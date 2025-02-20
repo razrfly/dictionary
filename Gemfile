@@ -72,7 +72,7 @@ gem "nokogiri"
 
 gem "dockerfile-rails", ">= 1.6", :group => :development
 
-gem "aws-sdk-s3", "~> 1.176", :require => false
+gem "aws-sdk-s3", "~> 1.182", :require => false
 
 gem 'friendly_id', '~> 5.5.0'
 gem 'pg_search'
