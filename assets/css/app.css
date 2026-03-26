@@ -1,0 +1,503 @@
+/* See the Tailwind configuration guide for advanced usage
+   https://tailwindcss.com/docs/configuration */
+
+@import "tailwindcss" source(none);
+@source "../css";
+@source "../js";
+@source "../../lib/devils_dictionary_web";
+
+/* A Tailwind plugin that makes "hero-#{ICON}" classes available.
+   The heroicons installation itself is managed by your mix.exs */
+@plugin "../vendor/heroicons";
+
+/* daisyUI Tailwind Plugin. You can update this file by fetching the latest version with:
+   curl -sLO https://github.com/saadeghi/daisyui/releases/latest/download/daisyui.js
+   Make sure to look at the daisyUI changelog: https://daisyui.com/docs/changelog/ */
+@plugin "../vendor/daisyui" {
+  themes: false;
+}
+
+/* daisyUI theme plugin. You can update this file by fetching the latest version with:
+  curl -sLO https://github.com/saadeghi/daisyui/releases/latest/download/daisyui-theme.js
+  We ship with two themes, a light one inspired on Phoenix colors and a dark one inspired
+  on Elixir colors. Build your own at: https://daisyui.com/theme-generator/ */
+@plugin "../vendor/daisyui-theme" {
+  name: "dark";
+  default: false;
+  prefersdark: true;
+  color-scheme: "dark";
+  --color-base-100: oklch(30.33% 0.016 252.42);
+  --color-base-200: oklch(25.26% 0.014 253.1);
+  --color-base-300: oklch(20.15% 0.012 254.09);
+  --color-base-content: oklch(97.807% 0.029 256.847);
+  --color-primary: oklch(58% 0.233 277.117);
+  --color-primary-content: oklch(96% 0.018 272.314);
+  --color-secondary: oklch(58% 0.233 277.117);
+  --color-secondary-content: oklch(96% 0.018 272.314);
+  --color-accent: oklch(60% 0.25 292.717);
+  --color-accent-content: oklch(96% 0.016 293.756);
+  --color-neutral: oklch(37% 0.044 257.287);
+  --color-neutral-content: oklch(98% 0.003 247.858);
+  --color-info: oklch(58% 0.158 241.966);
+  --color-info-content: oklch(97% 0.013 236.62);
+  --color-success: oklch(60% 0.118 184.704);
+  --color-success-content: oklch(98% 0.014 180.72);
+  --color-warning: oklch(66% 0.179 58.318);
+  --color-warning-content: oklch(98% 0.022 95.277);
+  --color-error: oklch(58% 0.253 17.585);
+  --color-error-content: oklch(96% 0.015 12.422);
+  --radius-selector: 0.25rem;
+  --radius-field: 0.25rem;
+  --radius-box: 0.5rem;
+  --size-selector: 0.21875rem;
+  --size-field: 0.21875rem;
+  --border: 1.5px;
+  --depth: 1;
+  --noise: 0;
+}
+
+@plugin "../vendor/daisyui-theme" {
+  name: "light";
+  default: true;
+  prefersdark: false;
+  color-scheme: "light";
+  --color-base-100: oklch(98% 0 0);
+  --color-base-200: oklch(96% 0.001 286.375);
+  --color-base-300: oklch(92% 0.004 286.32);
+  --color-base-content: oklch(21% 0.006 285.885);
+  --color-primary: oklch(70% 0.213 47.604);
+  --color-primary-content: oklch(98% 0.016 73.684);
+  --color-secondary: oklch(55% 0.027 264.364);
+  --color-secondary-content: oklch(98% 0.002 247.839);
+  --color-accent: oklch(0% 0 0);
+  --color-accent-content: oklch(100% 0 0);
+  --color-neutral: oklch(44% 0.017 285.786);
+  --color-neutral-content: oklch(98% 0 0);
+  --color-info: oklch(62% 0.214 259.815);
+  --color-info-content: oklch(97% 0.014 254.604);
+  --color-success: oklch(70% 0.14 182.503);
+  --color-success-content: oklch(98% 0.014 180.72);
+  --color-warning: oklch(66% 0.179 58.318);
+  --color-warning-content: oklch(98% 0.022 95.277);
+  --color-error: oklch(58% 0.253 17.585);
+  --color-error-content: oklch(96% 0.015 12.422);
+  --radius-selector: 0.25rem;
+  --radius-field: 0.25rem;
+  --radius-box: 0.5rem;
+  --size-selector: 0.21875rem;
+  --size-field: 0.21875rem;
+  --border: 1.5px;
+  --depth: 1;
+  --noise: 0;
+}
+
+/* Add variants based on LiveView classes */
+@custom-variant phx-click-loading (.phx-click-loading&, .phx-click-loading &);
+@custom-variant phx-submit-loading (.phx-submit-loading&, .phx-submit-loading &);
+@custom-variant phx-change-loading (.phx-change-loading&, .phx-change-loading &);
+
+/* Use the data attribute for dark mode  */
+@custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
+
+/* Make LiveView wrapper divs transparent for layout */
+[data-phx-session], [data-phx-teleported-src] { display: contents }
+
+/* This file is for your main application CSS */
+
+/* ═══════════════════════════════════════════════════════════════════════
+   DEVIL'S DICTIONARY - TIER COLOR SYSTEM
+   The visual hierarchy IS the argument
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* Define custom CSS variables for our tier system */
+@theme {
+  /* 🌾 OATMEAL BASE - Olive Color Palette */
+  --color-olive-50: oklch(98.8% 0.003 106.5);
+  --color-olive-100: oklch(96.6% 0.005 106.5);
+  --color-olive-200: oklch(93% 0.007 106.5);
+  --color-olive-300: oklch(88% 0.011 106.6);
+  --color-olive-400: oklch(73.7% 0.021 106.9);
+  --color-olive-500: oklch(58% 0.031 107.3);
+  --color-olive-600: oklch(46.6% 0.025 107.3);
+  --color-olive-700: oklch(39.4% 0.023 107.4);
+  --color-olive-800: oklch(28.6% 0.016 107.4);
+  --color-olive-900: oklch(22.8% 0.013 107.4);
+  --color-olive-950: oklch(15.3% 0.006 107.1);
+
+  /* 👑 ARISTOCRACY - Gilded Authority (Dead Intellectuals) */
+  --color-aristocracy-gold: oklch(58% 0.14 85);         /* #b8860b Dark Goldenrod */
+  --color-aristocracy-brass: oklch(55% 0.08 60);        /* #8b7355 Antique Brass */
+  --color-aristocracy-paper: oklch(98% 0.01 90);        /* #faf8f5 Aged paper start */
+  --color-aristocracy-aged: oklch(96% 0.02 85);         /* #f5f0e0 Aged paper end */
+  --color-aristocracy-border: oklch(75% 0.08 70);       /* #d4a574 Tan border */
+  --color-aristocracy-text: oklch(30% 0.01 0);          /* #3d3d3d Charcoal */
+
+  /* 📚 MIDDLE CLASS - Clean Aspiration (Institutional) */
+  --color-middle-primary: oklch(50% 0.03 255);          /* #64748b Slate 500 */
+  --color-middle-secondary: oklch(65% 0.02 255);        /* #94a3b8 Slate 400 */
+  --color-middle-bg: oklch(100% 0 0);                   /* #ffffff White */
+  --color-middle-border: oklch(90% 0.01 255);           /* #e2e8f0 Slate 200 */
+  --color-middle-text: oklch(35% 0.02 255);             /* #334155 Slate 700 */
+
+  /* 📱 THE PLEBS - Raw Democracy (Social Media) */
+  --color-plebs-primary: oklch(55% 0.22 265);           /* #6366f1 Indigo */
+  --color-plebs-secondary: oklch(60% 0.24 300);         /* #a855f7 Purple */
+  --color-plebs-bg: oklch(98% 0.005 255);               /* #f8fafc Slate 50 */
+  --color-plebs-text: oklch(45% 0.02 255);              /* #475569 Slate 600 */
+
+  /* 🌐 GLOBAL - Page Colors */
+  --color-page-bg: var(--color-olive-100);              /* Oatmeal background */
+  --color-header: var(--color-olive-950);               /* Dark olive */
+  --color-link: oklch(55% 0.12 60);                     /* Amber 700 */
+  --color-muted: var(--color-olive-500);                /* Mid olive */
+
+  /* Typography - Font Families */
+  --font-display: "Instrument Serif", Georgia, serif;   /* Oatmeal display */
+  --font-aristocracy: "Playfair Display", Georgia, serif;
+  --font-body: "Inter", system-ui, sans-serif;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   TIER-SPECIFIC UTILITY CLASSES
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* Aristocracy Tier Styling */
+.tier-aristocracy {
+  background: linear-gradient(to bottom, var(--color-aristocracy-paper), var(--color-aristocracy-aged));
+  border: 2px solid var(--color-aristocracy-border);
+  font-family: var(--font-aristocracy);
+  color: var(--color-aristocracy-text);
+}
+
+.tier-aristocracy-frame {
+  border: 4px double var(--color-aristocracy-gold);
+  padding: 1.5rem;
+  background: linear-gradient(to bottom, var(--color-aristocracy-paper), var(--color-aristocracy-aged));
+  box-shadow:
+    inset 0 0 20px rgba(184, 134, 11, 0.1),
+    0 4px 20px rgba(0, 0, 0, 0.15);
+}
+
+.tier-aristocracy-text {
+  font-family: var(--font-aristocracy);
+  color: var(--color-aristocracy-text);
+}
+
+/* Middle Class Tier Styling */
+.tier-middle {
+  background: var(--color-middle-bg);
+  border: 1px solid var(--color-middle-border);
+  font-family: var(--font-body);
+  color: var(--color-middle-text);
+}
+
+.tier-middle-text {
+  font-family: var(--font-body);
+  color: var(--color-middle-text);
+}
+
+/* Plebs Tier Styling */
+.tier-plebs {
+  background: var(--color-plebs-bg);
+  border: none;
+  font-family: var(--font-body);
+  color: var(--color-plebs-text);
+  border-radius: 0.5rem;
+}
+
+.tier-plebs-card {
+  background: white;
+  border-radius: 0.75rem;
+  padding: 1rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.tier-plebs-text {
+  font-family: var(--font-body);
+  color: var(--color-plebs-text);
+  font-size: 0.875rem;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   DEFINITION CARD COMPONENTS
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* Aristocratic Definition Card - Gilded and Elevated */
+.definition-aristocracy {
+  margin-bottom: 1.5rem;
+}
+
+.definition-aristocracy .definition-content {
+  font-family: var(--font-aristocracy);
+  font-size: 1.25rem;
+  line-height: 1.75;
+  font-style: italic;
+  color: var(--color-aristocracy-text);
+}
+
+.definition-aristocracy .definition-attribution {
+  font-family: var(--font-aristocracy);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-top: 1rem;
+  color: var(--color-aristocracy-brass);
+}
+
+.definition-aristocracy .definition-source {
+  font-family: var(--font-aristocracy);
+  font-size: 0.875rem;
+  color: var(--color-muted);
+}
+
+/* Middle Class Definition Card - Clean and Professional */
+.definition-middle {
+  padding: 1rem 1.5rem;
+  margin-bottom: 1rem;
+  background: var(--color-middle-bg);
+  border: 1px solid var(--color-middle-border);
+  border-radius: 0.375rem;
+}
+
+.definition-middle .definition-content {
+  font-family: var(--font-body);
+  font-size: 1rem;
+  line-height: 1.625;
+  color: var(--color-middle-text);
+}
+
+.definition-middle .definition-attribution {
+  font-family: var(--font-body);
+  font-weight: 500;
+  margin-top: 0.75rem;
+  color: var(--color-middle-primary);
+}
+
+/* Plebeian Definition Card - Social Media Aesthetic */
+.definition-plebs {
+  padding: 1rem;
+  margin-bottom: 0.75rem;
+  background: white;
+  border-radius: 0.75rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.definition-plebs .definition-source-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-plebs-primary);
+  margin-bottom: 0.5rem;
+}
+
+.definition-plebs .definition-content {
+  font-family: var(--font-body);
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  color: var(--color-plebs-text);
+}
+
+.definition-plebs .definition-votes {
+  display: flex;
+  gap: 1rem;
+  margin-top: 0.75rem;
+  font-size: 0.8125rem;
+  color: var(--color-muted);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   TOPIC PAGE LAYOUT
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.topic-header {
+  padding: 2rem;
+  background: var(--color-page-bg);
+  border-bottom: 1px solid var(--color-middle-border);
+}
+
+.topic-title {
+  font-family: var(--font-aristocracy);
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: var(--color-header);
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+}
+
+.topic-pronunciation {
+  font-family: var(--font-body);
+  font-size: 1rem;
+  color: var(--color-muted);
+  margin-top: 0.25rem;
+}
+
+.topic-part-of-speech {
+  font-family: var(--font-body);
+  font-style: italic;
+  color: var(--color-middle-primary);
+}
+
+/* Tier Section Headers */
+.tier-section-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+  padding-bottom: 0.5rem;
+}
+
+.tier-section-header.aristocracy {
+  border-bottom: 3px double var(--color-aristocracy-gold);
+  color: var(--color-aristocracy-gold);
+  font-family: var(--font-aristocracy);
+}
+
+.tier-section-header.middle {
+  border-bottom: 1px solid var(--color-middle-border);
+  color: var(--color-middle-primary);
+  font-family: var(--font-body);
+}
+
+.tier-section-header.plebs {
+  border-bottom: none;
+  color: var(--color-plebs-text);
+  font-family: var(--font-body);
+}
+
+/* Completeness Indicator */
+.completeness-bar {
+  display: flex;
+  gap: 0.25rem;
+  margin-top: 0.5rem;
+}
+
+.completeness-bar .segment {
+  width: 1.5rem;
+  height: 0.375rem;
+  border-radius: 0.125rem;
+  background: var(--color-middle-border);
+}
+
+.completeness-bar .segment.filled {
+  background: var(--color-aristocracy-gold);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   TYPOGRAPHY UTILITIES
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.font-aristocracy {
+  font-family: var(--font-aristocracy);
+}
+
+.font-body {
+  font-family: var(--font-body);
+}
+
+.text-aristocracy-gold {
+  color: var(--color-aristocracy-gold);
+}
+
+.text-aristocracy-brass {
+  color: var(--color-aristocracy-brass);
+}
+
+.bg-aged-paper {
+  background: linear-gradient(to bottom, var(--color-aristocracy-paper), var(--color-aristocracy-aged));
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   OATMEAL THEME BASE STYLES
+   ═══════════════════════════════════════════════════════════════════════ */
+
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: var(--color-olive-100);
+}
+
+body {
+  font-family: var(--font-body);
+  color: var(--color-olive-950);
+}
+
+.font-display {
+  font-family: var(--font-display);
+}
+
+/* Oatmeal-styled Button */
+.btn-oatmeal {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  padding: 0.5rem 1rem;
+  border-radius: 9999px;
+  font-size: 0.875rem;
+  line-height: 1.75rem;
+  font-weight: 500;
+  background-color: var(--color-olive-950);
+  color: white;
+  transition: background-color 0.15s ease;
+}
+
+.btn-oatmeal:hover {
+  background-color: var(--color-olive-800);
+}
+
+.btn-oatmeal-soft {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  padding: 0.5rem 1rem;
+  border-radius: 9999px;
+  font-size: 0.875rem;
+  line-height: 1.75rem;
+  font-weight: 500;
+  background-color: oklch(from var(--color-olive-950) l c h / 10%);
+  color: var(--color-olive-950);
+  transition: background-color 0.15s ease;
+}
+
+.btn-oatmeal-soft:hover {
+  background-color: oklch(from var(--color-olive-950) l c h / 15%);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   NAVIGATION & LAYOUT
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.nav-link {
+  color: var(--color-olive-600);
+  transition: color 0.15s ease;
+}
+
+.nav-link:hover {
+  color: var(--color-olive-950);
+}
+
+/* Container with max-width */
+.container-prose {
+  max-width: 65ch;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: 1rem;
+  padding-right: 1rem;
+}
+
+/* Olive background variants */
+.bg-olive-50 { background-color: var(--color-olive-50); }
+.bg-olive-100 { background-color: var(--color-olive-100); }
+.bg-olive-200 { background-color: var(--color-olive-200); }
+.bg-olive-950 { background-color: var(--color-olive-950); }
+
+.text-olive-500 { color: var(--color-olive-500); }
+.text-olive-600 { color: var(--color-olive-600); }
+.text-olive-700 { color: var(--color-olive-700); }
+.text-olive-950 { color: var(--color-olive-950); }
+
+.border-olive-200 { border-color: var(--color-olive-200); }
+.border-olive-300 { border-color: var(--color-olive-300); }
