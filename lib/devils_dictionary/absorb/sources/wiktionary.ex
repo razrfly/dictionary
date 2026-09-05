@@ -542,20 +542,14 @@ defmodule DevilsDictionary.Absorb.Sources.Wiktionary do
             counts = %{counts | en: counts.en + 1}
 
             if MapSet.member?(wanted, word) do
-              trimmed = trim(record)
-
-              row = %{
-                external_id: external_id(record),
-                url: page_url(word),
-                raw: trimmed
-              }
+              row = scoped_row(record)
 
               {[row | rows],
                %{
                  counts
                  | matched: MapSet.put(counts.matched, word),
                    bytes_raw: counts.bytes_raw + encoded_size(record),
-                   bytes_trimmed: counts.bytes_trimmed + encoded_size(trimmed)
+                   bytes_trimmed: counts.bytes_trimmed + encoded_size(row.raw)
                }}
             else
               {rows, counts}
@@ -566,6 +560,23 @@ defmodule DevilsDictionary.Absorb.Sources.Wiktionary do
         end
       end
     end)
+  end
+
+  @doc """
+  Projects one raw record onto the `source_records` row the scoped pass stores.
+
+  `content_hash` is taken on the record **as fetched, before `trim/1`**, so a
+  change to what we keep never looks like a change at the source: `changed_at`,
+  and the feeds built on it, must only move when Wiktionary moved. Pure; unit
+  tested.
+  """
+  def scoped_row(record) do
+    %{
+      external_id: external_id(record),
+      url: page_url(record["word"]),
+      raw: trim(record),
+      content_hash: SourceRecord.content_hash(record)
+    }
   end
 
   # M4 on the real records rather than only the three fixtures: the untrimmed
@@ -777,11 +788,13 @@ defmodule DevilsDictionary.Absorb.Sources.Wiktionary do
     |> Enum.sort()
   end
 
+  # `form_of` marks an entry the dump lists as a headword but which is only an
+  # inflection of another word ("dogs"). `Lexicon.lookup/1` reads it to decide
+  # whether a bare row deserves a page of its own.
   defp metadata(record) do
-    case categories(record) do
-      [] -> %{}
-      cats -> %{"wikt_categories" => cats}
-    end
+    %{}
+    |> put_some("wikt_categories", categories(record))
+    |> put_some("form_of", form_of?(record))
   end
 
   @doc """

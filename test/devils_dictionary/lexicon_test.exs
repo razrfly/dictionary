@@ -38,8 +38,9 @@ defmodule DevilsDictionary.LexiconTest do
 
     test "an inflected form lands on the word it inflects (X3)" do
       # The dump gives "monkeys" an index row of its own, bare, with no senses;
-      # a plain lemma match would stop there and render an empty page.
-      lexeme!("monkeys", "noun")
+      # a plain lemma match would stop there and render an empty page. The index
+      # pass marks such rows as form-of entries.
+      lexeme!("monkeys", "noun", metadata: %{"form_of" => true})
       enriched!("monkey", "noun", forms: [%{"form" => "monkeys", "tags" => ["plural"]}])
 
       assert %{via: :form, lexemes: [lexeme], matched: "monkeys"} = Lexicon.lookup("monkeys")
@@ -61,6 +62,25 @@ defmodule DevilsDictionary.LexiconTest do
 
       assert %{via: :lemma, lexemes: [lexeme]} = Lexicon.lookup("cats")
       assert lexeme.lemma == "cats"
+    end
+
+    test "a bare headword beats a forms match and offers the claimant as `also`" do
+      # "spat" (young oysters) has a bare index row of its own, and "spit" lists
+      # it as a past form. The headword keeps its page.
+      lexeme!("spat", "noun")
+      spit = enriched!("spit", "verb", forms: [%{"form" => "spat", "tags" => ["past"]}])
+
+      assert %{via: :lemma, lexemes: [lexeme], also: [also]} = Lexicon.lookup("spat")
+      assert lexeme.lemma == "spat"
+      assert also.id == spit.id
+    end
+
+    test "a bare form-of entry yields to the word it inflects" do
+      lexeme!("geese", "noun", metadata: %{"form_of" => true})
+      enriched!("goose", "noun", forms: [%{"form" => "geese", "tags" => ["plural"]}])
+
+      assert %{via: :form, lexemes: [lexeme]} = Lexicon.lookup("geese")
+      assert lexeme.lemma == "goose"
     end
 
     test "a bare row is still returned when nothing claims it as a form" do

@@ -57,10 +57,12 @@ defmodule DevilsDictionary.Lexicon do
 
   The subtlety is step 3. *monkeys* has an index row of its own — the dump lists
   534,780 form-of entries as headwords — so a plain lemma match finds it and
-  stops, on a page with nothing on it. So a match that is **bare** (no senses,
-  no entries, no canonical target) is not good enough to stop at: if some other
-  word claims the string as one of its forms, that word is the answer. A bare
-  row is only returned when nothing better exists.
+  stops, on a page with nothing on it. The index pass marks those rows
+  `metadata.form_of`, so a **bare** match (no senses, no entries, no canonical
+  target) that is only a form-of entry is not good enough to stop at: if some
+  other word claims the string as one of its forms, that word is the answer. A
+  bare row that is a headword in its own right keeps its page, and the words
+  that list the string among their forms come back under `also`.
 
   Returns `%{lexemes: [...], via: :lemma | :canonical | :form | :none,
   matched: term}`, with `via` telling the word page whether to show a
@@ -70,9 +72,18 @@ defmodule DevilsDictionary.Lexicon do
     word = String.trim(word || "")
     matches = by_lemma_or_slug(word, lang)
 
+    headwords = Enum.reject(matches, &form_of_entry?/1)
+
     cond do
       matches != [] and Enum.any?(matches, &enriched?/1) ->
         resolve_canonical(matches, word, :lemma)
+
+      headwords != [] ->
+        # Bare, but a headword in its own right: it keeps its page. Whatever
+        # lists the string as one of its forms is offered alongside.
+        headwords
+        |> resolve_canonical(word, :lemma)
+        |> Map.put(:also, by_form(word, lang))
 
       (forms = by_form(word, lang)) != [] ->
         resolve_canonical(forms, word, :form)
@@ -84,6 +95,8 @@ defmodule DevilsDictionary.Lexicon do
         %{lexemes: [], via: :none, matched: nil}
     end
   end
+
+  defp form_of_entry?(lexeme), do: lexeme.metadata["form_of"] == true
 
   defp enriched?(lexeme),
     do: not is_nil(lexeme.enriched_at) or not is_nil(lexeme.canonical_lexeme_id)

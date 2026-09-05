@@ -7,6 +7,7 @@ defmodule DevilsDictionary.Absorb.Sources.WiktionaryTest do
 
   use ExUnit.Case, async: true
 
+  alias DevilsDictionary.Sources.SourceRecord
   alias DevilsDictionary.Absorb.Sources.Wiktionary
   alias DevilsDictionary.Fixtures
 
@@ -172,6 +173,39 @@ defmodule DevilsDictionary.Absorb.Sources.WiktionaryTest do
       }
 
       assert Wiktionary.form_of?(record)
+    end
+  end
+
+  describe "scoped_row/1 (content hash before trim)" do
+    test "hashes the record as fetched, not as stored" do
+      record = records("cat") |> hd()
+      row = Wiktionary.scoped_row(record)
+
+      assert row.raw == Wiktionary.trim(record)
+      assert row.content_hash == SourceRecord.content_hash(record)
+      refute row.content_hash == SourceRecord.content_hash(row.raw)
+    end
+
+    test "carries the external id and the page url" do
+      row = records("oyster") |> hd() |> Wiktionary.scoped_row()
+
+      assert row.external_id =~ ~r{^oyster/}
+      assert row.url =~ ~r{^https://en\.wiktionary\.org/wiki/oyster}
+    end
+  end
+
+  describe "index_row/1 form_of flag" do
+    test "an inflected-form entry is marked, a headword is not" do
+      form = %{
+        "word" => "cats",
+        "pos" => "noun",
+        "senses" => [%{"form_of" => [%{"word" => "cat"}], "tags" => ["form-of", "plural"]}]
+      }
+
+      assert Wiktionary.index_row(form, 1).metadata["form_of"] == true
+
+      headword = records("cat") |> Enum.find(&(&1["pos"] == "noun"))
+      refute Map.has_key?(Wiktionary.index_row(headword, 1).metadata, "form_of")
     end
   end
 

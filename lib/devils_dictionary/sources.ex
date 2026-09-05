@@ -81,9 +81,12 @@ defmodule DevilsDictionary.Sources do
   @doc """
   Bulk-writes `source_records`, in chunks, with `record_conflict/0`.
 
-  Rows are plain maps needing `external_id`, `url` and `raw`; `source_id`,
-  `content_hash` and the timestamps are filled here so no caller can forget the
-  hash that `changed_at` depends on. Returns the number of rows written.
+  Rows are plain maps needing `external_id`, `url` and `raw`, plus
+  `content_hash` when the source trims: the hash must be taken on the payload
+  **as fetched**, before `trim/1`, so a change to the trim never reads as a
+  change at the source. A source whose trim is the identity may omit it and it
+  is computed from `raw` here. `source_id` and the timestamps are always filled
+  here. Returns the number of rows written.
   """
   def insert_records(%Source{} = source, rows, chunk \\ 1_000) do
     now = DateTime.utc_now()
@@ -97,7 +100,7 @@ defmodule DevilsDictionary.Sources do
         external_id: row.external_id,
         url: row[:url],
         raw: raw,
-        content_hash: SourceRecord.content_hash(raw),
+        content_hash: row[:content_hash] || SourceRecord.content_hash(raw),
         fetched_at: now,
         inserted_at: now,
         updated_at: now

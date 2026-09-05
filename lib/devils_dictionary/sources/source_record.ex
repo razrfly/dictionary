@@ -46,7 +46,11 @@ defmodule DevilsDictionary.Sources.SourceRecord do
   end
 
   @doc """
-  sha256 of the raw payload, used to detect a changed record on refetch.
+  sha256 of a payload, used to detect a changed record on refetch.
+
+  Sources take it on the payload **as fetched, before `trim/1`** (see
+  `Sources.insert_records/3`), so `changed_at` only moves when the source moved,
+  never when we change what we keep.
   """
   def content_hash(raw) when is_map(raw) do
     :sha256
