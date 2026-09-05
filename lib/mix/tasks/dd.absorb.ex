@@ -45,6 +45,8 @@ defmodule Mix.Tasks.Dd.Absorb do
 
   use Mix.Task
 
+  import Mix.Tasks.Dd.Report
+
   alias DevilsDictionary.{Absorb, Lexicon, Sources}
 
   @requirements ["app.start"]
@@ -97,30 +99,13 @@ defmodule Mix.Tasks.Dd.Absorb do
   end
 
   defp report(slug, stats, elapsed) do
-    Mix.shell().info("\n#{slug} — #{fmt_ms(elapsed)}")
+    say("\n#{slug} — #{fmt_ms(elapsed)}")
 
     stats
     |> Map.drop([:elapsed_ms])
     |> Enum.sort()
     |> Enum.each(fn {key, value} ->
-      Mix.shell().info("  #{String.pad_trailing(to_string(key), 22)} #{fmt(value)}")
+      row(key, value, 22)
     end)
   end
-
-  defp stringify(stats), do: Map.new(stats, fn {k, v} -> {to_string(k), v} end)
-
-  defp fmt(n) when is_integer(n) do
-    n
-    |> Integer.to_charlist()
-    |> Enum.reverse()
-    |> Enum.chunk_every(3)
-    |> Enum.join(",")
-    |> String.reverse()
-  end
-
-  defp fmt(other), do: to_string(other)
-
-  defp fmt_ms(ms) when ms < 1_000, do: "#{ms} ms"
-  defp fmt_ms(ms) when ms < 60_000, do: "#{Float.round(ms / 1000, 1)} s"
-  defp fmt_ms(ms), do: "#{div(ms, 60_000)}m #{rem(div(ms, 1000), 60)}s"
 end

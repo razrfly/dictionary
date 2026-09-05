@@ -84,9 +84,9 @@ defmodule DevilsDictionary.Absorb.Sources.Wikipedia do
     source = Sources.get_source_by_slug!(slug())
     rate = rate_limit(source, opts)
 
-    targets = targets(scope, opts)
+    {targets, in_scope} = targets(scope, source, opts)
 
-    if targets == [] do
+    if in_scope == 0 do
       raise """
       Scope #{scope.slug} has no lemmas#{if opts[:reason], do: " with reason #{opts[:reason]}"}.
       Build it first: mix dd.scope.build #{scope.slug}
@@ -163,13 +163,25 @@ defmodule DevilsDictionary.Absorb.Sources.Wikipedia do
       if opts[:refresh] do
         query
       else
-        # Skip what already has an entry, and what we already asked about and
-        # were told does not exist.
+        # Skip anything we have already asked about. An entry is the happy
+        # answer and an unexpired absent marker the explicit negative, but
+        # neither covers the concept we *did* fetch that yielded no entry — a
+        # disambiguation page, or an article with an empty extract. There are
+        # ~3,800 of those, and without the third clause every `--concepts` run
+        # re-fetched all of them. The clause tests `absent_until IS NULL` rather
+        # than the row's mere existence, so an expired marker is still retried
+        # exactly as #69 §5's terminal states ask. `--refresh` is the way back.
         from c in query,
           where: not fragment("EXISTS (SELECT 1 FROM entries e WHERE e.concept_id = ?)", c.id),
           where:
             not fragment(
               "EXISTS (SELECT 1 FROM source_records r WHERE r.source_id = ? AND r.external_id = ? AND r.absent_until > now())",
+              ^source.id,
+              fragment("'concept:' || ?", c.qid)
+            ),
+          where:
+            not fragment(
+              "EXISTS (SELECT 1 FROM source_records r WHERE r.source_id = ? AND r.external_id = ? AND r.absent_until IS NULL)",
               ^source.id,
               fragment("'concept:' || ?", c.qid)
             )
@@ -289,13 +301,24 @@ defmodule DevilsDictionary.Absorb.Sources.Wikipedia do
   defp candidates_pass(source, stats, rate, opts) do
     max = opts[:max_candidates] || @max_candidates
 
-    disambiguations =
-      Repo.all(
-        from r in SourceRecord,
-          where: r.source_id == ^source.id,
-          where: fragment("jsonb_exists(?->'pageprops', 'disambiguation')", r.raw),
-          select: %{r | raw: r.raw}
-      )
+    query =
+      from r in SourceRecord,
+        where: r.source_id == ^source.id,
+        where: fragment("jsonb_exists(?->'pageprops', 'disambiguation')", r.raw),
+        select: %{r | raw: r.raw}
+
+    # Candidates are read once per page. Re-reading a page we have already read
+    # costs one `links` request plus a `pageprops` chunk each and answers the
+    # same list — 1,775 pages of it — and rewriting the record for it is what
+    # restamped `changed_at` on 1,352 rows in S2.
+    query =
+      if opts[:refresh] do
+        query
+      else
+        from r in query, where: not fragment("jsonb_exists(?, '_candidates')", r.raw)
+      end
+
+    disambiguations = Repo.all(query)
 
     Enum.reduce(disambiguations, stats, fn record, acc ->
       title = record.raw["title"]
@@ -501,7 +524,7 @@ defmodule DevilsDictionary.Absorb.Sources.Wikipedia do
 
   # Reason order (#70's S0 audit): the WordNet-closure words first so the
   # flagship numbers arrive early, then the category-only tail.
-  defp targets(%Scope{} = scope, opts) do
+  defp targets(%Scope{} = scope, source, opts) do
     lemmas =
       case opts[:reason] do
         nil ->
@@ -512,6 +535,21 @@ defmodule DevilsDictionary.Absorb.Sources.Wikipedia do
           scope_lemmas(scope, reason)
       end
 
+    in_scope = length(lemmas)
+
+    # A probe is one fact per lemma and it does not go stale on its own, so a
+    # lemma we have already asked about is not asked about again. Without this
+    # the pass re-fetched the whole scope every run — 23,784 lemmas and 90
+    # minutes to learn nothing — which is also what made the disambiguation
+    # re-read restamp `changed_at`. `--refresh` is the way back in.
+    lemmas =
+      if opts[:refresh] do
+        lemmas
+      else
+        already = probed(source, lemmas)
+        Enum.reject(lemmas, &MapSet.member?(already, &1))
+      end
+
     lemmas =
       case opts[:limit] do
         nil -> lemmas
@@ -520,7 +558,27 @@ defmodule DevilsDictionary.Absorb.Sources.Wikipedia do
 
     keys = lexeme_keys(lemmas)
 
-    Enum.map(lemmas, &%{lemma: &1, lexemes: Map.get(keys, &1, [])})
+    {Enum.map(lemmas, &%{lemma: &1, lexemes: Map.get(keys, &1, [])}), in_scope}
+  end
+
+  # Lemmas with a record already: a hit, or an absent marker that has not
+  # expired. An expired marker is retried, exactly as #69 §5's terminal states
+  # ask.
+  defp probed(source, lemmas) do
+    now = DateTime.utc_now()
+
+    lemmas
+    |> Enum.chunk_every(10_000)
+    |> Enum.flat_map(fn chunk ->
+      Repo.all(
+        from r in SourceRecord,
+          where: r.source_id == ^source.id,
+          where: r.external_id in ^chunk,
+          where: is_nil(r.absent_until) or r.absent_until > ^now,
+          select: r.external_id
+      )
+    end)
+    |> MapSet.new()
   end
 
   defp scope_lemmas(%Scope{id: scope_id}, reason) do

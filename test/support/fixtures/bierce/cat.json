@@ -1,0 +1,22 @@
+{
+  "records": [
+    {
+      "alt_headwords": [],
+      "anchor": "link2H_4_0004",
+      "headword": "CAT",
+      "html": [
+        "<p>\n      CAT, n. A soft, indestructible automaton provided by nature to be kicked\n      when things go wrong in the domestic circle.\n    </p>",
+        "<pre>\n  This is a dog,\n      This is a cat.\n  This is a frog,\n      This is a rat.\n  Run, dog, mew, cat.\n  Jump, frog, gnaw, rat.\n</pre>",
+        "<p>\n      Elevenson\n    </p>"
+      ],
+      "kinds": [
+        "headword",
+        "verse",
+        "attribution"
+      ],
+      "letter": "C",
+      "pos": "n",
+      "position": 137
+    }
+  ]
+}

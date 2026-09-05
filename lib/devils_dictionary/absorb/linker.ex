@@ -117,6 +117,10 @@ defmodule DevilsDictionary.Absorb.Linker do
 
   # ── rung 2 · wordnet_wikidata ────────────────────────────────────────────
 
+  # A synset usually carries one QID as a string, but 1,887 of them carry an
+  # array (`panther` → `["Q35255", "Q109647288"]`). Reading only the string
+  # shape skipped 265 references in the Animals scope, so those senses never
+  # got a link however good the concept was.
   @doc false
   def wordnet_wikidata(scope) do
     insert_links(
@@ -125,9 +129,10 @@ defmodule DevilsDictionary.Absorb.Linker do
              #{@confidence.wordnet_wikidata}, 'auto', '{}'::jsonb, now(), now()
         FROM senses s
         JOIN sources so ON so.id = s.source_id AND so.slug = 'wordnet'
-        JOIN concepts c ON c.qid = s.metadata->>'wikidata'
+        CROSS JOIN LATERAL jsonb_array_elements_text(#{jsonb_qids("s.metadata->'wikidata'")}) AS q(qid)
+        JOIN concepts c ON c.qid = q.qid
        #{scope_join(scope, "s.lexeme_id")}
-       WHERE jsonb_typeof(s.metadata->'wikidata') = 'string'
+       WHERE jsonb_typeof(s.metadata->'wikidata') IN ('string', 'array')
       """,
       scope
     )
@@ -333,6 +338,19 @@ defmodule DevilsDictionary.Absorb.Linker do
   # is an array from Wiktionary and a bare string from WordNet, in one table.
   defp jsonb_array(expression) do
     "CASE WHEN jsonb_typeof(#{expression}) = 'array' THEN #{expression} ELSE '[]'::jsonb END"
+  end
+
+  # Same guard, one shape wider: a bare string is wrapped into a one-element
+  # array rather than discarded, so a column that holds both shapes (WordNet's
+  # `wikidata`) can be read by a single rung.
+  defp jsonb_qids(expression) do
+    """
+    CASE jsonb_typeof(#{expression})
+      WHEN 'array' THEN #{expression}
+      WHEN 'string' THEN jsonb_build_array(#{expression})
+      ELSE '[]'::jsonb
+    END\
+    """
   end
 
   # Distinct words of >= @min_word_length letters present in both texts.

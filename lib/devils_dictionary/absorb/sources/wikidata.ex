@@ -133,7 +133,11 @@ defmodule DevilsDictionary.Absorb.Sources.Wikidata do
        trim_saving_pct: saving_pct(stats.bytes_raw, stats.bytes_trimmed),
        concepts: second.concepts,
        concept_relations: second.concept_relations,
-       concept_relations_unresolved: second.concept_relations_skipped,
+       # Two numbers, not one. `parent_taxon_unresolved` is the walk's own
+       # residual and must be 0; `unchased_edges` is the P279/P31 targets we
+       # record but deliberately never fetch, and is expected to be large.
+       parent_taxon_unresolved: second.concept_relations_skipped_parent_taxon,
+       unchased_edges: second.concept_relations_skipped_unchased,
        materialize_passes: second.passes,
        taxa: count_taxa()
      }}
@@ -191,6 +195,11 @@ defmodule DevilsDictionary.Absorb.Sources.Wikidata do
   # Repeat the full re-materialize while it is still closing edges. Capped, and
   # the residual is reported either way: a walk that genuinely names a parent
   # nobody has fetched should be visible, not looped on.
+  #
+  # The loop watches the **`parent_taxon`** residual alone. The unchased
+  # P279/P31 skips never fall, so counting them here meant the loop only ever
+  # stopped on the "no better than last time" arm and could not tell a closed
+  # walk from a stuck one.
   @max_materialize_passes 5
 
   defp close_concept_relations(source, first) do
@@ -198,8 +207,9 @@ defmodule DevilsDictionary.Absorb.Sources.Wikidata do
       counts = Batch.run(__MODULE__, source, batch_size: @materialize_batch, only_stale: false)
       counts = Map.put(counts, :passes, pass)
 
-      if counts.concept_relations_skipped == 0 or
-           counts.concept_relations_skipped >= previous.concept_relations_skipped do
+      if counts.concept_relations_skipped_parent_taxon == 0 or
+           counts.concept_relations_skipped_parent_taxon >=
+             previous.concept_relations_skipped_parent_taxon do
         {:halt, counts}
       else
         {:cont, counts}
@@ -371,8 +381,10 @@ defmodule DevilsDictionary.Absorb.Sources.Wikidata do
   @doc """
   Every QID the rest of the database already points at, in reason order.
 
-  WordNet stores one QID per sense as a string; Wiktionary stores an array;
-  Wikipedia's pass leaves them on `concepts.qid` already. All three are unioned.
+  WordNet stores one QID per sense, usually as a string but sometimes as an
+  array (`panther` carries `["Q35255", "Q109647288"]`); Wiktionary always stores
+  an array; Wikipedia's pass leaves them on `concepts.qid` already. All are
+  unioned.
   """
   def seed_qids(scope, opts \\ []) do
     qids =
@@ -389,12 +401,31 @@ defmodule DevilsDictionary.Absorb.Sources.Wikidata do
     end
   end
 
+  # A synset's `wikidata` is a bare string for the common case and an array when
+  # the synset maps onto more than one item. Reading only the string shape
+  # silently dropped 1,887 senses (265 of them in the Animals scope), so neither
+  # the concept nor the `wordnet_wikidata` link was ever seeded for them.
   defp wordnet_qids(scope) do
+    wordnet_string_qids(scope) ++ wordnet_array_qids(scope)
+  end
+
+  defp wordnet_string_qids(scope) do
     from(s in Sense,
       join: so in assoc(s, :source),
       where: so.slug == "wordnet",
       where: fragment("jsonb_typeof(?->'wikidata') = 'string'", s.metadata),
       select: fragment("?->>'wikidata'", s.metadata)
+    )
+    |> in_scope(scope)
+    |> Repo.all()
+  end
+
+  defp wordnet_array_qids(scope) do
+    from(s in Sense,
+      join: so in assoc(s, :source),
+      where: so.slug == "wordnet",
+      where: fragment("jsonb_typeof(?->'wikidata') = 'array'", s.metadata),
+      select: fragment("jsonb_array_elements_text(?->'wikidata')", s.metadata)
     )
     |> in_scope(scope)
     |> Repo.all()

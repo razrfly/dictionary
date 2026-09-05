@@ -46,7 +46,14 @@ defmodule Mix.Tasks.Dd.Fixtures.Capture do
   # `seal` earns its place: it is a Wikipedia disambiguation page, which is the
   # only way to test the L4 path offline.
   @api_lemmas @default_lemmas ++ ~w(seal)
-  @all_sources ~w(wordnet wiktionary wikipedia wikidata)
+  # Bierce's awkward cases, not its ordinary ones: the entry the HTML mis-wraps
+  # in a <pre>, the alternate headword, the definition that resumes lowercase
+  # after its verse, the stub whose whole body is the verse, the bare
+  # cross-reference, the joke part of speech, the `[from X]` bracket, a letter
+  # essay, and the entry with 26 continuation paragraphs.
+  @bierce_lemmas @default_lemmas ++
+                   ~w(eucharist babe monument insectivora brute hash academy x story)
+  @all_sources ~w(wordnet wiktionary wikipedia wikidata bierce)
   @dir "test/support/fixtures"
 
   @requirements ["app.start"]
@@ -70,6 +77,7 @@ defmodule Mix.Tasks.Dd.Fixtures.Capture do
         "wiktionary" -> capture_wiktionary(lemmas(given, @default_lemmas), opts)
         "wikipedia" -> capture_wikipedia(lemmas(given, @api_lemmas), opts)
         "wikidata" -> capture_wikidata(lemmas(given, @api_lemmas), opts)
+        "bierce" -> capture_bierce(lemmas(given, @bierce_lemmas), opts)
       end)
 
     write_manifest(captured)
@@ -95,6 +103,25 @@ defmodule Mix.Tasks.Dd.Fixtures.Capture do
         )
 
       write("wordnet", lemma, records, opts)
+    end)
+  end
+
+  # Bierce records are keyed by the printed headword, so the lemma is upcased to
+  # find them. `REASON` legitimately returns two: Bierce defines it twice.
+  defp capture_bierce(lemmas, opts) do
+    source = Sources.get_source_by_slug!("bierce")
+
+    Enum.flat_map(lemmas, fn lemma ->
+      records =
+        Repo.all(
+          from r in SourceRecord,
+            where: r.source_id == ^source.id,
+            where: fragment("? ->> 'headword' = ?", r.raw, ^String.upcase(lemma)),
+            order_by: r.external_id,
+            select: r.raw
+        )
+
+      write("bierce", lemma, records, opts)
     end)
   end
 

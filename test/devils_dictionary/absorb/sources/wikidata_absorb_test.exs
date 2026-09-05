@@ -117,7 +117,7 @@ defmodule DevilsDictionary.Absorb.Sources.WikidataAbsorbTest do
       "Q729" => taxon("Q729", "Animalia", nil)
     })
 
-    assert {:ok, %{concept_relations: closed, concept_relations_unresolved: 0}} =
+    assert {:ok, %{concept_relations: closed, parent_taxon_unresolved: 0}} =
              Wikidata.absorb(ctx.animals, rate_limit_ms: 0)
 
     # Felis catus -> Felidae -> Animalia. A parent named by a child in an
@@ -125,6 +125,26 @@ defmodule DevilsDictionary.Absorb.Sources.WikidataAbsorbTest do
     # absorb keeps re-materializing until nothing is left unresolved.
     assert closed == 2
     assert Repo.aggregate(ConceptRelation, :count) == 2
+  end
+
+  test "a synset carrying an array of QIDs seeds every one of them", ctx do
+    # `panther` maps onto two Wikidata items, so WordNet stores an array where it
+    # usually stores a bare string. Reading only the string shape skipped 1,887
+    # senses — 265 of them in the Animals scope — and neither the concept nor the
+    # `wordnet_wikidata` link was ever seeded for them.
+    scoped_sense!(ctx, "panther", "wordnet", %{"wikidata" => ["Q35255", "Q109647288"]})
+
+    stub(%{
+      "Q35255" => taxon("Q35255", "Panthera pardus", nil),
+      "Q109647288" => taxon("Q109647288", "Puma concolor", nil)
+    })
+
+    # Three seeds: both of the synset's QIDs plus the scope's Wikidata root,
+    # which the stub does not answer for.
+    assert {:ok, %{seed_qids: 3, fetched: 2}} = Wikidata.absorb(ctx.animals, rate_limit_ms: 0)
+
+    assert Repo.all(from c in Concept, select: c.qid, order_by: c.qid) ==
+             ["Q109647288", "Q35255"]
   end
 
   test "an edge naming a parent nobody fetched is reported, not looped on", ctx do
@@ -135,7 +155,7 @@ defmodule DevilsDictionary.Absorb.Sources.WikidataAbsorbTest do
     # re-materialize loop or read as a clean run.
     stub(%{"Q20980826" => taxon("Q20980826", "Felis catus", "Q41960")})
 
-    assert {:ok, %{concept_relations: 0, concept_relations_unresolved: 1}} =
+    assert {:ok, %{concept_relations: 0, parent_taxon_unresolved: 1, unchased_edges: 0}} =
              Wikidata.absorb(ctx.animals, rate_limit_ms: 0)
   end
 

@@ -1,0 +1,22 @@
+{
+  "records": [
+    {
+      "alt_headwords": [],
+      "anchor": "link2H_4_0015",
+      "headword": "MONUMENT",
+      "html": [
+        "<p>\n      MONUMENT, n. A structure intended to commemorate something which either\n      needs no commemoration or cannot be commemorated.\n    </p>",
+        "<pre>\n  The bones of Agammemnon are a show,\n  And ruined is his royal monument,\n</pre>",
+        "<p>\n      but Agammemnon&#39;s fame suffers no diminution in consequence. The monument\n      custom has its <i>reductiones ad absurdum</i> in monuments &quot;to the unknown\n      dead&quot;—that is to say, monuments to perpetuate the memory of those\n      who have left no memory.\n    </p>"
+      ],
+      "kinds": [
+        "headword",
+        "verse",
+        "continuation"
+      ],
+      "letter": "M",
+      "pos": "n",
+      "position": 582
+    }
+  ]
+}

@@ -129,10 +129,17 @@ defmodule DevilsDictionary.Sources.Catalog do
         license: "Public domain",
         license_url: "https://www.gutenberg.org/policy/permission.html",
         homepage: "https://www.gutenberg.org/ebooks/972",
-        url_template: "https://www.gutenberg.org/cache/epub/972/pg972-images.html\#{external_id}",
+        # Gutenberg gives the text no per-entry anchors — only one `id` per
+        # letter chapter — so each record carries its own anchored url and this
+        # template is the whole-document fallback A9 asks every source for.
+        url_template: "https://www.gutenberg.org/files/972/972-h/972-h.htm",
         attribution: "Ambrose Bierce, The Devil's Dictionary (1911), public domain",
         config: %{
-          "file" => "priv/sources/bierce/pg972.txt",
+          # The HTML edition, not the plain text: one paragraph per entry, verse
+          # in <pre>, attributions as their own paragraphs. `pg972.txt` is the
+          # same transcription and stays as a cross-check.
+          "file" => "priv/sources/bierce/972-h.htm",
+          "cross_check_file" => "priv/sources/bierce/pg972.txt",
           "gutenberg_id" => 972
         }
       }

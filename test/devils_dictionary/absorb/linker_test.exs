@@ -96,6 +96,22 @@ defmodule DevilsDictionary.Absorb.LinkerTest do
       assert link!(cat, :wordnet_wikidata).confidence == 0.90
     end
 
+    test "wordnet_wikidata reads the array form too", ctx do
+      # 1,887 synsets carry more than one QID (`panther` is the flagship case).
+      # Rung 2 read only the string shape, so 265 scope references never linked.
+      panther = lexeme!(ctx, "panther")
+      concept!("Q35255")
+      concept!("Q109647288")
+
+      sense!(ctx, panther, "wordnet", metadata: %{"wikidata" => ["Q35255", "Q109647288"]})
+
+      Linker.run(ctx.animals)
+
+      links = Repo.all(from l in ConceptLink, where: l.lexeme_id == ^panther.id)
+      assert length(links) == 2
+      assert Enum.all?(links, &(&1.method == :wordnet_wikidata and &1.confidence == 0.90))
+    end
+
     test "wordnet_ili matches the concept's P5063 at 0.85", ctx do
       cat = lexeme!(ctx, "cat")
       concept!("Q146", wordnet_ili: "i46593")

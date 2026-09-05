@@ -70,11 +70,14 @@ config :devils_dictionary,
        :user_agent,
        "wordhoard/0.1 (https://github.com/razrfly/dictionary; holden.thomas@gmail.com)"
 
-# Oban (#69 §5). `absorb: 1` because a dump absorb is a single long stream;
-# `enrich: 3` because the API sources rate-limit themselves inside the worker.
+# Oban (#69 §5). `absorb: 1` because a dump absorb is a single long stream.
+# `enrich` is **1**, not the spec's 3: `EnrichWorker` paces with a per-process
+# `Process.sleep(rate_limit_ms)`, so three concurrent jobs would triple the rate
+# against a single API — 15 req/s where #69 §2 promises 5. Raise it back to 3
+# once a limiter shared across the queue exists (or one queue per source).
 config :devils_dictionary, Oban,
   repo: DevilsDictionary.Repo,
-  queues: [absorb: 1, enrich: 3, link: 2, maintenance: 1],
+  queues: [absorb: 1, enrich: 1, link: 2, maintenance: 1],
   plugins: [
     {Oban.Plugins.Pruner, max_age: 60 * 60 * 24 * 7},
     {Oban.Plugins.Lifeline, rescue_after: :timer.minutes(30)}

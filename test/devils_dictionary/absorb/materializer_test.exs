@@ -2,10 +2,10 @@ defmodule DevilsDictionary.Absorb.MaterializerTest do
   use DevilsDictionary.DataCase, async: true
 
   alias DevilsDictionary.Absorb.Materializer
-  alias DevilsDictionary.FakeSource
-  alias DevilsDictionary.Lexicon.{Lexeme, LexicalRelation, Sense}
+  alias DevilsDictionary.{FakeSource, Fixtures}
+  alias DevilsDictionary.Lexicon.{Entry, Lexeme, LexicalRelation, Sense}
   alias DevilsDictionary.Repo
-  alias DevilsDictionary.Sources.{Source, SourceRecord}
+  alias DevilsDictionary.Sources.{Person, Source, SourceRecord}
 
   defp source!(slug \\ "fake") do
     Repo.insert!(%Source{
@@ -128,6 +128,104 @@ defmodule DevilsDictionary.Absorb.MaterializerTest do
       assert counts() == before
       refute Repo.get!(SourceRecord, record.id).materialized_at
       assert Repo.get_by(Lexeme, lemma: "quoll") == nil
+    end
+  end
+
+  describe "atomicity on a real source (M3)" do
+    test "a Bierce entry whose lexeme cannot be written leaves no entry either" do
+      source =
+        Repo.insert!(%Source{
+          slug: "bierce",
+          name: "Bierce",
+          tier: :aristocracy,
+          kind: :dictionary,
+          access: :static
+        })
+
+      raw = Fixtures.one_raw("bierce", "cat")
+
+      record =
+        Repo.insert!(%SourceRecord{
+          source_id: source.id,
+          external_id: "CAT/n",
+          # A lemma longer than the column allows: the failure lands deep inside
+          # the writes, after the entry row has been prepared, which is the only
+          # place worth testing.
+          raw: %{raw | "headword" => String.duplicate("CAT", 200)},
+          fetched_at: DateTime.utc_now()
+        })
+
+      before = counts()
+
+      assert_raise Postgrex.Error, fn ->
+        Materializer.run(with_raw(record), DevilsDictionary.Absorb.Sources.Bierce)
+      end
+
+      assert counts() == before
+      refute Repo.get!(SourceRecord, record.id).materialized_at
+      assert Repo.aggregate(Entry, :count) == 0
+    end
+  end
+
+  describe "entries carry their author (S3)" do
+    test "an author named by slug is resolved inside the same transaction" do
+      source =
+        Repo.insert!(%Source{
+          slug: "bierce",
+          name: "Bierce",
+          tier: :aristocracy,
+          kind: :dictionary,
+          access: :static
+        })
+
+      person =
+        Repo.insert!(%Person{
+          name: "Ambrose Bierce",
+          slug: "ambrose-bierce",
+          source_id: source.id
+        })
+
+      record =
+        Repo.insert!(%SourceRecord{
+          source_id: source.id,
+          external_id: "CAT/n",
+          raw: Fixtures.one_raw("bierce", "cat"),
+          fetched_at: DateTime.utc_now()
+        })
+
+      {:ok, _} = Materializer.run(with_raw(record), DevilsDictionary.Absorb.Sources.Bierce)
+
+      assert Repo.one(from e in Entry, select: e.author_id) == person.id
+    end
+
+    test "a rebuild keeps the author, because it is resolved on every write" do
+      # The entries upsert is `replace_all_except`, so an author stamped outside
+      # this transaction would be blanked by the next `--all`. That would fail
+      # M2 for this source, silently.
+      source =
+        Repo.insert!(%Source{
+          slug: "bierce",
+          name: "Bierce",
+          tier: :aristocracy,
+          kind: :dictionary,
+          access: :static
+        })
+
+      person = Repo.insert!(%Person{name: "Ambrose Bierce", slug: "ambrose-bierce"})
+
+      record =
+        Repo.insert!(%SourceRecord{
+          source_id: source.id,
+          external_id: "CAT/n",
+          raw: Fixtures.one_raw("bierce", "cat"),
+          fetched_at: DateTime.utc_now()
+        })
+
+      {:ok, _} = Materializer.run(with_raw(record), DevilsDictionary.Absorb.Sources.Bierce)
+      {:ok, _} = Materializer.run(with_raw(record), DevilsDictionary.Absorb.Sources.Bierce)
+
+      assert Repo.one(from e in Entry, select: e.author_id) == person.id
+      assert Repo.aggregate(Entry, :count) == 1
     end
   end
 

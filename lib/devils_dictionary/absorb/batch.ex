@@ -45,7 +45,9 @@ defmodule DevilsDictionary.Absorb.Batch do
       relations: 0,
       links: 0,
       concept_relations: 0,
-      concept_relations_skipped: 0
+      concept_relations_skipped: 0,
+      concept_relations_skipped_parent_taxon: 0,
+      concept_relations_skipped_unchased: 0
     }
 
     source
@@ -65,6 +67,14 @@ defmodule DevilsDictionary.Absorb.Batch do
           |> Map.update!(:links, &(&1 + counts.links))
           |> Map.update!(:concept_relations, &(&1 + counts.concept_relations))
           |> Map.update!(:concept_relations_skipped, &(&1 + counts.concept_relations_skipped))
+          |> Map.update!(
+            :concept_relations_skipped_parent_taxon,
+            &(&1 + counts.concept_relations_skipped_parent_taxon)
+          )
+          |> Map.update!(
+            :concept_relations_skipped_unchased,
+            &(&1 + counts.concept_relations_skipped_unchased)
+          )
 
         {:error, reason} ->
           raise "materialize failed for #{module.slug()}: #{inspect(reason)}"

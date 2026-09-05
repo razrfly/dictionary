@@ -1,0 +1,24 @@
+{
+  "records": [
+    {
+      "alt_headwords": [
+        "BABY"
+      ],
+      "anchor": "link2H_4_0003",
+      "headword": "BABE",
+      "html": [
+        "<p>\n      BABE or BABY, n. A misshapen creature of no particular age, sex, or\n      condition, chiefly remarkable for the violence of the sympathies and\n      antipathies it excites in others, itself without sentiment or emotion.\n      There have been famous babes; for example, little Moses, from whose\n      adventure in the bulrushes the Egyptian hierophants of seven centuries\n      before doubtless derived their idle tale of the child Osiris being\n      preserved on a floating lotus leaf.\n    </p>",
+        "<pre>\n          Ere babes were invented\n          The girls were contented.\n          Now man is tormented\n  Until to buy babes he has squandered\n  His money.  And so I have pondered\n          This thing, and thought may be\n          &#39;T were better that Baby\n  The First had been eagled or condored.\n</pre>",
+        "<p>\n      Ro Amil\n    </p>"
+      ],
+      "kinds": [
+        "headword",
+        "verse",
+        "attribution"
+      ],
+      "letter": "B",
+      "pos": "n",
+      "position": 84
+    }
+  ]
+}

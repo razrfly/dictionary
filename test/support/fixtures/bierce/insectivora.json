@@ -1,0 +1,22 @@
+{
+  "records": [
+    {
+      "alt_headwords": [],
+      "anchor": "link2H_4_0010",
+      "headword": "INSECTIVORA",
+      "html": [
+        "<p>\n      INSECTIVORA, n.\n    </p>",
+        "<pre>\n  &quot;See,&quot; cries the chorus of admiring preachers,\n  &quot;How Providence provides for all His creatures!&quot;\n  &quot;His care,&quot; the gnat said, &quot;even the insects follows:\n  For us He has provided wrens and swallows.&quot;\n</pre>",
+        "<p>\n      Sempen Railey\n    </p>"
+      ],
+      "kinds": [
+        "headword",
+        "verse",
+        "attribution"
+      ],
+      "letter": "I",
+      "pos": "n",
+      "position": 447
+    }
+  ]
+}

@@ -1,6 +1,78 @@
 {
-  "captured_at": "2026-09-05T12:04:19.383605Z",
+  "captured_at": "2026-09-05T19:57:46.669821Z",
   "fixtures": [
+    {
+      "bytes": 353,
+      "lemma": "academy",
+      "records": 1,
+      "source": "bierce"
+    },
+    {
+      "bytes": 1206,
+      "lemma": "babe",
+      "records": 1,
+      "source": "bierce"
+    },
+    {
+      "bytes": 306,
+      "lemma": "brute",
+      "records": 1,
+      "source": "bierce"
+    },
+    {
+      "bytes": 643,
+      "lemma": "cat",
+      "records": 1,
+      "source": "bierce"
+    },
+    {
+      "bytes": 921,
+      "lemma": "dog",
+      "records": 1,
+      "source": "bierce"
+    },
+    {
+      "bytes": 557,
+      "lemma": "eucharist",
+      "records": 1,
+      "source": "bierce"
+    },
+    {
+      "bytes": 364,
+      "lemma": "hash",
+      "records": 1,
+      "source": "bierce"
+    },
+    {
+      "bytes": 662,
+      "lemma": "insectivora",
+      "records": 1,
+      "source": "bierce"
+    },
+    {
+      "bytes": 865,
+      "lemma": "monument",
+      "records": 1,
+      "source": "bierce"
+    },
+    {
+      "bytes": 459,
+      "lemma": "oyster",
+      "records": 1,
+      "source": "bierce"
+    },
+    {
+      "bytes": 8407,
+      "lemma": "story",
+      "records": 1,
+      "source": "bierce"
+    },
+    {
+      "bytes": 1037,
+      "lemma": "x",
+      "records": 1,
+      "source": "bierce"
+    },
     {
       "bytes": 401358,
       "lemma": "cat",
@@ -87,6 +159,7 @@
     }
   ],
   "sources": {
+    "bierce": {},
     "wikidata": {
       "api_url": "https://www.wikidata.org/w/api.php",
       "batch_size": 50

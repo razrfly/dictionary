@@ -28,8 +28,12 @@ defmodule Mix.Tasks.Dd.Materialize do
 
   use Mix.Task
 
-  alias DevilsDictionary.{Absorb, Health, Sources}
+  import Ecto.Query
+
+  alias DevilsDictionary.{Absorb, Health, Repo, Sources}
   alias DevilsDictionary.Absorb.Batch
+  alias DevilsDictionary.Encyclopedia.{Concept, ConceptLink, ConceptRelation}
+  alias DevilsDictionary.Lexicon.{Entry, Lexeme, LexicalRelation, Sense}
 
   @requirements ["app.start"]
 
@@ -68,6 +72,36 @@ defmodule Mix.Tasks.Dd.Materialize do
     end)
   end
 
+  # Every table `materialize/1` writes into. Row counts rather than checksums:
+  # an upsert that lost a row, wrote a duplicate or swapped a natural key all
+  # show up here, and M1's parity check covers what counts alone would miss.
+  @tables [
+    lexemes: Lexeme,
+    senses: Sense,
+    entries: Entry,
+    relations: LexicalRelation,
+    concepts: Concept,
+    concept_relations: ConceptRelation,
+    links: ConceptLink
+  ]
+
+  defp table_counts do
+    Map.new(@tables, fn {name, schema} ->
+      {to_string(name), Repo.aggregate(from(r in schema), :count)}
+    end)
+  end
+
+  defp m2_stats(true), do: %{}
+
+  defp m2_stats(before) do
+    now = table_counts()
+
+    changed =
+      for {k, v} <- before, now[k] != v, into: %{}, do: {k, %{"before" => v, "after" => now[k]}}
+
+    %{"m2_identical" => changed == %{}, "m2_changed" => changed, "m2_before" => before}
+  end
+
   defp materialize(slug, opts) do
     module = Absorb.source_module!(slug)
     source = Sources.get_source_by_slug!(slug)
@@ -79,13 +113,22 @@ defmodule Mix.Tasks.Dd.Materialize do
     run_row = Sources.start_run("materialize", source_id: source.id)
     started = System.monotonic_time(:millisecond)
 
+    # Scorecard M2: rebuilding every derived row from `raw`, with the network
+    # off, must change nothing. The check has to be taken here, around the
+    # rebuild — reading it back afterwards would only measure the database, not
+    # the rebuild — so `--all` records what it saw before and after.
+    before = only_stale || table_counts()
+
     try do
       counts = Batch.run(module, source, only_stale: only_stale)
       elapsed = System.monotonic_time(:millisecond) - started
 
       Sources.finish_run(
         run_row,
-        counts |> Map.new(fn {k, v} -> {to_string(k), v} end) |> Map.put("elapsed_ms", elapsed)
+        counts
+        |> Map.new(fn {k, v} -> {to_string(k), v} end)
+        |> Map.put("elapsed_ms", elapsed)
+        |> Map.merge(m2_stats(before))
       )
 
       Mix.shell().info("\n#{slug} — #{elapsed} ms")

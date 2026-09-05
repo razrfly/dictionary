@@ -14,7 +14,7 @@ defmodule DevilsDictionary.Health do
 
   alias DevilsDictionary.Absorb.Resolver
   alias DevilsDictionary.Encyclopedia.{Concept, ConceptLink}
-  alias DevilsDictionary.Health.Parity
+  alias DevilsDictionary.Health.{Coverage, Parity}
   alias DevilsDictionary.Lexicon
   alias DevilsDictionary.Lexicon.{Entry, Lexeme, ScopeLexeme, Sense}
   alias DevilsDictionary.Repo
@@ -141,6 +141,27 @@ defmodule DevilsDictionary.Health do
   `mix dd.materialize --dry-run` runs.
   """
   defdelegate parity(source_slug, opts \\ []), to: Parity, as: :check
+
+  @doc "**A1** — every source in the catalog absorbed, counting `done` runs only."
+  defdelegate source_runs(), to: Coverage, as: :sources
+
+  @doc "**A2** — WordNet synsets and lexemes."
+  defdelegate wordnet(), to: Coverage
+
+  @doc "**A3** — the size of the English index."
+  defdelegate index(lang \\ "en"), to: Coverage
+
+  @doc "**A4** — scope membership and the reasons for it."
+  defdelegate scope(scope_slug \\ "animals"), to: Coverage
+
+  @doc "**A8** — Bierce's entries and how many of his headwords the index knew."
+  defdelegate bierce(scope_slug \\ "animals"), to: Coverage
+
+  @doc "**R1** — WordNet edges resolved at absorb."
+  defdelegate wordnet_edges(), to: Coverage
+
+  @doc "**X3** — forms and spelling variants land on the right word."
+  defdelegate variants(), to: Coverage
 
   @doc """
   **M4** — what `trim/1` saved on the records actually stored, read back from
@@ -361,6 +382,7 @@ defmodule DevilsDictionary.Health do
     linked = scope_with_link(scope, threshold)
     strict = scope_with_link(scope, threshold, strict: true)
     any = scope_with_link(scope, 0.0)
+    reachable = scope_with_article(scope)
 
     histogram =
       Repo.all(
@@ -377,6 +399,8 @@ defmodule DevilsDictionary.Health do
       threshold: threshold,
       linked: linked,
       pct: pct(linked, total),
+      reachable: reachable,
+      reachable_pct: pct(linked, reachable),
       strict_linked: strict,
       strict_pct: pct(strict, total),
       any_linked: any,
@@ -576,6 +600,34 @@ defmodule DevilsDictionary.Health do
       fragment("EXISTS (SELECT 1 FROM concept_links cl WHERE cl.lexeme_id = ?)", l.id)
     )
     |> Repo.aggregate(:count)
+  end
+
+  # L1's denominator, as amended in S2 (#69 v10): the scope lexemes English
+  # Wikipedia has an article for. 6,840 Animals lemmas have none — `soup-fin`,
+  # `trochid`, `prophaethontid` — and no rung can conjure an article that does
+  # not exist, so measuring against the whole scope measures Wikipedia's
+  # coverage of zoology rather than the linker.
+  #
+  # "Has an article" is a record that is not an absent marker: the probe asked,
+  # and got a page back.
+  defp scope_with_article(scope) do
+    Repo.one(
+      from l in Lexeme,
+        join: sl in ScopeLexeme,
+        on: sl.lexeme_id == l.id and sl.scope_id == ^scope.id,
+        where:
+          fragment(
+            """
+            EXISTS (
+              SELECT 1 FROM source_records r
+                JOIN sources s ON s.id = r.source_id AND s.slug = 'wikipedia'
+               WHERE r.external_id = ? AND r.absent_until IS NULL
+            )
+            """,
+            l.lemma
+          ),
+        select: count(l.id)
+    )
   end
 
   # A5's denominator plus Wikidata's reach: a scope lexeme is covered when

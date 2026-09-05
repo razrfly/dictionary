@@ -25,6 +25,8 @@ defmodule Mix.Tasks.Dd.Link do
 
   use Mix.Task
 
+  import Mix.Tasks.Dd.Report
+
   alias DevilsDictionary.{Health, Lexicon, Sources}
   alias DevilsDictionary.Absorb.Linker
 
@@ -123,27 +125,4 @@ defmodule Mix.Tasks.Dd.Link do
     row("candidate links", fmt(disambiguation.candidates))
     row("promoted to 0.6", fmt(disambiguation.promoted))
   end
-
-  defp say(line), do: Mix.shell().info(line)
-
-  defp row(label, value) do
-    say("  #{String.pad_trailing(to_string(label), 26)} #{fmt(value)}")
-  end
-
-  defp stringify(map), do: Map.new(map, fn {k, v} -> {to_string(k), v} end)
-
-  defp fmt(n) when is_integer(n) do
-    n
-    |> Integer.to_charlist()
-    |> Enum.reverse()
-    |> Enum.chunk_every(3)
-    |> Enum.join(",")
-    |> String.reverse()
-  end
-
-  defp fmt(other), do: to_string(other)
-
-  defp fmt_ms(ms) when ms < 1_000, do: "#{ms} ms"
-  defp fmt_ms(ms) when ms < 60_000, do: "#{Float.round(ms / 1000, 1)} s"
-  defp fmt_ms(ms), do: "#{div(ms, 60_000)}m #{rem(div(ms, 1000), 60)}s"
 end

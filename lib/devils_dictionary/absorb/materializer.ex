@@ -13,7 +13,8 @@ defmodule DevilsDictionary.Absorb.Materializer do
 
       lexemes   %{key: {lang, lemma, pos}, lemma: .., pos: .., ..}
       senses    %{key: external_id, lexeme: {lang, lemma, pos}, ..}
-      entries   %{lexeme: {lang, lemma, pos} | nil, concept: qid | nil, ..}
+      entries   %{lexeme: {lang, lemma, pos} | nil, concept: qid | nil,
+                  author: person_slug | nil, ..}
       relations %{from_lexeme: {..}, from_sense: external_id | nil, to_lemma: ..}
       concepts  %{key: qid, qid: qid, taxon_concept: qid | nil, ..}
       links     %{lexeme: {..}, sense: external_id | nil, concept: qid, ..}
@@ -48,7 +49,7 @@ defmodule DevilsDictionary.Absorb.Materializer do
   alias DevilsDictionary.Encyclopedia.{Concept, ConceptLink, ConceptRelation}
   alias DevilsDictionary.Lexicon.{Entry, Lexeme, LexicalRelation, Sense}
   alias DevilsDictionary.Repo
-  alias DevilsDictionary.Sources.SourceRecord
+  alias DevilsDictionary.Sources.{Person, SourceRecord}
 
   # Postgres caps a statement at 65,535 bind parameters; the widest row here is
   # ~14 columns, so 2,000 leaves plenty of headroom.
@@ -106,7 +107,7 @@ defmodule DevilsDictionary.Absorb.Materializer do
       {:ok, upsert_senses(merged.senses, changes.lexemes, now)}
     end)
     |> Ecto.Multi.run(:entries, fn _repo, changes ->
-      {:ok, upsert_entries(merged.entries, changes, now)}
+      {:ok, upsert_entries(merged.entries, changes, authors(merged.entries), now)}
     end)
     |> Ecto.Multi.run(:relations, fn _repo, changes ->
       {:ok, upsert_relations(merged.relations, changes, now)}
@@ -319,7 +320,8 @@ defmodule DevilsDictionary.Absorb.Materializer do
 
   # ── concept relations ────────────────────────────────────────────────────
 
-  defp upsert_concept_relations([], _concept_ids, _now), do: %{written: 0, skipped: 0}
+  defp upsert_concept_relations([], _concept_ids, _now),
+    do: %{written: 0, skipped: 0, skipped_parent_taxon: 0, skipped_unchased: 0}
 
   defp upsert_concept_relations(rows, concept_ids, now) do
     qids = Enum.flat_map(rows, &[&1.from_concept, &1.to_concept])
@@ -354,7 +356,21 @@ defmodule DevilsDictionary.Absorb.Materializer do
     # A skip is a parent no record has introduced *yet*. Counted rather than
     # swallowed, so `Wikidata.absorb/2` knows whether another pass is owed and
     # M1 does not have to discover it later.
-    %{written: written, skipped: length(skipped)}
+    #
+    # Split by type, because the two halves mean opposite things. A skipped
+    # `parent_taxon` is a `P171` edge whose parent the walk should have fetched,
+    # and must reach zero. Everything else is a `P279`/`P31` target the walk
+    # deliberately never chases (#69 §5: chasing them climbs out of biology into
+    # the abstract ontology), and is permanently non-zero — around 36,000. One
+    # number for both let a real residual hide behind the expected one.
+    by_type = Enum.frequencies_by(skipped, &(&1.type == :parent_taxon))
+
+    %{
+      written: written,
+      skipped: length(skipped),
+      skipped_parent_taxon: Map.get(by_type, true, 0),
+      skipped_unchased: Map.get(by_type, false, 0)
+    }
   end
 
   # Batch first, then one query for whatever the batch did not introduce.
@@ -406,9 +422,28 @@ defmodule DevilsDictionary.Absorb.Materializer do
 
   # ── entries ──────────────────────────────────────────────────────────────
 
-  defp upsert_entries([], _changes, _now), do: 0
+  # `materialize/1` is pure and cannot look up a `people` row, so a source names
+  # its author by slug and it is resolved here — the same way a concept relation
+  # names a parent QID the batch may not contain. Resolving it on every write
+  # rather than stamping it afterwards is what keeps `--all` idempotent: the
+  # entries upsert is `replace_all_except`, so a column written outside this
+  # transaction would be blanked by the next rebuild (M2).
+  defp authors([]), do: %{}
 
-  defp upsert_entries(rows, changes, now) do
+  defp authors(rows) do
+    slugs = rows |> Enum.map(& &1[:author]) |> Enum.reject(&is_nil/1) |> Enum.uniq()
+
+    if slugs == [] do
+      %{}
+    else
+      Repo.all(from p in Person, where: p.slug in ^slugs, select: {p.slug, p.id})
+      |> Map.new()
+    end
+  end
+
+  defp upsert_entries([], _changes, _authors, _now), do: 0
+
+  defp upsert_entries(rows, changes, authors, now) do
     rows
     |> Enum.map(fn row ->
       %{
@@ -416,7 +451,7 @@ defmodule DevilsDictionary.Absorb.Materializer do
         source_record_id: row[:source_record_id],
         lexeme_id: row[:lexeme] && Map.fetch!(changes.lexemes, row.lexeme),
         concept_id: row[:concept] && Map.fetch!(changes.concepts, row.concept),
-        author_id: row[:author_id],
+        author_id: row[:author_id] || (row[:author] && Map.get(authors, row.author)),
         headword: row[:headword],
         pos: row[:pos],
         body: row[:body],
@@ -596,6 +631,8 @@ defmodule DevilsDictionary.Absorb.Materializer do
       links: changes.links,
       concept_relations: changes.concept_relations.written,
       concept_relations_skipped: changes.concept_relations.skipped,
+      concept_relations_skipped_parent_taxon: changes.concept_relations.skipped_parent_taxon,
+      concept_relations_skipped_unchased: changes.concept_relations.skipped_unchased,
       relations_offered: length(merged.relations),
       concept_relations_offered: length(merged.concept_relations)
     }

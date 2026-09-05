@@ -61,7 +61,7 @@ Patterns are borrowed from [Cinegraph](https://github.com/razrfly/cinegraph): ra
 | S1b `content_hash` taken before `trim/1` (changed_at now moves only when the source moves), `form_of` flag on 533,218 index rows, headword-first lookup; Health rows unchanged (A5 raw 83.5 % / amended 92.2 %, A9 100 %, M1 0, M4 67.7 %, R2 86.4 %) | ✅ 2026-09-05 |
 | S2 Wikidata + Wikipedia (44,194 concepts, 44,072 entries, 38,206 taxonomy edges, 65,679 links), Oban, the linking ladder (A6 ✅ 100% · A7 ✅ 100% · A10 ✅ 93.7% · L2 ✅ 1,165 surfaced · L3 ✅ 77.3% · L4 ✅ 100% · M1 ✅ 0 gaps · **L1 ⚠️ 57.7%**, ceiling 68.1%, see #69) | ✅ 2026-09-05 |
 | S2 audit + completion pass: Wiktionary re-absorbed on the grown scope (+2,176 records, +3,367 senses), Wikidata +66, links re-run; L1 58.4 % raw / **88.5 % of reachable**, A6 union 97.4 %, A7 100 %, A10 93.6 %, L3 77.2 %, R2 86.4 %, M1 0 gaps across 242,359 records | ✅ 2026-09-05 |
-| S3 Bierce, health, `dd.score` | ⬜ |
+| S3 Bierce (997 entries, 247 verse blocks), `Health.Coverage` + `Health.Score`, `mix dd.health`, `mix dd.score` (A1 ✅ 5/5 · A8 ✅ 997, 93.0% already in the index · M2 ✅ identical over 271,296 records · M3 ✅ · O1 ✅ · O3 ✅ · O4 ✅ — **24 / 24 graded rows pass**) | ✅ 2026-09-05 |
 | S4 six pages | ⬜ |
 | S5 extensibility proof (Johnson 1755, a toy scope) | ⬜ |
 
@@ -133,6 +133,10 @@ Everything below is designed for in the MVP-0 schema and adds tables rather than
 | 2026-09-05 | S2: `wikidata_taxon` grew the Animals scope from 21,277 to **25,393** lexemes. #69 §3's enwiki-sitelink requirement is applied (8,870 matched) and the count without it reported (9,290), because the article usually sits on the everyday concept rather than on the taxon item. | #69 §3, #70 |
 | 2026-09-05 | S2 audited (grade A−). Accepted: L1 measured against the reachable set (articles exist), L3 and A10 over asserted links, L4 by lemma, A7 as "answered", records keyed by what was asked, batched endpoints, `name` as nominal, the corroboration pass with both numbers printed. Rule learned: when a scope grows, re-run the dictionary half too. | #69 v10, #70 |
 | 2026-09-05 | Bierce source verified: Project Gutenberg #972 is the complete 1911 text and the only public-domain one (the 2000 *Unabridged* is a copyrighted compilation; Wikisource is the same text). Parse the **HTML edition** (`priv/sources/bierce/972-h.htm`), as the Rails app did: one paragraph per entry, verse in `<pre>`, attributions as short paragraphs. 959 entries + EUCHARIST, which the HTML mis-wraps. | #70 S3 notes |
+| 2026-09-05 | S3: **Bierce holds 997 entries, not the 959 recorded** (or the 966 #69 A8 assumed). The single regex everyone had used misses 21 stubs whose whole definition is the verse below them, the six letter essays that open chapters I, J, K, T, W and X (chapter X is *only* that, and it was gluing itself to chapter W), `HABEAS CORPUS.`, `CUI BONO?`, `FORMA PAUPERIS.`, `LL.D.`, `R.I.P.`, and one missing comma in the 1911 source. The Rails seed is a cautionary baseline, not a reference: it never visits a `<pre>`, so it drops all 247 verse blocks and every attribution. | #69 §7 A8, #70 |
+| 2026-09-05 | S3: for a source with structure, **`absorb/2` segments and `materialize/1` parses**. `raw` holds the entry's own markup; deciding which paragraphs, verse blocks and attribution lines belong to which entry needs the whole document, so it happens once, at absorb, as WordNet computes its inverse edges. The payoff is that a parser bug is fixed with `mix dd.materialize --source bierce --all`, network off, file never re-read — which is M2 in practice rather than in principle. | #69 §5, #70 |
+| 2026-09-05 | S3: A8's "entries with `lexeme_id`" is **100 % by construction** — `materialize/1` creates the lexeme when the index lacks it, so an unattached entry cannot exist. The number that carries information is the **index hit rate**: 93.0 % of Bierce's headwords were words another source already attested, and the other 70 are words he invented (`WHANGDEPOOTENAWAH`). | #69 §7 A8 |
+| 2026-09-05 | S3: **the Wikipedia lemma probe was never incremental.** It re-fetched all 23,784 scope lemmas on every run (90 minutes to learn nothing), and the disambiguation pass re-read all 1,775 "may refer to" pages with it — which is what restamped `changed_at` on 1,352 records in S2. Both now skip what they have already asked about; `--refresh` is the way back in. An expired absent marker is still retried. | #69 §5, #70 |
 | 2026-09-05 | The first UI is a new build, not the skeleton's: Oatmeal theme applied and verified on a `/kit` page before any product page; the minimum use case is the hop between related words with Bierce first; layers that do not exist yet may be shown as clearly labelled samples in a dev-only fake-data mode; never commit the kit source. | #71 |
 
 ---
@@ -177,7 +181,12 @@ mix dd.absorb wikidata --scope animals     # again: the QIDs those probes found
 mix dd.absorb wikipedia --scope animals --concepts   # a summary for every concept (A7)
 mix dd.link --scope animals                # the ladder → concept_links; prints L1
 
-mix dd.materialize --dry-run               # parity: raw vs derived, no network
+mix dd.absorb bierce                       # 997 entries, verse, cross-references
+mix dd.resolve --source bierce             # his "See X" targets
+
+mix dd.materialize --dry-run               # parity: raw vs derived, no network (M1)
+mix dd.materialize --all                   # rebuild every derived row offline (M2)
+mix dd.health                              # coverage, resolution, links, parity
 mix dd.score                               # the MVP-0 scorecard, PASS/FAIL with actuals
 mix phx.server                             # http://localhost:4000
 ```

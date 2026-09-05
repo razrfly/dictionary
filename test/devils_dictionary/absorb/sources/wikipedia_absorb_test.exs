@@ -9,7 +9,8 @@ defmodule DevilsDictionary.Absorb.Sources.WikipediaAbsorbTest do
   alias DevilsDictionary.Absorb.Clients
   alias DevilsDictionary.Absorb.Sources.Wikipedia
   alias DevilsDictionary.{Fixtures, Repo, Sources}
-  alias DevilsDictionary.Lexicon.{Lexeme, ScopeLexeme}
+  alias DevilsDictionary.Encyclopedia.Concept
+  alias DevilsDictionary.Lexicon.{Entry, Lexeme, ScopeLexeme}
   alias DevilsDictionary.Sources.SourceRecord
 
   setup do
@@ -177,9 +178,15 @@ defmodule DevilsDictionary.Absorb.Sources.WikipediaAbsorbTest do
     # The payload did not change, so neither did `changed_at` — which is the
     # whole contract the "changed this week" feed will be built on.
     assert is_nil(hd(records(ctx)).changed_at)
-    # A full re-absorb re-reads the candidates: the probe replaces `raw`, and a
-    # "may refer to" list that changed should be picked up.
-    assert second == first
+    # And the second run asks nothing at all: the lemma is probed and the page's
+    # candidates are already read. Re-reading them was what restamped 1,352
+    # records in S2, and it answers the same list.
+    assert second == 0
+
+    # `--refresh` still re-reads both.
+    Wikipedia.absorb(ctx.animals, refresh: true, rate_limit_ms: 0)
+    assert :counters.get(counter, 1) > first
+    assert is_nil(hd(records(ctx)).changed_at)
   end
 
   test "reads a long disambiguation page in 50-title chunks", ctx do
@@ -200,6 +207,67 @@ defmodule DevilsDictionary.Absorb.Sources.WikipediaAbsorbTest do
     # `pageprops` carries no extract, so its limit is the API's 50 — one chunk
     # short and the last ten candidates would silently have no QID and vanish.
     assert {:ok, %{candidates: 60}} = Wikipedia.absorb(ctx.animals, rate_limit_ms: 0)
+  end
+
+  test "a lemma already probed is not probed again", ctx do
+    scoped!(ctx, "cat", ["wordnet_closure"])
+    scoped!(ctx, "gone", ["wordnet_closure"])
+
+    counter = stub_api(%{"Cat" => page("Cat"), "cat" => page("Cat")})
+
+    assert {:ok, %{lemmas: 2, requests: 1}} = Wikipedia.absorb(ctx.animals, rate_limit_ms: 0)
+    first = :counters.get(counter, 1)
+
+    # `cat` was answered and `gone` got an absent marker. Neither is a question
+    # worth asking twice, so the second run does no work at all.
+    assert {:ok, %{lemmas: 0, requests: 0}} = Wikipedia.absorb(ctx.animals, rate_limit_ms: 0)
+    assert :counters.get(counter, 1) == first
+
+    assert {:ok, %{lemmas: 2}} = Wikipedia.absorb(ctx.animals, refresh: true, rate_limit_ms: 0)
+  end
+
+  test "an expired absent marker is probed again", ctx do
+    scoped!(ctx, "gone", ["wordnet_closure"])
+    stub_api(%{})
+
+    assert {:ok, %{lemmas: 1, misses: 1}} = Wikipedia.absorb(ctx.animals, rate_limit_ms: 0)
+
+    Repo.update_all(
+      from(r in SourceRecord, where: r.source_id == ^ctx.source.id),
+      set: [absent_until: DateTime.add(DateTime.utc_now(), -1, :day)]
+    )
+
+    assert {:ok, %{lemmas: 1}} = Wikipedia.absorb(ctx.animals, rate_limit_ms: 0)
+  end
+
+  test "the concept pass does not re-fetch a page that yielded no entry", ctx do
+    # A disambiguation page is fetched, stored, and produces no entry by design.
+    # The skip rule tested only "has an entry" and "has a live absent marker", so
+    # every `--concepts` run asked about all ~3,800 of them again.
+    Repo.insert!(%Concept{
+      qid: "Q_disambig",
+      label: "Seal",
+      kind: :thing,
+      wikipedia_title: "Seal"
+    })
+
+    counter =
+      stub_api(%{
+        "Seal" => page("Seal", %{"pageprops" => %{"disambiguation" => ""}, "extract" => nil})
+      })
+
+    assert {:ok, %{requests: 1}} = Wikipedia.absorb(ctx.animals, concepts: true, rate_limit_ms: 0)
+    assert Repo.aggregate(from(e in Entry, where: e.source_id == ^ctx.source.id), :count) == 0
+
+    # Second run: nothing left to ask about.
+    assert {:ok, %{requests: 0, concepts_probed: 0}} =
+             Wikipedia.absorb(ctx.animals, concepts: true, rate_limit_ms: 0)
+
+    assert :counters.get(counter, 1) == 1
+
+    # `--refresh` is still the way back in.
+    assert {:ok, %{requests: 1}} =
+             Wikipedia.absorb(ctx.animals, concepts: true, refresh: true, rate_limit_ms: 0)
   end
 
   test "refuses to run without a scope, rather than probing 1.5M lemmas", ctx do
