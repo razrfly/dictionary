@@ -61,8 +61,10 @@ defmodule DevilsDictionary.Lexicon do
   `metadata.form_of`, so a **bare** match (no senses, no entries, no canonical
   target) that is only a form-of entry is not good enough to stop at: if some
   other word claims the string as one of its forms, that word is the answer. A
-  bare row that is a headword in its own right keeps its page, and the words
-  that list the string among their forms come back under `also`.
+  bare row that is a headword in its own right, matched in its exact casing,
+  keeps its page, and the words that list the string among their forms come
+  back under `also`. A bare row in another casing (*CATS* for *cats*) does not
+  outrank a forms match.
 
   Returns `%{lexemes: [...], via: :lemma | :canonical | :form | :none,
   matched: term}`, with `via` telling the word page whether to show a
@@ -72,7 +74,8 @@ defmodule DevilsDictionary.Lexicon do
     word = String.trim(word || "")
     matches = by_lemma_or_slug(word, lang)
 
-    headwords = Enum.reject(matches, &form_of_entry?/1)
+    # Exact case only: a bare "CATS" must not answer for "cats".
+    headwords = Enum.reject(matches, &(form_of_entry?(&1) or &1.lemma != word))
 
     cond do
       matches != [] and Enum.any?(matches, &enriched?/1) ->

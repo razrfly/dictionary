@@ -75,6 +75,15 @@ defmodule DevilsDictionary.LexiconTest do
       assert also.id == spit.id
     end
 
+    test "a bare headword in another casing does not outrank a forms match" do
+      # "CATS" the musical has a bare index row; "cats" still means cats.
+      lexeme!("CATS", "name")
+      enriched!("cat", "noun", forms: [%{"form" => "cats", "tags" => ["plural"]}])
+
+      assert %{via: :form, lexemes: [lexeme]} = Lexicon.lookup("cats")
+      assert lexeme.lemma == "cat"
+    end
+
     test "a bare form-of entry yields to the word it inflects" do
       lexeme!("geese", "noun", metadata: %{"form_of" => true})
       enriched!("goose", "noun", forms: [%{"form" => "geese", "tags" => ["plural"]}])
