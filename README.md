@@ -91,7 +91,8 @@ Everything below is designed for in the MVP-0 schema and adds tables rather than
 
 **Product**
 - [ ] Feeds: new words, changed senses, top examples, word of the day
-- [ ] Design pass on the word page (#66): the tier styling *is* the joke
+- [ ] Minimum word-hopping UI on the Oatmeal theme, theme boilerplate first, with a labelled fake-data mode (#71)
+- [ ] Design pass on the word page (#66): the tier styling *is* the joke, on top of #71
 - [ ] JSON API (then GraphQL) over the same contexts
 - [ ] Progressive web app
 - [ ] iOS app
@@ -125,6 +126,7 @@ Everything below is designed for in the MVP-0 schema and adds tables rather than
 | 2026-09-05 | S1: **A5 cannot pass as specified** — Wiktionary attests 83.5% of the Animals scope, and the 3,504 misses are 1,995 Linnaean binomials plus 1,299 other multiword names that Wiktionary files under Translingual, not English. Reported rather than engineered around; amendment proposed on #69. `trim/1` also narrows categories instead of only dropping keys, which is what takes M4 from 45.6% to 67.7% on real records. | #69, #70 |
 | 2026-09-05 | S1 audited (grade A-) and fast-forwarded into `main`. A5 amendment accepted: the row now excludes lemmas Wiktionary files as Translingual (binomials) and measures 92.2 %; the raw 83.5 % and the 1,995 binomials stay reported. | #69 v7, #70 |
 | 2026-09-05 | S1b: the record hash is taken on the payload as fetched, before trimming, so tightening what we keep never reads as a change at the source (19,250 false stamps reset once). Bare index rows that are only inflected forms yield to the word they inflect; a bare headword keeps its page only on an exact-case match. | #69 v7 open items, #70 |
+| 2026-09-05 | The first UI is a new build, not the skeleton's: Oatmeal theme applied and verified on a `/kit` page before any product page; the minimum use case is the hop between related words with Bierce first; layers that do not exist yet may be shown as clearly labelled samples in a dev-only fake-data mode; never commit the kit source. | #71 |
 
 ---
 
