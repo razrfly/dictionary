@@ -60,6 +60,7 @@ Patterns are borrowed from [Cinegraph](https://github.com/razrfly/cinegraph): ra
 | S1 Wiktionary scoped (19,251 records, 31,116 senses, 105,731 relations), `Resolver`, parity, `Health` (A9 ✅ 100% · M1 ✅ 0 gaps · M4 ✅ 67.7% on real records · R2 ✅ 86.4% · X3 ✅ · A5 ⚠️ 83.5%, see #69) | ✅ 2026-09-05 |
 | S1b `content_hash` taken before `trim/1` (changed_at now moves only when the source moves), `form_of` flag on 533,218 index rows, headword-first lookup; Health rows unchanged (A5 raw 83.5 % / amended 92.2 %, A9 100 %, M1 0, M4 67.7 %, R2 86.4 %) | ✅ 2026-09-05 |
 | S2 Wikidata + Wikipedia (44,194 concepts, 44,072 entries, 38,206 taxonomy edges, 65,679 links), Oban, the linking ladder (A6 ✅ 100% · A7 ✅ 100% · A10 ✅ 93.7% · L2 ✅ 1,165 surfaced · L3 ✅ 77.3% · L4 ✅ 100% · M1 ✅ 0 gaps · **L1 ⚠️ 57.7%**, ceiling 68.1%, see #69) | ✅ 2026-09-05 |
+| S2 audit + completion pass: Wiktionary re-absorbed on the grown scope (+2,176 records, +3,367 senses), Wikidata +66, links re-run; L1 58.4 % raw / **88.5 % of reachable**, A6 union 97.4 %, A7 100 %, A10 93.6 %, L3 77.2 %, R2 86.4 %, M1 0 gaps across 242,359 records | ✅ 2026-09-05 |
 | S3 Bierce, health, `dd.score` | ⬜ |
 | S4 six pages | ⬜ |
 | S5 extensibility proof (Johnson 1755, a toy scope) | ⬜ |
@@ -130,6 +131,7 @@ Everything below is designed for in the MVP-0 schema and adds tables rather than
 | 2026-09-05 | S2: the two API sources use the **batched** endpoints (`wbgetentities`, 50 ids; the Action API, 20 titles) rather than #69 §2's pinned per-item URLs. 100,201 fetches became 7,380 requests and 1 h 37 m instead of ≈ 5.6 h, with redirect resolution, the disambiguation flag and `wikibase_item` included rather than inferred. The per-item URL stays as the record's link back. | #69 §2, #70 |
 | 2026-09-05 | S2: a Wikipedia record is keyed by **the thing we asked about** — the probed lemma, or `concept:<QID>` — not by pageid. A lemma with no article has no pageid to key an absent marker on, and two lemmas legitimately redirect to one page. | #69 §4, #70 |
 | 2026-09-05 | S2: `wikidata_taxon` grew the Animals scope from 21,277 to **25,393** lexemes. #69 §3's enwiki-sitelink requirement is applied (8,870 matched) and the count without it reported (9,290), because the article usually sits on the everyday concept rather than on the taxon item. | #69 §3, #70 |
+| 2026-09-05 | S2 audited (grade A−). Accepted: L1 measured against the reachable set (articles exist), L3 and A10 over asserted links, L4 by lemma, A7 as "answered", records keyed by what was asked, batched endpoints, `name` as nominal, the corroboration pass with both numbers printed. Rule learned: when a scope grows, re-run the dictionary half too. | #69 v10, #70 |
 | 2026-09-05 | The first UI is a new build, not the skeleton's: Oatmeal theme applied and verified on a `/kit` page before any product page; the minimum use case is the hop between related words with Bierce first; layers that do not exist yet may be shown as clearly labelled samples in a dev-only fake-data mode; never commit the kit source. | #71 |
 
 ---
