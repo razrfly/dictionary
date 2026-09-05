@@ -17,20 +17,11 @@ config :devils_dictionary, DevilsDictionary.Repo,
 # you can enable the server option below.
 config :devils_dictionary, DevilsDictionaryWeb.Endpoint,
   http: [ip: {127, 0, 0, 1}, port: 4002],
-  secret_key_base: "Z5I7K++4Y4OSE37WwLF7XPqiH/vsTes8TkqKCaSJpGoJ7O7vkeeyPLbg4kVYu949",
+  secret_key_base: "NDr0xrjf8WqeDKA+uRZeAREgdwX1OjLGz/NOpp6BsBrsfmXmxVEWtJ342GuHsNXC",
   server: false
-
-# In test we don't send emails
-config :devils_dictionary, DevilsDictionary.Mailer, adapter: Swoosh.Adapters.Test
-
-# Disable swoosh api client as it is only required for production adapters
-config :swoosh, :api_client, false
 
 # Print only warnings and errors during test
 config :logger, level: :warning
-
-# Disable Oban job processing in tests
-config :devils_dictionary, Oban, testing: :inline
 
 # Initialize plugs at runtime for faster test compilation
 config :phoenix, :plug_init_mode, :runtime

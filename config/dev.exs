@@ -19,11 +19,11 @@ config :devils_dictionary, DevilsDictionary.Repo,
 config :devils_dictionary, DevilsDictionaryWeb.Endpoint,
   # Binding to loopback ipv4 address prevents access from other machines.
   # Change to `ip: {0, 0, 0, 0}` to allow access from other machines.
-  http: [ip: {127, 0, 0, 1}, port: 4006],
+  http: [ip: {127, 0, 0, 1}],
   check_origin: false,
   code_reloader: true,
   debug_errors: true,
-  secret_key_base: "GC65zuPjfh2+so5ktciFG0D1LoopKwWWMW7LjT14iWnF4HsijL8moPoCc9emjrRy",
+  secret_key_base: "ECxygwHtDn8OFiRoCbhB5kvtsT2Np1WVR2ThlLPyIJZ7OrXGk/1pkbwum9lmyGF4",
   watchers: [
     esbuild: {Esbuild, :install_and_run, [:devils_dictionary, ~w(--sourcemap=inline --watch)]},
     tailwind: {Tailwind, :install_and_run, [:devils_dictionary, ~w(--watch)]}
@@ -52,21 +52,6 @@ config :devils_dictionary, DevilsDictionaryWeb.Endpoint,
 # configured to run both http and https servers on
 # different ports.
 
-# Reload browser tabs when matching files change.
-config :devils_dictionary, DevilsDictionaryWeb.Endpoint,
-  live_reload: [
-    web_console_logger: true,
-    patterns: [
-      # Static assets, except user uploads
-      ~r"priv/static/(?!uploads/).*\.(js|css|png|jpeg|jpg|gif|svg)$",
-      # Gettext translations
-      ~r"priv/gettext/.*\.po$",
-      # Router, Controllers, LiveViews and LiveComponents
-      ~r"lib/devils_dictionary_web/router\.ex$",
-      ~r"lib/devils_dictionary_web/(controllers|live|components)/.*\.(ex|heex)$"
-    ]
-  ]
-
 # Enable dev routes for dashboard and mailbox
 config :devils_dictionary, dev_routes: true
 
@@ -87,6 +72,3 @@ config :phoenix_live_view,
   debug_attributes: true,
   # Enable helpful, but potentially expensive runtime checks
   enable_expensive_runtime_checks: true
-
-# Disable swoosh api client as it is only required for production adapters.
-config :swoosh, :api_client, false

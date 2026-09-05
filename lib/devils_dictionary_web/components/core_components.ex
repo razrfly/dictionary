@@ -21,7 +21,7 @@ defmodule DevilsDictionaryWeb.CoreComponents do
 
     * [Heroicons](https://heroicons.com) - see `icon/1` for usage.
 
-    * [Phoenix.Component](https://hexdocs.pm/phoenix_live_view/Phoenix.Component.html) -
+    * [Phoenix.Component](https://phoenix-live-view.hexdocs.pm/Phoenix.Component.html) -
       the component system used by Phoenix. Some components, such as `<.link>`
       and `<.form>`, are defined there.
 
@@ -37,7 +37,14 @@ defmodule DevilsDictionaryWeb.CoreComponents do
   ## Examples
 
       <.flash kind={:info} flash={@flash} />
-      <.flash kind={:info} phx-mounted={show("#flash")}>Welcome Back!</.flash>
+      <.flash
+        id="welcome-back"
+        kind={:info}
+        phx-mounted={show("#welcome-back") |> JS.remove_attribute("hidden")}
+        hidden
+      >
+        Welcome Back!
+      </.flash>
   """
   attr :id, :string, doc: "the optional id of flash container"
   attr :flash, :map, default: %{}, doc: "the map of flash messages to display"
@@ -154,7 +161,7 @@ defmodule DevilsDictionaryWeb.CoreComponents do
   ```
 
   For more information on what kind of data can be passed to `options` see
-  [`options_for_select`](https://hexdocs.pm/phoenix_html/Phoenix.HTML.Form.html#options_for_select/2).
+  [`options_for_select`](https://phoenix-html.hexdocs.pm/Phoenix.HTML.Form.html#options_for_select/2).
   """
   attr :id, :any, default: nil
   attr :name, :any
@@ -206,7 +213,7 @@ defmodule DevilsDictionaryWeb.CoreComponents do
 
     ~H"""
     <div class="fieldset mb-2">
-      <label>
+      <label for={@id}>
         <input
           type="hidden"
           name={@name}
@@ -234,7 +241,7 @@ defmodule DevilsDictionaryWeb.CoreComponents do
   def input(%{type: "select"} = assigns) do
     ~H"""
     <div class="fieldset mb-2">
-      <label>
+      <label for={@id}>
         <span :if={@label} class="label mb-1">{@label}</span>
         <select
           id={@id}
@@ -255,7 +262,7 @@ defmodule DevilsDictionaryWeb.CoreComponents do
   def input(%{type: "textarea"} = assigns) do
     ~H"""
     <div class="fieldset mb-2">
-      <label>
+      <label for={@id}>
         <span :if={@label} class="label mb-1">{@label}</span>
         <textarea
           id={@id}
@@ -276,7 +283,7 @@ defmodule DevilsDictionaryWeb.CoreComponents do
   def input(assigns) do
     ~H"""
     <div class="fieldset mb-2">
-      <label>
+      <label for={@id}>
         <span :if={@label} class="label mb-1">{@label}</span>
         <input
           type={@type}

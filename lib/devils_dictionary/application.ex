@@ -1,5 +1,5 @@
 defmodule DevilsDictionary.Application do
-  # See https://hexdocs.pm/elixir/Application.html
+  # See https://elixir.hexdocs.pm/Application.html
   # for more information on OTP Applications
   @moduledoc false
 
@@ -12,15 +12,13 @@ defmodule DevilsDictionary.Application do
       DevilsDictionary.Repo,
       {DNSCluster, query: Application.get_env(:devils_dictionary, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: DevilsDictionary.PubSub},
-      # Oban for background job processing
-      {Oban, Application.fetch_env!(:devils_dictionary, Oban)},
-      # Cachex for in-memory caching of API responses
-      {Cachex, name: :api_cache, limit: 1000},
+      # Start a worker by calling: DevilsDictionary.Worker.start_link(arg)
+      # {DevilsDictionary.Worker, arg},
       # Start to serve requests, typically the last entry
       DevilsDictionaryWeb.Endpoint
     ]
 
-    # See https://hexdocs.pm/elixir/Supervisor.html
+    # See https://elixir.hexdocs.pm/Supervisor.html
     # for other strategies and supported options
     opts = [strategy: :one_for_one, name: DevilsDictionary.Supervisor]
     Supervisor.start_link(children, opts)

@@ -35,9 +35,6 @@ devils_dictionary-*.tar
 npm-debug.log
 /assets/node_modules/
 
-# OS files
-.DS_Store
 
-# Local Claude Code settings
-.claude/
-
+# local data dumps (Kaikki, WordNet); never committed
+/data/

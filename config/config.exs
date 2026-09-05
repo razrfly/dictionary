@@ -20,16 +20,12 @@ config :devils_dictionary, DevilsDictionaryWeb.Endpoint,
     layout: false
   ],
   pubsub_server: DevilsDictionary.PubSub,
-  live_view: [signing_salt: "6f7c0LYn"]
+  live_view: [signing_salt: "df7nUVYI"]
 
-# Configure the mailer
-#
-# By default it uses the "Local" adapter which stores the emails
-# locally. You can see the emails in your browser, at "/dev/mailbox".
-#
-# For production it's recommended to configure a different adapter
-# at the `config/runtime.exs`.
-config :devils_dictionary, DevilsDictionary.Mailer, adapter: Swoosh.Adapters.Local
+# Configure LiveView
+config :phoenix_live_view,
+  # the attribute set on all root tags. Used for Phoenix.LiveView.ColocatedCSS.
+  root_tag_attribute: "phx-r"
 
 # Configure esbuild (the version is required)
 config :esbuild,
@@ -43,13 +39,14 @@ config :esbuild,
 
 # Configure tailwind (the version is required)
 config :tailwind,
-  version: "4.1.12",
+  version: "4.3.0",
   devils_dictionary: [
     args: ~w(
       --input=assets/css/app.css
       --output=priv/static/assets/css/app.css
     ),
-    cd: Path.expand("..", __DIR__)
+    cd: Path.expand("..", __DIR__),
+    env: %{"NODE_PATH" => [Path.expand("../deps", __DIR__), Mix.Project.build_path()]}
   ]
 
 # Configure Elixir's Logger
@@ -59,15 +56,6 @@ config :logger, :default_formatter,
 
 # Use Jason for JSON parsing in Phoenix
 config :phoenix, :json_library, Jason
-
-# Configure Oban for background job processing
-config :devils_dictionary, Oban,
-  repo: DevilsDictionary.Repo,
-  queues: [
-    default: 10,
-    api_fetch: 5,      # Dictionary API fetching
-    cache_refresh: 3   # Cache warming/refresh jobs
-  ]
 
 # Import environment specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.

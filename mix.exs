@@ -5,7 +5,7 @@ defmodule DevilsDictionary.MixProject do
     [
       app: :devils_dictionary,
       version: "0.1.0",
-      elixir: "~> 1.15",
+      elixir: "~> 1.17",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       aliases: aliases(),
@@ -40,17 +40,17 @@ defmodule DevilsDictionary.MixProject do
   # Type `mix help deps` for examples and options.
   defp deps do
     [
-      {:phoenix, "~> 1.8.3"},
+      {:phoenix, "~> 1.8.13"},
       {:phoenix_ecto, "~> 4.5"},
       {:ecto_sql, "~> 3.13"},
       {:postgrex, ">= 0.0.0"},
       {:phoenix_html, "~> 4.1"},
       {:phoenix_live_reload, "~> 1.2", only: :dev},
-      {:phoenix_live_view, "~> 1.1.0"},
+      {:phoenix_live_view, "~> 1.2.0"},
       {:lazy_html, ">= 0.1.0", only: :test},
       {:phoenix_live_dashboard, "~> 0.8.3"},
       {:esbuild, "~> 0.10", runtime: Mix.env() == :dev},
-      {:tailwind, "~> 0.3", runtime: Mix.env() == :dev},
+      {:tailwind, "~> 0.5", runtime: Mix.env() == :dev},
       {:heroicons,
        github: "tailwindlabs/heroicons",
        tag: "v2.2.0",
@@ -58,8 +58,13 @@ defmodule DevilsDictionary.MixProject do
        app: false,
        compile: false,
        depth: 1},
-      {:swoosh, "~> 1.16"},
-      {:req, "~> 0.5"},
+      {:daisyui,
+       github: "saadeghi/daisyui",
+       tag: "v5.5.20",
+       sparse: "packages/bundle",
+       app: false,
+       compile: false,
+       depth: 1},
       {:telemetry_metrics, "~> 1.0"},
       {:telemetry_poller, "~> 1.0"},
       {:gettext, "~> 1.0"},
@@ -67,15 +72,13 @@ defmodule DevilsDictionary.MixProject do
       {:dns_cluster, "~> 0.2.0"},
       {:bandit, "~> 1.5"},
 
-      # Devil's Dictionary - Core Dependencies
-      {:floki, "~> 0.36"},                              # HTML parsing for API responses
-      {:ecto_autoslug_field, "~> 3.1"},                  # Automatic slug generation in Ecto schemas
-      {:oban, "~> 2.19"},                               # Background job processing
-      {:cachex, "~> 4.0"},                              # In-memory caching for API responses
-
-      # Development & Testing Tools
-      {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
-      {:dialyxir, "~> 1.4", only: [:dev], runtime: false}
+      # MVP-0 backbone (#69 §5): jobs, HTTP, HTML parsing, cache, slugs, lint
+      {:req, "~> 0.5"},
+      {:oban, "~> 2.19"},
+      {:floki, "~> 0.36"},
+      {:cachex, "~> 4.0"},
+      {:slugify, "~> 1.3"},
+      {:credo, "~> 1.7", only: [:dev, :test], runtime: false}
     ]
   end
 

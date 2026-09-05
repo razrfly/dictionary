@@ -17,15 +17,7 @@ defmodule DevilsDictionaryWeb.Router do
   scope "/", DevilsDictionaryWeb do
     pipe_through :browser
 
-    # Home page with search
-    live "/", HomeLive, :index
-
-    # Topic pages - the heart of the dictionary
-    live "/define/:slug", TopicLive, :show
-
-    # Browse A-Z
-    live "/browse", BrowseLive, :index
-    live "/browse/:letter", BrowseLive, :index
+    get "/", PageController, :home
   end
 
   # Other scopes may use custom stacks.
@@ -33,7 +25,7 @@ defmodule DevilsDictionaryWeb.Router do
   #   pipe_through :api
   # end
 
-  # Enable LiveDashboard and Swoosh mailbox preview in development
+  # Enable LiveDashboard in development
   if Application.compile_env(:devils_dictionary, :dev_routes) do
     # If you want to use the LiveDashboard in production, you should put
     # it behind authentication and allow only admins to access it.
@@ -46,7 +38,6 @@ defmodule DevilsDictionaryWeb.Router do
       pipe_through :browser
 
       live_dashboard "/dashboard", metrics: DevilsDictionaryWeb.Telemetry
-      forward "/mailbox", Plug.Swoosh.MailboxPreview
     end
   end
 end

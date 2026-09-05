@@ -86,8 +86,6 @@ defmodule DevilsDictionaryWeb do
       import Phoenix.HTML
       # Core UI components
       import DevilsDictionaryWeb.CoreComponents
-      # Dictionary-specific components (tier cards, topic headers)
-      import DevilsDictionaryWeb.DictionaryComponents
 
       # Common modules used in templates
       alias Phoenix.LiveView.JS

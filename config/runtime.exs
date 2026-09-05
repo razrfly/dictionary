@@ -20,6 +20,26 @@ if System.get_env("PHX_SERVER") do
   config :devils_dictionary, DevilsDictionaryWeb.Endpoint, server: true
 end
 
+config :devils_dictionary, DevilsDictionaryWeb.Endpoint,
+  http: [port: String.to_integer(System.get_env("PORT", "4000"))]
+
+if config_env() == :dev do
+  # Reload browser tabs when matching files change.
+  config :devils_dictionary, DevilsDictionaryWeb.Endpoint,
+    live_reload: [
+      web_console_logger: true,
+      patterns: [
+        # Static assets, except user uploads
+        ~r"priv/static/(?!uploads/).*\.(js|css|png|jpeg|jpg|gif|svg)$",
+        # Gettext translations
+        ~r"priv/gettext/.*\.po$",
+        # Router, Controllers, LiveViews and LiveComponents
+        ~r"lib/devils_dictionary_web/router\.ex$",
+        ~r"lib/devils_dictionary_web/(controllers|live|components)/.*\.(ex|heex)$"
+      ]
+    ]
+end
+
 if config_env() == :prod do
   database_url =
     System.get_env("DATABASE_URL") ||
@@ -59,7 +79,7 @@ if config_env() == :prod do
     http: [
       # Enable IPv6 and bind on all interfaces.
       # Set it to  {0, 0, 0, 0, 0, 0, 0, 1} for local network only access.
-      # See the documentation on https://hexdocs.pm/bandit/Bandit.html#t:options/0
+      # See the documentation on https://bandit.hexdocs.pm/Bandit.html#t:options/0
       # for details about using IPv6 vs IPv4 and loopback vs public addresses.
       ip: {0, 0, 0, 0, 0, 0, 0, 0}
     ],
@@ -87,7 +107,7 @@ if config_env() == :prod do
   # `:keyfile` and `:certfile` expect an absolute path to the key
   # and cert in disk or a relative path inside priv, for example
   # "priv/ssl/server.key". For all supported SSL configuration
-  # options, see https://hexdocs.pm/plug/Plug.SSL.html#configure/1
+  # options, see https://plug.hexdocs.pm/Plug.SSL.html#configure/1
   #
   # We also recommend setting `force_ssl` in your config/prod.exs,
   # ensuring no data is ever sent via http, always redirecting to https:
@@ -96,22 +116,4 @@ if config_env() == :prod do
   #       force_ssl: [hsts: true]
   #
   # Check `Plug.SSL` for all available options in `force_ssl`.
-
-  # ## Configuring the mailer
-  #
-  # In production you need to configure the mailer to use a different adapter.
-  # Here is an example configuration for Mailgun:
-  #
-  #     config :devils_dictionary, DevilsDictionary.Mailer,
-  #       adapter: Swoosh.Adapters.Mailgun,
-  #       api_key: System.get_env("MAILGUN_API_KEY"),
-  #       domain: System.get_env("MAILGUN_DOMAIN")
-  #
-  # Most non-SMTP adapters require an API client. Swoosh supports Req, Hackney,
-  # and Finch out-of-the-box. This configuration is typically done at
-  # compile-time in your config/prod.exs:
-  #
-  #     config :swoosh, :api_client, Swoosh.ApiClient.Req
-  #
-  # See https://hexdocs.pm/swoosh/Swoosh.html#module-installation for details.
 end

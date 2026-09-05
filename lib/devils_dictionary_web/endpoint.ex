@@ -7,7 +7,7 @@ defmodule DevilsDictionaryWeb.Endpoint do
   @session_options [
     store: :cookie,
     key: "_devils_dictionary_key",
-    signing_salt: "5S/CwQ2F",
+    signing_salt: "c/zYPsXo",
     same_site: "Lax"
   ]
 
