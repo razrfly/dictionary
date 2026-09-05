@@ -36,7 +36,17 @@ defmodule DevilsDictionary.Absorb.Batch do
     * `:on_batch` — a 1-arity callback given each batch's counts, for progress
   """
   def run(module, %Source{} = source, opts \\ []) do
-    zero = %{records: 0, lexemes: 0, senses: 0, entries: 0, relations: 0, links: 0}
+    zero = %{
+      records: 0,
+      lexemes: 0,
+      concepts: 0,
+      senses: 0,
+      entries: 0,
+      relations: 0,
+      links: 0,
+      concept_relations: 0,
+      concept_relations_skipped: 0
+    }
 
     source
     |> stream(opts)
@@ -48,10 +58,13 @@ defmodule DevilsDictionary.Absorb.Batch do
           acc
           |> Map.update!(:records, &(&1 + length(batch)))
           |> Map.update!(:lexemes, &(&1 + counts.lexemes))
+          |> Map.update!(:concepts, &(&1 + counts.concepts))
           |> Map.update!(:senses, &(&1 + counts.senses))
           |> Map.update!(:entries, &(&1 + counts.entries))
           |> Map.update!(:relations, &(&1 + counts.relations))
           |> Map.update!(:links, &(&1 + counts.links))
+          |> Map.update!(:concept_relations, &(&1 + counts.concept_relations))
+          |> Map.update!(:concept_relations_skipped, &(&1 + counts.concept_relations_skipped))
 
         {:error, reason} ->
           raise "materialize failed for #{module.slug()}: #{inspect(reason)}"

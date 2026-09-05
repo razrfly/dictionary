@@ -64,6 +64,22 @@ config :logger, :default_formatter,
 # Use Jason for JSON parsing in Phoenix
 config :phoenix, :json_library, Jason
 
+# The line every Wikimedia endpoint sees. One string, shared by every client and
+# by `mix dd.scope.categories`, so a polite absorb is never one module's habit.
+config :devils_dictionary,
+       :user_agent,
+       "wordhoard/0.1 (https://github.com/razrfly/dictionary; holden.thomas@gmail.com)"
+
+# Oban (#69 §5). `absorb: 1` because a dump absorb is a single long stream;
+# `enrich: 3` because the API sources rate-limit themselves inside the worker.
+config :devils_dictionary, Oban,
+  repo: DevilsDictionary.Repo,
+  queues: [absorb: 1, enrich: 3, link: 2, maintenance: 1],
+  plugins: [
+    {Oban.Plugins.Pruner, max_age: 60 * 60 * 24 * 7},
+    {Oban.Plugins.Lifeline, rescue_after: :timer.minutes(30)}
+  ]
+
 # Import environment specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.
 import_config "#{config_env()}.exs"

@@ -59,7 +59,7 @@ Patterns are borrowed from [Cinegraph](https://github.com/razrfly/cinegraph): ra
 | S0b thirteen-table schema, `Materializer`, WordNet full + Wiktionary index, Animals scope (A2 ✅ 120,564 synsets · A3 ✅ 1,534,818 lexemes · A4 ✅ 21,277 scope lexemes · R1 ✅ 100%) | ✅ 2026-09-05 |
 | S1 Wiktionary scoped (19,251 records, 31,116 senses, 105,731 relations), `Resolver`, parity, `Health` (A9 ✅ 100% · M1 ✅ 0 gaps · M4 ✅ 67.7% on real records · R2 ✅ 86.4% · X3 ✅ · A5 ⚠️ 83.5%, see #69) | ✅ 2026-09-05 |
 | S1b `content_hash` taken before `trim/1` (changed_at now moves only when the source moves), `form_of` flag on 533,218 index rows, headword-first lookup; Health rows unchanged (A5 raw 83.5 % / amended 92.2 %, A9 100 %, M1 0, M4 67.7 %, R2 86.4 %) | ✅ 2026-09-05 |
-| S2 Wikidata + Wikipedia, linking ladder, link rate | ⬜ |
+| S2 Wikidata + Wikipedia (44,194 concepts, 44,072 entries, 38,206 taxonomy edges, 65,679 links), Oban, the linking ladder (A6 ✅ 100% · A7 ✅ 100% · A10 ✅ 93.7% · L2 ✅ 1,165 surfaced · L3 ✅ 77.3% · L4 ✅ 100% · M1 ✅ 0 gaps · **L1 ⚠️ 57.7%**, ceiling 68.1%, see #69) | ✅ 2026-09-05 |
 | S3 Bierce, health, `dd.score` | ⬜ |
 | S4 six pages | ⬜ |
 | S5 extensibility proof (Johnson 1755, a toy scope) | ⬜ |
@@ -126,6 +126,10 @@ Everything below is designed for in the MVP-0 schema and adds tables rather than
 | 2026-09-05 | S1: **A5 cannot pass as specified** — Wiktionary attests 83.5% of the Animals scope, and the 3,504 misses are 1,995 Linnaean binomials plus 1,299 other multiword names that Wiktionary files under Translingual, not English. Reported rather than engineered around; amendment proposed on #69. `trim/1` also narrows categories instead of only dropping keys, which is what takes M4 from 45.6% to 67.7% on real records. | #69, #70 |
 | 2026-09-05 | S1 audited (grade A-) and fast-forwarded into `main`. A5 amendment accepted: the row now excludes lemmas Wiktionary files as Translingual (binomials) and measures 92.2 %; the raw 83.5 % and the 1,995 binomials stay reported. | #69 v7, #70 |
 | 2026-09-05 | S1b: the record hash is taken on the payload as fetched, before trimming, so tightening what we keep never reads as a change at the source (19,250 false stamps reset once). Bare index rows that are only inflected forms yield to the word they inflect; a bare headword keeps its page only on an exact-case match. | #69 v7 open items, #70 |
+| 2026-09-05 | S2: **L1 cannot reach 70 %** — only 68.1 % of the Animals scope has *any* concept link, because 6,840 of its lemmas have no English Wikipedia article at all (`soup-fin`, `trochid`, `prophaethontid`). 57.7 % clear the ≥ 0.8 bar. The QID rungs alone reach 25.2 %, so a corroboration step raises a title match when a taxon name, a QID rung or a gloss overlap agrees; both numbers are reported. Another rung cannot help: the words have no article. | #69 §7 L1, #70 |
+| 2026-09-05 | S2: the two API sources use the **batched** endpoints (`wbgetentities`, 50 ids; the Action API, 20 titles) rather than #69 §2's pinned per-item URLs. 100,201 fetches became 7,380 requests and 1 h 37 m instead of ≈ 5.6 h, with redirect resolution, the disambiguation flag and `wikibase_item` included rather than inferred. The per-item URL stays as the record's link back. | #69 §2, #70 |
+| 2026-09-05 | S2: a Wikipedia record is keyed by **the thing we asked about** — the probed lemma, or `concept:<QID>` — not by pageid. A lemma with no article has no pageid to key an absent marker on, and two lemmas legitimately redirect to one page. | #69 §4, #70 |
+| 2026-09-05 | S2: `wikidata_taxon` grew the Animals scope from 21,277 to **25,393** lexemes. #69 §3's enwiki-sitelink requirement is applied (8,870 matched) and the count without it reported (9,290), because the article usually sits on the everyday concept rather than on the taxon item. | #69 §3, #70 |
 | 2026-09-05 | The first UI is a new build, not the skeleton's: Oatmeal theme applied and verified on a `/kit` page before any product page; the minimum use case is the hop between related words with Bierce first; layers that do not exist yet may be shown as clearly labelled samples in a dev-only fake-data mode; never commit the kit source. | #71 |
 
 ---
@@ -154,12 +158,33 @@ Everything below is designed for in the MVP-0 schema and adds tables rather than
 Toolchain is pinned in `.tool-versions` (Elixir 1.19 on OTP 28; `mise` picks it up automatically). Phoenix 1.8.13, LiveView 1.2.11, Oban 2.24, Req 0.7. Dumps live in `data/` (ignored). The old dev database from the skeleton still exists: run `mix ecto.drop` once before the first `mix ecto.create`. After S0:
 
 ```bash
-mix setup                      # deps, db, assets
-mix dd.absorb wordnet          # then: wiktionary --index, scope.build animals, wiktionary --scope animals,
-                               #       wikidata --scope animals, wikipedia --scope animals, bierce
-mix dd.link --scope animals
-mix dd.score                   # the MVP-0 scorecard, PASS/FAIL with actuals
-mix phx.server                 # http://localhost:4000
+mix setup                                  # deps, db, assets
+
+mix dd.absorb wordnet                      # full corpus
+mix dd.absorb wiktionary --index           # ~1.5M bare lexemes + forms
+mix dd.scope.build animals                 # scope_lexemes, with reasons
+mix dd.absorb wiktionary --scope animals   # senses, relations, trimmed raw
+mix dd.resolve                             # relation targets, canonical variants
+
+mix dd.absorb wikipedia --scope animals    # title probes → concepts, entries, images
+mix dd.absorb wikidata --scope animals     # entities, taxonomy, the taxon bridge
+mix dd.scope.build animals                 # again, WITHOUT --reset: adds wikidata_taxon
+mix dd.absorb wikipedia --scope animals    # again: the lemmas the taxon rule added
+mix dd.absorb wikidata --scope animals     # again: the QIDs those probes found
+mix dd.absorb wikipedia --scope animals --concepts   # a summary for every concept (A7)
+mix dd.link --scope animals                # the ladder → concept_links; prints L1
+
+mix dd.materialize --dry-run               # parity: raw vs derived, no network
+mix dd.score                               # the MVP-0 scorecard, PASS/FAIL with actuals
+mix phx.server                             # http://localhost:4000
 ```
 
-Conventions live in `AGENTS.md`. Every task prints numbers and writes an `import_runs` row. Tests run offline on checked-in fixtures for `cat`, `dog`, `oyster`.
+Order matters three times. Wikidata is seeded from the QIDs the Wikipedia pass finds,
+so Wikipedia goes first. The second `dd.scope.build` must **not** take `--reset`,
+because reasons union and the taxon rule only ever adds. And the encyclopedia half
+converges rather than running once: the taxon rule grows the scope, the new lemmas need
+probing, and their pages name new QIDs — two rounds took it from 21,277 to 25,393
+lexemes and the third round added 49, so two is enough in practice. Every pass is
+incremental; a re-run costs only what it does not already have.
+
+Conventions live in `AGENTS.md`. Every task prints numbers and writes an `import_runs` row. Tests run offline on checked-in fixtures for `cat`, `dog`, `oyster` and — for the two API sources — `seal`, which is a disambiguation page.

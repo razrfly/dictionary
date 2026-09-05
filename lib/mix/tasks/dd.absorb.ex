@@ -9,6 +9,9 @@ defmodule Mix.Tasks.Dd.Absorb do
       mix dd.absorb wordnet
       mix dd.absorb wiktionary --index
       mix dd.absorb wiktionary --scope animals
+      mix dd.absorb wikipedia --scope animals
+      mix dd.absorb wikidata --scope animals
+      mix dd.absorb wikipedia --scope animals --concepts
 
   Every run writes an `import_runs` row (running → done or failed) and prints
   the numbers it produced. Those numbers are the point: they are what the
@@ -25,6 +28,19 @@ defmodule Mix.Tasks.Dd.Absorb do
       reason (`wordnet_closure`, `wiktionary_category`, …)
     * `--rebuild-indexes` — drop the lexemes GIN indexes for the load and
       recreate them after
+    * `--rate-limit-ms` — override the per-request pause from `sources.config`
+    * `--max-candidates` — Wikipedia only: how many articles to keep from a
+      disambiguation page (default 100; the API lists them alphabetically, so a
+      low cap truncates rather than samples)
+    * `--concepts` — Wikipedia only: fetch a summary for every `concepts` row
+      with an enwiki sitelink and no entry, rather than probing scope lemmas.
+      This is scorecard row A7, and it is the pass that gives the taxa and the
+      disambiguation candidates their text and thumbnails.
+    * `--max-depth` — Wikidata only: how many parent tiers to walk (default 30)
+    * `--refresh` — Wikidata only: refetch seed entities already stored, rather
+      than only the tiers that are missing
+    * `--strict` — raise on the first HTTP failure instead of counting it and
+      carrying on. Use it on a smoke run; leave it off for a 20,000-lemma pass.
   """
 
   use Mix.Task
@@ -43,7 +59,13 @@ defmodule Mix.Tasks.Dd.Absorb do
           path: :string,
           limit: :integer,
           reason: :string,
-          rebuild_indexes: :boolean
+          rebuild_indexes: :boolean,
+          concepts: :boolean,
+          max_candidates: :integer,
+          max_depth: :integer,
+          refresh: :boolean,
+          rate_limit_ms: :integer,
+          strict: :boolean
         ]
       )
 

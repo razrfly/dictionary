@@ -1,0 +1,193 @@
+{
+  "records": [
+    {
+      "_candidates": [
+        {
+          "description": "Indian actor",
+          "qid": "Q16887606",
+          "title": "Aditya Seal"
+        },
+        {
+          "description": "Battery electric mid-size fastback sedan",
+          "qid": "Q114414285",
+          "title": "BYD Seal"
+        },
+        {
+          "description": "Canadian judge",
+          "qid": "Q26703676",
+          "title": "Barbara Seal"
+        },
+        {
+          "description": "American drug smuggler (1939–1986)",
+          "qid": "Q326239",
+          "title": "Barry Seal"
+        },
+        {
+          "description": "British politician (1937–2025)",
+          "qid": "Q4864729",
+          "title": "Barry Seal (politician)"
+        },
+        {
+          "description": "Indian academic and scholar (1864–1938)",
+          "qid": "Q4955996",
+          "title": "Brajendra Nath Seal"
+        },
+        {
+          "description": "General-purpose programming language",
+          "qid": "Q2370",
+          "title": "C Sharp (programming language)"
+        },
+        {
+          "description": "Australian soccer player",
+          "qid": "Q5239613",
+          "title": "David Seal"
+        },
+        {
+          "description": "Family of marine mammals",
+          "qid": "Q26700",
+          "title": "Eared seal"
+        },
+        {
+          "description": "Family of mammals",
+          "qid": "Q25587",
+          "title": "Earless seal"
+        },
+        {
+          "description": "British actress (born 1933)",
+          "qid": "Q5363483",
+          "title": "Elizabeth Seal"
+        },
+        {
+          "description": "1930s British reconnaissance aircraft",
+          "qid": "Q3883220",
+          "title": "Fairey Seal"
+        },
+        {
+          "description": "Christian Science practitioner and teacher",
+          "qid": "Q1440819",
+          "title": "Frances Thurber Seal"
+        },
+        {
+          "description": "Pinnipeds with dense underfur",
+          "qid": "Q1043473",
+          "title": "Fur seal"
+        },
+        {
+          "description": "List of ships with the same or similar names",
+          "qid": "Q3782134",
+          "title": "HMS Seal"
+        },
+        {
+          "description": "Airtight seal",
+          "qid": "Q1475577",
+          "title": "Hermetic seal"
+        },
+        {
+          "description": "Object-oriented programming language",
+          "qid": "Q251",
+          "title": "Java (programming language)"
+        },
+        {
+          "description": "Australian television presenter (born 1973)",
+          "qid": "Q16214613",
+          "title": "Jaynie Seal"
+        },
+        {
+          "description": "American politician (born 1991)",
+          "qid": "Q135096964",
+          "title": "Jessie Seal"
+        },
+        {
+          "description": "English footballer",
+          "qid": "Q6201247",
+          "title": "Jimmy Seal"
+        },
+        {
+          "description": "American television presenter",
+          "qid": "Q6397458",
+          "title": "Kevin Seal"
+        },
+        {
+          "description": "Musical artist",
+          "qid": "Q6752875",
+          "title": "Manuel Seal"
+        },
+        {
+          "description": "British conductor",
+          "qid": "Q6848753",
+          "title": "Michael Seal"
+        },
+        {
+          "description": "Mixed martial arts fighter",
+          "qid": "Q15987712",
+          "title": "Mike Seal (fighter)"
+        },
+        {
+          "description": "Indian merchant and philanthropist (1792–1854)",
+          "qid": "Q6944137",
+          "title": "Mutty Lall Seal"
+        },
+        {
+          "description": "Military unit of the Philippines Navy",
+          "qid": "Q6981928",
+          "title": "Philippine Navy Special Warfare Force"
+        },
+        {
+          "description": "American football player (born 1952)",
+          "qid": "Q7153510",
+          "title": "Paul Seal"
+        },
+        {
+          "description": "Taxonomic group of semi-aquatic mammals",
+          "qid": "Q30263",
+          "title": "Pinniped"
+        },
+        {
+          "description": "Legal procedure",
+          "qid": "Q17145405",
+          "title": "Record sealing"
+        },
+        {
+          "description": "Special warfare unit of Republic of Korea Navy",
+          "qid": "Q485031",
+          "title": "Republic of Korea Navy Special Warfare Flotilla"
+        }
+      ],
+      "_probe": {
+        "lemma": "seal",
+        "lexemes": [
+          [
+            "en",
+            "seal",
+            "noun"
+          ],
+          [
+            "en",
+            "seal",
+            "verb"
+          ]
+        ]
+      },
+      "canonicalurl": "https://en.wikipedia.org/wiki/Seal",
+      "contentmodel": "wikitext",
+      "description": "Topics referred to by the same term",
+      "descriptionsource": "local",
+      "editurl": "https://en.wikipedia.org/w/index.php?title=Seal&action=edit",
+      "extract": "Seal may refer to any of the following:",
+      "fullurl": "https://en.wikipedia.org/wiki/Seal",
+      "lastrevid": 1370335928,
+      "length": 4454,
+      "ns": 0,
+      "pageid": 26754,
+      "pagelanguage": "en",
+      "pagelanguagedir": "ltr",
+      "pagelanguagehtmlcode": "en",
+      "pageprops": {
+        "disambiguation": "",
+        "wikibase_item": "Q257102"
+      },
+      "title": "Seal",
+      "touched": "2026-08-30T18:09:57Z"
+    }
+  ]
+}

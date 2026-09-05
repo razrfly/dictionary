@@ -59,6 +59,8 @@ defmodule Mix.Tasks.Dd.Materialize do
     Mix.shell().info("  missing senses         #{result.missing_senses}")
     Mix.shell().info("  missing relations      #{result.missing_relations}")
     Mix.shell().info("  missing entries        #{result.missing_entries}")
+    Mix.shell().info("  missing concepts       #{result.missing_concepts}")
+    Mix.shell().info("  missing concept edges  #{result.missing_concept_relations}")
     Mix.shell().info("  M1 gaps                #{result.gaps} — wants 0")
 
     Enum.each(result.examples, fn {external_id, detail} ->

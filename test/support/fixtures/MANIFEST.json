@@ -1,23 +1,53 @@
 {
-  "captured_at": "2026-09-05T10:05:45.916054Z",
+  "captured_at": "2026-09-05T12:04:19.383605Z",
   "fixtures": [
     {
-      "bytes": 11251,
+      "bytes": 401358,
       "lemma": "cat",
-      "records": 10,
-      "source": "wordnet"
+      "records": 2,
+      "source": "wikidata"
     },
     {
-      "bytes": 12965,
+      "bytes": 376404,
       "lemma": "dog",
-      "records": 8,
-      "source": "wordnet"
+      "records": 2,
+      "source": "wikidata"
     },
     {
-      "bytes": 5395,
+      "bytes": 126450,
       "lemma": "oyster",
-      "records": 4,
-      "source": "wordnet"
+      "records": 2,
+      "source": "wikidata"
+    },
+    {
+      "bytes": 7109,
+      "lemma": "seal",
+      "records": 1,
+      "source": "wikidata"
+    },
+    {
+      "bytes": 3122,
+      "lemma": "cat",
+      "records": 1,
+      "source": "wikipedia"
+    },
+    {
+      "bytes": 3438,
+      "lemma": "dog",
+      "records": 1,
+      "source": "wikipedia"
+    },
+    {
+      "bytes": 1876,
+      "lemma": "oyster",
+      "records": 1,
+      "source": "wikipedia"
+    },
+    {
+      "bytes": 5428,
+      "lemma": "seal",
+      "records": 1,
+      "source": "wikipedia"
     },
     {
       "bytes": 385550,
@@ -36,9 +66,35 @@
       "lemma": "oyster",
       "records": 3,
       "source": "wiktionary"
+    },
+    {
+      "bytes": 11251,
+      "lemma": "cat",
+      "records": 10,
+      "source": "wordnet"
+    },
+    {
+      "bytes": 12965,
+      "lemma": "dog",
+      "records": 8,
+      "source": "wordnet"
+    },
+    {
+      "bytes": 5395,
+      "lemma": "oyster",
+      "records": 4,
+      "source": "wordnet"
     }
   ],
   "sources": {
+    "wikidata": {
+      "api_url": "https://www.wikidata.org/w/api.php",
+      "batch_size": 50
+    },
+    "wikipedia": {
+      "api_url": "https://en.wikipedia.org/w/api.php",
+      "batch_size": 20
+    },
     "wiktionary": {
       "dump_date": "2026-08-28",
       "dump_url": "https://kaikki.org/dictionary/raw-wiktextract-data.jsonl.gz"

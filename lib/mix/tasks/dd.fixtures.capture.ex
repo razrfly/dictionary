@@ -8,6 +8,7 @@ defmodule Mix.Tasks.Dd.Fixtures.Capture do
 
       mix dd.fixtures.capture
       mix dd.fixtures.capture --source wiktionary --lemma cat --force
+      mix dd.fixtures.capture --source wikipedia --lemma seal --force
 
   Wiktionary fixtures are stored **untrimmed** on purpose: scorecard M4 measures
   trimmed size against untrimmed, so checking in the trimmed record would
@@ -16,10 +17,17 @@ defmodule Mix.Tasks.Dd.Fixtures.Capture do
   Refuses to overwrite without `--force`, so a green suite can never be quietly
   re-baselined against new data.
 
+  The two API sources are captured by calling the same clients the absorb uses,
+  so a fixture is a real response and not a hand-written approximation.
+  Wikipedia fixtures carry the absorb's `_probe` annotation, because
+  `materialize/1` reads the lexeme keys from it.
+
   Options:
 
-    * `--source` — `wordnet` or `wiktionary` (default: both)
-    * `--lemma` — repeatable (default: cat, dog, oyster)
+    * `--source` — `wordnet`, `wiktionary`, `wikipedia` or `wikidata`
+      (default: all four)
+    * `--lemma` — repeatable (default: cat, dog, oyster; the API sources add
+      `seal`, which is a disambiguation page)
     * `--force` — overwrite existing fixtures
   """
 
@@ -27,12 +35,18 @@ defmodule Mix.Tasks.Dd.Fixtures.Capture do
 
   import Ecto.Query
 
+  alias DevilsDictionary.Absorb.Clients
   alias DevilsDictionary.Absorb.GzipLines
+  alias DevilsDictionary.Lexicon.Lexeme
   alias DevilsDictionary.Repo
   alias DevilsDictionary.Sources
   alias DevilsDictionary.Sources.SourceRecord
 
   @default_lemmas ~w(cat dog oyster)
+  # `seal` earns its place: it is a Wikipedia disambiguation page, which is the
+  # only way to test the L4 path offline.
+  @api_lemmas @default_lemmas ++ ~w(seal)
+  @all_sources ~w(wordnet wiktionary wikipedia wikidata)
   @dir "test/support/fixtures"
 
   @requirements ["app.start"]
@@ -42,22 +56,20 @@ defmodule Mix.Tasks.Dd.Fixtures.Capture do
     {opts, _, _} =
       OptionParser.parse(args, strict: [source: :string, lemma: :keep, force: :boolean])
 
-    lemmas =
-      case Keyword.get_values(opts, :lemma) do
-        [] -> @default_lemmas
-        given -> given
-      end
+    given = Keyword.get_values(opts, :lemma)
 
     sources =
       case opts[:source] do
-        nil -> ~w(wordnet wiktionary)
+        nil -> @all_sources
         one -> [one]
       end
 
     captured =
       Enum.flat_map(sources, fn
-        "wordnet" -> capture_wordnet(lemmas, opts)
-        "wiktionary" -> capture_wiktionary(lemmas, opts)
+        "wordnet" -> capture_wordnet(lemmas(given, @default_lemmas), opts)
+        "wiktionary" -> capture_wiktionary(lemmas(given, @default_lemmas), opts)
+        "wikipedia" -> capture_wikipedia(lemmas(given, @api_lemmas), opts)
+        "wikidata" -> capture_wikidata(lemmas(given, @api_lemmas), opts)
       end)
 
     write_manifest(captured)
@@ -108,6 +120,82 @@ defmodule Mix.Tasks.Dd.Fixtures.Capture do
     end)
   end
 
+  defp lemmas([], default), do: default
+  defp lemmas(given, _default), do: given
+
+  # The API sources are captured through the same clients the absorb uses, so a
+  # fixture is a real response. Stored **untrimmed**, like Wiktionary's, so the
+  # trim tests have an honest denominator.
+  defp capture_wikipedia(lemmas, opts) do
+    Enum.flat_map(lemmas, fn lemma ->
+      case Clients.Wikipedia.summaries([lemma]) do
+        {:ok, %{^lemma => page}} when is_map(page) ->
+          write("wikipedia", lemma, [with_probe(page, lemma)], opts)
+
+        _ ->
+          write("wikipedia", lemma, [], opts)
+      end
+    end)
+  end
+
+  # `_probe` is the absorb's annotation, not Wikipedia's payload: it carries the
+  # lexeme keys the probe stands for, so `materialize/1` never has to guess a
+  # part of speech. A fixture without it would exercise a path the absorb never
+  # takes.
+  defp with_probe(page, lemma) do
+    keys =
+      Repo.all(from l in Lexeme, where: l.lemma == ^lemma, select: {l.lang, l.pos})
+      |> Enum.map(fn {lang, pos} -> [lang, lemma, pos] end)
+
+    keys = if keys == [], do: [["en", lemma, "noun"]], else: keys
+
+    page = Map.put(page, "_probe", %{"lemma" => lemma, "lexemes" => keys})
+
+    if get_in(page, ["pageprops", "disambiguation"]) do
+      Map.put(page, "_candidates", candidates(page["title"]))
+    else
+      page
+    end
+  end
+
+  defp candidates(title) do
+    with {:ok, titles} <- Clients.Wikipedia.links(title),
+         titles = Enum.take(titles, 30),
+         {:ok, props} <- Clients.Wikipedia.pageprops(titles) do
+      for t <- titles,
+          page = Map.get(props, t),
+          is_map(page),
+          qid = get_in(page, ["pageprops", "wikibase_item"]),
+          not is_nil(qid) do
+        %{"title" => page["title"], "qid" => qid, "description" => page["description"]}
+      end
+    else
+      _ -> []
+    end
+  end
+
+  # Wikidata is captured by QID, discovered from the lemma's Wikipedia page, plus
+  # the P13176 taxon item behind it — Q146 *cat* and Q20980826 *Felis catus* are
+  # different entities and the pair is what `taxon_concept_id` is tested on.
+  defp capture_wikidata(lemmas, opts) do
+    Enum.flat_map(lemmas, fn lemma ->
+      with {:ok, %{^lemma => page}} when is_map(page) <- Clients.Wikipedia.summaries([lemma]),
+           qid when is_binary(qid) <- get_in(page, ["pageprops", "wikibase_item"]),
+           {:ok, entities} <- Clients.Wikidata.fetch([qid]),
+           entity when is_map(entity) <- Map.get(entities, qid) do
+        taxa =
+          case Clients.Wikidata.entity_ids(entity, "P13176") do
+            [] -> %{}
+            ids -> ids |> Enum.take(1) |> Clients.Wikidata.fetch() |> then(&elem(&1, 1))
+          end
+
+        write("wikidata", lemma, [entity | Map.values(taxa)], opts)
+      else
+        _ -> write("wikidata", lemma, [], opts)
+      end
+    end)
+  end
+
   defp write(_source, lemma, [], _opts) do
     Mix.shell().error("  ! no records for #{lemma}")
     []
@@ -133,13 +221,29 @@ defmodule Mix.Tasks.Dd.Fixtures.Capture do
   defp write_manifest(captured) do
     sources =
       Sources.list_sources()
-      |> Enum.filter(&(&1.slug in ["wordnet", "wiktionary"]))
-      |> Map.new(&{&1.slug, Map.take(&1.config, ~w(dump_url edition snapshot_date dump_date))})
+      |> Enum.filter(&(&1.slug in @all_sources))
+      |> Map.new(
+        &{&1.slug,
+         Map.take(&1.config, ~w(dump_url edition snapshot_date dump_date api_url batch_size))}
+      )
+
+    # Merged, not replaced: capturing one source must not erase the record of
+    # when the others were taken.
+    previous =
+      case File.read(Path.join(@dir, "MANIFEST.json")) do
+        {:ok, body} -> Jason.decode!(body)["fixtures"] || []
+        _ -> []
+      end
+
+    fixtures =
+      (captured ++ previous)
+      |> Enum.uniq_by(&{&1["source"], &1["lemma"]})
+      |> Enum.sort_by(&{&1["source"], &1["lemma"]})
 
     manifest = %{
       "captured_at" => DateTime.to_iso8601(DateTime.utc_now()),
       "sources" => sources,
-      "fixtures" => captured
+      "fixtures" => fixtures
     }
 
     path = Path.join(@dir, "MANIFEST.json")

@@ -20,6 +20,14 @@ config :devils_dictionary, DevilsDictionaryWeb.Endpoint,
   secret_key_base: "NDr0xrjf8WqeDKA+uRZeAREgdwX1OjLGz/NOpp6BsBrsfmXmxVEWtJ342GuHsNXC",
   server: false
 
+# Jobs are asserted on, never run, and no queue or plugin starts. The mix tasks
+# are synchronous by design, so nothing in the suite waits on Oban.
+config :devils_dictionary, Oban, testing: :manual
+
+# Every HTTP call goes through a `Req.Test` stub in the suite. An unstubbed call
+# raises rather than reaching the network, which is what keeps O3 honest.
+config :devils_dictionary, :req_options, plug: {Req.Test, DevilsDictionary.Absorb.Clients}
+
 # Print only warnings and errors during test
 config :logger, level: :warning
 

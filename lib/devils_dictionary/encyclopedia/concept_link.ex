@@ -13,6 +13,10 @@ defmodule DevilsDictionary.Encyclopedia.ConceptLink do
 
   @methods [
     :wiktionary_qid,
+    # Not in #69 §5's original ladder: 22,036 OEWN synsets carry a Wikidata QID
+    # outright (S0b finding), which is free and high-signal. String column, so
+    # adding it costs no migration.
+    :wordnet_wikidata,
     :wikidata_p5137,
     :wordnet_ili,
     :title_match,

@@ -15,8 +15,17 @@ defmodule DevilsDictionary.Absorb.Materializer do
       senses    %{key: external_id, lexeme: {lang, lemma, pos}, ..}
       entries   %{lexeme: {lang, lemma, pos} | nil, concept: qid | nil, ..}
       relations %{from_lexeme: {..}, from_sense: external_id | nil, to_lemma: ..}
-      concepts  %{key: qid, qid: qid, ..}
+      concepts  %{key: qid, qid: qid, taxon_concept: qid | nil, ..}
       links     %{lexeme: {..}, sense: external_id | nil, concept: qid, ..}
+      concept_relations %{from_concept: qid, to_concept: qid, type: .., property: ..}
+
+  Concept-to-concept references (`concept_relations` and `concepts.taxon_concept_id`)
+  reach outside the batch: a P171 edge names a parent that another record
+  introduces. Those qids are resolved against the batch first and then against
+  the database, inside the same transaction; anything still unknown is counted
+  and skipped, never raised on. A source that walks a parent closure therefore
+  materializes twice — the second pass with `only_stale: false` — and the
+  residual count should be zero.
 
   Every write is an upsert on the unique keys of issue #69 §4, so running this
   twice is a no-op (M2). Every write and the record's `materialized_at` stamp
@@ -36,7 +45,7 @@ defmodule DevilsDictionary.Absorb.Materializer do
 
   import Ecto.Query
 
-  alias DevilsDictionary.Encyclopedia.{Concept, ConceptLink}
+  alias DevilsDictionary.Encyclopedia.{Concept, ConceptLink, ConceptRelation}
   alias DevilsDictionary.Lexicon.{Entry, Lexeme, LexicalRelation, Sense}
   alias DevilsDictionary.Repo
   alias DevilsDictionary.Sources.SourceRecord
@@ -45,7 +54,15 @@ defmodule DevilsDictionary.Absorb.Materializer do
   # ~14 columns, so 2,000 leaves plenty of headroom.
   @chunk 2_000
 
-  @empty %{lexemes: [], senses: [], entries: [], relations: [], concepts: [], links: []}
+  @empty %{
+    lexemes: [],
+    senses: [],
+    entries: [],
+    relations: [],
+    concepts: [],
+    links: [],
+    concept_relations: []
+  }
 
   @doc """
   Materializes one record. Used by `enrich/2` and by the tests.
@@ -79,6 +96,12 @@ defmodule DevilsDictionary.Absorb.Materializer do
     Ecto.Multi.new()
     |> Ecto.Multi.run(:lexemes, fn _repo, _ -> {:ok, upsert_lexemes(merged.lexemes, now)} end)
     |> Ecto.Multi.run(:concepts, fn _repo, _ -> {:ok, upsert_concepts(merged.concepts, now)} end)
+    |> Ecto.Multi.run(:taxon_concepts, fn _repo, changes ->
+      {:ok, link_taxon_concepts(merged.concepts, changes.concepts, now)}
+    end)
+    |> Ecto.Multi.run(:concept_relations, fn _repo, changes ->
+      {:ok, upsert_concept_relations(merged.concept_relations, changes.concepts, now)}
+    end)
     |> Ecto.Multi.run(:senses, fn _repo, changes ->
       {:ok, upsert_senses(merged.senses, changes.lexemes, now)}
     end)
@@ -197,21 +220,156 @@ defmodule DevilsDictionary.Absorb.Materializer do
 
   # ── concepts ─────────────────────────────────────────────────────────────
 
+  # Merge, never clobber — the same contract as `lexeme_conflict/0`, and for the
+  # same reason: two sources describe one concept from different sides.
+  # Wikipedia knows the title, pageid and thumbnail; Wikidata knows the taxon,
+  # the ILI and P18. Whichever lands second must not blank the other's columns.
+  #
+  # `kind` needs its own clause because it is NOT NULL with a default, so an
+  # incoming row cannot say "no opinion" with a nil. `"thing"` *is* the no-opinion
+  # value, so it never overwrites a `taxon` already established by Wikidata.
+  defp concept_conflict do
+    from(c in Concept,
+      update: [
+        set: [
+          label: fragment("COALESCE(EXCLUDED.label, ?)", c.label),
+          description: fragment("COALESCE(EXCLUDED.description, ?)", c.description),
+          kind:
+            fragment("CASE WHEN EXCLUDED.kind = 'thing' THEN ? ELSE EXCLUDED.kind END", c.kind),
+          wikipedia_title: fragment("COALESCE(EXCLUDED.wikipedia_title, ?)", c.wikipedia_title),
+          wikipedia_pageid:
+            fragment("COALESCE(EXCLUDED.wikipedia_pageid, ?)", c.wikipedia_pageid),
+          image_url: fragment("COALESCE(EXCLUDED.image_url, ?)", c.image_url),
+          image_attribution:
+            fragment("COALESCE(EXCLUDED.image_attribution, ?)", c.image_attribution),
+          wordnet_ili: fragment("COALESCE(EXCLUDED.wordnet_ili, ?)", c.wordnet_ili),
+          taxon: fragment("? || EXCLUDED.taxon", c.taxon),
+          metadata: fragment("? || EXCLUDED.metadata", c.metadata),
+          updated_at: fragment("EXCLUDED.updated_at")
+        ]
+      ]
+    )
+  end
+
   defp upsert_concepts([], _now), do: %{}
 
   defp upsert_concepts(rows, now) do
     rows
     |> Enum.map(fn row ->
-      row
-      |> Map.drop([:key])
-      |> Map.merge(%{inserted_at: now, updated_at: now})
+      %{
+        qid: row.qid,
+        label: row[:label],
+        description: row[:description],
+        kind: row[:kind] || :thing,
+        wikipedia_title: row[:wikipedia_title],
+        wikipedia_pageid: row[:wikipedia_pageid],
+        image_url: row[:image_url],
+        image_attribution: row[:image_attribution],
+        wordnet_ili: row[:wordnet_ili],
+        taxon: row[:taxon] || %{},
+        metadata: row[:metadata] || %{},
+        inserted_at: now,
+        updated_at: now
+      }
     end)
     |> insert_returning(Concept,
-      on_conflict: {:replace_all_except, [:id, :inserted_at]},
+      on_conflict: concept_conflict(),
       conflict_target: [:qid],
       returning: [:id, :qid]
     )
     |> Map.new(fn r -> {r.qid, r.id} end)
+  end
+
+  # `concepts.taxon_concept_id` points at another concept (Q146 cat → Q20980826
+  # Felis catus), so it cannot be part of the insert: the target may not exist
+  # until a later record introduces it.
+  defp link_taxon_concepts(rows, concept_ids, now) do
+    pairs =
+      for row <- rows,
+          target = row[:taxon_concept],
+          not is_nil(target),
+          do: {row.qid, target}
+
+    if pairs == [] do
+      0
+    else
+      ids = resolve_qids(concept_ids, Enum.flat_map(pairs, fn {a, b} -> [a, b] end))
+
+      pairs
+      |> Enum.flat_map(fn {from, to} ->
+        with from_id when not is_nil(from_id) <- Map.get(ids, from),
+             to_id when not is_nil(to_id) <- Map.get(ids, to),
+             true <- from_id != to_id do
+          [{from_id, to_id}]
+        else
+          _ -> []
+        end
+      end)
+      |> Enum.reduce(0, fn {from_id, to_id}, acc ->
+        {n, _} =
+          Repo.update_all(
+            from(c in Concept, where: c.id == ^from_id),
+            set: [taxon_concept_id: to_id, updated_at: now]
+          )
+
+        acc + n
+      end)
+    end
+  end
+
+  # ── concept relations ────────────────────────────────────────────────────
+
+  defp upsert_concept_relations([], _concept_ids, _now), do: %{written: 0, skipped: 0}
+
+  defp upsert_concept_relations(rows, concept_ids, now) do
+    qids = Enum.flat_map(rows, &[&1.from_concept, &1.to_concept])
+    ids = resolve_qids(concept_ids, qids)
+
+    {resolved, skipped} =
+      Enum.split_with(rows, fn row ->
+        from_id = Map.get(ids, row.from_concept)
+        to_id = Map.get(ids, row.to_concept)
+        not is_nil(from_id) and not is_nil(to_id) and from_id != to_id
+      end)
+
+    written =
+      resolved
+      |> Enum.map(fn row ->
+        %{
+          source_id: row.source_id,
+          from_concept_id: Map.fetch!(ids, row.from_concept),
+          to_concept_id: Map.fetch!(ids, row.to_concept),
+          type: row.type,
+          property: row[:property],
+          inserted_at: now,
+          updated_at: now
+        }
+      end)
+      |> Enum.uniq_by(&{&1.source_id, &1.from_concept_id, &1.to_concept_id, &1.type})
+      |> insert_count(ConceptRelation,
+        on_conflict: {:replace, [:property, :updated_at]},
+        conflict_target: [:from_concept_id, :to_concept_id, :type, :source_id]
+      )
+
+    # A skip is a parent no record has introduced *yet*. Counted rather than
+    # swallowed, so `Wikidata.absorb/2` knows whether another pass is owed and
+    # M1 does not have to discover it later.
+    %{written: written, skipped: length(skipped)}
+  end
+
+  # Batch first, then one query for whatever the batch did not introduce.
+  defp resolve_qids(concept_ids, qids) do
+    missing = qids |> Enum.uniq() |> Enum.reject(&Map.has_key?(concept_ids, &1))
+
+    from_db =
+      if missing == [] do
+        %{}
+      else
+        Repo.all(from c in Concept, where: c.qid in ^missing, select: {c.qid, c.id})
+        |> Map.new()
+      end
+
+    Map.merge(from_db, concept_ids)
   end
 
   # ── senses ───────────────────────────────────────────────────────────────
@@ -436,7 +594,10 @@ defmodule DevilsDictionary.Absorb.Materializer do
       entries: changes.entries,
       relations: changes.relations,
       links: changes.links,
-      relations_offered: length(merged.relations)
+      concept_relations: changes.concept_relations.written,
+      concept_relations_skipped: changes.concept_relations.skipped,
+      relations_offered: length(merged.relations),
+      concept_relations_offered: length(merged.concept_relations)
     }
   end
 end

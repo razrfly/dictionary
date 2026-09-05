@@ -85,8 +85,15 @@ defmodule DevilsDictionary.Sources.Catalog do
         url_template: "https://www.wikidata.org/wiki/{external_id}",
         attribution: "Wikidata (CC0)",
         config: %{
+          # `wbgetentities` takes 50 ids per call and, filtered to en + enwiki,
+          # returns the same claims as `Special:EntityData` for a third of the
+          # bytes: ~18,000 entities become ~360 requests. `entity_url` stays as
+          # the canonical per-entity document a human can open.
+          "api_url" => "https://www.wikidata.org/w/api.php",
           "entity_url" => "https://www.wikidata.org/wiki/Special:EntityData/{qid}.json",
-          "rate_limit_ms" => 200
+          "batch_size" => 50,
+          "rate_limit_ms" => 200,
+          "claims" => DevilsDictionary.Absorb.Sources.Wikidata.kept_properties()
         }
       },
       %{
@@ -102,8 +109,14 @@ defmodule DevilsDictionary.Sources.Catalog do
         url_template: "https://en.wikipedia.org/wiki/{title}",
         attribution: "Wikipedia contributors (CC BY-SA 4.0)",
         config: %{
+          # The Action API takes 20 titles per call and adds redirect
+          # resolution, the disambiguation flag and `wikibase_item`, none of
+          # which the REST summary gives without a second guess.
+          "api_url" => "https://en.wikipedia.org/w/api.php",
           "summary_url" => "https://en.wikipedia.org/api/rest_v1/page/summary/{title}",
-          "rate_limit_ms" => 200
+          "batch_size" => 20,
+          "rate_limit_ms" => 200,
+          "keep" => DevilsDictionary.Absorb.Sources.Wikipedia.kept_keys()
         }
       },
       %{

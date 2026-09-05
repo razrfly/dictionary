@@ -17,6 +17,14 @@ defmodule DevilsDictionary.Health.Parity do
     * senses — `(source_id, external_id)`
     * relations — `(from_lexeme_id, from_sense_id, to_lemma, type)`
     * entries — `(source_record_id, position)`
+    * concepts — `qid`
+    * concept relations — `(from_concept_id, to_concept_id, type)`, and only
+      once both ends resolve: a P171 edge whose parent has not been fetched is
+      legitimately absent, and `Materializer` skips it for the same reason.
+
+  Without the last two, `--dry-run` on Wikidata would compare nothing at all and
+  report a clean bill by construction — that source emits no senses, relations
+  or entries.
 
   A record is also a gap when it has never been materialized, or was
   materialized before its current payload was fetched.
@@ -26,6 +34,7 @@ defmodule DevilsDictionary.Health.Parity do
 
   alias DevilsDictionary.Absorb
   alias DevilsDictionary.Absorb.Batch
+  alias DevilsDictionary.Encyclopedia.{Concept, ConceptRelation}
   alias DevilsDictionary.Lexicon.{Entry, Lexeme, LexicalRelation, Sense}
   alias DevilsDictionary.Repo
   alias DevilsDictionary.Sources
@@ -49,6 +58,8 @@ defmodule DevilsDictionary.Health.Parity do
       missing_senses: 0,
       missing_relations: 0,
       missing_entries: 0,
+      missing_concepts: 0,
+      missing_concept_relations: 0,
       gaps: 0,
       examples: []
     }
@@ -71,6 +82,8 @@ defmodule DevilsDictionary.Health.Parity do
     sense_ids = sense_ids(outs, source)
     actual_relations = actual_relations(source, lexeme_ids)
     actual_entries = actual_entries(records)
+    concept_ids = concept_ids(outs)
+    actual_concept_relations = actual_concept_relations(source, concept_ids)
 
     Enum.reduce(outs, acc, fn {record, out}, acc ->
       missing_senses =
@@ -90,10 +103,39 @@ defmodule DevilsDictionary.Health.Parity do
         |> Enum.uniq()
         |> Enum.reject(&MapSet.member?(actual_entries, &1))
 
+      missing_concepts =
+        out.concepts
+        |> Enum.map(& &1.qid)
+        |> Enum.uniq()
+        |> Enum.reject(&Map.has_key?(concept_ids, &1))
+
+      # Only an edge whose two ends both exist can be missing. One that names a
+      # parent nobody has fetched is skipped here exactly as `Materializer`
+      # skips it, or every leaf taxon would read as a gap.
+      missing_concept_relations =
+        out.concept_relations
+        |> Enum.flat_map(fn relation ->
+          with from_id when not is_nil(from_id) <- Map.get(concept_ids, relation.from_concept),
+               to_id when not is_nil(to_id) <- Map.get(concept_ids, relation.to_concept) do
+            [{from_id, to_id, relation.type}]
+          else
+            _ -> []
+          end
+        end)
+        |> Enum.uniq()
+        |> Enum.reject(&MapSet.member?(actual_concept_relations, &1))
+
       stale? = stale?(record)
 
-      gap? =
-        stale? or missing_senses != [] or missing_relations != [] or missing_entries != []
+      missing = [
+        missing_senses,
+        missing_relations,
+        missing_entries,
+        missing_concepts,
+        missing_concept_relations
+      ]
+
+      gap? = stale? or Enum.any?(missing, &(&1 != []))
 
       acc
       |> Map.update!(:records, &(&1 + 1))
@@ -101,9 +143,44 @@ defmodule DevilsDictionary.Health.Parity do
       |> Map.update!(:missing_senses, &(&1 + length(missing_senses)))
       |> Map.update!(:missing_relations, &(&1 + length(missing_relations)))
       |> Map.update!(:missing_entries, &(&1 + length(missing_entries)))
+      |> Map.update!(:missing_concepts, &(&1 + length(missing_concepts)))
+      |> Map.update!(:missing_concept_relations, &(&1 + length(missing_concept_relations)))
       |> Map.update!(:gaps, &(&1 + if(gap?, do: 1, else: 0)))
-      |> add_example(gap?, record, stale?, missing_senses, missing_relations, missing_entries)
+      |> add_example(gap?, record, stale?, missing)
     end)
+  end
+
+  # Every qid the page mentions, on either end of an edge, resolved once.
+  defp concept_ids(outs) do
+    qids =
+      outs
+      |> Enum.flat_map(fn {_r, out} ->
+        Enum.map(out.concepts, & &1.qid) ++
+          Enum.flat_map(out.concept_relations, &[&1.from_concept, &1.to_concept])
+      end)
+      |> Enum.uniq()
+
+    if qids == [] do
+      %{}
+    else
+      from(c in Concept, where: c.qid in ^qids, select: {c.qid, c.id})
+      |> Repo.all()
+      |> Map.new()
+    end
+  end
+
+  defp actual_concept_relations(_source, concept_ids) when map_size(concept_ids) == 0,
+    do: MapSet.new()
+
+  defp actual_concept_relations(source, concept_ids) do
+    ids = Map.values(concept_ids)
+
+    from(r in ConceptRelation,
+      where: r.source_id == ^source.id and r.from_concept_id in ^ids,
+      select: {r.from_concept_id, r.to_concept_id, r.type}
+    )
+    |> Repo.all()
+    |> MapSet.new()
   end
 
   # `<` on two DateTime structs is Erlang term order — which compares the
@@ -115,9 +192,22 @@ defmodule DevilsDictionary.Health.Parity do
   defp stale?(%{materialized_at: materialized, fetched_at: fetched}),
     do: DateTime.compare(materialized, fetched) == :lt
 
+  # A source emits only the kinds it has — Wikidata returns concepts and nothing
+  # else, an absent marker returns an empty map — so the shape is filled in here
+  # exactly as `Materializer.collect/2` fills it.
+  @empty %{
+    lexemes: [],
+    senses: [],
+    entries: [],
+    relations: [],
+    concepts: [],
+    links: [],
+    concept_relations: []
+  }
+
   defp materialize!(module, record) do
     case module.materialize(record) do
-      {:ok, out} -> out
+      {:ok, out} -> Map.merge(@empty, out)
       {:error, reason} -> raise "materialize failed for #{record.external_id}: #{inspect(reason)}"
     end
   end
@@ -187,19 +277,23 @@ defmodule DevilsDictionary.Health.Parity do
     }
   end
 
-  defp add_example(acc, false, _record, _stale, _s, _r, _e), do: acc
+  defp add_example(acc, false, _record, _stale, _missing), do: acc
 
-  defp add_example(%{examples: examples} = acc, true, _record, _s, _r, _rel, _e)
+  defp add_example(%{examples: examples} = acc, true, _record, _stale, _missing)
        when length(examples) >= 20,
        do: acc
 
-  defp add_example(acc, true, record, stale?, senses, relations, entries) do
+  defp add_example(acc, true, record, stale?, missing) do
+    [senses, relations, entries, concepts, concept_relations] = missing
+
     detail =
       %{}
       |> put_unless_empty(:stale, stale? && true)
       |> put_unless_empty(:senses, Enum.take(senses, 3))
       |> put_unless_empty(:relations, length(relations))
       |> put_unless_empty(:entries, length(entries))
+      |> put_unless_empty(:concepts, Enum.take(concepts, 3))
+      |> put_unless_empty(:concept_relations, length(concept_relations))
 
     %{acc | examples: acc.examples ++ [{record.external_id, detail}]}
   end

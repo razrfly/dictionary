@@ -12,8 +12,7 @@ defmodule DevilsDictionary.Application do
       DevilsDictionary.Repo,
       {DNSCluster, query: Application.get_env(:devils_dictionary, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: DevilsDictionary.PubSub},
-      # Start a worker by calling: DevilsDictionary.Worker.start_link(arg)
-      # {DevilsDictionary.Worker, arg},
+      {Oban, Application.fetch_env!(:devils_dictionary, Oban)},
       # Start to serve requests, typically the last entry
       DevilsDictionaryWeb.Endpoint
     ]

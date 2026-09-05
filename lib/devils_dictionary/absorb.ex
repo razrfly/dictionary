@@ -16,7 +16,9 @@ defmodule DevilsDictionary.Absorb do
 
   @modules %{
     "wordnet" => Sources.Wordnet,
-    "wiktionary" => Sources.Wiktionary
+    "wiktionary" => Sources.Wiktionary,
+    "wikidata" => Sources.Wikidata,
+    "wikipedia" => Sources.Wikipedia
   }
 
   @doc """

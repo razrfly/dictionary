@@ -1,0 +1,50 @@
+{
+  "records": [
+    {
+      "_probe": {
+        "lemma": "oyster",
+        "lexemes": [
+          [
+            "en",
+            "oyster",
+            "adj"
+          ],
+          [
+            "en",
+            "oyster",
+            "noun"
+          ],
+          [
+            "en",
+            "oyster",
+            "verb"
+          ]
+        ]
+      },
+      "canonicalurl": "https://en.wikipedia.org/wiki/Oyster",
+      "contentmodel": "wikitext",
+      "description": "Variety of families of Mollusca",
+      "descriptionsource": "local",
+      "editurl": "https://en.wikipedia.org/w/index.php?title=Oyster&action=edit",
+      "extract": "Oyster is the common name for a number of different families of salt-water bivalve molluscs that live in marine or brackish habitats. In some species, the valves are highly calcified, and many are somewhat irregular in shape. Many (but not all) oysters are in the superfamily Ostreoidea.\nSome species of oyster are commonly consumed and are regarded as a delicacy in some localities. Some types of pearl oysters are harvested for the pearl produced within the mantle. Others, such as the translucent windowpane oysters, are harvested for their shells.",
+      "fullurl": "https://en.wikipedia.org/wiki/Oyster",
+      "lastrevid": 1372618956,
+      "length": 68178,
+      "ns": 0,
+      "pageid": 133824,
+      "pagelanguage": "en",
+      "pagelanguagedir": "ltr",
+      "pagelanguagehtmlcode": "en",
+      "pageprops": {
+        "wikibase_item": "Q107411"
+      },
+      "thumbnail": {
+        "height": 278,
+        "source": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b0/Crassostrea_gigas_p1040848.jpg/500px-Crassostrea_gigas_p1040848.jpg?utm_source=en.wikipedia.org&utm_campaign=api&utm_content=thumbnail",
+        "width": 400
+      },
+      "title": "Oyster",
+      "touched": "2026-09-04T04:03:46Z"
+    }
+  ]
+}

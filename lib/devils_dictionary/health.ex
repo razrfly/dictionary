@@ -4,14 +4,16 @@ defmodule DevilsDictionary.Health do
   relation targets, link histogram and conflicts, and the MVP-0 scorecard rows
   as functions (`mix dd.score`). Spec: issue #69 §7.
 
-  S1 implements the rows S1 is judged on — A5, A9, M1, M4, R2. S3 adds the rest
-  and `mix dd.score` on top of them, rather than re-deriving numbers the tasks
-  have already printed once.
+  S1 implements the rows S1 is judged on — A5, A9, M1, M4, R2. S2 adds the
+  encyclopedia rows — A6, A7, A10 and the four link rows L1–L4. S3 adds the
+  rest and `mix dd.score` on top of them, rather than re-deriving numbers the
+  tasks have already printed once.
   """
 
   import Ecto.Query
 
   alias DevilsDictionary.Absorb.Resolver
+  alias DevilsDictionary.Encyclopedia.{Concept, ConceptLink}
   alias DevilsDictionary.Health.Parity
   alias DevilsDictionary.Lexicon
   alias DevilsDictionary.Lexicon.{Entry, Lexeme, ScopeLexeme, Sense}
@@ -173,6 +175,465 @@ defmodule DevilsDictionary.Health do
           at: run.started_at
         }
     end
+  end
+
+  # ── S2: the encyclopedia rows ────────────────────────────────────────────
+
+  @doc """
+  **A6** — Wikidata coverage.
+
+  Two measures. The first is the row as #69 §7 writes it: every QID a link or a
+  relation names must have a `concepts` row, and anything less is a dangling
+  reference. The second is the amendment the S1 audit added: Wikidata's share of
+  the scope reported next to Wiktionary's, and the **union**, which is expected
+  to approach 100 % because the 1,995 Linnaean binomials A5 can never cover are
+  exactly what Wikidata's `P225` names are.
+  """
+  def concept_coverage(scope_slug \\ "animals") do
+    scope = Lexicon.get_scope_by_slug!(scope_slug)
+
+    # Every QID a link or a relation names, and how many of those have no row.
+    %{rows: [[referenced, dangling]]} =
+      Repo.query!(
+        """
+        WITH refs AS (
+          SELECT concept_id AS id FROM concept_links
+          UNION SELECT from_concept_id FROM concept_relations
+          UNION SELECT to_concept_id FROM concept_relations
+        )
+        SELECT count(*),
+               count(*) FILTER (WHERE c.id IS NULL)
+          FROM refs LEFT JOIN concepts c ON c.id = refs.id
+        """,
+        [],
+        timeout: :infinity
+      )
+
+    total = Repo.aggregate(scope_query(scope), :count)
+    wiktionary = scope_attested(scope, "wiktionary")
+    # Wikidata never writes a lexeme, so its reach into the scope is measured by
+    # the links that name it, not by `lexemes.source_ids`.
+    linked = scope_with_concept(scope)
+    union = union_covered(scope)
+
+    %{
+      referenced_qids: referenced,
+      dangling: dangling,
+      pct: pct(referenced - dangling, referenced),
+      scope_total: total,
+      wiktionary: wiktionary,
+      wiktionary_pct: pct(wiktionary, total),
+      wikidata_linked: linked,
+      wikidata_linked_pct: pct(linked, total),
+      union: union,
+      union_pct: pct(union, total)
+    }
+  end
+
+  @doc """
+  **A7** — every concept with an English Wikipedia article has an entry or an
+  absent marker. A concept we know has an article and never asked about is the
+  gap this row exists to catch.
+
+  "Answered" is the measure, not "has an entry": a disambiguation page is
+  answered by its candidate list and deliberately gets no entry, because
+  "Seal may refer to…" is not an encyclopedia article about a seal.
+  """
+  def wikipedia_coverage do
+    source = Sources.get_source_by_slug!("wikipedia")
+
+    with_sitelink =
+      from(c in Concept, where: not is_nil(c.wikipedia_title)) |> Repo.aggregate(:count)
+
+    answered =
+      Repo.one!(
+        from c in Concept,
+          where: not is_nil(c.wikipedia_title),
+          where:
+            fragment("EXISTS (SELECT 1 FROM entries e WHERE e.concept_id = ?)", c.id) or
+              fragment(
+                "EXISTS (SELECT 1 FROM source_records r WHERE r.source_id = ? AND r.external_id = 'concept:' || ?)",
+                ^source.id,
+                c.qid
+              ),
+          select: count(c.id)
+      )
+
+    with_entry =
+      Repo.one!(
+        from c in Concept,
+          where: not is_nil(c.wikipedia_title),
+          where: fragment("EXISTS (SELECT 1 FROM entries e WHERE e.concept_id = ?)", c.id),
+          select: count(c.id)
+      )
+
+    %{
+      with_sitelink: with_sitelink,
+      answered: answered,
+      with_entry: with_entry,
+      missing: with_sitelink - answered,
+      pct: pct(answered, with_sitelink)
+    }
+  end
+
+  @doc """
+  **A10** — images.
+
+  Measured over the concepts a scope's words actually **link to**, not over
+  every concept with an entry. The concept pass gives an entry to all 32,000
+  disambiguation candidates the "may refer to" pages named, and *Cherry Bomb
+  (album)* having no picture says nothing about whether *cat* does. The wider
+  figures are reported beside it.
+  """
+  def images(scope_slug \\ "animals") do
+    scope = Lexicon.get_scope_by_slug!(scope_slug)
+
+    %{rows: [[asserted, asserted_with_image, lexemes, lexemes_with_image]]} =
+      Repo.query!(
+        """
+        WITH asserted AS (
+          SELECT DISTINCT cl.concept_id AS id
+            FROM concept_links cl
+            JOIN scope_lexemes sl ON sl.lexeme_id = cl.lexeme_id AND sl.scope_id = $1
+           WHERE cl.status IN ('auto', 'confirmed')
+        ),
+        per_lexeme AS (
+          SELECT sl.lexeme_id, bool_or(c.image_url IS NOT NULL) AS has_image
+            FROM scope_lexemes sl
+            JOIN concept_links cl
+              ON cl.lexeme_id = sl.lexeme_id AND cl.status IN ('auto', 'confirmed')
+            JOIN concepts c ON c.id = cl.concept_id
+           WHERE sl.scope_id = $1
+           GROUP BY 1
+        )
+        SELECT (SELECT count(*) FROM asserted),
+               (SELECT count(*) FROM asserted JOIN concepts c ON c.id = asserted.id
+                 WHERE c.image_url IS NOT NULL),
+               (SELECT count(*) FROM per_lexeme),
+               (SELECT count(*) FROM per_lexeme WHERE has_image)
+        """,
+        [scope.id],
+        timeout: :infinity
+      )
+
+    with_entry =
+      from(c in Concept,
+        where: fragment("EXISTS (SELECT 1 FROM entries e WHERE e.concept_id = ?)", c.id)
+      )
+
+    entries = Repo.aggregate(with_entry, :count)
+
+    entries_with_image =
+      with_entry |> where([c], not is_nil(c.image_url)) |> Repo.aggregate(:count)
+
+    all = Repo.aggregate(Concept, :count)
+    all_with_image = from(c in Concept, where: not is_nil(c.image_url)) |> Repo.aggregate(:count)
+
+    %{
+      asserted: asserted,
+      asserted_with_image: asserted_with_image,
+      pct: pct(asserted_with_image, asserted),
+      lexemes_linked: lexemes,
+      lexemes_with_image: lexemes_with_image,
+      lexemes_pct: pct(lexemes_with_image, lexemes),
+      with_entry: entries,
+      with_image: entries_with_image,
+      entry_pct: pct(entries_with_image, entries),
+      all_concepts: all,
+      all_with_image: all_with_image,
+      all_pct: pct(all_with_image, all)
+    }
+  end
+
+  @doc """
+  **L1** — the link rate, and the histogram behind it.
+
+  Reported twice on purpose. `strict_pct` counts only what the ladder's own
+  confidences reach; `pct` counts links after `Linker.corroborate/1` has raised
+  the title matches a second signal agrees with. The QID rungs alone reach about
+  a fifth of an Animals scope, so the difference between the two numbers *is*
+  the finding.
+  """
+  def links(scope_slug \\ "animals", threshold \\ 0.8) do
+    scope = Lexicon.get_scope_by_slug!(scope_slug)
+    total = Repo.aggregate(scope_query(scope), :count)
+
+    linked = scope_with_link(scope, threshold)
+    strict = scope_with_link(scope, threshold, strict: true)
+    any = scope_with_link(scope, 0.0)
+
+    histogram =
+      Repo.all(
+        from cl in ConceptLink,
+          join: sl in ScopeLexeme,
+          on: sl.lexeme_id == cl.lexeme_id and sl.scope_id == ^scope.id,
+          group_by: [cl.method, cl.confidence],
+          order_by: [asc: cl.method, desc: cl.confidence],
+          select: {cl.method, cl.confidence, count(cl.id)}
+      )
+
+    %{
+      scope_total: total,
+      threshold: threshold,
+      linked: linked,
+      pct: pct(linked, total),
+      strict_linked: strict,
+      strict_pct: pct(strict, total),
+      any_linked: any,
+      any_pct: pct(any, total),
+      histogram: histogram,
+      corroboration: corroboration_counts(scope)
+    }
+  end
+
+  @doc """
+  **L2** — conflicts. One lexeme with two different concepts both above 0.7 is a
+  disagreement, and #69 §5 says we surface it rather than pick a winner.
+  """
+  def conflicts(scope_slug \\ "animals", threshold \\ 0.7, limit \\ 20) do
+    scope = Lexicon.get_scope_by_slug!(scope_slug)
+
+    rows =
+      Repo.all(
+        from cl in ConceptLink,
+          join: l in Lexeme,
+          on: l.id == cl.lexeme_id,
+          join: sl in ScopeLexeme,
+          on: sl.lexeme_id == cl.lexeme_id and sl.scope_id == ^scope.id,
+          where: cl.confidence >= ^threshold and cl.status != :rejected,
+          group_by: [cl.lexeme_id, l.lemma, l.pos],
+          having: count(fragment("DISTINCT ?", cl.concept_id)) > 1,
+          order_by: [desc: count(fragment("DISTINCT ?", cl.concept_id))],
+          select: %{
+            lemma: l.lemma,
+            pos: l.pos,
+            concepts: count(fragment("DISTINCT ?", cl.concept_id))
+          }
+      )
+
+    %{count: length(rows), sample: Enum.take(rows, limit)}
+  end
+
+  @doc """
+  **L3** — how many linked concepts sit on a `parent_taxon` path to Animalia.
+
+  Walks the stored edges, so it is a check on the absorb as much as on the
+  linker: a walk cut off at `--max-depth` shows up here as a soft number.
+
+  The population is links we **assert** (`auto` or `confirmed`). A
+  `:candidate` from a "may refer to" page is a possibility, not a claim — an
+  Animals scope carries about 19,000 of them, and *BYD Seal* was never going to
+  reach Animalia. The figure including candidates is reported beside it.
+  """
+  def taxonomy(scope_slug \\ "animals", root \\ "Q729") do
+    scope = Lexicon.get_scope_by_slug!(scope_slug)
+
+    %{rows: [[linked, reaching, all_linked, all_reaching]]} =
+      Repo.query!(
+        """
+        WITH RECURSIVE descendants(id) AS (
+          SELECT c.id FROM concepts c WHERE c.qid = $2
+          UNION
+          SELECT r.from_concept_id FROM concept_relations r
+            JOIN descendants d ON r.to_concept_id = d.id
+           WHERE r.type = 'parent_taxon'
+        ),
+        linked AS (
+          SELECT DISTINCT cl.concept_id AS id
+            FROM concept_links cl
+            JOIN scope_lexemes sl ON sl.lexeme_id = cl.lexeme_id AND sl.scope_id = $1
+           WHERE cl.status IN ('auto', 'confirmed')
+        ),
+        all_linked AS (
+          SELECT DISTINCT cl.concept_id AS id
+            FROM concept_links cl
+            JOIN scope_lexemes sl ON sl.lexeme_id = cl.lexeme_id AND sl.scope_id = $1
+           WHERE cl.status <> 'rejected'
+        ),
+        reaching AS (
+          SELECT c.id
+            FROM concepts c
+           WHERE c.id IN (SELECT id FROM descendants)
+              OR c.taxon_concept_id IN (SELECT id FROM descendants)
+        )
+        SELECT (SELECT count(*) FROM linked),
+               (SELECT count(*) FROM linked WHERE id IN (SELECT id FROM reaching)),
+               (SELECT count(*) FROM all_linked),
+               (SELECT count(*) FROM all_linked WHERE id IN (SELECT id FROM reaching))
+        """,
+        [scope.id, root],
+        timeout: :infinity
+      )
+
+    %{
+      linked_concepts: linked,
+      reaching_root: reaching,
+      pct: pct(reaching, linked),
+      with_candidates: all_linked,
+      with_candidates_reaching: all_reaching,
+      with_candidates_pct: pct(all_reaching, all_linked)
+    }
+  end
+
+  @doc """
+  **L4** — disambiguation. Every probe that hit a "may refer to" page must have
+  stored the title on the lexeme and its candidates as links; a hit with no
+  candidates is the failure this row looks for.
+
+  Counted by **lemma**, as #69 §7 words it. A probe is one fact per lemma and
+  the candidate rung links nouns only, so counting lexemes would charge
+  `seal/verb` for candidates that were never meant to be its.
+  """
+  def disambiguation(scope_slug \\ "animals") do
+    scope = Lexicon.get_scope_by_slug!(scope_slug)
+
+    hit = fn query ->
+      query
+      |> where([_sl, l], fragment("jsonb_exists(?, 'wikipedia_disambiguation')", l.metadata))
+      |> select([_sl, l], fragment("count(DISTINCT ?)", l.lemma))
+      |> Repo.one!()
+    end
+
+    hits = hit.(scope_query(scope))
+
+    with_candidates =
+      hit.(
+        where(
+          scope_query(scope),
+          [_sl, l],
+          fragment(
+            "EXISTS (SELECT 1 FROM concept_links cl WHERE cl.lexeme_id = ? AND cl.method = 'disambiguation')",
+            l.id
+          )
+        )
+      )
+
+    candidates =
+      Repo.one!(
+        from cl in ConceptLink,
+          join: sl in ScopeLexeme,
+          on: sl.lexeme_id == cl.lexeme_id and sl.scope_id == ^scope.id,
+          where: cl.method == :disambiguation,
+          select: count(cl.id)
+      )
+
+    # A lemma whose only scope lexemes are adjectives or verbs can never carry a
+    # candidate: a thing is not an adjective. Reported so the remainder is
+    # explained rather than left as an unexplained shortfall.
+    non_nominal =
+      hit.(
+        where(
+          scope_query(scope),
+          [_sl, l],
+          fragment(
+            "NOT EXISTS (SELECT 1 FROM lexemes n JOIN scope_lexemes s2 ON s2.lexeme_id = n.id AND s2.scope_id = ? WHERE n.lemma = ? AND n.pos = ANY(?))",
+            ^scope.id,
+            l.lemma,
+            ^DevilsDictionary.Absorb.Linker.nominal_pos()
+          )
+        )
+      )
+
+    %{
+      hits: hits,
+      with_candidates: with_candidates,
+      pct: pct(with_candidates, hits),
+      non_nominal: non_nominal,
+      nominal_pct: pct(with_candidates, hits - non_nominal),
+      candidates: candidates,
+      promoted:
+        Repo.one!(
+          from cl in ConceptLink,
+            join: sl in ScopeLexeme,
+            on: sl.lexeme_id == cl.lexeme_id and sl.scope_id == ^scope.id,
+            where: cl.method == :disambiguation and cl.confidence > 0.4,
+            select: count(cl.id)
+        )
+    }
+  end
+
+  # ── S2 helpers ───────────────────────────────────────────────────────────
+
+  defp scope_query(scope) do
+    from sl in ScopeLexeme,
+      join: l in Lexeme,
+      on: l.id == sl.lexeme_id,
+      where: sl.scope_id == ^scope.id
+  end
+
+  defp scope_attested(scope, source_slug) do
+    source = Sources.get_source_by_slug!(source_slug)
+
+    scope_query(scope)
+    |> where([_sl, l], fragment("? = ANY(?)", ^source.id, l.source_ids))
+    |> Repo.aggregate(:count)
+  end
+
+  defp scope_with_concept(scope) do
+    scope_query(scope)
+    |> where(
+      [_sl, l],
+      fragment("EXISTS (SELECT 1 FROM concept_links cl WHERE cl.lexeme_id = ?)", l.id)
+    )
+    |> Repo.aggregate(:count)
+  end
+
+  # A5's denominator plus Wikidata's reach: a scope lexeme is covered when
+  # Wiktionary attests it *or* a concept link names it.
+  defp union_covered(scope) do
+    source = Sources.get_source_by_slug!("wiktionary")
+
+    scope_query(scope)
+    |> where(
+      [_sl, l],
+      fragment("? = ANY(?)", ^source.id, l.source_ids) or
+        fragment("EXISTS (SELECT 1 FROM concept_links cl WHERE cl.lexeme_id = ?)", l.id)
+    )
+    |> Repo.aggregate(:count)
+  end
+
+  defp scope_with_link(scope, threshold, opts \\ []) do
+    query =
+      scope_query(scope)
+      |> where(
+        [_sl, l],
+        fragment(
+          "EXISTS (SELECT 1 FROM concept_links cl WHERE cl.lexeme_id = ? AND cl.confidence >= ? AND cl.status <> 'rejected')",
+          l.id,
+          ^threshold
+        )
+      )
+
+    # The strict reading ignores anything corroboration lifted, which is what
+    # makes the two L1 numbers comparable.
+    query =
+      if opts[:strict] do
+        where(
+          query,
+          [_sl, l],
+          fragment(
+            "EXISTS (SELECT 1 FROM concept_links cl WHERE cl.lexeme_id = ? AND cl.confidence >= ? AND cl.status <> 'rejected' AND NOT jsonb_exists(cl.metadata, 'corroboration'))",
+            l.id,
+            ^threshold
+          )
+        )
+      else
+        query
+      end
+
+    Repo.aggregate(query, :count)
+  end
+
+  defp corroboration_counts(scope) do
+    Repo.all(
+      from cl in ConceptLink,
+        join: sl in ScopeLexeme,
+        on: sl.lexeme_id == cl.lexeme_id and sl.scope_id == ^scope.id,
+        where: fragment("jsonb_exists(?, 'corroboration')", cl.metadata),
+        group_by: fragment("?->>'corroboration'", cl.metadata),
+        select: {fragment("?->>'corroboration'", cl.metadata), count(cl.id)}
+    )
+    |> Map.new()
   end
 
   defp pct(_part, 0), do: 0.0

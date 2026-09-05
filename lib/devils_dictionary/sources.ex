@@ -40,6 +40,7 @@ defmodule DevilsDictionary.Sources do
       |> Map.put(:source_id, source.id)
       |> Map.put(:content_hash, hash)
       |> Map.put(:fetched_at, now)
+      |> Map.put_new(:absent_until, nil)
 
     %SourceRecord{}
     |> SourceRecord.changeset(attrs)
@@ -57,6 +58,10 @@ defmodule DevilsDictionary.Sources do
   `changed_at` only moves when a refetch actually produced different content,
   and that is what the "changed this week" feed reads. A bulk absorb that rolls
   its own `{:replace, …}` list silently loses it.
+
+  `absent_until` is taken from the incoming row, so a source that had nothing
+  for a target sets the marker and a later fetch that finds something clears it
+  (#69 §5's terminal states: "source-absent" is not a permanent verdict).
   """
   def record_conflict do
     from(r in SourceRecord,
@@ -67,6 +72,7 @@ defmodule DevilsDictionary.Sources do
           content_hash: fragment("EXCLUDED.content_hash"),
           fetched_at: fragment("EXCLUDED.fetched_at"),
           updated_at: fragment("EXCLUDED.updated_at"),
+          absent_until: fragment("EXCLUDED.absent_until"),
           changed_at:
             fragment(
               "CASE WHEN ?.content_hash IS DISTINCT FROM EXCLUDED.content_hash THEN EXCLUDED.fetched_at ELSE ?.changed_at END",
@@ -85,8 +91,9 @@ defmodule DevilsDictionary.Sources do
   `content_hash` when the source trims: the hash must be taken on the payload
   **as fetched**, before `trim/1`, so a change to the trim never reads as a
   change at the source. A source whose trim is the identity may omit it and it
-  is computed from `raw` here. `source_id` and the timestamps are always filled
-  here. Returns the number of rows written.
+  is computed from `raw` here. A row may also carry `absent_until` to record a
+  "source had nothing" marker (`raw: %{}`). `source_id` and the timestamps are
+  always filled here. Returns the number of rows written.
   """
   def insert_records(%Source{} = source, rows, chunk \\ 1_000) do
     now = DateTime.utc_now()
@@ -101,6 +108,7 @@ defmodule DevilsDictionary.Sources do
         url: row[:url],
         raw: raw,
         content_hash: row[:content_hash] || SourceRecord.content_hash(raw),
+        absent_until: row[:absent_until],
         fetched_at: now,
         inserted_at: now,
         updated_at: now

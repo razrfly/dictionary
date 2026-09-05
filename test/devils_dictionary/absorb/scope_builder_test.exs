@@ -2,6 +2,7 @@ defmodule DevilsDictionary.Absorb.ScopeBuilderTest do
   use DevilsDictionary.DataCase, async: true
 
   alias DevilsDictionary.Absorb.ScopeBuilder
+  alias DevilsDictionary.Encyclopedia.{Concept, ConceptRelation}
   alias DevilsDictionary.Lexicon.{Lexeme, LexicalRelation, Scope, ScopeLexeme, Sense}
   alias DevilsDictionary.Repo
   alias DevilsDictionary.Sources.Source
@@ -157,19 +158,6 @@ defmodule DevilsDictionary.Absorb.ScopeBuilderTest do
     end
   end
 
-  describe "wikidata_taxon" do
-    test "reports itself skipped rather than contributing a silent zero" do
-      scope = scope!(%{})
-
-      result = ScopeBuilder.build(scope)
-
-      assert result.rules["wikidata_taxon"] == %{
-               "status" => "skipped",
-               "reason" => "lands in S2: no concepts absorbed yet"
-             }
-    end
-  end
-
   describe "reasons" do
     test "a lemma matching two rules keeps both" do
       source = wordnet!()
@@ -203,6 +191,106 @@ defmodule DevilsDictionary.Absorb.ScopeBuilderTest do
 
       assert members(narrowed) == []
     end
+  end
+
+  describe "wikidata_taxon" do
+    setup do
+      wikidata =
+        Repo.insert!(%Source{
+          slug: "wikidata",
+          name: "Wikidata",
+          tier: :middle,
+          kind: :knowledge_graph,
+          access: :api
+        })
+
+      animalia = concept!("Q729", "Animalia", [])
+      felidae = concept!("Q25265", "Felidae", [])
+      felis = concept!("Q20980826", "Felis catus", ["cat", "domestic cat"])
+
+      parent!(wikidata, felidae, animalia)
+      parent!(wikidata, felis, felidae)
+
+      # Outside the tree: named the same way, but nothing links it to Animalia.
+      concept!("Q25294", "Ferrum hammerensis", ["hammer"])
+
+      %{}
+    end
+
+    test "matches lemmas by scientific name and by English common name" do
+      for lemma <- ["cat", "Felis catus", "hammer"], do: lexeme!(lemma)
+
+      scope = scope!(%{"wikidata_root" => "Q729"})
+      ScopeBuilder.build(scope)
+
+      # `hammer` is a common name too, but of a concept with no path to Animalia.
+      assert members(scope) == ["cat", "Felis catus"]
+    end
+
+    test "the enwiki-sitelink requirement is applied, and the count without it reported" do
+      lexeme!("cat")
+
+      # The real Felis catus (Q20980826) has no article of its own — the article
+      # is on Q146 *Cat* — so §3's rule as written matches nothing. That gap is
+      # the finding, which is why both numbers are reported.
+      Repo.get_by!(Concept, qid: "Q20980826")
+      |> Ecto.Changeset.change(wikipedia_title: nil)
+      |> Repo.update!()
+
+      scope = scope!(%{"wikidata_root" => "Q729"})
+      %{rules: rules} = ScopeBuilder.build(scope)
+
+      assert rules["wikidata_taxon"]["matched"] == 0
+      assert rules["wikidata_taxon"]["matched_without_sitelink"] == 1
+      assert members(scope) == []
+    end
+
+    test "skips itself loudly when no concepts have been absorbed" do
+      Repo.delete_all(ConceptRelation)
+      Repo.delete_all(Concept)
+      scope = scope!(%{"wikidata_root" => "Q729"})
+
+      %{rules: rules} = ScopeBuilder.build(scope)
+
+      # A skip, never a silent zero: a zero here would read as a measurement.
+      assert rules["wikidata_taxon"]["status"] == "skipped"
+      assert rules["wikidata_taxon"]["reason"] =~ "mix dd.absorb wikidata"
+    end
+
+    test "skips itself when the scope names no root" do
+      scope = scope!(%{})
+
+      %{rules: rules} = ScopeBuilder.build(scope)
+
+      assert rules["wikidata_taxon"] == %{
+               "status" => "skipped",
+               "reason" => "no wikidata_root in scopes.rules"
+             }
+    end
+  end
+
+  defp concept!(qid, scientific_name, common_names) do
+    Repo.insert!(%Concept{
+      qid: qid,
+      label: scientific_name,
+      kind: :taxon,
+      wikipedia_title: scientific_name,
+      taxon: %{"scientific_name" => scientific_name, "common_names" => common_names}
+    })
+  end
+
+  defp parent!(source, child, parent) do
+    Repo.insert!(%ConceptRelation{
+      source_id: source.id,
+      from_concept_id: child.id,
+      to_concept_id: parent.id,
+      type: :parent_taxon,
+      property: "P171"
+    })
+  end
+
+  defp lexeme!(lemma) do
+    Repo.insert!(%Lexeme{lang: "en", lemma: lemma, pos: "noun", slug: Lexeme.slug(lemma)})
   end
 
   test "scope stats record what each rule did" do
