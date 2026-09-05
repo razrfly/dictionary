@@ -1,0 +1,596 @@
+{
+  "records": [
+    {
+      "_edges": [
+        {
+          "subtype": null,
+          "to": "oewn-01147629-v",
+          "to_members": [
+            "tree"
+          ],
+          "to_pos": "verb",
+          "type": "hyponym"
+        },
+        {
+          "subtype": null,
+          "to": "oewn-02008241-v",
+          "to_members": [
+            "run down"
+          ],
+          "to_pos": "verb",
+          "type": "hyponym"
+        },
+        {
+          "subtype": null,
+          "to": "oewn-02007615-v",
+          "to_members": [
+            "hound",
+            "hunt",
+            "trace"
+          ],
+          "to_pos": "verb",
+          "type": "hyponym"
+        },
+        {
+          "subtype": null,
+          "to": "oewn-02004900-v",
+          "to_members": [
+            "pursue",
+            "follow"
+          ],
+          "to_pos": "verb",
+          "type": "hypernym"
+        },
+        {
+          "subtype": null,
+          "to": "oewn-02006623-v",
+          "to_members": [
+            "quest"
+          ],
+          "to_pos": "verb",
+          "type": "hyponym"
+        }
+      ],
+      "definition": [
+        "go after with the intent to catch"
+      ],
+      "example": [
+        "The policeman chased the mugger down the alley",
+        "the fox chased the rabbit"
+      ],
+      "hypernym": [
+        "02004900-v"
+      ],
+      "id": "oewn-02005890-v",
+      "ili": "i31747",
+      "lexfile": "verb.motion",
+      "members": [
+        "chase",
+        "chase after",
+        "trail",
+        "tail",
+        "tag",
+        "give chase",
+        "dog",
+        "go after",
+        "track"
+      ],
+      "partOfSpeech": "v"
+    },
+    {
+      "_edges": [
+        {
+          "subtype": null,
+          "to": "oewn-02113458-n",
+          "to_members": [
+            "basenji"
+          ],
+          "to_pos": "noun",
+          "type": "hyponym"
+        },
+        {
+          "subtype": null,
+          "to": "oewn-02106058-n",
+          "to_members": [
+            "working dog"
+          ],
+          "to_pos": "noun",
+          "type": "hyponym"
+        },
+        {
+          "subtype": null,
+          "to": "oewn-02113781-n",
+          "to_members": [
+            "Leonberg"
+          ],
+          "to_pos": "noun",
+          "type": "hyponym"
+        },
+        {
+          "subtype": null,
+          "to": "oewn-01325095-n",
+          "to_members": [
+            "puppy"
+          ],
+          "to_pos": "noun",
+          "type": "hyponym"
+        },
+        {
+          "subtype": null,
+          "to": "oewn-02089774-n",
+          "to_members": [
+            "hunting dog"
+          ],
+          "to_pos": "noun",
+          "type": "hyponym"
+        },
+        {
+          "subtype": null,
+          "to": "oewn-02115478-n",
+          "to_members": [
+            "corgi",
+            "Welsh corgi"
+          ],
+          "to_pos": "noun",
+          "type": "hyponym"
+        },
+        {
+          "subtype": null,
+          "to": "oewn-02087513-n",
+          "to_members": [
+            "cur",
+            "mongrel",
+            "mutt"
+          ],
+          "to_pos": "noun",
+          "type": "hyponym"
+        },
+        {
+          "subtype": null,
+          "to": "oewn-02088026-n",
+          "to_members": [
+            "toy dog",
+            "toy"
+          ],
+          "to_pos": "noun",
+          "type": "hyponym"
+        },
+        {
+          "subtype": null,
+          "to": "oewn-02114278-n",
+          "to_members": [
+            "spitz"
+          ],
+          "to_pos": "noun",
+          "type": "hyponym"
+        },
+        {
+          "subtype": null,
+          "to": "oewn-02087924-n",
+          "to_members": [
+            "lapdog"
+          ],
+          "to_pos": "noun",
+          "type": "hyponym"
+        },
+        {
+          "subtype": null,
+          "to": "oewn-02113610-n",
+          "to_members": [
+            "pug",
+            "pug-dog"
+          ],
+          "to_pos": "noun",
+          "type": "hyponym"
+        },
+        {
+          "subtype": null,
+          "to": "oewn-02114152-n",
+          "to_members": [
+            "Great Pyrenees"
+          ],
+          "to_pos": "noun",
+          "type": "hyponym"
+        },
+        {
+          "subtype": "part",
+          "to": "oewn-02161498-n",
+          "to_members": [
+            "flag"
+          ],
+          "to_pos": "noun",
+          "type": "meronym"
+        },
+        {
+          "subtype": null,
+          "to": "oewn-01320032-n",
+          "to_members": [
+            "domestic animal",
+            "domesticated animal"
+          ],
+          "to_pos": "noun",
+          "type": "hypernym"
+        },
+        {
+          "subtype": null,
+          "to": "oewn-02085998-n",
+          "to_members": [
+            "canine",
+            "canid"
+          ],
+          "to_pos": "noun",
+          "type": "hypernym"
+        },
+        {
+          "subtype": null,
+          "to": "oewn-02112993-n",
+          "to_members": [
+            "dalmatian",
+            "coach dog",
+            "carriage dog"
+          ],
+          "to_pos": "noun",
+          "type": "hyponym"
+        },
+        {
+          "subtype": null,
+          "to": "oewn-02116630-n",
+          "to_members": [
+            "Mexican hairless"
+          ],
+          "to_pos": "noun",
+          "type": "hyponym"
+        },
+        {
+          "subtype": null,
+          "to": "oewn-02113929-n",
+          "to_members": [
+            "Newfoundland",
+            "Newfoundland dog"
+          ],
+          "to_pos": "noun",
+          "type": "hyponym"
+        },
+        {
+          "subtype": null,
+          "to": "oewn-02115987-n",
+          "to_members": [
+            "poodle",
+            "poodle dog"
+          ],
+          "to_pos": "noun",
+          "type": "hyponym"
+        },
+        {
+          "subtype": null,
+          "to": "oewn-02087384-n",
+          "to_members": [
+            "pooch",
+            "doggie",
+            "doggy",
+            "barker",
+            "bow-wow"
+          ],
+          "to_pos": "noun",
+          "type": "hyponym"
+        },
+        {
+          "subtype": null,
+          "to": "oewn-02115149-n",
+          "to_members": [
+            "griffon",
+            "Brussels griffon",
+            "Belgian griffon"
+          ],
+          "to_pos": "noun",
+          "type": "hyponym"
+        },
+        {
+          "subtype": "member",
+          "to": "oewn-02086515-n",
+          "to_members": [
+            "Canis",
+            "genus Canis"
+          ],
+          "to_pos": "noun",
+          "type": "holonym"
+        }
+      ],
+      "definition": [
+        "a member of the genus Canis (probably descended from the common wolf) that has been domesticated by man since prehistoric times; occurs in many breeds"
+      ],
+      "example": [
+        "the dog barked all night"
+      ],
+      "hypernym": [
+        "02085998-n",
+        "01320032-n"
+      ],
+      "id": "oewn-02086723-n",
+      "ili": "i46360",
+      "lexfile": "noun.animal",
+      "members": [
+        "dog",
+        "domestic dog",
+        "Canis familiaris"
+      ],
+      "mero_part": [
+        "02161498-n"
+      ],
+      "partOfSpeech": "n",
+      "wikidata": [
+        "Q26972265",
+        "Q20717272",
+        "Q144"
+      ]
+    },
+    {
+      "_edges": [
+        {
+          "subtype": null,
+          "to": "oewn-04366676-n",
+          "to_members": [
+            "support"
+          ],
+          "to_pos": "noun",
+          "type": "hypernym"
+        }
+      ],
+      "definition": [
+        "metal supports for logs in a fireplace"
+      ],
+      "example": [
+        "the andirons were too hot to touch"
+      ],
+      "hypernym": [
+        "04366676-n"
+      ],
+      "id": "oewn-02712903-n",
+      "ili": "i50007",
+      "lexfile": "noun.artifact",
+      "members": [
+        "andiron",
+        "firedog",
+        "dog",
+        "dog-iron"
+      ],
+      "partOfSpeech": "n",
+      "wikidata": "Q262026"
+    },
+    {
+      "_edges": [
+        {
+          "subtype": "part",
+          "to": "oewn-04062292-n",
+          "to_members": [
+            "ratchet",
+            "rachet",
+            "ratch"
+          ],
+          "to_pos": "noun",
+          "type": "holonym"
+        },
+        {
+          "subtype": null,
+          "to": "oewn-02986245-n",
+          "to_members": [
+            "catch",
+            "stop"
+          ],
+          "to_pos": "noun",
+          "type": "hypernym"
+        }
+      ],
+      "definition": [
+        "a hinged catch that fits into a notch of a ratchet to move a wheel forward or prevent it from moving backward"
+      ],
+      "hypernym": [
+        "02986245-n"
+      ],
+      "id": "oewn-03907626-n",
+      "ili": "i57068",
+      "lexfile": "noun.artifact",
+      "members": [
+        "pawl",
+        "detent",
+        "click",
+        "dog"
+      ],
+      "partOfSpeech": "n"
+    },
+    {
+      "_edges": [
+        {
+          "subtype": null,
+          "to": "oewn-07692600-n",
+          "to_members": [
+            "Vienna sausage"
+          ],
+          "to_pos": "noun",
+          "type": "hyponym"
+        },
+        {
+          "subtype": null,
+          "to": "oewn-07691372-n",
+          "to_members": [
+            "sausage"
+          ],
+          "to_pos": "noun",
+          "type": "hypernym"
+        },
+        {
+          "subtype": "part",
+          "to": "oewn-07713282-n",
+          "to_members": [
+            "hotdog",
+            "hot dog",
+            "red hot"
+          ],
+          "to_pos": "noun",
+          "type": "holonym"
+        }
+      ],
+      "definition": [
+        "a smooth-textured sausage of minced beef or pork usually smoked; often served on a bread roll"
+      ],
+      "hypernym": [
+        "07691372-n"
+      ],
+      "id": "oewn-07692347-n",
+      "ili": "i77293",
+      "lexfile": "noun.food",
+      "members": [
+        "frank",
+        "frankfurter",
+        "hotdog",
+        "hot dog",
+        "dog",
+        "wiener",
+        "wienerwurst",
+        "weenie"
+      ],
+      "partOfSpeech": "n"
+    },
+    {
+      "_edges": [
+        {
+          "subtype": null,
+          "to": "oewn-10773214-n",
+          "to_members": [
+            "villain",
+            "scoundrel"
+          ],
+          "to_pos": "noun",
+          "type": "hypernym"
+        },
+        {
+          "subtype": "exemplifies",
+          "to": "oewn-06730109-n",
+          "to_members": [
+            "disparagement",
+            "depreciation",
+            "derogation"
+          ],
+          "to_pos": "noun",
+          "type": "other"
+        },
+        {
+          "subtype": null,
+          "to": "oewn-10436573-n",
+          "to_members": [
+            "perisher"
+          ],
+          "to_pos": "noun",
+          "type": "hyponym"
+        }
+      ],
+      "definition": [
+        "someone who is morally reprehensible"
+      ],
+      "example": [
+        "you dirty dog"
+      ],
+      "exemplifies": [
+        "06730109-n"
+      ],
+      "hypernym": [
+        "10773214-n"
+      ],
+      "id": "oewn-09905672-n",
+      "ili": "i88771",
+      "lexfile": "noun.person",
+      "members": [
+        "cad",
+        "bounder",
+        "blackguard",
+        "dog",
+        "hound",
+        "heel"
+      ],
+      "partOfSpeech": "n"
+    },
+    {
+      "_edges": [
+        {
+          "subtype": null,
+          "to": "oewn-09927483-n",
+          "to_members": [
+            "chap",
+            "fellow",
+            "feller",
+            "fella",
+            "lad",
+            "gent",
+            "blighter",
+            "cuss",
+            "bloke"
+          ],
+          "to_pos": "noun",
+          "type": "hypernym"
+        }
+      ],
+      "definition": [
+        "informal term for a man"
+      ],
+      "example": [
+        "you lucky dog"
+      ],
+      "hypernym": [
+        "09927483-n"
+      ],
+      "id": "oewn-10042764-n",
+      "ili": "i89566",
+      "lexfile": "noun.person",
+      "members": [
+        "dog"
+      ],
+      "partOfSpeech": "n"
+    },
+    {
+      "_edges": [
+        {
+          "subtype": null,
+          "to": "oewn-09654651-n",
+          "to_members": [
+            "unpleasant person",
+            "disagreeable person"
+          ],
+          "to_pos": "noun",
+          "type": "hypernym"
+        },
+        {
+          "subtype": "exemplifies",
+          "to": "oewn-06730109-n",
+          "to_members": [
+            "disparagement",
+            "depreciation",
+            "derogation"
+          ],
+          "to_pos": "noun",
+          "type": "other"
+        }
+      ],
+      "definition": [
+        "a dull unattractive unpleasant girl or woman"
+      ],
+      "example": [
+        "she got a reputation as a frump",
+        "she's a real dog"
+      ],
+      "exemplifies": [
+        "06730109-n"
+      ],
+      "hypernym": [
+        "09654651-n"
+      ],
+      "id": "oewn-10133978-n",
+      "ili": "i90107",
+      "lexfile": "noun.person",
+      "members": [
+        "frump",
+        "dog"
+      ],
+      "partOfSpeech": "n"
+    }
+  ]
+}

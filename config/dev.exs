@@ -55,6 +55,11 @@ config :devils_dictionary, DevilsDictionaryWeb.Endpoint,
 # Enable dev routes for dashboard and mailbox
 config :devils_dictionary, dev_routes: true
 
+# Absorbs run millions of statements; Ecto logs each one at :debug, which buries
+# the numbers a task prints. Raise the floor to :info and pass `--log-level debug`
+# style opts only when actually debugging a query.
+config :logger, level: :info
+
 # Do not include metadata nor timestamps in development logs
 config :logger, :default_formatter, format: "[$level] $message\n"
 

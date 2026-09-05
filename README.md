@@ -56,7 +56,7 @@ Patterns are borrowed from [Cinegraph](https://github.com/razrfly/cinegraph): ra
 |---|---|
 | Direction decided, schema reviewed | ✅ 2026-09-05 |
 | Repo reset in place: Phoenix 1.8.13 / LiveView 1.2.11 on Elixir 1.19 / OTP 28, directory structure scaffolded (#70 S0a) | ✅ 2026-09-05 |
-| S0b schema, `Absorb.Source` + `Materializer`, WordNet + Wiktionary index, first numbers (index size, scope size) | ⬜ |
+| S0b thirteen-table schema, `Materializer`, WordNet full + Wiktionary index, Animals scope (A2 ✅ 120,564 synsets · A3 ✅ 1,534,818 lexemes · A4 ✅ 21,277 scope lexemes · R1 ✅ 100%) | ✅ 2026-09-05 |
 | S1 Wiktionary + WordNet scoped, relations resolved | ⬜ |
 | S2 Wikidata + Wikipedia, linking ladder, link rate | ⬜ |
 | S3 Bierce, health, `dd.score` | ⬜ |

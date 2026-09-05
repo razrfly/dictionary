@@ -1,0 +1,3325 @@
+{
+  "records": [
+    {
+      "categories": [
+        "English adjectives",
+        "English countable nouns",
+        "English doublets",
+        "English entries with incorrect language header",
+        "English lemmas",
+        "English nouns",
+        "English terms derived from Ancient Greek",
+        "English terms derived from Anglo-Norman",
+        "English terms derived from Latin",
+        "English terms derived from Middle English",
+        "English terms derived from Old English",
+        "English terms derived from Old French",
+        "English terms inherited from Middle English",
+        "English verbs",
+        "Entries missing English vernacular names of taxa",
+        "Entries using missing taxonomic name (genus)",
+        "Entries using missing taxonomic name (species)",
+        "Entries using missing taxonomic name (subfamily)",
+        "Entries with translation boxes",
+        "Pages with 1 entry",
+        "Pages with entries",
+        "Rhymes:English/ɔɪstə(ɹ)",
+        "Rhymes:English/ɔɪstə(ɹ)/2 syllables",
+        "Terms with Abenaki translations",
+        "Terms with Afrikaans translations",
+        "Terms with Albanian translations",
+        "Terms with Ancient Greek translations",
+        "Terms with Arabic translations",
+        "Terms with Armenian translations",
+        "Terms with Asturian translations",
+        "Terms with Azerbaijani translations",
+        "Terms with Basque translations",
+        "Terms with Belarusian translations",
+        "Terms with Bengali translations",
+        "Terms with Bhojpuri translations",
+        "Terms with Breton translations",
+        "Terms with Bulgarian translations",
+        "Terms with Burmese translations",
+        "Terms with Cantonese translations",
+        "Terms with Catalan translations",
+        "Terms with Central Melanau translations",
+        "Terms with Cornish translations",
+        "Terms with Corsican translations",
+        "Terms with Czech translations",
+        "Terms with Danish translations",
+        "Terms with Dutch translations",
+        "Terms with Egyptian Arabic translations",
+        "Terms with Esperanto translations",
+        "Terms with Estonian translations",
+        "Terms with Faroese translations",
+        "Terms with Finnish translations",
+        "Terms with French translations",
+        "Terms with Galician translations",
+        "Terms with Georgian translations",
+        "Terms with German translations",
+        "Terms with Greek translations",
+        "Terms with Gulf Arabic translations",
+        "Terms with Haitian Creole translations",
+        "Terms with Hawaiian translations",
+        "Terms with Hebrew translations",
+        "Terms with Hijazi Arabic translations",
+        "Terms with Hindi translations",
+        "Terms with Hungarian translations",
+        "Terms with Icelandic translations",
+        "Terms with Ido translations",
+        "Terms with Indonesian translations",
+        "Terms with Irish translations",
+        "Terms with Italian translations",
+        "Terms with Japanese translations",
+        "Terms with Javanese translations",
+        "Terms with Kazakh translations",
+        "Terms with Khmer translations",
+        "Terms with Kimaragang translations",
+        "Terms with Korean translations",
+        "Terms with Kyrgyz translations",
+        "Terms with Lao translations",
+        "Terms with Latin translations",
+        "Terms with Latvian translations",
+        "Terms with Lithuanian translations",
+        "Terms with Louisiana Creole translations",
+        "Terms with Lower Sorbian translations",
+        "Terms with Luxembourgish translations",
+        "Terms with Macedonian translations",
+        "Terms with Malagasy translations",
+        "Terms with Malay translations",
+        "Terms with Malayalam translations",
+        "Terms with Mandarin translations",
+        "Terms with Manx translations",
+        "Terms with Mi'kmaq translations",
+        "Terms with Mohegan-Pequot translations",
+        "Terms with Mongolian translations",
+        "Terms with Muna translations",
+        "Terms with Murik (New Guinea) translations",
+        "Terms with Māori translations",
+        "Terms with Navajo translations",
+        "Terms with Norman translations",
+        "Terms with North Frisian translations",
+        "Terms with Norwegian Bokmål translations",
+        "Terms with Norwegian Nynorsk translations",
+        "Terms with Occitan translations",
+        "Terms with Old English translations",
+        "Terms with Ottoman Turkish translations",
+        "Terms with Persian translations",
+        "Terms with Pohnpeian translations",
+        "Terms with Polish translations",
+        "Terms with Portuguese translations",
+        "Terms with Romanian translations",
+        "Terms with Russian translations",
+        "Terms with Scottish Gaelic translations",
+        "Terms with Serbo-Croatian translations",
+        "Terms with Sinhalese translations",
+        "Terms with Slovak translations",
+        "Terms with Slovene translations",
+        "Terms with Spanish translations",
+        "Terms with Swedish translations",
+        "Terms with Tagalog translations",
+        "Terms with Tajik translations",
+        "Terms with Tamil translations",
+        "Terms with Telugu translations",
+        "Terms with Thai translations",
+        "Terms with Turkish translations",
+        "Terms with Turkmen translations",
+        "Terms with Tày translations",
+        "Terms with Ukrainian translations",
+        "Terms with Unami translations",
+        "Terms with Upper Sorbian translations",
+        "Terms with Urdu translations",
+        "Terms with Uzbek translations",
+        "Terms with Vietnamese translations",
+        "Terms with Volapük translations",
+        "Terms with Walloon translations",
+        "Terms with Welsh translations",
+        "Terms with West Coast Bajau translations",
+        "Terms with West Frisian translations",
+        "Terms with Woiwurrung translations",
+        "Terms with Yiddish translations",
+        "Terms with Yoruba translations",
+        "Terms with Zulu translations",
+        "en:Bivalves",
+        "en:Greys",
+        "en:Seafood"
+      ],
+      "derived": [
+        {
+          "taxonomic": "Crassostrea virginica",
+          "word": "American oyster"
+        },
+        {
+          "taxonomic": "Crassostrea virginica",
+          "word": "Atlantic oyster"
+        },
+        {
+          "taxonomic": "Ostrea edulis",
+          "word": "Belon oyster"
+        },
+        {
+          "alt": "Saxostrea gradiva",
+          "word": "black-bordered oyster"
+        },
+        {
+          "taxonomic": "Pinctada margaritifera",
+          "word": "black-lip pearl oyster"
+        },
+        {
+          "taxonomic": "Ostrea chilensis",
+          "word": "bluff oyster"
+        },
+        {
+          "word": "box oyster"
+        },
+        {
+          "taxonomic": "Ostrea frons",
+          "word": "bunch oyster"
+        },
+        {
+          "taxonomic": "Pinctada vulgaris",
+          "word": "Ceylon pearl oyster"
+        },
+        {
+          "taxonomic": "Ostrea chilensis",
+          "word": "Chilean oyster"
+        },
+        {
+          "taxonomic": "Crassostrea virginica",
+          "word": "Chincoteague oyster"
+        },
+        {
+          "alt": "Pycnodonta hyotis, Ostrea cristi-galli",
+          "word": "cockscomb oyster"
+        },
+        {
+          "taxonomic": "Ostrea edulis",
+          "word": "Colchester native oyster"
+        },
+        {
+          "taxonomic": "Ostrea edulis",
+          "word": "common European oyster"
+        },
+        {
+          "taxonomic": "Ostrea frons",
+          "word": "coon oyster"
+        },
+        {
+          "word": "corn oyster"
+        },
+        {
+          "taxonomic": "Ostrea chilensis",
+          "word": "dredge oyster"
+        },
+        {
+          "taxonomic": "Crassostrea virginica",
+          "word": "eastern oyster"
+        },
+        {
+          "taxonomic": "Ostrea edulis",
+          "word": "edible oyster"
+        },
+        {
+          "taxonomic": "Ostrea edulis",
+          "word": "European flat oyster"
+        },
+        {
+          "taxonomic": "Pteriidae spp.",
+          "word": "feather oyster"
+        },
+        {
+          "alt": "Etheria spp.",
+          "word": "fresh-water oyster"
+        },
+        {
+          "word": "Glasgow oyster"
+        },
+        {
+          "alt": "Pinctida maxima",
+          "word": "gold-lip oyster"
+        },
+        {
+          "taxonomic": "Ulva lactuca",
+          "word": "green oyster"
+        },
+        {
+          "taxonomic": "Malleus spp. etc.",
+          "word": "hammer oyster"
+        },
+        {
+          "alt": "Magallana hongkongensis",
+          "word": "Hong Kong oyster"
+        },
+        {
+          "alt": "Saccostrea cucullata",
+          "word": "hooded oyster"
+        },
+        {
+          "alt": "Magallana gigas",
+          "word": "Japanese oyster"
+        },
+        {
+          "word": "king oyster mushroom"
+        },
+        {
+          "taxonomic": "Ostrea frons",
+          "word": "mangrove oyster"
+        },
+        {
+          "alt": "Magallana gigas",
+          "word": "Miyagi oyster"
+        },
+        {
+          "word": "mountain oyster"
+        },
+        {
+          "taxonomic": "Ostrea edulis",
+          "word": "mud oyster"
+        },
+        {
+          "word": "Murrumbidgee oyster"
+        },
+        {
+          "taxonomic": "Ostrea lurida",
+          "word": "Olympia oyster"
+        },
+        {
+          "word": "oyster ball"
+        },
+        {
+          "word": "oysterbank"
+        },
+        {
+          "word": "oyster bar"
+        },
+        {
+          "word": "Oyster Bay"
+        },
+        {
+          "word": "oyster bed"
+        },
+        {
+          "word": "oyster blade"
+        },
+        {
+          "word": "oyster blade steak"
+        },
+        {
+          "word": "oysterboat"
+        },
+        {
+          "alt": "Haustrum scobina",
+          "word": "oyster borer"
+        },
+        {
+          "word": "oyster cake"
+        },
+        {
+          "word": "Oyster card"
+        },
+        {
+          "taxonomic": "Haematopus spp.",
+          "word": "oystercatcher"
+        },
+        {
+          "word": "oyster cellar"
+        },
+        {
+          "word": "Oyster Cove"
+        },
+        {
+          "alt": "Zaops ostreus",
+          "word": "oyster crab"
+        },
+        {
+          "word": "oyster cracker"
+        },
+        {
+          "taxonomic": "Ocenebrinae gen. and spp.",
+          "word": "oyster drill"
+        },
+        {
+          "word": "oysterer"
+        },
+        {
+          "word": "oyster farm"
+        },
+        {
+          "taxonomic": "Tautoga onitis",
+          "word": "oysterfish"
+        },
+        {
+          "word": "oyster fruit"
+        },
+        {
+          "taxonomic": "Laminariales spp.",
+          "word": "oyster grass"
+        },
+        {
+          "word": "oysterhood"
+        },
+        {
+          "word": "oyster house"
+        },
+        {
+          "word": "oysterish"
+        },
+        {
+          "word": "oyster knife"
+        },
+        {
+          "taxonomic": "Stylochus frontalis",
+          "word": "oyster leech"
+        },
+        {
+          "word": "oysterless"
+        },
+        {
+          "word": "oysterlike"
+        },
+        {
+          "word": "oysterling"
+        },
+        {
+          "word": "oysterman"
+        },
+        {
+          "word": "oystermania"
+        },
+        {
+          "taxonomic": "Pleurotus spp.",
+          "word": "oyster mushroom"
+        },
+        {
+          "taxonomic": "Epioblasma capsaeformis",
+          "word": "oyster mussel"
+        },
+        {
+          "taxonomic": "Telfairia pedata",
+          "word": "oyster nut"
+        },
+        {
+          "word": "oyster omelette"
+        },
+        {
+          "word": "oysterous"
+        },
+        {
+          "word": "oyster parlor"
+        },
+        {
+          "word": "oyster pink"
+        },
+        {
+          "word": "oyster piracy"
+        },
+        {
+          "word": "oyster pirate"
+        },
+        {
+          "taxonomic": "Tragopogon porrifolius",
+          "word": "oyster plant"
+        },
+        {
+          "word": "oyster Rockefeller"
+        },
+        {
+          "word": "oyster saloon"
+        },
+        {
+          "word": "oyster sauce"
+        },
+        {
+          "word": "oystershell"
+        },
+        {
+          "taxonomic": "Lepidosaphes ulmi",
+          "word": "oystershell bark louse"
+        },
+        {
+          "taxonomic": "Lepidosaphes ulmi",
+          "word": "oystershell scale"
+        },
+        {
+          "word": "oyster shooter"
+        },
+        {
+          "word": "oyster-shucking knife"
+        },
+        {
+          "word": "oysters Kilpatrick"
+        },
+        {
+          "word": "oysters Rockefeller"
+        },
+        {
+          "word": "oyster-tecture"
+        },
+        {
+          "taxonomic": "Batrachoididae spp.",
+          "word": "oyster toadfish"
+        },
+        {
+          "taxonomic": "Rhizophora spp.",
+          "word": "oyster tree"
+        },
+        {
+          "word": "oyster white"
+        },
+        {
+          "word": "oyster wife"
+        },
+        {
+          "word": "oysterwoman"
+        },
+        {
+          "word": "oysterwood"
+        },
+        {
+          "word": "oystery"
+        },
+        {
+          "alt": "Magallana gigas",
+          "word": "Pacific oyster"
+        },
+        {
+          "taxonomic": "Pinctada margaritifera",
+          "word": "pearl oyster"
+        },
+        {
+          "taxonomic": "Pectinidae spp. etc.",
+          "word": "pilgrim oyster"
+        },
+        {
+          "taxonomic": "Crassostrea angulata",
+          "word": "Portuguese oyster"
+        },
+        {
+          "word": "prairie oyster"
+        },
+        {
+          "taxonomic": "Ostrea frons",
+          "word": "racoon oyster"
+        },
+        {
+          "alt": "Saccostrea spp.",
+          "word": "rock oyster"
+        },
+        {
+          "word": "Rocky Mountain oyster"
+        },
+        {
+          "alt": "Placuna sella, Anomia spp.",
+          "word": "saddle oyster"
+        },
+        {
+          "word": "scalloped oyster"
+        },
+        {
+          "word": "seed oyster"
+        },
+        {
+          "taxonomic": "Pinnidae spp.",
+          "word": "Spanish oyster"
+        },
+        {
+          "taxonomic": "Spondylus spp.",
+          "word": "spiny oyster"
+        },
+        {
+          "alt": "Saccostrea glomerata, Anomia spp.",
+          "word": "Sydney rock oyster"
+        },
+        {
+          "word": "the world is one's oyster"
+        },
+        {
+          "word": "the world is someone's oyster"
+        },
+        {
+          "taxonomic": "Spondylus spp.",
+          "word": "thorny oyster"
+        },
+        {
+          "taxonomic": "Pleurotus spp.",
+          "word": "tree oyster"
+        },
+        {
+          "taxonomic": "Ostreidae gen. and spp.",
+          "word": "true oyster"
+        },
+        {
+          "taxonomic": "Tragopogon porrifolius",
+          "word": "vegetable oyster"
+        },
+        {
+          "word": "Viennese oyster"
+        },
+        {
+          "taxonomic": "Crassostrea virginica",
+          "word": "Virginia oyster"
+        },
+        {
+          "taxonomic": "Crassostrea virginica",
+          "word": "Wellfleet oyster"
+        },
+        {
+          "english": "Placuna placenta",
+          "translation": "Placuna placenta",
+          "word": "windowpane oyster"
+        },
+        {
+          "taxonomic": "Pleurotus ostreatus",
+          "word": "woods oyster"
+        }
+      ],
+      "etymology_templates": [
+        {
+          "args": {
+            "1": "en",
+            "2": "enm",
+            "3": "oystre"
+          },
+          "expansion": "Middle English oystre",
+          "name": "inh"
+        },
+        {
+          "args": {
+            "1": "en",
+            "2": "ang",
+            "3": "ostre"
+          },
+          "expansion": "Old English ostre",
+          "name": "der"
+        },
+        {
+          "args": {
+            "1": "en",
+            "2": "xno",
+            "3": "oistre"
+          },
+          "expansion": "Anglo-Norman oistre",
+          "name": "der"
+        },
+        {
+          "args": {
+            "1": "en",
+            "2": "fro",
+            "3": "oistre"
+          },
+          "expansion": "Old French oistre",
+          "name": "der"
+        },
+        {
+          "args": {
+            "1": "en",
+            "2": "la",
+            "3": "ostrea"
+          },
+          "expansion": "Latin ostrea",
+          "name": "der"
+        },
+        {
+          "args": {
+            "1": "en",
+            "2": "grc",
+            "3": "ὄστρεον"
+          },
+          "expansion": "Ancient Greek ὄστρεον (óstreon)",
+          "name": "der"
+        },
+        {
+          "args": {
+            "1": "en",
+            "2": "ostro",
+            "t1": "a purple dye"
+          },
+          "expansion": "Doublet of ostro (“a purple dye”)",
+          "name": "dbt"
+        }
+      ],
+      "etymology_text": "From Middle English oystre, from Old English ostre, reinforced or superseded by Anglo-Norman oistre, which is from Old French oistre, uistre (compare modern French huître); both lines (Old English and Old French) from Latin ostrea, from Ancient Greek ὄστρεον (óstreon). Doublet of ostro (“a purple dye”).",
+      "forms": [
+        {
+          "form": "oysters",
+          "tags": [
+            "plural"
+          ]
+        },
+        {
+          "form": "erster",
+          "tags": [
+            "alternative"
+          ]
+        },
+        {
+          "form": "oister",
+          "tags": [
+            "alternative",
+            "obsolete"
+          ]
+        },
+        {
+          "form": "oystre",
+          "tags": [
+            "alternative",
+            "obsolete"
+          ]
+        }
+      ],
+      "head_templates": [
+        {
+          "args": {},
+          "expansion": "oyster (plural oysters)",
+          "name": "en-noun"
+        }
+      ],
+      "hyphenations": [
+        {
+          "parts": [
+            "oy",
+            "ster"
+          ]
+        }
+      ],
+      "lang": "English",
+      "lang_code": "en",
+      "pos": "noun",
+      "related": [
+        {
+          "word": "ostraceous"
+        },
+        {
+          "word": "ostreiculture"
+        },
+        {
+          "word": "ostreophage"
+        },
+        {
+          "word": "ostreophagous"
+        },
+        {
+          "word": "ostriferous"
+        }
+      ],
+      "senses": [
+        {
+          "categories": [
+            "English terms with quotations"
+          ],
+          "examples": [
+            {
+              "bold_text_offsets": [
+                [
+                  32,
+                  38
+                ]
+              ],
+              "ref": "c. 1597 (date written), William Shakespeare, “The Merry Wiues of Windsor”, in Mr. William Shakespeares Comedies, Histories, & Tragedies […] (First Folio), London: […] Isaac Iaggard, and Ed[ward] Blount, published 1623, →OCLC, [Act II, scene ii], page 45, lines 2–5:",
+              "text": "Piſt. Why then the world's mine Oyſter, which I, with ſword will open.",
+              "type": "quotation"
+            },
+            {
+              "bold_text_offsets": [
+                [
+                  36,
+                  42
+                ]
+              ],
+              "ref": "1731 (date written), Simon Wagstaff [pseudonym; Jonathan Swift], “Dialogue II”, in A Complete Collection of Genteel and Ingenious Conversation, […], London: […] B[enjamin] Motte […], published 1738, →OCLC, page 120:",
+              "text": "He was a bold man that first ate an oyster.",
+              "type": "quotation"
+            }
+          ],
+          "glosses": [
+            "Any of certain marine bivalve mollusks, especially those of the family Ostreidae (the true oysters), usually found adhering to rocks or other fixed objects in shallow water along the seacoasts, or in brackish water in the mouth of rivers."
+          ],
+          "links": [
+            [
+              "bivalve",
+              "bivalve"
+            ],
+            [
+              "mollusk",
+              "mollusk"
+            ],
+            [
+              "Ostreidae",
+              "Ostreidae#Translingual"
+            ]
+          ]
+        },
+        {
+          "categories": [
+            "English terms with quotations"
+          ],
+          "examples": [
+            {
+              "bold_text_offsets": [
+                [
+                  39,
+                  45
+                ]
+              ],
+              "ref": "1971, United States Bureau of Naval Personnel, “Food preparation”, in Steward 3 & 2, U.S. Government Printing Office, page 148:",
+              "text": "Cut remaining skin on back. Remove the oyster (choice dark meat in spoon-shaped bone on back) with the leg.",
+              "type": "quotation"
+            }
+          ],
+          "glosses": [
+            "The delicate oyster-shaped morsel of dark meat contained in a small cavity of the bone on each side of the lower part of the back of a fowl."
+          ],
+          "links": [
+            [
+              "morsel",
+              "morsel"
+            ],
+            [
+              "dark meat",
+              "dark meat"
+            ],
+            [
+              "fowl",
+              "fowl"
+            ]
+          ]
+        },
+        {
+          "glosses": [
+            "A pale beige color tinted with grey or pink, like that of an oyster."
+          ]
+        },
+        {
+          "categories": [
+            "English colloquialisms",
+            "English terms with quotations"
+          ],
+          "examples": [
+            {
+              "bold_text_offsets": [
+                [
+                  127,
+                  133
+                ]
+              ],
+              "ref": "1843 December 19, Charles Dickens, “Stave I. Marley’s Ghost.”, in A Christmas Carol. […], London: Chapman & Hall, […], →OCLC, page 3:",
+              "text": "Hard and sharp as flint, from which no steel had ever struck out generous fire; secret, and self-contained, and solitary as an oyster.",
+              "type": "quotation"
+            },
+            {
+              "bold_text_offsets": [
+                [
+                  22,
+                  28
+                ],
+                [
+                  100,
+                  106
+                ],
+                [
+                  100,
+                  107
+                ]
+              ],
+              "ref": "1928, Agatha Christie, The Mystery of the Blue Train:",
+              "text": "I will not be a human oyster. No, I will lay my cards on the table, which is assuredly a thing that oysters do not do.",
+              "type": "quotation"
+            }
+          ],
+          "glosses": [
+            "A person who keeps secrets."
+          ],
+          "links": [
+            [
+              "secret",
+              "secret"
+            ]
+          ],
+          "qualifier": "by analogy",
+          "raw_glosses": [
+            "(colloquial, by analogy) A person who keeps secrets."
+          ],
+          "tags": [
+            "colloquial"
+          ]
+        },
+        {
+          "categories": [
+            "English terms with quotations"
+          ],
+          "examples": [
+            {
+              "bold_text_offsets": [
+                [
+                  204,
+                  210
+                ]
+              ],
+              "ref": "1959, Vance Packard, The Status Seekers, Pocket Books, published 1971, →ISBN, page 116:",
+              "text": "He asked a major Chicago retailer with a large store in the heart of the city about the socioeconomic character of his customers. The man replied proudly that the entire range of economic classes was his oyster.",
+              "type": "quotation"
+            }
+          ],
+          "glosses": [
+            "Something at one's disposal."
+          ],
+          "links": [
+            [
+              "at one's disposal",
+              "at someone's disposal"
+            ]
+          ],
+          "raw_glosses": [
+            "(figurative) Something at one's disposal."
+          ],
+          "tags": [
+            "figuratively"
+          ]
+        },
+        {
+          "categories": [
+            "British English",
+            "English slang"
+          ],
+          "glosses": [
+            "A shoplifter."
+          ],
+          "links": [
+            [
+              "shoplifter",
+              "shoplifter"
+            ]
+          ],
+          "raw_glosses": [
+            "(UK, slang) A shoplifter."
+          ],
+          "tags": [
+            "UK",
+            "slang"
+          ]
+        },
+        {
+          "alt_of": [
+            {
+              "word": "Oyster card"
+            }
+          ],
+          "categories": [
+            "British English",
+            "English ellipses",
+            "English slang"
+          ],
+          "glosses": [
+            "Ellipsis of Oyster card."
+          ],
+          "links": [
+            [
+              "Oyster card",
+              "Oyster card#English"
+            ]
+          ],
+          "raw_glosses": [
+            "(UK, slang) Ellipsis of Oyster card."
+          ],
+          "tags": [
+            "UK",
+            "abbreviation",
+            "alt-of",
+            "ellipsis",
+            "slang"
+          ]
+        }
+      ],
+      "sounds": [
+        {
+          "ipa": "/ˈɔɪ.stə/",
+          "tags": [
+            "Received-Pronunciation"
+          ]
+        },
+        {
+          "ipa": "/ˈɔɪ.stɚ/",
+          "tags": [
+            "General-American"
+          ]
+        },
+        {
+          "audio": "En-us-oyster.ogg",
+          "mp3_url": "https://upload.wikimedia.org/wikipedia/commons/transcoded/b/b9/En-us-oyster.ogg/En-us-oyster.ogg.mp3",
+          "ogg_url": "https://upload.wikimedia.org/wikipedia/commons/b/b9/En-us-oyster.ogg",
+          "tags": [
+            "General-American"
+          ]
+        },
+        {
+          "ipa": "/ˈɔɪ.st͡ʃɚ/",
+          "tags": [
+            "Southern-US",
+            "regional"
+          ]
+        },
+        {
+          "rhymes": "-ɔɪstə(ɹ)"
+        }
+      ],
+      "translations": [
+        {
+          "code": "abe",
+          "lang": "Abenaki",
+          "lang_code": "abe",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "als"
+        },
+        {
+          "code": "af",
+          "lang": "Afrikaans",
+          "lang_code": "af",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "oester"
+        },
+        {
+          "code": "sq",
+          "lang": "Albanian",
+          "lang_code": "sq",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "tags": [
+            "feminine"
+          ],
+          "word": "stridhe"
+        },
+        {
+          "code": "ar",
+          "lang": "Arabic",
+          "lang_code": "ar",
+          "roman": "maḥār",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "tags": [
+            "masculine"
+          ],
+          "word": "مَحَار"
+        },
+        {
+          "code": "arz",
+          "lang": "Arabic",
+          "lang_code": "arz",
+          "roman": "esteredya",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "tags": [
+            "Egyptian-Arabic",
+            "masculine",
+            "plural"
+          ],
+          "word": "إسترديا"
+        },
+        {
+          "code": "afb",
+          "lang": "Arabic",
+          "lang_code": "afb",
+          "roman": "maḥḥār",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "tags": [
+            "Gulf-Arabic",
+            "masculine"
+          ],
+          "word": "محار"
+        },
+        {
+          "code": "acw",
+          "lang": "Arabic",
+          "lang_code": "acw",
+          "roman": "maḥār",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "tags": [
+            "Hijazi-Arabic",
+            "masculine",
+            "plural"
+          ],
+          "word": "مَحَار"
+        },
+        {
+          "code": "hy",
+          "lang": "Armenian",
+          "lang_code": "hy",
+          "roman": "ostre",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "ոստրե"
+        },
+        {
+          "code": "ast",
+          "lang": "Asturian",
+          "lang_code": "ast",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "tags": [
+            "feminine"
+          ],
+          "word": "ostra"
+        },
+        {
+          "code": "az",
+          "lang": "Azerbaijani",
+          "lang_code": "az",
+          "roman": "istiridiyə",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "tags": [
+            "Arabic"
+          ],
+          "word": "استریدیه"
+        },
+        {
+          "code": "az",
+          "lang": "Azerbaijani",
+          "lang_code": "az",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "tags": [
+            "Latin"
+          ],
+          "word": "istiridyə"
+        },
+        {
+          "code": "az",
+          "lang": "Azerbaijani",
+          "lang_code": "az",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "tags": [
+            "Latin"
+          ],
+          "word": "stridiya"
+        },
+        {
+          "code": "bdr",
+          "lang": "West Coast Bajau",
+          "lang_code": "bdr",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "tigom"
+        },
+        {
+          "code": "eu",
+          "lang": "Basque",
+          "lang_code": "eu",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "ostra"
+        },
+        {
+          "code": "be",
+          "lang": "Belarusian",
+          "lang_code": "be",
+          "roman": "vústryca",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "tags": [
+            "feminine"
+          ],
+          "word": "ву́стрыца"
+        },
+        {
+          "code": "bn",
+          "lang": "Bengali",
+          "lang_code": "bn",
+          "roman": "jhinuk",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "ঝিনুক"
+        },
+        {
+          "code": "bho",
+          "lang": "Bhojpuri",
+          "lang_code": "bho",
+          "roman": "sīp",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "सीप"
+        },
+        {
+          "code": "br",
+          "lang": "Breton",
+          "lang_code": "br",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "istr"
+        },
+        {
+          "code": "bg",
+          "lang": "Bulgarian",
+          "lang_code": "bg",
+          "roman": "strída",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "tags": [
+            "feminine"
+          ],
+          "word": "стри́да"
+        },
+        {
+          "code": "my",
+          "lang": "Burmese",
+          "lang_code": "my",
+          "roman": "ka.ma",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "ကမာ"
+        },
+        {
+          "code": "ca",
+          "lang": "Catalan",
+          "lang_code": "ca",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "tags": [
+            "feminine"
+          ],
+          "word": "ostra"
+        },
+        {
+          "code": "yue",
+          "lang": "Chinese Cantonese",
+          "lang_code": "yue",
+          "roman": "hou⁴",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "蠔 /蚝"
+        },
+        {
+          "code": "cmn",
+          "lang": "Chinese Mandarin",
+          "lang_code": "cmn",
+          "roman": "mǔlì",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "牡蠣 /牡蛎"
+        },
+        {
+          "code": "cmn",
+          "lang": "Chinese Mandarin",
+          "lang_code": "cmn",
+          "roman": "hǎilìzi",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "海蠣子 /海蛎子"
+        },
+        {
+          "code": "cmn",
+          "lang": "Chinese Mandarin",
+          "lang_code": "cmn",
+          "roman": "háozi",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "蠔子 /蚝子"
+        },
+        {
+          "code": "cmn",
+          "lang": "Chinese Mandarin",
+          "lang_code": "cmn",
+          "roman": "háo",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "蠔 /蚝"
+        },
+        {
+          "code": "kw",
+          "lang": "Cornish",
+          "lang_code": "kw",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "tags": [
+            "feminine"
+          ],
+          "word": "estren"
+        },
+        {
+          "code": "co",
+          "lang": "Corsican",
+          "lang_code": "co",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "tags": [
+            "feminine"
+          ],
+          "word": "ostrica"
+        },
+        {
+          "code": "co",
+          "lang": "Corsican",
+          "lang_code": "co",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "tags": [
+            "feminine"
+          ],
+          "word": "ostrice"
+        },
+        {
+          "code": "cs",
+          "lang": "Czech",
+          "lang_code": "cs",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "tags": [
+            "feminine"
+          ],
+          "word": "ústřice"
+        },
+        {
+          "code": "da",
+          "lang": "Danish",
+          "lang_code": "da",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "tags": [
+            "common-gender"
+          ],
+          "word": "østers"
+        },
+        {
+          "code": "nl",
+          "lang": "Dutch",
+          "lang_code": "nl",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "tags": [
+            "masculine",
+            "neuter"
+          ],
+          "word": "oester"
+        },
+        {
+          "code": "eo",
+          "lang": "Esperanto",
+          "lang_code": "eo",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "ostro"
+        },
+        {
+          "code": "et",
+          "lang": "Estonian",
+          "lang_code": "et",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "auster"
+        },
+        {
+          "code": "fo",
+          "lang": "Faroese",
+          "lang_code": "fo",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "tags": [
+            "feminine"
+          ],
+          "word": "ostra"
+        },
+        {
+          "code": "fi",
+          "lang": "Finnish",
+          "lang_code": "fi",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "osteri"
+        },
+        {
+          "code": "fr",
+          "lang": "French",
+          "lang_code": "fr",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "tags": [
+            "feminine"
+          ],
+          "word": "huître"
+        },
+        {
+          "code": "fr",
+          "lang": "French",
+          "lang_code": "fr",
+          "note": "post-1990 spelling",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "tags": [
+            "feminine"
+          ],
+          "word": "huitre"
+        },
+        {
+          "code": "frr",
+          "lang": "North Frisian",
+          "lang_code": "frr",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "tags": [
+            "Sylt"
+          ],
+          "word": "Skruk"
+        },
+        {
+          "code": "fy",
+          "lang": "West-Frisian",
+          "lang_code": "fy",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "tags": [
+            "common-gender"
+          ],
+          "word": "oester"
+        },
+        {
+          "code": "ka",
+          "lang": "Georgian",
+          "lang_code": "ka",
+          "roman": "xamanc̣ḳa",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "ხამანწკა"
+        },
+        {
+          "code": "de",
+          "lang": "German",
+          "lang_code": "de",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "tags": [
+            "feminine"
+          ],
+          "word": "Auster"
+        },
+        {
+          "code": "el",
+          "lang": "Greek",
+          "lang_code": "el",
+          "roman": "streídi",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "tags": [
+            "neuter"
+          ],
+          "word": "στρείδι"
+        },
+        {
+          "code": "grc",
+          "lang": "Ancient Greek",
+          "lang_code": "grc",
+          "roman": "óstreon",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "tags": [
+            "neuter"
+          ],
+          "word": "ὄστρεον"
+        },
+        {
+          "code": "grc",
+          "lang": "Ancient Greek",
+          "lang_code": "grc",
+          "roman": "têthos",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "tags": [
+            "neuter"
+          ],
+          "word": "τῆθος"
+        },
+        {
+          "code": "grc",
+          "lang": "Ancient Greek",
+          "lang_code": "grc",
+          "roman": "glukomarís",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "tags": [
+            "feminine"
+          ],
+          "word": "γλυκομαρίς"
+        },
+        {
+          "code": "ht",
+          "lang": "Haitian Creole",
+          "lang_code": "ht",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "zwit"
+        },
+        {
+          "code": "haw",
+          "lang": "Hawaiian",
+          "lang_code": "haw",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "kio"
+        },
+        {
+          "code": "he",
+          "lang": "Hebrew",
+          "lang_code": "he",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "צִדפָּה"
+        },
+        {
+          "code": "hi",
+          "lang": "Hindi",
+          "lang_code": "hi",
+          "roman": "sīp",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "सीप"
+        },
+        {
+          "code": "hi",
+          "lang": "Hindi",
+          "lang_code": "hi",
+          "roman": "śukti",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "tags": [
+            "feminine"
+          ],
+          "word": "शुक्ति"
+        },
+        {
+          "code": "hu",
+          "lang": "Hungarian",
+          "lang_code": "hu",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "osztriga"
+        },
+        {
+          "code": "is",
+          "lang": "Icelandic",
+          "lang_code": "is",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "tags": [
+            "feminine"
+          ],
+          "word": "ostra"
+        },
+        {
+          "code": "io",
+          "lang": "Ido",
+          "lang_code": "io",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "ostro"
+        },
+        {
+          "code": "id",
+          "lang": "Indonesian",
+          "lang_code": "id",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "tiram"
+        },
+        {
+          "code": "ga",
+          "lang": "Irish",
+          "lang_code": "ga",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "tags": [
+            "masculine"
+          ],
+          "word": "oisre"
+        },
+        {
+          "code": "it",
+          "lang": "Italian",
+          "lang_code": "it",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "tags": [
+            "feminine"
+          ],
+          "word": "ostrica"
+        },
+        {
+          "alt": "かき",
+          "code": "ja",
+          "lang": "Japanese",
+          "lang_code": "ja",
+          "roman": "kaki",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "牡蠣"
+        },
+        {
+          "code": "ja",
+          "lang": "Japanese",
+          "lang_code": "ja",
+          "roman": "kaki",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "カキ"
+        },
+        {
+          "alt": "しんじゅがい",
+          "code": "ja",
+          "lang": "Japanese",
+          "lang_code": "ja",
+          "roman": "shinjugai",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "真珠貝"
+        },
+        {
+          "code": "jv",
+          "lang": "Javanese",
+          "lang_code": "jv",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "kerang"
+        },
+        {
+          "code": "kk",
+          "lang": "Kazakh",
+          "lang_code": "kk",
+          "roman": "uwstrıyca",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "устрица"
+        },
+        {
+          "code": "km",
+          "lang": "Khmer",
+          "lang_code": "km",
+          "roman": "kyɑɑng smǝt",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "ខ្យងស្មិត"
+        },
+        {
+          "code": "km",
+          "lang": "Khmer",
+          "lang_code": "km",
+          "roman": "ngiev",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "ងាវ"
+        },
+        {
+          "code": "km",
+          "lang": "Khmer",
+          "lang_code": "km",
+          "roman": "ngiev samot",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "ងាវសមុទ្រ"
+        },
+        {
+          "code": "kqr",
+          "lang": "Kimaragang",
+          "lang_code": "kqr",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "kubili"
+        },
+        {
+          "code": "ko",
+          "lang": "Korean",
+          "lang_code": "ko",
+          "roman": "gul",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "굴"
+        },
+        {
+          "code": "ky",
+          "lang": "Kyrgyz",
+          "lang_code": "ky",
+          "roman": "ustritsa",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "устрица"
+        },
+        {
+          "code": "lo",
+          "lang": "Lao",
+          "lang_code": "lo",
+          "roman": "hǭi nāng lom",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "ຫອຍນາງລົມ"
+        },
+        {
+          "code": "lo",
+          "lang": "Lao",
+          "lang_code": "lo",
+          "roman": "hǭi nāng lom",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "ຫອຽນາງລົມ"
+        },
+        {
+          "code": "la",
+          "lang": "Latin",
+          "lang_code": "la",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "tags": [
+            "feminine"
+          ],
+          "word": "ostrea"
+        },
+        {
+          "code": "lv",
+          "lang": "Latvian",
+          "lang_code": "lv",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "tags": [
+            "feminine"
+          ],
+          "word": "austere"
+        },
+        {
+          "code": "lt",
+          "lang": "Lithuanian",
+          "lang_code": "lt",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "tags": [
+            "feminine"
+          ],
+          "word": "austrė"
+        },
+        {
+          "code": "lou",
+          "lang": "Louisiana Creole",
+          "lang_code": "lou",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "zwit"
+        },
+        {
+          "code": "lb",
+          "lang": "Luxembourgish",
+          "lang_code": "lb",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "Auster"
+        },
+        {
+          "code": "mk",
+          "lang": "Macedonian",
+          "lang_code": "mk",
+          "roman": "ostriga",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "tags": [
+            "feminine"
+          ],
+          "word": "острига"
+        },
+        {
+          "code": "mg",
+          "lang": "Malagasy",
+          "lang_code": "mg",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "masajy"
+        },
+        {
+          "code": "ms",
+          "lang": "Malay",
+          "lang_code": "ms",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "tiram"
+        },
+        {
+          "code": "ml",
+          "lang": "Malayalam",
+          "lang_code": "ml",
+          "roman": "muttuccippi",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "മുത്തുച്ചിപ്പി"
+        },
+        {
+          "code": "gv",
+          "lang": "Manx",
+          "lang_code": "gv",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "tags": [
+            "masculine"
+          ],
+          "word": "ooastyr"
+        },
+        {
+          "code": "mi",
+          "lang": "Māori",
+          "lang_code": "mi",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "tio"
+        },
+        {
+          "code": "mel",
+          "lang": "Central Melanau",
+          "lang_code": "mel",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "tirem"
+        },
+        {
+          "code": "mic",
+          "lang": "Mi'kmaq",
+          "lang_code": "mic",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "tags": [
+            "animate"
+          ],
+          "word": "mntmu"
+        },
+        {
+          "code": "mic",
+          "lang": "Mi'kmaq",
+          "lang_code": "mic",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "tags": [
+            "animate"
+          ],
+          "word": "tmtmu"
+        },
+        {
+          "code": "xpq",
+          "lang": "Mohegan-Pequot",
+          "lang_code": "xpq",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "apon"
+        },
+        {
+          "code": "mn",
+          "lang": "Mongolian",
+          "lang_code": "mn",
+          "roman": "xjasaa",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "хясаа"
+        },
+        {
+          "code": "mnb",
+          "lang": "Muna",
+          "lang_code": "mnb",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "fonoti"
+        },
+        {
+          "code": "mtf",
+          "lang": "Murik (New Guinea)",
+          "lang_code": "mtf",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "kabaŋk"
+        },
+        {
+          "code": "nv",
+          "lang": "Navajo",
+          "lang_code": "nv",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "chʼosh yoołgai bitsʼaʼígíí"
+        },
+        {
+          "code": "nv",
+          "lang": "Navajo",
+          "lang_code": "nv",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "chʼosh yoołgai bitsʼaʼí íiyisígíí"
+        },
+        {
+          "code": "nrf",
+          "lang": "Norman",
+          "lang_code": "nrf",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "tags": [
+            "feminine"
+          ],
+          "word": "hitre"
+        },
+        {
+          "code": "nb",
+          "lang": "Norwegian Bokmål",
+          "lang_code": "nb",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "tags": [
+            "masculine"
+          ],
+          "word": "østers"
+        },
+        {
+          "code": "nn",
+          "lang": "Norwegian Nynorsk",
+          "lang_code": "nn",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "tags": [
+            "masculine"
+          ],
+          "word": "østers"
+        },
+        {
+          "code": "oc",
+          "lang": "Occitan",
+          "lang_code": "oc",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "tags": [
+            "feminine"
+          ],
+          "word": "ustra"
+        },
+        {
+          "code": "ang",
+          "lang": "Old English",
+          "lang_code": "ang",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "tags": [
+            "feminine"
+          ],
+          "word": "ostre"
+        },
+        {
+          "code": "fa",
+          "lang": "Persian",
+          "lang_code": "fa",
+          "roman": "gušmâhi",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "گوشماهی"
+        },
+        {
+          "code": "pon",
+          "lang": "Pohnpeian",
+          "lang_code": "pon",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "lingkiri"
+        },
+        {
+          "code": "pon",
+          "lang": "Pohnpeian",
+          "lang_code": "pon",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "pelekenna"
+        },
+        {
+          "code": "pl",
+          "lang": "Polish",
+          "lang_code": "pl",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "tags": [
+            "feminine"
+          ],
+          "word": "ostryga"
+        },
+        {
+          "code": "pt",
+          "lang": "Portuguese",
+          "lang_code": "pt",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "tags": [
+            "feminine"
+          ],
+          "word": "ostra"
+        },
+        {
+          "code": "ro",
+          "lang": "Romanian",
+          "lang_code": "ro",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "tags": [
+            "feminine"
+          ],
+          "word": "stridie"
+        },
+        {
+          "code": "ru",
+          "lang": "Russian",
+          "lang_code": "ru",
+          "roman": "ústrica",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "tags": [
+            "feminine"
+          ],
+          "word": "у́стрица"
+        },
+        {
+          "code": "gd",
+          "lang": "Scottish Gaelic",
+          "lang_code": "gd",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "tags": [
+            "masculine"
+          ],
+          "word": "eisir"
+        },
+        {
+          "code": "gd",
+          "lang": "Scottish Gaelic",
+          "lang_code": "gd",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "tags": [
+            "masculine"
+          ],
+          "word": "oisir"
+        },
+        {
+          "code": "sh",
+          "lang": "Serbo-Croatian",
+          "lang_code": "sh",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "tags": [
+            "Cyrillic",
+            "feminine"
+          ],
+          "word": "каменица"
+        },
+        {
+          "code": "sh",
+          "lang": "Serbo-Croatian",
+          "lang_code": "sh",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "tags": [
+            "Cyrillic",
+            "feminine"
+          ],
+          "word": "оштрига"
+        },
+        {
+          "code": "sh",
+          "lang": "Serbo-Croatian",
+          "lang_code": "sh",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "tags": [
+            "Latin",
+            "feminine"
+          ],
+          "word": "kamenica"
+        },
+        {
+          "code": "sh",
+          "lang": "Serbo-Croatian",
+          "lang_code": "sh",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "tags": [
+            "Latin",
+            "feminine"
+          ],
+          "word": "oštriga"
+        },
+        {
+          "code": "si",
+          "lang": "Sinhalese",
+          "lang_code": "si",
+          "roman": "bellā",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "බෙල්ලා"
+        },
+        {
+          "code": "sk",
+          "lang": "Slovak",
+          "lang_code": "sk",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "tags": [
+            "feminine"
+          ],
+          "word": "ustrica"
+        },
+        {
+          "code": "sl",
+          "lang": "Slovene",
+          "lang_code": "sl",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "tags": [
+            "feminine"
+          ],
+          "word": "ostriga"
+        },
+        {
+          "code": "dsb",
+          "lang": "Lower Sorbian",
+          "lang_code": "dsb",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "tags": [
+            "feminine"
+          ],
+          "word": "wustrica"
+        },
+        {
+          "code": "hsb",
+          "lang": "Upper Sorbian",
+          "lang_code": "hsb",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "tags": [
+            "feminine"
+          ],
+          "word": "wustrica"
+        },
+        {
+          "code": "es",
+          "lang": "Spanish",
+          "lang_code": "es",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "tags": [
+            "feminine"
+          ],
+          "word": "ostra"
+        },
+        {
+          "code": "es",
+          "english": "larger",
+          "lang": "Spanish",
+          "lang_code": "es",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "tags": [
+            "masculine"
+          ],
+          "translation": "larger",
+          "word": "ostrón"
+        },
+        {
+          "code": "es",
+          "english": "larger",
+          "lang": "Spanish",
+          "lang_code": "es",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "tags": [
+            "masculine"
+          ],
+          "translation": "larger",
+          "word": "ostión"
+        },
+        {
+          "code": "es",
+          "lang": "Spanish",
+          "lang_code": "es",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "tags": [
+            "feminine"
+          ],
+          "word": "ostia (disused)"
+        },
+        {
+          "code": "sv",
+          "lang": "Swedish",
+          "lang_code": "sv",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "ostron"
+        },
+        {
+          "code": "tl",
+          "lang": "Tagalog",
+          "lang_code": "tl",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "talaba"
+        },
+        {
+          "code": "tg",
+          "lang": "Tajik",
+          "lang_code": "tg",
+          "roman": "güšmohi",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "гӯшмоҳӣ"
+        },
+        {
+          "code": "ta",
+          "lang": "Tamil",
+          "lang_code": "ta",
+          "roman": "cippi",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "சிப்பி"
+        },
+        {
+          "code": "tyz",
+          "lang": "Tày",
+          "lang_code": "tyz",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "cắp pai"
+        },
+        {
+          "code": "tyz",
+          "lang": "Tày",
+          "lang_code": "tyz",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "cắp cuồng"
+        },
+        {
+          "code": "te",
+          "lang": "Telugu",
+          "lang_code": "te",
+          "roman": "gulla",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "గుల్ల"
+        },
+        {
+          "code": "th",
+          "lang": "Thai",
+          "lang_code": "th",
+          "roman": "hɔ̌i-naang-rom",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "หอยนางรม"
+        },
+        {
+          "code": "th",
+          "lang": "Thai",
+          "lang_code": "th",
+          "roman": "múk",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "มุก"
+        },
+        {
+          "code": "tr",
+          "lang": "Turkish",
+          "lang_code": "tr",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "istiridye"
+        },
+        {
+          "code": "ota",
+          "lang": "Ottoman Turkish",
+          "lang_code": "ota",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "استریدیه"
+        },
+        {
+          "code": "ota",
+          "lang": "Ottoman Turkish",
+          "lang_code": "ota",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "استردیه"
+        },
+        {
+          "code": "tk",
+          "lang": "Turkmen",
+          "lang_code": "tk",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "ustrisa"
+        },
+        {
+          "code": "uk",
+          "lang": "Ukrainian",
+          "lang_code": "uk",
+          "roman": "ústrycja",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "tags": [
+            "feminine"
+          ],
+          "word": "у́стриця"
+        },
+        {
+          "code": "unm",
+          "lang": "Unami",
+          "lang_code": "unm",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "sisawin"
+        },
+        {
+          "code": "ur",
+          "lang": "Urdu",
+          "lang_code": "ur",
+          "roman": "śukti",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "tags": [
+            "feminine"
+          ],
+          "word": "شکتی"
+        },
+        {
+          "code": "uz",
+          "lang": "Uzbek",
+          "lang_code": "uz",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "ustritsa"
+        },
+        {
+          "code": "vi",
+          "lang": "Vietnamese",
+          "lang_code": "vi",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "hàu"
+        },
+        {
+          "code": "vo",
+          "lang": "Volapük",
+          "lang_code": "vo",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "hüit"
+        },
+        {
+          "code": "wa",
+          "lang": "Walloon",
+          "lang_code": "wa",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "tags": [
+            "feminine"
+          ],
+          "word": "plate mosse"
+        },
+        {
+          "code": "cy",
+          "lang": "Welsh",
+          "lang_code": "cy",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "tags": [
+            "masculine"
+          ],
+          "word": "llymarch"
+        },
+        {
+          "code": "cy",
+          "lang": "Welsh",
+          "lang_code": "cy",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "tags": [
+            "feminine",
+            "plural"
+          ],
+          "word": "wystrys"
+        },
+        {
+          "code": "wyi",
+          "lang": "Woiwurrung",
+          "lang_code": "wyi",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "u.yoke"
+        },
+        {
+          "code": "yi",
+          "lang": "Yiddish",
+          "lang_code": "yi",
+          "roman": "oyster",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "tags": [
+            "masculine"
+          ],
+          "word": "אויסטער"
+        },
+        {
+          "code": "yo",
+          "lang": "Yoruba",
+          "lang_code": "yo",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "ìsán"
+        },
+        {
+          "code": "zu",
+          "lang": "Zulu",
+          "lang_code": "zu",
+          "sense": "mollusk — see also clam, mollusc, mussel",
+          "word": "ukhwathu class 11/10"
+        },
+        {
+          "code": "ar",
+          "lang": "Arabic",
+          "lang_code": "ar",
+          "roman": "maḥār",
+          "sense": "food from mollusc",
+          "tags": [
+            "masculine"
+          ],
+          "word": "مَحَار"
+        },
+        {
+          "code": "acw",
+          "lang": "Arabic",
+          "lang_code": "acw",
+          "roman": "maḥār",
+          "sense": "food from mollusc",
+          "tags": [
+            "Hijazi-Arabic",
+            "masculine",
+            "plural"
+          ],
+          "word": "مَحَار"
+        },
+        {
+          "code": "bg",
+          "lang": "Bulgarian",
+          "lang_code": "bg",
+          "roman": "strida",
+          "sense": "food from mollusc",
+          "tags": [
+            "feminine"
+          ],
+          "word": "стрида"
+        },
+        {
+          "code": "yue",
+          "lang": "Chinese Cantonese",
+          "lang_code": "yue",
+          "roman": "hou⁴",
+          "sense": "food from mollusc",
+          "word": "蠔 /蚝"
+        },
+        {
+          "code": "cmn",
+          "lang": "Chinese Mandarin",
+          "lang_code": "cmn",
+          "roman": "mǔlì",
+          "sense": "food from mollusc",
+          "word": "牡蠣 /牡蛎"
+        },
+        {
+          "code": "fi",
+          "lang": "Finnish",
+          "lang_code": "fi",
+          "sense": "food from mollusc",
+          "word": "osteri"
+        },
+        {
+          "code": "fr",
+          "lang": "French",
+          "lang_code": "fr",
+          "sense": "food from mollusc",
+          "word": "huître"
+        },
+        {
+          "code": "gl",
+          "lang": "Galician",
+          "lang_code": "gl",
+          "sense": "food from mollusc",
+          "tags": [
+            "feminine"
+          ],
+          "word": "ostra"
+        },
+        {
+          "code": "de",
+          "lang": "German",
+          "lang_code": "de",
+          "sense": "food from mollusc",
+          "tags": [
+            "feminine"
+          ],
+          "word": "Auster"
+        },
+        {
+          "code": "el",
+          "lang": "Greek",
+          "lang_code": "el",
+          "roman": "streídi",
+          "sense": "food from mollusc",
+          "tags": [
+            "neuter"
+          ],
+          "word": "στρείδι"
+        },
+        {
+          "code": "grc",
+          "lang": "Ancient Greek",
+          "lang_code": "grc",
+          "roman": "óstreon",
+          "sense": "food from mollusc",
+          "tags": [
+            "neuter"
+          ],
+          "word": "ὄστρεον"
+        },
+        {
+          "code": "it",
+          "lang": "Italian",
+          "lang_code": "it",
+          "sense": "food from mollusc",
+          "tags": [
+            "feminine"
+          ],
+          "word": "ostrica"
+        },
+        {
+          "alt": "かき",
+          "code": "ja",
+          "lang": "Japanese",
+          "lang_code": "ja",
+          "roman": "kaki",
+          "sense": "food from mollusc",
+          "word": "牡蠣"
+        },
+        {
+          "code": "ja",
+          "lang": "Japanese",
+          "lang_code": "ja",
+          "roman": "kaki",
+          "sense": "food from mollusc",
+          "word": "カキ"
+        },
+        {
+          "code": "kk",
+          "lang": "Kazakh",
+          "lang_code": "kk",
+          "roman": "uwstrıyca",
+          "sense": "food from mollusc",
+          "word": "устрица"
+        },
+        {
+          "code": "ko",
+          "lang": "Korean",
+          "lang_code": "ko",
+          "roman": "gul",
+          "sense": "food from mollusc",
+          "word": "굴"
+        },
+        {
+          "code": "la",
+          "lang": "Latin",
+          "lang_code": "la",
+          "sense": "food from mollusc",
+          "tags": [
+            "feminine"
+          ],
+          "word": "ostrea"
+        },
+        {
+          "code": "mk",
+          "lang": "Macedonian",
+          "lang_code": "mk",
+          "roman": "óstriga",
+          "sense": "food from mollusc",
+          "tags": [
+            "feminine"
+          ],
+          "word": "о́стрига"
+        },
+        {
+          "code": "mk",
+          "lang": "Macedonian",
+          "lang_code": "mk",
+          "roman": "óstrigi",
+          "sense": "food from mollusc",
+          "tags": [
+            "feminine",
+            "plural"
+          ],
+          "word": "о́стриги"
+        },
+        {
+          "code": "nv",
+          "lang": "Navajo",
+          "lang_code": "nv",
+          "sense": "food from mollusc",
+          "word": "chʼosh yoołgai bitsʼaʼígíí"
+        },
+        {
+          "code": "fa",
+          "lang": "Persian",
+          "lang_code": "fa",
+          "roman": "gušmâhi",
+          "sense": "food from mollusc",
+          "word": "گوشماهی"
+        },
+        {
+          "code": "fa",
+          "lang": "Persian",
+          "lang_code": "fa",
+          "roman": "oyster",
+          "sense": "food from mollusc",
+          "word": "اویستر"
+        },
+        {
+          "code": "pl",
+          "lang": "Polish",
+          "lang_code": "pl",
+          "sense": "food from mollusc",
+          "tags": [
+            "feminine"
+          ],
+          "word": "ostryga"
+        },
+        {
+          "code": "pt",
+          "lang": "Portuguese",
+          "lang_code": "pt",
+          "sense": "food from mollusc",
+          "tags": [
+            "masculine"
+          ],
+          "word": "marisco"
+        },
+        {
+          "code": "ro",
+          "lang": "Romanian",
+          "lang_code": "ro",
+          "sense": "food from mollusc",
+          "word": "stridie"
+        },
+        {
+          "code": "ru",
+          "lang": "Russian",
+          "lang_code": "ru",
+          "roman": "ústrica",
+          "sense": "food from mollusc",
+          "tags": [
+            "feminine"
+          ],
+          "word": "у́стрица"
+        },
+        {
+          "code": "sh",
+          "lang": "Serbo-Croatian",
+          "lang_code": "sh",
+          "sense": "food from mollusc",
+          "tags": [
+            "Cyrillic",
+            "feminine"
+          ],
+          "word": "каменица"
+        },
+        {
+          "code": "sh",
+          "lang": "Serbo-Croatian",
+          "lang_code": "sh",
+          "sense": "food from mollusc",
+          "tags": [
+            "Latin",
+            "feminine"
+          ],
+          "word": "kamenica"
+        },
+        {
+          "code": "es",
+          "lang": "Spanish",
+          "lang_code": "es",
+          "sense": "food from mollusc",
+          "tags": [
+            "feminine"
+          ],
+          "word": "ostra"
+        },
+        {
+          "code": "sv",
+          "lang": "Swedish",
+          "lang_code": "sv",
+          "sense": "food from mollusc",
+          "tags": [
+            "neuter"
+          ],
+          "word": "ostron"
+        },
+        {
+          "code": "tr",
+          "lang": "Turkish",
+          "lang_code": "tr",
+          "sense": "food from mollusc",
+          "word": "istiridye"
+        },
+        {
+          "code": "vi",
+          "lang": "Vietnamese",
+          "lang_code": "vi",
+          "sense": "food from mollusc",
+          "word": "hàu"
+        },
+        {
+          "code": "vi",
+          "lang": "Vietnamese",
+          "lang_code": "vi",
+          "sense": "food from mollusc",
+          "word": "sò"
+        },
+        {
+          "code": "wa",
+          "lang": "Walloon",
+          "lang_code": "wa",
+          "sense": "food from mollusc",
+          "tags": [
+            "feminine"
+          ],
+          "word": "plate mosse"
+        },
+        {
+          "code": "fr",
+          "lang": "French",
+          "lang_code": "fr",
+          "sense": "meat from poultry",
+          "word": "sot-l’y-laisse"
+        },
+        {
+          "code": "de",
+          "lang": "German",
+          "lang_code": "de",
+          "sense": "meat from poultry",
+          "tags": [
+            "neuter"
+          ],
+          "word": "Pfaffenschnittchen"
+        },
+        {
+          "code": "de",
+          "lang": "German",
+          "lang_code": "de",
+          "sense": "meat from poultry",
+          "tags": [
+            "neuter"
+          ],
+          "word": "Pfaffenstückchen"
+        },
+        {
+          "code": "fi",
+          "lang": "Finnish",
+          "lang_code": "fi",
+          "sense": "colour",
+          "word": "osterinharmaa"
+        },
+        {
+          "code": "es",
+          "lang": "Spanish",
+          "lang_code": "es",
+          "sense": "colour",
+          "tags": [
+            "masculine"
+          ],
+          "word": "ostra"
+        },
+        {
+          "code": "bg",
+          "lang": "Bulgarian",
+          "lang_code": "bg",
+          "roman": "zatvoren čovek",
+          "sense": "person who keeps secrets",
+          "tags": [
+            "masculine"
+          ],
+          "word": "затворен човек"
+        },
+        {
+          "code": "fi",
+          "lang": "Finnish",
+          "lang_code": "fi",
+          "sense": "person who keeps secrets",
+          "word": "muuri"
+        },
+        {
+          "code": "ru",
+          "lang": "Russian",
+          "lang_code": "ru",
+          "roman": "zámknutyj čelovék",
+          "sense": "person who keeps secrets",
+          "tags": [
+            "masculine"
+          ],
+          "word": "за́мкнутый челове́к"
+        },
+        {
+          "code": "es",
+          "lang": "Spanish",
+          "lang_code": "es",
+          "sense": "person who keeps secrets",
+          "tags": [
+            "feminine"
+          ],
+          "word": "tumba"
+        }
+      ],
+      "word": "oyster"
+    },
+    {
+      "categories": [
+        "English adjectives",
+        "English countable nouns",
+        "English doublets",
+        "English entries with incorrect language header",
+        "English lemmas",
+        "English nouns",
+        "English terms derived from Ancient Greek",
+        "English terms derived from Anglo-Norman",
+        "English terms derived from Latin",
+        "English terms derived from Middle English",
+        "English terms derived from Old English",
+        "English terms derived from Old French",
+        "English terms inherited from Middle English",
+        "English verbs",
+        "Entries missing English vernacular names of taxa",
+        "Entries using missing taxonomic name (genus)",
+        "Entries using missing taxonomic name (species)",
+        "Entries using missing taxonomic name (subfamily)",
+        "Entries with translation boxes",
+        "Pages with 1 entry",
+        "Pages with entries",
+        "Rhymes:English/ɔɪstə(ɹ)",
+        "Rhymes:English/ɔɪstə(ɹ)/2 syllables",
+        "Terms with Abenaki translations",
+        "Terms with Afrikaans translations",
+        "Terms with Albanian translations",
+        "Terms with Ancient Greek translations",
+        "Terms with Arabic translations",
+        "Terms with Armenian translations",
+        "Terms with Asturian translations",
+        "Terms with Azerbaijani translations",
+        "Terms with Basque translations",
+        "Terms with Belarusian translations",
+        "Terms with Bengali translations",
+        "Terms with Bhojpuri translations",
+        "Terms with Breton translations",
+        "Terms with Bulgarian translations",
+        "Terms with Burmese translations",
+        "Terms with Cantonese translations",
+        "Terms with Catalan translations",
+        "Terms with Central Melanau translations",
+        "Terms with Cornish translations",
+        "Terms with Corsican translations",
+        "Terms with Czech translations",
+        "Terms with Danish translations",
+        "Terms with Dutch translations",
+        "Terms with Egyptian Arabic translations",
+        "Terms with Esperanto translations",
+        "Terms with Estonian translations",
+        "Terms with Faroese translations",
+        "Terms with Finnish translations",
+        "Terms with French translations",
+        "Terms with Galician translations",
+        "Terms with Georgian translations",
+        "Terms with German translations",
+        "Terms with Greek translations",
+        "Terms with Gulf Arabic translations",
+        "Terms with Haitian Creole translations",
+        "Terms with Hawaiian translations",
+        "Terms with Hebrew translations",
+        "Terms with Hijazi Arabic translations",
+        "Terms with Hindi translations",
+        "Terms with Hungarian translations",
+        "Terms with Icelandic translations",
+        "Terms with Ido translations",
+        "Terms with Indonesian translations",
+        "Terms with Irish translations",
+        "Terms with Italian translations",
+        "Terms with Japanese translations",
+        "Terms with Javanese translations",
+        "Terms with Kazakh translations",
+        "Terms with Khmer translations",
+        "Terms with Kimaragang translations",
+        "Terms with Korean translations",
+        "Terms with Kyrgyz translations",
+        "Terms with Lao translations",
+        "Terms with Latin translations",
+        "Terms with Latvian translations",
+        "Terms with Lithuanian translations",
+        "Terms with Louisiana Creole translations",
+        "Terms with Lower Sorbian translations",
+        "Terms with Luxembourgish translations",
+        "Terms with Macedonian translations",
+        "Terms with Malagasy translations",
+        "Terms with Malay translations",
+        "Terms with Malayalam translations",
+        "Terms with Mandarin translations",
+        "Terms with Manx translations",
+        "Terms with Mi'kmaq translations",
+        "Terms with Mohegan-Pequot translations",
+        "Terms with Mongolian translations",
+        "Terms with Muna translations",
+        "Terms with Murik (New Guinea) translations",
+        "Terms with Māori translations",
+        "Terms with Navajo translations",
+        "Terms with Norman translations",
+        "Terms with North Frisian translations",
+        "Terms with Norwegian Bokmål translations",
+        "Terms with Norwegian Nynorsk translations",
+        "Terms with Occitan translations",
+        "Terms with Old English translations",
+        "Terms with Ottoman Turkish translations",
+        "Terms with Persian translations",
+        "Terms with Pohnpeian translations",
+        "Terms with Polish translations",
+        "Terms with Portuguese translations",
+        "Terms with Romanian translations",
+        "Terms with Russian translations",
+        "Terms with Scottish Gaelic translations",
+        "Terms with Serbo-Croatian translations",
+        "Terms with Sinhalese translations",
+        "Terms with Slovak translations",
+        "Terms with Slovene translations",
+        "Terms with Spanish translations",
+        "Terms with Swedish translations",
+        "Terms with Tagalog translations",
+        "Terms with Tajik translations",
+        "Terms with Tamil translations",
+        "Terms with Telugu translations",
+        "Terms with Thai translations",
+        "Terms with Turkish translations",
+        "Terms with Turkmen translations",
+        "Terms with Tày translations",
+        "Terms with Ukrainian translations",
+        "Terms with Unami translations",
+        "Terms with Upper Sorbian translations",
+        "Terms with Urdu translations",
+        "Terms with Uzbek translations",
+        "Terms with Vietnamese translations",
+        "Terms with Volapük translations",
+        "Terms with Walloon translations",
+        "Terms with Welsh translations",
+        "Terms with West Coast Bajau translations",
+        "Terms with West Frisian translations",
+        "Terms with Woiwurrung translations",
+        "Terms with Yiddish translations",
+        "Terms with Yoruba translations",
+        "Terms with Zulu translations",
+        "en:Bivalves",
+        "en:Greys",
+        "en:Seafood"
+      ],
+      "etymology_templates": [
+        {
+          "args": {
+            "1": "en",
+            "2": "enm",
+            "3": "oystre"
+          },
+          "expansion": "Middle English oystre",
+          "name": "inh"
+        },
+        {
+          "args": {
+            "1": "en",
+            "2": "ang",
+            "3": "ostre"
+          },
+          "expansion": "Old English ostre",
+          "name": "der"
+        },
+        {
+          "args": {
+            "1": "en",
+            "2": "xno",
+            "3": "oistre"
+          },
+          "expansion": "Anglo-Norman oistre",
+          "name": "der"
+        },
+        {
+          "args": {
+            "1": "en",
+            "2": "fro",
+            "3": "oistre"
+          },
+          "expansion": "Old French oistre",
+          "name": "der"
+        },
+        {
+          "args": {
+            "1": "en",
+            "2": "la",
+            "3": "ostrea"
+          },
+          "expansion": "Latin ostrea",
+          "name": "der"
+        },
+        {
+          "args": {
+            "1": "en",
+            "2": "grc",
+            "3": "ὄστρεον"
+          },
+          "expansion": "Ancient Greek ὄστρεον (óstreon)",
+          "name": "der"
+        },
+        {
+          "args": {
+            "1": "en",
+            "2": "ostro",
+            "t1": "a purple dye"
+          },
+          "expansion": "Doublet of ostro (“a purple dye”)",
+          "name": "dbt"
+        }
+      ],
+      "etymology_text": "From Middle English oystre, from Old English ostre, reinforced or superseded by Anglo-Norman oistre, which is from Old French oistre, uistre (compare modern French huître); both lines (Old English and Old French) from Latin ostrea, from Ancient Greek ὄστρεον (óstreon). Doublet of ostro (“a purple dye”).",
+      "forms": [
+        {
+          "form": "more oyster",
+          "tags": [
+            "comparative"
+          ]
+        },
+        {
+          "form": "most oyster",
+          "tags": [
+            "superlative"
+          ]
+        },
+        {
+          "form": "erster",
+          "tags": [
+            "alternative"
+          ]
+        },
+        {
+          "form": "oister",
+          "tags": [
+            "alternative",
+            "obsolete"
+          ]
+        },
+        {
+          "form": "oystre",
+          "tags": [
+            "alternative",
+            "obsolete"
+          ]
+        }
+      ],
+      "head_templates": [
+        {
+          "args": {},
+          "expansion": "oyster (comparative more oyster, superlative most oyster)",
+          "name": "en-adj"
+        }
+      ],
+      "hyphenations": [
+        {
+          "parts": [
+            "oy",
+            "ster"
+          ]
+        }
+      ],
+      "lang": "English",
+      "lang_code": "en",
+      "pos": "adj",
+      "senses": [
+        {
+          "glosses": [
+            "Of a pale beige colour tinted with grey or pink, like that of an oyster."
+          ]
+        }
+      ],
+      "sounds": [
+        {
+          "ipa": "/ˈɔɪ.stə/",
+          "tags": [
+            "Received-Pronunciation"
+          ]
+        },
+        {
+          "ipa": "/ˈɔɪ.stɚ/",
+          "tags": [
+            "General-American"
+          ]
+        },
+        {
+          "audio": "En-us-oyster.ogg",
+          "mp3_url": "https://upload.wikimedia.org/wikipedia/commons/transcoded/b/b9/En-us-oyster.ogg/En-us-oyster.ogg.mp3",
+          "ogg_url": "https://upload.wikimedia.org/wikipedia/commons/b/b9/En-us-oyster.ogg",
+          "tags": [
+            "General-American"
+          ]
+        },
+        {
+          "ipa": "/ˈɔɪ.st͡ʃɚ/",
+          "tags": [
+            "Southern-US",
+            "regional"
+          ]
+        },
+        {
+          "rhymes": "-ɔɪstə(ɹ)"
+        }
+      ],
+      "word": "oyster"
+    },
+    {
+      "categories": [
+        "English adjectives",
+        "English countable nouns",
+        "English doublets",
+        "English entries with incorrect language header",
+        "English lemmas",
+        "English nouns",
+        "English terms derived from Ancient Greek",
+        "English terms derived from Anglo-Norman",
+        "English terms derived from Latin",
+        "English terms derived from Middle English",
+        "English terms derived from Old English",
+        "English terms derived from Old French",
+        "English terms inherited from Middle English",
+        "English verbs",
+        "Entries missing English vernacular names of taxa",
+        "Entries using missing taxonomic name (genus)",
+        "Entries using missing taxonomic name (species)",
+        "Entries using missing taxonomic name (subfamily)",
+        "Entries with translation boxes",
+        "Pages with 1 entry",
+        "Pages with entries",
+        "Rhymes:English/ɔɪstə(ɹ)",
+        "Rhymes:English/ɔɪstə(ɹ)/2 syllables",
+        "Terms with Abenaki translations",
+        "Terms with Afrikaans translations",
+        "Terms with Albanian translations",
+        "Terms with Ancient Greek translations",
+        "Terms with Arabic translations",
+        "Terms with Armenian translations",
+        "Terms with Asturian translations",
+        "Terms with Azerbaijani translations",
+        "Terms with Basque translations",
+        "Terms with Belarusian translations",
+        "Terms with Bengali translations",
+        "Terms with Bhojpuri translations",
+        "Terms with Breton translations",
+        "Terms with Bulgarian translations",
+        "Terms with Burmese translations",
+        "Terms with Cantonese translations",
+        "Terms with Catalan translations",
+        "Terms with Central Melanau translations",
+        "Terms with Cornish translations",
+        "Terms with Corsican translations",
+        "Terms with Czech translations",
+        "Terms with Danish translations",
+        "Terms with Dutch translations",
+        "Terms with Egyptian Arabic translations",
+        "Terms with Esperanto translations",
+        "Terms with Estonian translations",
+        "Terms with Faroese translations",
+        "Terms with Finnish translations",
+        "Terms with French translations",
+        "Terms with Galician translations",
+        "Terms with Georgian translations",
+        "Terms with German translations",
+        "Terms with Greek translations",
+        "Terms with Gulf Arabic translations",
+        "Terms with Haitian Creole translations",
+        "Terms with Hawaiian translations",
+        "Terms with Hebrew translations",
+        "Terms with Hijazi Arabic translations",
+        "Terms with Hindi translations",
+        "Terms with Hungarian translations",
+        "Terms with Icelandic translations",
+        "Terms with Ido translations",
+        "Terms with Indonesian translations",
+        "Terms with Irish translations",
+        "Terms with Italian translations",
+        "Terms with Japanese translations",
+        "Terms with Javanese translations",
+        "Terms with Kazakh translations",
+        "Terms with Khmer translations",
+        "Terms with Kimaragang translations",
+        "Terms with Korean translations",
+        "Terms with Kyrgyz translations",
+        "Terms with Lao translations",
+        "Terms with Latin translations",
+        "Terms with Latvian translations",
+        "Terms with Lithuanian translations",
+        "Terms with Louisiana Creole translations",
+        "Terms with Lower Sorbian translations",
+        "Terms with Luxembourgish translations",
+        "Terms with Macedonian translations",
+        "Terms with Malagasy translations",
+        "Terms with Malay translations",
+        "Terms with Malayalam translations",
+        "Terms with Mandarin translations",
+        "Terms with Manx translations",
+        "Terms with Mi'kmaq translations",
+        "Terms with Mohegan-Pequot translations",
+        "Terms with Mongolian translations",
+        "Terms with Muna translations",
+        "Terms with Murik (New Guinea) translations",
+        "Terms with Māori translations",
+        "Terms with Navajo translations",
+        "Terms with Norman translations",
+        "Terms with North Frisian translations",
+        "Terms with Norwegian Bokmål translations",
+        "Terms with Norwegian Nynorsk translations",
+        "Terms with Occitan translations",
+        "Terms with Old English translations",
+        "Terms with Ottoman Turkish translations",
+        "Terms with Persian translations",
+        "Terms with Pohnpeian translations",
+        "Terms with Polish translations",
+        "Terms with Portuguese translations",
+        "Terms with Romanian translations",
+        "Terms with Russian translations",
+        "Terms with Scottish Gaelic translations",
+        "Terms with Serbo-Croatian translations",
+        "Terms with Sinhalese translations",
+        "Terms with Slovak translations",
+        "Terms with Slovene translations",
+        "Terms with Spanish translations",
+        "Terms with Swedish translations",
+        "Terms with Tagalog translations",
+        "Terms with Tajik translations",
+        "Terms with Tamil translations",
+        "Terms with Telugu translations",
+        "Terms with Thai translations",
+        "Terms with Turkish translations",
+        "Terms with Turkmen translations",
+        "Terms with Tày translations",
+        "Terms with Ukrainian translations",
+        "Terms with Unami translations",
+        "Terms with Upper Sorbian translations",
+        "Terms with Urdu translations",
+        "Terms with Uzbek translations",
+        "Terms with Vietnamese translations",
+        "Terms with Volapük translations",
+        "Terms with Walloon translations",
+        "Terms with Welsh translations",
+        "Terms with West Coast Bajau translations",
+        "Terms with West Frisian translations",
+        "Terms with Woiwurrung translations",
+        "Terms with Yiddish translations",
+        "Terms with Yoruba translations",
+        "Terms with Zulu translations",
+        "en:Bivalves",
+        "en:Greys",
+        "en:Seafood"
+      ],
+      "etymology_templates": [
+        {
+          "args": {
+            "1": "en",
+            "2": "enm",
+            "3": "oystre"
+          },
+          "expansion": "Middle English oystre",
+          "name": "inh"
+        },
+        {
+          "args": {
+            "1": "en",
+            "2": "ang",
+            "3": "ostre"
+          },
+          "expansion": "Old English ostre",
+          "name": "der"
+        },
+        {
+          "args": {
+            "1": "en",
+            "2": "xno",
+            "3": "oistre"
+          },
+          "expansion": "Anglo-Norman oistre",
+          "name": "der"
+        },
+        {
+          "args": {
+            "1": "en",
+            "2": "fro",
+            "3": "oistre"
+          },
+          "expansion": "Old French oistre",
+          "name": "der"
+        },
+        {
+          "args": {
+            "1": "en",
+            "2": "la",
+            "3": "ostrea"
+          },
+          "expansion": "Latin ostrea",
+          "name": "der"
+        },
+        {
+          "args": {
+            "1": "en",
+            "2": "grc",
+            "3": "ὄστρεον"
+          },
+          "expansion": "Ancient Greek ὄστρεον (óstreon)",
+          "name": "der"
+        },
+        {
+          "args": {
+            "1": "en",
+            "2": "ostro",
+            "t1": "a purple dye"
+          },
+          "expansion": "Doublet of ostro (“a purple dye”)",
+          "name": "dbt"
+        }
+      ],
+      "etymology_text": "From Middle English oystre, from Old English ostre, reinforced or superseded by Anglo-Norman oistre, which is from Old French oistre, uistre (compare modern French huître); both lines (Old English and Old French) from Latin ostrea, from Ancient Greek ὄστρεον (óstreon). Doublet of ostro (“a purple dye”).",
+      "forms": [
+        {
+          "form": "oysters",
+          "tags": [
+            "present",
+            "singular",
+            "third-person"
+          ]
+        },
+        {
+          "form": "oystering",
+          "tags": [
+            "participle",
+            "present"
+          ]
+        },
+        {
+          "form": "oystered",
+          "tags": [
+            "participle",
+            "past"
+          ]
+        },
+        {
+          "form": "oystered",
+          "tags": [
+            "past"
+          ]
+        },
+        {
+          "form": "erster",
+          "tags": [
+            "alternative"
+          ]
+        },
+        {
+          "form": "oister",
+          "tags": [
+            "alternative",
+            "obsolete"
+          ]
+        },
+        {
+          "form": "oystre",
+          "tags": [
+            "alternative",
+            "obsolete"
+          ]
+        }
+      ],
+      "head_templates": [
+        {
+          "args": {},
+          "expansion": "oyster (third-person singular simple present oysters, present participle oystering, simple past and past participle oystered)",
+          "name": "en-verb"
+        }
+      ],
+      "hyphenations": [
+        {
+          "parts": [
+            "oy",
+            "ster"
+          ]
+        }
+      ],
+      "lang": "English",
+      "lang_code": "en",
+      "pos": "verb",
+      "related": [
+        {
+          "word": "astragalus"
+        },
+        {
+          "word": "bluepoint"
+        },
+        {
+          "word": "carpetbag steak"
+        },
+        {
+          "word": "clam"
+        },
+        {
+          "word": "lungwort"
+        },
+        {
+          "word": "mussel"
+        },
+        {
+          "word": "Ostreidae"
+        },
+        {
+          "word": "salsify"
+        },
+        {
+          "word": "spat"
+        }
+      ],
+      "senses": [
+        {
+          "categories": [
+            "English intransitive verbs",
+            "English terms with quotations"
+          ],
+          "examples": [
+            {
+              "bold_text_offsets": [
+                [
+                  23,
+                  31
+                ],
+                [
+                  129,
+                  137
+                ]
+              ],
+              "ref": "1986, Carolyn Ellis, Fisher Folk: Two Communities on Chesapeake Bay, University Press of Kentucky, →ISBN, page 77:",
+              "text": "Most Fishneck watermen oystered in winter, using the same small skiffs from which they potted crabs in summer. Sometimes two men oystered from the same boat or took along a son or younger brother to cull oysters (separate those of legal size from undersized ones and shell).",
+              "type": "quotation"
+            }
+          ],
+          "glosses": [
+            "To fish for oysters."
+          ],
+          "links": [
+            [
+              "fish",
+              "fish"
+            ]
+          ],
+          "raw_glosses": [
+            "(intransitive) To fish for oysters."
+          ],
+          "tags": [
+            "intransitive"
+          ]
+        }
+      ],
+      "sounds": [
+        {
+          "ipa": "/ˈɔɪ.stə/",
+          "tags": [
+            "Received-Pronunciation"
+          ]
+        },
+        {
+          "ipa": "/ˈɔɪ.stɚ/",
+          "tags": [
+            "General-American"
+          ]
+        },
+        {
+          "audio": "En-us-oyster.ogg",
+          "mp3_url": "https://upload.wikimedia.org/wikipedia/commons/transcoded/b/b9/En-us-oyster.ogg/En-us-oyster.ogg.mp3",
+          "ogg_url": "https://upload.wikimedia.org/wikipedia/commons/b/b9/En-us-oyster.ogg",
+          "tags": [
+            "General-American"
+          ]
+        },
+        {
+          "ipa": "/ˈɔɪ.st͡ʃɚ/",
+          "tags": [
+            "Southern-US",
+            "regional"
+          ]
+        },
+        {
+          "rhymes": "-ɔɪstə(ɹ)"
+        }
+      ],
+      "word": "oyster"
+    }
+  ]
+}

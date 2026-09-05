@@ -1,0 +1,52 @@
+{
+  "captured_at": "2026-09-05T10:05:45.916054Z",
+  "fixtures": [
+    {
+      "bytes": 11251,
+      "lemma": "cat",
+      "records": 10,
+      "source": "wordnet"
+    },
+    {
+      "bytes": 12965,
+      "lemma": "dog",
+      "records": 8,
+      "source": "wordnet"
+    },
+    {
+      "bytes": 5395,
+      "lemma": "oyster",
+      "records": 4,
+      "source": "wordnet"
+    },
+    {
+      "bytes": 385550,
+      "lemma": "cat",
+      "records": 6,
+      "source": "wiktionary"
+    },
+    {
+      "bytes": 395725,
+      "lemma": "dog",
+      "records": 3,
+      "source": "wiktionary"
+    },
+    {
+      "bytes": 92711,
+      "lemma": "oyster",
+      "records": 3,
+      "source": "wiktionary"
+    }
+  ],
+  "sources": {
+    "wiktionary": {
+      "dump_date": "2026-08-28",
+      "dump_url": "https://kaikki.org/dictionary/raw-wiktextract-data.jsonl.gz"
+    },
+    "wordnet": {
+      "dump_url": "https://github.com/globalwordnet/english-wordnet/releases/download/2025-edition/english-wordnet-2025-plus-json.zip",
+      "edition": "2025-plus",
+      "snapshot_date": "2025-12-12"
+    }
+  }
+}

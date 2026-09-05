@@ -11,6 +11,13 @@ config :devils_dictionary,
   ecto_repos: [DevilsDictionary.Repo],
   generators: [timestamp_type: :utc_datetime]
 
+# Migration conventions for the whole schema (#69 §4): bigint identity ids and
+# microsecond UTC timestamps, set once here instead of on every table.
+config :devils_dictionary, DevilsDictionary.Repo,
+  migration_primary_key: [name: :id, type: :identity],
+  migration_foreign_key: [type: :bigint],
+  migration_timestamps: [type: :utc_datetime_usec]
+
 # Configure the endpoint
 config :devils_dictionary, DevilsDictionaryWeb.Endpoint,
   url: [host: "localhost"],

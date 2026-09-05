@@ -1,0 +1,517 @@
+{
+  "records": [
+    {
+      "_edges": [
+        {
+          "subtype": null,
+          "to": "oewn-00072742-v",
+          "to_members": [
+            "excrete",
+            "egest",
+            "eliminate",
+            "pass"
+          ],
+          "to_pos": "verb",
+          "type": "hypernym"
+        }
+      ],
+      "definition": [
+        "eject the contents of the stomach through the mouth"
+      ],
+      "example": [
+        "After drinking too much, the students vomited",
+        "He purged continuously",
+        "The patient regurgitated the food we gave him last night"
+      ],
+      "hypernym": [
+        "00072742-v"
+      ],
+      "id": "oewn-00076153-v",
+      "ili": "i22154",
+      "lexfile": "verb.body",
+      "members": [
+        "vomit",
+        "vomit up",
+        "purge",
+        "cast",
+        "sick",
+        "cat",
+        "be sick",
+        "disgorge",
+        "regorge",
+        "retch",
+        "puke",
+        "barf",
+        "spew",
+        "spue",
+        "chuck",
+        "upchuck",
+        "honk",
+        "regurgitate",
+        "throw up"
+      ],
+      "partOfSpeech": "v"
+    },
+    {
+      "_edges": [
+        {
+          "subtype": null,
+          "to": "oewn-01413739-v",
+          "to_members": [
+            "flog",
+            "welt",
+            "whip",
+            "lather",
+            "lash",
+            "slash",
+            "strap",
+            "trounce"
+          ],
+          "to_pos": "verb",
+          "type": "hypernym"
+        }
+      ],
+      "definition": [
+        "beat with a cat-o'-nine-tails"
+      ],
+      "hypernym": [
+        "01413739-v"
+      ],
+      "id": "oewn-01414524-v",
+      "ili": "i28783",
+      "lexfile": "verb.contact",
+      "members": [
+        "cat"
+      ],
+      "partOfSpeech": "v"
+    },
+    {
+      "_edges": [
+        {
+          "subtype": null,
+          "to": "oewn-02127275-n",
+          "to_members": [
+            "wildcat"
+          ],
+          "to_pos": "noun",
+          "type": "hyponym"
+        },
+        {
+          "subtype": null,
+          "to": "oewn-02124272-n",
+          "to_members": [
+            "cat",
+            "true cat"
+          ],
+          "to_pos": "noun",
+          "type": "hyponym"
+        },
+        {
+          "subtype": "member",
+          "to": "oewn-02123344-n",
+          "to_members": [
+            "Felidae",
+            "family Felidae"
+          ],
+          "to_pos": "noun",
+          "type": "holonym"
+        },
+        {
+          "subtype": null,
+          "to": "oewn-02130460-n",
+          "to_members": [
+            "big cat",
+            "cat"
+          ],
+          "to_pos": "noun",
+          "type": "hyponym"
+        },
+        {
+          "subtype": "part",
+          "to": "oewn-02442560-n",
+          "to_members": [
+            "paw"
+          ],
+          "to_pos": "noun",
+          "type": "meronym"
+        },
+        {
+          "subtype": null,
+          "to": "oewn-02077948-n",
+          "to_members": [
+            "carnivore"
+          ],
+          "to_pos": "noun",
+          "type": "hypernym"
+        }
+      ],
+      "definition": [
+        "any of various lithe-bodied roundheaded fissiped mammals, many with retractile claws"
+      ],
+      "hypernym": [
+        "02077948-n"
+      ],
+      "id": "oewn-02123649-n",
+      "ili": "i46591",
+      "lexfile": "noun.animal",
+      "members": [
+        "feline",
+        "felid",
+        "cat"
+      ],
+      "mero_part": [
+        "02442560-n"
+      ],
+      "partOfSpeech": "n"
+    },
+    {
+      "_edges": [
+        {
+          "subtype": null,
+          "to": "oewn-02123649-n",
+          "to_members": [
+            "feline",
+            "felid",
+            "cat"
+          ],
+          "to_pos": "noun",
+          "type": "hypernym"
+        },
+        {
+          "subtype": null,
+          "to": "oewn-02124460-n",
+          "to_members": [
+            "domestic cat",
+            "house cat",
+            "Felis domesticus",
+            "Felis catus"
+          ],
+          "to_pos": "noun",
+          "type": "hyponym"
+        }
+      ],
+      "definition": [
+        "feline mammal usually having thick soft fur and no ability to roar"
+      ],
+      "hypernym": [
+        "02123649-n"
+      ],
+      "id": "oewn-02124272-n",
+      "ili": "i46593",
+      "lexfile": "noun.animal",
+      "members": [
+        "cat",
+        "true cat"
+      ],
+      "partOfSpeech": "n"
+    },
+    {
+      "_edges": [
+        {
+          "subtype": null,
+          "to": "oewn-02132643-n",
+          "to_members": [
+            "liger"
+          ],
+          "to_pos": "noun",
+          "type": "hyponym"
+        },
+        {
+          "subtype": "member",
+          "to": "oewn-02123344-n",
+          "to_members": [
+            "Felidae",
+            "family Felidae"
+          ],
+          "to_pos": "noun",
+          "type": "holonym"
+        },
+        {
+          "subtype": null,
+          "to": "oewn-02131817-n",
+          "to_members": [
+            "lion",
+            "king of beasts",
+            "Panthera leo"
+          ],
+          "to_pos": "noun",
+          "type": "hyponym"
+        },
+        {
+          "subtype": null,
+          "to": "oewn-02132960-n",
+          "to_members": [
+            "cheetah",
+            "chetah",
+            "Acinonyx jubatus"
+          ],
+          "to_pos": "noun",
+          "type": "hyponym"
+        },
+        {
+          "subtype": null,
+          "to": "oewn-02123649-n",
+          "to_members": [
+            "feline",
+            "felid",
+            "cat"
+          ],
+          "to_pos": "noun",
+          "type": "hypernym"
+        },
+        {
+          "subtype": null,
+          "to": "oewn-02133197-n",
+          "to_members": [
+            "saber-toothed tiger",
+            "sabertooth"
+          ],
+          "to_pos": "noun",
+          "type": "hyponym"
+        },
+        {
+          "subtype": null,
+          "to": "oewn-02132256-n",
+          "to_members": [
+            "tiger",
+            "Panthera tigris"
+          ],
+          "to_pos": "noun",
+          "type": "hyponym"
+        },
+        {
+          "subtype": null,
+          "to": "oewn-02131037-n",
+          "to_members": [
+            "leopard",
+            "Panthera pardus"
+          ],
+          "to_pos": "noun",
+          "type": "hyponym"
+        },
+        {
+          "subtype": null,
+          "to": "oewn-02131409-n",
+          "to_members": [
+            "snow leopard",
+            "ounce",
+            "Panthera uncia"
+          ],
+          "to_pos": "noun",
+          "type": "hyponym"
+        },
+        {
+          "subtype": null,
+          "to": "oewn-02131577-n",
+          "to_members": [
+            "jaguar",
+            "panther",
+            "Panthera onca",
+            "Felis onca"
+          ],
+          "to_pos": "noun",
+          "type": "hyponym"
+        },
+        {
+          "subtype": null,
+          "to": "oewn-02132738-n",
+          "to_members": [
+            "tiglon",
+            "tigon"
+          ],
+          "to_pos": "noun",
+          "type": "hyponym"
+        }
+      ],
+      "definition": [
+        "any of several large cats typically able to roar and living in the wild"
+      ],
+      "hypernym": [
+        "02123649-n"
+      ],
+      "id": "oewn-02130460-n",
+      "ili": "i46635",
+      "lexfile": "noun.animal",
+      "members": [
+        "big cat",
+        "cat"
+      ],
+      "partOfSpeech": "n"
+    },
+    {
+      "_edges": [
+        {
+          "subtype": null,
+          "to": "oewn-04472087-n",
+          "to_members": [
+            "tracked vehicle"
+          ],
+          "to_pos": "noun",
+          "type": "hypernym"
+        }
+      ],
+      "definition": [
+        "a large tracked vehicle that is propelled by two endless metal belts; frequently used for moving earth in construction and farm work"
+      ],
+      "hypernym": [
+        "04472087-n"
+      ],
+      "id": "oewn-02986962-n",
+      "ili": "i51642",
+      "lexfile": "noun.artifact",
+      "members": [
+        "Caterpillar",
+        "cat"
+      ],
+      "partOfSpeech": "n"
+    },
+    {
+      "_edges": [
+        {
+          "subtype": null,
+          "to": "oewn-04585055-n",
+          "to_members": [
+            "whip"
+          ],
+          "to_pos": "noun",
+          "type": "hypernym"
+        }
+      ],
+      "definition": [
+        "a whip with nine knotted cords"
+      ],
+      "example": [
+        "British sailors feared the cat"
+      ],
+      "hypernym": [
+        "04585055-n"
+      ],
+      "id": "oewn-02989061-n",
+      "ili": "i51653",
+      "lexfile": "noun.artifact",
+      "members": [
+        "cat-o'-nine-tails",
+        "cat"
+      ],
+      "partOfSpeech": "n"
+    },
+    {
+      "_edges": [
+        {
+          "subtype": null,
+          "to": "oewn-04327264-n",
+          "to_members": [
+            "stimulant",
+            "stimulant drug",
+            "excitant"
+          ],
+          "to_pos": "noun",
+          "type": "hypernym"
+        }
+      ],
+      "definition": [
+        "the leaves of the shrub Catha edulis which are chewed like tobacco or used to make tea; has the effect of a euphoric stimulant"
+      ],
+      "example": [
+        "in Yemen, kat is used daily by 85% of adults"
+      ],
+      "hypernym": [
+        "04327264-n"
+      ],
+      "id": "oewn-03614083-n",
+      "ili": "i55335",
+      "lexfile": "noun.artifact",
+      "members": [
+        "kat",
+        "khat",
+        "qat",
+        "quat",
+        "cat",
+        "Arabian tea",
+        "African tea"
+      ],
+      "partOfSpeech": "n"
+    },
+    {
+      "_edges": [
+        {
+          "subtype": null,
+          "to": "oewn-10807146-n",
+          "to_members": [
+            "woman",
+            "adult female"
+          ],
+          "to_pos": "noun",
+          "type": "hypernym"
+        },
+        {
+          "subtype": null,
+          "to": "oewn-10158867-n",
+          "to_members": [
+            "gossip",
+            "gossiper",
+            "gossipmonger",
+            "rumormonger",
+            "rumourmonger",
+            "newsmonger"
+          ],
+          "to_pos": "noun",
+          "type": "hypernym"
+        }
+      ],
+      "definition": [
+        "a spiteful woman gossip"
+      ],
+      "example": [
+        "what a cat she is!"
+      ],
+      "hypernym": [
+        "10158867-n",
+        "10807146-n"
+      ],
+      "id": "oewn-09919605-n",
+      "ili": "i88860",
+      "lexfile": "noun.person",
+      "members": [
+        "cat"
+      ],
+      "partOfSpeech": "n"
+    },
+    {
+      "_edges": [
+        {
+          "subtype": null,
+          "to": "oewn-10306910-n",
+          "to_members": [
+            "man",
+            "adult male"
+          ],
+          "to_pos": "noun",
+          "type": "hypernym"
+        }
+      ],
+      "definition": [
+        "an informal term for a youth or man"
+      ],
+      "example": [
+        "a nice guy",
+        "the guy's only doing it for some doll",
+        "the poor sod couldn't even buy a drink"
+      ],
+      "hypernym": [
+        "10306910-n"
+      ],
+      "id": "oewn-10172934-n",
+      "ili": "i93129",
+      "lexfile": "noun.person",
+      "members": [
+        "guy",
+        "cat",
+        "hombre",
+        "bozo",
+        "sod"
+      ],
+      "partOfSpeech": "n"
+    }
+  ]
+}

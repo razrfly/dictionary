@@ -1,0 +1,247 @@
+{
+  "records": [
+    {
+      "_edges": [
+        {
+          "subtype": null,
+          "to": "oewn-01383303-v",
+          "to_members": [
+            "gather",
+            "garner",
+            "collect",
+            "pull together"
+          ],
+          "to_pos": "verb",
+          "type": "hypernym"
+        }
+      ],
+      "definition": [
+        "gather oysters, dig oysters"
+      ],
+      "hypernym": [
+        "01383303-v"
+      ],
+      "id": "oewn-01386165-v",
+      "ili": "i28627",
+      "lexfile": "verb.contact",
+      "members": [
+        "oyster"
+      ],
+      "partOfSpeech": "v"
+    },
+    {
+      "_edges": [
+        {
+          "subtype": null,
+          "to": "oewn-01965147-n",
+          "to_members": [
+            "saddle oyster",
+            "Anomia ephippium"
+          ],
+          "to_pos": "noun",
+          "type": "hyponym"
+        },
+        {
+          "subtype": "member",
+          "to": "oewn-01962942-n",
+          "to_members": [
+            "Ostreidae",
+            "family Ostreidae"
+          ],
+          "to_pos": "noun",
+          "type": "holonym"
+        },
+        {
+          "subtype": null,
+          "to": "oewn-01963428-n",
+          "to_members": [
+            "seed oyster"
+          ],
+          "to_pos": "noun",
+          "type": "hyponym"
+        },
+        {
+          "subtype": null,
+          "to": "oewn-01964241-n",
+          "to_members": [
+            "Virginia oyster"
+          ],
+          "to_pos": "noun",
+          "type": "hyponym"
+        },
+        {
+          "subtype": null,
+          "to": "oewn-01963700-n",
+          "to_members": [
+            "bluepoint",
+            "blue point"
+          ],
+          "to_pos": "noun",
+          "type": "hyponym"
+        },
+        {
+          "subtype": null,
+          "to": "oewn-01963875-n",
+          "to_members": [
+            "Japanese oyster",
+            "Ostrea gigas"
+          ],
+          "to_pos": "noun",
+          "type": "hyponym"
+        },
+        {
+          "subtype": null,
+          "to": "oewn-01964626-n",
+          "to_members": [
+            "pearl oyster",
+            "Pinctada margaritifera"
+          ],
+          "to_pos": "noun",
+          "type": "hyponym"
+        },
+        {
+          "subtype": null,
+          "to": "oewn-01965429-n",
+          "to_members": [
+            "window oyster",
+            "windowpane oyster",
+            "capiz",
+            "Placuna placenta"
+          ],
+          "to_pos": "noun",
+          "type": "hyponym"
+        },
+        {
+          "subtype": "part",
+          "to": "oewn-07802140-n",
+          "to_members": [
+            "huitre",
+            "oyster"
+          ],
+          "to_pos": "noun",
+          "type": "meronym"
+        },
+        {
+          "subtype": null,
+          "to": "oewn-01958574-n",
+          "to_members": [
+            "bivalve",
+            "pelecypod",
+            "lamellibranch"
+          ],
+          "to_pos": "noun",
+          "type": "hypernym"
+        }
+      ],
+      "definition": [
+        "marine mollusks having a rough irregular shell; found on the sea bed mostly in coastal waters"
+      ],
+      "hypernym": [
+        "01958574-n"
+      ],
+      "id": "oewn-01963100-n",
+      "ili": "i45647",
+      "lexfile": "noun.animal",
+      "members": [
+        "oyster"
+      ],
+      "mero_part": [
+        "07802140-n"
+      ],
+      "partOfSpeech": "n"
+    },
+    {
+      "_edges": [
+        {
+          "subtype": null,
+          "to": "oewn-07593928-n",
+          "to_members": [
+            "helping",
+            "portion",
+            "serving"
+          ],
+          "to_pos": "noun",
+          "type": "hypernym"
+        },
+        {
+          "subtype": "part",
+          "to": "oewn-07659991-n",
+          "to_members": [
+            "bird",
+            "fowl"
+          ],
+          "to_pos": "noun",
+          "type": "holonym"
+        }
+      ],
+      "definition": [
+        "a small muscle on each side of the back of a fowl"
+      ],
+      "hypernym": [
+        "07593928-n"
+      ],
+      "id": "oewn-07664951-n",
+      "ili": "i77097",
+      "lexfile": "noun.food",
+      "members": [
+        "oyster"
+      ],
+      "partOfSpeech": "n"
+    },
+    {
+      "_edges": [
+        {
+          "subtype": null,
+          "to": "oewn-07802460-n",
+          "to_members": [
+            "bluepoint",
+            "blue point"
+          ],
+          "to_pos": "noun",
+          "type": "hyponym"
+        },
+        {
+          "subtype": null,
+          "to": "oewn-07802313-n",
+          "to_members": [
+            "oysters Rockefeller"
+          ],
+          "to_pos": "noun",
+          "type": "hyponym"
+        },
+        {
+          "subtype": null,
+          "to": "oewn-07799186-n",
+          "to_members": [
+            "shellfish"
+          ],
+          "to_pos": "noun",
+          "type": "hypernym"
+        },
+        {
+          "subtype": "part",
+          "to": "oewn-01963100-n",
+          "to_members": [
+            "oyster"
+          ],
+          "to_pos": "noun",
+          "type": "holonym"
+        }
+      ],
+      "definition": [
+        "edible body of any of numerous oysters"
+      ],
+      "hypernym": [
+        "07799186-n"
+      ],
+      "id": "oewn-07802140-n",
+      "ili": "i78005",
+      "lexfile": "noun.food",
+      "members": [
+        "huitre",
+        "oyster"
+      ],
+      "partOfSpeech": "n"
+    }
+  ]
+}
