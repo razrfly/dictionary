@@ -32,9 +32,19 @@ defmodule DevilsDictionary.FakeSource do
     lemma = raw["lemma"]
     pos = raw["pos"] || "noun"
 
+    # `also_lexeme` declares a word without saying anything about it — the shape
+    # a scoped Wiktionary batch produces when one record's linkage names a word
+    # another record in the same batch also touches. It must not come out marked
+    # enriched.
+    extra =
+      case raw["also_lexeme"] do
+        nil -> []
+        other -> [%{key: {"en", other, pos}, origin_source_id: source_id}]
+      end
+
     {:ok,
      %{
-       lexemes: [%{key: {"en", lemma, pos}, origin_source_id: source_id}],
+       lexemes: [%{key: {"en", lemma, pos}, origin_source_id: source_id}] ++ extra,
        senses: [
          %{
            key: "fake-#{lemma}",

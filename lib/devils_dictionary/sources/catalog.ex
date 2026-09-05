@@ -67,7 +67,9 @@ defmodule DevilsDictionary.Sources.Catalog do
           "lang_code" => "en",
           # Decision #11 / scorecard M4: drop what we never materialize before
           # storing. Measured at ~81% smaller on the fixtures.
-          "trim" => ["translations", "descendants", "etymology_templates", "head_templates"]
+          # One source of truth: the module decides what it throws away, and the
+          # catalog reports it, so the two can never drift.
+          "trim" => DevilsDictionary.Absorb.Sources.Wiktionary.trimmed_keys()
         }
       },
       %{

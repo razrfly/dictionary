@@ -57,7 +57,7 @@ Patterns are borrowed from [Cinegraph](https://github.com/razrfly/cinegraph): ra
 | Direction decided, schema reviewed | ✅ 2026-09-05 |
 | Repo reset in place: Phoenix 1.8.13 / LiveView 1.2.11 on Elixir 1.19 / OTP 28, directory structure scaffolded (#70 S0a) | ✅ 2026-09-05 |
 | S0b thirteen-table schema, `Materializer`, WordNet full + Wiktionary index, Animals scope (A2 ✅ 120,564 synsets · A3 ✅ 1,534,818 lexemes · A4 ✅ 21,277 scope lexemes · R1 ✅ 100%) | ✅ 2026-09-05 |
-| S1 Wiktionary + WordNet scoped, relations resolved | ⬜ |
+| S1 Wiktionary scoped (19,251 records, 31,116 senses, 105,731 relations), `Resolver`, parity, `Health` (A9 ✅ 100% · M1 ✅ 0 gaps · M4 ✅ 67.7% on real records · R2 ✅ 86.4% · X3 ✅ · A5 ⚠️ 83.5%, see #69) | ✅ 2026-09-05 |
 | S2 Wikidata + Wikipedia, linking ladder, link rate | ⬜ |
 | S3 Bierce, health, `dd.score` | ⬜ |
 | S4 six pages | ⬜ |
@@ -121,6 +121,7 @@ Everything below is designed for in the MVP-0 schema and adds tables rather than
 | 2026-09-05 | MVP-0 is built in six to eight sessions (S0–S5), each ending with numbers posted on #70. | #70 |
 | 2026-09-05 | Always generate and stay on the current Phoenix release; toolchain pinned per project in `.tool-versions`. Reset done with `phx_new` 1.8.13. | #70 |
 | 2026-09-05 | S0 audited. Animals scope measured at 21,277 lexemes (estimate was 8k–12k): kept whole, enriched in reason order; the O2 time budget is split into dump absorbs (≤ 2 h) and on-demand fetches (reported). WordNet is the plus edition; `wordnet_wikidata` joins the linking ladder. | #69 v6, #70 |
+| 2026-09-05 | S1: **A5 cannot pass as specified** — Wiktionary attests 83.5% of the Animals scope, and the 3,504 misses are 1,995 Linnaean binomials plus 1,299 other multiword names that Wiktionary files under Translingual, not English. Reported rather than engineered around; amendment proposed on #69. `trim/1` also narrows categories instead of only dropping keys, which is what takes M4 from 45.6% to 67.7% on real records. | #69, #70 |
 
 ---
 

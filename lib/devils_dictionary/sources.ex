@@ -44,27 +44,76 @@ defmodule DevilsDictionary.Sources do
     %SourceRecord{}
     |> SourceRecord.changeset(attrs)
     |> Repo.insert(
-      on_conflict:
-        from(r in SourceRecord,
-          update: [
-            set: [
-              raw: fragment("EXCLUDED.raw"),
-              url: fragment("EXCLUDED.url"),
-              content_hash: fragment("EXCLUDED.content_hash"),
-              fetched_at: fragment("EXCLUDED.fetched_at"),
-              updated_at: fragment("EXCLUDED.updated_at"),
-              changed_at:
-                fragment(
-                  "CASE WHEN ?.content_hash IS DISTINCT FROM EXCLUDED.content_hash THEN EXCLUDED.fetched_at ELSE ?.changed_at END",
-                  r,
-                  r
-                )
-            ]
-          ]
-        ),
+      on_conflict: record_conflict(),
       conflict_target: [:source_id, :external_id],
       returning: true
     )
+  end
+
+  @doc """
+  The `on_conflict` every `source_records` write must use, single or bulk.
+
+  It is a named query rather than a `{:replace, …}` list because of one column:
+  `changed_at` only moves when a refetch actually produced different content,
+  and that is what the "changed this week" feed reads. A bulk absorb that rolls
+  its own `{:replace, …}` list silently loses it.
+  """
+  def record_conflict do
+    from(r in SourceRecord,
+      update: [
+        set: [
+          raw: fragment("EXCLUDED.raw"),
+          url: fragment("EXCLUDED.url"),
+          content_hash: fragment("EXCLUDED.content_hash"),
+          fetched_at: fragment("EXCLUDED.fetched_at"),
+          updated_at: fragment("EXCLUDED.updated_at"),
+          changed_at:
+            fragment(
+              "CASE WHEN ?.content_hash IS DISTINCT FROM EXCLUDED.content_hash THEN EXCLUDED.fetched_at ELSE ?.changed_at END",
+              r,
+              r
+            )
+        ]
+      ]
+    )
+  end
+
+  @doc """
+  Bulk-writes `source_records`, in chunks, with `record_conflict/0`.
+
+  Rows are plain maps needing `external_id`, `url` and `raw`; `source_id`,
+  `content_hash` and the timestamps are filled here so no caller can forget the
+  hash that `changed_at` depends on. Returns the number of rows written.
+  """
+  def insert_records(%Source{} = source, rows, chunk \\ 1_000) do
+    now = DateTime.utc_now()
+
+    rows
+    |> Enum.map(fn row ->
+      raw = row[:raw] || %{}
+
+      %{
+        source_id: source.id,
+        external_id: row.external_id,
+        url: row[:url],
+        raw: raw,
+        content_hash: SourceRecord.content_hash(raw),
+        fetched_at: now,
+        inserted_at: now,
+        updated_at: now
+      }
+    end)
+    |> Enum.uniq_by(& &1.external_id)
+    |> Enum.chunk_every(chunk)
+    |> Enum.reduce(0, fn batch, acc ->
+      {n, _} =
+        Repo.insert_all(SourceRecord, batch,
+          on_conflict: record_conflict(),
+          conflict_target: [:source_id, :external_id]
+        )
+
+      acc + n
+    end)
   end
 
   @doc """

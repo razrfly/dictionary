@@ -63,6 +63,15 @@ defmodule DevilsDictionary.Absorb.Materializer do
   def run_batch([], _module), do: {:ok, %{}}
 
   def run_batch(records, module) do
+    try do
+      do_run_batch(records, module)
+    catch
+      {:materialize_failed, source_id, external_id, reason} ->
+        {:error, {:materialize, {source_id, external_id, reason}}}
+    end
+  end
+
+  defp do_run_batch(records, module) do
     merged = collect(records, module)
     now = DateTime.utc_now()
     record_ids = Enum.map(records, & &1.id)
@@ -85,7 +94,9 @@ defmodule DevilsDictionary.Absorb.Materializer do
     |> Ecto.Multi.run(:source_ids, fn _repo, changes ->
       {:ok, stamp_source_ids(changes, records, now)}
     end)
-    |> Ecto.Multi.run(:enriched, fn _repo, changes -> {:ok, stamp_enriched_at(changes, now)} end)
+    |> Ecto.Multi.run(:enriched, fn _repo, changes ->
+      {:ok, stamp_enriched_at(merged, changes, now)}
+    end)
     |> Ecto.Multi.update_all(
       :materialized,
       from(r in SourceRecord, where: r.id in ^record_ids),
@@ -103,7 +114,14 @@ defmodule DevilsDictionary.Absorb.Materializer do
   defp collect(records, module) do
     records
     |> Enum.reduce(@empty, fn record, acc ->
-      {:ok, out} = module.materialize(record)
+      out =
+        case module.materialize(record) do
+          {:ok, out} ->
+            out
+
+          {:error, reason} ->
+            throw({:materialize_failed, record.source_id, record.external_id, reason})
+        end
 
       Map.new(@empty, fn {kind, _} ->
         {kind, Map.get(out, kind, []) ++ Map.fetch!(acc, kind)}
@@ -136,6 +154,8 @@ defmodule DevilsDictionary.Absorb.Materializer do
             ),
           metadata: fragment("? || EXCLUDED.metadata", l.metadata),
           etymology: fragment("COALESCE(?, EXCLUDED.etymology)", l.etymology),
+          etymology_source_id:
+            fragment("COALESCE(?, EXCLUDED.etymology_source_id)", l.etymology_source_id),
           origin_source_id:
             fragment("COALESCE(?, EXCLUDED.origin_source_id)", l.origin_source_id),
           updated_at: fragment("EXCLUDED.updated_at")
@@ -159,6 +179,7 @@ defmodule DevilsDictionary.Absorb.Materializer do
         forms: row[:forms] || [],
         pronunciations: row[:pronunciations] || [],
         etymology: row[:etymology],
+        etymology_source_id: row[:etymology_source_id],
         origin_source_id: row[:origin_source_id],
         source_ids: [],
         metadata: row[:metadata] || %{},
@@ -354,13 +375,25 @@ defmodule DevilsDictionary.Absorb.Materializer do
     end
   end
 
-  # A lexeme is "enriched" once a source has said something about it. Bare index
-  # rows keep `enriched_at` nil, which is what A3 and the "bare rows" filter read.
-  defp stamp_enriched_at(changes, now) do
+  # A lexeme is "enriched" once a source has said something *about it*. Bare
+  # index rows keep `enriched_at` nil, which is what A3 and the "bare rows"
+  # filter read.
+  #
+  # Per lexeme, not per batch. WordNet gets away with the cruder version because
+  # every synset yields a sense for every member, but a scoped Wiktionary batch
+  # mixes words that gained senses with words that only had their `forms`
+  # touched, and marking the latter enriched would quietly inflate A3 and put
+  # empty cards on the word page.
+  defp stamp_enriched_at(merged, changes, now) do
+    keys =
+      Enum.map(merged.senses, & &1.lexeme) ++
+        (merged.entries |> Enum.map(& &1[:lexeme]) |> Enum.reject(&is_nil/1))
+
     ids =
-      changes.lexemes
-      |> Map.values()
-      |> Enum.filter(fn _ -> changes.senses != %{} or changes.entries > 0 end)
+      keys
+      |> Enum.uniq()
+      |> Enum.map(&Map.get(changes.lexemes, &1))
+      |> Enum.reject(&is_nil/1)
 
     if ids == [] do
       0

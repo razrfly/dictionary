@@ -39,7 +39,7 @@ defmodule DevilsDictionary.Absorb.Sources.Wordnet do
 
   import Ecto.Query
 
-  alias DevilsDictionary.Absorb.Materializer
+  alias DevilsDictionary.Absorb.Batch
   alias DevilsDictionary.Lexicon.Lexeme
   alias DevilsDictionary.Repo
   alias DevilsDictionary.Sources
@@ -84,7 +84,7 @@ defmodule DevilsDictionary.Absorb.Sources.Wordnet do
     edges = build_edges(synsets)
 
     records = write_records(source, synsets, edges)
-    materialized = materialize_all(source)
+    materialized = Batch.run(__MODULE__, source, batch_size: @materialize_batch)
     resolved = resolve_targets(source)
 
     {:ok,
@@ -185,65 +185,18 @@ defmodule DevilsDictionary.Absorb.Sources.Wordnet do
   # `raw` carries everything materialize/1 needs, so re-materializing works with
   # the dump deleted and the network off.
   defp write_records(source, synsets, edges) do
-    now = DateTime.utc_now()
-
     synsets
     |> Enum.map(fn {id, synset} ->
-      raw =
-        synset
-        |> Map.put("id", id)
-        |> Map.put("_edges", Map.get(edges, id, []))
-
       %{
-        source_id: source.id,
         external_id: id,
         url: @entity_url <> id,
-        raw: raw,
-        content_hash: SourceRecord.content_hash(raw),
-        fetched_at: now,
-        inserted_at: now,
-        updated_at: now
+        raw:
+          synset
+          |> Map.put("id", id)
+          |> Map.put("_edges", Map.get(edges, id, []))
       }
     end)
-    |> Enum.chunk_every(@record_batch)
-    |> Enum.reduce(0, fn chunk, acc ->
-      {n, _} =
-        Repo.insert_all(SourceRecord, chunk,
-          on_conflict: {:replace, [:raw, :url, :content_hash, :fetched_at, :updated_at]},
-          conflict_target: [:source_id, :external_id]
-        )
-
-      acc + n
-    end)
-  end
-
-  # Keyset pagination rather than Repo.stream: a stream would need an enclosing
-  # transaction, and that would fold every batch into one giant transaction,
-  # losing the per-batch atomicity M3 depends on.
-  defp materialize_all(source) do
-    Stream.unfold(0, fn last_id -> next_batch(source, last_id) end)
-    |> Enum.reduce(%{senses: 0, relations: 0}, fn batch, acc ->
-      {:ok, counts} = Materializer.run_batch(batch, __MODULE__)
-
-      %{acc | senses: acc.senses + counts.senses, relations: acc.relations + counts.relations}
-    end)
-  end
-
-  # `raw` is load_in_query: false, so ask for it explicitly for just this page.
-  defp next_batch(source, last_id) do
-    records =
-      Repo.all(
-        from r in SourceRecord,
-          where: r.source_id == ^source.id and r.id > ^last_id,
-          order_by: r.id,
-          limit: @materialize_batch,
-          select: %{r | raw: r.raw}
-      )
-
-    case records do
-      [] -> nil
-      records -> {records, List.last(records).id}
-    end
+    |> then(&Sources.insert_records(source, &1, @record_batch))
   end
 
   # WordNet is a closed graph and sense external ids are deterministic, so the

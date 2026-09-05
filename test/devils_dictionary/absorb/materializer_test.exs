@@ -131,6 +131,25 @@ defmodule DevilsDictionary.Absorb.MaterializerTest do
     end
   end
 
+  describe "enriched_at" do
+    test "only the lexemes a batch actually said something about are marked enriched" do
+      source = source!("fake")
+
+      # One record declares two lexemes but only says something about one of
+      # them — the shape a scoped Wiktionary batch produces. Marking the silent
+      # one enriched would inflate A3 and put an empty card on its page.
+      spoken = record!(source, %{"lemma" => "cat", "gloss" => "a cat", "also_lexeme" => "feline"})
+
+      {:ok, _} = Materializer.run_batch([with_raw(spoken)], FakeSource)
+
+      cat = Repo.get_by!(Lexeme, lemma: "cat")
+      feline = Repo.get_by!(Lexeme, lemma: "feline")
+
+      assert cat.enriched_at
+      refute feline.enriched_at
+    end
+  end
+
   describe "run_batch/2" do
     test "dedupes a lexeme that several records introduce" do
       source = source!()
