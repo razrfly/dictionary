@@ -122,6 +122,7 @@ Everything below is designed for in the MVP-0 schema and adds tables rather than
 | 2026-09-05 | Always generate and stay on the current Phoenix release; toolchain pinned per project in `.tool-versions`. Reset done with `phx_new` 1.8.13. | #70 |
 | 2026-09-05 | S0 audited. Animals scope measured at 21,277 lexemes (estimate was 8k–12k): kept whole, enriched in reason order; the O2 time budget is split into dump absorbs (≤ 2 h) and on-demand fetches (reported). WordNet is the plus edition; `wordnet_wikidata` joins the linking ladder. | #69 v6, #70 |
 | 2026-09-05 | S1: **A5 cannot pass as specified** — Wiktionary attests 83.5% of the Animals scope, and the 3,504 misses are 1,995 Linnaean binomials plus 1,299 other multiword names that Wiktionary files under Translingual, not English. Reported rather than engineered around; amendment proposed on #69. `trim/1` also narrows categories instead of only dropping keys, which is what takes M4 from 45.6% to 67.7% on real records. | #69, #70 |
+| 2026-09-05 | S1 audited (grade A-) and fast-forwarded into `main`. A5 amendment accepted: the row now excludes lemmas Wiktionary files as Translingual (binomials) and measures 92.2 %; the raw 83.5 % and the 1,995 binomials stay reported. | #69 v7, #70 |
 
 ---
 
