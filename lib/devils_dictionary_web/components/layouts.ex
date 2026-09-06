@@ -35,42 +35,56 @@ defmodule DevilsDictionaryWeb.Layouts do
 
   def app(assigns) do
     ~H"""
-    <header class="navbar px-4 sm:px-6 lg:px-8">
-      <div class="flex-1">
-        <a href="/" class="flex-1 flex w-fit items-center gap-2">
-          <img src={~p"/images/logo.svg"} width="36" />
-          <span class="text-sm font-semibold">v{Application.spec(:phoenix, :vsn)}</span>
-        </a>
-      </div>
-      <div class="flex-none">
-        <ul class="flex flex-column px-1 space-x-4 items-center">
-          <li>
-            <a href="https://phoenixframework.org/" class="btn btn-ghost">Website</a>
-          </li>
-          <li>
-            <a href="https://github.com/phoenixframework/phoenix" class="btn btn-ghost">GitHub</a>
-          </li>
-          <li>
-            <.theme_toggle />
-          </li>
-          <li>
-            <a href="https://phoenix.hexdocs.pm/overview.html" class="btn btn-primary">
-              Get Started <span aria-hidden="true">&rarr;</span>
-            </a>
-          </li>
-        </ul>
-      </div>
-    </header>
+    <.navbar>
+      <:logo>
+        <.link navigate={~p"/"} class="font-display text-2xl/8 text-mist-950 dark:text-white">
+          wordhoard
+        </.link>
+      </:logo>
+      <:links>
+        <.nav_link navigate={~p"/s/animals"}>Animals</.nav_link>
+        <.nav_link navigate={~p"/health"}>Health</.nav_link>
+        <.nav_link navigate={~p"/admin/imports"}>Imports</.nav_link>
+      </:links>
+      <:actions>
+        <.theme_toggle />
+      </:actions>
+    </.navbar>
 
-    <main class="px-4 py-20 sm:px-6 lg:px-8">
-      <div class="mx-auto max-w-2xl space-y-4">
-        {render_slot(@inner_block)}
-      </div>
-    </main>
+    <.main>
+      {render_slot(@inner_block)}
+    </.main>
+
+    <.footer>
+      <:links>
+        <.footer_category title="Browse">
+          <.footer_link navigate={~p"/s/animals"}>Animals</.footer_link>
+          <.footer_link navigate={~p"/health"}>Health</.footer_link>
+          <.footer_link navigate={~p"/admin/imports"}>Imports</.footer_link>
+        </.footer_category>
+        <.footer_category title="Sources">
+          <.footer_link :for={source <- sources()} navigate={~p"/sources/#{source.slug}"}>
+            {source.name}
+          </.footer_link>
+        </.footer_category>
+      </:links>
+      <:fineprint>
+        <p>
+          An aggregator, not an author. Every definition belongs to the source that wrote it and
+          links back to it. WordNet CC BY 4.0 · Wiktionary and Wikipedia CC BY-SA 4.0 ·
+          Wikidata CC0 · Bierce public domain.
+        </p>
+      </:fineprint>
+    </.footer>
 
     <.flash_group flash={@flash} />
     """
   end
+
+  # The footer names every source we absorb: the attribution #69 backbone rule 1
+  # asks for, and the fastest way to a source page. Five rows, read straight —
+  # there is no cache process in the tree and this does not deserve the first.
+  defp sources, do: DevilsDictionary.Sources.list_sources()
 
   @doc """
   Shows the flash group with standard titles and content.
@@ -128,11 +142,11 @@ defmodule DevilsDictionaryWeb.Layouts do
   """
   def theme_toggle(assigns) do
     ~H"""
-    <div class="card relative flex flex-row items-center border-2 border-base-300 bg-base-300 rounded-full">
-      <div class="absolute w-1/3 h-full rounded-full border-1 border-base-200 bg-base-100 brightness-200 left-0 [[data-theme=light]_&]:left-1/3 [[data-theme=dark]_&]:left-2/3 [[data-theme-source=system]_&]:!left-0 transition-[left]" />
+    <div class="relative flex flex-row items-center rounded-full bg-mist-950/10 dark:bg-white/10">
+      <div class="absolute left-0 h-full w-1/3 rounded-full bg-white transition-[left] [[data-theme=dark]_&]:left-2/3 [[data-theme=light]_&]:left-1/3 [[data-theme-source=system]_&]:!left-0 dark:bg-mist-700" />
 
       <button
-        class="flex p-2 cursor-pointer w-1/3"
+        class="flex w-1/3 cursor-pointer p-2"
         phx-click={JS.dispatch("phx:set-theme")}
         data-phx-theme="system"
       >
@@ -140,7 +154,7 @@ defmodule DevilsDictionaryWeb.Layouts do
       </button>
 
       <button
-        class="flex p-2 cursor-pointer w-1/3"
+        class="flex w-1/3 cursor-pointer p-2"
         phx-click={JS.dispatch("phx:set-theme")}
         data-phx-theme="light"
       >
@@ -148,7 +162,7 @@ defmodule DevilsDictionaryWeb.Layouts do
       </button>
 
       <button
-        class="flex p-2 cursor-pointer w-1/3"
+        class="flex w-1/3 cursor-pointer p-2"
         phx-click={JS.dispatch("phx:set-theme")}
         data-phx-theme="dark"
       >

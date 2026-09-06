@@ -41,3 +41,7 @@ config :phoenix_live_view,
 # Sort query params output of verified routes for robust url comparisons
 config :phoenix,
   sort_verified_routes_query_params: true
+
+# The dev-only routes are routed in test too, so /kit and the dashboard can be
+# tested. Production is gated at compile time in the router and has neither.
+config :devils_dictionary, dev_routes: true

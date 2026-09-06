@@ -63,13 +63,13 @@ defmodule DevilsDictionaryWeb.CoreComponents do
       id={@id}
       phx-click={JS.push("lv:clear-flash", value: %{key: @kind}) |> hide("##{@id}")}
       role="alert"
-      class="toast toast-top toast-end z-50"
+      class="fixed top-4 right-4 z-50"
       {@rest}
     >
       <div class={[
-        "alert w-80 sm:w-96 max-w-80 sm:max-w-96 text-wrap",
-        @kind == :info && "alert-info",
-        @kind == :error && "alert-error"
+        "flex w-80 max-w-80 items-start gap-2 rounded-xl p-4 text-sm/6 shadow-lg text-wrap sm:w-96 sm:max-w-96",
+        @kind == :info && "bg-mist-950 text-white dark:bg-mist-300 dark:text-mist-950",
+        @kind == :error && "bg-red-700 text-white"
       ]}>
         <.icon :if={@kind == :info} name="hero-information-circle" class="size-5 shrink-0" />
         <.icon :if={@kind == :error} name="hero-exclamation-circle" class="size-5 shrink-0" />
@@ -84,43 +84,6 @@ defmodule DevilsDictionaryWeb.CoreComponents do
       </div>
     </div>
     """
-  end
-
-  @doc """
-  Renders a button with navigation support.
-
-  ## Examples
-
-      <.button>Send!</.button>
-      <.button phx-click="go" variant="primary">Send!</.button>
-      <.button navigate={~p"/"}>Home</.button>
-  """
-  attr :rest, :global, include: ~w(href navigate patch method download name value disabled)
-  attr :class, :any
-  attr :variant, :string, values: ~w(primary)
-  slot :inner_block, required: true
-
-  def button(%{rest: rest} = assigns) do
-    variants = %{"primary" => "btn-primary", nil => "btn-primary btn-soft"}
-
-    assigns =
-      assign_new(assigns, :class, fn ->
-        ["btn", Map.fetch!(variants, assigns[:variant])]
-      end)
-
-    if rest[:href] || rest[:navigate] || rest[:patch] do
-      ~H"""
-      <.link class={@class} {@rest}>
-        {render_slot(@inner_block)}
-      </.link>
-      """
-    else
-      ~H"""
-      <button class={@class} {@rest}>
-        {render_slot(@inner_block)}
-      </button>
-      """
-    end
   end
 
   @doc """
@@ -212,7 +175,7 @@ defmodule DevilsDictionaryWeb.CoreComponents do
       end)
 
     ~H"""
-    <div class="fieldset mb-2">
+    <div class="mb-3">
       <label for={@id}>
         <input
           type="hidden"
@@ -221,14 +184,14 @@ defmodule DevilsDictionaryWeb.CoreComponents do
           disabled={@rest[:disabled]}
           form={@rest[:form]}
         />
-        <span class="label">
+        <span class="flex items-center gap-2 text-sm/7 text-mist-700 dark:text-mist-400">
           <input
             type="checkbox"
             id={@id}
             name={@name}
             value="true"
             checked={@checked}
-            class={@class || "checkbox checkbox-sm"}
+            class={@class || "size-4 rounded border-mist-300 text-mist-950 dark:border-mist-700"}
             {@rest}
           />{@label}
         </span>
@@ -240,13 +203,13 @@ defmodule DevilsDictionaryWeb.CoreComponents do
 
   def input(%{type: "select"} = assigns) do
     ~H"""
-    <div class="fieldset mb-2">
+    <div class="mb-3">
       <label for={@id}>
-        <span :if={@label} class="label mb-1">{@label}</span>
+        <span :if={@label} class="mb-1 block text-sm/7 font-medium text-mist-950 dark:text-white">{@label}</span>
         <select
           id={@id}
           name={@name}
-          class={[@class || "w-full select", @errors != [] && (@error_class || "select-error")]}
+          class={[@class || field_class(), @errors != [] && (@error_class || field_error_class())]}
           multiple={@multiple}
           {@rest}
         >
@@ -261,15 +224,15 @@ defmodule DevilsDictionaryWeb.CoreComponents do
 
   def input(%{type: "textarea"} = assigns) do
     ~H"""
-    <div class="fieldset mb-2">
+    <div class="mb-3">
       <label for={@id}>
-        <span :if={@label} class="label mb-1">{@label}</span>
+        <span :if={@label} class="mb-1 block text-sm/7 font-medium text-mist-950 dark:text-white">{@label}</span>
         <textarea
           id={@id}
           name={@name}
           class={[
-            @class || "w-full textarea",
-            @errors != [] && (@error_class || "textarea-error")
+            @class || field_class(),
+            @errors != [] && (@error_class || field_error_class())
           ]}
           {@rest}
         >{Phoenix.HTML.Form.normalize_value("textarea", @value)}</textarea>
@@ -282,17 +245,17 @@ defmodule DevilsDictionaryWeb.CoreComponents do
   # All other inputs text, datetime-local, url, password, etc. are handled here...
   def input(assigns) do
     ~H"""
-    <div class="fieldset mb-2">
+    <div class="mb-3">
       <label for={@id}>
-        <span :if={@label} class="label mb-1">{@label}</span>
+        <span :if={@label} class="mb-1 block text-sm/7 font-medium text-mist-950 dark:text-white">{@label}</span>
         <input
           type={@type}
           name={@name}
           id={@id}
           value={Phoenix.HTML.Form.normalize_value(@type, @value)}
           class={[
-            @class || "w-full input",
-            @errors != [] && (@error_class || "input-error")
+            @class || field_class(),
+            @errors != [] && (@error_class || field_error_class())
           ]}
           {@rest}
         />
@@ -302,10 +265,20 @@ defmodule DevilsDictionaryWeb.CoreComponents do
     """
   end
 
+  # The one input skin, so the four input clauses agree. daisyUI's `input`,
+  # `select` and `textarea` classes are gone with the plugin (#71 §3).
+  defp field_class do
+    "w-full rounded-lg border border-mist-300 bg-white px-3 py-1.5 text-sm/7 text-mist-950 " <>
+      "placeholder:text-mist-400 focus:border-mist-950 focus:outline-none " <>
+      "dark:border-mist-700 dark:bg-mist-900 dark:text-white dark:focus:border-mist-300"
+  end
+
+  defp field_error_class, do: "border-red-700 dark:border-red-400"
+
   # Helper used by inputs to generate form errors
   defp error(assigns) do
     ~H"""
-    <p class="mt-1.5 flex gap-2 items-center text-sm text-error">
+    <p class="mt-1.5 flex items-center gap-2 text-sm text-red-700 dark:text-red-400">
       <.icon name="hero-exclamation-circle" class="size-5" />
       {render_slot(@inner_block)}
     </p>
@@ -323,10 +296,10 @@ defmodule DevilsDictionaryWeb.CoreComponents do
     ~H"""
     <header class={[@actions != [] && "flex items-center justify-between gap-6", "pb-4"]}>
       <div>
-        <h1 class="text-lg font-semibold leading-8">
+        <h1 class="font-display text-3xl/10 tracking-tight text-mist-950 dark:text-white">
           {render_slot(@inner_block)}
         </h1>
-        <p :if={@subtitle != []} class="text-sm text-base-content/70">
+        <p :if={@subtitle != []} class="text-sm/7 text-mist-700 dark:text-mist-400">
           {render_slot(@subtitle)}
         </p>
       </div>
@@ -367,21 +340,27 @@ defmodule DevilsDictionaryWeb.CoreComponents do
       end
 
     ~H"""
-    <table class="table table-zebra">
+    <table class="w-full text-left text-sm/7 text-mist-700 dark:text-mist-400">
       <thead>
-        <tr>
-          <th :for={col <- @col}>{col[:label]}</th>
+        <tr class="border-b border-mist-950/10 dark:border-white/10">
+          <th :for={col <- @col} class="py-2 pr-4 font-medium text-mist-950 dark:text-white">
+            {col[:label]}
+          </th>
           <th :if={@action != []}>
             <span class="sr-only">{gettext("Actions")}</span>
           </th>
         </tr>
       </thead>
       <tbody id={@id} phx-update={is_struct(@rows, Phoenix.LiveView.LiveStream) && "stream"}>
-        <tr :for={row <- @rows} id={@row_id && @row_id.(row)}>
+        <tr
+          :for={row <- @rows}
+          id={@row_id && @row_id.(row)}
+          class="border-b border-mist-950/5 last:border-0 dark:border-white/5"
+        >
           <td
             :for={col <- @col}
             phx-click={@row_click && @row_click.(row)}
-            class={@row_click && "hover:cursor-pointer"}
+            class={["py-2 pr-4 align-top tabular-nums", @row_click && "hover:cursor-pointer"]}
           >
             {render_slot(col, @row_item.(row))}
           </td>

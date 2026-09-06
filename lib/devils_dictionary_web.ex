@@ -86,6 +86,8 @@ defmodule DevilsDictionaryWeb do
       import Phoenix.HTML
       # Core UI components
       import DevilsDictionaryWeb.CoreComponents
+      # The Oatmeal theme, ported by hand (#71 §3)
+      import DevilsDictionaryWeb.Kit
 
       # Common modules used in templates
       alias Phoenix.LiveView.JS
