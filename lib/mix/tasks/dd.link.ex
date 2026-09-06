@@ -65,7 +65,7 @@ defmodule Mix.Tasks.Dd.Link do
         "l1_pct" => links.pct,
         "l1_strict_pct" => links.strict_pct,
         "l2_conflicts" => conflicts.count,
-        "l3_pct" => taxonomy.pct,
+        "l3_pct" => taxonomy[:pct],
         "l4_hits" => disambiguation.hits
       })
     rescue
@@ -103,14 +103,7 @@ defmodule Mix.Tasks.Dd.Link do
       say("     #{c.lemma} (#{c.pos}) — #{c.concepts} concepts")
     end
 
-    say("\nL3  taxonomy reaches Animalia")
-    row("asserted concepts", fmt(taxonomy.linked_concepts))
-    row("reaching Q729", "#{fmt(taxonomy.reaching_root)}  #{taxonomy.pct}%")
-
-    row(
-      "incl. candidates",
-      "#{fmt(taxonomy.with_candidates_reaching)} / #{fmt(taxonomy.with_candidates)}  #{taxonomy.with_candidates_pct}%"
-    )
+    taxonomy_section(taxonomy)
 
     say("\nL4  disambiguation (by lemma)")
     row("scope lemmas that hit one", fmt(disambiguation.hits))
@@ -124,5 +117,22 @@ defmodule Mix.Tasks.Dd.Link do
     row("no nominal lexeme", fmt(disambiguation.non_nominal))
     row("candidate links", fmt(disambiguation.candidates))
     row("promoted to 0.6", fmt(disambiguation.promoted))
+  end
+
+  # A scope with no `wikidata_root` has no root to reach (#70 S5c).
+  defp taxonomy_section(%{root: nil}) do
+    say("\nL3  taxonomy")
+    row("root", "none — this scope is not a taxonomy")
+  end
+
+  defp taxonomy_section(taxonomy) do
+    say("\nL3  taxonomy reaches #{taxonomy.root}")
+    row("asserted concepts", fmt(taxonomy.linked_concepts))
+    row("reaching #{taxonomy.root}", "#{fmt(taxonomy.reaching_root)}  #{taxonomy.pct}%")
+
+    row(
+      "incl. candidates",
+      "#{fmt(taxonomy.with_candidates_reaching)} / #{fmt(taxonomy.with_candidates)}  #{taxonomy.with_candidates_pct}%"
+    )
   end
 end

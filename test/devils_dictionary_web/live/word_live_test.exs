@@ -80,6 +80,34 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
       assert html =~ "bivalve"
     end
 
+    test "a sense's chips render inside that sense, not at the foot of the card", ctx do
+      %{oyster: oyster} = oyster!(ctx)
+      colour = word!(ctx, "beige", ~w(wiktionary))
+      mollusk = word!(ctx, "mollusk", ~w(wiktionary))
+
+      shellfish = sense!(ctx, oyster, "wiktionary", gloss: "A marine bivalve.", position: 1)
+      paint = sense!(ctx, oyster, "wiktionary", gloss: "A pale beige colour.", position: 2)
+
+      relation!(ctx, oyster, :synonym, mollusk, from_sense: shellfish)
+      relation!(ctx, oyster, :synonym, colour, from_sense: paint)
+
+      {:ok, _live, html} = live(ctx.conn, ~p"/define/oyster")
+
+      shellfish_chips = ~s(id="card-wiktionary-group-0-sense-#{shellfish.id}-similar")
+      paint_chips = ~s(id="card-wiktionary-group-0-sense-#{paint.id}-similar")
+
+      assert html =~ shellfish_chips
+      assert html =~ paint_chips
+
+      # Each chip row sits inside its own sense: the colour's synonym comes
+      # after the colour gloss, not pooled with the shellfish's.
+      assert index(html, "card-wiktionary-group-0-sense-#{shellfish.id}") <
+               index(html, "card-wiktionary-group-0-sense-#{paint.id}")
+
+      assert index(html, "card-wiktionary-group-0-sense-#{shellfish.id}-similar") <
+               index(html, "card-wiktionary-group-0-sense-#{paint.id}")
+    end
+
     test "no chip carries phx-value-value, the binding LiveView silently overwrites", ctx do
       oyster!(ctx)
 
@@ -113,6 +141,94 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
       assert html =~ ~s(id="redirected-from")
       assert html =~ "oysters"
       assert html =~ ~s(id="card-bierce")
+    end
+  end
+
+  describe "the thing (U1b)" do
+    defp catwith_thing!(ctx) do
+      cat = word!(ctx, "cat", ~w(wordnet))
+      sense!(ctx, cat, "wordnet", group_key: "oewn-cat-n", gloss: "a feline mammal")
+
+      animal =
+        concept!("Q146", "cat",
+          description: "a small domesticated carnivore",
+          image_url: "https://upload.wikimedia.org/cat.jpg",
+          image_attribution: "Cat grooming.jpg · Wikimedia Commons",
+          wikipedia_title: "Cat"
+        )
+
+      link!(cat, animal, confidence: 0.95, method: :wiktionary_qid)
+
+      felidae = concept!("Q25265", "Felidae", kind: :taxon)
+      concept_relation!(ctx, animal, :parent_taxon, felidae)
+      felid = word!(ctx, "felid", ~w(wordnet))
+      link!(felid, felidae)
+
+      kitten = concept!("Q147", "kitten")
+      concept_relation!(ctx, kitten, :subclass_of, animal)
+      kitten_word = word!(ctx, "kitten", ~w(wordnet))
+      link!(kitten_word, kitten)
+
+      %{cat: cat, animal: animal, felid: felid, kitten: kitten_word}
+    end
+
+    test "the panel names the thing, shows its picture and links to both sources", ctx do
+      catwith_thing!(ctx)
+
+      {:ok, _live, html} = live(ctx.conn, ~p"/define/cat")
+
+      assert html =~ ~s(id="thing")
+      assert html =~ ~s(id="concept-card")
+      assert html =~ "a small domesticated carnivore"
+      assert html =~ "Wikimedia Commons"
+      assert html =~ ~s(id="concept-card-wikipedia")
+      assert html =~ ~s(id="concept-card-wikidata")
+
+      # Wikidata is a thing's source, never a badge on the word.
+      refute html =~ ~s(id="card-wikidata")
+    end
+
+    test "the chain and the kinds are hops, with the trail on them", ctx do
+      %{felid: felid, kitten: kitten} = catwith_thing!(ctx)
+
+      {:ok, live, html} = live(ctx.conn, ~p"/define/cat")
+
+      assert html =~ ~s(id="thing-chain")
+      assert live |> element("#thing-chain-#{felid.slug}") |> render() =~ "trail=cat"
+
+      {:error, {:live_redirect, %{to: to}}} =
+        live |> element("#thing-kinds-#{kitten.slug}") |> render_click()
+
+      assert to == "/define/kitten?trail=cat"
+    end
+
+    test "two asserted things are a plaque, not a silent winner", ctx do
+      %{cat: cat} = catwith_thing!(ctx)
+      utility = concept!("Q300918", "cat", description: "a Unix utility")
+      link!(cat, utility, confidence: 0.95, method: :wiktionary_qid)
+
+      {:ok, _live, html} = live(ctx.conn, ~p"/define/cat")
+
+      assert html =~ ~s(id="disagreement")
+      assert html =~ ~s(id="disagreement-Q300918")
+      assert html =~ "a Unix utility"
+    end
+
+    test "a word that names nothing has no panel", ctx do
+      oyster!(ctx)
+
+      {:ok, _live, html} = live(ctx.conn, ~p"/define/oyster")
+
+      refute html =~ ~s(id="thing")
+    end
+
+    test "a bare row has no panel and does not crash reaching for one", ctx do
+      word!(ctx, "abrocome", [], enriched_at: nil)
+
+      {:ok, _live, html} = live(ctx.conn, ~p"/define/abrocome")
+
+      assert html =~ ~s(id="bare-row")
+      refute html =~ ~s(id="thing")
     end
   end
 

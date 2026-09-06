@@ -40,11 +40,14 @@ defmodule DevilsDictionary.Health.Score do
   """
   def rows(opts \\ []) do
     scope = opts[:scope] || "animals"
+    forget_page_measurements()
 
-    absorb_rows(scope) ++
+    bars = bars(scope)
+
+    absorb_rows(scope, bars) ++
       materialize_rows(opts) ++
       resolve_rows() ++
-      link_rows(scope) ++
+      link_rows(scope, bars) ++
       experience_rows(scope) ++
       extensibility_rows() ++
       operations_rows(opts)
@@ -66,7 +69,7 @@ defmodule DevilsDictionary.Health.Score do
 
   # ── A: absorb ────────────────────────────────────────────────────────────
 
-  defp absorb_rows(scope) do
+  defp absorb_rows(scope, bars) do
     a1 = Health.source_runs()
     a2 = Health.wordnet()
     a3 = Health.index()
@@ -104,7 +107,7 @@ defmodule DevilsDictionary.Health.Score do
         "A4",
         "scope built with reasons",
         "#{fmt(a4.total)} lexemes, #{a4.without_reason} without a reason · #{reasons(a4)}",
-        ">= 7,500 and 0 unreasoned",
+        ">= #{fmt(a4.wants)} and 0 unreasoned",
         a4.total >= a4.wants and a4.without_reason == 0
       ),
       # Amended in S1 (#69 v7) and in the S4 audit (#69 v12): Wiktionary files
@@ -162,10 +165,41 @@ defmodule DevilsDictionary.Health.Score do
         "A10",
         "images",
         "#{fmt(a10.asserted_with_image)} / #{fmt(a10.asserted)} = #{a10.pct}%",
-        ">= 80%",
-        a10.pct >= 80.0
+        ">= #{bars["a10"]}%",
+        a10.pct >= bars["a10"]
       )
     ]
+  end
+
+  # The bars are the scope's, not Animals'. A4's 7,500, A10's 80 % and L1's
+  # 70 % were measured on 21,277 animals with a Wikipedia article each; asking
+  # an 809-word scope of abstract nouns to clear them grades the scope rather
+  # than the pipeline. `rules["bars"]` in `priv/scopes/<slug>.json` overrides
+  # any of them; the defaults are what Animals set.
+  @default_bars %{"a4" => 7_500, "a10" => 80.0, "l1" => 70.0, "l3" => 60.0}
+
+  defp bars(scope_slug) do
+    case Lexicon.get_scope_by_slug(scope_slug) do
+      nil -> @default_bars
+      scope -> Map.merge(@default_bars, Map.get(scope.rules, "bars", %{}))
+    end
+  end
+
+  # L3 asks whether a scope's things hang off its root. A scope with no
+  # `wikidata_root` has no such question — *emotions* is not under Animalia and
+  # never will be — so the row reports instead of failing at 0 %.
+  defp l3_row(%{root: nil}, _bars) do
+    row("L3", "taxonomy reaches the scope root", "no wikidata_root", "n/a", :report)
+  end
+
+  defp l3_row(l3, bars) do
+    row(
+      "L3",
+      "taxonomy reaches #{l3.root}",
+      "#{fmt(l3.reaching_root)} / #{fmt(l3.linked_concepts)} = #{l3.pct}%",
+      ">= #{bars["l3"]}%",
+      l3.pct >= bars["l3"]
+    )
   end
 
   defp reasons(a4) do
@@ -323,7 +357,7 @@ defmodule DevilsDictionary.Health.Score do
 
   # ── L: link ──────────────────────────────────────────────────────────────
 
-  defp link_rows(scope) do
+  defp link_rows(scope, bars) do
     l1 = Health.links(scope)
     l2 = Health.conflicts(scope)
     l3 = Health.taxonomy(scope)
@@ -338,8 +372,8 @@ defmodule DevilsDictionary.Health.Score do
         "L1",
         "link rate",
         "#{l1.reachable_pct}% of #{fmt(l1.reachable)} reachable · raw #{l1.pct}% · any #{l1.any_pct}%",
-        ">= 70% of reachable",
-        l1.reachable_pct >= 70.0
+        ">= #{bars["l1"]}% of reachable",
+        l1.reachable_pct >= bars["l1"]
       ),
       row(
         "L2",
@@ -348,13 +382,7 @@ defmodule DevilsDictionary.Health.Score do
         "listed",
         :report
       ),
-      row(
-        "L3",
-        "taxonomy reaches Animalia",
-        "#{fmt(l3.reaching_root)} / #{fmt(l3.linked_concepts)} = #{l3.pct}%",
-        ">= 60%",
-        l3.pct >= 60.0
-      ),
+      l3_row(l3, bars),
       row(
         "L4",
         "disambiguation handled",
@@ -426,6 +454,16 @@ defmodule DevilsDictionary.Health.Score do
   # Each is asked for twice — once for the actual, once for the status — so the
   # result is cached in the process dictionary for the length of one `rows/1`
   # call. X1 alone is 200 page builds.
+  #
+  # For the length of *one* call: `rows/1` forgets them first. A cache with no
+  # end is not a cache, it is a stale answer waiting for a second caller — and
+  # the health page's *recompute* button is exactly that second caller.
+  @page_measurements [:word_pages, :flagships, :cards_link_out, :chains]
+
+  defp forget_page_measurements do
+    Enum.each(@page_measurements, &Process.delete({__MODULE__, &1}))
+  end
+
   defp word_pages, do: once(:word_pages, &Health.word_pages/0)
   defp flagships, do: once(:flagships, &Health.flagships/0)
   defp cards_link_out, do: once(:cards_link_out, &Health.cards_link_out/0)

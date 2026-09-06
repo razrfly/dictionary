@@ -6,52 +6,24 @@ defmodule DevilsDictionaryWeb.ScopeLiveTest do
 
   use DevilsDictionaryWeb.ConnCase, async: true
 
-  alias DevilsDictionary.Encyclopedia.{Concept, ConceptLink, ConceptRelation}
+  import DevilsDictionary.WordFixtures
+
+  alias DevilsDictionary.Encyclopedia.ConceptRelation
   alias DevilsDictionary.Fixtures
   alias DevilsDictionary.{Health, Repo}
-  alias DevilsDictionary.Lexicon.{Lexeme, ScopeLexeme}
 
   setup do
     %{sources: sources, scopes: scopes} = Fixtures.seed_catalog!()
     %{sources: sources, animals: scopes["animals"]}
   end
 
-  defp word!(ctx, lemma, source_slugs, opts \\ []) do
-    lexeme =
-      Repo.insert!(%Lexeme{
-        lang: "en",
-        lemma: lemma,
-        pos: "noun",
-        slug: Lexeme.slug(lemma),
-        source_ids: Enum.map(source_slugs, &ctx.sources[&1].id),
-        enriched_at: Keyword.get(opts, :enriched_at, DateTime.utc_now())
-      })
-
-    Repo.insert!(%ScopeLexeme{
-      scope_id: ctx.animals.id,
-      lexeme_id: lexeme.id,
-      reasons: Keyword.get(opts, :reasons, ["wordnet_closure"])
-    })
-
-    lexeme
-  end
-
   # A row is identified by its id, so a negative assertion is about the row and
   # not about a word that happens to appear elsewhere on the page.
   defp row(lexeme), do: ~s(id="lexeme-#{lexeme.id}")
 
-  defp concept!(qid, label, attrs \\ []) do
-    Repo.insert!(struct(%Concept{qid: qid, label: label, kind: :taxon}, attrs))
-  end
-
-  defp link!(lexeme, concept, opts \\ []) do
-    Repo.insert!(%ConceptLink{
-      lexeme_id: lexeme.id,
-      concept_id: concept.id,
-      method: Keyword.get(opts, :method, :title_match),
-      confidence: Keyword.get(opts, :confidence, 0.9),
-      status: Keyword.get(opts, :status, :auto)
-    })
+  # The browse page's concepts are all taxa — the taxon rail is what it walks.
+  defp taxon!(qid, label, attrs \\ []) do
+    concept!(qid, label, Keyword.put(attrs, :kind, :taxon))
   end
 
   describe "the badges (U5)" do
@@ -102,7 +74,7 @@ defmodule DevilsDictionaryWeb.ScopeLiveTest do
 
       link!(
         cat,
-        concept!("Q146", "cat",
+        taxon!("Q146", "cat",
           taxon: %{"scientific_name" => "Felis catus", "rank" => "species"},
           image_url: "https://upload.wikimedia.org/x.jpg"
         )
@@ -142,8 +114,8 @@ defmodule DevilsDictionaryWeb.ScopeLiveTest do
 
     test "the state filters, including disputed", ctx do
       torpedo = word!(ctx, "torpedo", ~w(wordnet))
-      link!(torpedo, concept!("Q1", "fish"), confidence: 0.9)
-      link!(torpedo, concept!("Q2", "weapon"), confidence: 0.8, method: :wiktionary_qid)
+      link!(torpedo, taxon!("Q1", "fish"), confidence: 0.9)
+      link!(torpedo, taxon!("Q2", "weapon"), confidence: 0.8, method: :wiktionary_qid)
       aardvark = word!(ctx, "aardvark", ~w(wordnet), enriched_at: nil)
 
       {:ok, live, _html} = live(ctx.conn, ~p"/s/animals")
@@ -194,8 +166,8 @@ defmodule DevilsDictionaryWeb.ScopeLiveTest do
 
   describe "the taxonomy panel" do
     test "drilling in filters the words and keeps the filters", ctx do
-      animalia = concept!("Q729", "Animalia")
-      felidae = concept!("Q25265", "Felidae")
+      animalia = taxon!("Q729", "Animalia")
+      felidae = taxon!("Q25265", "Felidae")
 
       Repo.insert!(%ConceptRelation{
         source_id: ctx.sources["wikidata"].id,

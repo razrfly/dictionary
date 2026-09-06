@@ -123,12 +123,34 @@ defmodule DevilsDictionary.Lexicon.WordPageTest do
       [card] = Enum.filter(page.cards, &(&1.source.slug == "wordnet"))
       [animal_group, vehicle_group] = card.groups
 
-      assert chips(animal_group.relations, :broader) == ["feline"]
-      assert chips(vehicle_group.relations, :broader) == ["tracked vehicle"]
+      assert chips(sense_of(animal_group).relations, :broader) == ["feline"]
+      assert chips(sense_of(vehicle_group).relations, :broader) == ["tracked vehicle"]
 
       # The whole point: the animal sense never lists the vehicle's parent.
-      refute "tracked vehicle" in chips(animal_group.relations, :broader)
+      refute "tracked vehicle" in chips(sense_of(animal_group).relations, :broader)
       _ = ctx
+    end
+
+    test "a source with no synsets keeps each sense's chips under that sense", ctx do
+      # The U1a audit's remaining half of the rule. Wiktionary senses share the
+      # nil group key, so grouping the chips one level up put *cat*'s slang
+      # synonyms beside its feline ones.
+      cat = ctx.cat
+      kitty = word!(ctx, "kitty2", ~w(wiktionary))
+      bloke = word!(ctx, "bloke", ~w(wiktionary))
+
+      feline = sense!(ctx, cat, "wiktionary", gloss: "a small feline", position: 0)
+      slang = sense!(ctx, cat, "wiktionary", gloss: "a man", position: 1)
+
+      relation!(ctx, cat, :synonym, kitty, from_sense: feline)
+      relation!(ctx, cat, :synonym, bloke, from_sense: slang)
+
+      [card] = Enum.filter(page("cat").cards, &(&1.source.slug == "wiktionary"))
+      [group] = card.groups
+      [first, second] = group.senses
+
+      assert chips(first.relations, :similar) == ["kitty2"]
+      assert chips(second.relations, :similar) == ["bloke"]
     end
 
     test "an edge with no sense renders in the page-level block for its part of speech", ctx do
@@ -259,7 +281,137 @@ defmodule DevilsDictionary.Lexicon.WordPageTest do
       [group] = card.groups
 
       assert Enum.map(group.chain, & &1.lemma) == ["bivalve"]
-      refute Map.has_key?(group.relations, :broader)
+      refute Map.has_key?(sense_of(group).relations, :broader)
+    end
+  end
+
+  describe "the thing (#71 §2.4)" do
+    setup ctx do
+      cat = word!(ctx, "cat", ~w(wordnet))
+      animal = concept!("Q146", "cat", description: "a small carnivore", image_url: "i.jpg")
+      link!(cat, animal, confidence: 0.95, method: :wiktionary_qid)
+
+      felidae = concept!("Q25265", "Felidae", kind: :taxon)
+      carnivora = concept!("Q25306", "Carnivora", kind: :taxon)
+      concept_relation!(ctx, animal, :parent_taxon, felidae)
+      concept_relation!(ctx, felidae, :parent_taxon, carnivora)
+
+      Map.merge(ctx, %{cat: cat, animal: animal, felidae: felidae, carnivora: carnivora})
+    end
+
+    test "the concept card is what the linker asserted, not what it guessed", ctx do
+      thing = page("cat").thing
+
+      assert thing.concept.qid == "Q146"
+      assert thing.concept.description == "a small carnivore"
+      assert thing.wikipedia_url =~ "wikipedia.org"
+      assert thing.wikidata_url == "https://www.wikidata.org/wiki/Q146"
+      _ = ctx
+    end
+
+    test "the chain climbs, one parent per step, and carries the word where there is one", ctx do
+      felid = word!(ctx, "felid", ~w(wordnet))
+      link!(felid, ctx.felidae)
+
+      chain = page("cat").thing.chain
+
+      assert Enum.map(chain, & &1.label) == ["Felidae", "Carnivora"]
+      assert Enum.map(chain, & &1.slug) == ["felid", nil]
+    end
+
+    test "an instance climbs to its class, but only at the first step", ctx do
+      larry = word!(ctx, "larry", ~w(wordnet))
+      individual = concept!("Q1", "Larry")
+      link!(larry, individual)
+      concept_relation!(ctx, individual, :instance_of, ctx.animal)
+
+      # Carnivora is an instance of something too — a taxonomic rank. Following
+      # `instance_of` above the first step is how *Larry* ends up under
+      # *abstract entity*.
+      rank = concept!("Q2", "taxonomic rank")
+      concept_relation!(ctx, ctx.carnivora, :instance_of, rank)
+
+      assert Enum.map(page("larry").thing.chain, & &1.label) == [
+               "cat",
+               "Felidae",
+               "Carnivora"
+             ]
+    end
+
+    test "kinds and examples are only the children that have a word", ctx do
+      kitten = concept!("Q147", "kitten")
+      wordless = concept!("Q2", "American Bobtail")
+      tiddles = concept!("Q3", "Tiddles")
+
+      concept_relation!(ctx, kitten, :subclass_of, ctx.animal)
+      concept_relation!(ctx, wordless, :subclass_of, ctx.animal)
+      concept_relation!(ctx, tiddles, :instance_of, ctx.animal)
+
+      link!(word!(ctx, "kitten", ~w(wordnet)), kitten)
+      link!(word!(ctx, "tiddles", ~w(wordnet)), tiddles)
+
+      thing = page("cat").thing
+
+      assert Enum.map(thing.kinds.shown, & &1.lemma) == ["kitten"]
+      assert thing.kinds.total == 1
+      assert Enum.map(thing.examples.shown, & &1.lemma) == ["tiddles"]
+    end
+
+    test "kinds are capped, and the count beside them is the whole number", ctx do
+      for i <- 1..15 do
+        kind = concept!("Q1#{i}", "kind #{i}")
+        concept_relation!(ctx, kind, :subclass_of, ctx.animal)
+        link!(word!(ctx, "kind#{i}", ~w(wordnet)), kind)
+      end
+
+      thing = page("cat").thing
+
+      assert length(thing.kinds.shown) == WordPage.chip_cap()
+      assert thing.kinds.total == 15
+    end
+
+    test "two asserted concepts are a disagreement, and neither one wins", ctx do
+      utility = concept!("Q300918", "cat", description: "a Unix utility")
+      link!(ctx.cat, utility, confidence: 0.95, method: :wiktionary_qid)
+
+      thing = page("cat").thing
+
+      assert Enum.map(thing.disagreement, & &1.qid) == ["Q146", "Q300918"]
+      assert thing.concept.qid == "Q146"
+    end
+
+    test "a candidate is a possibility, not a claim: it is never the disagreement", ctx do
+      maybe = concept!("Q4", "CAT scan")
+      link!(ctx.cat, maybe, confidence: 0.4, method: :disambiguation, status: :candidate)
+
+      thing = page("cat").thing
+
+      assert Enum.map(thing.may_refer_to, & &1.label) == ["CAT scan"]
+      assert thing.disagreement == []
+    end
+
+    test "a word that names nothing has no panel at all", ctx do
+      word!(ctx, "oyster", ~w(wordnet))
+      assert page("oyster").thing == nil
+      _ = ctx
+    end
+
+    test "a word with only candidates still gets its may-refer-to", ctx do
+      seal = word!(ctx, "seal", ~w(wordnet))
+      link!(seal, concept!("Q5", "Phocidae"), confidence: 0.4, status: :candidate)
+
+      thing = page("seal").thing
+
+      assert thing.concept == nil
+      assert Enum.map(thing.may_refer_to, & &1.label) == ["Phocidae"]
+    end
+
+    test "a bare row and a miss never reach the thing side", ctx do
+      word!(ctx, "abrocome", [], enriched_at: nil)
+
+      assert page("abrocome").thing == nil
+      assert page("zzzznotaword").thing == nil
+      _ = ctx
     end
   end
 
@@ -349,6 +501,9 @@ defmodule DevilsDictionary.Lexicon.WordPageTest do
       assert page("oyster", trail: ["ghost"]).trail == [%{slug: "ghost", lemma: "ghost"}]
     end
   end
+
+  # Chips hang off the sense, never off the group: that is the placement rule.
+  defp sense_of(group), do: hd(group.senses)
 
   defp chips(groups, key) do
     case Map.get(groups, key) do

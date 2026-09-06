@@ -18,7 +18,7 @@ defmodule DevilsDictionaryWeb.WordLive do
 
   alias DevilsDictionary.Lexicon
   alias DevilsDictionary.Lexicon.WordPage
-  alias DevilsDictionaryWeb.Word
+  alias DevilsDictionaryWeb.{Thing, Word}
 
   @trail_cap 12
 
@@ -78,6 +78,12 @@ defmodule DevilsDictionaryWeb.WordLive do
           <Word.related_block
             :for={related <- @page.related}
             related={related}
+            trail={trail_here(@page)}
+          />
+
+          <Thing.thing_panel
+            :if={@page.thing}
+            thing={@page.thing}
             trail={trail_here(@page)}
           />
         <% end %>

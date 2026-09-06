@@ -530,7 +530,8 @@ defmodule DevilsDictionary.Health do
   end
 
   @doc """
-  **L3** — how many linked concepts sit on a `parent_taxon` path to Animalia.
+  **L3** — how many linked concepts sit on a `parent_taxon` path to the scope's
+  root.
 
   Walks the stored edges, so it is a check on the absorb as much as on the
   linker: a walk cut off at `--max-depth` shows up here as a soft number.
@@ -539,10 +540,21 @@ defmodule DevilsDictionary.Health do
   `:candidate` from a "may refer to" page is a possibility, not a claim — an
   Animals scope carries about 19,000 of them, and *BYD Seal* was never going to
   reach Animalia. The figure including candidates is reported beside it.
-  """
-  def taxonomy(scope_slug \\ "animals", root \\ "Q729") do
-    scope = Lexicon.get_scope_by_slug!(scope_slug)
 
+  The root is the scope's own `rules["wikidata_root"]`, not Animalia. A scope
+  without one has no taxonomy to reach — *emotions* is not under Q729 and never
+  will be — and gets `%{root: nil}`, which the scorecard reports rather than
+  grades. Measuring the second scope against the first scope's root is how L3
+  came to read 0 % and call it a failure.
+  """
+  def taxonomy(scope_slug \\ "animals", root \\ nil) do
+    scope = Lexicon.get_scope_by_slug!(scope_slug)
+    root = root || scope.rules["wikidata_root"]
+
+    if root, do: taxonomy_to_root(scope, root), else: %{root: nil}
+  end
+
+  defp taxonomy_to_root(scope, root) do
     %{rows: [[linked, reaching, all_linked, all_reaching]]} =
       Repo.query!(
         """
@@ -581,6 +593,7 @@ defmodule DevilsDictionary.Health do
       )
 
     %{
+      root: root,
       linked_concepts: linked,
       reaching_root: reaching,
       pct: pct(reaching, linked),

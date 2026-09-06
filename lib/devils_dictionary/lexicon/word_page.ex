@@ -11,13 +11,18 @@ defmodule DevilsDictionary.Lexicon.WordPage do
   ## The placement rule
 
   The one idea worth understanding here. A relation that carries
-  `from_sense_id` belongs to **that sense** and renders inside its source card;
-  a relation without one belongs to the **part of speech** and renders in the
-  page-level *Related words* block. This is the S0 audit's per-sense rule made
-  physical: WordNet hangs its edges off senses, so *cat*'s tracked-vehicle
-  sense keeps *tracked vehicle* to itself instead of the animal listing it
-  among its broader words. Wiktionary is mixed — its antonyms and most synonyms
-  are sense-scoped, its derived and coordinate edges are not.
+  `from_sense_id` belongs to **that sense** and renders under it, inside its
+  source card; a relation without one belongs to the **part of speech** and
+  renders in the page-level *Related words* block. This is the S0 audit's
+  per-sense rule made physical: WordNet hangs its edges off senses, so *cat*'s
+  tracked-vehicle sense keeps *tracked vehicle* to itself instead of the animal
+  listing it among its broader words. Wiktionary is mixed — its antonyms and
+  most synonyms are sense-scoped, its derived and coordinate edges are not.
+
+  *Under the sense*, not under the card. U1a grouped the chips one level up,
+  which is the same thing for WordNet — one synset is one group is one sense —
+  and wrong for Wiktionary, whose senses all share the nil group: *cat* listed
+  *kitty* and *tabby* beside *bloke* and *prostitute*.
 
   ## Seven queries
 
@@ -39,13 +44,14 @@ defmodule DevilsDictionary.Lexicon.WordPage do
   import Ecto.Query
 
   alias DevilsDictionary.Encyclopedia
+  alias DevilsDictionary.Encyclopedia.Concept
   alias DevilsDictionary.Lexicon.{Entry, LexicalRelation, Lexeme, Sense}
   alias DevilsDictionary.Markdown
   alias DevilsDictionary.Repo
   alias DevilsDictionary.Sources
   alias DevilsDictionary.Sources.SourceRecord
 
-  defstruct headword: nil, cards: [], related: [], trail: []
+  defstruct headword: nil, cards: [], related: [], thing: nil, trail: []
 
   @chip_cap 12
   @gloss_cap 3
@@ -155,6 +161,7 @@ defmodule DevilsDictionary.Lexicon.WordPage do
       headword: headword(lexemes, lookup, sources),
       cards: cards(senses, entries, sense_scoped, chains, sources, concept, by_lexeme),
       related: related(pos_scoped, by_lexeme, sources),
+      thing: thing(concept, ids, sources),
       trail: trail(opts[:trail])
     }
   end
@@ -294,11 +301,78 @@ defmodule DevilsDictionary.Lexicon.WordPage do
     )
   end
 
-  # The thing the word names is U1b's card. Here it exists only to reach
-  # Wikipedia's summary, so one lookup off the nominal lexeme is enough.
+  # The thing the word names. One lookup off the nominal lexeme: a word is a
+  # word, and *oyster* the verb names nothing the noun does not.
   defp primary_concept(lexemes) do
     lexeme = Enum.find(lexemes, &(&1.pos == "noun")) || hd(lexemes)
     Encyclopedia.primary_concept(lexeme.id)
+  end
+
+  # ── the thing side (#71 §2.4, U1b) ───────────────────────────────────────
+
+  # Three queries, and only for a word that names something — which most of the
+  # index does not. X1 renders 200 random lexemes and 150 of them are bare, so
+  # the nil clause is the common path and the page pays nothing for it.
+  #
+  # The disagreement and the *may refer to* list are asked for even without a
+  # primary concept: a word whose every link is a 0.40 candidate has no thing
+  # to show and still has possibilities worth naming.
+  defp thing(nil, ids, _sources) do
+    case Encyclopedia.candidates_for(ids) do
+      %{disagreement: [], may_refer_to: []} -> nil
+      candidates -> Map.merge(empty_thing(), candidates)
+    end
+  end
+
+  defp thing(%Concept{} = concept, ids, sources) do
+    %{kinds: kinds, examples: examples} = Encyclopedia.kinds_and_examples(concept.id, @chip_cap)
+    candidates = Encyclopedia.candidates_for(ids)
+
+    %{
+      concept: %{
+        qid: concept.qid,
+        label: concept.label,
+        description: concept.description,
+        kind: concept.kind,
+        image_url: concept.image_url,
+        image_attribution: concept.image_attribution,
+        wikipedia_title: concept.wikipedia_title,
+        taxon: concept.taxon
+      },
+      chain: Encyclopedia.chain(concept, @chain_depth),
+      kinds: kinds,
+      examples: examples,
+      wikipedia_url: concept_url(sources, "wikipedia", concept),
+      wikidata_url: concept_url(sources, "wikidata", concept)
+    }
+    |> Map.merge(candidates)
+  end
+
+  defp empty_thing do
+    %{
+      concept: nil,
+      chain: [],
+      kinds: none(),
+      examples: none(),
+      wikipedia_url: nil,
+      wikidata_url: nil
+    }
+  end
+
+  defp none, do: %{shown: [], total: 0}
+
+  # The thing's two links out, filled from what the concept knows and nothing
+  # invented: Wikidata is keyed by the QID, Wikipedia by the article title. A
+  # concept with no title has no article — 20,527 of them were introduced by a
+  # sitelink someone else's page mentioned — and gets no link rather than a URL
+  # ending in a slash.
+  defp concept_url(sources, slug, concept) do
+    with {_id, source} <- Enum.find(sources, fn {_id, s} -> s.slug == slug end) || :none,
+         title when is_binary(title) <- concept.wikipedia_title || concept.label do
+      fill_template(source, %{external_id: concept.qid}, title, concept)
+    else
+      _ -> nil
+    end
   end
 
   defp cards(senses, entries, sense_scoped, chains, sources, concept, by_lexeme) do
@@ -382,6 +456,11 @@ defmodule DevilsDictionary.Lexicon.WordPage do
   # Grouping by `group_key` does both jobs at once: WordNet's synsets become one
   # block each, and Wiktionary — which has no group key — falls into a single
   # nil group holding its numbered list.
+  #
+  # The chain belongs to the group, because it is the synset's walk upward. The
+  # chips belong to the **sense**: grouping them one level higher was the U1a
+  # audit's half-kept rule, and it put *cat*'s slang synonyms (*bloke*, *guy*)
+  # beside its feline ones, since every Wiktionary sense shares the nil group.
   defp sense_groups(rows, source, lemma, relations_by_sense, chains, sources) do
     rows
     |> Enum.group_by(& &1.group_key)
@@ -389,20 +468,10 @@ defmodule DevilsDictionary.Lexicon.WordPage do
     |> Enum.map(fn {group_key, senses} ->
       chain = Map.get(chains, group_key, [])
 
-      relations =
-        senses
-        |> Enum.flat_map(&Map.get(relations_by_sense, &1.id, []))
-        |> group_chips(sources)
-        # The chain is the broader relation, walked all the way up: its first
-        # step is exactly what the :broader chips would say. Showing both puts
-        # *bivalve* on the page twice, once as a chain and once as a chip.
-        |> then(&if(chain == [], do: &1, else: Map.delete(&1, :broader)))
-
       %{
         group_key: group_key,
         gloss: group_key && senses |> hd() |> Map.get(:gloss),
         chain: chain,
-        relations: relations,
         senses:
           Enum.map(senses, fn s ->
             %{
@@ -410,7 +479,16 @@ defmodule DevilsDictionary.Lexicon.WordPage do
               gloss: s.gloss,
               tags: s.tags,
               url: link_out(s, source, lemma, nil),
-              record_id: s.record_id
+              record_id: s.record_id,
+              relations:
+                relations_by_sense
+                |> Map.get(s.id, [])
+                |> group_chips(sources)
+                # The chain is the broader relation, walked all the way up: its
+                # first step is exactly what the :broader chips would say.
+                # Showing both puts *bivalve* on the page twice, once as a
+                # chain and once as a chip.
+                |> then(&if(chain == [], do: &1, else: Map.delete(&1, :broader)))
             }
           end)
       }

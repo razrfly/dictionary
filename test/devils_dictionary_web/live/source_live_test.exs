@@ -10,7 +10,7 @@ defmodule DevilsDictionaryWeb.SourceLiveTest do
 
   setup do
     %{sources: sources, scopes: scopes} = Fixtures.seed_catalog!()
-    %{sources: sources, animals: scopes["animals"]}
+    %{sources: sources, animals: scopes["animals"], emotions: scopes["emotions"]}
   end
 
   test "the row, its tier, its licence and its snapshot pin", ctx do
@@ -104,6 +104,30 @@ defmodule DevilsDictionaryWeb.SourceLiveTest do
 
     assert html =~ "materializes neither senses nor entries"
     assert ctx.sources["wikidata"].kind == :knowledge_graph
+  end
+
+  test "coverage is of the scope asked for, not always Animals (#70 S5c)", ctx do
+    lexeme =
+      Repo.insert!(%Lexeme{
+        lang: "en",
+        lemma: "joy",
+        pos: "noun",
+        slug: "joy",
+        source_ids: [ctx.sources["bierce"].id]
+      })
+
+    Repo.insert!(%ScopeLexeme{
+      scope_id: ctx.emotions.id,
+      lexeme_id: lexeme.id,
+      reasons: ["wordnet_closure"]
+    })
+
+    {:ok, _live, html} = live(ctx.conn, ~p"/sources/bierce?scope=emotions")
+
+    coverage = Health.coverage("emotions", "bierce")
+
+    assert html =~ ~s(id="source-coverage")
+    assert html =~ "#{coverage.total}"
   end
 
   test "an unknown source is a redirect, not a crash", ctx do

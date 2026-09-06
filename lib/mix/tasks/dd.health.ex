@@ -188,8 +188,10 @@ defmodule Mix.Tasks.Dd.Health do
     for c <- Enum.take(l2.sample, 5),
         do: say("     #{c.lemma} (#{c.pos}) — #{c.concepts} concepts")
 
-    l3 = Health.taxonomy(scope.slug)
-    row("reaching Animalia", "#{ratio(l3.reaching_root, l3.linked_concepts)}", 22)
+    case Health.taxonomy(scope.slug) do
+      %{root: nil} -> row("reaching the root", "n/a — no wikidata_root", 22)
+      l3 -> row("reaching #{l3.root}", "#{ratio(l3.reaching_root, l3.linked_concepts)}", 22)
+    end
 
     l4 = Health.disambiguation(scope.slug)
     row("disambiguation hits", fmt(l4.hits), 22)

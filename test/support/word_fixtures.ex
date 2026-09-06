@@ -10,7 +10,7 @@ defmodule DevilsDictionary.WordFixtures do
   make every one of them a test of the absorb path.
   """
 
-  alias DevilsDictionary.Encyclopedia.{Concept, ConceptLink}
+  alias DevilsDictionary.Encyclopedia.{Concept, ConceptLink, ConceptRelation}
   alias DevilsDictionary.Lexicon.{Entry, Lexeme, LexicalRelation, ScopeLexeme, Sense}
   alias DevilsDictionary.Repo
 
@@ -137,6 +137,20 @@ defmodule DevilsDictionary.WordFixtures do
       method: Keyword.get(opts, :method, :title_match),
       confidence: Keyword.get(opts, :confidence, 0.9),
       status: Keyword.get(opts, :status, :auto)
+    })
+  end
+
+  @doc """
+  One edge between two things — `:parent_taxon`, `:subclass_of`, `:instance_of`.
+  The three the absorb actually writes, and the three the thing panel walks.
+  """
+  def concept_relation!(ctx, from, type, to, opts \\ []) do
+    Repo.insert!(%ConceptRelation{
+      source_id: ctx.sources[Keyword.get(opts, :source, "wikidata")].id,
+      from_concept_id: from.id,
+      to_concept_id: to.id,
+      type: type,
+      property: Keyword.get(opts, :property)
     })
   end
 end

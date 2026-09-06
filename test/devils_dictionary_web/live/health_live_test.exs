@@ -87,6 +87,20 @@ defmodule DevilsDictionaryWeb.HealthLiveTest do
     assert render_async(live, @async_timeout) =~ "0 gaps over 0 records"
   end
 
+  test "the page takes a scope, and it is the scope it grades (#70 S5c)", ctx do
+    {:ok, live, _html} = live(ctx.conn, ~p"/health?scope=emotions")
+    html = render_async(live, @async_timeout)
+
+    rows = Score.rows(scope: "emotions", skip_parity: true)
+    summary = Score.summary(rows)
+
+    assert html =~ "#{summary.passed} / #{summary.graded} graded rows pass"
+
+    # L3 has no root to walk in a scope with no taxonomy, and says so rather
+    # than failing at 0 % against Animalia.
+    assert html =~ "no wikidata_root"
+  end
+
   test "the sources link through to their own pages", ctx do
     {:ok, live, _html} = live(ctx.conn, ~p"/health")
 

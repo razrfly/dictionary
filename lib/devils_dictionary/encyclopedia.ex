@@ -243,6 +243,188 @@ defmodule DevilsDictionary.Encyclopedia do
     |> Enum.sort_by(&depth[&1.id])
   end
 
+  @chain_sql """
+  WITH RECURSIVE walk AS (
+    SELECT $1::bigint AS id, 0 AS depth, ARRAY[$1::bigint] AS path
+    UNION ALL
+    SELECT p.to_concept_id, w.depth + 1, w.path || p.to_concept_id
+    FROM walk w
+    CROSS JOIN LATERAL (
+      SELECT r.to_concept_id
+      FROM concept_relations r
+      JOIN concepts c ON c.id = r.to_concept_id
+      WHERE r.from_concept_id = w.id
+        AND (r.type IN ('parent_taxon', 'subclass_of')
+             OR (w.depth = 0 AND r.type = 'instance_of'))
+      ORDER BY CASE r.type WHEN 'parent_taxon' THEN 0 WHEN 'subclass_of' THEN 1 ELSE 2 END,
+               c.label
+      LIMIT 1
+    ) p
+    WHERE w.depth < $2 AND NOT (p.to_concept_id = ANY(w.path))
+  )
+  SELECT w.depth, c.qid, c.label, l.lemma, l.slug, (l.enriched_at IS NOT NULL) AS enriched
+  FROM walk w
+  JOIN concepts c ON c.id = w.id
+  LEFT JOIN LATERAL (
+    SELECT lx.lemma, lx.slug, lx.enriched_at
+    FROM concept_links cl
+    JOIN lexemes lx ON lx.id = cl.lexeme_id
+    WHERE cl.concept_id = w.id AND cl.status IN ('auto', 'confirmed')
+      AND cl.confidence >= 0.7
+    ORDER BY cl.confidence DESC, lx.id
+    LIMIT 1
+  ) l ON TRUE
+  WHERE w.depth > 0
+  ORDER BY w.depth
+  """
+
+  @doc """
+  The walk upward from a thing — *oyster › Bivalvia › Mollusca* — whatever kind
+  of thing it is.
+
+  `taxon_chain/2` answers this for living things and returns nothing for
+  everything else, because `parent_taxon` is the only edge it knows. Emotions,
+  artefacts and ideas climb by `subclass_of` instead, and a named individual
+  (`instance_of`) takes one step to its class and climbs from there. So the
+  preference is taxonomy, then class, then — at the first step only — kind:
+  letting `instance_of` run at every depth walks *Larry* up to *entity*.
+
+  One parent per step, as the word page's synset chain does: a `concepts` DAG
+  gives *oyster* two parents at several ranks and eighteen rows for a walk of
+  ten. Steps that have a word carry its slug, so a chain is hoppable; steps
+  that do not are still shown, because a gap in the middle of a chain is the
+  chain.
+  """
+  def chain(%Concept{} = concept, max_depth \\ 8) do
+    start = concept.taxon_concept_id || concept.id
+
+    %{rows: rows} = Repo.query!(@chain_sql, [start, max_depth])
+
+    for [depth, qid, label, lemma, slug, enriched] <- rows do
+      %{depth: depth, qid: qid, label: label, lemma: lemma, slug: slug, enriched?: enriched}
+    end
+  end
+
+  @kinds_sql """
+  WITH children AS (
+    SELECT r.from_concept_id AS id,
+           CASE WHEN r.type = 'instance_of' THEN 'example' ELSE 'kind' END AS bucket
+      FROM concept_relations r
+     WHERE r.to_concept_id = $1
+       AND r.type IN ('parent_taxon', 'subclass_of', 'instance_of')
+     GROUP BY 1, 2
+  ),
+  worded AS (
+    SELECT ch.bucket, c.qid, c.label, w.lemma, w.slug, w.enriched
+      FROM children ch
+      JOIN concepts c ON c.id = ch.id
+      JOIN LATERAL (
+        SELECT lx.lemma, lx.slug, (lx.enriched_at IS NOT NULL) AS enriched
+          FROM concept_links cl
+          JOIN lexemes lx ON lx.id = cl.lexeme_id
+         WHERE cl.concept_id = ch.id AND cl.status IN ('auto', 'confirmed')
+           AND cl.confidence >= 0.7
+         ORDER BY cl.confidence DESC, lx.id
+         LIMIT 1
+      ) w ON TRUE
+  ),
+  ranked AS (
+    SELECT worded.*,
+           count(*) OVER (PARTITION BY bucket) AS total,
+           row_number() OVER (PARTITION BY bucket ORDER BY enriched DESC, lemma) AS rn
+      FROM worded
+  )
+  SELECT bucket, qid, label, lemma, slug, enriched, total
+    FROM ranked WHERE rn <= $2 ORDER BY bucket, rn
+  """
+
+  @doc """
+  What this thing has under it: its **kinds** (`subclass_of` and `parent_taxon`
+  pointing at it) and its **examples** (`instance_of`).
+
+  Only children that have a word are returned. The point of the panel is the
+  hop, and a chip that cannot be clicked is furniture: *cat* has four named
+  individuals under it — *Larry*, *Tiddles* — and not one of them is a word.
+
+  Capped, with the **exact** total beside it, so the “+N” is a number and not a
+  guess. The count is the expensive half on a hub — Q16521 *taxon* carries
+  14,964 children, 7,141 of them worded, and answers in about 85 ms.
+  """
+  def kinds_and_examples(concept_id, cap \\ 12) do
+    %{rows: rows} = Repo.query!(@kinds_sql, [concept_id, cap])
+
+    empty = %{shown: [], total: 0}
+
+    buckets =
+      rows
+      |> Enum.group_by(&hd/1)
+      |> Map.new(fn {bucket, rows} ->
+        {bucket,
+         %{
+           total: rows |> hd() |> List.last(),
+           shown:
+             for [_bucket, qid, label, lemma, slug, enriched, _total] <- rows do
+               %{qid: qid, label: label, lemma: lemma, slug: slug, enriched?: enriched}
+             end
+         }}
+      end)
+
+    %{
+      kinds: Map.get(buckets, "kind", empty),
+      examples: Map.get(buckets, "example", empty)
+    }
+  end
+
+  @doc """
+  The two states where the sources do not agree about what a word names.
+
+  **Disagreement** is more than one concept asserted at or above the threshold —
+  *cat* is the animal and the Unix utility, *seal* is the mammal and the wax —
+  and #69 says we surface it rather than pick a winner. **May refer to** is the
+  `:candidate` population, the 0.40 links a disambiguation page suggested and
+  nothing has corroborated: a possibility, not a claim, and never the same list.
+  """
+  def candidates_for(lexeme_ids, opts \\ []) do
+    min_confidence = opts[:min_confidence] || 0.7
+    cap = opts[:cap] || 12
+
+    links =
+      Repo.all(
+        from cl in ConceptLink,
+          where: cl.lexeme_id in ^lexeme_ids and cl.status != :rejected,
+          order_by: [desc: cl.confidence, asc: cl.method, asc: cl.id],
+          preload: [:concept]
+      )
+
+    asserted =
+      links
+      |> Enum.filter(
+        &(&1.status in [:auto, :confirmed] and (&1.confidence || 0.0) >= min_confidence)
+      )
+      |> Enum.uniq_by(& &1.concept_id)
+
+    %{
+      disagreement: if(length(asserted) > 1, do: Enum.map(asserted, &claim/1), else: []),
+      may_refer_to:
+        links
+        |> Enum.filter(&(&1.status == :candidate))
+        |> Enum.uniq_by(& &1.concept_id)
+        |> Enum.take(cap)
+        |> Enum.map(&claim/1)
+    }
+  end
+
+  defp claim(%ConceptLink{concept: concept} = link) do
+    %{
+      qid: concept.qid,
+      label: concept.label,
+      description: concept.description,
+      method: link.method,
+      confidence: link.confidence,
+      status: link.status
+    }
+  end
+
   @doc "The entries an encyclopedia published about a thing."
   def entries_for(concept_id) do
     Repo.all(

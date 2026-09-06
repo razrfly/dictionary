@@ -77,7 +77,7 @@ defmodule DevilsDictionary.Absorb.Sources.Wikipedia do
   end
 
   def absorb(%Scope{} = scope, opts) do
-    if opts[:concepts], do: concept_pass(opts), else: lemma_pass(scope, opts)
+    if opts[:concepts], do: concept_pass(scope, opts), else: lemma_pass(scope, opts)
   end
 
   defp lemma_pass(scope, opts) do
@@ -121,14 +121,20 @@ defmodule DevilsDictionary.Absorb.Sources.Wikipedia do
      }}
   end
 
-  # Every concept with an enwiki sitelink and no entry yet (A7). These are the
-  # taxa and the disambiguation candidates the Wikidata walk introduced; a lemma
-  # probe never asks about them because no scope lemma is spelled *Felidae*.
-  defp concept_pass(opts) do
+  # Every concept **this scope's words point at** with an enwiki sitelink and no
+  # entry yet (A7). These are the taxa and the disambiguation candidates the
+  # Wikidata walk introduced; a lemma probe never asks about them because no
+  # scope lemma is spelled *Felidae*.
+  #
+  # Scoped since S5c, for the reason `Wikidata.concept_qids/1` is: unscoped, the
+  # pass asked Wikipedia about every concept any scope had ever introduced, and
+  # each summary named more things than it answered for — one pass filled 274
+  # gaps and opened 20,526.
+  defp concept_pass(scope, opts) do
     source = Sources.get_source_by_slug!(slug())
     rate = rate_limit(source, opts)
 
-    targets = concept_targets(source, opts)
+    targets = concept_targets(source, scope, opts)
 
     stats =
       targets
@@ -152,10 +158,22 @@ defmodule DevilsDictionary.Absorb.Sources.Wikipedia do
      }}
   end
 
-  defp concept_targets(source, opts) do
+  defp concept_targets(source, scope, opts) do
     query =
       from c in Concept,
         where: not is_nil(c.wikipedia_title),
+        where:
+          fragment(
+            """
+            EXISTS (
+              SELECT 1 FROM concept_links cl
+                JOIN scope_lexemes sl ON sl.lexeme_id = cl.lexeme_id AND sl.scope_id = ?
+               WHERE cl.concept_id = ?
+            )
+            """,
+            ^scope.id,
+            c.id
+          ),
         order_by: c.id,
         select: %{qid: c.qid, title: c.wikipedia_title}
 

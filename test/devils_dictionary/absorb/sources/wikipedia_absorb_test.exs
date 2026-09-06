@@ -9,7 +9,7 @@ defmodule DevilsDictionary.Absorb.Sources.WikipediaAbsorbTest do
   alias DevilsDictionary.Absorb.Clients
   alias DevilsDictionary.Absorb.Sources.Wikipedia
   alias DevilsDictionary.{Fixtures, Repo, Sources}
-  alias DevilsDictionary.Encyclopedia.Concept
+  alias DevilsDictionary.Encyclopedia.{Concept, ConceptLink}
   alias DevilsDictionary.Lexicon.{Entry, Lexeme, ScopeLexeme}
   alias DevilsDictionary.Sources.SourceRecord
 
@@ -244,11 +244,21 @@ defmodule DevilsDictionary.Absorb.Sources.WikipediaAbsorbTest do
     # A disambiguation page is fetched, stored, and produces no entry by design.
     # The skip rule tested only "has an entry" and "has a live absent marker", so
     # every `--concepts` run asked about all ~3,800 of them again.
-    Repo.insert!(%Concept{
-      qid: "Q_disambig",
-      label: "Seal",
-      kind: :thing,
-      wikipedia_title: "Seal"
+    concept =
+      Repo.insert!(%Concept{
+        qid: "Q_disambig",
+        label: "Seal",
+        kind: :thing,
+        wikipedia_title: "Seal"
+      })
+
+    # Since S5c the pass asks only about the concepts this scope's words point
+    # at, so the concept needs the word that introduced it.
+    Repo.insert!(%ConceptLink{
+      lexeme_id: scoped!(ctx, "seal", ["wordnet_closure"]).id,
+      concept_id: concept.id,
+      method: :title_match,
+      confidence: 0.7
     })
 
     counter =

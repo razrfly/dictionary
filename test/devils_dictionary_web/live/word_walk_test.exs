@@ -88,6 +88,37 @@ defmodule DevilsDictionaryWeb.WordWalkTest do
     assert html =~ ~s(id="trail-oyster")
   end
 
+  test "a walk can cross to the thing side and back — word, kind, word", ctx do
+    # The U1b half of the acceptance: *cat* names a thing, the thing has kinds,
+    # and a kind that has a word is another page. Nothing on the word side of
+    # *cat* leads to *kitten* here — only the concept graph does.
+    cat = word!(ctx, "cat", ~w(wordnet))
+    sense!(ctx, cat, "wordnet", group_key: "oewn-cat-n", gloss: "a feline")
+    animal = concept!("Q146", "cat", wikipedia_title: "Cat")
+    link!(cat, animal, confidence: 0.95, method: :wiktionary_qid)
+
+    kitten = word!(ctx, "kitten", ~w(wordnet))
+    sense!(ctx, kitten, "wordnet", group_key: "oewn-kitten-n", gloss: "a young cat")
+    kitten_concept = concept!("Q147", "kitten")
+    link!(kitten, kitten_concept)
+    concept_relation!(ctx, kitten_concept, :subclass_of, animal)
+
+    tabby = word!(ctx, "tabby", ~w(wiktionary))
+    relation!(ctx, kitten, :derived, tabby)
+
+    {:ok, live, _html} = live(ctx.conn, ~p"/define/cat")
+
+    {:error, {:live_redirect, %{to: to}}} =
+      live |> element("#thing-kinds-kitten") |> render_click()
+
+    assert to == "/define/kitten?trail=cat"
+
+    {:ok, _live, html} = live(ctx.conn, to)
+
+    assert html =~ ~s(id="trail-cat")
+    assert html =~ ~s(id="related-noun-family-tabby")
+  end
+
   test "a page reached by a pasted URL reproduces the same walk", ctx do
     graph!(ctx)
 

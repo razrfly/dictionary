@@ -141,6 +141,10 @@ defmodule DevilsDictionaryWeb.Word do
   its glosses. The relations that hang off these senses render here rather than
   in the page-level block: that is the per-sense rule, and it is what keeps
   *tracked vehicle* off *cat*'s animal sense.
+
+  Each sense carries its own chips, under its own gloss. A Wiktionary card is
+  one group holding every sense it has, so chips rendered at group level pool
+  the whole card's synonyms into one row — U1a's remaining half-kept rule.
   """
   attr :card_id, :string, required: true
   attr :group, :map, required: true
@@ -153,19 +157,13 @@ defmodule DevilsDictionaryWeb.Word do
     ~H"""
     <div id={@id} class="mt-4">
       <ol class="space-y-1 text-sm/7 text-mist-700 dark:text-mist-400">
-        <li
+        <.sense_line
           :for={{sense, i} <- Enum.with_index(Enum.take(@group.senses, WordPage.gloss_cap()))}
           id={"#{@id}-sense-#{sense.id}"}
-          class="flex gap-3"
-        >
-          <span class="shrink-0 text-mist-400">
-            {if @group.group_key, do: "●", else: "#{i + 1}"}
-          </span>
-          <span>
-            {sense.gloss}
-            <span :if={sense.tags != []} class="text-mist-400">({Enum.join(sense.tags, ", ")})</span>
-          </span>
-        </li>
+          sense={sense}
+          marker={if @group.group_key, do: "●", else: "#{i + 1}"}
+          trail={@trail}
+        />
       </ol>
 
       <details :if={length(@group.senses) > WordPage.gloss_cap()} id={"#{@id}-more"} class="mt-1">
@@ -173,29 +171,49 @@ defmodule DevilsDictionaryWeb.Word do
           show {length(@group.senses) - WordPage.gloss_cap()} more
         </summary>
         <ol class="mt-1 space-y-1 text-sm/7 text-mist-700 dark:text-mist-400">
-          <li
+          <.sense_line
             :for={{sense, i} <- Enum.with_index(Enum.drop(@group.senses, WordPage.gloss_cap()))}
             id={"#{@id}-sense-#{sense.id}"}
-            class="flex gap-3"
-          >
-            <span class="shrink-0 text-mist-400">
-              {if @group.group_key, do: "●", else: "#{i + WordPage.gloss_cap() + 1}"}
-            </span>
-            <span>{sense.gloss}</span>
-          </li>
+            sense={sense}
+            marker={if @group.group_key, do: "●", else: "#{i + WordPage.gloss_cap() + 1}"}
+            trail={@trail}
+          />
         </ol>
       </details>
 
       <.chain :if={@group.chain != []} id={"#{@id}-chain"} chain={@group.chain} trail={@trail} />
-
-      <.relation_group
-        :for={{group, chips} <- ordered(@group.relations)}
-        id={"#{@id}-#{group_slug(group)}"}
-        group={group}
-        chips={chips}
-        trail={@trail}
-      />
     </div>
+    """
+  end
+
+  @doc """
+  One numbered gloss with the relations that belong to it and to nothing else.
+  """
+  attr :id, :string, required: true
+  attr :sense, :map, required: true
+  attr :marker, :string, required: true
+  attr :trail, :list, default: []
+
+  def sense_line(assigns) do
+    ~H"""
+    <li id={@id} class="flex gap-3">
+      <span class="shrink-0 text-mist-400">{@marker}</span>
+      <div class="min-w-0">
+        <span>
+          {@sense.gloss}
+          <span :if={@sense.tags != []} class="text-mist-400">
+            ({Enum.join(@sense.tags, ", ")})
+          </span>
+        </span>
+        <.relation_group
+          :for={{group, chips} <- ordered(@sense.relations)}
+          id={"#{@id}-#{group_slug(group)}"}
+          group={group}
+          chips={chips}
+          trail={@trail}
+        />
+      </div>
+    </li>
     """
   end
 
@@ -401,7 +419,11 @@ defmodule DevilsDictionaryWeb.Word do
   defp group_slug({:says_see, source}), do: "says-see-#{source.slug}"
   defp group_slug(group), do: group |> Atom.to_string() |> String.replace("_", "-")
 
-  # A hop appends the word being left to the trail, so the URL carries the walk.
-  defp hop(slug, []), do: ~p"/define/#{slug}"
-  defp hop(slug, trail), do: ~p"/define/#{slug}?#{[trail: Enum.map_join(trail, ",", & &1.slug)]}"
+  @doc """
+  The href a hop takes: the target word, with the word being left appended to
+  the trail, so the URL carries the walk. Public because the thing side hops
+  through the same trail.
+  """
+  def hop(slug, []), do: ~p"/define/#{slug}"
+  def hop(slug, trail), do: ~p"/define/#{slug}?#{[trail: Enum.map_join(trail, ",", & &1.slug)]}"
 end

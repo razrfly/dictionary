@@ -18,18 +18,32 @@ defmodule DevilsDictionaryWeb.HealthLive do
 
   @impl true
   def mount(_params, _session, socket) do
-    scope = "animals"
-
     {:ok,
-     socket
-     |> assign(
+     assign(socket,
        page_title: "Health",
-       scope_slug: scope,
+       scope_slug: nil,
        parity: %{},
        sources: Sources.list_sources()
-     )
-     |> load_scorecard()
-     |> assign_async(:detail, fn -> {:ok, %{detail: detail(scope)}} end)}
+     )}
+  end
+
+  # The scope is a parameter, not a constant (#70 S5c). Every scope has its own
+  # coverage, its own link rate and — since the bars moved into
+  # `scopes.rules` — its own passing marks, so a scorecard that can only show
+  # Animals is a scorecard for one scope of however many exist.
+  @impl true
+  def handle_params(params, _uri, socket) do
+    scope = params["scope"] || "animals"
+
+    if scope == socket.assigns.scope_slug do
+      {:noreply, socket}
+    else
+      {:noreply,
+       socket
+       |> assign(scope_slug: scope)
+       |> load_scorecard()
+       |> assign_async(:detail, fn -> {:ok, %{detail: detail(scope)}} end)}
+    end
   end
 
   # The scorecard is seconds of queries (4.5 s on Animals), which is longer
@@ -279,8 +293,8 @@ defmodule DevilsDictionaryWeb.HealthLive do
               <.stat value={"#{detail.links.strict_pct}%"}>
                 by the strict ladder alone, before corroboration
               </.stat>
-              <.stat value={"#{detail.taxonomy.pct}%"}>
-                of linked concepts reach Animalia by parent_taxon (L3)
+              <.stat value={taxonomy_pct(detail.taxonomy)}>
+                {taxonomy_note(detail.taxonomy)} (L3)
               </.stat>
             </div>
 
@@ -372,4 +386,14 @@ defmodule DevilsDictionaryWeb.HealthLive do
 
   defp parity_line(%{gaps: gaps, records: records}),
     do: "#{number(gaps)} gaps over #{number(records)} records"
+
+  # A scope with no `wikidata_root` has no taxonomy to reach (#70 S5c), and a
+  # page that reads `.pct` off that answer raises inside its own async render.
+  defp taxonomy_pct(%{root: nil}), do: "n/a"
+  defp taxonomy_pct(taxonomy), do: "#{taxonomy.pct}%"
+
+  defp taxonomy_note(%{root: nil}), do: "this scope has no wikidata_root to reach"
+
+  defp taxonomy_note(taxonomy),
+    do: "of linked concepts reach #{taxonomy.root} by parent_taxon"
 end

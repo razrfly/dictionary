@@ -30,11 +30,16 @@ defmodule DevilsDictionary.Absorb.Sources.Wikidata do
 
   alias DevilsDictionary.Absorb.Batch
   alias DevilsDictionary.Absorb.Clients.Wikidata, as: Client
-  alias DevilsDictionary.Encyclopedia.Concept
+  alias DevilsDictionary.Encyclopedia.{Concept, ConceptLink}
   alias DevilsDictionary.Lexicon.{ScopeLexeme, Sense}
   alias DevilsDictionary.Repo
   alias DevilsDictionary.Sources
   alias DevilsDictionary.Sources.{Source, SourceRecord}
+
+  # A candidate the linker could still promote. `Linker.corroborate/1` lifts a
+  # disambiguation candidate to 0.60 when a gloss agrees, so 0.60 is the line
+  # between "might yet be this word's thing" and "a page mentioned it once".
+  @promotable 0.6
 
   # The fifteen properties the pipeline reads. Everything else is dropped before
   # storage; a 130 KB entity becomes a couple of KB.
@@ -385,10 +390,17 @@ defmodule DevilsDictionary.Absorb.Sources.Wikidata do
   array (`panther` carries `["Q35255", "Q109647288"]`); Wiktionary always stores
   an array; Wikipedia's pass leaves them on `concepts.qid` already. All are
   unioned.
+
+  All four are scoped. The concept seed was not until S5c, and the second scope
+  is what made that visible: `concept_qids/0` read the whole table, so an
+  809-lexeme `emotions` scope seeded 72,108 QIDs and fetched 28,084 records in
+  sixteen minutes — every concept the *animals* scope had ever introduced,
+  walked again. With one scope the bug cannot be seen, because the whole table
+  is that scope.
   """
   def seed_qids(scope, opts \\ []) do
     qids =
-      wordnet_qids(scope) ++ wiktionary_qids(scope) ++ concept_qids() ++ root_qids(scope)
+      wordnet_qids(scope) ++ wiktionary_qids(scope) ++ concept_qids(scope) ++ root_qids(scope)
 
     qids =
       qids
@@ -442,8 +454,27 @@ defmodule DevilsDictionary.Absorb.Sources.Wikidata do
     |> Repo.all()
   end
 
-  defp concept_qids do
-    Repo.all(from c in Concept, select: c.qid)
+  # The concepts this scope's own words point at: asserted links, plus the
+  # candidates a corroboration pass could still promote. Not the 0.40
+  # disambiguation floor — chasing every thing a "may refer to" page mentioned
+  # is what grew the table to 90,481 rows, 54,273 of which link to no scope
+  # word at all.
+  #
+  # A run with no scope still walks the whole table: that is a full refresh
+  # asking for exactly what it says.
+  defp concept_qids(nil), do: Repo.all(from c in Concept, select: c.qid)
+
+  defp concept_qids(scope) do
+    Repo.all(
+      from c in Concept,
+        join: cl in ConceptLink,
+        on: cl.concept_id == c.id,
+        join: sl in ScopeLexeme,
+        on: sl.lexeme_id == cl.lexeme_id and sl.scope_id == ^scope.id,
+        where: cl.status in [:auto, :confirmed] or cl.confidence >= @promotable,
+        distinct: true,
+        select: c.qid
+    )
   end
 
   defp root_qids(nil), do: []

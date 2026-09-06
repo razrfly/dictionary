@@ -14,17 +14,27 @@ defmodule DevilsDictionaryWeb.SourceLive do
 
   @impl true
   def mount(%{"slug" => slug}, _session, socket) do
-    detail = Health.source_detail(slug, scope: "animals")
+    {:ok, assign(socket, slug: slug, scope_slug: nil, page_title: slug)}
+  end
 
-    {:ok,
-     assign(socket,
-       page_title: detail.source.name,
-       slug: slug,
-       detail: detail
-     )}
+  # How much of a scope this source attests depends on which scope is asked
+  # about, so `?scope=` decides it (#70 S5c). A source page hard-wired to
+  # Animals reports 0 % for a source that covers the second scope well.
+  @impl true
+  def handle_params(params, _uri, socket) do
+    scope = params["scope"] || "animals"
+
+    if scope == socket.assigns.scope_slug do
+      {:noreply, socket}
+    else
+      detail = Health.source_detail(socket.assigns.slug, scope: scope)
+
+      {:noreply,
+       assign(socket, scope_slug: scope, detail: detail, page_title: detail.source.name)}
+    end
   rescue
     Ecto.NoResultsError ->
-      {:ok,
+      {:noreply,
        socket
        |> put_flash(:error, "No such source.")
        |> push_navigate(to: ~p"/admin/imports")}

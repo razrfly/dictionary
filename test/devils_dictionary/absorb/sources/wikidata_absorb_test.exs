@@ -7,7 +7,7 @@ defmodule DevilsDictionary.Absorb.Sources.WikidataAbsorbTest do
 
   alias DevilsDictionary.Absorb.Clients
   alias DevilsDictionary.Absorb.Sources.Wikidata
-  alias DevilsDictionary.Encyclopedia.{Concept, ConceptRelation}
+  alias DevilsDictionary.Encyclopedia.{Concept, ConceptLink, ConceptRelation}
   alias DevilsDictionary.{Fixtures, Repo}
   alias DevilsDictionary.Lexicon.{Lexeme, ScopeLexeme, Sense}
   alias DevilsDictionary.Sources.SourceRecord
@@ -106,6 +106,49 @@ defmodule DevilsDictionary.Absorb.Sources.WikidataAbsorbTest do
     assert stats.fetched == 4
     assert stats.truncated == false
     assert Repo.aggregate(Concept, :count) == 4
+  end
+
+  test "the concept seed is this scope's concepts, not the whole table", ctx do
+    # #70 S5c. `concept_qids/0` read every row of `concepts`, so scope N walked
+    # every concept scopes 1..N-1 had introduced: an 809-lexeme `emotions`
+    # scope seeded 72,108 QIDs and fetched 28,084 records in sixteen minutes.
+    # With one scope the bug is invisible, because the whole table is that
+    # scope.
+    scoped_sense!(ctx, "cat", "wordnet", %{"wikidata" => "Q20980826"})
+
+    mine = Repo.insert!(%Concept{qid: "Q9001", label: "mine", kind: :thing})
+    Repo.insert!(%Concept{qid: "Q9002", label: "elsewhere", kind: :thing})
+
+    Repo.insert!(%ConceptLink{
+      lexeme_id: Repo.one!(from l in Lexeme, where: l.lemma == "cat", select: l.id),
+      concept_id: mine.id,
+      method: :title_match,
+      confidence: 0.7
+    })
+
+    seeds = Wikidata.seed_qids(ctx.animals)
+
+    assert "Q9001" in seeds
+    refute "Q9002" in seeds
+
+    # A run with no scope is a full refresh and still walks everything.
+    assert "Q9002" in Wikidata.seed_qids(nil)
+  end
+
+  test "a candidate below the promotion line is not chased", ctx do
+    scoped_sense!(ctx, "seal", "wordnet", %{"wikidata" => "Q20980826"})
+
+    maybe = Repo.insert!(%Concept{qid: "Q9003", label: "BYD Seal", kind: :thing})
+
+    Repo.insert!(%ConceptLink{
+      lexeme_id: Repo.one!(from l in Lexeme, where: l.lemma == "seal", select: l.id),
+      concept_id: maybe.id,
+      method: :disambiguation,
+      confidence: 0.4,
+      status: :candidate
+    })
+
+    refute "Q9003" in Wikidata.seed_qids(ctx.animals)
   end
 
   test "the second materialize pass closes edges the first could not resolve", ctx do

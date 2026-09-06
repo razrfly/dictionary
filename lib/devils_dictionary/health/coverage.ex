@@ -344,7 +344,7 @@ defmodule DevilsDictionary.Health.Coverage do
       total: Lexicon.count_scope_lexemes(scope),
       without_reason: Lexicon.count_scope_lexemes_without_reason(scope),
       by_reason: Lexicon.scope_reason_counts(scope),
-      wants: 7_500
+      wants: get_in(scope.rules, ["bars", "a4"]) || 7_500
     }
   end
 

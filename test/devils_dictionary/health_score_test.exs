@@ -148,6 +148,35 @@ defmodule DevilsDictionary.HealthScoreTest do
       assert by_id["A9"].status == :fail
     end
 
+    test "the bars are the scope's own, not Animals' (#70 S5c)" do
+      # A4 asks for 7,500 lexemes because that is what Animals holds. An
+      # 809-word scope failing it is the scorecard grading the scope rather
+      # than the pipeline, so `rules["bars"]` decides.
+      animals = row(Score.rows(scope: "animals", skip_parity: true), "A4")
+      emotions = row(Score.rows(scope: "emotions", skip_parity: true), "A4")
+
+      assert animals.wants =~ "7,500"
+      assert emotions.wants =~ "500"
+      refute emotions.wants =~ "7,500"
+    end
+
+    test "L3 reports rather than fails when a scope has no root" do
+      # *emotions* is not under Animalia and never will be. Measured against
+      # Q729 it read 0 % and called it a failure.
+      l3 = row(Score.rows(scope: "emotions", skip_parity: true), "L3")
+
+      assert l3.status == :report
+      assert l3.wants == "n/a"
+      assert l3.actual =~ "no wikidata_root"
+    end
+
+    test "L3 names the root it walked to when there is one" do
+      l3 = row(Score.rows(scope: "animals", skip_parity: true), "L3")
+
+      assert l3.check =~ "Q729"
+      assert l3.status in [:pass, :fail]
+    end
+
     test "O1 passes because this table exists", %{rows: rows} do
       assert Enum.find(rows, &(&1.id == "O1")).status == :pass
     end
@@ -167,4 +196,6 @@ defmodule DevilsDictionary.HealthScoreTest do
       assert summary.pending >= 5
     end
   end
+
+  defp row(rows, id), do: Enum.find(rows, &(&1.id == id))
 end
