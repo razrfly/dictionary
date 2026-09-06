@@ -63,7 +63,11 @@ Patterns are borrowed from [Cinegraph](https://github.com/razrfly/cinegraph): ra
 | S2 audit + completion pass: Wiktionary re-absorbed on the grown scope (+2,176 records, +3,367 senses), Wikidata +66, links re-run; L1 58.4 % raw / **88.5 % of reachable**, A6 union 97.4 %, A7 100 %, A10 93.6 %, L3 77.2 %, R2 86.4 %, M1 0 gaps across 242,359 records | ✅ 2026-09-05 |
 | S3 Bierce (997 entries, 247 verse blocks), `Health.Coverage` + `Health.Score`, `mix dd.health`, `mix dd.score` (A1 ✅ 5/5 · A8 ✅ 997, 93.0% already in the index · M2 ✅ identical over 271,296 records · M3 ✅ · O1 ✅ · O3 ✅ · O4 ✅ — **24 / 24 graded rows pass**) | ✅ 2026-09-05 |
 | S3 audited (grade A): scorecard reproduced, 24 / 24 graded rows pass on 261 tests; one parse nit (three alternate-headword bodies) noted for the next data touch. **U0, S4b and S5 unblocked.** | ✅ 2026-09-05 |
-| S4 six pages | ⬜ |
+| U0 Oatmeal theme ported by hand into `DevilsDictionaryWeb.Kit` (17 components), daisyUI removed, `/kit` dev-only, no kit source in git | ✅ 2026-09-06 |
+| S4b read layer (`Lexicon.browse/search`, `Encyclopedia.taxon_*`, `Health.records/source_detail`) and four developer surfaces: `/s/:slug`, `/sources/:slug`, `/admin/imports`, `/health` (U5 ✅ 5/5 · X2 ✅ p95 72 ms · U4 ✅ at 375 px — **26 / 26 graded rows pass**, 322 tests); Commons image URLs and nine Bierce bodies fixed | ✅ 2026-09-06 |
+| S4 audited in Chrome (U0 **A**, S4b **B+**): every page, filter, link-out and theme verified; two click-level defects (has/missing chips dead, `/health` abandons its own mount) and A5 v2 → **S4c** in #70 | ✅ 2026-09-06 |
+| S4c fixes from the audit (chips, health mount, Wikidata strip, `page=false`, A5 v2 at a 90 % bar) | ⬜ |
+| U1–U3 the word page and the hop, home/search, provenance, fake-data mode (#71) — the rows R3 X1 U1 U2 U3 U6 | ⬜ |
 | S5 extensibility proof (Johnson 1755, a toy scope) | ⬜ |
 
 ---
@@ -140,6 +144,9 @@ Everything below is designed for in the MVP-0 schema and adds tables rather than
 | 2026-09-05 | S3: **the Wikipedia lemma probe was never incremental.** It re-fetched all 23,784 scope lemmas on every run (90 minutes to learn nothing), and the disambiguation pass re-read all 1,775 "may refer to" pages with it — which is what restamped `changed_at` on 1,352 records in S2. Both now skip what they have already asked about; `--refresh` is the way back in. An expired absent marker is still retried. | #69 §5, #70 |
 | 2026-09-05 | S3 audited (grade A). Accepted: A8 = 997 with the index hit rate as its informative metric; L1's reachable set computed by `Health.links/2` (82.5 % of 18,028); A1 pins an API by its last finished run; M2 read from `--all` runs; X3 as named probes. The scorecard has four statuses so it is complete from its first run. | #69 v11, #70 |
 | 2026-09-05 | The first UI is a new build, not the skeleton's: Oatmeal theme applied and verified on a `/kit` page before any product page; the minimum use case is the hop between related words with Bierce first; layers that do not exist yet may be shown as clearly labelled samples in a dev-only fake-data mode; never commit the kit source. | #71 |
+| 2026-09-06 | S4 audited (U0 A, S4b B+). Every page was driven in Chrome, not read from reports: the has/missing chips never applied (LiveView overwrites a `phx-value-value` on a `<button>` with the button's own empty `.value`) and `/health` ran a 4.5 s scorecard inside `mount/3`, which the 2.5 s long-poll fallback abandons, so two visitors loop on *Something went wrong*. Both go to a short **S4c**; the lesson is that a URL test is not a click test. |
+| 2026-09-06 | **A5 v2.** The Translingual exclusion widens from the binomial regex to every scientific name at any rank (the lemma equals a linked concept's `taxon.scientific_name`): Wiktionary files *Archilochus*, *Paguridae* and *Therapsida* the way it files binomials, and the 85.0 % that sat exactly on the bar was those names counted as misses. Measured 93.0 %; bar raised to 90 %. |
+| 2026-09-06 | Three UI rules. **Nothing slower than the long-poll fallback runs in `mount/3`** (heavy figures go to `assign_async`, cached). **Wikidata is not a word badge**: it never enters `lexemes.source_ids` because it attests concepts; pages show it as *linked* through `concept_links` and, on the word page, through the concept card. **Never use `value` as a `phx-value-*` key.** |
 
 ---
 
