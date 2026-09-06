@@ -1,0 +1,15 @@
+{
+  "records": [
+    {
+      "alt_headwords": [
+        "ABBY"
+      ],
+      "headword": "A'BBEY",
+      "occurrence": 0,
+      "pos": "n. s.",
+      "position": 50,
+      "printed_headword": "A'BBEY, or ABBY.",
+      "xpln": "<xpln lang=\"en\"> <etym lang=\"tbd\">[Lat. <term lang=\"la\">abbatia;</term> from whence probably\r\nfirst ABBACY; which see.]</etym> A monastery of religious per&#173;\r\nsons, whether men or women; distinguished from religious\r\nhouses of other denominations by larger privileges. See\r\nABBOT.\r\n<term lang=\"quo\">With easy roads he came to Leicester;\r\nLodg'd in the abbey, where the reverend abbot,\r\nWith all his convent, honourably receiv'd him.\r\nShakesp. Henry VIII.</term></xpln>"
+    }
+  ]
+}

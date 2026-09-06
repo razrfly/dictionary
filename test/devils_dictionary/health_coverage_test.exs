@@ -63,8 +63,9 @@ defmodule DevilsDictionary.HealthCoverageTest do
       result = Health.source_runs()
       by_slug = Map.new(result.sources, &{&1.slug, &1})
 
-      assert result.expected == 5
-      assert result.present == 5
+      expected = length(DevilsDictionary.Sources.Catalog.sources())
+      assert result.expected == expected
+      assert result.present == expected
       assert by_slug["wordnet"].runs == 1
       assert by_slug["wiktionary"].runs == 0
       assert result.absorbed == 1

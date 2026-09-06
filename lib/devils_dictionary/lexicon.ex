@@ -193,6 +193,8 @@ defmodule DevilsDictionary.Lexicon do
 
   # ── scopes ───────────────────────────────────────────────────────────────
 
+  def list_scopes, do: Repo.all(from s in Scope, order_by: s.slug)
+
   def get_scope_by_slug!(slug), do: Repo.get_by!(Scope, slug: slug)
   def get_scope_by_slug(slug), do: Repo.get_by(Scope, slug: slug)
 

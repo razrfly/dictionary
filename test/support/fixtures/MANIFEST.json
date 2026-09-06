@@ -1,5 +1,5 @@
 {
-  "captured_at": "2026-09-05T19:57:46.669821Z",
+  "captured_at": "2026-09-06T09:52:37.097830Z",
   "fixtures": [
     {
       "bytes": 353,
@@ -72,6 +72,48 @@
       "lemma": "x",
       "records": 1,
       "source": "bierce"
+    },
+    {
+      "bytes": 7640,
+      "lemma": "a",
+      "records": 14,
+      "source": "johnson"
+    },
+    {
+      "bytes": 737,
+      "lemma": "abbey",
+      "records": 1,
+      "source": "johnson"
+    },
+    {
+      "bytes": 4610,
+      "lemma": "abide",
+      "records": 1,
+      "source": "johnson"
+    },
+    {
+      "bytes": 1147,
+      "lemma": "cat",
+      "records": 2,
+      "source": "johnson"
+    },
+    {
+      "bytes": 3704,
+      "lemma": "dog",
+      "records": 2,
+      "source": "johnson"
+    },
+    {
+      "bytes": 1175,
+      "lemma": "methought",
+      "records": 1,
+      "source": "johnson"
+    },
+    {
+      "bytes": 1222,
+      "lemma": "oyster",
+      "records": 1,
+      "source": "johnson"
     },
     {
       "bytes": 401358,
@@ -160,6 +202,7 @@
   ],
   "sources": {
     "bierce": {},
+    "johnson": {},
     "wikidata": {
       "api_url": "https://www.wikidata.org/w/api.php",
       "batch_size": 50

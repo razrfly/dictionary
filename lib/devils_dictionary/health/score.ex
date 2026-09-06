@@ -81,9 +81,9 @@ defmodule DevilsDictionary.Health.Score do
     [
       row(
         "A1",
-        "all five sources absorbed",
+        "every source absorbed",
         "#{a1.absorbed} / #{a1.expected} absorbed, #{a1.pinned} pinned",
-        "5 / 5",
+        "#{a1.expected} / #{a1.expected}",
         a1.absorbed == a1.expected and a1.pinned == a1.expected
       ),
       row(
@@ -189,7 +189,7 @@ defmodule DevilsDictionary.Health.Score do
 
   defp parity_row(opts) do
     if opts[:skip_parity] do
-      row("M1", "parity, all five sources", "skipped (--skip-parity)", "0 gaps", :pending)
+      row("M1", "parity, every source", "skipped (--skip-parity)", "0 gaps", :pending)
     else
       results = Enum.map(Absorb.implemented(), &Health.parity/1)
       gaps = results |> Enum.map(& &1.gaps) |> Enum.sum()
@@ -197,7 +197,7 @@ defmodule DevilsDictionary.Health.Score do
 
       row(
         "M1",
-        "parity, all five sources",
+        "parity, every source",
         "#{gaps} gaps over #{fmt(records)} records",
         "0 gaps",
         gaps == 0
@@ -426,33 +426,102 @@ defmodule DevilsDictionary.Health.Score do
 
   # ── E: extensibility ─────────────────────────────────────────────────────
 
+  # The three claims #69 §7 makes about the architecture rather than about the
+  # data. S5 turned them from prose into measurements: E1 counts migrations,
+  # E2 counts scopes that exist without a code change, and E3 — like M3 — is
+  # proven by an experiment that cannot live in a query.
   defp extensibility_rows do
-    [
-      row(
-        "E1",
-        "a new source is cheap",
-        "add Johnson 1755 after acceptance",
-        "0 migrations",
-        :pending,
-        session: "S5"
-      ),
+    [e1_row(), e2_row(), e3_row()]
+  end
+
+  # "0 migrations" is literal: the baseline schema and Oban's job table are the
+  # only two this app has ever run, and adding the sixth source did not make a
+  # third. Every enum-like column is a plain string backed by `Ecto.Enum`, so a
+  # new tier, kind or relation type would not make one either.
+  @baseline_migrations 2
+  @proof_source "johnson"
+
+  defp e1_row do
+    migrations = Repo.aggregate("schema_migrations", :count)
+    added? = @proof_source in Absorb.implemented()
+
+    actual =
+      if added? do
+        "#{@proof_source}: 1 sources row, 1 module, 1 registry line; #{migrations} migrations"
+      else
+        "#{@proof_source} not added; #{migrations} migrations"
+      end
+
+    row(
+      "E1",
+      "a new source is cheap",
+      actual,
+      "0 migrations",
+      added? and migrations == @baseline_migrations,
+      detail: "the baseline schema and Oban's job table; the sixth source added neither"
+    )
+  end
+
+  # Every scope, `animals` included, is now a `priv/scopes/<slug>.json` file
+  # read by `Catalog.scopes/0` — there is no scope defined in Elixir to point
+  # at. So the measure is: more than one scope is built, and every member of
+  # every one of them knows why it is there (the question A4 asks of the first).
+  defp e2_row do
+    built =
+      for scope <- Lexicon.list_scopes(),
+          total = Lexicon.count_scope_lexemes(scope),
+          total > 0,
+          do: {scope, total, Lexicon.count_scope_lexemes_without_reason(scope)}
+
+    actual =
+      case built do
+        [] ->
+          "no scope built"
+
+        scopes ->
+          Enum.map_join(scopes, " · ", fn {scope, total, _} ->
+            "#{scope.slug} #{fmt(total)} from #{roots(scope)}"
+          end) <> "; 0 code changes"
+      end
+
+    if length(built) < 2 do
+      row("E2", "a new scope is data", actual, "no code change", :pending, session: "S5")
+    else
       row(
         "E2",
         "a new scope is data",
-        "build `emotions` from one WordNet root",
+        actual,
         "no code change",
-        :pending,
-        session: "S5"
-      ),
-      row(
-        "E3",
-        "the community layer fits",
-        "write the examples + votes migration, do not ship it",
-        "0 changes to existing tables",
-        :pending,
-        session: "S5"
+        Enum.all?(built, fn {_scope, _total, without} -> without == 0 end),
+        detail: "priv/scopes/*.json, created by mix dd.scope.new, built by mix dd.scope.build"
       )
-    ]
+    end
+  end
+
+  defp roots(scope) do
+    case scope.rules["wordnet_roots"] || [] do
+      [] -> "its rules"
+      [one] -> "1 WordNet root (#{one})"
+      many -> "#{length(many)} WordNet roots"
+    end
+  end
+
+  # Like M3, this is an experiment, not a query: the migration was generated,
+  # applied to a full development database, diffed against a schema dump taken
+  # before it, rolled back, and moved out of `priv/repo/migrations` so it can
+  # never run again. The sketch is kept because deleting the evidence would
+  # make the claim unfalsifiable.
+  @community_sketch "docs/sketches/community_layer_migration.exs"
+
+  defp e3_row do
+    row(
+      "E3",
+      "the community layer fits",
+      "users + examples + votes migrate and roll back cleanly",
+      "0 changes to existing tables",
+      File.exists?(@community_sketch),
+      detail: "#{@community_sketch} — applied, schema-diffed, rolled back, unshipped"
+    )
   end
 
   # ── O: operations ────────────────────────────────────────────────────────
@@ -482,8 +551,15 @@ defmodule DevilsDictionary.Health.Score do
   # (a) the dump absorbs, which #69 §7 caps at two hours; (b) the on-demand
   # fetches, which it only asks us to report.
   defp o2_row do
-    dumps = ~w(wordnet wiktionary bierce)
-    apis = ~w(wikidata wikipedia)
+    # By `sources.access`, not by a literal list: a sixth source counts the day
+    # its row exists (scorecard E1). A static book is a dump for timing.
+    {apis, dumps} =
+      Absorb.implemented()
+      |> Enum.map(&Sources.get_source_by_slug!/1)
+      |> Enum.split_with(&(&1.access == :api))
+
+    dumps = Enum.map(dumps, & &1.slug)
+    apis = Enum.map(apis, & &1.slug)
 
     dump_ms = Enum.sum(Enum.map(dumps, &elapsed_for/1))
     api_ms = Enum.sum(Enum.map(apis, &elapsed_for/1))

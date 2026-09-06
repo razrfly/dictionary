@@ -50,7 +50,7 @@ Patterns are borrowed from [Cinegraph](https://github.com/razrfly/cinegraph): ra
 
 ## Status
 
-**MVP-0, the walking skeleton, is in progress.** Spec: [#69](https://github.com/razrfly/dictionary/issues/69). Build tracker (reset procedure, sessions S0–S5, directory structure): [#70](https://github.com/razrfly/dictionary/issues/70). Five open sources (Open English WordNet, Wiktionary via Kaikki, Wikidata, Wikipedia, Bierce), one test scope (Animals), thirteen tables, six plain pages, and a scorecard that `mix dd.score` computes. MVP-0 is done when every scorecard row passes.
+**MVP-0, the walking skeleton, is in progress.** Spec: [#69](https://github.com/razrfly/dictionary/issues/69). Build tracker (reset procedure, sessions S0–S5, directory structure): [#70](https://github.com/razrfly/dictionary/issues/70). Six sources (Open English WordNet, Wiktionary via Kaikki, Wikidata, Wikipedia, Bierce and — as S5's extensibility proof — Johnson 1755), two scopes (Animals, and Emotions as the toy), thirteen tables, six plain pages, and a scorecard that `mix dd.score` computes. MVP-0 is done when every scorecard row passes.
 
 | Milestone | State |
 |---|---|
@@ -68,7 +68,7 @@ Patterns are borrowed from [Cinegraph](https://github.com/razrfly/cinegraph): ra
 | S4 audited in Chrome (U0 **A**, S4b **B+**): every page, filter, link-out and theme verified; two click-level defects (has/missing chips dead, `/health` abandons its own mount) and A5 v2 → **S4c** in #70 | ✅ 2026-09-06 |
 | S4c fixes from the audit: chips carry `phx-value-slug`; the scorecard is `assign_async` + a ten-minute Cachex cache with a *recompute* button (health page dead render 3 ms, websocket kept); Wikidata shown as *linked · 16,014* from `concept_links` with its dead chips gone; no more `page=false`; **A5 v2 93.0 %** excl. 4,004 scientific names at a 90 % bar — all verified in Chrome, 322 tests | ✅ 2026-09-06 |
 | U1–U3 the word page and the hop, home/search, provenance, fake-data mode (#71) — the rows R3 X1 U1 U2 U3 U6 | ⬜ |
-| S5 extensibility proof (Johnson 1755, a toy scope) | ⬜ |
+| S5 the extensibility proof: **Johnson 1755** as the sixth source (42,726 entries, 37,422 headwords, 91.5 % already in the index, 114 alternates, 821 cross-references, **0 migrations**), **Emotions** as a second scope built from one WordNet root with no code touched (809 lexemes), and the `users` + `examples` + `votes` migration written, applied, schema-diffed, rolled back and moved to `docs/sketches/` — **E1 E2 E3 green** | ⬜ |
 
 ---
 
@@ -77,11 +77,12 @@ Patterns are borrowed from [Cinegraph](https://github.com/razrfly/cinegraph): ra
 Everything below is designed for in the MVP-0 schema and adds tables rather than changing them.
 
 **Layers (more sources)**
-- [ ] Johnson 1755 (LEME TEI-XML, CC BY 4.0) · Webster 1913 (GCIDE) · EB1911 (Britannica11 corpus)
+- [x] Johnson 1755 (LEME TEI-XML, CC BY 4.0) — landed in S5 as the extensibility proof
+- [ ] Webster 1913 (GCIDE) · EB1911 (Britannica11 corpus)
 - [ ] Wikidata lexemes dump (the P5137 word→thing bridge)
 - [ ] Merriam-Webster (1k/day, non-commercial) · Urban Dictionary (on demand, attributed, never stored in bulk) · Datamuse
 - [ ] Voltaire's *Philosophical Dictionary* · Diderot (link only) · the Guardian Gen Z terms (#63)
-- [ ] More scopes: emotions, politics, food, internet slang. A scope is one task run.
+- [ ] More scopes: politics, food, internet slang. A scope is a `priv/scopes/<slug>.json` file and two task runs — `mix dd.scope.new`, then `mix dd.scope.build` (emotions, S5, proved it).
 
 **Community**
 - [ ] Users (Clerk or `phx.gen.auth`), roles
@@ -148,6 +149,11 @@ Everything below is designed for in the MVP-0 schema and adds tables rather than
 | 2026-09-06 | **A5 v2.** The Translingual exclusion widens from the binomial regex to every scientific name at any rank (the lemma equals a linked concept's `taxon.scientific_name`): Wiktionary files *Archilochus*, *Paguridae* and *Therapsida* the way it files binomials, and the 85.0 % that sat exactly on the bar was those names counted as misses. Measured 93.0 %; bar raised to 90 %. |
 | 2026-09-06 | Three UI rules. **Nothing slower than the long-poll fallback runs in `mount/3`** (heavy figures go to `assign_async`, cached). **Wikidata is not a word badge**: it never enters `lexemes.source_ids` because it attests concepts; pages show it as *linked* through `concept_links` and, on the word page, through the concept card. **Never use `value` as a `phx-value-*` key.** |
 | 2026-09-06 | S5 planning. **A static source is a committed file when it is under about 10 MB compressed** (Johnson's LEME TEI-XML goes in gzipped, CC BY 4.0, pinned by edition and checksum); larger dumps stay in `data/` with a pinned checksum. **The extensibility rows are scored without footnotes:** S5a first makes the three hard-coded entry points generic and adds `mix dd.scope.new` over `priv/scopes/<slug>.json`, so E1 is one source row, one module, one registry line, fixtures and tests at zero migrations, and E2 is a scope with no code touched. |
+| 2026-09-06 | **S5, E1.** Adding Johnson cost one `sources` row, one `people` row, one line in `Absorb.@modules`, one module, fixtures and tests. `schema_migrations` stayed at **2**, which is what E1 now measures rather than asserts — every enum-like column is a plain string backed by `Ecto.Enum`, so even a new tier or relation type would cost none. The three entry points that hard-coded the five slugs (`health_live.ex`'s coverage list, `dd.fixtures.capture`'s dispatch, and the scope rows) were made generic **first**, so the claim needs no footnote. | #69 §7 E1, #70 S5 |
+| 2026-09-06 | **Johnson's headword rule.** Not "everything before the first period" — that is wrong for `To SINK pret I sunk` (no period after the headword) and for `A. Bp.` (all periods). Not "everything before the first lower-case word" either — that truncates all 565 phrase headwords (`CAT in the pan`, `LILY of the Valley`, `SENSITIVE Plant`). The run ends at a full stop **or at a grammar marker**, and the marker vocabulary was read off the file rather than imagined: `n` (972), `adj` (639), `v` (399), `adv` (240) leaking out of `<class>`, then `pret`, `part`, `plur`, `pronoun`. A comma-separated part is an alternate only if it survives the rule whole and every word of it is capitalised — otherwise `METHO'UGHT, the preterite of methinks` puts that sentence in the lexicon as a word, which the first pass did, 167 times. | #70 S5 |
+| 2026-09-06 | **Every scope is a file.** `priv/scopes/<slug>.json`, read by `Catalog.scopes/0`; `animals` moved there too, 231 pinned Wiktionary categories and all. There is no scope defined in Elixir to point at any more, so E2 measures what it claims: two scopes built, every member carrying a reason, zero code changed. `mix dd.scope.new <slug>` writes the file and the row; with no options it reads a file someone else committed. | #69 §7 E2, #70 S5 |
+| 2026-09-06 | **E3 is an experiment, not an assertion.** `users` + `examples` + `votes` were generated with `mix ecto.gen.migration`, applied to the full development database, diffed against a `pg_dump -s` taken before them, and rolled back. The diff adds three tables, seven indexes and two check constraints and changes **no column, index or constraint of the thirteen**; four foreign keys point into `lexemes`, `senses`, `concepts` and `sources` without adding anything to them. The file now lives at `docs/sketches/community_layer_migration.exs`, where `mix ecto.migrate` cannot see it and `mix precommit` cannot apply it to the test database — deleting it outright would have made the claim unfalsifiable. `users` is included deliberately: there is no auth scaffolding, so a proof that skipped the awkward half would not be one. | #69 §4 §7 E3, #70 S5 |
+| 2026-09-06 | **Deleting a source's records is not a rollback plan.** Re-absorbing Johnson after a parser fix meant clearing 42,726 `source_records`, and `senses.source_record_id` has no index, so the `nilify_all` cascade seq-scans 247k senses per deleted row — cancelled after twelve minutes. The absorb upserts on `(source_id, external_id)`, so the working move is: re-absorb over the top, then delete only the rows the new run did not re-stamp (293 of them) and the lexemes left orphaned (167). Worth an index if a source is ever re-absorbed often. | #70 S5 |
 
 ---
 
@@ -192,7 +198,13 @@ mix dd.absorb wikipedia --scope animals --concepts   # a summary for every conce
 mix dd.link --scope animals                # the ladder → concept_links; prints L1
 
 mix dd.absorb bierce                       # 997 entries, verse, cross-references
-mix dd.resolve --source bierce             # his "See X" targets
+mix dd.absorb johnson                      # 42,726 entries, quotations, cross-references
+mix dd.resolve                             # their "See X" targets
+
+# A second scope costs a file and two task runs, no code (E2)
+mix dd.scope.new emotions --name Emotions --rules '{"wordnet_roots":["oewn-00026390-n"]}'
+mix dd.scope.build emotions                # 809 lexemes from one WordNet root
+mix dd.absorb wiktionary --scope emotions  # then wikidata, wikipedia, dd.link as above
 
 mix dd.materialize --dry-run               # parity: raw vs derived, no network (M1)
 mix dd.materialize --all                   # rebuild every derived row offline (M2)

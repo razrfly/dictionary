@@ -51,19 +51,47 @@ defmodule DevilsDictionary.HealthScoreTest do
     test "rows a session has not run are pending, and name the session", %{rows: rows} do
       pending = for r <- rows, r.status == :pending, do: r.id
 
-      # S4 owns the pages; S5 the extensibility proof. On an empty database M2
-      # joins them: nothing has been rebuilt yet.
+      # The word page and its neighbours are #71's. On an empty database M2 and
+      # E2 join them: nothing has been rebuilt and no second scope is built.
       assert "U1" in pending
-      assert "E1" in pending
       assert "M2" in pending
+      assert "E2" in pending
 
-      # X2 and U5 became measurable in S4b, so they are graded now and are not
-      # in this list. U1 stays pending until #71 lands /define/:slug.
-      for id <- ~w(R3 X1 U1 U2 U3 U4 U6 E1 E2 E3) do
+      # X2 and U5 became measurable in S4b, E1 and E3 in S5. U1 stays pending
+      # until #71 lands /define/:slug.
+      for id <- ~w(R3 X1 U1 U2 U3 U4 U6) do
         row = Enum.find(rows, &(&1.id == id))
         assert row.status == :pending, "#{id} should be pending until its session runs"
-        assert row.session in ~w(S4 S5 U1 U3), "#{id} should name the session that owns it"
+        assert row.session in ~w(S4 U1 U3), "#{id} should name the session that owns it"
       end
+    end
+
+    test "E1 counts migrations rather than describing the source", %{rows: rows} do
+      e1 = Enum.find(rows, &(&1.id == "E1"))
+
+      # The sixth source is in the registry and the schema has not moved: the
+      # baseline plus Oban, which is what "0 migrations" means literally.
+      assert e1.actual =~ "johnson: 1 sources row, 1 module, 1 registry line"
+      assert e1.actual =~ "2 migrations"
+      assert e1.status == :pass
+    end
+
+    test "E2 is pending until a second scope is actually built", %{rows: rows} do
+      # The catalog seeds the scope rows from `priv/scopes/*.json`, but seeding
+      # a row is not building it: nothing has members on an empty database.
+      e2 = Enum.find(rows, &(&1.id == "E2"))
+
+      assert e2.actual == "no scope built"
+      assert e2.status == :pending
+      assert e2.session == "S5"
+    end
+
+    test "E3 is proven by the sketch it kept, not by prose", %{rows: rows} do
+      e3 = Enum.find(rows, &(&1.id == "E3"))
+
+      assert e3.status == :pass
+      assert e3.detail =~ "docs/sketches/community_layer_migration.exs"
+      refute File.exists?("priv/repo/migrations/20260906092918_community_layer_sketch.exs")
     end
 
     test "U1 counts the routes that exist and names the ones that do not", %{rows: rows} do
@@ -79,9 +107,10 @@ defmodule DevilsDictionary.HealthScoreTest do
     test "U5 grades the badges against Health.coverage/2, per source", %{rows: rows} do
       u5 = Enum.find(rows, &(&1.id == "U5"))
 
-      # An empty scope agrees trivially — five sources, nothing attested — and
+      # An empty scope agrees trivially — every source, nothing attested — and
       # that is the point: the row measures agreement, not size.
-      assert u5.actual =~ "5 / 5 sources agree with dd.health"
+      sources = length(DevilsDictionary.Sources.Catalog.sources())
+      assert u5.actual =~ "#{sources} / #{sources} sources agree with dd.health"
       assert u5.status == :pass
     end
 
@@ -126,7 +155,9 @@ defmodule DevilsDictionary.HealthScoreTest do
       assert summary.graded == summary.passed + summary.failed
       assert summary.total == summary.graded + summary.reported + summary.pending
       assert summary.reported >= 1
-      assert summary.pending >= 12
+      # R3 X1 U1 U2 U3 U4 U6, plus M1 (skipped), M2, M4 and E2, which an empty
+      # database cannot measure. E1 and E3 became graded in S5.
+      assert summary.pending >= 10
     end
   end
 end

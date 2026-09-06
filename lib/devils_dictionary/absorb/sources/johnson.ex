@@ -59,8 +59,12 @@ defmodule DevilsDictionary.Absorb.Sources.Johnson do
       are the *point* of Johnson the way the verse is the point of Bierce, and
       they are kept in `entries.body` in order, as blockquotes.
     * **36,342 `<etym>`** etymologies, **11,342** entries with numbered senses,
-      **742** with a `See HEADWORD` cross-reference, **165** with alternate
-      headwords (`A'BBEY, or ABBY`).
+      **742** with a `See HEADWORD` cross-reference, and **60** with a genuine
+      alternate headword (`A'BBEY, or ABBY`). Comma-separated parts are *not*
+      alternates by default: most of them are Johnson explaining himself
+      (`METHO'UGHT, the preterite of methinks`), and splitting on the comma
+      naively puts that sentence in the lexicon as a word. See
+      `split_headword/1`.
 
   ## Three transcription conventions that decide the lemma
 
@@ -71,10 +75,17 @@ defmodule DevilsDictionary.Absorb.Sources.Johnson do
     * A leading **`To `** is the verb marker of the period, not part of the
       word — 7,793 entries.
 
-  One known nit, eight entries: a headword that is a run of single-letter
-  abbreviations (`A. Bp.`, `F. R. S.`, `M. D.`) is kept whole by
-  `split_headword/1`, but anything else after a period is a printed grammar
-  note (`To CUT. pret. cut; part. pass. cut.`) and is dropped.
+  A headword that is a run of single-letter abbreviations (`A. Bp.`, `F. R. S.`,
+  `M. D.`) is kept whole; anything else in lower case after the headword is a
+  printed grammar note (`To CUT. pret. cut; part. pass. cut.`) and is dropped.
+
+  **Known nits, 77 entries** where the printed headword contains lower case.
+  Most are Johnson's real phrase entries and are kept as printed — `An
+  ABRIDGER`, `To hang an ARSE`, `JACOB's Ladder`, `At LEAST`, `SHEET-anchor`.
+  A handful are small-capital artefacts of the transcription (`MUsculous`,
+  `PLAguily`, `REPERCUssion`), and those still yield the right lemma because
+  `lemma/1` downcases. Three are simply wrong — `ToSTOW`, `To Rda'rgue`,
+  `To. preposition` — and would need a rule for three entries.
 
   `trim/1` is the identity: a public-domain dictionary is imported in full
   (#69 decision 11), so `Sources.insert_records/3` hashes `raw` itself.
@@ -136,6 +147,8 @@ defmodule DevilsDictionary.Absorb.Sources.Johnson do
       """
     end
 
+    verify!(path, source.config["sha256"])
+
     entries = path |> read!() |> segment()
 
     records = Sources.insert_records(source, Enum.map(entries, &record_row/1), @record_batch)
@@ -153,6 +166,27 @@ defmodule DevilsDictionary.Absorb.Sources.Johnson do
        materialized_entries: materialized.entries,
        relations: materialized.relations
      }}
+  end
+
+  # The file is committed and the numbers in the moduledoc were measured on it,
+  # so a mismatch is a different text and not a smaller problem.
+  defp verify!(_path, nil), do: :ok
+
+  defp verify!(path, expected) do
+    actual = :crypto.hash(:sha256, File.read!(path)) |> Base.encode16(case: :lower)
+
+    if actual != expected do
+      raise """
+      Johnson source file does not match the pinned checksum.
+
+        expected #{expected}
+        actual   #{actual}
+        file     #{path}
+
+      Every figure in this module was measured on the pinned file. Update
+      `sources.config["sha256"]` deliberately, with new measurements.
+      """
+    end
   end
 
   @doc "Reads the gzipped XML and drops the DTD prologue."
@@ -236,40 +270,114 @@ defmodule DevilsDictionary.Absorb.Sources.Johnson do
     {printed, marker}
   end
 
-  # A run of single-letter abbreviations is the headword (`A. Bp.`, `F. R. S.`,
-  # `M. D.` — eight entries); anything else after a period is a printed grammar
-  # note (`To CUT. pret. cut; part. pass. cut.`, `ABORIGINES.  Lat.`).
-  @abbreviation ~r/^(?:[A-Z]\.\s*){2,}(?:[A-Z][a-z]+\.)?/
-  @alternates ~r/\s+or\s+|,\s*/
+  # Johnson prints the headword first and then, in lower case, whatever he wants
+  # to say about it. Two different things can follow:
+  #
+  #   * the rest of the *phrase* — `CAT in the pan`, `APPLE of Love`,
+  #     `SENSITIVE Plant`, `HALF-SEAS over`, `To DIG up` — which is the headword;
+  #   * a printed *grammar note* — `SINK pret I sunk`, `n. s.` that leaked out of
+  #     `<class>`, `the preterite of methinks` — which is not.
+  #
+  # So the run ends at a full stop or at a grammar marker, and nowhere else.
+  # "Everything up to the first period" is the obvious rule and it is wrong for
+  # `To SINK pret I sunk` (no period after the headword) and for `A. Bp.` (all
+  # periods); "everything up to the first lower-case word" is wrong for all 565
+  # phrase headwords.
+  @abbreviation ~r/^(?:[A-Z]\.\s*){2,}|^[A-Z]\.\s+[A-Z][a-z]+\./
+  # `A'BBEY, or ABBY.` and `A, B, C.` — the comma is optional before the
+  # conjunction, so that branch is tried first or the comma eats it.
+  @alternates ~r/[,;]?\s*\b(?:or|and)\b\s+|[,;]\s*/
+
+  # Read off the file: the lower-case tokens that actually follow a headword,
+  # ranked. `n` (972), `adj` (639), `v` (399) and `adv` (240) are parts of
+  # speech that leaked out of `<class type="pos">` into the form; the rest are
+  # Johnson's grammar abbreviations. Deliberately absent: `of`, `the`, `in`,
+  # `up`, `for`, `and`, `without`, `Tree`, `Stone`, `Root`, `Grass` — every one
+  # of those is a word of a phrase headword — and `a`, which is why `APRON of a
+  # Ship` and `To smell a RAT` keep their tails.
+  @grammar_markers ~w(n v adj adv noun verb adjective adverb prep pron pronoun
+                      conj conjunct conjunction interj interject interjection
+                      part particip participle participial pass
+                      pret preter preterite plur plural pl sing singular
+                      substantive obsolete)
 
   @doc """
   The printed headword split into its alternates, and whether it was a verb.
 
   `"A'BBEY, or ABBY."` → `{["A'BBEY", "ABBY"], false}`;
-  `"To ABI'DE.  I abode or abid."` → `{["ABI'DE"], true}`.
+  `"To ABI'DE.  I abode or abid."` → `{["ABI'DE"], true}`;
+  `"METHO'UGHT, the preterite of methinks."` → `{["METHO'UGHT"], false}`;
+  `"CAT in the pan."` → `{["CAT in the pan"], false}`.
 
   The entry attaches to the first; the others become `alt_of` relations, the
-  same bargain `BABE or BABY` strikes in Bierce.
+  same bargain `BABE or BABY` strikes in Bierce. A comma-separated part is only
+  an alternate if it survives the run rule whole and every word of it is
+  capitalised — otherwise it is Johnson explaining himself, and splitting on the
+  comma naively puts that sentence in the lexicon as a word.
   """
   def split_headword(printed) do
     printed = printed |> unhyphenate() |> squish()
 
-    text =
-      case Regex.run(@abbreviation, printed, capture: :first) do
-        [abbreviation] -> abbreviation
-        nil -> printed |> String.split(".", parts: 2) |> hd()
+    case Regex.run(@abbreviation, printed, capture: :first) do
+      [abbreviation] ->
+        {[clean_part(abbreviation) <> "."], false}
+
+      nil ->
+        to_verb = String.match?(printed, ~r/^To\s+/)
+
+        [first | rest] =
+          printed
+          |> String.replace(~r/^To\s+/, "")
+          # `CE'LANDINE, (the lesser, or Pilewort.)` — the parenthesis is a
+          # separator, and keeping it would put a bracket in the lemma.
+          |> String.replace(~r/[()]/, " ")
+          |> String.split(@alternates)
+
+        alternates =
+          for part <- rest,
+              run = headword_run(part),
+              run != "" and run == clean_part(part),
+              capitalised?(run),
+              do: run
+
+        parts = [headword_run(first) | alternates] |> Enum.reject(&(&1 == "")) |> Enum.uniq()
+
+        {(parts == [] && [clean_part(printed)]) || parts, to_verb}
+    end
+  end
+
+  # The headword itself: the run of tokens that ends after one closing with a
+  # full stop, or before a grammar marker, and it never starts on one.
+  defp headword_run(part) do
+    part
+    |> String.split(~r/\s+/)
+    |> Enum.reduce_while([], fn token, acc ->
+      cond do
+        acc != [] and marker?(token) -> {:halt, acc}
+        String.ends_with?(token, ".") -> {:halt, [String.replace(token, ".", "") | acc]}
+        true -> {:cont, [token | acc]}
       end
+    end)
+    |> Enum.reverse()
+    |> Enum.join(" ")
+    |> clean_part()
+  end
 
-    to_verb = String.match?(text, ~r/^To\s+/)
+  defp marker?(token) do
+    bare = token |> String.replace(~r/[^\p{L}]/u, "") |> String.downcase()
+    bare in @grammar_markers
+  end
 
-    parts =
-      text
-      |> String.replace(~r/^To\s+/, "")
-      |> String.split(@alternates)
-      |> Enum.map(&String.trim(&1, " .,;:"))
-      |> Enum.reject(&(&1 == ""))
+  defp capitalised?(run) do
+    run |> String.split(~r/\s+/) |> Enum.all?(&(not Regex.match?(~r/^\p{Ll}/u, &1)))
+  end
 
-    {(parts == [] && [String.trim(printed, " .")]) || parts, to_verb}
+  # A character class, not `String.trim/2`: that takes the whole binary as one
+  # string to strip, so `String.trim("C.", " .,;:")` is `"C."`.
+  @edge_punctuation ~r/^[\s.,;:!?]+|[\s.,;:!?]+$/u
+
+  defp clean_part(part) do
+    part |> squish() |> String.replace(@edge_punctuation, "")
   end
 
   @doc """

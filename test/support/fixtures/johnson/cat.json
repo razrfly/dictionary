@@ -1,0 +1,22 @@
+{
+  "records": [
+    {
+      "alt_headwords": [],
+      "headword": "CAT",
+      "occurrence": 0,
+      "pos": "n. s.",
+      "position": 5871,
+      "printed_headword": "CAT.",
+      "xpln": "<xpln lang=\"en\"><etym lang=\"tbd\">[katz, Teuton. <term lang=\"fr\">chat,</term> Fr.]</etym> A domestick animal that\r\ncatches mice, commonly reckoned by naturalists the lowest or&#173;\r\nder of the leonine species.\r\n<term lang=\"quo\">'Twas you incens'd the rabble:\r\nCats, that can judge as fitly of his worth,\r\nAs I can of those mysteries, which heav'n\r\nWill not have earth to know. Shakesp. Coriolanus.</term>\r\n<term lang=\"quo\">Thrice the brinded cat hath mew'd. Shakesp. Macbeth.</term>\r\n<term lang=\"quo\">A cat, as she beholds the light, draws the ball of her eye\r\nsmall and long, being covered over with a green skin, and di&#173;\r\nlates it at pleasure. Peacham on Drawing.</term></xpln>"
+    },
+    {
+      "alt_headwords": [],
+      "headword": "CAT",
+      "occurrence": 1,
+      "pos": "n. s.",
+      "position": 5872,
+      "printed_headword": "CAT.",
+      "xpln": "<xpln lang=\"en\">A sort of ship.</xpln>"
+    }
+  ]
+}

@@ -45,22 +45,23 @@ defmodule Mix.Tasks.Dd.Fixtures.Capture do
   # `seal` earns its place: it is a Wikipedia disambiguation page, which is the
   # only way to test the L4 path offline.
   @api_lemmas @default_lemmas ++ ~w(seal)
-  # Bierce's awkward cases, not its ordinary ones: the entry the HTML mis-wraps
-  # in a <pre>, the alternate headword, the definition that resumes lowercase
-  # after its verse, the stub whose whole body is the verse, the bare
-  # cross-reference, the joke part of speech, the `[from X]` bracket, a letter
-  # essay, and the entry with 26 continuation paragraphs.
-  # Johnson's awkward cases: the alternate headword, the ten-way homograph, the
-  # bare cross-reference, the entry with no part of speech, and the verb whose
-  # printed headword carries a grammar note (`To ABIDE.  I abode or abid.`).
-  @johnson_lemmas @default_lemmas ++ ~w(abbey a brute abide)
-  # A static source is read back out of `source_records` by its printed
-  # headword; these are the lemmas worth keeping per source, and any source not
-  # named here gets the default three.
+  # A static book source is read back out of `source_records` by its printed
+  # headword. These are each one's awkward cases, not its ordinary ones; a
+  # source not named here gets the default three.
+  #
+  #   * **Bierce** — the entry the HTML mis-wraps in a `<pre>`, the alternate
+  #     headword, the definition that resumes lowercase after its verse, the
+  #     stub whose whole body is the verse, the bare cross-reference, the joke
+  #     part of speech, the `[from X]` bracket, a letter essay, and the entry
+  #     with 26 continuation paragraphs.
+  #   * **Johnson** — the alternate headword (`A'BBEY, or ABBY`), the comma that
+  #     is a gloss rather than an alternate (`METHO'UGHT, the preterite of
+  #     methinks`), the ten-way homograph, and the verb whose printed headword
+  #     carries a grammar note (`To ABIDE. I abode or abid.`).
   @static_lemmas %{
     "bierce" =>
       @default_lemmas ++ ~w(eucharist babe monument insectivora brute hash academy x story),
-    "johnson" => @johnson_lemmas
+    "johnson" => @default_lemmas ++ ~w(abbey methought a abide)
   }
   @dir "test/support/fixtures"
 
@@ -127,7 +128,16 @@ defmodule Mix.Tasks.Dd.Fixtures.Capture do
         Repo.all(
           from r in SourceRecord,
             where: r.source_id == ^source.id,
-            where: fragment("? ->> 'headword' = ?", r.raw, ^String.upcase(lemma)),
+            # Compared with the stress marks stripped from both sides: Johnson
+            # prints `ABI'DE`, and the lemma we ask for is `abide`.
+            where:
+              fragment(
+                "replace(replace(? ->> 'headword', ?, ''), ?, '') = ?",
+                r.raw,
+                "\u2019",
+                "'",
+                ^String.upcase(lemma)
+              ),
             order_by: r.external_id,
             select: r.raw
         )

@@ -2,12 +2,18 @@ defmodule Mix.Tasks.Dd.Scope.New do
   @shortdoc "Create a scope row from its slug, name and rules"
 
   @moduledoc """
-  Writes a `scopes` row. This is the generic entry point that makes scorecard
-  row **E2** ("a new scope is data") true: the Nth scope costs a task run and a
-  JSON blob, not an edit to `Sources.Catalog.scopes/0`.
+  Writes `priv/scopes/<slug>.json` and the `scopes` row it describes. This is
+  the generic entry point that makes scorecard row **E2** ("a new scope is
+  data") true: the Nth scope costs a file and a task run, not an edit to
+  `Sources.Catalog.scopes/0`.
 
       mix dd.scope.new emotions --name Emotions \\
         --rules '{"wordnet_roots":["oewn-00026390-n"]}'
+
+  With no options it reads the file that is already there, which is how a fresh
+  clone or a release seeds a scope someone else added:
+
+      mix dd.scope.new emotions
 
   Then `mix dd.scope.build emotions` applies the rules. The three rules
   `Absorb.ScopeBuilder` knows are all optional keys of the same map:
@@ -23,13 +29,14 @@ defmodule Mix.Tasks.Dd.Scope.New do
 
   Options:
 
-    * `--name` — the display name; defaults to the slug, capitalised
-    * `--rules` — the rules map as JSON; defaults to `{}`
+    * `--name` — the display name; defaults to the file's, then to the slug
+    * `--rules` — the rules map as JSON; defaults to the file's, then to `{}`
   """
 
   use Mix.Task
 
   alias DevilsDictionary.Lexicon
+  alias DevilsDictionary.Sources.Catalog
 
   @requirements ["app.start"]
 
@@ -37,12 +44,19 @@ defmodule Mix.Tasks.Dd.Scope.New do
   def run(args) do
     {opts, [slug], _} = OptionParser.parse(args, strict: [name: :string, rules: :string])
 
-    rules = decode_rules(opts[:rules])
-    name = opts[:name] || String.capitalize(slug)
+    path = Path.join(Catalog.scopes_dir(), "#{slug}.json")
+    on_disk = if File.exists?(path), do: Catalog.read_scope!(path), else: %{}
 
-    {:ok, scope} = Lexicon.create_scope(%{slug: slug, name: name, rules: rules})
+    rules = if opts[:rules], do: decode_rules(opts[:rules]), else: Map.get(on_disk, :rules, %{})
+    name = opts[:name] || Map.get(on_disk, :name) || String.capitalize(slug)
 
-    Mix.shell().info("scope #{scope.slug} — #{scope.name}")
+    attrs = %{slug: slug, name: name, rules: rules}
+    File.mkdir_p!(Path.dirname(path))
+    File.write!(path, Jason.encode!(attrs, pretty: true) <> "\n")
+
+    {:ok, scope} = Lexicon.create_scope(attrs)
+
+    Mix.shell().info("scope #{scope.slug} — #{scope.name}  (#{path})")
 
     if rules == %{} do
       Mix.shell().error("  no rules: mix dd.scope.build #{slug} will match nothing")

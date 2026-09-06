@@ -96,12 +96,12 @@ defmodule DevilsDictionary.SchemaTest do
     assert changeset.errors != []
   end
 
-  test "the catalog seeds the five MVP-0 sources and is idempotent" do
+  test "the catalog seeds every source and is idempotent" do
     Catalog.seed!()
     Catalog.seed!()
 
     slugs = Repo.all(Source) |> Enum.map(& &1.slug) |> Enum.sort()
-    assert slugs == ~w(bierce wikidata wikipedia wiktionary wordnet)
+    assert slugs == ~w(bierce johnson wikidata wikipedia wiktionary wordnet)
 
     wordnet = Repo.get_by!(Source, slug: "wordnet")
     assert wordnet.tier == :middle
@@ -126,5 +126,23 @@ defmodule DevilsDictionary.SchemaTest do
     assert scope.rules["wordnet_roots"] == ["oewn-00015568-n"]
     assert length(scope.rules["wiktionary_categories"]) > 200
     assert scope.rules["wikidata_root"] == "Q729"
+  end
+
+  test "every scope is a file, not code (E2)" do
+    files = Path.wildcard(Path.join(Catalog.scopes_dir(), "*.json"))
+
+    assert length(files) == length(Catalog.scopes())
+    assert length(files) >= 2, "the extensibility proof needs a second scope"
+
+    for scope <- Catalog.scopes() do
+      assert is_binary(scope.slug) and scope.slug != ""
+      assert is_binary(scope.name) and scope.name != ""
+      assert is_map(scope.rules)
+    end
+
+    # A scope with no rule at all would build an empty membership in silence.
+    for scope <- Catalog.scopes() do
+      assert Map.keys(scope.rules) != [], "#{scope.slug} has no rules"
+    end
   end
 end

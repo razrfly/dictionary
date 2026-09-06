@@ -165,6 +165,12 @@ defmodule DevilsDictionary.Sources.Catalog do
             "English (LEME), University of Toronto, CC BY 4.0",
         config: %{
           "file" => "priv/sources/johnson/johnson-1755-leme.xml.gz",
+          # The transcription is versioned and the file is committed, so both
+          # are pinned: a re-download that does not match this is a different
+          # text, and every number S5 posted was measured on this one.
+          "edition" => "LEME ver. 1.0 (2023)",
+          "sha256" => "5b969669f18fe08981d74314471b6864ebca18967fd4633e8c93f8724df74418",
+          "entries" => 42_726,
           "leme_lexicon_id" => 1345,
           "tspace_handle" => "1807/124274",
           "tspace_url" => "https://hdl.handle.net/1807/124274",
@@ -172,7 +178,6 @@ defmodule DevilsDictionary.Sources.Catalog do
           # no API. Linked from the source page, never absorbed.
           "related_url" => "https://johnsonsdictionaryonline.com/"
         }
-
       }
     ]
   end
@@ -206,269 +211,42 @@ defmodule DevilsDictionary.Sources.Catalog do
   end
 
   @doc """
-  Scopes and their rules.
+  The scopes, read from `priv/scopes/*.json`.
 
-  `wiktionary_categories` is frozen on purpose. The Kaikki dump carries each
-  entry's categories as flat strings with no hierarchy, so the tree was walked
-  once from `Category:en:Animals` (`mix dd.scope.categories animals`) and
-  pinned here — which keeps `mix dd.scope.build` offline and reproducible
-  (scorecard O3). Regenerate only if Wiktionary reorganises the tree.
+  A scope is **data**, not code (scorecard E2): its rules live in a file that
+  `mix dd.scope.new` writes, and no scope is defined in Elixir — `animals`
+  included, so nothing about the first one is different from the Nth.
+
+  `animals.json`'s `wiktionary_categories` list is frozen on purpose. The Kaikki
+  dump carries each entry's categories as flat strings with no hierarchy, so the
+  tree was walked once from `Category:en:Animals`
+  (`mix dd.scope.categories animals`) and pinned in the file — which keeps
+  `mix dd.scope.build` offline and reproducible (scorecard O3). Regenerate only
+  if Wiktionary reorganises the tree.
   """
   def scopes do
-    [
-      %{
-        slug: "animals",
-        name: "Animals",
-        rules: %{
-          "wordnet_roots" => ["oewn-00015568-n"],
-          "wiktionary_category_root" => "en:Animals",
-          "wiktionary_categories" => animal_categories(),
-          "wikidata_root" => "Q729"
-        }
-      }
-    ]
+    scopes_dir()
+    |> Path.join("*.json")
+    |> Path.wildcard()
+    |> Enum.sort()
+    |> Enum.map(&read_scope!/1)
   end
 
+  @doc "Where the scope files live, at compile time and from a release."
+  def scopes_dir, do: Application.app_dir(:devils_dictionary, "priv/scopes")
+
   @doc """
-  231 categories, walked to depth 4 from `Category:en:Animals` on 2026-09-05,
-  minus the subtrees that are about animals without being animals
-  (body parts, animal products, equestrian equipment and sport,
-  bestiality, veterinary medicine, a toy franchise).
+  Reads one scope file into the shape `seed!/0` and `Lexicon.create_scope/1`
+  want. A file without a slug or a name is a mistake worth stopping on.
   """
-  def animal_categories do
-    [
-      "en:Acanthuroid fish",
-      "en:Acipenseriform fish",
-      "en:Adephagan beetles",
-      "en:African insectivores",
-      "en:Ammonites",
-      "en:Amphibians",
-      "en:Amphipods",
-      "en:Anglerfish",
-      "en:Animals",
-      "en:Annelids",
-      "en:Anomurans",
-      "en:Anteaters and sloths",
-      "en:Ants",
-      "en:Anurans",
-      "en:Aphids",
-      "en:Apodiforms",
-      "en:Arachnids",
-      "en:Araneoid spiders",
-      "en:Argentiniform fish",
-      "en:Armadillos",
-      "en:Arthropods",
-      "en:Aschizan flies",
-      "en:Asilomorph flies",
-      "en:Astacideans",
-      "en:Atheriniform fish",
-      "en:Aulopiform fish",
-      "en:Baby animals",
-      "en:Barklice",
-      "en:Barnacles",
-      "en:Bats",
-      "en:Bees",
-      "en:Beetles",
-      "en:Beloniform fish",
-      "en:Bibionomorphs",
-      "en:Birds",
-      "en:Birds of prey",
-      "en:Bivalves",
-      "en:Blennies",
-      "en:Bostrichiform beetles",
-      "en:Brachiopods",
-      "en:Branchiopods",
-      "en:Bryozoans",
-      "en:Butterflies",
-      "en:Caddis flies",
-      "en:Caecilians",
-      "en:Camelids",
-      "en:Caprimulgiforms",
-      "en:Caridean shrimp",
-      "en:Carnivores",
-      "en:Catfish",
-      "en:Cattle",
-      "en:Cephalopods",
-      "en:Chalcidoid wasps",
-      "en:Characins",
-      "en:Chickens",
-      "en:Chimaeras (fish)",
-      "en:Chordates",
-      "en:Chrysomeloid beetles",
-      "en:Cicadas",
-      "en:Cnidarians",
-      "en:Cockroaches",
-      "en:Colugos",
-      "en:Columbids",
-      "en:Copepods",
-      "en:Coraciiforms",
-      "en:Crabs",
-      "en:Crickets and grasshoppers",
-      "en:Crocodilians",
-      "en:Crustaceans",
-      "en:Ctenophores",
-      "en:Culicomorphs",
-      "en:Cyprinids",
-      "en:Dabbling ducks",
-      "en:Damselflies",
-      "en:Decapods",
-      "en:Dinosaurs",
-      "en:Dionychan spiders",
-      "en:Dipterans",
-      "en:Dragonflies and damselflies",
-      "en:Ducks",
-      "en:Dugongs and manatees",
-      "en:Earthworms",
-      "en:Earwigs",
-      "en:Echinoderms",
-      "en:Elateroid beetles",
-      "en:Elephants",
-      "en:Elopomorph fish",
-      "en:Erinaceids",
-      "en:Even-toed ungulates",
-      "en:Female animals",
-      "en:Fish",
-      "en:Flatfish",
-      "en:Flatworms",
-      "en:Fleas",
-      "en:Fowls",
-      "en:Freshwater birds",
-      "en:Gadiforms",
-      "en:Gasterosteiform fish",
-      "en:Gastropods",
-      "en:Geese",
-      "en:Gelechioid moths",
-      "en:Geometrid moths",
-      "en:Goats",
-      "en:Gobies",
-      "en:Gossamer-winged butterflies",
-      "en:Hemipterans",
-      "en:Herrings",
-      "en:Holostean fish",
-      "en:Hoopoes and hornbills",
-      "en:Horse breeds",
-      "en:Horseflies",
-      "en:Horses",
-      "en:Hydrozoans",
-      "en:Hymenopterans",
-      "en:Hyraxes",
-      "en:Ichthyosauromorphs",
-      "en:Insects",
-      "en:Isopods",
-      "en:Jawless fish",
-      "en:Labroid fish",
-      "en:Labyrinth fish",
-      "en:Lagomorphs",
-      "en:Lampriform fish",
-      "en:Libellulid dragonflies",
-      "en:Lice",
-      "en:Littorinimorphs",
-      "en:Livestock",
-      "en:Lizards",
-      "en:Loaches",
-      "en:Lobe-finned fishes",
-      "en:Male animals",
-      "en:Mammals",
-      "en:Mantids",
-      "en:Marsupials",
-      "en:Mayflies",
-      "en:Megalopterans",
-      "en:Mergansers",
-      "en:Mites and ticks",
-      "en:Mollusks",
-      "en:Monotremes",
-      "en:Moths",
-      "en:Muscoid flies",
-      "en:Mygalomorph spiders",
-      "en:Myriapods",
-      "en:Nematodes",
-      "en:Neogastropods",
-      "en:Neuropterans",
-      "en:Noctuoid moths",
-      "en:Nudibranchs",
-      "en:Nymphalid butterflies",
-      "en:Octopuses",
-      "en:Odd-toed ungulates",
-      "en:Oestroid flies",
-      "en:Osteoglossomorph fish",
-      "en:Otidimorph birds",
-      "en:Otocephalan fish",
-      "en:Pangolins",
-      "en:Parrots",
-      "en:Penguins",
-      "en:Perching birds",
-      "en:Percoid fish",
-      "en:Piciforms",
-      "en:Pierid butterflies",
-      "en:Pigs",
-      "en:Pikes (fish)",
-      "en:Placoderms",
-      "en:Poultry",
-      "en:Primates",
-      "en:Pterosaurs",
-      "en:Pyraloid moths",
-      "en:Ratites",
-      "en:Rays and skates",
-      "en:Reptiles",
-      "en:Rodents",
-      "en:Salamanders",
-      "en:Salmonids",
-      "en:Saturniid moths",
-      "en:Sauropterygians",
-      "en:Sawflies and wood wasps",
-      "en:Scale insects",
-      "en:Scarabaeoids",
-      "en:Scombroids",
-      "en:Scorpaeniform fish",
-      "en:Scorpions",
-      "en:Screamers",
-      "en:Sea anemones",
-      "en:Sea cucumbers",
-      "en:Sea urchins",
-      "en:Seabirds",
-      "en:Sharks",
-      "en:Sheep",
-      "en:Shorebirds",
-      "en:Skippers",
-      "en:Smelts",
-      "en:Snails",
-      "en:Snakes",
-      "en:Soft corals",
-      "en:Soricomorphs",
-      "en:Sphinx moths",
-      "en:Spiders",
-      "en:Sponges",
-      "en:Squid",
-      "en:Staphylinoid beetles",
-      "en:Stick insects",
-      "en:Stoneflies",
-      "en:Stony corals",
-      "en:Stromateoid fish",
-      "en:Suckers (fish)",
-      "en:Swallowtails",
-      "en:Syngnathiform fish",
-      "en:Temnospondyls",
-      "en:Tenebrionoid beetles",
-      "en:Tephritoid flies",
-      "en:Termites",
-      "en:Tetraodontiforms",
-      "en:Ticks",
-      "en:Toothcarps",
-      "en:Tortricid moths",
-      "en:Trachinoid fish",
-      "en:Trilobites",
-      "en:True bugs",
-      "en:True jellyfish",
-      "en:Turtles",
-      "en:Venerida order mollusks",
-      "en:Vertebrates",
-      "en:Vespids",
-      "en:Vetigastropods",
-      "en:Weevils",
-      "en:Worms",
-      "en:Zoarcoid fish",
-      "en:Zygaenoid moths"
-    ]
+  def read_scope!(path) do
+    attrs = path |> File.read!() |> Jason.decode!()
+
+    %{
+      slug: Map.fetch!(attrs, "slug"),
+      name: Map.fetch!(attrs, "name"),
+      rules: Map.get(attrs, "rules", %{})
+    }
   end
 
   @doc """

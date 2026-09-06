@@ -1,0 +1,9 @@
+{
+  "name": "Emotions",
+  "slug": "emotions",
+  "rules": {
+    "wordnet_roots": [
+      "oewn-00026390-n"
+    ]
+  }
+}
