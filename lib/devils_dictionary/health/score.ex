@@ -312,7 +312,9 @@ defmodule DevilsDictionary.Health.Score do
         "chains render",
         "the word page shows a hypernym chain from >= 2 sources",
         "yes",
-        :pending, session: "S4")
+        :pending,
+        session: "S4"
+      )
     ]
   end
 
@@ -379,7 +381,9 @@ defmodule DevilsDictionary.Health.Score do
         "the flagship words",
         "cat, dog, oyster: >= 4 cards across >= 2 tiers",
         "all three",
-        :pending, session: "S4"),
+        :pending,
+        session: "S4"
+      ),
       row("U3", "provenance everywhere", "every card opens the drawer", "100% of cards", :pending,
         session: "S4"
       ),
@@ -414,19 +418,25 @@ defmodule DevilsDictionary.Health.Score do
         "a new source is cheap",
         "add Johnson 1755 after acceptance",
         "0 migrations",
-        :pending, session: "S5"),
+        :pending,
+        session: "S5"
+      ),
       row(
         "E2",
         "a new scope is data",
         "build `emotions` from one WordNet root",
         "no code change",
-        :pending, session: "S5"),
+        :pending,
+        session: "S5"
+      ),
       row(
         "E3",
         "the community layer fits",
         "write the examples + votes migration, do not ship it",
         "0 changes to existing tables",
-        :pending, session: "S5")
+        :pending,
+        session: "S5"
+      )
     ]
   end
 
@@ -441,7 +451,9 @@ defmodule DevilsDictionary.Health.Score do
         "clean and offline-testable",
         "`mix precommit`: compile, format, full suite",
         "green",
-        true, detail: "the suite runs on checked-in fixtures and never touches the network"),
+        true,
+        detail: "the suite runs on checked-in fixtures and never touches the network"
+      ),
       row(
         "O4",
         "health page",

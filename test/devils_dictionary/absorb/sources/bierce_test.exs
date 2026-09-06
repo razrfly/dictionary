@@ -210,6 +210,59 @@ defmodule DevilsDictionary.Absorb.Sources.BierceTest do
     end
   end
 
+  describe "headword_prefix/1" do
+    test "the printed phrase, alternates and all" do
+      assert Bierce.headword_prefix("ABASEMENT, n. A decent and customary mental attitude.") ==
+               {:ok, "ABASEMENT, n."}
+
+      # The three alternate shapes. The whole printed phrase is the headword, so
+      # the whole printed phrase comes off the body — this is what left `BABE`
+      # reading "or BABY, n. A misshapen…" when the prefix was rebuilt from the
+      # `headword` column, which knows only the first of the two.
+      assert Bierce.headword_prefix("BABE or BABY, n. A misshapen creature.") ==
+               {:ok, "BABE or BABY, n."}
+
+      assert Bierce.headword_prefix("CONFIDANT, CONFIDANTE, n. One entrusted by A.") ==
+               {:ok, "CONFIDANT, CONFIDANTE, n."}
+
+      assert Bierce.headword_prefix("TZETZE (or TSETSE) FLY, n. An African insect.") ==
+               {:ok, "TZETZE (or TSETSE) FLY, n."}
+    end
+
+    test "the marker's own oddities" do
+      # The 1911 typo, the joke marker, a compound marker, and no marker at all.
+      assert Bierce.headword_prefix("IMPOSTOR n. A rival aspirant to public honors.") ==
+               {:ok, "IMPOSTOR n."}
+
+      assert Bierce.headword_prefix("HASH, x. There is no definition for this word.") ==
+               {:ok, "HASH, x."}
+
+      assert Bierce.headword_prefix("REASON, v.i. To weigh probabilities.") ==
+               {:ok, "REASON, v.i."}
+
+      assert Bierce.headword_prefix("HABEAS CORPUS. A writ by which a man may be taken.") ==
+               {:ok, "HABEAS CORPUS. "}
+
+      assert Bierce.headword_prefix("ABRACADABRA.") == {:ok, "ABRACADABRA."}
+    end
+
+    test "a letter essay has no headword phrase" do
+      # The letter is the first word of a sentence, not a printed headword. A
+      # bare-headword fallback stripped it and left "is the first letter…".
+      assert Bierce.headword_prefix("I is the first letter of the alphabet.") == :no
+      assert Bierce.headword_prefix("W (double U) has the only cumbrous name.") == :no
+      assert Bierce.headword_prefix("X in our alphabet being a needless letter.") == :no
+      assert Bierce.headword_prefix("T, the twentieth letter of the alphabet.") == :no
+    end
+
+    test "an attribution is not a headword phrase" do
+      # `W.J. Candleton` has the shape of `LL.D. Letters indicating…`; only the
+      # sentence test separates them.
+      assert Bierce.headword_prefix("W.J. Candleton") == :no
+      assert Bierce.headword_prefix("Jamrach Holobom") == :no
+    end
+  end
+
   describe "pos/1" do
     test "every marker in the text maps to a lexicon part of speech" do
       assert Bierce.pos("n") == "noun"
@@ -262,6 +315,13 @@ defmodule DevilsDictionary.Absorb.Sources.BierceTest do
     test "the headword and its marker are columns, not body text" do
       [entry] = materialize("cat").entries
       refute String.starts_with?(entry.body, "CAT")
+    end
+
+    test "an alternate headword's body starts at the definition too" do
+      [entry] = materialize("babe").entries
+
+      assert String.starts_with?(entry.body, "A misshapen creature")
+      refute entry.body =~ "BABY"
     end
 
     test "a stub's body is only its verse" do
@@ -325,6 +385,10 @@ defmodule DevilsDictionary.Absorb.Sources.BierceTest do
       assert entry.headword == "X"
       assert entry.lexeme == {"en", "x", "unknown"}
       assert entry.body =~ "needless letter"
+
+      # And it keeps its opening letter: the letter is the sentence's subject,
+      # not a printed headword to strip.
+      assert String.starts_with?(entry.body, "X in our alphabet")
     end
 
     test "an empty record materializes to nothing rather than raising" do

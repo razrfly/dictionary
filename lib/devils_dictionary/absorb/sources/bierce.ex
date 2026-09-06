@@ -334,6 +334,45 @@ defmodule DevilsDictionary.Absorb.Sources.Bierce do
     if definition?(captures["rest"]), do: from_no_pos(captures), else: :no
   end
 
+  @doc """
+  The printed headword phrase at the head of an entry's first paragraph.
+
+  One function, shared with the rules above, for the same reason `pos/1` is
+  shared with the segmenter: those four patterns decide what counts as a
+  headword, so they are also the only honest answer to how much of the
+  paragraph the headword took up. `BABE or BABY, n.` and
+  `TZETZE (or TSETSE) FLY, n.` are headword phrases in full — alternates and
+  parentheses included — and `I is the first letter of the alphabet` is not a
+  headword phrase at all, so it gets `:no` and keeps its "I".
+  """
+  @spec headword_prefix(String.t()) :: {:ok, String.t()} | :no
+  def headword_prefix(text) do
+    cond do
+      m = Regex.run(@with_pos, text, return: :index) -> {:ok, through_pos(text, m)}
+      m = Regex.run(@missing_comma, text, return: :index) -> {:ok, through_pos(text, m)}
+      m = Regex.run(@bare_stub, text, return: :index) -> {:ok, whole_match(text, m)}
+      m = Regex.run(@no_pos, text, return: :index) -> before_rest(text, m)
+      true -> :no
+    end
+  end
+
+  # `@with_pos` and `@missing_comma` capture the headword then the marker; the
+  # phrase ends at the stop that closes the marker.
+  defp through_pos(text, [_full, _hw, {pos_at, pos_len}]),
+    do: binary_part(text, 0, pos_at + pos_len + 1)
+
+  # `@bare_stub` is anchored at both ends: the paragraph is the headword.
+  defp whole_match(text, [{0, len} | _]), do: binary_part(text, 0, len)
+
+  # `@no_pos` captures the headword then the definition that follows it, so the
+  # phrase is everything before the definition. The `definition?/1` guard is the
+  # same one `maybe_no_pos/1` uses: it is what keeps `W.J. Candleton` out.
+  defp before_rest(text, [_full, _hw, {rest_at, _len}]) do
+    rest = binary_part(text, rest_at, byte_size(text) - rest_at)
+
+    if definition?(rest), do: {:ok, binary_part(text, 0, rest_at)}, else: :no
+  end
+
   # A definition contains ordinary lowercase words. "Candleton" and "Railey" do
   # not; "Letters indicating the degree…" does.
   defp definition?(rest), do: String.match?(rest || "", ~r/\b[a-z]{2,}\b/)
@@ -429,7 +468,7 @@ defmodule DevilsDictionary.Absorb.Sources.Bierce do
     pos = pos(raw["pos"])
     alts = raw["alt_headwords"] || []
 
-    blocks = parse_blocks(raw["html"] || [], raw["kinds"] || [], headword, raw["pos"])
+    blocks = parse_blocks(raw["html"] || [], raw["kinds"] || [])
     {body, metadata} = render(blocks)
 
     lexemes =
@@ -468,7 +507,7 @@ defmodule DevilsDictionary.Absorb.Sources.Bierce do
   def materialize(%SourceRecord{}), do: {:ok, %{}}
 
   # Each stored fragment is re-parsed here; its kind comes from the record.
-  defp parse_blocks(fragments, kinds, headword, marker) do
+  defp parse_blocks(fragments, kinds) do
     fragments
     |> Enum.zip(kinds ++ List.duplicate("continuation", length(fragments)))
     |> Enum.map(fn {fragment, kind} ->
@@ -476,14 +515,14 @@ defmodule DevilsDictionary.Absorb.Sources.Bierce do
       kind = String.to_existing_atom(kind)
       text = node |> Floki.text() |> squish()
 
-      %{kind: kind, node: node, text: text, markdown: to_markdown(node, kind, headword, marker)}
+      %{kind: kind, node: node, text: text, markdown: to_markdown(node, kind)}
     end)
   end
 
   # `<i>` is the only inline tag in the corpus (171 pairs: foreign phrases and
   # book titles), and it is worth keeping — which is the reason the fragments
   # are stored as markup rather than as flattened text.
-  defp to_markdown(node, :verse, _headword, _marker) do
+  defp to_markdown(node, :verse) do
     node
     |> inline_text()
     |> String.split("\n")
@@ -495,41 +534,39 @@ defmodule DevilsDictionary.Absorb.Sources.Bierce do
     |> Enum.map_join("\n", &("> " <> &1))
   end
 
-  defp to_markdown(node, :headword, headword, marker) do
+  defp to_markdown(node, :headword) do
     node
     |> inline_text()
     |> squish()
-    |> strip_headword(headword, marker)
+    |> strip_headword()
   end
 
-  defp to_markdown(node, :attribution, _headword, _marker) do
+  defp to_markdown(node, :attribution) do
     "— " <> (node |> inline_text() |> squish())
   end
 
-  defp to_markdown(node, _kind, _headword, _marker), do: node |> inline_text() |> squish()
+  defp to_markdown(node, _kind), do: node |> inline_text() |> squish()
 
   # The headword and its marker are columns of their own; the body starts at the
   # definition. What is left when nothing follows is an empty string — the 21
   # entries whose whole joke is the verse underneath.
-  defp strip_headword(text, headword, marker) do
-    prefixes =
-      [
-        "#{headword}, #{marker}.",
-        "#{headword} #{marker}.",
-        "#{headword},",
-        "#{headword}.",
-        "#{headword}?",
-        headword
-      ]
-      |> Enum.reject(&(&1 == "" or (is_nil(marker) and String.contains?(&1, "nil"))))
-
-    Enum.find_value(prefixes, text, fn prefix ->
-      if String.starts_with?(text, prefix) do
+  #
+  # The span to drop is whatever `headword_prefix/1` matched, never a prefix
+  # rebuilt from the `headword` column. Rebuilding got two things wrong: it knew
+  # only the *first* headword, so `BABE or BABY, n.` kept "or BABY, n."; and its
+  # bare-headword fallback fired on the six letter essays, where the letter is
+  # the first word of a sentence rather than a printed headword, so `I is the
+  # first letter…` lost its "I".
+  defp strip_headword(text) do
+    case headword_prefix(text) do
+      {:ok, prefix} ->
         text
         |> binary_part(byte_size(prefix), byte_size(text) - byte_size(prefix))
         |> String.trim()
-      end
-    end)
+
+      :no ->
+        text
+    end
   end
 
   defp inline_text({"i", _, children}), do: "*" <> Enum.map_join(children, &inline_text/1) <> "*"
