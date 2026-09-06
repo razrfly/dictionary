@@ -7,8 +7,19 @@ defmodule DevilsDictionary.Lexicon do
 
   import Ecto.Query, warn: false
 
-  alias DevilsDictionary.Lexicon.{Lexeme, Scope, ScopeLexeme, Sense}
+  alias DevilsDictionary.Lexicon.{Browse, Lexeme, Scope, ScopeLexeme, Sense}
   alias DevilsDictionary.Repo
+
+  @doc """
+  Trigram search over the index. See `DevilsDictionary.Lexicon.Browse.search/2`.
+  """
+  defdelegate search(query, opts \\ []), to: Browse
+
+  @doc """
+  One page of a scope's lexemes with the coverage its badges need. See
+  `DevilsDictionary.Lexicon.Browse.browse/2`.
+  """
+  defdelegate browse(scope_slug, opts \\ []), to: Browse
 
   # ── lexemes ──────────────────────────────────────────────────────────────
 

@@ -54,6 +54,7 @@ defmodule Mix.Tasks.Dd.Health do
 
   defp report(scope, opts) do
     sources_section()
+    records_section(scope)
     coverage_section(scope)
     resolution_section()
     links_section(scope)
@@ -71,6 +72,57 @@ defmodule Mix.Tasks.Dd.Health do
 
       row(s.slug, "#{state} · #{s.snapshot || "no snapshot pin"}", 14)
     end
+  end
+
+  # The record ledger. `/admin/imports` renders `Health.records/1` too, so the
+  # page and the task cannot drift.
+  defp records_section(scope) do
+    say("\nRECORDS")
+    say("  " <> header())
+
+    for r <- Health.records(scope.slug) do
+      say(
+        "  " <>
+          String.pad_trailing(r.slug, 12) <>
+          String.pad_trailing(to_string(r.access), 8) <>
+          String.pad_leading(fmt(r.records), 10) <>
+          String.pad_leading(fmt(r.absent), 9) <>
+          String.pad_leading(needs_fetch(r), 12) <>
+          String.pad_leading(fmt(r.needs_materialization), 11) <>
+          String.pad_leading(fmt(r.changed), 9) <>
+          "   " <> last_run(r.last_run)
+      )
+    end
+
+    say("  needs fetch is over " <> populations())
+  end
+
+  defp header do
+    String.pad_trailing("source", 12) <>
+      String.pad_trailing("access", 8) <>
+      String.pad_leading("records", 10) <>
+      String.pad_leading("absent", 9) <>
+      String.pad_leading("needs fetch", 12) <>
+      String.pad_leading("needs mat.", 11) <>
+      String.pad_leading("changed", 9) <>
+      "   last run"
+  end
+
+  # A dump has nothing to fetch: what is in the file is in the file. An em dash
+  # says "the question does not apply", where a 0 would say "nothing to do".
+  defp needs_fetch(%{needs_fetch: nil}), do: "—"
+  defp needs_fetch(%{needs_fetch: n}), do: fmt(n)
+
+  defp last_run(nil), do: "never"
+
+  defp last_run(%{task: task, status: status, at: at}) do
+    "#{task} #{status} #{at |> DateTime.to_naive() |> NaiveDateTime.to_string() |> binary_part(0, 16)}"
+  end
+
+  defp populations do
+    Health.records()
+    |> Enum.reject(&is_nil(&1.needs_fetch_of))
+    |> Enum.map_join(", ", &"#{&1.slug}: #{&1.needs_fetch_of}")
   end
 
   defp coverage_section(scope) do
@@ -151,7 +203,12 @@ defmodule Mix.Tasks.Dd.Health do
     row("attached to a word", "#{ratio(a8.attached, a8.entries)}", 22)
     row("already in the index", "#{ratio(a8.known_to_the_index, a8.entries)}", 22)
     row("words he introduced", fmt(a8.introduced_by_bierce), 22)
-    row("in #{scope.slug}", fmt(a8.in_scope), 22)
+    # Two different questions, and they give two different numbers: 64 entries
+    # about a scope word, 66 scope words he attests. The extra two are the
+    # alternate headwords, which get a lexeme and an `alt_of` but no entry of
+    # their own. The browse badges count words, so both are printed here.
+    row("entries in #{scope.slug}", fmt(a8.in_scope), 22)
+    row("words he attests", fmt(Health.coverage(scope.slug, "bierce").covered), 22)
   end
 
   defp parity_section(opts) do

@@ -164,6 +164,19 @@ defmodule DevilsDictionary.Health do
   defdelegate variants(), to: Coverage
 
   @doc """
+  The per-source record ledger — fetched, absent, needs-materialization,
+  needs-fetch, changed, last run — which `mix dd.health` prints and
+  `/admin/imports` renders from the same call.
+  """
+  defdelegate records(scope_slug \\ "animals"), to: Coverage
+
+  @doc """
+  Everything one source page shows: the row, its pin, its ledger, what it
+  materialized, its coverage of a scope, its recent runs and a few real samples.
+  """
+  defdelegate source_detail(slug, opts \\ []), to: Coverage
+
+  @doc """
   **M4** — what `trim/1` saved on the records actually stored, read back from
   the `import_runs` row the scoped absorb wrote.
 

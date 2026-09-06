@@ -12,11 +12,12 @@ defmodule DevilsDictionary.Health.Coverage do
 
   import Ecto.Query
 
+  alias DevilsDictionary.Encyclopedia.{Concept, ConceptLink, ConceptRelation}
   alias DevilsDictionary.Lexicon
-  alias DevilsDictionary.Lexicon.{Entry, Lexeme, LexicalRelation}
+  alias DevilsDictionary.Lexicon.{Entry, Lexeme, LexicalRelation, ScopeLexeme, Sense}
   alias DevilsDictionary.Repo
   alias DevilsDictionary.Sources
-  alias DevilsDictionary.Sources.{Catalog, ImportRun, Source}
+  alias DevilsDictionary.Sources.{Catalog, ImportRun, Source, SourceRecord}
 
   @doc """
   **A1** — every source in the catalog has a row and a finished absorb.
@@ -85,6 +86,204 @@ defmodule DevilsDictionary.Health.Coverage do
 
   defp snapshot_pin(%Source{config: config}) do
     Enum.find_value(@pins, fn key -> config[key] && "#{key}=#{config[key]}" end)
+  end
+
+  @doc """
+  The record ledger the import dashboard shows: per source, how many
+  `source_records` we hold, how many of those are "the source had nothing"
+  markers, how many still need materializing, and how many changed on a refetch.
+
+  `mix dd.health` and `/admin/imports` both read this one function, so the two
+  can never disagree — which is what the task's moduledoc has promised since S3.
+
+  `needs_fetch` is `nil` for a dump or a book, and deliberately so: everything
+  in the file is either fetched or not in it, and a zero there would read as an
+  answer rather than as "the question does not apply". For the two API sources it
+  is #69 §5's "needs fetch" terminal state — no record, and no absent marker
+  still in date — over the population that is actually wanted, which
+  `needs_fetch_of` names:
+
+    * **Wikipedia**: the scope's lemmas, one title probe each.
+    * **Wikidata**: the concepts reached by an **asserted** link (`auto` or
+      `confirmed`), the same population A10 and L3 report on. Counting every
+      concept instead would read 27,742, but ~28,000 of the concepts are
+      disambiguation candidates the S3 audit already noted will mostly never be
+      asserted; of the ones that are, four are unfetched. A dashboard column
+      that says 27,742 when the outstanding work is four is a worse number.
+  """
+  def records(scope_slug \\ "animals") do
+    ledger = record_counts()
+    runs = last_runs()
+
+    for source <- Sources.list_sources() do
+      counts = Map.get(ledger, source.id, %{records: 0, absent: 0, needs_mat: 0, changed: 0})
+
+      %{
+        slug: source.slug,
+        name: source.name,
+        access: source.access,
+        tier: source.tier,
+        records: counts.records,
+        absent: counts.absent,
+        needs_materialization: counts.needs_mat,
+        changed: counts.changed,
+        needs_fetch: needs_fetch(source, scope_slug),
+        needs_fetch_of: needs_fetch_of(source),
+        last_run: Map.get(runs, source.id)
+      }
+    end
+  end
+
+  # One grouped aggregate over all 271k records rather than four counts per
+  # source. Measured at 40 ms, which is why the dashboard needs no cache.
+  defp record_counts do
+    from(r in SourceRecord,
+      group_by: r.source_id,
+      select: {
+        r.source_id,
+        %{
+          records: count(r.id),
+          absent: filter(count(r.id), not is_nil(r.absent_until)),
+          needs_mat:
+            filter(
+              count(r.id),
+              is_nil(r.materialized_at) or r.materialized_at < r.fetched_at
+            ),
+          changed: filter(count(r.id), not is_nil(r.changed_at))
+        }
+      }
+    )
+    |> Repo.all()
+    |> Map.new()
+  end
+
+  defp last_runs do
+    from(r in ImportRun,
+      distinct: r.source_id,
+      order_by: [asc: r.source_id, desc: r.started_at],
+      select: {r.source_id, %{task: r.task, status: r.status, at: r.started_at, id: r.id}}
+    )
+    |> Repo.all()
+    |> Map.new()
+  end
+
+  # Wikipedia's targets are the scope's lemmas; Wikidata's are the QIDs a link or
+  # a relation already referenced. The left join is on the records that *answer*
+  # the question — any real record, or an absent marker that has not expired —
+  # so what is left is #69 §5's "needs fetch" terminal state exactly.
+  defp needs_fetch(%Source{slug: "wikipedia", id: id}, scope_slug) do
+    now = DateTime.utc_now()
+
+    case Lexicon.get_scope_by_slug(scope_slug) do
+      nil ->
+        nil
+
+      scope ->
+        Repo.one(
+          from l in Lexeme,
+            join: sl in ScopeLexeme,
+            on: sl.lexeme_id == l.id and sl.scope_id == ^scope.id,
+            left_join: r in SourceRecord,
+            on:
+              r.source_id == ^id and r.external_id == l.lemma and
+                (is_nil(r.absent_until) or r.absent_until > ^now),
+            where: is_nil(r.id),
+            select: count(fragment("DISTINCT ?", l.lemma))
+        )
+    end
+  end
+
+  defp needs_fetch(%Source{slug: "wikidata", id: id}, _scope_slug) do
+    now = DateTime.utc_now()
+
+    Repo.one(
+      from c in Concept,
+        join: cl in ConceptLink,
+        on: cl.concept_id == c.id and cl.status in [:auto, :confirmed],
+        left_join: r in SourceRecord,
+        on:
+          r.source_id == ^id and r.external_id == c.qid and
+            (is_nil(r.absent_until) or r.absent_until > ^now),
+        where: is_nil(r.id),
+        select: count(c.id, :distinct)
+    )
+  end
+
+  defp needs_fetch(%Source{}, _scope_slug), do: nil
+
+  defp needs_fetch_of(%Source{slug: "wikipedia"}), do: "scope lemmas"
+  defp needs_fetch_of(%Source{slug: "wikidata"}), do: "asserted concepts"
+  defp needs_fetch_of(%Source{}), do: nil
+
+  @doc """
+  Everything `/sources/:slug` shows about one source: the row itself, what pins
+  it in time, its record ledger, what it has materialized, how much of a scope it
+  attests, its recent runs, and a few real rows to look at.
+
+  The coverage figure is `Health.coverage/2`'s, unchanged, so the source page and
+  the scorecard's A5 cannot disagree.
+  """
+  def source_detail(slug, opts \\ []) do
+    source = Sources.get_source_by_slug!(slug)
+    scope_slug = Keyword.get(opts, :scope, "animals")
+    sample_limit = Keyword.get(opts, :samples, 5)
+
+    %{
+      source: source,
+      snapshot: snapshot_pin(source),
+      ledger: Enum.find(records(scope_slug), &(&1.slug == slug)),
+      materialized: materialized_counts(source),
+      coverage: scope_slug && DevilsDictionary.Health.coverage(scope_slug, slug),
+      runs: recent_runs(source.id),
+      senses: sample_senses(source, sample_limit),
+      entries: sample_entries(source, sample_limit)
+    }
+  end
+
+  defp materialized_counts(%Source{id: id}) do
+    %{
+      senses: Repo.aggregate(from(x in Sense, where: x.source_id == ^id), :count),
+      entries: Repo.aggregate(from(e in Entry, where: e.source_id == ^id), :count),
+      relations: Repo.aggregate(from(r in LexicalRelation, where: r.source_id == ^id), :count),
+      concept_relations:
+        Repo.aggregate(from(r in ConceptRelation, where: r.source_id == ^id), :count),
+      concept_links: Repo.aggregate(from(cl in ConceptLink, where: cl.source_id == ^id), :count),
+      lexemes_introduced:
+        Repo.aggregate(from(l in Lexeme, where: l.origin_source_id == ^id), :count)
+    }
+  end
+
+  defp recent_runs(source_id, limit \\ 10) do
+    Repo.all(
+      from r in ImportRun,
+        where: r.source_id == ^source_id,
+        order_by: [desc: r.started_at],
+        limit: ^limit
+    )
+  end
+
+  # Real rows, not fixtures: a source page that showed invented samples would be
+  # the one page in the app that lies about what was absorbed.
+  defp sample_senses(%Source{id: id}, limit) do
+    Repo.all(
+      from x in Sense,
+        join: l in Lexeme,
+        on: l.id == x.lexeme_id,
+        where: x.source_id == ^id and not is_nil(x.gloss),
+        order_by: [asc: x.id],
+        limit: ^limit,
+        select: %{lemma: l.lemma, pos: l.pos, slug: l.slug, gloss: x.gloss, url: x.url}
+    )
+  end
+
+  defp sample_entries(%Source{id: id}, limit) do
+    Repo.all(
+      from e in Entry,
+        where: e.source_id == ^id,
+        order_by: [asc: e.id],
+        limit: ^limit,
+        select: %{headword: e.headword, pos: e.pos, body: e.body, url: e.url, year: e.year}
+    )
   end
 
   @doc """
