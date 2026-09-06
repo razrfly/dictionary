@@ -26,9 +26,10 @@ defmodule DevilsDictionary.Health do
 
   A scope lexeme counts as covered when the source attests it (`source_ids`),
   which for a dump source means a record was written for its lemma. The misses
-  are bucketed, because for Animals they are not random: WordNet contributes
-  thousands of Linnaean binomials, and Wiktionary files those under Translingual
-  rather than English, so the English index can never hold them.
+  are bucketed, because for Animals they are not random: WordNet and Wikidata
+  contribute thousands of scientific names — binomials, and genus, family and
+  order names — and Wiktionary files those under Translingual rather than
+  English, so the English index can never hold them (A5 v2, #69 v12).
   """
   def coverage(scope_slug, source_slug) do
     scope = Lexicon.get_scope_by_slug!(scope_slug)
@@ -50,6 +51,9 @@ defmodule DevilsDictionary.Health do
       |> select([_sl, l], l.lemma)
       |> Repo.all()
 
+    # One query for the whole call, not one per miss.
+    scientific_names = scientific_names()
+
     %{
       scope: scope_slug,
       source: source_slug,
@@ -57,20 +61,33 @@ defmodule DevilsDictionary.Health do
       covered: covered,
       pct: pct(covered, total),
       missing: length(misses),
-      missing_by_kind: Enum.frequencies_by(misses, &lemma_kind/1),
+      missing_by_kind: Enum.frequencies_by(misses, &lemma_kind(&1, scientific_names)),
       sample: misses |> Enum.take(20)
     }
   end
 
-  # A binomial is two capitalised-genus-plus-lowercase-species words: the
-  # Linnaean convention, and the shape Wiktionary keeps out of its English
-  # section.
-  defp lemma_kind(lemma) do
+  # A scientific name is what Wiktionary files as Translingual rather than
+  # English: a Linnaean binomial by shape (capitalised genus, lowercase
+  # species), or a name at any rank that a concept carries as
+  # `taxon.scientific_name` — genus, family and order names such as
+  # Archilochus, Paguridae and Therapsida (A5 v2, #69 v12).
+  defp lemma_kind(lemma, scientific_names) do
     cond do
-      Regex.match?(~r/^[A-Z][a-z]+ [a-z]+$/, lemma) -> "binomial"
+      Regex.match?(~r/^[A-Z][a-z]+ [a-z]+$/, lemma) -> "scientific_name"
+      MapSet.member?(scientific_names, lemma) -> "scientific_name"
       String.contains?(lemma, " ") -> "multiword"
       true -> "single_word"
     end
+  end
+
+  defp scientific_names do
+    from(c in Concept,
+      where: not is_nil(fragment("?->>'scientific_name'", c.taxon)),
+      distinct: true,
+      select: fragment("?->>'scientific_name'", c.taxon)
+    )
+    |> Repo.all()
+    |> MapSet.new()
   end
 
   @doc """

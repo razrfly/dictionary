@@ -66,7 +66,7 @@ Patterns are borrowed from [Cinegraph](https://github.com/razrfly/cinegraph): ra
 | U0 Oatmeal theme ported by hand into `DevilsDictionaryWeb.Kit` (17 components), daisyUI removed, `/kit` dev-only, no kit source in git | ✅ 2026-09-06 |
 | S4b read layer (`Lexicon.browse/search`, `Encyclopedia.taxon_*`, `Health.records/source_detail`) and four developer surfaces: `/s/:slug`, `/sources/:slug`, `/admin/imports`, `/health` (U5 ✅ 5/5 · X2 ✅ p95 72 ms · U4 ✅ at 375 px — **26 / 26 graded rows pass**, 322 tests); Commons image URLs and nine Bierce bodies fixed | ✅ 2026-09-06 |
 | S4 audited in Chrome (U0 **A**, S4b **B+**): every page, filter, link-out and theme verified; two click-level defects (has/missing chips dead, `/health` abandons its own mount) and A5 v2 → **S4c** in #70 | ✅ 2026-09-06 |
-| S4c fixes from the audit (chips, health mount, Wikidata strip, `page=false`, A5 v2 at a 90 % bar) | ⬜ |
+| S4c fixes from the audit: chips carry `phx-value-slug`; the scorecard is `assign_async` + a ten-minute Cachex cache with a *recompute* button (health page dead render 3 ms, websocket kept); Wikidata shown as *linked · 16,014* from `concept_links` with its dead chips gone; no more `page=false`; **A5 v2 93.0 %** excl. 4,004 scientific names at a 90 % bar — all verified in Chrome, 322 tests | ✅ 2026-09-06 |
 | U1–U3 the word page and the hop, home/search, provenance, fake-data mode (#71) — the rows R3 X1 U1 U2 U3 U6 | ⬜ |
 | S5 extensibility proof (Johnson 1755, a toy scope) | ⬜ |
 

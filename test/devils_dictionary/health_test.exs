@@ -42,15 +42,25 @@ defmodule DevilsDictionary.HealthTest do
       scoped!(ctx.animals, lexeme!("dusky-footed wood rat", [wordnet]))
       scoped!(ctx.animals, lexeme!("soupfin", [wordnet]))
 
+      # A genus is a scientific name too (A5 v2): the shape says nothing, the
+      # concept's `taxon.scientific_name` does.
+      scoped!(ctx.animals, lexeme!("Cimex", [wordnet]))
+
+      Repo.insert!(%DevilsDictionary.Encyclopedia.Concept{
+        qid: "Q1",
+        label: "Cimex",
+        taxon: %{"scientific_name" => "Cimex", "rank" => "genus"}
+      })
+
       result = Health.coverage("animals", "wiktionary")
 
-      assert result.total == 5
+      assert result.total == 6
       assert result.covered == 2
-      assert result.pct == 40.0
-      assert result.missing == 3
+      assert result.pct == 33.3
+      assert result.missing == 4
 
       assert result.missing_by_kind == %{
-               "binomial" => 1,
+               "scientific_name" => 2,
                "multiword" => 1,
                "single_word" => 1
              }

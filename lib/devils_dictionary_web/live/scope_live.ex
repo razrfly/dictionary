@@ -28,12 +28,14 @@ defmodule DevilsDictionaryWeb.ScopeLive do
   @impl true
   def mount(%{"slug" => slug}, _session, socket) do
     scope = Lexicon.get_scope_by_slug!(slug)
+    sources = Enum.sort_by(Sources.list_sources(), &tier_order(&1.tier))
 
     {:ok,
      assign(socket,
        page_title: scope.name || slug,
        scope: scope,
-       sources: Enum.sort_by(Sources.list_sources(), &tier_order(&1.tier)),
+       sources: sources,
+       attesting: Enum.reject(sources, &(&1.kind == :knowledge_graph)),
        coverage: nil
      )}
   rescue
@@ -60,13 +62,18 @@ defmodule DevilsDictionaryWeb.ScopeLive do
     {:noreply, patch(socket, %{q: params["q"], sort: params["sort"], page: nil})}
   end
 
+  # The chip's value travels as `phx-value-slug`, never `phx-value-value`:
+  # LiveView's JS reads the `phx-value-*` attributes and then sets
+  # `meta.value = el.value`, so on a <button> a key called `value` arrives as
+  # the button's own empty value and the chip does nothing (S4 audit, #70 S4c).
+  # LiveViewTest's `render_click/1` cannot see this — it skips the JS.
   @impl true
-  def handle_event("toggle", %{"kind" => kind, "value" => value}, socket) do
+  def handle_event("toggle", %{"kind" => kind, "slug" => slug}, socket) do
     key = String.to_existing_atom(kind)
     current = socket.assigns.filters[key] || []
 
     next =
-      if value in current, do: List.delete(current, value), else: Enum.sort([value | current])
+      if slug in current, do: List.delete(current, slug), else: Enum.sort([slug | current])
 
     {:noreply, patch(socket, %{kind => Enum.join(next, ","), page: nil})}
   end
@@ -87,10 +94,18 @@ defmodule DevilsDictionaryWeb.ScopeLive do
       socket.assigns.filters
       |> to_params()
       |> Map.merge(Map.new(changes, fn {k, v} -> {to_string(k), v} end))
-      |> Enum.reject(fn {_k, v} -> v in [nil, "", []] end)
-      |> Map.new()
+      |> compact()
 
     push_patch(socket, to: ~p"/s/#{socket.assigns.scope.slug}?#{params}")
+  end
+
+  # Only what a reader would type: no empty keys, no `page=1`, no `false`.
+  defp compact(params) do
+    params |> Enum.reject(fn {_k, v} -> v in [nil, false, "", []] end) |> Map.new()
+  end
+
+  defp page_params(filters, page) do
+    filters |> Keyword.put(:page, page) |> to_params() |> compact()
   end
 
   defp to_params(filters) do
@@ -101,7 +116,7 @@ defmodule DevilsDictionaryWeb.ScopeLive do
       "state" => filters[:state] && to_string(filters[:state]),
       "sort" => to_string(filters[:sort]),
       "taxon" => filters[:taxon],
-      "page" => filters[:page] > 1 && to_string(filters[:page])
+      "page" => if(filters[:page] > 1, do: to_string(filters[:page]), else: nil)
     }
   end
 
@@ -172,11 +187,28 @@ defmodule DevilsDictionaryWeb.ScopeLive do
   end
 
   # The figure the badges must agree with, read from the same function the
-  # scorecard grades A5 on.
+  # scorecard grades A5 on — plus the graph's own figure, which is not
+  # attestation: Wikidata links words to things (`concept_links`), it never
+  # enters `source_ids`, so its badge and its count mean "linked".
   defp coverage(scope_slug) do
-    for source <- Sources.list_sources(),
-        into: %{},
-        do: {source.slug, Health.coverage(scope_slug, source.slug).covered}
+    attested =
+      for source <- Sources.list_sources(),
+          source.kind != :knowledge_graph,
+          into: %{},
+          do: {source.slug, Health.coverage(scope_slug, source.slug).covered}
+
+    %{attested: attested, linked: Lexicon.Browse.linked_count(scope_slug)}
+  end
+
+  defp badge_on?(%{kind: :knowledge_graph}, row), do: row.concept != nil
+  defp badge_on?(source, row), do: source.id in row.source_ids
+
+  defp badge_title(%{kind: :knowledge_graph} = source, row) do
+    if badge_on?(source, row), do: "linked", else: "unlinked"
+  end
+
+  defp badge_title(source, row) do
+    if badge_on?(source, row), do: "attests", else: "silent"
   end
 
   @impl true
@@ -187,7 +219,7 @@ defmodule DevilsDictionaryWeb.ScopeLive do
         id="scope"
         eyebrow="Scope"
         headline={@scope.name || @scope.slug}
-        subheadline="A scope is a row and a filter. Each word carries one glyph per source that attests it — the same lexemes.source_ids array mix dd.health counts, so the badges and the scorecard cannot disagree."
+        subheadline="A scope is a row and a filter. Each word carries one glyph per source that attests it — the same lexemes.source_ids array mix dd.health counts, so the badges and the scorecard cannot disagree. Wikidata's glyph means linked: it attests things, not words."
       >
         <div class="flex flex-col gap-8">
           <.form for={%{}} phx-change="filter" phx-submit="filter" id="scope-filters">
@@ -218,11 +250,11 @@ defmodule DevilsDictionaryWeb.ScopeLive do
             <div class="flex flex-wrap items-center gap-2">
               <span class="text-sm/7 text-mist-700 dark:text-mist-400">has</span>
               <.chip
-                :for={source <- @sources}
+                :for={source <- @attesting}
                 id={"filter-has-#{source.slug}"}
                 on={source.slug in (@filters[:has] || [])}
                 click="toggle"
-                values={[kind: "has", value: source.slug]}
+                values={[kind: "has", slug: source.slug]}
               >
                 <span class={tier_class(source.tier)}>{tier_glyph(source.tier)}</span>
                 {source.slug}
@@ -232,11 +264,11 @@ defmodule DevilsDictionaryWeb.ScopeLive do
             <div class="flex flex-wrap items-center gap-2">
               <span class="text-sm/7 text-mist-700 dark:text-mist-400">missing</span>
               <.chip
-                :for={source <- @sources}
+                :for={source <- @attesting}
                 id={"filter-missing-#{source.slug}"}
                 on={source.slug in (@filters[:missing] || [])}
                 click="toggle"
-                values={[kind: "missing", value: source.slug]}
+                values={[kind: "missing", slug: source.slug]}
               >
                 {source.slug}
               </.chip>
@@ -281,9 +313,13 @@ defmodule DevilsDictionaryWeb.ScopeLive do
                 class="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm/7 text-mist-500"
               >
                 <span>attested by</span>
-                <span :for={source <- @sources} class="whitespace-nowrap">
+                <span :for={source <- @attesting} class="whitespace-nowrap">
                   <span class={tier_class(source.tier)}>{tier_glyph(source.tier)}</span>
-                  {source.slug} {number(coverage[source.slug])}
+                  {source.slug} {number(coverage.attested[source.slug])}
+                </span>
+                <span :for={source <- @sources -- @attesting} class="whitespace-nowrap">
+                  · linked to <span class={tier_class(source.tier)}>{tier_glyph(source.tier)}</span>
+                  {source.slug} <span id="scope-linked">{number(coverage.linked)}</span>
                 </span>
               </div>
             </.async_result>
@@ -402,12 +438,10 @@ defmodule DevilsDictionaryWeb.ScopeLive do
                   id={"badge-#{row.lexeme_id}-#{source.slug}"}
                   class={[
                     "text-sm/7",
-                    source.id in row.source_ids && tier_class(source.tier),
-                    source.id not in row.source_ids && "opacity-20 grayscale"
+                    badge_on?(source, row) && tier_class(source.tier),
+                    !badge_on?(source, row) && "opacity-20 grayscale"
                   ]}
-                  title={
-                    "#{source.slug}: #{if source.id in row.source_ids, do: "attests", else: "silent"}"
-                  }
+                  title={"#{source.slug}: #{badge_title(source, row)}"}
                 >
                   {tier_glyph(source.tier)}
                 </span>
@@ -421,9 +455,7 @@ defmodule DevilsDictionaryWeb.ScopeLive do
             <nav :if={@page.pages > 1} class="mt-6 flex items-center justify-between gap-4">
               <.button_link
                 :if={@page.page > 1}
-                patch={
-                  ~p"/s/#{@scope.slug}?#{to_params(Keyword.put(@filters, :page, @page.page - 1))}"
-                }
+                patch={~p"/s/#{@scope.slug}?#{page_params(@filters, @page.page - 1)}"}
                 variant="soft"
                 id="page-prev"
               >
@@ -434,9 +466,7 @@ defmodule DevilsDictionaryWeb.ScopeLive do
               </span>
               <.button_link
                 :if={@page.page < @page.pages}
-                patch={
-                  ~p"/s/#{@scope.slug}?#{to_params(Keyword.put(@filters, :page, @page.page + 1))}"
-                }
+                patch={~p"/s/#{@scope.slug}?#{page_params(@filters, @page.page + 1)}"}
                 variant="soft"
                 id="page-next"
               >
@@ -491,8 +521,7 @@ defmodule DevilsDictionaryWeb.ScopeLive do
     |> Keyword.put(:taxon, qid)
     |> Keyword.put(:page, 1)
     |> to_params()
-    |> Enum.reject(fn {_k, v} -> v in [nil, "", []] end)
-    |> Map.new()
+    |> compact()
   end
 
   defp filter_summary(filters) do

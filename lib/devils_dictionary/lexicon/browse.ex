@@ -201,6 +201,31 @@ defmodule DevilsDictionary.Lexicon.Browse do
 
   # The word's thing, for the label and the image. Asserted links only, best
   # confidence first — the same population A10 and L3 report on.
+  @doc """
+  How many of a scope's words carry the concept the rows show — the same
+  `concept_links` rule `with_concepts/1` applies (status auto or confirmed,
+  confidence ≥ 0.7), so the figure and the rows cannot disagree.
+
+  Wikidata attests things, not words: it never appears in `source_ids`, so
+  "attested by" is always zero for it. This is its figure on the browse page.
+  """
+  def linked_count(scope_slug) do
+    scope = Lexicon.get_scope_by_slug!(scope_slug)
+
+    from(sl in ScopeLexeme,
+      where: sl.scope_id == ^scope.id and sl.lexeme_id in subquery(linked_lexeme_ids())
+    )
+    |> Repo.aggregate(:count)
+  end
+
+  defp linked_lexeme_ids do
+    from(cl in ConceptLink,
+      where: cl.status in [:auto, :confirmed] and cl.confidence >= 0.7,
+      select: cl.lexeme_id,
+      distinct: true
+    )
+  end
+
   defp with_concepts([]), do: []
 
   defp with_concepts(rows) do

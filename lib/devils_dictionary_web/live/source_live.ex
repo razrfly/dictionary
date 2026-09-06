@@ -223,8 +223,9 @@ defmodule DevilsDictionaryWeb.SourceLive do
     ]
   end
 
-  defp miss_note("binomial"),
-    do: "a Linnaean name. Wiktionary files these as Translingual; Wikidata's P225 has them"
+  defp miss_note("scientific_name"),
+    do:
+      "a scientific name, any rank. Wiktionary files these as Translingual; Wikidata's P225 has them"
 
   defp miss_note("multiword"), do: "a phrase with no entry of its own"
   defp miss_note("single_word"), do: "a word this source simply does not have"

@@ -45,3 +45,6 @@ config :phoenix,
 # The dev-only routes are routed in test too, so /kit and the dashboard can be
 # tested. Production is gated at compile time in the router and has neither.
 config :devils_dictionary, dev_routes: true
+
+# The health page's scorecard cache would leak one test's rows into the next.
+config :devils_dictionary, cache_scorecard: false

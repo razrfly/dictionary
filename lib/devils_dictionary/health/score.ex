@@ -107,15 +107,17 @@ defmodule DevilsDictionary.Health.Score do
         ">= 7,500 and 0 unreasoned",
         a4.total >= a4.wants and a4.without_reason == 0
       ),
-      # Amended in S1 (#69 v7): Wiktionary files Linnaean binomials under
-      # Translingual, so the English index can never hold them. They are
-      # excluded from the denominator and still reported.
+      # Amended in S1 (#69 v7) and in the S4 audit (#69 v12): Wiktionary files
+      # scientific names — binomials, and genus, family and order names alike —
+      # under Translingual, so the English index can never hold them. They are
+      # excluded from the denominator and still reported; the bar rose from
+      # 85 % to 90 % with the wider exclusion.
       row(
         "A5",
         "Wiktionary coverage of scope",
-        "#{a5.pct}% raw · #{amended_a5(a5)}% excl. #{fmt(binomials(a5))} binomials",
-        ">= 85% of the remainder",
-        amended_a5(a5) >= 85.0
+        "#{a5.pct}% raw · #{amended_a5(a5)}% excl. #{fmt(scientific_names(a5))} scientific names",
+        ">= 90% of the remainder",
+        amended_a5(a5) >= 90.0
       ),
       row(
         "A6",
@@ -163,10 +165,10 @@ defmodule DevilsDictionary.Health.Score do
     a4.by_reason |> Enum.sort() |> Enum.map_join(" · ", fn {r, n} -> "#{r} #{fmt(n)}" end)
   end
 
-  defp binomials(a5), do: Map.get(a5.missing_by_kind, "binomial", 0)
+  defp scientific_names(a5), do: Map.get(a5.missing_by_kind, "scientific_name", 0)
 
   defp amended_a5(a5) do
-    denominator = a5.total - binomials(a5)
+    denominator = a5.total - scientific_names(a5)
     if denominator <= 0, do: 0.0, else: Float.round(a5.covered * 100 / denominator, 1)
   end
 

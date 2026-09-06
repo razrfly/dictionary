@@ -19,19 +19,56 @@ defmodule DevilsDictionaryWeb.HealthLive do
   @impl true
   def mount(_params, _session, socket) do
     scope = "animals"
-    rows = Score.rows(scope: scope, skip_parity: true)
 
     {:ok,
      socket
      |> assign(
        page_title: "Health",
        scope_slug: scope,
-       rows: rows,
-       summary: Score.summary(rows),
        parity: %{},
        sources: Sources.list_sources()
      )
+     |> load_scorecard()
      |> assign_async(:detail, fn -> {:ok, %{detail: detail(scope)}} end)}
+  end
+
+  # The scorecard is seconds of queries (4.5 s on Animals), which is longer
+  # than the client's long-poll fallback: computed in `mount/3` it ran on the
+  # dead render, again on the connected mount, and again on every reconnect,
+  # and the websocket was abandoned mid-mount every time (S4 audit, #70 S4c).
+  # So it is async like the detail below it, and cached for ten minutes —
+  # `rescore` drops the cache after an absorb. Rule: nothing slower than the
+  # long-poll fallback runs in `mount/3`.
+  defp load_scorecard(socket) do
+    scope = socket.assigns.scope_slug
+
+    assign_async(socket, :scorecard, fn ->
+      rows = cached_rows(scope)
+      {:ok, %{scorecard: %{rows: rows, summary: Score.summary(rows)}}}
+    end)
+  end
+
+  @scorecard_ttl :timer.minutes(10)
+
+  defp cached_rows(scope) do
+    if Application.get_env(:devils_dictionary, :cache_scorecard, true) do
+      {_status, rows} =
+        Cachex.fetch(:health, scorecard_key(scope), fn ->
+          {:commit, Score.rows(scope: scope, skip_parity: true), expire: @scorecard_ttl}
+        end)
+
+      rows
+    else
+      Score.rows(scope: scope, skip_parity: true)
+    end
+  end
+
+  defp scorecard_key(scope), do: {:scorecard, scope}
+
+  @impl true
+  def handle_event("rescore", _params, socket) do
+    Cachex.del(:health, scorecard_key(socket.assigns.scope_slug))
+    {:noreply, load_scorecard(socket)}
   end
 
   @impl true
@@ -80,34 +117,54 @@ defmodule DevilsDictionaryWeb.HealthLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash}>
-      <.section
-        id="scorecard"
-        eyebrow="Scorecard"
-        headline={"#{@summary.passed} / #{@summary.graded} graded rows pass"}
-        subheadline={"#{@summary.reported} reported, #{@summary.pending} pending. This is Health.Score.rows/1 — the same call mix dd.score prints, on scope #{@scope_slug}."}
-      >
-        <div>
-          <.table id="scorecard-rows" rows={@rows}>
-            <:col :let={row} label="">
-              <span id={"score-row-#{row.id}"} class={status_class(row.status)}>
-                {status_glyph(row.status)}
-              </span>
-            </:col>
-            <:col :let={row} label="id">
-              <span class="font-mono text-xs/6 font-semibold">{row.id}</span>
-            </:col>
-            <:col :let={row} label="check">
-              <span class="text-mist-950 dark:text-white">{row.check}</span>
-            </:col>
-            <:col :let={row} label="actual">{row.actual}</:col>
-            <:col :let={row} label="wants">{row.wants}</:col>
-            <:col :let={row} label="">
-              <span :if={row.session} class="font-mono text-xs/6 text-mist-400">{row.session}</span>
-              <span :if={row.detail} class="text-xs/6 text-mist-500">{row.detail}</span>
-            </:col>
-          </.table>
-        </div>
-      </.section>
+      <.async_result :let={scorecard} assign={@scorecard}>
+        <:loading>
+          <.section
+            id="scorecard"
+            eyebrow="Scorecard"
+            headline="Computing the scorecard…"
+            subheadline={"Health.Score.rows/1 — the same call mix dd.score prints, on scope #{@scope_slug}. A few seconds the first time; cached for ten minutes after that."}
+          >
+            <p id="scorecard-loading" class="text-sm/7 text-mist-500">Reading the graph…</p>
+          </.section>
+        </:loading>
+        <:failed :let={_reason}>
+          <.section id="scorecard" eyebrow="Scorecard" headline="The scorecard did not compute">
+            <.button phx-click="rescore" variant="soft">try again</.button>
+          </.section>
+        </:failed>
+        <.section
+          id="scorecard"
+          eyebrow="Scorecard"
+          headline={"#{scorecard.summary.passed} / #{scorecard.summary.graded} graded rows pass"}
+          subheadline={"#{scorecard.summary.reported} reported, #{scorecard.summary.pending} pending. This is Health.Score.rows/1 — the same call mix dd.score prints, on scope #{@scope_slug}; cached for ten minutes."}
+        >
+          <div>
+            <div class="mb-4 flex justify-end">
+              <.button id="rescore" phx-click="rescore" variant="soft">recompute</.button>
+            </div>
+            <.table id="scorecard-rows" rows={scorecard.rows}>
+              <:col :let={row} label="">
+                <span id={"score-row-#{row.id}"} class={status_class(row.status)}>
+                  {status_glyph(row.status)}
+                </span>
+              </:col>
+              <:col :let={row} label="id">
+                <span class="font-mono text-xs/6 font-semibold">{row.id}</span>
+              </:col>
+              <:col :let={row} label="check">
+                <span class="text-mist-950 dark:text-white">{row.check}</span>
+              </:col>
+              <:col :let={row} label="actual">{row.actual}</:col>
+              <:col :let={row} label="wants">{row.wants}</:col>
+              <:col :let={row} label="">
+                <span :if={row.session} class="font-mono text-xs/6 text-mist-400">{row.session}</span>
+                <span :if={row.detail} class="text-xs/6 text-mist-500">{row.detail}</span>
+              </:col>
+            </.table>
+          </div>
+        </.section>
+      </.async_result>
 
       <.section
         id="health-parity"

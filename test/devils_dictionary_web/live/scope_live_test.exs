@@ -71,10 +71,23 @@ defmodule DevilsDictionaryWeb.ScopeLiveTest do
       # The line is loaded asynchronously, so the words never wait for it.
       settled = render_async(live)
 
-      for slug <- ~w(wordnet wiktionary bierce wikidata wikipedia) do
+      for slug <- ~w(wordnet wiktionary bierce wikipedia) do
         covered = Health.coverage("animals", slug).covered
         assert settled =~ "#{slug} #{covered}"
       end
+
+      # Wikidata attests things, not words: its figure is the linked count,
+      # from the same rule the rows use to show a concept (S4c).
+      assert settled =~
+               ~s(id="scope-linked">#{DevilsDictionary.Lexicon.Browse.linked_count("animals")}<)
+
+      assert settled =~ "linked to"
+
+      # A chip's value must never travel as `phx-value-value`: LiveView's JS
+      # replaces it with the button's own empty value and the chip goes dead
+      # (S4 audit). LiveViewTest cannot see that, so the attribute is the guard.
+      refute settled =~ "phx-value-value"
+      assert settled =~ ~s(phx-value-slug="bierce")
     end
 
     test "a bare index row says so", ctx do
@@ -96,6 +109,9 @@ defmodule DevilsDictionaryWeb.ScopeLiveTest do
       )
 
       {:ok, _live, html} = live(ctx.conn, ~p"/s/animals")
+
+      # The graph's glyph on a row means "linked", not "attests".
+      assert html =~ ~s(title="wikidata: linked")
 
       assert html =~ "Felis catus"
       assert html =~ "https://upload.wikimedia.org/x.jpg"

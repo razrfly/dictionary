@@ -16,7 +16,8 @@ defmodule DevilsDictionaryWeb.HealthLiveTest do
   end
 
   test "the scorecard is Score.rows/1, row for row", ctx do
-    {:ok, _live, html} = live(ctx.conn, ~p"/health")
+    {:ok, live, _html} = live(ctx.conn, ~p"/health")
+    html = render_async(live)
 
     rows = Score.rows(scope: "animals", skip_parity: true)
     summary = Score.summary(rows)
@@ -30,7 +31,8 @@ defmodule DevilsDictionaryWeb.HealthLiveTest do
   end
 
   test "a pending row shows which session owes it", ctx do
-    {:ok, _live, html} = live(ctx.conn, ~p"/health")
+    {:ok, live, _html} = live(ctx.conn, ~p"/health")
+    html = render_async(live)
 
     # U2, U3 and U6 are #71's; E1–E3 are S5's. The table says so rather than
     # showing a blank.
@@ -39,14 +41,24 @@ defmodule DevilsDictionaryWeb.HealthLiveTest do
     assert html =~ "S5"
   end
 
-  test "the detail sections arrive asynchronously, and the scorecard does not wait", ctx do
+  # The scorecard is seconds of queries, longer than the client's long-poll
+  # fallback, so it must not run in mount (S4 audit): the page arrives with
+  # both sections loading and neither blocks the socket join.
+  test "the scorecard and the detail sections arrive asynchronously", ctx do
     {:ok, live, html} = live(ctx.conn, ~p"/health")
 
-    assert html =~ ~s(id="scorecard")
+    assert html =~ ~s(id="scorecard-loading")
     assert html =~ ~s(id="health-loading")
+    refute html =~ ~s(id="scorecard-rows")
 
     settled = render_async(live)
+    refute settled =~ ~s(id="scorecard-loading")
     refute settled =~ ~s(id="health-loading")
+    assert settled =~ ~s(id="scorecard-rows")
+
+    # `recompute` drops the cache and computes again.
+    live |> element("#rescore") |> render_click()
+    assert render_async(live) =~ ~s(id="scorecard-rows")
 
     for section <- ~w(health-coverage health-resolution health-links health-dead) do
       assert settled =~ ~s(id="#{section}")
