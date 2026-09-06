@@ -19,7 +19,8 @@ defmodule DevilsDictionary.Absorb do
     "wiktionary" => Sources.Wiktionary,
     "wikidata" => Sources.Wikidata,
     "wikipedia" => Sources.Wikipedia,
-    "bierce" => Sources.Bierce
+    "bierce" => Sources.Bierce,
+    "johnson" => Sources.Johnson
   }
 
   @doc """

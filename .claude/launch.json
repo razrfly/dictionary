@@ -5,7 +5,7 @@
       "name": "phx",
       "runtimeExecutable": "mise",
       "runtimeArgs": ["exec", "--", "mix", "phx.server"],
-      "port": 4000
+      "port": 4007
     }
   ]
 }

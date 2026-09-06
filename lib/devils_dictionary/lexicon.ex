@@ -196,6 +196,27 @@ defmodule DevilsDictionary.Lexicon do
   def get_scope_by_slug!(slug), do: Repo.get_by!(Scope, slug: slug)
   def get_scope_by_slug(slug), do: Repo.get_by(Scope, slug: slug)
 
+  @doc """
+  Creates or updates a scope row from its slug, name and rules.
+
+  A scope is data, not code (scorecard E2): `mix dd.scope.new` writes the row,
+  `mix dd.scope.build` applies its rules. `Sources.Catalog.scopes/0` seeds
+  `animals` only because the first scope has to come from somewhere.
+
+  Upserts on the slug so re-running with amended rules is safe; existing
+  `scope_lexemes` are untouched, and `mix dd.scope.build --reset` is how a
+  narrowed rule set drops the members it no longer matches.
+  """
+  def create_scope(attrs) do
+    %Scope{}
+    |> Scope.changeset(attrs)
+    |> Repo.insert(
+      on_conflict: {:replace, [:name, :rules, :updated_at]},
+      conflict_target: :slug,
+      returning: true
+    )
+  end
+
   def update_scope(%Scope{} = scope, attrs) do
     scope |> Scope.changeset(attrs) |> Repo.update!()
   end

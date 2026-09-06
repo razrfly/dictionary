@@ -198,7 +198,7 @@ mix dd.materialize --dry-run               # parity: raw vs derived, no network 
 mix dd.materialize --all                   # rebuild every derived row offline (M2)
 mix dd.health                              # coverage, resolution, links, parity
 mix dd.score                               # the MVP-0 scorecard, PASS/FAIL with actuals
-mix phx.server                             # http://localhost:4000
+mix phx.server                             # http://localhost:4007 (4000–4005 belong to sibling projects)
 ```
 
 Order matters three times. Wikidata is seeded from the QIDs the Wikipedia pass finds,

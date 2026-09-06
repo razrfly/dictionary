@@ -24,8 +24,7 @@ defmodule Mix.Tasks.Dd.Fixtures.Capture do
 
   Options:
 
-    * `--source` — `wordnet`, `wiktionary`, `wikipedia` or `wikidata`
-      (default: all four)
+    * `--source` — any slug `Absorb.implemented/0` knows (default: all of them)
     * `--lemma` — repeatable (default: cat, dog, oyster; the API sources add
       `seal`, which is a disambiguation page)
     * `--force` — overwrite existing fixtures
@@ -51,9 +50,18 @@ defmodule Mix.Tasks.Dd.Fixtures.Capture do
   # after its verse, the stub whose whole body is the verse, the bare
   # cross-reference, the joke part of speech, the `[from X]` bracket, a letter
   # essay, and the entry with 26 continuation paragraphs.
-  @bierce_lemmas @default_lemmas ++
-                   ~w(eucharist babe monument insectivora brute hash academy x story)
-  @all_sources ~w(wordnet wiktionary wikipedia wikidata bierce)
+  # Johnson's awkward cases: the alternate headword, the ten-way homograph, the
+  # bare cross-reference, the entry with no part of speech, and the verb whose
+  # printed headword carries a grammar note (`To ABIDE.  I abode or abid.`).
+  @johnson_lemmas @default_lemmas ++ ~w(abbey a brute abide)
+  # A static source is read back out of `source_records` by its printed
+  # headword; these are the lemmas worth keeping per source, and any source not
+  # named here gets the default three.
+  @static_lemmas %{
+    "bierce" =>
+      @default_lemmas ++ ~w(eucharist babe monument insectivora brute hash academy x story),
+    "johnson" => @johnson_lemmas
+  }
   @dir "test/support/fixtures"
 
   @requirements ["app.start"]
@@ -67,7 +75,7 @@ defmodule Mix.Tasks.Dd.Fixtures.Capture do
 
     sources =
       case opts[:source] do
-        nil -> @all_sources
+        nil -> all_sources()
         one -> [one]
       end
 
@@ -77,7 +85,7 @@ defmodule Mix.Tasks.Dd.Fixtures.Capture do
         "wiktionary" -> capture_wiktionary(lemmas(given, @default_lemmas), opts)
         "wikipedia" -> capture_wikipedia(lemmas(given, @api_lemmas), opts)
         "wikidata" -> capture_wikidata(lemmas(given, @api_lemmas), opts)
-        "bierce" -> capture_bierce(lemmas(given, @bierce_lemmas), opts)
+        slug -> capture_static(slug, lemmas(given, @static_lemmas[slug] || @default_lemmas), opts)
       end)
 
     write_manifest(captured)
@@ -106,10 +114,13 @@ defmodule Mix.Tasks.Dd.Fixtures.Capture do
     end)
   end
 
-  # Bierce records are keyed by the printed headword, so the lemma is upcased to
-  # find them. `REASON` legitimately returns two: Bierce defines it twice.
-  defp capture_bierce(lemmas, opts) do
-    source = Sources.get_source_by_slug!("bierce")
+  # A static book source (Bierce, Johnson) keys its records by the printed
+  # headword, so the lemma is upcased to find them, and a lemma may legitimately
+  # return several: Bierce defines `REASON` twice, Johnson defines `A` ten
+  # times. Nothing here names a slug — the sixth source captures with no edit
+  # (scorecard E1).
+  defp capture_static(slug, lemmas, opts) do
+    source = Sources.get_source_by_slug!(slug)
 
     Enum.flat_map(lemmas, fn lemma ->
       records =
@@ -121,7 +132,7 @@ defmodule Mix.Tasks.Dd.Fixtures.Capture do
             select: r.raw
         )
 
-      write("bierce", lemma, records, opts)
+      write(slug, lemma, records, opts)
     end)
   end
 
@@ -243,12 +254,14 @@ defmodule Mix.Tasks.Dd.Fixtures.Capture do
     end
   end
 
+  defp all_sources, do: Enum.sort(DevilsDictionary.Absorb.implemented())
+
   defp write_manifest([]), do: :ok
 
   defp write_manifest(captured) do
     sources =
       Sources.list_sources()
-      |> Enum.filter(&(&1.slug in @all_sources))
+      |> Enum.filter(&(&1.slug in all_sources()))
       |> Map.new(
         &{&1.slug,
          Map.take(&1.config, ~w(dump_url edition snapshot_date dump_date api_url batch_size))}

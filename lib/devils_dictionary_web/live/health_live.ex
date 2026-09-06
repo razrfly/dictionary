@@ -111,7 +111,11 @@ defmodule DevilsDictionaryWeb.HealthLive do
     }
   end
 
-  defp source_slugs, do: ~w(wordnet wiktionary wikidata wikipedia bierce)
+  # Every seeded source, in catalog order — not a literal list, so the sixth
+  # source appears here the moment its row exists (scorecard E1). The parity
+  # table above already reads `Sources.list_sources/0`; these two disagreeing
+  # was the bug.
+  defp source_slugs, do: Enum.map(Sources.list_sources(), & &1.slug)
 
   @impl true
   def render(assigns) do

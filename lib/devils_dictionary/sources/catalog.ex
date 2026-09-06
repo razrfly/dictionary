@@ -17,7 +17,7 @@ defmodule DevilsDictionary.Sources.Catalog do
   alias DevilsDictionary.Sources.{Person, Source}
 
   @doc """
-  The five MVP-0 sources. Pinned snapshots live in `config`.
+  The MVP-0 sources. Pinned snapshots live in `config`.
   """
   def sources do
     [
@@ -142,6 +142,37 @@ defmodule DevilsDictionary.Sources.Catalog do
           "cross_check_file" => "priv/sources/bierce/pg972.txt",
           "gutenberg_id" => 972
         }
+      },
+      %{
+        slug: "johnson",
+        name: "Samuel Johnson, A Dictionary of the English Language",
+        tier: :aristocracy,
+        kind: :dictionary,
+        access: :static,
+        era_year: 1755,
+        # The 1755 text is public domain; the transcription we parse is not.
+        # CC BY 4.0 makes the attribution below a licence condition.
+        license: "CC BY 4.0 (LEME transcription); the 1755 text is public domain",
+        license_url: "https://creativecommons.org/licenses/by/4.0/",
+        homepage: "https://leme.library.utoronto.ca/lexicons/1345/",
+        # LEME gives the lexicon one page and no per-entry anchors, so this is
+        # the whole-document fallback A9 asks every source for — the same
+        # bargain the Bierce row strikes with Gutenberg's letter chapters.
+        url_template: "https://leme.library.utoronto.ca/lexicons/1345/",
+        attribution:
+          "Samuel Johnson, A Dictionary of the English Language (1755); " <>
+            "TEI-XML transcription by Ian Lancashire, Lexicons of Early Modern " <>
+            "English (LEME), University of Toronto, CC BY 4.0",
+        config: %{
+          "file" => "priv/sources/johnson/johnson-1755-leme.xml.gz",
+          "leme_lexicon_id" => 1345,
+          "tspace_handle" => "1807/124274",
+          "tspace_url" => "https://hdl.handle.net/1807/124274",
+          # Also nicer to read, and restricted: non-commercial research only,
+          # no API. Linked from the source page, never absorbed.
+          "related_url" => "https://johnsonsdictionaryonline.com/"
+        }
+
       }
     ]
   end
@@ -159,6 +190,17 @@ defmodule DevilsDictionary.Sources.Catalog do
         bio: "American satirist; author of The Devil's Dictionary (1911).",
         wikidata_id: "Q310190",
         source_slug: "bierce"
+      },
+      %{
+        name: "Samuel Johnson",
+        slug: "samuel-johnson",
+        birth_date: ~D[1709-09-18],
+        death_date: ~D[1784-12-13],
+        bio:
+          "English lexicographer, critic and poet; author of A Dictionary of " <>
+            "the English Language (1755).",
+        wikidata_id: "Q182589",
+        source_slug: "johnson"
       }
     ]
   end
@@ -435,14 +477,15 @@ defmodule DevilsDictionary.Sources.Catalog do
   def seed! do
     sources = Map.new(sources(), fn attrs -> {attrs.slug, upsert!(Source, :slug, attrs)} end)
 
-    for person <- people() do
-      {slug, attrs} = Map.pop(person, :source_slug)
-      upsert!(Person, :slug, Map.put(attrs, :source_id, sources[slug].id))
-    end
+    people =
+      Map.new(people(), fn person ->
+        {slug, attrs} = Map.pop(person, :source_slug)
+        {attrs.slug, upsert!(Person, :slug, Map.put(attrs, :source_id, sources[slug].id))}
+      end)
 
     scopes = Map.new(scopes(), fn attrs -> {attrs.slug, upsert!(Scope, :slug, attrs)} end)
 
-    %{sources: sources, scopes: scopes}
+    %{sources: sources, scopes: scopes, people: people}
   end
 
   defp upsert!(schema, natural_key, attrs) do

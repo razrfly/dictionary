@@ -22,7 +22,6 @@ defmodule DevilsDictionaryWeb.ScopeLive do
 
   alias DevilsDictionary.{Encyclopedia, Health, Lexicon, Sources}
 
-  @root_qid "Q729"
   @states ~w(bare enriched disputed)
 
   @impl true
@@ -36,6 +35,7 @@ defmodule DevilsDictionaryWeb.ScopeLive do
        scope: scope,
        sources: sources,
        attesting: Enum.reject(sources, &(&1.kind == :knowledge_graph)),
+       taxon_root: scope.rules["wikidata_root"],
        coverage: nil
      )}
   rescue
@@ -50,10 +50,12 @@ defmodule DevilsDictionaryWeb.ScopeLive do
     page = Lexicon.browse(slug, Keyword.new(filters))
     qid = filters[:taxon]
 
+    scope = socket.assigns.scope
+
     {:noreply,
      socket
      |> assign(filters: filters, page: page)
-     |> assign_async(:tree, fn -> {:ok, %{tree: tree(qid, slug)}} end)
+     |> assign_async(:tree, fn -> {:ok, %{tree: tree(qid, scope)}} end)
      |> assign_async(:coverage, fn -> {:ok, %{coverage: coverage(slug)}} end)}
   end
 
@@ -167,19 +169,29 @@ defmodule DevilsDictionaryWeb.ScopeLive do
   defp tier_order(:plebs), do: 2
   defp tier_order(_other), do: 3
 
-  defp tree(qid, scope_slug) do
-    qid = qid || @root_qid
+  # The rail is rooted in the scope's own `wikidata_root`, not in Animalia. A
+  # scope without one (`emotions`, built from a WordNet root alone) has no
+  # taxonomy to walk and the aside is not rendered at all — asking for Q729
+  # there would draw the animal kingdom with fifteen zero-count children.
+  defp tree(qid, scope) do
+    case scope.rules["wikidata_root"] do
+      nil ->
+        nil
 
-    %{
-      here: Encyclopedia.get_concept_by_qid(qid),
-      path: path_to(qid),
-      children: Encyclopedia.taxon_children(qid, scope_slug)
-    }
+      root ->
+        qid = qid || root
+
+        %{
+          here: Encyclopedia.get_concept_by_qid(qid),
+          path: path_to(qid, root),
+          children: Encyclopedia.taxon_children(qid, scope.slug)
+        }
+    end
   end
 
-  defp path_to(@root_qid), do: []
+  defp path_to(root, root), do: []
 
-  defp path_to(qid) do
+  defp path_to(qid, _root) do
     case Encyclopedia.get_concept_by_qid(qid) do
       nil -> []
       concept -> concept |> Encyclopedia.taxon_chain() |> Enum.reverse()
@@ -328,8 +340,11 @@ defmodule DevilsDictionaryWeb.ScopeLive do
       </.section>
 
       <.container>
-        <div class="grid grid-cols-1 gap-10 pb-16 lg:grid-cols-[18rem_1fr]">
-          <aside id="scope-tree" class="flex flex-col gap-4">
+        <div class={[
+          "grid grid-cols-1 gap-10 pb-16",
+          @taxon_root && "lg:grid-cols-[18rem_1fr]"
+        ]}>
+          <aside :if={@taxon_root} id="scope-tree" class="flex flex-col gap-4">
             <h2 class="font-display text-2xl/8 text-mist-950 dark:text-white">Taxonomy</h2>
             <.async_result :let={tree} assign={@tree}>
               <:loading>
