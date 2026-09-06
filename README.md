@@ -46,6 +46,51 @@ Three ideas carry everything:
 
 Patterns are borrowed from [Cinegraph](https://github.com/razrfly/cinegraph): raw JSONB per record, a behaviour per source, idempotent materialization, terminal-state predicates, an import dashboard, health checks.
 
+## The map
+
+Read it upward: each band sits on the one below. Words and things are different tables that meet only through scored links; definitions and relations attach to words; the chain and the kinds attach to things; the culture attaches to all three.
+
+```mermaid
+flowchart BT
+  subgraph sources [Sources — who says it]
+    A["👑 Aristocracy of the dead<br/>Bierce 1911 · Johnson 1755"]
+    I["📚 Institutions<br/>WordNet · Wiktionary · Wikipedia · Wikidata"]
+    C["📱 The crowd (planned)<br/>users · curator bots · Urban Dictionary · the Guardian"]
+  end
+  subgraph lexicon [The lexicon — words]
+    W["lexemes<br/>one row per lemma + part of speech<br/>forms and spellings fold in"]
+    S["senses · entries<br/>a source's definitions of a word<br/>many per word, never merged"]
+    R["lexical_relations<br/>forms · similar · opposite · broader / narrower<br/>parts · family · see-also"]
+  end
+  subgraph encyclopedia [The encyclopedia — things]
+    T["concepts<br/>a Wikidata item, a Wikipedia article, an image"]
+    TR["concept_relations<br/>taxonomy · subclass of · instance of<br/>the chain, the kinds, the examples of a thing"]
+  end
+  L["concept_links<br/>word → thing · method · confidence<br/>may refer to · disagreement"]
+  subgraph culture [The culture (planned; tables sketched in S5)]
+    E["examples<br/>X is an example of a word, sense or thing<br/>a person (a thing of its own), a text, a URL"]
+    Q["quotes with provenance (issue 65)<br/>the evidence wall of media (issue 67)"]
+    V["users · curator bots · votes ±1 → score<br/>people never write definitions"]
+  end
+  P["What the reader sees<br/>word page · search · browse · sources · health<br/>later: feeds, API, PWA, iOS"]
+  sources -->|materialize| W
+  sources --> S
+  sources --> T
+  S -->|attach to lemma + pos| W
+  R -->|word ↔ word| W
+  W -->|names| L
+  L --> T
+  TR -->|thing ↔ thing| T
+  E -.->|of a word or a sense| W
+  E -.->|of a thing| T
+  Q -.-> S
+  V -.->|nominate · vote| E
+  lexicon --> P
+  encyclopedia --> P
+```
+
+Where it stands (2026-09-07): the lexicon and its relations are built and on the word page (U1a); the encyclopedia side is built in the data and goes on the page next (U1b); the culture is planned — the `users` + `examples` + `votes` migration was written, applied, diffed and rolled back in S5 to prove it touches none of the thirteen tables. Two rules the model enforces: nothing appears without a source, and the crowd nominates and votes but never defines. An example attaches to a *thing* first — Don Jr. exemplifies nepotism the practice, not the string — which is why the thing side comes before the culture layer.
+
 ---
 
 ## Status
@@ -163,6 +208,7 @@ Everything below is designed for in the MVP-0 schema and adds tables rather than
 | 2026-09-06 | **#71 rewritten as v2** after S5. The word page must offer *every* relation kind the sources assert — similar, opposite, broader, narrower, parts, part of, family, variants, an author's cross-references — with WordNet's edges split per sense, plus a **things** panel (concept card, chain, kinds and examples, *may refer to*, disagreement) so a word reaches other words through what it names as well as through what it means. The page is scope-free. Acceptance is two ten-hop walks, *oyster* and *joy*. "The hop" is UI copy only. #71 is the tracker from here; the closing scorecard lands with U3. |
 | 2026-09-06 | **#71 v3: four sessions, not three or seven, and the first one mapped in full.** U1 splits at its seam into U1a (the word page, word side) and U1b (the thing side, which takes S5c). U1a's plan fixes the **placement rule** — a relation with a `from_sense_id` renders under its sense inside the source card, one without renders in the page-level *Related words* for its part of speech — and the chain is walked synset to synset, never lexeme to lexeme (which yields *oyster › bivalve › allocation › abstract entity*). Bierce's and Johnson's markdown bodies get a renderer (Earmark, pure Elixir). No sub-issues: one tracker, edited from its live body. |
 | 2026-09-06 | U1a audited (A−). Two decisions the session made inside the plan's rules and that stand: **within a tier, older first** (Johnson 1755 above Bierce 1911 — the rule said tier then year), and **no markdown library**: the two 👑 corpora use three constructs (paragraphs, `> ` quotations, `*emphasis*`), a scan of all 43,723 bodies confirms it, Earmark is retired on Hex and MDEx is a NIF, so a 40-line renderer with escaping first does the job. One rule half-kept: sense-scoped relations sit under the *synset* for WordNet but pool per card for Wiktionary, which puts *cat*'s slang synonyms beside its feline ones — fixed in U1b. |
+| 2026-09-07 | **The map** (README § The map), drawn to check the model against Holden's description of the goal: a dictionary plus an encyclopedia, definitions on words, every relation kind between words, things with their hierarchies, and on top the culture — examples (a person, a poem, a video), quotes, media, votes. Every item has a place and nothing built points elsewhere. The distinction that matters: a definition is what a source says about a **word**; an example is what the culture attaches to a **thing** (or to a word or sense when there is none). So U1b's thing side precedes the culture layer, and the crowd never writes definitions. |
 
 ---
 
