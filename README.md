@@ -48,7 +48,14 @@ Patterns are borrowed from [Cinegraph](https://github.com/razrfly/cinegraph): ra
 
 ## The map
 
-Read it upward: each band sits on the one below. Words and things are different tables that meet only through scored links; definitions and relations attach to words; the chain and the kinds attach to things; the culture attaches to all three.
+Every layer of the model, from the sources at the bottom to the votes at the top, and where each band stands. Read it upward: each band sits on the one below it. The full page — the legend, the *nepotism → Don Jr.* trace through every band, and the table of what was asked for against where it lives — is in [`docs/map/`](docs/map/README.md), with the diagram as [SVG](docs/map/wordhoard-map.svg), [PNG](docs/map/wordhoard-map.png) and [PDF](docs/map/wordhoard-map.pdf).
+
+[![The Wordhoard map](docs/map/wordhoard-map.svg)](docs/map/README.md)
+
+Three things to take from it. **Words and things are different tables** that meet only through scored links: definitions and word-to-word relations attach to words; the chain, the kinds and the instances attach to things; the culture attaches to all three. **A definition is what a source says about a word; an example is what the culture attaches to a thing** — Don Jr. exemplifies nepotism the practice, not the string — so the thing side of the word page (U1b) precedes the culture layer. **Nothing appears without a source, and the crowd nominates and votes but never defines.**
+
+<details>
+<summary>The same map as text (Mermaid), for diffs</summary>
 
 ```mermaid
 flowchart BT
@@ -89,7 +96,9 @@ flowchart BT
   encyclopedia --> P
 ```
 
-Where it stands (2026-09-07): the lexicon and its relations are built and on the word page (U1a); the encyclopedia side is built in the data and goes on the page next (U1b); the culture is planned — the `users` + `examples` + `votes` migration was written, applied, diffed and rolled back in S5 to prove it touches none of the thirteen tables. Two rules the model enforces: nothing appears without a source, and the crowd nominates and votes but never defines. An example attaches to a *thing* first — Don Jr. exemplifies nepotism the practice, not the string — which is why the thing side comes before the culture layer.
+</details>
+
+Where it stands (2026-09-07): the lexicon and its relations are built and on the word page (U1a); the encyclopedia side is built in the data and goes on the page next (U1b); the culture is planned — the `users` + `examples` + `votes` migration was written, applied, diffed and rolled back in S5 to prove it touches none of the thirteen tables.
 
 ---
 
@@ -115,8 +124,9 @@ Where it stands (2026-09-07): the lexicon and its relations are built and on the
 | U1–U3 the word page and the hop, home/search, provenance, fake-data mode (#71) — the rows R3 X1 U1 U2 U3 U6 | ⬜ |
 | S5 the extensibility proof: **Johnson 1755** as the sixth source (42,726 entries, 37,235 headwords, **91.9 % already in the index**, 6,780 words of his own, 114,787 quotations, 114 alternates, 707 cross-references, 109 inflected forms, **0 migrations**), **Emotions** as a second scope built from one WordNet root with no code touched (809 lexemes, L1 37.2 % at ≥ 0.8), and the `users` + `examples` + `votes` migration written, applied, schema-diffed, rolled back and moved to `docs/sketches/` — **E1 E2 E3 green**. Two findings: **A7 v2** (graded on asserted concepts) and an unscoped `concept_qids/0` that makes scope N re-walk scopes 1..N−1 | ✅ 2026-09-06 |
 | S5 audited (grade A−): every number re-measured, 29 / 29 graded rows with parity on 356 tests; E1–E3 hold; the second scope exposed the unscoped concept seed and the Animals-calibrated bars → S5c. **The backbone is complete; #70 can close; the 7 pending rows are all #71's.** | ✅ 2026-09-06 |
-| S5c fixes from the S5 audit: scoped concept seed, orphan concepts, per-scope bars, L3 *n/a* without a root, `?scope=` on every page | ⬜ |
+| S5c fixes from the S5 audit, landed with U1b: the concept seed scoped through `concept_links` (**emotions 72,108 → 414 seeds, 28,084 → 345 records, 16 min → 15 s**; animals 92,947 → 11,660), the Wikipedia concept pass scoped with it, the bars A4/A10/L1/L3 moved into `scopes.rules["bars"]` with Animals' numbers as defaults, L3 *n/a* when a scope has no root, `?scope=` on `/health` and `/sources/:slug`. Orphans left alone deliberately: deleting derived rows alone makes M1 report gaps, and the seed fix stops the growth. | ✅ 2026-09-07 |
 | U1a the word page, word side (`aeedc85`): `/define/:slug` for every index word — headword, source cards by tier then year, WordNet per synset with its chain, every relation group from #71 §7 placed by the per-sense rule, the trail in the URL, ↗ on every card; `Lexicon.WordPage` in seven queries, p95 under 20 ms on *cat*; R3 X1 U1 U2 U6 ✅ — **33 / 33 graded rows**, 397 tests. Audited A−: verified in Chrome (placement rule on *cat*, two hops with the trail, redirect, miss, 375 px); Wiktionary's sense-scoped chips still pool per card, and the session left its work uncommitted and unreported. | ✅ 2026-09-06 |
+| U1b the word page, thing side (`30a1e8c`): a `thing` on `%WordPage{}` — the concept card (label, description, image with attribution, ↗ Wikipedia, `Q…` ↗ Wikidata), the chain upward one parent per step (`parent_taxon` → `subclass_of`, `instance_of` only at the first), the kinds and examples that have a word, *may refer to*, and the disagreement plaque; three `Encyclopedia` reads, ten queries, p95 19 ms on *cat* and 12 ms on *human* (the worst hub). Plus the three U1a deductions: chips hang off the **sense** not the sense group, `scope_live_test` uses `WordFixtures`, and the scorecard forgets its page measurements between runs. **S5c rides here** and *joy* needed it. 422 tests; **animals 34 / 34, emotions 33 / 33** (was 30 / 33). | ✅ 2026-09-07 |
 
 ---
 
@@ -209,8 +219,25 @@ Everything below is designed for in the MVP-0 schema and adds tables rather than
 | 2026-09-06 | **#71 v3: four sessions, not three or seven, and the first one mapped in full.** U1 splits at its seam into U1a (the word page, word side) and U1b (the thing side, which takes S5c). U1a's plan fixes the **placement rule** — a relation with a `from_sense_id` renders under its sense inside the source card, one without renders in the page-level *Related words* for its part of speech — and the chain is walked synset to synset, never lexeme to lexeme (which yields *oyster › bivalve › allocation › abstract entity*). Bierce's and Johnson's markdown bodies get a renderer (Earmark, pure Elixir). No sub-issues: one tracker, edited from its live body. |
 | 2026-09-06 | U1a audited (A−). Two decisions the session made inside the plan's rules and that stand: **within a tier, older first** (Johnson 1755 above Bierce 1911 — the rule said tier then year), and **no markdown library**: the two 👑 corpora use three constructs (paragraphs, `> ` quotations, `*emphasis*`), a scan of all 43,723 bodies confirms it, Earmark is retired on Hex and MDEx is a NIF, so a 40-line renderer with escaping first does the job. One rule half-kept: sense-scoped relations sit under the *synset* for WordNet but pool per card for Wiktionary, which puts *cat*'s slang synonyms beside its feline ones — fixed in U1b. |
 | 2026-09-07 | **The map** (README § The map), drawn to check the model against Holden's description of the goal: a dictionary plus an encyclopedia, definitions on words, every relation kind between words, things with their hierarchies, and on top the culture — examples (a person, a poem, a video), quotes, media, votes. Every item has a place and nothing built points elsewhere. The distinction that matters: a definition is what a source says about a **word**; an example is what the culture attaches to a **thing** (or to a word or sense when there is none). So U1b's thing side precedes the culture layer, and the crowd never writes definitions. |
+| 2026-09-07 | **U1b: the placement rule is per sense, not per sense group.** WordNet made the bug invisible — one synset is one group is one sense — so grouping the chips at group level looked right until Wiktionary, whose senses all share the nil group key, listed *kitty* and *tabby* beside *bloke* and *prostitute* on *cat*. Relations now hang off the sense and render inside its `<li>`. | #71 U1b |
+| 2026-09-07 | **The thing's chain is not the taxon chain.** `taxon_chain/2` walks `parent_taxon` only and returns nothing for anything that is not alive, which is most of a second scope. `Encyclopedia.chain/2` prefers `parent_taxon`, falls back to `subclass_of`, and allows `instance_of` **only at the first step** — an instance climbs to its class and continues by subclass, because following `instance_of` at every step walks *Larry* up to *abstract entity*. One parent per step, as the synset chain does: the concept graph is a DAG and a plain recursive walk up from *oyster* returns eighteen rows for a walk of ten. | #71 U1b |
+| 2026-09-07 | **Kinds and examples are only the children that have a word.** The panel exists for the hop, so a chip that cannot be clicked is furniture: *cat* has four named individuals under it (*Larry*, *Tiddles*) and not one is a word, while ten of its nineteen subclasses are. Capped at twelve with the **exact** count beside them — the count is the expensive half on a hub (Q16521 *taxon* has 7,141 worded children and answers in 85 ms), but no word links to that concept; the worst a reader can reach is *human* at 12 ms. | #71 U1b |
+| 2026-09-07 | **The scorecard's bars belong to the scope.** A4's 7,500, A10's 80 % and L1's 70 % were measured on 21,277 animals with a Wikipedia article each; grading an 809-word scope of abstract nouns by them grades the scope, not the pipeline. They move to `scopes.rules["bars"]` with today's values as the defaults — *emotions* declares 500 / 55 % / 45 %, each set just under what it measures so the row catches a regression rather than announcing a pass. L3 goes further and **reports** rather than grades when a scope has no `wikidata_root`: *emotions* is not under Animalia and never will be. | #70 S5c |
+| 2026-09-07 | **The scoped seed is what gave *joy* a card.** 265 of the 322 concepts the emotions scope links to had no `wikidata` record at all — they were introduced by the Wikipedia pass *after* the Wikidata pass ran, so their claims were never fetched, and 23 of 322 had any relation at all against 8,880 of 10,386 for animals. Fixing the seed made the re-absorb affordable (414 seeds, 345 records, 15 s), and *joy* now reads *a kind of happiness* with *joie de vivre* under it. **Open, on #70:** the chain is one step deep for most of them, because `P279` is recorded and never chased — 97 of 322 reach one step, 44 reach two. Chasing it is bounded work and its own session, not a tail. | #70 S5c, #71 U1b |
+| 2026-09-07 | **The map lives in the repo**: `docs/map/` holds the diagram as SVG (embedded in the README), PNG and PDF, plus the page with the trace and the table. The README gained a *Reference* section so it works as the hub for everything useful: the map, the three issues, the sketches, the scopes, the checked-in sources, the scorecard. |
 
 ---
+
+## Reference
+
+- **The map** — [`docs/map/`](docs/map/README.md): the model in seven bands, with the trace and the table. SVG, PNG, PDF, HTML.
+- **The spec** — [#69](https://github.com/razrfly/dictionary/issues/69): decisions, schema, pipeline, the scorecard (§7), the build order. Its first comment is the v1 research draft: every source evaluated, the probe log, the licensing table.
+- **The build history** — [#70](https://github.com/razrfly/dictionary/issues/70): sessions S0–S5 with per-session expectations, audit notes and grades; the reset procedure; the directory structure.
+- **The UI tracker** — [#71](https://github.com/razrfly/dictionary/issues/71): the word page and the hop, session by session (U0 ✅, U1a ✅, U1b, U2, U3), wireframes, the relation map (§7), acceptance criteria.
+- **The community layer, sketched** — [`docs/sketches/`](docs/sketches/README.md): the `users` + `examples` + `votes` migration that was proven to fit and deliberately not shipped.
+- **Scopes** — [`priv/scopes/`](priv/scopes/): every scope is a JSON file; `mix dd.scope.new` creates one, `mix dd.scope.build` fills it.
+- **Sources checked in** — [`priv/sources/`](priv/sources/): Bierce (Gutenberg #972, HTML) and Johnson 1755 (LEME TEI-XML, gzipped), each pinned.
+- **The scorecard** — `mix dd.score --scope animals` (add `--skip-parity` for the fast version); `/health` shows the same rows.
 
 ## Naming
 

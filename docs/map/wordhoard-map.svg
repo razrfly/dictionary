@@ -1,0 +1,174 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1060" viewBox="0 0 1200 1060" role="img" aria-label="The Wordhoard model as bands: sources at the bottom; words, definitions and word-to-word relations on the left; things, thing-to-thing relations and the word-to-thing links on the right; examples, quotes, media, people and votes above; the reader's surfaces at the top. Fill and outline show what is built, what is next, and what is planned.">
+        <style>
+    svg { font-family: Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; color: #1b1f22; }
+    .bg { fill: #fafbfb; }
+    .box { fill: #e4e8ea; stroke: #1b1f22; stroke-width: 1.3; }
+    .page-now { stroke-width: 2.6; }
+    .next { fill: #e2ecf3; stroke: #2f5d7c; stroke-width: 2.6; }
+    .plan { fill: none; stroke: #1b1f22; stroke-width: 1.3; stroke-dasharray: 6 4; }
+    .plain { fill: none; stroke: none; }
+    .ey { font-size: 10.5px; letter-spacing: .09em; text-transform: uppercase; fill: #5f686e; font-weight: 500; }
+    .t { font-size: 12.5px; fill: #1b1f22; }
+    .t.b { font-weight: 600; }
+    .col { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; fill: #5f686e; font-weight: 600; }
+    .lbl { font-size: 11.5px; fill: #5f686e; }
+    .lbl.acc { fill: #2f5d7c; }
+    .arrow { stroke: #1b1f22; stroke-width: 1.4; fill: none; }
+    .arrow.acc { stroke: #2f5d7c; }
+    .arrow.plan { stroke-dasharray: 5 4; }
+  </style>
+  <rect class="bg" x="0" y="0" width="1200" height="1060"></rect>
+  <defs>
+          <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#1b1f22"></path>
+          </marker>
+          <marker id="arr-acc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#2f5d7c"></path>
+          </marker>
+        </defs>
+
+        <!-- Surfaces -->
+        <text class="col" x="20" y="47">The reader</text>
+        <rect class="box page-now" x="190" y="20" width="990" height="80" rx="3"></rect>
+        <text class="ey" x="206" y="42">What the reader sees</text>
+        <text class="t" x="206" y="63">The word page — the word side is live (U1a), the thing side is next (U1b) · search and home (U2) · browse by scope · source pages · health</text>
+        <text class="t" x="206" y="84">Later: feeds, the JSON API, the progressive web app, iOS. Every surface reads the bands below and shows who said what, with a link out.</text>
+
+        <!-- The culture -->
+        <text class="col" x="20" y="167">The culture</text>
+        <rect class="plan" x="190" y="140" width="430" height="150" rx="3"></rect>
+        <text class="ey" x="206" y="162">Examples · planned, sketched in S5</text>
+        <text class="t b" x="206" y="184">“X is an example of this word, sense or thing”</text>
+        <text class="t" x="206" y="204">a person — a thing of its own: Don Jr. for nepotism</text>
+        <text class="t" x="206" y="223">a poem, a painting, a passage of text</text>
+        <text class="t" x="206" y="242">a link: a YouTube video, a TikTok, a news story</text>
+        <text class="t" x="206" y="261">kind · status (pending → accepted) · score</text>
+
+        <rect class="plan" x="640" y="140" width="240" height="150" rx="3"></rect>
+        <text class="ey" x="656" y="162">Quotes · media · planned</text>
+        <text class="t" x="656" y="184">quotes, with provenance</text>
+        <text class="t" x="656" y="203">scoring for misattribution (#65)</text>
+        <text class="t" x="656" y="226">the evidence wall: links</text>
+        <text class="t" x="656" y="245">unfurled into one feed (#67)</text>
+        <text class="t" x="656" y="268">attach to senses and things</text>
+
+        <rect class="plan" x="900" y="140" width="280" height="150" rx="3"></rect>
+        <text class="ey" x="916" y="162">People · bots · votes · planned</text>
+        <text class="t" x="916" y="184">users nominate examples</text>
+        <text class="t" x="916" y="203">curator bots are sources that vote (#17)</text>
+        <text class="t" x="916" y="222">a vote is ±1 by a person or a bot</text>
+        <text class="t" x="916" y="241">votes → score → the order on the page</text>
+        <text class="t b" x="916" y="266">people never write definitions</text>
+
+        <path class="arrow plan" d="M 1040 140 L 1040 124 L 405 124 L 405 137" marker-end="url(#arr)"></path>
+        <text class="lbl" x="690" y="119">nominate · vote</text>
+        <path class="arrow plan" d="M 405 290 L 405 333" marker-end="url(#arr)"></path>
+        <text class="lbl" x="414" y="316">is an example of a word or a sense</text>
+        <path class="arrow plan" d="M 610 290 L 1130 333" marker-end="url(#arr)"></path>
+        <text class="lbl" x="640" y="309">is an example of a thing</text>
+
+        <!-- Column headers -->
+        <text class="col" x="190" y="326">The lexicon — words</text>
+        <text class="col" x="770" y="326">The encyclopedia — things</text>
+
+        <!-- Row A: definitions | thing↔thing -->
+        <rect class="box page-now" x="190" y="340" width="210" height="120" rx="3"></rect>
+        <text class="ey" x="204" y="362">Senses</text>
+        <text class="t" x="204" y="383">a dictionary's meanings</text>
+        <text class="t" x="204" y="402">Wiktionary: 25 senses of cat</text>
+        <text class="t" x="204" y="421">WordNet: 8 synsets of cat</text>
+        <text class="t" x="204" y="440">many per word, never merged</text>
+
+        <rect class="box page-now" x="410" y="340" width="210" height="120" rx="3"></rect>
+        <text class="ey" x="424" y="362">Entries</text>
+        <text class="t" x="424" y="383">an author's text on a word</text>
+        <text class="t" x="424" y="402">Bierce's joke · Johnson's</text>
+        <text class="t" x="424" y="421">definition and quotations</text>
+        <text class="t" x="424" y="440">Wikipedia's, via the thing</text>
+
+        <rect class="next" x="770" y="340" width="410" height="120" rx="3"></rect>
+        <text class="ey" x="784" y="362">Thing ↔ thing · on the page next (U1b)</text>
+        <text class="t" x="784" y="383">concept_relations: taxonomy · subclass of · instance of</text>
+        <text class="t" x="784" y="402">→ the chain upward: oyster › bivalve › mollusc › animal</text>
+        <text class="t" x="784" y="421">→ kinds: 19 cat breeds, Abyssinian to Persian</text>
+        <text class="t" x="784" y="440">→ examples: Larry the Downing Street cat, Tiddles</text>
+
+        <!-- Row B: words | names | things -->
+        <rect class="box page-now" x="190" y="520" width="430" height="120" rx="3"></rect>
+        <text class="ey" x="204" y="542">Words</text>
+        <text class="t" x="204" y="563">lexemes: one row per lemma and part of speech</text>
+        <text class="t" x="204" y="582">cat · noun — cat · verb — oyster · adjective</text>
+        <text class="t" x="204" y="601">forms fold in (cats, oystered) · spellings fold in (oistre → oyster)</text>
+        <text class="t" x="204" y="620">1.54 M rows: every English word, from day one</text>
+
+        <rect class="next" x="636" y="548" width="122" height="66" rx="3"></rect>
+        <text class="ey" x="646" y="568">Names</text>
+        <text class="t" x="646" y="587">concept_links</text>
+        <text class="t" x="646" y="604">method · score</text>
+        <path class="arrow acc" d="M 622 580 L 633 580" marker-end="url(#arr-acc)"></path>
+        <path class="arrow acc" d="M 760 580 L 767 580" marker-end="url(#arr-acc)"></path>
+
+        <rect class="next" x="770" y="520" width="410" height="120" rx="3"></rect>
+        <text class="ey" x="784" y="542">Things · on the page next (U1b)</text>
+        <text class="t" x="784" y="563">concepts: a Wikidata item, a Wikipedia article, an image</text>
+        <text class="t" x="784" y="582">cat → Q146 “small domesticated carnivorous mammal”</text>
+        <text class="t" x="784" y="601">seal → 63 candidates: “may refer to”</text>
+        <text class="t" x="784" y="620">cat → the animal and the Unix command: a disagreement</text>
+
+        <!-- Row C: word↔word | provenance -->
+        <rect class="box page-now" x="190" y="700" width="430" height="100" rx="3"></rect>
+        <text class="ey" x="204" y="722">Word ↔ word</text>
+        <text class="t" x="204" y="743">lexical_relations — forms and variants · similar · opposite</text>
+        <text class="t" x="204" y="762">broader / narrower · parts · part of · family · see-also</text>
+        <text class="t" x="204" y="781">1.2 M edges; the hop</text>
+
+        <rect class="plain" x="770" y="700" width="410" height="100"></rect>
+        <text class="ey" x="784" y="722">Runs through every band</text>
+        <text class="t" x="784" y="743">Provenance: every row carries its source,</text>
+        <text class="t" x="784" y="762">a link out ↗ and its raw record (ⓘ, U2).</text>
+        <text class="t" x="784" y="781">Scopes (animals, emotions) are filters, not a layer.</text>
+
+        <!-- Vertical arrows in the middle -->
+        <path class="arrow" d="M 405 460 L 405 517" marker-end="url(#arr)"></path>
+        <text class="lbl" x="414" y="493">attach to a word (lemma + part of speech)</text>
+        <path class="arrow acc" d="M 975 460 L 975 517" marker-end="url(#arr-acc)"></path>
+        <text class="lbl acc" x="984" y="493">shape the thing's neighbourhood</text>
+        <path class="arrow" d="M 405 700 L 405 643" marker-end="url(#arr)"></path>
+        <text class="lbl" x="414" y="675">relate word to word</text>
+
+        <!-- Sources -->
+        <text class="col" x="20" y="867">Sources</text>
+        <rect class="box" x="190" y="840" width="310" height="140" rx="3"></rect>
+        <text class="ey" x="204" y="862">👑 The aristocracy of the dead</text>
+        <text class="t b" x="204" y="884">Bierce 1911 · Johnson 1755</text>
+        <text class="t" x="204" y="903">static books, committed and pinned</text>
+        <text class="t" x="204" y="922">later: Webster 1913, EB1911</text>
+        <text class="t" x="204" y="941">their words outrank everyone's</text>
+
+        <rect class="box" x="520" y="840" width="330" height="140" rx="3"></rect>
+        <text class="ey" x="534" y="862">📚 The institutions</text>
+        <text class="t b" x="534" y="884">WordNet · Wiktionary · Wikipedia · Wikidata</text>
+        <text class="t" x="534" y="903">dumps and APIs, pinned by date</text>
+        <text class="t" x="534" y="922">raw kept, trimmed, rebuilt offline</text>
+        <text class="t" x="534" y="941">later: Merriam-Webster</text>
+
+        <rect class="plan" x="870" y="840" width="310" height="140" rx="3"></rect>
+        <text class="ey" x="884" y="862">📱 The crowd · planned</text>
+        <text class="t" x="884" y="884">our users · curator bots</text>
+        <text class="t" x="884" y="903">Urban Dictionary, on demand, never stored</text>
+        <text class="t" x="884" y="922">the Guardian's explainers (#63)</text>
+        <text class="t" x="884" y="941">examples and votes, never definitions</text>
+
+        <path class="arrow" d="M 685 840 L 685 806" marker-end="url(#arr)"></path>
+        <text class="lbl" x="694" y="826">materialize — every row above belongs to a source and links back</text>
+
+        <!-- Legend -->
+        <rect class="box page-now" x="190" y="1018" width="26" height="16" rx="2"></rect>
+        <text class="lbl" x="224" y="1031">built, and on the page now</text>
+        <rect class="next" x="420" y="1018" width="26" height="16" rx="2"></rect>
+        <text class="lbl" x="454" y="1031">built in the data, on the page next (U1b)</text>
+        <rect class="box" x="720" y="1018" width="26" height="16" rx="2"></rect>
+        <text class="lbl" x="754" y="1031">built</text>
+        <rect class="plan" x="830" y="1018" width="26" height="16" rx="2"></rect>
+        <text class="lbl" x="864" y="1031">planned — the tables are sketched, nothing is shipped</text>
+      </svg>

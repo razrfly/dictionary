@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Wordhoard Map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --bg: #f2f3f3;
+    --bg-2: #fafbfb;
+    --ink: #1b1f22;
+    --muted: #5f686e;
+    --line: #c6cccf;
+    --tint: #e4e8ea;
+    --tint-next: #e2ecf3;
+    --accent: #2f5d7c;
+    --serif: 'Instrument Serif', Georgia, 'Times New Roman', serif;
+    --sans: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #17191b; --bg-2: #1f2225; --ink: #eceef0; --muted: #9ba4aa; --line: #3a4145;
+      --tint: #262b2e; --tint-next: #1f2f3a; --accent: #8fb8d4;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #17191b; --bg-2: #1f2225; --ink: #eceef0; --muted: #9ba4aa; --line: #3a4145;
+    --tint: #262b2e; --tint-next: #1f2f3a; --accent: #8fb8d4;
+  }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .page { max-width: 78rem; margin: 0 auto; padding: 2.5rem 1.5rem 5rem; }
+  h1 { font-family: var(--serif); font-weight: 400; font-size: clamp(2.4rem, 5vw, 3.6rem); line-height: 1.05; margin: 0 0 .6rem; letter-spacing: -0.01em; text-wrap: balance; }
+  h2 { font-family: var(--serif); font-weight: 400; font-size: 1.7rem; line-height: 1.2; margin: 3rem 0 .8rem; text-wrap: balance; }
+  .standfirst { max-width: 65ch; color: var(--muted); margin: 0 0 2rem; font-size: 1.05rem; }
+  p, li { max-width: 65ch; }
+  .eyebrow { font-size: .72rem; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+  figure { margin: 0; }
+  .map { overflow-x: auto; background: var(--bg-2); border: 1px solid var(--line); padding: 1rem; }
+  .map svg { display: block; min-width: 980px; width: 100%; height: auto; font-family: var(--sans); color: var(--ink); }
+  figcaption { color: var(--muted); font-size: .9rem; margin-top: .8rem; max-width: 70ch; }
+  svg .box { fill: var(--tint); stroke: currentColor; stroke-width: 1.3; }
+  svg .page-now { stroke-width: 2.6; }
+  svg .next { fill: var(--tint-next); stroke: var(--accent); stroke-width: 2.6; }
+  svg .plan { fill: none; stroke: currentColor; stroke-width: 1.3; stroke-dasharray: 6 4; }
+  svg .plain { fill: none; stroke: none; }
+  svg .ey { font-size: 10.5px; letter-spacing: .09em; text-transform: uppercase; fill: var(--muted); font-weight: 500; }
+  svg .t { font-size: 12.5px; fill: currentColor; }
+  svg .t.b { font-weight: 600; }
+  svg .col { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; fill: var(--muted); font-weight: 600; }
+  svg .lbl { font-size: 11.5px; fill: var(--muted); }
+  svg .lbl.acc { fill: var(--accent); }
+  svg .arrow { stroke: currentColor; stroke-width: 1.4; fill: none; }
+  svg .arrow.acc { stroke: var(--accent); }
+  svg .arrow.plan { stroke-dasharray: 5 4; }
+  ol.trace { counter-reset: step; list-style: none; padding: 0; margin: 0; }
+  ol.trace li { position: relative; padding: .55rem 0 .55rem 3rem; border-top: 1px solid var(--line); }
+  ol.trace li:last-child { border-bottom: 1px solid var(--line); }
+  ol.trace li::before { counter-increment: step; content: counter(step); position: absolute; left: 0; top: .5rem; font-family: var(--serif); font-size: 1.5rem; color: var(--muted); width: 2.2rem; }
+  ol.trace b { font-weight: 600; }
+  table { border-collapse: collapse; width: 100%; font-size: .93rem; }
+  th, td { text-align: left; vertical-align: top; padding: .55rem .7rem .55rem 0; border-top: 1px solid var(--line); }
+  th { font-size: .72rem; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); font-weight: 500; border-top: 0; }
+  tr:last-child td { border-bottom: 1px solid var(--line); }
+  .status { white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .status.now { color: var(--ink); font-weight: 600; }
+  .status.next { color: var(--accent); font-weight: 600; }
+  .status.plan { color: var(--muted); }
+  .tablewrap { overflow-x: auto; }
+  .verdict p { margin: 0 0 .9rem; }
+  a { color: var(--accent); }
+  a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+</style>
+</head>
+<body>
+<div class="page">
+  <p class="eyebrow">Wordhoard · working title · 7 September 2026</p>
+  <h1>The Wordhoard Map</h1>
+  <p class="standfirst">Every layer in the model, from the sources at the bottom to the votes at the top, and where each one stands. Read it upward: each band sits on the one below it.</p>
+
+  <figure>
+    <div class="map">
+      <svg viewBox="0 0 1200 1060" role="img" aria-label="The Wordhoard model as bands: sources at the bottom; words, definitions and word-to-word relations on the left; things, thing-to-thing relations and the word-to-thing links on the right; examples, quotes, media, people and votes above; the reader's surfaces at the top. Fill and outline show what is built, what is next, and what is planned.">
+        <defs>
+          <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"></path>
+          </marker>
+          <marker id="arr-acc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--accent)"></path>
+          </marker>
+        </defs>
+
+        <!-- Surfaces -->
+        <text class="col" x="20" y="47">The reader</text>
+        <rect class="box page-now" x="190" y="20" width="990" height="80" rx="3"></rect>
+        <text class="ey" x="206" y="42">What the reader sees</text>
+        <text class="t" x="206" y="63">The word page — the word side is live (U1a), the thing side is next (U1b) · search and home (U2) · browse by scope · source pages · health</text>
+        <text class="t" x="206" y="84">Later: feeds, the JSON API, the progressive web app, iOS. Every surface reads the bands below and shows who said what, with a link out.</text>
+
+        <!-- The culture -->
+        <text class="col" x="20" y="167">The culture</text>
+        <rect class="plan" x="190" y="140" width="430" height="150" rx="3"></rect>
+        <text class="ey" x="206" y="162">Examples · planned, sketched in S5</text>
+        <text class="t b" x="206" y="184">“X is an example of this word, sense or thing”</text>
+        <text class="t" x="206" y="204">a person — a thing of its own: Don Jr. for nepotism</text>
+        <text class="t" x="206" y="223">a poem, a painting, a passage of text</text>
+        <text class="t" x="206" y="242">a link: a YouTube video, a TikTok, a news story</text>
+        <text class="t" x="206" y="261">kind · status (pending → accepted) · score</text>
+
+        <rect class="plan" x="640" y="140" width="240" height="150" rx="3"></rect>
+        <text class="ey" x="656" y="162">Quotes · media · planned</text>
+        <text class="t" x="656" y="184">quotes, with provenance</text>
+        <text class="t" x="656" y="203">scoring for misattribution (#65)</text>
+        <text class="t" x="656" y="226">the evidence wall: links</text>
+        <text class="t" x="656" y="245">unfurled into one feed (#67)</text>
+        <text class="t" x="656" y="268">attach to senses and things</text>
+
+        <rect class="plan" x="900" y="140" width="280" height="150" rx="3"></rect>
+        <text class="ey" x="916" y="162">People · bots · votes · planned</text>
+        <text class="t" x="916" y="184">users nominate examples</text>
+        <text class="t" x="916" y="203">curator bots are sources that vote (#17)</text>
+        <text class="t" x="916" y="222">a vote is ±1 by a person or a bot</text>
+        <text class="t" x="916" y="241">votes → score → the order on the page</text>
+        <text class="t b" x="916" y="266">people never write definitions</text>
+
+        <path class="arrow plan" d="M 1040 140 L 1040 124 L 405 124 L 405 137" marker-end="url(#arr)"></path>
+        <text class="lbl" x="690" y="119">nominate · vote</text>
+        <path class="arrow plan" d="M 405 290 L 405 333" marker-end="url(#arr)"></path>
+        <text class="lbl" x="414" y="316">is an example of a word or a sense</text>
+        <path class="arrow plan" d="M 610 290 L 1130 333" marker-end="url(#arr)"></path>
+        <text class="lbl" x="640" y="309">is an example of a thing</text>
+
+        <!-- Column headers -->
+        <text class="col" x="190" y="326">The lexicon — words</text>
+        <text class="col" x="770" y="326">The encyclopedia — things</text>
+
+        <!-- Row A: definitions | thing↔thing -->
+        <rect class="box page-now" x="190" y="340" width="210" height="120" rx="3"></rect>
+        <text class="ey" x="204" y="362">Senses</text>
+        <text class="t" x="204" y="383">a dictionary's meanings</text>
+        <text class="t" x="204" y="402">Wiktionary: 25 senses of cat</text>
+        <text class="t" x="204" y="421">WordNet: 8 synsets of cat</text>
+        <text class="t" x="204" y="440">many per word, never merged</text>
+
+        <rect class="box page-now" x="410" y="340" width="210" height="120" rx="3"></rect>
+        <text class="ey" x="424" y="362">Entries</text>
+        <text class="t" x="424" y="383">an author's text on a word</text>
+        <text class="t" x="424" y="402">Bierce's joke · Johnson's</text>
+        <text class="t" x="424" y="421">definition and quotations</text>
+        <text class="t" x="424" y="440">Wikipedia's, via the thing</text>
+
+        <rect class="next" x="770" y="340" width="410" height="120" rx="3"></rect>
+        <text class="ey" x="784" y="362">Thing ↔ thing · on the page next (U1b)</text>
+        <text class="t" x="784" y="383">concept_relations: taxonomy · subclass of · instance of</text>
+        <text class="t" x="784" y="402">→ the chain upward: oyster › bivalve › mollusc › animal</text>
+        <text class="t" x="784" y="421">→ kinds: 19 cat breeds, Abyssinian to Persian</text>
+        <text class="t" x="784" y="440">→ examples: Larry the Downing Street cat, Tiddles</text>
+
+        <!-- Row B: words | names | things -->
+        <rect class="box page-now" x="190" y="520" width="430" height="120" rx="3"></rect>
+        <text class="ey" x="204" y="542">Words</text>
+        <text class="t" x="204" y="563">lexemes: one row per lemma and part of speech</text>
+        <text class="t" x="204" y="582">cat · noun — cat · verb — oyster · adjective</text>
+        <text class="t" x="204" y="601">forms fold in (cats, oystered) · spellings fold in (oistre → oyster)</text>
+        <text class="t" x="204" y="620">1.54 M rows: every English word, from day one</text>
+
+        <rect class="next" x="636" y="548" width="122" height="66" rx="3"></rect>
+        <text class="ey" x="646" y="568">Names</text>
+        <text class="t" x="646" y="587">concept_links</text>
+        <text class="t" x="646" y="604">method · score</text>
+        <path class="arrow acc" d="M 622 580 L 633 580" marker-end="url(#arr-acc)"></path>
+        <path class="arrow acc" d="M 760 580 L 767 580" marker-end="url(#arr-acc)"></path>
+
+        <rect class="next" x="770" y="520" width="410" height="120" rx="3"></rect>
+        <text class="ey" x="784" y="542">Things · on the page next (U1b)</text>
+        <text class="t" x="784" y="563">concepts: a Wikidata item, a Wikipedia article, an image</text>
+        <text class="t" x="784" y="582">cat → Q146 “small domesticated carnivorous mammal”</text>
+        <text class="t" x="784" y="601">seal → 63 candidates: “may refer to”</text>
+        <text class="t" x="784" y="620">cat → the animal and the Unix command: a disagreement</text>
+
+        <!-- Row C: word↔word | provenance -->
+        <rect class="box page-now" x="190" y="700" width="430" height="100" rx="3"></rect>
+        <text class="ey" x="204" y="722">Word ↔ word</text>
+        <text class="t" x="204" y="743">lexical_relations — forms and variants · similar · opposite</text>
+        <text class="t" x="204" y="762">broader / narrower · parts · part of · family · see-also</text>
+        <text class="t" x="204" y="781">1.2 M edges; the hop</text>
+
+        <rect class="plain" x="770" y="700" width="410" height="100"></rect>
+        <text class="ey" x="784" y="722">Runs through every band</text>
+        <text class="t" x="784" y="743">Provenance: every row carries its source,</text>
+        <text class="t" x="784" y="762">a link out ↗ and its raw record (ⓘ, U2).</text>
+        <text class="t" x="784" y="781">Scopes (animals, emotions) are filters, not a layer.</text>
+
+        <!-- Vertical arrows in the middle -->
+        <path class="arrow" d="M 405 460 L 405 517" marker-end="url(#arr)"></path>
+        <text class="lbl" x="414" y="493">attach to a word (lemma + part of speech)</text>
+        <path class="arrow acc" d="M 975 460 L 975 517" marker-end="url(#arr-acc)"></path>
+        <text class="lbl acc" x="984" y="493">shape the thing's neighbourhood</text>
+        <path class="arrow" d="M 405 700 L 405 643" marker-end="url(#arr)"></path>
+        <text class="lbl" x="414" y="675">relate word to word</text>
+
+        <!-- Sources -->
+        <text class="col" x="20" y="867">Sources</text>
+        <rect class="box" x="190" y="840" width="310" height="140" rx="3"></rect>
+        <text class="ey" x="204" y="862">👑 The aristocracy of the dead</text>
+        <text class="t b" x="204" y="884">Bierce 1911 · Johnson 1755</text>
+        <text class="t" x="204" y="903">static books, committed and pinned</text>
+        <text class="t" x="204" y="922">later: Webster 1913, EB1911</text>
+        <text class="t" x="204" y="941">their words outrank everyone's</text>
+
+        <rect class="box" x="520" y="840" width="330" height="140" rx="3"></rect>
+        <text class="ey" x="534" y="862">📚 The institutions</text>
+        <text class="t b" x="534" y="884">WordNet · Wiktionary · Wikipedia · Wikidata</text>
+        <text class="t" x="534" y="903">dumps and APIs, pinned by date</text>
+        <text class="t" x="534" y="922">raw kept, trimmed, rebuilt offline</text>
+        <text class="t" x="534" y="941">later: Merriam-Webster</text>
+
+        <rect class="plan" x="870" y="840" width="310" height="140" rx="3"></rect>
+        <text class="ey" x="884" y="862">📱 The crowd · planned</text>
+        <text class="t" x="884" y="884">our users · curator bots</text>
+        <text class="t" x="884" y="903">Urban Dictionary, on demand, never stored</text>
+        <text class="t" x="884" y="922">the Guardian's explainers (#63)</text>
+        <text class="t" x="884" y="941">examples and votes, never definitions</text>
+
+        <path class="arrow" d="M 685 840 L 685 806" marker-end="url(#arr)"></path>
+        <text class="lbl" x="694" y="826">materialize — every row above belongs to a source and links back</text>
+
+        <!-- Legend -->
+        <rect class="box page-now" x="190" y="1018" width="26" height="16" rx="2"></rect>
+        <text class="lbl" x="224" y="1031">built, and on the page now</text>
+        <rect class="next" x="420" y="1018" width="26" height="16" rx="2"></rect>
+        <text class="lbl" x="454" y="1031">built in the data, on the page next (U1b)</text>
+        <rect class="box" x="720" y="1018" width="26" height="16" rx="2"></rect>
+        <text class="lbl" x="754" y="1031">built</text>
+        <rect class="plan" x="830" y="1018" width="26" height="16" rx="2"></rect>
+        <text class="lbl" x="864" y="1031">planned — the tables are sketched, nothing is shipped</text>
+      </svg>
+    </div>
+    <figcaption>The model in seven bands. Words and things are different tables that meet only through scored links; definitions and relations attach to words, the chain and the kinds attach to things, and the culture attaches to all three. Solid boxes exist and are on the page today; blue is the next session; dashed is planned.</figcaption>
+  </figure>
+
+  <h2>Nepotism, traced through the bands</h2>
+  <p>Your own example, as the database holds it this morning and as the plan finishes it.</p>
+  <ol class="trace">
+    <li><b>Sources.</b> Two aristocrats have the word. Bierce: <i>“Appointing your grandmother to office for the good of the party.”</i> Johnson has an entry too. WordNet has one sense. Wiktionary has the word in the index but no senses yet, because nepotism is outside both scopes; its senses arrive with the whole-lexicon pass.</li>
+    <li><b>Word.</b> One row: <i>nepotism · noun</i>. Its page exists now at <code>/define/nepotism</code>.</li>
+    <li><b>Definitions.</b> Bierce's, Johnson's and WordNet's, side by side in tier order. If they contradict each other, the page shows the contradiction; it never picks a winner.</li>
+    <li><b>Word to word.</b> Today: broader words <i>favoritism</i> and <i>discrimination</i> from WordNet. After the Wiktionary pass: <i>nepotist</i>, <i>nepotistic</i> as family, <i>cronyism</i> as similar, and the antonyms.</li>
+    <li><b>Thing.</b> Nepotism is a thing in Wikidata, a social practice with a Wikipedia article. It is not linked yet, for the same reason: linking runs per scope. The link is one task run away, and it carries a confidence.</li>
+    <li><b>Examples.</b> Someone nominates <i>Donald Trump Jr.</i> He is a thing of his own, a person with a Wikidata item, so the example is a link from the thing <i>nepotism</i> to the thing <i>Donald Trump Jr.</i>, submitted by a user, pending until accepted. Someone else nominates a YouTube clip, which is a URL example, and a poem, which is a text example.</li>
+    <li><b>Votes.</b> People and curator bots vote each example up or down. The score orders them, so the personality most people think represents the word rises to the top of the page.</li>
+  </ol>
+
+  <h2>What you described, and where it lives</h2>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>You said</th><th>In the model</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td>A dictionary and an encyclopedia in one</td><td>The lexicon (words, senses, entries) and the encyclopedia (things) are two sides that meet through scored links</td><td class="status now">built</td></tr>
+        <tr><td>Definitions sit on top of words</td><td>senses and entries attach to a word by lemma and part of speech</td><td class="status now">built, on the page</td></tr>
+        <tr><td>A word can have many definitions</td><td>many senses per word; cat has 25 in Wiktionary and 8 synsets in WordNet</td><td class="status now">built, on the page</td></tr>
+        <tr><td>Same spelling, different meanings</td><td>separate senses under one word, and where they name different things, separate things: cat the animal and cat the Unix command</td><td class="status now">built; the thing half is next</td></tr>
+        <tr><td>Sources that contradict each other</td><td>every definition belongs to its source and sits beside the others; nothing is merged; a thing-level disagreement gets a plaque</td><td class="status next">built; the plaque is next</td></tr>
+        <tr><td>Conjugations and forms</td><td>forms fold into the headword; <i>oysters</i> lands on <i>oyster</i> with a note; variants are a chip group</td><td class="status now">built, on the page</td></tr>
+        <tr><td>Synonyms, antonyms, other relations</td><td>lexical_relations, grouped as similar, opposite, broader, narrower, parts, part of, family, see-also</td><td class="status now">built, on the page</td></tr>
+        <tr><td>Taxonomy and other hierarchies</td><td>concept_relations: taxonomy for living things, classes and instances for everything else; the chain, the kinds, the examples of a thing</td><td class="status next">built in the data; on the page next</td></tr>
+        <tr><td>A person as an example of nepotism</td><td>examples: a link from a word, sense or thing to another thing, a URL or a text, with a status and a score</td><td class="status plan">planned; tables sketched and proven to fit</td></tr>
+        <tr><td>A poem, art, a YouTube video as an example</td><td>the same table: text and URL kinds; media unfurls into the evidence wall</td><td class="status plan">planned (#67)</td></tr>
+        <tr><td>Quotes</td><td>a quote layer with provenance scoring, attached to senses and things</td><td class="status plan">planned (#65)</td></tr>
+        <tr><td>People cannot write definitions</td><td>senses and entries require a source row; users and bots are sources of the crowd tier, and the crowd tier owns examples and votes only</td><td class="status now">a rule of the model</td></tr>
+        <tr><td>People vote on which example fits best</td><td>votes of ±1 by a person or a curator bot; the score orders the examples on the page</td><td class="status plan">planned (#17 for the bots)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>Does it fit?</h2>
+  <div class="verdict">
+    <p>Yes. Everything you listed has a place, and nothing built so far points anywhere else. The one distinction worth holding onto is the middle of the map: a definition is something a source says about a <i>word</i>, while an example is something the culture attaches to a <i>thing</i>, or to a word or a sense when there is no thing. Don Jr. exemplifies nepotism the practice, not the string n-e-p-o-t-i-s-m. That is why the thing side has to exist before the culture layer does, and why U1b comes before the examples.</p>
+    <p>Two rules the model enforces rather than promises. First, nothing appears without a source: a person's example is a row from a crowd-tier source, and it is dressed as one. Second, the crowd can nominate and vote but never define. The definitions stay with the dictionaries and the dead.</p>
+    <p>What is still open is design, not structure: how a page with a Bierce joke, eight WordNet senses, a taxonomy chain, a top-voted example and a wall of clips stays readable. That is the design pass in #66, after the pages exist.</p>
+  </div>
+</div>
+
+</body>
+</html>
