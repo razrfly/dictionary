@@ -317,14 +317,7 @@ defmodule DevilsDictionary.Health.Score do
         ">= 80%",
         r2.pct >= 80.0
       ),
-      row(
-        "R3",
-        "chains render",
-        "the word page shows a hypernym chain from >= 2 sources",
-        "yes",
-        :pending,
-        session: "S4"
-      )
+      row("R3", "chains render", chains_actual(), "yes", chains().passed == chains().total)
     ]
   end
 
@@ -378,8 +371,12 @@ defmodule DevilsDictionary.Health.Score do
     x3 = Health.variants()
 
     [
-      row("X1", "every word has a page", "200 random index lexemes render", "0 errors", :pending,
-        session: "U1"
+      row(
+        "X1",
+        "every word has a page",
+        pages_sample_actual(),
+        "0 errors",
+        word_pages().passed == word_pages().total
       ),
       row("X2", "search is fast", search_actual(), "< 150 ms", search_status()),
       row("X3", "forms and variants resolve", variant_actual(x3), "both", x3.passed == x3.total),
@@ -390,10 +387,9 @@ defmodule DevilsDictionary.Health.Score do
       row(
         "U2",
         "the flagship words",
-        "cat, dog, oyster: >= 4 cards across >= 2 tiers",
+        flagships_actual(),
         "all three",
-        :pending,
-        session: "S4"
+        flagships().passed == flagships().total
       ),
       row("U3", "provenance everywhere", "every card opens the drawer", "100% of cards", :pending,
         session: "S4"
@@ -413,10 +409,77 @@ defmodule DevilsDictionary.Health.Score do
         "counts match",
         badges_status(scope)
       ),
-      row("U6", "every card links out", "↗ on every card resolves", "100%", :pending,
-        session: "S4"
+      row(
+        "U6",
+        "every card links out",
+        cards_out_actual(),
+        "100%",
+        cards_link_out().passed == cards_link_out().total
       )
     ]
+  end
+
+  # **X1, U2, U6, R3** — the four rows the word page answers (#71 §8a.4). They
+  # are measured by building the page rather than by rendering it, so `mix
+  # dd.score` and `mix test` are looking at the same thing.
+  #
+  # Each is asked for twice — once for the actual, once for the status — so the
+  # result is cached in the process dictionary for the length of one `rows/1`
+  # call. X1 alone is 200 page builds.
+  defp word_pages, do: once(:word_pages, &Health.word_pages/0)
+  defp flagships, do: once(:flagships, &Health.flagships/0)
+  defp cards_link_out, do: once(:cards_link_out, &Health.cards_link_out/0)
+  defp chains, do: once(:chains, &Health.chains/0)
+
+  defp once(key, fun) do
+    case Process.get({__MODULE__, key}) do
+      nil ->
+        value = fun.()
+        Process.put({__MODULE__, key}, value)
+        value
+
+      value ->
+        value
+    end
+  end
+
+  defp pages_sample_actual do
+    x1 = word_pages()
+    bare = Enum.count(x1.probes, &(&1.cards == 0))
+
+    case Enum.reject(x1.probes, & &1.ok) do
+      [] ->
+        "#{x1.passed} / #{x1.total} random index lexemes render · #{bare} of them bare"
+
+      failed ->
+        "#{x1.passed} / #{x1.total} render · " <>
+          Enum.map_join(Enum.take(failed, 3), "; ", &"#{&1.input}: #{&1.error}")
+    end
+  end
+
+  defp flagships_actual do
+    flagships().probes
+    |> Enum.map_join(" · ", &"#{&1.input} #{&1.cards} cards / #{&1.tiers} tiers")
+  end
+
+  defp cards_out_actual do
+    u6 = cards_link_out()
+
+    case u6.probes do
+      [] ->
+        "#{u6.passed} / #{u6.total} cards resolve a link out = 100%"
+
+      missing ->
+        "#{u6.passed} / #{u6.total} · no url: " <> Enum.map_join(missing, ", ", & &1.card)
+    end
+  end
+
+  defp chains_actual do
+    chains().probes
+    |> Enum.map_join(" · ", fn p ->
+      "#{p.input}: WordNet #{Enum.join(Enum.take(p.chain, 4), " > ")}" <>
+        ", Wiktionary broader #{length(p.broader)}"
+    end)
   end
 
   defp variant_actual(x3) do

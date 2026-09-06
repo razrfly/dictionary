@@ -51,15 +51,21 @@ defmodule DevilsDictionary.HealthScoreTest do
     test "rows a session has not run are pending, and name the session", %{rows: rows} do
       pending = for r <- rows, r.status == :pending, do: r.id
 
-      # The word page and its neighbours are #71's. On an empty database M2 and
-      # E2 join them: nothing has been rebuilt and no second scope is built.
-      assert "U1" in pending
+      # Provenance and the mobile pass are #71's U2 and U3. On an empty database
+      # M2 and E2 join them: nothing has been rebuilt and no second scope is
+      # built.
+      assert "U3" in pending
+      assert "U4" in pending
       assert "M2" in pending
       assert "E2" in pending
 
-      # X2 and U5 became measurable in S4b, E1 and E3 in S5. U1 stays pending
-      # until #71 lands /define/:slug.
-      for id <- ~w(R3 X1 U1 U2 U3 U4 U6) do
+      # U1a landed, so the four rows it measures are graded rather than
+      # pending, even on an empty database where they grade as failures.
+      for id <- ~w(R3 X1 U1 U2 U6), do: refute(id in pending, "#{id} should be graded")
+
+      # X2 and U5 became measurable in S4b, E1 and E3 in S5, and R3 X1 U1 U2 U6
+      # in U1a. What is left belongs to #71's later sessions and says so.
+      for id <- ~w(U3 U4) do
         row = Enum.find(rows, &(&1.id == id))
         assert row.status == :pending, "#{id} should be pending until its session runs"
         assert row.session in ~w(S4 U1 U3), "#{id} should name the session that owns it"
@@ -97,11 +103,11 @@ defmodule DevilsDictionary.HealthScoreTest do
     test "U1 counts the routes that exist and names the ones that do not", %{rows: rows} do
       u1 = Enum.find(rows, &(&1.id == "U1"))
 
-      # The four developer surfaces and the home page are routed; the word page
-      # is #71's, so the row reports five of six rather than passing on five.
-      assert u1.actual =~ "5 / 6 routes"
-      assert u1.actual =~ "/define/:slug"
-      assert u1.status == :pending
+      # All six of #69 §6's pages are routed now that U1a added /define/:slug.
+      # A route is a fact the router can be asked for, so this reads the route
+      # table rather than trusting the prose.
+      assert u1.actual =~ "6 / 6 routes"
+      assert u1.status == :pass
     end
 
     test "U5 grades the badges against Health.coverage/2, per source", %{rows: rows} do
@@ -155,9 +161,10 @@ defmodule DevilsDictionary.HealthScoreTest do
       assert summary.graded == summary.passed + summary.failed
       assert summary.total == summary.graded + summary.reported + summary.pending
       assert summary.reported >= 1
-      # R3 X1 U1 U2 U3 U4 U6, plus M1 (skipped), M2, M4 and E2, which an empty
-      # database cannot measure. E1 and E3 became graded in S5.
-      assert summary.pending >= 10
+      # U3 and U4 (#71's U2 and U3 sessions), plus M1 (skipped), M2, M4 and E2,
+      # which an empty database cannot measure. R3, X1, U1, U2 and U6 became
+      # graded in U1a; E1 and E3 in S5.
+      assert summary.pending >= 5
     end
   end
 end

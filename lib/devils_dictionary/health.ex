@@ -14,7 +14,7 @@ defmodule DevilsDictionary.Health do
 
   alias DevilsDictionary.Absorb.Resolver
   alias DevilsDictionary.Encyclopedia.{Concept, ConceptLink}
-  alias DevilsDictionary.Health.{Coverage, Parity}
+  alias DevilsDictionary.Health.{Coverage, Pages, Parity}
   alias DevilsDictionary.Lexicon
   alias DevilsDictionary.Lexicon.{Entry, Lexeme, ScopeLexeme, Sense}
   alias DevilsDictionary.Repo
@@ -179,6 +179,18 @@ defmodule DevilsDictionary.Health do
 
   @doc "**X3** — forms and spelling variants land on the right word."
   defdelegate variants(), to: Coverage
+
+  @doc "**X1** — a random sample of the index renders. See `Health.Pages.word_pages/1`."
+  defdelegate word_pages(sample \\ 200), to: Pages
+
+  @doc "**U2** — the flagship words. See `Health.Pages.flagships/0`."
+  defdelegate flagships(), to: Pages
+
+  @doc "**U6** — every card links out. See `Health.Pages.cards_link_out/0`."
+  defdelegate cards_link_out(), to: Pages
+
+  @doc "**R3** — chains render. See `Health.Pages.chains/0`."
+  defdelegate chains(), to: Pages
 
   @doc """
   The per-source record ledger — fetched, absent, needs-materialization,

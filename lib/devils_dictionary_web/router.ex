@@ -19,8 +19,12 @@ defmodule DevilsDictionaryWeb.Router do
 
     get "/", PageController, :home
 
-    # The developer surfaces (#70 S4b). The reader-facing pages — /define/:slug,
-    # search, the provenance drawer — are #71's, and are not here yet.
+    # The word page (#71 U1a): a page for every one of the 1.5 million index
+    # words, bare ones included. Search, provenance and the thing side follow
+    # in U1b and U2.
+    live "/define/:slug", WordLive, :show
+
+    # The developer surfaces (#70 S4b).
     live "/s/:slug", ScopeLive, :show
     live "/sources/:slug", SourceLive, :show
     live "/health", HealthLive, :show
