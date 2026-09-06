@@ -73,7 +73,7 @@ defmodule DevilsDictionary.Absorb.Sources.WikidataTest do
       assert concept.kind == :thing
       assert concept.wikipedia_title == "Cat"
       assert concept.wordnet_ili == "i46593"
-      assert concept.image_url =~ "commons.wikimedia.org/wiki/Special:FilePath/"
+      assert concept.image_url =~ "upload.wikimedia.org/wikipedia/commons/thumb/"
 
       # Q146 *cat* and Q20980826 *Felis catus* are different entities; P13176 is
       # the bridge and it is what `taxon_concept_id` is for.
@@ -115,6 +115,48 @@ defmodule DevilsDictionary.Absorb.Sources.WikidataTest do
 
     test "an absent marker materializes to nothing at all" do
       assert {:ok, %{}} == Wikidata.materialize(Fixtures.source_record(%{}, source_id: 3, id: 9))
+    end
+  end
+
+  describe "thumbnail_url/1" do
+    test "the Commons thumbnail path, derived rather than redirected to" do
+      # `commons.wikimedia.org/wiki/Special:FilePath/…` resolves to a real image
+      # in three hops, but the hops declare `text/html`, and a browser enforcing
+      # `nosniff` on an image subresource refuses the load. Every such URL was a
+      # broken picture. So the path Commons actually serves is derived: the two
+      # directory segments are the first one and two hex characters of the MD5 of
+      # the file name with underscores for spaces.
+      assert Wikidata.thumbnail_url("Two american alligators.jpg") ==
+               "https://upload.wikimedia.org/wikipedia/commons/thumb/c/cd/" <>
+                 "Two_american_alligators.jpg/500px-Two_american_alligators.jpg"
+    end
+
+    test "an SVG is thumbnailed to PNG, so the thumb gains an extension" do
+      assert Wikidata.thumbnail_url("Tide overview.svg") ==
+               "https://upload.wikimedia.org/wikipedia/commons/thumb/e/eb/" <>
+                 "Tide_overview.svg/500px-Tide_overview.svg.png"
+    end
+
+    test "a name too long for the column falls back to the original file" do
+      # A thumbnail URL names the file twice, so a long name overflows the
+      # 255-byte column and would be dropped. The original path names it once.
+      long =
+        "Die Säugthiere in Abbildungen nach der Natur, mit Beschreibungen (Plate CVIII) (8557366038).jpg"
+
+      url = Wikidata.thumbnail_url(long)
+
+      assert byte_size(url) <= 255
+      refute url =~ "/thumb/"
+      assert url =~ "/wikipedia/commons/b/bc/"
+    end
+
+    test "the width is one Wikimedia will still serve" do
+      # It no longer generates arbitrary sizes: 500px answers, 400px does not.
+      assert Wikidata.thumbnail_url("Blindshark.jpg") =~ "/500px-"
+    end
+
+    test "no image is no URL" do
+      assert Wikidata.thumbnail_url(nil) == nil
     end
   end
 

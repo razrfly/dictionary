@@ -340,40 +340,52 @@ defmodule DevilsDictionaryWeb.CoreComponents do
       end
 
     ~H"""
-    <table class="w-full text-left text-sm/7 text-mist-700 dark:text-mist-400">
-      <thead>
-        <tr class="border-b border-mist-950/10 dark:border-white/10">
-          <th :for={col <- @col} class="py-2 pr-4 font-medium text-mist-950 dark:text-white">
-            {col[:label]}
-          </th>
-          <th :if={@action != []}>
-            <span class="sr-only">{gettext("Actions")}</span>
-          </th>
-        </tr>
-      </thead>
-      <tbody id={@id} phx-update={is_struct(@rows, Phoenix.LiveView.LiveStream) && "stream"}>
-        <tr
-          :for={row <- @rows}
-          id={@row_id && @row_id.(row)}
-          class="border-b border-mist-950/5 last:border-0 dark:border-white/5"
-        >
-          <td
-            :for={col <- @col}
-            phx-click={@row_click && @row_click.(row)}
-            class={["py-2 pr-4 align-top tabular-nums", @row_click && "hover:cursor-pointer"]}
+    <%!-- A table wide enough to matter scrolls inside its own box rather than
+    pushing the page sideways. `min-w-0` is not decoration: the wrapper is a flex
+    item in `Kit.section/1`, and a flex item's `min-width: auto` makes it grow to
+    its content and ignore `overflow-x` — which is exactly how /admin/imports
+    came to scroll horizontally at 375 px. --%>
+    <div class="w-full min-w-0 overflow-x-auto">
+      <table class="w-full min-w-max text-left text-sm/7 text-mist-700 dark:text-mist-400">
+        <thead>
+          <tr class="border-b border-mist-950/10 dark:border-white/10">
+            <th :for={col <- @col} class="py-2 pr-4 font-medium text-mist-950 dark:text-white">
+              {col[:label]}
+            </th>
+            <th :if={@action != []}>
+              <span class="sr-only">{gettext("Actions")}</span>
+            </th>
+          </tr>
+        </thead>
+        <tbody id={@id} phx-update={is_struct(@rows, Phoenix.LiveView.LiveStream) && "stream"}>
+          <tr
+            :for={row <- @rows}
+            id={@row_id && @row_id.(row)}
+            class="border-b border-mist-950/5 last:border-0 dark:border-white/5"
           >
-            {render_slot(col, @row_item.(row))}
-          </td>
-          <td :if={@action != []} class="w-0 font-semibold">
-            <div class="flex gap-4">
-              <%= for action <- @action do %>
-                {render_slot(action, @row_item.(row))}
-              <% end %>
-            </div>
-          </td>
-        </tr>
-      </tbody>
-    </table>
+            <td
+              :for={col <- @col}
+              phx-click={@row_click && @row_click.(row)}
+              class={["py-2 pr-4 align-top tabular-nums", @row_click && "hover:cursor-pointer"]}
+            >
+              {render_slot(col, @row_item.(row))}
+            </td>
+            <%!-- `w-px`, not the generator's `w-0`. A zero-width cell relies on
+            its content overflowing it, and that overflow escapes the scroll box
+            above and drags the whole page sideways on a narrow screen. A page
+            that needs a button in a row is better off putting it in a `<:col>`
+            (see /admin/imports); this only stops the slot being a trap. --%>
+            <td :if={@action != []} class="w-px py-2 font-semibold whitespace-nowrap">
+              <div class="flex gap-4">
+                <%= for action <- @action do %>
+                  {render_slot(action, @row_item.(row))}
+                <% end %>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
     """
   end
 

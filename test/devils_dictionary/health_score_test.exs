@@ -57,11 +57,40 @@ defmodule DevilsDictionary.HealthScoreTest do
       assert "E1" in pending
       assert "M2" in pending
 
-      for id <- ~w(R3 X1 X2 U1 U2 U3 U4 U5 U6 E1 E2 E3) do
+      # X2 and U5 became measurable in S4b, so they are graded now and are not
+      # in this list. U1 stays pending until #71 lands /define/:slug.
+      for id <- ~w(R3 X1 U1 U2 U3 U4 U6 E1 E2 E3) do
         row = Enum.find(rows, &(&1.id == id))
         assert row.status == :pending, "#{id} should be pending until its session runs"
-        assert row.session in ~w(S4 S5), "#{id} should name the session that owns it"
+        assert row.session in ~w(S4 S5 U1 U3), "#{id} should name the session that owns it"
       end
+    end
+
+    test "U1 counts the routes that exist and names the ones that do not", %{rows: rows} do
+      u1 = Enum.find(rows, &(&1.id == "U1"))
+
+      # The four developer surfaces and the home page are routed; the word page
+      # is #71's, so the row reports five of six rather than passing on five.
+      assert u1.actual =~ "5 / 6 routes"
+      assert u1.actual =~ "/define/:slug"
+      assert u1.status == :pending
+    end
+
+    test "U5 grades the badges against Health.coverage/2, per source", %{rows: rows} do
+      u5 = Enum.find(rows, &(&1.id == "U5"))
+
+      # An empty scope agrees trivially — five sources, nothing attested — and
+      # that is the point: the row measures agreement, not size.
+      assert u5.actual =~ "5 / 5 sources agree with dd.health"
+      assert u5.status == :pass
+    end
+
+    test "X2 times the search rather than describing it", %{rows: rows} do
+      x2 = Enum.find(rows, &(&1.id == "X2"))
+
+      assert x2.actual =~ ~r/p95 \d+ ms over \d+ probes/
+      assert x2.wants == "< 150 ms"
+      assert x2.status == :pass
     end
 
     test "a row the spec gives no threshold is reported, not graded", %{rows: rows} do

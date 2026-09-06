@@ -482,12 +482,55 @@ defmodule DevilsDictionary.Absorb.Sources.Wikidata do
 
   defp entity_url(qid), do: "https://www.wikidata.org/wiki/" <> qid
 
+  # A browser will not render `commons.wikimedia.org/wiki/Special:FilePath/…` as
+  # an image. It resolves — three hops to a real JPEG — but the redirect hops
+  # declare `text/html`, and Chrome enforces the `nosniff` header on an image
+  # subresource, so the load fails. Every one of those URLs was a broken picture
+  # on the browse page, and A10 counted them all as images.
+  #
+  # So derive the thumbnail path Commons actually serves. It is not a guess: the
+  # two directory segments are the first one and two hex characters of the MD5 of
+  # the file name with underscores for spaces, which is Commons' documented
+  # layout, and this needs no network call.
+  #
+  # Two details that are easy to get wrong:
+  #
+  #   * the width has to be one Wikimedia will serve. It no longer generates
+  #     arbitrary sizes: 500px answers, 400px and 320px and 800px are all
+  #     `400 Bad Request`.
+  #   * an SVG is thumbnailed to PNG, so the thumb file gains a `.png`.
+  # A thumbnail URL repeats the file name, so a long one overflows the 255-byte
+  # column and `fit/1` would drop it. The original-file path names the file once
+  # and is ~120 bytes shorter, so it is the fallback: a full-size image is worse
+  # than a thumbnail and much better than no picture. 378 of the 40,947 images
+  # take this path.
+  @thumb_width 500
+
   defp commons_url(nil), do: nil
 
   defp commons_url(file) do
-    "https://commons.wikimedia.org/wiki/Special:FilePath/" <>
-      URI.encode(String.replace(file, " ", "_")) <> "?width=400"
+    name = String.replace(file, " ", "_")
+    encoded = URI.encode(name)
+    dir = commons_dir(name)
+
+    thumb =
+      if String.ends_with?(String.downcase(name), ".svg"),
+        do: "#{@thumb_width}px-#{encoded}.png",
+        else: "#{@thumb_width}px-#{encoded}"
+
+    thumb_url = String.replace(dir, "/commons/", "/commons/thumb/") <> "#{encoded}/#{thumb}"
+
+    if byte_size(thumb_url) <= 255, do: thumb_url, else: dir <> encoded
   end
+
+  defp commons_dir(name) do
+    hash = :crypto.hash(:md5, name) |> Base.encode16(case: :lower)
+
+    "https://upload.wikimedia.org/wikipedia/commons/#{String.first(hash)}/#{String.slice(hash, 0, 2)}/"
+  end
+
+  @doc "The Commons thumbnail URL for a file name. Public so the test can pin it."
+  def thumbnail_url(file), do: commons_url(file)
 
   defp commons_attribution(nil), do: nil
   defp commons_attribution(file), do: file <> " · Wikimedia Commons"

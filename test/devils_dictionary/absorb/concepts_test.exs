@@ -66,7 +66,10 @@ defmodule DevilsDictionary.Absorb.ConceptsTest do
       assert cat.wikipedia_title == "Cat"
       assert cat.wikipedia_pageid == 6678
       assert cat.wordnet_ili == "i46593"
-      assert cat.image_url =~ "commons.wikimedia.org"
+      # Wikidata's P18 file, not Wikipedia's article thumbnail. Both now live on
+      # upload.wikimedia.org — a Special:FilePath URL will not render as an
+      # image — so the file name is what tells them apart.
+      assert cat.image_url =~ "Cat_grooming.jpg"
     end
 
     test "and in the other order, which is the one that used to clobber" do

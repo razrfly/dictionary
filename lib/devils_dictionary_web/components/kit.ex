@@ -413,6 +413,26 @@ defmodule DevilsDictionaryWeb.Kit do
     """
   end
 
+  @doc """
+  A count with thousands separators, or an em dash for nothing.
+
+  `Mix.Tasks.Dd.Report.fmt/1` does the same for the tasks; web code must not
+  reach into a Mix task module, and that one also pads for a fixed-width
+  terminal, which this must not.
+  """
+  def number(nil), do: "—"
+  def number(n) when is_integer(n), do: n |> Integer.to_string() |> group_digits()
+  def number(other), do: to_string(other)
+
+  defp group_digits(digits) do
+    digits
+    |> String.reverse()
+    |> String.graphemes()
+    |> Enum.chunk_every(3)
+    |> Enum.map_join(",", &Enum.join/1)
+    |> String.reverse()
+  end
+
   # ── tier ─────────────────────────────────────────────────────────────────
 
   @doc """

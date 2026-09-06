@@ -27,6 +27,7 @@ defmodule DevilsDictionary.Health.Score do
 
   alias DevilsDictionary.Absorb
   alias DevilsDictionary.Health
+  alias DevilsDictionary.Lexicon
   alias DevilsDictionary.Repo
   alias DevilsDictionary.Sources
   alias DevilsDictionary.Sources.ImportRun
@@ -44,7 +45,7 @@ defmodule DevilsDictionary.Health.Score do
       materialize_rows(opts) ++
       resolve_rows() ++
       link_rows(scope) ++
-      experience_rows() ++
+      experience_rows(scope) ++
       extensibility_rows() ++
       operations_rows(opts)
   end
@@ -364,18 +365,19 @@ defmodule DevilsDictionary.Health.Score do
 
   # ── X / U: experience ────────────────────────────────────────────────────
 
-  defp experience_rows do
+  defp experience_rows(scope) do
     x3 = Health.variants()
 
     [
       row("X1", "every word has a page", "200 random index lexemes render", "0 errors", :pending,
-        session: "S4"
+        session: "U1"
       ),
-      row("X2", "search is fast", "trigram search over the full index, p95", "< 150 ms", :pending,
-        session: "S4"
-      ),
+      row("X2", "search is fast", search_actual(), "< 150 ms", search_status()),
       row("X3", "forms and variants resolve", variant_actual(x3), "both", x3.passed == x3.total),
-      row("U1", "six pages exist", "routes + LiveView tests", "all", :pending, session: "S4"),
+      # #69 §6 lists six pages. S4b built the four developer surfaces; the word
+      # page and search are #71's, so this row reports what exists and stays
+      # pending until they land rather than passing on four of six.
+      row("U1", "six pages exist", pages_actual(), "all 6", pages_status(), session: "U1"),
       row(
         "U2",
         "the flagship words",
@@ -387,9 +389,20 @@ defmodule DevilsDictionary.Health.Score do
       row("U3", "provenance everywhere", "every card opens the drawer", "100% of cards", :pending,
         session: "S4"
       ),
-      row("U4", "mobile", "word page and browse at 375 px", "passes", :pending, session: "S4"),
-      row("U5", "coverage is legible", "badges and filters on /s/animals", "passes", :pending,
-        session: "S4"
+      row(
+        "U4",
+        "mobile",
+        "browse, source, imports, health and /kit: no sideways scroll at 375 px; the word page is #71's",
+        "passes",
+        :pending,
+        session: "U3"
+      ),
+      row(
+        "U5",
+        "coverage is legible",
+        badges_actual(scope),
+        "counts match",
+        badges_status(scope)
       ),
       row("U6", "every card links out", "↗ on every card resolves", "100%", :pending,
         session: "S4"
@@ -457,7 +470,7 @@ defmodule DevilsDictionary.Health.Score do
       row(
         "O4",
         "health page",
-        "`mix dd.health` prints coverage, resolution, links, parity",
+        "`mix dd.health` and /health: coverage, resolution, the link histogram, candidates, conflicts, parity",
         "all present",
         opts[:skip_health_check] != true
       )
@@ -504,6 +517,100 @@ defmodule DevilsDictionary.Health.Score do
   defp to_ms(n) when is_integer(n), do: n
 
   # ── row construction ─────────────────────────────────────────────────────
+
+  # **X2** — trigram search over the whole index, timed. The probes are fixed so
+  # the number is comparable between runs: prefixes of different lengths, two
+  # misspellings, a multiword lemma, a capitalised one, and one that matches
+  # nothing. #71's home search calls the same `Lexicon.search/2`.
+  @search_probes ~w(o oy oys oyst oyster oysster monkeyz cat Cat aardvark
+                    giant\u00a0tortoise mongoose zzzzzz hyena dog dogg
+                    sperm\u00a0whale wolf axolotl turkey)
+
+  @search_budget_ms 150
+
+  defp search_timings do
+    for probe <- @search_probes do
+      probe = String.replace(probe, "\u00a0", " ")
+      at = System.monotonic_time(:microsecond)
+      Lexicon.search(probe)
+      (System.monotonic_time(:microsecond) - at) / 1000
+    end
+  end
+
+  defp search_actual do
+    timings = Enum.sort(search_timings())
+    n = length(timings)
+    p95 = Enum.at(timings, min(round(0.95 * n) - 1, n - 1))
+
+    "p95 #{round(p95)} ms over #{n} probes · median #{round(Enum.at(timings, div(n, 2)))} ms" <>
+      " · slowest #{round(List.last(timings))} ms"
+  end
+
+  defp search_status do
+    timings = Enum.sort(search_timings())
+    n = length(timings)
+    Enum.at(timings, min(round(0.95 * n) - 1, n - 1)) < @search_budget_ms
+  end
+
+  # **U1** — the routes #69 §6 asks for. A route is a fact the router can be
+  # asked for, so it is measured rather than asserted in prose.
+  @spec_pages [
+    {"/", "home and search"},
+    {"/define/:slug", "the word page"},
+    {"/s/:slug", "scope browse"},
+    {"/sources/:slug", "one source"},
+    {"/admin/imports", "the import dashboard"},
+    {"/health", "health"}
+  ]
+
+  defp routed do
+    paths = MapSet.new(DevilsDictionaryWeb.Router.__routes__(), & &1.path)
+    Enum.split_with(@spec_pages, fn {path, _} -> path in paths end)
+  end
+
+  defp pages_actual do
+    {have, missing} = routed()
+
+    case missing do
+      [] ->
+        "#{length(have)} / #{length(@spec_pages)} routes"
+
+      missing ->
+        "#{length(have)} / #{length(@spec_pages)} routes · still to build: " <>
+          Enum.map_join(missing, ", ", fn {path, what} -> "#{path} (#{what})" end)
+    end
+  end
+
+  defp pages_status do
+    case routed() do
+      {_have, []} -> :pass
+      _ -> :pending
+    end
+  end
+
+  # **U5** — the browse badges and `mix dd.health` are the same number. Both read
+  # `lexemes.source_ids`, so this holds by construction; the row measures it
+  # anyway, because "by construction" is how the last regression got in.
+  defp badge_agreement(scope) do
+    for source <- Sources.list_sources() do
+      {source.slug, Lexicon.browse(scope, has: [source.slug]).total,
+       Health.coverage(scope, source.slug).covered}
+    end
+  end
+
+  defp badges_actual(scope) do
+    rows = badge_agreement(scope)
+    agree = Enum.count(rows, fn {_slug, badges, covered} -> badges == covered end)
+
+    detail =
+      Enum.map_join(rows, " · ", fn {slug, badges, _} -> "#{slug} #{fmt(badges)}" end)
+
+    "#{agree} / #{length(rows)} sources agree with dd.health · #{detail}"
+  end
+
+  defp badges_status(scope) do
+    Enum.all?(badge_agreement(scope), fn {_slug, badges, covered} -> badges == covered end)
+  end
 
   defp row(id, check, actual, wants, status, extra \\ [])
 
