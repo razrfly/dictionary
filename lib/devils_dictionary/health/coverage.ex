@@ -75,7 +75,14 @@ defmodule DevilsDictionary.Health.Coverage do
   # by hand). A dump pins the file it was cut from and a book its edition, both
   # on the source row. An API has no such file — what pins it is the day we
   # asked, which is exactly what its last finished run records.
-  @pins ~w(dump_date snapshot_date gutenberg_id)
+  #
+  # Ordered most readable first, and general enough that a seventh source pins
+  # itself. A checksum is the strongest claim a committed file can make but the
+  # worst thing to print, so it is the fallback rather than the first choice —
+  # WordNet keeps `snapshot_date` over its `edition`, Johnson shows its LEME
+  # edition rather than 64 hex characters, and a file with nothing but a hash
+  # still counts as pinned.
+  @pins ~w(dump_date snapshot_date edition gutenberg_id sha256)
 
   defp snapshot_pin(%Source{access: :api} = source) do
     case last_done_at(source.id) do

@@ -112,6 +112,8 @@ defmodule DevilsDictionary.Lexicon do
 
   defp form_of_entry?(lexeme), do: lexeme.metadata["form_of"] == true
 
+  defp bare_form_of?(lexeme), do: form_of_entry?(lexeme) and not enriched?(lexeme)
+
   defp enriched?(lexeme),
     do: not is_nil(lexeme.enriched_at) or not is_nil(lexeme.canonical_lexeme_id)
 
@@ -152,7 +154,19 @@ defmodule DevilsDictionary.Lexicon do
   # A page shows the canonical word, not the variant that led there. Only
   # redirect when every match agrees, so an ambiguous word keeps its own page.
   defp resolve_canonical(lexemes, word, via) do
-    case lexemes |> Enum.map(& &1.canonical_lexeme_id) |> Enum.uniq() do
+    # A bare form-of index row has no opinion about where the word belongs,
+    # because nobody wrote one — the index pass only flagged it. It must not
+    # veto a row that does have one: `geese` has a bare Wiktionary row beside
+    # Johnson's "The plural of goose", and the bare row was winning the
+    # disagreement. `spat` still keeps its page, because `spat/noun` is a real
+    # headword rather than a bare row.
+    deciding =
+      case Enum.reject(lexemes, &bare_form_of?/1) do
+        [] -> lexemes
+        rest -> rest
+      end
+
+    case deciding |> Enum.map(& &1.canonical_lexeme_id) |> Enum.uniq() do
       [id] when is_integer(id) ->
         %{
           lexemes: Repo.all(from l in Lexeme, where: l.id == ^id, order_by: [l.lemma, l.pos]),

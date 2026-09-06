@@ -237,8 +237,21 @@ defmodule DevilsDictionary.Absorb.Sources.JohnsonTest do
     test "See HEADWORD becomes an unresolved see_also, for dd.resolve to fill" do
       out = materialize("methought", "METHO’UGHT, the preterite of methinks.")
 
-      assert [%{type: :see_also, to_lemma: "methinks"} = relation] = out.relations
+      assert [relation] = Enum.filter(out.relations, &(&1.type == :see_also))
+      assert relation.to_lemma == "methinks"
+      assert relation.from_lexeme == {"en", "methought", "unknown"}
+      # Unresolved on purpose: `mix dd.resolve` owns the other end (#69 §4).
       refute Map.has_key?(relation, :to_lexeme_id)
+    end
+
+    test "an inflected entry names its base word, so the word page redirects" do
+      # "METHO’UGHT, the preterite of methinks" and "GEESE. The plural of
+      # goose." — 115 entries where Johnson says which word this is a form of.
+      # Without the edge, `geese` keeps its own page and X3 fails.
+      out = materialize("methought", "METHO’UGHT, the preterite of methinks.")
+
+      assert [%{to_lemma: "methinks", from_lexeme: {"en", "methought", _}}] =
+               Enum.filter(out.relations, &(&1.type == :form_of))
     end
 
     test "the printed marker survives even where the mapping loses it" do

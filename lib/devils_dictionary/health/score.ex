@@ -129,9 +129,16 @@ defmodule DevilsDictionary.Health.Score do
       row(
         "A7",
         "Wikipedia coverage",
-        "#{fmt(a7.answered)} / #{fmt(a7.with_sitelink)} answered = #{a7.pct}%",
-        "100%",
-        a7.pct >= 100.0
+        "#{fmt(a7.asserted_answered)} / #{fmt(a7.asserted)} asserted = #{a7.asserted_pct}% · " <>
+          "#{fmt(a7.answered)} / #{fmt(a7.with_sitelink)} incl. candidates = #{a7.pct}%",
+        "100% of asserted",
+        a7.asserted_pct >= 100.0,
+        detail:
+          "v13 (S5): graded on concepts a scope word links to at auto/confirmed. " <>
+            "A 0.40 disambiguation candidate is a thing a page mentioned, and every " <>
+            "summary fetched names more, so the all-sitelinked denominator grows " <>
+            "faster than any pass can fill it — the split the S3 audit recommended " <>
+            "for the second scope"
       ),
       # Amended in S3: the file yields 997 entries, not the 966 §7 assumed, and
       # "attached" is 100% by construction — `materialize/1` creates the lexeme

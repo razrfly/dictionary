@@ -296,6 +296,9 @@ defmodule DevilsDictionary.Health do
     with_sitelink =
       from(c in Concept, where: not is_nil(c.wikipedia_title)) |> Repo.aggregate(:count)
 
+    asserted = asserted_concepts()
+    asserted_answered = asserted_concepts_answered(source)
+
     answered =
       Repo.one!(
         from c in Concept,
@@ -323,8 +326,54 @@ defmodule DevilsDictionary.Health do
       answered: answered,
       with_entry: with_entry,
       missing: with_sitelink - answered,
-      pct: pct(answered, with_sitelink)
+      pct: pct(answered, with_sitelink),
+      asserted: asserted,
+      asserted_answered: asserted_answered,
+      asserted_pct: pct(asserted_answered, asserted)
     }
+  end
+
+  # A concept a scope word actually links to, at `auto` or `confirmed`. This is
+  # the population A7 v2 grades: the 0.40 disambiguation candidates are things a
+  # page merely *mentioned*, and each summary we fetch names more of them, so
+  # the all-sitelinked denominator grows faster than any pass can fill it. The
+  # S3 audit predicted this for the second scope and recommended exactly this
+  # split; S5's `emotions` scope is where it came due (#69 v13).
+  @asserted ~w(auto confirmed)
+
+  defp asserted_concepts do
+    Repo.one!(
+      from c in Concept,
+        where: not is_nil(c.wikipedia_title),
+        where:
+          fragment(
+            "EXISTS (SELECT 1 FROM concept_links cl WHERE cl.concept_id = ? AND cl.status = ANY(?))",
+            c.id,
+            ^@asserted
+          ),
+        select: count(c.id)
+    )
+  end
+
+  defp asserted_concepts_answered(source) do
+    Repo.one!(
+      from c in Concept,
+        where: not is_nil(c.wikipedia_title),
+        where:
+          fragment(
+            "EXISTS (SELECT 1 FROM concept_links cl WHERE cl.concept_id = ? AND cl.status = ANY(?))",
+            c.id,
+            ^@asserted
+          ),
+        where:
+          fragment("EXISTS (SELECT 1 FROM entries e WHERE e.concept_id = ?)", c.id) or
+            fragment(
+              "EXISTS (SELECT 1 FROM source_records r WHERE r.source_id = ? AND r.external_id = 'concept:' || ?)",
+              ^source.id,
+              c.qid
+            ),
+        select: count(c.id)
+    )
   end
 
   @doc """

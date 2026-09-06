@@ -644,7 +644,46 @@ defmodule DevilsDictionary.Absorb.Sources.Johnson do
         }
       end
 
-    alt_rows ++ cross_references(record, lemma, pos, text)
+    alt_rows ++
+      form_of(record, lemma, pos, blocks) ++ cross_references(record, lemma, pos, text)
+  end
+
+  # "GEESE. The plural of goose.", "MICE, the plural of mouse.", "FOUGHT. The
+  # preterite and participle of fight." — 115 entries where Johnson names the
+  # base word himself, in the printed headword or in the first line of the body.
+  # Worth reading out: without it `geese` keeps its own page and scorecard row
+  # X3 fails, because a Johnson entry is not a bare index row and
+  # `Lexicon.lookup/1` rightly refuses to send a word with a definition of its
+  # own somewhere else.
+  #
+  # Only the prose is scanned, plus the printed headword: a quotation that
+  # happens to say "the plural of" is Johnson quoting somebody, not defining
+  # a form.
+  @form_of ~r/\b(?:plural|preterite|preter|pret\.|participle|particip\.|part\.)(?:\s+(?:and|or)\s+\w+\.?)*\s+of\s+(?:the\s+verb\s+)?(?:to\s+)?(?<target>[a-z][a-z'’\-]+)/
+  # `plural of the present tense of the verb to be` would otherwise resolve to
+  # "the". Losing ARE is better than inventing an inflection of the article.
+  @not_a_word ~w(the a an)
+
+  defp form_of(record, lemma, pos, blocks) do
+    prose =
+      [record.raw["printed_headword"] | for(b <- blocks, b.kind == :prose, do: b.text)]
+      |> Enum.reject(&is_nil/1)
+      |> Enum.join(" ")
+
+    with [target] <- Regex.run(@form_of, prose, capture: ["target"]),
+         target = lemma(target),
+         true <- target not in @not_a_word and target != lemma do
+      [
+        %{
+          source_id: record.source_id,
+          from_lexeme: {"en", lemma, pos},
+          to_lemma: target,
+          type: :form_of
+        }
+      ]
+    else
+      _ -> []
+    end
   end
 
   defp cross_references(record, lemma, pos, text) do

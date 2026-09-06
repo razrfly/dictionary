@@ -92,6 +92,29 @@ defmodule DevilsDictionary.LexiconTest do
       assert lexeme.lemma == "goose"
     end
 
+    test "a bare form-of row does not veto a row that names the canonical word" do
+      # Johnson defines GEESE ("The plural of goose"), so the word has an entry
+      # and stops being bare — but Wiktionary's bare index row is still beside
+      # it with no opinion, and it was winning the disagreement.
+      goose = enriched!("goose", "noun", forms: [%{"form" => "geese", "tags" => ["plural"]}])
+      lexeme!("geese", "noun", metadata: %{"form_of" => true})
+      enriched!("geese", "unknown", canonical_lexeme_id: goose.id)
+
+      assert %{via: :canonical, lexemes: [lexeme]} = Lexicon.lookup("geese")
+      assert lexeme.lemma == "goose"
+    end
+
+    test "a real headword beside an inflection still keeps its own page" do
+      # `spat` is young oysters as well as the preterite of spit. Neither row is
+      # a bare index row, so they disagree and the word keeps its page.
+      spit = enriched!("spit", "verb", forms: [%{"form" => "spat", "tags" => ["past"]}])
+      lexeme!("spat", "noun")
+      enriched!("spat", "verb", canonical_lexeme_id: spit.id)
+
+      assert %{via: :lemma, lexemes: lexemes} = Lexicon.lookup("spat")
+      assert Enum.all?(lexemes, &(&1.lemma == "spat"))
+    end
+
     test "a bare row is still returned when nothing claims it as a form" do
       lexeme!("wamplebug", "noun")
 
