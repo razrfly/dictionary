@@ -13,12 +13,14 @@ defmodule DevilsDictionary.WordFixtures do
   alias DevilsDictionary.Encyclopedia.{Concept, ConceptLink, ConceptRelation}
   alias DevilsDictionary.Lexicon.{Entry, Lexeme, LexicalRelation, ScopeLexeme, Sense}
   alias DevilsDictionary.Repo
+  alias DevilsDictionary.Sources.SourceRecord
 
   @doc """
   A lexeme, optionally placed in a scope.
 
   `source_slugs` fills `source_ids`, which is what the coverage badges read.
-  Pass `enriched_at: nil` for a bare index row — the case most of the 1.5
+  Pass `scope: nil` for a word outside every scope, and `enriched_at: nil` for
+  a bare index row — the case most of the 1.5
   million rows are in, and the one a page is most likely to break on.
   """
   def word!(ctx, lemma, source_slugs \\ [], opts \\ []) do
@@ -38,7 +40,9 @@ defmodule DevilsDictionary.WordFixtures do
         enriched_at: Keyword.get(opts, :enriched_at, DateTime.utc_now())
       })
 
-    if scope = opts[:scope] || ctx[:animals] do
+    # `scope: nil` is the deliberate way to build a word in no scope at all —
+    # *quark*, real and enriched and in neither Animals nor Emotions.
+    if scope = Keyword.get(opts, :scope, ctx[:animals]) do
       Repo.insert!(%ScopeLexeme{
         scope_id: scope.id,
         lexeme_id: lexeme.id,
@@ -47,6 +51,32 @@ defmodule DevilsDictionary.WordFixtures do
     end
 
     lexeme
+  end
+
+  @doc """
+  The raw row a sense or an entry was materialized from — what the ⓘ drawer
+  shows (#71 U2, row U3).
+
+  Senses and entries carry `source_record_id`, so every fixture that wants a
+  drawer needs one of these; `sense!/4` and `entry!/4` take `record:` and make
+  one when they are not given it, because a card with no record is the failure
+  U3 exists to catch and never the default.
+  """
+  def record!(ctx, source_slug, attrs \\ []) do
+    source = ctx.sources[source_slug]
+    now = DateTime.utc_now()
+
+    Repo.insert!(%SourceRecord{
+      source_id: source.id,
+      external_id:
+        Keyword.get(attrs, :external_id, "#{source_slug}-#{System.unique_integer([:positive])}"),
+      url: Keyword.get(attrs, :url, "https://example.test/record"),
+      raw: Keyword.get(attrs, :raw, %{"word" => "example", "senses" => []}),
+      content_hash: Keyword.get(attrs, :content_hash, "hash"),
+      fetched_at: Keyword.get(attrs, :fetched_at, now),
+      changed_at: Keyword.get(attrs, :changed_at, now),
+      materialized_at: Keyword.get(attrs, :materialized_at, now)
+    })
   end
 
   @doc """
@@ -61,6 +91,7 @@ defmodule DevilsDictionary.WordFixtures do
     Repo.insert!(%Sense{
       lexeme_id: lexeme.id,
       source_id: source.id,
+      source_record_id: record_id(ctx, source_slug, attrs),
       external_id:
         Keyword.get(
           attrs,
@@ -89,6 +120,7 @@ defmodule DevilsDictionary.WordFixtures do
       lexeme_id: lexeme_id,
       concept_id: concept_id,
       source_id: source.id,
+      source_record_id: record_id(ctx, source_slug, attrs),
       headword: Keyword.get(attrs, :headword),
       pos: Keyword.get(attrs, :pos),
       body: Keyword.get(attrs, :body, "A definition."),
@@ -98,6 +130,15 @@ defmodule DevilsDictionary.WordFixtures do
       year: Keyword.get(attrs, :year, source.era_year),
       position: Keyword.get(attrs, :position, 0)
     })
+  end
+
+  # `record: nil` is the deliberate way to build the broken case.
+  defp record_id(ctx, source_slug, attrs) do
+    case Keyword.fetch(attrs, :record) do
+      {:ok, nil} -> nil
+      {:ok, %SourceRecord{id: id}} -> id
+      :error -> record!(ctx, source_slug).id
+    end
   end
 
   @doc """

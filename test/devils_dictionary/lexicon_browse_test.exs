@@ -228,4 +228,41 @@ defmodule DevilsDictionary.LexiconBrowseTest do
       assert [%{lemma: "100%"}] = Lexicon.search("100%")
     end
   end
+
+  describe "random_lexemes/1 and random_word/0" do
+    test "an unfiltered draw returns rows from the index, bare ones included", _ctx do
+      for i <- 1..20, do: lexeme!("word#{i}", enriched_at: nil)
+
+      drawn = Lexicon.random_lexemes(sample: 5)
+
+      assert length(drawn) == 5
+      assert Enum.all?(drawn, &(&1.slug =~ "word"))
+      assert Enum.uniq_by(drawn, & &1.id) == drawn
+    end
+
+    test "an empty index draws nothing rather than raising", _ctx do
+      assert Lexicon.random_lexemes(sample: 5) == []
+      assert Lexicon.random_word() == nil
+    end
+
+    test "surprise me only ever lands on an enriched word inside a scope", ctx do
+      # A bare row, an enriched word outside every scope, a bare word inside
+      # one, and the only word that is both: *Surprise me* must find that one
+      # every time, because the other three are pages with nothing on them.
+      lexeme!("bareword", enriched_at: nil)
+      lexeme!("quark")
+      scoped!(ctx.animals, lexeme!("abrocome", enriched_at: nil))
+      scoped!(ctx.animals, lexeme!("oyster"))
+
+      for _ <- 1..20, do: assert(%{slug: "oyster"} = Lexicon.random_word())
+    end
+
+    test "a scope filter keeps the draw inside that scope", ctx do
+      scoped!(ctx.animals, lexeme!("oyster"))
+      lexeme!("quark")
+
+      assert [%{slug: "oyster"}] =
+               Lexicon.random_lexemes(sample: 1, scope: "animals", enriched: true)
+    end
+  end
 end

@@ -129,9 +129,78 @@ defmodule DevilsDictionary.Sources do
 
   @doc """
   Loads a record's `raw` payload, which is `load_in_query: false`.
+
+  Takes a record or a bare id, because the provenance drawer (#71 U2) has an id
+  and no reason to load the row twice.
   """
-  def raw(%SourceRecord{id: id}) do
+  def raw(%SourceRecord{id: id}), do: raw(id)
+
+  def raw(id) when is_integer(id) do
     Repo.one(from r in SourceRecord, where: r.id == ^id, select: r.raw)
+  end
+
+  @doc """
+  The metadata of a list of records, in one query, without `raw`.
+
+  What the provenance drawer shows above the fold: the external id, the
+  canonical url, the hash and the three timestamps. `raw` is deliberately left
+  behind — a WordNet card cites one record per synset, and twenty payloads is
+  not a panel, it is a download. The drawer opens one of them with `raw/1`.
+  """
+  def records(ids) when is_list(ids) do
+    ids = ids |> Enum.reject(&is_nil/1) |> Enum.uniq()
+
+    if ids == [] do
+      []
+    else
+      by_id =
+        Repo.all(
+          from r in SourceRecord,
+            where: r.id in ^ids,
+            select: %{
+              id: r.id,
+              source_id: r.source_id,
+              external_id: r.external_id,
+              url: r.url,
+              content_hash: r.content_hash,
+              fetched_at: r.fetched_at,
+              changed_at: r.changed_at,
+              materialized_at: r.materialized_at
+            }
+        )
+        |> Map.new(&{&1.id, &1})
+
+      # The caller's order is the order the card cites them in, which is the
+      # order the reader sees on the page.
+      Enum.flat_map(ids, fn id -> List.wrap(by_id[id]) end)
+    end
+  end
+
+  @doc """
+  One record by source slug and external id.
+
+  The thing side has no `source_record_id` to follow: a concept is keyed by its
+  QID, and Wikidata and Wikipedia record it under `"Q…"` and `"concept:Q…"`.
+  That is a convention rather than a foreign key, which is why the thing
+  panel's provenance is reported and never graded (#71 U2, row U3).
+  """
+  def record_by_external_id(source_slug, external_id) do
+    Repo.one(
+      from r in SourceRecord,
+        join: s in Source,
+        on: s.id == r.source_id,
+        where: s.slug == ^source_slug and r.external_id == ^external_id,
+        select: %{
+          id: r.id,
+          source_id: r.source_id,
+          external_id: r.external_id,
+          url: r.url,
+          content_hash: r.content_hash,
+          fetched_at: r.fetched_at,
+          changed_at: r.changed_at,
+          materialized_at: r.materialized_at
+        }
+    )
   end
 
   # ── import runs ──────────────────────────────────────────────────────────

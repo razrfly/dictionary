@@ -424,9 +424,18 @@ defmodule DevilsDictionary.Lexicon.WordPageTest do
       assert card.url == "https://en.wiktionary.org/wiki/oyster"
     end
 
-    test "a row with no url of its own falls back to the source's template", ctx do
+    test "a row with no url of its own falls back to the record it came from", ctx do
       oyster = word!(ctx, "oyster", ~w(wiktionary))
-      sense!(ctx, oyster, "wiktionary", url: nil)
+      record = record!(ctx, "wiktionary", url: "https://kaikki.org/oyster")
+      sense!(ctx, oyster, "wiktionary", url: nil, record: record)
+
+      assert [card] = page("oyster").cards
+      assert card.url == "https://kaikki.org/oyster"
+    end
+
+    test "a row with no url and no record url falls back to the source's template", ctx do
+      oyster = word!(ctx, "oyster", ~w(wiktionary))
+      sense!(ctx, oyster, "wiktionary", url: nil, record: record!(ctx, "wiktionary", url: nil))
 
       assert [card] = page("oyster").cards
       assert card.url == "https://en.wiktionary.org/wiki/oyster#English"
@@ -499,6 +508,90 @@ defmodule DevilsDictionary.Lexicon.WordPageTest do
       word!(ctx, "oyster", ~w(wordnet))
 
       assert page("oyster", trail: ["ghost"]).trail == [%{slug: "ghost", lemma: "ghost"}]
+    end
+  end
+
+  describe "provenance/2 (U3)" do
+    test "a card's ref resolves to the records it cites, one raw at a time", ctx do
+      oyster = word!(ctx, "oyster", ~w(wiktionary))
+
+      record =
+        record!(ctx, "wiktionary",
+          external_id: "oyster/noun",
+          url: "https://kaikki.org/oyster",
+          raw: %{"word" => "oyster", "pos" => "noun"}
+        )
+
+      sense!(ctx, oyster, "wiktionary", gloss: "A mollusk.", record: record)
+
+      page = page("oyster")
+      assert [card] = page.cards
+      assert %{} = drawer = WordPage.provenance(page, "card:" <> card.id)
+
+      assert drawer.ref == "card:card-wiktionary"
+      assert drawer.source.slug == "wiktionary"
+      assert [shown] = drawer.records
+      assert shown.external_id == "oyster/noun"
+      assert shown.url == "https://kaikki.org/oyster"
+      assert shown.materialized_at
+      assert drawer.open == 0
+      assert drawer.raw.json =~ ~s("word": "oyster")
+      refute drawer.raw.truncated?
+    end
+
+    test "a card citing several records opens the one the ref names", ctx do
+      oyster = word!(ctx, "oyster", ~w(wordnet))
+      first = record!(ctx, "wordnet", external_id: "oewn-1", raw: %{"id" => "oewn-1"})
+      second = record!(ctx, "wordnet", external_id: "oewn-2", raw: %{"id" => "oewn-2"})
+      sense!(ctx, oyster, "wordnet", group_key: "oewn-1", record: first, position: 0)
+      sense!(ctx, oyster, "wordnet", group_key: "oewn-2", record: second, position: 1)
+
+      page = page("oyster")
+
+      assert %{open: 0, raw: %{json: first_json}} = WordPage.provenance(page, "card:card-wordnet")
+      assert first_json =~ "oewn-1"
+
+      assert %{open: 1, raw: %{json: second_json}} =
+               WordPage.provenance(page, "card:card-wordnet:1")
+
+      assert second_json =~ "oewn-2"
+
+      # An index past the end is a URL somebody edited, not a crash.
+      assert %{open: 0} = WordPage.provenance(page, "card:card-wordnet:99")
+    end
+
+    test "the drawer carries the word's concept links, with method and confidence", ctx do
+      oyster = word!(ctx, "oyster", ~w(wiktionary))
+      sense!(ctx, oyster, "wiktionary", gloss: "A mollusk.")
+      concept = concept!("Q107411", "oyster")
+      link!(oyster, concept, method: :wiktionary_qid, confidence: 0.95)
+
+      assert %{links: [link]} = WordPage.provenance(page("oyster"), "card:card-wiktionary")
+      assert link.qid == "Q107411"
+      assert link.method == :wiktionary_qid
+      assert link.confidence == 0.95
+      assert link.status == :auto
+    end
+
+    test "a ref naming nothing on this page opens nothing", ctx do
+      oyster = word!(ctx, "oyster", ~w(wiktionary))
+      sense!(ctx, oyster, "wiktionary", gloss: "A mollusk.")
+      page = page("oyster")
+
+      assert WordPage.provenance(page, "card:card-bierce") == nil
+      assert WordPage.provenance(page, "thing") == nil
+      assert WordPage.provenance(page, "nonsense") == nil
+      assert WordPage.provenance(page, nil) == nil
+    end
+
+    test "a card cites each record once, in the order it cites them", ctx do
+      oyster = word!(ctx, "oyster", ~w(wiktionary))
+      record = record!(ctx, "wiktionary")
+      sense!(ctx, oyster, "wiktionary", gloss: "one", record: record, position: 0)
+      sense!(ctx, oyster, "wiktionary", gloss: "two", record: record, position: 1)
+
+      assert [card] = page("oyster").cards
+      assert [_only] = WordPage.card_record_ids(card)
     end
   end
 

@@ -189,6 +189,9 @@ defmodule DevilsDictionary.Health do
   @doc "**U6** — every card links out. See `Health.Pages.cards_link_out/0`."
   defdelegate cards_link_out(), to: Pages
 
+  @doc "**U3** — provenance everywhere. See `Health.Pages.cards_provenance/0`."
+  defdelegate cards_provenance(), to: Pages
+
   @doc "**R3** — chains render. See `Health.Pages.chains/0`."
   defdelegate chains(), to: Pages
 

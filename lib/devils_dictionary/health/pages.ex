@@ -1,24 +1,23 @@
 defmodule DevilsDictionary.Health.Pages do
   @moduledoc """
-  The four scorecard rows the word page answers — **X1** (every word has a
-  page), **U2** (the flagship words), **U6** (every card links out) and **R3**
-  (chains render).
+  The five scorecard rows the word page answers — **X1** (every word has a
+  page), **U2** (the flagship words), **U3** (provenance everywhere), **U6**
+  (every card links out) and **R3** (chains render).
 
-  All four are measured by building the page, not by rendering it: they call
+  All five are measured by building the page, not by rendering it: they call
   `Lexicon.WordPage.build/2` and read the struct. That keeps them pure — no
   HTTP, no endpoint, no browser — so `mix dd.score` and `mix test` measure the
   same thing, and a row cannot pass because a template happened to swallow a
   nil.
   """
 
-  import Ecto.Query
-
   alias DevilsDictionary.Lexicon
-  alias DevilsDictionary.Lexicon.{Lexeme, WordPage}
-  alias DevilsDictionary.Repo
+  alias DevilsDictionary.Lexicon.WordPage
+  alias DevilsDictionary.Sources
 
   @flagships ~w(cat dog oyster)
   @chain_words ~w(cat dog)
+  @page_words Enum.uniq(@flagships ++ @chain_words ++ ~w(joy grief oysters))
   @sample 200
 
   @doc """
@@ -29,12 +28,12 @@ defmodule DevilsDictionary.Health.Pages do
   about still gets a page, so the sample is dominated by exactly the case most
   likely to raise.
 
-  Sampled by drawing random ids across the id range rather than `ORDER BY
-  random()`, which is a sequential scan of the whole index.
+  Sampled by `Lexicon.random_lexemes/1`, which draws random ids across the id
+  range rather than `ORDER BY random()`, a sequential scan of the whole index.
   """
   def word_pages(sample \\ @sample) do
     probes =
-      for lexeme <- random_lexemes(sample) do
+      for lexeme <- Lexicon.random_lexemes(sample: sample) do
         case safe_build(lexeme.slug) do
           {:ok, page} ->
             %{input: lexeme.slug, ok: true, error: nil, cards: length(page.cards)}
@@ -79,22 +78,113 @@ defmodule DevilsDictionary.Health.Pages do
   or the source's `url_template` — A9's three answers, in A9's order. A card
   with none of them is a bug, not a missing icon, so this counts cards without
   a target rather than sampling them.
+
+  The thing panel's two ↗ — Wikipedia and Wikidata — joined the population in
+  U2, the carry-over from the U1b audit. They are probed only for a word that
+  names something, and counted separately: a word with no concept has no panel
+  and cannot fail a row about link-outs.
   """
   def cards_link_out do
+    pages = pages()
+
     cards =
-      for word <- @flagships ++ @chain_words ++ ~w(joy grief oysters),
-          card <- build!(word).cards do
+      for {word, page} <- pages, card <- page.cards do
         %{word: word, card: card.id, url: card.url}
       end
       |> Enum.uniq_by(&{&1.word, &1.card})
 
-    linked = Enum.filter(cards, &(is_binary(&1.url) and &1.url != ""))
+    things =
+      for {word, %{thing: %{concept: concept} = thing}} when not is_nil(concept) <- pages,
+          {label, url} <- [{"wikipedia", thing.wikipedia_url}, {"wikidata", thing.wikidata_url}] do
+        %{word: word, card: "thing-#{label}", url: url}
+      end
+
+    all = cards ++ things
+    linked = Enum.filter(all, &linked?/1)
 
     %{
-      probes: Enum.reject(cards, &(is_binary(&1.url) and &1.url != "")),
+      probes: Enum.reject(all, &linked?/1),
       passed: length(linked),
-      total: length(cards)
+      total: length(all),
+      cards: length(cards),
+      things: length(things)
     }
+  end
+
+  defp linked?(%{url: url}), do: is_binary(url) and url != ""
+
+  @doc """
+  **U3** — provenance everywhere.
+
+  Every card opens the drawer, and the drawer is a `source_records` row: the
+  external id, the canonical url, the license, the three timestamps and the
+  trimmed raw. A card passes when at least one of the records it cites still
+  exists — `entries.source_record_id` and `senses.source_record_id` are
+  `on_delete: :nilify_all`, so a deleted record leaves a card that renders and
+  cannot say where it came from, which is exactly the rot this row is for.
+
+  Two figures, because one hides the other: **cards** that open a drawer, and
+  **citations** — every entry and every sense on those cards — that carry a
+  record. A WordNet card cites one record per synset, so a card can pass on its
+  first synset while the rest have gone.
+
+  The thing panel is reported beside them, never graded: a concept has no
+  `source_record_id`, and its records are found by the convention that Wikidata
+  writes `Q…` and Wikipedia writes `concept:Q…` or the title it probed with.
+  A convention is not a foreign key.
+  """
+  def cards_provenance do
+    pages = pages()
+
+    cards =
+      for {word, page} <- pages, card <- page.cards do
+        citations = card.entries ++ Enum.flat_map(card.groups, & &1.senses)
+
+        %{
+          word: word,
+          card: card.id,
+          records: WordPage.card_record_ids(card),
+          citations: length(citations),
+          cited: Enum.count(citations, &(not is_nil(&1.record_id)))
+        }
+      end
+      |> Enum.uniq_by(&{&1.word, &1.card})
+
+    known =
+      cards
+      |> Enum.flat_map(& &1.records)
+      |> Sources.records()
+      |> MapSet.new(& &1.id)
+
+    probes = Enum.map(cards, &Map.put(&1, :ok, Enum.any?(&1.records, fn id -> id in known end)))
+
+    %{
+      probes: Enum.reject(probes, & &1.ok),
+      passed: Enum.count(probes, & &1.ok),
+      total: length(probes),
+      citations: Enum.sum(Enum.map(cards, & &1.citations)),
+      cited: Enum.sum(Enum.map(cards, & &1.cited)),
+      words: length(pages),
+      things: thing_provenance(pages)
+    }
+  end
+
+  # Reported, not graded. `passed` is the words whose panel finds at least one
+  # record of its own; `total` is the words that have a panel at all.
+  defp thing_provenance(pages) do
+    with_concept =
+      for {_word, %{thing: %{concept: concept}} = page} when not is_nil(concept) <- pages,
+          do: page
+
+    opened =
+      Enum.count(with_concept, fn page ->
+        case WordPage.provenance(page, "thing") do
+          %{records: [_ | _]} -> true
+          _ -> false
+        end
+      end)
+
+    %{passed: opened, total: length(with_concept)}
   end
 
   @doc """
@@ -137,42 +227,17 @@ defmodule DevilsDictionary.Health.Pages do
 
   defp build!(word), do: word |> Lexicon.lookup() |> WordPage.build()
 
+  # The six words U3 and U6 are measured on, built once per call: the three
+  # flagships (which are also the two chain words), an emotion, its opposite,
+  # and a plural that redirects. A small denominator, which is why the actual
+  # strings print it.
+  defp pages, do: for(word <- @page_words, do: {word, build!(word)})
+
   defp safe_build(word) do
     {:ok, build!(word)}
   rescue
     error -> {:error, Exception.message(error)}
   catch
     :exit, reason -> {:error, inspect(reason)}
-  end
-
-  # Uniform over the id range rather than `ORDER BY random()`, which reads all
-  # 1.5 million rows. The id space has gaps — a round of 400 draws lands about
-  # 140 rows — so rounds are drawn until the sample is full, each one a single
-  # indexed lookup.
-  defp random_lexemes(sample) do
-    case Repo.one(from l in Lexeme, select: {min(l.id), max(l.id)}) do
-      {nil, nil} -> []
-      {low, high} -> draw(low..high, sample, [], 8)
-    end
-  end
-
-  defp draw(_range, sample, taken, 0), do: Enum.take(taken, sample)
-
-  defp draw(range, sample, taken, rounds) do
-    have = MapSet.new(taken, & &1.id)
-    ids = for _ <- 1..(sample * 3), do: Enum.random(range)
-    ids = ids |> Enum.uniq() |> Enum.reject(&(&1 in have))
-
-    found =
-      Repo.all(
-        from l in Lexeme,
-          where: l.id in ^ids,
-          select: %{id: l.id, slug: l.slug, lemma: l.lemma}
-      )
-
-    case taken ++ found do
-      all when length(all) >= sample -> Enum.take(all, sample)
-      all -> draw(range, sample, all, rounds - 1)
-    end
   end
 end

@@ -51,21 +51,20 @@ defmodule DevilsDictionary.HealthScoreTest do
     test "rows a session has not run are pending, and name the session", %{rows: rows} do
       pending = for r <- rows, r.status == :pending, do: r.id
 
-      # Provenance and the mobile pass are #71's U2 and U3. On an empty database
-      # M2 and E2 join them: nothing has been rebuilt and no second scope is
-      # built.
-      assert "U3" in pending
+      # The mobile pass is #71's U3. On an empty database M2 and E2 join it:
+      # nothing has been rebuilt and no second scope is built.
       assert "U4" in pending
       assert "M2" in pending
       assert "E2" in pending
 
-      # U1a landed, so the four rows it measures are graded rather than
-      # pending, even on an empty database where they grade as failures.
-      for id <- ~w(R3 X1 U1 U2 U6), do: refute(id in pending, "#{id} should be graded")
+      # U1a landed the four rows it measures and U2 landed U3, so all five are
+      # graded rather than pending, even on an empty database where they grade
+      # as failures.
+      for id <- ~w(R3 X1 U1 U2 U3 U6), do: refute(id in pending, "#{id} should be graded")
 
-      # X2 and U5 became measurable in S4b, E1 and E3 in S5, and R3 X1 U1 U2 U6
-      # in U1a. What is left belongs to #71's later sessions and says so.
-      for id <- ~w(U3 U4) do
+      # X2 and U5 became measurable in S4b, E1 and E3 in S5, R3 X1 U1 U2 U6 in
+      # U1a and U3 in U2. What is left belongs to #71's last session.
+      for id <- ~w(U4) do
         row = Enum.find(rows, &(&1.id == id))
         assert row.status == :pending, "#{id} should be pending until its session runs"
         assert row.session in ~w(S4 U1 U3), "#{id} should name the session that owns it"

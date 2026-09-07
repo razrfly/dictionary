@@ -142,6 +142,163 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
       assert html =~ "oysters"
       assert html =~ ~s(id="card-bierce")
     end
+
+    test "a headword that is also somebody's form says so", ctx do
+      word!(ctx, "spat", ~w(wiktionary), enriched_at: nil)
+      word!(ctx, "spit", ~w(wiktionary), forms: [%{"form" => "spat", "tags" => ["past"]}])
+
+      {:ok, _live, html} = live(ctx.conn, ~p"/define/spat")
+
+      assert html =~ ~s(id="also-a-form-of")
+      assert html =~ ~s(href="/define/spit")
+    end
+  end
+
+  describe "the sparse states (U2)" do
+    test "a word the index does not hold offers the nearest words it does", ctx do
+      word!(ctx, "oyster", ~w(wiktionary))
+      word!(ctx, "oysterer", ~w(wiktionary))
+
+      {:ok, _live, html} = live(ctx.conn, ~p"/define/oysster")
+
+      assert html =~ ~s(id="no-such-word")
+      assert html =~ ~s(id="did-you-mean")
+      assert html =~ ~s(id="suggestion-oyster")
+    end
+
+    test "a miss with nothing near it is still a page", ctx do
+      word!(ctx, "oyster", ~w(wiktionary))
+
+      {:ok, _live, html} = live(ctx.conn, ~p"/define/zzzznotaword")
+
+      assert html =~ ~s(id="no-such-word")
+      refute html =~ ~s(id="did-you-mean")
+    end
+
+    test "a word in a scope says which one, and links to it", ctx do
+      oyster!(ctx)
+
+      {:ok, _live, html} = live(ctx.conn, ~p"/define/oyster")
+
+      assert html =~ ~s(id="scopes")
+      assert html =~ ~s(id="scope-animals")
+      assert html =~ ~s(href="/s/animals")
+      refute html =~ ~s(id="out-of-scope")
+    end
+
+    test "a word in no scope says so, and names what does hold it", ctx do
+      quark = word!(ctx, "quark", ~w(wordnet), scope: nil)
+      sense!(ctx, quark, "wordnet", group_key: "oewn-quark-n", gloss: "an elementary particle")
+
+      {:ok, _live, html} = live(ctx.conn, ~p"/define/quark")
+
+      assert html =~ ~s(id="out-of-scope")
+      assert html =~ "not in Animals"
+      assert html =~ "Open English WordNet"
+    end
+
+    test "a bare row has no scope line to print and does not invent one", ctx do
+      word!(ctx, "abrocome", [], enriched_at: nil, scope: nil)
+
+      {:ok, _live, html} = live(ctx.conn, ~p"/define/abrocome")
+
+      assert html =~ ~s(id="bare-row")
+      refute html =~ ~s(id="scopes")
+    end
+  end
+
+  describe "the provenance drawer (U3)" do
+    test "every card carries an ⓘ, and it opens the record the card cites", ctx do
+      oyster!(ctx)
+
+      {:ok, live, html} = live(ctx.conn, ~p"/define/oyster")
+
+      for card <- ~w(card-bierce card-johnson card-wiktionary card-wordnet) do
+        assert html =~ ~s(id="#{card}-info")
+      end
+
+      html = live |> element("#card-wiktionary-info") |> render_click()
+
+      assert html =~ ~s(id="provenance")
+      assert html =~ ~s(id="provenance-records")
+      assert html =~ "materialized"
+      assert html =~ ~s(id="provenance-raw")
+      assert_patched(live, "/define/oyster?provenance=card%3Acard-wiktionary")
+    end
+
+    test "the drawer shows the record's own id, url and the source's license", ctx do
+      oyster = word!(ctx, "oyster", ~w(wiktionary))
+
+      record =
+        record!(ctx, "wiktionary",
+          external_id: "oyster/noun",
+          url: "https://kaikki.org/oyster",
+          raw: %{"word" => "oyster"}
+        )
+
+      sense!(ctx, oyster, "wiktionary", gloss: "A mollusk.", record: record)
+
+      {:ok, _live, html} =
+        live(ctx.conn, ~p"/define/oyster?provenance=card:card-wiktionary")
+
+      assert html =~ "oyster/noun"
+      assert html =~ "https://kaikki.org/oyster"
+      assert html =~ "CC BY-SA 4.0"
+      assert html =~ "&quot;word&quot;: &quot;oyster&quot;"
+    end
+
+    test "a pasted drawer URL opens the drawer, and closing it keeps the walk", ctx do
+      oyster!(ctx)
+
+      {:ok, live, html} =
+        live(ctx.conn, ~p"/define/oyster?trail=cat&provenance=card:card-bierce")
+
+      assert html =~ ~s(id="provenance")
+      assert html =~ ~s(id="trail")
+
+      html = live |> element("#provenance-close") |> render_click()
+
+      refute html =~ ~s(id="provenance-panel")
+      assert_patched(live, "/define/oyster?trail=cat")
+    end
+
+    test "the thing panel opens its own drawer, keyed by the concept", ctx do
+      %{oyster: oyster} = oyster!(ctx)
+      concept = concept!("Q107411", "oyster", description: "a bivalve")
+      link!(oyster, concept, confidence: 0.95)
+
+      {:ok, live, html} = live(ctx.conn, ~p"/define/oyster")
+
+      assert html =~ ~s(id="thing-info")
+
+      html = live |> element("#thing-info") |> render_click()
+
+      assert html =~ ~s(id="provenance")
+      assert html =~ ~s(id="provenance-link-Q107411-title_match")
+      assert html =~ "title_match"
+    end
+
+    test "opening the drawer does not rebuild the page it is already on", ctx do
+      oyster!(ctx)
+
+      {:ok, live, _html} = live(ctx.conn, ~p"/define/oyster")
+
+      # The page is ten queries; the drawer is the records it cites plus their
+      # raw. If the count comes back near ten, the `handle_params/3` guard has
+      # gone and every ⓘ click is a page rebuild (#71 U2).
+      queries = count_queries(fn -> live |> element("#card-bierce-info") |> render_click() end)
+
+      assert queries <= 5
+    end
+
+    test "a provenance parameter naming nothing on the page opens nothing", ctx do
+      oyster!(ctx)
+
+      {:ok, _live, html} = live(ctx.conn, ~p"/define/oyster?provenance=card:card-nonsense")
+
+      assert html =~ ~s(id="headword")
+      refute html =~ ~s(id="provenance-panel")
+    end
   end
 
   describe "the thing (U1b)" do
@@ -283,4 +440,30 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
   end
 
   defp index(html, id), do: :binary.match(html, ~s(id="#{id}")) |> elem(0)
+  # Counts the repo queries one interaction runs. Cheaper than a benchmark and
+  # exact: a rebuilt page and a patched one differ by an order of magnitude.
+  defp count_queries(fun) do
+    parent = self()
+    ref = make_ref()
+    handler = "query-counter-#{inspect(ref)}"
+
+    :telemetry.attach(
+      handler,
+      [:devils_dictionary, :repo, :query],
+      fn _event, _measurements, _metadata, _config -> send(parent, {ref, :query}) end,
+      nil
+    )
+
+    fun.()
+    :telemetry.detach(handler)
+    drain(ref, 0)
+  end
+
+  defp drain(ref, count) do
+    receive do
+      {^ref, :query} -> drain(ref, count + 1)
+    after
+      0 -> count
+    end
+  end
 end

@@ -85,12 +85,114 @@ defmodule DevilsDictionaryWeb.Word do
   end
 
   @doc """
+  Where the word stands in the scopes (#71 §2.7, W5).
+
+  A scope is a browse concept and the word page is scope-free, so this is a
+  line and never a filter: it says which scopes have claimed the word, or —
+  when none has — that what is on the page is whatever the general sources
+  happened to hold. *quark* is the case it was written for: real, enriched, in
+  neither Animals nor Emotions, and thin for a reason worth printing.
+  """
+  attr :scopes, :list, default: []
+  attr :all, :list, default: []
+  attr :sources, :list, default: []
+
+  def scope_line(assigns) do
+    ~H"""
+    <p :if={@scopes != [] or @sources != []} id="scopes" class="mt-3 text-sm/7 text-mist-500">
+      <span :if={@scopes != []}>
+        in
+        <.link
+          :for={scope <- @scopes}
+          id={"scope-#{scope.slug}"}
+          navigate={~p"/s/#{scope.slug}"}
+          class="underline underline-offset-4 hover:text-mist-950 dark:hover:text-white"
+        >
+          {scope.name}
+        </.link>
+        <span :if={@sources != []}>· {count(@sources, "source")}</span>
+      </span>
+
+      <span :if={@scopes == []} id="out-of-scope">
+        not in {Enum.map_join(@all, " or ", & &1.name)}
+        <span :if={@sources != []}>· {Enum.join(@sources, " · ")} only</span>
+      </span>
+    </p>
+    """
+  end
+
+  defp count([_one], noun), do: "1 #{noun}"
+  defp count(list, noun), do: "#{length(list)} #{noun}s"
+
+  @doc """
+  A word the index knows and no source has been asked about yet (#71 §2.7).
+
+  There are 1.3 million of these, which is the point: the lexicon is complete
+  from day one and enrichment arrives scope by scope, so a bare row is a
+  promise rather than a mistake.
+  """
+  def bare_row(assigns) do
+    ~H"""
+    <div id="bare-row" class="mt-8">
+      <.text class="text-mist-500">
+        Known to exist, nothing absorbed yet. It is in the index — a headword some source listed —
+        and no dictionary here has been asked about it.
+      </.text>
+      <.a navigate={~p"/"} class="mt-4">Search for another word</.a>
+    </div>
+    """
+  end
+
+  @doc "The trigram's nearest answers to a word the index does not hold."
+  attr :suggestions, :list, default: []
+
+  def did_you_mean(assigns) do
+    ~H"""
+    <p :if={@suggestions != []} id="did-you-mean" class="mt-6 text-sm/7 text-mist-500">
+      did you mean
+      <.link
+        :for={suggestion <- @suggestions}
+        id={"suggestion-#{suggestion.slug}"}
+        navigate={~p"/define/#{suggestion.slug}"}
+        class="mr-2 rounded-full bg-mist-950/5 px-3 py-1 text-mist-950 hover:bg-mist-950/10 dark:bg-white/10 dark:text-white dark:hover:bg-white/20"
+      >
+        {suggestion.lemma}
+      </.link>
+    </p>
+    """
+  end
+
+  @doc """
+  The ⓘ that opens the provenance drawer. A patch link, not a button: it works
+  in the dead render, it can be right-clicked, and the URL it writes is the
+  whole of the drawer's state (#71 §4).
+  """
+  attr :id, :string, required: true
+  attr :path, :string, required: true
+  attr :label, :string, required: true
+
+  def info_link(assigns) do
+    ~H"""
+    <.link
+      id={@id}
+      patch={@path}
+      title={"where this came from — #{@label}"}
+      class="text-sm/7 text-mist-500 hover:text-mist-950 dark:hover:text-white"
+    >
+      <span aria-hidden="true">ⓘ</span>
+      <span class="sr-only">where this came from — {@label}</span>
+    </.link>
+    """
+  end
+
+  @doc """
   One source's say on the word. A 👑 author's entry renders as prose; an
   institution's senses render as a list, one block per synset where the source
   has them.
   """
   attr :card, :map, required: true
   attr :trail, :list, default: []
+  attr :info, :string, default: nil
 
   def source_card(assigns) do
     ~H"""
@@ -109,7 +211,10 @@ defmodule DevilsDictionaryWeb.Word do
           <span :if={@card.year} class="font-normal text-mist-500">· {@card.year}</span>
           <span :if={@card.pos} class="font-normal text-mist-500">· {@card.pos}</span>
         </h2>
-        <.link_out id={"#{@card.id}-out"} href={@card.url} label={@card.source.name} />
+        <span class="flex items-baseline gap-3">
+          <.link_out id={"#{@card.id}-out"} href={@card.url} label={@card.source.name} />
+          <.info_link :if={@info} id={"#{@card.id}-info"} path={@info} label={@card.source.name} />
+        </span>
       </header>
 
       <div :if={@card.thumbnail_url} class="mt-4">
@@ -426,4 +531,26 @@ defmodule DevilsDictionaryWeb.Word do
   """
   def hop(slug, []), do: ~p"/define/#{slug}"
   def hop(slug, trail), do: ~p"/define/#{slug}?#{[trail: Enum.map_join(trail, ",", & &1.slug)]}"
+
+  @doc """
+  The path that opens the ⓘ drawer for `ref` — the same word, the same trail,
+  one parameter more — or closes it when `ref` is `nil`.
+
+  The slug is the one in the address bar rather than the canonical one: a
+  reader who typed *oysters* stays on *oysters*, keeps the *redirected from*
+  line, and gets a URL that reproduces exactly what they are looking at.
+  """
+  def info_path(slug, trail, ref \\ nil) do
+    params =
+      [
+        trail: trail != [] && Enum.map_join(trail, ",", & &1.slug),
+        provenance: ref
+      ]
+      |> Enum.reject(fn {_k, v} -> v in [nil, false, ""] end)
+
+    case params do
+      [] -> ~p"/define/#{slug}"
+      params -> ~p"/define/#{slug}?#{params}"
+    end
+  end
 end

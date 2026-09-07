@@ -21,6 +21,18 @@ defmodule DevilsDictionary.Lexicon do
   """
   defdelegate browse(scope_slug, opts \\ []), to: Browse
 
+  @doc """
+  A random draw over the index. See
+  `DevilsDictionary.Lexicon.Browse.random_lexemes/1`.
+  """
+  defdelegate random_lexemes(opts \\ []), to: Browse
+
+  @doc """
+  One enriched word from either scope — *Surprise me*. See
+  `DevilsDictionary.Lexicon.Browse.random_word/0`.
+  """
+  defdelegate random_word(), to: Browse
+
   # ── lexemes ──────────────────────────────────────────────────────────────
 
   def get_lexeme(lang \\ "en", lemma, pos) do
@@ -211,6 +223,34 @@ defmodule DevilsDictionary.Lexicon do
 
   def get_scope_by_slug!(slug), do: Repo.get_by!(Scope, slug: slug)
   def get_scope_by_slug(slug), do: Repo.get_by(Scope, slug: slug)
+
+  @doc """
+  The scopes a word belongs to, by lexeme id — the word page's *in Animals* and
+  its *not in Animals or Emotions* (#71 U2).
+
+  One indexed query over `scope_lexemes`, and deliberately **not** part of
+  `WordPage.build/2`: X1 builds two hundred pages a scorecard and would pay for
+  a line only the headword renders. Scope membership is a browse concept
+  visiting a scope-free page (#71 §10), which is exactly why it is fetched
+  beside the page rather than inside it.
+
+  Returns `[%{slug, name}]`, ordered by slug.
+  """
+  def scopes_for(lexeme_ids) when is_list(lexeme_ids) do
+    if lexeme_ids == [] do
+      []
+    else
+      Repo.all(
+        from sl in ScopeLexeme,
+          join: s in Scope,
+          on: s.id == sl.scope_id,
+          where: sl.lexeme_id in ^lexeme_ids,
+          distinct: true,
+          order_by: s.slug,
+          select: %{slug: s.slug, name: s.name}
+      )
+    end
+  end
 
   @doc """
   Creates or updates a scope row from its slug, name and rules.

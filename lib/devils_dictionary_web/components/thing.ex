@@ -22,6 +22,7 @@ defmodule DevilsDictionaryWeb.Thing do
   """
   attr :thing, :map, required: true
   attr :trail, :list, default: []
+  attr :info, :string, default: nil
 
   def thing_panel(assigns) do
     ~H"""
@@ -29,7 +30,7 @@ defmodule DevilsDictionaryWeb.Thing do
       <.eyebrow>the thing</.eyebrow>
 
       <.disagreement :if={@thing.disagreement != []} concepts={@thing.disagreement} />
-      <.concept_card :if={@thing.concept} concept={@thing.concept} thing={@thing} />
+      <.concept_card :if={@thing.concept} concept={@thing.concept} thing={@thing} info={@info} />
       <.thing_chain :if={@thing.chain != []} chain={@thing.chain} trail={@trail} />
 
       <.thing_chips id="thing-kinds" label="kinds" chips={@thing.kinds} trail={@trail} />
@@ -43,6 +44,7 @@ defmodule DevilsDictionaryWeb.Thing do
   @doc "Label, description, picture and the two ways out — Wikipedia and Wikidata."
   attr :concept, :map, required: true
   attr :thing, :map, required: true
+  attr :info, :string, default: nil
 
   def concept_card(assigns) do
     ~H"""
@@ -96,6 +98,12 @@ defmodule DevilsDictionaryWeb.Thing do
           >
             {@concept.qid} <span aria-hidden="true">↗</span>
           </.link>
+          <Word.info_link
+            :if={@info}
+            id="thing-info"
+            path={@info}
+            label={"the thing this word names — #{@concept.label || @concept.qid}"}
+          />
         </p>
       </div>
     </div>

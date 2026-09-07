@@ -17,11 +17,12 @@ defmodule DevilsDictionaryWeb.Router do
   scope "/", DevilsDictionaryWeb do
     pipe_through :browser
 
-    get "/", PageController, :home
+    # The way in (#71 U2): search over the whole index, Surprise me, seed words.
+    live "/", HomeLive, :show
 
-    # The word page (#71 U1a): a page for every one of the 1.5 million index
-    # words, bare ones included. Search, provenance and the thing side follow
-    # in U1b and U2.
+    # The word page (#71 U1a, U1b, U2): a page for every one of the 1.5 million
+    # index words, bare ones included, with the thing it names and the
+    # provenance of every card.
     live "/define/:slug", WordLive, :show
 
     # The developer surfaces (#70 S4b).

@@ -513,6 +513,185 @@ defmodule DevilsDictionary.Lexicon.WordPage do
     |> then(&(&1 && &1.lemma))
   end
 
+  # ── provenance (#71 §2.6, U2) ────────────────────────────────────────────
+
+  @raw_cap 24_000
+
+  @doc """
+  What the ⓘ drawer shows for one card, or for the thing panel.
+
+  `ref` is the `?provenance=` parameter: `"card:<card-id>"`, optionally with the
+  index of the record to open (`"card:card-wordnet-noun:3"`), or `"thing"`. It
+  is resolved **against the page that was just built**, so an id nobody put
+  there opens nothing and costs nothing — the alternative, a bare
+  `source_records.id` in the URL, is an enumerable handle on a table the app
+  does not otherwise expose.
+
+  Two queries at most: the cited records' metadata in one (`Sources.records/1`),
+  and the `raw` of the single record the reader opened. A WordNet card cites one
+  record per synset — twenty is ordinary — so loading every payload would make a
+  panel out of a download.
+
+  Returns `nil` when the ref names nothing on this page.
+  """
+  def provenance(page, ref)
+
+  def provenance(_page, ref) when ref in [nil, ""], do: nil
+
+  def provenance(page, ref) when is_binary(ref) do
+    case String.split(ref, ":") do
+      ["card", id] -> card_provenance(page, id, 0)
+      ["card", id, n] -> card_provenance(page, id, to_index(n))
+      ["thing"] -> thing_provenance(page, 0)
+      ["thing", n] -> thing_provenance(page, to_index(n))
+      _ -> nil
+    end
+  end
+
+  defp to_index(n) do
+    case Integer.parse(n) do
+      {i, ""} when i >= 0 -> i
+      _ -> 0
+    end
+  end
+
+  defp card_provenance(page, card_id, index) do
+    case Enum.find(page.cards, &(&1.id == card_id)) do
+      nil ->
+        nil
+
+      card ->
+        drawer(
+          "card:#{card.id}",
+          card.source.name,
+          card.source,
+          card_record_ids(card),
+          index,
+          page
+        )
+    end
+  end
+
+  @doc """
+  The `source_records` ids a card cites, in the order it cites them — its
+  entries first, then its senses, synset by synset. Public because **U3** counts
+  them (`Health.Pages.cards_provenance/0`).
+  """
+  def card_record_ids(card) do
+    senses = Enum.flat_map(card.groups, & &1.senses)
+
+    (card.entries ++ senses)
+    |> Enum.map(& &1.record_id)
+    |> Enum.reject(&is_nil/1)
+    |> Enum.uniq()
+  end
+
+  # The thing side has no `source_record_id` to follow: a concept is keyed by
+  # its QID, and the two sources that attest it record it under `"Q…"` and
+  # `"concept:Q…"`. A convention, not a foreign key — which is why U3 grades
+  # cards and reports the panel.
+  defp thing_provenance(%{thing: nil}, _index), do: nil
+  defp thing_provenance(%{thing: %{concept: nil}}, _index), do: nil
+
+  defp thing_provenance(%{thing: %{concept: concept}} = page, index) do
+    titles =
+      ["concept:" <> concept.qid] ++
+        case concept.wikipedia_title do
+          nil -> []
+          title -> [title, String.downcase(title)]
+        end
+
+    records =
+      [
+        first_record("wikidata", [concept.qid]),
+        first_record("wikipedia", titles)
+      ]
+      |> Enum.reject(&is_nil/1)
+      |> Enum.uniq_by(& &1.id)
+
+    drawer("thing", concept.label || concept.qid, nil, Enum.map(records, & &1.id), index, page)
+  end
+
+  # A concept's Wikipedia record was written either by the concepts pass, keyed
+  # `concept:Q…`, or by the title probe, keyed by the lemma it probed with —
+  # which is lowercase where the article is not. Three candidates, the first
+  # that answers.
+  defp first_record(source_slug, candidates) do
+    Enum.find_value(candidates, &Sources.record_by_external_id(source_slug, &1))
+  end
+
+  # `source` is the card's — one card is one source. The thing panel's records
+  # come from two (Wikidata CC0, Wikipedia CC BY-SA), so every record carries
+  # its own source and the panel's header carries none.
+  defp drawer(ref, title, source, record_ids, index, page) do
+    sources = Map.new(Sources.list_sources(), &{&1.id, &1})
+
+    records =
+      record_ids
+      |> Sources.records()
+      |> Enum.with_index(fn record, i ->
+        record |> Map.put(:index, i) |> Map.put(:source, sources[record.source_id])
+      end)
+
+    index = if index < length(records), do: index, else: 0
+    open = Enum.at(records, index)
+
+    %{
+      ref: ref,
+      title: title,
+      source: source || (open && open.source),
+      records: records,
+      open: open && index,
+      raw: raw_payload(open),
+      links: concept_links(page)
+    }
+  end
+
+  defp raw_payload(nil), do: nil
+
+  defp raw_payload(record) do
+    json =
+      case Sources.raw(record.id) do
+        nil -> "null"
+        raw -> raw |> Jason.encode_to_iodata!(pretty: true) |> IO.iodata_to_binary()
+      end
+
+    bytes = byte_size(json)
+
+    %{
+      record_id: record.id,
+      json: binary_part(json, 0, min(bytes, @raw_cap)),
+      bytes: bytes,
+      shown: min(bytes, @raw_cap),
+      truncated?: bytes > @raw_cap
+    }
+  end
+
+  # The word → thing joins, with the method and the confidence that made them:
+  # the drawer's last line in #71 §5's W4. Read off the nominal lexeme, the same
+  # one `primary_concept/1` asks, because a word is a word.
+  defp concept_links(%{headword: %{lexemes: []}}), do: []
+
+  defp concept_links(%{headword: %{lexemes: lexemes}}) do
+    lexeme = Enum.find(lexemes, &(&1.pos == "noun")) || hd(lexemes)
+
+    lexeme.id
+    |> Encyclopedia.links_for()
+    |> Enum.map(fn link ->
+      %{
+        qid: link.concept.qid,
+        label: link.concept.label,
+        method: link.method,
+        confidence: link.confidence,
+        status: link.status
+      }
+    end)
+    # One claim per row. The same concept is linked once per sense that names
+    # it, so *cat* asserts `Q146 · wiktionary_qid · 0.95` twice and the drawer
+    # would print the same sentence twice.
+    |> Enum.uniq_by(&{&1.qid, &1.method, &1.confidence, &1.status})
+  end
+
   # ── links out ────────────────────────────────────────────────────────────
 
   @doc """

@@ -87,6 +87,133 @@ defmodule DevilsDictionary.Lexicon.Browse do
   end
 
   @doc """
+  A random draw over the index: **X1**'s sample of 200 and the home page's
+  *Surprise me* (#71 U2), one sampler with two shapes.
+
+  Unfiltered it draws random ids across `min(id)..max(id)` in rounds, never
+  `ORDER BY random()`, which is a sequential scan of all 1.5 million rows. The
+  id space has gaps, so a round of `sample * 3` draws lands about a third of
+  them and rounds repeat until the sample is full — each round one indexed
+  lookup. The draw is biased toward the ids that follow a gap; for a sample
+  meant to be *representative of nothing in particular* that is harmless, and
+  it is the reason this is not the sampler to use for a statistic.
+
+  Filtered — `scope: :any | "animals"`, `enriched: true` — the population is
+  small (26,203 enriched rows across the two scopes), so it is counted once and
+  taken at a random offset: exact, and one query per word drawn. That is the
+  shape *Surprise me* wants, because a random word out of 1.5 million is a bare
+  row 90 % of the time and lands the reader on a page with nothing on it.
+
+  Returns `[%{id, slug, lemma}]`.
+  """
+  def random_lexemes(opts \\ []) do
+    sample = Keyword.get(opts, :sample, 1)
+
+    if opts[:scope] || opts[:enriched] do
+      draw_by_offset(sample, opts)
+    else
+      draw_over_ids(sample)
+    end
+  end
+
+  @doc """
+  One enriched word from either scope — the home page's *Surprise me*.
+
+  Returns a `%{id, slug, lemma}` or `nil` on an empty database.
+  """
+  def random_word do
+    case random_lexemes(sample: 1, scope: :any, enriched: true) do
+      [word | _] -> word
+      [] -> nil
+    end
+  end
+
+  defp draw_by_offset(sample, opts) do
+    base = random_base(opts)
+
+    case Repo.aggregate(base, :count) do
+      0 ->
+        []
+
+      count ->
+        1..sample
+        |> Enum.map(fn _ -> :rand.uniform(count) - 1 end)
+        |> Enum.uniq()
+        |> Enum.flat_map(fn offset ->
+          base
+          |> order_by([l], asc: l.id)
+          |> offset(^offset)
+          |> limit(1)
+          |> select([l], %{id: l.id, slug: l.slug, lemma: l.lemma})
+          |> Repo.all()
+        end)
+    end
+  end
+
+  defp random_base(opts) do
+    Lexeme
+    |> from(as: :lexeme)
+    |> where([l], l.lang == ^Keyword.get(opts, :lang, "en"))
+    |> then(fn q ->
+      if opts[:enriched], do: where(q, [l], not is_nil(l.enriched_at)), else: q
+    end)
+    |> random_scope(opts[:scope])
+  end
+
+  defp random_scope(query, nil), do: query
+
+  defp random_scope(query, :any) do
+    where(
+      query,
+      exists(from sl in ScopeLexeme, where: sl.lexeme_id == parent_as(:lexeme).id, select: 1)
+    )
+  end
+
+  defp random_scope(query, slug) do
+    case Lexicon.get_scope_by_slug(slug) do
+      nil ->
+        query
+
+      scope ->
+        where(
+          query,
+          exists(
+            from sl in ScopeLexeme,
+              where: sl.lexeme_id == parent_as(:lexeme).id and sl.scope_id == ^scope.id,
+              select: 1
+          )
+        )
+    end
+  end
+
+  defp draw_over_ids(sample) do
+    case Repo.one(from l in Lexeme, select: {min(l.id), max(l.id)}) do
+      {nil, nil} -> []
+      {low, high} -> draw(low..high, sample, [], 8)
+    end
+  end
+
+  defp draw(_range, sample, taken, 0), do: Enum.take(taken, sample)
+
+  defp draw(range, sample, taken, rounds) do
+    have = MapSet.new(taken, & &1.id)
+    ids = for _ <- 1..(sample * 3), do: Enum.random(range)
+    ids = ids |> Enum.uniq() |> Enum.reject(&(&1 in have))
+
+    found =
+      Repo.all(
+        from l in Lexeme,
+          where: l.id in ^ids,
+          select: %{id: l.id, slug: l.slug, lemma: l.lemma}
+      )
+
+    case taken ++ found do
+      all when length(all) >= sample -> Enum.take(all, sample)
+      all -> draw(range, sample, all, rounds - 1)
+    end
+  end
+
+  @doc """
   One page of a scope's lexemes, with the coverage each row's badges need.
 
   Options: `:q`, `:has` and `:missing` (source slugs), `:state`

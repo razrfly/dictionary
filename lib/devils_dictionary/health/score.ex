@@ -419,8 +419,13 @@ defmodule DevilsDictionary.Health.Score do
         "all three",
         flagships().passed == flagships().total
       ),
-      row("U3", "provenance everywhere", "every card opens the drawer", "100% of cards", :pending,
-        session: "S4"
+      row(
+        "U3",
+        "provenance everywhere",
+        provenance_actual(),
+        "100% of cards",
+        cards_provenance().passed == cards_provenance().total,
+        session: "U2"
       ),
       row(
         "U4",
@@ -458,7 +463,7 @@ defmodule DevilsDictionary.Health.Score do
   # For the length of *one* call: `rows/1` forgets them first. A cache with no
   # end is not a cache, it is a stale answer waiting for a second caller — and
   # the health page's *recompute* button is exactly that second caller.
-  @page_measurements [:word_pages, :flagships, :cards_link_out, :chains]
+  @page_measurements [:word_pages, :flagships, :cards_link_out, :cards_provenance, :chains]
 
   defp forget_page_measurements do
     Enum.each(@page_measurements, &Process.delete({__MODULE__, &1}))
@@ -467,6 +472,7 @@ defmodule DevilsDictionary.Health.Score do
   defp word_pages, do: once(:word_pages, &Health.word_pages/0)
   defp flagships, do: once(:flagships, &Health.flagships/0)
   defp cards_link_out, do: once(:cards_link_out, &Health.cards_link_out/0)
+  defp cards_provenance, do: once(:cards_provenance, &Health.cards_provenance/0)
   defp chains, do: once(:chains, &Health.chains/0)
 
   defp once(key, fun) do
@@ -502,13 +508,36 @@ defmodule DevilsDictionary.Health.Score do
 
   defp cards_out_actual do
     u6 = cards_link_out()
+    population = "#{u6.cards} cards + #{u6.things} thing-panel links"
 
     case u6.probes do
       [] ->
-        "#{u6.passed} / #{u6.total} cards resolve a link out = 100%"
+        "#{u6.passed} / #{u6.total} resolve a link out = 100% (#{population})"
 
       missing ->
-        "#{u6.passed} / #{u6.total} · no url: " <> Enum.map_join(missing, ", ", & &1.card)
+        "#{u6.passed} / #{u6.total} (#{population}) · no url: " <>
+          Enum.map_join(missing, ", ", &"#{&1.word} #{&1.card}")
+    end
+  end
+
+  # Two figures and the denominator, because "100% of cards" over eight words is
+  # a smaller claim than it sounds, and a card that opens its first synset's
+  # record while the rest have gone is not provenance everywhere.
+  defp provenance_actual do
+    u3 = cards_provenance()
+    t = u3.things
+
+    tail =
+      "#{u3.cited} / #{u3.citations} citations carry one · " <>
+        "thing panel #{t.passed} / #{t.total}, reported"
+
+    case u3.probes do
+      [] ->
+        "#{u3.passed} / #{u3.total} cards over #{u3.words} words open a record · #{tail}"
+
+      missing ->
+        "#{u3.passed} / #{u3.total} cards (#{u3.words} words) · #{tail} · no record: " <>
+          Enum.map_join(missing, ", ", &"#{&1.word} #{&1.card}")
     end
   end
 

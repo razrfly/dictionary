@@ -1,7 +1,7 @@
 defmodule DevilsDictionary.HealthPagesTest do
   @moduledoc """
-  The four scorecard rows the word page answers — **X1**, **U2**, **U6** and
-  **R3** — measured on fixtures rather than on the development database, so the
+  The five scorecard rows the word page answers — **X1**, **U2**, **U3**, **U6**
+  and **R3** — measured on fixtures rather than on the development database, so the
   numbers `mix dd.score` prints have a test that says what they mean.
   """
 
@@ -9,7 +9,9 @@ defmodule DevilsDictionary.HealthPagesTest do
 
   import DevilsDictionary.WordFixtures
 
-  alias DevilsDictionary.{Fixtures, Health}
+  import Ecto.Query
+
+  alias DevilsDictionary.{Fixtures, Health, Lexicon, Repo}
 
   setup do
     %{sources: sources, scopes: scopes} = Fixtures.seed_catalog!()
@@ -99,6 +101,79 @@ defmodule DevilsDictionary.HealthPagesTest do
       assert result.total > 0
       assert result.passed == result.total
       assert result.probes == []
+    end
+
+    test "the thing panel's two link-outs are in the population, counted apart", ctx do
+      flagships!(ctx)
+      cards_only = Health.cards_link_out()
+
+      cat = Lexicon.get_lexeme("en", "cat", "noun")
+      concept = concept!("Q146", "cat", wikipedia_title: "Cat")
+      link!(cat, concept, confidence: 0.95)
+
+      result = Health.cards_link_out()
+
+      assert result.cards == cards_only.cards
+      assert result.things == 2
+      assert result.total == result.cards + 2
+      assert result.passed == result.total
+    end
+
+    test "a word that names nothing adds no thing-panel probe to fail", ctx do
+      flagships!(ctx)
+
+      assert Health.cards_link_out().things == 0
+    end
+  end
+
+  describe "U3 — provenance everywhere" do
+    test "every card opens a record, and every citation carries one", ctx do
+      flagships!(ctx)
+
+      result = Health.cards_provenance()
+
+      assert result.total > 0
+      assert result.passed == result.total
+      assert result.probes == []
+      assert result.cited == result.citations
+      assert result.citations >= result.total
+      assert result.words == 6
+    end
+
+    test "a card whose records have been deleted fails the row", ctx do
+      flagships!(ctx)
+      cat = Lexicon.get_lexeme("en", "cat", "noun")
+      sense!(ctx, cat, "wiktionary", gloss: "A second sense, unrecorded.", record: nil)
+
+      Repo.delete_all(
+        from r in DevilsDictionary.Sources.SourceRecord,
+          where:
+            r.id in subquery(
+              from s in DevilsDictionary.Lexicon.Sense,
+                where: s.lexeme_id == ^cat.id,
+                select: s.source_record_id
+            )
+      )
+
+      result = Health.cards_provenance()
+
+      assert result.passed < result.total
+      assert "card-wiktionary" in Enum.map(result.probes, & &1.card)
+      assert result.cited < result.citations
+    end
+
+    test "the thing panel is reported beside the cards, never graded", ctx do
+      flagships!(ctx)
+      cat = Lexicon.get_lexeme("en", "cat", "noun")
+      concept = concept!("Q146", "cat", wikipedia_title: "Cat")
+      link!(cat, concept, confidence: 0.95)
+
+      # No `source_records` row exists for Q146 in this fixture, so the panel
+      # reports 0 of 1 — and the graded figure is untouched by it.
+      result = Health.cards_provenance()
+
+      assert result.things == %{passed: 0, total: 1}
+      assert result.passed == result.total
     end
   end
 
