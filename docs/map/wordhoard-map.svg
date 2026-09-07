@@ -1,10 +1,9 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1060" viewBox="0 0 1200 1060" role="img" aria-label="The Wordhoard model as bands: sources at the bottom; words, definitions and word-to-word relations on the left; things, thing-to-thing relations and the word-to-thing links on the right; examples, quotes, media, people and votes above; the reader's surfaces at the top. Fill and outline show what is built, what is next, and what is planned.">
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1060" viewBox="0 0 1200 1060" role="img" aria-label="The Wordhoard model as bands: sources at the bottom; words, definitions and word-to-word relations on the left; things, thing-to-thing relations and the word-to-thing links on the right; examples, quotes, media, people and votes above; the reader's surfaces at the top. Fill and outline show what is built and on the page today, and what is planned.">
         <style>
     svg { font-family: Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; color: #1b1f22; }
     .bg { fill: #fafbfb; }
     .box { fill: #e4e8ea; stroke: #1b1f22; stroke-width: 1.3; }
     .page-now { stroke-width: 2.6; }
-    .next { fill: #e2ecf3; stroke: #2f5d7c; stroke-width: 2.6; }
     .plan { fill: none; stroke: #1b1f22; stroke-width: 1.3; stroke-dasharray: 6 4; }
     .plain { fill: none; stroke: none; }
     .ey { font-size: 10.5px; letter-spacing: .09em; text-transform: uppercase; fill: #5f686e; font-weight: 500; }
@@ -31,7 +30,7 @@
         <text class="col" x="20" y="47">The reader</text>
         <rect class="box page-now" x="190" y="20" width="990" height="80" rx="3"></rect>
         <text class="ey" x="206" y="42">What the reader sees</text>
-        <text class="t" x="206" y="63">The word page — the word side is live (U1a), the thing side is next (U1b) · search and home (U2) · browse by scope · source pages · health</text>
+        <text class="t" x="206" y="63">The word page — words and things, both sides live · search and home · provenance on every card · browse by scope · source pages · health</text>
         <text class="t" x="206" y="84">Later: feeds, the JSON API, the progressive web app, iOS. Every surface reads the bands below and shows who said what, with a link out.</text>
 
         <!-- The culture -->
@@ -86,8 +85,8 @@
         <text class="t" x="424" y="421">definition and quotations</text>
         <text class="t" x="424" y="440">Wikipedia's, via the thing</text>
 
-        <rect class="next" x="770" y="340" width="410" height="120" rx="3"></rect>
-        <text class="ey" x="784" y="362">Thing ↔ thing · on the page next (U1b)</text>
+        <rect class="box page-now" x="770" y="340" width="410" height="120" rx="3"></rect>
+        <text class="ey" x="784" y="362">Thing ↔ thing</text>
         <text class="t" x="784" y="383">concept_relations: taxonomy · subclass of · instance of</text>
         <text class="t" x="784" y="402">→ the chain upward: oyster › bivalve › mollusc › animal</text>
         <text class="t" x="784" y="421">→ kinds: 19 cat breeds, Abyssinian to Persian</text>
@@ -101,15 +100,15 @@
         <text class="t" x="204" y="601">forms fold in (cats, oystered) · spellings fold in (oistre → oyster)</text>
         <text class="t" x="204" y="620">1.54 M rows: every English word, from day one</text>
 
-        <rect class="next" x="636" y="548" width="122" height="66" rx="3"></rect>
+        <rect class="box page-now" x="636" y="548" width="122" height="66" rx="3"></rect>
         <text class="ey" x="646" y="568">Names</text>
         <text class="t" x="646" y="587">concept_links</text>
         <text class="t" x="646" y="604">method · score</text>
         <path class="arrow acc" d="M 622 580 L 633 580" marker-end="url(#arr-acc)"></path>
         <path class="arrow acc" d="M 760 580 L 767 580" marker-end="url(#arr-acc)"></path>
 
-        <rect class="next" x="770" y="520" width="410" height="120" rx="3"></rect>
-        <text class="ey" x="784" y="542">Things · on the page next (U1b)</text>
+        <rect class="box page-now" x="770" y="520" width="410" height="120" rx="3"></rect>
+        <text class="ey" x="784" y="542">Things</text>
         <text class="t" x="784" y="563">concepts: a Wikidata item, a Wikipedia article, an image</text>
         <text class="t" x="784" y="582">cat → Q146 “small domesticated carnivorous mammal”</text>
         <text class="t" x="784" y="601">seal → 63 candidates: “may refer to”</text>
@@ -125,7 +124,7 @@
         <rect class="plain" x="770" y="700" width="410" height="100"></rect>
         <text class="ey" x="784" y="722">Runs through every band</text>
         <text class="t" x="784" y="743">Provenance: every row carries its source,</text>
-        <text class="t" x="784" y="762">a link out ↗ and its raw record (ⓘ, U2).</text>
+        <text class="t" x="784" y="762">a link out ↗ and its raw record (ⓘ).</text>
         <text class="t" x="784" y="781">Scopes (animals, emotions) are filters, not a layer.</text>
 
         <!-- Vertical arrows in the middle -->
@@ -165,10 +164,8 @@
         <!-- Legend -->
         <rect class="box page-now" x="190" y="1018" width="26" height="16" rx="2"></rect>
         <text class="lbl" x="224" y="1031">built, and on the page now</text>
-        <rect class="next" x="420" y="1018" width="26" height="16" rx="2"></rect>
-        <text class="lbl" x="454" y="1031">built in the data, on the page next (U1b)</text>
-        <rect class="box" x="720" y="1018" width="26" height="16" rx="2"></rect>
-        <text class="lbl" x="754" y="1031">built</text>
-        <rect class="plan" x="830" y="1018" width="26" height="16" rx="2"></rect>
-        <text class="lbl" x="864" y="1031">planned — the tables are sketched, nothing is shipped</text>
+        <rect class="box" x="430" y="1018" width="26" height="16" rx="2"></rect>
+        <text class="lbl" x="464" y="1031">built</text>
+        <rect class="plan" x="540" y="1018" width="26" height="16" rx="2"></rect>
+        <text class="lbl" x="574" y="1031">planned — the tables are sketched, nothing is shipped</text>
       </svg>

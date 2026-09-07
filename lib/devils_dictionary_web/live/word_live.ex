@@ -21,44 +21,65 @@ defmodule DevilsDictionaryWeb.WordLive do
 
   use DevilsDictionaryWeb, :live_view
 
+  alias DevilsDictionary.Demo, as: Samples
   alias DevilsDictionary.Lexicon
   alias DevilsDictionary.Lexicon.WordPage
-  alias DevilsDictionaryWeb.{Provenance, Thing, Word}
+  alias DevilsDictionaryWeb.{Demo, Provenance, Thing, Word}
 
   @trail_cap 12
   @suggestions 5
 
   @impl true
   def mount(_params, _session, socket) do
-    {:ok, assign(socket, slug: nil, trail: [], page: nil)}
+    {:ok, assign(socket, slug: nil, trail: [], page: nil, demo: false, evidence: [])}
   end
 
   @impl true
   def handle_params(%{"slug" => slug} = params, _uri, socket) do
     trail = parse_trail(params["trail"])
+    demo = Samples.on?(params)
 
     socket =
-      if slug == socket.assigns.slug and trail == socket.assigns.trail do
+      if slug == socket.assigns.slug and trail == socket.assigns.trail and
+           demo == socket.assigns.demo do
         socket
       else
-        load(socket, slug, trail)
+        load(socket, slug, trail, demo)
       end
 
-    {:noreply,
-     assign(socket, :provenance, WordPage.provenance(socket.assigns.page, params["provenance"]))}
+    {:noreply, assign(socket, :provenance, provenance(socket.assigns.page, params["provenance"]))}
   end
 
-  defp load(socket, slug, trail) do
+  # A sample card's drawer is invented too. Falling through to
+  # `WordPage.provenance/2` would put the word's real concept links under a
+  # card that does not exist, which is the one dishonest thing the mode could
+  # do.
+  defp provenance(page, ref) do
+    Samples.provenance(page, ref || "") || WordPage.provenance(page, ref)
+  end
+
+  defp load(socket, slug, trail, demo) do
     page = slug |> Lexicon.lookup() |> WordPage.build(trail: trail)
+
+    samples =
+      if demo, do: Samples.samples(page.headword.lemma || slug), else: %{cards: [], evidence: []}
+
+    # Counted before the samples go in: the scope line is a claim about what has
+    # been absorbed, and "8 sources" on a page where three of them are invented
+    # would be the mode telling a lie the banner cannot take back.
+    card_sources = page.cards |> Enum.map(& &1.source.name) |> Enum.uniq()
+    page = if demo, do: Samples.decorate(page, samples), else: page
 
     socket
     |> assign(:slug, slug)
     |> assign(:trail, trail)
+    |> assign(:demo, demo)
+    |> assign(:evidence, samples.evidence)
     |> assign(:page, page)
     |> assign(:page_title, title(page, slug))
     |> assign(:scopes, Lexicon.scopes_for(Enum.map(page.headword.lexemes, & &1.id)))
     |> assign(:all_scopes, Lexicon.list_scopes())
-    |> assign(:card_sources, page.cards |> Enum.map(& &1.source.name) |> Enum.uniq())
+    |> assign(:card_sources, card_sources)
     |> assign(:suggestions, suggestions(page, slug))
   end
 
@@ -95,12 +116,18 @@ defmodule DevilsDictionaryWeb.WordLive do
     ~H"""
     <Layouts.app flash={@flash}>
       <.container class="py-10">
-        <Word.trail trail={@page.trail} current={@page.headword.lemma || @slug} />
+        <Demo.demo_banner :if={@demo} />
+
+        <Word.trail
+          trail={@page.trail}
+          current={@page.headword.lemma || @slug}
+          demo={@demo}
+        />
 
         <%= if @page.headword.lexemes == [] do %>
-          <.miss slug={@slug} suggestions={@suggestions} />
+          <.miss slug={@slug} suggestions={@suggestions} demo={@demo} />
         <% else %>
-          <Word.headword headword={@page.headword} />
+          <Word.headword headword={@page.headword} demo={@demo} />
 
           <Word.scope_line scopes={@scopes} all={@all_scopes} sources={@card_sources} />
 
@@ -109,7 +136,8 @@ defmodule DevilsDictionaryWeb.WordLive do
               :for={card <- @page.cards}
               card={card}
               trail={trail_here(@page)}
-              info={Word.info_path(@slug, @page.trail, "card:" <> card.id)}
+              info={Word.info_path(@slug, @page.trail, "card:" <> card.id, @demo)}
+              demo={@demo}
             />
           </div>
 
@@ -119,14 +147,18 @@ defmodule DevilsDictionaryWeb.WordLive do
             :for={related <- @page.related}
             related={related}
             trail={trail_here(@page)}
+            demo={@demo}
           />
 
           <Thing.thing_panel
             :if={@page.thing}
             thing={@page.thing}
             trail={trail_here(@page)}
-            info={Word.info_path(@slug, @page.trail, "thing")}
+            info={Word.info_path(@slug, @page.trail, "thing", @demo)}
+            demo={@demo}
           />
+
+          <Demo.evidence_wall :if={@demo} evidence={@evidence} />
         <% end %>
       </.container>
     </Layouts.app>
@@ -140,14 +172,15 @@ defmodule DevilsDictionaryWeb.WordLive do
     <Provenance.provenance
       :if={@provenance}
       provenance={@provenance}
-      close={Word.info_path(@slug, @page.trail)}
-      record_path={&Word.info_path(@slug, @page.trail, "#{@provenance.ref}:#{&1}")}
+      close={Word.info_path(@slug, @page.trail, nil, @demo)}
+      record_path={&Word.info_path(@slug, @page.trail, "#{@provenance.ref}:#{&1}", @demo)}
     />
     """
   end
 
   attr :slug, :string, required: true
   attr :suggestions, :list, default: []
+  attr :demo, :boolean, default: false
 
   defp miss(assigns) do
     ~H"""
@@ -157,7 +190,7 @@ defmodule DevilsDictionaryWeb.WordLive do
         No such word. Nothing in the index — not as a headword, not as a spelling, not as an
         inflected form of anything else.
       </.text>
-      <Word.did_you_mean suggestions={@suggestions} />
+      <Word.did_you_mean suggestions={@suggestions} demo={@demo} />
       <.a navigate={~p"/"} class="mt-6">Start somewhere else</.a>
     </div>
     """

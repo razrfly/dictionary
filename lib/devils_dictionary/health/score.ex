@@ -427,14 +427,7 @@ defmodule DevilsDictionary.Health.Score do
         cards_provenance().passed == cards_provenance().total,
         session: "U2"
       ),
-      row(
-        "U4",
-        "mobile",
-        "browse, source, imports, health and /kit: no sideways scroll at 375 px; the word page is #71's",
-        "passes",
-        :pending,
-        session: "U3"
-      ),
+      u4_row(),
       row(
         "U5",
         "coverage is legible",
@@ -648,6 +641,55 @@ defmodule DevilsDictionary.Health.Score do
   # before it, rolled back, and moved out of `priv/repo/migrations` so it can
   # never run again. The sketch is kept because deleting the evidence would
   # make the claim unfalsifiable.
+  # **U4 — mobile.** The one row in the scorecard that no query can answer: a
+  # page either scrolls sideways on a phone or it does not, and the only honest
+  # instrument is a viewport and a pair of eyes. So it is graded the way E3 is,
+  # as a **dated attestation with checked-in evidence** rather than a number
+  # dressed up as one — the date, the pages, and a screenshot of each at
+  # 375 px. Deleting a screenshot fails the row, which is the whole point:
+  # an attestation nobody can check is a claim, not a measurement.
+  #
+  # What was measured on the date below, over every page in `@mobile_pages`:
+  # `documentElement.scrollWidth - clientWidth == 0` at a 375 × 812 viewport,
+  # with every `<details>` on the page forced open. The wide things that remain
+  # — the drawer's raw JSON, the scorecard table — scroll inside their own
+  # `overflow-x-auto`, which is the rule rather than an exception to it.
+  @mobile_pass ~D[2026-09-07]
+  @mobile_evidence "docs/mobile"
+  @mobile_pages [
+    {"home", "375-home.jpg"},
+    {"the word page", "375-word.jpg"},
+    {"its relation groups", "375-word-relations.jpg"},
+    {"its thing panel", "375-word-thing.jpg"},
+    {"the provenance drawer", "375-word-drawer.jpg"},
+    {"fake-data mode", "375-word-demo.jpg"},
+    {"the evidence wall", "375-evidence-wall.jpg"},
+    {"browse", "375-browse.jpg"},
+    {"one source", "375-source.jpg"},
+    {"imports", "375-imports.jpg"},
+    {"health", "375-health.jpg"},
+    {"/kit", "375-kit.jpg"}
+  ]
+
+  defp u4_row do
+    missing = for {_page, file} <- @mobile_pages, not File.exists?(mobile_path(file)), do: file
+    names = Enum.map_join(@mobile_pages, ", ", fn {page, _file} -> page end)
+
+    actual =
+      case missing do
+        [] -> "#{@mobile_pass}: #{length(@mobile_pages)} pages at 375 px — #{names}"
+        missing -> "evidence missing: #{Enum.join(missing, ", ")}"
+      end
+
+    row("U4", "mobile", actual, "passes", missing == [],
+      session: "U3",
+      detail:
+        "#{@mobile_evidence}/README.md — attested, not measured; the screenshots are the evidence"
+    )
+  end
+
+  defp mobile_path(file), do: Path.join(@mobile_evidence, file)
+
   @community_sketch "docs/sketches/community_layer_migration.exs"
 
   defp e3_row do

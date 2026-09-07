@@ -23,6 +23,7 @@ defmodule DevilsDictionaryWeb.Thing do
   attr :thing, :map, required: true
   attr :trail, :list, default: []
   attr :info, :string, default: nil
+  attr :demo, :boolean, default: false
 
   def thing_panel(assigns) do
     ~H"""
@@ -31,10 +32,27 @@ defmodule DevilsDictionaryWeb.Thing do
 
       <.disagreement :if={@thing.disagreement != []} concepts={@thing.disagreement} />
       <.concept_card :if={@thing.concept} concept={@thing.concept} thing={@thing} info={@info} />
-      <.thing_chain :if={@thing.chain != []} chain={@thing.chain} trail={@trail} />
+      <.thing_chain
+        :if={@thing.chain != []}
+        chain={@thing.chain}
+        trail={@trail}
+        demo={@demo}
+      />
 
-      <.thing_chips id="thing-kinds" label="kinds" chips={@thing.kinds} trail={@trail} />
-      <.thing_chips id="thing-examples" label="examples" chips={@thing.examples} trail={@trail} />
+      <.thing_chips
+        id="thing-kinds"
+        label="kinds"
+        chips={@thing.kinds}
+        trail={@trail}
+        demo={@demo}
+      />
+      <.thing_chips
+        id="thing-examples"
+        label="examples"
+        chips={@thing.examples}
+        trail={@trail}
+        demo={@demo}
+      />
 
       <.may_refer_to :if={@thing.may_refer_to != []} concepts={@thing.may_refer_to} />
     </section>
@@ -117,6 +135,7 @@ defmodule DevilsDictionaryWeb.Thing do
   """
   attr :chain, :list, required: true
   attr :trail, :list, default: []
+  attr :demo, :boolean, default: false
 
   def thing_chain(assigns) do
     ~H"""
@@ -127,7 +146,7 @@ defmodule DevilsDictionaryWeb.Thing do
         <.link
           :if={step.slug}
           id={"thing-chain-#{step.slug}"}
-          navigate={Word.hop(step.slug, @trail)}
+          navigate={Word.hop(step.slug, @trail, @demo)}
           class={[
             "hover:underline",
             step.enriched? && "text-mist-950 dark:text-white",
@@ -151,6 +170,7 @@ defmodule DevilsDictionaryWeb.Thing do
   attr :label, :string, required: true
   attr :chips, :map, required: true
   attr :trail, :list, default: []
+  attr :demo, :boolean, default: false
 
   def thing_chips(assigns) do
     ~H"""
@@ -163,7 +183,7 @@ defmodule DevilsDictionaryWeb.Thing do
       <.link
         :for={chip <- @chips.shown}
         id={"#{@id}-#{chip.slug}"}
-        navigate={Word.hop(chip.slug, @trail)}
+        navigate={Word.hop(chip.slug, @trail, @demo)}
         title={"#{@label} · #{chip.label}"}
         class={[
           "rounded-full px-3 py-0.5 text-sm/6",

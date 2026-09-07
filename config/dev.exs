@@ -56,6 +56,12 @@ config :devils_dictionary, DevilsDictionaryWeb.Endpoint,
 # Enable dev routes for dashboard and mailbox
 config :devils_dictionary, dev_routes: true
 
+# Fake-data mode (#71 §2.8, U3). `?demo=1` does nothing at all unless this is
+# set, and it is set here and in `test.exs` only: `prod.exs` and `runtime.exs`
+# never mention the key, which is the same gate `dev_routes` uses for `/kit`.
+# `demo_inert_test.exs` reads `prod.exs` back and fails if it ever grows one.
+config :devils_dictionary, demo_mode: true
+
 # Absorbs run millions of statements; Ecto logs each one at :debug, which buries
 # the numbers a task prints. Raise the floor to :info and pass `--log-level debug`
 # style opts only when actually debugging a query.

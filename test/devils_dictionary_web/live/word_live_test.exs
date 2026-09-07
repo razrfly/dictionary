@@ -415,6 +415,110 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
       assert html =~ ~s(id="trail-oyster")
     end
 
+    # #71 §9 asks that every group in §7's map be clickable, and until U3 one
+    # of the ten was: *family*. The struct-level tests in `word_page_test.exs`
+    # prove the mapping; these prove the rendered chip is a link with the right
+    # id and the right href, which is a different claim and the one a reader
+    # depends on. The ids are the contract — `#related-<pos>-<group>-<slug>`.
+    test "every relation kind in §7's map renders a chip that can be clicked", ctx do
+      oyster = word!(ctx, "oyster", ~w(bierce johnson wiktionary wordnet))
+
+      # One target per group, so a click can only have come from that group.
+      targets =
+        Map.new(
+          [
+            {:synonym, "huitre"},
+            {:antonym, "clam"},
+            {:hypernym, "bivalve"},
+            {:hyponym, "bluepoint"},
+            {:meronym, "oyster shell"},
+            {:holonym, "ostreidae"},
+            {:derived, "oyster bed"},
+            {:alt_of, "oistre"},
+            {:see_also, "pearl"},
+            {:other, "spat"}
+          ],
+          fn {type, lemma} -> {type, word!(ctx, lemma, ~w(wiktionary))} end
+        )
+
+      for {type, target} <- targets do
+        # `see_also` becomes "<author> says see" only from a 👑 source; from an
+        # institution it folds into *related*, which `:other` already covers.
+        source = if type == :see_also, do: "johnson", else: "wiktionary"
+        relation!(ctx, oyster, type, target, source: source)
+      end
+
+      {:ok, _live, html} = live(ctx.conn, ~p"/define/oyster")
+
+      groups = [
+        {"similar", :synonym},
+        {"opposite", :antonym},
+        {"broader", :hypernym},
+        {"narrower", :hyponym},
+        {"parts", :meronym},
+        {"part-of", :holonym},
+        {"family", :derived},
+        {"variants", :alt_of},
+        {"says-see-johnson", :see_also},
+        {"related", :other}
+      ]
+
+      # All ten present, in §7's order — "every group in §7's map that the word
+      # has, in that order".
+      positions = for {group, _type} <- groups, do: index(html, "related-noun-#{group}")
+      assert positions == Enum.sort(positions)
+
+      # A fresh mount per group: the click is a `live_redirect`, so the first
+      # one takes the LiveView with it.
+      for {group, type} <- groups do
+        target = targets[type]
+
+        assert html =~ ~s(id="related-noun-#{group}-#{target.slug}"),
+               "#{group} has no chip for #{target.lemma}"
+
+        {:ok, live, _} = live(ctx.conn, ~p"/define/oyster")
+
+        {:error, {:live_redirect, %{to: to}}} =
+          live |> element("#related-noun-#{group}-#{target.slug}") |> render_click()
+
+        assert to == "/define/#{target.slug}?trail=oyster",
+               "clicking the #{group} chip went to #{to}"
+
+        # And the target is a page, not a dead end — the promise in §1.
+        {:ok, _live, landed} = live(ctx.conn, to)
+        assert landed =~ ~s(id="headword")
+        assert landed =~ ~s(id="trail-oyster")
+      end
+    end
+
+    test "a sense-scoped chip is clickable too, and it is a different id path", ctx do
+      oyster = word!(ctx, "oyster", ~w(wiktionary))
+      mollusk = word!(ctx, "mollusk", ~w(wiktionary))
+      sense = sense!(ctx, oyster, "wiktionary", gloss: "A marine bivalve.")
+
+      relation!(ctx, oyster, :synonym, mollusk, from_sense: sense)
+
+      {:ok, live, _html} = live(ctx.conn, ~p"/define/oyster")
+
+      id = "#card-wiktionary-group-0-sense-#{sense.id}-similar-#{mollusk.slug}"
+
+      {:error, {:live_redirect, %{to: to}}} = live |> element(id) |> render_click()
+      assert to == "/define/mollusk?trail=oyster"
+    end
+
+    test "a chain step is a hop of its own", ctx do
+      %{bivalve: bivalve} = oyster!(ctx)
+
+      {:ok, live, _html} = live(ctx.conn, ~p"/define/oyster")
+
+      {:error, {:live_redirect, %{to: to}}} =
+        live
+        |> element(~s(#card-wordnet-group-0-chain a), bivalve.lemma)
+        |> render_click()
+
+      assert to == "/define/#{bivalve.slug}?trail=oyster"
+    end
+
     test "a trail entry links back to itself with the walk truncated there", ctx do
       oyster!(ctx)
       word!(ctx, "mollusk", ~w(wordnet))

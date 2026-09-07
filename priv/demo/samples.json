@@ -1,0 +1,180 @@
+{
+  "note": "Fake data for #71 §2.8's demo mode. Every body ends in (invented for layout). None of these sources is absorbed; none of these slugs is a real one. Johnson is not here — he has been real since S5.",
+  "sources": [
+    {
+      "slug": "webster1913",
+      "name": "Webster's Revised Unabridged Dictionary",
+      "tier": "aristocracy",
+      "year": 1913,
+      "license": "public domain",
+      "license_url": null,
+      "url": "https://www.webster-dictionary.org/definition/{{word}}"
+    },
+    {
+      "slug": "eb1911",
+      "name": "Encyclopædia Britannica, 11th edition",
+      "tier": "aristocracy",
+      "year": 1911,
+      "license": "public domain",
+      "license_url": null,
+      "url": "https://en.wikisource.org/wiki/1911_Encyclop%C3%A6dia_Britannica/{{Word}}"
+    },
+    {
+      "slug": "urbandictionary",
+      "name": "Urban Dictionary",
+      "tier": "plebs",
+      "year": null,
+      "license": "not redistributable — linked, never stored",
+      "license_url": "https://www.urbandictionary.com/tos.php",
+      "url": "https://www.urbandictionary.com/define.php?term={{word}}"
+    }
+  ],
+  "words": {
+    "_default": {
+      "cards": [
+        {
+          "source": "webster1913",
+          "pos": "noun",
+          "senses": [
+            { "gloss": "That which is called {{word}}; the thing or quality so named. (invented for layout)", "tags": [] },
+            { "gloss": "The state or condition of being {{word}}; hence, figuratively, any state resembling it.", "tags": ["Obs."] },
+            { "gloss": "A person or thing remarkable for {{word}}; one given to it.", "tags": ["Rare"] },
+            { "gloss": "To make or become {{word}}; to render such.", "tags": ["v. t."] }
+          ]
+        },
+        {
+          "source": "eb1911",
+          "entry": {
+            "headword": "{{WORD}}",
+            "body": "{{WORD}}, a subject on which the eleventh edition would spend four hundred words of confident Edwardian prose before conceding, in its last sentence, that the matter is disputed.\n\n> The article's own citation would sit here, set smaller, and would name a German monograph nobody has opened since 1904.\n\n*(invented for layout)*"
+          }
+        },
+        {
+          "source": "urbandictionary",
+          "entry": {
+            "headword": "{{word}}",
+            "marker": "▲ 1,243",
+            "body": "when something is so {{word}} that saying it once doesn't cover it. deployed in the group chat, never out loud.\n\n> “not the {{word}} behaviour again”\n\n*(invented for layout)*"
+          }
+        }
+      ],
+      "evidence": [
+        { "kind": "tiktok", "label": "TIKTOK", "duration": "0:31", "body": "POV: you look up {{word}} and the dictionary is meaner than you are", "handle": "@lexiconbrain", "metric": "▲ 3.4M" },
+        { "kind": "tweet", "label": "TWEET", "body": "every generation invents a word for {{word}} and every generation thinks it invented the thing", "handle": "@theorygf", "metric": "❤ 15k" },
+        { "kind": "lyric", "label": "SONG LYRIC", "body": "“and the {{word}} of it lived rent-free / somewhere behind my teeth”", "meta": "Clairo — “Bags”", "handle": "@itgirl", "metric": "▲ 201" },
+        { "kind": "youtube", "label": "YOUTUBE", "duration": "9:48", "body": "How to spot {{word}} in the wild — a video essay", "handle": "Practical Semantics", "metric": "▲ 920k" },
+        { "kind": "instagram", "label": "INSTAGRAM · CAROUSEL", "body": "six slides on {{word}}, five of them a beige apartment", "handle": "@beigecat", "metric": "▲ 640" },
+        { "kind": "example", "label": "COMMUNITY EXAMPLE", "body": "Nominated as an example of {{word}}: a person, with a Wikidata item of their own, so the example is a link between two things rather than a caption.", "handle": "@holden", "metric": "▲ 88" }
+      ]
+    },
+    "oyster": {
+      "cards": [
+        {
+          "source": "webster1913",
+          "pos": "noun",
+          "senses": [
+            { "gloss": "Any marine bivalve mollusk of the genus Ostrea. They are usually found adhering to rocks or other fixed objects. (invented for layout)", "tags": ["Zool."] },
+            { "gloss": "A small mass of dark meat found in a cavity of the bone on each side of the back of a fowl.", "tags": [] },
+            { "gloss": "A person of few words; one from whom nothing may be got.", "tags": ["Colloq."] }
+          ]
+        },
+        {
+          "source": "eb1911",
+          "entry": {
+            "headword": "OYSTER",
+            "body": "OYSTER, the common name of the lamellibranch molluscs of the family *Ostreidae*, of which the eleventh edition treats at length, with a plate, and with a digression on the beds of Whitstable that runs to a column and a half.\n\n> The oyster is, of all shell-fish, that which has been longest cultivated by man; the Romans, as Pliny relates, esteemed those of Brundisium above all others.\n\n*(invented for layout)*"
+          }
+        },
+        {
+          "source": "urbandictionary",
+          "entry": {
+            "headword": "oyster",
+            "marker": "▲ 2,907",
+            "body": "the sea's way of testing your commitment. you don't like them, you like *having eaten* them.\n\n> “he ordered a dozen oysters to seem like a man with a boat”\n\n*(invented for layout)*"
+          }
+        }
+      ],
+      "evidence": [
+        { "kind": "tiktok", "label": "TIKTOK", "duration": "0:22", "body": "shucking my first oyster and immediately regretting the whole 19th century", "handle": "@brinepilled", "metric": "▲ 1.9M" },
+        { "kind": "tweet", "label": "TWEET", "body": "the world is your oyster is a threat if you have ever actually met an oyster", "handle": "@wetsandposting", "metric": "❤ 42k" },
+        { "kind": "lyric", "label": "SONG LYRIC", "body": "“I will not lend thee a penny — / why then the world's mine oyster, / which I with sword will open”", "meta": "Shakespeare — Merry Wives, II.ii", "handle": "@folio1623", "metric": "▲ 512" },
+        { "kind": "youtube", "label": "YOUTUBE", "duration": "14:02", "body": "The oyster beds that fed London, and the winter that killed them", "handle": "Estuary Histories", "metric": "▲ 380k" },
+        { "kind": "instagram", "label": "INSTAGRAM", "body": "half a dozen on ice, one lemon, no context", "handle": "@sixonice", "metric": "▲ 1.1k" },
+        { "kind": "example", "label": "COMMUNITY EXAMPLE", "body": "Nominated as an example of “oyster”: the Whitstable Oyster Festival, a thing with a Wikidata item, linked to the thing the word names rather than to the string.", "handle": "@holden", "metric": "▲ 143" }
+      ]
+    },
+    "cat": {
+      "cards": [
+        {
+          "source": "webster1913",
+          "pos": "noun",
+          "senses": [
+            { "gloss": "Any animal belonging to the natural family Felidae, and in particular to the various species of the genera Felis, Panthera, and Lynx. (invented for layout)", "tags": ["Zool."] },
+            { "gloss": "A strong vessel with a narrow stern, projecting quarters, and a deep waist, used in the coal and timber trade.", "tags": ["Naut."] },
+            { "gloss": "A double tripod having six legs, so contrived that whichever way it falls it stands upon three.", "tags": [] },
+            { "gloss": "A spiteful or backbiting woman.", "tags": ["Colloq."] }
+          ]
+        },
+        {
+          "source": "eb1911",
+          "entry": {
+            "headword": "CAT",
+            "body": "CAT (*Felis domestica*), on which the eleventh edition is unusually warm, allowing the animal three columns and conceding, against its own habit, that the creature is agreeable company.\n\n> Of the domestication of the cat in Egypt there can be no doubt; the mummied remains found at Beni-Hasan are numbered in tens of thousands.\n\n*(invented for layout)*"
+          }
+        },
+        {
+          "source": "urbandictionary",
+          "entry": {
+            "headword": "cat",
+            "marker": "▲ 8,412",
+            "body": "a small landlord you are legally required to feed.\n\n> “my cat has never once acknowledged the rent”\n\n*(invented for layout)*"
+          }
+        }
+      ],
+      "evidence": [
+        { "kind": "tiktok", "label": "TIKTOK", "duration": "0:14", "body": "he sits like a man who has read the lease", "handle": "@orangecatbehaviour", "metric": "▲ 11.2M" },
+        { "kind": "tweet", "label": "TWEET", "body": "cats were domesticated in the sense that they filed the paperwork", "handle": "@felinelaw", "metric": "❤ 88k" },
+        { "kind": "lyric", "label": "SONG LYRIC", "body": "“the naming of cats is a difficult matter, / it isn't just one of your holiday games”", "meta": "T. S. Eliot — Old Possum's Book of Practical Cats", "handle": "@possum", "metric": "▲ 904" },
+        { "kind": "youtube", "label": "YOUTUBE", "duration": "22:31", "body": "Why every language's word for cat sounds the same, and why that is mostly a lie", "handle": "Etymology Nerd", "metric": "▲ 2.1M" },
+        { "kind": "instagram", "label": "INSTAGRAM · REEL", "body": "the loaf, the void, the danger noodle's rival", "handle": "@loafwatch", "metric": "▲ 3.3k" },
+        { "kind": "example", "label": "COMMUNITY EXAMPLE", "body": "Nominated as an example of “cat”: Larry, Chief Mouser to the Cabinet Office — a thing with a Wikidata item, which is exactly why the thing panel above lists him and the word does not.", "handle": "@holden", "metric": "▲ 267" }
+      ]
+    },
+    "joy": {
+      "cards": [
+        {
+          "source": "webster1913",
+          "pos": "noun",
+          "senses": [
+            { "gloss": "The passion or emotion excited by the acquisition or expectation of good; gladness; exhilaration of spirits. (invented for layout)", "tags": [] },
+            { "gloss": "That which causes joy or happiness; the cause or occasion of gladness.", "tags": [] },
+            { "gloss": "To rejoice; to be glad; to delight; to exult.", "tags": ["v. i.", "Obs."] }
+          ]
+        },
+        {
+          "source": "eb1911",
+          "entry": {
+            "headword": "JOY",
+            "body": "JOY, treated by the eleventh edition not under its own head but within the article on the *Emotions*, where it is defined against grief and then largely abandoned in favour of a discussion of the vasomotor system.\n\n> The physiologists are agreed that the expression of joy is the more difficult to counterfeit, the eye being less obedient than the mouth.\n\n*(invented for layout)*"
+          }
+        },
+        {
+          "source": "urbandictionary",
+          "entry": {
+            "headword": "joy",
+            "marker": "▲ 1,504",
+            "body": "the feeling you get about a thing before you find out what it costs.\n\n> “pure joy, briefly, and then the invoice”\n\n*(invented for layout)*"
+          }
+        }
+      ],
+      "evidence": [
+        { "kind": "tiktok", "label": "TIKTOK", "duration": "0:44", "body": "small joys tier list: bread heel, green light, the good pen", "handle": "@tinywins", "metric": "▲ 5.7M" },
+        { "kind": "tweet", "label": "TWEET", "body": "joy is a discipline and I am, unfortunately, not disciplined", "handle": "@softmarxist", "metric": "❤ 61k" },
+        { "kind": "lyric", "label": "SONG LYRIC", "body": "“joy is such a human madness”", "meta": "Zadie Smith, quoted in a hundred captions", "handle": "@marginalia", "metric": "▲ 1.4k" },
+        { "kind": "youtube", "label": "YOUTUBE", "duration": "17:09", "body": "Why joy and happiness are not the same word, and never were", "handle": "The Feeling Wheel", "metric": "▲ 640k" },
+        { "kind": "instagram", "label": "INSTAGRAM · CAROUSEL", "body": "ten slides of other people's small joys, submitted by strangers", "handle": "@joydept", "metric": "▲ 2.9k" },
+        { "kind": "example", "label": "COMMUNITY EXAMPLE", "body": "Nominated as an example of “joy”: “joie de vivre” — which is a thing under this one already, and is on the page above without anybody voting for it.", "handle": "@holden", "metric": "▲ 71" }
+      ]
+    }
+  }
+}

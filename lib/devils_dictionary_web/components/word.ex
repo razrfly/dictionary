@@ -25,6 +25,7 @@ defmodule DevilsDictionaryWeb.Word do
 
   @doc "The word itself: every part of speech the index holds, forms, sound, origin."
   attr :headword, :map, required: true
+  attr :demo, :boolean, default: false
 
   def headword(assigns) do
     ~H"""
@@ -74,7 +75,7 @@ defmodule DevilsDictionaryWeb.Word do
         also listed as a form of
         <.link
           :for={other <- @headword.also}
-          navigate={~p"/define/#{other.slug}"}
+          navigate={hop(other.slug, [], @demo)}
           class="underline underline-offset-4"
         >
           {other.lemma}
@@ -145,6 +146,7 @@ defmodule DevilsDictionaryWeb.Word do
 
   @doc "The trigram's nearest answers to a word the index does not hold."
   attr :suggestions, :list, default: []
+  attr :demo, :boolean, default: false
 
   def did_you_mean(assigns) do
     ~H"""
@@ -153,7 +155,7 @@ defmodule DevilsDictionaryWeb.Word do
       <.link
         :for={suggestion <- @suggestions}
         id={"suggestion-#{suggestion.slug}"}
-        navigate={~p"/define/#{suggestion.slug}"}
+        navigate={hop(suggestion.slug, [], @demo)}
         class="mr-2 rounded-full bg-mist-950/5 px-3 py-1 text-mist-950 hover:bg-mist-950/10 dark:bg-white/10 dark:text-white dark:hover:bg-white/20"
       >
         {suggestion.lemma}
@@ -193,15 +195,21 @@ defmodule DevilsDictionaryWeb.Word do
   attr :card, :map, required: true
   attr :trail, :list, default: []
   attr :info, :string, default: nil
+  attr :demo, :boolean, default: false
 
   def source_card(assigns) do
+    assigns = assign(assigns, :sample?, Map.get(assigns.card, :sample?, false))
+
     ~H"""
     <section
       id={@card.id}
       class={[
-        "rounded-xl border-l-2 py-6 pl-6",
-        @card.tier == :aristocracy && "border-amber-600/50 bg-amber-50/40 dark:bg-amber-950/10",
-        @card.tier != :aristocracy && "border-mist-950/10 dark:border-white/10"
+        "rounded-xl py-6 pl-6",
+        @sample? && "border-l-2 border-dashed border-amber-600/60",
+        not @sample? && "border-l-2",
+        not @sample? && @card.tier == :aristocracy &&
+          "border-amber-600/50 bg-amber-50/40 dark:bg-amber-950/10",
+        not @sample? && @card.tier != :aristocracy && "border-mist-950/10 dark:border-white/10"
       ]}
     >
       <header class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
@@ -210,6 +218,7 @@ defmodule DevilsDictionaryWeb.Word do
           {@card.source.name}
           <span :if={@card.year} class="font-normal text-mist-500">· {@card.year}</span>
           <span :if={@card.pos} class="font-normal text-mist-500">· {@card.pos}</span>
+          <DevilsDictionaryWeb.Demo.sample_badge :if={@sample?} />
         </h2>
         <span class="flex items-baseline gap-3">
           <.link_out id={"#{@card.id}-out"} href={@card.url} label={@card.source.name} />
@@ -236,6 +245,7 @@ defmodule DevilsDictionaryWeb.Word do
         group={group}
         index={i}
         trail={@trail}
+        demo={@demo}
       />
     </section>
     """
@@ -255,6 +265,7 @@ defmodule DevilsDictionaryWeb.Word do
   attr :group, :map, required: true
   attr :index, :integer, required: true
   attr :trail, :list, default: []
+  attr :demo, :boolean, default: false
 
   def sense_group(assigns) do
     assigns = assign(assigns, :id, "#{assigns.card_id}-group-#{assigns.index}")
@@ -268,6 +279,7 @@ defmodule DevilsDictionaryWeb.Word do
           sense={sense}
           marker={if @group.group_key, do: "●", else: "#{i + 1}"}
           trail={@trail}
+          demo={@demo}
         />
       </ol>
 
@@ -282,11 +294,18 @@ defmodule DevilsDictionaryWeb.Word do
             sense={sense}
             marker={if @group.group_key, do: "●", else: "#{i + WordPage.gloss_cap() + 1}"}
             trail={@trail}
+            demo={@demo}
           />
         </ol>
       </details>
 
-      <.chain :if={@group.chain != []} id={"#{@id}-chain"} chain={@group.chain} trail={@trail} />
+      <.chain
+        :if={@group.chain != []}
+        id={"#{@id}-chain"}
+        chain={@group.chain}
+        trail={@trail}
+        demo={@demo}
+      />
     </div>
     """
   end
@@ -298,6 +317,7 @@ defmodule DevilsDictionaryWeb.Word do
   attr :sense, :map, required: true
   attr :marker, :string, required: true
   attr :trail, :list, default: []
+  attr :demo, :boolean, default: false
 
   def sense_line(assigns) do
     ~H"""
@@ -316,6 +336,7 @@ defmodule DevilsDictionaryWeb.Word do
           group={group}
           chips={chips}
           trail={@trail}
+          demo={@demo}
         />
       </div>
     </li>
@@ -329,6 +350,7 @@ defmodule DevilsDictionaryWeb.Word do
   attr :id, :string, required: true
   attr :chain, :list, required: true
   attr :trail, :list, default: []
+  attr :demo, :boolean, default: false
 
   def chain(assigns) do
     ~H"""
@@ -337,7 +359,7 @@ defmodule DevilsDictionaryWeb.Word do
       <span :for={{step, i} <- Enum.with_index(@chain)} class="flex items-center gap-x-2">
         <span :if={i > 0} aria-hidden="true" class="text-mist-400">›</span>
         <.link
-          navigate={hop(step.slug, @trail)}
+          navigate={hop(step.slug, @trail, @demo)}
           class={[
             "hover:underline",
             step.enriched? && "text-mist-950 dark:text-white",
@@ -356,6 +378,7 @@ defmodule DevilsDictionaryWeb.Word do
   attr :group, :any, required: true
   attr :chips, :map, required: true
   attr :trail, :list, default: []
+  attr :demo, :boolean, default: false
 
   def relation_group(assigns) do
     ~H"""
@@ -367,6 +390,7 @@ defmodule DevilsDictionaryWeb.Word do
         group={@group}
         chip={chip}
         trail={@trail}
+        demo={@demo}
       />
       <%!-- `max-w-full min-w-0` is load-bearing at 375 px: a flex item sizes to
       its widest child by default, so a long lemma like *murrumbidgee oyster*
@@ -382,6 +406,7 @@ defmodule DevilsDictionaryWeb.Word do
             group={@group}
             chip={chip}
             trail={@trail}
+            demo={@demo}
           />
         </span>
       </details>
@@ -402,12 +427,13 @@ defmodule DevilsDictionaryWeb.Word do
   attr :group, :any, required: true
   attr :chip, :map, required: true
   attr :trail, :list, default: []
+  attr :demo, :boolean, default: false
 
   def chip(assigns) do
     ~H"""
     <.link
       id={@id}
-      navigate={hop(@chip.slug, @trail)}
+      navigate={hop(@chip.slug, @trail, @demo)}
       title={"#{label_for(@group)} · #{@chip.pos}"}
       class={[
         "rounded-full px-3 py-0.5 text-sm/6",
@@ -425,6 +451,7 @@ defmodule DevilsDictionaryWeb.Word do
   @doc "The words walked to get here, kept in the URL so the walk can be pasted."
   attr :trail, :list, required: true
   attr :current, :string, default: nil
+  attr :demo, :boolean, default: false
 
   def trail(assigns) do
     ~H"""
@@ -438,7 +465,7 @@ defmodule DevilsDictionaryWeb.Word do
         <span :if={i > 0} aria-hidden="true" class="text-mist-400">›</span>
         <.link
           id={"trail-#{step.slug}"}
-          navigate={hop(step.slug, Enum.take(@trail, i))}
+          navigate={hop(step.slug, Enum.take(@trail, i), @demo)}
           class="text-mist-500 hover:text-mist-950 hover:underline dark:hover:text-white"
         >
           {step.lemma}
@@ -478,6 +505,7 @@ defmodule DevilsDictionaryWeb.Word do
   """
   attr :related, :map, required: true
   attr :trail, :list, default: []
+  attr :demo, :boolean, default: false
 
   def related_block(assigns) do
     ~H"""
@@ -492,6 +520,7 @@ defmodule DevilsDictionaryWeb.Word do
         group={group}
         chips={chips}
         trail={@trail}
+        demo={@demo}
       />
     </section>
     """
@@ -529,8 +558,9 @@ defmodule DevilsDictionaryWeb.Word do
   the trail, so the URL carries the walk. Public because the thing side hops
   through the same trail.
   """
-  def hop(slug, []), do: ~p"/define/#{slug}"
-  def hop(slug, trail), do: ~p"/define/#{slug}?#{[trail: Enum.map_join(trail, ",", & &1.slug)]}"
+  def hop(slug, trail, demo? \\ false) do
+    trail |> query(demo?) |> to_path(slug)
+  end
 
   @doc """
   The path that opens the ⓘ drawer for `ref` — the same word, the same trail,
@@ -540,17 +570,22 @@ defmodule DevilsDictionaryWeb.Word do
   reader who typed *oysters* stays on *oysters*, keeps the *redirected from*
   line, and gets a URL that reproduces exactly what they are looking at.
   """
-  def info_path(slug, trail, ref \\ nil) do
-    params =
-      [
-        trail: trail != [] && Enum.map_join(trail, ",", & &1.slug),
-        provenance: ref
-      ]
-      |> Enum.reject(fn {_k, v} -> v in [nil, false, ""] end)
-
-    case params do
-      [] -> ~p"/define/#{slug}"
-      params -> ~p"/define/#{slug}?#{params}"
-    end
+  def info_path(slug, trail, ref \\ nil, demo? \\ false) do
+    trail |> query(demo?, ref) |> to_path(slug)
   end
+
+  # `?demo=1` rides along with the trail rather than being dropped at the first
+  # click. A mode that survives one navigation is not a mode — and the drawer's
+  # own close link would have been the thing that turned it off.
+  defp query(trail, demo?, ref \\ nil) do
+    [
+      trail: trail != [] && Enum.map_join(trail, ",", & &1.slug),
+      provenance: ref,
+      demo: demo? && "1"
+    ]
+    |> Enum.reject(fn {_k, v} -> v in [nil, false, ""] end)
+  end
+
+  defp to_path([], slug), do: ~p"/define/#{slug}"
+  defp to_path(query, slug), do: ~p"/define/#{slug}?#{query}"
 end
