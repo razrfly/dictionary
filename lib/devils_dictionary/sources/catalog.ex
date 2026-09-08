@@ -2,19 +2,26 @@ defmodule DevilsDictionary.Sources.Catalog do
   @moduledoc """
   The registry of what we absorb from, as data.
 
-  Five open sources for MVP-0 (issue #69 §2), the Animals test scope (§3), and
-  Bierce as a person who authored a layer. Lives in `lib` rather than in
-  `seeds.exs` because seeds do **not** run in `:test` — the test alias is
-  `ecto.create, ecto.migrate, test` — so tests and seeds need one shared
-  definition. `mix dd.score`'s A1 row checks reality against this list.
+  Six open sources, the scopes read from `priv/scopes/`, and the authors of the
+  two historical dictionaries — as **entities**, with the works they wrote and
+  the editions we imported. Lives in `lib` rather than in `seeds.exs` because
+  seeds do **not** run in `:test` — the test alias is `ecto.create, ecto.migrate,
+  test` — so tests and seeds need one shared definition. `mix dd.score`'s A1 row
+  checks reality against this list.
 
   Adding a source is a row here plus a module under `Absorb.Sources`
   (scorecard E1: zero migrations).
   """
 
+  import Ecto.Query
+
+  alias DevilsDictionary.Claims
+  alias DevilsDictionary.Claims.AssertionRevision
   alias DevilsDictionary.Lexicon.Scope
+  alias DevilsDictionary.Registry
+  alias DevilsDictionary.Registry.Entity
   alias DevilsDictionary.Repo
-  alias DevilsDictionary.Sources.{Person, Source}
+  alias DevilsDictionary.Sources.Source
 
   @doc """
   The MVP-0 sources. Pinned snapshots live in `config`.
@@ -183,7 +190,15 @@ defmodule DevilsDictionary.Sources.Catalog do
   end
 
   @doc """
-  People who authored a layer. Keyed by the source slug they wrote.
+  The people who authored a layer, and the works and editions those layers are.
+
+  Not a `people` table any more. Each of these becomes an `entities` row with
+  `entity_kind: :person` plus a `person_details` row, so Bierce authoring a
+  definition, Bierce being the subject of a biography and Bierce being named in
+  a cultural claim are all the same `object_id`. #73's first requirement.
+
+  QIDs live in `external_identifiers`, namespaced, and are **verified against
+  Wikidata rather than typed from memory** -- see the note on Bierce below.
   """
   def people do
     [
@@ -193,8 +208,23 @@ defmodule DevilsDictionary.Sources.Catalog do
         birth_date: ~D[1842-06-24],
         death_date: ~D[1914-01-01],
         bio: "American satirist; author of The Devil's Dictionary (1911).",
-        wikidata_id: "Q310190",
-        source_slug: "bierce"
+        # Q191050, not Q310190. This row carried Q310190 from S3 until #74 P0:
+        # that is **Tobin Bell**, an American actor born 1942, and the error was
+        # invisible because nothing ever resolved it -- Bierce has no Wikipedia
+        # pass and the QID was never read back. Checked against the Wikidata API
+        # and pinned by a regression test rather than a comment.
+        wikidata_id: "Q191050",
+        source_slug: "bierce",
+        work: %{
+          title: "The Devil's Dictionary",
+          work_kind: "dictionary",
+          first_published_year: 1911,
+          wikidata_id: "Q1197843",
+          edition: %{
+            label: "Project Gutenberg #972 (1911 text)",
+            publication_year: 1911
+          }
+        }
       },
       %{
         name: "Samuel Johnson",
@@ -205,7 +235,17 @@ defmodule DevilsDictionary.Sources.Catalog do
           "English lexicographer, critic and poet; author of A Dictionary of " <>
             "the English Language (1755).",
         wikidata_id: "Q182589",
-        source_slug: "johnson"
+        source_slug: "johnson",
+        work: %{
+          title: "A Dictionary of the English Language",
+          work_kind: "dictionary",
+          first_published_year: 1755,
+          wikidata_id: "Q1526598",
+          edition: %{
+            label: "LEME ver. 1.0 (2023) transcription of the 1755 first edition",
+            publication_year: 1755
+          }
+        }
       }
     ]
   end
@@ -251,19 +291,109 @@ defmodule DevilsDictionary.Sources.Catalog do
 
   @doc """
   Upserts the whole catalog. Idempotent: re-running only refreshes config.
+
+  People, works and editions are identities rather than rows with a natural key,
+  so they are matched on their verified Wikidata id where there is one and on
+  their preferred label otherwise -- never created twice.
   """
   def seed! do
-    sources = Map.new(sources(), fn attrs -> {attrs.slug, upsert!(Source, :slug, attrs)} end)
+    # Predicates first: seeding a person also asserts `authored_by` and
+    # `edition_of`, and those cannot be asserted before they are registered.
+    predicates = DevilsDictionary.Claims.Catalog.seed!()
 
-    people =
-      Map.new(people(), fn person ->
-        {slug, attrs} = Map.pop(person, :source_slug)
-        {attrs.slug, upsert!(Person, :slug, Map.put(attrs, :source_id, sources[slug].id))}
+    sources = Map.new(sources(), fn attrs -> {attrs.slug, upsert!(Source, :slug, attrs)} end)
+    scopes = Map.new(scopes(), fn attrs -> {attrs.slug, upsert!(Scope, :slug, attrs)} end)
+    people = Map.new(people(), fn person -> {person.slug, seed_person!(person)} end)
+
+    %{sources: sources, scopes: scopes, people: people, predicates: predicates}
+  end
+
+  # A person, the work they wrote, the edition we imported, and the two
+  # `authored_by` / `edition_of` claims that connect them. Everything here is
+  # `find_or_create`, so seeding twice produces one Bierce.
+  defp seed_person!(attrs) do
+    person =
+      find_or_create_entity(attrs.wikidata_id, attrs.name, fn ->
+        {:ok, entity} =
+          Registry.create_person(%{
+            entity_kind: :person,
+            preferred_label: attrs.name,
+            description: attrs.bio,
+            birth_date: attrs.birth_date,
+            death_date: attrs.death_date
+          })
+
+        entity
       end)
 
-    scopes = Map.new(scopes(), fn attrs -> {attrs.slug, upsert!(Scope, :slug, attrs)} end)
+    work =
+      find_or_create_entity(attrs.work.wikidata_id, attrs.work.title, fn ->
+        {:ok, entity} =
+          Registry.create_work(%{
+            entity_kind: :work,
+            preferred_label: attrs.work.title,
+            work_kind: attrs.work.work_kind,
+            first_published_year: attrs.work.first_published_year
+          })
 
-    %{sources: sources, scopes: scopes, people: people}
+        entity
+      end)
+
+    edition =
+      find_or_create_entity(nil, attrs.work.edition.label, fn ->
+        {:ok, entity} =
+          Registry.create_edition(%{
+            entity_kind: :edition,
+            preferred_label: attrs.work.edition.label,
+            work_id: work.object_id,
+            publication_year: attrs.work.edition.publication_year
+          })
+
+        entity
+      end)
+
+    assert_once(work.object_id, "authored_by", person.object_id)
+    assert_once(edition.object_id, "edition_of", work.object_id)
+
+    %{person: person, work: work, edition: edition}
+  end
+
+  defp find_or_create_entity(wikidata_id, label, build) do
+    existing =
+      (wikidata_id && Registry.by_external_id("wikidata", wikidata_id)) ||
+        Repo.one(from e in Entity, where: e.preferred_label == ^label, select: e.object_id)
+
+    case existing do
+      nil ->
+        entity = build.()
+
+        if wikidata_id do
+          {:ok, _} = Registry.add_external_id(entity.object_id, "wikidata", wikidata_id)
+        end
+
+        entity
+
+      object_id ->
+        Repo.get!(Entity, object_id)
+    end
+  end
+
+  defp assert_once(subject_id, predicate_key, object_id) do
+    existing =
+      Repo.one(
+        from r in AssertionRevision,
+          join: p in assoc(r, :predicate),
+          where:
+            r.subject_object_id == ^subject_id and r.object_object_id == ^object_id and
+              p.key == ^predicate_key and r.is_current,
+          limit: 1
+      )
+
+    if is_nil(existing) do
+      {:ok, _} = Claims.assert(subject_id, predicate_key, object_id, %{method: "catalog"})
+    end
+
+    :ok
   end
 
   defp upsert!(schema, natural_key, attrs) do

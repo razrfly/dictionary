@@ -17,7 +17,7 @@ defmodule DevilsDictionary.Lexicon.Scope do
     field :rules, :map, default: %{}
     field :stats, :map, default: %{}
 
-    has_many :scope_lexemes, DevilsDictionary.Lexicon.ScopeLexeme
+    has_many :members, DevilsDictionary.Lexicon.ScopeMember
 
     timestamps(type: :utc_datetime_usec)
   end
