@@ -1,0 +1,48 @@
+{
+  "files": [
+    {
+      "file": "bierce.jsonl.gz",
+      "rows": 997,
+      "source": "bierce",
+      "sha256": "2bc715d91d365181e0e92d21d0c3b17e6c7b81905db23245fa54bf9cce4c3c0a",
+      "byte_count": 245820
+    },
+    {
+      "file": "johnson.jsonl.gz",
+      "rows": 42726,
+      "source": "johnson",
+      "sha256": "ff5b9e0a88a7bd79fd10a924433963396352f6f318f4fac1e6f12e629e55cfe5",
+      "byte_count": 12015822
+    },
+    {
+      "file": "wikidata.jsonl.gz",
+      "rows": 72770,
+      "source": "wikidata",
+      "sha256": "b5e3f029edb361a799711f4ab2f1faa919063f849fc5625f70d41ece63aeb89d",
+      "byte_count": 21718251
+    },
+    {
+      "file": "wikipedia.jsonl.gz",
+      "rows": 85044,
+      "source": "wikipedia",
+      "sha256": "bc25a476bf88a7491c8ed6d65bdda35346691a8de23ef9141a4140ec44737023",
+      "byte_count": 36953314
+    },
+    {
+      "file": "wiktionary.jsonl.gz",
+      "rows": 22534,
+      "source": "wiktionary",
+      "sha256": "f9fe11c65facb333262f58aca108880c39589a286e61a335d3704c1a4040bbcf",
+      "byte_count": 8562876
+    },
+    {
+      "file": "wordnet.jsonl.gz",
+      "rows": 120564,
+      "source": "wordnet",
+      "sha256": "574e476a1c5f935ae08e8c78a224fc0edda8d7102fbef17f62bfdbece04fa8df",
+      "byte_count": 22084500
+    }
+  ],
+  "note": "Replay archive of source_records. The API sources (wikipedia, wikidata) exist only here outside the database; the dump sources are re-derivable from priv/sources/MANIFEST.json and are exported for convenience, not necessity.",
+  "recorded_at": "2026-09-08"
+}

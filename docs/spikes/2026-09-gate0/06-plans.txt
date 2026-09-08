@@ -1,0 +1,162 @@
+
+════════════════════════════════════════════ strategy a, out
+                                                   QUERY PLAN                                                    
+-----------------------------------------------------------------------------------------------------------------
+ Gather (actual time=0.250..4.252 rows=1229.00 loops=1)
+   Workers Planned: 1
+   Workers Launched: 1
+   Buffers: shared hit=7957
+   ->  Nested Loop (actual time=0.083..1.126 rows=614.50 loops=2)
+         Buffers: shared hit=7957
+         ->  Parallel Bitmap Heap Scan on assertion_revisions ar (actual time=0.073..0.229 rows=1108.50 loops=2)
+               Recheck Cond: (subject_object_id = 6476)
+               Heap Blocks: exact=49
+               Buffers: shared hit=77
+               ->  Bitmap Index Scan on ar_subject (actual time=0.062..0.062 rows=2217.00 loops=1)
+                     Index Cond: (subject_object_id = 6476)
+                     Index Searches: 1
+                     Buffers: shared hit=8
+         ->  Index Scan using a_current on assertions a (actual time=0.001..0.001 rows=0.55 loops=2217)
+               Index Cond: (current_revision_id = ar.id)
+               Filter: (id = ar.assertion_id)
+               Index Searches: 2217
+               Buffers: shared hit=7880
+ Planning:
+   Buffers: shared hit=424
+ Planning Time: 1.363 ms
+ Execution Time: 4.327 ms
+(23 rows)
+
+
+════════════════════════════════════════════ strategy a, in
+                                                   QUERY PLAN                                                   
+----------------------------------------------------------------------------------------------------------------
+ Gather (actual time=0.692..10.556 rows=1573.00 loops=1)
+   Workers Planned: 2
+   Workers Launched: 2
+   Buffers: shared hit=12361
+   ->  Nested Loop (actual time=0.263..5.796 rows=524.33 loops=3)
+         Buffers: shared hit=12361
+         ->  Parallel Bitmap Heap Scan on assertion_revisions ar (actual time=0.234..2.779 rows=964.33 loops=3)
+               Recheck Cond: (object_object_id = 10143599)
+               Heap Blocks: exact=881
+               Buffers: shared hit=2107
+               Worker 0:  Heap Blocks: exact=588
+               Worker 1:  Heap Blocks: exact=590
+               ->  Bitmap Index Scan on ar_object (actual time=0.266..0.266 rows=2893.00 loops=1)
+                     Index Cond: (object_object_id = 10143599)
+                     Index Searches: 1
+                     Buffers: shared hit=8
+         ->  Index Scan using a_current on assertions a (actual time=0.003..0.003 rows=0.54 loops=2893)
+               Index Cond: (current_revision_id = ar.id)
+               Filter: (id = ar.assertion_id)
+               Index Searches: 2893
+               Buffers: shared hit=10254
+ Planning:
+   Buffers: shared hit=424
+ Planning Time: 1.221 ms
+ Execution Time: 10.648 ms
+(25 rows)
+
+
+════════════════════════════════════════════ strategy b, out
+                                                            QUERY PLAN                                                            
+----------------------------------------------------------------------------------------------------------------------------------
+ Subquery Scan on t (actual time=2.563..2.851 rows=1229.00 loops=1)
+   Filter: (t.subject_object_id = 6476)
+   Buffers: shared hit=5989
+   ->  Unique (actual time=2.562..2.744 rows=1229.00 loops=1)
+         Buffers: shared hit=5989
+         ->  Sort (actual time=2.562..2.622 rows=2217.00 loops=1)
+               Sort Key: ar.assertion_id, ar.revision_number DESC
+               Sort Method: quicksort  Memory: 277kB
+               Buffers: shared hit=5989
+               ->  Nested Loop (actual time=0.547..2.082 rows=2217.00 loops=1)
+                     Buffers: shared hit=5983
+                     ->  HashAggregate (actual time=0.536..0.609 rows=1229.00 loops=1)
+                           Group Key: assertion_revisions.assertion_id
+                           Batches: 1  Memory Usage: 121kB
+                           Buffers: shared hit=74
+                           ->  Index Scan using ar_subject on assertion_revisions (actual time=0.022..0.341 rows=2217.00 loops=1)
+                                 Index Cond: (subject_object_id = 6476)
+                                 Index Searches: 1
+                                 Buffers: shared hit=74
+                     ->  Index Scan using ar_latest on assertion_revisions ar (actual time=0.001..0.001 rows=1.80 loops=1229)
+                           Index Cond: (assertion_id = assertion_revisions.assertion_id)
+                           Index Searches: 1229
+                           Buffers: shared hit=5909
+ Planning:
+   Buffers: shared hit=266
+ Planning Time: 0.813 ms
+ Execution Time: 2.935 ms
+(27 rows)
+
+
+════════════════════════════════════════════ strategy b, in
+                                                          QUERY PLAN                                                          
+------------------------------------------------------------------------------------------------------------------------------
+ Subquery Scan on t (actual time=11.072..11.363 rows=1573.00 loops=1)
+   Filter: (t.object_object_id = 10143599)
+   Buffers: shared hit=9685
+   ->  Unique (actual time=11.071..11.257 rows=1573.00 loops=1)
+         Buffers: shared hit=9685
+         ->  Sort (actual time=11.071..11.135 rows=2893.00 loops=1)
+               Sort Key: ar.assertion_id, ar.revision_number DESC
+               Sort Method: quicksort  Memory: 333kB
+               Buffers: shared hit=9685
+               ->  Nested Loop (actual time=6.995..10.543 rows=2893.00 loops=1)
+                     Buffers: shared hit=9679
+                     ->  HashAggregate (actual time=6.985..7.065 rows=1573.00 loops=1)
+                           Group Key: assertion_revisions.assertion_id
+                           Batches: 1  Memory Usage: 153kB
+                           Buffers: shared hit=2067
+                           ->  Bitmap Heap Scan on assertion_revisions (actual time=0.372..6.669 rows=2893.00 loops=1)
+                                 Recheck Cond: (object_object_id = 10143599)
+                                 Heap Blocks: exact=2059
+                                 Buffers: shared hit=2067
+                                 ->  Bitmap Index Scan on ar_object (actual time=0.190..0.190 rows=2893.00 loops=1)
+                                       Index Cond: (object_object_id = 10143599)
+                                       Index Searches: 1
+                                       Buffers: shared hit=8
+                     ->  Index Scan using ar_latest on assertion_revisions ar (actual time=0.002..0.002 rows=1.84 loops=1573)
+                           Index Cond: (assertion_id = assertion_revisions.assertion_id)
+                           Index Searches: 1573
+                           Buffers: shared hit=7612
+ Planning:
+   Buffers: shared hit=266
+ Planning Time: 0.726 ms
+ Execution Time: 11.447 ms
+(31 rows)
+
+
+════════════════════════════════════════════ strategy c, out
+                                                  QUERY PLAN                                                   
+---------------------------------------------------------------------------------------------------------------
+ Index Scan using ar_subject_current on assertion_revisions ar (actual time=0.028..0.218 rows=1229.00 loops=1)
+   Index Cond: (subject_object_id = 6476)
+   Index Searches: 1
+   Buffers: shared hit=41
+ Planning:
+   Buffers: shared hit=207
+ Planning Time: 0.511 ms
+ Execution Time: 0.261 ms
+(8 rows)
+
+
+════════════════════════════════════════════ strategy c, in
+                                          QUERY PLAN                                          
+----------------------------------------------------------------------------------------------
+ Bitmap Heap Scan on assertion_revisions ar (actual time=0.141..2.484 rows=1573.00 loops=1)
+   Recheck Cond: ((object_object_id = 10143599) AND is_current)
+   Heap Blocks: exact=905
+   Buffers: shared hit=912
+   ->  Bitmap Index Scan on ar_object_current (actual time=0.073..0.073 rows=1573.00 loops=1)
+         Index Cond: (object_object_id = 10143599)
+         Index Searches: 1
+         Buffers: shared hit=7
+ Planning:
+   Buffers: shared hit=207
+ Planning Time: 0.448 ms
+ Execution Time: 2.532 ms
+(12 rows)
+

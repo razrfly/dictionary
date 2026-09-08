@@ -1,0 +1,57 @@
+
+MVP-0 scorecard — 25.1 s
+
+  ABSORB
+  PASS  A1  every source absorbed          6 / 6 absorbed, 6 pinned
+  PASS  A2  WordNet is full (plus edition) 120,564 synsets / 161,814 lexemes
+  PASS  A3  Wiktionary index is full       1,541,669 lexemes, 566,241 with forms
+  PASS  A4  scope built with reasons       25,402 lexemes, 0 without a reason · wikidata_taxon 8,887 · wiktionary_category 15,612 · wordnet_closure 7,692
+  PASS  A5  Wiktionary coverage of scope   78.3% raw · 93.0% excl. 4,004 scientific names
+  PASS  A6  Wikidata coverage              57,231 referenced, 0 dangling · union 97.4%
+  PASS  A7  Wikipedia coverage             10,412 / 10,412 asserted = 100.0% · 70,224 / 90,481 incl. candidates = 77.6%
+  PASS  A8  Bierce is full and attached    997 entries, 100.0% attached · 93.0% already in the index
+  PASS  A9  links back everywhere          365,037 / 365,037 = 100.0%
+  PASS  A10 images                         9,678 / 10,386 = 93.2%
+
+  MATERIALIZE
+  PASS  M1  parity, every source           0 gaps over 344,635 records
+  PASS  M2  idempotent, offline            row counts identical over 344,290 records, all 6 sources
+  PASS  M3  atomic writes                  proven by test
+  PASS  M4  trimmed raw                    14.8 MB → 3.9 MB = 73.7% smaller
+
+  RESOLVE
+  PASS  R1  WordNet edges resolved         1,047,918 / 1,047,918 = 100.0%
+  PASS  R2  Wiktionary edges resolved      114,827 / 130,519 = 88.0%
+  PASS  R3  chains render                  cat: WordNet feline > carnivore > placental > mammal, Wiktionary broader 7 · dog: WordNet domestic animal > animal > organism > living thing, Wiktionary broader 12
+
+  LINK
+  PASS  L1  link rate                      82.5% of 18,028 reachable · raw 58.6% · any 68.4%
+    ·   L2  conflicts surfaced             1,418 lexemes with two concepts >= 0.7
+  PASS  L3  taxonomy reaches Q729          8,025 / 10,386 = 77.3%
+  PASS  L4  disambiguation handled         1,764 / 1,775 = 100.0% of nominal lemmas
+
+  EXPERIENCE
+  PASS  X1  every word has a page          200 / 200 random index lexemes render · 159 of them bare
+  PASS  X2  search is fast                 p95 65 ms over 20 probes · median 21 ms · slowest 132 ms
+  PASS  X3  forms and variants resolve     4 / 4 probes land: monkeys, cats, geese, spat
+
+  PAGES
+  PASS  U1  six pages exist                6 / 6 routes
+  PASS  U2  the flagship words             cat 8 cards / 2 tiers · dog 8 cards / 2 tiers · oyster 8 cards / 2 tiers
+  PASS  U3  provenance everywhere          43 / 43 cards over 6 words open a record · 156 / 156 citations carry one · thing panel 5 / 5, reported
+  PASS  U4  mobile                         2026-09-07: 12 pages at 375 px — home, the word page, its relation groups, its thing panel, the provenance drawer, fake-data mode, the evidence wall, browse, one source, imports, health, /kit
+  PASS  U5  coverage is legible            6 / 6 sources agree with dd.health · bierce 66 · johnson 1,313 · wikidata 0 · wikipedia 18,028 · wiktionary 19,896 · wordnet 10,875
+  PASS  U6  every card links out           53 / 53 resolve a link out = 100% (43 cards + 10 thing-panel links)
+
+  EXTENSIBILITY
+  PASS  E1  a new source is cheap          johnson: 1 sources row, 1 module, 1 registry line; 2 migrations
+  PASS  E2  a new scope is data            animals 25,402 from 1 WordNet root (oewn-00015568-n) · emotions 809 from 1 WordNet root (oewn-00026390-n); 0 code changes
+  PASS  E3  the community layer fits       users + examples + votes migrate and roll back cleanly
+
+  OPERATIONS
+  PASS  O1  the scorecard runs itself      this table
+  PASS  O2  it is fast enough              (a) dumps 10m 6s · (b) APIs 266m 47s
+  PASS  O3  clean and offline-testable     `mix precommit`: compile, format, full suite
+  PASS  O4  health page                    `mix dd.health` and /health: coverage, resolution, the link histogram, candidates, conflicts, parity
+
+  36 / 36 graded rows pass, 1 reported, 0 pending

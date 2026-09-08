@@ -1,0 +1,802 @@
+{
+  "records": [
+    {
+      "coordinate_terms": [
+        {
+          "english": "broadly synonymous",
+          "translation": "broadly synonymous",
+          "word": "cronyism"
+        }
+      ],
+      "derived": [
+        {
+          "word": "antinepotism"
+        },
+        {
+          "word": "nepotism baby"
+        },
+        {
+          "word": "nepotism friend"
+        }
+      ],
+      "etymology_templates": [
+        {
+          "args": {
+            "1": "en",
+            "2": "fr",
+            "3": "népotisme"
+          },
+          "expansion": "Borrowed from French népotisme",
+          "name": "bor+"
+        },
+        {
+          "args": {
+            "1": "en",
+            "2": "it",
+            "3": "nepotismo"
+          },
+          "expansion": "Italian nepotismo",
+          "name": "der"
+        },
+        {
+          "args": {
+            "1": "en",
+            "2": "la",
+            "3": "nepōs",
+            "4": "",
+            "5": "nephew"
+          },
+          "expansion": "Latin nepōs (“nephew”)",
+          "name": "der"
+        }
+      ],
+      "etymology_text": "Borrowed from French népotisme, from Italian nepotismo, from Latin nepōs (“nephew”), a reference to the practice of popes appointing relatives (most often nephews) as cardinals (cardinal-nephew) during the Middle Ages and Renaissance.",
+      "forms": [
+        {
+          "form": "nepotisms",
+          "tags": [
+            "plural"
+          ]
+        }
+      ],
+      "head_templates": [
+        {
+          "args": {
+            "1": "~"
+          },
+          "expansion": "nepotism (countable and uncountable, plural nepotisms)",
+          "name": "en-noun"
+        }
+      ],
+      "lang": "English",
+      "lang_code": "en",
+      "pos": "noun",
+      "related": [
+        {
+          "word": "nepotistic"
+        },
+        {
+          "word": "nepotistical"
+        }
+      ],
+      "senses": [
+        {
+          "antonyms": [
+            {
+              "word": "meritocracy"
+            }
+          ],
+          "categories": [
+            "English countable nouns",
+            "English entries with incorrect language header",
+            "English lemmas",
+            "English nouns",
+            "English terms borrowed from French",
+            "English terms derived from French",
+            "English terms derived from Italian",
+            "English terms derived from Latin",
+            "English terms suffixed with -ism",
+            "English terms with quotations",
+            "English terms with usage examples",
+            "English uncountable nouns",
+            "Entries with translation boxes",
+            "Mandarin terms with redundant transliterations",
+            "Pages with 3 entries",
+            "Pages with entries",
+            "Terms with Albanian translations",
+            "Terms with Azerbaijani translations",
+            "Terms with Bulgarian translations",
+            "Terms with Catalan translations",
+            "Terms with Czech translations",
+            "Terms with Danish translations",
+            "Terms with Dutch translations",
+            "Terms with Esperanto translations",
+            "Terms with Estonian translations",
+            "Terms with Finnish translations",
+            "Terms with French translations",
+            "Terms with Galician translations",
+            "Terms with Georgian translations",
+            "Terms with German translations",
+            "Terms with Greek translations",
+            "Terms with Hebrew translations",
+            "Terms with Hindi translations",
+            "Terms with Hungarian translations",
+            "Terms with Icelandic translations",
+            "Terms with Ido translations",
+            "Terms with Indonesian translations",
+            "Terms with Irish translations",
+            "Terms with Italian translations",
+            "Terms with Japanese translations",
+            "Terms with Khmer translations",
+            "Terms with Korean translations",
+            "Terms with Mandarin translations",
+            "Terms with Mandinka translations",
+            "Terms with Marathi translations",
+            "Terms with Polish translations",
+            "Terms with Portuguese translations",
+            "Terms with Romanian translations",
+            "Terms with Russian translations",
+            "Terms with Spanish translations",
+            "Terms with Swahili translations",
+            "Terms with Swedish translations",
+            "Terms with Thai translations",
+            "Terms with Turkish translations",
+            "Terms with Ukrainian translations",
+            "Terms with Welsh translations",
+            "en:Corruption"
+          ],
+          "examples": [
+            {
+              "bold_text_offsets": [
+                [
+                  0,
+                  8
+                ]
+              ],
+              "text": "Nepotism can get you very far in the world if you've got the right connections.",
+              "type": "example"
+            },
+            {
+              "bold_text_offsets": [
+                [
+                  229,
+                  237
+                ]
+              ],
+              "ref": "1989, Report on Business Magazine, volume 6, numbers 1-6, page 100:",
+              "text": "Now retailers even demand deslotting or failure fees, a penalty for trial products that fail to meet their sales objectives. The struggle over display space heavily favors the incumbents and encourages what might be called brand nepotism.",
+              "type": "quotation"
+            },
+            {
+              "bold_text_offsets": [
+                [
+                  90,
+                  98
+                ]
+              ],
+              "ref": "2006 September 27, “China airbrushes Chen”, in Financial Times:",
+              "text": "Mr Chen - a member of the national politburo as well as the Shanghai boss - is accused of nepotism and corruption on a grand scale: protecting political allies, granting preferment to his family and looting Shanghai's pension fund.",
+              "type": "quotation"
+            }
+          ],
+          "glosses": [
+            "The favoring of relatives (most strictly) or also personal friends (more broadly) because of their relationship rather than because of their abilities."
+          ],
+          "links": [
+            [
+              "favor",
+              "favor"
+            ],
+            [
+              "relative",
+              "relative"
+            ],
+            [
+              "relationship",
+              "relationship"
+            ],
+            [
+              "abilities",
+              "ability"
+            ]
+          ],
+          "tags": [
+            "countable",
+            "uncountable"
+          ]
+        }
+      ],
+      "sounds": [
+        {
+          "ipa": "/ˈnɛp.ə.tɪ.zəm/",
+          "tags": [
+            "Received-Pronunciation"
+          ]
+        },
+        {
+          "ipa": "/ˈniː.pə.tɪ.zəm/",
+          "tags": [
+            "Received-Pronunciation",
+            "rare"
+          ]
+        },
+        {
+          "ipa": "/ˈnɛp.ə.tɪ.zəm/",
+          "tags": [
+            "Canada",
+            "General-American"
+          ]
+        },
+        {
+          "audio": "en-us-nepotism.ogg",
+          "mp3_url": "https://upload.wikimedia.org/wikipedia/commons/transcoded/f/fa/En-us-nepotism.ogg/En-us-nepotism.ogg.mp3",
+          "ogg_url": "https://upload.wikimedia.org/wikipedia/commons/f/fa/En-us-nepotism.ogg",
+          "tags": [
+            "US"
+          ]
+        },
+        {
+          "ipa": "/ˈnep.ə.tɪ.zəm/",
+          "tags": [
+            "Australia"
+          ]
+        },
+        {
+          "audio": "en-au-nepotism.ogg",
+          "mp3_url": "https://upload.wikimedia.org/wikipedia/commons/transcoded/0/04/En-au-nepotism.ogg/En-au-nepotism.ogg.mp3",
+          "note": "Queensland",
+          "ogg_url": "https://upload.wikimedia.org/wikipedia/commons/0/04/En-au-nepotism.ogg"
+        },
+        {
+          "ipa": "/ˈnep.ə.tə.zəm/",
+          "tags": [
+            "New-Zealand"
+          ]
+        }
+      ],
+      "translations": [
+        {
+          "code": "sq",
+          "lang": "Albanian",
+          "lang_code": "sq",
+          "sense": "favoring of relatives or personal friends",
+          "tags": [
+            "masculine"
+          ],
+          "word": "nepotizëm"
+        },
+        {
+          "code": "az",
+          "lang": "Azerbaijani",
+          "lang_code": "az",
+          "sense": "favoring of relatives or personal friends",
+          "word": "qohumbazlıq"
+        },
+        {
+          "code": "az",
+          "lang": "Azerbaijani",
+          "lang_code": "az",
+          "sense": "favoring of relatives or personal friends",
+          "word": "nepotizm"
+        },
+        {
+          "code": "az",
+          "lang": "Azerbaijani",
+          "lang_code": "az",
+          "sense": "favoring of relatives or personal friends",
+          "word": "tanışbazlıq"
+        },
+        {
+          "code": "bg",
+          "lang": "Bulgarian",
+          "lang_code": "bg",
+          "roman": "šurobadžanaština",
+          "sense": "favoring of relatives or personal friends",
+          "tags": [
+            "feminine"
+          ],
+          "word": "шуробаджанащина"
+        },
+        {
+          "code": "ca",
+          "lang": "Catalan",
+          "lang_code": "ca",
+          "sense": "favoring of relatives or personal friends",
+          "tags": [
+            "masculine"
+          ],
+          "word": "nepotisme"
+        },
+        {
+          "code": "cmn",
+          "lang": "Chinese Mandarin",
+          "lang_code": "cmn",
+          "roman": "piāntǎn",
+          "sense": "favoring of relatives or personal friends",
+          "word": "偏袒"
+        },
+        {
+          "code": "cmn",
+          "lang": "Chinese Mandarin",
+          "lang_code": "cmn",
+          "roman": "qúndài guānxì",
+          "sense": "favoring of relatives or personal friends",
+          "word": "裙帶關係 /裙带关系"
+        },
+        {
+          "code": "cmn",
+          "lang": "Chinese Mandarin",
+          "lang_code": "cmn",
+          "roman": "rènrénwéiqīn",
+          "sense": "favoring of relatives or personal friends",
+          "word": "任人唯親 /任人唯亲"
+        },
+        {
+          "code": "cs",
+          "lang": "Czech",
+          "lang_code": "cs",
+          "sense": "favoring of relatives or personal friends",
+          "tags": [
+            "neuter"
+          ],
+          "word": "rodinkářství"
+        },
+        {
+          "code": "cs",
+          "lang": "Czech",
+          "lang_code": "cs",
+          "sense": "favoring of relatives or personal friends",
+          "tags": [
+            "masculine"
+          ],
+          "word": "nepotismus"
+        },
+        {
+          "code": "cs",
+          "lang": "Czech",
+          "lang_code": "cs",
+          "sense": "favoring of relatives or personal friends",
+          "tags": [
+            "masculine"
+          ],
+          "word": "nepotizmus"
+        },
+        {
+          "code": "da",
+          "lang": "Danish",
+          "lang_code": "da",
+          "sense": "favoring of relatives or personal friends",
+          "tags": [
+            "common-gender"
+          ],
+          "word": "nepotisme"
+        },
+        {
+          "code": "nl",
+          "lang": "Dutch",
+          "lang_code": "nl",
+          "sense": "favoring of relatives or personal friends",
+          "tags": [
+            "neuter"
+          ],
+          "word": "nepotisme"
+        },
+        {
+          "code": "nl",
+          "lang": "Dutch",
+          "lang_code": "nl",
+          "sense": "favoring of relatives or personal friends",
+          "word": "vriendjespolitiek"
+        },
+        {
+          "code": "eo",
+          "lang": "Esperanto",
+          "lang_code": "eo",
+          "sense": "favoring of relatives or personal friends",
+          "word": "nepotismo"
+        },
+        {
+          "code": "et",
+          "lang": "Estonian",
+          "lang_code": "et",
+          "sense": "favoring of relatives or personal friends",
+          "word": "onupojapoliitika"
+        },
+        {
+          "code": "et",
+          "lang": "Estonian",
+          "lang_code": "et",
+          "sense": "favoring of relatives or personal friends",
+          "word": "nepotism"
+        },
+        {
+          "code": "fi",
+          "lang": "Finnish",
+          "lang_code": "fi",
+          "sense": "favoring of relatives or personal friends",
+          "word": "nepotismi"
+        },
+        {
+          "code": "fr",
+          "lang": "French",
+          "lang_code": "fr",
+          "sense": "favoring of relatives or personal friends",
+          "tags": [
+            "masculine"
+          ],
+          "word": "népotisme"
+        },
+        {
+          "code": "fr",
+          "lang": "French",
+          "lang_code": "fr",
+          "sense": "favoring of relatives or personal friends",
+          "tags": [
+            "masculine"
+          ],
+          "word": "copinage"
+        },
+        {
+          "code": "gl",
+          "lang": "Galician",
+          "lang_code": "gl",
+          "sense": "favoring of relatives or personal friends",
+          "tags": [
+            "masculine"
+          ],
+          "word": "nepotismo"
+        },
+        {
+          "code": "ka",
+          "lang": "Georgian",
+          "lang_code": "ka",
+          "roman": "neṗoṭizmi",
+          "sense": "favoring of relatives or personal friends",
+          "word": "ნეპოტიზმი"
+        },
+        {
+          "code": "de",
+          "lang": "German",
+          "lang_code": "de",
+          "sense": "favoring of relatives or personal friends",
+          "tags": [
+            "masculine"
+          ],
+          "word": "Nepotismus"
+        },
+        {
+          "code": "de",
+          "lang": "German",
+          "lang_code": "de",
+          "sense": "favoring of relatives or personal friends",
+          "tags": [
+            "feminine"
+          ],
+          "word": "Vetternwirtschaft"
+        },
+        {
+          "code": "el",
+          "lang": "Greek",
+          "lang_code": "el",
+          "roman": "oikogeneiokratía",
+          "sense": "favoring of relatives or personal friends",
+          "tags": [
+            "feminine"
+          ],
+          "word": "οικογενειοκρατία"
+        },
+        {
+          "code": "he",
+          "lang": "Hebrew",
+          "lang_code": "he",
+          "roman": "nepotizm",
+          "sense": "favoring of relatives or personal friends",
+          "tags": [
+            "masculine"
+          ],
+          "word": "נֶפּוֹטִיזְם"
+        },
+        {
+          "code": "hi",
+          "lang": "Hindi",
+          "lang_code": "hi",
+          "roman": "bhāī-bhatījāvād",
+          "sense": "favoring of relatives or personal friends",
+          "word": "भाई-भतीजावाद"
+        },
+        {
+          "code": "hu",
+          "lang": "Hungarian",
+          "lang_code": "hu",
+          "sense": "favoring of relatives or personal friends",
+          "word": "nepotizmus"
+        },
+        {
+          "code": "is",
+          "lang": "Icelandic",
+          "lang_code": "is",
+          "sense": "favoring of relatives or personal friends",
+          "tags": [
+            "feminine"
+          ],
+          "word": "frændhygli"
+        },
+        {
+          "code": "io",
+          "lang": "Ido",
+          "lang_code": "io",
+          "sense": "favoring of relatives or personal friends",
+          "word": "nepotismo"
+        },
+        {
+          "code": "id",
+          "lang": "Indonesian",
+          "lang_code": "id",
+          "sense": "favoring of relatives or personal friends",
+          "word": "nepotisme"
+        },
+        {
+          "code": "ga",
+          "lang": "Irish",
+          "lang_code": "ga",
+          "sense": "favoring of relatives or personal friends",
+          "tags": [
+            "masculine"
+          ],
+          "word": "finíochas"
+        },
+        {
+          "code": "it",
+          "lang": "Italian",
+          "lang_code": "it",
+          "sense": "favoring of relatives or personal friends",
+          "tags": [
+            "masculine"
+          ],
+          "word": "nepotismo"
+        },
+        {
+          "code": "ja",
+          "lang": "Japanese",
+          "lang_code": "ja",
+          "roman": "enjabiiki",
+          "sense": "favoring of relatives or personal friends",
+          "word": "縁者贔屓"
+        },
+        {
+          "code": "km",
+          "lang": "Khmer",
+          "lang_code": "km",
+          "roman": "ñiət mɨt niyum",
+          "sense": "favoring of relatives or personal friends",
+          "word": "ញាតិមិត្តនិយម"
+        },
+        {
+          "code": "ko",
+          "lang": "Korean",
+          "lang_code": "ko",
+          "roman": "jokbeoljuui",
+          "sense": "favoring of relatives or personal friends",
+          "word": "족벌주의"
+        },
+        {
+          "code": "mnk",
+          "lang": "Mandinka",
+          "lang_code": "mnk",
+          "sense": "favoring of relatives or personal friends",
+          "word": "baadinfaasaa"
+        },
+        {
+          "code": "mr",
+          "lang": "Marathi",
+          "lang_code": "mr",
+          "roman": "gharāṇeśāhī",
+          "sense": "favoring of relatives or personal friends",
+          "tags": [
+            "feminine"
+          ],
+          "word": "घराणेशाही"
+        },
+        {
+          "code": "pl",
+          "lang": "Polish",
+          "lang_code": "pl",
+          "sense": "favoring of relatives or personal friends",
+          "tags": [
+            "masculine"
+          ],
+          "word": "nepotyzm"
+        },
+        {
+          "code": "pt",
+          "lang": "Portuguese",
+          "lang_code": "pt",
+          "sense": "favoring of relatives or personal friends",
+          "tags": [
+            "masculine"
+          ],
+          "word": "nepotismo"
+        },
+        {
+          "code": "ro",
+          "lang": "Romanian",
+          "lang_code": "ro",
+          "sense": "favoring of relatives or personal friends",
+          "tags": [
+            "neuter"
+          ],
+          "word": "nepotism"
+        },
+        {
+          "code": "ru",
+          "lang": "Russian",
+          "lang_code": "ru",
+          "roman": "nepotízm",
+          "sense": "favoring of relatives or personal friends",
+          "tags": [
+            "masculine"
+          ],
+          "word": "непоти́зм"
+        },
+        {
+          "code": "ru",
+          "lang": "Russian",
+          "lang_code": "ru",
+          "roman": "kumovstvó",
+          "sense": "favoring of relatives or personal friends",
+          "tags": [
+            "neuter"
+          ],
+          "word": "кумовство́"
+        },
+        {
+          "code": "es",
+          "lang": "Spanish",
+          "lang_code": "es",
+          "sense": "favoring of relatives or personal friends",
+          "tags": [
+            "masculine"
+          ],
+          "word": "nepotismo"
+        },
+        {
+          "code": "es",
+          "lang": "Spanish",
+          "lang_code": "es",
+          "sense": "favoring of relatives or personal friends",
+          "tags": [
+            "masculine",
+            "uncommon"
+          ],
+          "word": "sobrinazgo"
+        },
+        {
+          "code": "sw",
+          "lang": "Swahili",
+          "lang_code": "sw",
+          "sense": "favoring of relatives or personal friends",
+          "word": "upendeleo wa ndugu"
+        },
+        {
+          "code": "sv",
+          "lang": "Swedish",
+          "lang_code": "sv",
+          "sense": "favoring of relatives or personal friends",
+          "tags": [
+            "common-gender"
+          ],
+          "word": "nepotism"
+        },
+        {
+          "code": "sv",
+          "lang": "Swedish",
+          "lang_code": "sv",
+          "sense": "favoring of relatives or personal friends",
+          "tags": [
+            "common-gender"
+          ],
+          "word": "svågerpolitik"
+        },
+        {
+          "code": "th",
+          "lang": "Thai",
+          "lang_code": "th",
+          "sense": "favoring of relatives or personal friends",
+          "word": "คติเห็นแก่ญาติ"
+        },
+        {
+          "code": "tr",
+          "lang": "Turkish",
+          "lang_code": "tr",
+          "sense": "favoring of relatives or personal friends",
+          "word": "kayırma"
+        },
+        {
+          "code": "tr",
+          "lang": "Turkish",
+          "lang_code": "tr",
+          "sense": "favoring of relatives or personal friends",
+          "word": "kayırmacılık"
+        },
+        {
+          "code": "tr",
+          "lang": "Turkish",
+          "lang_code": "tr",
+          "sense": "favoring of relatives or personal friends",
+          "word": "adam kayırma"
+        },
+        {
+          "code": "tr",
+          "lang": "Turkish",
+          "lang_code": "tr",
+          "sense": "favoring of relatives or personal friends",
+          "word": "nepotizm"
+        },
+        {
+          "code": "tr",
+          "lang": "Turkish",
+          "lang_code": "tr",
+          "sense": "favoring of relatives or personal friends",
+          "word": "iltimas"
+        },
+        {
+          "code": "tr",
+          "lang": "Turkish",
+          "lang_code": "tr",
+          "sense": "favoring of relatives or personal friends",
+          "word": "kohumbazlık"
+        },
+        {
+          "code": "tr",
+          "lang": "Turkish",
+          "lang_code": "tr",
+          "sense": "favoring of relatives or personal friends",
+          "word": "torpil"
+        },
+        {
+          "code": "uk",
+          "lang": "Ukrainian",
+          "lang_code": "uk",
+          "roman": "kumívstvo",
+          "sense": "favoring of relatives or personal friends",
+          "tags": [
+            "neuter"
+          ],
+          "word": "кумі́вство"
+        },
+        {
+          "code": "uk",
+          "lang": "Ukrainian",
+          "lang_code": "uk",
+          "roman": "nepotýzm",
+          "sense": "favoring of relatives or personal friends",
+          "tags": [
+            "masculine"
+          ],
+          "word": "непоти́зм"
+        },
+        {
+          "code": "cy",
+          "lang": "Welsh",
+          "lang_code": "cy",
+          "sense": "favoring of relatives or personal friends",
+          "tags": [
+            "masculine"
+          ],
+          "word": "neigarwch"
+        },
+        {
+          "code": "cy",
+          "lang": "Welsh",
+          "lang_code": "cy",
+          "sense": "favoring of relatives or personal friends",
+          "tags": [
+            "masculine"
+          ],
+          "word": "neiedd"
+        }
+      ],
+      "word": "nepotism"
+    }
+  ]
+}
