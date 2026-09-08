@@ -1,0 +1,198 @@
+{
+  "$comment": [
+    "The product's own predicates (#74 §C). Source-native lexical and semantic",
+    "predicates live in per-source mapping files beside this one, so a source's",
+    "own distinctions are preserved rather than flattened into `related_to`.",
+    "",
+    "`endpoints` is the enumerated list of allowed (subject, object) kind pairs.",
+    "A subkind of `-` means the kind has none. These become rows in",
+    "predicate_endpoint_rules, which assertion_revisions holds a composite",
+    "foreign key into -- so an invalid endpoint is refused by the database, on",
+    "bulk writes too, not by a changeset someone can bypass."
+  ],
+  "predicates": [
+    {
+      "key": "defines",
+      "forward_label": "defines",
+      "reverse_label": "Definitions",
+      "description": "A source's definition of a word, or of one of its meanings.",
+      "endpoints": [
+        ["content/definition", "lexeme/-"],
+        ["content/definition", "sense/-"]
+      ]
+    },
+    {
+      "key": "authored_by",
+      "forward_label": "authored by",
+      "reverse_label": "Authored",
+      "description": "Credit for writing. Several are allowed; a coauthor costs a row, not a column.",
+      "endpoints": [
+        ["content/definition", "entity/person"],
+        ["content/article", "entity/person"],
+        ["content/quotation", "entity/person"],
+        ["content/passage", "entity/person"],
+        ["content/other", "entity/person"],
+        ["entity/work", "entity/person"],
+        ["entity/work", "entity/organization"],
+        ["content/definition", "entity/organization"],
+        ["content/article", "entity/organization"]
+      ]
+    },
+    {
+      "key": "translated_by",
+      "forward_label": "translated by",
+      "reverse_label": "Translations",
+      "description": "Separate from authorship: the translator's wording is not the original author's.",
+      "endpoints": [
+        ["content/passage", "entity/person"],
+        ["content/quotation", "entity/person"],
+        ["entity/work", "entity/person"]
+      ]
+    },
+    {
+      "key": "published_in",
+      "forward_label": "published in",
+      "reverse_label": "Contents",
+      "description": "Where a piece of content appeared. The edition, not the work.",
+      "endpoints": [
+        ["content/definition", "entity/edition"],
+        ["content/article", "entity/edition"],
+        ["content/passage", "entity/edition"],
+        ["content/quotation", "entity/edition"]
+      ]
+    },
+    {
+      "key": "edition_of",
+      "forward_label": "an edition of",
+      "reverse_label": "Editions",
+      "description": "Keeps one hosted transcription from becoming a second work.",
+      "endpoints": [["entity/edition", "entity/work"]]
+    },
+    {
+      "key": "about",
+      "forward_label": "about",
+      "reverse_label": "Articles about",
+      "description": "A biography is a publication about a person. The person is not their article.",
+      "endpoints": [
+        ["content/article", "entity/person"],
+        ["content/article", "entity/organization"],
+        ["content/article", "entity/concept"],
+        ["content/article", "entity/event"],
+        ["content/article", "entity/work"],
+        ["content/article", "entity/place"],
+        ["content/article", "entity/taxon"],
+        ["content/article", "entity/artifact"],
+        ["content/article", "entity/other"]
+      ]
+    },
+    {
+      "key": "refers_to",
+      "forward_label": "refers to",
+      "reverse_label": "Words referring to this",
+      "description": "A source meaning names a thing. Sense-backed only -- a title match is not this.",
+      "endpoints": [
+        ["sense/-", "entity/concept"],
+        ["sense/-", "entity/taxon"],
+        ["sense/-", "entity/person"],
+        ["sense/-", "entity/organization"],
+        ["sense/-", "entity/place"],
+        ["sense/-", "entity/event"],
+        ["sense/-", "entity/work"],
+        ["sense/-", "entity/artifact"],
+        ["sense/-", "entity/other"]
+      ]
+    },
+    {
+      "key": "lexeme_entity_candidate",
+      "forward_label": "may refer to",
+      "reverse_label": "Words that may refer to this",
+      "description": "A title or disambiguation heuristic at the WORD level. Carries method, confidence and review state. Explicitly NOT sense equivalence: a candidate can appear as a possible subject and never propagates examples.",
+      "endpoints": [
+        ["lexeme/-", "entity/concept"],
+        ["lexeme/-", "entity/taxon"],
+        ["lexeme/-", "entity/person"],
+        ["lexeme/-", "entity/organization"],
+        ["lexeme/-", "entity/place"],
+        ["lexeme/-", "entity/event"],
+        ["lexeme/-", "entity/work"],
+        ["lexeme/-", "entity/artifact"],
+        ["lexeme/-", "entity/other"]
+      ]
+    },
+    {
+      "key": "illustrates",
+      "forward_label": "illustrates",
+      "reverse_label": "Attributed examples",
+      "description": "The culture's claim that some thing exemplifies a meaning or a concept. An interpretation, always attributed, never a definition.",
+      "endpoints": [
+        ["entity/person", "sense/-"],
+        ["entity/person", "entity/concept"],
+        ["entity/organization", "sense/-"],
+        ["entity/organization", "entity/concept"],
+        ["entity/event", "sense/-"],
+        ["entity/event", "entity/concept"],
+        ["entity/artifact", "sense/-"],
+        ["entity/artifact", "entity/concept"],
+        ["entity/work", "sense/-"],
+        ["entity/work", "entity/concept"],
+        ["content/media", "sense/-"],
+        ["content/media", "entity/concept"],
+        ["content/image", "sense/-"],
+        ["content/image", "entity/concept"],
+        ["content/quotation", "sense/-"],
+        ["content/quotation", "entity/concept"],
+        ["content/passage", "sense/-"],
+        ["content/passage", "entity/concept"]
+      ]
+    },
+    {
+      "key": "satirizes",
+      "forward_label": "satirizes",
+      "reverse_label": "Satirical treatments",
+      "endpoints": [
+        ["entity/work", "entity/person"],
+        ["entity/work", "entity/concept"],
+        ["entity/work", "entity/organization"],
+        ["content/media", "entity/person"],
+        ["content/media", "entity/concept"],
+        ["content/passage", "entity/person"],
+        ["content/passage", "entity/concept"]
+      ]
+    },
+    {
+      "key": "depicts",
+      "forward_label": "depicts",
+      "reverse_label": "Depictions",
+      "endpoints": [
+        ["entity/work", "entity/person"],
+        ["entity/work", "entity/place"],
+        ["entity/work", "entity/event"],
+        ["content/image", "entity/person"],
+        ["content/image", "entity/place"],
+        ["content/image", "entity/taxon"],
+        ["content/image", "entity/concept"]
+      ]
+    },
+    {
+      "key": "participates_in",
+      "forward_label": "participates in",
+      "reverse_label": "Participants",
+      "endpoints": [
+        ["entity/person", "entity/event"],
+        ["entity/organization", "entity/event"]
+      ]
+    },
+    {
+      "key": "excerpt_of",
+      "forward_label": "an excerpt of",
+      "reverse_label": "Excerpts",
+      "description": "Store a passage once; the claims about it are separate.",
+      "endpoints": [
+        ["content/passage", "content/other"],
+        ["content/passage", "entity/work"],
+        ["content/quotation", "content/other"],
+        ["content/quotation", "entity/work"]
+      ]
+    }
+  ]
+}

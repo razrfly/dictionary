@@ -5,7 +5,11 @@ config :devils_dictionary, DevilsDictionary.Repo,
   username: "postgres",
   password: "postgres",
   hostname: "localhost",
-  database: "devils_dictionary_dev",
+  # #74: the encyclopedia model is built in a NEW database. `devils_dictionary_dev`
+  # is left intact -- nothing is destroyed, and it stays available as the matched
+  # baseline for the Gate 0 benchmarks and P5's semantic comparison. It is
+  # reachable only through the two scripts that need it, never from app code.
+  database: "devils_dictionary_v2",
   stacktrace: true,
   show_sensitive_data_on_connection_error: true,
   pool_size: 10

@@ -1,60 +1,70 @@
 defmodule DevilsDictionary.Sources.SourceRecord do
   @moduledoc """
-  The truth we fetched, trimmed to the fields we use.
+  What a source calls one of its records, and when we last looked at it.
 
-  One row per `(source, external_id)`; replaced, never edited. Carries the
-  canonical URL at the source, so every derived row has a link back and can be
-  rebuilt with the network off. Spec: issue #69 §4.
+  Identity only. The payload moved to `source_record_revisions`, because
+  overwriting `raw` in place meant a claim citing "the Wiktionary record for
+  bank" would quietly come to cite whatever Wiktionary said most recently — the
+  cause the 7 September audit traced findings #1 and #2 back to.
 
-  `raw` is `load_in_query: false` — select it explicitly when you need it.
+  `content_hash` is still taken on the payload **as fetched, before `trim/1`**.
+  That is deliberate and load-bearing: tightening what we choose to keep must
+  never read as a change at the source, and 19,250 records were falsely stamped
+  once before this rule existed. The hash is now also the revision key, so a
+  re-fetch that hashes the same writes nothing at all.
+
+  `absent_until` records "this source had nothing for this target", which is a
+  finding with an expiry rather than a permanent verdict.
+
+  The record's `content_hash` names its **current** revision: the two are the
+  same value by construction, so "the payload as of now" needs no extra pointer.
   """
-
   use Ecto.Schema
+
   import Ecto.Changeset
 
-  schema "source_records" do
-    belongs_to :source, DevilsDictionary.Sources.Source
+  alias DevilsDictionary.Corpus.SourceRecordRevision
+  alias DevilsDictionary.Sources.Source
 
+  schema "source_records" do
+    belongs_to :source, Source
     field :external_id, :string
     field :url, :string
-    field :raw, :map, load_in_query: false
     field :content_hash, :string
     field :fetched_at, :utc_datetime_usec
     field :changed_at, :utc_datetime_usec
     field :materialized_at, :utc_datetime_usec
     field :absent_until, :utc_datetime_usec
 
+    has_many :revisions, SourceRecordRevision
+
+    # The current revision's payload, loaded on demand rather than stored here.
+    # Virtual on purpose: `materialize/1` is a pure function of a record, and
+    # keeping the field means all six adapters and their 159 offline tests are
+    # untouched by the payload moving into its own table. `Sources.raw/1` and
+    # `Absorb.Batch` are what fill it.
+    field :raw, :map, virtual: true, default: %{}
+
     timestamps(type: :utc_datetime_usec)
   end
 
-  @doc false
+  @castable ~w(source_id external_id url content_hash fetched_at changed_at
+               materialized_at absent_until)a
+
   def changeset(record, attrs) do
     record
-    |> cast(attrs, [
-      :source_id,
-      :external_id,
-      :url,
-      :raw,
-      :content_hash,
-      :fetched_at,
-      :changed_at,
-      :materialized_at,
-      :absent_until
-    ])
+    |> cast(attrs, @castable)
     |> validate_required([:source_id, :external_id])
     |> unique_constraint([:source_id, :external_id])
   end
 
   @doc """
-  sha256 of a payload, used to detect a changed record on refetch.
+  The content hash of a payload: sha256 of its JSON, lowercase hex.
 
-  Sources take it on the payload **as fetched, before `trim/1`** (see
-  `Sources.insert_records/3`), so `changed_at` only moves when the source moved,
-  never when we change what we keep.
+  Taken before `trim/1` — see the moduledoc. Also the `revision_key`, so
+  identical bytes are identical revisions by construction.
   """
   def content_hash(raw) when is_map(raw) do
-    :sha256
-    |> :crypto.hash(Jason.encode!(raw))
-    |> Base.encode16(case: :lower)
+    :sha256 |> :crypto.hash(Jason.encode!(raw)) |> Base.encode16(case: :lower)
   end
 end

@@ -7,6 +7,29 @@
 # General application configuration
 import Config
 
+config :devils_dictionary, :scopes,
+  user: [
+    default: true,
+    module: DevilsDictionary.Accounts.Scope,
+    assign_key: :current_scope,
+    access_path: [:user, :id],
+    schema_key: :user_id,
+    schema_type: :id,
+    schema_table: :users,
+    test_data_fixture: DevilsDictionary.AccountsFixtures,
+    test_setup_helper: :register_and_log_in_user
+  ]
+
+# Swoosh's local adapter keeps mail in memory; `/dev/mailbox` renders it.
+# Production is deliberately not configured -- see DevilsDictionary.Mailer.
+config :devils_dictionary, DevilsDictionary.Mailer, adapter: Swoosh.Adapters.Local
+
+# No API client: the Local and Test adapters never make an HTTP request, and
+# leaving this unset makes Swoosh demand hackney at boot. If a remote adapter is
+# ever configured, point this at Req rather than adding a second HTTP client --
+# AGENTS.md is explicit that Req is the one.
+config :swoosh, :api_client, false
+
 config :devils_dictionary,
   ecto_repos: [DevilsDictionary.Repo],
   generators: [timestamp_type: :utc_datetime]

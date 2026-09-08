@@ -1,5 +1,8 @@
 import Config
 
+# Only in tests, remove the complexity from the password hashing algorithm
+config :bcrypt_elixir, :log_rounds, 1
+
 # Configure your database
 #
 # The MIX_TEST_PARTITION environment variable can be used
@@ -54,3 +57,6 @@ config :devils_dictionary, demo_mode: true
 
 # The health page's scorecard cache would leak one test's rows into the next.
 config :devils_dictionary, cache_scorecard: false
+
+# Mail goes nowhere in tests; assert on it with Swoosh.TestAssertions.
+config :devils_dictionary, DevilsDictionary.Mailer, adapter: Swoosh.Adapters.Test

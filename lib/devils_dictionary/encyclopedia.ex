@@ -1,437 +1,310 @@
 defmodule DevilsDictionary.Encyclopedia do
   @moduledoc """
-  Things. Schemas and queries for `concepts` (keyed by Wikidata QID),
-  `concept_relations` (taxonomy first) and `concept_links` (the word ↔ thing
-  bridge with method, confidence and status). Encyclopedias attach here.
-  Spec: issue #69 §4.
+  The things side: entities, what they are kinds of, and what names them.
 
-  Reads live here rather than in `Absorb.Linker`: the linker writes the bridge,
-  the word page walks it, and the two should not be the same module.
+  Ported from the MVP-0 version, which read `concepts`, `concept_links` and
+  `concept_relations`. Those three tables are gone; the same questions are now
+  asked of `entities` and `assertion_revisions`, and the answers are the same
+  shape so the word page's thing panel did not have to be redesigned.
+
+  Three rules from U1b that survive the port unchanged, because they were right
+  for reasons that have nothing to do with the schema:
+
+    * **a thing's chain is not the taxon chain.** Prefer `parent_taxon`, fall
+      back to `subclass_of`, and allow `instance_of` **only at the first step** —
+      following it at every step walks *Larry* up to *abstract entity*. One
+      parent per step, because the graph is a DAG and a plain walk fans out to
+      eighteen rows for a walk of ten.
+    * **kinds and examples are only the children that have a word**, because a
+      chip that cannot be clicked is furniture.
+    * **`refers_to` and `lexeme_entity_candidate` are different claims.** A
+      sense-backed mapping says this meaning names that thing. A title match
+      says this spelling might. The second never propagates examples, and the
+      audit's "0.85 is not a probability" applies to it and not the first.
   """
 
   import Ecto.Query
 
-  alias DevilsDictionary.Encyclopedia.{Concept, ConceptLink}
-  alias DevilsDictionary.Lexicon.Entry
+  alias DevilsDictionary.Claims.AssertionRevision
+  alias DevilsDictionary.Registry.{Entity, ExternalIdentifier}
   alias DevilsDictionary.Repo
 
-  @doc "One concept by QID."
-  def get_concept_by_qid(qid), do: Repo.get_by(Concept, qid: qid)
+  # Sense-backed. The word page's "what this meaning names".
+  @refers_to "refers_to"
+  # Word-level heuristic. Never sense equivalence.
+  @candidate "lexeme_entity_candidate"
+  # The hierarchy predicates, in the preference order the chain walks them.
+  @up ~w(parent_taxon subclass_of)
+  @instance "instance_of"
 
-  @doc "One concept by QID, raising."
-  def get_concept_by_qid!(qid), do: Repo.get_by!(Concept, qid: qid)
-
-  @doc """
-  Every concept a word is linked to, best first, with the method and confidence
-  that put it there.
-
-  `status: :candidate` rows are included — they are the "may refer to" panel —
-  so a caller that wants only settled links filters on `status` or on
-  `confidence`.
-  """
-  def links_for(lexeme_id, opts \\ []) do
-    query =
-      from cl in ConceptLink,
-        where: cl.lexeme_id == ^lexeme_id and cl.status != :rejected,
-        order_by: [desc: cl.confidence, asc: cl.method],
-        preload: [:concept]
-
-    query =
-      case opts[:min_confidence] do
-        nil -> query
-        min -> where(query, [cl], cl.confidence >= ^min)
-      end
-
-    query =
-      case opts[:status] do
-        nil -> query
-        status -> where(query, [cl], cl.status == ^status)
-      end
-
-    Repo.all(query)
+  @doc "An entity by a verified external identifier, or nil."
+  def by_external_id(namespace, external_id) do
+    Repo.one(
+      from e in Entity,
+        join: x in ExternalIdentifier,
+        on: x.object_id == e.object_id,
+        where: x.namespace == ^namespace and x.external_id == ^external_id and x.status == :verified
+    )
   end
 
-  @doc """
-  The best concept for a word: highest confidence, `:candidate` rows excluded.
+  @doc "An entity by QID, the common case of `by_external_id/2`."
+  def by_qid(qid), do: by_external_id("wikidata", qid)
 
-  This is what the word page's image and taxon panel hang off, so a
-  disambiguation candidate must never win it.
-  """
-  def primary_concept(lexeme_id, min_confidence \\ 0.7) do
+  @doc "An entity by QID. Raises."
+  def by_qid!(qid) do
+    by_qid(qid) || raise Ecto.NoResultsError, queryable: Entity
+  end
+
+  @doc "The QID of an entity, or nil."
+  def qid(object_id) do
     Repo.one(
-      from cl in ConceptLink,
-        join: c in assoc(cl, :concept),
-        where: cl.lexeme_id == ^lexeme_id,
-        where: cl.status in [:auto, :confirmed],
-        where: cl.confidence >= ^min_confidence,
-        order_by: [desc: cl.confidence, asc: cl.id],
-        limit: 1,
-        select: c
+      from x in ExternalIdentifier,
+        where:
+          x.object_id == ^object_id and x.namespace == "wikidata" and x.status == :verified,
+        select: x.external_id
     )
   end
 
   @doc """
-  The direct children of a taxon, each with the size of its subtree — the tree
-  panel on `/s/:slug`.
+  The things a word's meanings name, and the things its spelling might name.
 
-  `taxon_chain/2` walks up; this walks down, over the same `parent_taxon` edges
-  and the same index (`concept_relations_to_concept_id_type_index`). One
-  recursive query, not one per child: the walk carries the direct child each
-  descendant descends from, so every child's counts come back together.
-  Measured from Animalia (Q729), the whole subtree is 20 ms and there are
-  fifteen children, so this needs no cache and no precomputed column.
-
-  `scope_lexemes` counts the words in `scope_slug` that an **asserted** link
-  (`auto` or `confirmed`) attaches anywhere in the subtree — the population A10
-  and L3 report on, and the one the list filter then shows.
+  Two predicates, kept apart. `:refers_to` links come from a source's own sense
+  mapping; `:candidate` links come from a title or disambiguation heuristic and
+  carry their method and confidence so the page can say which is which.
   """
-  def taxon_children(qid, scope_slug \\ "animals", max_depth \\ 40) do
-    %{rows: rows} =
-      Repo.query!(
-        """
-        WITH RECURSIVE root AS (
-          SELECT id FROM concepts WHERE qid = $1
-        ),
-        down(child_id, id, depth) AS (
-          SELECT r.from_concept_id, r.from_concept_id, 1
-            FROM concept_relations r JOIN root ON r.to_concept_id = root.id
-           WHERE r.type = 'parent_taxon'
-          UNION
-          SELECT down.child_id, r.from_concept_id, down.depth + 1
-            FROM concept_relations r
-            JOIN down ON r.to_concept_id = down.id
-           WHERE r.type = 'parent_taxon' AND down.depth < $3
-        ),
-        -- The same (child, descendant) pair arrives at several depths in a DAG,
-        -- and joining the links onto the duplicates is what made this slow.
-        pairs AS (SELECT DISTINCT child_id, id FROM down),
-        scoped AS (
-          SELECT DISTINCT cl.concept_id AS id, sl.lexeme_id
-            FROM concept_links cl
-            JOIN scope_lexemes sl
-              ON sl.lexeme_id = cl.lexeme_id
-             AND sl.scope_id = (SELECT id FROM scopes WHERE slug = $2)
-           WHERE cl.status IN ('auto', 'confirmed')
-        ),
-        counts AS (
-          SELECT p.child_id,
-                 count(DISTINCT p.id) AS subtree,
-                 count(DISTINCT s.lexeme_id) AS scope_lexemes
-            FROM pairs p LEFT JOIN scoped s ON s.id = p.id
-           GROUP BY p.child_id
-        )
-        SELECT c.id, c.qid, c.label, c.description, c.taxon,
-               counts.subtree, counts.scope_lexemes,
-               EXISTS (
-                 SELECT 1 FROM concept_relations r2
-                  WHERE r2.to_concept_id = c.id AND r2.type = 'parent_taxon'
-               ) AS has_children
-          FROM counts JOIN concepts c ON c.id = counts.child_id
-         ORDER BY counts.scope_lexemes DESC, c.label
-        """,
-        [qid, scope_slug, max_depth]
+  def links_for(lexeme_id, opts \\ []) do
+    sense_ids =
+      from(s in DevilsDictionary.Registry.Sense,
+        where: s.lexeme_id == ^lexeme_id and s.identity_state == :active,
+        select: s.object_id
       )
+      |> Repo.all()
 
-    for [id, qid, label, description, taxon, subtree, scope_lexemes, has_children] <- rows do
-      %{
-        id: id,
-        qid: qid,
-        label: label,
-        description: description,
-        taxon: taxon,
-        subtree: subtree,
-        scope_lexemes: scope_lexemes,
-        has_children?: has_children
-      }
+    subjects = [lexeme_id | sense_ids]
+
+    AssertionRevision
+    |> join(:inner, [r], p in assoc(r, :predicate))
+    |> where([r, p], r.subject_object_id in ^subjects and r.is_current)
+    |> where([r, p], p.key in ^[@refers_to, @candidate])
+    |> where([r], r.lifecycle_state == :active)
+    |> then(fn q ->
+      case opts[:min_confidence] do
+        nil -> q
+        min -> where(q, [r], is_nil(r.confidence) or r.confidence >= ^min)
+      end
+    end)
+    |> order_by([r], desc: r.confidence, asc: r.id)
+    |> limit(^(opts[:limit] || 50))
+    |> preload([:predicate, object_object: :entity])
+    |> Repo.all()
+  end
+
+  @doc """
+  The one thing a word most likely names, or nil.
+
+  Sense-backed `refers_to` outranks a word-level candidate however confident the
+  candidate is: a title match is a guess about a spelling, and a sense mapping
+  is a claim about a meaning. Within each, the highest confidence wins.
+  """
+  def primary_entity(lexeme_id, min_confidence \\ 0.7) do
+    lexeme_id
+    |> links_for(min_confidence: min_confidence)
+    |> Enum.sort_by(fn r -> {rank(r.predicate.key), -(r.confidence || 0.0), r.id} end)
+    |> List.first()
+    |> case do
+      nil -> nil
+      revision -> Repo.get(Entity, revision.object_object_id)
     end
   end
 
-  @doc """
-  Every concept id in a taxon's subtree, including the taxon itself.
-
-  Distinct: in a DAG the same concept is reachable at several depths, and the
-  recursive term carries a depth, so the raw union repeats it. Animalia's
-  subtree comes back as 114,666 rows without the `DISTINCT` and 10,799 with it.
-  """
-  def taxon_descendants(qid, max_depth \\ 40) do
-    %{rows: rows} =
-      Repo.query!(
-        """
-        WITH RECURSIVE down(id, depth) AS (
-          SELECT id, 0 FROM concepts WHERE qid = $1
-          UNION
-          SELECT r.from_concept_id, down.depth + 1
-            FROM concept_relations r
-            JOIN down ON r.to_concept_id = down.id
-           WHERE r.type = 'parent_taxon' AND down.depth < $2
-        )
-        SELECT DISTINCT id FROM down
-        """,
-        [qid, max_depth]
-      )
-
-    Enum.map(rows, &hd/1)
-  end
-
-  @doc """
-  The lexeme ids an asserted link attaches anywhere inside a taxon's subtree.
-
-  One statement, so the browse filter never has to ship a subtree of concept ids
-  through the application. Animalia, the widest case, is 10,799 concepts in and
-  8,470 lexemes out, in 114 ms; a family like Felidae is 2 ms.
-  """
-  def taxon_lexeme_ids(qid, max_depth \\ 40) do
-    %{rows: rows} =
-      Repo.query!(
-        """
-        WITH RECURSIVE down(id, depth) AS (
-          SELECT id, 0 FROM concepts WHERE qid = $1
-          UNION
-          SELECT r.from_concept_id, down.depth + 1
-            FROM concept_relations r
-            JOIN down ON r.to_concept_id = down.id
-           WHERE r.type = 'parent_taxon' AND down.depth < $2
-        )
-        SELECT DISTINCT cl.lexeme_id
-          FROM concept_links cl
-         WHERE cl.status IN ('auto', 'confirmed')
-           AND cl.concept_id IN (SELECT id FROM down)
-        """,
-        [qid, max_depth]
-      )
-
-    Enum.map(rows, &hd/1)
-  end
-
-  @doc """
-  The `parent_taxon` chain above a concept, nearest first.
-
-  Starts at the concept's taxon item when it has one, because the everyday
-  concept and the taxon are different entities: *Cat* (Q146) carries no `P171`,
-  *Felis catus* (Q20980826) carries the whole chain to Animalia.
-
-  Depth-capped, so a cycle in the data cannot hang a page render.
-  """
-  def taxon_chain(%Concept{} = concept, max_depth \\ 40) do
-    start = concept.taxon_concept_id || concept.id
-
-    %{rows: rows} =
-      Repo.query!(
-        """
-        WITH RECURSIVE up(id, depth) AS (
-          SELECT $1::bigint, 0
-          UNION ALL
-          SELECT r.to_concept_id, up.depth + 1
-            FROM concept_relations r
-            JOIN up ON r.from_concept_id = up.id
-           WHERE r.type = 'parent_taxon' AND up.depth < $2
-        )
-        SELECT DISTINCT ON (c.id) c.id, min(up.depth) OVER (PARTITION BY c.id)
-          FROM up JOIN concepts c ON c.id = up.id
-         WHERE up.depth > 0
-         ORDER BY c.id
-        """,
-        [start, max_depth]
-      )
-
-    ids = Enum.map(rows, &hd/1)
-    depth = Map.new(rows, fn [id, d] -> {id, d} end)
-
-    Concept
-    |> where([c], c.id in ^ids)
-    |> Repo.all()
-    |> Enum.sort_by(&depth[&1.id])
-  end
+  defp rank(@refers_to), do: 0
+  defp rank(_), do: 1
 
   @chain_sql """
-  WITH RECURSIVE walk AS (
+  WITH RECURSIVE up AS (
     SELECT $1::bigint AS id, 0 AS depth, ARRAY[$1::bigint] AS path
     UNION ALL
-    SELECT p.to_concept_id, w.depth + 1, w.path || p.to_concept_id
-    FROM walk w
+    SELECT step.parent_id, u.depth + 1, u.path || step.parent_id
+    FROM up u
     CROSS JOIN LATERAL (
-      SELECT r.to_concept_id
-      FROM concept_relations r
-      JOIN concepts c ON c.id = r.to_concept_id
-      WHERE r.from_concept_id = w.id
-        AND (r.type IN ('parent_taxon', 'subclass_of')
-             OR (w.depth = 0 AND r.type = 'instance_of'))
-      ORDER BY CASE r.type WHEN 'parent_taxon' THEN 0 WHEN 'subclass_of' THEN 1 ELSE 2 END,
-               c.label
+      SELECT r.object_object_id AS parent_id
+      FROM assertion_revisions r
+      JOIN predicates p ON p.id = r.predicate_id
+      JOIN entities e ON e.object_id = r.object_object_id
+      WHERE r.subject_object_id = u.id
+        AND r.is_current AND r.lifecycle_state = 'active'
+        AND (p.key = ANY($3::text[]) OR (u.depth = 0 AND p.key = $4))
+      ORDER BY CASE p.key WHEN 'parent_taxon' THEN 0 WHEN 'subclass_of' THEN 1 ELSE 2 END,
+               e.preferred_label
       LIMIT 1
-    ) p
-    WHERE w.depth < $2 AND NOT (p.to_concept_id = ANY(w.path))
+    ) step
+    WHERE u.depth < $2 AND NOT (step.parent_id = ANY(u.path))
   )
-  SELECT w.depth, c.qid, c.label, l.lemma, l.slug, (l.enriched_at IS NOT NULL) AS enriched
-  FROM walk w
-  JOIN concepts c ON c.id = w.id
+  SELECT u.depth, e.object_id, e.preferred_label, w.lemma, w.slug, w.object_id,
+         (w.enriched_at IS NOT NULL) AS enriched
+  FROM up u
+  JOIN entities e ON e.object_id = u.id
   LEFT JOIN LATERAL (
-    SELECT lx.lemma, lx.slug, lx.enriched_at
-    FROM concept_links cl
-    JOIN lexemes lx ON lx.id = cl.lexeme_id
-    WHERE cl.concept_id = w.id AND cl.status IN ('auto', 'confirmed')
-      AND cl.confidence >= 0.7
-    ORDER BY cl.confidence DESC, lx.id
+    SELECT lx.lemma, lx.slug, lx.object_id, lx.enriched_at
+    FROM assertion_revisions link
+    JOIN predicates lp ON lp.id = link.predicate_id
+    JOIN senses s ON s.object_id = link.subject_object_id
+    JOIN lexemes lx ON lx.object_id = s.lexeme_id
+    WHERE link.object_object_id = u.id AND link.is_current
+      AND link.lifecycle_state = 'active' AND lp.key = $5
+    ORDER BY link.confidence DESC NULLS LAST, lx.object_id
     LIMIT 1
-  ) l ON TRUE
-  WHERE w.depth > 0
-  ORDER BY w.depth
+  ) w ON TRUE
+  WHERE u.depth > 0
+  ORDER BY u.depth
   """
 
   @doc """
-  The walk upward from a thing — *oyster › Bivalvia › Mollusca* — whatever kind
-  of thing it is.
+  The walk upward from a thing — *oyster › Bivalvia › Mollusca*.
 
-  `taxon_chain/2` answers this for living things and returns nothing for
-  everything else, because `parent_taxon` is the only edge it knows. Emotions,
-  artefacts and ideas climb by `subclass_of` instead, and a named individual
-  (`instance_of`) takes one step to its class and climbs from there. So the
-  preference is taxonomy, then class, then — at the first step only — kind:
-  letting `instance_of` run at every depth walks *Larry* up to *entity*.
-
-  One parent per step, as the word page's synset chain does: a `concepts` DAG
-  gives *oyster* two parents at several ranks and eighteen rows for a walk of
-  ten. Steps that have a word carry its slug, so a chain is hoppable; steps
+  One parent per step, taxonomy preferred, `instance_of` only at the first step.
+  Steps that have a word carry its id and slug so the chain is hoppable; steps
   that do not are still shown, because a gap in the middle of a chain is the
   chain.
   """
-  def chain(%Concept{} = concept, max_depth \\ 8) do
-    start = concept.taxon_concept_id || concept.id
+  def chain(%Entity{} = entity, max_depth \\ 8) do
+    %{rows: rows} =
+      Repo.query!(@chain_sql, [entity.object_id, max_depth, @up, @instance, @refers_to])
 
-    %{rows: rows} = Repo.query!(@chain_sql, [start, max_depth])
-
-    for [depth, qid, label, lemma, slug, enriched] <- rows do
-      %{depth: depth, qid: qid, label: label, lemma: lemma, slug: slug, enriched?: enriched}
+    for [depth, object_id, label, lemma, slug, lexeme_id, enriched] <- rows do
+      %{
+        depth: depth,
+        object_id: object_id,
+        label: label,
+        lemma: lemma,
+        slug: slug,
+        lexeme_id: lexeme_id,
+        enriched?: enriched
+      }
     end
   end
 
   @kinds_sql """
   WITH children AS (
-    SELECT r.from_concept_id AS id,
-           CASE WHEN r.type = 'instance_of' THEN 'example' ELSE 'kind' END AS bucket
-      FROM concept_relations r
-     WHERE r.to_concept_id = $1
-       AND r.type IN ('parent_taxon', 'subclass_of', 'instance_of')
-     GROUP BY 1, 2
+    SELECT r.subject_object_id AS id,
+           CASE WHEN p.key = 'instance_of' THEN 'example' ELSE 'kind' END AS bucket
+    FROM assertion_revisions r
+    JOIN predicates p ON p.id = r.predicate_id
+    WHERE r.object_object_id = $1
+      AND r.is_current AND r.lifecycle_state = 'active'
+      AND p.key IN ('parent_taxon', 'subclass_of', 'instance_of')
   ),
   worded AS (
-    SELECT ch.bucket, c.qid, c.label, w.lemma, w.slug, w.enriched
-      FROM children ch
-      JOIN concepts c ON c.id = ch.id
-      JOIN LATERAL (
-        SELECT lx.lemma, lx.slug, (lx.enriched_at IS NOT NULL) AS enriched
-          FROM concept_links cl
-          JOIN lexemes lx ON lx.id = cl.lexeme_id
-         WHERE cl.concept_id = ch.id AND cl.status IN ('auto', 'confirmed')
-           AND cl.confidence >= 0.7
-         ORDER BY cl.confidence DESC, lx.id
-         LIMIT 1
-      ) w ON TRUE
-  ),
-  ranked AS (
-    SELECT worded.*,
-           count(*) OVER (PARTITION BY bucket) AS total,
-           row_number() OVER (PARTITION BY bucket ORDER BY enriched DESC, lemma) AS rn
-      FROM worded
+    SELECT c.id, c.bucket, e.preferred_label, w.lemma, w.slug, w.object_id AS lexeme_id
+    FROM children c
+    JOIN entities e ON e.object_id = c.id
+    JOIN LATERAL (
+      SELECT lx.lemma, lx.slug, lx.object_id
+      FROM assertion_revisions link
+      JOIN predicates lp ON lp.id = link.predicate_id
+      JOIN senses s ON s.object_id = link.subject_object_id
+      JOIN lexemes lx ON lx.object_id = s.lexeme_id
+      WHERE link.object_object_id = c.id AND link.is_current
+        AND link.lifecycle_state = 'active' AND lp.key = $3
+      ORDER BY link.confidence DESC NULLS LAST, lx.object_id
+      LIMIT 1
+    ) w ON TRUE
   )
-  SELECT bucket, qid, label, lemma, slug, enriched, total
-    FROM ranked WHERE rn <= $2 ORDER BY bucket, rn
+  SELECT bucket, id, preferred_label, lemma, slug, lexeme_id,
+         COUNT(*) OVER (PARTITION BY bucket) AS total,
+         ROW_NUMBER() OVER (PARTITION BY bucket ORDER BY lemma) AS rank
+  FROM worded
+  ORDER BY bucket, lemma
   """
 
   @doc """
-  What this thing has under it: its **kinds** (`subclass_of` and `parent_taxon`
-  pointing at it) and its **examples** (`instance_of`).
+  What kinds of this thing there are, and which named individuals it has.
 
-  Only children that have a word are returned. The point of the panel is the
-  hop, and a chip that cannot be clicked is furniture: *cat* has four named
-  individuals under it — *Larry*, *Tiddles* — and not one of them is a word.
+  **Only the children that have a word.** The panel exists so a reader can hop,
+  so a chip that cannot be clicked is furniture — *cat* has four named
+  individuals under it and not one of them is a word, while ten of its nineteen
+  subclasses are.
 
-  Capped, with the **exact** total beside it, so the “+N” is a number and not a
-  guess. The count is the expensive half on a hub — Q16521 *taxon* carries
-  14,964 children, 7,141 of them worded, and answers in about 85 ms.
+  Capped, with the exact total beside the cap: the count is the expensive half
+  on a hub, and knowing there are 7,141 is worth more than seeing twelve of them
+  and wondering.
   """
-  def kinds_and_examples(concept_id, cap \\ 12) do
-    %{rows: rows} = Repo.query!(@kinds_sql, [concept_id, cap])
+  def kinds_and_examples(object_id, cap \\ 12) do
+    %{rows: rows} = Repo.query!(@kinds_sql, [object_id, cap, @refers_to])
 
-    empty = %{shown: [], total: 0}
-
-    buckets =
-      rows
-      |> Enum.group_by(&hd/1)
-      |> Map.new(fn {bucket, rows} ->
-        {bucket,
-         %{
-           total: rows |> hd() |> List.last(),
-           shown:
-             for [_bucket, qid, label, lemma, slug, enriched, _total] <- rows do
-               %{qid: qid, label: label, lemma: lemma, slug: slug, enriched?: enriched}
-             end
-         }}
-      end)
-
-    %{
-      kinds: Map.get(buckets, "kind", empty),
-      examples: Map.get(buckets, "example", empty)
-    }
+    rows
+    |> Enum.map(fn [bucket, id, label, lemma, slug, lexeme_id, total, rank] ->
+      %{
+        bucket: String.to_existing_atom(bucket),
+        object_id: id,
+        label: label,
+        lemma: lemma,
+        slug: slug,
+        lexeme_id: lexeme_id,
+        total: total,
+        rank: rank
+      }
+    end)
+    |> Enum.group_by(& &1.bucket)
+    |> Map.new(fn {bucket, items} ->
+      {bucket,
+       %{total: List.first(items).total, items: Enum.filter(items, &(&1.rank <= cap))}}
+    end)
   end
 
   @doc """
-  The two states where the sources do not agree about what a word names.
+  The other things a word's spellings and meanings might name.
 
-  **Disagreement** is more than one concept asserted at or above the threshold —
-  *cat* is the animal and the Unix utility, *seal* is the mammal and the wax —
-  and #69 says we surface it rather than pick a winner. **May refer to** is the
-  `:candidate` population, the 0.40 links a disambiguation page suggested and
-  nothing has corroborated: a possibility, not a claim, and never the same list.
+  Two questions, deliberately separate. `:may_refer_to` is the word-level
+  candidates — the disambiguation page's list. `:disagreement` is when a word's
+  *meanings* name more than one thing, which is ordinary polysemy far more often
+  than it is a conflict, so the caller is handed both and the UI says "the
+  sources name more than one thing" rather than claiming they disagree.
   """
   def candidates_for(lexeme_ids, opts \\ []) do
-    min_confidence = opts[:min_confidence] || 0.7
-    cap = opts[:cap] || 12
+    ids = List.wrap(lexeme_ids)
 
-    links =
+    sense_ids =
       Repo.all(
-        from cl in ConceptLink,
-          where: cl.lexeme_id in ^lexeme_ids and cl.status != :rejected,
-          order_by: [desc: cl.confidence, asc: cl.method, asc: cl.id],
-          preload: [:concept]
+        from s in DevilsDictionary.Registry.Sense,
+          where: s.lexeme_id in ^ids and s.identity_state == :active,
+          select: s.object_id
       )
+
+    may_refer_to =
+      AssertionRevision
+      |> join(:inner, [r], p in assoc(r, :predicate))
+      |> where([r, p], r.subject_object_id in ^ids and p.key == @candidate)
+      |> where([r], r.is_current and r.lifecycle_state == :active)
+      |> order_by([r], desc: r.confidence, asc: r.id)
+      |> limit(^(opts[:limit] || 12))
+      |> preload(object_object: :entity)
+      |> Repo.all()
 
     asserted =
-      links
-      |> Enum.filter(
-        &(&1.status in [:auto, :confirmed] and (&1.confidence || 0.0) >= min_confidence)
-      )
-      |> Enum.uniq_by(& &1.concept_id)
+      AssertionRevision
+      |> join(:inner, [r], p in assoc(r, :predicate))
+      |> where([r, p], r.subject_object_id in ^sense_ids and p.key == @refers_to)
+      |> where([r], r.is_current and r.lifecycle_state == :active)
+      |> preload(object_object: :entity)
+      |> Repo.all()
+
+    distinct = asserted |> Enum.map(& &1.object_object_id) |> Enum.uniq()
 
     %{
-      disagreement: if(length(asserted) > 1, do: Enum.map(asserted, &claim/1), else: []),
-      may_refer_to:
-        links
-        |> Enum.filter(&(&1.status == :candidate))
-        |> Enum.uniq_by(& &1.concept_id)
-        |> Enum.take(cap)
-        |> Enum.map(&claim/1)
+      may_refer_to: may_refer_to,
+      disagreement: if(length(distinct) > 1, do: asserted, else: [])
     }
   end
 
-  defp claim(%ConceptLink{concept: concept} = link) do
-    %{
-      qid: concept.qid,
-      label: concept.label,
-      description: concept.description,
-      method: link.method,
-      confidence: link.confidence,
-      status: link.status
-    }
-  end
-
-  @doc "The entries an encyclopedia published about a thing."
-  def entries_for(concept_id) do
-    Repo.all(
-      from e in Entry,
-        where: e.concept_id == ^concept_id,
-        order_by: [asc: e.position],
-        preload: [:source]
-    )
+  @doc "The articles and other content published about a thing."
+  def content_about(object_id, opts \\ []) do
+    AssertionRevision
+    |> join(:inner, [r], p in assoc(r, :predicate))
+    |> where([r, p], r.object_object_id == ^object_id and p.key == "about")
+    |> where([r], r.is_current and r.lifecycle_state == :active)
+    |> limit(^(opts[:limit] || 20))
+    |> preload(subject_object: :content_item)
+    |> Repo.all()
   end
 end

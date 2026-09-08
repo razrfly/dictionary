@@ -1,13 +1,21 @@
 defmodule DevilsDictionary.Sources do
   @moduledoc """
-  Provenance. Schemas and queries for `sources` (tier, kind, access, license,
-  url template live here and nowhere else), `source_records` (the trimmed raw
-  truth we fetched, with its canonical url), `people` and `import_runs`.
-  Spec: issue #69 §4.
+  Provenance: where a row came from, and what it looked like when we read it.
+
+  `sources` holds tier, kind, access and licence and nothing else does.
+  `source_records` is a record's stable identity; `source_record_revisions`
+  holds the payloads, one per distinct content hash, and **never overwrites
+  one**. That split is what makes a citation keep its meaning after the source
+  is edited — #74 §B, "Extend stored source records so a cited revision is not
+  overwritten".
+
+  People used to live here too. They are entities now (`DevilsDictionary.Registry`),
+  so an author and a biography subject cannot be two rows.
   """
 
   import Ecto.Query, warn: false
 
+  alias DevilsDictionary.Corpus.SourceRecordRevision
   alias DevilsDictionary.Repo
   alias DevilsDictionary.Sources.{ImportRun, Source, SourceRecord}
 
@@ -25,49 +33,97 @@ defmodule DevilsDictionary.Sources do
   end
 
   @doc """
-  Inserts or replaces a `source_record`.
+  Records one observation of a source record.
 
-  Sets `content_hash` from the payload and bumps `changed_at` when a refetch
-  produced different content — that is what the "changed this week" feed reads.
+  Upserts the record's identity, then adds a revision **only if this payload is
+  new** — the revision key is the content hash, so a re-fetch that returns the
+  same bytes writes nothing and `changed_at` does not move. A re-fetch that
+  returns different bytes adds a revision beside the old one, and the old one
+  stays citable.
+
+  Returns `{:ok, record}` with `:current_revision` set.
   """
   def upsert_record(%Source{} = source, attrs) do
     now = DateTime.utc_now()
     raw = Map.get(attrs, :raw) || %{}
-    hash = SourceRecord.content_hash(raw)
+    hash = attrs[:content_hash] || SourceRecord.content_hash(raw)
 
-    attrs =
+    record_attrs =
       attrs
-      |> Map.put(:source_id, source.id)
-      |> Map.put(:content_hash, hash)
-      |> Map.put(:fetched_at, now)
+      |> Map.drop([:raw])
+      |> Map.merge(%{
+        source_id: source.id,
+        content_hash: hash,
+        fetched_at: now
+      })
       |> Map.put_new(:absent_until, nil)
 
-    %SourceRecord{}
-    |> SourceRecord.changeset(attrs)
-    |> Repo.insert(
-      on_conflict: record_conflict(),
-      conflict_target: [:source_id, :external_id],
-      returning: true
+    Repo.transaction(fn ->
+      {:ok, record} =
+        %SourceRecord{}
+        |> SourceRecord.changeset(record_attrs)
+        |> Repo.insert(
+          on_conflict: record_conflict(),
+          conflict_target: [:source_id, :external_id],
+          returning: true
+        )
+
+      revision = ensure_revision(record, hash, raw, now, attrs[:import_run_id])
+      Map.put(record, :current_revision, revision)
+    end)
+  end
+
+  @doc """
+  Adds a revision for this payload if one does not already exist, and returns it.
+
+  `on_conflict: :nothing` returns no row, so the existing revision is read back
+  — a caller needs the id either way, and "nothing changed" is the common case
+  by a wide margin on a re-absorb.
+  """
+  def ensure_revision(%SourceRecord{} = record, hash, raw, observed_at \\ nil, run_id \\ nil) do
+    observed_at = observed_at || DateTime.utc_now()
+
+    {_n, _} =
+      Repo.insert_all(
+        SourceRecordRevision,
+        [
+          %{
+            source_record_id: record.id,
+            revision_key: hash,
+            payload: raw,
+            checksum: hash,
+            observed_at: observed_at,
+            import_run_id: run_id,
+            inserted_at: observed_at,
+            updated_at: observed_at
+          }
+        ],
+        on_conflict: :nothing,
+        conflict_target: [:source_record_id, :revision_key]
+      )
+
+    Repo.one(
+      from r in SourceRecordRevision,
+        where: r.source_record_id == ^record.id and r.revision_key == ^hash
     )
   end
 
   @doc """
   The `on_conflict` every `source_records` write must use, single or bulk.
 
-  It is a named query rather than a `{:replace, …}` list because of one column:
-  `changed_at` only moves when a refetch actually produced different content,
-  and that is what the "changed this week" feed reads. A bulk absorb that rolls
-  its own `{:replace, …}` list silently loses it.
+  A named query rather than a `{:replace, …}` list because of one column:
+  `changed_at` only moves when a re-fetch actually produced different content,
+  and that is what the "changed this week" feed reads. A bulk absorb rolling its
+  own replace list silently loses it.
 
   `absent_until` is taken from the incoming row, so a source that had nothing
-  for a target sets the marker and a later fetch that finds something clears it
-  (#69 §5's terminal states: "source-absent" is not a permanent verdict).
+  sets the marker and a later fetch that finds something clears it — an absence
+  is a dated finding, not a permanent verdict.
   """
   def record_conflict do
     from(r in SourceRecord,
       update: [
         set: [
-          raw: fragment("EXCLUDED.raw"),
           url: fragment("EXCLUDED.url"),
           content_hash: fragment("EXCLUDED.content_hash"),
           fetched_at: fragment("EXCLUDED.fetched_at"),
@@ -85,15 +141,15 @@ defmodule DevilsDictionary.Sources do
   end
 
   @doc """
-  Bulk-writes `source_records`, in chunks, with `record_conflict/0`.
+  Bulk-writes source records and their revisions, in chunks.
 
   Rows are plain maps needing `external_id`, `url` and `raw`, plus
-  `content_hash` when the source trims: the hash must be taken on the payload
-  **as fetched**, before `trim/1`, so a change to the trim never reads as a
-  change at the source. A source whose trim is the identity may omit it and it
-  is computed from `raw` here. A row may also carry `absent_until` to record a
-  "source had nothing" marker (`raw: %{}`). `source_id` and the timestamps are
-  always filled here. Returns the number of rows written.
+  `content_hash` when the source trims — the hash must be taken on the payload
+  **as fetched**, before `trim/1`. A source whose trim is the identity may omit
+  it and it is computed here. A row may also carry `absent_until` to record a
+  "source had nothing" marker with `raw: %{}`.
+
+  Returns the number of records written.
   """
   def insert_records(%Source{} = source, rows, chunk \\ 1_000) do
     now = DateTime.utc_now()
@@ -101,34 +157,75 @@ defmodule DevilsDictionary.Sources do
     rows
     |> Enum.map(fn row ->
       raw = row[:raw] || %{}
-
-      %{
-        source_id: source.id,
-        external_id: row.external_id,
-        url: row[:url],
-        raw: raw,
-        content_hash: row[:content_hash] || SourceRecord.content_hash(raw),
-        absent_until: row[:absent_until],
-        fetched_at: now,
-        inserted_at: now,
-        updated_at: now
-      }
+      hash = row[:content_hash] || SourceRecord.content_hash(raw)
+      {%{
+         source_id: source.id,
+         external_id: row.external_id,
+         url: row[:url],
+         content_hash: hash,
+         absent_until: row[:absent_until],
+         fetched_at: now,
+         inserted_at: now,
+         updated_at: now
+       }, hash, raw}
     end)
-    |> Enum.uniq_by(& &1.external_id)
+    |> Enum.uniq_by(fn {record, _, _} -> record.external_id end)
     |> Enum.chunk_every(chunk)
     |> Enum.reduce(0, fn batch, acc ->
-      {n, _} =
-        Repo.insert_all(SourceRecord, batch,
-          on_conflict: record_conflict(),
-          conflict_target: [:source_id, :external_id]
-        )
-
-      acc + n
+      acc + write_batch(source, batch, now)
     end)
   end
 
+  # One chunk: upsert the identities, read back their ids, then bulk-insert the
+  # revisions that are new. Two statements rather than one because a revision
+  # needs the record id, and `insert_all` cannot return ids for rows that
+  # conflicted.
+  defp write_batch(source, batch, now) do
+    records = Enum.map(batch, fn {record, _, _} -> record end)
+
+    {n, _} =
+      Repo.insert_all(SourceRecord, records,
+        on_conflict: record_conflict(),
+        conflict_target: [:source_id, :external_id]
+      )
+
+    external_ids = Enum.map(records, & &1.external_id)
+
+    ids =
+      Repo.all(
+        from r in SourceRecord,
+          where: r.source_id == ^source.id and r.external_id in ^external_ids,
+          select: {r.external_id, r.id}
+      )
+      |> Map.new()
+
+    revisions =
+      for {record, hash, raw} <- batch, id = ids[record.external_id], !is_nil(id) do
+        %{
+          source_record_id: id,
+          revision_key: hash,
+          payload: raw,
+          checksum: hash,
+          observed_at: now,
+          inserted_at: now,
+          updated_at: now
+        }
+      end
+
+    Repo.insert_all(SourceRecordRevision, revisions,
+      on_conflict: :nothing,
+      conflict_target: [:source_record_id, :revision_key]
+    )
+
+    n
+  end
+
   @doc """
-  Loads a record's `raw` payload, which is `load_in_query: false`.
+  Loads a record's current payload.
+
+  The current revision is the one whose `revision_key` equals the record's
+  `content_hash` — the two are the same value by construction, so this needs no
+  pointer column and cannot drift out of step with it.
 
   Takes a record or a bare id, because the provenance drawer (#71 U2) has an id
   and no reason to load the row twice.
@@ -136,7 +233,58 @@ defmodule DevilsDictionary.Sources do
   def raw(%SourceRecord{id: id}), do: raw(id)
 
   def raw(id) when is_integer(id) do
-    Repo.one(from r in SourceRecord, where: r.id == ^id, select: r.raw)
+    Repo.one(
+      from rev in SourceRecordRevision,
+        join: rec in assoc(rev, :source_record),
+        where: rec.id == ^id and rev.revision_key == rec.content_hash,
+        select: rev.payload
+    )
+  end
+
+  @doc """
+  Fills the virtual `raw` from the current revision, for a record or a list.
+
+  `materialize/1` is a pure function of a record, so the payload has to be on
+  the struct before an adapter sees it. The list clause does it in one query
+  because a per-record load would be N+1 across a 500-record batch.
+  """
+  def with_raw(%SourceRecord{} = record) do
+    %{record | raw: raw(record.id) || %{}}
+  end
+
+  def with_raw(records) when is_list(records) do
+    ids = Enum.map(records, & &1.id)
+
+    payloads =
+      Repo.all(
+        from rev in SourceRecordRevision,
+          join: rec in assoc(rev, :source_record),
+          where: rec.id in ^ids and rev.revision_key == rec.content_hash,
+          select: {rec.id, rev.payload}
+      )
+      |> Map.new()
+
+    Enum.map(records, &%{&1 | raw: Map.get(payloads, &1.id, %{})})
+  end
+
+  @doc """
+  Every stored revision of a record, newest observation first.
+
+  This is what makes a citation durable: the revision a claim cited is still
+  here after the source has moved on.
+  """
+  def revisions(record_id) do
+    Repo.all(
+      from r in SourceRecordRevision,
+        where: r.source_record_id == ^record_id,
+        order_by: [desc: r.observed_at, desc: r.id],
+        select: %{
+          id: r.id,
+          revision_key: r.revision_key,
+          observed_at: r.observed_at,
+          import_run_id: r.import_run_id
+        }
+    )
   end
 
   @doc """

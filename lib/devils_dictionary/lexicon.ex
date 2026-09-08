@@ -7,7 +7,8 @@ defmodule DevilsDictionary.Lexicon do
 
   import Ecto.Query, warn: false
 
-  alias DevilsDictionary.Lexicon.{Browse, Lexeme, Scope, ScopeLexeme, Sense}
+  alias DevilsDictionary.Lexicon.{Browse, Scope, ScopeMember}
+  alias DevilsDictionary.Registry.{Lexeme, Sense}
   alias DevilsDictionary.Repo
 
   @doc """
@@ -36,7 +37,7 @@ defmodule DevilsDictionary.Lexicon do
   # ── lexemes ──────────────────────────────────────────────────────────────
 
   def get_lexeme(lang \\ "en", lemma, pos) do
-    Repo.get_by(Lexeme, lang: lang, lemma: lemma, pos: pos)
+    Registry.lexeme_by_key(lang, lemma, pos)
   end
 
   @doc """
@@ -44,7 +45,7 @@ defmodule DevilsDictionary.Lexicon do
   of speech and every casing.
   """
   def list_by_slug(slug) do
-    Repo.all(from l in Lexeme, where: l.slug == ^slug, order_by: [l.lemma, l.pos])
+    Repo.all(from l in Lexeme, where: l.slug == ^slug, order_by: [l.lemma, l.part_of_speech])
   end
 
   @doc """
@@ -55,13 +56,13 @@ defmodule DevilsDictionary.Lexicon do
 
     Repo.all(
       from l in Lexeme,
-        where: l.lang == ^lang and fragment("lower(?)", l.lemma) == ^down,
-        order_by: l.pos
+        where: l.language_tag == ^lang and fragment("lower(?)", l.lemma) == ^down,
+        order_by: l.part_of_speech
     )
   end
 
   def count_lexemes(lang \\ "en") do
-    Repo.aggregate(from(l in Lexeme, where: l.lang == ^lang), :count)
+    Repo.aggregate(from(l in Lexeme, where: l.language_tag == ^lang), :count)
   end
 
   @doc """
@@ -135,9 +136,9 @@ defmodule DevilsDictionary.Lexicon do
     Repo.all(
       from l in Lexeme,
         where:
-          l.lang == ^lang and
+          l.language_tag == ^lang and
             (fragment("lower(?)", l.lemma) == ^down or l.slug == ^down),
-        order_by: [l.lemma, l.pos]
+        order_by: [l.lemma, l.part_of_speech]
     )
   end
 
@@ -158,8 +159,8 @@ defmodule DevilsDictionary.Lexicon do
 
     Repo.all(
       from l in Lexeme,
-        where: l.lang == ^lang and fragment("? @> ?", l.forms, ^contains),
-        order_by: [l.lemma, l.pos]
+        where: l.language_tag == ^lang and fragment("? @> ?", l.forms, ^contains),
+        order_by: [l.lemma, l.part_of_speech]
     )
   end
 
@@ -181,7 +182,7 @@ defmodule DevilsDictionary.Lexicon do
     case deciding |> Enum.map(& &1.canonical_lexeme_id) |> Enum.uniq() do
       [id] when is_integer(id) ->
         %{
-          lexemes: Repo.all(from l in Lexeme, where: l.id == ^id, order_by: [l.lemma, l.pos]),
+          lexemes: Repo.all(from l in Lexeme, where: l.id == ^id, order_by: [l.lemma, l.part_of_speech]),
           via: :canonical,
           matched: word
         }
@@ -241,7 +242,7 @@ defmodule DevilsDictionary.Lexicon do
       []
     else
       Repo.all(
-        from sl in ScopeLexeme,
+        from sl in ScopeMember,
           join: s in Scope,
           on: s.id == sl.scope_id,
           where: sl.lexeme_id in ^lexeme_ids,
@@ -278,7 +279,7 @@ defmodule DevilsDictionary.Lexicon do
   end
 
   def count_scope_lexemes(%Scope{id: id}) do
-    Repo.aggregate(from(sl in ScopeLexeme, where: sl.scope_id == ^id), :count)
+    Repo.aggregate(from(sl in ScopeMember, where: sl.scope_id == ^id), :count)
   end
 
   @doc """
@@ -287,7 +288,7 @@ defmodule DevilsDictionary.Lexicon do
   """
   def scope_reason_counts(%Scope{id: id}) do
     Repo.all(
-      from sl in ScopeLexeme,
+      from sl in ScopeMember,
         where: sl.scope_id == ^id,
         select: {fragment("unnest(?)", sl.reasons), count()},
         group_by: fragment("unnest(?)", sl.reasons)
@@ -300,7 +301,7 @@ defmodule DevilsDictionary.Lexicon do
   """
   def count_scope_lexemes_without_reason(%Scope{id: id}) do
     Repo.aggregate(
-      from(sl in ScopeLexeme,
+      from(sl in ScopeMember,
         where: sl.scope_id == ^id and fragment("cardinality(?) = 0", sl.reasons)
       ),
       :count
