@@ -1,0 +1,92 @@
+{
+  "$comment": [
+    "The input manifest for issue #74. One entry per archived input the rebuild reads.",
+    "A locally computed digest pins what was actually used; it does not independently",
+    "authenticate a publisher. Verified by `mix dd.manifest --verify`, which fails loudly",
+    "on a mismatch and on a missing archive. Recorded 2026-09-08 on commit a2ef867's tree.",
+    "",
+    "`archive_locator` is the path we read. `acquisition_url` is where it came from;",
+    "where that URL is rolling rather than versioned, `url_is_rolling` says so and the",
+    "digest is the only thing that identifies the bytes -- a re-download will differ."
+  ],
+  "recorded_at": "2026-09-08",
+  "inputs": [
+    {
+      "source": "wordnet",
+      "edition": "2025-plus",
+      "archive_locator": "data/english-wordnet-2025-plus-json.zip",
+      "acquisition_url": "https://github.com/globalwordnet/english-wordnet/releases/download/2025-edition/english-wordnet-2025-plus-json.zip",
+      "url_is_rolling": false,
+      "acquired_on": "2026-09-05",
+      "snapshot_date": "2025-12-12",
+      "byte_count": 11298794,
+      "sha256": "8832b8fa26a14c0ba8c99bb1ef8db6f9e122a6d9193b65ca9e0ef572580fee7e",
+      "parser_version": "wordnet.1",
+      "license": "CC BY 4.0",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "committed": false,
+      "notes": "The PLUS edition, not the base one: base holds 107,519 synsets and fails A2."
+    },
+    {
+      "source": "wiktionary",
+      "edition": "kaikki raw-wiktextract 2026-08-28",
+      "archive_locator": "data/raw-wiktextract-data.jsonl.gz",
+      "acquisition_url": "https://kaikki.org/dictionary/raw-wiktextract-data.jsonl.gz",
+      "url_is_rolling": true,
+      "acquired_on": "2026-09-05",
+      "snapshot_date": "2026-08-28",
+      "byte_count": 2826623319,
+      "sha256": "4c27d202e875550c2cc7ea93a4d21ddf80440e5030606d3edbb8b0e65dc64006",
+      "parser_version": "wiktionary.1",
+      "license": "CC BY-SA 4.0",
+      "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "committed": false,
+      "notes": "Rolling URL, unreproducible: kaikki serves the latest extract at this path, so a re-download will not match this digest. Only 22,534 of its records reach source_records -- the 1.5M-row index is written straight to lexemes -- so this file is a REQUIRED recovery input, not a convenience."
+    },
+    {
+      "source": "bierce",
+      "edition": "Project Gutenberg #972, HTML edition",
+      "archive_locator": "priv/sources/bierce/972-h.htm",
+      "acquisition_url": "https://www.gutenberg.org/files/972/972-h/972-h.htm",
+      "url_is_rolling": false,
+      "acquired_on": "2026-09-05",
+      "byte_count": 420193,
+      "sha256": "849f63f2a342ad72783ef8cdeaf8fdd3cba5479c6c8e09317d5cd1d4eb6da826",
+      "parser_version": "bierce.1",
+      "license": "Public domain",
+      "license_url": "https://www.gutenberg.org/policy/permission.html",
+      "committed": true,
+      "notes": "The HTML edition, not the plain text: one paragraph per entry, verse in <pre>."
+    },
+    {
+      "source": "bierce",
+      "edition": "Project Gutenberg #972, plain text (cross-check only)",
+      "archive_locator": "priv/sources/bierce/pg972.txt",
+      "acquisition_url": "https://www.gutenberg.org/ebooks/972",
+      "url_is_rolling": false,
+      "acquired_on": "2026-09-05",
+      "byte_count": 394033,
+      "sha256": "7647d34ce676ad30d3e7d9545d535c5f6d936e1f7d71492747d1fa81a5102976",
+      "parser_version": null,
+      "license": "Public domain",
+      "license_url": "https://www.gutenberg.org/policy/permission.html",
+      "committed": true,
+      "notes": "Never parsed. Kept as a cross-check of the HTML transcription."
+    },
+    {
+      "source": "johnson",
+      "edition": "LEME ver. 1.0 (2023)",
+      "archive_locator": "priv/sources/johnson/johnson-1755-leme.xml.gz",
+      "acquisition_url": "https://hdl.handle.net/1807/124274",
+      "url_is_rolling": false,
+      "acquired_on": "2026-09-06",
+      "byte_count": 8768153,
+      "sha256": "5b969669f18fe08981d74314471b6864ebca18967fd4633e8c93f8724df74418",
+      "parser_version": "johnson.1",
+      "license": "CC BY 4.0 (LEME transcription); the 1755 text is public domain",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "committed": true,
+      "notes": "Already pinned in Sources.Catalog and enforced by Johnson.verify!/2. Its digest is the one this manifest was validated against: the two agree."
+    }
+  ]
+}

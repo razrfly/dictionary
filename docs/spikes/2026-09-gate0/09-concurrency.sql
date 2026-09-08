@@ -1,0 +1,10 @@
+-- Gate 0: "Lock/serialize updates of that assertion when adding a revision and
+-- changing its pointer; test concurrent writers and rollback."
+--
+-- Two sessions each add a revision to assertion 13 and make it current. Without
+-- the FOR UPDATE the two can interleave: both read revision_number 1, both
+-- write revision 2 (one loses to the unique index) or both set is_current
+-- (one loses to ar_one_current). With it, the second waits and sees the first.
+--
+-- Run as: session A and session B against the same assertion, A holding the
+-- lock through a sleep so B is guaranteed to arrive mid-transaction.

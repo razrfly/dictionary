@@ -1,0 +1,33 @@
+REFRESH_PROBE: %{
+  forms_after_refresh: [%{"form" => "oldform"}],
+  senses_after_removal: [{11224, "second meaning"}, {11225, "second meaning"}],
+  old_sense_id: 11224,
+  stale_relations: 1,
+  stale_links: 1,
+  parity: %{
+    source: "wiktionary",
+    stale: 0,
+    records: 1,
+    examples: [],
+    gaps: 0,
+    missing_concept_relations: 0,
+    missing_concepts: 0,
+    missing_entries: 0,
+    missing_relations: 0,
+    missing_senses: 0
+  }
+}
+CORRUPTED_PARITY: %{
+  source: "wiktionary",
+  stale: 0,
+  records: 1,
+  examples: [],
+  gaps: 0,
+  missing_concept_relations: 0,
+  missing_concepts: 0,
+  missing_entries: 0,
+  missing_relations: 0,
+  missing_senses: 0
+}
+SLUG_PROBE: [{"C", "c"}, {"C++", "c"}, {"C#", "c"}, {"!!!", "!!!"}, {"?", "?"}]
+REJECTED_AFTER_RELINK: :auto

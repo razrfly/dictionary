@@ -1,0 +1,46 @@
+── an assertion with NO current revision is rejected at commit ─────────
+BEGIN
+INSERT 0 1
+INSERT 0 1
+ERROR:  assertion 99000001 has 0 current revisions, expected exactly 1
+CONTEXT:  PL/pgSQL function assertion_current_count(bigint) line 14 at RAISE
+SQL statement "SELECT assertion_current_count(NEW.id)"
+PL/pgSQL function assertions_exactly_one_current() line 3 at PERFORM
+   ^ expected: ERROR assertion 99000001 has 0 current revisions
+
+── an assertion with NO revisions at all is rejected at commit ─────────
+BEGIN
+INSERT 0 1
+ERROR:  assertion 99000002 has 0 current revisions, expected exactly 1
+CONTEXT:  PL/pgSQL function assertion_current_count(bigint) line 14 at RAISE
+SQL statement "SELECT assertion_current_count(NEW.id)"
+PL/pgSQL function assertions_exactly_one_current() line 3 at PERFORM
+   ^ expected: ERROR assertion 99000002 has 0 current revisions
+
+── clearing the flag on an existing assertion is rejected at commit ────
+BEGIN
+UPDATE 1
+ERROR:  assertion 11 has 0 current revisions, expected exactly 1
+CONTEXT:  PL/pgSQL function assertion_current_count(bigint) line 14 at RAISE
+SQL statement "SELECT assertion_current_count(COALESCE(NEW.assertion_id, OLD.assertion_id))"
+PL/pgSQL function assertion_revisions_exactly_one_current() line 3 at PERFORM
+   ^ expected: ERROR assertion 11 has 0 current revisions
+
+── a valid add-a-revision-and-switch commits ──────────────────────────
+BEGIN
+ id 
+----
+ 11
+(1 row)
+
+UPDATE 1
+INSERT 0 1
+COMMIT
+ revision_number | is_current | lifecycle_state 
+-----------------+------------+-----------------
+               1 | f          | active
+              99 | t          | withdrawn
+(2 rows)
+
+   ^ expected: one current row, and it says withdrawn --
+     currentness and lifecycle are separate, as #74 requires

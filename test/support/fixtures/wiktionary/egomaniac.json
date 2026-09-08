@@ -1,0 +1,157 @@
+{
+  "records": [
+    {
+      "etymology_templates": [
+        {
+          "args": {
+            "1": "en",
+            "2": "ego",
+            "3": "maniac"
+          },
+          "expansion": "ego- + -maniac",
+          "name": "confix"
+        }
+      ],
+      "etymology_text": "From ego- + -maniac.",
+      "forms": [
+        {
+          "form": "egomaniacs",
+          "tags": [
+            "plural"
+          ]
+        }
+      ],
+      "head_templates": [
+        {
+          "args": {},
+          "expansion": "egomaniac (plural egomaniacs)",
+          "name": "en-noun"
+        }
+      ],
+      "lang": "English",
+      "lang_code": "en",
+      "pos": "noun",
+      "senses": [
+        {
+          "categories": [
+            "English countable nouns",
+            "English entries with incorrect language header",
+            "English lemmas",
+            "English nouns",
+            "English terms prefixed with ego-",
+            "English terms suffixed with -maniac",
+            "English terms with usage examples",
+            "Entries with translation boxes",
+            "Pages with 1 entry",
+            "Pages with entries",
+            "Rhymes:English/eɪniæk",
+            "Rhymes:English/eɪniæk/5 syllables",
+            "Terms with Finnish translations",
+            "Terms with German translations",
+            "Terms with Norwegian translations",
+            "Terms with Portuguese translations",
+            "Terms with Russian translations",
+            "en:Stock characters"
+          ],
+          "examples": [
+            {
+              "bold_text_offsets": [
+                [
+                  14,
+                  23
+                ]
+              ],
+              "text": "He's a raving egomaniac: all he ever talks about is himself and how important he is.",
+              "type": "example"
+            }
+          ],
+          "glosses": [
+            "A person obsessed with their own (supposed) importance."
+          ]
+        }
+      ],
+      "sounds": [
+        {
+          "ipa": "/iɡoʊˈmeɪniæk/",
+          "tags": [
+            "General-American"
+          ]
+        },
+        {
+          "rhymes": "-eɪniæk"
+        }
+      ],
+      "translations": [
+        {
+          "code": "fi",
+          "lang": "Finnish",
+          "lang_code": "fi",
+          "sense": "person obsessed with their own (supposed) importance",
+          "word": "egomaanikko"
+        },
+        {
+          "code": "de",
+          "lang": "German",
+          "lang_code": "de",
+          "sense": "person obsessed with their own (supposed) importance",
+          "tags": [
+            "masculine"
+          ],
+          "word": "Egomane"
+        },
+        {
+          "code": "de",
+          "lang": "German",
+          "lang_code": "de",
+          "sense": "person obsessed with their own (supposed) importance",
+          "tags": [
+            "feminine"
+          ],
+          "word": "Egomanin"
+        },
+        {
+          "code": "no",
+          "lang": "Norwegian",
+          "lang_code": "no",
+          "sense": "person obsessed with their own (supposed) importance",
+          "tags": [
+            "masculine"
+          ],
+          "word": "egomaniker"
+        },
+        {
+          "code": "pt",
+          "lang": "Portuguese",
+          "lang_code": "pt",
+          "sense": "person obsessed with their own (supposed) importance",
+          "tags": [
+            "masculine"
+          ],
+          "word": "egomaníaco"
+        },
+        {
+          "code": "pt",
+          "lang": "Portuguese",
+          "lang_code": "pt",
+          "sense": "person obsessed with their own (supposed) importance",
+          "tags": [
+            "feminine"
+          ],
+          "word": "egomaníaca"
+        },
+        {
+          "code": "ru",
+          "lang": "Russian",
+          "lang_code": "ru",
+          "roman": "egoíst",
+          "sense": "person obsessed with their own (supposed) importance",
+          "tags": [
+            "masculine"
+          ],
+          "word": "эгои́ст"
+        }
+      ],
+      "word": "egomaniac"
+    }
+  ]
+}

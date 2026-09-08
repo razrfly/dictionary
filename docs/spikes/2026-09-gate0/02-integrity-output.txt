@@ -1,0 +1,82 @@
+── seed ────────────────────────────────────────────────────────────────
+
+── PROOF 2: an object with no subtype is rejected AT COMMIT ─────────────
+   (it must be legal mid-transaction: the object row has to exist first)
+                   note                    
+-------------------------------------------
+ mid-transaction: still legal, as designed
+(1 row)
+
+psql:docs/spikes/2026-09-gate0/02-integrity.sql:52: ERROR:  object 900 (kind lexeme) has no lexeme row
+CONTEXT:  PL/pgSQL function object_has_subtype() line 13 at RAISE
+   ^ expected: ERROR object 900 (kind lexeme) has no lexeme row
+
+── PROOF 2b: a subtype of the WRONG kind is rejected immediately ────────
+psql:docs/spikes/2026-09-gate0/02-integrity.sql:60: ERROR:  insert or update on table "lexemes" violates foreign key constraint "lexemes_object_id_kind_fkey"
+DETAIL:  Key (object_id, kind)=(901, lexeme) is not present in table "objects".
+   ^ expected: ERROR insert violates foreign key lexemes_object_id_kind_fkey
+
+── PROOF 2c: two subtypes for one object is rejected ────────────────────
+psql:docs/spikes/2026-09-gate0/02-integrity.sql:68: ERROR:  insert or update on table "lexemes" violates foreign key constraint "lexemes_object_id_kind_fkey"
+DETAIL:  Key (object_id, kind)=(105, lexeme) is not present in table "objects".
+   ^ expected: ERROR duplicate key / foreign key — 105 is content, not lexeme
+
+── PROOF 2d: objects.kind cannot change ─────────────────────────────────
+psql:docs/spikes/2026-09-gate0/02-integrity.sql:75: ERROR:  objects.kind is immutable (lexeme -> entity) for object 104
+CONTEXT:  PL/pgSQL function objects_kind_is_immutable() line 4 at RAISE
+   ^ expected: ERROR objects.kind is immutable (lexeme -> entity)
+
+── PROOF 2e: a person subtype cannot attach to a concept entity ─────────
+psql:docs/spikes/2026-09-gate0/02-integrity.sql:82: ERROR:  insert or update on table "person_details" violates foreign key constraint "person_details_entity_id_entity_kind_fkey"
+DETAIL:  Key (entity_id, entity_kind)=(107, person) is not present in table "entities".
+   ^ expected: ERROR foreign key — 107 is a concept, not a person
+
+── PROOF 2f: deleting a subtype cannot orphan its object ────────────────
+   The gap the first run of this spike found: an AFTER INSERT trigger on
+   `objects` cannot see a subtype being deleted out from under it.
+psql:docs/spikes/2026-09-gate0/02-integrity.sql:93: ERROR:  object 101 would be left with no subtype row; retire it instead
+CONTEXT:  PL/pgSQL function subtype_delete_leaves_object_typed() line 19 at RAISE
+   ^ expected: ERROR object 101 would be left with no subtype row
+
+── PROOF 2g: deleting the object itself cascades, and is allowed ────────
+ entities_left_for_902 
+-----------------------
+                     0
+(1 row)
+
+   ^ expected: no error, 0 rows — the cascade path is not blocked
+
+── PROOF 3: `defines` pointing at a person is rejected ──────────────────
+psql:docs/spikes/2026-09-gate0/02-integrity.sql:113: ERROR:  insert or update on table "assertion_revisions" violates foreign key constraint "assertion_revisions_endpoints"
+DETAIL:  Key (predicate_id, subject_kind, subject_subkind, object_kind, object_subkind)=(1, content, definition, entity, person) is not present in table "predicate_endpoint_rules".
+   ^ expected: ERROR assertion_revisions_endpoints — content/definition -> entity/person
+
+── PROOF 3b: the same rejection on a BULK write (insert_all / COPY) ─────
+   One good row and one bad row in a single statement.
+psql:docs/spikes/2026-09-gate0/02-integrity.sql:126: ERROR:  insert or update on table "assertion_revisions" violates foreign key constraint "assertion_revisions_endpoints"
+DETAIL:  Key (predicate_id, subject_kind, subject_subkind, object_kind, object_subkind)=(1, content, definition, entity, person) is not present in table "predicate_endpoint_rules".
+   ^ expected: ERROR — the whole statement rejected, not just filtered
+
+── PROOF 3c: refers_to from a lexeme (not a sense) is rejected ──────────
+psql:docs/spikes/2026-09-gate0/02-integrity.sql:135: ERROR:  insert or update on table "assertion_revisions" violates foreign key constraint "assertion_revisions_endpoints"
+DETAIL:  Key (predicate_id, subject_kind, subject_subkind, object_kind, object_subkind)=(3, lexeme, -, entity, concept) is not present in table "predicate_endpoint_rules".
+   ^ expected: ERROR — refers_to is sense -> concept; a lexeme is not a sense
+
+── PROOF 3d: confidence outside [0,1] is rejected ───────────────────────
+psql:docs/spikes/2026-09-gate0/02-integrity.sql:144: ERROR:  new row for relation "assertion_revisions" violates check constraint "assertion_revisions_confidence"
+DETAIL:  Failing row contains (5, 9005, 1, 105, 1, 104, content, definition, lexeme, -, null, 1.4, active, f).
+   ^ expected: ERROR assertion_revisions_confidence
+
+── PROOF 3e: a current-revision pointer at ANOTHER assertion is rejected ─
+psql:docs/spikes/2026-09-gate0/02-integrity.sql:156: ERROR:  insert or update on table "assertions" violates foreign key constraint "assertions_current_revision"
+DETAIL:  Key (id, current_revision_id)=(9007, 77001) is not present in table "assertion_revisions".
+   ^ expected: ERROR assertions_current_revision — revision 77001 belongs to 9006
+
+── CONTROL: the valid Bierce assertions all commit ──────────────────────
+  id  |      subject       |  predicate  |    object     
+------+--------------------+-------------+---------------
+ 1001 | content/definition | defines     | lexeme/-
+ 1002 | content/definition | authored_by | entity/person
+(2 rows)
+
+   ^ expected: two rows, kinds filled in by the trigger, nothing rejected
