@@ -113,10 +113,11 @@ defmodule DevilsDictionary.HealthScoreTest do
     test "U1 counts the routes that exist and names the ones that do not", %{rows: rows} do
       u1 = Enum.find(rows, &(&1.id == "U1"))
 
-      # All six of #69 §6's pages are routed now that U1a added /define/:slug.
-      # A route is a fact the router can be asked for, so this reads the route
-      # table rather than trusting the prose.
-      assert u1.actual =~ "6 / 6 routes"
+      # #69 §6's six, plus the four #74 §F adds: the canonical word address, the
+      # thing page, one connection, and the composer. A route is a fact the
+      # router can be asked for, so this reads the route table rather than
+      # trusting the prose.
+      assert u1.actual =~ "10 / 10 routes"
       assert u1.status == :pass
     end
 

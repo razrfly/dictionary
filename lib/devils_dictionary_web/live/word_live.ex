@@ -17,6 +17,17 @@ defmodule DevilsDictionaryWeb.WordLive do
   offers the nearest words the trigram can find; a bare index row is a page with
   a headword and a promise. X1 renders 200 random index lexemes and most of the
   index is bare.
+
+  ## Two ways in, and only one of them is identity
+
+  ADR decision 10. `/words/:id/:slug` is **canonical**: the id is the word's
+  `object_id`, and the slug is a readable tail nothing reads back. `/define/:slug`
+  is a **resolver**, kept because a slug is what a reader types and what an old
+  link holds — but a slug is lossy. 28,306 slug groups hold more than one
+  distinct lemma, which is how searching for `C++` came to land on `/define/c`
+  headed `-c-`. So when a slug resolves to several distinct lemmas this page
+  offers the choice instead of silently picking one, and every word it lists
+  links to its canonical address.
   """
 
   use DevilsDictionaryWeb, :live_view
@@ -31,10 +42,41 @@ defmodule DevilsDictionaryWeb.WordLive do
 
   @impl true
   def mount(_params, _session, socket) do
-    {:ok, assign(socket, slug: nil, trail: [], page: nil, demo: false, evidence: [])}
+    {:ok,
+     assign(socket,
+       slug: nil,
+       trail: [],
+       page: nil,
+       demo: false,
+       evidence: [],
+       object_id: nil,
+       choices: []
+     )}
   end
 
   @impl true
+  def handle_params(%{"id" => id, "slug" => slug} = params, uri, socket) do
+    # The canonical address. The id is identity; a slug that does not match is
+    # a redirect rather than an error, so an old link keeps working and the
+    # address bar tells the truth.
+    #
+    # `Map.delete(params, "id")` before delegating, always: leaving it in would
+    # match this clause again, for ever.
+    resolver = Map.delete(params, "id")
+
+    case Lexicon.by_object_id(id) do
+      nil ->
+        handle_params(resolver, uri, assign(socket, :object_id, nil))
+
+      lexeme ->
+        if slug == lexeme.slug do
+          handle_params(resolver, uri, assign(socket, :object_id, lexeme.object_id))
+        else
+          {:noreply, push_navigate(socket, to: ~p"/words/#{id}/#{lexeme.slug}")}
+        end
+    end
+  end
+
   def handle_params(%{"slug" => slug} = params, _uri, socket) do
     trail = parse_trail(params["trail"])
     demo = Samples.on?(params)
@@ -59,7 +101,7 @@ defmodule DevilsDictionaryWeb.WordLive do
   end
 
   defp load(socket, slug, trail, demo) do
-    page = slug |> Lexicon.lookup() |> WordPage.build(trail: trail)
+    page = socket.assigns.object_id |> lookup(slug) |> WordPage.build(trail: trail)
 
     samples =
       if demo, do: Samples.samples(page.headword.lemma || slug), else: %{cards: [], evidence: []}
@@ -81,6 +123,45 @@ defmodule DevilsDictionaryWeb.WordLive do
     |> assign(:all_scopes, Lexicon.list_scopes())
     |> assign(:card_sources, card_sources)
     |> assign(:suggestions, suggestions(page, slug))
+    |> assign(:choices, choices(slug, socket.assigns.object_id))
+  end
+
+  # A slug that names more than one *distinct lemma* is ambiguous, and #74 says
+  # so out loud rather than picking. `C++`, `C+` and `c` are three identities
+  # that share a slug; the page names them and links each to its canonical
+  # address.
+  #
+  # Distinct **lemma**, not distinct lexeme: `cat` the noun and `cat` the verb
+  # are two lexemes and one word, and offering a choice between them would be
+  # noise. 28,306 slug groups are the real case.
+  #
+  # Reached by the canonical route there is nothing to choose — the id already
+  # said which one — and a miss has nothing to offer.
+  defp choices(_slug, object_id) when not is_nil(object_id), do: []
+
+  defp choices(slug, _object_id) do
+    case Lexicon.list_by_slug(slug) do
+      lexemes when length(lexemes) > 1 ->
+        if lexemes |> Enum.map(& &1.lemma) |> Enum.uniq() |> length() > 1,
+          do: Enum.uniq_by(lexemes, & &1.lemma),
+          else: []
+
+      _ ->
+        []
+    end
+  end
+
+  # The canonical address names one word, so it renders that word — not
+  # whatever else shares its slug. `/words/<C++>/c` is a page about `C++`;
+  # `/define/c` is a page about everything the slug reaches. That difference is
+  # the whole reason there are two routes.
+  defp lookup(nil, slug), do: Lexicon.lookup(slug)
+
+  defp lookup(object_id, slug) do
+    case Lexicon.by_object_id(object_id) do
+      nil -> Lexicon.lookup(slug)
+      lexeme -> %{lexemes: [lexeme], via: :lemma, matched: lexeme.lemma}
+    end
   end
 
   # Only a miss pays for suggestions: on every other page the trigram would be
@@ -127,6 +208,8 @@ defmodule DevilsDictionaryWeb.WordLive do
         <%= if @page.headword.lexemes == [] do %>
           <.miss slug={@slug} suggestions={@suggestions} demo={@demo} />
         <% else %>
+          <.disambiguation :if={@choices != []} slug={@slug} choices={@choices} />
+
           <Word.headword headword={@page.headword} demo={@demo} />
 
           <Word.scope_line scopes={@scopes} all={@all_scopes} sources={@card_sources} />
@@ -175,6 +258,33 @@ defmodule DevilsDictionaryWeb.WordLive do
       close={Word.info_path(@slug, @page.trail, nil, @demo)}
       record_path={&Word.info_path(@slug, @page.trail, "#{@provenance.ref}:#{&1}", @demo)}
     />
+    """
+  end
+
+  attr :slug, :string, required: true
+  attr :choices, :list, required: true
+
+  # A slug is a label, not an identity. When one names more than one distinct
+  # lemma the page says so and offers the canonical address of each, rather than
+  # picking the first and heading the page with the wrong word — which is what
+  # `/define/c` did to `C++`.
+  defp disambiguation(assigns) do
+    ~H"""
+    <aside
+      id="disambiguation"
+      class="mb-8 rounded-lg border border-mist-950/10 p-4 text-sm/7 dark:border-white/10"
+    >
+      <p class="text-mist-500">
+        “{@slug}” is the slug of more than one word. This page shows them together; each
+        has an address of its own.
+      </p>
+      <ul class="mt-2 space-y-1">
+        <li :for={lexeme <- @choices} id={"disambiguation-#{lexeme.object_id}"}>
+          <.a navigate={~p"/words/#{lexeme.object_id}/#{@slug}"}>{lexeme.lemma}</.a>
+          <span class="text-mist-500">· {lexeme.part_of_speech}</span>
+        </li>
+      </ul>
+    </aside>
     """
   end
 

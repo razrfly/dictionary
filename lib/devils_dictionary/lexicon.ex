@@ -46,6 +46,23 @@ defmodule DevilsDictionary.Lexicon do
   end
 
   @doc """
+  A word by its identity — what `/words/:id/:slug` renders.
+
+  The canonical lookup. Takes a string because it arrives from a URL, and
+  returns nil rather than raising on anything that is not an id: an address bar
+  is user input.
+  """
+  def by_object_id(id) when is_binary(id) do
+    case Integer.parse(id) do
+      {object_id, ""} -> by_object_id(object_id)
+      _ -> nil
+    end
+  end
+
+  def by_object_id(id) when is_integer(id), do: Repo.get(Lexeme, id)
+  def by_object_id(_), do: nil
+
+  @doc """
   Every lexeme sharing a slug — what `/define/:slug` renders, across every part
   of speech and every casing.
   """
