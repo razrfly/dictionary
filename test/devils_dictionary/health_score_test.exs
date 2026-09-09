@@ -15,8 +15,12 @@ defmodule DevilsDictionary.HealthScoreTest do
   alias DevilsDictionary.Health.Score
 
   # Every row id in #69 §7, in the order the spec lists them.
+  # #69 §7's thirty-seven, plus the six #74 adds. Each D row exists because the
+  # 7 September audit reproduced a defect that none of the thirty-seven could
+  # catch — see docs/rebuild/score-rows.md.
   @spec_rows ~w(A1 A2 A3 A4 A5 A6 A7 A8 A9 A10
                 M1 M2 M3 M4
+                D1 D2 D3 D4 D5 D6
                 R1 R2 R3
                 L1 L2 L3 L4
                 X1 X2 X3
@@ -91,12 +95,19 @@ defmodule DevilsDictionary.HealthScoreTest do
       assert e2.session == "S5"
     end
 
-    test "E3 is proven by the sketch it kept, not by prose", %{rows: rows} do
+    test "E3 is the extension exercise, and reports what it cost", %{rows: rows} do
       e3 = Enum.find(rows, &(&1.id == "E3"))
 
       assert e3.status == :pass
-      assert e3.detail =~ "docs/sketches/community_layer_migration.exs"
-      refute File.exists?("priv/repo/migrations/20260906092918_community_layer_sketch.exs")
+      assert e3.detail =~ "extension_test.exs"
+      assert e3.actual =~ "translated poem passage"
+      assert e3.actual =~ "4 / 4 predicates"
+      assert e3.actual =~ "4 / 4 kinds"
+
+      # The community-layer sketch is retired: the layer it sketched is shipped
+      # schema now, so a `File.exists?` on it would be measuring a file.
+      refute File.exists?("docs/sketches/community_layer_migration.exs")
+      refute e3.detail =~ "community_layer_migration"
     end
 
     test "U1 counts the routes that exist and names the ones that do not", %{rows: rows} do

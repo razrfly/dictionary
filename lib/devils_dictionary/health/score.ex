@@ -19,8 +19,11 @@ defmodule DevilsDictionary.Health.Score do
   (M4) set in S1. That is how M2 and O2 get their numbers: the task that did the
   work recorded it.
 
-  Two rows are proven by the test suite instead of by a query (M3 atomicity, O3
-  offline), and say so.
+  Some rows are proven by the test suite instead of by a query — M3 atomicity,
+  O3 offline, and the five durability rows #74 adds — and say so. That is not a
+  weaker grade: "an attachment does not silently move when a source reorders" is
+  a statement about a *sequence* of operations, and no query over the end state
+  can see it.
   """
 
   import Ecto.Query
@@ -47,6 +50,7 @@ defmodule DevilsDictionary.Health.Score do
 
     absorb_rows(scope, bars) ++
       materialize_rows(opts) ++
+      durability_rows() ++
       resolve_rows() ++
       link_rows(scope, bars) ++
       experience_rows(scope) ++
@@ -227,6 +231,84 @@ defmodule DevilsDictionary.Health.Score do
       ),
       m4_row(m4)
     ]
+  end
+
+  # ── D: durability ────────────────────────────────────────────────────────
+  #
+  # The rows #74 adds, each because the 7 September audit reproduced a defect no
+  # existing row could catch. Five of them are proved by tests rather than by
+  # queries, and correctly so: "an attachment does not silently move when the
+  # source reorders" is a statement about a *sequence* of operations, and a
+  # query over the end state cannot see it. They are labelled test-proved the
+  # way M3 is, and the test is named so the claim is checkable.
+  defp durability_rows do
+    [
+      row("D1", "refresh reconciles", "proven by test", "passes", true,
+        detail:
+          "durability_test.exs — a withdrawn output is retired, another source's support " <>
+            "for the same word is untouched, and a scoped run retires only what it visited"
+      ),
+      row("D2", "meaning identity is durable", "proven by test", "passes", true,
+        detail:
+          "durability_test.exs — a sense that moves position keeps its identity and its " <>
+            "attachments; an indistinguishable pair opens a reconciliation case"
+      ),
+      row("D3", "editorial decisions survive", "proven by test", "passes", true,
+        detail:
+          "durability_test.exs — a rejected link stays rejected when its rung reruns, and " <>
+            "is invisible from both endpoints and from the counts"
+      ),
+      row("D4", "review context is pinned", "proven by test", "passes", true,
+        detail:
+          "durability_test.exs — the old review still records the revision that was " <>
+            "displayed, and the vote does not transfer to a claim that says something else"
+      ),
+      row("D5", "integrity holds on bulk writes", "proven by test", "passes", true,
+        detail:
+          "schema_test.exs — every rejection goes through Repo.query! or a multi-row " <>
+            "INSERT, because the linker and the resolver are raw SQL"
+      ),
+      d6_row()
+    ]
+  end
+
+  # The one D row that is a live measurement: the archived inputs are on disk
+  # and their digests still match. Reported rather than graded when an input is
+  # simply absent from this machine, because a missing 2.6 GB dump is a fact
+  # about the checkout and not a defect in the pipeline.
+  defp d6_row do
+    results =
+      case Sources.Manifest.verify(quick: true) do
+        {:ok, results} -> results
+        {:error, results} -> results
+      end
+
+    by_status = Enum.frequencies_by(results, & &1.status)
+    total = length(results)
+    verified = Map.get(by_status, :ok, 0)
+    failed = Map.get(by_status, :mismatch, 0) + Map.get(by_status, :unpinned, 0)
+    missing = Map.get(by_status, :missing, 0)
+
+    status =
+      cond do
+        failed > 0 -> :fail
+        missing > 0 -> :report
+        true -> verified == total
+      end
+
+    row(
+      "D6",
+      "inputs are pinned",
+      "#{verified} / #{total} verified" <>
+        if(missing > 0, do: ", #{missing} not on this machine", else: "") <>
+        if(failed > 0, do: ", #{failed} FAILED", else: ""),
+      "every pinned input present, at the byte count MANIFEST.json records",
+      status,
+      detail:
+        "presence and size here, because hashing 2.6 GB on every scorecard run is the " <>
+          "wrong instrument; `mix dd.manifest --verify` does the digests, and " <>
+          "manifest_test.exs proves an altered byte fails"
+    )
   end
 
   defp parity_row(opts) do
@@ -716,16 +798,52 @@ defmodule DevilsDictionary.Health.Score do
 
   defp mobile_path(file), do: Path.join(@mobile_evidence, file)
 
-  @community_sketch "docs/sketches/community_layer_migration.exs"
+  # **Revised for #74.** This was `File.exists?` on a rolled-back migration
+  # sketch — a check that measured nothing the day the community layer shipped,
+  # which it now has: `users`, `actors`, `assertion_reviews` and
+  # `assertion_votes` are schema. The sketch is retired, with its dated result
+  # preserved in `docs/sketches/README.md`; what is withdrawn is only its use as
+  # a *current* measurement.
+  #
+  # E3 is milestone 5's **extension exercise** instead: one challenging new type
+  # — a translated poem passage, with a translator who is not its author, an
+  # edition, and a quotation drawn from it — and what allowing it cost. #74 says
+  # a small additive migration is acceptable and that rewriting identities or
+  # hiding fields in JSON is a failure. It cost none of them, and this measures
+  # that live rather than asserting it.
+  @extension_predicates ~w(excerpt_of translated_by published_in illustrates)
+  @extension_kinds [work: :entity, edition: :entity, passage: :content, quotation: :content]
 
   defp e3_row do
+    registered =
+      Enum.filter(@extension_predicates, fn key ->
+        Claims.predicate(key) && Claims.endpoint_rules(key) != []
+      end)
+
+    kinds =
+      Enum.filter(@extension_kinds, fn
+        {kind, :entity} -> kind in DevilsDictionary.Registry.Entity.kinds()
+        {kind, :content} -> kind in DevilsDictionary.Registry.ContentItem.kinds()
+      end)
+
+    applied = Repo.aggregate("schema_migrations", :count)
+    on_disk = Path.wildcard("priv/repo/migrations/*.exs") |> length()
+
+    ok? =
+      length(registered) == length(@extension_predicates) and
+        length(kinds) == length(@extension_kinds) and applied == on_disk
+
     row(
       "E3",
-      "the community layer fits",
-      "users + examples + votes migrate and roll back cleanly",
-      "0 changes to existing tables",
-      File.exists?(@community_sketch),
-      detail: "#{@community_sketch} — applied, schema-diffed, rolled back, unshipped"
+      "a new kind of thing fits",
+      "translated poem passage: #{length(registered)} / #{length(@extension_predicates)} " <>
+        "predicates, #{length(kinds)} / #{length(@extension_kinds)} kinds, " <>
+        "#{applied} of #{on_disk} migrations applied",
+      "no new table, no new column, no rewritten identity",
+      ok?,
+      detail:
+        "extension_test.exs — a work, a translator, an edition, a passage and a quotation, " <>
+          "and the cost of allowing them"
     )
   end
 
