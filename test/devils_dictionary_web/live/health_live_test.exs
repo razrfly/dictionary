@@ -8,6 +8,7 @@ defmodule DevilsDictionaryWeb.HealthLiveTest do
   use DevilsDictionaryWeb.ConnCase, async: true
 
   alias DevilsDictionary.Fixtures
+  alias DevilsDictionary.Health
   alias DevilsDictionary.Health.Score
 
   # The point of these assertions is *what* arrives, not how fast. LiveView's
@@ -67,6 +68,26 @@ defmodule DevilsDictionaryWeb.HealthLiveTest do
 
     for section <- ~w(health-coverage health-resolution health-links health-dead) do
       assert settled =~ ~s(id="#{section}")
+    end
+  end
+
+  test "the coverage numbers are the ones `mix dd.health` prints", ctx do
+    # O4's claim is that the page and the CLI agree. Until now the row asserted
+    # it and graded itself `true` unconditionally — the same shape of evidence
+    # the 7 September audit rejected for E3, where `File.exists?` stood in for a
+    # measurement. Both surfaces read `Health.coverage/2`, so agreement is a
+    # property that can actually be checked rather than claimed.
+    {:ok, live, _html} = live(ctx.conn, ~p"/health?scope=#{ctx.animals.slug}")
+    render_async(live, @async_timeout)
+
+    rendered = live |> element("#health-coverage-rows") |> render()
+
+    for slug <- ~w(wiktionary wordnet) do
+      coverage = Health.coverage(ctx.animals.slug, slug)
+
+      assert rendered =~ slug
+      assert rendered =~ "#{coverage.covered}"
+      assert rendered =~ "#{coverage.pct}%"
     end
   end
 
