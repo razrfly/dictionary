@@ -73,6 +73,48 @@ The final `mix precommit` run passed **721 tests with zero failures**. The new i
 
 The current branch is ready for code review, but the completion gate remains open. Final evidence records an exact independent rebuild comparison (`identical: true`), semantic replay equality for all six sources, and passing scorecards: animals **44/44**, emotions **43/43**, culture **42/42**, each with zero pending rows. Warm-cache animals measurements are P1 **44.191 ms** p95, P2 **0.418 ms** p95, and X2 **69 ms** p95. O2 reports cumulative recorded runs, not a fresh API acquisition benchmark. Culture's empty linkability population is reported as not applicable, not counted as a pass.
 
-Remaining acceptance work: complete the authenticated contribution/review browser workflow, confirm final CLI/browser health agreement, reconcile the provenance-stamp diagnostic below, and clean up the disposable verification database. Browser login now succeeds after correcting authentication form buttons to submit; the regression is included in the 721 tests. Desktop/mobile read-page screenshots are recorded. Earlier failed comparisons remain diagnostic evidence, not successful validation.
+Remaining acceptance work: complete the authenticated contribution/review browser workflow, and clean up the disposable verification database. The CLI/browser health agreement and the provenance-stamp diagnostic are both closed — see "Provenance stamps" and "O4" below. Browser login now succeeds after correcting authentication form buttons to submit; the regression is included in the 721 tests. Desktop/mobile read-page screenshots are recorded. Earlier failed comparisons remain diagnostic evidence, not successful validation.
 
-The final corpus contains 1,541,668 lexemes, 250,305 source-specific senses, 92,952 entities and 108,475 content items, with 1,491,146 assertions and 900,843 forms. The latest integrity diagnostic found no missing current revisions, unstamped object outputs or missing source snapshots, but reports **117,363 claim outputs with a null last_seen_run_id**. This differs from the earlier zero-count observation and still needs reconciliation; passing scorecards do not resolve that discrepancy. Assertion storage, including the new pagination indexes, is 950,362,112 bytes versus the original relation table’s 765,050,880 bytes: **1.24×**, below the 2× budget. The original database remains intact.
+The final corpus contains 1,541,668 lexemes, 250,305 source-specific senses, 92,952 entities and 108,475 content items, with 1,491,146 assertions and 900,843 forms. The latest integrity diagnostic found no missing current revisions, unstamped object outputs or missing source snapshots. It also reported **117,363 claim outputs with a null last_seen_run_id**, which is now reconciled and fixed (see below). Assertion storage, including the new pagination indexes, is 950,362,112 bytes versus the original relation table’s 765,050,880 bytes: **1.24×**, below the 2× budget. The original database remains intact.
+
+## Provenance stamps, reconciled
+
+The 117,363 figure was correct, and it did not contradict the earlier zero: the
+two observations counted **different tables**. `source_materialized_outputs` was
+zero and remains so; `source_assertion_outputs` was not checked.
+
+The cause is one line in each of two callers. Wiktionary, Johnson and Bierce name
+a relation's target by *lemma* rather than by a sense key, so every claim those
+three sources make is written by the resolver rather than by the materializer's
+second pass. `mix dd.resolve` and `dd.rebuild`'s resolve stage each opened an
+`import_runs` row and then called `Resolver.run/1` without it, so
+`own_assertions/3` wrote the run it was given — `nil`. WordNet's edges carry a
+deterministic sense key and close under the materializer's own run, which is why
+none of its 1.05 M claims were affected, and why the split fell exactly along
+that line.
+
+This is not cosmetic bookkeeping. `reconcile/2` tests `is_nil(last_seen_run_id)
+or last_seen_run_id != run_id` to decide that a source has stopped publishing
+something, so an unstamped output is not merely unreconciled — it is
+indistinguishable from a withdrawn one.
+
+Both callers hand over their run now, a regression asserts the stamp, and the
+corpus was repaired by the documented `mix dd.materialize --all && mix
+dd.resolve` path. All six sources reported `semantic replay identical: true` on
+that pass. The count is **0**.
+
+## O4, made to measure
+
+O4's actual read "`mix dd.health` and /health: coverage, resolution, the link
+histogram, candidates, conflicts, parity" and its grade was
+`opts[:skip_health_check] != true` — unconditionally true. It asserted the
+agreement rather than checking it, which is why this pass could not confirm it:
+there was nothing there to confirm.
+
+Both surfaces read `Health.coverage/2`, which is what `mix dd.health` prints, so
+the agreement is a property that can be checked. `health_live_test.exs` settles
+the page's async assigns and asserts its rendered coverage rows carry the values
+that function returns. O4 reads "proven by test", like D1-D5.
+
+Scorecards after both fixes: animals **44 / 44**, emotions **43 / 43**, culture
+**42 / 42**, zero pending, on **724 tests**.
