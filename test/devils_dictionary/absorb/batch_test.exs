@@ -25,7 +25,7 @@ defmodule DevilsDictionary.Absorb.BatchTest do
 
   import Ecto.Query
 
-  alias DevilsDictionary.Absorb.Batch
+  alias DevilsDictionary.Absorb.{Batch, Resolver}
   alias DevilsDictionary.Registry.Sense
   alias DevilsDictionary.{Claims, FakeSource, Repo, Sources}
   alias DevilsDictionary.Sources.{ImportRun, Source}
@@ -123,6 +123,33 @@ defmodule DevilsDictionary.Absorb.BatchTest do
                from r in "content_revisions", where: r.is_current, select: r.lifecycle_state
              ) ==
                "active"
+    end
+
+    test "two records that assert the same edge both own the one claim it becomes", ctx do
+      # Wiktionary keys a record by etymology, so `bear/noun/2`, `/3` and `/4` all
+      # say *bear* is a kind of *mammal*. That is one claim and three attestations
+      # — and if the pending row is keyed by the edge alone, two of the three
+      # records never reach the resolver and the claim ends up with one owner.
+      Sources.insert_records(ctx.source, [
+        %{external_id: "bear/noun/2", raw: %{"lemma" => "bear", "to_lemma" => "mammal"}},
+        %{external_id: "bear/noun/3", raw: %{"lemma" => "bear", "to_lemma" => "mammal"}}
+      ])
+
+      Sources.insert_records(ctx.source, [
+        %{external_id: "mammal/noun", raw: %{"lemma" => "mammal"}}
+      ])
+
+      Batch.run(FakeSource, ctx.source)
+      Resolver.run()
+
+      key = ~s(rel|fake-bear|hypernym|mammal)
+
+      assert Repo.aggregate(from(a in "assertions", where: a.origin_key == ^key), :count) == 1
+
+      assert Repo.aggregate(
+               from(o in "source_assertion_outputs", where: o.output_key == ^key),
+               :count
+             ) == 2
     end
 
     test "reconcile: false stamps without retiring, for a pass that writes a partial view",

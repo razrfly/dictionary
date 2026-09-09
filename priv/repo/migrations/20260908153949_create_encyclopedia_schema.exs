@@ -802,9 +802,21 @@ defmodule DevilsDictionary.Repo.Migrations.CreateEncyclopediaSchema do
       timestamps(type: :utc_datetime_usec)
     end
 
+    # `source_record_id` is part of the key, not incidental to it: three
+    # Wiktionary records — `bear/noun/2`, `/3`, `/4` — assert the same edge, and
+    # each of them really does attest it. Keyed by the edge alone, two of those
+    # records lose their pending row, the resolver never sees them, and the
+    # assertion ends up with one owner where it should have three.
     create unique_index(
              :pending_relations,
-             [:source_id, :subject_object_id, :predicate_id, :to_lemma, :to_pos],
+             [
+               :source_id,
+               :source_record_id,
+               :subject_object_id,
+               :predicate_id,
+               :to_lemma,
+               :to_pos
+             ],
              nulls_distinct: false,
              name: :pending_relations_edge_index
            )
