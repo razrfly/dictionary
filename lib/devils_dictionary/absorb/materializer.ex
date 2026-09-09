@@ -202,6 +202,9 @@ defmodule DevilsDictionary.Absorb.Materializer do
   end
 
   # Later rows win, matching "replaced, never edited".
+  defp dedupe_by(rows, fun) when is_function(fun, 1),
+    do: rows |> Map.new(&{fun.(&1), &1}) |> Map.values()
+
   defp dedupe_by(rows, key), do: rows |> Map.new(&{Map.fetch!(&1, key), &1}) |> Map.values()
 
   # The current revision of each record being materialized. Everything derived
@@ -622,7 +625,15 @@ defmodule DevilsDictionary.Absorb.Materializer do
     ids = mint(:content, existing, keys, now)
     authors = authors(rows)
 
-    rows
+    # Several records can name **one** content item, and since #74 that is the
+    # point: Wikipedia's canonical publication identity is what stops one article
+    # rendering six times, so six probe records now resolve to one key. Postgres
+    # refuses a statement that hits the same conflict key twice, so the item is
+    # written once — while `own_outputs/5` below still sees every row, because
+    # each of those records really does attest it.
+    unique = dedupe_by(rows, &content_key/1)
+
+    unique
     |> Enum.map(fn row ->
       %{
         object_id: Map.fetch!(ids, content_key(row)),
@@ -642,7 +653,7 @@ defmodule DevilsDictionary.Absorb.Materializer do
     write_revisions(
       "content_revisions",
       :content_id,
-      Enum.map(rows, fn row ->
+      Enum.map(unique, fn row ->
         {Map.fetch!(ids, content_key(row)),
          %{
            body: row[:body],
@@ -1242,9 +1253,6 @@ defmodule DevilsDictionary.Absorb.Materializer do
     {senses, content} =
       Enum.split_with(stale_outputs, fn {role, _id} -> role == "sense" end)
 
-    retire_senses(Enum.map(senses, &elem(&1, 1)), now)
-    retire_content(Enum.map(content, &elem(&1, 1)), now)
-
     stale_assertions =
       from(o in "source_assertion_outputs",
         where: o.source_record_id in ^record_ids,
@@ -1276,11 +1284,35 @@ defmodule DevilsDictionary.Absorb.Materializer do
       set: [retired_at: now, updated_at: now]
     )
 
+    # Only now, and only what nothing still attests. The outputs are marked
+    # retired first so this reads the state after the run rather than before it:
+    # several records can own one object — Wikipedia's canonical article is
+    # named by every probe that redirects to it — and one of them going quiet is
+    # not the source withdrawing the article.
+    retire_senses(unattested(Enum.map(senses, &elem(&1, 1))), now)
+    retire_content(unattested(Enum.map(content, &elem(&1, 1))), now)
+
     %{
       senses: length(senses),
       content: length(content),
       assertions: length(stale_assertions)
     }
+  end
+
+  # The objects among these that no unretired output still points at.
+  defp unattested([]), do: []
+
+  defp unattested(object_ids) do
+    still_owned =
+      from(o in "source_materialized_outputs",
+        where: o.output_object_id in ^object_ids and is_nil(o.retired_at),
+        select: o.output_object_id,
+        distinct: true
+      )
+      |> Repo.all()
+      |> MapSet.new()
+
+    Enum.reject(object_ids, &MapSet.member?(still_owned, &1))
   end
 
   defp retire_senses([], _now), do: 0

@@ -77,7 +77,26 @@ defmodule DevilsDictionary.FakeSource do
      %{
        lexemes: [%{key: {"en", lemma, pos}, origin_source_id: source_id}] ++ extra,
        senses: senses,
-       entries: [],
+       # `content_key` makes two records name **one** content item, the shape
+       # Wikipedia produces once an article has a canonical publication identity
+       # and six probes redirect to it.
+       entries:
+         case raw["content_key"] do
+           nil ->
+             []
+
+           key ->
+             [
+               %{
+                 key: key,
+                 kind: :article,
+                 headword: lemma,
+                 body: raw["body"] || "a body",
+                 source_id: source_id,
+                 source_record_id: Map.get(record, :id)
+               }
+             ]
+         end,
        relations: [
          %{
            source_id: source_id,
