@@ -128,16 +128,16 @@ defmodule DevilsDictionaryWeb.HomeLiveTest do
   end
 
   describe "surprise me" do
-    test "lands on an enriched word from a scope", ctx do
+    test "lands on an enriched word outside all test scopes", ctx do
       word!(ctx, "quark", ~w(wordnet), scope: nil)
       word!(ctx, "bareword", [], enriched_at: nil)
-      word!(ctx, "oyster", ~w(wiktionary))
+      word!(ctx, "oyster", [], enriched_at: nil)
 
       {:ok, live, _html} = live(ctx.conn, ~p"/")
 
       live |> element("#surprise") |> render_click()
 
-      assert_redirect(live, "/define/oyster")
+      assert_redirect(live, "/define/quark")
     end
 
     test "an empty index leaves the reader where they are", ctx do

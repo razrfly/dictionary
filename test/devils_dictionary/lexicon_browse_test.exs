@@ -273,16 +273,17 @@ defmodule DevilsDictionary.LexiconBrowseTest do
       assert Lexicon.random_word() == nil
     end
 
-    test "surprise me only ever lands on an enriched word inside a scope", ctx do
-      # A bare row, an enriched word outside every scope, a bare word inside
-      # one, and the only word that is both: *Surprise me* must find that one
-      # every time, because the other three are pages with nothing on them.
+    test "surprise me includes enriched words outside all test scopes", ctx do
       lexeme!("bareword", enriched_at: nil)
       lexeme!("quark")
-      scoped!(ctx.animals, lexeme!("abrocome", enriched_at: nil))
-      scoped!(ctx.animals, lexeme!("oyster"))
+      scoped!(ctx.animals, lexeme!("oyster", enriched_at: nil))
 
-      for _ <- 1..20, do: assert(%{slug: "oyster"} = Lexicon.random_word())
+      assert %{slug: "quark"} = Lexicon.random_word()
+    end
+
+    test "surprise me still includes enriched animal entries", ctx do
+      scoped!(ctx.animals, lexeme!("oyster"))
+      assert %{slug: "oyster"} = Lexicon.random_word()
     end
 
     test "a scope filter keeps the draw inside that scope", ctx do

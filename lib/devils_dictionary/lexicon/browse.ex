@@ -103,11 +103,9 @@ defmodule DevilsDictionary.Lexicon.Browse do
   meant to be *representative of nothing in particular* that is harmless, and
   it is the reason this is not the sampler to use for a statistic.
 
-  Filtered — `scope: :any | "animals"`, `enriched: true` — the population is
-  small (26,203 enriched rows across the two scopes), so it is counted once and
-  taken at a random offset: exact, and one query per word drawn. That is the
-  shape *Surprise me* wants, because a random word out of 1.5 million is a bare
-  row 90 % of the time and lands the reader on a page with nothing on it.
+  Filtered draws use a count and random offset. Scope filters are explicit
+  operational options. The public *Surprise me* draw requires enrichment but
+  no scope membership, so test populations do not constrain discovery.
 
   Returns `[%{id, slug, lemma}]`.
   """
@@ -122,12 +120,13 @@ defmodule DevilsDictionary.Lexicon.Browse do
   end
 
   @doc """
-  One enriched word from either scope — the home page's *Surprise me*.
+  One enriched word across the index — the home page's *Surprise me*.
+  Scope membership is irrelevant to public discovery.
 
   Returns a `%{id, slug, lemma}` or `nil` on an empty database.
   """
   def random_word do
-    case random_lexemes(sample: 1, scope: :any, enriched: true) do
+    case random_lexemes(sample: 1, enriched: true) do
       [word | _] -> word
       [] -> nil
     end
