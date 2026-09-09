@@ -28,11 +28,32 @@ defmodule Mix.Tasks.Dd.Rebuild do
   | 9 | `wikipedia` | the scope and the entities | articles and candidates |
   | 10 | `resolve` | everything above | pending edges become assertions |
   | 11 | `link` | senses and entities | the word ↔ thing ladder |
-  | 12 | `scope` again | the taxonomy | the `wikidata_taxon` rule, now able to run |
+  | 12 | `wikidata-taxon` | Wikipedia's entities | the P31/P279 edges whose target arrived late |
+  | 13 | `scope` again | the taxonomy | the `wikidata_taxon` rule, now able to run |
+  | 14 | `wiktionary-taxon` | the grown scope | senses for the words the taxonomy added |
+  | 15 | `resolve-taxon` | those senses | their edges become assertions |
+  | 16 | `link-taxon` | all of it | the ladder over the whole scope |
 
-  The scope is built **twice** on purpose: its third rule walks the Wikidata
-  taxonomy, which does not exist on the first pass. The first build is what
-  gives Wiktionary and Wikipedia something to scope *to*.
+  ## The second sweep, and why five stages run twice
+
+  Nothing here is a retry. Each of these stages can only do its work once a
+  *later* stage has run, and the pipeline is a straight line, so the line has to
+  come back round.
+
+  **The scope grows.** Its third rule walks the Wikidata taxonomy, which does not
+  exist on the first pass — so the first build is what gives Wiktionary and
+  Wikipedia something to scope *to*, and the second adds 8,724 lemmas to Animals
+  that were not there when Wiktionary ran. Without a second sweep *pica*, *loris*
+  and *calyptra* sit in the scope with no senses. MVP-0 found this the same way
+  and closed it by hand ("Wiktionary re-absorbed on the grown scope"); here it is
+  a stage, so a rebuild does not depend on anybody remembering.
+
+  **The taxonomy grows too.** Wikidata records a P31 edge to whatever the source
+  names — `Q24089999 instance_of Q34038`, *Slippery Falls* is a *Waterfall* — but
+  P31 and P279 targets are recorded, not chased, so the edge waits for its target
+  to exist. Wikipedia introduces 3,350 of those targets *after* Wikidata has
+  finished. Re-materializing Wikidata closes them; without it the corpus is short
+  exactly that many edges and nothing reports it.
 
   ## Resumability
 
@@ -56,7 +77,7 @@ defmodule Mix.Tasks.Dd.Rebuild do
 
   import Mix.Tasks.Dd.Report
 
-  alias DevilsDictionary.Absorb.{Linker, Resolver, ScopeBuilder}
+  alias DevilsDictionary.Absorb.{Batch, Linker, Resolver, ScopeBuilder}
   alias DevilsDictionary.{Lexicon, Sources}
 
   @requirements ["app.start"]
@@ -73,7 +94,11 @@ defmodule Mix.Tasks.Dd.Rebuild do
     {:wikipedia, "Wikipedia: articles and candidates"},
     {:resolve, "drain pending edges into assertions"},
     {:link, "the word ↔ thing ladder"},
-    {:"scope-taxon", "rebuild the scope, now that the taxonomy exists"}
+    {:"wikidata-taxon", "close the taxonomy edges Wikipedia's entities unlocked"},
+    {:"scope-taxon", "rebuild the scope, now that the taxonomy exists"},
+    {:"wiktionary-taxon", "Wiktionary: the words the taxonomy added"},
+    {:"resolve-taxon", "drain the edges those words brought"},
+    {:"link-taxon", "the ladder, over the grown scope"}
   ]
 
   @impl Mix.Task
@@ -177,12 +202,39 @@ defmodule Mix.Tasks.Dd.Rebuild do
   defp do_stage(:"scope-taxon", scope, _opts), do: build_scope(scope)
 
   defp do_stage(:wiktionary, scope, opts), do: absorb("wiktionary", [scope: scope], opts)
+
+  defp do_stage(:"wiktionary-taxon", scope, opts),
+    do: absorb("wiktionary", [scope: scope], opts)
+
   defp do_stage(:bierce, _scope, opts), do: absorb("bierce", [], opts)
   defp do_stage(:johnson, _scope, opts), do: absorb("johnson", [], opts)
   defp do_stage(:wikidata, scope, opts), do: replay_or_absorb("wikidata", [scope: scope], opts)
 
   defp do_stage(:wikipedia, scope, opts),
     do: replay_or_absorb("wikipedia", [scope: scope], opts)
+
+  # Wikidata's P171 walk chases parents; P31 and P279 are *recorded* rather than
+  # chased, so an edge to an entity Wikipedia had not introduced yet was counted
+  # as unresolved and left there. Re-materializing after Wikipedia closes them —
+  # no fetching, no network, just the records already on disk read again.
+  defp do_stage(:"wikidata-taxon", _scope, _opts) do
+    source = Sources.get_source_by_slug!("wikidata")
+    module = DevilsDictionary.Absorb.source_module!("wikidata")
+    run = Sources.start_run("materialize", source_id: source.id)
+
+    counts = Batch.run(module, source, only_stale: false, run_id: run.id)
+    Sources.finish_run(run, stringify(counts))
+
+    Map.take(counts, [
+      :concept_relations,
+      :concept_relations_skipped,
+      :concept_relations_skipped_parent_taxon,
+      :concept_relations_skipped_unchased
+    ])
+  end
+
+  defp do_stage(:"resolve-taxon", scope, opts), do: do_stage(:resolve, scope, opts)
+  defp do_stage(:"link-taxon", scope, opts), do: do_stage(:link, scope, opts)
 
   defp do_stage(:resolve, _scope, _opts) do
     result = Resolver.run()

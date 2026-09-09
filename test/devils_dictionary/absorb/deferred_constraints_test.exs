@@ -116,5 +116,59 @@ defmodule DevilsDictionary.Absorb.DeferredConstraintsTest do
                :count
              ) == @rows
     end
+
+    test "resolving the same edge twice updates the claim rather than duplicating it", %{
+      ctx: ctx,
+      wordnet: wordnet
+    } do
+      # Re-materializing a record re-creates the pending row for an edge that was
+      # already resolved — the second Wiktionary sweep does it 21,398 times — and
+      # the resolver used to insert a second assertion with the same origin key.
+      word!(ctx, "thing", ~w(wordnet))
+      subject = word!(ctx, "cat", ~w(wordnet))
+      record = record!(ctx, "wordnet", external_id: "oewn-1-n", raw: %{})
+
+      pending = fn ->
+        Repo.insert_all("pending_relations", [pending_row(wordnet, record, subject.object_id)])
+      end
+
+      pending.()
+      assert %{resolved: 1} = Resolver.run()
+
+      pending.()
+      assert %{resolved: 1} = Resolver.run()
+
+      key = "rel|cat|hypernym|thing"
+
+      assert Repo.aggregate(from(a in "assertions", where: a.origin_key == ^key), :count) == 1
+
+      assert Repo.aggregate(
+               from(r in AssertionRevision,
+                 join: a in "assertions",
+                 on: a.id == r.assertion_id,
+                 where: a.origin_key == ^key and r.is_current
+               ),
+               :count
+             ) == 1
+    end
+  end
+
+  defp pending_row(source, record, subject) do
+    predicate = Repo.one!(from p in "predicates", where: p.key == "hypernym", select: p.id)
+    now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
+
+    %{
+      source_id: source.id,
+      source_record_id: record.id,
+      subject_object_id: subject,
+      predicate_id: predicate,
+      to_lemma: "thing",
+      to_pos: "noun",
+      origin_key: "rel|cat|hypernym|thing",
+      method: "source",
+      metadata: %{},
+      inserted_at: now,
+      updated_at: now
+    }
   end
 end

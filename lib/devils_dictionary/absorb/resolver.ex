@@ -39,6 +39,7 @@ defmodule DevilsDictionary.Absorb.Resolver do
 
   import Ecto.Query
 
+  alias DevilsDictionary.Absorb.Materializer
   alias DevilsDictionary.Registry.Lexeme
   alias DevilsDictionary.Repo
 
@@ -127,12 +128,21 @@ defmodule DevilsDictionary.Absorb.Resolver do
     n
   end
 
+  # Through `Materializer.write_assertions/3`, not beside it. The resolver used
+  # to insert assertions, revisions and ownership rows itself, and so had its own
+  # answers to "is this claim already here?", "did anything change?" and "who
+  # owns it?" — three copies of a policy the ADR says is one. It also meant that
+  # re-materializing a record, which re-creates the pending row for an edge
+  # already resolved, made the resolver insert a second assertion with the same
+  # origin key:
+  #
+  #     duplicate key value violates unique constraint "assertions_origin_index"
+  #     Key (source_id, origin_key)=(2, rel|{"en", "whim", "noun"}|derived|at the whim of)
+  #
+  # The shared writer upserts on that key, writes a revision only when something
+  # changed, and stamps ownership — which is exactly what re-resolving means.
   defp write_matched(matched, run_id) do
-    now = DateTime.utc_now()
-    ids = insert_assertions(matched, now)
-
-    write_revisions(matched, ids, now)
-    write_ownership(matched, ids, run_id, now)
+    Materializer.write_assertions(matched, run_id)
 
     {n, _} =
       from(p in "pending_relations", where: p.id in ^Enum.map(matched, & &1.pending_id))
@@ -141,15 +151,20 @@ defmodule DevilsDictionary.Absorb.Resolver do
     n
   end
 
+  # One `DISTINCT ON` per pending row picks the target lexeme, in the preference
+  # order #69 §4 fixed: a stated part of speech, then an exact-case lemma, then
+  # `@pos_priority`, then the oldest identity. Ties are broken by rule rather
+  # than by whichever row the planner happened to return.
   defp matched(source_id, from, to) do
     %{rows: rows} =
       Repo.query!(
         """
         SELECT DISTINCT ON (p.id)
                p.id, p.source_id, p.source_record_id, p.origin_key,
-               p.subject_object_id, p.predicate_id, p.confidence, p.method, p.metadata,
+               p.subject_object_id, pred.key, p.confidence, p.method, p.metadata,
                l.object_id
           FROM pending_relations p
+          JOIN predicates pred ON pred.id = p.predicate_id
           JOIN lexemes l
             ON l.language_tag = 'en' AND lower(l.lemma) = lower(p.to_lemma)
          WHERE p.id >= $1 AND p.id < $2
@@ -175,76 +190,14 @@ defmodule DevilsDictionary.Absorb.Resolver do
         source_id: src,
         source_record_id: record,
         origin_key: key,
-        subject_object_id: subject,
-        predicate_id: predicate,
+        subject: subject,
+        predicate: predicate,
         confidence: confidence,
         method: method,
         metadata: metadata || %{},
-        target_id: target
+        object: target
       }
     end
-  end
-
-  defp insert_assertions(matched, now) do
-    rows =
-      Enum.map(matched, fn m ->
-        %{
-          source_id: m.source_id,
-          origin_key: m.origin_key,
-          inserted_at: now,
-          updated_at: now
-        }
-      end)
-
-    {_, inserted} = Repo.insert_all("assertions", rows, returning: [:id])
-    Enum.map(inserted, & &1.id)
-  end
-
-  defp write_revisions(matched, ids, now) do
-    rows =
-      Enum.zip_with(matched, ids, fn m, assertion_id ->
-        %{
-          assertion_id: assertion_id,
-          revision_number: 1,
-          subject_object_id: m.subject_object_id,
-          predicate_id: m.predicate_id,
-          object_object_id: m.target_id,
-          confidence: m.confidence,
-          method: m.method,
-          metadata: m.metadata,
-          lifecycle_state: "active",
-          is_current: true,
-          inserted_at: now,
-          updated_at: now
-        }
-      end)
-
-    Repo.insert_all("assertion_revisions", rows)
-  end
-
-  # Ownership, so a later run that no longer emits this edge can retire it — and
-  # retire only its own, never another source's support.
-  defp write_ownership(matched, ids, run_id, now) do
-    rows =
-      matched
-      |> Enum.zip(ids)
-      |> Enum.reject(fn {m, _} -> is_nil(m.source_record_id) end)
-      |> Enum.map(fn {m, assertion_id} ->
-        %{
-          source_record_id: m.source_record_id,
-          output_key: m.origin_key || "assertion:#{assertion_id}",
-          assertion_id: assertion_id,
-          last_seen_run_id: run_id,
-          inserted_at: now,
-          updated_at: now
-        }
-      end)
-      |> Enum.uniq_by(&{&1.source_record_id, &1.output_key})
-
-    Repo.insert_all("source_assertion_outputs", rows,
-      on_conflict: {:replace, [:assertion_id, :last_seen_run_id, :retired_at, :updated_at]},
-      conflict_target: [:source_record_id, :output_key]
-    )
   end
 
   @doc """

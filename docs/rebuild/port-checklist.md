@@ -105,17 +105,34 @@ places that reference it: `docs/sketches/README.md`, `README.md` (three rows),
 
 Recorded at P5, against the plan above. Every treatment held: no file marked
 *Reuse* needed rewriting, and no file marked *Rewrite* turned out to be a port.
-The two surprises were both in the **write** path, and neither was visible to
-`mix compile`:
+What the plan did not anticipate is **where** the remaining defects would be, and
+it is worth writing down, because they were not distributed evenly. All nine were
+in the write path, none was visible to `mix compile`, and only one was visible to
+the test suite as it stood.
 
 | Found | Where | Why nothing caught it earlier |
 |---|---|---|
-| Content matching collapsed two WordNet synsets into one identity (194 of them), each survivor then flip-flopping its gloss one revision per pass | `absorb/sense_identity.ex` | The policy was calibrated on Wiktionary, where a key *is* a position. WordNet's key is a synset id, and its glosses are written to be near-neighbours — *sequoia* the tree and *sequoia* the wood differ by two words. No row is missing afterwards, so no count shows it. |
+| Content matching collapsed two WordNet synsets into one identity — 194 of them — each survivor then flip-flopping its gloss one revision per pass | `absorb/sense_identity.ex` | The policy was calibrated on Wiktionary, where a key *is* a position. WordNet's key is a synset id and its glosses are written to be near-neighbours: *sequoia* the tree and *sequoia* the wood differ by two words. No row is missing afterwards, so no count shows it. |
 | The import path never called `reconcile/2`: 240,056 outputs with a null `last_seen_run_id` | `absorb/batch.ex` | `durability_test.exs` proved the *function*. Nothing asserted that the loop every source actually calls used it. |
-| The index pass minted `objects` and `lexemes` in separate autocommit statements | `absorb/sources/wiktionary.ex` | The registry's constraint trigger is **deferred to COMMIT**, and the SQL sandbox is one enclosing transaction — so the whole class is invisible to an ordinary test. `@moduletag :unboxed` exists now, and reproduces it. |
+| The index pass minted `objects` and `lexemes` in separate autocommit statements | `absorb/sources/wiktionary.ex` | Deferred constraint, sandboxed test. See below. |
+| The scoped pass filtered on `source_records.raw`, which stopped being a column at P1 | `absorb/sources/wiktionary.ex`, `mix/tasks/dd.fixtures.capture.ex` | `r.raw` is a real *schema field*, so it compiles. It is just not a column, and no test had run the scoped pass since the payload moved. |
 | `mix dd.rebuild` passed a `%Source{}` where `absorb/2` takes a scope | `mix/tasks/dd.rebuild.ex` | The four sources that ignore the argument absorbed happily; only Wiktionary and Wikipedia pattern-match it. |
+| `Mix.Task.run/2` runs a task once per session, so the second replay stage did nothing and reported success | `mix/tasks/dd.rebuild.ex` | Nothing failed. The stage printed `0 ms` and 85,044 records were simply absent. |
+| The resolver sized its write statement by the scan window: 369,208 bind parameters against a limit of 65,535 | `absorb/resolver.ex` | Only a backlog above ~5,400 edges reaches it, and no fixture is that big. |
+| `write_assertions/3` had no transaction of its own, so the linker's first rung committed an assertion with no revision | `absorb/materializer.ex` | Deferred constraint, sandboxed test. See below. |
+| `mint/4` used `--`, which removes one occurrence, so a duplicated key minted two objects and kept one | `absorb/materializer.ex` | No caller passed a duplicate key until Wikipedia gained a canonical publication identity — which is #74's own fix. |
 
-The lesson the checklist did not anticipate is that **the sandbox hides deferred
-constraints**. `raw_sql_test.exs` was added at P1 for the defects `mix compile`
-cannot see; `DataCase`'s `:unboxed` tag is its counterpart for the defects a
-transaction cannot see.
+### The two mechanisms
+
+**`mix compile` cannot see raw SQL.** That was anticipated: `raw_sql_test.exs`
+was written at P1 and found a stale table name on its first run. What it did not
+cover was **lowercase** SQL — the scan has to be case-sensitive, because `from
+the` and `into a` appear in every other sentence of prose — so the guard now says
+so where the next person will look, and raw SQL is written in the house style.
+
+**The SQL sandbox cannot see a deferred constraint.** Three of the nine are the
+same defect in three writers: two statements, autocommit, and a trigger checked
+at `COMMIT` that the sandbox's enclosing transaction never reaches. A test of a
+bulk writer therefore belongs *outside* the sandbox, and `DataCase`'s
+`@moduletag :unboxed` exists for it. Each of those three now has a test that
+reproduces the production error verbatim.

@@ -850,24 +850,34 @@ defmodule DevilsDictionary.Absorb.Materializer do
     now = now || DateTime.utc_now()
     predicates = predicate_ids(claims)
 
-    claims = Enum.uniq_by(claims, &{&1.source_id, &1.origin_key})
+    # `assertions.origin_key` is **nullable**, and the unique index over
+    # `(source_id, origin_key)` is partial — it does not cover NULLs. So a claim
+    # without one has no idempotency key: it is not deduped against its siblings
+    # and not matched against anything stored, because `{source_id, nil}` is not
+    # an identity, it is the absence of one. Treating it as a key collapsed every
+    # such claim in a batch into a single assertion.
+    {keyed, unkeyed} = Enum.split_with(claims, & &1[:origin_key])
+    keyed = Enum.uniq_by(keyed, &{&1.source_id, &1.origin_key})
 
     existing =
       from(a in "assertions",
-        where: a.origin_key in ^Enum.map(claims, & &1.origin_key),
+        where: a.origin_key in ^Enum.map(keyed, & &1.origin_key),
         select: {{a.source_id, a.origin_key}, a.id}
       )
       |> Repo.all()
       |> Map.new()
 
-    fresh = Enum.reject(claims, &Map.has_key?(existing, {&1.source_id, &1.origin_key}))
+    {held, fresh} =
+      Enum.split_with(keyed, &Map.has_key?(existing, {&1.source_id, &1.origin_key}))
+
+    fresh = fresh ++ unkeyed
 
     minted =
       fresh
       |> Enum.map(
         &%{
           source_id: &1.source_id,
-          origin_key: &1.origin_key,
+          origin_key: &1[:origin_key],
           inserted_at: now,
           updated_at: now
         }
@@ -879,17 +889,15 @@ defmodule DevilsDictionary.Absorb.Materializer do
       end)
       |> Enum.map(& &1.id)
 
-    ids =
-      Map.merge(
-        existing,
-        Map.new(Enum.zip(Enum.map(fresh, &{&1.source_id, &1.origin_key}), minted))
-      )
+    pairs =
+      Enum.map(held, &{&1, Map.fetch!(existing, {&1.source_id, &1.origin_key})}) ++
+        Enum.zip(fresh, minted)
 
     write_revisions(
       "assertion_revisions",
       :assertion_id,
-      Enum.map(claims, fn claim ->
-        {Map.fetch!(ids, {claim.source_id, claim.origin_key}),
+      Enum.map(pairs, fn {claim, assertion_id} ->
+        {assertion_id,
          %{
            subject_object_id: claim.subject,
            predicate_id: Map.fetch!(predicates, claim.predicate),
@@ -903,9 +911,9 @@ defmodule DevilsDictionary.Absorb.Materializer do
       now
     )
 
-    own_assertions(claims, ids, run_id, now)
+    own_assertions(pairs, run_id, now)
 
-    length(claims)
+    length(pairs)
   end
 
   defp predicate_ids(claims) do
@@ -1206,13 +1214,13 @@ defmodule DevilsDictionary.Absorb.Materializer do
     )
   end
 
-  defp own_assertions(claims, ids, run_id, now) do
-    claims
-    |> Enum.map(fn claim ->
+  defp own_assertions(pairs, run_id, now) do
+    pairs
+    |> Enum.map(fn {claim, assertion_id} ->
       %{
         source_record_id: claim[:source_record_id],
-        output_key: claim.origin_key,
-        assertion_id: Map.fetch!(ids, {claim.source_id, claim.origin_key}),
+        output_key: claim[:origin_key] || "assertion:#{assertion_id}",
+        assertion_id: assertion_id,
         last_seen_run_id: run_id,
         retired_at: nil,
         inserted_at: now,
