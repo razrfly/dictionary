@@ -206,7 +206,9 @@ defmodule DevilsDictionary.Sources.Catalog do
         name: "Ambrose Bierce",
         slug: "ambrose-bierce",
         birth_date: ~D[1842-06-24],
-        death_date: ~D[1914-01-01],
+        # The archived biography gives an approximate year after his disappearance,
+        # not a known calendar date. Do not manufacture January 1.
+        death_date: nil,
         bio: "American satirist; author of The Devil's Dictionary (1911).",
         # Q191050, not Q310190. This row carried Q310190 from S3 until #74 P0:
         # that is **Tobin Bell**, an American actor born 1942, and the error was

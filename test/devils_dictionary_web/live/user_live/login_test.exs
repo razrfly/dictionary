@@ -5,6 +5,17 @@ defmodule DevilsDictionaryWeb.UserLive.LoginTest do
   import DevilsDictionary.AccountsFixtures
 
   describe "login page" do
+    test "login controls submit their forms in the browser", %{conn: conn} do
+      {:ok, lv, _} = live(conn, ~p"/users/log-in")
+      assert has_element?(lv, "#login_form_magic button[type='submit']")
+
+      assert has_element?(
+               lv,
+               "#login_form_password button[type='submit']",
+               "Log in only this time"
+             )
+    end
+
     test "renders login page", %{conn: conn} do
       {:ok, _lv, html} = live(conn, ~p"/users/log-in")
 

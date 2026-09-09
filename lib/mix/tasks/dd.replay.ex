@@ -127,6 +127,7 @@ defmodule Mix.Tasks.Dd.Replay do
               url: row["url"],
               raw: row["raw"] || %{},
               content_hash: row["content_hash"],
+              fetched_at: parse_time(row["fetched_at"]),
               absent_until: parse_time(row["absent_until"])
             }
           end)

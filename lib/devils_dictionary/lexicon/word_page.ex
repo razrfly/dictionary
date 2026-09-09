@@ -24,10 +24,10 @@ defmodule DevilsDictionary.Lexicon.WordPage do
   and wrong for Wiktionary, whose senses all share the nil group: *cat* listed
   *kitty* and *tabby* beside *bloke* and *prostitute*.
 
-  ## Seven queries
+  ## Batched page queries
 
   Sources; senses; content (by lexeme **or** by the primary entity, which is how
-  Wikipedia's summary arrives); the primary entity; relations; the WordNet
+  Wikipedia's summary arrives); the content's authors; the primary entity; relations; the WordNet
   chain; the trail's lemmas. All of them keyed by the lexeme ids `lookup/2`
   returned, none of them in a loop.
 
@@ -380,6 +380,30 @@ defmodule DevilsDictionary.Lexicon.WordPage do
         }
     )
     |> Enum.uniq_by(& &1.id)
+    |> attach_authors()
+  end
+
+  defp attach_authors(entries) do
+    ids = Enum.map(entries, & &1.id)
+
+    authors =
+      Repo.all(
+        from(r in AssertionRevision,
+          join: p in assoc(r, :predicate),
+          join: e in Entity,
+          on: e.object_id == r.object_object_id,
+          where:
+            r.subject_object_id in ^ids and r.is_current and
+              r.lifecycle_state == :active and
+              p.key == "authored_by",
+          order_by: [asc: e.preferred_label, asc: e.object_id],
+          select: {r.subject_object_id, %{id: e.object_id, label: e.preferred_label}}
+        )
+        |> DevilsDictionary.Claims.visible(:public)
+      )
+      |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
+
+    Enum.map(entries, &Map.put(&1, :authors, Map.get(authors, &1.id, [])))
   end
 
   # The thing the word names. One lookup off the nominal lexeme: a word is a
@@ -475,6 +499,7 @@ defmodule DevilsDictionary.Lexicon.WordPage do
           entries:
             Enum.map(rows, fn e ->
               %{
+                authors: e.authors,
                 headword: e.headword,
                 marker: e.pos,
                 body_html: Markdown.to_html(e.body, e.body_format),

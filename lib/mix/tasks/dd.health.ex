@@ -222,7 +222,13 @@ defmodule Mix.Tasks.Dd.Health do
       gaps =
         Enum.map(slugs, fn slug ->
           result = Health.parity(slug)
-          row(slug, "#{result.gaps} gaps over #{fmt(result.records)} records", 14)
+
+          row(
+            slug,
+            "#{result.gaps} gaps over #{fmt(result.records)} records; #{result.alternate_content_observations} alternate publication observations",
+            14
+          )
+
           result.gaps
         end)
 

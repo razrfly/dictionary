@@ -69,6 +69,7 @@ defmodule DevilsDictionary.Health.Parity do
       missing_senses: 0,
       missing_relations: 0,
       missing_entries: 0,
+      alternate_content_observations: 0,
       missing_concepts: 0,
       missing_concept_relations: 0,
       mismatched: 0,
@@ -97,7 +98,7 @@ defmodule DevilsDictionary.Health.Parity do
     owned_assertions = owned_assertions(record_ids)
 
     sense_content = sense_content(owned, "sense")
-    item_content = content_content(owned, "content")
+    item_content = content_content(owned, "content", module)
     endpoints = assertion_endpoints(owned_assertions)
     entities = known_entities(outs)
     known = {known_lexemes(outs), known_senses(outs)}
@@ -135,6 +136,7 @@ defmodule DevilsDictionary.Health.Parity do
       |> Map.update!(:missing_senses, &(&1 + length(senses.missing)))
       |> Map.update!(:missing_relations, &(&1 + length(relations.missing)))
       |> Map.update!(:missing_entries, &(&1 + length(entries.missing)))
+      |> Map.update!(:alternate_content_observations, &(&1 + entries.alternates))
       |> Map.update!(:missing_concepts, &(&1 + length(concepts.missing)))
       |> Map.update!(:missing_concept_relations, &(&1 + length(concept_relations.missing)))
       |> Map.update!(:mismatched, &(&1 + mismatched))
@@ -200,26 +202,50 @@ defmodule DevilsDictionary.Health.Parity do
     end
   end
 
-  defp content_content(owned, role) do
+  defp content_content(owned, role, module) do
     ids = object_ids(owned, role)
 
     if ids == [] do
       %{}
     else
-      from(r in "content_revisions",
-        where: r.content_id in ^ids and r.is_current,
-        select:
-          {r.content_id,
-           %{
-             body: r.body,
-             headword: r.headword,
-             year: r.year,
-             position: r.position,
-             body_format: r.body_format
-           }}
-      )
-      |> Repo.all()
-      |> Map.new()
+      actual =
+        from(r in "content_revisions",
+          where: r.content_id in ^ids and r.is_current,
+          select:
+            {r.content_id,
+             %{
+               body: r.body,
+               headword: r.headword,
+               year: r.year,
+               position: r.position,
+               body_format: r.body_format
+             }}
+        )
+        |> Repo.all()
+        |> Map.new()
+
+      winners =
+        Repo.query!(
+          """
+          SELECT DISTINCT ON (o.output_object_id) o.output_object_id, o.output_key, sr.id
+          FROM source_materialized_outputs o JOIN source_records sr ON sr.id=o.source_record_id
+          WHERE o.output_object_id=ANY($1) AND o.output_role='content' AND o.retired_at IS NULL
+          ORDER BY o.output_object_id, sr.external_id COLLATE "C"
+          """,
+          [ids]
+        ).rows
+
+      record_ids = Enum.map(winners, &Enum.at(&1, 2))
+
+      outputs =
+        Repo.all(from r in DevilsDictionary.Sources.SourceRecord, where: r.id in ^record_ids)
+        |> Sources.with_raw()
+        |> Map.new(fn record -> {record.id, materialize!(module, record).entries} end)
+
+      Map.new(winners, fn [id, key, record_id] ->
+        expected = Enum.find(outputs[record_id] || [], &(content_key(&1) == key))
+        {id, %{actual: actual[id], expected: expected && entry_fields(expected)}}
+      end)
     end
   end
 
@@ -281,7 +307,8 @@ defmodule DevilsDictionary.Health.Parity do
   end
 
   defp check_entries(out, keys, content) do
-    Enum.reduce(out.entries, %{missing: [], mismatched: 0, wrong: []}, fn entry, acc ->
+    Enum.reduce(out.entries, %{missing: [], mismatched: 0, wrong: [], alternates: 0}, fn entry,
+                                                                                         acc ->
       key = content_key(entry)
 
       case Map.get(keys, {"content", key}) do
@@ -289,22 +316,26 @@ defmodule DevilsDictionary.Health.Parity do
           %{acc | missing: [key | acc.missing]}
 
         object_id ->
-          expected = %{
-            body: entry[:body],
-            headword: entry[:headword],
-            year: entry[:year],
-            position: entry[:position] || 0,
-            body_format: to_string(entry[:body_format] || :text)
-          }
+          projection = Map.get(content, object_id, %{actual: nil, expected: nil})
 
-          if matches?(Map.get(content, object_id), expected) do
-            acc
+          if projection.expected && matches?(projection.actual, projection.expected) do
+            alternate = entry_fields(entry) != projection.expected
+            %{acc | alternates: acc.alternates + if(alternate, do: 1, else: 0)}
           else
             %{acc | mismatched: acc.mismatched + 1, wrong: [key | acc.wrong]}
           end
       end
     end)
   end
+
+  defp entry_fields(entry),
+    do: %{
+      body: entry[:body],
+      headword: entry[:headword],
+      year: entry[:year],
+      position: entry[:position] || 0,
+      body_format: to_string(entry[:body_format] || :text)
+    }
 
   defp check_concepts(out, entities) do
     missing =

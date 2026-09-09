@@ -1,0 +1,142 @@
+rebuild · scope animals · 16 stages
+
+── manifest · verify the archived inputs
+  verified                   5
+  elapsed                    1.4 s
+
+── wordnet · WordNet: synsets, senses, the closed graph
+  edges                      277,995
+  lexemes                    161,814
+  records                    120,564
+  relations                  1,056,779
+  relations_resolved         1,056,779
+  senses                     212,659
+  synsets                    120,564
+  elapsed                    5m 1s
+
+── wiktionary-index · Wiktionary: the full English index
+  en_records                 1,487,639
+  form_of_records            534,780
+  lexemes_written            1,470,135
+  lines                      10,806,865
+  with_categories            394,239
+  elapsed                    2m 14s
+
+── scope · build the scope from the index and WordNet
+  total                      21,304
+  without_reason             0
+  elapsed                    1.0 s
+
+── wiktionary · Wiktionary: the scoped records
+  bytes_raw                  72,092,935
+  bytes_trimmed              23,301,300
+  en_records                 1,487,639
+  lexemes                    18,121
+  lines                      10,806,865
+  matched_lemmas             16,507
+  records                    19,265
+  relations                  0
+  senses                     31,133
+  trim_saving_pct            67.7
+  wanted_lemmas              20,014
+  elapsed                    47.7 s
+
+── bierce · Bierce: 997 definitions
+  alt_headwords              3
+  attributions               190
+  continuations              107
+  entries                    997
+  headwords                  996
+  lexemes                    1,000
+  materialized_entries       997
+  records                    997
+  relations                  0
+  verse_blocks               247
+  elapsed                    1.1 s
+
+── johnson · Johnson: the 1755 dictionary
+  alt_headwords              114
+  entries                    42,726
+  headwords                  37,422
+  homographs                 468
+  lexemes                    41,105
+  materialized_entries       42,726
+  records                    42,726
+  relations                  0
+  without_pos                3,388
+  elapsed                    1m 23s
+
+── wikidata · Wikidata: entities and the taxonomy
+  replayed                   priv/replay/wikidata.jsonl.gz
+  elapsed                    29.6 s
+
+── wikipedia · Wikipedia: articles and candidates
+  replayed                   priv/replay/wikipedia.jsonl.gz
+  elapsed                    48.8 s
+
+── resolve · drain pending edges into assertions
+  canonical                  221
+  resolved                   93,601
+  still_unresolved           14,429
+  elapsed                    8.7 s
+
+── link · the word ↔ thing ladder
+  agreement                  839
+  disambiguation             26,040
+  disambiguation_gloss       1,142
+  gloss                      6,886
+  taxon                      3,808
+  title_match                11,744
+  wiktionary_qid             765
+  wordnet_ili                3,187
+  wordnet_wikidata           4,654
+  elapsed                    20.9 s
+
+── wikidata-taxon · close the taxonomy edges Wikipedia's entities unlocked
+  concept_relations          50,446
+  concept_relations_skipped  59,786
+  concept_relations_skipped_parent_taxon 0
+  concept_relations_skipped_unchased 59,786
+  elapsed                    9.7 s
+
+── scope-taxon · rebuild the scope, now that the taxonomy exists
+  total                      25,385
+  without_reason             0
+  elapsed                    1.2 s
+
+── wiktionary-taxon · Wiktionary: the words the taxonomy added
+  bytes_raw                  76,958,678
+  bytes_trimmed              24,953,791
+  en_records                 1,487,639
+  lexemes                    20,145
+  lines                      10,806,865
+  matched_lemmas             18,366
+  records                    21,403
+  relations                  0
+  senses                     34,352
+  trim_saving_pct            67.6
+  wanted_lemmas              23,770
+  elapsed                    53.8 s
+
+── resolve-taxon · drain the edges those words brought
+  canonical                  0
+  resolved                   97,317
+  still_unresolved           15,169
+  elapsed                    2.8 s
+
+── link-taxon · the ladder, over the grown scope
+  agreement                  35
+  disambiguation             38,117
+  disambiguation_gloss       463
+  gloss                      273
+  taxon                      2,568
+  title_match                4,128
+  wiktionary_qid             826
+  wordnet_ili                4,794
+  wordnet_wikidata           6,655
+  elapsed                    12.7 s
+
+── rebuild
+  stages                     16
+  failed                     0
+  elapsed                    12m 38s

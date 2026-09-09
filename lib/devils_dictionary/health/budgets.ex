@@ -25,11 +25,8 @@ defmodule DevilsDictionary.Health.Budgets do
   across a rebuild, and what the audit meant by "with their actual populations
   and measurement definitions".
 
-  Warm cache, stated: a cold-cache figure measures the disk, and every page a
-  reader sees is served warm.
+  Warm cache, stated: cold-cache behavior is not covered by these measurements.
   """
-
-  import Ecto.Query
 
   alias DevilsDictionary.Claims
   alias DevilsDictionary.Lexicon
@@ -57,12 +54,40 @@ defmodule DevilsDictionary.Health.Budgets do
     if words == [] do
       %{measured: false, reason: "no enriched words to measure"}
     else
-      measure(words, fn slug -> slug |> Lexicon.lookup() |> WordPage.build() end)
-      |> Map.merge(%{
+      word_result =
+        measure(words, fn id ->
+          word = Lexicon.by_object_id(id)
+          WordPage.build(%{lexemes: [word], via: :lemma, matched: word.lemma})
+        end)
+
+      entities =
+        Repo.query!(
+          """
+          WITH degrees AS (
+            SELECT object_object_id id,count(*) n FROM assertion_revisions WHERE is_current GROUP BY object_object_id
+            UNION ALL
+            SELECT subject_object_id id,count(*) n FROM assertion_revisions WHERE is_current GROUP BY subject_object_id
+          ) SELECT e.object_id FROM entities e JOIN degrees d ON d.id=e.object_id
+          GROUP BY e.object_id ORDER BY sum(d.n) DESC,e.object_id LIMIT $1
+          """,
+          [sample],
+          timeout: :infinity
+        ).rows
+        |> Enum.map(&hd/1)
+
+      entity_result = measure(entities, &DevilsDictionary.Encyclopedia.EntityPage.build/1)
+
+      Map.merge(word_result, %{
         measured: true,
+        p95: max(word_result.p95, entity_result.p95),
+        word_p95: word_result.p95,
+        entity_p95: entity_result.p95,
+        max: max(word_result.max, entity_result.max),
+        runs: word_result.runs + entity_result.runs,
         budget_ms: @page_budget_ms,
-        population: "the #{length(words)} words with the most senses and relations",
-        probes: words
+        population:
+          "#{length(words)} high-degree words and #{length(entities)} high-degree entities; 3 warmups and 5 rounds per page",
+        probes: %{words: words, entities: entities}
       })
     end
   end
@@ -98,13 +123,12 @@ defmodule DevilsDictionary.Health.Budgets do
 
   # ── measurement ───────────────────────────────────────────────────────────
 
-  # Warm, and said so. A cold-cache figure measures the disk; every page a
-  # reader sees is served warm, and the budget is about the reader.
+  # Warm, and said so. A cold-cache figure measures the disk; this is explicitly a warm-cache budget, not a cold-start claim.
   defp measure(subjects, fun) do
-    for subject <- Enum.take(subjects, @warmup), do: fun.(subject)
+    for _ <- 1..@warmup, subject <- subjects, do: fun.(subject)
 
     timings =
-      for subject <- subjects do
+      for _ <- 1..5, subject <- subjects do
         {microseconds, _} = :timer.tc(fn -> fun.(subject) end)
         microseconds / 1_000
       end
@@ -115,14 +139,14 @@ defmodule DevilsDictionary.Health.Budgets do
       runs: length(timings),
       p50: percentile(sorted, 0.50),
       p95: percentile(sorted, 0.95),
-      max: sorted |> List.last() |> round_ms()
+      max: round_ms(List.last(sorted) || 0.0)
     }
   end
 
   defp percentile([], _p), do: 0.0
 
   defp percentile(sorted, p) do
-    index = min(round(p * length(sorted)), length(sorted) - 1)
+    index = min(ceil(p * length(sorted)) - 1, length(sorted) - 1)
     sorted |> Enum.at(max(index, 0)) |> round_ms()
   end
 
@@ -135,36 +159,53 @@ defmodule DevilsDictionary.Health.Budgets do
   # enriched word on a small database, so the row measures something rather
   # than reporting nothing.
   defp busiest_words(sample) do
-    Repo.all(
-      from s in "senses",
-        join: l in "lexemes",
-        on: l.object_id == s.lexeme_id,
-        group_by: l.slug,
-        order_by: [desc: count(s.object_id)],
-        limit: ^sample,
-        select: l.slug
-    )
+    Repo.query!(
+      """
+      WITH counts AS (
+        SELECT s.lexeme_id AS id, count(*) AS n FROM senses s GROUP BY s.lexeme_id
+        UNION ALL
+        SELECT coalesce(s.lexeme_id, l.object_id), count(*) FROM assertion_revisions r
+          LEFT JOIN senses s ON s.object_id = r.subject_object_id
+          LEFT JOIN lexemes l ON l.object_id = r.subject_object_id
+          WHERE r.is_current AND coalesce(s.lexeme_id, l.object_id) IS NOT NULL
+          GROUP BY coalesce(s.lexeme_id, l.object_id)
+      ) SELECT id FROM counts GROUP BY id ORDER BY sum(n) DESC, id LIMIT $1
+      """,
+      [sample],
+      timeout: :infinity
+    ).rows
+    |> Enum.map(&hd/1)
   end
 
   defp busiest_objects(sample) do
-    Repo.all(
-      from r in "assertion_revisions",
-        where: r.is_current,
-        group_by: r.object_object_id,
-        order_by: [desc: count(r.id)],
-        limit: ^sample,
-        select: r.object_object_id
-    )
+    Repo.query!(
+      """
+        (SELECT subject_object_id FROM assertion_revisions WHERE is_current
+         GROUP BY subject_object_id ORDER BY count(*) DESC, subject_object_id LIMIT $1)
+        UNION
+        (SELECT object_object_id FROM assertion_revisions WHERE is_current
+         GROUP BY object_object_id ORDER BY count(*) DESC, object_object_id LIMIT $1)
+      """,
+      [sample],
+      timeout: :infinity
+    ).rows
+    |> Enum.map(&hd/1)
+    |> Enum.sort()
   end
 
   defp top_degree do
-    Repo.one(
-      from r in "assertion_revisions",
-        where: r.is_current,
-        group_by: r.object_object_id,
-        order_by: [desc: count(r.id)],
-        limit: 1,
-        select: count(r.id)
-    ) || 0
+    Repo.query!(
+      """
+        SELECT max(n) FROM (
+          SELECT count(*) n FROM assertion_revisions WHERE is_current GROUP BY subject_object_id
+          UNION ALL
+          SELECT count(*) n FROM assertion_revisions WHERE is_current GROUP BY object_object_id
+        ) degrees
+      """,
+      [],
+      timeout: :infinity
+    ).rows
+    |> hd()
+    |> hd() || 0
   end
 end

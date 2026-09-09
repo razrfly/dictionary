@@ -127,7 +127,17 @@ defmodule Mix.Tasks.Dd.Rebuild do
       say("  --dry-run: nothing was written.")
     else
       started = System.monotonic_time(:millisecond)
-      results = Enum.map(plan, &run_stage(&1, scope, opts))
+
+      results =
+        Enum.reduce_while(plan, [], fn stage, completed ->
+          result = run_stage(stage, scope, opts)
+
+          case result do
+            {_, {:error, _}, _} -> {:halt, completed ++ [result]}
+            _ -> {:cont, completed ++ [result]}
+          end
+        end)
+
       report(results, System.monotonic_time(:millisecond) - started)
     end
   end

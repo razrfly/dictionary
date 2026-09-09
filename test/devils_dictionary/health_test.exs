@@ -259,6 +259,33 @@ defmodule DevilsDictionary.HealthTest do
       e -> {:error, Exception.message(e)}
     end
 
+    test "M1 verifies the selected publication and reports conflicting retained observations",
+         ctx do
+      source = ctx.sources["wikipedia"]
+
+      raw =
+        Fixtures.one_raw("wikipedia", "cat") |> DevilsDictionary.Absorb.Sources.Wikipedia.trim()
+
+      Sources.insert_records(source, [
+        %{external_id: "Z-cat", raw: raw},
+        %{external_id: "a-cat", raw: Map.put(raw, "extract", "An alternate archived extract.")}
+      ])
+
+      DevilsDictionary.Absorb.Batch.run(DevilsDictionary.Absorb.Sources.Wikipedia, source,
+        batch_size: 1
+      )
+
+      parity = Health.parity("wikipedia")
+      assert parity.gaps == 0
+      assert parity.alternate_content_observations == 1
+
+      Repo.update_all(from(r in "content_revisions", where: r.is_current),
+        set: [body: "CORRUPTED"]
+      )
+
+      assert Health.parity("wikipedia").mismatched > 0
+    end
+
     test "M1 fails on the corruption probe (the audit's finding)", ctx do
       source = ctx.sources["wordnet"]
       raw = Fixtures.one_raw("wordnet", "oyster")

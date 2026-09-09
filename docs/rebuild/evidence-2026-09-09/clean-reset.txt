@@ -1,0 +1,9 @@
+resetting devils_dictionary_74_verify
+
+  database                   devils_dictionary_74_verify
+  sources                    6
+  scopes                     3
+  predicates                 30
+  people                     2
+
+  empty and seeded. `mix dd.rebuild` is what fills it.

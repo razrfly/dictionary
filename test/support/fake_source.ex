@@ -75,7 +75,17 @@ defmodule DevilsDictionary.FakeSource do
 
     {:ok,
      %{
-       lexemes: [%{key: {"en", lemma, pos}, origin_source_id: source_id}] ++ extra,
+       lexemes:
+         [
+           %{
+             key: {"en", lemma, pos},
+             origin_source_id: source_id,
+             forms: raw["forms"] || [],
+             pronunciations: raw["pronunciations"] || [],
+             etymology: raw["etymology"],
+             etymology_source_id: source_id
+           }
+         ] ++ extra,
        senses: senses,
        # `content_key` makes two records name **one** content item, the shape
        # Wikipedia produces once an article has a canonical publication identity

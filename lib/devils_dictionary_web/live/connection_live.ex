@@ -34,8 +34,10 @@ defmodule DevilsDictionaryWeb.ConnectionLive do
   import Ecto.Query
 
   alias DevilsDictionary.Claims
-  alias DevilsDictionary.Claims.Connection
+  alias DevilsDictionary.Claims.{Connection, Contributions}
   alias DevilsDictionary.{Encyclopedia, Lexicon, Markdown, Registry, Repo}
+
+  on_mount {DevilsDictionaryWeb.UserAuth, :mount_current_scope}
 
   @results 8
 
@@ -43,28 +45,54 @@ defmodule DevilsDictionaryWeb.ConnectionLive do
   def mount(_params, _session, socket) do
     {:ok,
      socket
-     |> assign(connection: nil, id: nil)
+     |> assign(
+       connection: nil,
+       id: nil,
+       reviewer: Contributions.reviewer?(socket.assigns[:current_scope]),
+       review_items: [],
+       review_form: to_form(%{"reason" => ""})
+     )
      |> assign(subject: nil, object: nil, predicate: nil, rationale: "", locator: "")
-     |> assign(subject_query: "", object_query: "", subject_hits: [], object_hits: [])
-     |> assign(predicates: [], error: nil)}
+     |> assign(subject_query: "", object_query: "")
+     |> assign(
+       predicates: [],
+       error: nil,
+       context: nil,
+       context_query: "",
+       evidence: nil,
+       evidence_query: "",
+       contribution_form: to_form(%{"rationale" => "", "locator" => ""})
+     )
+     |> stream(:subject_hits, [], dom_id: &"subject-result-#{&1.object_id}")
+     |> stream(:object_hits, [], dom_id: &"object-result-#{&1.object_id}")
+     |> stream(:context_hits, [], dom_id: &"context-result-#{&1.object_id}")
+     |> stream(:evidence_hits, [], dom_id: &"evidence-result-#{&1.object_id}")}
   end
 
   # ── the detail page ───────────────────────────────────────────────────────
 
   @impl true
   def handle_params(params, _uri, %{assigns: %{live_action: :show}} = socket) do
-    revision = params["revision"] && String.to_integer(params["revision"])
+    socket = assign(socket, :reviewer, Contributions.reviewer?(socket.assigns[:current_scope]))
 
-    case Integer.parse(params["id"] || "") do
-      {id, ""} ->
-        {:noreply,
-         socket
-         |> assign(:id, id)
-         |> assign(:connection, Connection.build(id, revision: revision))
-         |> assign(:page_title, "connection ##{id}")}
+    with {id, ""} <- Integer.parse(params["id"] || ""),
+         {:ok, revision} <- revision_number(params["revision"]) do
+      connection =
+        Connection.build(id,
+          revision: revision,
+          visibility: if(socket.assigns.reviewer, do: :internal, else: :public)
+        )
 
-      _ ->
-        {:noreply, assign(socket, connection: nil, page_title: "no such connection")}
+      {:noreply,
+       assign(socket,
+         id: id,
+         connection: connection,
+         review_items:
+           if(connection, do: Contributions.context_items(connection.revision), else: []),
+         page_title: "connection ##{id}"
+       )}
+    else
+      _ -> {:noreply, assign(socket, connection: nil, page_title: "no such connection")}
     end
   end
 
@@ -72,15 +100,49 @@ defmodule DevilsDictionaryWeb.ConnectionLive do
     {:noreply, assign(socket, page_title: "propose a connection")}
   end
 
+  defp revision_number(nil), do: {:ok, nil}
+
+  defp revision_number(value) do
+    case Integer.parse(value) do
+      {n, ""} when n > 0 -> {:ok, n}
+      _ -> :error
+    end
+  end
+
   # ── the composer ──────────────────────────────────────────────────────────
 
   @impl true
   def handle_event("search-subject", %{"q" => q}, socket) do
-    {:noreply, socket |> assign(:subject_query, q) |> assign(:subject_hits, search(q))}
+    {:noreply,
+     socket |> assign(:subject_query, q) |> stream(:subject_hits, search(q), reset: true)}
   end
 
   def handle_event("search-object", %{"q" => q}, socket) do
-    {:noreply, socket |> assign(:object_query, q) |> assign(:object_hits, search(q))}
+    {:noreply, socket |> assign(:object_query, q) |> stream(:object_hits, search(q), reset: true)}
+  end
+
+  def handle_event("search-context", %{"q" => q}, socket) do
+    {:noreply,
+     socket |> assign(:context_query, q) |> stream(:context_hits, search(q), reset: true)}
+  end
+
+  def handle_event("pick-context", %{"id" => id}, socket) do
+    {:noreply,
+     socket
+     |> assign(:context, Connection.endpoint(String.to_integer(id)))
+     |> stream(:context_hits, [], reset: true)}
+  end
+
+  def handle_event("search-evidence", %{"q" => q}, socket) do
+    hits = Enum.filter(search(q), &(&1.kind in [:content, :sense]))
+    {:noreply, socket |> assign(:evidence_query, q) |> stream(:evidence_hits, hits, reset: true)}
+  end
+
+  def handle_event("pick-evidence", %{"id" => id}, socket) do
+    {:noreply,
+     socket
+     |> assign(:evidence, Connection.endpoint(String.to_integer(id)))
+     |> stream(:evidence_hits, [], reset: true)}
   end
 
   def handle_event("pick-subject", %{"id" => id}, socket) do
@@ -89,7 +151,7 @@ defmodule DevilsDictionaryWeb.ConnectionLive do
     {:noreply,
      socket
      |> assign(:subject, subject)
-     |> assign(:subject_hits, [])
+     |> stream(:subject_hits, [], reset: true)
      |> assign(:predicate, nil)
      |> assign(:predicates, predicates_for(subject))}
   end
@@ -98,7 +160,7 @@ defmodule DevilsDictionaryWeb.ConnectionLive do
     {:noreply,
      socket
      |> assign(:object, Connection.endpoint(String.to_integer(id)))
-     |> assign(:object_hits, [])}
+     |> stream(:object_hits, [], reset: true)}
   end
 
   def handle_event("pick-predicate", %{"key" => key}, socket) do
@@ -106,10 +168,21 @@ defmodule DevilsDictionaryWeb.ConnectionLive do
   end
 
   def handle_event("change", %{"rationale" => rationale} = params, socket) do
-    {:noreply, assign(socket, rationale: rationale, locator: params["locator"] || "")}
+    {:noreply,
+     assign(socket,
+       rationale: rationale,
+       locator: params["locator"] || "",
+       contribution_form: to_form(params)
+     )}
   end
 
-  def handle_event("submit", _params, socket) do
+  def handle_event("submit", params, socket) do
+    socket =
+      assign(socket,
+        rationale: params["rationale"] || socket.assigns.rationale,
+        locator: params["locator"] || socket.assigns.locator
+      )
+
     %{subject: subject, object: object, predicate: predicate, rationale: rationale} =
       socket.assigns
 
@@ -126,48 +199,68 @@ defmodule DevilsDictionaryWeb.ConnectionLive do
     end
   end
 
-  defp propose(socket, subject, predicate, object, rationale) do
-    actor = actor_for(socket.assigns.current_scope)
+  def handle_event("review", params, socket) do
+    connection = socket.assigns.connection
 
-    attrs = %{
-      submitted_by_actor_id: actor.id,
-      origin_actor_id: actor.id,
-      rationale: rationale,
-      method: "curated"
-    }
+    result =
+      if connection do
+        Contributions.review(
+          socket.assigns.current_scope,
+          connection.assertion.id,
+          connection.revision.id,
+          params["decision"],
+          params["reason"],
+          socket.assigns.review_items
+        )
+      else
+        {:error, :unauthorized}
+      end
 
-    case Claims.assert(subject.object_id, predicate, object.object_id, attrs) do
-      {:ok, assertion} ->
+    case result do
+      {:ok, _} ->
         {:noreply,
          socket
-         |> put_flash(:info, "Proposed. It is waiting for review.")
-         |> push_navigate(to: ~p"/connections/#{assertion.id}")}
+         |> put_flash(:info, "Review recorded.")
+         |> push_patch(to: ~p"/connections/#{connection.assertion.id}")}
 
-      {:error, _changeset} ->
-        # The endpoint rules are a foreign key, so an impossible pair fails
-        # here rather than being written and found later.
+      {:error, _} ->
         {:noreply,
-         assign(
+         put_flash(
            socket,
            :error,
-           "Those two things cannot be connected that way. The relation's endpoint rules refused it."
+           "Review not saved. Check your reviewer access, enter a reason, and reload if the claim has changed."
          )}
     end
   end
 
-  # An account is never automatically the person it claims to be (#74 §B), so
-  # the actor is the *account*, found or made, and nothing more.
-  defp actor_for(%{user: user}) do
-    case Repo.get_by(DevilsDictionary.Sources.Actor, user_id: user.id) do
-      nil ->
-        Repo.insert!(%DevilsDictionary.Sources.Actor{
-          actor_kind: :user,
-          user_id: user.id,
-          label: user.email
-        })
+  defp propose(socket, subject, predicate, object, rationale) do
+    evidence_id = socket.assigns.evidence && socket.assigns.evidence.object_id
 
-      actor ->
-        actor
+    case Contributions.propose(
+           socket.assigns.current_scope,
+           subject.object_id,
+           predicate,
+           object.object_id,
+           %{
+             rationale: rationale,
+             context_object_id: socket.assigns.context && socket.assigns.context.object_id
+           },
+           evidence_id,
+           socket.assigns.locator
+         ) do
+      {:ok, assertion} ->
+        {:noreply,
+         socket
+         |> put_flash(:info, "Proposed with attribution; awaiting review.")
+         |> push_navigate(to: ~p"/connections/#{assertion.id}")}
+
+      {:error, _} ->
+        {:noreply,
+         assign(
+           socket,
+           :error,
+           "Could not save. Select valid endpoints and a source meaning or passage for any evidence locator."
+         )}
     end
   end
 
@@ -179,7 +272,9 @@ defmodule DevilsDictionaryWeb.ConnectionLive do
     words =
       q
       |> Lexicon.search(limit: @results)
-      |> Enum.map(&%{object_id: &1.lexeme_id, label: &1.lemma, detail: "word · #{&1.pos}"})
+      |> Enum.map(
+        &%{kind: :lexeme, object_id: &1.lexeme_id, label: &1.lemma, detail: "word · #{&1.pos}"}
+      )
 
     things =
       Repo.all(
@@ -189,10 +284,50 @@ defmodule DevilsDictionaryWeb.ConnectionLive do
           limit: @results
       )
       |> Enum.map(fn e ->
-        %{object_id: e.object_id, label: e.preferred_label, detail: "thing · #{e.entity_kind}"}
+        %{
+          kind: :entity,
+          object_id: e.object_id,
+          label: e.preferred_label,
+          detail: "thing · #{e.entity_kind}"
+        }
       end)
 
-    words ++ things
+    senses =
+      Repo.all(
+        from s in Registry.Sense,
+          join: r in Registry.SenseRevision,
+          on: r.sense_id == s.object_id and r.is_current,
+          join: l in Registry.Lexeme,
+          on: l.object_id == s.lexeme_id,
+          join: src in assoc(s, :source),
+          where: ilike(l.lemma, ^"%#{q}%"),
+          order_by: [l.lemma, s.object_id],
+          limit: @results,
+          select: %{
+            kind: :sense,
+            object_id: s.object_id,
+            label: l.lemma,
+            detail: fragment("? || ': ' || ?", src.name, r.gloss)
+          }
+      )
+
+    content =
+      Repo.all(
+        from c in Registry.ContentItem,
+          join: r in Registry.ContentRevision,
+          on: r.content_id == c.object_id and r.is_current,
+          where: ilike(r.headword, ^"%#{q}%") or ilike(r.body, ^"%#{q}%"),
+          order_by: c.object_id,
+          limit: @results,
+          select: %{
+            kind: :content,
+            object_id: c.object_id,
+            label: coalesce(r.headword, fragment("left(?, 60)", r.body)),
+            detail: fragment("left(?, 120)", r.body)
+          }
+      )
+
+    words ++ things ++ senses ++ content
   end
 
   # Only the relations this subject can actually be the subject of. #74 §F:
@@ -226,7 +361,7 @@ defmodule DevilsDictionaryWeb.ConnectionLive do
 
   defp detail(assigns) do
     ~H"""
-    <Layouts.app flash={@flash}>
+    <Layouts.app flash={@flash} current_scope={@current_scope}>
       <.container class="py-10">
         <%= if @connection == nil do %>
           <div id="no-such-connection" class="py-12">
@@ -300,6 +435,18 @@ defmodule DevilsDictionaryWeb.ConnectionLive do
             evidence={@connection.counterevidence}
           />
 
+          <.form
+            :if={@reviewer}
+            for={@review_form}
+            id="connection-review-form"
+            phx-submit="review"
+            class="mt-8 space-y-3"
+          >
+            <.input field={@review_form[:reason]} type="textarea" label="Review reason" required />
+            <.button id="review-accept" name="decision" value="accepted" type="submit">Accept</.button>
+            <.button id="review-dispute" name="decision" value="disputed" type="submit">Dispute</.button>
+            <.button id="review-reject" name="decision" value="rejected" type="submit">Reject</.button>
+          </.form>
           <section
             id="connection-history"
             class="mt-10 border-t border-mist-950/10 pt-8 dark:border-white/10"
@@ -366,13 +513,13 @@ defmodule DevilsDictionaryWeb.ConnectionLive do
 
   defp composer(assigns) do
     ~H"""
-    <Layouts.app flash={@flash}>
+    <Layouts.app flash={@flash} current_scope={@current_scope}>
       <.container class="py-10">
         <.eyebrow>propose</.eyebrow>
         <.heading>Connect two things</.heading>
         <.text class="mt-2">
           Names help you find them; the thing you pick is what the claim points at. It goes
-          to review — nothing here is published by proposing it.
+          to review and remains visibly attributed while it awaits a decision.
         </.text>
 
         <p :if={@error} id="composer-error" class="mt-4 text-sm/7 text-red-600">{@error}</p>
@@ -382,7 +529,7 @@ defmodule DevilsDictionaryWeb.ConnectionLive do
             id="subject"
             label="Subject"
             query={@subject_query}
-            hits={@subject_hits}
+            hits={@streams.subject_hits}
             chosen={@subject}
             search="search-subject"
             pick="pick-subject"
@@ -418,41 +565,57 @@ defmodule DevilsDictionaryWeb.ConnectionLive do
             id="object"
             label="Object"
             query={@object_query}
-            hits={@object_hits}
+            hits={@streams.object_hits}
             chosen={@object}
             search="search-object"
             pick="pick-object"
           />
 
-          <form id="composer-form" phx-change="change" phx-submit="submit" class="space-y-4">
-            <div>
-              <.eyebrow>Rationale</.eyebrow>
-              <textarea
-                id="composer-rationale"
-                name="rationale"
-                rows="3"
-                class="mt-2 w-full rounded-lg border border-mist-950/20 bg-transparent p-3 text-sm/6 dark:border-white/20"
-                placeholder="Why is this true, and what should a reviewer look at?"
-              >{@rationale}</textarea>
-            </div>
+          <.picker
+            id="context"
+            label="Context (optional): the work, event or meaning this connection applies in"
+            query={@context_query}
+            hits={@streams.context_hits}
+            chosen={@context}
+            search="search-context"
+            pick="pick-context"
+          />
 
-            <div>
-              <.eyebrow>Evidence locator</.eyebrow>
-              <input
-                id="composer-locator"
-                name="locator"
-                value={@locator}
-                class="mt-2 w-full rounded-lg border border-mist-950/20 bg-transparent p-3 text-sm/6 dark:border-white/20"
-                placeholder="A page, a line, a timestamp — where to look"
-              />
-            </div>
+          <.picker
+            id="evidence"
+            label="Evidence: a source meaning or passage"
+            query={@evidence_query}
+            hits={@streams.evidence_hits}
+            chosen={@evidence}
+            search="search-evidence"
+            pick="pick-evidence"
+          />
+          <.form
+            for={@contribution_form}
+            id="composer-form"
+            phx-change="change"
+            phx-submit="submit"
+            class="space-y-4"
+          >
+            <.input
+              field={@contribution_form[:rationale]}
+              id="composer-rationale"
+              type="textarea"
+              label="Rationale"
+            />
+            <.input
+              field={@contribution_form[:locator]}
+              id="composer-locator"
+              label="Evidence locator"
+              placeholder="Page, paragraph, timestamp or URL in the selected evidence"
+            />
 
             <p id="composer-preview" class="text-sm/7 text-mist-500">
               {preview(@subject, @predicate, @object)}
             </p>
 
             <.button id="composer-submit" type="submit">Submit for review</.button>
-          </form>
+          </.form>
         </div>
       </.container>
     </Layouts.app>
@@ -462,12 +625,14 @@ defmodule DevilsDictionaryWeb.ConnectionLive do
   attr :id, :string, required: true
   attr :label, :string, required: true
   attr :query, :string, default: ""
-  attr :hits, :list, default: []
+  attr :hits, :any, required: true
   attr :chosen, :map, default: nil
   attr :search, :string, required: true
   attr :pick, :string, required: true
 
   defp picker(assigns) do
+    assigns = assign(assigns, :form, to_form(%{"q" => assigns.query}))
+
     ~H"""
     <section id={"composer-#{@id}"}>
       <.eyebrow>{@label}</.eyebrow>
@@ -475,18 +640,17 @@ defmodule DevilsDictionaryWeb.ConnectionLive do
         {@chosen.label}
         <span class="text-mist-500">— {@chosen.kind} #{@chosen.object_id}</span>
       </p>
-      <form id={"#{@id}-search"} phx-change={@search}>
-        <input
+      <.form for={@form} id={"#{@id}-search"} phx-change={@search}>
+        <.input
           id={"composer-#{@id}-search"}
-          name="q"
-          value={@query}
+          field={@form[:q]}
           autocomplete="off"
           class="mt-2 w-full rounded-lg border border-mist-950/20 bg-transparent p-3 text-sm/6 dark:border-white/20"
           placeholder="Find an existing word or thing"
         />
-      </form>
-      <ul :if={@hits != []} class="mt-2 space-y-1 text-sm/7">
-        <li :for={hit <- @hits}>
+      </.form>
+      <ul id={"#{@id}-results"} phx-update="stream" class="mt-2 space-y-1 text-sm/7">
+        <li :for={{dom_id, hit} <- @hits} id={dom_id}>
           <button
             type="button"
             id={"composer-#{@id}-hit-#{hit.object_id}"}

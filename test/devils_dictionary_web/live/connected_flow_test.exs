@@ -95,15 +95,15 @@ defmodule DevilsDictionaryWeb.ConnectedFlowTest do
       person = ctx.bierce.person
 
       # 1. The word page has Bierce's definition on it.
-      {:ok, _live, html} = live(ctx.conn, ~p"/define/nepotism")
+      {:ok, word_live, html} = live(ctx.conn, ~p"/define/nepotism")
       assert html =~ "Appointing your grandmother"
 
-      # 2. His page, reached by identity rather than by name.
+      # 2. Follow the actual definition's author link.
       {:ok, live, html} =
-        live(
-          ctx.conn,
-          ~p"/entities/#{person.object_id}/#{Connection.slugify(person.preferred_label)}"
-        )
+        word_live
+        |> element("a[id$='-author-#{person.object_id}']")
+        |> render_click()
+        |> follow_redirect(ctx.conn)
 
       assert html =~ "Ambrose Bierce"
 
@@ -132,6 +132,23 @@ defmodule DevilsDictionaryWeb.ConnectedFlowTest do
       # 6. Which is the canonical address of the word we started from.
       {:ok, _live, html} = live(ctx.conn, back)
       assert html =~ "Appointing your grandmother"
+    end
+
+    test "definitions targeting a word and its sense both retain their word links", ctx do
+      ctx = anchor!(ctx)
+
+      {:ok, passage} =
+        Registry.create_content(%{
+          content_kind: :definition,
+          body: "A meaning-specific definition"
+        })
+
+      {:ok, _} = Claims.assert(passage.object_id, "defines", ctx.sense.object_id)
+      {:ok, _} = Claims.assert(passage.object_id, "authored_by", ctx.bierce.person.object_id)
+      page = DevilsDictionary.Encyclopedia.EntityPage.build(ctx.bierce.person.object_id)
+      definitions = Map.new(page.definitions, &{&1.object_id, &1})
+      assert definitions[ctx.definition.object_id].defines.object_id == ctx.nepotism.object_id
+      assert definitions[passage.object_id].defines.object_id == ctx.nepotism.object_id
     end
 
     test "the work page names its author, its edition and what the edition contains", ctx do
@@ -377,6 +394,104 @@ defmodule DevilsDictionaryWeb.ConnectedFlowTest do
       # `person_details` hangs off it.
       assert Registry.object(person.object_id).kind == :entity
       assert Repo.get(Registry.PersonDetails, person.object_id)
+    end
+  end
+
+  describe "closure regressions" do
+    test "rejected claims cannot leak through direct or historical public URLs", ctx do
+      ctx = anchor!(ctx)
+      first = Claims.current_revision(ctx.illustration.id)
+      {:ok, _} = Claims.revise(ctx.illustration.id, %{rationale: "new wording"})
+      current = Claims.current_revision(ctx.illustration.id)
+      Claims.review(current.id, :rejected, %{reason: "not applicable"})
+
+      for suffix <- ["", "?revision=#{first.revision_number}", "?revision=garbage"] do
+        {:ok, view, _} = live(ctx.conn, "/connections/#{ctx.illustration.id}#{suffix}")
+        assert has_element?(view, "#no-such-connection")
+      end
+    end
+
+    test "source sense and evidence can be selected, saved and reviewed by an authorized reviewer",
+         ctx do
+      ctx = anchor!(ctx)
+      %{conn: conn, user: user} = register_and_log_in_user(%{conn: ctx.conn})
+      {:ok, view, _} = live(conn, "/connect")
+      view |> form("#composer-subject form", %{q: "untitled"}) |> render_change()
+      view |> element("#composer-subject-hit-#{ctx.meme.object_id}") |> render_click()
+      view |> element("#predicate-illustrates") |> render_click()
+      view |> form("#composer-object form", %{q: "nepotism"}) |> render_change()
+      assert has_element?(view, "#composer-object-hit-#{ctx.sense.object_id}")
+      view |> element("#composer-object-hit-#{ctx.sense.object_id}") |> render_click()
+      view |> form("#composer-context form", %{q: "Ambrose Bierce"}) |> render_change()
+      view |> element("#composer-context-hit-#{ctx.bierce.person.object_id}") |> render_click()
+      view |> form("#composer-evidence form", %{q: "NEPOTISM"}) |> render_change()
+      view |> element("#composer-evidence-hit-#{ctx.definition.object_id}") |> render_click()
+
+      {:error, {:live_redirect, %{to: to}}} =
+        view
+        |> form("#composer-form", %{rationale: "a precise example", locator: "paragraph 1"})
+        |> render_submit()
+
+      {:ok, detail, _} = live(conn, to)
+      assert has_element?(detail, "#connection-evidence", "paragraph 1")
+      refute has_element?(detail, "#connection-review-form")
+      id = to |> String.split("/") |> List.last() |> String.to_integer()
+      current = Claims.current_revision(id)
+      assert current.context_object_id == ctx.bierce.person.object_id
+      [evidence] = Claims.evidence(current.id)
+
+      assert evidence.content_revision_id ==
+               Registry.current_content_revision(ctx.definition.object_id).id
+
+      assert {:error, :unauthorized} =
+               DevilsDictionary.Claims.Contributions.review(
+                 DevilsDictionary.Accounts.Scope.for_user(user),
+                 id,
+                 current.id,
+                 "accepted",
+                 "checked",
+                 []
+               )
+
+      reviewer = Repo.update!(Ecto.Changeset.change(user, reviewer: true))
+      {:ok, review_view, _} = live(log_in_user(build_conn(), reviewer), to)
+      assert has_element?(review_view, "#connection-review-form")
+
+      review_view
+      |> form("#connection-review-form", %{reason: "checked against the cited meaning"})
+      |> render_submit(%{decision: "accepted"})
+
+      assert Claims.review_state(current.id) == :accepted
+      [review] = Claims.reviews(current.id)
+      assert review.review_context_id
+      assert review.reviewer_actor_id
+      # Revocation takes effect even with an already connected LiveView.
+      Repo.update!(Ecto.Changeset.change(reviewer, reviewer: false))
+
+      review_view
+      |> form("#connection-review-form", %{reason: "attempt after revocation"})
+      |> render_submit(%{decision: "rejected"})
+
+      assert Claims.review_state(current.id) == :accepted
+    end
+
+    test "an evidence locator without a selected citation fails atomically", ctx do
+      ctx = anchor!(ctx)
+      %{scope: scope} = register_and_log_in_user(%{conn: ctx.conn})
+      before = Repo.aggregate(DevilsDictionary.Claims.Assertion, :count)
+
+      assert {:error, :evidence_required} =
+               DevilsDictionary.Claims.Contributions.propose(
+                 scope,
+                 ctx.meme.object_id,
+                 "illustrates",
+                 ctx.sense.object_id,
+                 %{rationale: "example"},
+                 nil,
+                 "page 3"
+               )
+
+      assert Repo.aggregate(DevilsDictionary.Claims.Assertion, :count) == before
     end
   end
 end

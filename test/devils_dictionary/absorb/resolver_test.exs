@@ -101,6 +101,17 @@ defmodule DevilsDictionary.Absorb.ResolverTest do
                0
     end
 
+    test "an otherwise tied target does not depend on identity creation order" do
+      for {word, order} <- [{"against-a", ["prep", "conj"]}, {"against-b", ["conj", "prep"]}] do
+        source = source!("johnson")
+        subject = lexeme!("gainst-#{word}", "prep")
+        targets = Map.new(order, fn pos -> {pos, lexeme!(word, pos)} end)
+        relation!(source, subject, to_lemma: word, type: :see_also)
+        assert Resolver.resolve_targets(source.id) == 1
+        assert target_of(subject, :see_also) == targets["conj"].object_id
+      end
+    end
+
     test "prefers the part of speech the source stated" do
       source = source!("wiktionary")
       cat = lexeme!("cat", "noun")

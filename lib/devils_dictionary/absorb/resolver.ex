@@ -23,8 +23,9 @@ defmodule DevilsDictionary.Absorb.Resolver do
   `feline` exists as a noun and an adjective, so `lower(to_lemma)` alone is
   ambiguous. The order of preference is: the pos the source stated, then an
   exact-case lemma match (so *Turkey* does not answer for *turkey*), then a
-  plain part-of-speech priority, then the oldest row. Deterministic, and it
-  never invents a link the source did not imply.
+  plain part-of-speech priority, then the bytewise lexical key. The fallback
+  is a deterministic heuristic, not evidence that the source specified that
+  part of speech. Numeric identity allocation must not choose the meaning.
 
   ## The cycle check, corrected
 
@@ -153,7 +154,7 @@ defmodule DevilsDictionary.Absorb.Resolver do
 
   # One `DISTINCT ON` per pending row picks the target lexeme, in the preference
   # order #69 §4 fixed: a stated part of speech, then an exact-case lemma, then
-  # `@pos_priority`, then the oldest identity. Ties are broken by rule rather
+  # `@pos_priority`, then the lexical key. Ties are broken by rule rather
   # than by whichever row the planner happened to return.
   defp matched(source_id, from, to) do
     %{rows: rows} =
@@ -178,7 +179,7 @@ defmodule DevilsDictionary.Absorb.Resolver do
                   (l.part_of_speech = p.to_pos) DESC NULLS LAST,
                   (l.lemma = p.to_lemma) DESC,
                   array_position($4::text[], l.part_of_speech) NULLS LAST,
-                  l.object_id
+                  l.lexical_key COLLATE "C", l.object_id
         """,
         [from, to, source_id, @pos_priority],
         timeout: :infinity

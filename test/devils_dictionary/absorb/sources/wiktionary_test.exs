@@ -206,7 +206,7 @@ defmodule DevilsDictionary.Absorb.Sources.WiktionaryTest do
       assert Wiktionary.index_row(form, 1).metadata["form_of"] == true
 
       headword = records("cat") |> Enum.find(&(&1["pos"] == "noun"))
-      refute Map.has_key?(Wiktionary.index_row(headword, 1).metadata, "form_of")
+      assert Wiktionary.index_row(headword, 1).metadata["form_of"] == false
     end
   end
 

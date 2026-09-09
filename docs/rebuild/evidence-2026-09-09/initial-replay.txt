@@ -1,0 +1,84 @@
+bierce: materializing 997 record(s)…
+
+bierce — 54051 ms
+  concept_relations      0
+  concept_relations_skipped 0
+  concept_relations_skipped_parent_taxon 0
+  concept_relations_skipped_unchased 0
+  concepts               0
+  entries                997
+  lexemes                1000
+  links                  0
+  records                997
+  relations              0
+  senses                 0
+johnson: materializing 42726 record(s)…
+
+johnson — 64321 ms
+  concept_relations      0
+  concept_relations_skipped 0
+  concept_relations_skipped_parent_taxon 0
+  concept_relations_skipped_unchased 0
+  concepts               0
+  entries                42726
+  lexemes                41100
+  links                  0
+  records                42726
+  relations              0
+  senses                 0
+wikidata: materializing 72770 record(s)…
+
+wikidata — 60003 ms
+  concept_relations      50446
+  concept_relations_skipped 59786
+  concept_relations_skipped_parent_taxon 0
+  concept_relations_skipped_unchased 59786
+  concepts               72770
+  entries                0
+  lexemes                0
+  links                  0
+  records                72770
+  relations              0
+  senses                 0
+wikipedia: materializing 85044 record(s)…
+
+wikipedia — 73367 ms
+  concept_relations      0
+  concept_relations_skipped 0
+  concept_relations_skipped_parent_taxon 0
+  concept_relations_skipped_unchased 0
+  concepts               178262
+  entries                70925
+  lexemes                19209
+  links                  0
+  records                85044
+  relations              0
+  senses                 0
+wiktionary: materializing 22505 record(s)…
+
+wiktionary — 67940 ms
+  concept_relations      0
+  concept_relations_skipped 0
+  concept_relations_skipped_parent_taxon 0
+  concept_relations_skipped_unchased 0
+  concepts               0
+  entries                0
+  lexemes                21170
+  links                  0
+  records                22505
+  relations              0
+  senses                 37594
+wordnet: materializing 120564 record(s)…
+
+wordnet — 95045 ms
+  concept_relations      0
+  concept_relations_skipped 0
+  concept_relations_skipped_parent_taxon 0
+  concept_relations_skipped_unchased 0
+  concepts               0
+  entries                0
+  lexemes                212133
+  links                  0
+  records                120564
+  relations              1056779
+  senses                 212659

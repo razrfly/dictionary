@@ -1,0 +1,82 @@
+[info] The function passed as a handler with ID "audit74-page" is a local function.
+This means that it is either an anonymous function or a capture of a function without a module specified. That may cause a performance penalty when calling that handler. For more details see the note in `telemetry:attach/4` documentation.
+
+https://hexdocs.pm/telemetry/telemetry.html#attach/4
+PAGE 4: 696.063 ms
+PAGE 6: 614.946 ms
+%{
+  params: [4],
+  sql: "SELECT e0.\"object_id\", e0.\"entity_kind\", e0.\"preferred_label\", e0.\"description\", e0.\"metadata\", e0.\"inserted_at\", e0.\"updated_at\" FROM \"entities\" AS e0 WHERE (e0.\"object_id\" = $1)",
+  ms: 3.705
+}
+%{
+  params: ["Oban", ~U[2026-09-09 13:46:10.158511Z]],
+  sql: "DELETE FROM \"public\".\"oban_peers\" AS o0 WHERE (o0.\"name\" = $1) AND (o0.\"expires_at\" < $2)",
+  ms: 4.558
+}
+%{
+  params: [4, ["authored_by"], "active", 50],
+  sql: "SELECT a0.\"id\", a0.\"assertion_id\", a0.\"revision_number\", a0.\"subject_object_id\", a0.\"predicate_id\", a0.\"object_object_id\", a0.\"subject_kind\", a0.\"subject_subkind\", a0.\"object_kind\", a0.\"object_subkind\", a0.\"rationale\", a0.\"valid_from\", a0.\"valid_to\", a0.\"language_tag\", a0.\"jurisdiction_entity_id\", a0.\"context_object_id\", a0.\"method\", a0.\"confidence\", a0.\"lifecycle_state\", a0.\"is_current\", a0.\"metadata\", a0.\"inserted_at\", a0.\"updated_at\" FROM \"assertion_revisions\" AS a0 INNER JOIN \"predicates\" AS p1 ON p1.\"id\" = a0.\"predicate_id\" WHERE ((a0.\"object_object_id\" = $1) AND a0.\"is_current\") AND (p1.\"key\" = ANY($2)) AND (a0.\"lifecycle_state\" = $3) AND (COALESCE(\n  (SELECT ar.decision FROM assertion_reviews ar\n    WHERE ar.assertion_revision_id = a0.\"id\"\n    ORDER BY ar.inserted_at DESC, ar.id DESC\n    LIMIT 1),\n  'needs_review'\n) NOT IN ('rejected', 'withdrawn')\n) ORDER BY a0.\"id\" LIMIT $4",
+  ms: 48.816
+}
+%{
+  params: [
+    [7302, 374765, 1779682, 51287, 282684, 36569, 1779714, 29731, 45171,
+     1779703, 1779695, 1779700, 303945, 284394, 1779690, 1779710, 1778613,
+     374981, 86769, 23205, 374792, 1779680, 201213, 1779706, 129665, 1779683,
+     375032, 374728, 366283, 375219, 61427, 1779699, 275270, 182705, 192021,
+     14535, 375443, 41440, 1779708, 1779705, 203060, 374813, 303732, 193973,
+     374722, 1779696, 1779712, 1779711, 76833],
+    [7302, 374765, 1779682, 51287, 282684, 36569, 1779714, 29731, 45171,
+     1779703, 1779695, 1779700, 303945, 284394, 1779690, 1779710, 1778613,
+     374981, 86769, 23205, 374792, 1779680, 201213, 1779706, 129665, 1779683,
+     375032, 374728, 366283, 375219, 61427, 1779699, 275270, 182705, 192021,
+     14535, 375443, 41440, 1779708, 1779705, 203060, 374813, 303732, 193973,
+     374722, 1779696, 1779712, 1779711, 76833]
+  ],
+  sql: "SELECT coalesce(s1.\"object_id\", l0.\"object_id\"), l0.\"object_id\", l0.\"lemma\", l0.\"slug\", l0.\"part_of_speech\" FROM \"lexemes\" AS l0 LEFT OUTER JOIN \"senses\" AS s1 ON (s1.\"lexeme_id\" = l0.\"object_id\") AND s1.\"object_id\" = ANY($1) WHERE (l0.\"object_id\" = ANY($2) OR NOT (s1.\"object_id\" IS NULL))",
+  ms: 466.608
+}
+%{
+  params: [4, "active", 50],
+  sql: "SELECT a0.\"id\", a0.\"assertion_id\", a0.\"revision_number\", a0.\"subject_object_id\", a0.\"predicate_id\", a0.\"object_object_id\", a0.\"subject_kind\", a0.\"subject_subkind\", a0.\"object_kind\", a0.\"object_subkind\", a0.\"rationale\", a0.\"valid_from\", a0.\"valid_to\", a0.\"language_tag\", a0.\"jurisdiction_entity_id\", a0.\"context_object_id\", a0.\"method\", a0.\"confidence\", a0.\"lifecycle_state\", a0.\"is_current\", a0.\"metadata\", a0.\"inserted_at\", a0.\"updated_at\" FROM \"assertion_revisions\" AS a0 WHERE ((a0.\"object_object_id\" = $1) AND a0.\"is_current\") AND (a0.\"lifecycle_state\" = $2) AND (COALESCE(\n  (SELECT ar.decision FROM assertion_reviews ar\n    WHERE ar.assertion_revision_id = a0.\"id\"\n    ORDER BY ar.inserted_at DESC, ar.id DESC\n    LIMIT 1),\n  'needs_review'\n) NOT IN ('rejected', 'withdrawn')\n) ORDER BY a0.\"id\" LIMIT $3",
+  ms: 92.998
+}
+%{
+  params: [4, "active"],
+  sql: "SELECT count(a0.\"id\") FROM \"assertion_revisions\" AS a0 WHERE ((a0.\"object_object_id\" = $1) AND a0.\"is_current\") AND (a0.\"lifecycle_state\" = $2) AND (COALESCE(\n  (SELECT ar.decision FROM assertion_reviews ar\n    WHERE ar.assertion_revision_id = a0.\"id\"\n    ORDER BY ar.inserted_at DESC, ar.id DESC\n    LIMIT 1),\n  'needs_review'\n) NOT IN ('rejected', 'withdrawn')\n)",
+  ms: 20.184
+}
+%{
+  params: [6, ["published_in"], "active", 50],
+  sql: "SELECT a0.\"id\", a0.\"assertion_id\", a0.\"revision_number\", a0.\"subject_object_id\", a0.\"predicate_id\", a0.\"object_object_id\", a0.\"subject_kind\", a0.\"subject_subkind\", a0.\"object_kind\", a0.\"object_subkind\", a0.\"rationale\", a0.\"valid_from\", a0.\"valid_to\", a0.\"language_tag\", a0.\"jurisdiction_entity_id\", a0.\"context_object_id\", a0.\"method\", a0.\"confidence\", a0.\"lifecycle_state\", a0.\"is_current\", a0.\"metadata\", a0.\"inserted_at\", a0.\"updated_at\" FROM \"assertion_revisions\" AS a0 INNER JOIN \"predicates\" AS p1 ON p1.\"id\" = a0.\"predicate_id\" WHERE ((a0.\"object_object_id\" = $1) AND a0.\"is_current\") AND (p1.\"key\" = ANY($2)) AND (a0.\"lifecycle_state\" = $3) AND (COALESCE(\n  (SELECT ar.decision FROM assertion_reviews ar\n    WHERE ar.assertion_revision_id = a0.\"id\"\n    ORDER BY ar.inserted_at DESC, ar.id DESC\n    LIMIT 1),\n  'needs_review'\n) NOT IN ('rejected', 'withdrawn')\n) ORDER BY a0.\"id\" LIMIT $4",
+  ms: 27.244
+}
+%{
+  params: [
+    [7302, 374765, 1779682, 51287, 282684, 36569, 1779714, 29731, 45171,
+     1779703, 1779695, 374657, 1779700, 303945, 284394, 1779690, 1779710,
+     1778613, 374981, 86769, 23205, 374792, 1779680, 201213, 1779706, 129665,
+     1779683, 375032, 374728, 366283, 375219, 61427, 1779699, 275270, 182705,
+     192021, 14535, 375443, 41440, 1779708, 1779705, 203060, 374813, 303732,
+     193973, 374722, 1779696, 1779712, 1779711, 76833],
+    [7302, 374765, 1779682, 51287, 282684, 36569, 1779714, 29731, 45171,
+     1779703, 1779695, 374657, 1779700, 303945, 284394, 1779690, 1779710,
+     1778613, 374981, 86769, 23205, 374792, 1779680, 201213, 1779706, 129665,
+     1779683, 375032, 374728, 366283, 375219, 61427, 1779699, 275270, 182705,
+     192021, 14535, 375443, 41440, 1779708, 1779705, 203060, 374813, 303732,
+     193973, 374722, 1779696, 1779712, 1779711, 76833]
+  ],
+  sql: "SELECT coalesce(s1.\"object_id\", l0.\"object_id\"), l0.\"object_id\", l0.\"lemma\", l0.\"slug\", l0.\"part_of_speech\" FROM \"lexemes\" AS l0 LEFT OUTER JOIN \"senses\" AS s1 ON (s1.\"lexeme_id\" = l0.\"object_id\") AND s1.\"object_id\" = ANY($1) WHERE (l0.\"object_id\" = ANY($2) OR NOT (s1.\"object_id\" IS NULL))",
+  ms: 460.964
+}
+%{
+  params: [6, "active", 50],
+  sql: "SELECT a0.\"id\", a0.\"assertion_id\", a0.\"revision_number\", a0.\"subject_object_id\", a0.\"predicate_id\", a0.\"object_object_id\", a0.\"subject_kind\", a0.\"subject_subkind\", a0.\"object_kind\", a0.\"object_subkind\", a0.\"rationale\", a0.\"valid_from\", a0.\"valid_to\", a0.\"language_tag\", a0.\"jurisdiction_entity_id\", a0.\"context_object_id\", a0.\"method\", a0.\"confidence\", a0.\"lifecycle_state\", a0.\"is_current\", a0.\"metadata\", a0.\"inserted_at\", a0.\"updated_at\" FROM \"assertion_revisions\" AS a0 WHERE ((a0.\"object_object_id\" = $1) AND a0.\"is_current\") AND (a0.\"lifecycle_state\" = $2) AND (COALESCE(\n  (SELECT ar.decision FROM assertion_reviews ar\n    WHERE ar.assertion_revision_id = a0.\"id\"\n    ORDER BY ar.inserted_at DESC, ar.id DESC\n    LIMIT 1),\n  'needs_review'\n) NOT IN ('rejected', 'withdrawn')\n) ORDER BY a0.\"id\" LIMIT $3",
+  ms: 92.454
+}
+%{
+  params: [6, "active"],
+  sql: "SELECT count(a0.\"id\") FROM \"assertion_revisions\" AS a0 WHERE ((a0.\"object_object_id\" = $1) AND a0.\"is_current\") AND (a0.\"lifecycle_state\" = $2) AND (COALESCE(\n  (SELECT ar.decision FROM assertion_reviews ar\n    WHERE ar.assertion_revision_id = a0.\"id\"\n    ORDER BY ar.inserted_at DESC, ar.id DESC\n    LIMIT 1),\n  'needs_review'\n) NOT IN ('rejected', 'withdrawn')\n)",
+  ms: 19.801
+}

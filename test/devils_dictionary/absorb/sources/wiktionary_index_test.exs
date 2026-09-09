@@ -77,6 +77,60 @@ defmodule DevilsDictionary.Absorb.Sources.WiktionaryIndexTest do
     assert orphaned() == 0
   end
 
+  test "index retains forms and categories from every etymology of one headword" do
+    records = [
+      %{
+        "word" => "bit",
+        "pos" => "verb",
+        "lang_code" => "en",
+        "etymology_number" => 1,
+        "categories" => ["en:Computing"],
+        "forms" => [%{"form" => "bitted"}],
+        "senses" => [%{"tags" => ["form-of"]}]
+      },
+      %{
+        "word" => "bit",
+        "pos" => "verb",
+        "lang_code" => "en",
+        "etymology_number" => 2,
+        "categories" => ["en:Tools"],
+        "forms" => [%{"form" => "bitting"}],
+        "senses" => [%{"glosses" => ["to use a bit"]}]
+      }
+    ]
+
+    path =
+      Path.join(
+        System.tmp_dir!(),
+        "index-observations-#{System.unique_integer([:positive])}.jsonl.gz"
+      )
+
+    on_exit(fn -> File.rm(path) end)
+
+    for rows <- [records, Enum.reverse(records)] do
+      lines =
+        Enum.map_join(
+          rows,
+          "\n",
+          &(Jason.encode!(&1) |> String.replace("\"lang_code\":\"en\"", "\"lang_code\": \"en\""))
+        )
+
+      File.write!(path, :zlib.gzip(lines <> "\n"))
+      assert {:ok, _} = Wiktionary.absorb(nil, index: true, path: path, limit: 10)
+      lexeme = Repo.one!(Lexeme)
+      assert lexeme.metadata["wikt_categories"] == ["en:Computing", "en:Tools"]
+      assert lexeme.metadata["form_of"] == false
+
+      assert Repo.all(from f in "lexeme_forms", order_by: f.written_form, select: f.written_form) ==
+               [
+                 "bitted",
+                 "bitting"
+               ]
+
+      assert orphaned() == 0
+    end
+  end
+
   # An object of kind `lexeme` with no `lexemes` row. The composite foreign key
   # makes this unrepresentable at COMMIT; counting it here says so out loud, and
   # keeps the assertion meaningful if the trigger is ever relaxed.

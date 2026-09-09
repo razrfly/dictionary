@@ -25,7 +25,7 @@ defmodule DevilsDictionaryWeb.UserLive.Settings do
           spellcheck="false"
           required
         />
-        <.button variant="solid" phx-disable-with="Changing...">Change Email</.button>
+        <.button type="submit" variant="solid" phx-disable-with="Changing...">Change Email</.button>
       </.form>
 
       <div class="divider" />
@@ -61,7 +61,7 @@ defmodule DevilsDictionaryWeb.UserLive.Settings do
           autocomplete="new-password"
           spellcheck="false"
         />
-        <.button variant="solid" phx-disable-with="Saving...">
+        <.button type="submit" variant="solid" phx-disable-with="Saving...">
           Save Password
         </.button>
       </.form>

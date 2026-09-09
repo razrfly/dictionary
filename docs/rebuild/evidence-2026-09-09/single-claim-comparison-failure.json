@@ -1,0 +1,141 @@
+{
+  "baseline": {
+    "claim_attestations": {
+      "rows": 1426682,
+      "sha256": "ae7f27c067b26b69a28355cb81880930d44b379efb6908149cc844b5bb3677b9"
+    },
+    "claims": {
+      "rows": 1491146,
+      "sha256": "32d3e122f7bbefb47e1049b022c824aed25bf94bdf3b1e8a41a29f47b26c1350"
+    },
+    "content": {
+      "rows": 108475,
+      "sha256": "c70228c51667e14bf1317a54817be290452df8edf7a7cfa34bdbfdf419c23666"
+    },
+    "edition_details": {
+      "rows": 2,
+      "sha256": "d72f739cd0e3876a908c5dc1b25f3d8b66c85fb88a55f6b97e4819cbbcf9ae3a"
+    },
+    "entities": {
+      "rows": 92952,
+      "sha256": "89c1ad442f70cbefe9cf812d48e8834645bb4b2e938e90f9dc5a149138089272"
+    },
+    "external_identifiers": {
+      "rows": 92950,
+      "sha256": "df19d1a53f7cb1f75ca39ffcd3408e20c042bd1b3d4354e407d79d41e145fab1"
+    },
+    "forms": {
+      "rows": 900843,
+      "sha256": "473c708b2b53cd0521ef64d600634eacdd264e52259eacf0a7a6e9901a698902"
+    },
+    "lexemes": {
+      "rows": 1541668,
+      "sha256": "27482868c92d15243a176945d3121d4a099cddb612cf4267be19c6dec1aad4be"
+    },
+    "names": {
+      "rows": 6,
+      "sha256": "a75c5c50b3ade037173c17d7f1fae5f89c64f35cfc8ff8f942662265841e1318"
+    },
+    "object_attestations": {
+      "rows": 364953,
+      "sha256": "ea9566d1a3c7e71a676aa44e8bd823ce6761f4c5bce09412957fd39c56b7e261"
+    },
+    "objects": {
+      "rows": 1993400,
+      "sha256": "f4ea7c9b2702335229e5d86f6ea729a34815e998e27449060d0fccb9b9697f91"
+    },
+    "person_details": {
+      "rows": 2,
+      "sha256": "6469540de4e9d5150156e3c224bc7a4fb46b303d80a8923bc03271d3e729018c"
+    },
+    "scopes": {
+      "rows": 26199,
+      "sha256": "66b7dd137b0d310c4dcc7c55456176e40ccec82d7bf05d7bbfcf6c9f3343bc58"
+    },
+    "senses": {
+      "rows": 250305,
+      "sha256": "4c13fde0c1d777c1b913c6ee2ef33e129cd5e4c53dd15178118a91c3c214e2c9"
+    },
+    "source_records": {
+      "rows": 344622,
+      "sha256": "41a2290f1d6e2c398a619afac8bdac8be4b6d1d9b499ce682a7e96f2efae7986"
+    },
+    "work_details": {
+      "rows": 2,
+      "sha256": "b9cd03a346c40ae0ebf3bbeaa5d18c669a98352a14bfff7b37f9e4b4bd49ef41"
+    }
+  },
+  "baseline_database": "devils_dictionary_v2",
+  "differences": [
+    "claim_attestations",
+    "claims"
+  ],
+  "identical": false,
+  "rebuilt": {
+    "claim_attestations": {
+      "rows": 1426682,
+      "sha256": "1b0a181b2b5e4d52a3f481b0b0f4ae9c459317b3e1064201bd1ffbb83596213d"
+    },
+    "claims": {
+      "rows": 1491146,
+      "sha256": "f8ecb5d7f78f8d7db8dc4806e1322eebfdfd99e9ed116a07d49539245e43c77c"
+    },
+    "content": {
+      "rows": 108475,
+      "sha256": "c70228c51667e14bf1317a54817be290452df8edf7a7cfa34bdbfdf419c23666"
+    },
+    "edition_details": {
+      "rows": 2,
+      "sha256": "d72f739cd0e3876a908c5dc1b25f3d8b66c85fb88a55f6b97e4819cbbcf9ae3a"
+    },
+    "entities": {
+      "rows": 92952,
+      "sha256": "89c1ad442f70cbefe9cf812d48e8834645bb4b2e938e90f9dc5a149138089272"
+    },
+    "external_identifiers": {
+      "rows": 92950,
+      "sha256": "df19d1a53f7cb1f75ca39ffcd3408e20c042bd1b3d4354e407d79d41e145fab1"
+    },
+    "forms": {
+      "rows": 900843,
+      "sha256": "473c708b2b53cd0521ef64d600634eacdd264e52259eacf0a7a6e9901a698902"
+    },
+    "lexemes": {
+      "rows": 1541668,
+      "sha256": "27482868c92d15243a176945d3121d4a099cddb612cf4267be19c6dec1aad4be"
+    },
+    "names": {
+      "rows": 6,
+      "sha256": "a75c5c50b3ade037173c17d7f1fae5f89c64f35cfc8ff8f942662265841e1318"
+    },
+    "object_attestations": {
+      "rows": 364953,
+      "sha256": "ea9566d1a3c7e71a676aa44e8bd823ce6761f4c5bce09412957fd39c56b7e261"
+    },
+    "objects": {
+      "rows": 1993400,
+      "sha256": "f4ea7c9b2702335229e5d86f6ea729a34815e998e27449060d0fccb9b9697f91"
+    },
+    "person_details": {
+      "rows": 2,
+      "sha256": "6469540de4e9d5150156e3c224bc7a4fb46b303d80a8923bc03271d3e729018c"
+    },
+    "scopes": {
+      "rows": 26199,
+      "sha256": "66b7dd137b0d310c4dcc7c55456176e40ccec82d7bf05d7bbfcf6c9f3343bc58"
+    },
+    "senses": {
+      "rows": 250305,
+      "sha256": "4c13fde0c1d777c1b913c6ee2ef33e129cd5e4c53dd15178118a91c3c214e2c9"
+    },
+    "source_records": {
+      "rows": 344622,
+      "sha256": "41a2290f1d6e2c398a619afac8bdac8be4b6d1d9b499ce682a7e96f2efae7986"
+    },
+    "work_details": {
+      "rows": 2,
+      "sha256": "b9cd03a346c40ae0ebf3bbeaa5d18c669a98352a14bfff7b37f9e4b4bd49ef41"
+    }
+  },
+  "rebuilt_database": "devils_dictionary_74_verify"
+}

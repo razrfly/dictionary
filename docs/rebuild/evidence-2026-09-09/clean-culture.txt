@@ -1,0 +1,120 @@
+rebuild · scope culture · 13 stages
+
+── scope · build the scope from the index and WordNet
+  total                      5
+  without_reason             0
+  elapsed                    56 ms
+
+── wiktionary · Wiktionary: the scoped records
+  bytes_raw                  177,139
+  bytes_trimmed              54,288
+  en_records                 1,487,639
+  lexemes                    5
+  lines                      10,806,865
+  matched_lemmas             4
+  records                    11
+  relations                  0
+  senses                     47
+  trim_saving_pct            69.4
+  wanted_lemmas              4
+  elapsed                    19.9 s
+
+── bierce · Bierce: 997 definitions
+  alt_headwords              3
+  attributions               190
+  continuations              107
+  entries                    997
+  headwords                  996
+  lexemes                    1,000
+  materialized_entries       997
+  records                    997
+  relations                  0
+  verse_blocks               247
+  elapsed                    864 ms
+
+── johnson · Johnson: the 1755 dictionary
+  alt_headwords              114
+  entries                    42,726
+  headwords                  37,422
+  homographs                 468
+  lexemes                    41,105
+  materialized_entries       42,726
+  records                    42,726
+  relations                  0
+  without_pos                3,388
+  elapsed                    29.0 s
+
+── wikidata · Wikidata: entities and the taxonomy
+  replayed                   priv/replay/wikidata.jsonl.gz
+  elapsed                    9.0 s
+
+── wikipedia · Wikipedia: articles and candidates
+  replayed                   priv/replay/wikipedia.jsonl.gz
+  elapsed                    3.9 s
+
+── resolve · drain pending edges into assertions
+  canonical                  0
+  resolved                   1,193
+  still_unresolved           15,759
+  elapsed                    504 ms
+
+── link · the word ↔ thing ladder
+  agreement                  0
+  disambiguation             0
+  disambiguation_gloss       0
+  gloss                      0
+  taxon                      0
+  title_match                0
+  wiktionary_qid             0
+  wordnet_ili                0
+  wordnet_wikidata           0
+  elapsed                    4.9 s
+
+── wikidata-taxon · close the taxonomy edges Wikipedia's entities unlocked
+  concept_relations          50,446
+  concept_relations_skipped  59,786
+  concept_relations_skipped_parent_taxon 0
+  concept_relations_skipped_unchased 59,786
+  elapsed                    9.7 s
+
+── scope-taxon · rebuild the scope, now that the taxonomy exists
+  total                      5
+  without_reason             0
+  elapsed                    3 ms
+
+── wiktionary-taxon · Wiktionary: the words the taxonomy added
+  bytes_raw                  177,139
+  bytes_trimmed              54,288
+  en_records                 1,487,639
+  lexemes                    5
+  lines                      10,806,865
+  matched_lemmas             4
+  records                    11
+  relations                  0
+  senses                     47
+  trim_saving_pct            69.4
+  wanted_lemmas              4
+  elapsed                    20.1 s
+
+── resolve-taxon · drain the edges those words brought
+  canonical                  0
+  resolved                   278
+  still_unresolved           15,759
+  elapsed                    417 ms
+
+── link-taxon · the ladder, over the grown scope
+  agreement                  0
+  disambiguation             0
+  disambiguation_gloss       0
+  gloss                      0
+  taxon                      0
+  title_match                0
+  wiktionary_qid             0
+  wordnet_ili                0
+  wordnet_wikidata           0
+  elapsed                    4.9 s
+
+── rebuild
+  stages                     13
+  failed                     0
+  elapsed                    1m 43s

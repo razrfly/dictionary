@@ -291,10 +291,10 @@ defmodule DevilsDictionary.Health.Score do
         row(
           "P1",
           "page composition",
-          "p95 #{p1.p95} ms · p50 #{p1.p50} ms · max #{p1.max} ms over #{p1.runs} pages",
+          "p95 #{p1.p95} ms (words #{p1.word_p95}, entities #{p1.entity_p95}) · max #{p1.max} ms over #{p1.runs} pages",
           "p95 < #{p1.budget_ms} ms",
           p1.p95 < p1.budget_ms,
-          detail: "#{p1.population}, warm cache, WordPage.build/2 end to end"
+          detail: "#{p1.population}, warm cache, WordPage and EntityPage end to end"
         )
     end
   end
@@ -363,18 +363,19 @@ defmodule DevilsDictionary.Health.Score do
       results = Enum.map(Absorb.implemented(), &Health.parity/1)
       gaps = results |> Enum.map(& &1.gaps) |> Enum.sum()
       records = results |> Enum.map(& &1.records) |> Enum.sum()
+      alternates = results |> Enum.map(& &1.alternate_content_observations) |> Enum.sum()
 
       row(
         "M1",
         "parity, every source",
-        "#{gaps} gaps over #{fmt(records)} records",
+        "#{gaps} gaps over #{fmt(records)} records · #{alternates} alternate publication observations",
         "0 gaps",
         gaps == 0
       )
     end
   end
 
-  # `mix dd.materialize --all` writes the row counts it saw before and after
+  # `mix dd.materialize --all` writes the semantic fingerprints it saw before and after
   # rebuilding every record from raw. Reading them back is the only honest way
   # to grade this: re-running it here would be the measurement, not the check.
   defp m2_row do
@@ -389,7 +390,7 @@ defmodule DevilsDictionary.Health.Score do
           "M2",
           "idempotent, offline",
           "not measured — run `mix dd.materialize --all`",
-          "identical row counts",
+          "identical semantic fingerprints",
           :pending
         )
 
@@ -398,14 +399,14 @@ defmodule DevilsDictionary.Health.Score do
           "M2",
           "idempotent, offline",
           "not rebuilt: #{Enum.join(missing, ", ")}",
-          "identical row counts",
+          "identical semantic fingerprints",
           :pending
         )
 
       true ->
         changed =
           for {slug, run} <- measured,
-              run.stats["m2_identical"] != true,
+              run.stats["m2_identical"] != true or run.stats["m2_version"] != 2,
               do: {slug, run.stats["m2_changed"]}
 
         records = measured |> Map.values() |> Enum.map(&(&1.stats["records"] || 0)) |> Enum.sum()
@@ -413,10 +414,10 @@ defmodule DevilsDictionary.Health.Score do
         actual =
           if changed == [],
             do:
-              "row counts identical over #{fmt(records)} records, all #{map_size(measured)} sources",
+              "semantic fingerprints identical over #{fmt(records)} records, all #{map_size(measured)} sources",
             else: "changed: #{inspect(changed)}"
 
-        row("M2", "idempotent, offline", actual, "identical row counts", changed == [])
+        row("M2", "idempotent, offline", actual, "identical semantic fingerprints", changed == [])
     end
   end
 
@@ -514,9 +515,13 @@ defmodule DevilsDictionary.Health.Score do
       row(
         "L4",
         "disambiguation handled",
-        "#{fmt(l4.with_candidates)} / #{fmt(l4.hits)} = #{l4.nominal_pct}% of nominal lemmas",
+        if(l4.hits == 0,
+          do: "no disambiguation hits in this scope",
+          else:
+            "#{fmt(l4.with_candidates)} / #{fmt(l4.hits)} = #{l4.nominal_pct}% of nominal lemmas"
+        ),
         "100% of hits",
-        l4.nominal_pct >= 100.0
+        if(l4.hits == 0, do: :report, else: l4.nominal_pct >= 100.0)
       )
     ]
   end
@@ -935,7 +940,7 @@ defmodule DevilsDictionary.Health.Score do
     row(
       "O2",
       "it is fast enough",
-      "(a) dumps #{Mix.Tasks.Dd.Report.fmt_ms(dump_ms)} · (b) APIs #{Mix.Tasks.Dd.Report.fmt_ms(api_ms)}",
+      "recorded runs: dumps #{Mix.Tasks.Dd.Report.fmt_ms(dump_ms)} · API/replay #{Mix.Tasks.Dd.Report.fmt_ms(api_ms)}",
       "(a) <= 2 h · (b) report",
       dump_ms <= 2 * 60 * 60 * 1000
     )
@@ -950,8 +955,19 @@ defmodule DevilsDictionary.Health.Score do
         Repo.one(
           from r in ImportRun,
             where: r.source_id == ^source.id and r.status == :done,
-            where: r.task in ["absorb", "index"],
-            select: coalesce(sum(fragment("(?->>'elapsed_ms')::bigint", r.stats)), 0)
+            where: r.task in ["absorb", "index", "replay"],
+            select:
+              coalesce(
+                sum(
+                  fragment(
+                    "COALESCE((?->>'elapsed_ms')::bigint, (EXTRACT(EPOCH FROM (? - ?)) * 1000)::bigint)",
+                    r.stats,
+                    r.finished_at,
+                    r.started_at
+                  )
+                ),
+                0
+              )
         )
         |> to_ms()
     end
