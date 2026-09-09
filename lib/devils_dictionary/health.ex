@@ -13,10 +13,14 @@ defmodule DevilsDictionary.Health do
   import Ecto.Query
 
   alias DevilsDictionary.Absorb.Resolver
-  alias DevilsDictionary.Encyclopedia.{Concept, ConceptLink}
+  alias DevilsDictionary.Claims.AssertionRevision
+  alias DevilsDictionary.Corpus.SourceRecordRevision
+  alias DevilsDictionary.Encyclopedia
   alias DevilsDictionary.Health.{Coverage, Pages, Parity}
   alias DevilsDictionary.Lexicon
-  alias DevilsDictionary.Lexicon.{Entry, Lexeme, ScopeLexeme, Sense}
+  alias DevilsDictionary.Lexicon.ScopeMember
+  alias DevilsDictionary.Registry.{ContentItem, ContentRevision, Entity, Lexeme}
+  alias DevilsDictionary.Registry.{Sense, SenseRevision}
   alias DevilsDictionary.Repo
   alias DevilsDictionary.Sources
   alias DevilsDictionary.Sources.{ImportRun, Source, SourceRecord}
@@ -35,7 +39,7 @@ defmodule DevilsDictionary.Health do
     scope = Lexicon.get_scope_by_slug!(scope_slug)
     source = Sources.get_source_by_slug!(source_slug)
 
-    scoped = from sl in ScopeLexeme, join: l in Lexeme, on: l.id == sl.lexeme_id
+    scoped = from sl in ScopeMember, join: l in Lexeme, on: l.object_id == sl.lexeme_id
     scoped = from [sl, _l] in scoped, where: sl.scope_id == ^scope.id
 
     total = Repo.aggregate(scoped, :count)
@@ -80,11 +84,13 @@ defmodule DevilsDictionary.Health do
     end
   end
 
+  # `concepts.taxon` was a jsonb column of taxonomic facts; those facts are now
+  # descriptive metadata on the entity, under the same key.
   defp scientific_names do
-    from(c in Concept,
-      where: not is_nil(fragment("?->>'scientific_name'", c.taxon)),
+    from(e in Entity,
+      where: not is_nil(fragment("? -> 'taxon' ->> 'scientific_name'", e.metadata)),
       distinct: true,
-      select: fragment("?->>'scientific_name'", c.taxon)
+      select: fragment("? -> 'taxon' ->> 'scientific_name'", e.metadata)
     )
     |> Repo.all()
     |> MapSet.new()
@@ -103,8 +109,8 @@ defmodule DevilsDictionary.Health do
       |> Repo.all()
 
     %{
-      senses: linkable(Sense, templated),
-      entries: linkable(Entry, templated)
+      senses: linkable_senses(templated),
+      entries: linkable_content(templated)
     }
     |> then(fn parts ->
       total = parts.senses.total + parts.entries.total
@@ -114,19 +120,52 @@ defmodule DevilsDictionary.Health do
     end)
   end
 
-  defp linkable(schema, templated_source_ids) do
-    query =
-      from row in schema,
+  # The row's own url is on its current revision now, and the record it came
+  # from is two joins away rather than one — the revision cites a *revision* of
+  # the record, which is the whole point of #74. The three acceptable answers
+  # are unchanged.
+  defp linkable_senses(templated) do
+    base =
+      from s in Sense,
+        join: rev in SenseRevision,
+        on: rev.sense_id == s.object_id and rev.is_current,
+        left_join: srr in SourceRecordRevision,
+        on: srr.id == rev.source_record_revision_id,
         left_join: r in SourceRecord,
-        on: r.id == row.source_record_id
-
-    total = Repo.aggregate(from(row in schema), :count)
+        on: r.id == srr.source_record_id
 
     linked =
-      query
+      base
       |> where(
-        [row, r],
-        not is_nil(row.url) or not is_nil(r.url) or row.source_id in ^templated_source_ids
+        [s, rev, _srr, r],
+        not is_nil(rev.url) or not is_nil(r.url) or s.source_id in ^templated
+      )
+      |> Repo.aggregate(:count)
+
+    %{
+      total: Repo.aggregate(Sense, :count),
+      linked: linked,
+      pct: pct(linked, Repo.aggregate(Sense, :count))
+    }
+  end
+
+  defp linkable_content(templated) do
+    base =
+      from c in ContentItem,
+        join: rev in ContentRevision,
+        on: rev.content_id == c.object_id and rev.is_current,
+        left_join: srr in SourceRecordRevision,
+        on: srr.id == rev.source_record_revision_id,
+        left_join: r in SourceRecord,
+        on: r.id == srr.source_record_id
+
+    total = Repo.aggregate(ContentItem, :count)
+
+    linked =
+      base
+      |> where(
+        [c, rev, _srr, r],
+        not is_nil(rev.canonical_url) or not is_nil(r.url) or c.source_id in ^templated
       )
       |> Repo.aggregate(:count)
 
@@ -263,13 +302,22 @@ defmodule DevilsDictionary.Health do
       Repo.query!(
         """
         WITH refs AS (
-          SELECT concept_id AS id FROM concept_links
-          UNION SELECT from_concept_id FROM concept_relations
-          UNION SELECT to_concept_id FROM concept_relations
+          SELECT r.object_object_id AS id
+            FROM assertion_revisions r
+            JOIN predicates p ON p.id = r.predicate_id
+           WHERE r.is_current
+             AND p.key IN ('refers_to', 'lexeme_entity_candidate',
+                           'parent_taxon', 'subclass_of', 'instance_of', 'taxon_item')
+          UNION
+          SELECT r.subject_object_id
+            FROM assertion_revisions r
+            JOIN predicates p ON p.id = r.predicate_id
+           WHERE r.is_current
+             AND p.key IN ('parent_taxon', 'subclass_of', 'instance_of', 'taxon_item')
         )
         SELECT count(*),
-               count(*) FILTER (WHERE c.id IS NULL)
-          FROM refs LEFT JOIN concepts c ON c.id = refs.id
+               count(*) FILTER (WHERE e.object_id IS NULL)
+          FROM refs LEFT JOIN entities e ON e.object_id = refs.id
         """,
         [],
         timeout: :infinity
@@ -308,33 +356,18 @@ defmodule DevilsDictionary.Health do
   def wikipedia_coverage do
     source = Sources.get_source_by_slug!("wikipedia")
 
-    with_sitelink =
-      from(c in Concept, where: not is_nil(c.wikipedia_title)) |> Repo.aggregate(:count)
+    with_sitelink = Repo.aggregate(sitelinked(), :count)
 
     asserted = asserted_concepts()
     asserted_answered = asserted_concepts_answered(source)
 
     answered =
       Repo.one!(
-        from c in Concept,
-          where: not is_nil(c.wikipedia_title),
-          where:
-            fragment("EXISTS (SELECT 1 FROM entries e WHERE e.concept_id = ?)", c.id) or
-              fragment(
-                "EXISTS (SELECT 1 FROM source_records r WHERE r.source_id = ? AND r.external_id = 'concept:' || ?)",
-                ^source.id,
-                c.qid
-              ),
-          select: count(c.id)
+        from e in sitelinked(), where: ^answered_clause(source), select: count(e.object_id)
       )
 
     with_entry =
-      Repo.one!(
-        from c in Concept,
-          where: not is_nil(c.wikipedia_title),
-          where: fragment("EXISTS (SELECT 1 FROM entries e WHERE e.concept_id = ?)", c.id),
-          select: count(c.id)
-      )
+      Repo.one!(from e in sitelinked(), where: ^has_article(), select: count(e.object_id))
 
     %{
       with_sitelink: with_sitelink,
@@ -354,40 +387,76 @@ defmodule DevilsDictionary.Health do
   # the all-sitelinked denominator grows faster than any pass can fill it. The
   # S3 audit predicted this for the second scope and recommended exactly this
   # split; S5's `emotions` scope is where it came due (#69 v13).
-  @asserted ~w(auto confirmed)
+  # `concept_links.status IN ('auto','confirmed')` is now "an asserted link the
+  # reviewers have not rejected", which is what it always meant;
+  # `Encyclopedia.linked_lexemes_query/1` is the one definition of it.
+  defp sitelinked do
+    from e in Entity,
+      as: :entity,
+      where: not is_nil(fragment("? ->> 'wikipedia_title'", e.metadata))
+  end
+
+  defp has_article do
+    dynamic(
+      [e],
+      fragment(
+        """
+        EXISTS (
+          SELECT 1 FROM assertion_revisions ar
+            JOIN predicates ap ON ap.id = ar.predicate_id
+           WHERE ar.object_object_id = ? AND ar.is_current
+             AND ar.lifecycle_state = 'active' AND ap.key = 'about'
+        )
+        """,
+        e.object_id
+      )
+    )
+  end
+
+  # Answered means "we asked": an article, or a record — including the absent
+  # marker a disambiguation page leaves, which is answered by its candidate list
+  # and deliberately gets no article.
+  defp answered_clause(source) do
+    dynamic(
+      [e],
+      ^has_article() or
+        fragment(
+          """
+          EXISTS (
+            SELECT 1 FROM source_records r
+              JOIN external_identifiers x
+                ON x.object_id = ? AND x.namespace = 'wikidata' AND x.status = 'verified'
+             WHERE r.source_id = ? AND r.external_id = 'concept:' || x.external_id
+          )
+          """,
+          e.object_id,
+          ^source.id
+        )
+    )
+  end
+
+  # `exists(subquery)` with `parent_as`, not an interpolated fragment: Ecto
+  # refuses a runtime string as a fragment's first argument, and it is right to
+  # — the composable form is also the one that keeps a single definition of
+  # what an asserted link is.
+  defp asserted_entity do
+    from lk in subquery(Encyclopedia.linked_lexemes_query()),
+      where: lk.entity_id == parent_as(:entity).object_id,
+      select: 1
+  end
 
   defp asserted_concepts do
     Repo.one!(
-      from c in Concept,
-        where: not is_nil(c.wikipedia_title),
-        where:
-          fragment(
-            "EXISTS (SELECT 1 FROM concept_links cl WHERE cl.concept_id = ? AND cl.status = ANY(?))",
-            c.id,
-            ^@asserted
-          ),
-        select: count(c.id)
+      from e in sitelinked(), where: exists(asserted_entity()), select: count(e.object_id)
     )
   end
 
   defp asserted_concepts_answered(source) do
     Repo.one!(
-      from c in Concept,
-        where: not is_nil(c.wikipedia_title),
-        where:
-          fragment(
-            "EXISTS (SELECT 1 FROM concept_links cl WHERE cl.concept_id = ? AND cl.status = ANY(?))",
-            c.id,
-            ^@asserted
-          ),
-        where:
-          fragment("EXISTS (SELECT 1 FROM entries e WHERE e.concept_id = ?)", c.id) or
-            fragment(
-              "EXISTS (SELECT 1 FROM source_records r WHERE r.source_id = ? AND r.external_id = 'concept:' || ?)",
-              ^source.id,
-              c.qid
-            ),
-        select: count(c.id)
+      from e in sitelinked(),
+        where: exists(asserted_entity()),
+        where: ^answered_clause(source),
+        select: count(e.object_id)
     )
   end
 
@@ -406,24 +475,25 @@ defmodule DevilsDictionary.Health do
     %{rows: [[asserted, asserted_with_image, lexemes, lexemes_with_image]]} =
       Repo.query!(
         """
-        WITH asserted AS (
-          SELECT DISTINCT cl.concept_id AS id
-            FROM concept_links cl
-            JOIN scope_lexemes sl ON sl.lexeme_id = cl.lexeme_id AND sl.scope_id = $1
-           WHERE cl.status IN ('auto', 'confirmed')
+        WITH linked AS (#{Encyclopedia.linked_lexemes_sql()}),
+        asserted AS (
+          SELECT DISTINCT linked.entity_id AS id
+            FROM linked
+            JOIN scope_lexeme_members sl
+              ON sl.lexeme_id = linked.lexeme_id AND sl.scope_id = $1
         ),
         per_lexeme AS (
-          SELECT sl.lexeme_id, bool_or(c.image_url IS NOT NULL) AS has_image
-            FROM scope_lexemes sl
-            JOIN concept_links cl
-              ON cl.lexeme_id = sl.lexeme_id AND cl.status IN ('auto', 'confirmed')
-            JOIN concepts c ON c.id = cl.concept_id
+          SELECT sl.lexeme_id,
+                 bool_or(e.metadata ->> 'image_url' IS NOT NULL) AS has_image
+            FROM scope_lexeme_members sl
+            JOIN linked ON linked.lexeme_id = sl.lexeme_id
+            JOIN entities e ON e.object_id = linked.entity_id
            WHERE sl.scope_id = $1
            GROUP BY 1
         )
         SELECT (SELECT count(*) FROM asserted),
-               (SELECT count(*) FROM asserted JOIN concepts c ON c.id = asserted.id
-                 WHERE c.image_url IS NOT NULL),
+               (SELECT count(*) FROM asserted JOIN entities e ON e.object_id = asserted.id
+                 WHERE e.metadata ->> 'image_url' IS NOT NULL),
                (SELECT count(*) FROM per_lexeme),
                (SELECT count(*) FROM per_lexeme WHERE has_image)
         """,
@@ -431,18 +501,20 @@ defmodule DevilsDictionary.Health do
         timeout: :infinity
       )
 
-    with_entry =
-      from(c in Concept,
-        where: fragment("EXISTS (SELECT 1 FROM entries e WHERE e.concept_id = ?)", c.id)
-      )
+    with_entry = from e in Entity, where: ^has_article()
 
     entries = Repo.aggregate(with_entry, :count)
 
     entries_with_image =
-      with_entry |> where([c], not is_nil(c.image_url)) |> Repo.aggregate(:count)
+      with_entry
+      |> where([e], not is_nil(fragment("? ->> 'image_url'", e.metadata)))
+      |> Repo.aggregate(:count)
 
-    all = Repo.aggregate(Concept, :count)
-    all_with_image = from(c in Concept, where: not is_nil(c.image_url)) |> Repo.aggregate(:count)
+    all = Repo.aggregate(Entity, :count)
+
+    all_with_image =
+      from(e in Entity, where: not is_nil(fragment("? ->> 'image_url'", e.metadata)))
+      |> Repo.aggregate(:count)
 
     %{
       asserted: asserted,
@@ -480,12 +552,14 @@ defmodule DevilsDictionary.Health do
 
     histogram =
       Repo.all(
-        from cl in ConceptLink,
-          join: sl in ScopeLexeme,
-          on: sl.lexeme_id == cl.lexeme_id and sl.scope_id == ^scope.id,
-          group_by: [cl.method, cl.confidence],
-          order_by: [asc: cl.method, desc: cl.confidence],
-          select: {cl.method, cl.confidence, count(cl.id)}
+        from link in subquery(Encyclopedia.linked_lexemes_query()),
+          join: r in AssertionRevision,
+          on: r.id == link.revision_id,
+          join: sl in ScopeMember,
+          on: sl.lexeme_id == link.lexeme_id and sl.scope_id == ^scope.id,
+          group_by: [r.method, r.confidence],
+          order_by: [asc: r.method, desc: r.confidence],
+          select: {r.method, r.confidence, count(r.id)}
       )
 
     %{
@@ -513,19 +587,19 @@ defmodule DevilsDictionary.Health do
 
     rows =
       Repo.all(
-        from cl in ConceptLink,
+        from link in subquery(Encyclopedia.linked_lexemes_query(min_confidence: 0.0)),
           join: l in Lexeme,
-          on: l.id == cl.lexeme_id,
-          join: sl in ScopeLexeme,
-          on: sl.lexeme_id == cl.lexeme_id and sl.scope_id == ^scope.id,
-          where: cl.confidence >= ^threshold and cl.status != :rejected,
-          group_by: [cl.lexeme_id, l.lemma, l.pos],
-          having: count(fragment("DISTINCT ?", cl.concept_id)) > 1,
-          order_by: [desc: count(fragment("DISTINCT ?", cl.concept_id))],
+          on: l.object_id == link.lexeme_id,
+          join: sl in ScopeMember,
+          on: sl.lexeme_id == link.lexeme_id and sl.scope_id == ^scope.id,
+          where: link.confidence >= ^threshold,
+          group_by: [link.lexeme_id, l.lemma, l.part_of_speech],
+          having: count(fragment("DISTINCT ?", link.entity_id)) > 1,
+          order_by: [desc: count(fragment("DISTINCT ?", link.entity_id))],
           select: %{
             lemma: l.lemma,
-            pos: l.pos,
-            concepts: count(fragment("DISTINCT ?", cl.concept_id))
+            pos: l.part_of_speech,
+            concepts: count(fragment("DISTINCT ?", link.entity_id))
           }
       )
 
@@ -562,29 +636,44 @@ defmodule DevilsDictionary.Health do
       Repo.query!(
         """
         WITH RECURSIVE descendants(id) AS (
-          SELECT c.id FROM concepts c WHERE c.qid = $2
+          SELECT x.object_id FROM external_identifiers x
+           WHERE x.namespace = 'wikidata' AND x.external_id = $2 AND x.status = 'verified'
           UNION
-          SELECT r.from_concept_id FROM concept_relations r
-            JOIN descendants d ON r.to_concept_id = d.id
-           WHERE r.type = 'parent_taxon'
+          SELECT r.subject_object_id
+            FROM assertion_revisions r
+            JOIN predicates p ON p.id = r.predicate_id
+            JOIN descendants d ON r.object_object_id = d.id
+           WHERE p.key = 'parent_taxon' AND r.is_current AND r.lifecycle_state = 'active'
         ),
+        asserted_link AS (#{Encyclopedia.linked_lexemes_sql()}),
+        -- The second population L3 reports beside the first: every link that is
+        -- not rejected, including the 0.40 candidates a "may refer to" page
+        -- named. *BYD Seal* was never going to reach Animalia, so grading on it
+        -- would grade Wikipedia's disambiguation pages rather than the linker.
+        any_link AS (#{Encyclopedia.linked_lexemes_sql(0.0)}),
         linked AS (
-          SELECT DISTINCT cl.concept_id AS id
-            FROM concept_links cl
-            JOIN scope_lexemes sl ON sl.lexeme_id = cl.lexeme_id AND sl.scope_id = $1
-           WHERE cl.status IN ('auto', 'confirmed')
+          SELECT DISTINCT el.entity_id AS id
+            FROM asserted_link el
+            JOIN scope_lexeme_members sl
+              ON sl.lexeme_id = el.lexeme_id AND sl.scope_id = $1
         ),
         all_linked AS (
-          SELECT DISTINCT cl.concept_id AS id
-            FROM concept_links cl
-            JOIN scope_lexemes sl ON sl.lexeme_id = cl.lexeme_id AND sl.scope_id = $1
-           WHERE cl.status <> 'rejected'
+          SELECT DISTINCT el.entity_id AS id
+            FROM any_link el
+            JOIN scope_lexeme_members sl
+              ON sl.lexeme_id = el.lexeme_id AND sl.scope_id = $1
         ),
         reaching AS (
-          SELECT c.id
-            FROM concepts c
-           WHERE c.id IN (SELECT id FROM descendants)
-              OR c.taxon_concept_id IN (SELECT id FROM descendants)
+          SELECT e.object_id AS id
+            FROM entities e
+           WHERE e.object_id IN (SELECT id FROM descendants)
+              OR EXISTS (
+                   SELECT 1 FROM assertion_revisions tr
+                     JOIN predicates tp ON tp.id = tr.predicate_id
+                    WHERE tr.subject_object_id = e.object_id AND tp.key = 'taxon_item'
+                      AND tr.is_current AND tr.lifecycle_state = 'active'
+                      AND tr.object_object_id IN (SELECT id FROM descendants)
+                 )
         )
         SELECT (SELECT count(*) FROM linked),
                (SELECT count(*) FROM linked WHERE id IN (SELECT id FROM reaching)),
@@ -633,19 +722,30 @@ defmodule DevilsDictionary.Health do
           scope_query(scope),
           [_sl, l],
           fragment(
-            "EXISTS (SELECT 1 FROM concept_links cl WHERE cl.lexeme_id = ? AND cl.method = 'disambiguation')",
-            l.id
+            """
+            EXISTS (
+              SELECT 1 FROM assertion_revisions ar
+                JOIN predicates ap ON ap.id = ar.predicate_id
+               WHERE ar.subject_object_id = ? AND ar.is_current
+                 AND ap.key = 'lexeme_entity_candidate' AND ar.method = 'disambiguation'
+            )
+            """,
+            l.object_id
           )
         )
       )
 
     candidates =
       Repo.one!(
-        from cl in ConceptLink,
-          join: sl in ScopeLexeme,
-          on: sl.lexeme_id == cl.lexeme_id and sl.scope_id == ^scope.id,
-          where: cl.method == :disambiguation,
-          select: count(cl.id)
+        from link in subquery(
+               Encyclopedia.linked_lexemes_query(visibility: :internal, min_confidence: 0.0)
+             ),
+             join: r in AssertionRevision,
+             on: r.id == link.revision_id,
+             join: sl in ScopeMember,
+             on: sl.lexeme_id == link.lexeme_id and sl.scope_id == ^scope.id,
+             where: r.method == "disambiguation",
+             select: count(r.id)
       )
 
     # A lemma whose only scope lexemes are adjectives or verbs can never carry a
@@ -657,7 +757,7 @@ defmodule DevilsDictionary.Health do
           scope_query(scope),
           [_sl, l],
           fragment(
-            "NOT EXISTS (SELECT 1 FROM lexemes n JOIN scope_lexemes s2 ON s2.lexeme_id = n.id AND s2.scope_id = ? WHERE n.lemma = ? AND n.pos = ANY(?))",
+            "NOT EXISTS (SELECT 1 FROM lexemes n JOIN scope_lexeme_members s2 ON s2.lexeme_id = n.object_id AND s2.scope_id = ? WHERE n.lemma = ? AND n.part_of_speech = ANY(?))",
             ^scope.id,
             l.lemma,
             ^DevilsDictionary.Absorb.Linker.nominal_pos()
@@ -674,11 +774,15 @@ defmodule DevilsDictionary.Health do
       candidates: candidates,
       promoted:
         Repo.one!(
-          from cl in ConceptLink,
-            join: sl in ScopeLexeme,
-            on: sl.lexeme_id == cl.lexeme_id and sl.scope_id == ^scope.id,
-            where: cl.method == :disambiguation and cl.confidence > 0.4,
-            select: count(cl.id)
+          from link in subquery(
+                 Encyclopedia.linked_lexemes_query(visibility: :internal, min_confidence: 0.0)
+               ),
+               join: r in AssertionRevision,
+               on: r.id == link.revision_id,
+               join: sl in ScopeMember,
+               on: sl.lexeme_id == link.lexeme_id and sl.scope_id == ^scope.id,
+               where: r.method == "disambiguation" and r.confidence > 0.4,
+               select: count(r.id)
         )
     }
   end
@@ -686,10 +790,34 @@ defmodule DevilsDictionary.Health do
   # ── S2 helpers ───────────────────────────────────────────────────────────
 
   defp scope_query(scope) do
-    from sl in ScopeLexeme,
+    from sl in ScopeMember,
       join: l in Lexeme,
-      on: l.id == sl.lexeme_id,
+      as: :lexeme,
+      on: l.object_id == sl.lexeme_id,
       where: sl.scope_id == ^scope.id
+  end
+
+  # "This word is linked to some thing", as one correlated subquery the five
+  # callers below share. `Encyclopedia.linked_lexemes_query/1` is the single
+  # definition of what an asserted link is, so none of them spells the rule
+  # again — which is the property the browse page and L1 depend on.
+  defp linked_to_word(opts \\ []) do
+    # `min_confidence: 0.0` on the base, then this function's own floor: L1
+    # counts the same population at several thresholds, including zero, so it
+    # must widen the shared rule explicitly rather than inherit its default.
+    from(lk in subquery(Encyclopedia.linked_lexemes_query(min_confidence: 0.0)),
+      where: lk.lexeme_id == parent_as(:lexeme).object_id,
+      select: 1
+    )
+    |> then(fn q ->
+      case opts[:min_confidence] do
+        nil -> q
+        min -> where(q, [lk], lk.confidence >= ^min)
+      end
+    end)
+    |> then(fn q ->
+      if opts[:strict], do: where(q, [lk], not lk.corroborated), else: q
+    end)
   end
 
   defp scope_attested(scope, source_slug) do
@@ -702,10 +830,7 @@ defmodule DevilsDictionary.Health do
 
   defp scope_with_concept(scope) do
     scope_query(scope)
-    |> where(
-      [_sl, l],
-      fragment("EXISTS (SELECT 1 FROM concept_links cl WHERE cl.lexeme_id = ?)", l.id)
-    )
+    |> where(exists(linked_to_word()))
     |> Repo.aggregate(:count)
   end
 
@@ -720,8 +845,8 @@ defmodule DevilsDictionary.Health do
   defp scope_with_article(scope) do
     Repo.one(
       from l in Lexeme,
-        join: sl in ScopeLexeme,
-        on: sl.lexeme_id == l.id and sl.scope_id == ^scope.id,
+        join: sl in ScopeMember,
+        on: sl.lexeme_id == l.object_id and sl.scope_id == ^scope.id,
         where:
           fragment(
             """
@@ -733,7 +858,7 @@ defmodule DevilsDictionary.Health do
             """,
             l.lemma
           ),
-        select: count(l.id)
+        select: count(l.object_id)
     )
   end
 
@@ -745,8 +870,7 @@ defmodule DevilsDictionary.Health do
     scope_query(scope)
     |> where(
       [_sl, l],
-      fragment("? = ANY(?)", ^source.id, l.source_ids) or
-        fragment("EXISTS (SELECT 1 FROM concept_links cl WHERE cl.lexeme_id = ?)", l.id)
+      fragment("? = ANY(?)", ^source.id, l.source_ids) or exists(linked_to_word())
     )
     |> Repo.aggregate(:count)
   end
@@ -754,28 +878,13 @@ defmodule DevilsDictionary.Health do
   defp scope_with_link(scope, threshold, opts \\ []) do
     query =
       scope_query(scope)
-      |> where(
-        [_sl, l],
-        fragment(
-          "EXISTS (SELECT 1 FROM concept_links cl WHERE cl.lexeme_id = ? AND cl.confidence >= ? AND cl.status <> 'rejected')",
-          l.id,
-          ^threshold
-        )
-      )
+      |> where(exists(linked_to_word(min_confidence: threshold)))
 
     # The strict reading ignores anything corroboration lifted, which is what
     # makes the two L1 numbers comparable.
     query =
       if opts[:strict] do
-        where(
-          query,
-          [_sl, l],
-          fragment(
-            "EXISTS (SELECT 1 FROM concept_links cl WHERE cl.lexeme_id = ? AND cl.confidence >= ? AND cl.status <> 'rejected' AND NOT jsonb_exists(cl.metadata, 'corroboration'))",
-            l.id,
-            ^threshold
-          )
-        )
+        where(query, exists(linked_to_word(min_confidence: threshold, strict: true)))
       else
         query
       end
@@ -785,12 +894,14 @@ defmodule DevilsDictionary.Health do
 
   defp corroboration_counts(scope) do
     Repo.all(
-      from cl in ConceptLink,
-        join: sl in ScopeLexeme,
-        on: sl.lexeme_id == cl.lexeme_id and sl.scope_id == ^scope.id,
-        where: fragment("jsonb_exists(?, 'corroboration')", cl.metadata),
-        group_by: fragment("?->>'corroboration'", cl.metadata),
-        select: {fragment("?->>'corroboration'", cl.metadata), count(cl.id)}
+      from link in subquery(Encyclopedia.linked_lexemes_query()),
+        join: r in AssertionRevision,
+        on: r.id == link.revision_id,
+        join: sl in ScopeMember,
+        on: sl.lexeme_id == link.lexeme_id and sl.scope_id == ^scope.id,
+        where: fragment("jsonb_exists(?, 'corroboration')", r.metadata),
+        group_by: fragment("? ->> 'corroboration'", r.metadata),
+        select: {fragment("? ->> 'corroboration'", r.metadata), count(r.id)}
     )
     |> Map.new()
   end

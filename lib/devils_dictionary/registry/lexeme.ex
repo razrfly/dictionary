@@ -31,6 +31,9 @@ defmodule DevilsDictionary.Registry.Lexeme do
     field :slug, :string
     field :canonical_lexeme_id, :id
     field :etymology, :string
+    field :etymology_source_id, :id
+    field :origin_source_id, :id
+    # `%{"items" => [%{"ipa" => ..., "tags" => [...]}]}`. See the migration.
     field :pronunciations, :map, default: %{}
     field :source_ids, {:array, :integer}, default: []
     field :metadata, :map, default: %{}
@@ -40,7 +43,8 @@ defmodule DevilsDictionary.Registry.Lexeme do
   end
 
   @castable ~w(object_id language_tag lemma part_of_speech slug canonical_lexeme_id
-               etymology pronunciations source_ids metadata enriched_at)a
+               etymology etymology_source_id origin_source_id pronunciations
+               source_ids metadata enriched_at)a
 
   def changeset(lexeme, attrs) do
     lexeme

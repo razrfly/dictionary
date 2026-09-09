@@ -3,10 +3,10 @@ defmodule DevilsDictionaryWeb.SourceLiveTest do
 
   use DevilsDictionaryWeb.ConnCase, async: true
 
+  import DevilsDictionary.WordFixtures
+
   alias DevilsDictionary.Fixtures
-  alias DevilsDictionary.{Health, Repo}
-  alias DevilsDictionary.Lexicon.{Entry, Lexeme, ScopeLexeme}
-  alias DevilsDictionary.Sources.SourceRecord
+  alias DevilsDictionary.Health
 
   setup do
     %{sources: sources, scopes: scopes} = Fixtures.seed_catalog!()
@@ -29,31 +29,16 @@ defmodule DevilsDictionaryWeb.SourceLiveTest do
   end
 
   test "what it holds, and what that became", ctx do
-    source = ctx.sources["bierce"]
-    now = DateTime.utc_now()
+    record = record!(ctx, "bierce", external_id: "CAT/n", raw: %{})
+    lexeme = word!(ctx, "cat", ~w(bierce), scope: nil)
 
-    record =
-      Repo.insert!(%SourceRecord{
-        source_id: source.id,
-        external_id: "CAT/n",
-        raw: %{},
-        content_hash: "x",
-        fetched_at: now,
-        materialized_at: now
-      })
-
-    lexeme = Repo.insert!(%Lexeme{lang: "en", lemma: "cat", pos: "noun", slug: "cat"})
-
-    Repo.insert!(%Entry{
-      source_id: source.id,
-      source_record_id: record.id,
-      lexeme_id: lexeme.id,
+    entry!(ctx, lexeme, "bierce",
+      record: record,
       headword: "CAT",
       pos: "n",
       body: "A soft, indestructible automaton.",
-      body_format: :markdown,
       year: 1911
-    })
+    )
 
     {:ok, _live, html} = live(ctx.conn, ~p"/sources/bierce")
 
@@ -65,29 +50,8 @@ defmodule DevilsDictionaryWeb.SourceLiveTest do
   end
 
   test "coverage of the scope is Health.coverage/2's number", ctx do
-    lexeme =
-      Repo.insert!(%Lexeme{
-        lang: "en",
-        lemma: "cat",
-        pos: "noun",
-        slug: "cat",
-        source_ids: [ctx.sources["bierce"].id]
-      })
-
-    Repo.insert!(%ScopeLexeme{
-      scope_id: ctx.animals.id,
-      lexeme_id: lexeme.id,
-      reasons: ["wordnet_closure"]
-    })
-
-    Repo.insert!(%Lexeme{lang: "en", lemma: "oyster", pos: "noun", slug: "oyster"})
-    |> then(
-      &Repo.insert!(%ScopeLexeme{
-        scope_id: ctx.animals.id,
-        lexeme_id: &1.id,
-        reasons: ["wordnet_closure"]
-      })
-    )
+    word!(ctx, "cat", ~w(bierce))
+    word!(ctx, "oyster", [])
 
     {:ok, _live, html} = live(ctx.conn, ~p"/sources/bierce")
 
@@ -107,20 +71,7 @@ defmodule DevilsDictionaryWeb.SourceLiveTest do
   end
 
   test "coverage is of the scope asked for, not always Animals (#70 S5c)", ctx do
-    lexeme =
-      Repo.insert!(%Lexeme{
-        lang: "en",
-        lemma: "joy",
-        pos: "noun",
-        slug: "joy",
-        source_ids: [ctx.sources["bierce"].id]
-      })
-
-    Repo.insert!(%ScopeLexeme{
-      scope_id: ctx.emotions.id,
-      lexeme_id: lexeme.id,
-      reasons: ["wordnet_closure"]
-    })
+    word!(ctx, "joy", ~w(bierce), scope: ctx.emotions)
 
     {:ok, _live, html} = live(ctx.conn, ~p"/sources/bierce?scope=emotions")
 

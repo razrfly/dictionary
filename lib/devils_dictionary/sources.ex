@@ -69,7 +69,14 @@ defmodule DevilsDictionary.Sources do
         )
 
       revision = ensure_revision(record, hash, raw, now, attrs[:import_run_id])
-      Map.put(record, :current_revision, revision)
+
+      # `raw` is virtual, so the caller gets back a record whose payload is
+      # loaded — the on-demand enrich path hands this straight to
+      # `materialize/1`, which is a pure function of the record and would
+      # otherwise see an empty map and write nothing at all.
+      record
+      |> Map.put(:current_revision, revision)
+      |> Map.put(:raw, raw)
     end)
   end
 
@@ -158,6 +165,7 @@ defmodule DevilsDictionary.Sources do
     |> Enum.map(fn row ->
       raw = row[:raw] || %{}
       hash = row[:content_hash] || SourceRecord.content_hash(raw)
+
       {%{
          source_id: source.id,
          external_id: row.external_id,
@@ -239,6 +247,40 @@ defmodule DevilsDictionary.Sources do
         where: rec.id == ^id and rev.revision_key == rec.content_hash,
         select: rev.payload
     )
+  end
+
+  @doc """
+  Adds an annotation to a record's current revision, in place.
+
+  The contract, stated once because it is the only in-place write to a payload
+  anywhere: **a key beginning with `_` is ours, not the source's.** `_probe`
+  records the lemma we asked about; `_candidates` records the "may refer to"
+  list a second request read off the same page. Neither is content the source
+  changed, so neither may move `changed_at`, create a revision, or alter
+  `checksum` — which still pins the source's own bytes as fetched, before
+  `trim/1`.
+
+  Everything else about a revision stays immutable. A cited revision's source
+  content is exactly what it was.
+  """
+  def annotate_record(%SourceRecord{} = record, annotations) when is_map(annotations) do
+    keys = Map.keys(annotations)
+
+    unless Enum.all?(keys, &String.starts_with?(to_string(&1), "_")) do
+      raise ArgumentError,
+            "an annotation key must begin with _ (ours, not the source's): #{inspect(keys)}"
+    end
+
+    {count, _} =
+      Repo.update_all(
+        from(rev in SourceRecordRevision,
+          where: rev.source_record_id == ^record.id and rev.revision_key == ^record.content_hash,
+          update: [set: [payload: fragment("? || ?", rev.payload, ^annotations)]]
+        ),
+        []
+      )
+
+    count
   end
 
   @doc """

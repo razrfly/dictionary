@@ -129,6 +129,7 @@ defmodule DevilsDictionaryWeb.UserLive.Login do
   end
 
   defp local_mail_adapter? do
-    Application.get_env(:devils_dictionary, DevilsDictionary.Mailer)[:adapter] == Swoosh.Adapters.Local
+    Application.get_env(:devils_dictionary, DevilsDictionary.Mailer)[:adapter] ==
+      Swoosh.Adapters.Local
   end
 end

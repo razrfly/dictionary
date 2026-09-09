@@ -103,5 +103,44 @@ defmodule DevilsDictionary.Absorb.Clients.Wikidata do
     end
   end
 
-  defp claims(entity, property), do: entity |> Map.get("claims", %{}) |> Map.get(property, [])
+  @doc """
+  Every statement for a property, with its rank, qualifiers and references.
+
+  For callers that need the evidence rather than just the value — the audit's
+  finding #8: a deprecated statement was being read as if it were current.
+  """
+  def statements(entity, property) do
+    entity
+    |> raw_claims(property)
+    |> Enum.map(fn claim ->
+      %{
+        id: claim["id"],
+        rank: claim["rank"] || "normal",
+        value: get_in(claim, ["mainsnak", "datavalue", "value"]),
+        qualifiers: claim["qualifiers"] || %{},
+        references: claim["references"] || []
+      }
+    end)
+  end
+
+  # Wikidata's own rank policy, which the readers above did not apply: a
+  # `deprecated` statement is one the community has marked wrong and must never
+  # be read as a value. Where any statement is `preferred`, the preferred ones
+  # are the answer and the merely `normal` ones are not — that is what "rank"
+  # means, and reading them all equally is how a superseded population figure or
+  # a former taxonomic parent ends up on the page beside the current one.
+  #
+  # The full statements, ranks and references are still available through
+  # `statements/2`, so nothing is discarded — only the *default reading* changes.
+  defp claims(entity, property) do
+    all = entity |> raw_claims(property) |> Enum.reject(&(&1["rank"] == "deprecated"))
+
+    case Enum.filter(all, &(&1["rank"] == "preferred")) do
+      [] -> all
+      preferred -> preferred
+    end
+  end
+
+  defp raw_claims(entity, property),
+    do: entity |> Map.get("claims", %{}) |> Map.get(property, [])
 end

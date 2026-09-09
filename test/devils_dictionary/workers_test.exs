@@ -8,7 +8,6 @@ defmodule DevilsDictionary.WorkersTest do
   use Oban.Testing, repo: DevilsDictionary.Repo
 
   alias DevilsDictionary.Absorb.Clients
-  alias DevilsDictionary.Encyclopedia.Concept
   alias DevilsDictionary.{Fixtures, Repo, Sources}
   alias DevilsDictionary.Sources.SourceRecord
   alias DevilsDictionary.Workers.EnrichWorker
@@ -55,9 +54,9 @@ defmodule DevilsDictionary.WorkersTest do
 
     assert :ok = perform_job(EnrichWorker, %{"source" => "wikidata", "target" => "Q146"})
 
-    concept = Repo.get_by!(Concept, qid: "Q146")
-    assert concept.wikipedia_title == "Cat"
-    assert concept.wordnet_ili == "i46593"
+    concept = DevilsDictionary.Encyclopedia.by_qid!("Q146")
+    assert concept.metadata["wikipedia_title"] == "Cat"
+    assert concept.metadata["wordnet_ili"] == "i46593"
     assert record!("wikidata", "Q146").materialized_at
   end
 

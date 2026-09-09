@@ -182,7 +182,7 @@ defmodule DevilsDictionaryWeb.ScopeLive do
         qid = qid || root
 
         %{
-          here: Encyclopedia.get_concept_by_qid(qid),
+          here: qid |> Encyclopedia.by_qid() |> Encyclopedia.view(),
           path: path_to(qid, root),
           children: Encyclopedia.taxon_children(qid, scope.slug)
         }
@@ -192,9 +192,15 @@ defmodule DevilsDictionaryWeb.ScopeLive do
   defp path_to(root, root), do: []
 
   defp path_to(qid, _root) do
-    case Encyclopedia.get_concept_by_qid(qid) do
-      nil -> []
-      concept -> concept |> Encyclopedia.taxon_chain() |> Enum.reverse()
+    case Encyclopedia.by_qid(qid) do
+      nil ->
+        []
+
+      entity ->
+        entity
+        |> Encyclopedia.taxon_chain()
+        |> Enum.map(&Encyclopedia.view/1)
+        |> Enum.reverse()
     end
   end
 

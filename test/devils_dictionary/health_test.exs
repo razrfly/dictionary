@@ -9,7 +9,10 @@ defmodule DevilsDictionary.HealthTest do
   alias DevilsDictionary.Absorb.Materializer
   alias DevilsDictionary.Fixtures
   alias DevilsDictionary.{Health, Lexicon, Repo, Sources}
-  alias DevilsDictionary.Lexicon.{Lexeme, ScopeLexeme, Sense}
+  alias DevilsDictionary.Lexicon.ScopeMember
+  alias DevilsDictionary.Registry
+  alias DevilsDictionary.Registry.Sense
+  alias DevilsDictionary.WordFixtures
   alias DevilsDictionary.Sources.SourceRecord
 
   setup do
@@ -18,17 +21,43 @@ defmodule DevilsDictionary.HealthTest do
   end
 
   defp lexeme!(lemma, source_ids) do
-    Repo.insert!(%Lexeme{
-      lang: "en",
-      lemma: lemma,
-      pos: "noun",
-      slug: Lexeme.slug(lemma),
-      source_ids: source_ids
-    })
+    {:ok, lexeme} =
+      Registry.create_lexeme(%{
+        language_tag: "en",
+        lemma: lemma,
+        part_of_speech: "noun",
+        source_ids: source_ids
+      })
+
+    lexeme
   end
 
   defp scoped!(scope, lexeme, reasons \\ ["wordnet_closure"]) do
-    Repo.insert!(%ScopeLexeme{scope_id: scope.id, lexeme_id: lexeme.id, reasons: reasons})
+    Repo.insert!(%ScopeMember{
+      scope_id: scope.id,
+      lexeme_id: lexeme.object_id,
+      reasons: reasons
+    })
+  end
+
+  defp revision_id(record) do
+    Repo.one!(
+      from r in DevilsDictionary.Corpus.SourceRecordRevision,
+        where: r.source_record_id == ^record.id,
+        select: r.id
+    )
+  end
+
+  defp sense!(lexeme, source, attrs) do
+    {:ok, sense} =
+      Registry.create_sense(
+        Map.merge(
+          %{lexeme_id: lexeme.object_id, source_id: source.id},
+          Map.new(attrs)
+        )
+      )
+
+    sense
   end
 
   describe "coverage/2 (A5)" do
@@ -46,11 +75,12 @@ defmodule DevilsDictionary.HealthTest do
       # concept's `taxon.scientific_name` does.
       scoped!(ctx.animals, lexeme!("Cimex", [wordnet]))
 
-      Repo.insert!(%DevilsDictionary.Encyclopedia.Concept{
-        qid: "Q1",
-        label: "Cimex",
-        taxon: %{"scientific_name" => "Cimex", "rank" => "genus"}
-      })
+      {:ok, _} =
+        Registry.create_entity(%{
+          entity_kind: :taxon,
+          preferred_label: "Cimex",
+          metadata: %{"taxon" => %{"scientific_name" => "Cimex", "rank" => "genus"}}
+        })
 
       result = Health.coverage("animals", "wiktionary")
 
@@ -78,13 +108,11 @@ defmodule DevilsDictionary.HealthTest do
       source = ctx.sources["wordnet"]
       lexeme = lexeme!("cat", [source.id])
 
-      Repo.insert!(%Sense{
-        lexeme_id: lexeme.id,
-        source_id: source.id,
-        external_id: "oewn-1-n#cat",
+      sense!(lexeme, source,
+        external_key: "oewn-1-n#cat",
         gloss: "a cat",
         url: "https://en-word.net/id/oewn-1-n"
-      })
+      )
 
       assert %{senses: %{total: 1, linked: 1}, pct: 100.0} = Health.links_back()
     end
@@ -95,19 +123,16 @@ defmodule DevilsDictionary.HealthTest do
       lexeme = lexeme!("cat", [source.id])
 
       record =
-        Repo.insert!(%SourceRecord{
-          source_id: source.id,
+        WordFixtures.record!(ctx, "wordnet",
           external_id: "oewn-1-n",
           url: "https://en-word.net/id/oewn-1-n"
-        })
+        )
 
-      Repo.insert!(%Sense{
-        lexeme_id: lexeme.id,
-        source_id: source.id,
-        source_record_id: record.id,
-        external_id: "oewn-1-n#cat",
-        gloss: "a cat"
-      })
+      sense!(lexeme, source,
+        external_key: "oewn-1-n#cat",
+        gloss: "a cat",
+        source_record_revision_id: revision_id(record)
+      )
 
       # Every seeded source has a url_template, so even a bare sense links back;
       # that is exactly what A9 allows as the last resort.
@@ -149,11 +174,8 @@ defmodule DevilsDictionary.HealthTest do
       Sources.insert_records(source, [%{external_id: raw["id"], url: "https://x", raw: raw}])
 
       record =
-        Repo.one!(
-          from r in SourceRecord,
-            where: r.source_id == ^source.id,
-            select: %{r | raw: r.raw}
-        )
+        Repo.one!(from r in SourceRecord, where: r.source_id == ^source.id)
+        |> Sources.with_raw()
 
       {:ok, _} = Materializer.run(record, DevilsDictionary.Absorb.Sources.Wordnet)
 
@@ -185,11 +207,8 @@ defmodule DevilsDictionary.HealthTest do
       Sources.insert_records(source, [%{external_id: raw["id"], url: "https://x", raw: raw}])
 
       record =
-        Repo.one!(
-          from r in SourceRecord,
-            where: r.source_id == ^source.id,
-            select: %{r | raw: r.raw}
-        )
+        Repo.one!(from r in SourceRecord, where: r.source_id == ^source.id)
+        |> Sources.with_raw()
 
       {:ok, _} = Materializer.run(record, DevilsDictionary.Absorb.Sources.Wordnet)
 
@@ -204,26 +223,66 @@ defmodule DevilsDictionary.HealthTest do
       assert Health.parity("wordnet").stale == 0
     end
 
-    test "senses deleted behind the materializer's back show up as missing", ctx do
+    test "a sense cannot be deleted behind the materializer's back at all", ctx do
       source = ctx.sources["wordnet"]
       raw = Fixtures.one_raw("wordnet", "oyster")
 
       Sources.insert_records(source, [%{external_id: raw["id"], url: "https://x", raw: raw}])
 
       record =
-        Repo.one!(
-          from r in SourceRecord,
-            where: r.source_id == ^source.id,
-            select: %{r | raw: r.raw}
-        )
+        Repo.one!(from r in SourceRecord, where: r.source_id == ^source.id)
+        |> Sources.with_raw()
 
       {:ok, _} = Materializer.run(record, DevilsDictionary.Absorb.Sources.Wordnet)
+
+      # MVP-0 tested that deleting the senses showed up as a gap. In this model
+      # the deletion itself is refused: an identity is retired, never deleted
+      # out from under the claims that point at it, and the Gate 0 spike found
+      # the subtype-delete gap the hard way. So the stronger assertion replaces
+      # the weaker one.
+      #
+      # The guard is a DEFERRABLE constraint trigger, so it fires at COMMIT —
+      # which inside the test sandbox never arrives. `SET CONSTRAINTS ALL
+      # IMMEDIATE` is how a test reaches the moment the database would check.
       Repo.delete_all(Sense)
+
+      assert {:error, message} = at_commit()
+      assert message =~ "object" or message =~ "subtype"
+    end
+
+    defp at_commit do
+      case Repo.query("SET CONSTRAINTS ALL IMMEDIATE") do
+        {:ok, _} -> :ok
+        {:error, e} -> {:error, Exception.message(e)}
+      end
+    rescue
+      e -> {:error, Exception.message(e)}
+    end
+
+    test "M1 fails on the corruption probe (the audit's finding)", ctx do
+      source = ctx.sources["wordnet"]
+      raw = Fixtures.one_raw("wordnet", "oyster")
+
+      Sources.insert_records(source, [%{external_id: raw["id"], url: "https://x", raw: raw}])
+
+      record =
+        Repo.one!(from r in SourceRecord, where: r.source_id == ^source.id)
+        |> Sources.with_raw()
+
+      {:ok, _} = Materializer.run(record, DevilsDictionary.Absorb.Sources.Wordnet)
+      assert Health.parity("wordnet").gaps == 0
+
+      # Every gloss replaced with a string that is not the gloss. The MVP-0
+      # check returned zero gaps for exactly this, because every natural key was
+      # still present. Semantic parity has to see it.
+      Repo.update_all(
+        from(r in "sense_revisions", where: r.is_current),
+        set: [gloss: "CORRUPTED"]
+      )
 
       result = Health.parity("wordnet")
 
-      assert result.stale == 0
-      assert result.missing_senses > 0
+      assert result.mismatched > 0
       assert result.gaps == 1
       assert [{external_id, detail}] = result.examples
       assert external_id == raw["id"]

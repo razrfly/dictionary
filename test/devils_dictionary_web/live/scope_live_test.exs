@@ -8,9 +8,8 @@ defmodule DevilsDictionaryWeb.ScopeLiveTest do
 
   import DevilsDictionary.WordFixtures
 
-  alias DevilsDictionary.Encyclopedia.ConceptRelation
   alias DevilsDictionary.Fixtures
-  alias DevilsDictionary.{Health, Repo}
+  alias DevilsDictionary.Health
 
   setup do
     %{sources: sources, scopes: scopes} = Fixtures.seed_catalog!()
@@ -19,7 +18,7 @@ defmodule DevilsDictionaryWeb.ScopeLiveTest do
 
   # A row is identified by its id, so a negative assertion is about the row and
   # not about a word that happens to appear elsewhere on the page.
-  defp row(lexeme), do: ~s(id="lexeme-#{lexeme.id}")
+  defp row(lexeme), do: ~s(id="lexeme-#{lexeme.object_id}")
 
   # The browse page's concepts are all taxa — the taxon rail is what it walks.
   defp taxon!(qid, label, attrs \\ []) do
@@ -36,7 +35,7 @@ defmodule DevilsDictionaryWeb.ScopeLiveTest do
 
       # Every word shows a badge slot for every source, lit or not.
       for lexeme <- [cat], source <- ~w(wordnet wiktionary wikidata wikipedia bierce) do
-        assert html =~ ~s(id="badge-#{lexeme.id}-#{source}")
+        assert html =~ ~s(id="badge-#{lexeme.object_id}-#{source}")
       end
 
       # U5's requirement: the page's coverage line and Health.coverage/2 agree.
@@ -169,13 +168,7 @@ defmodule DevilsDictionaryWeb.ScopeLiveTest do
       animalia = taxon!("Q729", "Animalia")
       felidae = taxon!("Q25265", "Felidae")
 
-      Repo.insert!(%ConceptRelation{
-        source_id: ctx.sources["wikidata"].id,
-        from_concept_id: felidae.id,
-        to_concept_id: animalia.id,
-        type: :parent_taxon,
-        property: "P171"
-      })
+      concept_relation!(ctx, felidae, :parent_taxon, animalia, property: "P171")
 
       cat = word!(ctx, "cat", ~w(wordnet))
       link!(cat, felidae)

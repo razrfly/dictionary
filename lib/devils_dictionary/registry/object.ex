@@ -33,6 +33,15 @@ defmodule DevilsDictionary.Registry.Object do
     field :kind, Ecto.Enum, values: @kinds
     field :lifecycle_state, Ecto.Enum, values: @states, default: :active
 
+    # The four subtypes, one of which exists. They are `has_one` and not
+    # `belongs_to` because the subtype carries the foreign key, and all four
+    # are declared so that a reader holding an endpoint object can preload
+    # whichever one it turns out to have without knowing the kind first.
+    has_one :lexeme, DevilsDictionary.Registry.Lexeme, foreign_key: :object_id
+    has_one :sense, DevilsDictionary.Registry.Sense, foreign_key: :object_id
+    has_one :entity, DevilsDictionary.Registry.Entity, foreign_key: :object_id
+    has_one :content_item, DevilsDictionary.Registry.ContentItem, foreign_key: :object_id
+
     timestamps(type: :utc_datetime_usec)
   end
 

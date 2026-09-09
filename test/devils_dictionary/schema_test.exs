@@ -149,6 +149,7 @@ defmodule DevilsDictionary.SchemaTest do
 
       assert %Object{lifecycle_state: :retired} = Registry.object(entity.object_id)
       assert Repo.get(Entity, entity.object_id)
+
       assert [%{event: %{operation: :retire, reason: "duplicate"}}] =
                Registry.identity_history(entity.object_id)
     end
@@ -199,10 +200,8 @@ defmodule DevilsDictionary.SchemaTest do
       predicate = Claims.predicate!("defines")
 
       {:ok, %{rows: [[good_id], [bad_id]]}} =
-        Repo.query(
-          "INSERT INTO assertions (inserted_at, updated_at)
-           VALUES (now(), now()), (now(), now()) RETURNING id"
-        )
+        Repo.query("INSERT INTO assertions (inserted_at, updated_at)
+           VALUES (now(), now()), (now(), now()) RETURNING id")
 
       # One good row and one bad row in a single statement. The whole statement
       # must be rejected, not filtered -- otherwise the good row lands and the
@@ -316,9 +315,69 @@ defmodule DevilsDictionary.SchemaTest do
       current = Claims.current_revision(assertion.id)
       assert current.id == withdrawn.id
       assert current.lifecycle_state == :withdrawn
-      # The history that shows the claim was once made is untouched.
-      assert [%{lifecycle_state: :superseded}, %{lifecycle_state: :withdrawn}] =
-               Claims.history(assertion.id)
+
+      # The history that shows the claim was once made is untouched — including
+      # what it *said*. Revision 1 still reads `active`, because that is what it
+      # asserted; overwriting it with `superseded` would encode currentness and
+      # meaning in one column, which #74 forbids and which the audit found here.
+      assert [first, second] = Claims.history(assertion.id)
+      assert first.lifecycle_state == :active
+      refute first.is_current
+      assert second.lifecycle_state == :withdrawn
+      assert second.is_current
+    end
+
+    test "revising a withdrawn claim does not silently revive it", %{assertion: assertion} do
+      {:ok, _} = Claims.withdraw(assertion.id, reason: "source dropped it")
+      {:ok, revised} = Claims.revise(assertion.id, %{rationale: "typo in the reason"})
+
+      # `lifecycle_state` carries forward with everything else. Fixing a typo in
+      # a withdrawn claim's rationale must not put the claim back into force.
+      assert revised.lifecycle_state == :withdrawn
+      assert revised.rationale == "typo in the reason"
+
+      {:ok, back} = Claims.reinstate(assertion.id, reason: "the source restored it")
+      assert back.lifecycle_state == :active
+    end
+
+    test "every context field carries forward, and a named nil clears it",
+         %{assertion: assertion} do
+      {:ok, entity} = Registry.create_entity(%{entity_kind: :place, preferred_label: "France"})
+      {:ok, context} = Registry.create_entity(%{entity_kind: :event, preferred_label: "a trial"})
+      from = ~U[1900-01-01 00:00:00.000000Z]
+      to = ~U[1950-01-01 00:00:00.000000Z]
+
+      {:ok, _} =
+        Claims.revise(assertion.id, %{
+          valid_from: from,
+          valid_to: to,
+          jurisdiction_entity_id: entity.object_id,
+          context_object_id: context.object_id,
+          language_tag: "en",
+          method: "curated",
+          confidence: 0.75,
+          metadata: %{"note" => "kept"}
+        })
+
+      # Changing only the rationale must retain every unspecified field. This is
+      # the audit's first gap: `revise/2` carried seven of thirteen.
+      {:ok, later} = Claims.revise(assertion.id, %{rationale: "reworded"})
+
+      assert later.valid_from == from
+      assert later.valid_to == to
+      assert later.jurisdiction_entity_id == entity.object_id
+      assert later.context_object_id == context.object_id
+      assert later.language_tag == "en"
+      assert later.method == "curated"
+      assert later.confidence == 0.75
+      assert later.metadata == %{"note" => "kept"}
+
+      # Naming a field with nil still clears it: "absent" and "present and nil"
+      # are different instructions.
+      {:ok, cleared} = Claims.revise(assertion.id, %{valid_to: nil, confidence: nil})
+      assert cleared.valid_from == from
+      assert is_nil(cleared.valid_to)
+      assert is_nil(cleared.confidence)
     end
   end
 

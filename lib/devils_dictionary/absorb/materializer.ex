@@ -1,58 +1,83 @@
 defmodule DevilsDictionary.Absorb.Materializer do
   @moduledoc """
-  Turns raw `source_records` into normalized rows, inside one transaction.
+  Turns raw `source_records` into registry objects and assertions, in one
+  transaction.
 
   A source module's `materialize/1` is **pure**: raw record in, plain maps out,
   no `Repo`, no network. That is what makes scorecard rows M1 (parity), M2
-  (re-materialize offline) and O3 (offline tests) achievable, and it is why
+  (rebuild offline) and O3 (offline tests) achievable, and it is why
   `materialize/1` is unit-tested against checked-in fixtures.
 
   Purity costs one indirection: the output rows must reference each other before
   any of them has a database id. So `materialize/1` returns **local keys** and
-  this module resolves them:
+  this module resolves them. The seven key names are the source's vocabulary and
+  have not changed; what each one *becomes* has:
 
-      lexemes   %{key: {lang, lemma, pos}, lemma: .., pos: .., ..}
-      senses    %{key: external_id, lexeme: {lang, lemma, pos}, ..}
-      entries   %{lexeme: {lang, lemma, pos} | nil, concept: qid | nil,
-                  author: person_slug | nil, ..}
-      relations %{from_lexeme: {..}, from_sense: external_id | nil, to_lemma: ..}
-      concepts  %{key: qid, qid: qid, taxon_concept: qid | nil, ..}
-      links     %{lexeme: {..}, sense: external_id | nil, concept: qid, ..}
-      concept_relations %{from_concept: qid, to_concept: qid, type: .., property: ..}
+      lexemes           %{key: {lang, lemma, pos}, ..}       -> objects + lexemes + lexeme_forms
+      senses            %{key: external_key, lexeme: {..}}   -> objects + senses + sense_revisions
+      entries           %{key: .., lexeme: | concept: , ..}  -> objects + content_items
+                                                              + content_revisions
+                                                              + `defines` / `about`
+                                                              + `authored_by` / `published_in`
+      relations         %{from_lexeme:, from_sense:, type:}  -> assertions on the source-native
+                                                                lexical predicates, or a
+                                                                `pending_relations` row
+      concepts          %{key: qid, ..}                      -> objects + entities
+                                                              + external_identifiers
+      links             %{lexeme:, sense:, concept: qid}     -> `refers_to` /
+                                                                `lexeme_entity_candidate`
+      concept_relations %{from_concept:, to_concept:, type:} -> `parent_taxon` / `subclass_of` /
+                                                                `instance_of` / `taxon_item`
 
-  Concept-to-concept references (`concept_relations` and `concepts.taxon_concept_id`)
-  reach outside the batch: a P171 edge names a parent that another record
-  introduces. Those qids are resolved against the batch first and then against
-  the database, inside the same transaction; anything still unknown is counted
-  and skipped, never raised on. A source that walks a parent closure therefore
-  materializes twice — the second pass with `only_stale: false` — and the
-  residual count should be zero.
+  Cross-batch references (a P171 edge names a parent another record introduces)
+  are resolved against the batch first and then against the database, inside the
+  same transaction; anything still unknown is counted and skipped, never raised
+  on. A source that walks a parent closure therefore materializes twice — the
+  second pass with `only_stale: false` — and the residual count should be zero.
 
-  Every write is an upsert on the unique keys of issue #69 §4, so running this
-  twice is a no-op (M2). Every write and the record's `materialized_at` stamp
-  happen in one `Ecto.Multi`, so a record can never be marked materialized
-  without its rows, and a failure leaves neither (M3).
+  ## What changed from MVP-0, and why
+
+  **Every object is two rows.** An `objects` row and its typed subtype, and the
+  database checks at COMMIT that both exist. New identities are created in two
+  steps — insert the objects, then the subtypes with the returned ids — because
+  a bulk insert cannot see its own generated keys. Two concurrent batches racing
+  for the same new word will have one of them rolled back by the `lexical_key`
+  unique index rather than leaving an orphan; materialization is serial per
+  source, so this is a documented consequence rather than a hot path.
+
+  **Text is a revision, not a column.** A sense's gloss and a definition's body
+  go to `sense_revisions` / `content_revisions`, and a new revision is written
+  **only when the text actually differs**. Re-importing identical input produces
+  zero new revisions, which is what M2 measures and what the Gate 0 spike proved
+  on the real Wiktionary `bank` record.
+
+  **Outputs are owned.** Every row this writes is stamped in
+  `source_materialized_outputs` / `source_assertion_outputs` with the run that
+  last emitted it. `reconcile/2` retires what a run stopped emitting — the
+  audit's finding #1, that refresh was purely additive. Retired, never deleted,
+  and only ever this source's own output: withdrawing a Wiktionary sense must
+  not touch WordNet's support for the same word.
 
   Two rules worth stating, because both are silent when broken:
 
     * `on_conflict` must always UPDATE, never `:nothing` — `insert_all` returns
       no row for a conflicting entry, so `:nothing` would hand back an empty id
       map on the second run and write orphans.
-    * The two expression unique indexes (`coalesce(from_sense_id, 0)` and
-      `coalesce(sense_id, 0)`) cannot be named by column list, so their
-      `conflict_target` is an `:unsafe_fragment` that must match the migration
-      character for character.
+    * A predicate's endpoint rules are a real foreign key, so an assertion with
+      an impossible pair is refused here exactly as it is refused in a
+      changeset. That is deliberate: this module writes with `insert_all`.
   """
 
   import Ecto.Query
 
-  alias DevilsDictionary.Encyclopedia.{Concept, ConceptLink, ConceptRelation}
-  alias DevilsDictionary.Lexicon.{Entry, Lexeme, LexicalRelation, Sense}
+  alias DevilsDictionary.Absorb.SenseIdentity
+  alias DevilsDictionary.Claims
   alias DevilsDictionary.Repo
-  alias DevilsDictionary.Sources.{Person, SourceRecord}
+  alias DevilsDictionary.Registry.Lexeme
+  alias DevilsDictionary.Sources.SourceRecord
 
   # Postgres caps a statement at 65,535 bind parameters; the widest row here is
-  # ~14 columns, so 2,000 leaves plenty of headroom.
+  # ~16 columns, so 2,000 leaves plenty of headroom.
   @chunk 2_000
 
   @empty %{
@@ -65,10 +90,13 @@ defmodule DevilsDictionary.Absorb.Materializer do
     concept_relations: []
   }
 
+  @doc "The shape `materialize/1` may return. A source emits only the kinds it has."
+  def empty_output, do: @empty
+
   @doc """
   Materializes one record. Used by `enrich/2` and by the tests.
   """
-  def run(%SourceRecord{} = record, module), do: run_batch([record], module)
+  def run(%SourceRecord{} = record, module, opts \\ []), do: run_batch([record], module, opts)
 
   @doc """
   Materializes a batch of records in one transaction.
@@ -77,43 +105,50 @@ defmodule DevilsDictionary.Absorb.Materializer do
   commit overhead, and batching also dedupes lexemes across records (`cat`
   appears in eight WordNet synsets). Atomicity still holds per batch — no
   record is stamped without its rows.
-  """
-  def run_batch([], _module), do: {:ok, %{}}
 
-  def run_batch(records, module) do
+  Options: `:run_id`, stamped on every output so `reconcile/2` can tell this
+  run's work from the last one's.
+  """
+  def run_batch(records, module, opts \\ [])
+
+  def run_batch([], _module, _opts), do: {:ok, %{}}
+
+  def run_batch(records, module, opts) do
     try do
-      do_run_batch(records, module)
+      do_run_batch(records, module, opts)
     catch
       {:materialize_failed, source_id, external_id, reason} ->
         {:error, {:materialize, {source_id, external_id, reason}}}
     end
   end
 
-  defp do_run_batch(records, module) do
+  defp do_run_batch(records, module, opts) do
     merged = collect(records, module)
     now = DateTime.utc_now()
+    run_id = opts[:run_id]
     record_ids = Enum.map(records, & &1.id)
+    revisions = revision_ids(record_ids)
 
     Ecto.Multi.new()
     |> Ecto.Multi.run(:lexemes, fn _repo, _ -> {:ok, upsert_lexemes(merged.lexemes, now)} end)
-    |> Ecto.Multi.run(:concepts, fn _repo, _ -> {:ok, upsert_concepts(merged.concepts, now)} end)
-    |> Ecto.Multi.run(:taxon_concepts, fn _repo, changes ->
-      {:ok, link_taxon_concepts(merged.concepts, changes.concepts, now)}
+    |> Ecto.Multi.run(:forms, fn _repo, changes ->
+      {:ok, upsert_forms(merged.lexemes, changes.lexemes, revisions, now)}
     end)
-    |> Ecto.Multi.run(:concept_relations, fn _repo, changes ->
-      {:ok, upsert_concept_relations(merged.concept_relations, changes.concepts, now)}
-    end)
+    |> Ecto.Multi.run(:concepts, fn _repo, _ -> {:ok, upsert_entities(merged.concepts, now)} end)
     |> Ecto.Multi.run(:senses, fn _repo, changes ->
-      {:ok, upsert_senses(merged.senses, changes.lexemes, now)}
+      {:ok, upsert_senses(merged.senses, changes.lexemes, records, revisions, run_id, now)}
     end)
     |> Ecto.Multi.run(:entries, fn _repo, changes ->
-      {:ok, upsert_entries(merged.entries, changes, authors(merged.entries), now)}
+      {:ok, upsert_content(merged.entries, changes, records, revisions, run_id, now)}
+    end)
+    |> Ecto.Multi.run(:concept_relations, fn _repo, changes ->
+      {:ok, write_entity_relations(merged, changes, records, run_id, now)}
     end)
     |> Ecto.Multi.run(:relations, fn _repo, changes ->
-      {:ok, upsert_relations(merged.relations, changes, now)}
+      {:ok, write_relations(merged, changes, records, run_id, now)}
     end)
     |> Ecto.Multi.run(:links, fn _repo, changes ->
-      {:ok, upsert_links(merged.links, changes, now)}
+      {:ok, write_links(merged, changes, records, run_id, now)}
     end)
     |> Ecto.Multi.run(:source_ids, fn _repo, changes ->
       {:ok, stamp_source_ids(changes, records, now)}
@@ -148,7 +183,8 @@ defmodule DevilsDictionary.Absorb.Materializer do
         end
 
       Map.new(@empty, fn {kind, _} ->
-        {kind, Map.get(out, kind, []) ++ Map.fetch!(acc, kind)}
+        {kind,
+         Enum.map(Map.get(out, kind, []), &stamp_record(&1, record)) ++ Map.fetch!(acc, kind)}
       end)
     end)
     |> Map.update!(:lexemes, &dedupe_by(&1, :key))
@@ -156,23 +192,77 @@ defmodule DevilsDictionary.Absorb.Materializer do
     |> Map.update!(:senses, &dedupe_by(&1, :key))
   end
 
+  # Every emitted row remembers which record produced it, so ownership can be
+  # recorded without the adapters having to thread a record id through by hand.
+  defp stamp_record(row, record) do
+    row
+    |> Map.put_new(:source_record_id, record.id)
+    |> Map.put_new(:source_id, record.source_id)
+  end
+
   # Later rows win, matching "replaced, never edited".
   defp dedupe_by(rows, key), do: rows |> Map.new(&{Map.fetch!(&1, key), &1}) |> Map.values()
+
+  # The current revision of each record being materialized. Everything derived
+  # cites it, which is what makes "what did this claim actually rest on"
+  # answerable after the source rewords its entry.
+  defp revision_ids(record_ids) do
+    from(r in "source_record_revisions",
+      where: r.source_record_id in ^record_ids,
+      order_by: [asc: r.source_record_id, desc: r.id],
+      distinct: r.source_record_id,
+      select: {r.source_record_id, r.id}
+    )
+    |> Repo.all()
+    |> Map.new()
+  end
+
+  # ── identities ───────────────────────────────────────────────────────────
+
+  # Two steps, because a bulk insert cannot see its own generated keys: find the
+  # identities that already exist, mint `objects` rows for the rest, then write
+  # the subtype rows against both sets of ids.
+  defp mint(kind, existing_keys, wanted_keys, now) do
+    fresh = wanted_keys -- Map.keys(existing_keys)
+
+    if fresh == [] do
+      existing_keys
+    else
+      rows =
+        for _ <- fresh,
+            do: %{
+              kind: to_string(kind),
+              lifecycle_state: "active",
+              inserted_at: now,
+              updated_at: now
+            }
+
+      minted =
+        rows
+        |> Enum.chunk_every(@chunk)
+        |> Enum.flat_map(fn chunk ->
+          {_n, returned} = Repo.insert_all("objects", chunk, returning: [:id])
+          returned
+        end)
+        |> Enum.map(& &1.id)
+
+      Map.merge(existing_keys, Map.new(Enum.zip(fresh, minted)))
+    end
+  end
 
   # ── lexemes ──────────────────────────────────────────────────────────────
 
   # Merge, never clobber: a lexeme may already exist because another source
-  # introduced it. `forms` only fills an empty slot, `metadata` merges,
-  # `origin_source_id` keeps whoever got there first.
+  # introduced it. `metadata` merges, `origin_source_id` keeps whoever got there
+  # first. `forms` are rows now and are handled separately, so the JSONB
+  # fill-empty rule that made them import-order-sensitive is simply gone.
   defp lexeme_conflict do
     from(l in Lexeme,
       update: [
         set: [
-          forms:
-            fragment("CASE WHEN ? = '[]'::jsonb THEN EXCLUDED.forms ELSE ? END", l.forms, l.forms),
           pronunciations:
             fragment(
-              "CASE WHEN ? = '[]'::jsonb THEN EXCLUDED.pronunciations ELSE ? END",
+              "CASE WHEN ? = '{}'::jsonb THEN EXCLUDED.pronunciations ELSE ? END",
               l.pronunciations,
               l.pronunciations
             ),
@@ -188,356 +278,978 @@ defmodule DevilsDictionary.Absorb.Materializer do
     )
   end
 
-  defp upsert_lexemes([], _now), do: %{}
+  @doc """
+  Upserts lexeme identities, returning `%{{lang, lemma, pos} => object_id}`.
 
-  defp upsert_lexemes(rows, now) do
+  Public because the Wiktionary index pass writes 1.5 M bare rows outside the
+  normal materialize path and must mint identities the same way. Two writers
+  with two spellings of "create an object and its subtype" is exactly the drift
+  the registry exists to prevent.
+  """
+  def upsert_lexemes([], _now), do: %{}
+
+  def upsert_lexemes(rows, now) do
+    keys = Enum.map(rows, & &1.key)
+
+    lexical_keys =
+      Enum.map(keys, fn {lang, lemma, pos} -> Lexeme.lexical_key(lang, lemma, pos) end)
+
+    existing =
+      from(l in Lexeme,
+        where: l.lexical_key in ^lexical_keys,
+        select: {l.lexical_key, l.object_id}
+      )
+      |> Repo.all()
+      |> Map.new()
+      |> then(fn found ->
+        Map.new(keys, fn {lang, lemma, pos} = key ->
+          {key, found[Lexeme.lexical_key(lang, lemma, pos)]}
+        end)
+      end)
+      |> Enum.reject(&is_nil(elem(&1, 1)))
+      |> Map.new()
+
+    ids = mint(:lexeme, existing, keys, now)
+
     rows
     |> Enum.map(fn row ->
       {lang, lemma, pos} = row.key
 
       %{
-        lang: lang,
+        object_id: Map.fetch!(ids, row.key),
+        language_tag: lang,
         lemma: lemma,
-        pos: pos,
+        part_of_speech: pos,
+        lexical_key: Lexeme.lexical_key(lang, lemma, pos),
         slug: row[:slug] || Lexeme.slug(lemma),
-        forms: row[:forms] || [],
-        pronunciations: row[:pronunciations] || [],
+        pronunciations: wrap_items(row[:pronunciations]),
         etymology: row[:etymology],
         etymology_source_id: row[:etymology_source_id],
-        origin_source_id: row[:origin_source_id],
+        origin_source_id: row[:origin_source_id] || row[:source_id],
         source_ids: [],
         metadata: row[:metadata] || %{},
         inserted_at: now,
         updated_at: now
       }
     end)
-    |> insert_returning(Lexeme,
+    |> insert_count(Lexeme,
       on_conflict: lexeme_conflict(),
-      conflict_target: [:lang, :lemma, :pos],
-      returning: [:id, :lang, :lemma, :pos]
+      conflict_target: [:lexical_key]
     )
-    |> Map.new(fn r -> {{r.lang, r.lemma, r.pos}, r.id} end)
+
+    ids
   end
 
-  # ── concepts ─────────────────────────────────────────────────────────────
+  # The list of `%{"ipa" => .., "tags" => [..]}` lives under "items": the column
+  # is jsonb and the schema field is a map, and a bare JSON array is legal jsonb
+  # but not a legal Ecto `:map`.
+  defp wrap_items(nil), do: %{}
+  defp wrap_items([]), do: %{}
+  defp wrap_items(list) when is_list(list), do: %{"items" => list}
+  defp wrap_items(%{} = map), do: map
+
+  # A row per form, each carrying the source revision that attested it — which
+  # is what makes "which source says *oysters* is the plural" answerable, and
+  # what retires the JSONB array whose fill-empty merge depended on import order.
+  @doc "Upserts `lexeme_forms` rows for already-minted lexemes. See `upsert_lexemes/2`."
+  def upsert_forms(lexeme_rows, ids, revisions, now) do
+    rows =
+      for row <- lexeme_rows,
+          form <- row[:forms] || [],
+          written = form["form"] || form[:form],
+          is_binary(written) and written != "" do
+        %{
+          lexeme_id: Map.fetch!(ids, row.key),
+          written_form: written,
+          form_kind: form["kind"] || form[:kind] || "inflection",
+          language_tag: elem(row.key, 0),
+          tags: form["tags"] || form[:tags] || [],
+          source_record_revision_id: revisions[row[:source_record_id]],
+          inserted_at: now,
+          updated_at: now
+        }
+      end
+      |> Enum.uniq_by(&{&1.lexeme_id, &1.written_form, &1.form_kind})
+
+    insert_count(rows, "lexeme_forms",
+      on_conflict: {:replace, [:tags, :source_record_revision_id, :updated_at]},
+      conflict_target: [:lexeme_id, :written_form, :form_kind]
+    )
+  end
+
+  # ── entities ─────────────────────────────────────────────────────────────
 
   # Merge, never clobber — the same contract as `lexeme_conflict/0`, and for the
-  # same reason: two sources describe one concept from different sides.
-  # Wikipedia knows the title, pageid and thumbnail; Wikidata knows the taxon,
-  # the ILI and P18. Whichever lands second must not blank the other's columns.
+  # same reason: two sources describe one thing from different sides. Wikipedia
+  # knows the title, pageid and thumbnail; Wikidata knows the taxon, the ILI and
+  # P18. Whichever lands second must not blank the other's fields.
   #
-  # `kind` needs its own clause because it is NOT NULL with a default, so an
-  # incoming row cannot say "no opinion" with a nil. `"thing"` *is* the no-opinion
+  # `entity_kind` needs its own clause because it is NOT NULL: an incoming row
+  # cannot say "no opinion" with a nil, and `"concept"` *is* the no-opinion
   # value, so it never overwrites a `taxon` already established by Wikidata.
-  defp concept_conflict do
-    from(c in Concept,
+  defp entity_conflict do
+    from(e in "entities",
       update: [
         set: [
-          label: fragment("COALESCE(EXCLUDED.label, ?)", c.label),
-          description: fragment("COALESCE(EXCLUDED.description, ?)", c.description),
-          kind:
-            fragment("CASE WHEN EXCLUDED.kind = 'thing' THEN ? ELSE EXCLUDED.kind END", c.kind),
-          wikipedia_title: fragment("COALESCE(EXCLUDED.wikipedia_title, ?)", c.wikipedia_title),
-          wikipedia_pageid:
-            fragment("COALESCE(EXCLUDED.wikipedia_pageid, ?)", c.wikipedia_pageid),
-          image_url: fragment("COALESCE(EXCLUDED.image_url, ?)", c.image_url),
-          image_attribution:
-            fragment("COALESCE(EXCLUDED.image_attribution, ?)", c.image_attribution),
-          wordnet_ili: fragment("COALESCE(EXCLUDED.wordnet_ili, ?)", c.wordnet_ili),
-          taxon: fragment("? || EXCLUDED.taxon", c.taxon),
-          metadata: fragment("? || EXCLUDED.metadata", c.metadata),
+          entity_kind:
+            fragment(
+              "CASE WHEN EXCLUDED.entity_kind = 'concept' THEN ? ELSE EXCLUDED.entity_kind END",
+              e.entity_kind
+            ),
+          preferred_label: fragment("COALESCE(?, EXCLUDED.preferred_label)", e.preferred_label),
+          description: fragment("COALESCE(?, EXCLUDED.description)", e.description),
+          metadata: fragment("? || EXCLUDED.metadata", e.metadata),
           updated_at: fragment("EXCLUDED.updated_at")
         ]
       ]
     )
   end
 
-  defp upsert_concepts([], _now), do: %{}
+  defp upsert_entities([], _now), do: %{}
 
-  defp upsert_concepts(rows, now) do
+  defp upsert_entities(rows, now) do
+    qids = Enum.map(rows, & &1.key)
+
+    existing =
+      from(x in "external_identifiers",
+        where: x.namespace == "wikidata" and x.external_id in ^qids and x.status == "verified",
+        select: {x.external_id, x.object_id}
+      )
+      |> Repo.all()
+      |> Map.new()
+
+    ids = mint(:entity, existing, qids, now)
+
     rows
     |> Enum.map(fn row ->
       %{
-        qid: row.qid,
-        label: row[:label],
+        object_id: Map.fetch!(ids, row.key),
+        entity_kind: to_string(row[:kind] || :concept),
+        preferred_label: row[:label],
         description: row[:description],
-        kind: row[:kind] || :thing,
-        wikipedia_title: row[:wikipedia_title],
-        wikipedia_pageid: row[:wikipedia_pageid],
-        image_url: row[:image_url],
-        image_attribution: row[:image_attribution],
-        wordnet_ili: row[:wordnet_ili],
-        taxon: row[:taxon] || %{},
         metadata: row[:metadata] || %{},
         inserted_at: now,
         updated_at: now
       }
     end)
-    |> insert_returning(Concept,
-      on_conflict: concept_conflict(),
-      conflict_target: [:qid],
-      returning: [:id, :qid]
-    )
-    |> Map.new(fn r -> {r.qid, r.id} end)
-  end
+    |> insert_count("entities", on_conflict: entity_conflict(), conflict_target: [:object_id])
 
-  # `concepts.taxon_concept_id` points at another concept (Q146 cat → Q20980826
-  # Felis catus), so it cannot be part of the insert: the target may not exist
-  # until a later record introduces it.
-  defp link_taxon_concepts(rows, concept_ids, now) do
-    pairs =
-      for row <- rows,
-          target = row[:taxon_concept],
-          not is_nil(target),
-          do: {row.qid, target}
-
-    if pairs == [] do
-      0
-    else
-      ids = resolve_qids(concept_ids, Enum.flat_map(pairs, fn {a, b} -> [a, b] end))
-
-      pairs
-      |> Enum.flat_map(fn {from, to} ->
-        with from_id when not is_nil(from_id) <- Map.get(ids, from),
-             to_id when not is_nil(to_id) <- Map.get(ids, to),
-             true <- from_id != to_id do
-          [{from_id, to_id}]
-        else
-          _ -> []
-        end
-      end)
-      |> Enum.reduce(0, fn {from_id, to_id}, acc ->
-        {n, _} =
-          Repo.update_all(
-            from(c in Concept, where: c.id == ^from_id),
-            set: [taxon_concept_id: to_id, updated_at: now]
-          )
-
-        acc + n
-      end)
+    # The QID is evidence about an identity, not the identity. Adding one later
+    # leaves the object and every attachment unchanged, which is decision 7.
+    for {qid, object_id} <- ids do
+      %{
+        object_id: object_id,
+        namespace: "wikidata",
+        external_id: qid,
+        status: "verified",
+        metadata: %{},
+        inserted_at: now,
+        updated_at: now
+      }
     end
-  end
+    |> insert_count("external_identifiers",
+      on_conflict: {:replace, [:updated_at]},
+      conflict_target: {:unsafe_fragment, "(namespace, external_id) WHERE status = 'verified'"}
+    )
 
-  # ── concept relations ────────────────────────────────────────────────────
-
-  defp upsert_concept_relations([], _concept_ids, _now),
-    do: %{written: 0, skipped: 0, skipped_parent_taxon: 0, skipped_unchased: 0}
-
-  defp upsert_concept_relations(rows, concept_ids, now) do
-    qids = Enum.flat_map(rows, &[&1.from_concept, &1.to_concept])
-    ids = resolve_qids(concept_ids, qids)
-
-    {resolved, skipped} =
-      Enum.split_with(rows, fn row ->
-        from_id = Map.get(ids, row.from_concept)
-        to_id = Map.get(ids, row.to_concept)
-        not is_nil(from_id) and not is_nil(to_id) and from_id != to_id
-      end)
-
-    written =
-      resolved
-      |> Enum.map(fn row ->
-        %{
-          source_id: row.source_id,
-          from_concept_id: Map.fetch!(ids, row.from_concept),
-          to_concept_id: Map.fetch!(ids, row.to_concept),
-          type: row.type,
-          property: row[:property],
-          inserted_at: now,
-          updated_at: now
-        }
-      end)
-      |> Enum.uniq_by(&{&1.source_id, &1.from_concept_id, &1.to_concept_id, &1.type})
-      |> insert_count(ConceptRelation,
-        on_conflict: {:replace, [:property, :updated_at]},
-        conflict_target: [:from_concept_id, :to_concept_id, :type, :source_id]
-      )
-
-    # A skip is a parent no record has introduced *yet*. Counted rather than
-    # swallowed, so `Wikidata.absorb/2` knows whether another pass is owed and
-    # M1 does not have to discover it later.
-    #
-    # Split by type, because the two halves mean opposite things. A skipped
-    # `parent_taxon` is a `P171` edge whose parent the walk should have fetched,
-    # and must reach zero. Everything else is a `P279`/`P31` target the walk
-    # deliberately never chases (#69 §5: chasing them climbs out of biology into
-    # the abstract ontology), and is permanently non-zero — around 36,000. One
-    # number for both let a real residual hide behind the expected one.
-    by_type = Enum.frequencies_by(skipped, &(&1.type == :parent_taxon))
-
-    %{
-      written: written,
-      skipped: length(skipped),
-      skipped_parent_taxon: Map.get(by_type, true, 0),
-      skipped_unchased: Map.get(by_type, false, 0)
-    }
-  end
-
-  # Batch first, then one query for whatever the batch did not introduce.
-  defp resolve_qids(concept_ids, qids) do
-    missing = qids |> Enum.uniq() |> Enum.reject(&Map.has_key?(concept_ids, &1))
-
-    from_db =
-      if missing == [] do
-        %{}
-      else
-        Repo.all(from c in Concept, where: c.qid in ^missing, select: {c.qid, c.id})
-        |> Map.new()
-      end
-
-    Map.merge(from_db, concept_ids)
+    ids
   end
 
   # ── senses ───────────────────────────────────────────────────────────────
 
-  defp upsert_senses([], _lexeme_ids, _now), do: %{}
+  # Identity is matched on **content**, never on the source's own key: a
+  # Wiktionary sense key is a position, and deleting one meaning from the middle
+  # renumbers everything after it. `Absorb.SenseIdentity` decides whether an
+  # incoming sense is one we already hold, a new one, or a case nobody should
+  # decide automatically; this writes what it decides.
+  defp upsert_senses([], _lexeme_ids, _records, _revisions, _run_id, _now), do: %{}
 
-  defp upsert_senses(rows, lexeme_ids, now) do
+  defp upsert_senses(rows, lexeme_ids, records, revisions, run_id, now) do
+    source_ids = records |> Enum.map(& &1.source_id) |> Enum.uniq()
+    lexeme_object_ids = rows |> Enum.map(&Map.fetch!(lexeme_ids, &1.lexeme)) |> Enum.uniq()
+
+    held = held_senses(source_ids, lexeme_object_ids)
+
+    {ids, states, cases} = match_senses(rows, lexeme_ids, held)
+    ids = mint(:sense, ids, Enum.map(rows, & &1.key), now)
+
     rows
     |> Enum.map(fn row ->
       %{
+        object_id: Map.fetch!(ids, row.key),
         lexeme_id: Map.fetch!(lexeme_ids, row.lexeme),
         source_id: row.source_id,
-        source_record_id: row[:source_record_id],
-        external_id: row.key,
-        group_key: row[:group_key],
-        gloss: row[:gloss],
-        url: row[:url],
-        position: row[:position] || 0,
-        tags: row[:tags] || [],
-        topics: row[:topics] || [],
-        examples: row[:examples] || [],
-        metadata: row[:metadata] || %{},
+        external_key: row.key,
+        identity_state: Map.get(states, row.key, "active"),
         inserted_at: now,
         updated_at: now
       }
     end)
-    |> insert_returning(Sense,
-      on_conflict: {:replace_all_except, [:id, :inserted_at]},
-      conflict_target: [:source_id, :external_id],
-      returning: [:id, :external_id]
+    |> insert_count("senses",
+      on_conflict: {:replace, [:lexeme_id, :external_key, :identity_state, :updated_at]},
+      conflict_target: [:object_id]
     )
-    |> Map.new(fn r -> {r.external_id, r.id} end)
+
+    open_cases(cases, ids, rows, run_id, now)
+
+    write_revisions(
+      "sense_revisions",
+      :sense_id,
+      Enum.map(rows, fn row ->
+        {Map.fetch!(ids, row.key),
+         %{
+           gloss: row[:gloss],
+           group_key: row[:group_key],
+           position: row[:position] || 0,
+           tags: row[:tags] || [],
+           topics: row[:topics] || [],
+           examples: row[:examples] || %{},
+           url: row[:url],
+           metadata: row[:metadata] || %{},
+           source_record_revision_id: revisions[row[:source_record_id]]
+         }}
+      end),
+      [:gloss, :group_key, :position, :tags, :topics, :examples, :url],
+      now
+    )
+
+    own_outputs(rows, ids, "sense", run_id, now)
+
+    ids
   end
 
-  # ── entries ──────────────────────────────────────────────────────────────
+  # Every sense this source already holds for the words in this batch, with the
+  # gloss its current revision carries. One query, not one per incoming sense.
+  defp held_senses(source_ids, lexeme_ids) do
+    from(s in "senses",
+      join: r in "sense_revisions",
+      on: r.sense_id == s.object_id and r.is_current,
+      where: s.source_id in ^source_ids and s.lexeme_id in ^lexeme_ids,
+      where: s.identity_state != "retired",
+      select: %{
+        object_id: s.object_id,
+        lexeme_id: s.lexeme_id,
+        external_key: s.external_key,
+        identity_state: s.identity_state,
+        gloss: r.gloss,
+        metadata: r.metadata
+      }
+    )
+    |> Repo.all()
+    |> Enum.group_by(& &1.lexeme_id)
+  end
 
-  # `materialize/1` is pure and cannot look up a `people` row, so a source names
-  # its author by slug and it is resolved here — the same way a concept relation
-  # names a parent QID the batch may not contain. Resolving it on every write
-  # rather than stamping it afterwards is what keeps `--all` idempotent: the
-  # entries upsert is `replace_all_except`, so a column written outside this
-  # transaction would be blanked by the next rebuild (M2).
-  defp authors([]), do: %{}
+  defp match_senses(rows, lexeme_ids, held) do
+    rows
+    |> Enum.group_by(&Map.fetch!(lexeme_ids, &1.lexeme))
+    |> Enum.reduce({%{}, %{}, []}, fn {lexeme_id, group}, {ids, states, cases} ->
+      decisions = SenseIdentity.decide(group, Map.get(held, lexeme_id, []))
 
+      Enum.zip(group, decisions)
+      |> Enum.reduce({ids, states, cases}, fn
+        {row, {:matched, object_id, _score}}, {ids, states, cases} ->
+          {Map.put(ids, row.key, object_id), states, cases}
+
+        {_row, {:new, nil}}, acc ->
+          acc
+
+        # No id is reused and no attachment moves. A person decides.
+        {row, {:ambiguous, candidates, reason}}, {ids, states, cases} ->
+          {ids, Map.put(states, row.key, "needs_review"), [{row, candidates, reason} | cases]}
+      end)
+    end)
+  end
+
+  defp open_cases([], _ids, _rows, _run_id, _now), do: 0
+
+  defp open_cases(cases, ids, _rows, run_id, now) do
+    cases
+    |> Enum.map(fn {row, candidates, reason} ->
+      %{
+        source_id: row.source_id,
+        source_record_id: row[:source_record_id],
+        kind: "sense_identity",
+        sense_id: Map.fetch!(ids, row.key),
+        payload: %{
+          "reason" => to_string(reason),
+          "external_key" => to_string(row.key),
+          "gloss" => row[:gloss],
+          "candidates" =>
+            Enum.map(candidates, fn {id, score} -> %{"sense_id" => id, "score" => score} end)
+        },
+        status: "open",
+        opened_run_id: run_id,
+        inserted_at: now,
+        updated_at: now
+      }
+    end)
+    |> insert_count("reconciliation_cases", [])
+  end
+
+  # ── content ──────────────────────────────────────────────────────────────
+
+  # An `entries` row becomes a content item, its revision, and the assertions
+  # that say what it is about. `materialize/1` is pure and cannot look up a
+  # person, so a source names its author by slug and the catalog's seed is what
+  # turns that into an entity id.
+  defp upsert_content([], _changes, _records, _revisions, _run_id, _now), do: 0
+
+  defp upsert_content(rows, changes, records, revisions, run_id, now) do
+    source_ids = records |> Enum.map(& &1.source_id) |> Enum.uniq()
+    keys = Enum.map(rows, &content_key/1)
+
+    existing =
+      from(o in "source_materialized_outputs",
+        where:
+          o.source_record_id in ^Enum.map(records, & &1.id) and o.output_role == "content" and
+            o.output_key in ^keys,
+        select: {o.output_key, o.output_object_id}
+      )
+      |> Repo.all()
+      |> Map.new()
+
+    ids = mint(:content, existing, keys, now)
+    authors = authors(rows)
+
+    rows
+    |> Enum.map(fn row ->
+      %{
+        object_id: Map.fetch!(ids, content_key(row)),
+        content_kind: to_string(row[:kind] || :definition),
+        original_language: row[:language_tag] || "en",
+        source_id: row.source_id,
+        metadata: row[:item_metadata] || %{},
+        inserted_at: now,
+        updated_at: now
+      }
+    end)
+    |> insert_count("content_items",
+      on_conflict: {:replace, [:content_kind, :updated_at]},
+      conflict_target: [:object_id]
+    )
+
+    write_revisions(
+      "content_revisions",
+      :content_id,
+      Enum.map(rows, fn row ->
+        {Map.fetch!(ids, content_key(row)),
+         %{
+           body: row[:body],
+           body_format: to_string(row[:body_format] || :text),
+           canonical_url: row[:url],
+           headword: row[:headword],
+           position: row[:position] || 0,
+           year: row[:year],
+           rights_metadata: row[:rights] || %{},
+           metadata: content_metadata(row),
+           source_record_revision_id: revisions[row[:source_record_id]]
+         }}
+      end),
+      [:body, :body_format, :canonical_url, :headword, :position, :year],
+      now
+    )
+
+    own_outputs(rows, ids, "content", run_id, now, &content_key/1)
+
+    claims =
+      for row <- rows,
+          {predicate, target} <- content_targets(row, changes, authors),
+          not is_nil(target) do
+        %{
+          subject: Map.fetch!(ids, content_key(row)),
+          predicate: predicate,
+          object: target,
+          source_id: row.source_id,
+          source_record_id: row[:source_record_id],
+          origin_key: "#{content_key(row)}|#{predicate}|#{target}",
+          method: "source",
+          confidence: nil,
+          metadata: %{}
+        }
+      end
+
+    write_assertions(claims, run_id, now)
+
+    length(rows) + (source_ids != [] && 0)
+  end
+
+  # `defines` reaches the word (or the exact meaning, where the source names
+  # one); `about` reaches the thing; `authored_by` and `published_in` are the
+  # credits that keep a definition distinguishable from an article.
+  defp content_targets(row, changes, authors) do
+    [
+      {"defines", row[:sense] && Map.get(changes.senses, row[:sense])},
+      {"defines", is_nil(row[:sense]) && row[:lexeme] && Map.get(changes.lexemes, row[:lexeme])},
+      {"about", row[:concept] && Map.get(changes.concepts, row[:concept])},
+      {"authored_by", row[:author] && Map.get(authors, row[:author])},
+      {"published_in", row[:edition] && Map.get(authors, row[:edition])}
+    ]
+    |> Enum.reject(fn {_p, target} -> target in [nil, false] end)
+  end
+
+  defp content_key(row), do: row[:key] || "#{row[:source_record_id]}##{row[:position] || 0}"
+
+  defp content_metadata(row) do
+    (row[:metadata] || %{})
+    |> put_if(:pos_marker, row[:pos])
+    |> put_if(:thumbnail_url, row[:thumbnail_url])
+  end
+
+  defp put_if(map, _key, nil), do: map
+  defp put_if(map, key, value), do: Map.put(map, to_string(key), value)
+
+  # A source names its author and its edition by slug; the catalog's seed is
+  # what turns that into an entity id. A curator account claiming to be a known
+  # author is not automatically linked to them — that is `actors`, not this.
   defp authors(rows) do
-    slugs = rows |> Enum.map(& &1[:author]) |> Enum.reject(&is_nil/1) |> Enum.uniq()
+    slugs =
+      rows
+      |> Enum.flat_map(&[&1[:author], &1[:edition]])
+      |> Enum.reject(&is_nil/1)
+      |> Enum.uniq()
 
     if slugs == [] do
       %{}
     else
-      Repo.all(from p in Person, where: p.slug in ^slugs, select: {p.slug, p.id})
+      from(n in "object_names",
+        join: e in "entities",
+        on: e.object_id == n.object_id,
+        where: n.name_kind == "catalog_slug" and n.name in ^slugs,
+        select: {n.name, n.object_id}
+      )
+      |> Repo.all()
       |> Map.new()
     end
   end
 
-  defp upsert_entries([], _changes, _authors, _now), do: 0
+  # ── revisions ────────────────────────────────────────────────────────────
 
-  defp upsert_entries(rows, changes, authors, now) do
+  # A new revision **only when the text differs**. Re-importing identical input
+  # must produce zero new revisions — M2, and the property the Gate 0 spike
+  # proved on the real Wiktionary `bank` record. Comparing the fields that carry
+  # meaning is what makes that true; comparing a fetch timestamp would make
+  # every re-import look like a change, which is the defect the audit found.
+  defp write_revisions(_table, _fk, [], _compared, _now), do: 0
+
+  defp write_revisions(table, fk, pairs, compared, now) do
+    parent_ids = Enum.map(pairs, &elem(&1, 0))
+
+    current =
+      from(r in table,
+        where: field(r, ^fk) in ^parent_ids and r.is_current,
+        select: {field(r, ^fk), map(r, ^([:id, :revision_number] ++ compared))}
+      )
+      |> Repo.all()
+      |> Map.new()
+
+    changed =
+      Enum.reject(pairs, fn {parent_id, attrs} ->
+        case current[parent_id] do
+          nil -> false
+          row -> Enum.all?(compared, fn f -> same?(Map.get(row, f), Map.get(attrs, f)) end)
+        end
+      end)
+
+    if changed == [] do
+      0
+    else
+      ids = Enum.map(changed, &elem(&1, 0))
+
+      # Currentness only. What the outgoing revision asserted is history.
+      Repo.update_all(
+        from(r in table, where: field(r, ^fk) in ^ids and r.is_current),
+        set: [is_current: false]
+      )
+
+      rows =
+        Enum.map(changed, fn {parent_id, attrs} ->
+          next = ((current[parent_id] && current[parent_id].revision_number) || 0) + 1
+
+          attrs
+          |> Map.merge(%{
+            fk => parent_id,
+            :revision_number => next,
+            :lifecycle_state => "active",
+            :is_current => true,
+            :inserted_at => now,
+            :updated_at => now
+          })
+        end)
+
+      insert_count(rows, table, [])
+    end
+  end
+
+  # `[]` and nil are the same absence, and a float read back from Postgres is
+  # the same number it was written as. Everything else compares as itself.
+  defp same?(nil, []), do: true
+  defp same?([], nil), do: true
+  defp same?(nil, %{}), do: true
+  defp same?(a, b), do: a == b
+
+  # ── assertions ───────────────────────────────────────────────────────────
+
+  @doc """
+  Writes claims, upserting on `(source_id, origin_key)`.
+
+  One helper for every claim written anywhere in the absorb — `Absorb.Linker`
+  calls it too, so the ladder's rungs and the materializer share one revision
+  policy, one idempotency key and one ownership rule rather than three.
+
+  Each claim is a map of `subject`, `predicate` (a key), `object`, `source_id`,
+  `origin_key`, and optionally `source_record_id`, `method`, `confidence` and
+  `metadata`. A re-import updates the claim it made last time instead of making
+  a second one, and writes a new revision **only if something changed**.
+  """
+  def write_assertions(claims, run_id \\ nil, now \\ nil)
+
+  def write_assertions([], _run_id, _now), do: 0
+
+  def write_assertions(claims, run_id, now) do
+    now = now || DateTime.utc_now()
+    predicates = predicate_ids(claims)
+
+    claims = Enum.uniq_by(claims, &{&1.source_id, &1.origin_key})
+
+    existing =
+      from(a in "assertions",
+        where: a.origin_key in ^Enum.map(claims, & &1.origin_key),
+        select: {{a.source_id, a.origin_key}, a.id}
+      )
+      |> Repo.all()
+      |> Map.new()
+
+    fresh = Enum.reject(claims, &Map.has_key?(existing, {&1.source_id, &1.origin_key}))
+
+    minted =
+      fresh
+      |> Enum.map(
+        &%{
+          source_id: &1.source_id,
+          origin_key: &1.origin_key,
+          inserted_at: now,
+          updated_at: now
+        }
+      )
+      |> Enum.chunk_every(@chunk)
+      |> Enum.flat_map(fn chunk ->
+        {_n, returned} = Repo.insert_all("assertions", chunk, returning: [:id])
+        returned
+      end)
+      |> Enum.map(& &1.id)
+
+    ids =
+      Map.merge(
+        existing,
+        Map.new(Enum.zip(Enum.map(fresh, &{&1.source_id, &1.origin_key}), minted))
+      )
+
+    write_revisions(
+      "assertion_revisions",
+      :assertion_id,
+      Enum.map(claims, fn claim ->
+        {Map.fetch!(ids, {claim.source_id, claim.origin_key}),
+         %{
+           subject_object_id: claim.subject,
+           predicate_id: Map.fetch!(predicates, claim.predicate),
+           object_object_id: claim.object,
+           method: claim[:method],
+           confidence: claim[:confidence],
+           metadata: claim[:metadata] || %{}
+         }}
+      end),
+      [:subject_object_id, :predicate_id, :object_object_id, :method, :confidence],
+      now
+    )
+
+    own_assertions(claims, ids, run_id, now)
+
+    length(claims)
+  end
+
+  defp predicate_ids(claims) do
+    keys = claims |> Enum.map(& &1.predicate) |> Enum.uniq()
+
+    from(p in "predicates", where: p.key in ^keys, select: {p.key, p.id})
+    |> Repo.all()
+    |> Map.new()
+    |> tap(fn found ->
+      case keys -- Map.keys(found) do
+        [] -> :ok
+        missing -> raise "unregistered predicates: #{inspect(missing)} — seed priv/predicates/"
+      end
+    end)
+  end
+
+  # ── relations ────────────────────────────────────────────────────────────
+
+  # An edge whose target word exists becomes an assertion; one whose target is
+  # still a string waits in `pending_relations` with its evidence. #69 §4 keeps
+  # `to_lemma` forever either way, and inventing a lexeme for a lemma no source
+  # listed would be exactly the identity-by-string mistake #74 exists to end.
+  defp write_relations(merged, changes, records, run_id, now) do
+    # A sense key names a meaning another batch may have introduced — WordNet's
+    # graph is closed and its keys are deterministic, so the target is knowable
+    # even when it is not in this batch. Resolved against the batch first, then
+    # the database, the same way an entity QID is.
+    known = Map.merge(resolve_sense_keys(merged.relations, changes, records), changes.senses)
+    changes = %{changes | senses: known}
+
+    {resolvable, pending} =
+      Enum.split_with(merged.relations, fn r ->
+        not is_nil(relation_target(r, changes))
+      end)
+
+    claims =
+      Enum.map(resolvable, fn r ->
+        %{
+          subject: relation_subject(r, changes),
+          predicate: to_string(r.type),
+          object: relation_target(r, changes),
+          source_id: r.source_id,
+          source_record_id: r[:source_record_id],
+          origin_key: relation_key(r),
+          method: "source",
+          confidence: r[:weight],
+          metadata: r[:metadata] || %{}
+        }
+      end)
+      |> Enum.reject(&is_nil(&1.subject))
+
+    written = write_assertions(claims, run_id, now)
+    held = write_pending(pending, changes, records, run_id, now)
+
+    %{written: written, pending: held, offered: length(merged.relations)}
+  end
+
+  defp resolve_sense_keys(relations, changes, records) do
+    wanted =
+      relations
+      |> Enum.flat_map(&[&1[:to_sense], &1[:from_sense]])
+      |> Enum.reject(&is_nil/1)
+      |> Enum.uniq()
+      |> Kernel.--(Map.keys(changes.senses))
+
+    source_ids = records |> Enum.map(& &1.source_id) |> Enum.uniq()
+
+    if wanted == [] do
+      %{}
+    else
+      from(s in "senses",
+        where: s.source_id in ^source_ids and s.external_key in ^wanted,
+        select: {s.external_key, s.object_id}
+      )
+      |> Repo.all()
+      |> Map.new()
+    end
+  end
+
+  defp relation_subject(r, changes) do
+    (r[:from_sense] && Map.get(changes.senses, r[:from_sense])) ||
+      (r[:from_lexeme] && Map.get(changes.lexemes, r[:from_lexeme]))
+  end
+
+  defp relation_target(r, changes) do
+    (r[:to_sense] && Map.get(changes.senses, r[:to_sense])) ||
+      (r[:to_lexeme] && Map.get(changes.lexemes, r[:to_lexeme]))
+  end
+
+  defp relation_key(r) do
+    subject = r[:from_sense] || inspect(r[:from_lexeme])
+    target = r[:to_sense] || r[:to_lemma] || inspect(r[:to_lexeme])
+    "rel|#{subject}|#{r.type}|#{target}"
+  end
+
+  defp write_pending([], _changes, _records, _run_id, _now), do: 0
+
+  defp write_pending(rows, changes, _records, run_id, now) do
+    predicates = predicate_ids(Enum.map(rows, &%{predicate: to_string(&1.type)}))
+
+    rows
+    |> Enum.map(fn r ->
+      %{
+        source_id: r.source_id,
+        source_record_id: r[:source_record_id],
+        subject_object_id: relation_subject(r, changes),
+        predicate_id: Map.fetch!(predicates, to_string(r.type)),
+        to_lemma: r[:to_lemma] || "",
+        to_pos: r[:to_pos],
+        origin_key: relation_key(r),
+        confidence: r[:weight],
+        method: "source",
+        metadata: r[:metadata] || %{},
+        last_seen_run_id: run_id,
+        inserted_at: now,
+        updated_at: now
+      }
+    end)
+    |> Enum.reject(&(is_nil(&1.subject_object_id) or &1.to_lemma == ""))
+    |> Enum.uniq_by(
+      &{&1.source_id, &1.subject_object_id, &1.predicate_id, &1.to_lemma, &1.to_pos}
+    )
+    |> insert_count("pending_relations",
+      on_conflict: {:replace, [:confidence, :metadata, :last_seen_run_id, :updated_at]},
+      conflict_target: [:source_id, :subject_object_id, :predicate_id, :to_lemma, :to_pos]
+    )
+  end
+
+  # ── entity relations and links ───────────────────────────────────────────
+
+  # A P171 edge names a parent another record introduces. Resolve against the
+  # batch first, then the database; anything still unknown is counted and
+  # skipped, never raised on, and the second pass closes it.
+  defp write_entity_relations(merged, changes, _records, run_id, now) do
+    wanted =
+      merged.concept_relations
+      |> Enum.flat_map(&[&1.from_concept, &1.to_concept])
+      |> Kernel.++(Enum.map(merged.concepts, & &1[:taxon_concept]))
+      |> Enum.reject(&is_nil/1)
+      |> Enum.uniq()
+
+    ids = Map.merge(resolve_qids(wanted, changes.concepts), changes.concepts)
+
+    edges =
+      Enum.map(merged.concept_relations, fn r ->
+        {r, Map.get(ids, r.from_concept), Map.get(ids, r.to_concept)}
+      end)
+
+    taxon_edges =
+      for c <- merged.concepts,
+          qid = c[:taxon_concept],
+          not is_nil(qid) do
+        {%{type: "taxon_item", source_id: c.source_id, source_record_id: c[:source_record_id]},
+         Map.get(ids, c.key), Map.get(ids, qid)}
+      end
+
+    {resolved, skipped} =
+      Enum.split_with(edges ++ taxon_edges, fn {_r, from, to} ->
+        not is_nil(from) and not is_nil(to)
+      end)
+
+    claims =
+      Enum.map(resolved, fn {r, from, to} ->
+        %{
+          subject: from,
+          predicate: to_string(r.type),
+          object: to,
+          source_id: r.source_id,
+          source_record_id: r[:source_record_id],
+          origin_key: "ent|#{from}|#{r.type}|#{to}",
+          method: "source",
+          confidence: nil,
+          metadata: if(r[:property], do: %{"property" => r.property}, else: %{})
+        }
+      end)
+
+    written = write_assertions(claims, run_id, now)
+
+    %{
+      written: written,
+      skipped: length(skipped),
+      skipped_parent_taxon:
+        Enum.count(skipped, &(elem(&1, 0).type in ["parent_taxon", :parent_taxon])),
+      skipped_unchased:
+        Enum.count(
+          skipped,
+          &(elem(&1, 0).type in ["subclass_of", :subclass_of, "instance_of", :instance_of])
+        )
+    }
+  end
+
+  defp resolve_qids([], _batch), do: %{}
+
+  defp resolve_qids(qids, batch) do
+    missing = qids -- Map.keys(batch)
+
+    if missing == [] do
+      %{}
+    else
+      from(x in "external_identifiers",
+        where: x.namespace == "wikidata" and x.external_id in ^missing and x.status == "verified",
+        select: {x.external_id, x.object_id}
+      )
+      |> Repo.all()
+      |> Map.new()
+    end
+  end
+
+  # A sense-backed mapping and a spelling-level guess are different claims and
+  # get different predicates. The linker's `title_match` and `disambiguation`
+  # rungs produce the second, never the first — that is the audit's finding #7.
+  defp write_links(merged, changes, _records, run_id, now) do
+    claims =
+      for link <- merged.links,
+          entity = Map.get(changes.concepts, link[:concept]),
+          not is_nil(entity) do
+        {subject, predicate} =
+          case link[:sense] && Map.get(changes.senses, link[:sense]) do
+            nil -> {Map.get(changes.lexemes, link[:lexeme]), "lexeme_entity_candidate"}
+            sense_id -> {sense_id, "refers_to"}
+          end
+
+        %{
+          subject: subject,
+          predicate: predicate,
+          object: entity,
+          source_id: link.source_id,
+          source_record_id: link[:source_record_id],
+          origin_key:
+            "link|#{inspect(link[:lexeme])}|#{link[:sense]}|#{link[:concept]}|#{link[:method]}",
+          method: to_string(link[:method] || "source"),
+          confidence: link[:confidence],
+          metadata: link[:metadata] || %{}
+        }
+      end
+      |> Enum.reject(&is_nil(&1.subject))
+
+    write_assertions(claims, run_id, now)
+  end
+
+  # ── output ownership ─────────────────────────────────────────────────────
+
+  # Every derived row is stamped with the run that last emitted it, so
+  # `reconcile/2` can retire what a run stopped emitting — and only this
+  # source's own output.
+  defp own_outputs(rows, ids, role, run_id, now, key_fun \\ & &1.key) do
     rows
     |> Enum.map(fn row ->
       %{
-        source_id: row.source_id,
         source_record_id: row[:source_record_id],
-        lexeme_id: row[:lexeme] && Map.fetch!(changes.lexemes, row.lexeme),
-        concept_id: row[:concept] && Map.fetch!(changes.concepts, row.concept),
-        author_id: row[:author_id] || (row[:author] && Map.get(authors, row.author)),
-        headword: row[:headword],
-        pos: row[:pos],
-        body: row[:body],
-        body_format: row[:body_format] || :text,
-        url: row[:url],
-        thumbnail_url: row[:thumbnail_url],
-        year: row[:year],
-        position: row[:position] || 0,
-        metadata: row[:metadata] || %{},
+        output_role: role,
+        output_key: to_string(key_fun.(row)),
+        output_object_id: Map.fetch!(ids, key_fun.(row)),
+        last_seen_run_id: run_id,
+        retired_at: nil,
         inserted_at: now,
         updated_at: now
       }
     end)
-    |> insert_count(Entry,
-      on_conflict: {:replace_all_except, [:id, :inserted_at]},
-      conflict_target: [:source_record_id, :position]
+    |> Enum.reject(&is_nil(&1.source_record_id))
+    |> Enum.uniq_by(&{&1.source_record_id, &1.output_role, &1.output_key})
+    |> insert_count("source_materialized_outputs",
+      on_conflict: {:replace, [:output_object_id, :last_seen_run_id, :retired_at, :updated_at]},
+      conflict_target: [:source_record_id, :output_role, :output_key]
     )
   end
 
-  # ── lexical relations ────────────────────────────────────────────────────
-
-  defp upsert_relations([], _changes, _now), do: 0
-
-  defp upsert_relations(rows, changes, now) do
-    rows
-    |> Enum.map(fn row ->
+  defp own_assertions(claims, ids, run_id, now) do
+    claims
+    |> Enum.map(fn claim ->
       %{
-        source_id: row.source_id,
-        from_lexeme_id: Map.fetch!(changes.lexemes, row.from_lexeme),
-        from_sense_id: row[:from_sense] && Map.get(changes.senses, row.from_sense),
-        to_lemma: row.to_lemma,
-        to_pos: row[:to_pos],
-        to_lexeme_id: nil,
-        to_sense_id: nil,
-        to_group_key: row[:to_group_key],
-        type: row.type,
-        subtype: row[:subtype],
-        weight: row[:weight] || 1.0,
-        metadata: row[:metadata] || %{},
+        source_record_id: claim[:source_record_id],
+        output_key: claim.origin_key,
+        assertion_id: Map.fetch!(ids, {claim.source_id, claim.origin_key}),
+        last_seen_run_id: run_id,
+        retired_at: nil,
         inserted_at: now,
         updated_at: now
       }
     end)
-    # Dedupe in-process too: the unique index cannot help inside one statement,
-    # and Postgres rejects a batch that hits the same key twice.
-    |> Enum.uniq_by(&{&1.source_id, &1.from_lexeme_id, &1.from_sense_id, &1.to_lemma, &1.type})
-    |> insert_count(LexicalRelation,
-      on_conflict: {:replace, [:subtype, :weight, :metadata, :to_group_key, :updated_at]},
-      conflict_target:
-        {:unsafe_fragment,
-         "(source_id, from_lexeme_id, coalesce(from_sense_id, 0), to_lemma, type)"}
+    |> Enum.reject(&is_nil(&1.source_record_id))
+    |> Enum.uniq_by(&{&1.source_record_id, &1.output_key})
+    |> insert_count("source_assertion_outputs",
+      on_conflict: {:replace, [:assertion_id, :last_seen_run_id, :retired_at, :updated_at]},
+      conflict_target: [:source_record_id, :output_key]
     )
   end
 
-  # ── concept links ────────────────────────────────────────────────────────
+  @doc """
+  Retires the outputs a run stopped emitting. The audit's finding #1.
 
-  defp upsert_links([], _changes, _now), do: 0
+  Refresh was purely additive: a sense a source withdrew stayed in the database
+  for ever, and nothing could tell it from one still attested. Everything this
+  module writes is stamped with the run that last emitted it, so what a
+  completed run did **not** re-stamp is what the source no longer publishes.
 
-  defp upsert_links(rows, changes, now) do
-    rows
-    |> Enum.map(fn row ->
-      %{
-        lexeme_id: Map.fetch!(changes.lexemes, row.lexeme),
-        sense_id: row[:sense] && Map.get(changes.senses, row.sense),
-        concept_id: Map.fetch!(changes.concepts, row.concept),
-        source_id: row[:source_id],
-        method: row.method,
-        confidence: row[:confidence],
-        status: row[:status] || :auto,
-        metadata: row[:metadata] || %{},
-        inserted_at: now,
-        updated_at: now
-      }
-    end)
-    |> Enum.uniq_by(&{&1.lexeme_id, &1.sense_id, &1.concept_id, &1.method})
-    |> insert_count(ConceptLink,
-      on_conflict: {:replace, [:confidence, :status, :metadata, :updated_at]},
-      conflict_target:
-        {:unsafe_fragment, "(lexeme_id, coalesce(sense_id, 0), concept_id, method)"}
+  Retired, never deleted — the identity keeps resolving and every attachment to
+  it keeps meaning what it meant — and only ever this source's own output, so
+  withdrawing a Wiktionary sense cannot remove WordNet's support for the same
+  word.
+
+  Scoped to the records the run actually visited: a scoped import that touched
+  200 records must not retire the other 340,000.
+  """
+  def reconcile(run_id, record_ids) when is_integer(run_id) do
+    now = DateTime.utc_now()
+
+    stale_outputs =
+      from(o in "source_materialized_outputs",
+        where: o.source_record_id in ^record_ids,
+        where: is_nil(o.retired_at),
+        where: is_nil(o.last_seen_run_id) or o.last_seen_run_id != ^run_id,
+        select: {o.output_role, o.output_object_id}
+      )
+      |> Repo.all()
+
+    {senses, content} =
+      Enum.split_with(stale_outputs, fn {role, _id} -> role == "sense" end)
+
+    retire_senses(Enum.map(senses, &elem(&1, 1)), now)
+    retire_content(Enum.map(content, &elem(&1, 1)), now)
+
+    stale_assertions =
+      from(o in "source_assertion_outputs",
+        where: o.source_record_id in ^record_ids,
+        where: is_nil(o.retired_at),
+        where: is_nil(o.last_seen_run_id) or o.last_seen_run_id != ^run_id,
+        select: o.assertion_id
+      )
+      |> Repo.all()
+
+    for assertion_id <- stale_assertions do
+      Claims.withdraw(assertion_id, reason: "no longer emitted by its source")
+    end
+
+    Repo.update_all(
+      from(o in "source_materialized_outputs",
+        where: o.source_record_id in ^record_ids,
+        where: is_nil(o.retired_at),
+        where: is_nil(o.last_seen_run_id) or o.last_seen_run_id != ^run_id
+      ),
+      set: [retired_at: now, updated_at: now]
+    )
+
+    Repo.update_all(
+      from(o in "source_assertion_outputs",
+        where: o.source_record_id in ^record_ids,
+        where: is_nil(o.retired_at),
+        where: is_nil(o.last_seen_run_id) or o.last_seen_run_id != ^run_id
+      ),
+      set: [retired_at: now, updated_at: now]
+    )
+
+    %{
+      senses: length(senses),
+      content: length(content),
+      assertions: length(stale_assertions)
+    }
+  end
+
+  defp retire_senses([], _now), do: 0
+
+  defp retire_senses(ids, now) do
+    Repo.update_all(
+      from(s in "senses", where: s.object_id in ^ids),
+      set: [identity_state: "retired", updated_at: now]
+    )
+
+    Repo.update_all(
+      from(r in "sense_revisions", where: r.sense_id in ^ids and r.is_current),
+      set: [lifecycle_state: "withdrawn", updated_at: now]
     )
   end
 
-  # ── cached columns ───────────────────────────────────────────────────────
+  defp retire_content([], _now), do: 0
 
-  # `lexemes.source_ids` is the cached "who attests this word" array; it makes
-  # "crowd-only words" a filter rather than a join.
+  defp retire_content(ids, now) do
+    Repo.update_all(
+      from(r in "content_revisions", where: r.content_id in ^ids and r.is_current),
+      set: [lifecycle_state: "withdrawn", updated_at: now]
+    )
+  end
+
+  # ── stamps ───────────────────────────────────────────────────────────────
+
   defp stamp_source_ids(changes, records, now) do
     ids = Map.values(changes.lexemes)
     source_ids = records |> Enum.map(& &1.source_id) |> Enum.uniq()
@@ -548,7 +1260,7 @@ defmodule DevilsDictionary.Absorb.Materializer do
       {count, _} =
         Repo.update_all(
           from(l in Lexeme,
-            where: l.id in ^ids and not fragment("? @> ?", l.source_ids, ^source_ids),
+            where: l.object_id in ^ids and not fragment("? @> ?", l.source_ids, ^source_ids),
             update: [
               set: [
                 source_ids:
@@ -574,9 +1286,9 @@ defmodule DevilsDictionary.Absorb.Materializer do
   #
   # Per lexeme, not per batch. WordNet gets away with the cruder version because
   # every synset yields a sense for every member, but a scoped Wiktionary batch
-  # mixes words that gained senses with words that only had their `forms`
-  # touched, and marking the latter enriched would quietly inflate A3 and put
-  # empty cards on the word page.
+  # mixes words that gained senses with words that only had their forms touched,
+  # and marking the latter enriched would quietly inflate A3 and put empty cards
+  # on the word page.
   defp stamp_enriched_at(merged, changes, now) do
     keys =
       Enum.map(merged.senses, & &1.lexeme) ++
@@ -593,7 +1305,7 @@ defmodule DevilsDictionary.Absorb.Materializer do
     else
       {count, _} =
         Repo.update_all(
-          from(l in Lexeme, where: l.id in ^ids and is_nil(l.enriched_at)),
+          from(l in Lexeme, where: l.object_id in ^ids and is_nil(l.enriched_at)),
           set: [enriched_at: now, updated_at: now]
         )
 
@@ -602,15 +1314,6 @@ defmodule DevilsDictionary.Absorb.Materializer do
   end
 
   # ── insert helpers ───────────────────────────────────────────────────────
-
-  defp insert_returning(rows, schema, opts) do
-    rows
-    |> Enum.chunk_every(@chunk)
-    |> Enum.flat_map(fn chunk ->
-      {_n, returned} = Repo.insert_all(schema, chunk, opts)
-      returned || []
-    end)
-  end
 
   defp insert_count(rows, schema, opts) do
     rows
@@ -624,16 +1327,18 @@ defmodule DevilsDictionary.Absorb.Materializer do
   defp counts(changes, merged) do
     %{
       lexemes: map_size(changes.lexemes),
+      forms: changes.forms,
       concepts: map_size(changes.concepts),
       senses: map_size(changes.senses),
       entries: changes.entries,
-      relations: changes.relations,
+      relations: changes.relations.written,
+      relations_pending: changes.relations.pending,
       links: changes.links,
       concept_relations: changes.concept_relations.written,
       concept_relations_skipped: changes.concept_relations.skipped,
       concept_relations_skipped_parent_taxon: changes.concept_relations.skipped_parent_taxon,
       concept_relations_skipped_unchased: changes.concept_relations.skipped_unchased,
-      relations_offered: length(merged.relations),
+      relations_offered: changes.relations.offered,
       concept_relations_offered: length(merged.concept_relations)
     }
   end

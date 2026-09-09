@@ -217,10 +217,12 @@ defmodule DevilsDictionary.Sources.Catalog do
         source_slug: "bierce",
         work: %{
           title: "The Devil's Dictionary",
+          slug: "the-devils-dictionary",
           work_kind: "dictionary",
           first_published_year: 1911,
           wikidata_id: "Q1197843",
           edition: %{
+            slug: "bierce-gutenberg-972",
             label: "Project Gutenberg #972 (1911 text)",
             publication_year: 1911
           }
@@ -238,10 +240,12 @@ defmodule DevilsDictionary.Sources.Catalog do
         source_slug: "johnson",
         work: %{
           title: "A Dictionary of the English Language",
+          slug: "a-dictionary-of-the-english-language",
           work_kind: "dictionary",
           first_published_year: 1755,
           wikidata_id: "Q1526598",
           edition: %{
+            slug: "johnson-leme-1755",
             label: "LEME ver. 1.0 (2023) transcription of the 1755 first edition",
             publication_year: 1755
           }
@@ -355,7 +359,22 @@ defmodule DevilsDictionary.Sources.Catalog do
     assert_once(work.object_id, "authored_by", person.object_id)
     assert_once(edition.object_id, "edition_of", work.object_id)
 
+    # `materialize/1` is pure and cannot look up a person, so a source names its
+    # author and its edition by the catalog slug. This is what turns that slug
+    # into an entity id, and it is a *name* rather than an identifier because
+    # that is what it is: `object_names` is where a thing's names live.
+    name_once(person.object_id, attrs.slug)
+    name_once(work.object_id, attrs.work[:slug])
+    name_once(edition.object_id, attrs.work.edition[:slug])
+
     %{person: person, work: work, edition: edition}
+  end
+
+  defp name_once(object_id, nil), do: object_id
+
+  defp name_once(object_id, slug) do
+    Registry.add_name(object_id, slug, name_kind: "catalog_slug")
+    object_id
   end
 
   defp find_or_create_entity(wikidata_id, label, build) do

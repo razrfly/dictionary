@@ -42,7 +42,9 @@ defmodule DevilsDictionary.Absorb.Sources.Wiktionary do
   import Ecto.Query
 
   alias DevilsDictionary.Absorb.{Batch, GzipLines}
-  alias DevilsDictionary.Lexicon.{Lexeme, Scope, ScopeLexeme}
+  alias DevilsDictionary.Absorb.Materializer
+  alias DevilsDictionary.Lexicon.{Scope, ScopeMember}
+  alias DevilsDictionary.Registry.Lexeme
   alias DevilsDictionary.Repo
   alias DevilsDictionary.Sources
   alias DevilsDictionary.Sources.SourceRecord
@@ -514,9 +516,9 @@ defmodule DevilsDictionary.Absorb.Sources.Wiktionary do
   """
   def scope_lemmas(%Scope{id: scope_id}, reason \\ nil) do
     query =
-      from sl in ScopeLexeme,
+      from sl in ScopeMember,
         join: l in Lexeme,
-        on: l.id == sl.lexeme_id,
+        on: l.object_id == sl.lexeme_id,
         where: sl.scope_id == ^scope_id,
         select: l.lemma,
         distinct: true
@@ -755,18 +757,14 @@ defmodule DevilsDictionary.Absorb.Sources.Wiktionary do
     lemma = record["word"]
 
     %{
-      lang: "en",
-      lemma: lemma,
-      pos: pos(record),
+      key: {"en", lemma, pos(record)},
       slug: Lexeme.slug(lemma),
       forms: forms(record),
       pronunciations: [],
       etymology: nil,
       origin_source_id: source_id,
       source_ids: [source_id],
-      metadata: metadata(record),
-      inserted_at: {:placeholder, :now},
-      updated_at: {:placeholder, :now}
+      metadata: metadata(record)
     }
   end
 
@@ -830,58 +828,70 @@ defmodule DevilsDictionary.Absorb.Sources.Wiktionary do
 
   defp flush(%{buffered: 0} = acc), do: %{acc | buffer: []}
 
+  # Identities are minted through `Materializer.upsert_lexemes/2` rather than a
+  # second spelling of "insert an object and its subtype". Two writers with two
+  # spellings of that is exactly the drift the registry exists to prevent, and
+  # an orphaned `objects` row is refused at COMMIT rather than tolerated.
+  #
+  # `source_ids` is stamped afterwards: the shared upsert deliberately does not
+  # set it, because it is a cache of who attests the word and the materializer
+  # maintains it in one statement per batch.
   defp flush(acc) do
-    written =
+    now = DateTime.utc_now()
+
+    rows =
       acc.buffer
       |> Enum.concat()
       # The unique index cannot help inside a single statement: Postgres rejects
       # a batch that hits the same conflict key twice.
-      |> Enum.uniq_by(&{&1.lang, &1.lemma, &1.pos})
+      |> Enum.uniq_by(& &1.key)
+
+    written =
+      rows
       |> Enum.chunk_every(@insert_chunk)
       |> Enum.reduce(0, fn chunk, written ->
-        {n, _} =
-          Repo.insert_all(Lexeme, chunk,
-            placeholders: %{now: DateTime.utc_now()},
-            on_conflict: index_conflict(),
-            conflict_target: [:lang, :lemma, :pos]
-          )
-
-        written + n
+        ids = Materializer.upsert_lexemes(chunk, now)
+        Materializer.upsert_forms(chunk, ids, %{}, now)
+        stamp_index_source(ids, chunk, now)
+        written + map_size(ids)
       end)
 
     %{acc | buffer: [], buffered: 0, written: acc.written + written}
   end
 
-  # Merge rather than clobber: WordNet may have created the lexeme first, and it
-  # sets neither forms nor categories. `origin_source_id` keeps whoever got here
-  # first; `source_ids` accumulates everyone who attests the word.
-  defp index_conflict do
-    import Ecto.Query
+  # `source_ids` accumulates everyone who attests the word; the index pass adds
+  # Wiktionary to every row it touches, including ones WordNet created first.
+  defp stamp_index_source(ids, rows, now) do
+    source_ids = rows |> Enum.map(& &1.origin_source_id) |> Enum.uniq() |> Enum.reject(&is_nil/1)
+    object_ids = Map.values(ids)
 
-    from(l in Lexeme,
-      update: [
-        set: [
-          forms: fragment("EXCLUDED.forms"),
-          metadata: fragment("? || EXCLUDED.metadata", l.metadata),
-          origin_source_id:
-            fragment("COALESCE(?, EXCLUDED.origin_source_id)", l.origin_source_id),
-          source_ids:
-            fragment(
-              "(SELECT array_agg(DISTINCT x) FROM unnest(? || EXCLUDED.source_ids) AS x)",
-              l.source_ids
-            ),
-          updated_at: fragment("EXCLUDED.updated_at")
-        ]
-      ]
-    )
+    if source_ids != [] and object_ids != [] do
+      Repo.update_all(
+        from(l in Lexeme,
+          where: l.object_id in ^object_ids and not fragment("? @> ?", l.source_ids, ^source_ids),
+          update: [
+            set: [
+              source_ids:
+                fragment(
+                  "(SELECT array_agg(DISTINCT x) FROM unnest(? || ?::bigint[]) AS x)",
+                  l.source_ids,
+                  ^source_ids
+                ),
+              updated_at: ^now
+            ]
+          ]
+        ),
+        []
+      )
+    end
   end
 
   # A live gin_trgm_ops index makes a 1.4M-row load several times slower.
   defp drop_load_indexes do
     Repo.query!("SET maintenance_work_mem = '1GB'")
     Repo.query!("DROP INDEX IF EXISTS lexemes_lemma_trgm_index")
-    Repo.query!("DROP INDEX IF EXISTS lexemes_forms_index")
     Repo.query!("DROP INDEX IF EXISTS lexemes_metadata_index")
+    Repo.query!("DROP INDEX IF EXISTS lexeme_forms_lower_written_form_index")
   end
 
   defp create_load_indexes do
@@ -893,7 +903,9 @@ defmodule DevilsDictionary.Absorb.Sources.Wiktionary do
       timeout: :infinity
     )
 
-    Repo.query!("CREATE INDEX lexemes_forms_index ON lexemes USING gin (forms)", [],
+    Repo.query!(
+      "CREATE INDEX IF NOT EXISTS lexeme_forms_lower_written_form_index ON lexeme_forms (lower(written_form))",
+      [],
       timeout: :infinity
     )
 

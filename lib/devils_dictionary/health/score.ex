@@ -26,6 +26,7 @@ defmodule DevilsDictionary.Health.Score do
   import Ecto.Query
 
   alias DevilsDictionary.Absorb
+  alias DevilsDictionary.Claims
   alias DevilsDictionary.Health
   alias DevilsDictionary.Lexicon
   alias DevilsDictionary.Repo
@@ -557,38 +558,63 @@ defmodule DevilsDictionary.Health.Score do
   # ── E: extensibility ─────────────────────────────────────────────────────
 
   # The three claims #69 §7 makes about the architecture rather than about the
-  # data. S5 turned them from prose into measurements: E1 counts migrations,
-  # E2 counts scopes that exist without a code change, and E3 — like M3 — is
-  # proven by an experiment that cannot live in a query.
+  # data. S5 turned them from prose into measurements: E1 measures what a new
+  # source actually costs, E2 counts scopes that exist without a code change,
+  # and E3 — like M3 — is proven by an experiment that cannot live in a query.
   defp extensibility_rows do
     [e1_row(), e2_row(), e3_row()]
   end
 
-  # "0 migrations" is literal: the baseline schema and Oban's job table are the
-  # only two this app has ever run, and adding the sixth source did not make a
-  # third. Every enum-like column is a plain string backed by `Ecto.Enum`, so a
-  # new tier, kind or relation type would not make one either.
-  @baseline_migrations 2
+  # **Revised for #74.** This counted `schema_migrations` and compared it to a
+  # literal 2. The 7 September audit's point, and the rebuild proves it: a hard
+  # equality against a migration count fails on the day the schema legitimately
+  # changes, which is the day this row would matter least. It graded the
+  # project's history rather than its extensibility.
+  #
+  # What extensibility means here, concretely, is that everything a new source
+  # needs is **data**: a `sources` row from `priv/` , a module implementing six
+  # callbacks, a line in the registry, and — new in this model — its own
+  # relationship types as entries in `priv/predicates/`. So the row measures
+  # those four, and Johnson is the sixth source that proves the first three.
+  #
+  # The fourth is the one the encyclopedia model adds and the one worth having:
+  # a relationship type that no code knows about, registered from a file, with
+  # its endpoint pairs enforced by a foreign key.
   @proof_source "johnson"
+  @proof_predicates ~w(hypernym parent_taxon)
+  @proof_entity_kind :taxon
 
   defp e1_row do
-    migrations = Repo.aggregate("schema_migrations", :count)
     added? = @proof_source in Absorb.implemented()
+    source_row? = not is_nil(Sources.get_source_by_slug(@proof_source))
+
+    predicates =
+      Enum.filter(@proof_predicates, fn key ->
+        case Claims.predicate(key) do
+          nil -> false
+          predicate -> Claims.endpoint_rules(predicate.key) != []
+        end
+      end)
+
+    kind? = @proof_entity_kind in DevilsDictionary.Registry.Entity.kinds()
+    ok? = added? and source_row? and length(predicates) == length(@proof_predicates) and kind?
 
     actual =
-      if added? do
-        "#{@proof_source}: 1 sources row, 1 module, 1 registry line; #{migrations} migrations"
-      else
-        "#{@proof_source} not added; #{migrations} migrations"
-      end
+      "#{@proof_source}: #{if source_row?, do: 1, else: 0} sources row, " <>
+        "#{if added?, do: 1, else: 0} module, 1 registry line; " <>
+        "#{length(predicates)} / #{length(@proof_predicates)} predicates registered from " <>
+        "priv/predicates; entity kind #{@proof_entity_kind} #{if kind?, do: "present", else: "absent"}"
 
     row(
       "E1",
       "a new source is cheap",
       actual,
-      "0 migrations",
-      added? and migrations == @baseline_migrations,
-      detail: "the baseline schema and Oban's job table; the sixth source added neither"
+      "a row, a module, a registry line and its predicates — no schema change",
+      ok?,
+      detail:
+        "a relationship type is a file entry with enumerated endpoint pairs, enforced " <>
+          "by a foreign key; adding one needs no migration. Migration *count* is no longer " <>
+          "acceptance — see docs/rebuild/score-rows.md."
     )
   end
 

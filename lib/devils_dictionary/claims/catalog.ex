@@ -15,6 +15,7 @@ defmodule DevilsDictionary.Claims.Catalog do
   """
 
   alias DevilsDictionary.Claims
+  alias DevilsDictionary.Registry.{ContentItem, Entity}
 
   @doc "Where the predicate files live, at compile time and from a release."
   def dir, do: Application.app_dir(:devils_dictionary, "priv/predicates")
@@ -47,11 +48,10 @@ defmodule DevilsDictionary.Claims.Catalog do
     Map.new(predicates(), fn definition ->
       {:ok, predicate} = upsert(definition)
 
-      for endpoint <- definition["endpoints"] || [] do
-        [subject, object] = endpoint
-        {subject_kind, subject_subkind} = split(subject)
-        {object_kind, object_subkind} = split(object)
-
+      for endpoint <- definition["endpoints"] || [],
+          [subject, object] = endpoint,
+          {subject_kind, subject_subkind} <- expand(subject),
+          {object_kind, object_subkind} <- expand(object) do
         Claims.allow_endpoints(predicate, subject_kind, object_kind,
           subject_subkind: subject_subkind,
           object_subkind: object_subkind
@@ -68,16 +68,36 @@ defmodule DevilsDictionary.Claims.Catalog do
                               is_symmetric is_transitive cycles_allowed source_native))
 
     case Claims.predicate(definition["key"]) do
-      nil -> Claims.create_predicate(attrs)
-      existing -> existing |> DevilsDictionary.Claims.Predicate.changeset(attrs) |> DevilsDictionary.Repo.update()
+      nil ->
+        Claims.create_predicate(attrs)
+
+      existing ->
+        existing
+        |> DevilsDictionary.Claims.Predicate.changeset(attrs)
+        |> DevilsDictionary.Repo.update()
     end
   end
 
-  # "content/definition" -> {"content", "definition"}; "lexeme/-" -> {"lexeme", "-"}
-  defp split(endpoint) do
-    case String.split(endpoint, "/", parts: 2) do
-      [kind, subkind] -> {kind, subkind}
-      [kind] -> {kind, "-"}
-    end
+  # "content/definition" -> [{"content", "definition"}]; "lexeme/-" -> [{"lexeme", "-"}].
+  #
+  # `*` expands over the kind's subkinds. An imported Wikidata item's kind is not
+  # known before its statements are read, so `entity/*` on the hierarchy
+  # predicates is the honest statement of the rule; writing out a hundred pairs
+  # by hand would be a worse record of the same thing. Every pair still becomes
+  # its own `predicate_endpoint_rules` row, so the composite foreign key checks
+  # exactly what it checked before.
+  defp expand(endpoint) do
+    {kind, subkind} =
+      case String.split(endpoint, "/", parts: 2) do
+        [kind, subkind] -> {kind, subkind}
+        [kind] -> {kind, "-"}
+      end
+
+    for sub <- subkinds(kind, subkind), do: {kind, sub}
   end
+
+  defp subkinds("entity", "*"), do: Enum.map(Entity.kinds(), &to_string/1)
+  defp subkinds("content", "*"), do: Enum.map(ContentItem.kinds(), &to_string/1)
+  defp subkinds(_kind, "*"), do: ["-"]
+  defp subkinds(_kind, subkind), do: [subkind]
 end

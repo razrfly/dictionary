@@ -36,7 +36,7 @@ defmodule Mix.Tasks.Dd.Fixtures.Capture do
 
   alias DevilsDictionary.Absorb.Clients
   alias DevilsDictionary.Absorb.GzipLines
-  alias DevilsDictionary.Lexicon.Lexeme
+  alias DevilsDictionary.Registry.Lexeme
   alias DevilsDictionary.Repo
   alias DevilsDictionary.Sources
   alias DevilsDictionary.Sources.SourceRecord
@@ -192,7 +192,11 @@ defmodule Mix.Tasks.Dd.Fixtures.Capture do
   # takes.
   defp with_probe(page, lemma) do
     keys =
-      Repo.all(from l in Lexeme, where: l.lemma == ^lemma, select: {l.lang, l.pos})
+      Repo.all(
+        from l in Lexeme,
+          where: l.lemma == ^lemma,
+          select: {l.language_tag, l.part_of_speech}
+      )
       |> Enum.map(fn {lang, pos} -> [lang, lemma, pos] end)
 
     keys = if keys == [], do: [["en", lemma, "noun"]], else: keys

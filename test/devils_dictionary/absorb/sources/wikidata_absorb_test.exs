@@ -7,45 +7,70 @@ defmodule DevilsDictionary.Absorb.Sources.WikidataAbsorbTest do
 
   alias DevilsDictionary.Absorb.Clients
   alias DevilsDictionary.Absorb.Sources.Wikidata
-  alias DevilsDictionary.Encyclopedia.{Concept, ConceptLink, ConceptRelation}
-  alias DevilsDictionary.{Fixtures, Repo}
-  alias DevilsDictionary.Lexicon.{Lexeme, ScopeLexeme, Sense}
-  alias DevilsDictionary.Sources.SourceRecord
+  alias DevilsDictionary.Claims.AssertionRevision
+  alias DevilsDictionary.Lexicon.ScopeMember
+  alias DevilsDictionary.Registry.{Entity, Lexeme}
+  alias DevilsDictionary.{Claims, Fixtures, Registry, Repo}
+  alias DevilsDictionary.WordFixtures
 
   setup do
     %{sources: sources, scopes: scopes} = Fixtures.seed_catalog!()
-    %{sources: sources, animals: scopes["animals"]}
+
+    # The catalog seeds Bierce and Johnson, their works and their editions — six
+    # entities and four QIDs before this source has absorbed anything. Counting
+    # them into an absorb's result would make these assertions about the seed.
+    %{sources: sources, animals: scopes["animals"], seeded: Repo.aggregate(Entity, :count)}
   end
 
   defp scoped_sense!(ctx, lemma, source_slug, metadata) do
-    lexeme =
-      Repo.insert!(%Lexeme{lang: "en", lemma: lemma, pos: "noun", slug: Lexeme.slug(lemma)})
+    {:ok, lexeme} =
+      Registry.create_lexeme(%{language_tag: "en", lemma: lemma, part_of_speech: "noun"})
 
-    Repo.insert!(%ScopeLexeme{
+    Repo.insert!(%ScopeMember{
       scope_id: ctx.animals.id,
-      lexeme_id: lexeme.id,
+      lexeme_id: lexeme.object_id,
       reasons: ["wordnet_closure"]
     })
 
-    source = ctx.sources[source_slug]
+    record = WordFixtures.record!(ctx, source_slug, external_id: "#{lemma}/1", raw: %{})
 
-    record =
-      Repo.insert!(%SourceRecord{
-        source_id: source.id,
-        external_id: "#{lemma}/1",
-        raw: %{},
-        fetched_at: DateTime.utc_now()
+    {:ok, _sense} =
+      Registry.create_sense(%{
+        lexeme_id: lexeme.object_id,
+        source_id: ctx.sources[source_slug].id,
+        external_key: "#{lemma}#1",
+        metadata: metadata,
+        source_record_revision_id: revision_id(record)
       })
 
-    Repo.insert!(%Sense{
-      lexeme_id: lexeme.id,
-      source_id: source.id,
-      source_record_id: record.id,
-      external_id: "#{lemma}#1",
-      metadata: metadata
-    })
-
     lexeme
+  end
+
+  defp revision_id(record) do
+    Repo.one!(
+      from r in DevilsDictionary.Corpus.SourceRecordRevision,
+        where: r.source_record_id == ^record.id,
+        select: r.id
+    )
+  end
+
+  defp entity_qids do
+    Repo.all(
+      from x in DevilsDictionary.Registry.ExternalIdentifier,
+        where: x.namespace == "wikidata" and x.status == :verified,
+        order_by: x.external_id,
+        select: x.external_id
+    )
+  end
+
+  defp taxon_edges do
+    Repo.aggregate(
+      from(r in AssertionRevision,
+        join: p in assoc(r, :predicate),
+        where: r.is_current and p.key == "parent_taxon"
+      ),
+      :count
+    )
   end
 
   # A three-tier taxonomy: species -> genus -> family, so the walk has more than
@@ -105,7 +130,7 @@ defmodule DevilsDictionary.Absorb.Sources.WikidataAbsorbTest do
     assert stats.seed_qids == 3
     assert stats.fetched == 4
     assert stats.truncated == false
-    assert Repo.aggregate(Concept, :count) == 4
+    assert Repo.aggregate(Entity, :count) - ctx.seeded == 4
   end
 
   test "the concept seed is this scope's concepts, not the whole table", ctx do
@@ -116,15 +141,15 @@ defmodule DevilsDictionary.Absorb.Sources.WikidataAbsorbTest do
     # scope.
     scoped_sense!(ctx, "cat", "wordnet", %{"wikidata" => "Q20980826"})
 
-    mine = Repo.insert!(%Concept{qid: "Q9001", label: "mine", kind: :thing})
-    Repo.insert!(%Concept{qid: "Q9002", label: "elsewhere", kind: :thing})
+    mine = WordFixtures.concept!("Q9001", "mine")
+    WordFixtures.concept!("Q9002", "elsewhere")
+    cat = Repo.one!(from l in Lexeme, where: l.lemma == "cat")
 
-    Repo.insert!(%ConceptLink{
-      lexeme_id: Repo.one!(from l in Lexeme, where: l.lemma == "cat", select: l.id),
-      concept_id: mine.id,
-      method: :title_match,
-      confidence: 0.7
-    })
+    {:ok, _} =
+      Claims.assert(cat.object_id, "lexeme_entity_candidate", mine.object_id, %{
+        method: "title_match",
+        confidence: 0.7
+      })
 
     seeds = Wikidata.seed_qids(ctx.animals)
 
@@ -138,15 +163,14 @@ defmodule DevilsDictionary.Absorb.Sources.WikidataAbsorbTest do
   test "a candidate below the promotion line is not chased", ctx do
     scoped_sense!(ctx, "seal", "wordnet", %{"wikidata" => "Q20980826"})
 
-    maybe = Repo.insert!(%Concept{qid: "Q9003", label: "BYD Seal", kind: :thing})
+    maybe = WordFixtures.concept!("Q9003", "BYD Seal")
+    seal = Repo.one!(from l in Lexeme, where: l.lemma == "seal")
 
-    Repo.insert!(%ConceptLink{
-      lexeme_id: Repo.one!(from l in Lexeme, where: l.lemma == "seal", select: l.id),
-      concept_id: maybe.id,
-      method: :disambiguation,
-      confidence: 0.4,
-      status: :candidate
-    })
+    {:ok, _} =
+      Claims.assert(seal.object_id, "lexeme_entity_candidate", maybe.object_id, %{
+        method: "disambiguation",
+        confidence: 0.4
+      })
 
     refute "Q9003" in Wikidata.seed_qids(ctx.animals)
   end
@@ -167,7 +191,7 @@ defmodule DevilsDictionary.Absorb.Sources.WikidataAbsorbTest do
     # earlier tier only exists once the later tier is fetched, which is why the
     # absorb keeps re-materializing until nothing is left unresolved.
     assert closed == 2
-    assert Repo.aggregate(ConceptRelation, :count) == 2
+    assert taxon_edges() == 2
   end
 
   test "a synset carrying an array of QIDs seeds every one of them", ctx do
@@ -186,8 +210,8 @@ defmodule DevilsDictionary.Absorb.Sources.WikidataAbsorbTest do
     # which the stub does not answer for.
     assert {:ok, %{seed_qids: 3, fetched: 2}} = Wikidata.absorb(ctx.animals, rate_limit_ms: 0)
 
-    assert Repo.all(from c in Concept, select: c.qid, order_by: c.qid) ==
-             ["Q109647288", "Q35255"]
+    assert "Q109647288" in entity_qids()
+    assert "Q35255" in entity_qids()
   end
 
   test "an edge naming a parent nobody fetched is reported, not looped on", ctx do
@@ -218,7 +242,7 @@ defmodule DevilsDictionary.Absorb.Sources.WikidataAbsorbTest do
     # Two: the unknown QID, plus the scope's own root, which is always seeded so
     # the `wikidata_taxon` rule has somewhere to start its walk.
     assert {:ok, %{absent: 2, fetched: 0}} = Wikidata.absorb(ctx.animals, rate_limit_ms: 0)
-    assert Repo.aggregate(Concept, :count) == 0
+    assert Repo.aggregate(Entity, :count) == ctx.seeded
   end
 
   test "a second run costs nothing, and --refresh is how a snapshot moves", ctx do

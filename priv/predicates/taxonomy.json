@@ -1,0 +1,70 @@
+{
+  "$comment": [
+    "Wikidata's own hierarchy properties, kept as themselves (#74 §C: 'Preserve",
+    "source-specific relation types and direction').",
+    "",
+    "The three that mattered in MVP-0's `concept_relations.type` enum, plus the bridge",
+    "from an everyday concept to its taxon item. Q146 *cat* is a concept with an enwiki",
+    "article and no P171 at all; Q20980826 *Felis catus* is the taxon and carries the whole",
+    "chain to Animalia. P13176 is the one hop between them, and it is what made the taxon",
+    "chain reachable from a word in the first place.",
+    "",
+    "Only P171 and P13176 are walked to closure by the importer. P279 and P31 are recorded",
+    "as edges and never chased: following them climbs out of biology into the abstract",
+    "ontology (40 seeds pulled 1,372 entities over 20 tiers before this was narrowed).",
+    "That policy lives in the adapter; these rows only say the edges are legal.",
+    "",
+    "`entity/*` expands over every entity kind at seed time. An imported Wikidata item's",
+    "kind is not known before its statements are read, and enumerating 100 pairs by hand",
+    "per predicate would be a worse record of the same rule.",
+    "",
+    "`cycles_allowed` is false for all four: a taxonomy that loops is a data defect, and",
+    "the recursive chain walk depends on it terminating."
+  ],
+  "predicates": [
+    {
+      "key": "parent_taxon",
+      "forward_label": "parent taxon",
+      "reverse_label": "child taxa",
+      "description": "Wikidata P171. The taxonomy proper, terminating at Animalia. The chain walk prefers this above all others.",
+      "is_symmetric": false,
+      "is_transitive": true,
+      "cycles_allowed": false,
+      "source_native": true,
+      "endpoints": [["entity/*", "entity/*"]]
+    },
+    {
+      "key": "subclass_of",
+      "forward_label": "kind of",
+      "reverse_label": "kinds",
+      "description": "Wikidata P279. The chain walk falls back to this where there is no parent taxon.",
+      "is_symmetric": false,
+      "is_transitive": true,
+      "cycles_allowed": false,
+      "source_native": true,
+      "endpoints": [["entity/*", "entity/*"]]
+    },
+    {
+      "key": "instance_of",
+      "forward_label": "instance of",
+      "reverse_label": "examples",
+      "description": "Wikidata P31. Followed only at the first step of a chain: following it at every step walks a named individual up to 'abstract entity'.",
+      "is_symmetric": false,
+      "is_transitive": false,
+      "cycles_allowed": false,
+      "source_native": true,
+      "endpoints": [["entity/*", "entity/*"]]
+    },
+    {
+      "key": "taxon_item",
+      "forward_label": "taxon",
+      "reverse_label": "concept",
+      "description": "Wikidata P13176. The bridge from an everyday concept to the taxon item that carries its classification.",
+      "is_symmetric": false,
+      "is_transitive": false,
+      "cycles_allowed": false,
+      "source_native": true,
+      "endpoints": [["entity/*", "entity/taxon"], ["entity/*", "entity/concept"]]
+    }
+  ]
+}

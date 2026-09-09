@@ -6,10 +6,9 @@ defmodule DevilsDictionary.LexiconBrowseTest do
 
   use DevilsDictionary.DataCase, async: true
 
-  alias DevilsDictionary.Encyclopedia.{Concept, ConceptLink, ConceptRelation}
   alias DevilsDictionary.Fixtures
-  alias DevilsDictionary.{Encyclopedia, Health, Lexicon, Repo}
-  alias DevilsDictionary.Lexicon.{Lexeme, ScopeLexeme}
+  alias DevilsDictionary.{Claims, Encyclopedia, Health, Lexicon, Registry, Repo}
+  alias DevilsDictionary.Lexicon.ScopeMember
 
   setup do
     %{sources: sources, scopes: scopes} = Fixtures.seed_catalog!()
@@ -17,43 +16,72 @@ defmodule DevilsDictionary.LexiconBrowseTest do
   end
 
   defp lexeme!(lemma, opts \\ []) do
-    Repo.insert!(%Lexeme{
-      lang: "en",
-      lemma: lemma,
-      pos: Keyword.get(opts, :pos, "noun"),
-      slug: Lexeme.slug(lemma),
-      source_ids: Keyword.get(opts, :source_ids, []),
-      enriched_at: Keyword.get(opts, :enriched_at, DateTime.utc_now())
-    })
+    {:ok, lexeme} =
+      Registry.create_lexeme(%{
+        language_tag: "en",
+        lemma: lemma,
+        part_of_speech: Keyword.get(opts, :pos, "noun"),
+        source_ids: Keyword.get(opts, :source_ids, []),
+        enriched_at: Keyword.get(opts, :enriched_at, DateTime.utc_now())
+      })
+
+    lexeme
   end
 
   defp scoped!(scope, lexeme, reasons \\ ["wordnet_closure"]) do
-    Repo.insert!(%ScopeLexeme{scope_id: scope.id, lexeme_id: lexeme.id, reasons: reasons})
+    Repo.insert!(%ScopeMember{
+      scope_id: scope.id,
+      lexeme_id: lexeme.object_id,
+      reasons: reasons
+    })
+
     lexeme
   end
 
   defp concept!(qid, label, attrs \\ []) do
-    Repo.insert!(struct(%Concept{qid: qid, label: label, kind: :taxon}, attrs))
+    attrs = Map.new(attrs)
+
+    {:ok, entity} =
+      Registry.create_entity(%{
+        entity_kind: :taxon,
+        preferred_label: label,
+        description: Map.get(attrs, :description),
+        metadata:
+          %{}
+          |> maybe_put("image_url", Map.get(attrs, :image_url))
+          |> maybe_put("wikipedia_title", Map.get(attrs, :wikipedia_title))
+      })
+
+    {:ok, _} = Registry.add_external_id(entity.object_id, "wikidata", qid)
+    entity
   end
 
-  defp link!(lexeme, concept, opts \\ []) do
-    Repo.insert!(%ConceptLink{
-      lexeme_id: lexeme.id,
-      concept_id: concept.id,
-      method: Keyword.get(opts, :method, :title_match),
-      confidence: Keyword.get(opts, :confidence, 0.9),
-      status: Keyword.get(opts, :status, :auto)
-    })
+  defp maybe_put(map, _key, nil), do: map
+  defp maybe_put(map, key, value), do: Map.put(map, key, value)
+
+  # A word-level guess, which is what `title_match` always was. `status: :auto`
+  # means nobody has reviewed it, so nothing is written for it; a decision is a
+  # review row, which is what stops an importer rerun from overwriting one.
+  defp link!(lexeme, entity, opts \\ []) do
+    {:ok, assertion} =
+      Claims.assert(lexeme.object_id, "lexeme_entity_candidate", entity.object_id, %{
+        method: to_string(Keyword.get(opts, :method, :title_match)),
+        confidence: Keyword.get(opts, :confidence, 0.9)
+      })
+
+    case Keyword.get(opts, :status, :auto) do
+      :auto -> :ok
+      decision -> Claims.review(Claims.current_revision(assertion.id).id, decision)
+    end
+
+    assertion
   end
 
   defp parent!(child, parent, source_id) do
-    Repo.insert!(%ConceptRelation{
-      source_id: source_id,
-      from_concept_id: child.id,
-      to_concept_id: parent.id,
-      type: :parent_taxon,
-      property: "P171"
-    })
+    {:ok, assertion} =
+      Claims.assert(child.object_id, "parent_taxon", parent.object_id, %{source_id: source_id})
+
+    assertion
   end
 
   describe "browse/2 badges" do

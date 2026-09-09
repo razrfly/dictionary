@@ -1,14 +1,19 @@
 defmodule DevilsDictionary.Lexicon do
   @moduledoc """
-  Words. Schemas and queries for `lexemes` (lang · lemma · pos, the full English
-  index), `senses`, `entries`, `lexical_relations`, `scopes` and `scope_lexemes`.
-  Dictionaries attach here. Spec: issue #69 §4.
+  Words. Queries over `lexemes` (language · lemma · part of speech, the full
+  English index), `lexeme_forms`, `senses` with their revisions, `scopes` and
+  `scope_lexeme_members`. Dictionaries attach here. Spec: issue #69 §4.
+
+  A word is addressed by its `object_id`. `slug` is a cosmetic label and
+  deliberately not unique — #74 ADR decision 10, and the reason `C++` no longer
+  lands on `/define/c`.
   """
 
   import Ecto.Query, warn: false
 
   alias DevilsDictionary.Lexicon.{Browse, Scope, ScopeMember}
-  alias DevilsDictionary.Registry.{Lexeme, Sense}
+  alias DevilsDictionary.Registry
+  alias DevilsDictionary.Registry.{Lexeme, LexemeForm, Sense, SenseRevision}
   alias DevilsDictionary.Repo
 
   @doc """
@@ -72,12 +77,12 @@ defmodule DevilsDictionary.Lexicon do
 
     1. the slug or the lemma itself
     2. `canonical_lexeme_id` — *oistre* is a variant spelling of *oyster*
-    3. `forms` — *monkeys* is listed among *monkey*'s inflections
+    3. `lexeme_forms` — *monkeys* is listed among *monkey*'s inflections
 
-  Step 3 is why the index pass stores `forms` on every bare row: an inflected
-  form does not need a record of its own to land on the right page, and the
-  `lexemes_forms_index` GIN index makes the containment lookup cheap. Scorecard
-  row X3 is both step 2 and step 3.
+  Step 3 is why the index pass records a form row for every bare word: an
+  inflected form does not need a record of its own to land on the right page,
+  and the `lower(written_form)` index makes the lookup cheap. Scorecard row X3
+  is both step 2 and step 3.
 
   The subtlety is step 3. *monkeys* has an index row of its own — the dump lists
   534,780 form-of entries as headwords — so a plain lemma match finds it and
@@ -142,27 +147,37 @@ defmodule DevilsDictionary.Lexicon do
     )
   end
 
-  # `forms` is a jsonb array of objects, so containment finds "monkeys" inside
-  # [%{"form" => "monkeys", "tags" => ["plural"]}] whatever else the object
-  # carries. Exact case first, since `US` and `us` are different words.
+  # Forms are rows in `lexeme_forms` now, each carrying the source revision that
+  # attested it, so this is a join rather than a JSONB containment test. Exact
+  # case first, since `US` and `us` are different words; the fallback uses the
+  # `lower(written_form)` index.
   defp by_form(word, lang) do
-    case do_by_form(word, lang) do
-      [] -> do_by_form(String.downcase(word), lang)
+    case do_by_form(word, lang, :exact) do
+      [] -> do_by_form(String.downcase(word), lang, :folded)
       lexemes -> lexemes
     end
   end
 
-  defp do_by_form("", _lang), do: []
+  defp do_by_form("", _lang, _casing), do: []
 
-  defp do_by_form(form, lang) do
-    contains = [%{"form" => form}]
-
-    Repo.all(
+  defp do_by_form(form, lang, casing) do
+    query =
       from l in Lexeme,
-        where: l.language_tag == ^lang and fragment("? @> ?", l.forms, ^contains),
+        join: f in LexemeForm,
+        on: f.lexeme_id == l.object_id,
+        where: l.language_tag == ^lang,
+        distinct: true,
         order_by: [l.lemma, l.part_of_speech]
-    )
+
+    query
+    |> match_form(casing, form)
+    |> Repo.all()
   end
+
+  defp match_form(query, :exact, form), do: where(query, [_l, f], f.written_form == ^form)
+
+  defp match_form(query, :folded, form),
+    do: where(query, [_l, f], fragment("lower(?)", f.written_form) == ^form)
 
   # A page shows the canonical word, not the variant that led there. Only
   # redirect when every match agrees, so an ambiguous word keeps its own page.
@@ -182,7 +197,12 @@ defmodule DevilsDictionary.Lexicon do
     case deciding |> Enum.map(& &1.canonical_lexeme_id) |> Enum.uniq() do
       [id] when is_integer(id) ->
         %{
-          lexemes: Repo.all(from l in Lexeme, where: l.id == ^id, order_by: [l.lemma, l.part_of_speech]),
+          lexemes:
+            Repo.all(
+              from l in Lexeme,
+                where: l.object_id == ^id,
+                order_by: [l.lemma, l.part_of_speech]
+            ),
           via: :canonical,
           matched: word
         }
@@ -202,8 +222,10 @@ defmodule DevilsDictionary.Lexicon do
   def count_sense_groups(source_id) do
     Repo.one(
       from s in Sense,
-        where: s.source_id == ^source_id and not is_nil(s.group_key),
-        select: count(s.group_key, :distinct)
+        join: r in SenseRevision,
+        on: r.sense_id == s.object_id and r.is_current,
+        where: s.source_id == ^source_id and not is_nil(r.group_key),
+        select: count(r.group_key, :distinct)
     )
   end
 

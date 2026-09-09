@@ -31,12 +31,16 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
     entry!(ctx, oyster, "johnson", body: "A bivalve testaceous fish.")
     sense!(ctx, oyster, "wiktionary", gloss: "Any marine bivalve mollusk.")
     sense = sense!(ctx, oyster, "wordnet", group_key: "oewn-oyster-n", gloss: "marine mollusks")
-    sense!(ctx, bivalve, "wordnet", group_key: "oewn-bivalve-n", gloss: "a shellfish")
 
+    bivalve_sense =
+      sense!(ctx, bivalve, "wordnet", group_key: "oewn-bivalve-n", gloss: "a shellfish")
+
+    # Sense to sense: WordNet's edges run between meanings, and the chain walks
+    # `group_key` to `group_key` through them.
     relation!(ctx, oyster, :hypernym, bivalve,
       source: "wordnet",
       from_sense: sense,
-      to_group_key: "oewn-bivalve-n"
+      to_sense: bivalve_sense
     )
 
     relation!(ctx, oyster, :derived, bed)
@@ -93,19 +97,19 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
 
       {:ok, _live, html} = live(ctx.conn, ~p"/define/oyster")
 
-      shellfish_chips = ~s(id="card-wiktionary-group-0-sense-#{shellfish.id}-similar")
-      paint_chips = ~s(id="card-wiktionary-group-0-sense-#{paint.id}-similar")
+      shellfish_chips = ~s(id="card-wiktionary-group-0-sense-#{shellfish.object_id}-similar")
+      paint_chips = ~s(id="card-wiktionary-group-0-sense-#{paint.object_id}-similar")
 
       assert html =~ shellfish_chips
       assert html =~ paint_chips
 
       # Each chip row sits inside its own sense: the colour's synonym comes
       # after the colour gloss, not pooled with the shellfish's.
-      assert index(html, "card-wiktionary-group-0-sense-#{shellfish.id}") <
-               index(html, "card-wiktionary-group-0-sense-#{paint.id}")
+      assert index(html, "card-wiktionary-group-0-sense-#{shellfish.object_id}") <
+               index(html, "card-wiktionary-group-0-sense-#{paint.object_id}")
 
-      assert index(html, "card-wiktionary-group-0-sense-#{shellfish.id}-similar") <
-               index(html, "card-wiktionary-group-0-sense-#{paint.id}")
+      assert index(html, "card-wiktionary-group-0-sense-#{shellfish.object_id}-similar") <
+               index(html, "card-wiktionary-group-0-sense-#{paint.object_id}")
     end
 
     test "no chip carries phx-value-value, the binding LiveView silently overwrites", ctx do
@@ -265,7 +269,7 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
     test "the thing panel opens its own drawer, keyed by the concept", ctx do
       %{oyster: oyster} = oyster!(ctx)
       concept = concept!("Q107411", "oyster", description: "a bivalve")
-      link!(oyster, concept, confidence: 0.95)
+      link!(oyster, concept, confidence: 0.95, method: :title_match)
 
       {:ok, live, html} = live(ctx.conn, ~p"/define/oyster")
 
@@ -500,7 +504,7 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
 
       {:ok, live, _html} = live(ctx.conn, ~p"/define/oyster")
 
-      id = "#card-wiktionary-group-0-sense-#{sense.id}-similar-#{mollusk.slug}"
+      id = "#card-wiktionary-group-0-sense-#{sense.object_id}-similar-#{mollusk.slug}"
 
       {:error, {:live_redirect, %{to: to}}} = live |> element(id) |> render_click()
       assert to == "/define/mollusk?trail=oyster"

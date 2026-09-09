@@ -1,0 +1,168 @@
+{
+  "$comment": [
+    "Source-native lexical predicates (#74 §C: 'Keep source-native lexical and semantic",
+    "predicates, including WordNet and ConceptNet distinctions, through a reviewed mapping",
+    "registry. These initial product predicates do not replace those source relations with",
+    "generic illustrates or related_to.').",
+    "",
+    "These are the twelve types the retired `lexical_relations.type` enum carried, plus",
+    "`other`, which is where a source's own edge label lands when no mapping claims it --",
+    "with the label kept in the assertion's metadata rather than discarded.",
+    "",
+    "THREE endpoint pairs, not two. Gate 0 loaded the resolved corpus with only",
+    "sense -> sense and lexeme -> lexeme declared and silently lost 36,434 of 1,163,659",
+    "relations: a meaning pointing at a *word* without naming which of that word's",
+    "meanings. §C requires exactly that, 'without inventing sense IDs'. After declaring",
+    "sense -> lexeme: 1,047,918 sense->sense, 79,307 lexeme->lexeme, 36,434 sense->lexeme,",
+    "0 assertions without a current revision.",
+    "",
+    "`is_symmetric` is the column name deliberately: SYMMETRIC is a reserved word in",
+    "PostgreSQL. `cycles_allowed` is declared per predicate rather than cycles being banned",
+    "outright -- synonymy is a cycle and is not a defect."
+  ],
+  "predicates": [
+    {
+      "key": "hypernym",
+      "forward_label": "broader",
+      "reverse_label": "narrower",
+      "description": "A more general meaning. WordNet's hypernym, Wiktionary's hypernyms.",
+      "is_symmetric": false,
+      "is_transitive": true,
+      "cycles_allowed": false,
+      "source_native": true,
+      "endpoints": [["sense/-", "sense/-"], ["lexeme/-", "lexeme/-"], ["sense/-", "lexeme/-"]]
+    },
+    {
+      "key": "hyponym",
+      "forward_label": "narrower",
+      "reverse_label": "broader",
+      "description": "A more specific meaning; the stated inverse of hypernym, kept as its own edge because a source may state only one direction.",
+      "is_symmetric": false,
+      "is_transitive": true,
+      "cycles_allowed": false,
+      "source_native": true,
+      "endpoints": [["sense/-", "sense/-"], ["lexeme/-", "lexeme/-"], ["sense/-", "lexeme/-"]]
+    },
+    {
+      "key": "meronym",
+      "forward_label": "parts",
+      "reverse_label": "part of",
+      "description": "A part, member or substance of this meaning.",
+      "is_symmetric": false,
+      "is_transitive": false,
+      "cycles_allowed": false,
+      "source_native": true,
+      "endpoints": [["sense/-", "sense/-"], ["lexeme/-", "lexeme/-"], ["sense/-", "lexeme/-"]]
+    },
+    {
+      "key": "holonym",
+      "forward_label": "part of",
+      "reverse_label": "parts",
+      "description": "The whole this meaning is a part of.",
+      "is_symmetric": false,
+      "is_transitive": false,
+      "cycles_allowed": false,
+      "source_native": true,
+      "endpoints": [["sense/-", "sense/-"], ["lexeme/-", "lexeme/-"], ["sense/-", "lexeme/-"]]
+    },
+    {
+      "key": "synonym",
+      "forward_label": "similar",
+      "reverse_label": "similar",
+      "description": "A meaning a source states as equivalent. Symmetric, and a cycle by nature.",
+      "is_symmetric": true,
+      "is_transitive": false,
+      "cycles_allowed": true,
+      "source_native": true,
+      "endpoints": [["sense/-", "sense/-"], ["lexeme/-", "lexeme/-"], ["sense/-", "lexeme/-"]]
+    },
+    {
+      "key": "antonym",
+      "forward_label": "opposite",
+      "reverse_label": "opposite",
+      "description": "A meaning a source states as opposite.",
+      "is_symmetric": true,
+      "is_transitive": false,
+      "cycles_allowed": true,
+      "source_native": true,
+      "endpoints": [["sense/-", "sense/-"], ["lexeme/-", "lexeme/-"], ["sense/-", "lexeme/-"]]
+    },
+    {
+      "key": "coordinate",
+      "forward_label": "similar",
+      "reverse_label": "similar",
+      "description": "A sibling under the same broader meaning.",
+      "is_symmetric": true,
+      "is_transitive": false,
+      "cycles_allowed": true,
+      "source_native": true,
+      "endpoints": [["sense/-", "sense/-"], ["lexeme/-", "lexeme/-"], ["sense/-", "lexeme/-"]]
+    },
+    {
+      "key": "derived",
+      "forward_label": "family",
+      "reverse_label": "family",
+      "description": "Morphologically derived from, or deriving, this word.",
+      "is_symmetric": false,
+      "is_transitive": false,
+      "cycles_allowed": true,
+      "source_native": true,
+      "endpoints": [["sense/-", "sense/-"], ["lexeme/-", "lexeme/-"], ["sense/-", "lexeme/-"]]
+    },
+    {
+      "key": "related",
+      "forward_label": "family",
+      "reverse_label": "family",
+      "description": "A source's own 'related terms', which is weaker than any of the above and is kept as itself rather than promoted.",
+      "is_symmetric": true,
+      "is_transitive": false,
+      "cycles_allowed": true,
+      "source_native": true,
+      "endpoints": [["sense/-", "sense/-"], ["lexeme/-", "lexeme/-"], ["sense/-", "lexeme/-"]]
+    },
+    {
+      "key": "form_of",
+      "forward_label": "variants",
+      "reverse_label": "variants",
+      "description": "An inflected form of another word. Word-level: an inflection has no sense of its own.",
+      "is_symmetric": false,
+      "is_transitive": false,
+      "cycles_allowed": false,
+      "source_native": true,
+      "endpoints": [["lexeme/-", "lexeme/-"], ["sense/-", "lexeme/-"]]
+    },
+    {
+      "key": "alt_of",
+      "forward_label": "variants",
+      "reverse_label": "variants",
+      "description": "An alternative spelling of another word.",
+      "is_symmetric": false,
+      "is_transitive": false,
+      "cycles_allowed": false,
+      "source_native": true,
+      "endpoints": [["lexeme/-", "lexeme/-"], ["sense/-", "lexeme/-"]]
+    },
+    {
+      "key": "see_also",
+      "forward_label": "says see",
+      "reverse_label": "referred to by",
+      "description": "A cross-reference a dictionary printed. Johnson's 'see' and Bierce's 'see' are different claims and stay separate by source, never merged.",
+      "is_symmetric": false,
+      "is_transitive": false,
+      "cycles_allowed": true,
+      "source_native": true,
+      "endpoints": [["sense/-", "sense/-"], ["lexeme/-", "lexeme/-"], ["sense/-", "lexeme/-"]]
+    },
+    {
+      "key": "other",
+      "forward_label": "related",
+      "reverse_label": "related",
+      "description": "A source edge whose own label has no mapping yet. The label is kept in the assertion's metadata so nothing is lost, and the mapping registry can claim it later.",
+      "is_symmetric": false,
+      "is_transitive": false,
+      "cycles_allowed": true,
+      "source_native": true,
+      "endpoints": [["sense/-", "sense/-"], ["lexeme/-", "lexeme/-"], ["sense/-", "lexeme/-"]]
+    }
+  ]
+}

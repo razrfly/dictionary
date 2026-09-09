@@ -33,10 +33,11 @@ defmodule DevilsDictionary.HealthPagesTest do
       sense!(ctx, word, "wiktionary", gloss: "A #{lemma}.")
       sense = sense!(ctx, word, "wordnet", group_key: "oewn-#{lemma}-n", gloss: "the animal")
 
+      # Sense to sense: WordNet's chain walks `group_key` to `group_key`.
       relation!(ctx, word, :hypernym, animal,
         source: "wordnet",
         from_sense: sense,
-        to_group_key: "oewn-animal-n"
+        to_sense: animal_sense
       )
 
       # Wiktionary's broader edge hangs off the part of speech, not the sense.
@@ -145,13 +146,19 @@ defmodule DevilsDictionary.HealthPagesTest do
       cat = Lexicon.get_lexeme("en", "cat", "noun")
       sense!(ctx, cat, "wiktionary", gloss: "A second sense, unrecorded.", record: nil)
 
+      # A card's citations reach the record through the revision each sense
+      # cites, so deleting the records is what makes the drawer come up empty.
       Repo.delete_all(
         from r in DevilsDictionary.Sources.SourceRecord,
           where:
             r.id in subquery(
-              from s in DevilsDictionary.Lexicon.Sense,
-                where: s.lexeme_id == ^cat.id,
-                select: s.source_record_id
+              from s in DevilsDictionary.Registry.Sense,
+                join: rev in DevilsDictionary.Registry.SenseRevision,
+                on: rev.sense_id == s.object_id,
+                join: srr in DevilsDictionary.Corpus.SourceRecordRevision,
+                on: srr.id == rev.source_record_revision_id,
+                where: s.lexeme_id == ^cat.object_id,
+                select: srr.source_record_id
             )
       )
 
@@ -194,7 +201,9 @@ defmodule DevilsDictionary.HealthPagesTest do
 
     test "a WordNet chain alone is not two sources", ctx do
       animal = word!(ctx, "animal", ~w(wordnet))
-      sense!(ctx, animal, "wordnet", group_key: "oewn-animal-n", gloss: "a living thing")
+
+      animal_sense =
+        sense!(ctx, animal, "wordnet", group_key: "oewn-animal-n", gloss: "a living thing")
 
       for lemma <- ~w(cat dog) do
         word = word!(ctx, lemma, ~w(wordnet))
@@ -203,7 +212,7 @@ defmodule DevilsDictionary.HealthPagesTest do
         relation!(ctx, word, :hypernym, animal,
           source: "wordnet",
           from_sense: sense,
-          to_group_key: "oewn-animal-n"
+          to_sense: animal_sense
         )
       end
 

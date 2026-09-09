@@ -7,11 +7,11 @@ defmodule DevilsDictionary.Absorb.LinkerTest do
   use DevilsDictionary.DataCase, async: true
 
   alias DevilsDictionary.Absorb.Linker
-  alias DevilsDictionary.Encyclopedia.{Concept, ConceptLink}
+  alias DevilsDictionary.Claims.AssertionRevision
   alias DevilsDictionary.Fixtures
-  alias DevilsDictionary.Lexicon.{Entry, Lexeme, ScopeLexeme, Sense}
-  alias DevilsDictionary.Repo
-  alias DevilsDictionary.Sources.SourceRecord
+  alias DevilsDictionary.Lexicon.ScopeMember
+  alias DevilsDictionary.{Claims, Registry, Repo}
+  alias DevilsDictionary.WordFixtures
 
   setup do
     %{sources: sources, scopes: scopes} = Fixtures.seed_catalog!()
@@ -19,18 +19,17 @@ defmodule DevilsDictionary.Absorb.LinkerTest do
   end
 
   defp lexeme!(ctx, lemma, attrs \\ []) do
-    lexeme =
-      Repo.insert!(%Lexeme{
-        lang: "en",
+    {:ok, lexeme} =
+      Registry.create_lexeme(%{
+        language_tag: "en",
         lemma: lemma,
-        pos: attrs[:pos] || "noun",
-        slug: Lexeme.slug(lemma),
+        part_of_speech: attrs[:pos] || "noun",
         metadata: attrs[:metadata] || %{}
       })
 
-    Repo.insert!(%ScopeLexeme{
+    Repo.insert!(%ScopeMember{
       scope_id: ctx.animals.id,
-      lexeme_id: lexeme.id,
+      lexeme_id: lexeme.object_id,
       reasons: ["wordnet_closure"]
     })
 
@@ -38,37 +37,95 @@ defmodule DevilsDictionary.Absorb.LinkerTest do
   end
 
   defp concept!(qid, attrs \\ []) do
-    Repo.insert!(struct(%Concept{qid: qid, kind: attrs[:kind] || :thing}, attrs))
-  end
-
-  defp sense!(ctx, lexeme, source_slug, attrs) do
-    source = ctx.sources[source_slug]
-
-    record =
-      Repo.insert!(%SourceRecord{
-        source_id: source.id,
-        external_id: "#{lexeme.lemma}/#{System.unique_integer([:positive])}",
-        raw: %{},
-        fetched_at: DateTime.utc_now()
+    {:ok, entity} =
+      Registry.create_entity(%{
+        entity_kind: attrs[:kind] || :concept,
+        preferred_label: attrs[:label] || qid,
+        description: attrs[:description],
+        metadata:
+          (attrs[:metadata] || %{})
+          |> put_some("wikipedia_title", attrs[:wikipedia_title])
+          |> put_some("wordnet_ili", attrs[:wordnet_ili])
+          |> put_some("taxon", attrs[:taxon])
       })
 
-    Repo.insert!(%Sense{
-      lexeme_id: lexeme.id,
-      source_id: source.id,
-      source_record_id: record.id,
-      external_id: "#{lexeme.lemma}##{System.unique_integer([:positive])}",
-      gloss: attrs[:gloss],
-      metadata: attrs[:metadata] || %{}
-    })
+    {:ok, _} = Registry.add_external_id(entity.object_id, "wikidata", qid)
+
+    if item = attrs[:taxon_item] do
+      {:ok, _} = Claims.assert(entity.object_id, "taxon_item", item.object_id)
+    end
+
+    entity
   end
 
+  defp put_some(map, _key, nil), do: map
+  defp put_some(map, key, value), do: Map.put(map, key, value)
+
+  defp sense!(ctx, lexeme, source_slug, attrs) do
+    record = WordFixtures.record!(ctx, source_slug, raw: %{})
+
+    {:ok, sense} =
+      Registry.create_sense(%{
+        lexeme_id: lexeme.object_id,
+        source_id: ctx.sources[source_slug].id,
+        external_key: "#{lexeme.lemma}##{System.unique_integer([:positive])}",
+        gloss: attrs[:gloss],
+        metadata: attrs[:metadata] || %{},
+        source_record_revision_id: revision_id(record)
+      })
+
+    sense
+  end
+
+  defp revision_id(record) do
+    Repo.one!(
+      from r in DevilsDictionary.Corpus.SourceRecordRevision,
+        where: r.source_record_id == ^record.id,
+        select: r.id
+    )
+  end
+
+  # A link is an assertion now: rungs 1-3 write `refers_to` from the *sense*,
+  # rungs 4-5 write `lexeme_entity_candidate` from the *word*. So "the links of
+  # this lexeme" means both, reached through its senses where they are
+  # sense-backed.
   defp links(lexeme, method) do
-    Repo.all(from cl in ConceptLink, where: cl.lexeme_id == ^lexeme.id and cl.method == ^method)
+    sense_ids =
+      Repo.all(
+        from s in DevilsDictionary.Registry.Sense,
+          where: s.lexeme_id == ^lexeme.object_id,
+          select: s.object_id
+      )
+
+    subjects = [lexeme.object_id | sense_ids]
+
+    Repo.all(
+      from r in AssertionRevision,
+        where: r.subject_object_id in ^subjects and r.is_current,
+        where: r.method == ^to_string(method),
+        preload: [:predicate]
+    )
   end
 
   defp link!(lexeme, method) do
     assert [link] = links(lexeme, method)
     link
+  end
+
+  defp qid_of(object_id), do: DevilsDictionary.Encyclopedia.qid(object_id)
+
+  # An encyclopedia's prose about a thing: a content item and an `about` claim.
+  defp article!(ctx, entity, body) do
+    {:ok, content} =
+      Registry.create_content(%{
+        content_kind: :article,
+        source_id: ctx.sources["wikipedia"].id,
+        body: body,
+        position: 0
+      })
+
+    {:ok, _} = Claims.assert(content.object_id, "about", entity.object_id)
+    content
   end
 
   describe "the rungs" do
@@ -81,9 +138,12 @@ defmodule DevilsDictionary.Absorb.LinkerTest do
 
       link = link!(cat, :wiktionary_qid)
       assert link.confidence == 0.95
-      assert link.sense_id == sense.id
-      assert link.concept_id == concept.id
-      assert link.status == :auto
+      # Sense-precise: the subject is the meaning, and the predicate says so.
+      assert link.subject_object_id == sense.object_id
+      assert link.predicate.key == "refers_to"
+      assert link.object_object_id == concept.object_id
+      # Nobody has reviewed it, which is what `auto` always meant.
+      assert Claims.review_state(link.id) == :needs_review
     end
 
     test "wordnet_wikidata reads the string form at 0.90", ctx do
@@ -107,9 +167,9 @@ defmodule DevilsDictionary.Absorb.LinkerTest do
 
       Linker.run(ctx.animals)
 
-      links = Repo.all(from l in ConceptLink, where: l.lexeme_id == ^panther.id)
+      links = links(panther, :wordnet_wikidata)
       assert length(links) == 2
-      assert Enum.all?(links, &(&1.method == :wordnet_wikidata and &1.confidence == 0.90))
+      assert Enum.all?(links, &(&1.confidence == 0.90))
     end
 
     test "wordnet_ili matches the concept's P5063 at 0.85", ctx do
@@ -130,9 +190,10 @@ defmodule DevilsDictionary.Absorb.LinkerTest do
 
       link = link!(cat, :title_match)
       assert link.confidence == 0.70
-      # Nobody asserted this; we inferred it from a title.
-      assert is_nil(link.source_id)
-      assert is_nil(link.sense_id)
+      # We inferred this from a spelling, so it is a word-level candidate and
+      # never sense equivalence: the subject is the lexeme, not a meaning.
+      assert link.subject_object_id == cat.object_id
+      assert link.predicate.key == "lexeme_entity_candidate"
     end
 
     test "title_match skips a verb and skips a disambiguation page", ctx do
@@ -161,7 +222,7 @@ defmodule DevilsDictionary.Absorb.LinkerTest do
           taxon: %{"scientific_name" => "Felis catus", "common_names" => ["cat"]}
         )
 
-      concept!("Q146", wikipedia_title: "Cat", taxon_concept_id: felis.id)
+      concept!("Q146", wikipedia_title: "Cat", taxon_item: felis)
 
       Linker.run(ctx.animals)
 
@@ -193,8 +254,12 @@ defmodule DevilsDictionary.Absorb.LinkerTest do
 
       link = link!(cat, :title_match)
       assert link.confidence == 0.90
-      assert link.status == :confirmed
       assert link.metadata["corroboration"] == "qid_agreement"
+
+      # MVP-0 also wrote `status: :confirmed` here. #74 asks for that policy not
+      # to be preserved blindly: two methods agreeing is evidence, not an
+      # editorial decision, and nobody performed a review.
+      assert Claims.review_state(link.id) == :needs_review
     end
 
     test "a gloss sharing content words with the article rises to 0.85", ctx do
@@ -202,12 +267,7 @@ defmodule DevilsDictionary.Absorb.LinkerTest do
       concept = concept!("Q146", wikipedia_title: "Cat")
       sense!(ctx, cat, "wiktionary", gloss: "A domesticated carnivorous mammal.")
 
-      Repo.insert!(%Entry{
-        source_id: ctx.sources["wikipedia"].id,
-        concept_id: concept.id,
-        body: "The cat is a small domesticated carnivorous mammal.",
-        position: 0
-      })
+      article!(ctx, concept, "The cat is a small domesticated carnivorous mammal.")
 
       Linker.run(ctx.animals)
 
@@ -221,12 +281,7 @@ defmodule DevilsDictionary.Absorb.LinkerTest do
       concept = concept!("Q146", wikipedia_title: "Cat")
       sense!(ctx, cat, "wiktionary", gloss: "A domesticated pet.")
 
-      Repo.insert!(%Entry{
-        source_id: ctx.sources["wikipedia"].id,
-        concept_id: concept.id,
-        body: "A tracked vehicle, domesticated by nobody.",
-        position: 0
-      })
+      article!(ctx, concept, "A tracked vehicle, domesticated by nobody.")
 
       Linker.run(ctx.animals)
 
@@ -249,8 +304,7 @@ defmodule DevilsDictionary.Absorb.LinkerTest do
       concept!("Q7365", wikipedia_title: "Pinniped", description: "Marine carnivorous mammal")
       concept!("Q114414285", wikipedia_title: "BYD Seal", description: "Battery electric sedan")
 
-      Repo.insert!(%SourceRecord{
-        source_id: ctx.sources["wikipedia"].id,
+      WordFixtures.record!(ctx, "wikipedia",
         external_id: "seal",
         raw: %{
           "title" => "Seal",
@@ -259,9 +313,8 @@ defmodule DevilsDictionary.Absorb.LinkerTest do
             %{"title" => "Pinniped", "qid" => "Q7365"},
             %{"title" => "BYD Seal", "qid" => "Q114414285"}
           ]
-        },
-        fetched_at: DateTime.utc_now()
-      })
+        }
+      )
 
       sense!(ctx, seal, "wiktionary",
         gloss: "A marine carnivorous mammal of the family Phocidae."
@@ -270,17 +323,16 @@ defmodule DevilsDictionary.Absorb.LinkerTest do
       assert %{rungs: %{disambiguation: 2}} = Linker.run(ctx.animals)
 
       by_qid =
-        Repo.all(
-          from cl in ConceptLink,
-            join: c in Concept,
-            on: c.id == cl.concept_id,
-            where: cl.method == :disambiguation,
-            select: {c.qid, cl.confidence, cl.status}
-        )
-        |> Map.new(fn {qid, confidence, status} -> {qid, {confidence, status}} end)
+        seal
+        |> links(:disambiguation)
+        |> Map.new(&{qid_of(&1.object_object_id), &1.confidence})
 
-      assert {0.60, :candidate} = by_qid["Q7365"]
-      assert {0.40, :candidate} = by_qid["Q114414285"]
+      # Both sit below `Encyclopedia.asserted_floor/0`, which is what keeps a
+      # possibility out of the populations A10 and L3 report on. Promotion
+      # reorders the "may refer to" panel; it does not make a claim.
+      assert by_qid["Q7365"] == 0.60
+      assert by_qid["Q114414285"] == 0.40
+      assert by_qid["Q7365"] < DevilsDictionary.Encyclopedia.asserted_floor()
     end
   end
 
@@ -291,15 +343,24 @@ defmodule DevilsDictionary.Absorb.LinkerTest do
       sense!(ctx, cat, "wiktionary", metadata: %{"wikidata" => ["Q146"]})
 
       Linker.run(ctx.animals)
-      before = Repo.aggregate(ConceptLink, :count)
+      before = Repo.aggregate(AssertionRevision, :count)
 
+      # Not merely "no duplicate rows": no new *revision* either. A rerun that
+      # finds the same evidence has nothing to say.
       Linker.run(ctx.animals)
-      assert Repo.aggregate(ConceptLink, :count) == before
+
+      assert Repo.aggregate(AssertionRevision, :count) == before
     end
 
     test "and it stays inside the scope it was given", ctx do
-      outside = Repo.insert!(%Lexeme{lang: "en", lemma: "hammer", pos: "noun", slug: "hammer"})
-      Repo.update!(Ecto.Changeset.change(outside, metadata: %{"wikipedia_title" => "Hammer"}))
+      {:ok, outside} =
+        Registry.create_lexeme(%{
+          language_tag: "en",
+          lemma: "hammer",
+          part_of_speech: "noun",
+          metadata: %{"wikipedia_title" => "Hammer"}
+        })
+
       concept!("Q25294", wikipedia_title: "Hammer")
 
       assert %{rungs: %{title_match: 0}} = Linker.run(ctx.animals)
