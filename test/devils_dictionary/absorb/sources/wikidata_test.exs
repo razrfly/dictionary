@@ -65,20 +65,22 @@ defmodule DevilsDictionary.Absorb.Sources.WikidataTest do
   end
 
   describe "materialize/1" do
-    test "an everyday concept keeps kind :thing and bridges to its taxon item" do
+    test "an everyday concept keeps the no-opinion kind and bridges to its taxon" do
       assert [concept] = out(entity("cat", "Q146")).concepts
 
       assert concept.qid == "Q146"
       assert concept.label == "cat"
-      assert concept.kind == :thing
-      assert concept.wikipedia_title == "Cat"
-      assert concept.wordnet_ili == "i46593"
-      assert concept.image_url =~ "upload.wikimedia.org/wikipedia/commons/thumb/"
+      # `:concept` is the no-opinion entity kind — the one another source may
+      # sharpen — which is what MVP-0's `:thing` meant.
+      assert concept.kind == :concept
+      assert concept.metadata["wikipedia_title"] == "Cat"
+      assert concept.metadata["wordnet_ili"] == "i46593"
+      assert concept.metadata["image_url"] =~ "upload.wikimedia.org/wikipedia/commons/thumb/"
 
       # Q146 *cat* and Q20980826 *Felis catus* are different entities; P13176 is
-      # the bridge and it is what `taxon_concept_id` is for.
+      # the bridge, and it becomes a `taxon_item` claim.
       assert concept.taxon_concept == "Q20980826"
-      assert concept.taxon == %{}
+      refute Map.has_key?(concept.metadata, "taxon")
     end
 
     test "a taxon item carries its rank, binomial and English common names" do
@@ -86,16 +88,16 @@ defmodule DevilsDictionary.Absorb.Sources.WikidataTest do
 
       assert concept.kind == :taxon
       assert concept.label == "Felis catus"
-      assert concept.taxon["scientific_name"] == "Felis catus"
-      assert concept.taxon["rank"] == "Q7432"
-      assert "cat" in concept.taxon["common_names"]
+      assert concept.metadata["taxon"]["scientific_name"] == "Felis catus"
+      assert concept.metadata["taxon"]["rank"] == "Q7432"
+      assert "cat" in concept.metadata["taxon"]["common_names"]
 
       # It already is the taxon, so there is nothing to bridge to.
       assert concept.taxon_concept == nil
 
       # And it has no English Wikipedia article of its own — the article lives
       # on the everyday concept. §3's `wikidata_taxon` rule assumes otherwise.
-      assert concept.wikipedia_title == nil
+      refute Map.has_key?(concept.metadata, "wikipedia_title")
     end
 
     test "taxonomy edges are typed by property" do

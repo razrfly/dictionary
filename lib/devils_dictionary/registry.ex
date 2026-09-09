@@ -17,6 +17,9 @@ defmodule DevilsDictionary.Registry do
 
   import Ecto.Query
 
+  alias DevilsDictionary.Claims.AssertionRevision
+  alias DevilsDictionary.Sources.ReconciliationCase
+
   alias DevilsDictionary.Registry.{
     ContentItem,
     ContentRevision,
@@ -76,7 +79,8 @@ defmodule DevilsDictionary.Registry do
 
   @doc "Creates a work: an entity plus its `work_details` row."
   def create_work(attrs) do
-    {details, entity_attrs} = Map.split(attrs, [:work_kind, :original_language, :first_published_year])
+    {details, entity_attrs} =
+      Map.split(attrs, [:work_kind, :original_language, :first_published_year])
 
     Repo.transaction(fn ->
       {:ok, entity} = create_entity(Map.put(entity_attrs, :entity_kind, :work))
@@ -118,6 +122,9 @@ defmodule DevilsDictionary.Registry do
   alternative anyway.
   """
   def create_content(attrs) do
+    # `metadata` belongs to the revision — the printed grammar marker and the
+    # thumbnail are facts about *this* version of the text. `item_metadata` is
+    # the escape hatch for a fact about the item itself.
     {revision, item_attrs} =
       Map.split(attrs, [
         :body,
@@ -127,8 +134,15 @@ defmodule DevilsDictionary.Registry do
         :position,
         :year,
         :rights_metadata,
+        :metadata,
         :source_record_revision_id
       ])
+
+    item_attrs =
+      case Map.pop(item_attrs, :item_metadata) do
+        {nil, rest} -> rest
+        {metadata, rest} -> Map.put(rest, :metadata, metadata)
+      end
 
     Repo.transaction(fn ->
       {:ok, item} = create_object(:content, ContentItem, item_attrs)
@@ -143,6 +157,9 @@ defmodule DevilsDictionary.Registry do
   `external_key` is what the source called it — provenance, never identity.
   """
   def create_sense(attrs) do
+    # `metadata` is a revision field: it carries the QIDs and the ILI a source
+    # asserted *in this wording*, which is exactly the kind of thing that must
+    # not be silently carried across a reword.
     {revision, sense_attrs} =
       Map.split(attrs, [
         :gloss,
@@ -152,6 +169,7 @@ defmodule DevilsDictionary.Registry do
         :topics,
         :examples,
         :url,
+        :metadata,
         :source_record_revision_id
       ])
 
@@ -219,8 +237,10 @@ defmodule DevilsDictionary.Registry do
   defp do_add_sense_revision(sense_id, attrs) do
     next = next_revision_number(SenseRevision, :sense_id, sense_id)
 
+    # Currentness only. What the outgoing revision asserted is history, and
+    # #74 keeps that separate from which revision is in force.
     from(r in SenseRevision, where: r.sense_id == ^sense_id and r.is_current)
-    |> Repo.update_all(set: [is_current: false, lifecycle_state: :superseded])
+    |> Repo.update_all(set: [is_current: false])
 
     %SenseRevision{}
     |> SenseRevision.changeset(
@@ -247,7 +267,7 @@ defmodule DevilsDictionary.Registry do
     next = next_revision_number(ContentRevision, :content_id, content_id)
 
     from(r in ContentRevision, where: r.content_id == ^content_id and r.is_current)
-    |> Repo.update_all(set: [is_current: false, lifecycle_state: :superseded])
+    |> Repo.update_all(set: [is_current: false])
 
     %ContentRevision{}
     |> ContentRevision.changeset(
@@ -357,35 +377,195 @@ defmodule DevilsDictionary.Registry do
   end
 
   @doc """
-  Merges identities, recording every input and the surviving output.
+  Merges identities into a surviving one, recording every input and the output.
 
   #73: merge only with evidence, and preserve aliases, provenance and old links.
-  The event is the audit trail that makes a merge reversible in principle.
+  What that means concretely, and what this does:
+
+    * **Names move.** Every `object_names` row on a retired input is re-pointed
+      at the survivor, because a merge's whole claim is that those names named
+      this thing all along. A name the survivor already has is dropped rather
+      than duplicated.
+    * **External identifiers move**, keeping their namespace. Where the survivor
+      already holds a *verified* id in that namespace, the incoming one lands as
+      a `candidate` instead — the unique-among-verified index is the rule, and
+      a merge is not a licence to break it or to silently discard the evidence.
+    * **Assertions are not rewritten.** A revision is immutable and says what it
+      said; re-pointing its endpoint would forge history. Old links keep
+      resolving because the input object still exists, reads `merged`, and
+      `resolve/1` follows the event to the survivor.
+
+  Retirement is `merged`, not `retired`: they are different things that happened.
   """
   def merge(input_ids, output_id, opts \\ []) do
+    inputs = Enum.reject(input_ids, &(&1 == output_id))
+
     Repo.transaction(fn ->
-      for id <- input_ids, id != output_id do
-        Repo.get!(Object, id) |> Object.retire_changeset() |> Repo.update!()
+      for id <- inputs do
+        move_names(id, output_id)
+        move_external_ids(id, output_id)
+
+        Repo.get!(Object, id)
+        |> Ecto.Changeset.change(lifecycle_state: :merged)
+        |> Repo.update!()
       end
 
-      members =
-        Enum.map(input_ids, &{&1, :input}) ++ [{output_id, :output}]
+      members = Enum.map(input_ids, &{&1, :input}) ++ [{output_id, :output}]
 
       record_event(:merge, members, opts)
     end)
+  end
+
+  # A name the survivor already carries is not worth a second row; the unique
+  # index would refuse it anyway.
+  defp move_names(from_id, to_id) do
+    held =
+      Repo.all(
+        from n in ObjectName,
+          where: n.object_id == ^to_id,
+          select: {n.name, n.name_kind, n.language_tag}
+      )
+      |> MapSet.new()
+
+    for name <- Repo.all(from n in ObjectName, where: n.object_id == ^from_id) do
+      if MapSet.member?(held, {name.name, name.name_kind, name.language_tag}) do
+        Repo.delete!(name)
+      else
+        name |> Ecto.Changeset.change(object_id: to_id) |> Repo.update!()
+      end
+    end
+  end
+
+  # `verified` is unique per namespace and external id. Where the survivor
+  # already has one, the input's becomes a candidate: the evidence is kept and
+  # the conflict is visible, which is what #74 asks for over a silent drop.
+  defp move_external_ids(from_id, to_id) do
+    for identifier <- Repo.all(from i in ExternalIdentifier, where: i.object_id == ^from_id) do
+      taken? =
+        Repo.exists?(
+          from i in ExternalIdentifier,
+            where:
+              i.object_id == ^to_id and i.namespace == ^identifier.namespace and
+                i.status == :verified
+        )
+
+      status =
+        if taken? and identifier.status == :verified, do: :candidate, else: identifier.status
+
+      identifier
+      |> Ecto.Changeset.change(object_id: to_id, status: status)
+      |> Repo.update!()
+    end
   end
 
   @doc """
   Splits one identity into several, naming every output.
 
   A split has many outputs, which is why membership is a table. #73: ambiguous
-  attachments enter explicit review; they are never reassigned by guesswork.
+  attachments enter explicit review; they are **never** reassigned by guesswork,
+  so this deliberately moves nothing. Every current assertion revision touching
+  the input opens a `reconciliation_cases` row naming the assertion and the
+  candidate outputs, and a person decides which output it belonged to.
+
+  The input reads `split` rather than `retired`, and `resolve/1` returns every
+  output rather than picking one — an ambiguous identity has no single answer
+  and pretending otherwise is the defect this guards against.
   """
   def split(input_id, output_ids, opts \\ []) do
     Repo.transaction(fn ->
       members = [{input_id, :input}] ++ Enum.map(output_ids, &{&1, :output})
-      record_event(:split, members, opts)
+      event = record_event(:split, members, opts)
+
+      open_split_cases(input_id, output_ids, event, opts)
+
+      Repo.get!(Object, input_id)
+      |> Ecto.Changeset.change(lifecycle_state: :split)
+      |> Repo.update!()
+
+      event
     end)
+  end
+
+  defp open_split_cases(input_id, output_ids, event, opts) do
+    attached =
+      Repo.all(
+        from r in AssertionRevision,
+          where:
+            r.is_current and
+              (r.subject_object_id == ^input_id or r.object_object_id == ^input_id),
+          select: {r.assertion_id, r.id, r.subject_object_id == ^input_id}
+      )
+
+    for {assertion_id, revision_id, subject?} <- attached do
+      %ReconciliationCase{}
+      |> ReconciliationCase.changeset(%{
+        kind: "identity_split",
+        object_id: input_id,
+        assertion_id: assertion_id,
+        opened_run_id: opts[:run_id],
+        payload: %{
+          "identity_event_id" => event.id,
+          "assertion_revision_id" => revision_id,
+          "endpoint_role" => if(subject?, do: "subject", else: "object"),
+          "candidate_output_ids" => output_ids
+        }
+      })
+      |> Repo.insert!()
+    end
+  end
+
+  @doc """
+  Where a retired identity went: `{:merged, id}`, `{:split, ids}`, or `:itself`.
+
+  This is what keeps an old link meaningful after a merge. The link still points
+  at the object it always pointed at — nothing was rewritten — and a reader that
+  wants the live identity asks here rather than guessing from a label.
+  """
+  def resolve(object_id) do
+    case Repo.get(Object, object_id) do
+      nil ->
+        nil
+
+      %Object{lifecycle_state: state} when state in [:merged, :split] ->
+        outputs = event_outputs(object_id, state)
+
+        case {state, outputs} do
+          {:merged, [id]} -> {:merged, id}
+          {:merged, []} -> :itself
+          {:split, ids} -> {:split, ids}
+          {:merged, ids} -> {:split, ids}
+        end
+
+      %Object{} ->
+        :itself
+    end
+  end
+
+  # The most recent such event, then its outputs. An object can in principle be
+  # merged twice; the latest event is the one that says where it is now.
+  defp event_outputs(object_id, operation) do
+    latest =
+      Repo.one(
+        from m in IdentityEventMember,
+          join: e in assoc(m, :event),
+          where: m.object_id == ^object_id and m.role == :input and e.operation == ^operation,
+          order_by: [desc: e.id],
+          limit: 1,
+          select: e.id
+      )
+
+    case latest do
+      nil ->
+        []
+
+      event_id ->
+        Repo.all(
+          from m in IdentityEventMember,
+            where: m.event_id == ^event_id and m.role == :output and m.object_id != ^object_id,
+            order_by: m.object_id,
+            select: m.object_id
+        )
+    end
   end
 
   defp record_event(operation, members, opts) do

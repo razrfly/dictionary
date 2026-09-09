@@ -59,7 +59,7 @@ defmodule DevilsDictionaryWeb.Admin.ImportsLiveTest do
     {:ok, _live, html} = live(ctx.conn, ~p"/admin/imports")
 
     assert html =~ "a dump is the answer"
-    assert html =~ "wikidata: asserted concepts"
+    assert html =~ "wikidata: asserted entities"
     assert html =~ "wikipedia: scope lemmas"
     assert ctx.sources["wordnet"].access == :dump
   end

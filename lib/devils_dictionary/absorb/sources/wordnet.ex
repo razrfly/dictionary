@@ -40,7 +40,7 @@ defmodule DevilsDictionary.Absorb.Sources.Wordnet do
   import Ecto.Query
 
   alias DevilsDictionary.Absorb.Batch
-  alias DevilsDictionary.Lexicon.Lexeme
+  alias DevilsDictionary.Registry.Lexeme
   alias DevilsDictionary.Repo
   alias DevilsDictionary.Sources
   alias DevilsDictionary.Sources.SourceRecord
@@ -84,8 +84,15 @@ defmodule DevilsDictionary.Absorb.Sources.Wordnet do
     edges = build_edges(synsets)
 
     records = write_records(source, synsets, edges)
-    materialized = Batch.run(__MODULE__, source, batch_size: @materialize_batch)
-    resolved = resolve_targets(source)
+
+    # Twice, for the same reason Wikidata materializes twice: an edge names a
+    # synset a later batch introduces, and the second pass closes it. WordNet's
+    # sense keys are deterministic, so nothing has to be guessed — see
+    # `materialize/1`'s `to_sense`.
+    Batch.run(__MODULE__, source, batch_size: @materialize_batch)
+
+    materialized =
+      Batch.run(__MODULE__, source, batch_size: @materialize_batch, only_stale: false)
 
     {:ok,
      %{
@@ -95,7 +102,7 @@ defmodule DevilsDictionary.Absorb.Sources.Wordnet do
        lexemes: count_lexemes(source),
        senses: materialized.senses,
        relations: materialized.relations,
-       relations_resolved: resolved
+       relations_resolved: materialized.relations
      }}
   end
 
@@ -199,34 +206,11 @@ defmodule DevilsDictionary.Absorb.Sources.Wordnet do
     |> then(&Sources.insert_records(source, &1, @record_batch))
   end
 
-  # WordNet is a closed graph and sense external ids are deterministic, so the
-  # targets resolve in one set-based statement rather than a pass. Idempotent,
-  # and it puts scorecard row R1 at 100% inside the absorb (#69 §4: WordNet
-  # relations are "resolved at absorb").
-  defp resolve_targets(source) do
-    %{num_rows: count} =
-      Repo.query!(
-        """
-        UPDATE lexical_relations r
-           SET to_sense_id = s.id, to_lexeme_id = s.lexeme_id, updated_at = now()
-          FROM senses s
-         WHERE r.source_id = $1 AND s.source_id = $1
-           AND r.to_sense_id IS NULL
-           AND r.to_group_key IS NOT NULL
-           AND s.external_id = r.to_group_key || '#' || r.to_lemma
-        """,
-        [source.id],
-        timeout: :infinity
-      )
-
-    count
-  end
-
   defp count_lexemes(source) do
     Repo.one(
       from l in Lexeme,
         where: fragment("? = ANY(?)", ^source.id, l.source_ids),
-        select: count(l.id)
+        select: count(l.object_id)
     )
   end
 
@@ -285,6 +269,12 @@ defmodule DevilsDictionary.Absorb.Sources.Wordnet do
           to_lemma: target,
           to_pos: edge["to_pos"],
           to_group_key: edge["to"],
+          # WordNet is a closed graph and its sense keys are deterministic, so
+          # the edge names its target *meaning* rather than a string somebody
+          # has to resolve later. That is what makes R1 100 % inside the absorb
+          # (#69 §4: WordNet relations are "resolved at absorb") without a
+          # second set-based statement over a table that no longer exists.
+          to_sense: sense_id(edge["to"], target),
           type: String.to_existing_atom(edge["type"]),
           subtype: edge["subtype"]
         }

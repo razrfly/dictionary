@@ -2,10 +2,15 @@ defmodule DevilsDictionary.Absorb.MaterializerTest do
   use DevilsDictionary.DataCase, async: true
 
   alias DevilsDictionary.Absorb.Materializer
-  alias DevilsDictionary.{FakeSource, Fixtures}
-  alias DevilsDictionary.Lexicon.{Entry, Lexeme, LexicalRelation, Sense}
-  alias DevilsDictionary.Repo
-  alias DevilsDictionary.Sources.{Person, Source, SourceRecord}
+  alias DevilsDictionary.Claims.{AssertionRevision, PendingRelation}
+  alias DevilsDictionary.Registry.{ContentItem, Lexeme, Sense}
+  alias DevilsDictionary.{Claims, FakeSource, Fixtures, Registry, Repo, Sources}
+  alias DevilsDictionary.Sources.{Source, SourceRecord}
+
+  setup do
+    Claims.Catalog.seed!()
+    :ok
+  end
 
   defp source!(slug \\ "fake") do
     Repo.insert!(%Source{
@@ -17,20 +22,26 @@ defmodule DevilsDictionary.Absorb.MaterializerTest do
     })
   end
 
+  # Identity and payload are two tables: the record, then the revision that
+  # carries what the source said. `raw` is virtual and filled from it.
   defp record!(source, raw) do
-    Repo.insert!(%SourceRecord{
-      source_id: source.id,
-      external_id: raw["lemma"] <> "/" <> to_string(raw["pos"] || "noun"),
-      raw: raw,
-      fetched_at: DateTime.utc_now()
-    })
+    external_id = raw["lemma"] <> "/" <> to_string(raw["pos"] || "noun")
+    Sources.insert_records(source, [%{external_id: external_id, raw: raw}])
+
+    Repo.one!(
+      from r in SourceRecord,
+        where: r.source_id == ^source.id and r.external_id == ^external_id
+    )
+    |> Sources.with_raw()
   end
 
   defp counts do
     %{
       lexemes: Repo.aggregate(Lexeme, :count),
       senses: Repo.aggregate(Sense, :count),
-      relations: Repo.aggregate(LexicalRelation, :count)
+      relations: Repo.aggregate(AssertionRevision, :count),
+      pending: Repo.aggregate(PendingRelation, :count),
+      content: Repo.aggregate(ContentItem, :count)
     }
   end
 
@@ -42,16 +53,26 @@ defmodule DevilsDictionary.Absorb.MaterializerTest do
       assert {:ok, stats} = Materializer.run(record, FakeSource)
       assert stats.lexemes == 1
       assert stats.senses == 1
-      assert stats.relations == 1
+      # The fake source's edge names a word nothing has introduced, so it is
+      # held rather than asserted — see the `to_lemma` test below.
+      assert stats.relations == 0
+      assert stats.relations_pending == 1
 
       lexeme = Repo.get_by!(Lexeme, lemma: "monkey")
       assert lexeme.slug == "monkey"
-      assert lexeme.pos == "noun"
+      assert lexeme.part_of_speech == "noun"
 
-      sense = Repo.get_by!(Sense, external_id: "fake-monkey")
-      assert sense.gloss == "a primate"
-      assert sense.lexeme_id == lexeme.id
-      assert sense.source_record_id == record.id
+      sense = Repo.get_by!(Sense, external_key: "fake-monkey")
+      assert Registry.current_sense_revision(sense.object_id).gloss == "a primate"
+      assert sense.lexeme_id == lexeme.object_id
+
+      # The sense cites a *revision* of the record, which is what makes "what did
+      # this rest on" answerable after the source rewords its entry.
+      assert Repo.one!(
+               from r in DevilsDictionary.Registry.SenseRevision,
+                 where: r.sense_id == ^sense.object_id and r.is_current,
+                 select: r.source_record_revision_id
+             )
 
       assert Repo.get!(SourceRecord, record.id).materialized_at
     end
@@ -80,10 +101,13 @@ defmodule DevilsDictionary.Absorb.MaterializerTest do
 
       {:ok, _} = Materializer.run(record, FakeSource)
 
-      relation = Repo.one!(LexicalRelation)
-      assert relation.to_lemma == "seabird"
-      assert relation.to_lexeme_id == nil
-      assert relation.type == :hypernym
+      # An edge with no target word is not an assertion with a missing end — both
+      # endpoints are real objects and NOT NULL. It waits in `pending_relations`
+      # with its evidence, which is where #69 §4's "to_lemma is kept forever"
+      # lives now, and where R2 counts it.
+      pending = Repo.one!(from p in PendingRelation, preload: [:predicate])
+      assert pending.to_lemma == "seabird"
+      assert pending.predicate.key == "hypernym"
     end
   end
 
@@ -97,6 +121,8 @@ defmodule DevilsDictionary.Absorb.MaterializerTest do
 
       {:ok, _} = Materializer.run(Repo.get!(SourceRecord, record.id) |> with_raw(), FakeSource)
 
+      # Not merely the same row counts: the same *revision* counts. Identical
+      # input produces zero new semantic revisions, which is what M2 measures.
       assert counts() == before
     end
 
@@ -144,26 +170,20 @@ defmodule DevilsDictionary.Absorb.MaterializerTest do
 
       raw = Fixtures.one_raw("bierce", "cat")
 
-      record =
-        Repo.insert!(%SourceRecord{
-          source_id: source.id,
-          external_id: "CAT/n",
-          # A lemma longer than the column allows: the failure lands deep inside
-          # the writes, after the entry row has been prepared, which is the only
-          # place worth testing.
-          raw: %{raw | "headword" => String.duplicate("CAT", 200)},
-          fetched_at: DateTime.utc_now()
-        })
+      # A headword longer than `content_revisions.headword` allows: the failure
+      # lands deep inside the writes, after the content item has been prepared,
+      # which is the only place worth testing.
+      record = bierce_record!(source, %{raw | "headword" => String.duplicate("CAT", 200)})
 
       before = counts()
 
       assert_raise Postgrex.Error, fn ->
-        Materializer.run(with_raw(record), DevilsDictionary.Absorb.Sources.Bierce)
+        Materializer.run(record, DevilsDictionary.Absorb.Sources.Bierce)
       end
 
       assert counts() == before
       refute Repo.get!(SourceRecord, record.id).materialized_at
-      assert Repo.aggregate(Entry, :count) == 0
+      assert Repo.aggregate(ContentItem, :count) == 0
     end
   end
 
@@ -178,24 +198,14 @@ defmodule DevilsDictionary.Absorb.MaterializerTest do
           access: :static
         })
 
-      person =
-        Repo.insert!(%Person{
-          name: "Ambrose Bierce",
-          slug: "ambrose-bierce",
-          source_id: source.id
-        })
+      person = person!(source)
+      record = bierce_record!(source)
 
-      record =
-        Repo.insert!(%SourceRecord{
-          source_id: source.id,
-          external_id: "CAT/n",
-          raw: Fixtures.one_raw("bierce", "cat"),
-          fetched_at: DateTime.utc_now()
-        })
+      {:ok, _} = Materializer.run(record, DevilsDictionary.Absorb.Sources.Bierce)
 
-      {:ok, _} = Materializer.run(with_raw(record), DevilsDictionary.Absorb.Sources.Bierce)
-
-      assert Repo.one(from e in Entry, select: e.author_id) == person.id
+      # An author is a claim now: `authored_by` from the definition to the
+      # person, which is the same object id his biography would be `about`.
+      assert authored_by() == person.object_id
     end
 
     test "a rebuild keeps the author, because it is resolved on every write" do
@@ -211,21 +221,14 @@ defmodule DevilsDictionary.Absorb.MaterializerTest do
           access: :static
         })
 
-      person = Repo.insert!(%Person{name: "Ambrose Bierce", slug: "ambrose-bierce"})
+      person = person!(source)
+      record = bierce_record!(source)
 
-      record =
-        Repo.insert!(%SourceRecord{
-          source_id: source.id,
-          external_id: "CAT/n",
-          raw: Fixtures.one_raw("bierce", "cat"),
-          fetched_at: DateTime.utc_now()
-        })
+      {:ok, _} = Materializer.run(record, DevilsDictionary.Absorb.Sources.Bierce)
+      {:ok, _} = Materializer.run(record, DevilsDictionary.Absorb.Sources.Bierce)
 
-      {:ok, _} = Materializer.run(with_raw(record), DevilsDictionary.Absorb.Sources.Bierce)
-      {:ok, _} = Materializer.run(with_raw(record), DevilsDictionary.Absorb.Sources.Bierce)
-
-      assert Repo.one(from e in Entry, select: e.author_id) == person.id
-      assert Repo.aggregate(Entry, :count) == 1
+      assert authored_by() == person.object_id
+      assert Repo.aggregate(ContentItem, :count) == 1
     end
   end
 
@@ -266,8 +269,33 @@ defmodule DevilsDictionary.Absorb.MaterializerTest do
     end
   end
 
-  # `raw` is load_in_query: false, so a reloaded record needs it fetched back.
-  defp with_raw(%SourceRecord{id: id} = record) do
-    %{record | raw: Repo.one!(from r in SourceRecord, where: r.id == ^id, select: r.raw)}
+  # `raw` is virtual, so a reloaded record needs it filled from its revision.
+  defp with_raw(%SourceRecord{} = record), do: Sources.with_raw(record)
+
+  # A person is an entity plus `person_details`, named by the catalog slug an
+  # adapter emits — the same object id that would carry his biography.
+  defp person!(_source) do
+    {:ok, person} =
+      Registry.create_person(%{entity_kind: :person, preferred_label: "Ambrose Bierce"})
+
+    {:ok, _} = Registry.add_name(person.object_id, "ambrose-bierce", name_kind: "catalog_slug")
+    person
+  end
+
+  defp bierce_record!(source, raw \\ nil) do
+    Sources.insert_records(source, [
+      %{external_id: "CAT/n", raw: raw || Fixtures.one_raw("bierce", "cat")}
+    ])
+
+    Repo.one!(from r in SourceRecord, where: r.source_id == ^source.id) |> Sources.with_raw()
+  end
+
+  defp authored_by do
+    Repo.one(
+      from r in AssertionRevision,
+        join: p in assoc(r, :predicate),
+        where: p.key == "authored_by" and r.is_current,
+        select: r.object_object_id
+    )
   end
 end

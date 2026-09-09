@@ -8,8 +8,8 @@ defmodule DevilsDictionary.HealthCoverageTest do
   use DevilsDictionary.DataCase, async: true
 
   alias DevilsDictionary.Fixtures
-  alias DevilsDictionary.{Health, Repo}
-  alias DevilsDictionary.Lexicon.{Entry, Lexeme, LexicalRelation, ScopeLexeme, Sense}
+  alias DevilsDictionary.{Claims, Health, Registry, Repo}
+  alias DevilsDictionary.Lexicon.ScopeMember
   alias DevilsDictionary.Sources.{ImportRun, SourceRecord}
 
   setup do
@@ -18,11 +18,45 @@ defmodule DevilsDictionary.HealthCoverageTest do
   end
 
   defp lexeme!(lemma, attrs \\ []) do
-    Repo.insert!(
-      struct(
-        %Lexeme{lang: "en", lemma: lemma, pos: "noun", slug: Lexeme.slug(lemma)},
-        Map.new(attrs)
+    attrs = Map.new(attrs)
+    {forms, attrs} = Map.pop(attrs, :forms, [])
+    {lang, attrs} = Map.pop(attrs, :lang, "en")
+
+    {:ok, lexeme} =
+      Registry.create_lexeme(
+        Map.merge(%{language_tag: lang, lemma: lemma, part_of_speech: "noun"}, attrs)
       )
+
+    for form <- forms do
+      Registry.add_form(lexeme.object_id, form["form"], tags: form["tags"] || [])
+    end
+
+    lexeme
+  end
+
+  defp sense!(lexeme, source, record, attrs) do
+    {:ok, sense} =
+      Registry.create_sense(
+        Map.merge(
+          %{
+            lexeme_id: lexeme.object_id,
+            source_id: source.id,
+            source_record_revision_id: revision_id(record)
+          },
+          Map.new(attrs)
+        )
+      )
+
+    sense
+  end
+
+  defp revision_id(record) do
+    Repo.one(
+      from r in DevilsDictionary.Corpus.SourceRecordRevision,
+        where: r.source_record_id == ^record.id,
+        order_by: [desc: r.id],
+        limit: 1,
+        select: r.id
     )
   end
 
@@ -97,13 +131,10 @@ defmodule DevilsDictionary.HealthCoverageTest do
             {feline, "oewn-02124272-n"},
             {cat, "oewn-02121620-n"}
           ] do
-        Repo.insert!(%Sense{
-          lexeme_id: lexeme.id,
-          source_id: wordnet.id,
-          source_record_id: record.id,
-          external_id: "#{group}##{lexeme.lemma}",
+        sense!(lexeme, wordnet, record,
+          external_key: "#{group}##{lexeme.lemma}",
           group_key: group
-        })
+        )
       end
 
       # Two synsets, two distinct lexemes — `cat` is in both and counts once.
@@ -132,9 +163,9 @@ defmodule DevilsDictionary.HealthCoverageTest do
             {"aardvark", ["wordnet_closure"]},
             {"Felis catus", ["wikidata_taxon"]}
           ] do
-        Repo.insert!(%ScopeLexeme{
+        Repo.insert!(%ScopeMember{
           scope_id: ctx.animals.id,
-          lexeme_id: lexeme!(lemma).id,
+          lexeme_id: lexeme!(lemma).object_id,
           reasons: reasons
         })
       end
@@ -162,21 +193,28 @@ defmodule DevilsDictionary.HealthCoverageTest do
       known = lexeme!("cat", origin_source_id: ctx.sources["wiktionary"].id)
       invented = lexeme!("whangdepootenawah", origin_source_id: bierce.id)
 
-      Repo.insert!(%ScopeLexeme{
+      Repo.insert!(%ScopeMember{
         scope_id: ctx.animals.id,
-        lexeme_id: known.id,
+        lexeme_id: known.object_id,
         reasons: ["wordnet_closure"]
       })
 
+      # A definition is a content item and a `defines` claim, not a row with a
+      # nullable `lexeme_id`.
       for {lexeme, position} <- [{known, 0}, {invented, 1}] do
-        Repo.insert!(%Entry{
-          source_id: bierce.id,
-          source_record_id: record.id,
-          lexeme_id: lexeme.id,
-          headword: String.upcase(lexeme.lemma),
-          position: position,
-          year: 1911
-        })
+        {:ok, content} =
+          Registry.create_content(%{
+            content_kind: :definition,
+            source_id: bierce.id,
+            source_record_revision_id: revision_id(record),
+            headword: String.upcase(lexeme.lemma),
+            body: "A definition.",
+            position: position,
+            year: 1911
+          })
+
+        {:ok, _} =
+          Claims.assert(content.object_id, "defines", lexeme.object_id, %{source_id: bierce.id})
       end
 
       :ok
@@ -209,33 +247,43 @@ defmodule DevilsDictionary.HealthCoverageTest do
       record = record!(wordnet, "oewn-02124272-n")
       cat = lexeme!("cat")
 
+      feline = lexeme!("feline")
+
+      # WordNet's graph is sense to sense: a synset's members each get a sense,
+      # and the hypernym edge runs between the meanings, not between the words.
+      # Gate 0 measured the three endpoint pairs the corpus actually holds —
+      # sense→sense, lexeme→lexeme and sense→lexeme — and `lexeme → sense` is
+      # not one of them, so the database refuses it.
+      cat_sense =
+        sense!(cat, wordnet, record,
+          external_key: "oewn-02124272-n#cat",
+          group_key: "oewn-02124272-n"
+        )
+
       sense =
-        Repo.insert!(%Sense{
-          lexeme_id: cat.id,
-          source_id: wordnet.id,
-          source_record_id: record.id,
-          external_id: "oewn-02121620-n#feline",
+        sense!(feline, wordnet, record,
+          external_key: "oewn-02121620-n#feline",
           group_key: "oewn-02121620-n"
-        })
+        )
 
-      Repo.insert!(%LexicalRelation{
+      {:ok, _} =
+        Claims.assert(cat_sense.object_id, "hypernym", sense.object_id, %{source_id: wordnet.id})
+
+      assert %{total: 1, resolved: 1, pending: 0, pct: 100.0} = Health.wordnet_edges()
+
+      # An unresolved edge is not an assertion with a missing end: it waits in
+      # `pending_relations` with its evidence, and that is the population R1
+      # reports as unresolved.
+      Repo.insert!(%DevilsDictionary.Claims.PendingRelation{
         source_id: wordnet.id,
-        from_lexeme_id: cat.id,
-        to_lemma: "feline",
-        to_sense_id: sense.id,
-        type: :hypernym
-      })
-
-      assert %{total: 1, resolved: 1, pct: 100.0} = Health.wordnet_edges()
-
-      Repo.insert!(%LexicalRelation{
-        source_id: wordnet.id,
-        from_lexeme_id: cat.id,
+        subject_object_id: cat_sense.object_id,
+        predicate_id: Claims.predicate!("hyponym").id,
         to_lemma: "unfetched",
-        type: :hyponym
+        inserted_at: DateTime.utc_now(),
+        updated_at: DateTime.utc_now()
       })
 
-      assert %{total: 2, resolved: 1, pct: 50.0} = Health.wordnet_edges()
+      assert %{total: 2, resolved: 1, pending: 1, pct: 50.0} = Health.wordnet_edges()
     end
   end
 

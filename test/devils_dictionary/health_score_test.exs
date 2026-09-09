@@ -62,14 +62,23 @@ defmodule DevilsDictionary.HealthScoreTest do
       for id <- ~w(R3 X1 U1 U2 U3 U4 U6), do: refute(id in pending, "#{id} should be graded")
     end
 
-    test "E1 counts migrations rather than describing the source", %{rows: rows} do
+    test "E1 measures what a source costs, and no longer counts migrations",
+         %{rows: rows} do
       e1 = Enum.find(rows, &(&1.id == "E1"))
 
-      # The sixth source is in the registry and the schema has not moved: the
-      # baseline plus Oban, which is what "0 migrations" means literally.
+      # The sixth source is a row, a module and a registry line, and its
+      # relationship types are entries in `priv/predicates/` with their endpoint
+      # pairs enforced by a foreign key.
       assert e1.actual =~ "johnson: 1 sources row, 1 module, 1 registry line"
-      assert e1.actual =~ "2 migrations"
+      assert e1.actual =~ "2 / 2 predicates registered from priv/predicates"
+      assert e1.actual =~ "entity kind taxon present"
       assert e1.status == :pass
+
+      # #74 and the 7 September audit: a hard equality against a migration count
+      # fails on the day the schema legitimately changes, which is the day this
+      # row matters least. It is gone.
+      refute e1.actual =~ "migrations"
+      refute e1.wants =~ "migrations"
     end
 
     test "E2 is pending until a second scope is actually built", %{rows: rows} do

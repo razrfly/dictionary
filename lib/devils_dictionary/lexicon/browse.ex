@@ -10,23 +10,28 @@ defmodule DevilsDictionary.Lexicon.Browse do
       `Health.coverage/2` tests exactly `? = ANY(source_ids)`, so reading the
       same array is what makes U5's "counts match `mix dd.health`" true by
       construction rather than by coincidence. The two disagree, and the array is
-      right: Wikipedia's prose hangs off `entries.concept_id` and never off a
+      right: Wikipedia's prose hangs off an `about` assertion and never off a
       lexeme, so a join says 0 where the truth is 18,028; Wikidata writes neither
-      senses nor entries at all. What a badge means is *this source attests this
+      senses nor content at all. What a badge means is *this source attests this
       word*, which is what the scorecard means too.
 
     * **"disputed" has one definition.** `disputed_lexeme_ids/2` is the same
-      predicate `Health.conflicts/3` reports on — two distinct concepts at or
+      predicate `Health.conflicts/3` reports on — two distinct entities at or
       above the threshold for one lexeme — so the filter and the number cannot
       drift apart.
+
+  Ported to the encyclopedia model: `lexemes.id` becomes `lexemes.object_id`,
+  `lang` and `pos` become `language_tag` and `part_of_speech`, `scope_lexemes`
+  becomes `scope_lexeme_members`, and `concept_links` becomes the assertions
+  `Encyclopedia.linked_lexemes_query/1` reads. Both rules above are unchanged.
   """
 
   import Ecto.Query
 
   alias DevilsDictionary.Encyclopedia
-  alias DevilsDictionary.Encyclopedia.{Concept, ConceptLink}
   alias DevilsDictionary.Lexicon
-  alias DevilsDictionary.Lexicon.{Lexeme, ScopeLexeme}
+  alias DevilsDictionary.Lexicon.ScopeMember
+  alias DevilsDictionary.Registry.{Entity, ExternalIdentifier, Lexeme}
   alias DevilsDictionary.Repo
   alias DevilsDictionary.Sources
 
@@ -60,7 +65,7 @@ defmodule DevilsDictionary.Lexicon.Browse do
       down = String.downcase(query)
 
       Lexeme
-      |> where([l], l.lang == ^lang)
+      |> where([l], l.language_tag == ^lang)
       |> where(
         [l],
         ilike(l.lemma, ^(escape_like(query) <> "%")) or
@@ -72,13 +77,13 @@ defmodule DevilsDictionary.Lexicon.Browse do
         desc: fragment("similarity(?, ?)", l.lemma, ^query),
         asc: fragment("length(?)", l.lemma),
         asc: l.lemma,
-        asc: l.pos
+        asc: l.part_of_speech
       )
       |> limit(^limit)
       |> select([l], %{
-        lexeme_id: l.id,
+        lexeme_id: l.object_id,
         lemma: l.lemma,
-        pos: l.pos,
+        pos: l.part_of_speech,
         slug: l.slug,
         enriched_at: l.enriched_at
       })
@@ -141,10 +146,10 @@ defmodule DevilsDictionary.Lexicon.Browse do
         |> Enum.uniq()
         |> Enum.flat_map(fn offset ->
           base
-          |> order_by([l], asc: l.id)
+          |> order_by([l], asc: l.object_id)
           |> offset(^offset)
           |> limit(1)
-          |> select([l], %{id: l.id, slug: l.slug, lemma: l.lemma})
+          |> select([l], %{id: l.object_id, slug: l.slug, lemma: l.lemma})
           |> Repo.all()
         end)
     end
@@ -153,7 +158,7 @@ defmodule DevilsDictionary.Lexicon.Browse do
   defp random_base(opts) do
     Lexeme
     |> from(as: :lexeme)
-    |> where([l], l.lang == ^Keyword.get(opts, :lang, "en"))
+    |> where([l], l.language_tag == ^Keyword.get(opts, :lang, "en"))
     |> then(fn q ->
       if opts[:enriched], do: where(q, [l], not is_nil(l.enriched_at)), else: q
     end)
@@ -165,7 +170,9 @@ defmodule DevilsDictionary.Lexicon.Browse do
   defp random_scope(query, :any) do
     where(
       query,
-      exists(from sl in ScopeLexeme, where: sl.lexeme_id == parent_as(:lexeme).id, select: 1)
+      exists(
+        from sl in ScopeMember, where: sl.lexeme_id == parent_as(:lexeme).object_id, select: 1
+      )
     )
   end
 
@@ -178,8 +185,8 @@ defmodule DevilsDictionary.Lexicon.Browse do
         where(
           query,
           exists(
-            from sl in ScopeLexeme,
-              where: sl.lexeme_id == parent_as(:lexeme).id and sl.scope_id == ^scope.id,
+            from sl in ScopeMember,
+              where: sl.lexeme_id == parent_as(:lexeme).object_id and sl.scope_id == ^scope.id,
               select: 1
           )
         )
@@ -187,7 +194,7 @@ defmodule DevilsDictionary.Lexicon.Browse do
   end
 
   defp draw_over_ids(sample) do
-    case Repo.one(from l in Lexeme, select: {min(l.id), max(l.id)}) do
+    case Repo.one(from l in Lexeme, select: {min(l.object_id), max(l.object_id)}) do
       {nil, nil} -> []
       {low, high} -> draw(low..high, sample, [], 8)
     end
@@ -203,8 +210,8 @@ defmodule DevilsDictionary.Lexicon.Browse do
     found =
       Repo.all(
         from l in Lexeme,
-          where: l.id in ^ids,
-          select: %{id: l.id, slug: l.slug, lemma: l.lemma}
+          where: l.object_id in ^ids,
+          select: %{id: l.object_id, slug: l.slug, lemma: l.lemma}
       )
 
     case taken ++ found do
@@ -240,9 +247,9 @@ defmodule DevilsDictionary.Lexicon.Browse do
       |> offset(^((page - 1) * per_page))
       |> limit(^per_page)
       |> select([l, sl], %{
-        lexeme_id: l.id,
+        lexeme_id: l.object_id,
         lemma: l.lemma,
-        pos: l.pos,
+        pos: l.part_of_speech,
         slug: l.slug,
         source_ids: l.source_ids,
         enriched_at: l.enriched_at,
@@ -262,8 +269,8 @@ defmodule DevilsDictionary.Lexicon.Browse do
 
   defp scoped(scope, opts) do
     from(l in Lexeme,
-      join: sl in ScopeLexeme,
-      on: sl.lexeme_id == l.id and sl.scope_id == ^scope.id
+      join: sl in ScopeMember,
+      on: sl.lexeme_id == l.object_id and sl.scope_id == ^scope.id
     )
     |> filter_query(opts[:q])
     |> filter_sources(:has, opts[:has])
@@ -307,31 +314,39 @@ defmodule DevilsDictionary.Lexicon.Browse do
   defp filter_state(query, :enriched, _scope), do: where(query, [l], not is_nil(l.enriched_at))
 
   defp filter_state(query, :disputed, scope) do
-    where(query, [l], l.id in subquery(disputed_ids_query(scope)))
+    where(query, [l], l.object_id in subquery(disputed_ids_query(scope)))
   end
 
   defp filter_taxon(query, nil), do: query
 
   defp filter_taxon(query, qid) do
-    where(query, [l], l.id in ^Encyclopedia.taxon_lexeme_ids(qid))
+    where(query, [l], l.object_id in ^Encyclopedia.taxon_lexeme_ids(qid))
   end
 
   defp sorted(query, :coverage) do
     order_by(query, [l],
       desc: fragment("coalesce(array_length(?, 1), 0)", l.source_ids),
       asc: l.lemma,
-      asc: l.pos
+      asc: l.part_of_speech
     )
   end
 
-  defp sorted(query, _lemma), do: order_by(query, [l], asc: l.lemma, asc: l.pos)
+  defp sorted(query, _lemma), do: order_by(query, [l], asc: l.lemma, asc: l.part_of_speech)
 
   # The word's thing, for the label and the image. Asserted links only, best
   # confidence first — the same population A10 and L3 report on.
+  #
+  # `concept_links.status IN ('auto','confirmed')` has become two conditions that
+  # were always what it meant: the assertion is current and active, and no
+  # reviewer has rejected it. `Encyclopedia.linked_lexemes_query/1` applies both,
+  # so a link a curator rejected stops counting here the moment they say so —
+  # which is the defect the audit found, where a rerun returned it to `auto`.
+  @linked_floor 0.7
+
   @doc """
-  How many of a scope's words carry the concept the rows show — the same
-  `concept_links` rule `with_concepts/1` applies (status auto or confirmed,
-  confidence ≥ 0.7), so the figure and the rows cannot disagree.
+  How many of a scope's words carry the thing the rows show — the same rule
+  `with_concepts/1` applies (asserted, not rejected, confidence ≥ 0.7), so the
+  figure and the rows cannot disagree.
 
   Wikidata attests things, not words: it never appears in `source_ids`, so
   "attested by" is always zero for it. This is its figure on the browse page.
@@ -339,16 +354,16 @@ defmodule DevilsDictionary.Lexicon.Browse do
   def linked_count(scope_slug) do
     scope = Lexicon.get_scope_by_slug!(scope_slug)
 
-    from(sl in ScopeLexeme,
+    from(sl in ScopeMember,
       where: sl.scope_id == ^scope.id and sl.lexeme_id in subquery(linked_lexeme_ids())
     )
     |> Repo.aggregate(:count)
   end
 
   defp linked_lexeme_ids do
-    from(cl in ConceptLink,
-      where: cl.status in [:auto, :confirmed] and cl.confidence >= 0.7,
-      select: cl.lexeme_id,
+    from(link in subquery(Encyclopedia.linked_lexemes_query()),
+      where: link.confidence >= @linked_floor,
+      select: link.lexeme_id,
       distinct: true
     )
   end
@@ -359,21 +374,24 @@ defmodule DevilsDictionary.Lexicon.Browse do
     ids = Enum.map(rows, & &1.lexeme_id)
 
     concepts =
-      from(cl in ConceptLink,
-        join: c in Concept,
-        on: c.id == cl.concept_id,
-        where: cl.lexeme_id in ^ids and cl.status in [:auto, :confirmed] and cl.confidence >= 0.7,
-        order_by: [asc: cl.lexeme_id, desc: cl.confidence],
-        distinct: cl.lexeme_id,
+      from(link in subquery(Encyclopedia.linked_lexemes_query()),
+        join: e in Entity,
+        on: e.object_id == link.entity_id,
+        left_join: x in ExternalIdentifier,
+        on: x.object_id == e.object_id and x.namespace == "wikidata" and x.status == :verified,
+        where: link.lexeme_id in ^ids and link.confidence >= @linked_floor,
+        order_by: [asc: link.lexeme_id, desc: link.confidence],
+        distinct: link.lexeme_id,
         select:
-          {cl.lexeme_id,
+          {link.lexeme_id,
            %{
-             qid: c.qid,
-             label: c.label,
-             description: c.description,
-             image_url: c.image_url,
-             taxon: c.taxon,
-             confidence: cl.confidence
+             object_id: e.object_id,
+             qid: x.external_id,
+             label: e.preferred_label,
+             description: e.description,
+             image_url: fragment("? ->> 'image_url'", e.metadata),
+             taxon: fragment("? -> 'taxon'", e.metadata),
+             confidence: link.confidence
            }}
       )
       |> Repo.all()
@@ -383,9 +401,9 @@ defmodule DevilsDictionary.Lexicon.Browse do
   end
 
   @doc """
-  The lexemes in a scope with two or more concepts at or above `threshold` —
-  L2's population, exposed so the browse filter and `Health.conflicts/3` share
-  one definition.
+  The lexemes in a scope whose links name two or more distinct things at or above
+  `threshold` — L2's population, exposed so the browse filter and
+  `Health.conflicts/3` share one definition.
   """
   def disputed_lexeme_ids(scope_slug, threshold \\ 0.7) do
     scope_slug
@@ -395,13 +413,13 @@ defmodule DevilsDictionary.Lexicon.Browse do
   end
 
   defp disputed_ids_query(scope, threshold \\ 0.7) do
-    from cl in ConceptLink,
-      join: sl in ScopeLexeme,
-      on: sl.lexeme_id == cl.lexeme_id and sl.scope_id == ^scope.id,
-      where: cl.confidence >= ^threshold and cl.status != :rejected,
-      group_by: cl.lexeme_id,
-      having: count(cl.concept_id, :distinct) > 1,
-      select: cl.lexeme_id
+    from link in subquery(Encyclopedia.linked_lexemes_query(min_confidence: 0.0)),
+      join: sl in ScopeMember,
+      on: sl.lexeme_id == link.lexeme_id and sl.scope_id == ^scope.id,
+      where: link.confidence >= ^threshold,
+      group_by: link.lexeme_id,
+      having: count(link.entity_id, :distinct) > 1,
+      select: link.lexeme_id
   end
 
   @doc "The five sources, keyed by slug, for badge rendering."
@@ -427,8 +445,8 @@ defmodule DevilsDictionary.Lexicon.Browse do
         query
 
       scope ->
-        join(query, :inner, [l], sl in ScopeLexeme,
-          on: sl.lexeme_id == l.id and sl.scope_id == ^scope.id
+        join(query, :inner, [l], sl in ScopeMember,
+          on: sl.lexeme_id == l.object_id and sl.scope_id == ^scope.id
         )
     end
   end

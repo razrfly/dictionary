@@ -6,14 +6,23 @@ defmodule DevilsDictionary.LexiconTest do
 
   use DevilsDictionary.DataCase, async: true
 
-  alias DevilsDictionary.Lexicon
-  alias DevilsDictionary.Lexicon.Lexeme
-  alias DevilsDictionary.Repo
+  alias DevilsDictionary.{Lexicon, Registry}
 
+  # Forms are rows in `lexeme_forms` now, each carrying the source revision that
+  # attested it, so `forms:` here writes them rather than setting a column.
   defp lexeme!(lemma, pos, attrs \\ []) do
-    Repo.insert!(
-      struct(%Lexeme{lang: "en", lemma: lemma, pos: pos, slug: Lexeme.slug(lemma)}, attrs)
-    )
+    {forms, attrs} = Keyword.pop(attrs, :forms, [])
+
+    {:ok, lexeme} =
+      Registry.create_lexeme(
+        Map.merge(%{language_tag: "en", lemma: lemma, part_of_speech: pos}, Map.new(attrs))
+      )
+
+    for form <- forms do
+      Registry.add_form(lexeme.object_id, form["form"], tags: form["tags"] || [])
+    end
+
+    lexeme
   end
 
   defp enriched!(lemma, pos, attrs \\ []) do
@@ -33,7 +42,7 @@ defmodule DevilsDictionary.LexiconTest do
       enriched!("oyster", "verb")
 
       assert %{lexemes: lexemes} = Lexicon.lookup("OYSTER")
-      assert Enum.map(lexemes, & &1.pos) == ["noun", "verb"]
+      assert Enum.map(lexemes, & &1.part_of_speech) == ["noun", "verb"]
     end
 
     test "an inflected form lands on the word it inflects (X3)" do
@@ -49,10 +58,10 @@ defmodule DevilsDictionary.LexiconTest do
 
     test "a spelling variant lands on its canonical lexeme (X3)" do
       oyster = enriched!("oyster", "noun")
-      enriched!("oistre", "noun", canonical_lexeme_id: oyster.id)
+      enriched!("oistre", "noun", canonical_lexeme_id: oyster.object_id)
 
       assert %{via: :canonical, lexemes: [lexeme]} = Lexicon.lookup("oistre")
-      assert lexeme.id == oyster.id
+      assert lexeme.object_id == oyster.object_id
     end
 
     test "a word that means something itself keeps its own page" do
@@ -72,7 +81,7 @@ defmodule DevilsDictionary.LexiconTest do
 
       assert %{via: :lemma, lexemes: [lexeme], also: [also]} = Lexicon.lookup("spat")
       assert lexeme.lemma == "spat"
-      assert also.id == spit.id
+      assert also.object_id == spit.object_id
     end
 
     test "a bare headword in another casing does not outrank a forms match" do
@@ -98,7 +107,7 @@ defmodule DevilsDictionary.LexiconTest do
       # it with no opinion, and it was winning the disagreement.
       goose = enriched!("goose", "noun", forms: [%{"form" => "geese", "tags" => ["plural"]}])
       lexeme!("geese", "noun", metadata: %{"form_of" => true})
-      enriched!("geese", "unknown", canonical_lexeme_id: goose.id)
+      enriched!("geese", "unknown", canonical_lexeme_id: goose.object_id)
 
       assert %{via: :canonical, lexemes: [lexeme]} = Lexicon.lookup("geese")
       assert lexeme.lemma == "goose"
@@ -109,7 +118,7 @@ defmodule DevilsDictionary.LexiconTest do
       # a bare index row, so they disagree and the word keeps its page.
       spit = enriched!("spit", "verb", forms: [%{"form" => "spat", "tags" => ["past"]}])
       lexeme!("spat", "noun")
-      enriched!("spat", "verb", canonical_lexeme_id: spit.id)
+      enriched!("spat", "verb", canonical_lexeme_id: spit.object_id)
 
       assert %{via: :lemma, lexemes: lexemes} = Lexicon.lookup("spat")
       assert Enum.all?(lexemes, &(&1.lemma == "spat"))

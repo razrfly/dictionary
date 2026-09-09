@@ -8,7 +8,8 @@ defmodule DevilsDictionary.Absorb.Batch do
     * **Keyset pagination, not `Repo.stream`.** A stream needs an enclosing
       transaction, which would fold every batch into one giant transaction and
       lose the per-batch atomicity scorecard row M3 depends on.
-    * **`raw` is `load_in_query: false`**, so it has to be selected explicitly
+    * **`raw` is virtual**, so it is filled from the record's current revision
+      after each page loads rather than selected
       for exactly the page being materialized — never for the whole table.
 
   `only_stale: true` (the default) skips records already materialized against
@@ -21,6 +22,7 @@ defmodule DevilsDictionary.Absorb.Batch do
 
   alias DevilsDictionary.Absorb.Materializer
   alias DevilsDictionary.Repo
+  alias DevilsDictionary.Sources
   alias DevilsDictionary.Sources.{Source, SourceRecord}
 
   @batch 500
@@ -102,14 +104,19 @@ defmodule DevilsDictionary.Absorb.Batch do
     Repo.aggregate(base(source, opts), :count)
   end
 
+  # `raw` is virtual now — the payload lives in `source_record_revisions` so a
+  # cited revision is never overwritten — so it is filled after the page loads
+  # rather than selected. `Sources.with_raw/1` does it in one query for the
+  # whole page, because `materialize/1` is a pure function of a record and the
+  # payload has to be on the struct before an adapter sees it.
   defp page(source, last_id, opts) do
     Repo.all(
       from r in base(source, opts),
         where: r.id > ^last_id,
         order_by: r.id,
-        limit: ^(opts[:batch_size] || @batch),
-        select: %{r | raw: r.raw}
+        limit: ^(opts[:batch_size] || @batch)
     )
+    |> Sources.with_raw()
   end
 
   defp base(source, opts) do

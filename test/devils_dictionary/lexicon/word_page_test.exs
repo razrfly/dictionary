@@ -246,17 +246,20 @@ defmodule DevilsDictionary.Lexicon.WordPageTest do
       # bivalve → mollusk → invertebrate, each synset reached from the last.
       chain = ~w(bivalve mollusk invertebrate)
 
-      Enum.reduce(Enum.with_index(chain), {oyster, sense}, fn {lemma, i}, {from, from_sense} ->
+      # WordNet's graph is sense to sense: the edge runs between the meanings,
+      # and the chain walks `group_key` to `group_key` through it.
+      Enum.reduce(Enum.with_index(chain), {oyster, sense}, fn {lemma, i}, {_from, from_sense} ->
         target = word!(ctx, lemma, ~w(wordnet))
         key = "oewn-#{lemma}-n"
+        to_sense = sense!(ctx, target, "wordnet", group_key: key, gloss: "level #{i}")
 
-        relation!(ctx, from, :hypernym, target,
+        relation!(ctx, target, :hypernym, target,
           source: "wordnet",
           from_sense: from_sense,
-          to_group_key: key
+          to_sense: to_sense
         )
 
-        {target, sense!(ctx, target, "wordnet", group_key: key, gloss: "level #{i}")}
+        {target, to_sense}
       end)
 
       [card] = Enum.filter(page("oyster").cards, &(&1.source.slug == "wordnet"))
@@ -269,12 +272,14 @@ defmodule DevilsDictionary.Lexicon.WordPageTest do
       oyster = word!(ctx, "oyster", ~w(wordnet))
       bivalve = word!(ctx, "bivalve", ~w(wordnet))
       sense = sense!(ctx, oyster, "wordnet", group_key: "oewn-oyster-n", gloss: "a mollusk")
-      sense!(ctx, bivalve, "wordnet", group_key: "oewn-bivalve-n", gloss: "a shellfish")
+
+      bivalve_sense =
+        sense!(ctx, bivalve, "wordnet", group_key: "oewn-bivalve-n", gloss: "a shellfish")
 
       relation!(ctx, oyster, :hypernym, bivalve,
         source: "wordnet",
         from_sense: sense,
-        to_group_key: "oewn-bivalve-n"
+        to_sense: bivalve_sense
       )
 
       [card] = Enum.filter(page("oyster").cards, &(&1.source.slug == "wordnet"))
@@ -398,7 +403,14 @@ defmodule DevilsDictionary.Lexicon.WordPageTest do
 
     test "a word with only candidates still gets its may-refer-to", ctx do
       seal = word!(ctx, "seal", ~w(wordnet))
-      link!(seal, concept!("Q5", "Phocidae"), confidence: 0.4, status: :candidate)
+
+      # A spelling-level guess below the asserted floor: a possibility, so the
+      # word names nothing and the panel is the "may refer to" list alone.
+      link!(seal, concept!("Q5", "Phocidae"),
+        confidence: 0.4,
+        method: :disambiguation,
+        status: :candidate
+      )
 
       thing = page("seal").thing
 
@@ -568,9 +580,9 @@ defmodule DevilsDictionary.Lexicon.WordPageTest do
 
       assert %{links: [link]} = WordPage.provenance(page("oyster"), "card:card-wiktionary")
       assert link.qid == "Q107411"
-      assert link.method == :wiktionary_qid
+      assert link.method == "wiktionary_qid"
       assert link.confidence == 0.95
-      assert link.status == :auto
+      assert link.status == :needs_review
     end
 
     test "a ref naming nothing on this page opens nothing", ctx do

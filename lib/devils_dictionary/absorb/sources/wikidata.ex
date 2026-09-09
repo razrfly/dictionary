@@ -30,8 +30,9 @@ defmodule DevilsDictionary.Absorb.Sources.Wikidata do
 
   alias DevilsDictionary.Absorb.Batch
   alias DevilsDictionary.Absorb.Clients.Wikidata, as: Client
-  alias DevilsDictionary.Encyclopedia.{Concept, ConceptLink}
-  alias DevilsDictionary.Lexicon.{ScopeLexeme, Sense}
+  alias DevilsDictionary.Encyclopedia
+  alias DevilsDictionary.Lexicon.ScopeMember
+  alias DevilsDictionary.Registry.{Entity, Sense, SenseRevision}
   alias DevilsDictionary.Repo
   alias DevilsDictionary.Sources
   alias DevilsDictionary.Sources.{Source, SourceRecord}
@@ -308,19 +309,25 @@ defmodule DevilsDictionary.Absorb.Sources.Wikidata do
     qid = raw["id"]
     scientific_name = Client.string(raw, "P225")
 
+    # The columns `concepts` carried are descriptive facts about a thing, not its
+    # identity, and they move into `entities.metadata` under the same names.
+    # `kind` becomes an entity kind: `:concept` is the no-opinion value another
+    # source may sharpen, which is why it is not `:other`.
     concept = %{
       key: qid,
       qid: qid,
       label: clamp(label(raw, scientific_name)),
       description: get_in(raw, ["descriptions", "en", "value"]),
-      kind: if(scientific_name, do: :taxon, else: :thing),
-      wikipedia_title: clamp(get_in(raw, ["sitelinks", "enwiki", "title"])),
-      image_url: fit(commons_url(Client.string(raw, "P18"))),
-      image_attribution: clamp(commons_attribution(Client.string(raw, "P18"))),
-      wordnet_ili: clamp(Client.string(raw, "P5063")),
-      taxon: taxon(raw, scientific_name),
+      kind: if(scientific_name, do: :taxon, else: :concept),
       taxon_concept: taxon_concept(raw, scientific_name),
-      metadata: metadata(raw)
+      metadata:
+        raw
+        |> metadata()
+        |> put_if("wikipedia_title", clamp(get_in(raw, ["sitelinks", "enwiki", "title"])))
+        |> put_if("image_url", fit(commons_url(Client.string(raw, "P18"))))
+        |> put_if("image_attribution", clamp(commons_attribution(Client.string(raw, "P18"))))
+        |> put_if("wordnet_ili", clamp(Client.string(raw, "P5063")))
+        |> put_if("taxon", taxon(raw, scientific_name))
     }
 
     {:ok, %{concepts: [concept], concept_relations: relations(record, qid, raw)}}
@@ -334,7 +341,7 @@ defmodule DevilsDictionary.Absorb.Sources.Wikidata do
       scientific_name
   end
 
-  defp taxon(_raw, nil), do: %{}
+  defp taxon(_raw, nil), do: nil
 
   defp taxon(raw, scientific_name) do
     %{
@@ -421,35 +428,36 @@ defmodule DevilsDictionary.Absorb.Sources.Wikidata do
     wordnet_string_qids(scope) ++ wordnet_array_qids(scope)
   end
 
-  defp wordnet_string_qids(scope) do
-    from(s in Sense,
+  # A sense's metadata lives on its current revision now, so each of these joins
+  # one row further. The `jsonb_typeof` split is unchanged and still load-bearing.
+  defp sense_metadata(source_slug) do
+    from s in Sense,
       join: so in assoc(s, :source),
-      where: so.slug == "wordnet",
-      where: fragment("jsonb_typeof(?->'wikidata') = 'string'", s.metadata),
-      select: fragment("?->>'wikidata'", s.metadata)
-    )
+      join: rev in SenseRevision,
+      on: rev.sense_id == s.object_id and rev.is_current,
+      where: so.slug == ^source_slug
+  end
+
+  defp wordnet_string_qids(scope) do
+    sense_metadata("wordnet")
+    |> where([_s, _so, rev], fragment("jsonb_typeof(?->'wikidata') = 'string'", rev.metadata))
+    |> select([_s, _so, rev], fragment("?->>'wikidata'", rev.metadata))
     |> in_scope(scope)
     |> Repo.all()
   end
 
   defp wordnet_array_qids(scope) do
-    from(s in Sense,
-      join: so in assoc(s, :source),
-      where: so.slug == "wordnet",
-      where: fragment("jsonb_typeof(?->'wikidata') = 'array'", s.metadata),
-      select: fragment("jsonb_array_elements_text(?->'wikidata')", s.metadata)
-    )
+    sense_metadata("wordnet")
+    |> where([_s, _so, rev], fragment("jsonb_typeof(?->'wikidata') = 'array'", rev.metadata))
+    |> select([_s, _so, rev], fragment("jsonb_array_elements_text(?->'wikidata')", rev.metadata))
     |> in_scope(scope)
     |> Repo.all()
   end
 
   defp wiktionary_qids(scope) do
-    from(s in Sense,
-      join: so in assoc(s, :source),
-      where: so.slug == "wiktionary",
-      where: fragment("jsonb_typeof(?->'wikidata') = 'array'", s.metadata),
-      select: fragment("jsonb_array_elements_text(?->'wikidata')", s.metadata)
-    )
+    sense_metadata("wiktionary")
+    |> where([_s, _so, rev], fragment("jsonb_typeof(?->'wikidata') = 'array'", rev.metadata))
+    |> select([_s, _so, rev], fragment("jsonb_array_elements_text(?->'wikidata')", rev.metadata))
     |> in_scope(scope)
     |> Repo.all()
   end
@@ -462,18 +470,26 @@ defmodule DevilsDictionary.Absorb.Sources.Wikidata do
   #
   # A run with no scope still walks the whole table: that is a full refresh
   # asking for exactly what it says.
-  defp concept_qids(nil), do: Repo.all(from c in Concept, select: c.qid)
+  defp concept_qids(nil) do
+    Repo.all(
+      from x in DevilsDictionary.Registry.ExternalIdentifier,
+        where: x.namespace == "wikidata" and x.status == :verified,
+        select: x.external_id
+    )
+  end
 
   defp concept_qids(scope) do
     Repo.all(
-      from c in Concept,
-        join: cl in ConceptLink,
-        on: cl.concept_id == c.id,
-        join: sl in ScopeLexeme,
-        on: sl.lexeme_id == cl.lexeme_id and sl.scope_id == ^scope.id,
-        where: cl.status in [:auto, :confirmed] or cl.confidence >= @promotable,
+      from link in subquery(Encyclopedia.linked_lexemes_query()),
+        join: x in DevilsDictionary.Registry.ExternalIdentifier,
+        on:
+          x.object_id == link.entity_id and x.namespace == "wikidata" and
+            x.status == :verified,
+        join: sl in ScopeMember,
+        on: sl.lexeme_id == link.lexeme_id and sl.scope_id == ^scope.id,
+        where: is_nil(link.confidence) or link.confidence >= @promotable,
         distinct: true,
-        select: c.qid
+        select: x.external_id
     )
   end
 
@@ -483,8 +499,8 @@ defmodule DevilsDictionary.Absorb.Sources.Wikidata do
   defp in_scope(query, nil), do: query
 
   defp in_scope(query, scope) do
-    from [s, _so] in query,
-      join: sl in ScopeLexeme,
+    from [s, _so, _rev] in query,
+      join: sl in ScopeMember,
       on: sl.lexeme_id == s.lexeme_id and sl.scope_id == ^scope.id
   end
 
@@ -508,7 +524,7 @@ defmodule DevilsDictionary.Absorb.Sources.Wikidata do
   end
 
   defp count_taxa do
-    Repo.aggregate(from(c in Concept, where: c.kind == :taxon), :count)
+    Repo.aggregate(from(e in Entity, where: e.entity_kind == :taxon), :count)
   end
 
   defp entity_url(qid), do: "https://www.wikidata.org/wiki/" <> qid

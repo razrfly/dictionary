@@ -6,9 +6,8 @@ defmodule DevilsDictionary.HealthConceptsTest do
   """
   use DevilsDictionary.DataCase, async: true
 
-  alias DevilsDictionary.Encyclopedia.{Concept, ConceptLink, ConceptRelation}
-  alias DevilsDictionary.{Fixtures, Health, Repo}
-  alias DevilsDictionary.Lexicon.{Entry, Lexeme, ScopeLexeme}
+  alias DevilsDictionary.{Claims, Fixtures, Health, Registry, Repo}
+  alias DevilsDictionary.Lexicon.ScopeMember
 
   setup do
     %{sources: sources, scopes: scopes} = Fixtures.seed_catalog!()
@@ -16,56 +15,90 @@ defmodule DevilsDictionary.HealthConceptsTest do
   end
 
   defp scoped!(ctx, lemma, attrs \\ []) do
-    lexeme =
-      Repo.insert!(%Lexeme{
-        lang: "en",
+    {:ok, lexeme} =
+      Registry.create_lexeme(%{
+        language_tag: "en",
         lemma: lemma,
-        pos: "noun",
-        slug: Lexeme.slug(lemma),
+        part_of_speech: "noun",
         metadata: attrs[:metadata] || %{},
         source_ids: attrs[:source_ids] || []
       })
 
-    Repo.insert!(%ScopeLexeme{
+    Repo.insert!(%ScopeMember{
       scope_id: ctx.animals.id,
-      lexeme_id: lexeme.id,
+      lexeme_id: lexeme.object_id,
       reasons: ["wordnet_closure"]
     })
 
     lexeme
   end
 
-  defp concept!(qid, attrs \\ []),
-    do: Repo.insert!(struct(%Concept{qid: qid, kind: attrs[:kind] || :thing}, attrs))
+  # The QID is an `external_identifiers` row; the image, article title and taxon
+  # facts are descriptive metadata on the entity. Neither is identity.
+  defp concept!(qid, attrs \\ []) do
+    {:ok, entity} =
+      Registry.create_entity(%{
+        entity_kind: attrs[:kind] || :concept,
+        preferred_label: attrs[:label] || qid,
+        metadata:
+          %{}
+          |> put_some("wikipedia_title", attrs[:wikipedia_title])
+          |> put_some("image_url", attrs[:image_url])
+      })
 
-  defp link!(lexeme, concept, attrs) do
-    Repo.insert!(%ConceptLink{
-      lexeme_id: lexeme.id,
-      concept_id: concept.id,
-      method: attrs[:method] || :title_match,
-      confidence: attrs[:confidence],
-      status: attrs[:status] || :auto,
-      metadata: attrs[:metadata] || %{}
-    })
+    {:ok, _} = Registry.add_external_id(entity.object_id, "wikidata", qid)
+
+    if taxon = attrs[:taxon_item] do
+      {:ok, _} = Claims.assert(entity.object_id, "taxon_item", taxon.object_id)
+    end
+
+    entity
   end
 
-  defp entry!(ctx, concept, body \\ "A thing.") do
-    Repo.insert!(%Entry{
-      source_id: ctx.sources["wikipedia"].id,
-      concept_id: concept.id,
-      body: body,
-      position: 0
-    })
+  defp put_some(map, _key, nil), do: map
+  defp put_some(map, key, value), do: Map.put(map, key, value)
+
+  # `status: :auto` means nobody has reviewed it, so nothing is written for it;
+  # a decision is an append-only review, which is what stops an importer rerun
+  # from returning a rejected link to `auto`.
+  defp link!(lexeme, entity, attrs) do
+    {:ok, assertion} =
+      Claims.assert(lexeme.object_id, "lexeme_entity_candidate", entity.object_id, %{
+        method: to_string(attrs[:method] || :title_match),
+        confidence: attrs[:confidence],
+        metadata: attrs[:metadata] || %{}
+      })
+
+    case attrs[:status] || :auto do
+      :auto -> :ok
+      :candidate -> :ok
+      decision -> Claims.review(Claims.current_revision(assertion.id).id, decision)
+    end
+
+    assertion
+  end
+
+  defp entry!(ctx, entity, body \\ "A thing.") do
+    {:ok, content} =
+      Registry.create_content(%{
+        content_kind: :article,
+        source_id: ctx.sources["wikipedia"].id,
+        body: body,
+        position: 0
+      })
+
+    {:ok, _} = Claims.assert(content.object_id, "about", entity.object_id)
+    content
   end
 
   defp parent!(ctx, child, parent) do
-    Repo.insert!(%ConceptRelation{
-      source_id: ctx.sources["wikidata"].id,
-      from_concept_id: child.id,
-      to_concept_id: parent.id,
-      type: :parent_taxon,
-      property: "P171"
-    })
+    {:ok, assertion} =
+      Claims.assert(child.object_id, "parent_taxon", parent.object_id, %{
+        source_id: ctx.sources["wikidata"].id,
+        metadata: %{"property" => "P171"}
+      })
+
+    assertion
   end
 
   describe "concept_coverage/1 (A6)" do
@@ -221,7 +254,7 @@ defmodule DevilsDictionary.HealthConceptsTest do
       # `cat` links to the everyday concept, which reaches Animalia only via
       # `taxon_concept_id` — the case §3's rule keeps getting wrong.
       cat = scoped!(ctx, "cat")
-      link!(cat, concept!("Q146", taxon_concept_id: felis.id), confidence: 0.9)
+      link!(cat, concept!("Q146", taxon_item: felis), confidence: 0.9)
 
       # A concept with no taxonomy at all.
       hammer = scoped!(ctx, "hammer")
@@ -278,18 +311,17 @@ defmodule DevilsDictionary.HealthConceptsTest do
 
       # The probe flags every lexeme of the lemma, but the candidate rung links
       # nouns only. Counting lexemes would score this lemma 1 of 2.
-      verb =
-        Repo.insert!(%Lexeme{
-          lang: "en",
+      {:ok, verb} =
+        Registry.create_lexeme(%{
+          language_tag: "en",
           lemma: "seal",
-          pos: "verb",
-          slug: "seal",
+          part_of_speech: "verb",
           metadata: %{"wikipedia_disambiguation" => true}
         })
 
-      Repo.insert!(%ScopeLexeme{
+      Repo.insert!(%ScopeMember{
         scope_id: ctx.animals.id,
-        lexeme_id: verb.id,
+        lexeme_id: verb.object_id,
         reasons: ["wordnet_closure"]
       })
 
@@ -301,18 +333,17 @@ defmodule DevilsDictionary.HealthConceptsTest do
     test "a lemma with no nominal lexeme is explained, not counted as a shortfall", ctx do
       # A thing is not an adjective, so `formic` can never carry a candidate.
       # Eleven Animals lemmas are like this; L4 says so rather than reading 99%.
-      adjective =
-        Repo.insert!(%Lexeme{
-          lang: "en",
+      {:ok, adjective} =
+        Registry.create_lexeme(%{
+          language_tag: "en",
           lemma: "formic",
-          pos: "adj",
-          slug: "formic",
+          part_of_speech: "adj",
           metadata: %{"wikipedia_disambiguation" => true}
         })
 
-      Repo.insert!(%ScopeLexeme{
+      Repo.insert!(%ScopeMember{
         scope_id: ctx.animals.id,
-        lexeme_id: adjective.id,
+        lexeme_id: adjective.object_id,
         reasons: ["wiktionary_category"]
       })
 

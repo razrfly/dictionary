@@ -6,6 +6,11 @@ defmodule DevilsDictionary.Sources.ReconciliationCase do
   reuse an old ID for a different meaning. This cannot be solved by a uniqueness
   constraint alone."
 
+  A case need not come from a source. An identity split is curatorial, and #74
+  requires its ambiguous attachments to enter explicit review rather than be
+  guessed onto an output -- so `source_id` is optional and such a case names
+  the `object` being split and the `assertion` nobody may reassign for you.
+
   The Gate 0 spike showed both ways in. Either nothing scores well enough to
   claim an existing identity, or two candidates score so close that picking the
   higher would be arbitrary — measured at 0.897 against two senses with a 0.000
@@ -17,7 +22,8 @@ defmodule DevilsDictionary.Sources.ReconciliationCase do
 
   import Ecto.Changeset
 
-  alias DevilsDictionary.Registry.{Lexeme, Sense}
+  alias DevilsDictionary.Claims.Assertion
+  alias DevilsDictionary.Registry.{Lexeme, Object, Sense}
   alias DevilsDictionary.Sources.{Actor, ImportRun, Source, SourceRecord}
 
   @statuses [:open, :resolved, :dismissed]
@@ -26,6 +32,8 @@ defmodule DevilsDictionary.Sources.ReconciliationCase do
     belongs_to :source, Source
     belongs_to :source_record, SourceRecord
     field :kind, :string
+    belongs_to :object, Object
+    belongs_to :assertion, Assertion
     belongs_to :lexeme, Lexeme, references: :object_id
     belongs_to :sense, Sense, references: :object_id
     field :payload, :map, default: %{}
@@ -39,13 +47,13 @@ defmodule DevilsDictionary.Sources.ReconciliationCase do
 
   def statuses, do: @statuses
 
-  @castable ~w(source_id source_record_id kind lexeme_id sense_id payload status
-               opened_run_id resolved_by_actor_id resolved_at)a
+  @castable ~w(source_id source_record_id kind object_id assertion_id lexeme_id sense_id
+               payload status opened_run_id resolved_by_actor_id resolved_at)a
 
   def changeset(kase, attrs) do
     kase
     |> cast(attrs, @castable)
-    |> validate_required([:source_id, :kind])
+    |> validate_required([:kind])
     |> check_constraint(:status, name: :reconciliation_cases_status)
   end
 end

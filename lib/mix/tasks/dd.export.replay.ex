@@ -132,7 +132,13 @@ defmodule Mix.Tasks.Dd.Export.Replay do
           |> where([r], r.source_id == ^source_id and r.id > ^after_id)
           |> order_by([r], asc: r.id)
           |> limit(^@batch)
-          |> select([r], %{
+          # The payload comes from the record's current revision, which is what
+          # the replay archive has to carry: a cited revision is the evidence,
+          # and Wikipedia's and Wikidata's records exist nowhere else.
+          |> join(:left, [r], rev in DevilsDictionary.Corpus.SourceRecordRevision,
+            on: rev.source_record_id == r.id and rev.revision_key == r.content_hash
+          )
+          |> select([r, rev], %{
             id: r.id,
             external_id: r.external_id,
             url: r.url,
@@ -140,7 +146,7 @@ defmodule Mix.Tasks.Dd.Export.Replay do
             fetched_at: r.fetched_at,
             changed_at: r.changed_at,
             absent_until: r.absent_until,
-            raw: r.raw
+            raw: rev.payload
           })
           |> Repo.all()
 

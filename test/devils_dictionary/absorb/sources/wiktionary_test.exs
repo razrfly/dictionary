@@ -100,9 +100,10 @@ defmodule DevilsDictionary.Absorb.Sources.WiktionaryTest do
     test "keys the row on lemma and part of speech" do
       row = records("cat") |> hd() |> Wiktionary.index_row(3)
 
-      assert row.lang == "en"
-      assert row.lemma == "cat"
-      assert row.pos in ~w(noun verb adj adv name)
+      # The key is the identity triple the shared upsert mints an object for,
+      # rather than three columns the index pass writes itself.
+      assert {"en", "cat", pos} = row.key
+      assert pos in ~w(noun verb adj adv name)
       assert row.slug == "cat"
       assert row.origin_source_id == 3
       assert row.source_ids == [3]

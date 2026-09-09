@@ -9,9 +9,12 @@ defmodule DevilsDictionary.Absorb.Sources.WikipediaAbsorbTest do
   alias DevilsDictionary.Absorb.Clients
   alias DevilsDictionary.Absorb.Sources.Wikipedia
   alias DevilsDictionary.{Fixtures, Repo, Sources}
-  alias DevilsDictionary.Encyclopedia.{Concept, ConceptLink}
-  alias DevilsDictionary.Lexicon.{Entry, Lexeme, ScopeLexeme}
+  alias DevilsDictionary.Claims
+  alias DevilsDictionary.Lexicon.ScopeMember
+  alias DevilsDictionary.Registry
+  alias DevilsDictionary.Registry.ContentItem
   alias DevilsDictionary.Sources.SourceRecord
+  alias DevilsDictionary.WordFixtures
 
   setup do
     %{sources: sources, scopes: scopes} = Fixtures.seed_catalog!()
@@ -19,12 +22,12 @@ defmodule DevilsDictionary.Absorb.Sources.WikipediaAbsorbTest do
   end
 
   defp scoped!(ctx, lemma, reasons) do
-    lexeme =
-      Repo.insert!(%Lexeme{lang: "en", lemma: lemma, pos: "noun", slug: Lexeme.slug(lemma)})
+    {:ok, lexeme} =
+      Registry.create_lexeme(%{language_tag: "en", lemma: lemma, part_of_speech: "noun"})
 
-    Repo.insert!(%ScopeLexeme{
+    Repo.insert!(%ScopeMember{
       scope_id: ctx.animals.id,
-      lexeme_id: lexeme.id,
+      lexeme_id: lexeme.object_id,
       reasons: reasons
     })
 
@@ -244,22 +247,17 @@ defmodule DevilsDictionary.Absorb.Sources.WikipediaAbsorbTest do
     # A disambiguation page is fetched, stored, and produces no entry by design.
     # The skip rule tested only "has an entry" and "has a live absent marker", so
     # every `--concepts` run asked about all ~3,800 of them again.
-    concept =
-      Repo.insert!(%Concept{
-        qid: "Q_disambig",
-        label: "Seal",
-        kind: :thing,
-        wikipedia_title: "Seal"
-      })
+    concept = WordFixtures.concept!("Q_disambig", "Seal", wikipedia_title: "Seal")
 
-    # Since S5c the pass asks only about the concepts this scope's words point
-    # at, so the concept needs the word that introduced it.
-    Repo.insert!(%ConceptLink{
-      lexeme_id: scoped!(ctx, "seal", ["wordnet_closure"]).id,
-      concept_id: concept.id,
-      method: :title_match,
-      confidence: 0.7
-    })
+    # Since S5c the pass asks only about the entities this scope's words point
+    # at, so the entity needs the word that introduced it.
+    seal = scoped!(ctx, "seal", ["wordnet_closure"])
+
+    {:ok, _} =
+      Claims.assert(seal.object_id, "lexeme_entity_candidate", concept.object_id, %{
+        method: "title_match",
+        confidence: 0.7
+      })
 
     counter =
       stub_api(%{
@@ -267,7 +265,9 @@ defmodule DevilsDictionary.Absorb.Sources.WikipediaAbsorbTest do
       })
 
     assert {:ok, %{requests: 1}} = Wikipedia.absorb(ctx.animals, concepts: true, rate_limit_ms: 0)
-    assert Repo.aggregate(from(e in Entry, where: e.source_id == ^ctx.source.id), :count) == 0
+
+    assert Repo.aggregate(from(c in ContentItem, where: c.source_id == ^ctx.source.id), :count) ==
+             0
 
     # Second run: nothing left to ask about.
     assert {:ok, %{requests: 0, concepts_probed: 0}} =

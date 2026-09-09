@@ -12,9 +12,12 @@ defmodule DevilsDictionary.Health.Coverage do
 
   import Ecto.Query
 
-  alias DevilsDictionary.Encyclopedia.{Concept, ConceptLink, ConceptRelation}
+  alias DevilsDictionary.Claims.{AssertionRevision, PendingRelation}
+  alias DevilsDictionary.Encyclopedia
   alias DevilsDictionary.Lexicon
-  alias DevilsDictionary.Lexicon.{Entry, Lexeme, LexicalRelation, ScopeLexeme, Sense}
+  alias DevilsDictionary.Lexicon.ScopeMember
+  alias DevilsDictionary.Registry.{ContentItem, ContentRevision, Entity, Lexeme, LexemeForm}
+  alias DevilsDictionary.Registry.{Sense, SenseRevision}
   alias DevilsDictionary.Repo
   alias DevilsDictionary.Sources
   alias DevilsDictionary.Sources.{Catalog, ImportRun, Source, SourceRecord}
@@ -188,8 +191,8 @@ defmodule DevilsDictionary.Health.Coverage do
       scope ->
         Repo.one(
           from l in Lexeme,
-            join: sl in ScopeLexeme,
-            on: sl.lexeme_id == l.id and sl.scope_id == ^scope.id,
+            join: sl in ScopeMember,
+            on: sl.lexeme_id == l.object_id and sl.scope_id == ^scope.id,
             left_join: r in SourceRecord,
             on:
               r.source_id == ^id and r.external_id == l.lemma and
@@ -204,22 +207,24 @@ defmodule DevilsDictionary.Health.Coverage do
     now = DateTime.utc_now()
 
     Repo.one(
-      from c in Concept,
-        join: cl in ConceptLink,
-        on: cl.concept_id == c.id and cl.status in [:auto, :confirmed],
+      from e in Entity,
+        join: link in subquery(Encyclopedia.linked_lexemes_query()),
+        on: link.entity_id == e.object_id,
+        join: x in DevilsDictionary.Registry.ExternalIdentifier,
+        on: x.object_id == e.object_id and x.namespace == "wikidata" and x.status == :verified,
         left_join: r in SourceRecord,
         on:
-          r.source_id == ^id and r.external_id == c.qid and
+          r.source_id == ^id and r.external_id == x.external_id and
             (is_nil(r.absent_until) or r.absent_until > ^now),
         where: is_nil(r.id),
-        select: count(c.id, :distinct)
+        select: count(e.object_id, :distinct)
     )
   end
 
   defp needs_fetch(%Source{}, _scope_slug), do: nil
 
   defp needs_fetch_of(%Source{slug: "wikipedia"}), do: "scope lemmas"
-  defp needs_fetch_of(%Source{slug: "wikidata"}), do: "asserted concepts"
+  defp needs_fetch_of(%Source{slug: "wikidata"}), do: "asserted entities"
   defp needs_fetch_of(%Source{}), do: nil
 
   @doc """
@@ -247,18 +252,53 @@ defmodule DevilsDictionary.Health.Coverage do
     }
   end
 
+  # `entries`, `lexical_relations`, `concept_relations` and `concept_links` were
+  # four tables; they are one now, told apart by predicate. The four figures the
+  # source page has always shown are kept, because "how many relations did
+  # Wikidata write" is still the question a reader has.
   defp materialized_counts(%Source{id: id}) do
+    by_source =
+      from r in AssertionRevision,
+        join: a in assoc(r, :assertion),
+        join: p in assoc(r, :predicate),
+        where: a.source_id == ^id and r.is_current
+
     %{
       senses: Repo.aggregate(from(x in Sense, where: x.source_id == ^id), :count),
-      entries: Repo.aggregate(from(e in Entry, where: e.source_id == ^id), :count),
-      relations: Repo.aggregate(from(r in LexicalRelation, where: r.source_id == ^id), :count),
+      entries: Repo.aggregate(from(c in ContentItem, where: c.source_id == ^id), :count),
+      relations:
+        Repo.aggregate(
+          from([r, _a, p] in by_source, where: p.key in ^lexical_predicates()),
+          :count
+        ),
       concept_relations:
-        Repo.aggregate(from(r in ConceptRelation, where: r.source_id == ^id), :count),
-      concept_links: Repo.aggregate(from(cl in ConceptLink, where: cl.source_id == ^id), :count),
+        Repo.aggregate(
+          from([r, _a, p] in by_source, where: p.key in ^hierarchy_predicates()),
+          :count
+        ),
+      concept_links:
+        Repo.aggregate(
+          from([r, _a, p] in by_source,
+            where: p.key in ["refers_to", "lexeme_entity_candidate"]
+          ),
+          :count
+        ),
+      pending_relations:
+        Repo.aggregate(from(p in PendingRelation, where: p.source_id == ^id), :count),
       lexemes_introduced:
         Repo.aggregate(from(l in Lexeme, where: l.origin_source_id == ^id), :count)
     }
   end
+
+  @lexical_predicates ~w(hypernym hyponym meronym holonym synonym antonym coordinate
+                         derived related form_of alt_of see_also other)
+  @hierarchy_predicates ~w(parent_taxon subclass_of instance_of taxon_item)
+
+  @doc "The source-native word-to-word predicate keys."
+  def lexical_predicates, do: @lexical_predicates
+
+  @doc "The source-native thing-to-thing predicate keys."
+  def hierarchy_predicates, do: @hierarchy_predicates
 
   defp recent_runs(source_id, limit \\ 10) do
     Repo.all(
@@ -274,22 +314,38 @@ defmodule DevilsDictionary.Health.Coverage do
   defp sample_senses(%Source{id: id}, limit) do
     Repo.all(
       from x in Sense,
+        join: rev in SenseRevision,
+        on: rev.sense_id == x.object_id and rev.is_current,
         join: l in Lexeme,
-        on: l.id == x.lexeme_id,
-        where: x.source_id == ^id and not is_nil(x.gloss),
-        order_by: [asc: x.id],
+        on: l.object_id == x.lexeme_id,
+        where: x.source_id == ^id and not is_nil(rev.gloss),
+        order_by: [asc: x.object_id],
         limit: ^limit,
-        select: %{lemma: l.lemma, pos: l.pos, slug: l.slug, gloss: x.gloss, url: x.url}
+        select: %{
+          lemma: l.lemma,
+          pos: l.part_of_speech,
+          slug: l.slug,
+          gloss: rev.gloss,
+          url: rev.url
+        }
     )
   end
 
   defp sample_entries(%Source{id: id}, limit) do
     Repo.all(
-      from e in Entry,
-        where: e.source_id == ^id,
-        order_by: [asc: e.id],
+      from c in ContentItem,
+        join: rev in ContentRevision,
+        on: rev.content_id == c.object_id and rev.is_current,
+        where: c.source_id == ^id,
+        order_by: [asc: c.object_id],
         limit: ^limit,
-        select: %{headword: e.headword, pos: e.pos, body: e.body, url: e.url, year: e.year}
+        select: %{
+          headword: rev.headword,
+          pos: fragment("? ->> 'pos_marker'", rev.metadata),
+          body: rev.body,
+          url: rev.canonical_url,
+          year: rev.year
+        }
     )
   end
 
@@ -311,21 +367,24 @@ defmodule DevilsDictionary.Health.Coverage do
 
   @doc """
   **A3** — the full English index: every Wiktionary headword is a lexeme row.
-  The count of rows carrying `forms` is *report*, not a threshold; it is what
+  The count of rows carrying forms is *report*, not a threshold; it is what
   makes `monkeys` land on *monkey* without a record of its own.
   """
   def index(lang \\ "en") do
     total = Lexicon.count_lexemes(lang)
 
     with_forms =
-      Repo.aggregate(
-        from(l in Lexeme, where: l.lang == ^lang and fragment("? <> '[]'::jsonb", l.forms)),
-        :count
+      Repo.one(
+        from f in LexemeForm,
+          join: l in Lexeme,
+          on: l.object_id == f.lexeme_id,
+          where: l.language_tag == ^lang,
+          select: count(f.lexeme_id, :distinct)
       )
 
     enriched =
       Repo.aggregate(
-        from(l in Lexeme, where: l.lang == ^lang and not is_nil(l.enriched_at)),
+        from(l in Lexeme, where: l.language_tag == ^lang and not is_nil(l.enriched_at)),
         :count
       )
 
@@ -361,30 +420,54 @@ defmodule DevilsDictionary.Health.Coverage do
   def bierce(scope_slug \\ "animals") do
     source = Sources.get_source_by_slug!("bierce")
 
-    entries = from e in Entry, where: e.source_id == ^source.id
+    entries = from c in ContentItem, where: c.source_id == ^source.id
 
     total = Repo.aggregate(entries, :count)
-    attached = Repo.aggregate(from(e in entries, where: not is_nil(e.lexeme_id)), :count)
+
+    # "Attached" is now a `defines` assertion rather than a nullable column, and
+    # it is still 100 % by construction: `materialize/1` creates the lexeme when
+    # the index lacks it, so a definition with nothing to define cannot exist.
+    defined =
+      from c in entries,
+        join: r in AssertionRevision,
+        on: r.subject_object_id == c.object_id and r.is_current and r.lifecycle_state == :active,
+        join: p in assoc(r, :predicate),
+        left_join: sn in Sense,
+        on: sn.object_id == r.object_object_id,
+        where: p.key == "defines",
+        select: %{content_id: c.object_id, lexeme_id: coalesce(sn.lexeme_id, r.object_object_id)}
+
+    attached = Repo.one(from d in subquery(defined), select: count(d.content_id, :distinct))
 
     known =
-      Repo.aggregate(
-        from(e in entries,
+      Repo.one(
+        from d in subquery(defined),
           join: l in Lexeme,
-          on: l.id == e.lexeme_id,
-          where: is_nil(l.origin_source_id) or l.origin_source_id != ^source.id
-        ),
-        :count
+          on: l.object_id == d.lexeme_id,
+          where: is_nil(l.origin_source_id) or l.origin_source_id != ^source.id,
+          select: count(d.content_id, :distinct)
       )
 
     in_scope =
-      Repo.aggregate(
-        from(e in entries,
-          join: sl in "scope_lexemes",
-          on: sl.lexeme_id == e.lexeme_id,
+      Repo.one(
+        from d in subquery(defined),
+          join: sl in ScopeMember,
+          on: sl.lexeme_id == d.lexeme_id,
           join: s in "scopes",
-          on: s.id == sl.scope_id and s.slug == ^scope_slug
-        ),
-        :count
+          on: s.id == sl.scope_id and s.slug == ^scope_slug,
+          select: count(d.content_id, :distinct)
+      )
+
+    authored =
+      Repo.one(
+        from c in entries,
+          join: r in AssertionRevision,
+          on:
+            r.subject_object_id == c.object_id and r.is_current and
+              r.lifecycle_state == :active,
+          join: p in assoc(r, :predicate),
+          where: p.key == "authored_by",
+          select: count(c.object_id, :distinct)
       )
 
     %{
@@ -395,7 +478,7 @@ defmodule DevilsDictionary.Health.Coverage do
       index_hit_pct: pct(known, total),
       introduced_by_bierce: total - known,
       in_scope: in_scope,
-      authored: Repo.aggregate(from(e in entries, where: not is_nil(e.author_id)), :count),
+      authored: authored,
       wants_entries: 997
     }
   end
@@ -407,12 +490,26 @@ defmodule DevilsDictionary.Health.Coverage do
   def wordnet_edges do
     source = Sources.get_source_by_slug!("wordnet")
 
-    relations = from r in LexicalRelation, where: r.source_id == ^source.id
+    resolved =
+      Repo.aggregate(
+        from(r in AssertionRevision,
+          join: a in assoc(r, :assertion),
+          join: p in assoc(r, :predicate),
+          where: a.source_id == ^source.id and r.is_current and p.key in ^@lexical_predicates
+        ),
+        :count
+      )
 
-    total = Repo.aggregate(relations, :count)
-    resolved = Repo.aggregate(from(r in relations, where: not is_nil(r.to_sense_id)), :count)
+    # An unresolved WordNet edge would be a row in `pending_relations`, and there
+    # should be none: the graph is closed, so every target is a synset we hold.
+    # That is the whole of what R1 asserts, and it is now a table nobody has to
+    # take on trust — the unresolved ones can be listed.
+    pending =
+      Repo.aggregate(from(p in PendingRelation, where: p.source_id == ^source.id), :count)
 
-    %{total: total, resolved: resolved, pct: pct(resolved, total)}
+    total = resolved + pending
+
+    %{total: total, resolved: resolved, pending: pending, pct: pct(resolved, total)}
   end
 
   @doc """

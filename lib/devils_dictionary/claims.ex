@@ -118,14 +118,46 @@ defmodule DevilsDictionary.Claims do
 
   defp assertion_keys, do: [:source_id, :origin_key, :origin_actor_id, :submitted_by_actor_id]
 
+  # Everything a revision means, as opposed to everything it is. `assertion_id`,
+  # `revision_number` and `is_current` are bookkeeping and are set here; the
+  # denormalised endpoint kinds are filled by a database trigger. Every other
+  # column carries forward, because a revision that changes only the rationale
+  # must still mean what it meant — the audit found `valid_from`, `valid_to`,
+  # `jurisdiction_entity_id`, `context_object_id` and `metadata` silently
+  # dropped, so a date-bounded claim became unbounded on a typo fix.
+  @carried [
+    :subject_object_id,
+    :predicate_id,
+    :object_object_id,
+    :rationale,
+    :valid_from,
+    :valid_to,
+    :language_tag,
+    :jurisdiction_entity_id,
+    :context_object_id,
+    :method,
+    :confidence,
+    :lifecycle_state,
+    :metadata
+  ]
+
+  @doc "The context columns `revise/2` carries forward from the current revision."
+  def carried_fields, do: @carried
+
   @doc """
   Adds a revision to an existing claim and makes it current.
 
   Changing endpoints or meaning is a revision, never an edit: a review or a vote
   cites a revision id, so this is what stops old approval from carrying forward
   onto a claim that now says something else.
+
+  Everything in `carried_fields/0` carries forward unless `attrs` names it.
+  Naming it with `nil` clears it — "absent" and "present and nil" are different
+  instructions, which is why this reads keys rather than values.
   """
   def revise(assertion_id, attrs) do
+    attrs = normalize(attrs)
+
     Repo.transaction(fn ->
       Repo.query!("SELECT 1 FROM assertions WHERE id = $1 FOR UPDATE", [assertion_id])
 
@@ -138,22 +170,16 @@ defmodule DevilsDictionary.Claims do
             select: max(r.revision_number)
         ) + 1
 
+      # Only currentness moves. The outgoing revision's `lifecycle_state` is
+      # what it asserted, and rewriting it to `superseded` would destroy that —
+      # #74 is explicit that currentness and lifecycle are separate columns.
       from(r in AssertionRevision, where: r.assertion_id == ^assertion_id and r.is_current)
-      |> Repo.update_all(set: [is_current: false, lifecycle_state: :superseded])
-
-      carried = Map.take(current, [
-        :subject_object_id,
-        :predicate_id,
-        :object_object_id,
-        :rationale,
-        :language_tag,
-        :method,
-        :confidence
-      ])
+      |> Repo.update_all(set: [is_current: false])
 
       revision_attrs =
-        carried
-        |> Map.merge(normalize(attrs))
+        current
+        |> Map.take(@carried)
+        |> Map.merge(attrs)
         |> Map.merge(%{
           assertion_id: assertion_id,
           revision_number: next,
@@ -173,9 +199,29 @@ defmodule DevilsDictionary.Claims do
   Not a delete and not a lifecycle flip on the existing revision: the current
   revision reads `withdrawn` while the history that shows the claim was once
   made stays exactly as it was.
+
+  A `:reason` replaces the rationale; omitting one leaves the rationale alone
+  rather than erasing it, since `revise/2` treats a named `nil` as a clear.
   """
   def withdraw(assertion_id, opts \\ []) do
-    revise(assertion_id, %{lifecycle_state: :withdrawn, rationale: opts[:reason]})
+    attrs = %{lifecycle_state: :withdrawn}
+    attrs = if opts[:reason], do: Map.put(attrs, :rationale, opts[:reason]), else: attrs
+
+    revise(assertion_id, attrs)
+  end
+
+  @doc """
+  Puts a withdrawn or rejected claim back into force, as a new revision.
+
+  The counterpart of `withdraw/2`. It exists because `lifecycle_state` now
+  carries forward: without it, reviving a claim would mean relying on a caller
+  to remember the column's name.
+  """
+  def reinstate(assertion_id, opts \\ []) do
+    attrs = %{lifecycle_state: :active}
+    attrs = if opts[:reason], do: Map.put(attrs, :rationale, opts[:reason]), else: attrs
+
+    revise(assertion_id, attrs)
   end
 
   defp normalize(attrs) when is_list(attrs), do: normalize(Map.new(attrs))
@@ -207,42 +253,127 @@ defmodule DevilsDictionary.Claims do
   end
 
   @doc """
-  Current claims where this object is the subject.
+  Current claims where this object is the subject. **A public read.**
 
   Served by the partial `is_current` index — Gate 0 measured 0.256 ms p95 on the
   1,229-degree node against 2.576 ms for a pointer join. Bounded by `:limit`
   because #73 forbids an unbounded "everything related" query on page load.
+
+  Options: `:predicate`, `:lifecycle_state` (`:any` for all), `:limit`,
+  `:after` (a cursor from `next_cursor/1`), and `:visibility` — `:public` by
+  default, `:internal` for a review queue or a health check. See `visible/2`.
   """
   def outgoing(subject_id, opts \\ []) do
-    AssertionRevision
-    |> where([r], r.subject_object_id == ^subject_id and r.is_current)
-    |> filter_predicate(opts[:predicate])
-    |> filter_state(opts[:lifecycle_state] || :active)
-    |> limit(^(opts[:limit] || 100))
-    |> preload(:predicate)
-    |> Repo.all()
+    subject_id |> outgoing_query(opts) |> page(opts)
   end
 
   @doc """
-  Current claims where this object is the object.
+  Current claims where this object is the object. **A public read.**
 
   The same claim, read from the other end. #73: "The same claim revision appears
-  from either endpoint" — there is one row, so they cannot disagree.
+  from either endpoint" — there is one row, so they cannot disagree. That
+  includes being hidden: the visibility filter is the same one, applied before
+  the cursor and before `count_incoming/2`, so a rejected claim is missing from
+  the counts too and not merely from the first page.
   """
   def incoming(object_id, opts \\ []) do
+    object_id |> incoming_query(opts) |> page(opts)
+  end
+
+  @doc "How many claims `outgoing/2` would return, unpaginated."
+  def count_outgoing(subject_id, opts \\ []),
+    do: subject_id |> outgoing_query(opts) |> Repo.aggregate(:count, :id)
+
+  @doc "How many claims `incoming/2` would return, unpaginated."
+  def count_incoming(object_id, opts \\ []),
+    do: object_id |> incoming_query(opts) |> Repo.aggregate(:count, :id)
+
+  @doc """
+  The cursor to pass as `:after` for the next page, or nil at the end.
+
+  Keyset, not offset: the ordering is `(id)` on a table whose rows are only ever
+  inserted, so a page boundary cannot move under a concurrent writer and no row
+  is skipped or repeated.
+  """
+  def next_cursor([]), do: nil
+  def next_cursor(revisions), do: List.last(revisions).id
+
+  defp outgoing_query(subject_id, opts) do
+    AssertionRevision
+    |> where([r], r.subject_object_id == ^subject_id and r.is_current)
+    |> common_filters(opts)
+  end
+
+  defp incoming_query(object_id, opts) do
     AssertionRevision
     |> where([r], r.object_object_id == ^object_id and r.is_current)
+    |> common_filters(opts)
+  end
+
+  defp common_filters(query, opts) do
+    query
     |> filter_predicate(opts[:predicate])
     |> filter_state(opts[:lifecycle_state] || :active)
+    |> visible(opts[:visibility] || :public)
+  end
+
+  # Filters, then cursor, then limit -- in that order, so the page is a page of
+  # what the reader is allowed to see rather than a filtered page.
+  defp page(query, opts) do
+    query
+    |> after_cursor(opts[:after])
+    |> order_by([r], asc: r.id)
     |> limit(^(opts[:limit] || 100))
     |> preload(:predicate)
     |> Repo.all()
   end
+
+  defp after_cursor(query, nil), do: query
+  defp after_cursor(query, id), do: where(query, [r], r.id > ^id)
+
+  @doc """
+  Applies the editorial visibility policy.
+
+  `:public` hides a claim revision whose most recent review decision is
+  `rejected` or `withdrawn`. `:internal` hides nothing and is what a review
+  queue, an importer or a health check reads.
+
+  Lifecycle and review are separate axes and are filtered separately: a claim
+  whose current revision is `active` can still have been rejected by a
+  reviewer, and #74 requires that such a claim appear from **neither** endpoint.
+  The decision is derived from `assertion_reviews` rather than stored, so no
+  importer can write it — the same property `review_state/1` relies on.
+  """
+  def visible(query, :internal), do: query
+
+  def visible(query, :public) do
+    where(
+      query,
+      [r],
+      fragment(
+        """
+        COALESCE(
+          (SELECT ar.decision FROM assertion_reviews ar
+            WHERE ar.assertion_revision_id = ?
+            ORDER BY ar.inserted_at DESC, ar.id DESC
+            LIMIT 1),
+          'needs_review'
+        ) NOT IN ('rejected', 'withdrawn')
+        """,
+        r.id
+      )
+    )
+  end
+
+  @doc "The review decisions that hide a claim from a public read."
+  def hidden_decisions, do: [:rejected, :withdrawn]
 
   defp filter_predicate(query, nil), do: query
 
   defp filter_predicate(query, keys) when is_list(keys) do
-    from r in query, join: p in assoc(r, :predicate), where: p.key in ^Enum.map(keys, &to_string/1)
+    from r in query,
+      join: p in assoc(r, :predicate),
+      where: p.key in ^Enum.map(keys, &to_string/1)
   end
 
   defp filter_predicate(query, key), do: filter_predicate(query, [key])
@@ -294,7 +425,9 @@ defmodule DevilsDictionary.Claims do
       for {role, target} <- items do
         %ReviewContextItem{}
         |> ReviewContextItem.changeset(
-          target |> Map.new() |> Map.merge(%{context_id: context.id, endpoint_role: role})
+          target
+          |> Map.new()
+          |> Map.merge(%{context_id: context.id, endpoint_role: role})
         )
         |> Repo.insert!()
       end

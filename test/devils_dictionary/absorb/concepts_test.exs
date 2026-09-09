@@ -11,11 +11,15 @@ defmodule DevilsDictionary.Absorb.ConceptsTest do
 
   alias DevilsDictionary.Absorb.Materializer
   alias DevilsDictionary.Absorb.Sources.{Wikidata, Wikipedia}
-  alias DevilsDictionary.Encyclopedia.{Concept, ConceptRelation}
-  alias DevilsDictionary.Fixtures
-  alias DevilsDictionary.Lexicon.Lexeme
-  alias DevilsDictionary.Repo
+  alias DevilsDictionary.Claims.AssertionRevision
+  alias DevilsDictionary.Registry.Lexeme
+  alias DevilsDictionary.{Claims, Encyclopedia, Fixtures, Registry, Repo, Sources}
   alias DevilsDictionary.Sources.{Source, SourceRecord}
+
+  setup do
+    Claims.Catalog.seed!()
+    :ok
+  end
 
   # Deliberately *not* the real slugs. `Catalog.seed!/0` upserts `wikipedia` and
   # `wikidata` from other async tests, and two transactions touching those rows
@@ -32,12 +36,13 @@ defmodule DevilsDictionary.Absorb.ConceptsTest do
   end
 
   defp record!(source, external_id, raw) do
-    Repo.insert!(%SourceRecord{
-      source_id: source.id,
-      external_id: external_id,
-      raw: raw,
-      fetched_at: DateTime.utc_now()
-    })
+    Sources.insert_records(source, [%{external_id: external_id, raw: raw}])
+
+    Repo.one!(
+      from r in SourceRecord,
+        where: r.source_id == ^source.id and r.external_id == ^external_id
+    )
+    |> Sources.with_raw()
   end
 
   defp wikipedia_record!(lemma) do
@@ -52,7 +57,19 @@ defmodule DevilsDictionary.Absorb.ConceptsTest do
     {record!(source, qid, raw), source}
   end
 
-  defp concept(qid), do: Repo.get_by!(Concept, qid: qid)
+  # The display shape, so a test reads `wikipedia_title` and `kind` the way a
+  # page does rather than reaching into `metadata` by hand.
+  defp concept(qid), do: qid |> Encyclopedia.by_qid!() |> Encyclopedia.view()
+
+  defp taxon_edges do
+    Repo.aggregate(
+      from(r in AssertionRevision,
+        join: p in assoc(r, :predicate),
+        where: r.is_current and p.key == "parent_taxon"
+      ),
+      :count
+    )
+  end
 
   describe "two sources on one concept" do
     test "Wikipedia then Wikidata composes, and neither blanks the other" do
@@ -62,14 +79,14 @@ defmodule DevilsDictionary.Absorb.ConceptsTest do
       assert {:ok, _} = Materializer.run(wp, Wikipedia)
       assert {:ok, _} = Materializer.run(wd, Wikidata)
 
-      cat = concept("Q146")
-      assert cat.wikipedia_title == "Cat"
-      assert cat.wikipedia_pageid == 6678
-      assert cat.wordnet_ili == "i46593"
+      cat = Encyclopedia.by_qid!("Q146")
+      assert cat.metadata["wikipedia_title"] == "Cat"
+      assert cat.metadata["wikipedia_pageid"] == 6678
+      assert cat.metadata["wordnet_ili"] == "i46593"
       # Wikidata's P18 file, not Wikipedia's article thumbnail. Both now live on
       # upload.wikimedia.org — a Special:FilePath URL will not render as an
       # image — so the file name is what tells them apart.
-      assert cat.image_url =~ "Cat_grooming.jpg"
+      assert cat.metadata["image_url"] =~ "Cat_grooming.jpg"
     end
 
     test "and in the other order, which is the one that used to clobber" do
@@ -79,10 +96,10 @@ defmodule DevilsDictionary.Absorb.ConceptsTest do
       assert {:ok, _} = Materializer.run(wd, Wikidata)
       assert {:ok, _} = Materializer.run(wp, Wikipedia)
 
-      cat = concept("Q146")
-      assert cat.wikipedia_pageid == 6678
+      cat = Encyclopedia.by_qid!("Q146")
+      assert cat.metadata["wikipedia_pageid"] == 6678
       # Wikipedia knows nothing about the ILI and must not erase it.
-      assert cat.wordnet_ili == "i46593"
+      assert cat.metadata["wordnet_ili"] == "i46593"
     end
 
     test "a taxon's kind survives a later Wikipedia write" do
@@ -90,16 +107,38 @@ defmodule DevilsDictionary.Absorb.ConceptsTest do
       assert {:ok, _} = Materializer.run(wd, Wikidata)
       assert concept("Q20980826").kind == :taxon
 
-      # `\"thing\"` is the no-opinion value, so a source that does not know about
-      # taxa can never demote one.
-      felis = concept("Q20980826")
+      # `concept` is the no-opinion entity kind, so a source that does not know
+      # about taxa can never demote one. Written through the materializer, which
+      # is the only writer whose merge rule this is.
+      felis = Encyclopedia.by_qid!("Q20980826")
 
-      Repo.insert!(%Concept{qid: "Q20980826"},
-        on_conflict: {:replace, [:updated_at]},
-        conflict_target: [:qid]
+      Repo.insert_all(
+        "entities",
+        [
+          %{
+            object_id: felis.object_id,
+            entity_kind: "concept",
+            metadata: %{},
+            inserted_at: DateTime.utc_now(),
+            updated_at: DateTime.utc_now()
+          }
+        ],
+        on_conflict:
+          from(e in "entities",
+            update: [
+              set: [
+                entity_kind:
+                  fragment(
+                    "CASE WHEN EXCLUDED.entity_kind = 'concept' THEN ? ELSE EXCLUDED.entity_kind END",
+                    e.entity_kind
+                  )
+              ]
+            ]
+          ),
+        conflict_target: [:object_id]
       )
 
-      assert Repo.get!(Concept, felis.id).kind == :taxon
+      assert concept("Q20980826").kind == :taxon
     end
   end
 
@@ -111,7 +150,7 @@ defmodule DevilsDictionary.Absorb.ConceptsTest do
                Materializer.run(wd, Wikidata)
 
       assert offered > 0
-      assert Repo.aggregate(ConceptRelation, :count) == 0
+      assert taxon_edges() == 0
 
       # The parents arrive in a later tier; re-materializing then closes the
       # edges. This is why `Wikidata.absorb/2` runs `Batch.run` twice.
@@ -120,10 +159,10 @@ defmodule DevilsDictionary.Absorb.ConceptsTest do
       assert {:ok, %{concept_relations: written}} = Materializer.run(wd, Wikidata)
 
       assert written > 0
-      assert Repo.exists?(from r in ConceptRelation, where: r.type == :parent_taxon)
+      assert taxon_edges() > 0
     end
 
-    test "taxon_concept_id links the everyday concept to its taxon item" do
+    test "the taxon_item bridge links the everyday concept to its taxon" do
       {wd, source} = wikidata_record!("cat", "Q146")
       taxon = Fixtures.raw("wikidata", "cat") |> Enum.find(&(&1["id"] == "Q20980826"))
       taxon_record = record!(source, "Q20980826", Wikidata.trim(taxon))
@@ -131,19 +170,20 @@ defmodule DevilsDictionary.Absorb.ConceptsTest do
       assert {:ok, _} = Materializer.run(taxon_record, Wikidata)
       assert {:ok, _} = Materializer.run(wd, Wikidata)
 
-      assert concept("Q146").taxon_concept_id == concept("Q20980826").id
+      assert Encyclopedia.taxon_item(concept("Q146").object_id) ==
+               concept("Q20980826").object_id
     end
   end
 
   describe "Wikipedia's lexeme annotation" do
     test "the probed lexemes get the title and are not marked enriched" do
-      lexeme =
-        Repo.insert!(%Lexeme{lang: "en", lemma: "cat", pos: "noun", slug: "cat"})
+      {:ok, lexeme} =
+        Registry.create_lexeme(%{language_tag: "en", lemma: "cat", part_of_speech: "noun"})
 
       {wp, _} = wikipedia_record!("cat")
       assert {:ok, _} = Materializer.run(wp, Wikipedia)
 
-      lexeme = Repo.get!(Lexeme, lexeme.id)
+      lexeme = Repo.get!(Lexeme, lexeme.object_id)
       assert lexeme.metadata["wikipedia_title"] == "Cat"
 
       # Wikipedia's entry hangs off the concept, not the word, so it must not

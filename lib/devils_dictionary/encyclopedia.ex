@@ -25,8 +25,9 @@ defmodule DevilsDictionary.Encyclopedia do
 
   import Ecto.Query
 
+  alias DevilsDictionary.Claims
   alias DevilsDictionary.Claims.AssertionRevision
-  alias DevilsDictionary.Registry.{Entity, ExternalIdentifier}
+  alias DevilsDictionary.Registry.{Entity, ExternalIdentifier, Sense}
   alias DevilsDictionary.Repo
 
   # Sense-backed. The word page's "what this meaning names".
@@ -43,7 +44,8 @@ defmodule DevilsDictionary.Encyclopedia do
       from e in Entity,
         join: x in ExternalIdentifier,
         on: x.object_id == e.object_id,
-        where: x.namespace == ^namespace and x.external_id == ^external_id and x.status == :verified
+        where:
+          x.namespace == ^namespace and x.external_id == ^external_id and x.status == :verified
     )
   end
 
@@ -59,10 +61,46 @@ defmodule DevilsDictionary.Encyclopedia do
   def qid(object_id) do
     Repo.one(
       from x in ExternalIdentifier,
-        where:
-          x.object_id == ^object_id and x.namespace == "wikidata" and x.status == :verified,
+        where: x.object_id == ^object_id and x.namespace == "wikidata" and x.status == :verified,
         select: x.external_id
     )
+  end
+
+  @doc """
+  An entity as the pages show it.
+
+  MVP-0's `concepts` row was both the identity and the display shape, so a
+  template could read `concept.qid` and `concept.taxon` off the struct. Identity
+  and description have separated — the QID is an `external_identifiers` row and
+  the image, article title and taxon facts are `metadata` — so this is the one
+  place that flattening happens, and every surface reads the same keys.
+  """
+  def view(nil), do: nil
+
+  def view(%Entity{} = entity) do
+    %{
+      object_id: entity.object_id,
+      qid: qid(entity.object_id),
+      label: entity.preferred_label,
+      description: entity.description,
+      kind: entity.entity_kind,
+      image_url: entity.metadata["image_url"],
+      image_attribution: entity.metadata["image_attribution"],
+      wikipedia_title: entity.metadata["wikipedia_title"],
+      taxon: entity.metadata["taxon"]
+    }
+  end
+
+  @doc "The QIDs of many objects at once, keyed by object id. One query."
+  def qids(object_ids) do
+    Repo.all(
+      from x in ExternalIdentifier,
+        where:
+          x.object_id in ^Enum.uniq(object_ids) and x.namespace == "wikidata" and
+            x.status == :verified,
+        select: {x.object_id, x.external_id}
+    )
+    |> Map.new()
   end
 
   @doc """
@@ -74,7 +112,7 @@ defmodule DevilsDictionary.Encyclopedia do
   """
   def links_for(lexeme_id, opts \\ []) do
     sense_ids =
-      from(s in DevilsDictionary.Registry.Sense,
+      from(s in Sense,
         where: s.lexeme_id == ^lexeme_id and s.identity_state == :active,
         select: s.object_id
       )
@@ -97,6 +135,54 @@ defmodule DevilsDictionary.Encyclopedia do
     |> limit(^(opts[:limit] || 50))
     |> preload([:predicate, object_object: :entity])
     |> Repo.all()
+  end
+
+  @doc """
+  Every link off a word, flattened for display, in **one** query.
+
+  `links_for/2` returns assertion revisions and needs three more queries to turn
+  them into something a drawer can print — the sense ids, the QIDs, the derived
+  review state. On a page that is already ten queries that is four more for a
+  panel, and the ⓘ click budget is five. So this joins what it needs and derives
+  the decision in the same statement.
+
+  The decision is still derived rather than stored, which is the property that
+  stops an importer writing it.
+  """
+  def link_views(lexeme_id) do
+    Repo.all(
+      from r in AssertionRevision,
+        join: p in assoc(r, :predicate),
+        left_join: s in Sense,
+        on: s.object_id == r.subject_object_id,
+        join: e in Entity,
+        on: e.object_id == r.object_object_id,
+        left_join: x in ExternalIdentifier,
+        on: x.object_id == e.object_id and x.namespace == "wikidata" and x.status == :verified,
+        where: p.key in ^[@refers_to, @candidate],
+        where: r.is_current and r.lifecycle_state == :active,
+        where: s.lexeme_id == ^lexeme_id or r.subject_object_id == ^lexeme_id,
+        order_by: [desc: r.confidence, asc: r.id],
+        select: %{
+          qid: x.external_id,
+          label: e.preferred_label,
+          predicate: p.key,
+          method: r.method,
+          confidence: r.confidence,
+          status:
+            fragment(
+              """
+              COALESCE(
+                (SELECT ar.decision FROM assertion_reviews ar
+                  WHERE ar.assertion_revision_id = ?
+                  ORDER BY ar.inserted_at DESC, ar.id DESC LIMIT 1),
+                'needs_review'
+              )
+              """,
+              r.id
+            )
+        }
+    )
   end
 
   @doc """
@@ -195,22 +281,23 @@ defmodule DevilsDictionary.Encyclopedia do
       AND p.key IN ('parent_taxon', 'subclass_of', 'instance_of')
   ),
   worded AS (
-    SELECT c.id, c.bucket, e.preferred_label, w.lemma, w.slug, w.object_id AS lexeme_id
+    SELECT c.id, c.bucket, e.preferred_label, w.lemma, w.slug, w.object_id AS lexeme_id,
+           (w.enriched_at IS NOT NULL) AS enriched
     FROM children c
     JOIN entities e ON e.object_id = c.id
     JOIN LATERAL (
-      SELECT lx.lemma, lx.slug, lx.object_id
+      SELECT lx.lemma, lx.slug, lx.object_id, lx.enriched_at
       FROM assertion_revisions link
       JOIN predicates lp ON lp.id = link.predicate_id
       JOIN senses s ON s.object_id = link.subject_object_id
       JOIN lexemes lx ON lx.object_id = s.lexeme_id
       WHERE link.object_object_id = c.id AND link.is_current
-        AND link.lifecycle_state = 'active' AND lp.key = $3
+        AND link.lifecycle_state = 'active' AND lp.key = $2
       ORDER BY link.confidence DESC NULLS LAST, lx.object_id
       LIMIT 1
     ) w ON TRUE
   )
-  SELECT bucket, id, preferred_label, lemma, slug, lexeme_id,
+  SELECT bucket, id, preferred_label, lemma, slug, lexeme_id, enriched,
          COUNT(*) OVER (PARTITION BY bucket) AS total,
          ROW_NUMBER() OVER (PARTITION BY bucket ORDER BY lemma) AS rank
   FROM worded
@@ -230,10 +317,12 @@ defmodule DevilsDictionary.Encyclopedia do
   and wondering.
   """
   def kinds_and_examples(object_id, cap \\ 12) do
-    %{rows: rows} = Repo.query!(@kinds_sql, [object_id, cap, @refers_to])
+    # The cap is applied below rather than in SQL: the window function needs the
+    # whole partition to report an exact total, which is the number worth having.
+    %{rows: rows} = Repo.query!(@kinds_sql, [object_id, @refers_to])
 
     rows
-    |> Enum.map(fn [bucket, id, label, lemma, slug, lexeme_id, total, rank] ->
+    |> Enum.map(fn [bucket, id, label, lemma, slug, lexeme_id, enriched, total, rank] ->
       %{
         bucket: String.to_existing_atom(bucket),
         object_id: id,
@@ -241,14 +330,14 @@ defmodule DevilsDictionary.Encyclopedia do
         lemma: lemma,
         slug: slug,
         lexeme_id: lexeme_id,
+        enriched?: enriched,
         total: total,
         rank: rank
       }
     end)
     |> Enum.group_by(& &1.bucket)
     |> Map.new(fn {bucket, items} ->
-      {bucket,
-       %{total: List.first(items).total, items: Enum.filter(items, &(&1.rank <= cap))}}
+      {bucket, %{total: List.first(items).total, items: Enum.filter(items, &(&1.rank <= cap))}}
     end)
   end
 
@@ -266,7 +355,7 @@ defmodule DevilsDictionary.Encyclopedia do
 
     sense_ids =
       Repo.all(
-        from s in DevilsDictionary.Registry.Sense,
+        from s in Sense,
           where: s.lexeme_id in ^ids and s.identity_state == :active,
           select: s.object_id
       )
@@ -291,10 +380,322 @@ defmodule DevilsDictionary.Encyclopedia do
 
     distinct = asserted |> Enum.map(& &1.object_object_id) |> Enum.uniq()
 
+    # Both lists are handed to the panel as `view/1` maps, the same shape the
+    # concept card reads, so a template never has to know that a link is an
+    # assertion revision and a thing is an entity plus an identifier row.
     %{
-      may_refer_to: may_refer_to,
-      disagreement: if(length(distinct) > 1, do: asserted, else: [])
+      may_refer_to: Enum.map(may_refer_to, &candidate_view/1),
+      disagreement: if(length(distinct) > 1, do: Enum.map(asserted, &candidate_view/1), else: [])
     }
+  end
+
+  defp candidate_view(%AssertionRevision{} = revision) do
+    revision.object_object.entity
+    |> view()
+    |> Map.merge(%{method: revision.method, confidence: revision.confidence})
+  end
+
+  # ── the taxonomy, walked down ─────────────────────────────────────────────
+  #
+  # `concept_relations.type = 'parent_taxon'` becomes an assertion revision on
+  # the `parent_taxon` predicate, and `concept_links` becomes `refers_to` and
+  # `lexeme_entity_candidate`. The algorithms are the MVP-0 ones: the walk
+  # carries the direct child each descendant descends from so every child's
+  # counts come back together, and the (child, descendant) pairs are DISTINCTed
+  # before the links join, which is what made this fast on a DAG.
+
+  # MVP-0's `concept_links.status` had four values and "asserted" meant `auto`
+  # or `confirmed`; a `candidate` from a "may refer to" page was a possibility
+  # rather than a claim, and sat at 0.40 while the ladder's own rungs sat at
+  # 0.70 and above. In this model editorial state is a review — append-only, so
+  # no importer rerun can return a rejected link to `auto` — and the proposal /
+  # claim distinction is what it always was underneath: the confidence.
+  #
+  # One number, stated once, so A10, L3, the browse badge and the Wikidata seed
+  # cannot drift apart on what "linked" means.
+  @asserted_floor 0.7
+
+  @doc "The confidence at or above which a link is a claim rather than a proposal."
+  def asserted_floor, do: @asserted_floor
+
+  # A word that an asserted link attaches to an entity. `refers_to` reaches the
+  # lexeme through its sense; `lexeme_entity_candidate` names it directly. Both
+  # count, because the browse badge means "this word is linked to that thing".
+  @linked_lexemes_sql """
+  SELECT DISTINCT lx.object_id AS lexeme_id, r.object_object_id AS entity_id
+    FROM assertion_revisions r
+    JOIN predicates p ON p.id = r.predicate_id
+    JOIN LATERAL (
+      SELECT CASE
+               WHEN p.key = 'refers_to' THEN (SELECT s.lexeme_id FROM senses s
+                                               WHERE s.object_id = r.subject_object_id)
+               ELSE r.subject_object_id
+             END AS object_id
+    ) lx ON lx.object_id IS NOT NULL
+   WHERE r.is_current AND r.lifecycle_state = 'active'
+     AND p.key IN ('refers_to', 'lexeme_entity_candidate')
+     AND (r.confidence IS NULL OR r.confidence >= __FLOOR__)
+     AND COALESCE(
+           (SELECT ar.decision FROM assertion_reviews ar
+             WHERE ar.assertion_revision_id = r.id
+             ORDER BY ar.inserted_at DESC, ar.id DESC LIMIT 1),
+           'needs_review'
+         ) NOT IN ('rejected', 'withdrawn')
+  """
+
+  @doc """
+  Every lexeme an asserted link attaches to an entity, as raw SQL.
+
+  Exposed because the two recursive walks above have to inline it. The composable
+  form is `linked_lexemes_query/1`, and `encyclopedia_test.exs` asserts the two
+  return the same pairs — one rule with two spellings is exactly the drift the
+  moduledoc warns about, so it is held down by a test rather than by care.
+
+  `min_confidence` defaults to `asserted_floor/0`. Pass `0.0` for the wider
+  population L3 reports beside its own — the guard is `is_float/1` rather than
+  a bound parameter because this is inlined into a CTE, and the only callers are
+  in this application.
+  """
+  def linked_lexemes_sql(min_confidence \\ @asserted_floor) when is_float(min_confidence),
+    do: String.replace(@linked_lexemes_sql, "__FLOOR__", Float.to_string(min_confidence))
+
+  @doc """
+  The same rule as `linked_lexemes_sql/0`, composable.
+
+  Selects `%{lexeme_id, entity_id, confidence, predicate_key, revision_id}`.
+  `refers_to` reaches the lexeme through its sense; `lexeme_entity_candidate`
+  names the lexeme directly, so the left join finds nothing and the coalesce
+  falls through to the subject itself.
+
+  Public by default: a link a reviewer rejected is not one the browse page may
+  count. Pass `visibility: :internal` for a review queue.
+
+  `min_confidence` defaults to `asserted_floor/0`, the same as
+  `linked_lexemes_sql/1`, so the two spellings of the rule agree unless a caller
+  says otherwise. L1 counts the same population at several thresholds and passes
+  `min_confidence: 0.0` to widen it — visibly, at the call site, rather than by
+  the default quietly differing between the two forms.
+  """
+  def linked_lexemes_query(opts \\ []) do
+    from(r in AssertionRevision,
+      join: p in assoc(r, :predicate),
+      left_join: s in Sense,
+      on: s.object_id == r.subject_object_id,
+      where: p.key in ^[@refers_to, @candidate],
+      where: r.is_current and r.lifecycle_state == :active,
+      select: %{
+        lexeme_id: fragment("COALESCE(?, ?)", s.lexeme_id, r.subject_object_id),
+        entity_id: r.object_object_id,
+        confidence: r.confidence,
+        method: r.method,
+        predicate_key: p.key,
+        revision_id: r.id,
+        # L1 reports the rate twice: once for what the ladder's own confidences
+        # reach, once after corroboration lifted the title matches a second
+        # signal agreed with. Carrying the flag here is what lets the strict
+        # reading be a `where` rather than a second definition of a link.
+        corroborated: fragment("jsonb_exists(?, 'corroboration')", r.metadata)
+      }
+    )
+    |> then(fn q ->
+      min = Keyword.get(opts, :min_confidence, @asserted_floor)
+      where(q, [r], is_nil(r.confidence) or r.confidence >= ^min)
+    end)
+    |> Claims.visible(opts[:visibility] || :public)
+  end
+
+  @doc """
+  The direct children of a taxon, each with the size of its subtree.
+
+  `chain/2` walks up; this walks down, over the same `parent_taxon` edges. One
+  recursive query, not one per child.
+
+  `scope_lexeme_members` counts the words in `scope_slug` that an asserted link
+  attaches anywhere in the subtree — the population A10 and L3 report on, and
+  the one the list filter then shows.
+  """
+  def taxon_children(qid, scope_slug \\ "animals", max_depth \\ 40) do
+    %{rows: rows} =
+      Repo.query!(
+        """
+        WITH RECURSIVE root AS (
+          SELECT x.object_id AS id FROM external_identifiers x
+           WHERE x.namespace = 'wikidata' AND x.external_id = $1 AND x.status = 'verified'
+        ),
+        edges AS (
+          SELECT r.subject_object_id AS child_id, r.object_object_id AS parent_id
+            FROM assertion_revisions r
+            JOIN predicates p ON p.id = r.predicate_id
+           WHERE p.key = 'parent_taxon' AND r.is_current AND r.lifecycle_state = 'active'
+        ),
+        down(child_id, id, depth) AS (
+          SELECT e.child_id, e.child_id, 1 FROM edges e JOIN root ON e.parent_id = root.id
+          UNION
+          SELECT down.child_id, e.child_id, down.depth + 1
+            FROM edges e JOIN down ON e.parent_id = down.id
+           WHERE down.depth < $3
+        ),
+        -- The same (child, descendant) pair arrives at several depths in a DAG,
+        -- and joining the links onto the duplicates is what made this slow.
+        pairs AS (SELECT DISTINCT child_id, id FROM down),
+        linked AS (#{linked_lexemes_sql()}),
+        scoped AS (
+          SELECT DISTINCT linked.entity_id AS id, m.lexeme_id
+            FROM linked
+            JOIN scope_lexeme_members m
+              ON m.lexeme_id = linked.lexeme_id
+             AND m.scope_id = (SELECT id FROM scopes WHERE slug = $2)
+        ),
+        counts AS (
+          SELECT p.child_id,
+                 count(DISTINCT p.id) AS subtree,
+                 count(DISTINCT s.lexeme_id) AS scope_lexemes
+            FROM pairs p LEFT JOIN scoped s ON s.id = p.id
+           GROUP BY p.child_id
+        )
+        SELECT e.object_id, x.external_id, e.preferred_label, e.description,
+               e.metadata->'taxon' AS taxon,
+               counts.subtree, counts.scope_lexemes,
+               EXISTS (SELECT 1 FROM edges e2 WHERE e2.parent_id = e.object_id) AS has_children
+          FROM counts
+          JOIN entities e ON e.object_id = counts.child_id
+          LEFT JOIN external_identifiers x
+            ON x.object_id = e.object_id AND x.namespace = 'wikidata' AND x.status = 'verified'
+         ORDER BY counts.scope_lexemes DESC, e.preferred_label
+        """,
+        [qid, scope_slug, max_depth]
+      )
+
+    for [id, qid, label, description, taxon, subtree, scope_lexemes, has_children] <- rows do
+      %{
+        id: id,
+        object_id: id,
+        qid: qid,
+        label: label,
+        description: description,
+        taxon: taxon,
+        image_url: nil,
+        subtree: subtree,
+        scope_lexemes: scope_lexemes,
+        has_children?: has_children
+      }
+    end
+  end
+
+  @doc """
+  Every entity id in a taxon's subtree, including the taxon itself.
+
+  Distinct: in a DAG the same entity is reachable at several depths, and the
+  recursive term carries a depth, so the raw union repeats it.
+  """
+  def taxon_descendants(qid, max_depth \\ 40) do
+    %{rows: rows} =
+      Repo.query!(
+        """
+        WITH RECURSIVE down(id, depth) AS (
+          SELECT x.object_id, 0 FROM external_identifiers x
+           WHERE x.namespace = 'wikidata' AND x.external_id = $1 AND x.status = 'verified'
+          UNION
+          SELECT r.subject_object_id, down.depth + 1
+            FROM assertion_revisions r
+            JOIN predicates p ON p.id = r.predicate_id
+            JOIN down ON r.object_object_id = down.id
+           WHERE p.key = 'parent_taxon' AND r.is_current AND r.lifecycle_state = 'active'
+             AND down.depth < $2
+        )
+        SELECT DISTINCT id FROM down
+        """,
+        [qid, max_depth]
+      )
+
+    Enum.map(rows, &hd/1)
+  end
+
+  @doc """
+  The lexeme ids an asserted link attaches anywhere inside a taxon's subtree.
+
+  One statement, so the browse filter never has to ship a subtree of entity ids
+  through the application.
+  """
+  def taxon_lexeme_ids(qid, max_depth \\ 40) do
+    %{rows: rows} =
+      Repo.query!(
+        """
+        WITH RECURSIVE down(id, depth) AS (
+          SELECT x.object_id, 0 FROM external_identifiers x
+           WHERE x.namespace = 'wikidata' AND x.external_id = $1 AND x.status = 'verified'
+          UNION
+          SELECT r.subject_object_id, down.depth + 1
+            FROM assertion_revisions r
+            JOIN predicates p ON p.id = r.predicate_id
+            JOIN down ON r.object_object_id = down.id
+           WHERE p.key = 'parent_taxon' AND r.is_current AND r.lifecycle_state = 'active'
+             AND down.depth < $2
+        ),
+        linked AS (#{linked_lexemes_sql()})
+        SELECT DISTINCT linked.lexeme_id
+          FROM linked
+         WHERE linked.entity_id IN (SELECT id FROM down)
+        """,
+        [qid, max_depth]
+      )
+
+    Enum.map(rows, &hd/1)
+  end
+
+  @doc """
+  The `parent_taxon` chain above an entity, nearest first.
+
+  Starts at the entity's taxon item when it has one, because the everyday
+  concept and the taxon are different entities: *Cat* (Q146) carries no P171,
+  *Felis catus* (Q20980826) carries the whole chain to Animalia. The bridge is
+  the `taxon_item` predicate, Wikidata's P13176.
+
+  Depth-capped, so a cycle in the data cannot hang a page render.
+  """
+  def taxon_chain(%Entity{} = entity, max_depth \\ 40) do
+    start = taxon_item(entity.object_id) || entity.object_id
+
+    %{rows: rows} =
+      Repo.query!(
+        """
+        WITH RECURSIVE up(id, depth) AS (
+          SELECT $1::bigint, 0
+          UNION ALL
+          SELECT r.object_object_id, up.depth + 1
+            FROM assertion_revisions r
+            JOIN predicates p ON p.id = r.predicate_id
+            JOIN up ON r.subject_object_id = up.id
+           WHERE p.key = 'parent_taxon' AND r.is_current AND r.lifecycle_state = 'active'
+             AND up.depth < $2
+        )
+        SELECT DISTINCT ON (e.object_id) e.object_id, min(up.depth) OVER (PARTITION BY e.object_id)
+          FROM up JOIN entities e ON e.object_id = up.id
+         WHERE up.depth > 0
+         ORDER BY e.object_id
+        """,
+        [start, max_depth]
+      )
+
+    ids = Enum.map(rows, &hd/1)
+    depth = Map.new(rows, fn [id, d] -> {id, d} end)
+
+    Entity
+    |> where([e], e.object_id in ^ids)
+    |> Repo.all()
+    |> Enum.sort_by(&Map.fetch!(depth, &1.object_id))
+  end
+
+  @doc "The taxon item bridged from an everyday concept (P13176), or nil."
+  def taxon_item(object_id) do
+    Repo.one(
+      from r in AssertionRevision,
+        join: p in assoc(r, :predicate),
+        where: r.subject_object_id == ^object_id and p.key == "taxon_item",
+        where: r.is_current and r.lifecycle_state == :active,
+        limit: 1,
+        select: r.object_object_id
+    )
   end
 
   @doc "The articles and other content published about a thing."

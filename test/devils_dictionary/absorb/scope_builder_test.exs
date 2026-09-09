@@ -2,10 +2,15 @@ defmodule DevilsDictionary.Absorb.ScopeBuilderTest do
   use DevilsDictionary.DataCase, async: true
 
   alias DevilsDictionary.Absorb.ScopeBuilder
-  alias DevilsDictionary.Encyclopedia.{Concept, ConceptRelation}
-  alias DevilsDictionary.Lexicon.{Lexeme, LexicalRelation, Scope, ScopeLexeme, Sense}
-  alias DevilsDictionary.Repo
+  alias DevilsDictionary.Lexicon.{Scope, ScopeMember}
+  alias DevilsDictionary.Registry.Lexeme
+  alias DevilsDictionary.{Claims, Registry, Repo}
   alias DevilsDictionary.Sources.Source
+
+  setup do
+    Claims.Catalog.seed!()
+    :ok
+  end
 
   # A five-synset slice shaped like WordNet's: animal -> mammal -> {cat, dog},
   # plus rock hanging off nothing, so the closure has something to exclude.
@@ -30,14 +35,13 @@ defmodule DevilsDictionary.Absorb.ScopeBuilderTest do
   defp build_graph(source) do
     senses =
       Map.new(@graph, fn {group_key, {lemma, _parent}} ->
-        lexeme =
-          Repo.insert!(%Lexeme{lang: "en", lemma: lemma, pos: "noun", slug: lemma})
+        lexeme = lexeme!(lemma)
 
-        sense =
-          Repo.insert!(%Sense{
-            lexeme_id: lexeme.id,
+        {:ok, sense} =
+          Registry.create_sense(%{
+            lexeme_id: lexeme.object_id,
             source_id: source.id,
-            external_id: "#{group_key}##{lemma}",
+            external_key: "#{group_key}##{lemma}",
             group_key: group_key,
             gloss: "a #{lemma}"
           })
@@ -45,29 +49,22 @@ defmodule DevilsDictionary.Absorb.ScopeBuilderTest do
         {group_key, {lexeme, sense}}
       end)
 
-    # The absorb stores both directions; the closure walks the derived :hyponym.
+    # The absorb stores both directions; the closure walks the derived hyponym.
+    # Sense to sense, which is what WordNet's graph actually is and what the
+    # three declared endpoint pairs allow.
     for {group_key, {_lemma, parent}} <- @graph, parent != nil do
       {_, parent_sense} = senses[parent]
-      {child_lexeme, child_sense} = senses[group_key]
-      {parent_lexeme, _} = senses[parent]
+      {_child_lexeme, child_sense} = senses[group_key]
 
-      Repo.insert!(%LexicalRelation{
-        source_id: source.id,
-        from_lexeme_id: parent_lexeme.id,
-        from_sense_id: parent_sense.id,
-        to_lemma: child_lexeme.lemma,
-        to_group_key: group_key,
-        type: :hyponym
-      })
+      {:ok, _} =
+        Claims.assert(parent_sense.object_id, "hyponym", child_sense.object_id, %{
+          source_id: source.id
+        })
 
-      Repo.insert!(%LexicalRelation{
-        source_id: source.id,
-        from_lexeme_id: child_lexeme.id,
-        from_sense_id: child_sense.id,
-        to_lemma: parent_lexeme.lemma,
-        to_group_key: parent,
-        type: :hypernym
-      })
+      {:ok, _} =
+        Claims.assert(child_sense.object_id, "hypernym", parent_sense.object_id, %{
+          source_id: source.id
+        })
     end
 
     senses
@@ -79,9 +76,9 @@ defmodule DevilsDictionary.Absorb.ScopeBuilderTest do
 
   defp members(scope) do
     Repo.all(
-      from sl in ScopeLexeme,
+      from sl in ScopeMember,
         join: l in Lexeme,
-        on: l.id == sl.lexeme_id,
+        on: l.object_id == sl.lexeme_id,
         where: sl.scope_id == ^scope.id,
         select: l.lemma,
         order_by: l.lemma
@@ -125,21 +122,8 @@ defmodule DevilsDictionary.Absorb.ScopeBuilderTest do
 
   describe "wiktionary_category" do
     test "matches the categories the index pass wrote onto the lexeme" do
-      Repo.insert!(%Lexeme{
-        lang: "en",
-        lemma: "corvid",
-        pos: "noun",
-        slug: "corvid",
-        metadata: %{"wikt_categories" => ["en:Corvids", "en:Birds"]}
-      })
-
-      Repo.insert!(%Lexeme{
-        lang: "en",
-        lemma: "hammer",
-        pos: "noun",
-        slug: "hammer",
-        metadata: %{"wikt_categories" => ["en:Tools"]}
-      })
+      lexeme!("corvid", %{"wikt_categories" => ["en:Corvids", "en:Birds"]})
+      lexeme!("hammer", %{"wikt_categories" => ["en:Tools"]})
 
       scope = scope!(%{"wiktionary_categories" => ["en:Birds"]})
 
@@ -174,7 +158,7 @@ defmodule DevilsDictionary.Absorb.ScopeBuilderTest do
 
       ScopeBuilder.build(scope)
 
-      row = Repo.get_by!(ScopeLexeme, scope_id: scope.id, lexeme_id: cat.id)
+      row = Repo.get_by!(ScopeMember, scope_id: scope.id, lexeme_id: cat.object_id)
       assert Enum.sort(row.reasons) == ["wiktionary_category", "wordnet_closure"]
     end
 
@@ -233,8 +217,10 @@ defmodule DevilsDictionary.Absorb.ScopeBuilderTest do
       # The real Felis catus (Q20980826) has no article of its own — the article
       # is on Q146 *Cat* — so §3's rule as written matches nothing. That gap is
       # the finding, which is why both numbers are reported.
-      Repo.get_by!(Concept, qid: "Q20980826")
-      |> Ecto.Changeset.change(wikipedia_title: nil)
+      felis = DevilsDictionary.Encyclopedia.by_qid!("Q20980826")
+
+      felis
+      |> Ecto.Changeset.change(metadata: Map.delete(felis.metadata, "wikipedia_title"))
       |> Repo.update!()
 
       scope = scope!(%{"wikidata_root" => "Q729"})
@@ -246,8 +232,10 @@ defmodule DevilsDictionary.Absorb.ScopeBuilderTest do
     end
 
     test "skips itself loudly when no concepts have been absorbed" do
-      Repo.delete_all(ConceptRelation)
-      Repo.delete_all(Concept)
+      # The root entity is what the rule looks for; without it the rule has
+      # nothing to walk. Identities are retired rather than deleted, so the
+      # external identifier is what goes.
+      Repo.delete_all(DevilsDictionary.Registry.ExternalIdentifier)
       scope = scope!(%{"wikidata_root" => "Q729"})
 
       %{rules: rules} = ScopeBuilder.build(scope)
@@ -270,27 +258,43 @@ defmodule DevilsDictionary.Absorb.ScopeBuilderTest do
   end
 
   defp concept!(qid, scientific_name, common_names) do
-    Repo.insert!(%Concept{
-      qid: qid,
-      label: scientific_name,
-      kind: :taxon,
-      wikipedia_title: scientific_name,
-      taxon: %{"scientific_name" => scientific_name, "common_names" => common_names}
-    })
+    {:ok, entity} =
+      Registry.create_entity(%{
+        entity_kind: :taxon,
+        preferred_label: scientific_name,
+        metadata: %{
+          "wikipedia_title" => scientific_name,
+          "taxon" => %{
+            "scientific_name" => scientific_name,
+            "common_names" => common_names
+          }
+        }
+      })
+
+    {:ok, _} = Registry.add_external_id(entity.object_id, "wikidata", qid)
+    entity
   end
 
   defp parent!(source, child, parent) do
-    Repo.insert!(%ConceptRelation{
-      source_id: source.id,
-      from_concept_id: child.id,
-      to_concept_id: parent.id,
-      type: :parent_taxon,
-      property: "P171"
-    })
+    {:ok, assertion} =
+      Claims.assert(child.object_id, "parent_taxon", parent.object_id, %{
+        source_id: source.id,
+        metadata: %{"property" => "P171"}
+      })
+
+    assertion
   end
 
-  defp lexeme!(lemma) do
-    Repo.insert!(%Lexeme{lang: "en", lemma: lemma, pos: "noun", slug: Lexeme.slug(lemma)})
+  defp lexeme!(lemma, metadata \\ %{}) do
+    {:ok, lexeme} =
+      Registry.create_lexeme(%{
+        language_tag: "en",
+        lemma: lemma,
+        part_of_speech: "noun",
+        metadata: metadata
+      })
+
+    lexeme
   end
 
   test "scope stats record what each rule did" do

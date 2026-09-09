@@ -53,8 +53,11 @@ defmodule DevilsDictionary.Absorb.Sources.WikipediaTest do
 
       assert [concept] = out.concepts
       assert concept.qid == "Q146"
-      assert concept.wikipedia_title == "Cat"
-      assert concept.wikipedia_pageid == 6678
+      # The title and pageid are descriptive facts about the thing, not its
+      # identity, so they travel in `metadata` — identity is the QID, which is
+      # an `external_identifiers` row.
+      assert concept.metadata["wikipedia_title"] == "Cat"
+      assert concept.metadata["wikipedia_pageid"] == 6678
       assert concept.description == "Small domesticated carnivorous mammal"
 
       assert [entry] = out.entries
@@ -81,7 +84,7 @@ defmodule DevilsDictionary.Absorb.Sources.WikipediaTest do
     end
 
     test "the utm tracking parameters never reach the database" do
-      assert [%{image_url: url}] = out("cat").concepts
+      assert [%{metadata: %{"image_url" => url}}] = out("cat").concepts
       assert url =~ "upload.wikimedia.org"
       refute url =~ "utm_"
     end

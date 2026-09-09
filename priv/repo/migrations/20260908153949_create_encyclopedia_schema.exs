@@ -14,14 +14,13 @@ defmodule DevilsDictionary.Repo.Migrations.CreateEncyclopediaSchema do
   backed by `Ecto.Enum`, never Postgres enum types; `lemma` is case-sensitive
   text; raw payloads are JSONB.
 
-  ## Build order note
+  ## One baseline, not a rebuild path
 
-  This migration adds the new model beside the thirteen MVP-0 tables rather
-  than replacing them in place. Nothing writes both and nothing reads both —
-  the old tables are simply not yet deleted, and the baseline is squashed when
-  the adapters and read layer land. That is a build order inside one unreleased
-  branch, not a compatibility layer; #74's ban on dual writes and compatibility
-  reads is about migrating *data*, and no row is migrated anywhere.
+  This replaces the MVP-0 baseline migration outright rather than transforming
+  it. ADR decision 9: nothing is deployed and the data is disposable, so writing
+  a rebuild path over thirteen tables we are deleting would be work spent on
+  rows nobody wants. No row is migrated anywhere, and there is no compatibility
+  layer to read from.
   """
 
   use Ecto.Migration
@@ -183,6 +182,16 @@ defmodule DevilsDictionary.Repo.Migrations.CreateEncyclopediaSchema do
       add :slug, :string, null: false
       add :canonical_lexeme_id, :bigint
       add :etymology, :text
+      # Which source wrote the etymology, and which source introduced the word.
+      # Both are real facts a reader is shown -- the word page prints "Wiktionary"
+      # beside an etymology, and A8's index-hit rate is "how many of Bierce's
+      # headwords did some other source already attest". They were columns in
+      # MVP-0 and stay columns: burying a queried fact in `metadata` to keep a
+      # table narrow is how a schema stops answering questions.
+      add :etymology_source_id, references(:sources, on_delete: :nilify_all)
+      add :origin_source_id, references(:sources, on_delete: :nilify_all)
+      # The list of `%{"ipa" => ..., "tags" => [...]}` lives under "items": a bare
+      # JSON array is legal jsonb but not a legal Ecto `:map`.
       add :pronunciations, :map, null: false, default: %{}
       add :source_ids, {:array, :bigint}, null: false, default: []
       add :metadata, :map, null: false, default: %{}
@@ -208,6 +217,7 @@ defmodule DevilsDictionary.Repo.Migrations.CreateEncyclopediaSchema do
     create unique_index(:lexemes, [:lexical_key])
     create index(:lexemes, [:slug])
     create index(:lexemes, [:canonical_lexeme_id])
+    create index(:lexemes, [:origin_source_id])
     create index(:lexemes, [:enriched_at])
     # `lookup/2`'s first step.
     execute "CREATE INDEX lexemes_lower_lemma_index ON lexemes (lower(lemma))",
@@ -584,10 +594,19 @@ defmodule DevilsDictionary.Repo.Migrations.CreateEncyclopediaSchema do
 
     create index(:identity_event_members, [:object_id])
 
+    # `source_id` is nullable because not every case comes from a source: an
+    # identity split is a curatorial operation, and #74 requires its ambiguous
+    # attachments to enter explicit review rather than be guessed onto an
+    # output. Such a case names the `object_id` being split and, per row, the
+    # `assertion_id` nobody may reassign automatically.
     create table(:reconciliation_cases) do
-      add :source_id, references(:sources, on_delete: :delete_all), null: false
+      add :source_id, references(:sources, on_delete: :delete_all)
       add :source_record_id, references(:source_records, on_delete: :nilify_all)
       add :kind, :string, null: false
+      add :object_id, references(:objects, on_delete: :nilify_all)
+      # Plain bigint here and a foreign key further down: `assertions` does not
+      # exist yet at this point in the migration.
+      add :assertion_id, :bigint
       add :lexeme_id, references(:lexemes, column: :object_id, on_delete: :delete_all)
       add :sense_id, references(:senses, column: :object_id, on_delete: :nilify_all)
       add :payload, :map, null: false, default: %{}
@@ -654,6 +673,18 @@ defmodule DevilsDictionary.Repo.Migrations.CreateEncyclopediaSchema do
              name: :assertions_origin_index
            )
 
+    # The other half of `reconciliation_cases.assertion_id`, declared above as a
+    # plain bigint because this table did not exist yet.
+    execute """
+            ALTER TABLE reconciliation_cases
+              ADD CONSTRAINT reconciliation_cases_assertion_id_fkey
+              FOREIGN KEY (assertion_id) REFERENCES assertions (id) ON DELETE SET NULL
+            """,
+            "ALTER TABLE reconciliation_cases DROP CONSTRAINT reconciliation_cases_assertion_id_fkey"
+
+    create index(:reconciliation_cases, [:object_id])
+    create index(:reconciliation_cases, [:assertion_id])
+
     create table(:assertion_revisions) do
       add :assertion_id, references(:assertions, on_delete: :delete_all), null: false
       add :revision_number, :integer, null: false
@@ -673,7 +704,10 @@ defmodule DevilsDictionary.Repo.Migrations.CreateEncyclopediaSchema do
       add :valid_from, :utc_datetime_usec
       add :valid_to, :utc_datetime_usec
       add :language_tag, :string
-      add :jurisdiction_entity_id, references(:entities, column: :object_id, on_delete: :nilify_all)
+
+      add :jurisdiction_entity_id,
+          references(:entities, column: :object_id, on_delete: :nilify_all)
+
       add :context_object_id, references(:objects, on_delete: :nilify_all)
       add :method, :string
       # Explicitly heuristic. A source's own weight is a different quantity and
@@ -732,6 +766,44 @@ defmodule DevilsDictionary.Repo.Migrations.CreateEncyclopediaSchema do
     # History reads, which are rare and bounded.
     create index(:assertion_revisions, [:subject_object_id])
     create index(:assertion_revisions, [:object_object_id])
+
+    # ── edges whose other end we do not have yet ─────────────────────────────
+    # `materialize/1` is pure and per record, so when Wiktionary says *cat* has
+    # the hypernym *feline* all it can write is the string. MVP-0 kept that in
+    # `lexical_relations.to_lemma` with a nullable `to_lexeme_id`; here both
+    # endpoints of an assertion are real objects and NOT NULL, so an unresolved
+    # edge cannot be one.
+    #
+    # It is not dropped either — #69 §4 keeps `to_lemma` forever and #74 forbids
+    # silently flattening what a source said. It waits here with its evidence
+    # until the target word exists, and `Resolver.run/1` drains it into
+    # assertions. This table **is** the unresolved population scorecard row R2
+    # reports: 15,718 of 1,179,377 at the last measurement.
+    create table(:pending_relations) do
+      add :source_id, references(:sources, on_delete: :delete_all), null: false
+      add :source_record_id, references(:source_records, on_delete: :delete_all)
+      add :subject_object_id, references(:objects, on_delete: :delete_all), null: false
+      add :predicate_id, references(:predicates, on_delete: :restrict), null: false
+      add :to_lemma, :text, null: false
+      add :to_pos, :string
+      add :origin_key, :string
+      add :confidence, :float
+      add :method, :string
+      add :metadata, :map, null: false, default: %{}
+      add :last_seen_run_id, references(:import_runs, on_delete: :nilify_all)
+
+      timestamps(type: :utc_datetime_usec)
+    end
+
+    create unique_index(
+             :pending_relations,
+             [:source_id, :subject_object_id, :predicate_id, :to_lemma, :to_pos],
+             nulls_distinct: false,
+             name: :pending_relations_edge_index
+           )
+
+    create index(:pending_relations, ["lower(to_lemma)"])
+    create index(:pending_relations, [:last_seen_run_id])
 
     # ── evidence, review contexts, reviews, votes ────────────────────────────
     create table(:assertion_evidence) do
@@ -844,9 +916,7 @@ defmodule DevilsDictionary.Repo.Migrations.CreateEncyclopediaSchema do
       timestamps(type: :utc_datetime_usec)
     end
 
-    create constraint(:assertion_votes, :assertion_votes_value,
-             check: "value IN (-1, 1)"
-           )
+    create constraint(:assertion_votes, :assertion_votes_value, check: "value IN (-1, 1)")
 
     # A vote is on a revision, not on a claim: changing what a claim says must
     # not inherit approval of what it used to say.
@@ -1135,5 +1205,66 @@ defmodule DevilsDictionary.Repo.Migrations.CreateEncyclopediaSchema do
               """,
               "DROP TRIGGER IF EXISTS #{child}_exactly_one_current ON #{child}"
     end
+
+    # 5. A review context item must cite a revision of the endpoint it names.
+    #
+    #    The `one_target` check above proves a row cites exactly one revision;
+    #    it does not prove that revision has anything to do with the claim. The
+    #    audit's finding: nothing stopped a reviewer's "subject" item from
+    #    pointing at an unrelated passage, which would make the pinned manifest
+    #    a record of something nobody looked at.
+    #
+    #    BEFORE, not a constraint trigger, and resolving through the revision's
+    #    owning object — so it holds for `insert_all`, for COPY and for a
+    #    multi-row INSERT, the same reason the endpoint rule is a foreign key.
+    execute """
+            CREATE FUNCTION review_context_item_owns_endpoint() RETURNS trigger AS $$
+            DECLARE
+              endpoint_id bigint;
+              owner_id bigint;
+            BEGIN
+              SELECT CASE NEW.endpoint_role
+                       WHEN 'subject' THEN ar.subject_object_id
+                       WHEN 'object'  THEN ar.object_object_id
+                       WHEN 'context' THEN ar.context_object_id
+                     END
+                INTO endpoint_id
+                FROM review_contexts rc
+                JOIN assertion_revisions ar ON ar.id = rc.assertion_revision_id
+               WHERE rc.id = NEW.context_id;
+
+              IF endpoint_id IS NULL THEN
+                RAISE EXCEPTION
+                  'review context % has no % endpoint to pin', NEW.context_id, NEW.endpoint_role
+                  USING ERRCODE = 'integrity_constraint_violation';
+              END IF;
+
+              IF NEW.content_revision_id IS NOT NULL THEN
+                SELECT content_id INTO owner_id
+                  FROM content_revisions WHERE id = NEW.content_revision_id;
+              ELSE
+                SELECT sense_id INTO owner_id
+                  FROM sense_revisions WHERE id = NEW.sense_revision_id;
+              END IF;
+
+              IF owner_id IS DISTINCT FROM endpoint_id THEN
+                RAISE EXCEPTION
+                  'review context item cites revision of object %, but the % endpoint is %',
+                  owner_id, NEW.endpoint_role, endpoint_id
+                  USING ERRCODE = 'integrity_constraint_violation';
+              END IF;
+
+              RETURN NEW;
+            END;
+            $$ LANGUAGE plpgsql;
+            """,
+            "DROP FUNCTION IF EXISTS review_context_item_owns_endpoint() CASCADE"
+
+    execute """
+            CREATE TRIGGER review_context_items_own_endpoint
+              BEFORE INSERT OR UPDATE ON review_context_items
+              FOR EACH ROW EXECUTE FUNCTION review_context_item_owns_endpoint();
+            """,
+            "DROP TRIGGER IF EXISTS review_context_items_own_endpoint ON review_context_items"
   end
 end

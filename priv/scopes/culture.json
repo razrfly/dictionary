@@ -1,0 +1,36 @@
+{
+  "name": "Culture",
+  "slug": "culture",
+  "rules": {
+    "$comment": [
+      "#74's bounded pilot. Three words chosen because each one exercises a different",
+      "part of the model, not because they belong to a category:",
+      "",
+      "  nepotism  -- the anchor example. Bierce defined it, so it carries a definition",
+      "               with an author, a work and an edition, and a concept an artifact",
+      "               can be asserted to illustrate.",
+      "  bank      -- the ambiguous word. Four etymologies and ten Wiktionary senses,",
+      "               and the record Gate 0 reproduced the position-key defect on: delete",
+      "               a sense from the middle and everything after it renumbers.",
+      "  egomaniac -- a word with a WordNet sense and no Wikidata entity, so the pilot",
+      "               includes one word that names nothing.",
+      "",
+      "None of these is in Animals or Emotions, and no closure or category tree would",
+      "ever produce the three of them together. That is why `explicit_lemmas` exists;",
+      "every member still records its reason, so an explicit scope is as inspectable as",
+      "a derived one.",
+      "",
+      "No `wikidata_root`: this scope has no taxonomy to reach, so scorecard row L3",
+      "reports n/a rather than grading it 0 %. The bars are the scope's own -- grading",
+      "three words by Animals' 21,277-word thresholds would grade the scope, not the",
+      "pipeline."
+    ],
+    "explicit_lemmas": ["nepotism", "bank", "egomaniac"],
+    "bars": {
+      "a4": 3,
+      "a10": 0.0,
+      "l1": 0.0,
+      "l3": 0.0
+    }
+  }
+}

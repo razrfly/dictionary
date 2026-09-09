@@ -26,8 +26,8 @@ defmodule DevilsDictionary.Lexicon.WordPage do
 
   ## Seven queries
 
-  Sources; senses; entries (by lexeme **or** by the primary concept, which is
-  how Wikipedia's summary arrives); the primary concept; relations; the WordNet
+  Sources; senses; content (by lexeme **or** by the primary entity, which is how
+  Wikipedia's summary arrives); the primary entity; relations; the WordNet
   chain; the trail's lemmas. All of them keyed by the lexeme ids `lookup/2`
   returned, none of them in a loop.
 
@@ -35,18 +35,37 @@ defmodule DevilsDictionary.Lexicon.WordPage do
   matters: walking lexeme to lexeme gives *oyster › bivalve › allocation ›
   abstract entity*, because a lemma reached through one synset carries every
   other synset it belongs to. The walk is sense → synset instead —
-  `senses.group_key` to `lexical_relations.to_group_key` over `hypernym`,
-  re-entering through any sense of the parent synset — and it takes exactly one
-  parent per step (`CROSS JOIN LATERAL … LIMIT 1`), so one synset yields one
-  linear chain rather than the fan-out a plain recursive CTE produces.
+  `sense_revisions.group_key` to the parent sense's `group_key` over the
+  `hypernym` predicate, re-entering through any sense of the parent synset — and
+  it takes exactly one parent per step (`CROSS JOIN LATERAL … LIMIT 1`), so one
+  synset yields one linear chain rather than the fan-out a plain recursive CTE
+  produces.
+
+  ## Ported to the encyclopedia model
+
+  `entries` became `content_items` + `content_revisions` reached by a `defines`
+  or `about` assertion; `lexical_relations` became assertions on the
+  source-native predicates; `concepts` became `entities`. What each of the two
+  rules above says is unchanged, and so is every cap, order and id.
   """
 
   import Ecto.Query
 
+  alias DevilsDictionary.Claims.AssertionRevision
+  alias DevilsDictionary.Corpus.SourceRecordRevision
   alias DevilsDictionary.Encyclopedia
-  alias DevilsDictionary.Encyclopedia.Concept
-  alias DevilsDictionary.Lexicon.{Entry, LexicalRelation, Lexeme, Sense}
   alias DevilsDictionary.Markdown
+
+  alias DevilsDictionary.Registry.{
+    ContentItem,
+    ContentRevision,
+    Entity,
+    Lexeme,
+    LexemeForm,
+    Sense,
+    SenseRevision
+  }
+
   alias DevilsDictionary.Repo
   alias DevilsDictionary.Sources
   alias DevilsDictionary.Sources.SourceRecord
@@ -61,20 +80,24 @@ defmodule DevilsDictionary.Lexicon.WordPage do
   # #71 §7's map, as data. Every `lexical_relations.type` lands in exactly one
   # group; `see_also` splits by source because "Johnson says see" and "Bierce
   # says see" are different claims, and WordNet's fold into `related`.
+  # Keys are predicate keys, which are strings, because a predicate is a row in
+  # a data file now rather than a member of an enum. A predicate this map does
+  # not name renders under :related rather than raising — `priv/predicates/` is
+  # allowed to grow without this file changing, which is what E1 measures.
   @groups %{
-    synonym: :similar,
-    coordinate: :similar,
-    antonym: :opposite,
-    hypernym: :broader,
-    hyponym: :narrower,
-    meronym: :parts,
-    holonym: :part_of,
-    derived: :family,
-    related: :family,
-    alt_of: :variants,
-    form_of: :variants,
-    see_also: :says_see,
-    other: :related
+    "synonym" => :similar,
+    "coordinate" => :similar,
+    "antonym" => :opposite,
+    "hypernym" => :broader,
+    "hyponym" => :narrower,
+    "meronym" => :parts,
+    "holonym" => :part_of,
+    "derived" => :family,
+    "related" => :family,
+    "alt_of" => :variants,
+    "form_of" => :variants,
+    "see_also" => :says_see,
+    "other" => :related
   }
 
   # The order §9 grades: "every group in §7's map that the word has, in that
@@ -145,23 +168,33 @@ defmodule DevilsDictionary.Lexicon.WordPage do
   end
 
   def build(%{lexemes: lexemes} = lookup, opts) do
-    ids = Enum.map(lexemes, & &1.id)
+    ids = Enum.map(lexemes, & &1.object_id)
     sources = Map.new(Sources.list_sources(), &{&1.id, &1})
-    concept = primary_concept(lexemes)
+
+    # The entity for the walks that need one, the flattened view for everything
+    # that renders. `Encyclopedia.view/1` is the single place identity and
+    # description are put back together.
+    entity = primary_concept(lexemes)
+    concept = Encyclopedia.view(entity)
 
     senses = senses(ids)
-    entries = entries(ids, concept)
-    relations = relations(ids)
+    # Relations and content both reach past the word to its meanings, so the
+    # sense ids are gathered once from the senses query rather than asked for
+    # twice.
+    sense_ids = Enum.map(senses, & &1.id)
+
+    entries = entries(ids, sense_ids, concept)
+    relations = relations(ids, sense_ids)
     chains = chains(senses, sources)
 
-    by_lexeme = Map.new(lexemes, &{&1.id, &1})
+    by_lexeme = Map.new(lexemes, &{&1.object_id, &1})
     {sense_scoped, pos_scoped} = Enum.split_with(relations, &(&1.from_sense_id != nil))
 
     %__MODULE__{
       headword: headword(lexemes, lookup, sources),
       cards: cards(senses, entries, sense_scoped, chains, sources, concept, by_lexeme),
       related: related(pos_scoped, by_lexeme, sources),
-      thing: thing(concept, ids, sources),
+      thing: thing(entity, ids, sources),
       trail: trail(opts[:trail])
     }
   end
@@ -174,17 +207,21 @@ defmodule DevilsDictionary.Lexicon.WordPage do
       slug: first.slug,
       via: lookup[:via],
       matched: lookup[:matched],
-      also: Enum.map(lookup[:also] || [], &%{lemma: &1.lemma, slug: &1.slug, pos: &1.pos}),
+      also:
+        Enum.map(
+          lookup[:also] || [],
+          &%{lemma: &1.lemma, slug: &1.slug, pos: &1.part_of_speech}
+        ),
       forms: forms(lexemes),
       pronunciations: pronunciations(lexemes),
       etymologies: etymologies(lexemes, sources),
       lexemes:
         lexemes
-        |> Enum.sort_by(&pos_rank(&1.pos))
+        |> Enum.sort_by(&pos_rank(&1.part_of_speech))
         |> Enum.map(fn l ->
           %{
-            id: l.id,
-            pos: l.pos,
+            id: l.object_id,
+            pos: l.part_of_speech,
             etymology: l.etymology,
             etymology_source: source_name(sources, l.etymology_source_id),
             enriched?: not is_nil(l.enriched_at),
@@ -197,21 +234,35 @@ defmodule DevilsDictionary.Lexicon.WordPage do
   # Forms are the union across every part of speech — the reader wants the
   # word's inflections, not a column per pos — deduplicated and stripped of the
   # lemma itself.
+  #
+  # A row per form now, rather than a JSONB array on the lexeme, so each one
+  # carries the source revision that attested it. That is one more query on a
+  # page that already runs seven, and it is what makes "which source says
+  # *oysters* is the plural" answerable at all.
   defp forms(lexemes) do
-    lexemes
-    |> Enum.flat_map(& &1.forms)
-    |> Enum.map(&(&1["form"] || &1[:form]))
-    |> Enum.reject(&(is_nil(&1) or &1 == ""))
-    |> Enum.reject(fn form -> Enum.any?(lexemes, &(&1.lemma == form)) end)
-    |> Enum.uniq()
+    ids = Enum.map(lexemes, & &1.object_id)
+    lemmas = MapSet.new(lexemes, & &1.lemma)
+
+    Repo.all(
+      from f in LexemeForm,
+        where: f.lexeme_id in ^ids,
+        order_by: [asc: f.written_form],
+        distinct: true,
+        select: f.written_form
+    )
+    |> Enum.reject(&(is_nil(&1) or &1 == "" or MapSet.member?(lemmas, &1)))
   end
 
   # *cat* carries fourteen pronunciation rows and two distinct IPA strings: the
   # rest are audio recordings of the same two. Keep the ones that actually say
   # how the word sounds, one per spelling, three at most.
+  #
+  # The column is jsonb and the schema field is a map, so the list lives under
+  # `"items"`. A bare JSON array is legal jsonb but not a legal Ecto `:map`, and
+  # a wrapper key is a smaller lie than a custom type.
   defp pronunciations(lexemes) do
     lexemes
-    |> Enum.flat_map(& &1.pronunciations)
+    |> Enum.flat_map(&(&1.pronunciations["items"] || []))
     |> Enum.map(&{&1["ipa"], &1["tags"]})
     |> Enum.reject(fn {ipa, _tags} -> is_nil(ipa) or ipa == "" end)
     |> Enum.uniq_by(&elem(&1, 0))
@@ -230,7 +281,7 @@ defmodule DevilsDictionary.Lexicon.WordPage do
       %{
         text: text,
         source: source_name(sources, hd(group).etymology_source_id),
-        parts: group |> Enum.map(& &1.pos) |> Enum.sort_by(&pos_rank/1)
+        parts: group |> Enum.map(& &1.part_of_speech) |> Enum.sort_by(&pos_rank/1)
       }
     end)
     |> Enum.sort_by(&pos_rank(hd(&1.parts)))
@@ -241,71 +292,101 @@ defmodule DevilsDictionary.Lexicon.WordPage do
 
   # ── cards ────────────────────────────────────────────────────────────────
 
+  # The text is on the current revision; the identity is on the sense. The two
+  # joins are the price of a source being able to reword a meaning without the
+  # meaning becoming a different one, which is the whole point of #74.
+  #
+  # `external_key` is selected as `external_id` because it is only ever used to
+  # fill a source's `url_template` — provenance, exactly as the schema says, and
+  # never identity.
   defp senses(ids) do
     Repo.all(
       from s in Sense,
+        join: rev in SenseRevision,
+        on: rev.sense_id == s.object_id and rev.is_current,
+        left_join: srr in SourceRecordRevision,
+        on: srr.id == rev.source_record_revision_id,
         left_join: rec in SourceRecord,
-        on: rec.id == s.source_record_id,
-        where: s.lexeme_id in ^ids,
-        order_by: [asc: s.position, asc: s.id],
+        on: rec.id == srr.source_record_id,
+        where: s.lexeme_id in ^ids and s.identity_state != :retired,
+        order_by: [asc: rev.position, asc: s.object_id],
         select: %{
-          id: s.id,
+          id: s.object_id,
           lexeme_id: s.lexeme_id,
           source_id: s.source_id,
-          group_key: s.group_key,
-          gloss: s.gloss,
-          url: s.url,
-          tags: s.tags,
-          position: s.position,
-          external_id: s.external_id,
+          group_key: rev.group_key,
+          gloss: rev.gloss,
+          url: rev.url,
+          tags: rev.tags,
+          position: rev.position,
+          external_id: s.external_key,
           record_id: rec.id,
           record_url: rec.url
         }
     )
   end
 
-  # One query for both kinds of entry: the 👑 authors hang theirs off a lexeme,
-  # Wikipedia hangs its summary off a concept. The schema's check constraint
-  # makes that an exclusive or, so the two can never collide.
-  defp entries(ids, concept) do
-    # The concept half is added as a clause rather than parameterised with a
-    # nil: Postgres cannot infer the type of a bare `$n IS NULL` and refuses the
-    # statement outright.
-    scope =
-      case concept do
-        nil -> dynamic([e], e.lexeme_id in ^ids)
-        %{id: id} -> dynamic([e], e.lexeme_id in ^ids or e.concept_id == ^id)
-      end
+  # One query for both kinds of published prose: the 👑 authors' definitions
+  # reach the word through `defines`, Wikipedia's summary reaches the thing
+  # through `about`. In MVP-0 these were two nullable columns on one `entries`
+  # row with a check constraint making them exclusive; they are now two
+  # predicates, which says the same thing and says it in the endpoint rules.
+  #
+  # `defines` may name a lexeme *or* a source sense — §C allows both — so the
+  # sense ids are in the target list too, and the row reports the lexeme either
+  # way so `pos_of/2` still works.
+  defp entries(lexeme_ids, sense_ids, concept) do
+    defined = lexeme_ids ++ sense_ids
+    about = if concept, do: [concept.object_id], else: []
 
     Repo.all(
-      from e in Entry,
+      from ci in ContentItem,
+        join: cr in ContentRevision,
+        on: cr.content_id == ci.object_id and cr.is_current,
+        join: link in AssertionRevision,
+        on: link.subject_object_id == ci.object_id and link.is_current,
+        join: pr in assoc(link, :predicate),
+        left_join: target in Sense,
+        on: target.object_id == link.object_object_id,
+        left_join: srr in SourceRecordRevision,
+        on: srr.id == cr.source_record_revision_id,
         left_join: rec in SourceRecord,
-        on: rec.id == e.source_record_id,
-        where: ^scope,
-        order_by: [asc: e.position, asc: e.id],
+        on: rec.id == srr.source_record_id,
+        where: link.lifecycle_state == :active and cr.lifecycle_state == :active,
+        where:
+          (pr.key == "defines" and link.object_object_id in ^defined) or
+            (pr.key == "about" and link.object_object_id in ^about),
+        order_by: [asc: cr.position, asc: ci.object_id],
         select: %{
-          id: e.id,
-          lexeme_id: e.lexeme_id,
-          concept_id: e.concept_id,
-          source_id: e.source_id,
-          headword: e.headword,
-          pos: e.pos,
-          body: e.body,
-          body_format: e.body_format,
-          url: e.url,
-          thumbnail_url: e.thumbnail_url,
-          year: e.year,
+          id: ci.object_id,
+          lexeme_id:
+            fragment(
+              "CASE WHEN ? = 'defines' THEN COALESCE(?, ?) END",
+              pr.key,
+              target.lexeme_id,
+              link.object_object_id
+            ),
+          concept_id: fragment("CASE WHEN ? = 'about' THEN ? END", pr.key, link.object_object_id),
+          source_id: ci.source_id,
+          headword: cr.headword,
+          pos: fragment("? ->> 'pos_marker'", cr.metadata),
+          body: cr.body,
+          body_format: cr.body_format,
+          url: cr.canonical_url,
+          thumbnail_url: fragment("? ->> 'thumbnail_url'", cr.metadata),
+          year: cr.year,
           record_id: rec.id,
           record_url: rec.url
         }
     )
+    |> Enum.uniq_by(& &1.id)
   end
 
   # The thing the word names. One lookup off the nominal lexeme: a word is a
   # word, and *oyster* the verb names nothing the noun does not.
   defp primary_concept(lexemes) do
-    lexeme = Enum.find(lexemes, &(&1.pos == "noun")) || hd(lexemes)
-    Encyclopedia.primary_concept(lexeme.id)
+    lexeme = Enum.find(lexemes, &(&1.part_of_speech == "noun")) || hd(lexemes)
+    Encyclopedia.primary_entity(lexeme.object_id)
   end
 
   # ── the thing side (#71 §2.4, U1b) ───────────────────────────────────────
@@ -324,28 +405,29 @@ defmodule DevilsDictionary.Lexicon.WordPage do
     end
   end
 
-  defp thing(%Concept{} = concept, ids, sources) do
-    %{kinds: kinds, examples: examples} = Encyclopedia.kinds_and_examples(concept.id, @chip_cap)
+  defp thing(%Entity{} = entity, ids, sources) do
+    buckets = Encyclopedia.kinds_and_examples(entity.object_id, @chip_cap)
     candidates = Encyclopedia.candidates_for(ids)
+    concept = Encyclopedia.view(entity)
 
     %{
-      concept: %{
-        qid: concept.qid,
-        label: concept.label,
-        description: concept.description,
-        kind: concept.kind,
-        image_url: concept.image_url,
-        image_attribution: concept.image_attribution,
-        wikipedia_title: concept.wikipedia_title,
-        taxon: concept.taxon
-      },
-      chain: Encyclopedia.chain(concept, @chain_depth),
-      kinds: kinds,
-      examples: examples,
+      concept: concept,
+      chain: Encyclopedia.chain(entity, @chain_depth),
+      kinds: bucket(buckets, :kind),
+      examples: bucket(buckets, :example),
       wikipedia_url: concept_url(sources, "wikipedia", concept),
       wikidata_url: concept_url(sources, "wikidata", concept)
     }
     |> Map.merge(candidates)
+  end
+
+  # `kinds_and_examples/2` reports the exact total beside a capped list; the
+  # panel calls the capped half `shown`.
+  defp bucket(buckets, key) do
+    case Map.get(buckets, key) do
+      nil -> none()
+      %{total: total, items: items} -> %{shown: items, total: total}
+    end
   end
 
   defp empty_thing do
@@ -499,7 +581,9 @@ defmodule DevilsDictionary.Lexicon.WordPage do
   # 👑 authors' `entries.pos` is the *printed* grammar marker ("n", "n. s."),
   # never our own vocabulary. Both answers come from the lexeme or not at all.
   defp pos_of(_by_lexeme, nil), do: nil
-  defp pos_of(by_lexeme, lexeme_id), do: by_lexeme[lexeme_id] && by_lexeme[lexeme_id].pos
+
+  defp pos_of(by_lexeme, lexeme_id),
+    do: by_lexeme[lexeme_id] && by_lexeme[lexeme_id].part_of_speech
 
   # The lemma a card's `url_template` gets filled with. Where several
   # capitalisations share a part of speech the enriched one wins, then the
@@ -670,25 +754,23 @@ defmodule DevilsDictionary.Lexicon.WordPage do
   # The word → thing joins, with the method and the confidence that made them:
   # the drawer's last line in #71 §5's W4. Read off the nominal lexeme, the same
   # one `primary_concept/1` asks, because a word is a word.
+  #
+  # `status` is the derived review state, not a stored column — an importer
+  # cannot write it, which is the fix for a rejected link returning to `auto` on
+  # the next run. The predicate is shown too, because a sense-backed
+  # `refers_to` and a spelling-level `lexeme_entity_candidate` are different
+  # claims and the drawer is exactly where that distinction is worth printing.
   defp concept_links(%{headword: %{lexemes: []}}), do: []
 
   defp concept_links(%{headword: %{lexemes: lexemes}}) do
     lexeme = Enum.find(lexemes, &(&1.pos == "noun")) || hd(lexemes)
 
     lexeme.id
-    |> Encyclopedia.links_for()
-    |> Enum.map(fn link ->
-      %{
-        qid: link.concept.qid,
-        label: link.concept.label,
-        method: link.method,
-        confidence: link.confidence,
-        status: link.status
-      }
-    end)
-    # One claim per row. The same concept is linked once per sense that names
-    # it, so *cat* asserts `Q146 · wiktionary_qid · 0.95` twice and the drawer
-    # would print the same sentence twice.
+    |> Encyclopedia.link_views()
+    |> Enum.map(&%{&1 | status: String.to_existing_atom(&1.status)})
+    # One claim per row. The same thing is linked once per sense that names it,
+    # so *cat* asserts `Q146 · wiktionary_qid · 0.95` twice and the drawer would
+    # print the same sentence twice.
     |> Enum.uniq_by(&{&1.qid, &1.method, &1.confidence, &1.status})
   end
 
@@ -722,23 +804,43 @@ defmodule DevilsDictionary.Lexicon.WordPage do
   # ── relations ────────────────────────────────────────────────────────────
 
   # Only resolved targets: a chip that points nowhere is a dead end, and #71 §2
-  # says every chip lands on a page.
-  defp relations(ids) do
+  # says every chip lands on a page. In this model that condition is free —
+  # an edge with no target word is still in `pending_relations` and is not an
+  # assertion at all.
+  #
+  # Both endpoints may be a lexeme or a sense (§C's three declared pairs), so
+  # each end is left-joined to `senses` and the coalesce falls through to the
+  # object itself where it is a word. `from_sense_id` is what the placement rule
+  # reads: present means the edge belongs to that meaning, absent means it
+  # belongs to the part of speech.
+  defp relations(lexeme_ids, sense_ids) do
+    subjects = lexeme_ids ++ sense_ids
+
     Repo.all(
-      from r in LexicalRelation,
+      from r in AssertionRevision,
+        join: p in assoc(r, :predicate),
+        left_join: fs in Sense,
+        on: fs.object_id == r.subject_object_id,
+        left_join: ts in Sense,
+        on: ts.object_id == r.object_object_id,
+        left_join: trev in SenseRevision,
+        on: trev.sense_id == ts.object_id and trev.is_current,
         join: t in Lexeme,
-        on: t.id == r.to_lexeme_id,
-        where: r.from_lexeme_id in ^ids and not is_nil(r.to_lexeme_id),
+        on: t.object_id == coalesce(ts.lexeme_id, r.object_object_id),
+        join: a in assoc(r, :assertion),
+        where: r.subject_object_id in ^subjects,
+        where: r.is_current and r.lifecycle_state == :active,
+        where: p.source_native,
         select: %{
-          type: r.type,
-          source_id: r.source_id,
-          from_lexeme_id: r.from_lexeme_id,
-          from_sense_id: r.from_sense_id,
-          to_group_key: r.to_group_key,
-          weight: r.weight,
+          type: p.key,
+          source_id: a.source_id,
+          from_lexeme_id: coalesce(fs.lexeme_id, r.subject_object_id),
+          from_sense_id: fs.object_id,
+          to_group_key: trev.group_key,
+          weight: coalesce(r.confidence, 0.0),
           lemma: t.lemma,
           slug: t.slug,
-          pos: t.pos,
+          pos: t.part_of_speech,
           enriched?: not is_nil(t.enriched_at)
         }
     )
@@ -751,7 +853,7 @@ defmodule DevilsDictionary.Lexicon.WordPage do
       groups = group_chips(rows, sources)
 
       %{
-        pos: by_lexeme[lexeme_id] && by_lexeme[lexeme_id].pos,
+        pos: by_lexeme[lexeme_id] && by_lexeme[lexeme_id].part_of_speech,
         groups: groups,
         counts: Map.new(groups, fn {group, chips} -> {group, total_of(chips)} end)
       }
@@ -762,7 +864,7 @@ defmodule DevilsDictionary.Lexicon.WordPage do
 
   defp group_chips(rows, sources) do
     rows
-    |> Enum.group_by(&Map.fetch!(@groups, &1.type))
+    |> Enum.group_by(&Map.get(@groups, &1.type, :related))
     |> Enum.flat_map(fn
       {:says_see, rows} -> says_see(rows, sources)
       {group, rows} -> [{group, rows}]
@@ -839,20 +941,26 @@ defmodule DevilsDictionary.Lexicon.WordPage do
 
   @chain_sql """
   WITH RECURSIVE walk AS (
-    SELECT s.group_key AS root, s.group_key AS group_key, 0 AS depth,
-           ARRAY[s.group_key]::text[] AS path
+    SELECT rev.group_key AS root, rev.group_key AS group_key, 0 AS depth,
+           ARRAY[rev.group_key]::text[] AS path
     FROM senses s
-    WHERE s.id = ANY($1) AND s.group_key IS NOT NULL
+    JOIN sense_revisions rev ON rev.sense_id = s.object_id AND rev.is_current
+    WHERE s.object_id = ANY($1) AND rev.group_key IS NOT NULL
     UNION ALL
     SELECT w.root, p.to_group_key, w.depth + 1, w.path || p.to_group_key::text
     FROM walk w
     CROSS JOIN LATERAL (
-      SELECT r.to_group_key
+      SELECT trev.group_key AS to_group_key
       FROM senses s2
-      JOIN lexical_relations r ON r.from_sense_id = s2.id
-      WHERE s2.group_key = w.group_key AND s2.source_id = $2
-        AND r.type = 'hypernym' AND r.to_group_key IS NOT NULL
-      ORDER BY r.weight DESC, r.to_group_key
+      JOIN sense_revisions srev ON srev.sense_id = s2.object_id AND srev.is_current
+      JOIN assertion_revisions r ON r.subject_object_id = s2.object_id
+                                AND r.is_current AND r.lifecycle_state = 'active'
+      JOIN predicates pr ON pr.id = r.predicate_id AND pr.key = 'hypernym'
+      JOIN senses ts ON ts.object_id = r.object_object_id
+      JOIN sense_revisions trev ON trev.sense_id = ts.object_id AND trev.is_current
+      WHERE srev.group_key = w.group_key AND s2.source_id = $2
+        AND trev.group_key IS NOT NULL
+      ORDER BY r.confidence DESC NULLS LAST, trev.group_key
       LIMIT 1
     ) p
     WHERE w.depth < $3 AND NOT (p.to_group_key::text = ANY(w.path))
@@ -862,9 +970,10 @@ defmodule DevilsDictionary.Lexicon.WordPage do
   JOIN LATERAL (
     SELECT l.lemma, l.slug, (l.enriched_at IS NOT NULL) AS enriched
     FROM senses s3
-    JOIN lexemes l ON l.id = s3.lexeme_id
-    WHERE s3.group_key = w.group_key AND s3.source_id = $2
-    ORDER BY s3.position, l.lemma
+    JOIN sense_revisions r3 ON r3.sense_id = s3.object_id AND r3.is_current
+    JOIN lexemes l ON l.object_id = s3.lexeme_id
+    WHERE r3.group_key = w.group_key AND s3.source_id = $2
+    ORDER BY r3.position, l.lemma
     LIMIT 1
   ) rep ON TRUE
   WHERE w.depth > 0

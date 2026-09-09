@@ -6,10 +6,10 @@ defmodule DevilsDictionary.HealthRecordsTest do
 
   use DevilsDictionary.DataCase, async: true
 
-  alias DevilsDictionary.Encyclopedia.Concept
+  import DevilsDictionary.WordFixtures, except: [record!: 2, record!: 3]
+
   alias DevilsDictionary.Fixtures
-  alias DevilsDictionary.{Health, Repo}
-  alias DevilsDictionary.Lexicon.{Lexeme, ScopeLexeme}
+  alias DevilsDictionary.{Claims, Health, Repo}
   alias DevilsDictionary.Sources.SourceRecord
 
   setup do
@@ -80,16 +80,7 @@ defmodule DevilsDictionary.HealthRecordsTest do
     test "counts the scope lemmas Wikipedia has not answered", ctx do
       wikipedia = ctx.sources["wikipedia"]
 
-      for lemma <- ~w(cat dog oyster) do
-        lexeme =
-          Repo.insert!(%Lexeme{lang: "en", lemma: lemma, pos: "noun", slug: lemma})
-
-        Repo.insert!(%ScopeLexeme{
-          scope_id: ctx.animals.id,
-          lexeme_id: lexeme.id,
-          reasons: ["wordnet_closure"]
-        })
-      end
+      for lemma <- ~w(cat dog oyster), do: word!(ctx, lemma)
 
       assert ledger(Health.records("animals"), "wikipedia").needs_fetch == 3
 
@@ -107,30 +98,27 @@ defmodule DevilsDictionary.HealthRecordsTest do
     test "counts asserted concepts Wikidata has not answered, not every concept", ctx do
       wikidata = ctx.sources["wikidata"]
 
-      asserted = Repo.insert!(%Concept{qid: "Q146", label: "cat"})
-      candidate = Repo.insert!(%Concept{qid: "Q1", label: "CAT scan"})
+      asserted = concept!("Q146", "cat")
+      candidate = concept!("Q1", "CAT scan")
+      lexeme = word!(ctx, "cat")
 
-      lexeme = Repo.insert!(%Lexeme{lang: "en", lemma: "cat", pos: "noun", slug: "cat"})
+      {:ok, _} =
+        Claims.assert(lexeme.object_id, "lexeme_entity_candidate", asserted.object_id, %{
+          method: "title_match",
+          confidence: 0.9
+        })
 
-      Repo.insert!(%DevilsDictionary.Encyclopedia.ConceptLink{
-        lexeme_id: lexeme.id,
-        concept_id: asserted.id,
-        method: :title_match,
-        confidence: 0.9,
-        status: :auto
-      })
-
-      Repo.insert!(%DevilsDictionary.Encyclopedia.ConceptLink{
-        lexeme_id: lexeme.id,
-        concept_id: candidate.id,
-        method: :disambiguation,
-        confidence: 0.4,
-        status: :candidate
-      })
+      # Below `Encyclopedia.asserted_floor/0`: a possibility, not a claim, and
+      # chasing every one of them is what grew the table to 90,481 rows.
+      {:ok, _} =
+        Claims.assert(lexeme.object_id, "lexeme_entity_candidate", candidate.object_id, %{
+          method: "disambiguation",
+          confidence: 0.4
+        })
 
       row = ledger(Health.records("animals"), "wikidata")
       assert row.needs_fetch == 1
-      assert row.needs_fetch_of == "asserted concepts"
+      assert row.needs_fetch_of == "asserted entities"
 
       record!(wikidata, "Q146")
       assert ledger(Health.records("animals"), "wikidata").needs_fetch == 0

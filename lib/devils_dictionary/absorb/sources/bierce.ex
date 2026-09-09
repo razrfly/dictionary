@@ -54,7 +54,7 @@ defmodule DevilsDictionary.Absorb.Sources.Bierce do
   @behaviour DevilsDictionary.Absorb.Source
 
   alias DevilsDictionary.Absorb.Batch
-  alias DevilsDictionary.Lexicon.Lexeme
+  alias DevilsDictionary.Registry.Lexeme
   alias DevilsDictionary.Sources
   alias DevilsDictionary.Sources.SourceRecord
 

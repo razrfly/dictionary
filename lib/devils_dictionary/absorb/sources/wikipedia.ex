@@ -36,8 +36,9 @@ defmodule DevilsDictionary.Absorb.Sources.Wikipedia do
 
   alias DevilsDictionary.Absorb.Batch
   alias DevilsDictionary.Absorb.Clients.Wikipedia, as: Client
-  alias DevilsDictionary.Encyclopedia.Concept
-  alias DevilsDictionary.Lexicon.{Lexeme, Scope, ScopeLexeme}
+  alias DevilsDictionary.Encyclopedia
+  alias DevilsDictionary.Lexicon.{Scope, ScopeMember}
+  alias DevilsDictionary.Registry.{Entity, ExternalIdentifier, Lexeme}
   alias DevilsDictionary.Repo
   alias DevilsDictionary.Sources
   alias DevilsDictionary.Sources.SourceRecord
@@ -160,22 +161,21 @@ defmodule DevilsDictionary.Absorb.Sources.Wikipedia do
 
   defp concept_targets(source, scope, opts) do
     query =
-      from c in Concept,
-        where: not is_nil(c.wikipedia_title),
+      from e in Entity,
+        as: :entity,
+        join: x in ExternalIdentifier,
+        on: x.object_id == e.object_id and x.namespace == "wikidata" and x.status == :verified,
+        where: not is_nil(fragment("? ->> 'wikipedia_title'", e.metadata)),
         where:
-          fragment(
-            """
-            EXISTS (
-              SELECT 1 FROM concept_links cl
-                JOIN scope_lexemes sl ON sl.lexeme_id = cl.lexeme_id AND sl.scope_id = ?
-               WHERE cl.concept_id = ?
-            )
-            """,
-            ^scope.id,
-            c.id
+          exists(
+            from link in subquery(Encyclopedia.linked_lexemes_query()),
+              join: sl in ScopeMember,
+              on: sl.lexeme_id == link.lexeme_id and sl.scope_id == ^scope.id,
+              where: link.entity_id == parent_as(:entity).object_id,
+              select: 1
           ),
-        order_by: c.id,
-        select: %{qid: c.qid, title: c.wikipedia_title}
+        order_by: e.object_id,
+        select: %{qid: x.external_id, title: fragment("? ->> 'wikipedia_title'", e.metadata)}
 
     query =
       if opts[:refresh] do
@@ -189,19 +189,30 @@ defmodule DevilsDictionary.Absorb.Sources.Wikipedia do
         # re-fetched all of them. The clause tests `absent_until IS NULL` rather
         # than the row's mere existence, so an expired marker is still retried
         # exactly as #69 §5's terminal states ask. `--refresh` is the way back.
-        from c in query,
-          where: not fragment("EXISTS (SELECT 1 FROM entries e WHERE e.concept_id = ?)", c.id),
+        from [c, x] in query,
+          where:
+            not fragment(
+              """
+              EXISTS (
+                SELECT 1 FROM assertion_revisions ar
+                  JOIN predicates ap ON ap.id = ar.predicate_id AND ap.key = 'about'
+                 WHERE ar.object_object_id = ? AND ar.is_current
+                   AND ar.lifecycle_state = 'active'
+              )
+              """,
+              c.object_id
+            ),
           where:
             not fragment(
               "EXISTS (SELECT 1 FROM source_records r WHERE r.source_id = ? AND r.external_id = ? AND r.absent_until > now())",
               ^source.id,
-              fragment("'concept:' || ?", c.qid)
+              fragment("'concept:' || ?", x.external_id)
             ),
           where:
             not fragment(
               "EXISTS (SELECT 1 FROM source_records r WHERE r.source_id = ? AND r.external_id = ? AND r.absent_until IS NULL)",
               ^source.id,
-              fragment("'concept:' || ?", c.qid)
+              fragment("'concept:' || ?", x.external_id)
             )
       end
 
@@ -319,11 +330,24 @@ defmodule DevilsDictionary.Absorb.Sources.Wikipedia do
   defp candidates_pass(source, stats, rate, opts) do
     max = opts[:max_candidates] || @max_candidates
 
+    # `raw` is virtual — the payload is in `source_record_revisions` — so the
+    # predicate reads the current revision's payload and `Sources.with_raw/1`
+    # fills the struct afterwards.
     query =
       from r in SourceRecord,
         where: r.source_id == ^source.id,
-        where: fragment("jsonb_exists(?->'pageprops', 'disambiguation')", r.raw),
-        select: %{r | raw: r.raw}
+        where:
+          fragment(
+            """
+            EXISTS (
+              SELECT 1 FROM source_record_revisions rev
+               WHERE rev.source_record_id = ? AND rev.revision_key = ?
+                 AND jsonb_exists(rev.payload->'pageprops', 'disambiguation')
+            )
+            """,
+            r.id,
+            r.content_hash
+          )
 
     # Candidates are read once per page. Re-reading a page we have already read
     # costs one `links` request plus a `pageprops` chunk each and answers the
@@ -333,10 +357,22 @@ defmodule DevilsDictionary.Absorb.Sources.Wikipedia do
       if opts[:refresh] do
         query
       else
-        from r in query, where: not fragment("jsonb_exists(?, '_candidates')", r.raw)
+        from r in query,
+          where:
+            not fragment(
+              """
+              EXISTS (
+                SELECT 1 FROM source_record_revisions rev
+                 WHERE rev.source_record_id = ? AND rev.revision_key = ?
+                   AND jsonb_exists(rev.payload, '_candidates')
+              )
+              """,
+              r.id,
+              r.content_hash
+            )
       end
 
-    disambiguations = Repo.all(query)
+    disambiguations = query |> Repo.all() |> Sources.with_raw()
 
     Enum.reduce(disambiguations, stats, fn record, acc ->
       title = record.raw["title"]
@@ -353,24 +389,14 @@ defmodule DevilsDictionary.Absorb.Sources.Wikipedia do
             %{"title" => page["title"], "qid" => q, "description" => page["description"]}
           end
 
-        raw = Map.put(record.raw, "_candidates", candidates)
-
-        Sources.insert_records(
-          source,
-          [
-            %{
-              external_id: record.external_id,
-              url: record.url,
-              raw: trim(raw),
-              # The record's own hash, carried through untouched. `_candidates`
-              # is our annotation like `_probe`, not content Wikipedia changed,
-              # and rehashing here would stamp `changed_at` on every
-              # disambiguation page — the S1b mistake in a new place.
-              content_hash: record.content_hash
-            }
-          ],
-          1
-        )
+        # `_candidates` is our annotation like `_probe`, not content Wikipedia
+        # changed, so it is added to the revision in place rather than written
+        # as a new record. Re-inserting would either rehash — stamping
+        # `changed_at` on every disambiguation page, the S1b mistake in a new
+        # place — or, keyed by the same hash, write nothing at all, because a
+        # revision is immutable and one with that key already exists.
+        # `annotate_record/2` is the narrow, `_`-prefixed exception.
+        Sources.annotate_record(record, %{"_candidates" => candidates})
 
         %{
           acc
@@ -486,18 +512,32 @@ defmodule DevilsDictionary.Absorb.Sources.Wikipedia do
      }}
   end
 
+  # `:concept` is the no-opinion entity kind — the value another source is
+  # allowed to sharpen into `:taxon` or `:person`, which is what
+  # `Materializer.entity_conflict/0`'s CASE relies on. The title, pageid, image
+  # and attribution are descriptive facts and live in `metadata`; the QID is an
+  # `external_identifiers` row, not a column.
+  #
+  # #74's "canonicalize Wikipedia publication identity independently of lookup
+  # probes": `wikipedia_title` and `wikipedia_pageid` come from the *page*, never
+  # from the lemma we probed with, so one article probed under three spellings
+  # is one entity rather than three.
   defp concept(raw, qid, disambiguation?) do
     %{
       key: qid,
       qid: qid,
       label: clamp(raw["title"]),
       description: raw["description"],
-      kind: :thing,
-      wikipedia_title: clamp(raw["title"]),
-      wikipedia_pageid: raw["pageid"],
-      image_url: thumbnail(raw),
-      image_attribution: fit(attribution(get_in(raw, ["thumbnail", "source"]))),
-      metadata: maybe_put(%{}, "disambiguation", disambiguation? || nil)
+      kind: :concept,
+      metadata:
+        %{"wikipedia_title" => clamp(raw["title"])}
+        |> maybe_put("wikipedia_pageid", raw["pageid"])
+        |> maybe_put("image_url", thumbnail(raw))
+        |> maybe_put(
+          "image_attribution",
+          fit(attribution(get_in(raw, ["thumbnail", "source"])))
+        )
+        |> maybe_put("disambiguation", disambiguation? || nil)
     }
   end
 
@@ -511,9 +551,11 @@ defmodule DevilsDictionary.Absorb.Sources.Wikipedia do
         qid: candidate["qid"],
         label: clamp(candidate["title"]),
         description: candidate["description"],
-        kind: :thing,
-        wikipedia_title: clamp(candidate["title"]),
-        metadata: %{"from_disambiguation" => raw["title"]}
+        kind: :concept,
+        metadata: %{
+          "wikipedia_title" => clamp(candidate["title"]),
+          "from_disambiguation" => raw["title"]
+        }
       }
     end
   end
@@ -525,6 +567,10 @@ defmodule DevilsDictionary.Absorb.Sources.Wikipedia do
 
   defp entry(record, raw, qid, false) do
     %{
+      # The content item's identity within this record. An article is one item
+      # per record, and the key is what `source_materialized_outputs` owns.
+      key: "article:#{qid}",
+      kind: :article,
       source_id: record.source_id,
       source_record_id: record.id,
       concept: qid,
@@ -601,9 +647,9 @@ defmodule DevilsDictionary.Absorb.Sources.Wikipedia do
 
   defp scope_lemmas(%Scope{id: scope_id}, reason) do
     query =
-      from sl in ScopeLexeme,
+      from sl in ScopeMember,
         join: l in Lexeme,
-        on: l.id == sl.lexeme_id,
+        on: l.object_id == sl.lexeme_id,
         where: sl.scope_id == ^scope_id,
         select: l.lemma,
         distinct: true,
@@ -629,7 +675,7 @@ defmodule DevilsDictionary.Absorb.Sources.Wikipedia do
       Repo.all(
         from l in Lexeme,
           where: l.lemma in ^chunk,
-          select: {l.lemma, l.lang, l.pos}
+          select: {l.lemma, l.language_tag, l.part_of_speech}
       )
     end)
     |> Enum.group_by(fn {lemma, _, _} -> lemma end, fn {lemma, lang, pos} ->
