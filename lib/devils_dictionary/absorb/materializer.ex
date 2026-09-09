@@ -227,7 +227,12 @@ defmodule DevilsDictionary.Absorb.Materializer do
   # identities that already exist, mint `objects` rows for the rest, then write
   # the subtype rows against both sets of ids.
   defp mint(kind, existing_keys, wanted_keys, now) do
-    fresh = wanted_keys -- Map.keys(existing_keys)
+    # `Enum.uniq/1` is load-bearing, not tidiness: `--` removes one occurrence
+    # per element, so a key listed twice stays in `fresh` twice, mints two
+    # objects, and `Map.new/1` keeps only the second — leaving the first an
+    # object of its kind with no subtype row, refused at COMMIT. Wikipedia lists
+    # a key once per record that names it, and several records name one article.
+    fresh = Enum.uniq(wanted_keys) -- Map.keys(existing_keys)
 
     if fresh == [] do
       existing_keys

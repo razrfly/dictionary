@@ -14,7 +14,14 @@ defmodule DevilsDictionary.Absorb.BatchTest do
   actually calls, and assert on the stamping and the retirement it performs.
   """
 
-  use DevilsDictionary.DataCase, async: true
+  use DevilsDictionary.DataCase, async: false
+
+  # Unboxed, because this file tests the **import path** and half of what the
+  # import path can get wrong is a constraint deferred to COMMIT — which the
+  # sandbox's enclosing transaction swallows. Two records naming one article
+  # minted two objects and wrote one content row, and inside the sandbox that
+  # passed.
+  @moduletag :unboxed
 
   import Ecto.Query
 
