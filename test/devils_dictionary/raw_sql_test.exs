@@ -58,6 +58,12 @@ defmodule DevilsDictionary.RawSqlTest do
   end
 
   describe "every table a raw statement names exists" do
+    # The scan is deliberately case-**sensitive**, and that is the reason raw SQL
+    # in this codebase is written with uppercase keywords: `from the` and `into a`
+    # appear in every other sentence of prose, so a case-insensitive scan reports
+    # a hundred English words and guards nothing. The cost is that a lowercase
+    # statement is exempt — so write SQL the way the rest of the codebase does,
+    # and it is checked.
     test "including the ones only the linker and the resolver ever touch" do
       existing = table_names()
 
@@ -89,8 +95,15 @@ defmodule DevilsDictionary.RawSqlTest do
     end
   end
 
+  # `mix dd.compare` is the one file that names the retired tables on purpose:
+  # it reads the **baseline** database, whose schema is the one #74 replaced, so
+  # a comparison that could not say `FROM entries` could not compare anything.
+  # Exempted by name rather than by a pattern, so a second such file has to be
+  # argued for rather than slipped in.
+  @baseline_reader "lib/mix/tasks/dd.compare.ex"
+
   defp sources do
-    Path.wildcard("lib/**/*.ex")
+    Path.wildcard("lib/**/*.ex") -- [@baseline_reader]
   end
 
   # `Regex.scan/2` drops a trailing optional group when it did not participate.
@@ -124,10 +137,19 @@ defmodule DevilsDictionary.RawSqlTest do
       |> Regex.scan(contents)
       |> Enum.map(&Enum.at(&1, 1))
 
-    MapSet.new(["lateral" | ctes ++ laterals])
+    # A temp table exists only for the connection that made it, so it is never
+    # in `pg_tables` when this runs — but the file that creates one has, by
+    # definition, defined it.
+    temps =
+      ~r/create\s+temp\s+table\s+(?:if\s+not\s+exists\s+)?([a-z_][a-z0-9_]*)/i
+      |> Regex.scan(contents)
+      |> Enum.map(&Enum.at(&1, 1))
+
+    MapSet.new(["lateral" | ctes ++ laterals ++ temps])
   end
 
   # Words that follow FROM or JOIN without naming anything: `DELETE FROM x` is
-  # covered above, and a line break can put a bare `AND` after one.
-  defp keywords, do: ~w(and or not lateral select)
+  # covered above, a line break can put a bare `AND` after one, and `COPY … FROM
+  # STDIN` names the wire rather than a table.
+  defp keywords, do: ~w(and or not lateral select stdin)
 end

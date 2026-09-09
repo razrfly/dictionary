@@ -68,9 +68,9 @@ defmodule Mix.Tasks.Dd.Compare do
   # and a sense's lemma is its lexeme's.
   defp endpoint_joins(prefix, column) do
     """
-    left join lexemes #{prefix}l on #{prefix}l.object_id = #{column}
-    left join senses #{prefix}s on #{prefix}s.object_id = #{column}
-    left join lexemes #{prefix}sl on #{prefix}sl.object_id = #{prefix}s.lexeme_id
+    LEFT JOIN lexemes #{prefix}l ON #{prefix}l.object_id = #{column}
+    LEFT JOIN senses #{prefix}s ON #{prefix}s.object_id = #{column}
+    LEFT JOIN lexemes #{prefix}sl ON #{prefix}sl.object_id = #{prefix}s.lexeme_id
     """
   end
 
@@ -82,145 +82,145 @@ defmodule Mix.Tasks.Dd.Compare do
         key: "lexemes",
         title: "lemma, language and part of speech",
         baseline:
-          "select lang || '|' || lower(lemma) || '|' || coalesce(pos, '') as k from lexemes",
+          "SELECT lang || '|' || lower(lemma) || '|' || coalesce(pos, '') AS k FROM lexemes",
         current:
-          "select language_tag || '|' || lower(lemma) || '|' || coalesce(part_of_speech, '') as k from lexemes"
+          "SELECT language_tag || '|' || lower(lemma) || '|' || coalesce(part_of_speech, '') AS k FROM lexemes"
       },
       %{
         key: "senses",
         title: "what each source says a word means",
         baseline: """
-        select so.slug || '|' || lower(l.lemma) || '|' || coalesce(l.pos, '') || '|' || #{norm("se.gloss")} as k
-          from senses se
-          join lexemes l on l.id = se.lexeme_id
-          join sources so on so.id = se.source_id
+        SELECT so.slug || '|' || lower(l.lemma) || '|' || coalesce(l.pos, '') || '|' || #{norm("se.gloss")} AS k
+          FROM senses se
+          JOIN lexemes l ON l.id = se.lexeme_id
+          JOIN sources so ON so.id = se.source_id
         """,
         current: """
-        select so.slug || '|' || lower(l.lemma) || '|' || coalesce(l.part_of_speech, '') || '|' || #{norm("r.gloss")} as k
-          from senses se
-          join sense_revisions r on r.sense_id = se.object_id and r.is_current
-          join lexemes l on l.object_id = se.lexeme_id
-          join sources so on so.id = se.source_id
+        SELECT so.slug || '|' || lower(l.lemma) || '|' || coalesce(l.part_of_speech, '') || '|' || #{norm("r.gloss")} AS k
+          FROM senses se
+          JOIN sense_revisions r ON r.sense_id = se.object_id AND r.is_current
+          JOIN lexemes l ON l.object_id = se.lexeme_id
+          JOIN sources so ON so.id = se.source_id
         """
       },
       %{
         key: "content",
         title: "authored definitions and articles",
         baseline: """
-        select so.slug || '|' || lower(coalesce(e.headword, '')) || '|' || md5(#{norm("e.body")}) as k
-          from entries e
-          join sources so on so.id = e.source_id
+        SELECT so.slug || '|' || lower(coalesce(e.headword, '')) || '|' || md5(#{norm("e.body")}) AS k
+          FROM entries e
+          JOIN sources so ON so.id = e.source_id
         """,
         current: """
-        select so.slug || '|' || lower(coalesce(r.headword, '')) || '|' || md5(#{norm("r.body")}) as k
-          from content_items c
-          join content_revisions r on r.content_id = c.object_id and r.is_current
-          join sources so on so.id = c.source_id
+        SELECT so.slug || '|' || lower(coalesce(r.headword, '')) || '|' || md5(#{norm("r.body")}) AS k
+          FROM content_items c
+          JOIN content_revisions r ON r.content_id = c.object_id AND r.is_current
+          JOIN sources so ON so.id = c.source_id
         """
       },
       %{
         key: "relations",
         title: "source-native lexical edges",
         baseline: """
-        select lr.type || '|' || lower(coalesce(fl.lemma, fsl.lemma)) || '|' ||
+        SELECT lr.type || '|' || lower(coalesce(fl.lemma, fsl.lemma)) || '|' ||
                lower(coalesce(tl.lemma, tsl.lemma, lr.to_lemma)) as k
-          from lexical_relations lr
-          left join lexemes fl on fl.id = lr.from_lexeme_id
-          left join senses fs on fs.id = lr.from_sense_id
-          left join lexemes fsl on fsl.id = fs.lexeme_id
-          left join lexemes tl on tl.id = lr.to_lexeme_id
-          left join senses ts on ts.id = lr.to_sense_id
-          left join lexemes tsl on tsl.id = ts.lexeme_id
-         where coalesce(fl.lemma, fsl.lemma) is not null
-           and coalesce(tl.lemma, tsl.lemma, lr.to_lemma) is not null
+          FROM lexical_relations lr
+          LEFT JOIN lexemes fl ON fl.id = lr.from_lexeme_id
+          LEFT JOIN senses fs ON fs.id = lr.from_sense_id
+          LEFT JOIN lexemes fsl ON fsl.id = fs.lexeme_id
+          LEFT JOIN lexemes tl ON tl.id = lr.to_lexeme_id
+          LEFT JOIN senses ts ON ts.id = lr.to_sense_id
+          LEFT JOIN lexemes tsl ON tsl.id = ts.lexeme_id
+         WHERE coalesce(fl.lemma, fsl.lemma) IS NOT NULL
+           AND coalesce(tl.lemma, tsl.lemma, lr.to_lemma) IS NOT NULL
         """,
         current: """
-        select p.key || '|' || #{endpoint_lemma("f")} || '|' || #{endpoint_lemma("t")} as k
-          from assertion_revisions ar
-          join predicates p on p.id = ar.predicate_id
+        SELECT p.key || '|' || #{endpoint_lemma("f")} || '|' || #{endpoint_lemma("t")} AS k
+          FROM assertion_revisions ar
+          JOIN predicates p ON p.id = ar.predicate_id
           #{endpoint_joins("f", "ar.subject_object_id")}
           #{endpoint_joins("t", "ar.object_object_id")}
-         where ar.is_current
-           and p.source_native
-           and p.key not in ('parent_taxon', 'subclass_of', 'instance_of', 'taxon_item')
-           and #{endpoint_lemma("f")} is not null
-           and #{endpoint_lemma("t")} is not null
-        union all
-        select p.key || '|' || #{endpoint_lemma("f")} || '|' || lower(pr.to_lemma) as k
-          from pending_relations pr
-          join predicates p on p.id = pr.predicate_id
+         WHERE ar.is_current
+           AND p.source_native
+           AND p.key NOT IN ('parent_taxon', 'subclass_of', 'instance_of', 'taxon_item')
+           AND #{endpoint_lemma("f")} IS NOT NULL
+           AND #{endpoint_lemma("t")} IS NOT NULL
+        UNION ALL
+        SELECT p.key || '|' || #{endpoint_lemma("f")} || '|' || lower(pr.to_lemma) AS k
+          FROM pending_relations pr
+          JOIN predicates p ON p.id = pr.predicate_id
           #{endpoint_joins("f", "pr.subject_object_id")}
-         where #{endpoint_lemma("f")} is not null
+         WHERE #{endpoint_lemma("f")} IS NOT NULL
         """
       },
       %{
         key: "entities",
         title: "the things, by QID",
-        baseline: "select qid as k from concepts where qid is not null",
-        current: "select external_id as k from external_identifiers where namespace = 'wikidata'"
+        baseline: "SELECT qid AS k FROM concepts WHERE qid IS NOT NULL",
+        current: "SELECT external_id AS k FROM external_identifiers WHERE namespace = 'wikidata'"
       },
       %{
         key: "taxonomy",
         title: "the taxonomy, QID to QID",
         baseline: """
-        select cr.type || '|' || f.qid || '|' || t.qid as k
-          from concept_relations cr
-          join concepts f on f.id = cr.from_concept_id
-          join concepts t on t.id = cr.to_concept_id
-         where f.qid is not null and t.qid is not null
+        SELECT cr.type || '|' || f.qid || '|' || t.qid AS k
+          FROM concept_relations cr
+          JOIN concepts f ON f.id = cr.from_concept_id
+          JOIN concepts t ON t.id = cr.to_concept_id
+         WHERE f.qid IS NOT NULL AND t.qid IS NOT NULL
         """,
         current: """
-        select p.key || '|' || fx.external_id || '|' || tx.external_id as k
-          from assertion_revisions ar
-          join predicates p on p.id = ar.predicate_id
-          join external_identifiers fx
-            on fx.object_id = ar.subject_object_id and fx.namespace = 'wikidata'
-          join external_identifiers tx
-            on tx.object_id = ar.object_object_id and tx.namespace = 'wikidata'
-         where ar.is_current and p.key in ('parent_taxon', 'subclass_of', 'instance_of')
+        SELECT p.key || '|' || fx.external_id || '|' || tx.external_id AS k
+          FROM assertion_revisions ar
+          JOIN predicates p ON p.id = ar.predicate_id
+          JOIN external_identifiers fx
+            ON fx.object_id = ar.subject_object_id AND fx.namespace = 'wikidata'
+          JOIN external_identifiers tx
+            ON tx.object_id = ar.object_object_id AND tx.namespace = 'wikidata'
+         WHERE ar.is_current AND p.key IN ('parent_taxon', 'subclass_of', 'instance_of')
         """
       },
       %{
         key: "links",
         title: "word to thing, at or above the asserted floor",
         baseline: """
-        select lower(coalesce(l.lemma, sl.lemma)) || '|' || c.qid as k
-          from concept_links cl
-          join concepts c on c.id = cl.concept_id
-          left join lexemes l on l.id = cl.lexeme_id
-          left join senses s on s.id = cl.sense_id
-          left join lexemes sl on sl.id = s.lexeme_id
-         where cl.confidence >= 0.7
-           and c.qid is not null
-           and coalesce(l.lemma, sl.lemma) is not null
+        SELECT lower(coalesce(l.lemma, sl.lemma)) || '|' || c.qid AS k
+          FROM concept_links cl
+          JOIN concepts c ON c.id = cl.concept_id
+          LEFT JOIN lexemes l ON l.id = cl.lexeme_id
+          LEFT JOIN senses s ON s.id = cl.sense_id
+          LEFT JOIN lexemes sl ON sl.id = s.lexeme_id
+         WHERE cl.confidence >= 0.7
+           AND c.qid IS NOT NULL
+           AND coalesce(l.lemma, sl.lemma) IS NOT NULL
         """,
         current: """
-        select #{endpoint_lemma("f")} || '|' || x.external_id as k
-          from assertion_revisions ar
-          join predicates p on p.id = ar.predicate_id
+        SELECT #{endpoint_lemma("f")} || '|' || x.external_id AS k
+          FROM assertion_revisions ar
+          JOIN predicates p ON p.id = ar.predicate_id
           #{endpoint_joins("f", "ar.subject_object_id")}
-          join external_identifiers x
-            on x.object_id = ar.object_object_id and x.namespace = 'wikidata'
-         where ar.is_current
-           and p.key in ('refers_to', 'lexeme_entity_candidate')
-           and ar.confidence >= 0.7
-           and #{endpoint_lemma("f")} is not null
+          JOIN external_identifiers x
+            ON x.object_id = ar.object_object_id AND x.namespace = 'wikidata'
+         WHERE ar.is_current
+           AND p.key in ('refers_to', 'lexeme_entity_candidate')
+           AND ar.confidence >= 0.7
+           AND #{endpoint_lemma("f")} IS NOT NULL
         """
       },
       %{
         key: "scope",
         title: "scope membership",
         baseline: """
-        select sc.slug || '|' || lower(l.lemma) as k
-          from scope_lexemes sm
-          join scopes sc on sc.id = sm.scope_id
-          join lexemes l on l.id = sm.lexeme_id
+        SELECT sc.slug || '|' || lower(l.lemma) AS k
+          FROM scope_lexemes sm
+          JOIN scopes sc ON sc.id = sm.scope_id
+          JOIN lexemes l ON l.id = sm.lexeme_id
         """,
         current: """
-        select sc.slug || '|' || lower(l.lemma) as k
-          from scope_lexeme_members sm
-          join scopes sc on sc.id = sm.scope_id
-          join lexemes l on l.object_id = sm.lexeme_id
+        SELECT sc.slug || '|' || lower(l.lemma) AS k
+          FROM scope_lexeme_members sm
+          JOIN scopes sc ON sc.id = sm.scope_id
+          JOIN lexemes l ON l.object_id = sm.lexeme_id
         """
       }
     ]
@@ -271,18 +271,18 @@ defmodule Mix.Tasks.Dd.Compare do
       Postgrex.query!(
         current,
         """
-        with baseline_keys as (select distinct k from cmp_baseline where k is not null),
+        WITH baseline_keys AS (SELECT DISTINCT k FROM cmp_baseline WHERE k IS NOT NULL),
              current_keys as (
-               select distinct k from (#{dimension.current}) dimension where k is not null
+               SELECT DISTINCT k FROM (#{dimension.current}) dimension WHERE k IS NOT NULL
              )
-        select (select count(*) from baseline_keys),
-               (select count(*) from current_keys),
-               (select count(*)
-                  from (select k from baseline_keys intersect select k from current_keys) shared),
-               (select array_agg(k)
-                  from (select k from baseline_keys except select k from current_keys limit $1) lost),
-               (select array_agg(k)
-                  from (select k from current_keys except select k from baseline_keys limit $1) gained)
+        SELECT (SELECT count(*) FROM baseline_keys),
+               (SELECT count(*) FROM current_keys),
+               (SELECT count(*)
+                  FROM (SELECT k FROM baseline_keys INTERSECT SELECT k FROM current_keys) shared),
+               (SELECT array_agg(k)
+                  FROM (SELECT k FROM baseline_keys EXCEPT SELECT k FROM current_keys LIMIT $1) lost),
+               (SELECT array_agg(k)
+                  FROM (SELECT k FROM current_keys EXCEPT SELECT k FROM baseline_keys LIMIT $1) gained)
         """,
         [examples],
         timeout: :infinity
@@ -319,13 +319,13 @@ defmodule Mix.Tasks.Dd.Compare do
   # Streamed out of one database and `COPY`d into a temp table beside the other,
   # so a 1.5 M-row dimension costs one connection's buffer rather than a heap.
   defp load(baseline, current, sql) do
-    Postgrex.query!(current, "create temp table if not exists cmp_baseline (k text)", [])
-    Postgrex.query!(current, "truncate cmp_baseline", [])
+    Postgrex.query!(current, "CREATE TEMP TABLE IF NOT EXISTS cmp_baseline (k text)", [])
+    Postgrex.query!(current, "TRUNCATE cmp_baseline", [])
 
     Postgrex.transaction(
       current,
       fn c ->
-        copy = Postgrex.stream(c, "copy cmp_baseline from stdin", [])
+        copy = Postgrex.stream(c, "COPY cmp_baseline FROM STDIN", [])
 
         Postgrex.transaction(
           baseline,
