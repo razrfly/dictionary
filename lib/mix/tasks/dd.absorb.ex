@@ -84,7 +84,7 @@ defmodule Mix.Tasks.Dd.Absorb do
     Mix.shell().info("#{slug}: #{task}#{(scope && " (scope: #{scope.slug})") || ""}…")
 
     try do
-      {:ok, stats} = module.absorb(scope, opts)
+      {:ok, stats} = module.absorb(scope, Keyword.put(opts, :run_id, run_row.id))
       elapsed = System.monotonic_time(:millisecond) - started
 
       stats = Map.put(stats, :elapsed_ms, elapsed)

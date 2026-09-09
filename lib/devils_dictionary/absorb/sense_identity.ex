@@ -9,9 +9,27 @@ defmodule DevilsDictionary.Absorb.SenseIdentity do
   silently comes to hold something else — and every quote, example and vote
   hanging off that id follows, with no foreign key violated anywhere.
 
-  So `senses.external_key` is provenance, never identity. Identity is matched on
-  **content**: same word, same part of speech, same etymology number, and a
-  gloss similar enough to be the same meaning reworded.
+  So for a source that keys a sense by where it sat, `senses.external_key` is
+  provenance, never identity. Identity is matched on **content**: same word,
+  same part of speech, same etymology number, and a gloss similar enough to be
+  the same meaning reworded.
+
+  ## The exception, and why it is not a loophole
+
+  A source whose key is derived from an identifier *the source keeps stable* is
+  the opposite case, and content matching there is not merely unnecessary — it
+  is wrong. WordNet's `oewn-84481488-n#sequoia` names a synset and a member;
+  the synset id is exactly what WordNet promises not to move. And its glosses
+  are written to be near-neighbours: *sequoia* the tree and *sequoia* the wood
+  differ by the two words "wood of", which is 0.79 similar and well past any
+  threshold worth having. Matching those on content collapsed 194 synsets into
+  their neighbours on the first full re-import, and left each survivor
+  flip-flopping between two glosses — a new revision per pass, for ever.
+
+  So `Absorb.Source.sense_key_stability/0` lets a source say which kind of key
+  it has. `:positional` is the default and the assumption that costs nothing if
+  it is wrong; `:stable` means the key is the identity and two different keys
+  are two different meanings, however alike they read.
 
   ## The three outcomes
 
@@ -71,8 +89,26 @@ defmodule DevilsDictionary.Absorb.SenseIdentity do
   An existing identity is claimed at most once per call: two incoming senses
   that both look like one old meaning cannot both become it, and the loser is
   ambiguous rather than silently new.
+
+  `stability` is the source's answer to `Absorb.Source.sense_key_stability/0`.
+  Under `:stable` the key decides and nothing is scored: the same key is the
+  same meaning, a key not held before is new, and two different keys are never
+  the same identity.
   """
-  def decide(incoming, existing) do
+  def decide(incoming, existing, stability \\ :positional)
+
+  def decide(incoming, existing, :stable) do
+    held = Map.new(existing, &{to_string(&1[:external_key]), &1})
+
+    Enum.map(incoming, fn sense ->
+      case Map.get(held, to_string(sense[:key])) do
+        nil -> {:new, nil}
+        row -> {:matched, row.object_id, 1.0}
+      end
+    end)
+  end
+
+  def decide(incoming, existing, _positional) do
     prepared = Enum.map(existing, &{&1, trigrams(&1[:gloss])})
 
     {decisions, _claimed} =

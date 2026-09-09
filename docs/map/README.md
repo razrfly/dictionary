@@ -9,7 +9,9 @@ Every layer of the model, from the sources at the bottom to the votes at the top
 
 ![The Wordhoard map](wordhoard-map.svg)
 
-**Legend.** Solid boxes with a thick outline exist and are on the word page today — as of MVP-0 that is both sides of it, words and things. Plain solid boxes are built. Dashed boxes are planned: their tables were sketched, applied, diffed and rolled back in S5 to prove they touch none of the thirteen tables, and nothing is shipped.
+**Legend.** Solid boxes with a thick outline exist and are on the word page today — as of MVP-0 that is both sides of it, words and things. Plain solid boxes are built. Dashed boxes are planned.
+
+**Updated at #74.** The bands are unchanged; the tables under them are not. MVP-0's thirteen lexicon tables were replaced by the encyclopedia model — an `objects` identity registry with typed subtypes, and revisioned, attributed `assertions` — so the rows below now name what the claim *is* rather than which relationship table it sat in. The dashed boxes lost their dashes on the way: examples and votes are no longer a sketch to be proven compatible, they are `assertions` with a predicate, an `actors` submitter, `assertion_reviews` and `assertion_votes`. What is still planned is the *content* of those bands, not their shape. See [ADR 0001](../adr/0001-encyclopedia-model.md).
 
 ## The distinction the whole thing turns on
 
@@ -33,19 +35,19 @@ As the database holds it at the close of MVP-0 (2026-09-07), and as the plan fin
 
 | You said | In the model | Status |
 |---|---|---|
-| A dictionary and an encyclopedia in one | the lexicon (words, senses, entries) and the encyclopedia (things), meeting through scored links | built |
-| Definitions sit on top of words | `senses` and `entries` attach to a word by lemma and part of speech | built, on the page |
+| A dictionary and an encyclopedia in one | the lexicon (`lexemes`, `senses`, `content_items`) and the encyclopedia (`entities`), one registry of objects, meeting through `refers_to` and `lexeme_entity_candidate` assertions that carry a confidence | built |
+| Definitions sit on top of words | `senses` hang off a lexeme; an authored definition is a `content_item` that `defines` it, `authored_by` a person and `published_in` an edition | built, on the page |
 | A word can have many definitions | many senses per word; *cat* has 25 in Wiktionary and 8 synsets in WordNet | built, on the page |
 | Same spelling, different meanings | separate senses under one word, and where they name different things, separate things: cat the animal and cat the Unix command | built, both halves on the page |
 | Sources that contradict each other | every definition belongs to its source and sits beside the others; nothing is merged; a thing-level disagreement gets a plaque | built, and the plaque is on the page |
 | Conjugations and forms | forms fold into the headword; *oysters* lands on *oyster* with a note; variants are a chip group | built, on the page |
-| Synonyms, antonyms, other relations | `lexical_relations`, grouped as similar, opposite, broader, narrower, parts, part of, family, see-also | built, on the page |
-| Taxonomy and other hierarchies | `concept_relations`: taxonomy for living things, classes and instances for everything else; the chain, the kinds, the examples of a thing | built, on the page |
-| A person as an example of nepotism | `examples`: a link from a word, sense or thing to another thing, a URL or a text, with a status and a score | planned; tables sketched and proven to fit |
+| Synonyms, antonyms, other relations | `assertions` on the twelve source-native predicates, grouped as similar, opposite, broader, narrower, parts, part of, family, see-also | built, on the page |
+| Taxonomy and other hierarchies | `parent_taxon`, `subclass_of` and `instance_of` assertions between entities: taxonomy for living things, classes and instances for everything else; the chain, the kinds, the examples of a thing | built, on the page |
+| A person as an example of nepotism | an assertion — `illustrates` or `participates_in` — from a sense or a thing to another thing, submitted by an `actors` row, with `assertion_evidence` for a URL or a text, a review state and votes | built as structure; the curation flow is the product work |
 | A poem, art, a YouTube video as an example | the same table: text and URL kinds; media unfurls into the evidence wall | planned (#67) |
 | Quotes | a quote layer with provenance scoring, attached to senses and things | planned (#65) |
-| People cannot write definitions | `senses` and `entries` require a source row; users and bots are sources of the crowd tier, which owns examples and votes only | a rule of the model |
-| People vote on which example fits best | votes of ±1 by a person or a curator bot; the score orders the examples on the page | planned (#17 for the bots) |
+| People cannot write definitions | `senses` and `content_items` require a source row, and `predicate_endpoint_rules` is a foreign key rather than a convention; users and bots are actors of the crowd tier, which owns examples and votes only | a rule the database enforces |
+| People vote on which example fits best | `assertion_votes` of ±1 by a person or a curator bot, cast **per revision** so a reworded claim does not inherit them; the score orders the examples on the page | built as structure (#17 for the bots) |
 
 What is still open is design, not structure: how a page with a Bierce joke, eight WordNet senses, a taxonomy chain, a top-voted example and a wall of clips stays readable. That is the design pass in #66, and the pages now exist for it to work on — `?demo=1` on any word page draws the layers that have not been absorbed yet as clearly-labelled samples, the evidence wall included.
 

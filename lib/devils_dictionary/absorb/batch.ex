@@ -16,6 +16,20 @@ defmodule DevilsDictionary.Absorb.Batch do
   their current payload, which is the "needs materialization" predicate from
   #69 §5's terminal-state table: `materialized_at IS NULL OR < fetched_at`. A
   re-absorb bumps `fetched_at`, so changed records still come back round.
+
+  ## Every batch is stamped, and every batch reconciles
+
+  This is where the audit's finding #1 stops being a test and starts being the
+  import path. Each batch is materialized under a run id and then
+  `Materializer.reconcile/2` retires whatever that run did **not** re-stamp for
+  the records it just visited — scoped to those records, so a scoped import
+  that touched 200 of them cannot retire the other 340,000.
+
+  A caller that already owns a run passes `:run_id`; one that does not gets a
+  `materialize` run opened and finished here. Doing it at this level rather than
+  in each source is deliberate: an unstamped output is invisible until a refresh
+  silently keeps something a source withdrew, and that is not a mistake a new
+  source should be able to make by forgetting a keyword.
   """
 
   import Ecto.Query
@@ -36,8 +50,21 @@ defmodule DevilsDictionary.Absorb.Batch do
     * `:where` — an extra `Ecto.Query.dynamic/1` filter on the record
     * `:batch_size` — records per transaction (default #{@batch})
     * `:on_batch` — a 1-arity callback given each batch's counts, for progress
+    * `:run_id` — the run every output is stamped with; one is opened if absent
+    * `:reconcile` — set `false` to stamp without retiring (default `true`)
   """
   def run(module, %Source{} = source, opts \\ []) do
+    own = if opts[:run_id], do: nil, else: Sources.start_run("materialize", source_id: source.id)
+    run_id = opts[:run_id] || own.id
+
+    counts = do_run(module, source, opts, run_id)
+
+    if own, do: Sources.finish_run(own, Map.new(counts, fn {k, v} -> {to_string(k), v} end))
+
+    counts
+  end
+
+  defp do_run(module, source, opts, run_id) do
     zero = %{
       records: 0,
       lexemes: 0,
@@ -55,8 +82,12 @@ defmodule DevilsDictionary.Absorb.Batch do
     source
     |> stream(opts)
     |> Enum.reduce(zero, fn batch, acc ->
-      case Materializer.run_batch(batch, module) do
+      case Materializer.run_batch(batch, module, run_id: run_id) do
         {:ok, counts} ->
+          if Keyword.get(opts, :reconcile, true) do
+            Materializer.reconcile(run_id, Enum.map(batch, & &1.id))
+          end
+
           if cb = opts[:on_batch], do: cb.(counts)
 
           acc

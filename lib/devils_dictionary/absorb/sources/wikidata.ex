@@ -122,8 +122,14 @@ defmodule DevilsDictionary.Absorb.Sources.Wikidata do
     # be a batch behind its child again — so this runs until nothing is left
     # unresolved rather than a fixed number of times. Without it M1 finds the
     # remainder instead.
-    first = Batch.run(__MODULE__, source, batch_size: @materialize_batch, only_stale: true)
-    second = close_concept_relations(source, first)
+    first =
+      Batch.run(__MODULE__, source,
+        batch_size: @materialize_batch,
+        only_stale: true,
+        run_id: opts[:run_id]
+      )
+
+    second = close_concept_relations(source, first, opts[:run_id])
 
     {:ok,
      %{
@@ -208,9 +214,15 @@ defmodule DevilsDictionary.Absorb.Sources.Wikidata do
   # walk from a stuck one.
   @max_materialize_passes 5
 
-  defp close_concept_relations(source, first) do
+  defp close_concept_relations(source, first, run_id) do
     Enum.reduce_while(2..@max_materialize_passes, Map.put(first, :passes, 1), fn pass, previous ->
-      counts = Batch.run(__MODULE__, source, batch_size: @materialize_batch, only_stale: false)
+      counts =
+        Batch.run(__MODULE__, source,
+          batch_size: @materialize_batch,
+          only_stale: false,
+          run_id: run_id
+        )
+
       counts = Map.put(counts, :passes, pass)
 
       if counts.concept_relations_skipped_parent_taxon == 0 or

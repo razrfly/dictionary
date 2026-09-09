@@ -268,8 +268,53 @@ defmodule DevilsDictionary.Health.Score do
           "schema_test.exs — every rejection goes through Repo.query! or a multi-row " <>
             "INSERT, because the linker and the resolver are raw SQL"
       ),
-      d6_row()
+      d6_row(),
+      p1_row(),
+      p2_row()
     ]
+  end
+
+  # **P1 and P2** — the two budgets #74 leaves as measurements. Gate 0 agreed
+  # the traversal one from measured numbers (0.256 / 0.489 ms against a 5 ms
+  # budget, ~10× headroom); the page-composition one was explicitly *pending*
+  # there, because it needed the ported `WordPage` and a matched population to
+  # measure honestly.
+  #
+  # Both are drawn from the top of the degree distribution rather than at
+  # random: a page budget met on the median word is met on nothing that matters.
+  defp p1_row do
+    case Health.Budgets.page_composition() do
+      %{measured: false, reason: reason} ->
+        row("P1", "page composition", reason, "p95 < 150 ms", :pending)
+
+      p1 ->
+        row(
+          "P1",
+          "page composition",
+          "p95 #{p1.p95} ms · p50 #{p1.p50} ms · max #{p1.max} ms over #{p1.runs} pages",
+          "p95 < #{p1.budget_ms} ms",
+          p1.p95 < p1.budget_ms,
+          detail: "#{p1.population}, warm cache, WordPage.build/2 end to end"
+        )
+    end
+  end
+
+  defp p2_row do
+    case Health.Budgets.bounded_traversal() do
+      %{measured: false, reason: reason} ->
+        row("P2", "bounded traversal", reason, "p95 < 5 ms", :pending)
+
+      p2 ->
+        row(
+          "P2",
+          "bounded traversal",
+          "p95 #{p2.p95} ms (out #{p2.outgoing_p95}, in #{p2.incoming_p95}) · " <>
+            "top degree #{fmt(p2.top_degree)}",
+          "p95 < #{p2.budget_ms} ms",
+          p2.p95 < p2.budget_ms,
+          detail: "#{p2.population}, warm cache, both directions"
+        )
+    end
   end
 
   # The one D row that is a live measurement: the archived inputs are on disk

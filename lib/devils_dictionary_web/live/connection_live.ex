@@ -475,7 +475,7 @@ defmodule DevilsDictionaryWeb.ConnectionLive do
         {@chosen.label}
         <span class="text-mist-500">— {@chosen.kind} #{@chosen.object_id}</span>
       </p>
-      <form phx-change={@search}>
+      <form id={"#{@id}-search"} phx-change={@search}>
         <input
           id={"composer-#{@id}-search"}
           name="q"

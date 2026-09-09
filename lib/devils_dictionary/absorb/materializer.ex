@@ -136,7 +136,8 @@ defmodule DevilsDictionary.Absorb.Materializer do
     end)
     |> Ecto.Multi.run(:concepts, fn _repo, _ -> {:ok, upsert_entities(merged.concepts, now)} end)
     |> Ecto.Multi.run(:senses, fn _repo, changes ->
-      {:ok, upsert_senses(merged.senses, changes.lexemes, records, revisions, run_id, now)}
+      {:ok,
+       upsert_senses(merged.senses, changes.lexemes, records, revisions, run_id, now, module)}
     end)
     |> Ecto.Multi.run(:entries, fn _repo, changes ->
       {:ok, upsert_content(merged.entries, changes, records, revisions, run_id, now)}
@@ -462,15 +463,15 @@ defmodule DevilsDictionary.Absorb.Materializer do
   # renumbers everything after it. `Absorb.SenseIdentity` decides whether an
   # incoming sense is one we already hold, a new one, or a case nobody should
   # decide automatically; this writes what it decides.
-  defp upsert_senses([], _lexeme_ids, _records, _revisions, _run_id, _now), do: %{}
+  defp upsert_senses([], _lexeme_ids, _records, _revisions, _run_id, _now, _module), do: %{}
 
-  defp upsert_senses(rows, lexeme_ids, records, revisions, run_id, now) do
+  defp upsert_senses(rows, lexeme_ids, records, revisions, run_id, now, module) do
     source_ids = records |> Enum.map(& &1.source_id) |> Enum.uniq()
     lexeme_object_ids = rows |> Enum.map(&Map.fetch!(lexeme_ids, &1.lexeme)) |> Enum.uniq()
 
     held = held_senses(source_ids, lexeme_object_ids)
 
-    {ids, states, cases} = match_senses(rows, lexeme_ids, held)
+    {ids, states, cases} = match_senses(rows, lexeme_ids, held, stability(module))
     ids = mint(:sense, ids, Enum.map(rows, & &1.key), now)
 
     rows
@@ -539,11 +540,21 @@ defmodule DevilsDictionary.Absorb.Materializer do
     |> Enum.group_by(& &1.lexeme_id)
   end
 
-  defp match_senses(rows, lexeme_ids, held) do
+  # A source that keys a sense by where it sat gets content matching; one whose
+  # key is a stable identifier gets its key honoured. Assuming `:positional` for
+  # a source that never said costs a review case; assuming `:stable` for one
+  # that lied would cost a meaning.
+  defp stability(module) do
+    if function_exported?(module, :sense_key_stability, 0),
+      do: module.sense_key_stability(),
+      else: :positional
+  end
+
+  defp match_senses(rows, lexeme_ids, held, stability) do
     rows
     |> Enum.group_by(&Map.fetch!(lexeme_ids, &1.lexeme))
     |> Enum.reduce({%{}, %{}, []}, fn {lexeme_id, group}, {ids, states, cases} ->
-      decisions = SenseIdentity.decide(group, Map.get(held, lexeme_id, []))
+      decisions = SenseIdentity.decide(group, Map.get(held, lexeme_id, []), stability)
 
       Enum.zip(group, decisions)
       |> Enum.reduce({ids, states, cases}, fn
@@ -917,9 +928,31 @@ defmodule DevilsDictionary.Absorb.Materializer do
       |> Enum.reject(&is_nil(&1.subject))
 
     written = write_assertions(claims, run_id, now)
+    drained = drop_pending(resolvable, records)
     held = write_pending(pending, changes, records, run_id, now)
 
-    %{written: written, pending: held, offered: length(merged.relations)}
+    %{written: written, pending: held, drained: drained, offered: length(merged.relations)}
+  end
+
+  # An edge stops being pending the moment it becomes an assertion. WordNet's
+  # graph is closed but arrives in batches, so an edge naming a synset a later
+  # batch introduces waits here on the first pass and is written on the second —
+  # and if the row it waited in were left behind, the lemma-matching resolver
+  # would later write the same claim with a *lexeme* target instead of the
+  # meaning the source named.
+  defp drop_pending([], _records), do: 0
+
+  defp drop_pending(resolved, records) do
+    source_ids = records |> Enum.map(& &1.source_id) |> Enum.uniq()
+    keys = Enum.map(resolved, &relation_key/1)
+
+    {n, _} =
+      from(p in "pending_relations",
+        where: p.source_id in ^source_ids and p.origin_key in ^keys
+      )
+      |> Repo.delete_all()
+
+    n
   end
 
   defp resolve_sense_keys(relations, changes, records) do
@@ -977,7 +1010,11 @@ defmodule DevilsDictionary.Absorb.Materializer do
         origin_key: relation_key(r),
         confidence: r[:weight],
         method: "source",
-        metadata: r[:metadata] || %{},
+        # The sense key the source named, kept so the lemma-matching resolver
+        # knows to leave this row alone: an edge that names a *meaning* is the
+        # materializer's second pass to close, not something to resolve by
+        # spelling.
+        metadata: pending_metadata(r),
         last_seen_run_id: run_id,
         inserted_at: now,
         updated_at: now
@@ -998,6 +1035,13 @@ defmodule DevilsDictionary.Absorb.Materializer do
   # A P171 edge names a parent another record introduces. Resolve against the
   # batch first, then the database; anything still unknown is counted and
   # skipped, never raised on, and the second pass closes it.
+  defp pending_metadata(r) do
+    case r[:to_sense] do
+      nil -> r[:metadata] || %{}
+      key -> Map.put(r[:metadata] || %{}, "to_sense", key)
+    end
+  end
+
   defp write_entity_relations(merged, changes, _records, run_id, now) do
     wanted =
       merged.concept_relations
@@ -1333,6 +1377,7 @@ defmodule DevilsDictionary.Absorb.Materializer do
       entries: changes.entries,
       relations: changes.relations.written,
       relations_pending: changes.relations.pending,
+      relations_drained: changes.relations.drained,
       links: changes.links,
       concept_relations: changes.concept_relations.written,
       concept_relations_skipped: changes.concept_relations.skipped,

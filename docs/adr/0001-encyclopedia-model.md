@@ -117,6 +117,25 @@ Proved on the real Wiktionary `bank/noun/1` record: after deleting a sense from 
 resolves to a different sense. The curator attachment made before the edit still means what
 it meant. Byte-identical input produces zero new identities and zero new revisions.
 
+**Amended at P5, on evidence.** The rule above is right for a key that encodes a
+*position*, and wrong for a key derived from an identifier the source itself keeps
+stable. WordNet's `oewn-84481488-n#sequoia` is a synset id and a member name, and the
+synset id is precisely what WordNet promises not to move. Its glosses, meanwhile, are
+written to be near-neighbours: *sequoia* the tree and *sequoia* the wood differ by the
+words "wood of", which scores 0.79 — past any threshold worth having. The first full
+re-import collapsed **194 synsets** into their neighbours on that similarity, and left
+each survivor rewriting its gloss one way on the first pass and back on the second, a
+new revision each time, for ever. It also stranded 1,665 `pending_relations` rows whose
+subject no longer matched the edge that wrote them.
+
+So `Absorb.Source.sense_key_stability/0` lets a source declare which kind of key it has.
+`:positional` is the default and the assumption that costs nothing when it is wrong — an
+unnecessary review case. `:stable` means the key **is** the identity: the same key is the
+same meaning however the gloss was rewritten, and two different keys are two meanings
+however alike they read. Only WordNet claims it today. This does not reinstate
+key-as-identity for Wiktionary, which is the case #74 exists for and which still gets
+content matching.
+
 ### 6. One person, one identity
 
 `people` is deleted. A person is `objects(kind: entity)` + `entities(entity_kind: person)`

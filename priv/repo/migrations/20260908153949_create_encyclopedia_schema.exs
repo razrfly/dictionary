@@ -812,6 +812,11 @@ defmodule DevilsDictionary.Repo.Migrations.CreateEncyclopediaSchema do
     create index(:pending_relations, ["lower(to_lemma)"])
     create index(:pending_relations, [:last_seen_run_id])
 
+    # The materializer's second pass deletes by origin key the moment an edge
+    # becomes an assertion; without this it seq-scans half a million rows once
+    # per batch.
+    create index(:pending_relations, [:source_id, :origin_key])
+
     # ── evidence, review contexts, reviews, votes ────────────────────────────
     create table(:assertion_evidence) do
       add :assertion_revision_id, references(:assertion_revisions, on_delete: :delete_all),

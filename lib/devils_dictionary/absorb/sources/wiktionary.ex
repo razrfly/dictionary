@@ -490,7 +490,7 @@ defmodule DevilsDictionary.Absorb.Sources.Wiktionary do
       """
     end
 
-    materialized = materialize_in_reason_order(source, scope)
+    materialized = materialize_in_reason_order(source, scope, opts)
 
     {:ok,
      %{
@@ -635,7 +635,7 @@ defmodule DevilsDictionary.Absorb.Sources.Wiktionary do
   #
   # The phase filter reads `raw->>'word'` rather than splitting `external_id`:
   # lemmas like `and/or` and `km/h` contain the separator.
-  defp materialize_in_reason_order(source, scope) do
+  defp materialize_in_reason_order(source, scope, opts) do
     first = scope |> scope_lemmas("wordnet_closure") |> MapSet.to_list()
 
     phases = [
@@ -648,7 +648,8 @@ defmodule DevilsDictionary.Absorb.Sources.Wiktionary do
         Batch.run(__MODULE__, source,
           where: where,
           batch_size: @materialize_batch,
-          only_stale: true
+          only_stale: true,
+          run_id: opts[:run_id]
         )
 
       %{
@@ -850,10 +851,25 @@ defmodule DevilsDictionary.Absorb.Sources.Wiktionary do
       rows
       |> Enum.chunk_every(@insert_chunk)
       |> Enum.reduce(0, fn chunk, written ->
-        ids = Materializer.upsert_lexemes(chunk, now)
-        Materializer.upsert_forms(chunk, ids, %{}, now)
-        stamp_index_source(ids, chunk, now)
-        written + map_size(ids)
+        # One transaction per chunk, exactly as `Materializer.run_batch/3` does
+        # and for the same reason. Minting an object and writing its subtype are
+        # two statements, and the registry's constraint trigger is deferred to
+        # **COMMIT** — so run outside a transaction, the object's own commit is
+        # where it is asked for a lexeme row that the next statement has not
+        # written yet. An index pass that wrote 1.5 M rows in autocommit failed
+        # on its very first flush.
+        {:ok, count} =
+          Repo.transaction(
+            fn ->
+              ids = Materializer.upsert_lexemes(chunk, now)
+              Materializer.upsert_forms(chunk, ids, %{}, now)
+              stamp_index_source(ids, chunk, now)
+              map_size(ids)
+            end,
+            timeout: :infinity
+          )
+
+        written + count
       end)
 
     %{acc | buffer: [], buffered: 0, written: acc.written + written}

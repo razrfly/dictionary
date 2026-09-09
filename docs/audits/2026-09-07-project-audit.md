@@ -191,7 +191,7 @@ Other sketch limitations matter before shipping:
 
 The analogous existing schema has gaps too: concept links do not enforce sense-to-lexeme consistency or confidence bounds, and the entries check allows both lexeme and concept even though a read-layer comment calls it XOR. The live check found zero mismatched concept-link senses; these are missing protections, not claims of existing corruption in that particular field.
 
-Evidence: [community sketch](../sketches/community_layer_migration.exs), [model narrative](../map/README.md), [baseline constraints](../../priv/repo/migrations/20260905094219_create_lexicon_schema.exs).
+Evidence: [community sketch](../sketches/README.md) (retired at #74), [model narrative](../map/README.md), [baseline constraints](../../priv/repo/migrations/20260905094219_create_lexicon_schema.exs).
 
 ## Relationship assessment
 
