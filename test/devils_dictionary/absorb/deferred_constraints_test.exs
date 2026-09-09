@@ -200,6 +200,32 @@ defmodule DevilsDictionary.Absorb.DeferredConstraintsTest do
     end
   end
 
+  describe "ownership of a claim the resolver writes" do
+    test "carries the run that wrote it", %{ctx: ctx, wordnet: wordnet} do
+      # Wiktionary, Johnson and Bierce name their targets by *lemma*, so every
+      # claim those three make is written by the resolver rather than by the
+      # materializer's second pass. Both callers opened a run and then did not
+      # hand it over, and 117,363 claim outputs carried a null
+      # `last_seen_run_id` — which `reconcile/2` reads as "the source stopped
+      # publishing this", exactly the state it cannot distinguish from "never
+      # seen".
+      word!(ctx, "thing", ~w(wordnet))
+      subject = word!(ctx, "cat", ~w(wordnet))
+      record = record!(ctx, "wordnet", external_id: "oewn-1-n", raw: %{})
+
+      Repo.insert_all("pending_relations", [pending_row(wordnet, record, subject.object_id)])
+
+      run = Sources.start_run("resolve")
+      assert %{resolved: 1} = Resolver.run(run_id: run.id)
+
+      assert Repo.one!(
+               from o in "source_assertion_outputs",
+                 where: o.source_record_id == ^record.id,
+                 select: o.last_seen_run_id
+             ) == run.id
+    end
+  end
+
   defp current_state(assertion_id) do
     Repo.one!(
       from r in AssertionRevision,

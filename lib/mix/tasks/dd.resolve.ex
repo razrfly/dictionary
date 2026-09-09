@@ -39,7 +39,10 @@ defmodule Mix.Tasks.Dd.Resolve do
     Mix.shell().info("resolving#{(source && " (#{source.slug})") || ""}…")
 
     try do
-      result = Resolver.run(source_id: source && source.id)
+      # The run this task already opened, handed to the resolver: an assertion it
+      # writes is owned by a record, and an ownership row with no run cannot tell
+      # `reconcile/2` "no longer published" from "never seen".
+      result = Resolver.run(source_id: source && source.id, run_id: run_row.id)
       elapsed = System.monotonic_time(:millisecond) - started
 
       Sources.finish_run(run_row, %{
