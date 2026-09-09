@@ -118,6 +118,8 @@ defmodule Mix.Tasks.Dd.Score do
       "L" -> "LINK"
       "X" -> "EXPERIENCE"
       "U" -> "PAGES"
+      "D" -> "DURABILITY"
+      "P" -> "BUDGETS"
       "E" -> "EXTENSIBILITY"
       "O" -> "OPERATIONS"
     end

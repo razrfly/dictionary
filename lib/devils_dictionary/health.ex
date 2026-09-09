@@ -864,15 +864,26 @@ defmodule DevilsDictionary.Health do
 
   # A5's denominator plus Wikidata's reach: a scope lexeme is covered when
   # Wiktionary attests it *or* a concept link names it.
+  # A6's union: the scope lemmas Wiktionary attests **or** something is linked
+  # to. Written as two sets rather than `A OR EXISTS (…)`, because the `OR`
+  # stops Postgres using a semi-join for the EXISTS and makes it re-run the
+  # subquery once per scope member — 154 s on Animals' 25,383, against 176 ms
+  # for the same set as a union. Both halves still read the link rule from
+  # `linked_to_word/1`, so there is still one definition of what a link is.
   defp union_covered(scope) do
     source = Sources.get_source_by_slug!("wiktionary")
 
-    scope_query(scope)
-    |> where(
-      [_sl, l],
-      fragment("? = ANY(?)", ^source.id, l.source_ids) or exists(linked_to_word())
-    )
-    |> Repo.aggregate(:count)
+    attested =
+      scope_query(scope)
+      |> where([_sl, l], fragment("? = ANY(?)", ^source.id, l.source_ids))
+      |> select([_sl, l], %{object_id: l.object_id})
+
+    linked =
+      scope_query(scope)
+      |> where(exists(linked_to_word()))
+      |> select([_sl, l], %{object_id: l.object_id})
+
+    Repo.aggregate(subquery(union(attested, ^linked)), :count)
   end
 
   defp scope_with_link(scope, threshold, opts \\ []) do

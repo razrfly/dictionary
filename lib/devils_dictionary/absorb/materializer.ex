@@ -865,18 +865,23 @@ defmodule DevilsDictionary.Absorb.Materializer do
     # an identity, it is the absence of one. Treating it as a key collapsed every
     # such claim in a batch into a single assertion.
     {keyed, unkeyed} = Enum.split_with(claims, & &1[:origin_key])
-    keyed = Enum.uniq_by(keyed, &{&1.source_id, &1.origin_key})
+
+    # Deduped for the *identity*, kept whole for the *ownership*: three records
+    # can assert the same edge, and each of them attests it. One assertion, three
+    # rows in `source_assertion_outputs` — the same rule content items got when
+    # six Wikipedia probes resolved to one article.
+    unique = Enum.uniq_by(keyed, &{&1.source_id, &1.origin_key})
 
     existing =
       from(a in "assertions",
-        where: a.origin_key in ^Enum.map(keyed, & &1.origin_key),
+        where: a.origin_key in ^Enum.map(unique, & &1.origin_key),
         select: {{a.source_id, a.origin_key}, a.id}
       )
       |> Repo.all()
       |> Map.new()
 
     {held, fresh} =
-      Enum.split_with(keyed, &Map.has_key?(existing, {&1.source_id, &1.origin_key}))
+      Enum.split_with(unique, &Map.has_key?(existing, {&1.source_id, &1.origin_key}))
 
     fresh = fresh ++ unkeyed
 
@@ -919,7 +924,16 @@ defmodule DevilsDictionary.Absorb.Materializer do
       now
     )
 
-    own_assertions(pairs, run_id, now)
+    # Every claim, not every identity: the ones deduped above still name the
+    # record that made them.
+    by_key = Map.new(pairs, fn {claim, id} -> {{claim.source_id, claim[:origin_key]}, id} end)
+
+    own_assertions(
+      Enum.map(keyed, &{&1, Map.fetch!(by_key, {&1.source_id, &1.origin_key})}) ++
+        Enum.filter(pairs, fn {claim, _} -> is_nil(claim[:origin_key]) end),
+      run_id,
+      now
+    )
 
     length(pairs)
   end
@@ -1098,11 +1112,19 @@ defmodule DevilsDictionary.Absorb.Materializer do
     end)
     |> Enum.reject(&(is_nil(&1.subject_object_id) or &1.to_lemma == ""))
     |> Enum.uniq_by(
-      &{&1.source_id, &1.subject_object_id, &1.predicate_id, &1.to_lemma, &1.to_pos}
+      &{&1.source_id, &1.source_record_id, &1.subject_object_id, &1.predicate_id, &1.to_lemma,
+       &1.to_pos}
     )
     |> insert_count("pending_relations",
       on_conflict: {:replace, [:confidence, :metadata, :last_seen_run_id, :updated_at]},
-      conflict_target: [:source_id, :subject_object_id, :predicate_id, :to_lemma, :to_pos]
+      conflict_target: [
+        :source_id,
+        :source_record_id,
+        :subject_object_id,
+        :predicate_id,
+        :to_lemma,
+        :to_pos
+      ]
     )
   end
 
