@@ -28,12 +28,8 @@ defmodule Mix.Tasks.Dd.Materialize do
 
   use Mix.Task
 
-  import Ecto.Query
-
-  alias DevilsDictionary.{Absorb, Health, Repo, Sources}
+  alias DevilsDictionary.{Absorb, Health, Sources}
   alias DevilsDictionary.Absorb.Batch
-  alias DevilsDictionary.Claims.{Assertion, AssertionRevision}
-  alias DevilsDictionary.Registry.{ContentItem, Entity, Lexeme, Object, Sense}
 
   @requirements ["app.start"]
 
@@ -46,9 +42,13 @@ defmodule Mix.Tasks.Dd.Materialize do
 
     slugs = if opts[:source], do: [opts[:source]], else: Absorb.implemented()
 
-    Enum.each(slugs, fn slug ->
-      if opts[:dry_run], do: dry_run(slug, opts), else: materialize(slug, opts)
-    end)
+    results =
+      Enum.map(slugs, fn slug ->
+        if opts[:dry_run], do: dry_run(slug, opts), else: materialize(slug, opts)
+      end)
+
+    if false in results,
+      do: Mix.raise("semantic replay changed derived state; inspect materialize run stats")
   end
 
   defp dry_run(slug, opts) do
@@ -72,43 +72,23 @@ defmodule Mix.Tasks.Dd.Materialize do
     end)
   end
 
-  # Every table `materialize/1` writes into. Row counts rather than checksums:
-  # an upsert that lost a row, wrote a duplicate or swapped a natural key all
-  # show up here, and M1's parity check covers what counts alone would miss.
-  #
-  # These were the retired lexicon schemas until P5 — named as bare atoms in a
-  # list, which is the one place the compiler does not check that a module
-  # exists. The task raised `Ecto.Queryable not implemented for Atom` the first
-  # time anybody ran it against the new model.
-  #
-  # `assertion_revisions` is counted as well as `assertions`: a re-materialize
-  # that wrote a needless revision leaves the identity count unchanged and is
-  # exactly the churn M2 exists to catch.
-  @tables [
-    objects: Object,
-    lexemes: Lexeme,
-    senses: Sense,
-    content_items: ContentItem,
-    entities: Entity,
-    assertions: Assertion,
-    assertion_revisions: AssertionRevision
-  ]
-
-  defp table_counts do
-    Map.new(@tables, fn {name, schema} ->
-      {to_string(name), Repo.aggregate(from(r in schema), :count)}
-    end)
-  end
+  # Hash all semantic columns and revision histories; counts alone miss changed text and endpoints.
+  defp table_fingerprints, do: Health.StateFingerprint.capture()
 
   defp m2_stats(true), do: %{}
 
   defp m2_stats(before) do
-    now = table_counts()
+    now = table_fingerprints()
 
     changed =
       for {k, v} <- before, now[k] != v, into: %{}, do: {k, %{"before" => v, "after" => now[k]}}
 
-    %{"m2_identical" => changed == %{}, "m2_changed" => changed, "m2_before" => before}
+    %{
+      "m2_version" => 2,
+      "m2_identical" => changed == %{},
+      "m2_changed" => changed,
+      "m2_before" => before
+    }
   end
 
   defp materialize(slug, opts) do
@@ -126,18 +106,20 @@ defmodule Mix.Tasks.Dd.Materialize do
     # off, must change nothing. The check has to be taken here, around the
     # rebuild — reading it back afterwards would only measure the database, not
     # the rebuild — so `--all` records what it saw before and after.
-    before = only_stale || table_counts()
+    before = only_stale || table_fingerprints()
 
     try do
       counts = Batch.run(module, source, only_stale: only_stale)
       elapsed = System.monotonic_time(:millisecond) - started
+
+      comparison = m2_stats(before)
 
       Sources.finish_run(
         run_row,
         counts
         |> Map.new(fn {k, v} -> {to_string(k), v} end)
         |> Map.put("elapsed_ms", elapsed)
-        |> Map.merge(m2_stats(before))
+        |> Map.merge(comparison)
       )
 
       Mix.shell().info("\n#{slug} — #{elapsed} ms")
@@ -145,6 +127,11 @@ defmodule Mix.Tasks.Dd.Materialize do
       Enum.each(Enum.sort(counts), fn {key, value} ->
         Mix.shell().info("  #{String.pad_trailing(to_string(key), 22)} #{value}")
       end)
+
+      if opts[:all],
+        do: Mix.shell().info("  semantic replay identical: #{comparison["m2_identical"]}")
+
+      comparison["m2_identical"] != false
     rescue
       error ->
         elapsed = System.monotonic_time(:millisecond) - started

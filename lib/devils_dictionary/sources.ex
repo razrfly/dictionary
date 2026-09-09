@@ -172,7 +172,7 @@ defmodule DevilsDictionary.Sources do
          url: row[:url],
          content_hash: hash,
          absent_until: row[:absent_until],
-         fetched_at: now,
+         fetched_at: row[:fetched_at] || now,
          inserted_at: now,
          updated_at: now
        }, hash, raw}
@@ -214,7 +214,7 @@ defmodule DevilsDictionary.Sources do
           revision_key: hash,
           payload: raw,
           checksum: hash,
-          observed_at: now,
+          observed_at: record.fetched_at,
           inserted_at: now,
           updated_at: now
         }

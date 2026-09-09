@@ -167,6 +167,169 @@ defmodule DevilsDictionary.Absorb.BatchTest do
       assert Repo.aggregate(from(c in "content_items"), :count) == 1
     end
 
+    test "conflicting probes do not alternate a publication's text on replay", ctx do
+      for {key, body} <- [
+            {"a-probe", "first observed wording"},
+            {"z-probe", "other observed wording"}
+          ] do
+        Sources.insert_records(ctx.source, [
+          %{
+            external_id: key,
+            raw: %{"lemma" => "shared", "content_key" => "article:shared", "body" => body}
+          }
+        ])
+      end
+
+      Batch.run(FakeSource, ctx.source, batch_size: 1)
+
+      before =
+        Repo.all(
+          from r in "content_revisions", select: {r.id, r.body, r.is_current}, order_by: r.id
+        )
+
+      Batch.run(FakeSource, ctx.source, batch_size: 1, only_stale: false)
+
+      assert before ==
+               Repo.all(
+                 from r in "content_revisions",
+                   select: {r.id, r.body, r.is_current},
+                   order_by: r.id
+               )
+
+      assert Enum.any?(before, fn {_, body, current} ->
+               current and body == "first observed wording"
+             end)
+    end
+
+    test "withdrawing the selected probe selects surviving text in a stale-only run", ctx do
+      Sources.insert_records(ctx.source, [
+        %{
+          external_id: "a",
+          raw: %{"lemma" => "shared", "content_key" => "shared", "body" => "selected"}
+        },
+        %{
+          external_id: "z",
+          raw: %{"lemma" => "shared", "content_key" => "shared", "body" => "surviving"}
+        }
+      ])
+
+      Batch.run(FakeSource, ctx.source, batch_size: 1)
+      Sources.insert_records(ctx.source, [%{external_id: "a", raw: %{"lemma" => "shared"}}])
+      Batch.run(FakeSource, ctx.source, batch_size: 1)
+
+      assert Repo.one!(from r in "content_revisions", where: r.is_current, select: r.body) ==
+               "surviving"
+    end
+
+    test "every lexical observation contributes forms and pronunciations within one batch", ctx do
+      for key <- ["a", "b"] do
+        Sources.insert_records(ctx.source, [
+          %{
+            external_id: key,
+            raw: %{
+              "lemma" => "shared",
+              "senses" => [],
+              "forms" => [%{"form" => "form-#{key}"}],
+              "pronunciations" => [%{"ipa" => key}]
+            }
+          }
+        ])
+      end
+
+      Batch.run(FakeSource, ctx.source, batch_size: 20)
+      assert Repo.aggregate(from(f in "lexeme_forms"), :count) == 2
+
+      assert Repo.one!(from(l in "lexemes", select: l.pronunciations)) == %{
+               "items" => [%{"ipa" => "a"}, %{"ipa" => "b"}]
+             }
+
+      before = DevilsDictionary.Health.StateFingerprint.capture(["lexemes", "lexeme_forms"])
+      Batch.run(FakeSource, ctx.source, batch_size: 1, only_stale: false)
+
+      assert before ==
+               DevilsDictionary.Health.StateFingerprint.capture(["lexemes", "lexeme_forms"])
+    end
+
+    test "etymology selects a stable observation across batches and accepts its corrections",
+         ctx do
+      for {key, etymology} <- [{"a-probe", "alternate"}, {"Z-probe", "selected"}] do
+        Sources.insert_records(ctx.source, [
+          %{
+            external_id: key,
+            raw: %{"lemma" => "shared", "senses" => [], "etymology" => etymology}
+          }
+        ])
+
+        Batch.run(FakeSource, ctx.source, batch_size: 1)
+      end
+
+      assert Repo.one!(from l in "lexemes", select: l.etymology) == "selected"
+      before = DevilsDictionary.Health.StateFingerprint.capture(["lexemes"])
+      Batch.run(FakeSource, ctx.source, batch_size: 20, only_stale: false)
+      assert before == DevilsDictionary.Health.StateFingerprint.capture(["lexemes"])
+
+      Sources.insert_records(ctx.source, [
+        %{
+          external_id: "Z-probe",
+          raw: %{"lemma" => "shared", "senses" => [], "etymology" => "corrected"}
+        }
+      ])
+
+      Batch.run(FakeSource, ctx.source, batch_size: 1)
+      assert Repo.one!(from l in "lexemes", select: l.etymology) == "corrected"
+    end
+
+    test "unchanged source snapshots do not manufacture ambiguity between identical glosses",
+         ctx do
+      Sources.insert_records(ctx.source, [
+        %{
+          external_id: "same",
+          raw: %{
+            "lemma" => "same",
+            "senses" => [
+              %{"key" => "a", "gloss" => "same gloss"},
+              %{"key" => "b", "gloss" => "same gloss"}
+            ]
+          }
+        }
+      ])
+
+      Batch.run(FakeSource, ctx.source)
+      before = DevilsDictionary.Health.StateFingerprint.capture(["senses", "sense_revisions"])
+      Batch.run(FakeSource, ctx.source, only_stale: false)
+
+      assert before ==
+               DevilsDictionary.Health.StateFingerprint.capture(["senses", "sense_revisions"])
+    end
+
+    test "a source returning to an earlier payload cites that observation, not the largest revision ID",
+         ctx do
+      for body <- ["original", "changed", "original"] do
+        Sources.insert_records(ctx.source, [
+          %{
+            external_id: "versioned",
+            raw: %{
+              "lemma" => "versioned",
+              "senses" => [],
+              "content_key" => "versioned",
+              "body" => body
+            }
+          }
+        ])
+
+        Batch.run(FakeSource, ctx.source)
+      end
+
+      %{rows: [[selected, current]]} =
+        Repo.query!("""
+        SELECT rr.revision_key,sr.content_hash FROM content_revisions cr
+        JOIN source_record_revisions rr ON rr.id=cr.source_record_revision_id
+        JOIN source_records sr ON sr.id=rr.source_record_id WHERE cr.is_current
+        """)
+
+      assert selected == current
+    end
+
     test "an ambiguous sense keeps the identity it was given, run after run", ctx do
       # Ambiguity means no *existing* meaning is claimed. It does not mean a
       # fresh identity every import: that grew the table by one row per

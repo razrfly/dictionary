@@ -228,3 +228,21 @@ implies and the plan had not spelled out:
   Recorded as pending rather than guessed.
 - ConceptNet. The assertion contract is validated against its endpoint types and dataset
   lineage before the schema freezes; the ingest itself stays in #72.
+
+### Completion correction: selecting a display projection
+
+The 9 September semantic replay check exposed a distinction missing from the
+initial materializer: publication identity can be shared while archived lookup
+observations disagree on text. A shared identity does not make every observation
+interchangeable. Content now selects a deterministic supporting external record
+key; source-specific entity display fields record their projection owners and
+use declared source precedence. Corrections from the selected owner still apply,
+and withdrawing a selected publication observation selects a surviving one.
+
+This is a presentation rule, not a chronology or truth claim. Raw observations
+remain attributable and immutable. Semantic parity derives the selected expected
+text from the archived input and separately reports alternate observations;
+replay checks include revision histories so selection oscillation fails even
+when final text and row counts appear unchanged. See
+[the completion verification](../rebuild/completion-2026-09-09.md) for the policy,
+regression tests and measured results.

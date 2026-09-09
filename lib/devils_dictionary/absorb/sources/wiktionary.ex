@@ -473,7 +473,7 @@ defmodule DevilsDictionary.Absorb.Sources.Wiktionary do
       |> Stream.chunk_every(@decode_chunk)
       |> Task.async_stream(&select_chunk(&1, wanted),
         max_concurrency: System.schedulers_online(),
-        ordered: false,
+        ordered: true,
         timeout: :infinity
       )
       |> Enum.reduce(new_scoped_stats(), fn {:ok, {rows, counts}}, acc ->
@@ -715,7 +715,7 @@ defmodule DevilsDictionary.Absorb.Sources.Wiktionary do
       |> Stream.chunk_every(@decode_chunk)
       |> Task.async_stream(&project_chunk(&1, source.id),
         max_concurrency: System.schedulers_online(),
-        ordered: false,
+        ordered: true,
         timeout: :infinity
       )
       |> Enum.reduce(new_stats(), fn {:ok, {rows, counts}}, acc ->
@@ -783,6 +783,7 @@ defmodule DevilsDictionary.Absorb.Sources.Wiktionary do
     %{
       key: {"en", lemma, pos(record)},
       slug: Lexeme.slug(lemma),
+      source_record_key: external_id(record),
       forms: forms(record),
       pronunciations: [],
       etymology: nil,
@@ -816,7 +817,7 @@ defmodule DevilsDictionary.Absorb.Sources.Wiktionary do
   defp metadata(record) do
     %{}
     |> put_some("wikt_categories", categories(record))
-    |> put_some("form_of", form_of?(record))
+    |> Map.put("form_of", form_of?(record))
   end
 
   @doc """
@@ -866,9 +867,9 @@ defmodule DevilsDictionary.Absorb.Sources.Wiktionary do
     rows =
       acc.buffer
       |> Enum.concat()
-      # The unique index cannot help inside a single statement: Postgres rejects
-      # a batch that hits the same conflict key twice.
-      |> Enum.uniq_by(& &1.key)
+
+    # Identity deduplication happens inside upsert_lexemes; keep every
+    # observation here so its forms and categories are not discarded.
 
     written =
       rows

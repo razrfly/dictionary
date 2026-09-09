@@ -35,6 +35,30 @@ defmodule DevilsDictionary.ReplayExportTest do
     data |> String.split("\n", trim: true) |> Enum.map(&Jason.decode!/1)
   end
 
+  test "bulk replay preserves archived observation time rather than manufacturing freshness" do
+    source = DevilsDictionary.Sources.Catalog.seed!().sources["wikipedia"]
+    observed = ~U[2024-01-02 03:04:05.000000Z]
+
+    DevilsDictionary.Sources.insert_records(source, [
+      %{external_id: "old-observation", raw: %{"title" => "Old"}, fetched_at: observed}
+    ])
+
+    record =
+      DevilsDictionary.Repo.get_by!(DevilsDictionary.Sources.SourceRecord,
+        source_id: source.id,
+        external_id: "old-observation"
+      )
+
+    assert record.fetched_at == observed
+
+    revision =
+      DevilsDictionary.Repo.get_by!(DevilsDictionary.Corpus.SourceRecordRevision,
+        source_record_id: record.id
+      )
+
+    assert revision.observed_at == observed
+  end
+
   test "a record round-trips with its payload intact", %{dir: dir} do
     source = Sources.get_source_by_slug!("wikipedia")
 

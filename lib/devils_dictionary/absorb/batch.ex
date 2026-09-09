@@ -85,7 +85,9 @@ defmodule DevilsDictionary.Absorb.Batch do
       case Materializer.run_batch(batch, module, run_id: run_id) do
         {:ok, counts} ->
           if Keyword.get(opts, :reconcile, true) do
-            Materializer.reconcile(run_id, Enum.map(batch, & &1.id))
+            record_ids = Enum.map(batch, & &1.id)
+            Materializer.reconcile(run_id, record_ids)
+            refresh_shared_content(module, record_ids, run_id)
           end
 
           if cb = opts[:on_batch], do: cb.(counts)
@@ -140,6 +142,39 @@ defmodule DevilsDictionary.Absorb.Batch do
   # rather than selected. `Sources.with_raw/1` does it in one query for the
   # whole page, because `materialize/1` is a pure function of a record and the
   # payload has to be on the struct before an adapter sees it.
+  # If the selected observation disappears, an unchanged surviving observation
+  # must replace it even in a stale-only import. Do not wait for a full replay.
+  defp refresh_shared_content(module, changed_records, run_id) do
+    records =
+      Repo.query!(
+        """
+        SELECT DISTINCT chosen.id FROM content_revisions cr
+        JOIN source_record_revisions rr ON rr.id=cr.source_record_revision_id
+        CROSS JOIN LATERAL (
+          SELECT sr.id FROM source_materialized_outputs o
+          JOIN source_records sr ON sr.id=o.source_record_id
+          WHERE o.output_object_id=cr.content_id AND o.output_role='content' AND o.retired_at IS NULL
+          ORDER BY sr.external_id COLLATE "C" LIMIT 1
+        ) chosen
+        WHERE cr.is_current AND rr.source_record_id=ANY($1)
+          AND NOT EXISTS (SELECT 1 FROM source_materialized_outputs own
+            WHERE own.source_record_id=rr.source_record_id AND own.output_object_id=cr.content_id
+              AND own.output_role='content' AND own.retired_at IS NULL)
+        """,
+        [changed_records]
+      ).rows
+      |> Enum.map(&hd/1)
+
+    if records != [] do
+      batch = Repo.all(from r in SourceRecord, where: r.id in ^records) |> Sources.with_raw()
+
+      case Materializer.run_batch(batch, module, run_id: run_id) do
+        {:ok, _} -> :ok
+        {:error, reason} -> raise "shared publication refresh failed: #{inspect(reason)}"
+      end
+    end
+  end
+
   defp page(source, last_id, opts) do
     Repo.all(
       from r in base(source, opts),

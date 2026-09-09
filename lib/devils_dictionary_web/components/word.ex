@@ -235,9 +235,20 @@ defmodule DevilsDictionaryWeb.Word do
         />
       </div>
 
-      <.document :for={entry <- @card.entries} class="mt-4">
-        {Phoenix.HTML.raw(entry.body_html)}
-      </.document>
+      <div :for={entry <- @card.entries} class="mt-4">
+        <.document>{Phoenix.HTML.raw(entry.body_html)}</.document>
+        <p :if={Map.get(entry, :authors, []) != []} class="mt-3 text-sm text-mist-500">
+          By
+          <.link
+            :for={author <- Map.get(entry, :authors, [])}
+            id={"#{@card.id}-author-#{author.id}"}
+            navigate={"/entities/#{author.id}/#{DevilsDictionary.Claims.Connection.slugify(author.label)}"}
+            class="mr-2 underline underline-offset-4 hover:text-amber-700"
+          >
+            {author.label}
+          </.link>
+        </p>
+      </div>
 
       <.sense_group
         :for={{group, i} <- Enum.with_index(@card.groups)}

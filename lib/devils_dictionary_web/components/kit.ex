@@ -220,12 +220,13 @@ defmodule DevilsDictionaryWeb.Kit do
   attr :size, :string, default: "md", values: ~w(md lg)
   attr :color, :string, default: "dark", values: ~w(dark light)
   attr :class, :string, default: nil
-  attr :rest, :global, include: ~w(disabled form name value type)
+  attr :type, :string, default: "button", values: ~w(button submit reset)
+  attr :rest, :global, include: ~w(disabled form name value)
   slot :inner_block, required: true
 
   def button(assigns) do
     ~H"""
-    <button type="button" class={[button_class(@variant, @size, @color), @class]} {@rest}>
+    <button type={@type} class={[button_class(@variant, @size, @color), @class]} {@rest}>
       {render_slot(@inner_block)}
     </button>
     """

@@ -66,7 +66,9 @@ defmodule DevilsDictionary.Claims.Connection do
   """
   def build(assertion_id, opts \\ []) do
     with %Assertion{} = assertion <- Repo.get(Assertion, assertion_id),
-         %AssertionRevision{} = revision <- revision_for(assertion_id, opts[:revision]) do
+         true <- visible_revision?(Claims.current_revision(assertion_id), opts),
+         %AssertionRevision{} = revision <- revision_for(assertion_id, opts[:revision]),
+         true <- visible_revision?(revision, opts) do
       evidence = Claims.evidence(revision.id)
       {supports, contradicts} = Enum.split_with(evidence, &(&1.evidence_role != :contradicts))
 
@@ -82,13 +84,21 @@ defmodule DevilsDictionary.Claims.Connection do
         review: Claims.review_state(revision.id),
         reviews: Claims.reviews(revision.id),
         score: Claims.score(revision.id),
-        history: Claims.history(assertion_id),
+        history: Enum.filter(Claims.history(assertion_id), &visible_revision?(&1, opts)),
         claimant: actor(assertion.origin_actor_id),
         submitted_by: actor(assertion.submitted_by_actor_id)
       }
     else
       _ -> nil
     end
+  end
+
+  defp visible_revision?(nil, _opts), do: false
+
+  defp visible_revision?(revision, opts) do
+    opts[:visibility] == :internal or
+      (revision.lifecycle_state == :active and
+         Claims.review_state(revision.id) not in Claims.hidden_decisions())
   end
 
   defp revision_for(assertion_id, nil), do: Claims.current_revision(assertion_id)

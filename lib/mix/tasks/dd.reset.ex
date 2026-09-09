@@ -6,15 +6,15 @@ defmodule Mix.Tasks.Dd.Reset do
   reproducibly"*.
 
       mix dd.reset --database devils_dictionary_v2
-      mix dd.reset --database devils_dictionary_rebuild --quiet
+      DD_DATABASE=devils_dictionary_rebuild mix dd.reset --database devils_dictionary_rebuild --quiet
 
   ## Why it demands the name
 
   #74: *"Reset commands must explicitly target the intended development/test
   database. Do not delete original source archives, unrelated databases or
   credentials."* So `--database` is required and must **match the one this
-  environment is configured for**, unless `--force` is given with the name
-  spelled out again. There is no default, and there is no way to run this
+  environment is configured for**. Set `DD_DATABASE` to select another database;
+  `--force` cannot override a configuration mismatch. There is no default, and there is no way to run this
   without having typed the name of the thing being dropped.
 
   It refuses outright to touch a database whose name does not begin with
@@ -85,7 +85,7 @@ defmodule Mix.Tasks.Dd.Reset do
     """)
   end
 
-  defp check!(named, configured, force) do
+  defp check!(named, configured, _force) do
     unless String.starts_with?(named, @prefix) do
       Mix.raise("refusing to touch #{named}: this task only resets #{@prefix}* databases")
     end
@@ -94,17 +94,11 @@ defmodule Mix.Tasks.Dd.Reset do
       named == configured ->
         :ok
 
-      force == named ->
-        # Deliberate, and the name typed twice. Used when pointing a run at the
-        # third database P5's rebuildability proof creates.
-        :ok
-
       true ->
         Mix.raise("""
         #{named} is not the database this environment is configured for (#{configured}).
 
-        If that is deliberate, set the environment's database first, or repeat the
-        name: --database #{named} --force #{named}
+        Set DD_DATABASE=#{named} first. --force cannot override a database mismatch.
         """)
     end
   end

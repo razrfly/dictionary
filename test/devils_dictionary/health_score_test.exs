@@ -36,6 +36,32 @@ defmodule DevilsDictionary.HealthScoreTest do
   end
 
   describe "rows/1" do
+    test "import timings fall back to recorded start and finish times and include replay" do
+      for {slug, task, seconds} <- [{"wordnet", "absorb", 10}, {"wikidata", "replay", 20}] do
+        source = DevilsDictionary.Sources.get_source_by_slug!(slug)
+        started = ~U[2026-09-09 00:00:00.000000Z]
+
+        Repo.insert!(%DevilsDictionary.Sources.ImportRun{
+          source_id: source.id,
+          task: task,
+          status: :done,
+          started_at: started,
+          finished_at: DateTime.add(started, seconds),
+          stats: %{}
+        })
+      end
+
+      row = Score.rows(skip_parity: true) |> Enum.find(&(&1.id == "O2"))
+      assert row.actual =~ "dumps 10.0 s"
+      assert row.actual =~ "API/replay 20.0 s"
+    end
+
+    test "a scope without disambiguation hits reports the empty population" do
+      row = Score.rows(scope: "culture", skip_parity: true) |> Enum.find(&(&1.id == "L4"))
+      assert row.status == :report
+      assert row.actual == "no disambiguation hits in this scope"
+    end
+
     test "every row of the spec is present exactly once", %{rows: rows} do
       ids = Enum.map(rows, & &1.id)
 

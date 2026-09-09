@@ -1,0 +1,7 @@
+Compiling 1 file (.ex)
+Generated devils_dictionary app
+Running ExUnit with seed: 891969, max_cases: 32
+
+.......................
+Finished in 2.5 seconds (0.5s async, 2.0s sync)
+23 tests, 0 failures

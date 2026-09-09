@@ -1,0 +1,83 @@
+
+SOURCES
+  wordnet        5 done run(s) · snapshot_date=2025-12-12
+  wiktionary     18 done run(s) · dump_date=2026-08-28
+  wikidata       16 done run(s) · fetched=2026-09-09
+  wikipedia      11 done run(s) · fetched=2026-09-09
+  bierce         12 done run(s) · gutenberg_id=972
+  johnson        12 done run(s) · edition=LEME ver. 1.0 (2023)
+
+RECORDS
+  source      access     records   absent needs fetch needs mat.  changed   last run
+  bierce      static         997        0           —          0        0   materialize done 2026-09-09 13:22
+  johnson     static      42,726        0           —          0        0   materialize done 2026-09-09 13:24
+  wikidata    api         72,770        0           0          0        0   materialize done 2026-09-09 13:26
+  wikipedia   api         85,044    7,365          59          0        0   materialize done 2026-09-09 13:28
+  wiktionary  dump        22,521        0           —          0        0   materialize done 2026-09-09 13:30
+  wordnet     dump       120,564        0           —          0        0   materialize done 2026-09-09 13:32
+  needs fetch is over wikidata: asserted entities, wikipedia: scope lemmas
+
+COVERAGE of animals
+  scope lexemes          25,385
+    wikidata_taxon       8,724
+    wiktionary_category  15,615
+    wordnet_closure      7,728
+  wiktionary attests     19,854 / 25,385 = 78.2%
+    missing: multiword   1,289
+    missing: scientific_name 4,011
+    missing: single_word 231
+  wikidata linked        17,300 (68.2%)
+  union of the two       97.3%
+  referenced QIDs        57,128, 0 dangling
+  wikipedia answered     70,224 / 90,481 = 77.6%
+  images on concepts     9,666 / 10,372 = 93.2%
+
+RESOLUTION
+  wordnet        1,056,779 / 1,056,779 = 100.0%
+  wiktionary     114,982 / 130,715 = 88.0%
+    alt_of       1,206 / 1,363 = 88.5%
+    antonym      1,769 / 1,790 = 98.8%
+    coordinate   1,957 / 2,069 = 94.6%
+    derived      59,056 / 70,355 = 83.9%
+    form_of      796 / 798 = 99.7%
+    holonym      87 / 93 = 93.5%
+    hypernym     3,565 / 3,613 = 98.7%
+    hyponym      5,062 / 6,446 = 78.5%
+    meronym      255 / 273 = 93.4%
+    related      6,586 / 7,312 = 90.1%
+    synonym      34,596 / 36,556 = 94.6%
+  bierce         9 / 10 = 90.0%
+    see_also     5 / 6 = 83.3%
+  most-referenced unresolved: sperm buttercup (10), crotch monkey (10), cum cheese (10), pet sperm (10), cum pet (10), sperm bubbles (10), Alternative spelling of dumbass. (8), dumbfucker (8)
+
+LINKS in animals
+  at >= 0.8              14,846  58.5%
+  strict ladder          6,612  26.0%
+  any confidence         17,300  68.2%
+    title_match 0.9      7,250
+    title_match 0.85     6,339
+    title_match 0.7      1,286
+    wiktionary_qid 0.95  826
+    wordnet_ili 0.85     4,794
+    wordnet_wikidata 0.9 6,655
+  conflicts (>= 0.7)     1,411
+     dock (noun) — 8 concepts
+     torpedo (noun) — 8 concepts
+     blackcap (noun) — 7 concepts
+     jackal (noun) — 7 concepts
+     drone (noun) — 6 concepts
+  reaching Q729          8,026 / 10,372 = 77.4%
+  disambiguation hits    1,765
+    candidates stored    39,259
+
+THE DEAD
+  bierce entries         997
+  attached to a word     997 / 997 = 100.0%
+  already in the index   927 / 997 = 93.0%
+  words he introduced    70
+  entries in animals     67
+  words he attests       69
+
+PARITY  not run (pass --parity)
+
+  4.3 s

@@ -1,0 +1,90 @@
+bierce: materializing 997 record(s)…
+
+bierce — 54349 ms
+  concept_relations      0
+  concept_relations_skipped 0
+  concept_relations_skipped_parent_taxon 0
+  concept_relations_skipped_unchased 0
+  concepts               0
+  entries                997
+  lexemes                1000
+  links                  0
+  records                997
+  relations              0
+  senses                 0
+  semantic replay identical: true
+johnson: materializing 42726 record(s)…
+
+johnson — 66189 ms
+  concept_relations      0
+  concept_relations_skipped 0
+  concept_relations_skipped_parent_taxon 0
+  concept_relations_skipped_unchased 0
+  concepts               0
+  entries                42726
+  lexemes                41100
+  links                  0
+  records                42726
+  relations              0
+  senses                 0
+  semantic replay identical: true
+wikidata: materializing 72770 record(s)…
+
+wikidata — 62214 ms
+  concept_relations      50446
+  concept_relations_skipped 59786
+  concept_relations_skipped_parent_taxon 0
+  concept_relations_skipped_unchased 59786
+  concepts               72770
+  entries                0
+  lexemes                0
+  links                  0
+  records                72770
+  relations              0
+  senses                 0
+  semantic replay identical: true
+wikipedia: materializing 85044 record(s)…
+
+wikipedia — 80592 ms
+  concept_relations      0
+  concept_relations_skipped 0
+  concept_relations_skipped_parent_taxon 0
+  concept_relations_skipped_unchased 0
+  concepts               178262
+  entries                70925
+  lexemes                19209
+  links                  0
+  records                85044
+  relations              0
+  senses                 0
+  semantic replay identical: true
+wiktionary: materializing 22521 record(s)…
+
+wiktionary — 65982 ms
+  concept_relations      0
+  concept_relations_skipped 0
+  concept_relations_skipped_parent_taxon 0
+  concept_relations_skipped_unchased 0
+  concepts               0
+  entries                0
+  lexemes                21179
+  links                  0
+  records                22521
+  relations              0
+  senses                 37646
+  semantic replay identical: true
+wordnet: materializing 120564 record(s)…
+
+wordnet — 107542 ms
+  concept_relations      0
+  concept_relations_skipped 0
+  concept_relations_skipped_parent_taxon 0
+  concept_relations_skipped_unchased 0
+  concepts               0
+  entries                0
+  lexemes                212133
+  links                  0
+  records                120564
+  relations              1056779
+  senses                 212659
+  semantic replay identical: true

@@ -4,7 +4,7 @@
 
 Internal name: `devils_dictionary` (the Phoenix app, the repo). Product name is provisional; see [Naming](#naming).
 
-This file is the **living record** of the project: what it is, what it is not, the decisions we've made, and what we plan to build next. Update it whenever a decision changes. The current implementation spec is [issue #69](https://github.com/razrfly/dictionary/issues/69).
+This file is the **living record** of the project: what it is, what it is not, the decisions we've made, and what we plan to build next. Update it whenever a decision changes. The encyclopedia foundation is specified in [issue #74](https://github.com/razrfly/dictionary/issues/74); [issue #69](https://github.com/razrfly/dictionary/issues/69) defines the original source-coverage scorecard.
 
 ---
 
@@ -110,7 +110,7 @@ MVP-0 was done when every scorecard row passed, and it does: **animals 36 / 36 g
 
 **What comes next is not the design pass.** The [7 September audit](docs/audits/2026-09-07-project-audit.md) established that the skeleton assembles correctly and does not *survive change*: refresh is additive, a Wiktionary sense id is a position and silently acquires a new meaning when the source reorders, `C++` navigates to `/define/c`, one Wikipedia article renders six times, and a rejected link returns to `auto` on the next run. So [#72](https://github.com/razrfly/dictionary/issues/72) set a backbone contract, [#73](https://github.com/razrfly/dictionary/issues/73) an identity contract, and [#74](https://github.com/razrfly/dictionary/issues/74) is the implementation — **a new schema, rebuilt from sources, with the current derived data treated as disposable**. The earlier claim here that the remaining work changed none of the thirteen tables is withdrawn; it was not supported. See [ADR 0001](docs/adr/0001-encyclopedia-model.md) and the [Gate 0 evidence](docs/spikes/2026-09-gate0/README.md). The design pass ([#66](https://github.com/razrfly/dictionary/issues/66)), the evidence wall ([#67](https://github.com/razrfly/dictionary/issues/67)) and quotes ([#65](https://github.com/razrfly/dictionary/issues/65)) consume the new model.
 
-**#74 is built and the corpus is rebuilt from source.** The encyclopedia model — an `objects` identity registry, typed subtypes, and revisioned, attributed `assertions` — replaced the thirteen tables, and `devils_dictionary_v2` was filled from the pinned inputs by `mix dd.rebuild` rather than migrated. The re-import is the evidence: it found nine defects no test could see, because three of them are constraints deferred to `COMMIT` (which the SQL sandbox never reaches) and the rest only exist at a scale no fixture has. Each is fixed and each has a test that fails without its fix — see [`docs/rebuild/port-checklist.md`](docs/rebuild/port-checklist.md). `devils_dictionary_dev` is untouched, and is what the rebuild is compared against.
+**#74's implementation and independent completion checks** are documented in [the completion report](docs/rebuild/completion-2026-09-09.md). The encyclopedia model uses an `objects` identity registry, typed subtypes and revisioned, attributed `assertions`. The corpus is rebuilt from pinned inputs rather than migrated. The independent checks compare exact semantic content and source ownership, exercise authenticated submission/review and validate complete word/entity pages; the report distinguishes completed evidence from remaining source integrations. `devils_dictionary_dev` remains untouched.
 
 | Milestone | State |
 |---|---|

@@ -1,0 +1,29 @@
+{
+  "database": "devils_dictionary_v2",
+  "counts": {
+    "assertion_revisions": 1507568,
+    "assertions": 1491146,
+    "content_items": 108475,
+    "content_revisions": 108478,
+    "entities": 92952,
+    "lexeme_forms": 900843,
+    "lexemes": 1541668,
+    "objects": 1993400,
+    "sense_revisions": 250305,
+    "senses": 250305,
+    "source_assertion_outputs": 1426682,
+    "source_materialized_outputs": 364953,
+    "source_records": 344622
+  },
+  "violations": {
+    "assertion_current": 0,
+    "content_current": 0,
+    "missing_source_snapshot": 0,
+    "sense_current": 0,
+    "unstamped_claims": 117363,
+    "unstamped_objects": 0
+  },
+  "measured_at": "2026-09-09T13:49:23.734864Z",
+  "database_bytes": 6004479679,
+  "assertion_storage_bytes": 950362112
+}

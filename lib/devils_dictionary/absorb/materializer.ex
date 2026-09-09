@@ -185,18 +185,55 @@ defmodule DevilsDictionary.Absorb.Materializer do
 
       Map.new(@empty, fn {kind, _} ->
         {kind,
-         Enum.map(Map.get(out, kind, []), &stamp_record(&1, record)) ++ Map.fetch!(acc, kind)}
+         Enum.map(Map.get(out, kind, []), &stamp_record(&1, record, kind, module)) ++
+           Map.fetch!(acc, kind)}
       end)
     end)
-    |> Map.update!(:lexemes, &dedupe_by(&1, :key))
-    |> Map.update!(:concepts, &dedupe_by(&1, :key))
+    |> Map.update!(:concepts, fn rows ->
+      # Keep every observation: a preferred probe may omit a field that another
+      # probe supplies. Deduplicating here makes projection depend on batch size.
+      Enum.sort_by(rows, &get_in(&1, [:metadata, "_projection_origin"]))
+    end)
     |> Map.update!(:senses, &dedupe_by(&1, :key))
   end
 
   # Every emitted row remembers which record produced it, so ownership can be
   # recorded without the adapters having to thread a record id through by hand.
-  defp stamp_record(row, record) do
+  defp stamp_record(row, record, kind, module) do
+    row =
+      if kind == :concepts do
+        # Select a stable display projection, never whichever source/batch ran last.
+        # Full Wikipedia articles outrank Wikidata display hints; disambiguation
+        # candidates are only a fallback. The external probe key breaks ties,
+        # without pretending it establishes publication chronology.
+        priority =
+          case module do
+            DevilsDictionary.Absorb.Sources.Wikipedia ->
+              if get_in(row, [:metadata, "from_disambiguation"]), do: 3, else: 1
+
+            DevilsDictionary.Absorb.Sources.Wikidata ->
+              2
+
+            _ ->
+              4
+          end
+
+        # Ranks 1–3 identify the two established providers. Future providers
+        # share fallback rank 4 and must include their namespace in the key.
+        key =
+          if priority == 4, do: "#{module.slug()}:#{record.external_id}", else: record.external_id
+
+        metadata =
+          Map.put(row[:metadata] || %{}, "_projection_origin", [priority, key])
+
+        Map.put(row, :metadata, metadata)
+      else
+        row
+      end
+
     row
+    |> Map.put_new(:source_namespace, module.slug())
+    |> Map.put_new(:source_record_key, record.external_id)
     |> Map.put_new(:source_record_id, record.id)
     |> Map.put_new(:source_id, record.source_id)
   end
@@ -212,9 +249,9 @@ defmodule DevilsDictionary.Absorb.Materializer do
   # answerable after the source rewords its entry.
   defp revision_ids(record_ids) do
     from(r in "source_record_revisions",
+      join: record in "source_records",
+      on: record.id == r.source_record_id and record.content_hash == r.revision_key,
       where: r.source_record_id in ^record_ids,
-      order_by: [asc: r.source_record_id, desc: r.id],
-      distinct: r.source_record_id,
       select: {r.source_record_id, r.id}
     )
     |> Repo.all()
@@ -271,14 +308,26 @@ defmodule DevilsDictionary.Absorb.Materializer do
         set: [
           pronunciations:
             fragment(
-              "CASE WHEN ? = '{}'::jsonb THEN EXCLUDED.pronunciations ELSE ? END",
-              l.pronunciations,
+              "jsonb_build_object('items', (SELECT COALESCE(jsonb_agg(v ORDER BY v),'[]'::jsonb) FROM (SELECT DISTINCT v FROM jsonb_array_elements(COALESCE(?->'items','[]'::jsonb) || COALESCE(EXCLUDED.pronunciations->'items','[]'::jsonb)) v) observations))",
               l.pronunciations
             ),
-          metadata: fragment("? || EXCLUDED.metadata", l.metadata),
-          etymology: fragment("COALESCE(?, EXCLUDED.etymology)", l.etymology),
+          metadata: fragment("dd_merge_lexeme_metadata(?, EXCLUDED.metadata)", l.metadata),
+          etymology:
+            fragment(
+              "CASE WHEN EXCLUDED.etymology IS NOT NULL AND (? IS NULL OR ?->>'_etymology_owner' IS NULL OR (EXCLUDED.metadata->>'_etymology_owner') COLLATE \"C\" <= (?->>'_etymology_owner') COLLATE \"C\") THEN EXCLUDED.etymology ELSE ? END",
+              l.etymology,
+              l.metadata,
+              l.metadata,
+              l.etymology
+            ),
           etymology_source_id:
-            fragment("COALESCE(?, EXCLUDED.etymology_source_id)", l.etymology_source_id),
+            fragment(
+              "CASE WHEN EXCLUDED.etymology IS NOT NULL AND (? IS NULL OR ?->>'_etymology_owner' IS NULL OR (EXCLUDED.metadata->>'_etymology_owner') COLLATE \"C\" <= (?->>'_etymology_owner') COLLATE \"C\") THEN EXCLUDED.etymology_source_id ELSE ? END",
+              l.etymology,
+              l.metadata,
+              l.metadata,
+              l.etymology_source_id
+            ),
           origin_source_id:
             fragment("COALESCE(?, EXCLUDED.origin_source_id)", l.origin_source_id),
           updated_at: fragment("EXCLUDED.updated_at")
@@ -298,6 +347,70 @@ defmodule DevilsDictionary.Absorb.Materializer do
   def upsert_lexemes([], _now), do: %{}
 
   def upsert_lexemes(rows, now) do
+    rows =
+      rows
+      |> Enum.group_by(& &1.key)
+      |> Enum.map(fn {_key, observations} ->
+        ordered = Enum.sort_by(observations, &(&1[:source_record_key] || ""))
+
+        pronunciations =
+          ordered
+          |> Enum.flat_map(fn r ->
+            case r[:pronunciations] do
+              %{"items" => items} -> items
+              items when is_list(items) -> items
+              _ -> []
+            end
+          end)
+          |> Enum.uniq()
+          |> Enum.sort()
+
+        categories =
+          ordered
+          |> Enum.flat_map(&(get_in(&1, [:metadata, "wikt_categories"]) || []))
+          |> Enum.uniq()
+          |> Enum.sort()
+
+        form_flags =
+          ordered
+          |> Enum.flat_map(fn row ->
+            case Map.fetch(row[:metadata] || %{}, "form_of") do
+              {:ok, flag} -> [flag]
+              :error -> []
+            end
+          end)
+
+        metadata = Enum.reduce(ordered, %{}, &Map.merge(&2, &1[:metadata] || %{}))
+
+        metadata =
+          if categories == [],
+            do: metadata,
+            else: Map.put(metadata, "wikt_categories", categories)
+
+        metadata =
+          if form_flags == [],
+            do: metadata,
+            else: Map.put(metadata, "form_of", Enum.all?(form_flags))
+
+        etymology = Enum.find(ordered, &(not is_nil(&1[:etymology])))
+
+        metadata =
+          if etymology,
+            do:
+              Map.put(
+                metadata,
+                "_etymology_owner",
+                "#{etymology[:source_namespace] || etymology[:etymology_source_id]}:#{etymology[:source_record_key] || inspect(etymology.key)}"
+              ),
+            else: metadata
+
+        hd(ordered)
+        |> Map.put(:pronunciations, pronunciations)
+        |> Map.put(:metadata, metadata)
+        |> Map.put(:etymology, etymology && etymology.etymology)
+        |> Map.put(:etymology_source_id, etymology && etymology[:etymology_source_id])
+      end)
+
     keys = Enum.map(rows, & &1.key)
 
     lexical_keys =
@@ -363,7 +476,7 @@ defmodule DevilsDictionary.Absorb.Materializer do
   @doc "Upserts `lexeme_forms` rows for already-minted lexemes. See `upsert_lexemes/2`."
   def upsert_forms(lexeme_rows, ids, revisions, now) do
     rows =
-      for row <- lexeme_rows,
+      for row <- Enum.sort_by(lexeme_rows, &(&1[:source_record_key] || "")),
           form <- row[:forms] || [],
           written = form["form"] || form[:form],
           is_binary(written) and written != "" do
@@ -381,7 +494,22 @@ defmodule DevilsDictionary.Absorb.Materializer do
       |> Enum.uniq_by(&{&1.lexeme_id, &1.written_form, &1.form_kind})
 
     insert_count(rows, "lexeme_forms",
-      on_conflict: {:replace, [:tags, :source_record_revision_id, :updated_at]},
+      on_conflict:
+        from(f in "lexeme_forms",
+          update: [
+            set: [
+              tags: fragment("EXCLUDED.tags"),
+              source_record_revision_id: fragment("EXCLUDED.source_record_revision_id"),
+              updated_at: fragment("EXCLUDED.updated_at")
+            ]
+          ],
+          where:
+            fragment(
+              "? IS NULL OR (EXCLUDED.source_record_revision_id IS NOT NULL AND (SELECT sr.external_id COLLATE \"C\" FROM source_record_revisions rr JOIN source_records sr ON sr.id=rr.source_record_id WHERE rr.id=EXCLUDED.source_record_revision_id) <= (SELECT sr.external_id COLLATE \"C\" FROM source_record_revisions rr JOIN source_records sr ON sr.id=rr.source_record_id WHERE rr.id=?))",
+              f.source_record_revision_id,
+              f.source_record_revision_id
+            )
+        ),
       conflict_target: [:lexeme_id, :written_form, :form_kind]
     )
   end
@@ -407,12 +535,21 @@ defmodule DevilsDictionary.Absorb.Materializer do
             ),
           preferred_label: fragment("COALESCE(?, EXCLUDED.preferred_label)", e.preferred_label),
           description: fragment("COALESCE(?, EXCLUDED.description)", e.description),
-          metadata: fragment("? || EXCLUDED.metadata", e.metadata),
+          metadata: fragment("dd_merge_projected_metadata(?, EXCLUDED.metadata)", e.metadata),
           updated_at: fragment("EXCLUDED.updated_at")
         ]
       ]
     )
   end
+
+  defp initial_projection(%{"_projection_origin" => owner} = metadata) do
+    owners =
+      metadata |> Map.delete("_projection_origin") |> Map.new(fn {key, _} -> {key, owner} end)
+
+    Map.put(metadata, "_projection_owners", owners)
+  end
+
+  defp initial_projection(metadata), do: metadata
 
   defp upsert_entities([], _now), do: %{}
 
@@ -436,12 +573,24 @@ defmodule DevilsDictionary.Absorb.Materializer do
         entity_kind: to_string(row[:kind] || :concept),
         preferred_label: row[:label],
         description: row[:description],
-        metadata: row[:metadata] || %{},
+        metadata: initial_projection(row[:metadata] || %{}),
         inserted_at: now,
         updated_at: now
       }
     end)
-    |> insert_count("entities", on_conflict: entity_conflict(), conflict_target: [:object_id])
+    # PostgreSQL cannot update one conflict target twice in a single INSERT.
+    # Write one observation per identity per round, preserving source priority,
+    # so the same field-ownership merge runs within and across batch boundaries.
+    |> Enum.group_by(& &1.object_id)
+    |> Enum.flat_map(fn {_id, observations} -> Enum.with_index(observations) end)
+    |> Enum.group_by(&elem(&1, 1), &elem(&1, 0))
+    |> Enum.sort_by(&elem(&1, 0))
+    |> Enum.each(fn {_round, observations} ->
+      insert_count(observations, "entities",
+        on_conflict: entity_conflict(),
+        conflict_target: [:object_id]
+      )
+    end)
 
     # The QID is evidence about an identity, not the identity. Adding one later
     # leaves the object and every attachment unchanged, which is decision 7.
@@ -479,7 +628,7 @@ defmodule DevilsDictionary.Absorb.Materializer do
 
     held = held_senses(source_ids, lexeme_object_ids)
 
-    {ids, states, cases} = match_senses(rows, lexeme_ids, held, stability(module))
+    {ids, states, cases} = match_senses(rows, lexeme_ids, held, stability(module), revisions)
     ids = mint(:sense, ids, Enum.map(rows, & &1.key), now)
 
     rows
@@ -541,6 +690,7 @@ defmodule DevilsDictionary.Absorb.Materializer do
         external_key: s.external_key,
         identity_state: s.identity_state,
         gloss: r.gloss,
+        source_record_revision_id: r.source_record_revision_id,
         metadata: r.metadata
       }
     )
@@ -558,14 +708,30 @@ defmodule DevilsDictionary.Absorb.Materializer do
       else: :positional
   end
 
-  defp match_senses(rows, lexeme_ids, held, stability) do
+  defp match_senses(rows, lexeme_ids, held, stability, revisions) do
     rows
     |> Enum.group_by(&Map.fetch!(lexeme_ids, &1.lexeme))
     |> Enum.reduce({%{}, %{}, []}, fn {lexeme_id, group}, {ids, states, cases} ->
       group_held = Map.get(held, lexeme_id, [])
-      decisions = SenseIdentity.decide(group, group_held, stability)
 
-      Enum.zip(group, decisions)
+      {unchanged, changed} =
+        Enum.split_with(group, fn row ->
+          Enum.any?(group_held, fn held ->
+            held.external_key == to_string(row.key) and
+              held.source_record_revision_id == revisions[row.source_record_id] and
+              held.gloss == row[:gloss] and held.metadata == (row[:metadata] || %{})
+          end)
+        end)
+
+      {ids, states} =
+        Enum.reduce(unchanged, {ids, states}, fn row, {ids, states} ->
+          own = Enum.find(group_held, &(&1.external_key == to_string(row.key)))
+          {Map.put(ids, row.key, own.object_id), Map.put(states, row.key, own.identity_state)}
+        end)
+
+      decisions = SenseIdentity.decide(changed, group_held, stability)
+
+      Enum.zip(changed, decisions)
       |> Enum.reduce({ids, states, cases}, fn
         {row, {:matched, object_id, _score}}, {ids, states, cases} ->
           {Map.put(ids, row.key, object_id), states, cases}
@@ -656,7 +822,33 @@ defmodule DevilsDictionary.Absorb.Materializer do
     # refuses a statement that hits the same conflict key twice, so the item is
     # written once — while `own_outputs/5` below still sees every row, because
     # each of those records really does attest it.
-    unique = dedupe_by(rows, &content_key/1)
+    unique = rows |> Enum.sort_by(& &1.source_record_key, :desc) |> dedupe_by(&content_key/1)
+
+    current_owners =
+      from(cr in "content_revisions",
+        join: rr in "source_record_revisions",
+        on: rr.id == cr.source_record_revision_id,
+        join: sr in "source_records",
+        on: sr.id == rr.source_record_id,
+        where:
+          cr.content_id in ^Map.values(ids) and cr.is_current and
+            rr.revision_key == sr.content_hash,
+        where:
+          fragment(
+            "EXISTS (SELECT 1 FROM source_materialized_outputs o WHERE o.source_record_id=? AND o.output_object_id=? AND o.output_role='content' AND o.retired_at IS NULL)",
+            sr.id,
+            cr.content_id
+          ),
+        select: {cr.content_id, sr.external_id}
+      )
+      |> Repo.all()
+      |> Map.new()
+
+    selected =
+      Enum.filter(unique, fn row ->
+        previous = current_owners[Map.fetch!(ids, content_key(row))]
+        is_nil(previous) or row.source_record_key <= previous
+      end)
 
     unique
     |> Enum.map(fn row ->
@@ -678,7 +870,7 @@ defmodule DevilsDictionary.Absorb.Materializer do
     write_revisions(
       "content_revisions",
       :content_id,
-      Enum.map(unique, fn row ->
+      Enum.map(selected, fn row ->
         {Map.fetch!(ids, content_key(row)),
          %{
            body: row[:body],

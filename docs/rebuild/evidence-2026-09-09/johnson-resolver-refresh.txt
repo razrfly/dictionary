@@ -1,0 +1,24 @@
+rebuild · scope animals · 2 stages
+
+── johnson · Johnson: the 1755 dictionary
+  alt_headwords              114
+  entries                    42,726
+  headwords                  37,422
+  homographs                 468
+  lexemes                    41,105
+  materialized_entries       42,726
+  records                    42,726
+  relations                  0
+  without_pos                3,388
+  elapsed                    27.5 s
+
+── resolve · drain pending edges into assertions
+  canonical                  0
+  resolved                   906
+  still_unresolved           15,759
+  elapsed                    459 ms
+
+── rebuild
+  stages                     2
+  failed                     0
+  elapsed                    28.0 s

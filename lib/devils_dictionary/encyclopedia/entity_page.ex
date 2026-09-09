@@ -204,21 +204,30 @@ defmodule DevilsDictionary.Encyclopedia.EntityPage do
   defp words_for([]), do: %{}
 
   defp words_for(ids) do
-    Repo.all(
-      from l in Lexeme,
-        left_join: s in Sense,
-        on: s.lexeme_id == l.object_id and s.object_id in ^ids,
-        where: l.object_id in ^ids or not is_nil(s.object_id),
-        select:
-          {coalesce(s.object_id, l.object_id),
-           %{
-             object_id: l.object_id,
-             lemma: l.lemma,
-             slug: l.slug,
-             pos: l.part_of_speech
-           }}
-    )
-    |> Map.new()
+    # Two bounded primary-key lookups. An OR across word and sense targets scanned the
+    # entire lexicon, and coalesce lost the direct word when both a word and
+    # one of its senses were requested together.
+    words =
+      Repo.all(
+        from l in Lexeme,
+          where: l.object_id in ^ids,
+          select:
+            {l.object_id,
+             %{object_id: l.object_id, lemma: l.lemma, slug: l.slug, pos: l.part_of_speech}}
+      )
+
+    meanings =
+      Repo.all(
+        from s in Sense,
+          join: l in Lexeme,
+          on: l.object_id == s.lexeme_id,
+          where: s.object_id in ^ids,
+          select:
+            {s.object_id,
+             %{object_id: l.object_id, lemma: l.lemma, slug: l.slug, pos: l.part_of_speech}}
+      )
+
+    Map.new(words ++ meanings)
   end
 
   # An edition's contents: the definitions printed in it, and what each defines.

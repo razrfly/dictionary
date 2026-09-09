@@ -1,0 +1,48 @@
+resolving…
+
+resolve — 2465 ms
+  targets resolved this run   117363
+  canonical variants linked   0
+
+  by type (resolved / total)
+    hyponym      349128 / 350512 (99.6%)
+    hypernym     347631 / 347679 (100.0%)
+    other        152854 / 152854 (100.0%)
+    meronym      105820 / 105838 (100.0%)
+    holonym      105652 / 105658 (100.0%)
+    derived      59056 / 70355 (83.9%)
+    synonym      34596 / 36556 (94.6%)
+    instance_of  29129 / 29129 (100.0%)
+    parent_taxon 18399 / 18399 (100.0%)
+    related      6587 / 7313 (90.1%)
+    see_also     5397 / 5423 (99.5%)
+    subclass_of  2798 / 2798 (100.0%)
+    coordinate   1957 / 2069 (94.6%)
+    antonym      1769 / 1790 (98.8%)
+    alt_of       1323 / 1480 (89.4%)
+    form_of      905 / 907 (99.8%)
+    taxon_item   111 / 111 (100.0%)
+
+  R2: 1223112 / 1238871 (98.7%) — wants >= 80%
+
+  most-referenced unresolved targets
+    sperm buttercup                10
+    crotch monkey                  10
+    cum cheese                     10
+    pet sperm                      10
+    cum pet                        10
+    sperm bubbles                  10
+    Alternative spelling of dumbass. 8
+    dumbfucker                     8
+    Informal and slang terms       7
+    Formal terms                   7
+    tía                            6
+    mameluke (US (Italian-American) 5
+    get under one's goat           5
+    Single species                 5
+    All are derogatory unless otherwise labeled 5
+    bule                           5
+    béké                           5
+    vazaha                         5
+    African bush elephant          5
+    divvo                          5

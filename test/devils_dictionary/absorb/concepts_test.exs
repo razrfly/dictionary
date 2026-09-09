@@ -83,10 +83,13 @@ defmodule DevilsDictionary.Absorb.ConceptsTest do
       assert cat.metadata["wikipedia_title"] == "Cat"
       assert cat.metadata["wikipedia_pageid"] == 6678
       assert cat.metadata["wordnet_ili"] == "i46593"
-      # Wikidata's P18 file, not Wikipedia's article thumbnail. Both now live on
-      # upload.wikimedia.org — a Special:FilePath URL will not render as an
-      # image — so the file name is what tells them apart.
-      assert cat.metadata["image_url"] =~ "Cat_grooming.jpg"
+      # The article thumbnail has declared display precedence in either order;
+      # Wikidata's observation remains in its immutable source record.
+      assert cat.metadata["image_url"] =~ "Siam_lilacpoint.jpg"
+      before = cat.metadata
+      assert {:ok, _} = Materializer.run(wp, Wikipedia)
+      assert {:ok, _} = Materializer.run(wd, Wikidata)
+      assert Encyclopedia.by_qid!("Q146").metadata == before
     end
 
     test "and in the other order, which is the one that used to clobber" do
@@ -98,8 +101,22 @@ defmodule DevilsDictionary.Absorb.ConceptsTest do
 
       cat = Encyclopedia.by_qid!("Q146")
       assert cat.metadata["wikipedia_pageid"] == 6678
+      assert cat.metadata["image_url"] =~ "Siam_lilacpoint.jpg"
       # Wikipedia knows nothing about the ILI and must not erase it.
       assert cat.metadata["wordnet_ili"] == "i46593"
+    end
+
+    test "all probes contribute metadata even when the preferred probe omits a field" do
+      source = source!("wikipedia", :encyclopedia)
+      raw = Wikipedia.trim(Fixtures.one_raw("wikipedia", "cat"))
+      preferred = record!(source, "a", Map.delete(raw, "thumbnail"))
+      alternate = record!(source, "z", raw)
+      assert {:ok, _} = Materializer.run_batch([preferred, alternate], Wikipedia)
+      before = Encyclopedia.by_qid!("Q146").metadata
+      assert before["image_url"] =~ "Siam_lilacpoint.jpg"
+      assert {:ok, _} = Materializer.run(alternate, Wikipedia)
+      assert {:ok, _} = Materializer.run(preferred, Wikipedia)
+      assert Encyclopedia.by_qid!("Q146").metadata == before
     end
 
     test "a taxon's kind survives a later Wikipedia write" do
