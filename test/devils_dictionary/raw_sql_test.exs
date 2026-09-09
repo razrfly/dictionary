@@ -57,6 +57,38 @@ defmodule DevilsDictionary.RawSqlTest do
     end
   end
 
+  describe "no source file names a module the port retired" do
+    # A module named in a **list of bare atoms** is the one place the compiler
+    # does not check that it exists — `mix dd.materialize`'s `@tables` still
+    # named `Lexicon.Entry` and five others long after they were deleted, and
+    # raised `Ecto.Queryable not implemented for Atom` the first time anybody
+    # ran the task against the new model. `mix compile` cannot see this for the
+    # same reason it cannot see a stale table name in raw SQL.
+    @retired_modules ~w(
+      DevilsDictionary.Lexicon.Entry
+      DevilsDictionary.Lexicon.LexicalRelation
+      DevilsDictionary.Lexicon.ScopeLexeme
+      DevilsDictionary.Encyclopedia.Concept
+      DevilsDictionary.Encyclopedia.ConceptLink
+      DevilsDictionary.Encyclopedia.ConceptRelation
+      DevilsDictionary.Lexicon.Person
+    )
+
+    test "not in an alias, and not as a bare atom in a list" do
+      offences =
+        for path <- sources(),
+            contents = File.read!(path),
+            module <- @retired_modules,
+            short = module |> String.split(".") |> List.last(),
+            String.contains?(contents, module) or
+              Regex.match?(~r/\balias DevilsDictionary\.\w+\.\{[^}]*\b#{short}\b/, contents) do
+          "#{Path.relative_to_cwd(path)} still names `#{module}`"
+        end
+
+      assert offences == [], Enum.join(offences, "\n")
+    end
+  end
+
   describe "every table a raw statement names exists" do
     # The scan is deliberately case-**sensitive**, and that is the reason raw SQL
     # in this codebase is written with uppercase keywords: `from the` and `into a`

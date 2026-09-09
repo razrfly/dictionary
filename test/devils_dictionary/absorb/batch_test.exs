@@ -152,6 +152,47 @@ defmodule DevilsDictionary.Absorb.BatchTest do
              ) == 2
     end
 
+    test "one article stays one content item when its records fall in different batches", ctx do
+      # The canonical publication identity has to hold across the **source**, not
+      # across the batch in hand. Scoped to the batch, the second record to name
+      # `article:Q2703156` minted a second *San Jose scale*, both owned the same
+      # `about` claim, and every re-materialize rewrote its subject to whichever
+      # ran last — eight identical revisions of one assertion.
+      article(ctx.source, "aspidiotus-perniciosus", "Q2703156")
+      Batch.run(FakeSource, ctx.source, batch_size: 1)
+
+      article(ctx.source, "san-jose-scale", "Q2703156")
+      Batch.run(FakeSource, ctx.source, batch_size: 1)
+
+      assert Repo.aggregate(from(c in "content_items"), :count) == 1
+    end
+
+    test "an ambiguous sense keeps the identity it was given, run after run", ctx do
+      # Ambiguity means no *existing* meaning is claimed. It does not mean a
+      # fresh identity every import: that grew the table by one row per
+      # ambiguous sense per run, and M2 caught it as 16 new senses on a
+      # byte-identical re-import.
+      Sources.insert_records(ctx.source, [
+        %{
+          external_id: "bank/noun",
+          raw: %{
+            "lemma" => "bank",
+            "senses" => [
+              %{"key" => "a", "gloss" => "the edge of a river"},
+              %{"key" => "b", "gloss" => "the edge of the river"}
+            ]
+          }
+        }
+      ])
+
+      Batch.run(FakeSource, ctx.source)
+      first = Repo.aggregate(from(s in "senses"), :count)
+
+      Batch.run(FakeSource, ctx.source, only_stale: false)
+
+      assert Repo.aggregate(from(s in "senses"), :count) == first
+    end
+
     test "reconcile: false stamps without retiring, for a pass that writes a partial view",
          ctx do
       publish(ctx.source, [{"a", "Money; profit."}, {"b", "The edge of a river."}])
