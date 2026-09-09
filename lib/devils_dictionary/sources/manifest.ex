@@ -77,12 +77,17 @@ defmodule DevilsDictionary.Sources.Manifest do
       |> Keyword.get(:path, @path)
       |> inputs()
       |> Enum.filter(&(is_nil(slug) or &1["source"] == slug))
-      |> Enum.map(&verify_one(&1, root))
+      |> Enum.map(&verify_one(&1, root, opts[:quick] == true))
 
     if Enum.all?(results, &(&1.status == :ok)), do: {:ok, results}, else: {:error, results}
   end
 
-  defp verify_one(%{"archive_locator" => locator} = entry, root) do
+  # `quick: true` checks presence and byte count and stops there. Hashing 2.6 GB
+  # is the right thing for `mix dd.manifest --verify` and the wrong thing for a
+  # scorecard row that runs on every page load: the cheap check still catches a
+  # missing or truncated archive, and it says which check it did rather than
+  # implying the strong one.
+  defp verify_one(%{"archive_locator" => locator} = entry, root, quick?) do
     expected = entry["sha256"]
     full = Path.join(root, locator)
 
@@ -93,8 +98,27 @@ defmodule DevilsDictionary.Sources.Manifest do
       not File.exists?(full) ->
         %{locator: locator, source: entry["source"], status: :missing, detail: acquire(entry)}
 
+      quick? ->
+        compare_size(entry, locator, full)
+
       true ->
         compare(entry, locator, full, expected)
+    end
+  end
+
+  defp compare_size(entry, locator, full) do
+    expected = entry["byte_count"]
+    actual = File.stat!(full).size
+
+    if is_nil(expected) or actual == expected do
+      %{locator: locator, source: entry["source"], status: :ok, detail: "#{actual} bytes"}
+    else
+      %{
+        locator: locator,
+        source: entry["source"],
+        status: :mismatch,
+        detail: "expected #{expected} bytes, found #{actual}"
+      }
     end
   end
 

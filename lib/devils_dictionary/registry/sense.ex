@@ -51,7 +51,6 @@ defmodule DevilsDictionary.Registry.Sense do
     sense
     |> cast(attrs, [:object_id, :lexeme_id, :source_id, :external_key, :identity_state])
     |> validate_required([:object_id, :lexeme_id, :source_id, :external_key])
-    |> unique_constraint([:source_id, :external_key])
     |> check_constraint(:identity_state, name: :senses_identity_state)
   end
 end

@@ -284,7 +284,14 @@ defmodule DevilsDictionary.Repo.Migrations.CreateEncyclopediaSchema do
              check: "identity_state IN ('active','needs_review','retired')"
            )
 
-    create unique_index(:senses, [:source_id, :external_key])
+    # **Not unique**, and that is the point. `external_key` is what the source
+    # called this meaning — provenance — and a position-based key is reusable by
+    # construction: delete a Wiktionary sense from the middle and the key that
+    # said `#5` now says `#4`. A meaning that keeps its identity through a
+    # reorder therefore takes a key another sense still holds until its own
+    # retirement lands, and a unique index would refuse the very case #74 exists
+    # to make safe. Identity is `object_id`; this is an index for lookup.
+    create index(:senses, [:source_id, :external_key])
     create index(:senses, [:lexeme_id, :source_id])
     create index(:senses, [:lexeme_id, :identity_state])
 
