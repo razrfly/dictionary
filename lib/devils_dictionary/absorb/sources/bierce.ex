@@ -68,6 +68,13 @@ defmodule DevilsDictionary.Absorb.Sources.Bierce do
   @year 1911
   @author_slug "ambrose-bierce"
 
+  # The edition these definitions were printed in. #74 §E: the definition is
+  # `published_in` the edition, the edition is an `edition_of` the work, and the
+  # work is `authored_by` the person — four records rather than one row with an
+  # author column, which is what lets "the 1911 text" stop being a property of
+  # the dictionary.
+  @edition_slug "bierce-gutenberg-972"
+
   @impl true
   def slug, do: "bierce"
 
@@ -98,7 +105,9 @@ defmodule DevilsDictionary.Absorb.Sources.Bierce do
     entries = path |> File.read!() |> segment()
 
     records = Sources.insert_records(source, Enum.map(entries, &record_row/1), @record_batch)
-    materialized = Batch.run(__MODULE__, source, batch_size: @materialize_batch)
+
+    materialized =
+      Batch.run(__MODULE__, source, batch_size: @materialize_batch, run_id: opts[:run_id])
 
     {:ok,
      %{
@@ -481,6 +490,7 @@ defmodule DevilsDictionary.Absorb.Sources.Bierce do
       source_record_id: record.id,
       lexeme: {"en", lemma, pos},
       author: @author_slug,
+      edition: @edition_slug,
       headword: headword,
       pos: raw["pos"],
       body: body,

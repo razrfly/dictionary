@@ -20,7 +20,7 @@ defmodule DevilsDictionary.HealthScoreTest do
   # catch — see docs/rebuild/score-rows.md.
   @spec_rows ~w(A1 A2 A3 A4 A5 A6 A7 A8 A9 A10
                 M1 M2 M3 M4
-                D1 D2 D3 D4 D5 D6
+                D1 D2 D3 D4 D5 D6 P1 P2
                 R1 R2 R3
                 L1 L2 L3 L4
                 X1 X2 X3

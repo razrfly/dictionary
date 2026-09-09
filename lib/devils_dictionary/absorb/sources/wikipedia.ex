@@ -104,7 +104,11 @@ defmodule DevilsDictionary.Absorb.Sources.Wikipedia do
     stats = candidates_pass(source, stats, rate, opts)
 
     materialized =
-      Batch.run(__MODULE__, source, batch_size: @materialize_batch, only_stale: true)
+      Batch.run(__MODULE__, source,
+        batch_size: @materialize_batch,
+        only_stale: true,
+        run_id: opts[:run_id]
+      )
 
     {:ok,
      %{
@@ -145,7 +149,11 @@ defmodule DevilsDictionary.Absorb.Sources.Wikipedia do
       end)
 
     materialized =
-      Batch.run(__MODULE__, source, batch_size: @materialize_batch, only_stale: true)
+      Batch.run(__MODULE__, source,
+        batch_size: @materialize_batch,
+        only_stale: true,
+        run_id: opts[:run_id]
+      )
 
     {:ok,
      %{

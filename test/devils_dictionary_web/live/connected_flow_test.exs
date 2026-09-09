@@ -264,7 +264,7 @@ defmodule DevilsDictionaryWeb.ConnectedFlowTest do
       assert html =~ ~s(id="predicate-illustrates")
       refute html =~ ~s(id="predicate-defines")
 
-      html = live |> element("#predicate-illustrates") |> render_click()
+      live |> element("#predicate-illustrates") |> render_click()
 
       html =
         live

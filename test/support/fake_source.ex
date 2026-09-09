@@ -32,6 +32,37 @@ defmodule DevilsDictionary.FakeSource do
     lemma = raw["lemma"]
     pos = raw["pos"] || "noun"
 
+    # `senses` lets a test say what the source publishes *this* time, so a
+    # second run can publish less than the first — which is the only way to
+    # exercise reconciliation through the real import path rather than by
+    # calling `reconcile/2` directly.
+    senses =
+      case raw["senses"] do
+        nil ->
+          [
+            %{
+              key: "fake-#{lemma}",
+              lexeme: {"en", lemma, pos},
+              source_id: source_id,
+              source_record_id: Map.get(record, :id),
+              gloss: raw["gloss"] || "a gloss",
+              group_key: "fake-group"
+            }
+          ]
+
+        list ->
+          Enum.map(list, fn sense ->
+            %{
+              key: sense["key"],
+              lexeme: {"en", lemma, pos},
+              source_id: source_id,
+              source_record_id: Map.get(record, :id),
+              gloss: sense["gloss"],
+              group_key: "fake-group"
+            }
+          end)
+      end
+
     # `also_lexeme` declares a word without saying anything about it — the shape
     # a scoped Wiktionary batch produces when one record's linkage names a word
     # another record in the same batch also touches. It must not come out marked
@@ -45,16 +76,7 @@ defmodule DevilsDictionary.FakeSource do
     {:ok,
      %{
        lexemes: [%{key: {"en", lemma, pos}, origin_source_id: source_id}] ++ extra,
-       senses: [
-         %{
-           key: "fake-#{lemma}",
-           lexeme: {"en", lemma, pos},
-           source_id: source_id,
-           source_record_id: Map.get(record, :id),
-           gloss: raw["gloss"] || "a gloss",
-           group_key: "fake-group"
-         }
-       ],
+       senses: senses,
        entries: [],
        relations: [
          %{

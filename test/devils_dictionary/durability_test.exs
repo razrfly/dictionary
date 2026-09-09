@@ -19,9 +19,9 @@ defmodule DevilsDictionary.DurabilityTest do
   import DevilsDictionary.WordFixtures
 
   alias DevilsDictionary.Absorb.{Linker, Materializer}
-  alias DevilsDictionary.Claims.{AssertionRevision, PendingRelation}
+  alias DevilsDictionary.Claims.AssertionRevision
   alias DevilsDictionary.Registry.{Sense, SenseRevision}
-  alias DevilsDictionary.{Claims, Encyclopedia, Fixtures, Registry, Repo, Sources}
+  alias DevilsDictionary.{Claims, Fixtures, Registry, Repo, Sources}
   alias DevilsDictionary.Sources.SourceRecord
 
   setup do

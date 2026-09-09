@@ -62,6 +62,13 @@ defmodule DevilsDictionary.Absorb.Sources.Wordnet do
   @impl true
   def rate_limit_ms, do: 0
 
+  # A synset id is what WordNet promises to keep still, and `sense_id/2` is that
+  # id plus a member name. Scoring these on gloss similarity instead collapsed
+  # *sequoia* the tree into *sequoia* the wood — the two glosses differ by
+  # "wood of" — and 193 other synsets with it.
+  @impl true
+  def sense_key_stability, do: :stable
+
   @impl true
   def trim(raw), do: raw
 
@@ -89,10 +96,14 @@ defmodule DevilsDictionary.Absorb.Sources.Wordnet do
     # synset a later batch introduces, and the second pass closes it. WordNet's
     # sense keys are deterministic, so nothing has to be guessed — see
     # `materialize/1`'s `to_sense`.
-    Batch.run(__MODULE__, source, batch_size: @materialize_batch)
+    Batch.run(__MODULE__, source, batch_size: @materialize_batch, run_id: opts[:run_id])
 
     materialized =
-      Batch.run(__MODULE__, source, batch_size: @materialize_batch, only_stale: false)
+      Batch.run(__MODULE__, source,
+        batch_size: @materialize_batch,
+        only_stale: false,
+        run_id: opts[:run_id]
+      )
 
     {:ok,
      %{

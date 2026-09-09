@@ -9,7 +9,12 @@ config :devils_dictionary, DevilsDictionary.Repo,
   # is left intact -- nothing is destroyed, and it stays available as the matched
   # baseline for the Gate 0 benchmarks and P5's semantic comparison. It is
   # reachable only through the two scripts that need it, never from app code.
-  database: "devils_dictionary_v2",
+  #
+  # `DD_DATABASE` exists for one reason: P5's rebuildability proof builds a
+  # *third* database from the documented inputs, compares its semantics and drops
+  # it. Overriding it is deliberate and has to be typed, and `mix dd.reset` still
+  # demands the name of whatever it is about to drop.
+  database: System.get_env("DD_DATABASE") || "devils_dictionary_v2",
   stacktrace: true,
   show_sensitive_data_on_connection_error: true,
   pool_size: 10

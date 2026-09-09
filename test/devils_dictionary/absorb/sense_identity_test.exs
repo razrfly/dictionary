@@ -120,13 +120,53 @@ defmodule DevilsDictionary.Absorb.SenseIdentityTest do
     end
   end
 
+  describe "decide/3 — a source whose keys are stable" do
+    # The defect the first full WordNet re-import found. Two synsets share the
+    # lemma *sequoia* and their glosses differ by two words, so content matching
+    # collapsed them into one identity — and then flip-flopped its gloss on
+    # every pass, one revision each way, for ever.
+    @tree "either of two huge coniferous California trees that reach a height of 300 feet"
+    @wood "wood of either of two huge coniferous California trees that reach a height of 300 feet"
+
+    test "two different keys stay two meanings, however alike they read" do
+      assert SenseIdentity.similarity(@tree, @wood) > SenseIdentity.strong()
+
+      existing = [held(1, @wood, %{}, "oewn-84481488-n#sequoia")]
+      incoming = [incoming("oewn-89665091-n#sequoia", @tree)]
+
+      assert [{:matched, 1, _}] = SenseIdentity.decide(incoming, existing)
+      assert [{:new, nil}] = SenseIdentity.decide(incoming, existing, :stable)
+    end
+
+    test "the same key is the same meaning even when the gloss was rewritten" do
+      existing = [held(7, "an old wording", %{}, "oewn-84481488-n#sequoia")]
+      incoming = [incoming("oewn-84481488-n#sequoia", "a completely unrelated wording")]
+
+      assert [{:new, nil}] = SenseIdentity.decide(incoming, existing)
+      assert [{:matched, 7, 1.0}] = SenseIdentity.decide(incoming, existing, :stable)
+    end
+
+    test "nothing is ever ambiguous, so no case opens and no id is guessed" do
+      existing = [held(1, @tree, %{}, "a"), held(2, @wood, %{}, "b")]
+      incoming = [incoming("c", @tree), incoming("a", @wood)]
+
+      assert [{:new, nil}, {:matched, 1, 1.0}] =
+               SenseIdentity.decide(incoming, existing, :stable)
+    end
+  end
+
   defp postgres_similarity(a, b) do
     %{rows: [[score]]} = Repo.query!("SELECT similarity($1, $2)::float8", [a, b])
     score
   end
 
-  defp held(id, gloss, metadata \\ %{}),
-    do: %{object_id: id, external_key: "held-#{id}", gloss: gloss, metadata: metadata}
+  defp held(id, gloss, metadata \\ %{}, external_key \\ nil),
+    do: %{
+      object_id: id,
+      external_key: external_key || "held-#{id}",
+      gloss: gloss,
+      metadata: metadata
+    }
 
   defp incoming(key, gloss, metadata \\ %{}),
     do: %{key: key, gloss: gloss, metadata: metadata}

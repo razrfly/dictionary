@@ -11,9 +11,12 @@ defmodule DevilsDictionary.Absorb.Resolver do
   edge; it stays where it is and is reported.
 
   WordNet needs none of this: its graph is closed and its sense ids are
-  deterministic, so `Sources.Wordnet` resolves inside the absorb and this pass
-  never sees its rows. Scorecard row R1 is WordNet's; **R2** is this module's,
-  and wants >= 80 % of Wiktionary's edges resolved.
+  deterministic, so its edges name the target **meaning** and the materializer's
+  second pass closes them. A pending row carrying `metadata["to_sense"]` is
+  therefore skipped here — matching it to a lexeme by spelling would write the
+  claim with the wrong endpoint and call it resolved. Scorecard row R1 is
+  WordNet's; **R2** is this module's, and wants >= 80 % of Wiktionary's edges
+  resolved.
 
   ## Picking one target out of many
 
@@ -139,6 +142,11 @@ defmodule DevilsDictionary.Absorb.Resolver do
             ON l.language_tag = 'en' AND lower(l.lemma) = lower(p.to_lemma)
          WHERE p.id >= $1 AND p.id < $2
            AND ($3::bigint IS NULL OR p.source_id = $3)
+           -- An edge that names a *meaning* is not resolvable by spelling. It
+           -- waits for the materializer's second pass, which knows the sense
+           -- key; matching it to a lexeme here would write the claim with the
+           -- wrong endpoint and call it resolved.
+           AND NOT (p.metadata ? 'to_sense')
          ORDER BY p.id,
                   (l.part_of_speech = p.to_pos) DESC NULLS LAST,
                   (l.lemma = p.to_lemma) DESC,
