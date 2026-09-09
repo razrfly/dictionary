@@ -80,6 +80,44 @@ defmodule DevilsDictionary.Absorb.BatchTest do
       assert state("b") == :active
     end
 
+    test "writes one content item for the records that name it, and lets each of them own it",
+         ctx do
+      # Two records, one canonical article — `ON CONFLICT DO UPDATE command
+      # cannot affect row a second time` if the batch tries to write it twice,
+      # and a Wikipedia replay of 85,044 records hits it in the first batch.
+      article(ctx.source, "eastern-grey-squirrel", "Sciurus carolinensis")
+      article(ctx.source, "grey-squirrel", "Sciurus carolinensis")
+
+      Batch.run(FakeSource, ctx.source)
+
+      assert Repo.aggregate(from(c in "content_items"), :count) == 1
+
+      assert Repo.aggregate(
+               from(o in "source_materialized_outputs", where: o.output_role == "content"),
+               :count
+             ) == 2
+    end
+
+    test "an object two records attest survives one of them going quiet", ctx do
+      article(ctx.source, "eastern-grey-squirrel", "Sciurus carolinensis")
+      article(ctx.source, "grey-squirrel", "Sciurus carolinensis")
+      Batch.run(FakeSource, ctx.source)
+
+      # One probe stops redirecting there. The article is still attested by the
+      # other, so withdrawing it would be the source losing an article it still
+      # publishes.
+      Sources.insert_records(ctx.source, [
+        %{external_id: "grey-squirrel/noun", raw: %{"lemma" => "grey-squirrel"}}
+      ])
+
+      Batch.run(FakeSource, ctx.source)
+
+      assert Repo.one!(
+               from r in "content_revisions", where: r.is_current, select: r.lifecycle_state
+             ) ==
+               "active"
+    end
+
     test "reconcile: false stamps without retiring, for a pass that writes a partial view",
          ctx do
       publish(ctx.source, [{"a", "Money; profit."}, {"b", "The edge of a river."}])
@@ -115,6 +153,15 @@ defmodule DevilsDictionary.Absorb.BatchTest do
           "lemma" => "bank",
           "senses" => Enum.map(senses, fn {key, gloss} -> %{"key" => key, "gloss" => gloss} end)
         }
+      }
+    ])
+  end
+
+  defp article(source, lemma, key) do
+    Sources.insert_records(source, [
+      %{
+        external_id: "#{lemma}/noun",
+        raw: %{"lemma" => lemma, "content_key" => key, "body" => "an article about #{key}"}
       }
     ])
   end
