@@ -914,9 +914,12 @@ defmodule DevilsDictionary.Health.Score do
       row(
         "O4",
         "health page",
-        "`mix dd.health` and /health: coverage, resolution, the link histogram, candidates, conflicts, parity",
-        "all present",
-        opts[:skip_health_check] != true
+        "proven by test",
+        "the page's numbers are the CLI's",
+        opts[:skip_health_check] != true,
+        detail:
+          "health_live_test.exs — every section renders, and the coverage rows carry " <>
+            "the values `Health.coverage/2` returns, which is what `mix dd.health` prints"
       )
     ]
   end
