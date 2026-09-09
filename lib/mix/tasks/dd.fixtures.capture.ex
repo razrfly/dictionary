@@ -103,12 +103,14 @@ defmodule Mix.Tasks.Dd.Fixtures.Capture do
       records =
         Repo.all(
           from r in SourceRecord,
+            join: rev in assoc(r, :revisions),
+            on: rev.source_record_id == r.id and rev.revision_key == r.content_hash,
             where: r.source_id == ^source.id,
             # jsonb_exists/2 rather than the `?` operator: `?` is Ecto's
             # fragment placeholder and cannot be escaped.
-            where: fragment("jsonb_exists(? -> 'members', ?)", r.raw, ^lemma),
+            where: fragment("jsonb_exists(? -> 'members', ?)", rev.payload, ^lemma),
             order_by: r.external_id,
-            select: r.raw
+            select: rev.payload
         )
 
       write("wordnet", lemma, records, opts)
@@ -127,19 +129,21 @@ defmodule Mix.Tasks.Dd.Fixtures.Capture do
       records =
         Repo.all(
           from r in SourceRecord,
+            join: rev in assoc(r, :revisions),
+            on: rev.source_record_id == r.id and rev.revision_key == r.content_hash,
             where: r.source_id == ^source.id,
             # Compared with the stress marks stripped from both sides: Johnson
             # prints `ABI'DE`, and the lemma we ask for is `abide`.
             where:
               fragment(
                 "replace(replace(? ->> 'headword', ?, ''), ?, '') = ?",
-                r.raw,
+                rev.payload,
                 "\u2019",
                 "'",
                 ^String.upcase(lemma)
               ),
             order_by: r.external_id,
-            select: r.raw
+            select: rev.payload
         )
 
       write(slug, lemma, records, opts)

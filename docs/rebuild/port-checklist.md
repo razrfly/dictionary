@@ -100,3 +100,22 @@ Eleven tasks port. Five are new: `dd.manifest` (done), `dd.export.replay`,
 places that reference it: `docs/sketches/README.md`, `README.md` (three rows),
 `docs/map/README.md`, `lib/devils_dictionary/demo.ex`,
 `lib/devils_dictionary_web/components/demo.ex`, and `health/score.ex:693`.
+
+## What the port actually cost, and what it found
+
+Recorded at P5, against the plan above. Every treatment held: no file marked
+*Reuse* needed rewriting, and no file marked *Rewrite* turned out to be a port.
+The two surprises were both in the **write** path, and neither was visible to
+`mix compile`:
+
+| Found | Where | Why nothing caught it earlier |
+|---|---|---|
+| Content matching collapsed two WordNet synsets into one identity (194 of them), each survivor then flip-flopping its gloss one revision per pass | `absorb/sense_identity.ex` | The policy was calibrated on Wiktionary, where a key *is* a position. WordNet's key is a synset id, and its glosses are written to be near-neighbours — *sequoia* the tree and *sequoia* the wood differ by two words. No row is missing afterwards, so no count shows it. |
+| The import path never called `reconcile/2`: 240,056 outputs with a null `last_seen_run_id` | `absorb/batch.ex` | `durability_test.exs` proved the *function*. Nothing asserted that the loop every source actually calls used it. |
+| The index pass minted `objects` and `lexemes` in separate autocommit statements | `absorb/sources/wiktionary.ex` | The registry's constraint trigger is **deferred to COMMIT**, and the SQL sandbox is one enclosing transaction — so the whole class is invisible to an ordinary test. `@moduletag :unboxed` exists now, and reproduces it. |
+| `mix dd.rebuild` passed a `%Source{}` where `absorb/2` takes a scope | `mix/tasks/dd.rebuild.ex` | The four sources that ignore the argument absorbed happily; only Wiktionary and Wikipedia pattern-match it. |
+
+The lesson the checklist did not anticipate is that **the sandbox hides deferred
+constraints**. `raw_sql_test.exs` was added at P1 for the defects `mix compile`
+cannot see; `DataCase`'s `:unboxed` tag is its counterpart for the defects a
+transaction cannot see.

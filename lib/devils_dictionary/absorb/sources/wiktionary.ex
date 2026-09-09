@@ -633,14 +633,14 @@ defmodule DevilsDictionary.Absorb.Sources.Wiktionary do
   # so a run that has to be stopped early has still enriched the words the word
   # page is judged on.
   #
-  # The phase filter reads `raw->>'word'` rather than splitting `external_id`:
-  # lemmas like `and/or` and `km/h` contain the separator.
+  # The phase filter reads the payload's `word` rather than splitting
+  # `external_id`: lemmas like `and/or` and `km/h` contain the separator.
   defp materialize_in_reason_order(source, scope, opts) do
     first = scope |> scope_lemmas("wordnet_closure") |> MapSet.to_list()
 
     phases = [
-      dynamic([r], fragment("?->>'word' = ANY(?)", r.raw, ^first)),
-      dynamic([r], not fragment("?->>'word' = ANY(?)", r.raw, ^first))
+      dynamic([r], ^named_by(first)),
+      dynamic([r], not (^named_by(first)))
     ]
 
     Enum.reduce(phases, %{lexemes: 0, senses: 0, relations: 0}, fn where, acc ->
@@ -658,6 +658,29 @@ defmodule DevilsDictionary.Absorb.Sources.Wiktionary do
         relations: acc.relations + counts.relations
       }
     end)
+  end
+
+  # `source_records.raw` is **virtual**: the payload lives in
+  # `source_record_revisions`, keyed by the checksum the record still carries.
+  # A query that names `r.raw` compiles and then fails with `column s0.raw does
+  # not exist` — which is how the first full rebuild lost this stage.
+  defp named_by(lemmas) do
+    dynamic(
+      [r],
+      fragment(
+        """
+        EXISTS (
+          SELECT 1 FROM source_record_revisions rv
+           WHERE rv.source_record_id = ?
+             AND rv.revision_key = ?
+             AND rv.payload->>'word' = ANY(?)
+        )
+        """,
+        r.id,
+        r.content_hash,
+        ^lemmas
+      )
+    )
   end
 
   defp dump_path!(source, opts) do

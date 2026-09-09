@@ -24,7 +24,9 @@ defmodule DevilsDictionary.Absorb.Sources.WiktionaryIndexTest do
 
   import Ecto.Query
 
+  alias DevilsDictionary.Absorb.ScopeBuilder
   alias DevilsDictionary.Absorb.Sources.Wiktionary
+  alias DevilsDictionary.Lexicon
   alias DevilsDictionary.Registry.Lexeme
   alias DevilsDictionary.{Fixtures, Repo}
 
@@ -53,6 +55,25 @@ defmodule DevilsDictionary.Absorb.Sources.WiktionaryIndexTest do
     {:ok, _} = Wiktionary.absorb(nil, index: true, path: path, limit: 10)
 
     assert Repo.aggregate(Lexeme, :count) == before
+    assert orphaned() == 0
+  end
+
+  test "the scoped pass filters on the payload, which is not a column on the record" do
+    # `source_records.raw` is virtual — the payload moved to
+    # `source_record_revisions` at P1 — so the phase filter that reads
+    # `raw->>'word'` compiles and then dies with `column s0.raw does not exist`.
+    # The first full rebuild lost this whole stage to it, and nothing before this
+    # test ran the scoped pass against the new schema.
+    path = dump(~w(nepotism bank egomaniac))
+    {:ok, _} = Wiktionary.absorb(nil, index: true, path: path, limit: 10)
+
+    scope = Lexicon.get_scope_by_slug!("culture")
+    %{total: 3} = ScopeBuilder.build(scope, reset: true)
+
+    assert {:ok, stats} = Wiktionary.absorb(scope, path: path, limit: 10)
+
+    assert stats.records == 3
+    assert stats.senses == 3
     assert orphaned() == 0
   end
 
