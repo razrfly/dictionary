@@ -562,7 +562,8 @@ defmodule DevilsDictionary.Absorb.Materializer do
     rows
     |> Enum.group_by(&Map.fetch!(lexeme_ids, &1.lexeme))
     |> Enum.reduce({%{}, %{}, []}, fn {lexeme_id, group}, {ids, states, cases} ->
-      decisions = SenseIdentity.decide(group, Map.get(held, lexeme_id, []), stability)
+      group_held = Map.get(held, lexeme_id, [])
+      decisions = SenseIdentity.decide(group, group_held, stability)
 
       Enum.zip(group, decisions)
       |> Enum.reduce({ids, states, cases}, fn
@@ -572,8 +573,19 @@ defmodule DevilsDictionary.Absorb.Materializer do
         {_row, {:new, nil}}, acc ->
           acc
 
-        # No id is reused and no attachment moves. A person decides.
+        # No *existing* meaning is claimed and no attachment moves: a person
+        # decides. But the row this source published under this key last time is
+        # ours, not a candidate — reusing it is not "matching on the key", it is
+        # declining to mint a second identity for the same unresolved case every
+        # run. Without this the table grew by one sense per ambiguous sense per
+        # import, for ever.
         {row, {:ambiguous, candidates, reason}}, {ids, states, cases} ->
+          ids =
+            case Enum.find(group_held, &(to_string(&1.external_key) == to_string(row.key))) do
+              nil -> ids
+              own -> Map.put(ids, row.key, own.object_id)
+            end
+
           {ids, Map.put(states, row.key, "needs_review"), [{row, candidates, reason} | cases]}
       end)
     end)
@@ -617,11 +629,19 @@ defmodule DevilsDictionary.Absorb.Materializer do
     source_ids = records |> Enum.map(& &1.source_id) |> Enum.uniq()
     keys = Enum.map(rows, &content_key/1)
 
+    # Across the **source**, not across this batch. A content key is the canonical
+    # publication identity — `article:Q2703156` is *San Jose scale* whoever asked
+    # for it — so scoping the lookup to the records in hand made a second object
+    # for the same article as soon as the two records that name it fell in
+    # different batches. Both then owned the same `about` claim, and each run
+    # rewrote its subject to whichever had been materialized last: eight
+    # revisions of one assertion, all identical apart from that.
     existing =
       from(o in "source_materialized_outputs",
+        join: r in "source_records",
+        on: r.id == o.source_record_id,
         where:
-          o.source_record_id in ^Enum.map(records, & &1.id) and o.output_role == "content" and
-            o.output_key in ^keys,
+          r.source_id in ^source_ids and o.output_role == "content" and o.output_key in ^keys,
         select: {o.output_key, o.output_object_id}
       )
       |> Repo.all()

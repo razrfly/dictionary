@@ -32,8 +32,8 @@ defmodule Mix.Tasks.Dd.Materialize do
 
   alias DevilsDictionary.{Absorb, Health, Repo, Sources}
   alias DevilsDictionary.Absorb.Batch
-  alias DevilsDictionary.Encyclopedia.{Concept, ConceptLink, ConceptRelation}
-  alias DevilsDictionary.Lexicon.{Entry, Lexeme, LexicalRelation, Sense}
+  alias DevilsDictionary.Claims.{Assertion, AssertionRevision}
+  alias DevilsDictionary.Registry.{ContentItem, Entity, Lexeme, Object, Sense}
 
   @requirements ["app.start"]
 
@@ -75,14 +75,23 @@ defmodule Mix.Tasks.Dd.Materialize do
   # Every table `materialize/1` writes into. Row counts rather than checksums:
   # an upsert that lost a row, wrote a duplicate or swapped a natural key all
   # show up here, and M1's parity check covers what counts alone would miss.
+  #
+  # These were the retired lexicon schemas until P5 — named as bare atoms in a
+  # list, which is the one place the compiler does not check that a module
+  # exists. The task raised `Ecto.Queryable not implemented for Atom` the first
+  # time anybody ran it against the new model.
+  #
+  # `assertion_revisions` is counted as well as `assertions`: a re-materialize
+  # that wrote a needless revision leaves the identity count unchanged and is
+  # exactly the churn M2 exists to catch.
   @tables [
+    objects: Object,
     lexemes: Lexeme,
     senses: Sense,
-    entries: Entry,
-    relations: LexicalRelation,
-    concepts: Concept,
-    concept_relations: ConceptRelation,
-    links: ConceptLink
+    content_items: ContentItem,
+    entities: Entity,
+    assertions: Assertion,
+    assertion_revisions: AssertionRevision
   ]
 
   defp table_counts do

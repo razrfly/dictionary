@@ -69,3 +69,6 @@ that no existing row could catch.
 | **D6** inputs are pinned | `mix dd.manifest` | 5/5 verified; an altered byte fails |
 | **P1** page composition | full word/entity page p95 on high-degree nodes | the budget agreed at Gate 0 |
 | **P2** bounded traversal | incoming and outgoing assertion queries on the 1,768-degree lexeme | the budget agreed at Gate 0 |
+
+*What these rows measured once there was a corpus to measure, and the two that
+changed:* [`score-rows-p5.md`](score-rows-p5.md).
