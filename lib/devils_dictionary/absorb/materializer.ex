@@ -817,6 +817,20 @@ defmodule DevilsDictionary.Absorb.Materializer do
   def write_assertions([], _run_id, _now), do: 0
 
   def write_assertions(claims, run_id, now) do
+    # One transaction, because minting an assertion and writing its first
+    # revision are two statements and `assertion_has_one_current_revision` is
+    # deferred to **COMMIT**. Inside the materializer's `Ecto.Multi` this joins
+    # the enclosing transaction and costs nothing; called from `Absorb.Linker`,
+    # which has none of its own, it is the difference between a ladder rung and
+    #
+    #     assertions 1236827 has 0 current revisions, expected exactly 1
+    {:ok, written} =
+      Repo.transaction(fn -> do_write_assertions(claims, run_id, now) end, timeout: :infinity)
+
+    written
+  end
+
+  defp do_write_assertions(claims, run_id, now) do
     now = now || DateTime.utc_now()
     predicates = predicate_ids(claims)
 

@@ -253,7 +253,11 @@ defmodule Mix.Tasks.Dd.Rebuild do
     if opts[:live] || not File.exists?(archive) do
       absorb(slug, stage_opts, opts)
     else
-      Mix.Task.run("dd.replay", ["--source", slug, "--quiet"])
+      # `Mix.Task.run/2` runs a task **once per session** and returns `:noop`
+      # after that, so the second replay stage of a rebuild silently did nothing
+      # — Wikipedia's 85,044 records were reported as replayed in 0 ms and were
+      # not in the database.
+      Mix.Task.rerun("dd.replay", ["--source", slug, "--quiet"])
       %{replayed: archive}
     end
   end

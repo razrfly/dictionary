@@ -46,6 +46,11 @@ defmodule DevilsDictionary.Absorb.Resolver do
   # statement locks a million rows.
   @window 200_000
 
+  # Rows per write statement. Twelve columns on a revision, and Postgres takes
+  # 65,535 bind parameters: 2,000 rows is 24,000, with room for the widest of
+  # the three writes.
+  @write_chunk 2_000
+
   @pos_priority ~w(noun verb adj adv name phrase)
 
   @doc """
@@ -105,26 +110,33 @@ defmodule DevilsDictionary.Absorb.Resolver do
     {:ok, n} =
       Repo.transaction(
         fn ->
-          case matched(source_id, from, to) do
-            [] ->
-              0
-
-            matched ->
-              now = DateTime.utc_now()
-              ids = insert_assertions(matched, now)
-
-              write_revisions(matched, ids, now)
-              write_ownership(matched, ids, run_id, now)
-
-              {n, _} =
-                from(p in "pending_relations", where: p.id in ^Enum.map(matched, & &1.pending_id))
-                |> Repo.delete_all()
-
-              n
-          end
+          source_id
+          |> matched(from, to)
+          # The window is sized for the **scan**; the write has to be sized for
+          # the **wire**. Postgres accepts at most 65,535 bind parameters in one
+          # statement and a revision row is twelve of them, so a window holding
+          # 30,767 matches is 369,208 parameters — a hard protocol error, not a
+          # slow query, and the first full re-import hit it on the Wiktionary
+          # backlog.
+          |> Enum.chunk_every(@write_chunk)
+          |> Enum.reduce(0, fn chunk, acc -> acc + write_matched(chunk, run_id) end)
         end,
         timeout: :infinity
       )
+
+    n
+  end
+
+  defp write_matched(matched, run_id) do
+    now = DateTime.utc_now()
+    ids = insert_assertions(matched, now)
+
+    write_revisions(matched, ids, now)
+    write_ownership(matched, ids, run_id, now)
+
+    {n, _} =
+      from(p in "pending_relations", where: p.id in ^Enum.map(matched, & &1.pending_id))
+      |> Repo.delete_all()
 
     n
   end
