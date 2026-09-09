@@ -26,6 +26,22 @@ defmodule Mix.Tasks.Dd.RebuildTest do
     refute @source =~ ~s|Mix.Task.run("dd.replay"|
   end
 
+  test "the scope's third rule gets a Wiktionary pass of its own" do
+    # `wikidata_taxon` walks a taxonomy that does not exist until Wikidata has
+    # been absorbed, so it adds lemmas — 8,724 of them on Animals — *after*
+    # Wiktionary has already run. Without a second sweep those words sit in the
+    # scope with no senses, which is how *pica*, *loris* and *calyptra* came to
+    # be in the corpus and mean nothing.
+    assert @source =~ ":\"wiktionary-taxon\""
+    assert @source =~ ":\"resolve-taxon\""
+    assert @source =~ ":\"link-taxon\""
+
+    # And after the second scope build, not before it.
+    taxon = :binary.match(@source, "{:\"scope-taxon\"") |> elem(0)
+    sweep = :binary.match(@source, "{:\"wiktionary-taxon\"") |> elem(0)
+    assert taxon < sweep
+  end
+
   test "a source module is handed a scope, never its own source" do
     # `absorb/2`'s first argument is the scope; a source looks its own source up.
     # Passing a `%Source{}` was a `FunctionClauseError` in Wiktionary and
