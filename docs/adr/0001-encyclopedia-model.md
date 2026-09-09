@@ -190,6 +190,27 @@ is case- and punctuation-preserving, so `C++`, `C+` and `c` are three identities
 - `entries`, `lexical_relations`, `concept_links`, `concept_relations`, `concepts` and
   `people` are retired as tables.
 
+Added at P5, from the first full re-import — each of these is a cost the design
+implies and the plan had not spelled out:
+
+- **Deferring a constraint means a writer must own a transaction.** Two of the
+  registry's rules are checked at `COMMIT`, so any writer that mints an identity
+  in one statement and its subtype or first revision in the next has to enclose
+  them. That is now true of `write_assertions/3` itself rather than of each
+  caller — the linker is raw SQL by design and has no transaction of its own.
+- **And it means the SQL sandbox cannot test them.** A test that wraps a whole
+  case in one transaction never reaches the commit where a deferred constraint
+  fires. Bulk-writer tests run unboxed.
+- **Every output carries the run that wrote it, and every batch reconciles.**
+  Ownership by `last_seen_run_id` is only a mechanism until something stamps it;
+  `Batch.run/3` opens a run when its caller does not own one, so a new source
+  cannot make refresh additive again by forgetting a keyword.
+- **A rebuild's last five stages are its earlier ones again.** The scope's third
+  rule needs a taxonomy that does not exist on the first pass, and Wikidata's
+  recorded P31/P279 edges need entities Wikipedia introduces afterwards. Neither
+  is a retry: a straight line whose stages depend on later stages has to come
+  back round once.
+
 **Rejected, with reasons:**
 
 - *A graph database.* The workload is bounded adjacency with provenance, and Postgres

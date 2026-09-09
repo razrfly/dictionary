@@ -764,7 +764,7 @@ defmodule DevilsDictionary.Absorb.Materializer do
     current =
       from(r in table,
         where: field(r, ^fk) in ^parent_ids and r.is_current,
-        select: {field(r, ^fk), map(r, ^([:id, :revision_number] ++ compared))}
+        select: {field(r, ^fk), map(r, ^([:id, :revision_number, :lifecycle_state] ++ compared))}
       )
       |> Repo.all()
       |> Map.new()
@@ -772,8 +772,16 @@ defmodule DevilsDictionary.Absorb.Materializer do
     changed =
       Enum.reject(pairs, fn {parent_id, attrs} ->
         case current[parent_id] do
-          nil -> false
-          row -> Enum.all?(compared, fn f -> same?(Map.get(row, f), Map.get(attrs, f)) end)
+          nil ->
+            false
+
+          row ->
+            # A withdrawn revision is never "unchanged". The source is emitting
+            # this again, and every row written here is written as active — so a
+            # claim that was retired and is now re-asserted has to come back,
+            # rather than staying withdrawn because its wording never moved.
+            row.lifecycle_state == "active" and
+              Enum.all?(compared, fn f -> same?(Map.get(row, f), Map.get(attrs, f)) end)
         end
       end)
 
@@ -968,6 +976,7 @@ defmodule DevilsDictionary.Absorb.Materializer do
     written = write_assertions(claims, run_id, now)
     drained = drop_pending(resolvable, records)
     held = write_pending(pending, changes, records, run_id, now)
+    restamp_pending(pending, records, run_id, now)
 
     %{written: written, pending: held, drained: drained, offered: length(merged.relations)}
   end
@@ -991,6 +1000,35 @@ defmodule DevilsDictionary.Absorb.Materializer do
       |> Repo.delete_all()
 
     n
+  end
+
+  # An edge this batch could not resolve is still an edge the source **emits**.
+  # It goes to `pending_relations` for the resolver to close by lemma, and if the
+  # resolver closed it on an earlier run then an assertion for it already exists
+  # — owned by that run, not this one. Without this, `reconcile/2` reads "not
+  # stamped by the current run" as "no longer published" and withdraws it: the
+  # second Wiktionary sweep retired 110,331 claims that the very next stage
+  # re-asserted. Ownership passes between stages of one import; the edge is what
+  # is still emitted, so the edge's key is what is re-stamped.
+  defp restamp_pending([], _records, _run_id, _now), do: 0
+
+  defp restamp_pending(pending, records, run_id, now) do
+    record_ids = Enum.map(records, & &1.id)
+
+    pending
+    |> Enum.map(&relation_key/1)
+    |> Enum.chunk_every(@chunk)
+    |> Enum.reduce(0, fn keys, acc ->
+      {n, _} =
+        Repo.update_all(
+          from(o in "source_assertion_outputs",
+            where: o.source_record_id in ^record_ids and o.output_key in ^keys
+          ),
+          set: [last_seen_run_id: run_id, retired_at: nil, updated_at: now]
+        )
+
+      acc + n
+    end)
   end
 
   defp resolve_sense_keys(relations, changes, records) do
