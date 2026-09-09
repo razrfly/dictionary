@@ -247,7 +247,14 @@ defmodule Mix.Tasks.Dd.Rebuild do
   defp do_stage(:"link-taxon", scope, opts), do: do_stage(:link, scope, opts)
 
   defp do_stage(:resolve, _scope, _opts) do
-    result = Resolver.run()
+    # A run of its own, for the same reason every absorb stage has one: the
+    # resolver writes assertions, and an unstamped claim output is invisible to
+    # reconciliation. Wiktionary, Johnson and Bierce reach their targets by lemma
+    # rather than by sense key, so **every** claim those three sources make is
+    # written here — 117,363 of them carried a null `last_seen_run_id`.
+    run = Sources.start_run("resolve")
+    result = Resolver.run(run_id: run.id)
+    Sources.finish_run(run, stringify(Map.take(result, [:resolved, :canonical])))
 
     %{
       resolved: result.resolved,
