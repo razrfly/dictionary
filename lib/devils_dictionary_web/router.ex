@@ -26,7 +26,24 @@ defmodule DevilsDictionaryWeb.Router do
     # The word page (#71 U1a, U1b, U2): a page for every one of the 1.5 million
     # index words, bare ones included, with the thing it names and the
     # provenance of every card.
+    #
+    # **Two ways in, and only one of them is identity.** ADR decision 10:
+    # `/words/:id/:slug` is canonical and addressed by `object_id`, because a
+    # slug is a lossy label — 28,306 slug groups hold more than one distinct
+    # lemma, and searching for `C++` used to land on `/define/c` headed `-c-`.
+    # `/define/:slug` survives as a *resolver*: it renders the word when the
+    # slug is unambiguous and offers the choice when it is not.
+    live "/words/:id/:slug", WordLive, :canonical
     live "/define/:slug", WordLive, :show
+
+    # The thing page (#74 §F): one identity, asked different questions. Bierce's
+    # biography, his works and his definitions are three sections of the same
+    # object id, which is the whole of #74's goal 2.
+    live "/entities/:id/:slug", EntityLive, :show
+
+    # One claim, from either endpoint, with its evidence, its review state and
+    # its history (#74 §F's connection detail).
+    live "/connections/:id", ConnectionLive, :show
 
     # The developer surfaces (#70 S4b).
     live "/s/:slug", ScopeLive, :show
@@ -73,6 +90,15 @@ defmodule DevilsDictionaryWeb.Router do
       on_mount: [{DevilsDictionaryWeb.UserAuth, :require_authenticated}] do
       live "/users/settings", UserLive.Settings, :edit
       live "/users/settings/confirm-email/:token", UserLive.Settings, :confirm_email
+
+      # Proposing a connection is the one thing on this site that needs an
+      # account: #74 asks for "a minimal authenticated submit/review flow", and
+      # an anonymous claim has nobody to attribute it to.
+      #
+      # `/connect` rather than `/connections/new`: routes match in definition
+      # order, and `/connections/:id` is declared in the public scope above, so
+      # `new` would be read as an id and never reach this.
+      live "/connect", ConnectionLive, :new
     end
 
     post "/users/update-password", UserSessionController, :update_password
