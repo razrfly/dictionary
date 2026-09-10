@@ -1,0 +1,14 @@
+db_bytes|4932794047
+lexemes_bytes|1109491712
+n_defined_lexemes|195322
+n_lexemes|1541668
+n_objects|1993400
+n_senses|250305
+n_source_records|344622
+n_wikt_records|22521
+n_wikt_senses|37646
+objects_bytes|262553600
+sense_revisions_bytes|119480320
+senses_bytes|106201088
+source_record_revisions_bytes|449421312
+source_records_bytes|204029952

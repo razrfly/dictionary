@@ -1,0 +1,4 @@
+db_bytes|5145417407
+n_defined|282098
+n_pending_rel|183918
+n_wikt_records|116930

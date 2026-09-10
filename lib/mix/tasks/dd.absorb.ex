@@ -23,7 +23,10 @@ defmodule Mix.Tasks.Dd.Absorb do
       headword, rather than scoped records
     * `--scope` — restrict the absorb to a scope slug
     * `--path` — override the dump path from `sources.config`
-    * `--limit` — stop after N records (for a smoke test)
+    * `--limit` — stop after N records (for a smoke test). Takes the *head* of
+      the dump, which is page order, not a representative sample
+    * `--sample-every` — Wiktionary only: absorb a 1-in-N sample of English
+      headwords, unscoped, by hash of the headword (#79 W1's measurement path)
     * `--reason` — with `--scope`, only the lemmas a scope rule tagged with that
       reason (`wordnet_closure`, `wiktionary_category`, …)
     * `--rebuild-indexes` — drop the lexemes GIN indexes for the load and
@@ -60,6 +63,7 @@ defmodule Mix.Tasks.Dd.Absorb do
           scope: :string,
           path: :string,
           limit: :integer,
+          sample_every: :integer,
           reason: :string,
           rebuild_indexes: :boolean,
           concepts: :boolean,

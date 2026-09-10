@@ -1,0 +1,10 @@
+db_bytes|4933473983
+n_defined|195671
+n_objects|1993834
+n_senses|250739
+n_wikt_records|22896
+objects_bytes|262619136
+sense_rev_bytes|119709696
+senses_bytes|106209280
+sr_bytes|204046336
+srr_bytes|449732608

@@ -429,14 +429,20 @@ defmodule DevilsDictionary.Absorb.Sources.Wiktionary do
   def absorb(scope \\ nil, opts \\ [])
 
   def absorb(nil, opts) do
-    if opts[:index] do
-      index(opts)
-    else
-      raise """
-      Wiktionary needs to know which pass to run:
-        mix dd.absorb wiktionary --index            # the full English index
-        mix dd.absorb wiktionary --scope animals    # trimmed records for a scope
-      """
+    cond do
+      opts[:index] ->
+        index(opts)
+
+      opts[:sample_every] ->
+        sample(opts)
+
+      true ->
+        raise """
+        Wiktionary needs to know which pass to run:
+          mix dd.absorb wiktionary --index               # the full English index
+          mix dd.absorb wiktionary --scope animals       # trimmed records for a scope
+          mix dd.absorb wiktionary --sample-every 30     # 1-in-N sample, unscoped (#79 W1)
+        """
     end
   end
 
@@ -508,6 +514,84 @@ defmodule DevilsDictionary.Absorb.Sources.Wiktionary do
      }}
   end
 
+  # ── sampled absorb (#79 W1) ──────────────────────────────────────────────
+
+  # The measurement path for #79's W1: the *same* stream, trim, insert and
+  # materialize machinery as `scoped/2`, with the scope membership test swapped
+  # for a 1-in-N sample. Its numbers therefore transfer to W2's full pass.
+  #
+  # Sampling is by `:erlang.phash2/1` of the headword, not by position:
+  #
+  #   * the dump is in page order (it opens with `dictionary`, `free`), so a
+  #     head-limited `--limit` sample is biased and cannot be extrapolated;
+  #   * a hash is stateless, so it survives `Task.async_stream` without a shared
+  #     counter, and re-running the same N picks the same words;
+  #   * it selects *words*, so every part of speech for a sampled headword
+  #     arrives together — the same lemma-granularity `scoped/2` has.
+  #
+  # This is deliberately not the W2 pass: it never claims completeness, and it
+  # materializes without reason ordering because there is no scope to order by.
+  defp sample(opts) do
+    n = opts[:sample_every]
+
+    unless is_integer(n) and n > 1 do
+      raise "--sample-every must be an integer greater than 1, got: #{inspect(n)}"
+    end
+
+    source = Sources.get_source_by_slug!(slug())
+    path = dump_path!(source, opts)
+
+    stats =
+      path
+      |> GzipLines.stream!()
+      |> Stream.chunk_every(@decode_chunk)
+      |> Task.async_stream(&select_chunk(&1, {:sample, n}),
+        max_concurrency: System.schedulers_online(),
+        ordered: true,
+        timeout: :infinity
+      )
+      |> Enum.reduce(new_scoped_stats(), fn {:ok, {rows, counts}}, acc ->
+        acc
+        |> merge_scoped_counts(counts)
+        |> buffer_records(source, rows)
+      end)
+      |> flush_records(source)
+
+    if stats.lines < @expect_min_lines do
+      raise """
+      gzip stream ended after #{stats.lines} lines, expected at least #{@expect_min_lines}.
+      Multi-member gzip files truncate silently with inflateInit/31 — check `gzip -t #{path}`.
+      """
+    end
+
+    materialized =
+      Batch.run(__MODULE__, source,
+        batch_size: @materialize_batch,
+        only_stale: true,
+        run_id: opts[:run_id]
+      )
+
+    {:ok,
+     %{
+       sample_every: n,
+       lines: stats.lines,
+       en_records: stats.en,
+       sampled_lemmas: MapSet.size(stats.matched),
+       records: stats.written,
+       lexemes: materialized.lexemes,
+       senses: materialized.senses,
+       relations: materialized.relations,
+       bytes_raw: stats.bytes_raw,
+       bytes_trimmed: stats.bytes_trimmed,
+       trim_saving_pct: saving_pct(stats.bytes_raw, stats.bytes_trimmed)
+     }}
+  end
+
+  # `scoped/2` selects by scope membership, `sample/1` by hash. One predicate so
+  # both share `select_chunk/2` and therefore share the trim and byte accounting.
+  defp selected?(%MapSet{} = wanted, word), do: MapSet.member?(wanted, word)
+  defp selected?({:sample, n}, word), do: rem(:erlang.phash2(word), n) == 0
+
   @doc """
   The distinct lemmas of a scope, optionally narrowed to one build reason.
 
@@ -543,7 +627,7 @@ defmodule DevilsDictionary.Absorb.Sources.Wiktionary do
           {:ok, %{"lang_code" => "en", "word" => word} = record} ->
             counts = %{counts | en: counts.en + 1}
 
-            if MapSet.member?(wanted, word) do
+            if selected?(wanted, word) do
               row = scoped_row(record)
 
               {[row | rows],
