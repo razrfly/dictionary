@@ -1,0 +1,3 @@
+db_bytes|5044156095
+n_defined|240533
+n_wikt_records|71787

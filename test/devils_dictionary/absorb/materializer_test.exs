@@ -109,6 +109,41 @@ defmodule DevilsDictionary.Absorb.MaterializerTest do
       assert pending.to_lemma == "seabird"
       assert pending.predicate.key == "hypernym"
     end
+
+    test "bounds an origin_key a source's relation target would overrun" do
+      source = source!()
+
+      # `origin_key` is varchar(255) and is built by interpolating strings the
+      # source chose. Wiktionary's `coordinate_terms` can name a whole series in
+      # a single target — "A-shaped - B-shaped - … - Z-shaped" is 315 bytes of
+      # key — which no test scope ever held, so the first unscoped absorb aborted
+      # the entire materialize transaction with a 22001 (#79 W1).
+      long = Enum.map_join(?A..?Z, " - ", &"#{<<&1>>}-shaped")
+      assert byte_size(long) > 255
+
+      record = record!(source, %{"lemma" => "a-shaped", "to_lemma" => long})
+
+      {:ok, _} = Materializer.run(record, FakeSource)
+
+      pending = Repo.one!(from(p in PendingRelation))
+
+      # The target itself is `text` and is kept whole; only the key is bounded.
+      assert pending.to_lemma == long
+      assert byte_size(pending.origin_key) <= 255
+
+      # Truncation alone would collide two long targets sharing a prefix and
+      # break the upsert, so the tail is a digest of the whole key.
+      assert pending.origin_key =~ ~r/~[0-9a-f]{16}$/
+
+      # And it has to be *stable*, or a re-import writes a second row for the
+      # same edge instead of upserting onto the first.
+      key = pending.origin_key
+
+      {:ok, _} =
+        Materializer.run(Repo.get!(SourceRecord, record.id) |> Sources.with_raw(), FakeSource)
+
+      assert Repo.one!(from(p in PendingRelation)).origin_key == key
+    end
   end
 
   describe "idempotence (scorecard M2)" do

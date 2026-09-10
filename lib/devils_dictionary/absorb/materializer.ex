@@ -900,7 +900,7 @@ defmodule DevilsDictionary.Absorb.Materializer do
           object: target,
           source_id: row.source_id,
           source_record_id: row[:source_record_id],
-          origin_key: "#{content_key(row)}|#{predicate}|#{target}",
+          origin_key: bounded_key("#{content_key(row)}|#{predicate}|#{target}"),
           method: "source",
           confidence: nil,
           metadata: %{}
@@ -1292,7 +1292,41 @@ defmodule DevilsDictionary.Absorb.Materializer do
   defp relation_key(r) do
     subject = r[:from_sense] || inspect(r[:from_lexeme])
     target = r[:to_sense] || r[:to_lemma] || inspect(r[:to_lexeme])
-    "rel|#{subject}|#{r.type}|#{target}"
+    bounded_key("rel|#{subject}|#{r.type}|#{target}")
+  end
+
+  # `origin_key` is `varchar(255)` on both `assertions` and `pending_relations`,
+  # and every one of them is built by interpolating strings the *source* chose.
+  # The three test scopes never held one long enough to notice; the unscoped
+  # corpus does — Wiktionary's `coordinate_terms` can name a whole series in a
+  # single target ("A-shaped - B-shaped - … - Z-shaped", 315 bytes), which aborts
+  # the materialize transaction with a 22001 (#79 W1).
+  #
+  # Truncating alone would collide two long keys that share a prefix and break
+  # the idempotent upsert, so keep the readable head and make the tail unique
+  # with a digest of the whole key. Deterministic, so a re-run still upserts onto
+  # the same row; inspectable, because the prefix survives; and no migration,
+  # because the result fits the column it always had.
+  @origin_key_max 255
+  @origin_key_suffix 17
+
+  defp bounded_key(key) when byte_size(key) <= @origin_key_max, do: key
+
+  defp bounded_key(key) do
+    digest = :crypto.hash(:sha256, key) |> Base.encode16(case: :lower) |> binary_part(0, 16)
+
+    key
+    |> binary_part(0, @origin_key_max - @origin_key_suffix)
+    |> drop_partial_codepoint()
+    |> Kernel.<>("~" <> digest)
+  end
+
+  # A byte-length cut can land inside a multi-byte codepoint; back off until the
+  # prefix is valid UTF-8 again (at most three bytes).
+  defp drop_partial_codepoint(bin) do
+    if String.valid?(bin),
+      do: bin,
+      else: drop_partial_codepoint(binary_part(bin, 0, byte_size(bin) - 1))
   end
 
   defp write_pending([], _changes, _records, _run_id, _now), do: 0
@@ -1388,7 +1422,7 @@ defmodule DevilsDictionary.Absorb.Materializer do
           object: to,
           source_id: r.source_id,
           source_record_id: r[:source_record_id],
-          origin_key: "ent|#{from}|#{r.type}|#{to}",
+          origin_key: bounded_key("ent|#{from}|#{r.type}|#{to}"),
           method: "source",
           confidence: nil,
           metadata: if(r[:property], do: %{"property" => r.property}, else: %{})
@@ -1448,7 +1482,9 @@ defmodule DevilsDictionary.Absorb.Materializer do
           source_id: link.source_id,
           source_record_id: link[:source_record_id],
           origin_key:
-            "link|#{inspect(link[:lexeme])}|#{link[:sense]}|#{link[:concept]}|#{link[:method]}",
+            bounded_key(
+              "link|#{inspect(link[:lexeme])}|#{link[:sense]}|#{link[:concept]}|#{link[:method]}"
+            ),
           method: to_string(link[:method] || "source"),
           confidence: link[:confidence],
           metadata: link[:metadata] || %{}
