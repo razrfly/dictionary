@@ -101,10 +101,19 @@ Remaining after the spike: 1,370,709 records.
 
 **Coverage.** The linear extrapolation of the 0.919 define ratio saturates — it
 lands at 100.0 % of 1,541,668, which is past the ceiling. Read it as: essentially
-the whole index gets a definition. The structural bound is that 1,487,639 of
-1,541,668 lexemes (96.5 %) have an English Wiktionary record at all, and the ratio
-will decay as coverage fills, so **expect the low-to-mid 90s, versus 12.7 % today**.
-W3 measures the real figure rather than inheriting this one.
+the whole index gets a definition.
+
+The structural bound is *not* the record count. 1,487,639 counts decoded English
+**records**, and a record is `(word, pos)` — separate records share that key when
+Wiktionary splits a word by etymology, so the record count overstates distinct
+lexemes. Measured directly: **1,470,121 of 1,541,668 lexemes (95.4 %) carry
+`wiktionary` in `source_ids`**. The sample agrees independently — run N=31 wrote
+47,399 records for 46,917 lexemes, a ratio of 0.9898, which extrapolates to
+1,472,511 (95.5 %).
+
+So the ceiling is **95.4 %**, the ratio decays as coverage fills, and the honest
+expectation is **the low-to-mid 90s versus 12.7 % today**. W3 measures the real
+figure rather than inheriting this one.
 
 ## Recommendation: one pass, not batched by frequency band
 
@@ -140,4 +149,16 @@ mix dd.resolve --source wiktionary
 ```
 
 Raw before/after snapshots: `before.txt`, `pre30.txt`, `post30.txt`, `pre31.txt`,
-`post31.txt` in this directory.
+`post31.txt` in this directory. They are the literal captures, so their key sets
+differ as the questions narrowed — read them with this mapping:
+
+| `before.txt` | later files | meaning |
+|---|---|---|
+| `n_defined_lexemes` | `n_defined` | lexemes with any definition |
+| `source_records_bytes` | `sr_bytes` | `pg_total_relation_size('source_records')` |
+| `source_record_revisions_bytes` | `srr_bytes` | ditto, revisions |
+| `sense_revisions_bytes` | `sense_rev_bytes` | ditto, sense revisions |
+| `n_lexemes` | *(dropped)* | constant at 1,541,668 throughout |
+
+`pre31.txt` and `post31.txt` carry only the three keys that moved, because by then
+the storage-per-record figure was already established from the N=30 pair.

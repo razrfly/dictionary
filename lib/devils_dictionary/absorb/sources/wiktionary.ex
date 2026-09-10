@@ -544,6 +544,12 @@ defmodule DevilsDictionary.Absorb.Sources.Wiktionary do
     stats =
       path
       |> GzipLines.stream!()
+      |> then(fn stream ->
+        case opts[:limit] do
+          nil -> stream
+          n -> Stream.take(stream, n)
+        end
+      end)
       |> Stream.chunk_every(@decode_chunk)
       |> Task.async_stream(&select_chunk(&1, {:sample, n}),
         max_concurrency: System.schedulers_online(),
@@ -557,7 +563,7 @@ defmodule DevilsDictionary.Absorb.Sources.Wiktionary do
       end)
       |> flush_records(source)
 
-    if stats.lines < @expect_min_lines do
+    if is_nil(opts[:limit]) and stats.lines < @expect_min_lines do
       raise """
       gzip stream ended after #{stats.lines} lines, expected at least #{@expect_min_lines}.
       Multi-member gzip files truncate silently with inflateInit/31 — check `gzip -t #{path}`.
