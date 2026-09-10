@@ -38,17 +38,31 @@ defmodule DevilsDictionaryWeb.HomeLiveTest do
       assert html =~ "family=Inter"
     end
 
-    test "the stats line counts the index, the scopes and the sources", ctx do
+    # #77 §1. It used to add a clause per scope — "25,385 animals enriched · 5
+    # culture enriched · 809 emotions enriched" — naming internal populations in
+    # public copy and presenting a five-row pilot as a product category. Three
+    # whole-corpus numbers now, one of them the one that matters: how often a
+    # reader who types a word finds anything.
+    test "the stats line counts the index, what is defined, and the sources", ctx do
       word!(ctx, "oyster", ~w(wiktionary))
       word!(ctx, "quark", ~w(wordnet), scope: nil)
+      word!(ctx, "abrocome", [], enriched_at: nil, scope: nil)
 
       {:ok, live, _html} = live(ctx.conn, ~p"/")
-      html = render_async(live)
+      render_async(live)
 
-      assert html =~ ~s(id="stats")
-      assert html =~ "2 words indexed"
-      assert html =~ "1 animals enriched"
-      assert html =~ "6 sources"
+      # Read off the element and squashed, because the line wraps in the
+      # template and the sentence is what is under test, not its indentation.
+      stats = live |> element("#stats") |> render() |> squash()
+
+      assert stats =~ "3 words indexed · 2 with at least one definition · 6 sources so far"
+
+      refute stats =~ "animals enriched"
+      refute stats =~ "Animals"
+    end
+
+    defp squash(html) do
+      html |> String.replace(~r/<[^>]*>/, " ") |> String.replace(~r/\s+/, " ") |> String.trim()
     end
   end
 

@@ -45,11 +45,38 @@ defmodule DevilsDictionaryWeb.Router do
     # its history (#74 §F's connection detail).
     live "/connections/:id", ConnectionLive, :show
 
-    # The developer surfaces (#70 S4b).
-    live "/s/:slug", ScopeLive, :show
+    # A source's identity, licence and attribution are reader-facing provenance
+    # — #69 backbone rule 1, the thing the footer's Sources column links to — so
+    # this one stays public and stays put. Its *coverage* section is the part
+    # that needs a population, and it now renders only when one is asked for.
     live "/sources/:slug", SourceLive, :show
+  end
+
+  # The developer surfaces (#70 S4b), moved off the public paths they used to
+  # occupy (#77 §1). They were the whole of the navigation: one test population
+  # and two consoles standing in for the product's structure.
+  #
+  # Deliberately **not** access-controlled and deliberately **not** behind
+  # `dev_routes`. #77 is explicit that a diagnostic surface is not automatically
+  # access-controlled and that the access policy is a separate decision; and
+  # `/ops/health` is most wanted in exactly the environment a compile-time gate
+  # would remove it from.
+  scope "/ops", DevilsDictionaryWeb do
+    pipe_through :browser
+
+    live "/scopes/:slug", ScopeLive, :show
     live "/health", HealthLive, :show
-    live "/admin/imports", Admin.ImportsLive, :index
+    live "/imports", Admin.ImportsLive, :index
+  end
+
+  # The retired paths, redirected rather than deleted. Declared after the public
+  # scope so nothing above is shadowed. See `OpsRedirectController` for why 302.
+  scope "/", DevilsDictionaryWeb do
+    pipe_through :browser
+
+    get "/s/:slug", OpsRedirectController, :scope
+    get "/health", OpsRedirectController, :health
+    get "/admin/imports", OpsRedirectController, :imports
   end
 
   # Other scopes may use custom stacks.

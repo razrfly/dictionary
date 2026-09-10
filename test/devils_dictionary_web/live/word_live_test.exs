@@ -179,35 +179,54 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
       refute html =~ ~s(id="did-you-mean")
     end
 
-    test "a word in a scope says which one, and links to it", ctx do
+    # #77 §1 removed the scope half of this line. A population is an operational
+    # selection with an internal name; naming one in a reader's copy leaks it,
+    # and the names linked the word page at what is now an ops surface. What is
+    # left is the half a reader can act on.
+    test "a word a population holds says nothing about the population", ctx do
       oyster!(ctx)
 
       {:ok, _live, html} = live(ctx.conn, ~p"/define/oyster")
 
-      assert html =~ ~s(id="scopes")
-      assert html =~ ~s(id="scope-animals")
-      assert html =~ ~s(href="/s/animals")
-      refute html =~ ~s(id="out-of-scope")
+      refute html =~ ~s(id="scopes")
+      refute html =~ ~s(id="scope-animals")
+      refute html =~ ~s(href="/s/animals")
+      refute html =~ "Animals"
+      refute html =~ "not in"
     end
 
-    test "a word in no scope says so, and names what does hold it", ctx do
+    test "a thinly-sourced word says why it is thin, and names the one source", ctx do
       quark = word!(ctx, "quark", ~w(wordnet), scope: nil)
       sense!(ctx, quark, "wordnet", group_key: "oewn-quark-n", gloss: "an elementary particle")
 
       {:ok, _live, html} = live(ctx.conn, ~p"/define/quark")
 
-      assert html =~ ~s(id="out-of-scope")
-      assert html =~ "not in Animals"
+      assert html =~ ~s(id="sources")
+      assert html =~ ~s(id="one-source")
+      assert html =~ "One source so far"
       assert html =~ "Open English WordNet"
+      refute html =~ "Animals"
     end
 
-    test "a bare row has no scope line to print and does not invent one", ctx do
+    test "a word several sources define is counted, not listed", ctx do
+      cat = word!(ctx, "cat", ~w(wordnet bierce), scope: nil)
+      sense!(ctx, cat, "wordnet", group_key: "oewn-cat-n", gloss: "a feline")
+      entry!(ctx, cat, "bierce", headword: "CAT", pos: "n", body: "A soft automaton.", year: 1911)
+
+      {:ok, _live, html} = live(ctx.conn, ~p"/define/cat")
+
+      assert html =~ ~s(id="sources")
+      assert html =~ "Defined here by 2 sources"
+      refute html =~ ~s(id="one-source")
+    end
+
+    test "a bare row has no source line to print and does not invent one", ctx do
       word!(ctx, "abrocome", [], enriched_at: nil, scope: nil)
 
       {:ok, _live, html} = live(ctx.conn, ~p"/define/abrocome")
 
       assert html =~ ~s(id="bare-row")
-      refute html =~ ~s(id="scopes")
+      refute html =~ ~s(id="sources")
     end
   end
 

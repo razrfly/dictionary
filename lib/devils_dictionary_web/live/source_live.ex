@@ -7,6 +7,14 @@ defmodule DevilsDictionaryWeb.SourceLive do
 
   The samples are real records, not fixtures. A source page showing invented
   samples would be the one page in the app that lies about what was absorbed.
+
+  **The one public page that takes a population, and only when asked** (#77 §1).
+  Identity, licence, attribution, holdings, runs and samples are the source's own
+  and always render. Coverage is a claim about a population, so it renders only
+  with an explicit `?scope=`; the ops pages link here carrying theirs. It used to
+  default to Animals, which is how a Bierce page asked about Emotions came to
+  report Emotions' percentage above a link to Animals' gaps. No chooser here
+  either: "population" is ops vocabulary, and this page is for readers.
   """
   use DevilsDictionaryWeb, :live_view
 
@@ -14,15 +22,18 @@ defmodule DevilsDictionaryWeb.SourceLive do
 
   @impl true
   def mount(%{"slug" => slug}, _session, socket) do
-    {:ok, assign(socket, slug: slug, scope_slug: nil, page_title: slug)}
+    {:ok, assign(socket, slug: slug, scope_slug: :unset, page_title: slug)}
   end
 
   # How much of a scope this source attests depends on which scope is asked
   # about, so `?scope=` decides it (#70 S5c). A source page hard-wired to
   # Animals reports 0 % for a source that covers the second scope well.
+  #
+  # `:unset` on mount, because `nil` is now the meaningful "no population asked
+  # about" and the first call has to be able to tell them apart.
   @impl true
   def handle_params(params, _uri, socket) do
-    scope = params["scope"] || "animals"
+    scope = params["scope"]
 
     if scope == socket.assigns.scope_slug do
       {:noreply, socket}
@@ -37,7 +48,7 @@ defmodule DevilsDictionaryWeb.SourceLive do
       {:noreply,
        socket
        |> put_flash(:error, "No such source.")
-       |> push_navigate(to: ~p"/admin/imports")}
+       |> push_navigate(to: ~p"/ops/imports")}
   end
 
   @impl true
@@ -108,6 +119,7 @@ defmodule DevilsDictionaryWeb.SourceLive do
       </.section>
 
       <.section
+        :if={@detail.coverage}
         id="source-coverage"
         eyebrow="Coverage"
         headline={"How much of #{@detail.coverage.scope} it attests"}
@@ -143,7 +155,7 @@ defmodule DevilsDictionaryWeb.SourceLive do
           </div>
 
           <p class="text-sm/7">
-            <.link navigate={~p"/s/animals?missing=#{@slug}"} class="underline">
+            <.link navigate={~p"/ops/scopes/#{@scope_slug}?missing=#{@slug}"} class="underline">
               Browse the words this source is missing →
             </.link>
           </p>

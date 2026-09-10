@@ -22,7 +22,7 @@ defmodule DevilsDictionaryWeb.HealthLiveTest do
   end
 
   test "the scorecard is Score.rows/1, row for row", ctx do
-    {:ok, live, _html} = live(ctx.conn, ~p"/health")
+    {:ok, live, _html} = live(ctx.conn, ~p"/ops/health?scope=animals")
     html = render_async(live, @async_timeout)
 
     rows = Score.rows(scope: "animals", skip_parity: true)
@@ -37,7 +37,7 @@ defmodule DevilsDictionaryWeb.HealthLiveTest do
   end
 
   test "a pending row shows which session owes it", ctx do
-    {:ok, live, _html} = live(ctx.conn, ~p"/health")
+    {:ok, live, _html} = live(ctx.conn, ~p"/ops/health?scope=animals")
     html = render_async(live, @async_timeout)
 
     # U2, U3 and U6 are #71's; E1–E3 are S5's. The table says so rather than
@@ -51,7 +51,7 @@ defmodule DevilsDictionaryWeb.HealthLiveTest do
   # fallback, so it must not run in mount (S4 audit): the page arrives with
   # both sections loading and neither blocks the socket join.
   test "the scorecard and the detail sections arrive asynchronously", ctx do
-    {:ok, live, html} = live(ctx.conn, ~p"/health")
+    {:ok, live, html} = live(ctx.conn, ~p"/ops/health?scope=animals")
 
     assert html =~ ~s(id="scorecard-loading")
     assert html =~ ~s(id="health-loading")
@@ -77,7 +77,7 @@ defmodule DevilsDictionaryWeb.HealthLiveTest do
     # the 7 September audit rejected for E3, where `File.exists?` stood in for a
     # measurement. Both surfaces read `Health.coverage/2`, so agreement is a
     # property that can actually be checked rather than claimed.
-    {:ok, live, _html} = live(ctx.conn, ~p"/health?scope=#{ctx.animals.slug}")
+    {:ok, live, _html} = live(ctx.conn, ~p"/ops/health?scope=#{ctx.animals.slug}")
     render_async(live, @async_timeout)
 
     rendered = live |> element("#health-coverage-rows") |> render()
@@ -92,7 +92,7 @@ defmodule DevilsDictionaryWeb.HealthLiveTest do
   end
 
   test "parity is a button per source, not a page load", ctx do
-    {:ok, live, html} = live(ctx.conn, ~p"/health")
+    {:ok, live, html} = live(ctx.conn, ~p"/ops/health?scope=animals")
 
     assert html =~ ~s(id="health-parity")
     assert html =~ "not checked"
@@ -109,7 +109,7 @@ defmodule DevilsDictionaryWeb.HealthLiveTest do
   end
 
   test "the page takes a scope, and it is the scope it grades (#70 S5c)", ctx do
-    {:ok, live, _html} = live(ctx.conn, ~p"/health?scope=emotions")
+    {:ok, live, _html} = live(ctx.conn, ~p"/ops/health?scope=emotions")
     html = render_async(live, @async_timeout)
 
     rows = Score.rows(scope: "emotions", skip_parity: true)
@@ -122,8 +122,40 @@ defmodule DevilsDictionaryWeb.HealthLiveTest do
     assert html =~ "no wikidata_root"
   end
 
+  # #77 §2. The page with no `?scope=` used to compute Animals' scorecard and
+  # head it "36 / 36 graded rows pass" — a test population's result, presented
+  # as the corpus's.
+  describe "with no population selected" do
+    test "nothing population-specific is computed, and M1 still is", ctx do
+      {:ok, live, html} = live(ctx.conn, ~p"/ops/health")
+
+      assert html =~ ~s(id="no-population")
+      assert html =~ ~s(id="health-parity")
+      refute html =~ ~s(id="scorecard-loading")
+      refute html =~ ~s(id="health-loading")
+      refute html =~ "graded rows pass"
+
+      # And it stays that way: there is no async result on its way in.
+      assert render_async(live, @async_timeout) =~ ~s(id="no-population")
+    end
+
+    test "the chooser offers every population, and choosing one grades it", ctx do
+      {:ok, live, html} = live(ctx.conn, ~p"/ops/health")
+
+      for slug <- ~w(animals culture emotions) do
+        assert html =~ ~s(id="population-#{slug}")
+      end
+
+      live |> element("#population-emotions") |> render_click()
+      html = render_async(live, @async_timeout)
+
+      summary = "emotions" |> then(&Score.rows(scope: &1, skip_parity: true)) |> Score.summary()
+      assert html =~ "#{summary.passed} / #{summary.graded} graded rows pass"
+    end
+  end
+
   test "the sources link through to their own pages", ctx do
-    {:ok, live, _html} = live(ctx.conn, ~p"/health")
+    {:ok, live, _html} = live(ctx.conn, ~p"/ops/health?scope=animals")
 
     assert render_async(live, @async_timeout) =~ ~p"/sources/bierce"
     assert ctx.sources["bierce"].slug == "bierce"

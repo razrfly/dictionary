@@ -221,12 +221,22 @@ defmodule DevilsDictionaryWeb.Kit do
   attr :color, :string, default: "dark", values: ~w(dark light)
   attr :class, :string, default: nil
   attr :type, :string, default: "button", values: ~w(button submit reset)
-  attr :rest, :global, include: ~w(disabled form name value)
+  # Declared rather than left to `:global`, because a disabled button has to
+  # *look* disabled: `button_class/3` sets `cursor-pointer` unconditionally, so
+  # one that refuses the click while still offering the hand cursor and the
+  # hover state reads as broken rather than as unavailable.
+  attr :disabled, :boolean, default: false
+  attr :rest, :global, include: ~w(form name value)
   slot :inner_block, required: true
 
   def button(assigns) do
     ~H"""
-    <button type={@type} class={[button_class(@variant, @size, @color), @class]} {@rest}>
+    <button
+      type={@type}
+      disabled={@disabled}
+      class={[button_class(@variant, @size, @color, @disabled), @class]}
+      {@rest}
+    >
       {render_slot(@inner_block)}
     </button>
     """
@@ -248,19 +258,24 @@ defmodule DevilsDictionaryWeb.Kit do
     """
   end
 
-  defp button_class(variant, size, color) do
+  defp button_class(variant, size, color, disabled \\ false) do
     [
-      "inline-flex shrink-0 cursor-pointer items-center justify-center rounded-full text-sm/7 font-medium",
+      "inline-flex shrink-0 items-center justify-center rounded-full text-sm/7 font-medium",
+      not disabled && "cursor-pointer",
+      disabled && "cursor-not-allowed opacity-40",
       variant == "plain" && "gap-2",
       variant != "plain" && "gap-1",
       size == "md" && "px-3 py-1",
       size == "lg" && "px-4 py-2",
       variant == "solid" && color == "dark" &&
-        "bg-mist-950 text-white hover:bg-mist-800 dark:bg-mist-300 dark:text-mist-950 dark:hover:bg-mist-200",
+        "bg-mist-950 text-white dark:bg-mist-300 dark:text-mist-950",
+      variant == "solid" && color == "dark" && not disabled &&
+        "hover:bg-mist-800 dark:hover:bg-mist-200",
       variant == "solid" && color == "light" &&
         "bg-white text-mist-950 hover:bg-mist-100 dark:bg-mist-100 dark:hover:bg-white",
-      variant == "soft" &&
-        "bg-mist-950/10 text-mist-950 hover:bg-mist-950/15 dark:bg-white/10 dark:text-white dark:hover:bg-white/20",
+      variant == "soft" && "bg-mist-950/10 text-mist-950 dark:bg-white/10 dark:text-white",
+      variant == "soft" && not disabled &&
+        "hover:bg-mist-950/15 dark:hover:bg-white/20",
       variant == "plain" && color == "dark" &&
         "text-mist-950 hover:bg-mist-950/10 dark:text-white dark:hover:bg-white/10",
       variant == "plain" && color == "light" &&
@@ -294,7 +309,10 @@ defmodule DevilsDictionaryWeb.Kit do
   attr :class, :string, default: nil
   attr :rest, :global
   slot :logo, required: true
-  slot :links, required: true
+  # Optional since #77 §1: the bar carried three links to one test population and
+  # two consoles, and stripping them is the point. An empty slot must render a
+  # bar, not a hamburger onto an empty sheet.
+  slot :links
   slot :actions
 
   def navbar(assigns) do
@@ -304,12 +322,12 @@ defmodule DevilsDictionaryWeb.Kit do
         <div class="mx-auto flex h-(--scroll-padding-top) max-w-7xl items-center gap-4 px-6 lg:px-10">
           <div class="flex flex-1 items-center gap-12">
             <div class="flex items-center">{render_slot(@logo)}</div>
-            <div class="flex gap-8 max-lg:hidden">{render_slot(@links)}</div>
+            <div :if={@links != []} class="flex gap-8 max-lg:hidden">{render_slot(@links)}</div>
           </div>
           <div class="flex flex-1 items-center justify-end gap-4">
             <div class="flex shrink-0 items-center gap-5">{render_slot(@actions)}</div>
 
-            <details class="group lg:hidden">
+            <details :if={@links != []} class="group lg:hidden">
               <summary
                 class="inline-flex cursor-pointer list-none rounded-full p-1.5 text-mist-950 hover:bg-mist-950/10 [&::-webkit-details-marker]:hidden dark:text-white dark:hover:bg-white/10"
                 aria-label="Toggle menu"

@@ -18,7 +18,8 @@ defmodule Mix.Tasks.Dd.Link do
 
   Options:
 
-    * `--scope` — scope slug (default `animals`)
+    * `--scope` — scope slug. **Required**: there is no default population
+      (#77 §2).
     * `--strict-only` — skip the corroboration pass, to see the bare ladder
     * `--threshold` — the confidence L1 counts from (default 0.8)
   """
@@ -39,7 +40,7 @@ defmodule Mix.Tasks.Dd.Link do
         strict: [scope: :string, strict_only: :boolean, threshold: :float]
       )
 
-    scope = Lexicon.get_scope_by_slug!(opts[:scope] || "animals")
+    scope = Lexicon.get_scope_by_slug!(opts[:scope] || require_scope!("dd.link"))
     threshold = opts[:threshold] || 0.8
 
     run_row = Sources.start_run("link", scope_id: scope.id)

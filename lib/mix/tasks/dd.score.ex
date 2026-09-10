@@ -5,9 +5,8 @@ defmodule Mix.Tasks.Dd.Score do
   Issue #69 §7 as a PASS / FAIL table with the real numbers. **MVP-0 is done
   when every row passes** — this task is scorecard row O1.
 
-      mix dd.score
       mix dd.score --scope animals
-      mix dd.score --skip-parity
+      mix dd.score --scope emotions --skip-parity
 
   Rows the spec gives no threshold are printed as `report`: the number is the
   finding, not a grade. Rows belonging to a session that has not run are
@@ -18,7 +17,8 @@ defmodule Mix.Tasks.Dd.Score do
 
   Options:
 
-    * `--scope` — scope slug (default `animals`)
+    * `--scope` — scope slug. **Required**: there is no default population
+      (#77 §2).
     * `--skip-parity` — omit M1, which re-runs `materialize/1` over every stored
       record; correct, but minutes rather than seconds on a full database
   """
@@ -39,7 +39,7 @@ defmodule Mix.Tasks.Dd.Score do
     {opts, _, _} =
       OptionParser.parse(args, strict: [scope: :string, skip_parity: :boolean])
 
-    scope = Lexicon.get_scope_by_slug!(opts[:scope] || "animals")
+    scope = Lexicon.get_scope_by_slug!(opts[:scope] || require_scope!("dd.score"))
     run_row = Sources.start_run("score", scope_id: scope.id)
     started = System.monotonic_time(:millisecond)
 

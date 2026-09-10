@@ -106,7 +106,7 @@ defmodule DevilsDictionaryWeb.WordLive do
     samples =
       if demo, do: Samples.samples(page.headword.lemma || slug), else: %{cards: [], evidence: []}
 
-    # Counted before the samples go in: the scope line is a claim about what has
+    # Counted before the samples go in: the source line is a claim about what has
     # been absorbed, and "8 sources" on a page where three of them are invented
     # would be the mode telling a lie the banner cannot take back.
     card_sources = page.cards |> Enum.map(& &1.source.name) |> Enum.uniq()
@@ -119,8 +119,6 @@ defmodule DevilsDictionaryWeb.WordLive do
     |> assign(:evidence, samples.evidence)
     |> assign(:page, page)
     |> assign(:page_title, title(page, slug))
-    |> assign(:scopes, Lexicon.scopes_for(Enum.map(page.headword.lexemes, & &1.id)))
-    |> assign(:all_scopes, Lexicon.list_scopes())
     |> assign(:card_sources, card_sources)
     |> assign(:suggestions, suggestions(page, slug))
     |> assign(:choices, choices(slug, socket.assigns.object_id))
@@ -212,7 +210,7 @@ defmodule DevilsDictionaryWeb.WordLive do
 
           <Word.headword headword={@page.headword} demo={@demo} />
 
-          <Word.scope_line scopes={@scopes} all={@all_scopes} sources={@card_sources} />
+          <Word.source_line sources={@card_sources} />
 
           <div :if={@page.cards != []} class="mt-8 space-y-6">
             <Word.source_card

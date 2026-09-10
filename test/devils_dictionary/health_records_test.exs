@@ -129,7 +129,7 @@ defmodule DevilsDictionary.HealthRecordsTest do
     test "the row, its pin, its ledger and its coverage of the scope", ctx do
       record!(ctx.sources["bierce"], "CAT/n")
 
-      detail = Health.source_detail("bierce")
+      detail = Health.source_detail("bierce", scope: "animals")
 
       assert detail.source.slug == "bierce"
       assert detail.snapshot == "gutenberg_id=972"
@@ -137,6 +137,34 @@ defmodule DevilsDictionary.HealthRecordsTest do
       assert detail.coverage.source == "bierce"
       assert detail.materialized.entries == 0
       assert detail.runs == []
+    end
+
+    # #77 §2: no population selected is a state, not a cue to answer for
+    # Animals. Everything the source owns still answers; only the claim about a
+    # population is withheld.
+    test "without a scope it answers for the source and makes no coverage claim", ctx do
+      record!(ctx.sources["bierce"], "CAT/n")
+
+      detail = Health.source_detail("bierce")
+
+      assert detail.source.slug == "bierce"
+      assert detail.snapshot == "gutenberg_id=972"
+      assert detail.ledger.records == 1
+      assert detail.materialized.entries == 0
+      refute detail.coverage
+    end
+
+    # Wikipedia's needs-fetch population *is* the scope's lemmas, so with no
+    # population it is not applicable rather than zero. Wikidata's was never
+    # scoped and still answers.
+    test "the ledger withholds only the figure that needs a population" do
+      [wikipedia] = Enum.filter(Health.records(nil), &(&1.slug == "wikipedia"))
+      [wikidata] = Enum.filter(Health.records(nil), &(&1.slug == "wikidata"))
+
+      assert wikipedia.needs_fetch_of == "scope lemmas"
+      refute wikipedia.needs_fetch
+      assert wikidata.needs_fetch_of == "asserted entities"
+      assert is_integer(wikidata.needs_fetch)
     end
   end
 end

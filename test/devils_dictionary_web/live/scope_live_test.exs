@@ -31,7 +31,7 @@ defmodule DevilsDictionaryWeb.ScopeLiveTest do
       word!(ctx, "oyster", ~w(wordnet wiktionary))
       word!(ctx, "aardvark", ~w(wordnet))
 
-      {:ok, live, html} = live(ctx.conn, ~p"/s/animals")
+      {:ok, live, html} = live(ctx.conn, ~p"/ops/scopes/animals")
 
       # Every word shows a badge slot for every source, lit or not.
       for lexeme <- [cat], source <- ~w(wordnet wiktionary wikidata wikipedia bierce) do
@@ -64,7 +64,7 @@ defmodule DevilsDictionaryWeb.ScopeLiveTest do
     test "a bare index row says so", ctx do
       word!(ctx, "aardvarks", ~w(wiktionary), enriched_at: nil)
 
-      {:ok, _live, html} = live(ctx.conn, ~p"/s/animals")
+      {:ok, _live, html} = live(ctx.conn, ~p"/ops/scopes/animals")
       assert html =~ "bare"
     end
 
@@ -79,7 +79,7 @@ defmodule DevilsDictionaryWeb.ScopeLiveTest do
         )
       )
 
-      {:ok, _live, html} = live(ctx.conn, ~p"/s/animals")
+      {:ok, _live, html} = live(ctx.conn, ~p"/ops/scopes/animals")
 
       # The graph's glyph on a row means "linked", not "attests".
       assert html =~ ~s(title="wikidata: linked")
@@ -96,12 +96,12 @@ defmodule DevilsDictionaryWeb.ScopeLiveTest do
       cat = word!(ctx, "cat", ~w(bierce wordnet))
       aardvark = word!(ctx, "aardvark", ~w(wordnet))
 
-      {:ok, live, _html} = live(ctx.conn, ~p"/s/animals")
+      {:ok, live, _html} = live(ctx.conn, ~p"/ops/scopes/animals")
 
       html = live |> element("#filter-has-bierce") |> render_click()
       assert html =~ row(cat)
       refute html =~ row(aardvark)
-      assert_patched(live, ~p"/s/animals?has=bierce&sort=lemma")
+      assert_patched(live, ~p"/ops/scopes/animals?has=bierce&sort=lemma")
 
       html = live |> element("#filter-has-bierce") |> render_click()
       assert html =~ row(aardvark)
@@ -117,7 +117,7 @@ defmodule DevilsDictionaryWeb.ScopeLiveTest do
       link!(torpedo, taxon!("Q2", "weapon"), confidence: 0.8, method: :wiktionary_qid)
       aardvark = word!(ctx, "aardvark", ~w(wordnet), enriched_at: nil)
 
-      {:ok, live, _html} = live(ctx.conn, ~p"/s/animals")
+      {:ok, live, _html} = live(ctx.conn, ~p"/ops/scopes/animals")
 
       html = live |> element("#filter-state-disputed") |> render_click()
       assert html =~ row(torpedo)
@@ -132,7 +132,7 @@ defmodule DevilsDictionaryWeb.ScopeLiveTest do
       oyster = word!(ctx, "oyster", ~w(wordnet))
       cat = word!(ctx, "cat", ~w(wordnet))
 
-      {:ok, live, _html} = live(ctx.conn, ~p"/s/animals")
+      {:ok, live, _html} = live(ctx.conn, ~p"/ops/scopes/animals")
 
       html =
         live
@@ -147,18 +147,18 @@ defmodule DevilsDictionaryWeb.ScopeLiveTest do
       word!(ctx, "cat", ~w(bierce))
       aardvark = word!(ctx, "aardvark", ~w(wordnet))
 
-      {:ok, live, _html} = live(ctx.conn, ~p"/s/animals?has=bierce")
+      {:ok, live, _html} = live(ctx.conn, ~p"/ops/scopes/animals?has=bierce")
       refute render(live) =~ row(aardvark)
 
       html = live |> element("#filter-clear") |> render_click()
       assert html =~ row(aardvark)
-      assert_patched(live, ~p"/s/animals")
+      assert_patched(live, ~p"/ops/scopes/animals")
     end
 
     test "a filter that matches nothing says so rather than looking broken", ctx do
       word!(ctx, "cat", ~w(wordnet))
 
-      {:ok, _live, html} = live(ctx.conn, ~p"/s/animals?has=bierce")
+      {:ok, _live, html} = live(ctx.conn, ~p"/ops/scopes/animals?has=bierce")
       assert html =~ "Nothing in this scope matches"
     end
   end
@@ -174,7 +174,7 @@ defmodule DevilsDictionaryWeb.ScopeLiveTest do
       link!(cat, felidae)
       oyster = word!(ctx, "oyster", ~w(wordnet))
 
-      {:ok, live, html} = live(ctx.conn, ~p"/s/animals")
+      {:ok, live, html} = live(ctx.conn, ~p"/ops/scopes/animals")
 
       # The words are on screen before the taxonomy is walked.
       assert html =~ row(cat)
@@ -190,6 +190,6 @@ defmodule DevilsDictionaryWeb.ScopeLiveTest do
   end
 
   test "an unknown scope is a redirect, not a crash", ctx do
-    assert {:error, {:live_redirect, %{to: "/"}}} = live(ctx.conn, ~p"/s/nosuch")
+    assert {:error, {:live_redirect, %{to: "/"}}} = live(ctx.conn, ~p"/ops/scopes/nosuch")
   end
 end

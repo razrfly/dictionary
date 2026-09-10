@@ -3,6 +3,20 @@
   "slug": "animals",
   "rules": {
     "wikidata_root": "Q729",
+    "wiktionary_category_denylist": [
+      "en:Animal body parts",
+      "en:Animal riding",
+      "en:Bestiality",
+      "en:Eggs",
+      "en:Equestrianism",
+      "en:Farriery",
+      "en:Feathers",
+      "en:Horse colors",
+      "en:Horse racing",
+      "en:Horse tack",
+      "en:My Little Pony",
+      "en:Veterinary medicine"
+    ],
     "wiktionary_categories": [
       "en:Acanthuroid fish",
       "en:Acipenseriform fish",
