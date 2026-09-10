@@ -31,7 +31,7 @@ defmodule DevilsDictionaryWeb.KitLive do
           <.text>
             Body copy at the default size, on the mist scale. A dictionary is mostly this.
           </.text>
-          <.a navigate={~p"/health"}>An inline link<span aria-hidden="true">→</span></.a>
+          <.a navigate={~p"/ops/health"}>An inline link<span aria-hidden="true">→</span></.a>
         </div>
       </.section>
 

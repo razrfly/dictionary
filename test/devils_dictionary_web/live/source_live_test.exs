@@ -53,7 +53,7 @@ defmodule DevilsDictionaryWeb.SourceLiveTest do
     word!(ctx, "cat", ~w(bierce))
     word!(ctx, "oyster", [])
 
-    {:ok, _live, html} = live(ctx.conn, ~p"/sources/bierce")
+    {:ok, _live, html} = live(ctx.conn, ~p"/sources/bierce?scope=animals")
 
     coverage = Health.coverage("animals", "bierce")
     assert coverage.covered == 1
@@ -81,8 +81,44 @@ defmodule DevilsDictionaryWeb.SourceLiveTest do
     assert html =~ "#{coverage.total}"
   end
 
+  # The defect this page had all along, and the one test/ never covered — not
+  # even the S5c test above, which exists to prove the page is not hard-wired to
+  # Animals. The headline read the scope asked for; the link under it went to
+  # `/s/animals` whatever was asked (#77 §1).
+  test "the gaps link goes to the population the page is reporting on", ctx do
+    word!(ctx, "joy", ~w(wordnet), scope: ctx.emotions)
+
+    {:ok, _live, html} = live(ctx.conn, ~p"/sources/bierce?scope=emotions")
+
+    assert html =~ "Browse the words this source is missing"
+    assert html =~ ~s(href="/ops/scopes/emotions?missing=bierce")
+    refute html =~ "/s/animals"
+    refute html =~ ~s(href="/ops/scopes/animals?missing=bierce")
+  end
+
+  # #77 §1: a reader's source page must not make a claim about a population
+  # nobody asked about, and "population" is not a word public copy uses. So the
+  # coverage section is simply absent, and everything the source owns is not.
+  describe "with no population asked about" do
+    test "the source answers for itself and makes no coverage claim", ctx do
+      word!(ctx, "cat", ~w(bierce))
+
+      {:ok, _live, html} = live(ctx.conn, ~p"/sources/bierce")
+
+      assert html =~ ~s(id="source-header")
+      assert html =~ ~s(id="source-counts")
+      assert html =~ ~s(id="source-runs")
+      assert html =~ "Attribution:"
+
+      refute html =~ ~s(id="source-coverage")
+      refute html =~ "scope words"
+      refute html =~ "Animals"
+      refute html =~ ~s(id="population-chooser")
+    end
+  end
+
   test "an unknown source is a redirect, not a crash", ctx do
-    assert {:error, {:live_redirect, %{to: "/admin/imports"}}} =
+    assert {:error, {:live_redirect, %{to: "/ops/imports"}}} =
              live(ctx.conn, ~p"/sources/nosuch")
   end
 end

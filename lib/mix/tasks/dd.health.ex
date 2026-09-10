@@ -6,9 +6,8 @@ defmodule Mix.Tasks.Dd.Health do
   unresolved, how the links are distributed, and whether raw still agrees with
   derived. Scorecard row **O4**; `/admin/imports` renders the same numbers.
 
-      mix dd.health
       mix dd.health --scope animals
-      mix dd.health --parity
+      mix dd.health --scope emotions --parity
 
   `mix dd.score` grades; this one describes. Parity is off by default because it
   re-runs `materialize/1` over every stored record — right, but minutes on a
@@ -16,7 +15,8 @@ defmodule Mix.Tasks.Dd.Health do
 
   Options:
 
-    * `--scope` — scope slug (default `animals`)
+    * `--scope` — scope slug. **Required**: coverage, links and taxonomy are
+      per-population figures, and there is no default population (#77 §2).
     * `--parity` — also run the raw-vs-derived check (M1)
     * `--source` — restrict parity to one source
   """
@@ -34,7 +34,7 @@ defmodule Mix.Tasks.Dd.Health do
     {opts, _, _} =
       OptionParser.parse(args, strict: [scope: :string, parity: :boolean, source: :string])
 
-    scope = Lexicon.get_scope_by_slug!(opts[:scope] || "animals")
+    scope = Lexicon.get_scope_by_slug!(opts[:scope] || require_scope!("dd.health"))
     run_row = Sources.start_run("health", scope_id: scope.id)
     started = System.monotonic_time(:millisecond)
 
@@ -80,7 +80,9 @@ defmodule Mix.Tasks.Dd.Health do
     say("\nRECORDS")
     say("  " <> header())
 
-    for r <- Health.records(scope.slug) do
+    rows = Health.records(scope.slug)
+
+    for r <- rows do
       say(
         "  " <>
           String.pad_trailing(r.slug, 12) <>
@@ -94,7 +96,7 @@ defmodule Mix.Tasks.Dd.Health do
       )
     end
 
-    say("  needs fetch is over " <> populations())
+    say("  needs fetch is over " <> populations(rows))
   end
 
   defp header do
@@ -119,8 +121,12 @@ defmodule Mix.Tasks.Dd.Health do
     "#{task} #{status} #{at |> DateTime.to_naive() |> NaiveDateTime.to_string() |> binary_part(0, 16)}"
   end
 
-  defp populations do
-    Health.records()
+  # Takes the rows the section just printed rather than fetching its own. It used
+  # to call `Health.records()` bare, which — before #77 §2 removed the default —
+  # meant `mix dd.health --scope emotions` footnoted Animals. Silent, because the
+  # line names populations rather than numbers.
+  defp populations(rows) do
+    rows
     |> Enum.reject(&is_nil(&1.needs_fetch_of))
     |> Enum.map_join(", ", &"#{&1.slug}: #{&1.needs_fetch_of}")
   end

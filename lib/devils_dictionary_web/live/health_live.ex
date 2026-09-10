@@ -13,15 +13,21 @@ defmodule DevilsDictionaryWeb.HealthLive do
   """
   use DevilsDictionaryWeb, :live_view
 
-  alias DevilsDictionary.{Health, Sources}
+  import DevilsDictionaryWeb.Ops
+
+  alias DevilsDictionary.{Health, Lexicon, Sources}
   alias DevilsDictionary.Health.Score
 
+  # `:unset` rather than `nil`, because `nil` is now a meaningful scope value —
+  # "no population selected" — and the first `handle_params` has to be able to
+  # tell it apart from "already showing that".
   @impl true
   def mount(_params, _session, socket) do
     {:ok,
      assign(socket,
        page_title: "Health",
-       scope_slug: nil,
+       scope_slug: :unset,
+       scopes: Lexicon.list_scopes(),
        parity: %{},
        sources: Sources.list_sources()
      )}
@@ -31,20 +37,30 @@ defmodule DevilsDictionaryWeb.HealthLive do
   # coverage, its own link rate and — since the bars moved into
   # `scopes.rules` — its own passing marks, so a scorecard that can only show
   # Animals is a scorecard for one scope of however many exist.
+  #
+  # And no scope is no longer Animals (#77 §2). Nothing population-specific is
+  # computed until one is chosen; M1 parity, which is whole-corpus, still is.
   @impl true
   def handle_params(params, _uri, socket) do
-    scope = params["scope"] || "animals"
+    scope = params["scope"]
 
-    if scope == socket.assigns.scope_slug do
-      {:noreply, socket}
-    else
-      {:noreply,
-       socket
-       |> assign(scope_slug: scope)
-       |> load_scorecard()
-       |> assign_async(:detail, fn -> {:ok, %{detail: detail(scope)}} end)}
+    cond do
+      scope == socket.assigns.scope_slug ->
+        {:noreply, socket}
+
+      is_nil(scope) ->
+        {:noreply, assign(socket, scope_slug: nil)}
+
+      true ->
+        {:noreply,
+         socket
+         |> assign(scope_slug: scope)
+         |> load_scorecard()
+         |> assign_async(:detail, fn -> {:ok, %{detail: detail(scope)}} end)}
     end
   end
+
+  defp chooser_path(slug), do: ~p"/ops/health?scope=#{slug}"
 
   # The scorecard is seconds of queries (4.5 s on Animals), which is longer
   # than the client's long-poll fallback: computed in `mount/3` it ran on the
@@ -135,7 +151,26 @@ defmodule DevilsDictionaryWeb.HealthLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash}>
-      <.async_result :let={scorecard} assign={@scorecard}>
+      <.container class="pt-10">
+        <.population_chooser scopes={@scopes} selected={@scope_slug} path={&chooser_path/1} />
+      </.container>
+
+      <.section
+        :if={is_nil(@scope_slug)}
+        id="scorecard"
+        eyebrow="Scorecard"
+        headline="Which population?"
+      >
+        <.text id="no-population" class="max-w-2xl text-pretty">
+          The scorecard grades one population at a time — A4, A6, A8, A10, L1–L4
+          and U5 have no whole-corpus meaning — so pick one above. There is
+          deliberately no default: it used to be Animals, which made a test
+          population read as the corpus. Parity below is whole-corpus and
+          answers either way.
+        </.text>
+      </.section>
+
+      <.async_result :let={scorecard} :if={@scope_slug} assign={@scorecard}>
         <:loading>
           <.section
             id="scorecard"
@@ -216,7 +251,7 @@ defmodule DevilsDictionaryWeb.HealthLive do
         </div>
       </.section>
 
-      <.async_result :let={detail} assign={@detail}>
+      <.async_result :let={detail} :if={@scope_slug} assign={@detail}>
         <:loading>
           <.section id="health-loading" eyebrow="Detail" headline="Reading the graph…">
             <.text>Coverage, resolution, links and taxonomy are a second or two behind.</.text>
@@ -249,7 +284,7 @@ defmodule DevilsDictionaryWeb.HealthLive do
               |> Enum.map_join(" · ", fn {k, n} -> "#{k} #{number(n)}" end)}
             </:col>
             <:col :let={{slug, _}} label="">
-              <.link navigate={~p"/s/#{@scope_slug}?missing=#{slug}"} class="underline">
+              <.link navigate={~p"/ops/scopes/#{@scope_slug}?missing=#{slug}"} class="underline">
                 browse the gaps
               </.link>
             </:col>
@@ -319,7 +354,7 @@ defmodule DevilsDictionaryWeb.HealthLive do
                 <:col :let={c} label="concepts">{c.concepts}</:col>
               </.table>
               <p class="mt-3 text-sm/7">
-                <.link navigate={~p"/s/#{@scope_slug}?state=disputed"} class="underline">
+                <.link navigate={~p"/ops/scopes/#{@scope_slug}?state=disputed"} class="underline">
                   Browse every disputed word →
                 </.link>
               </p>

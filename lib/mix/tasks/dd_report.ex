@@ -11,6 +11,31 @@ defmodule Mix.Tasks.Dd.Report do
   in `mix help`.
   """
 
+  @doc """
+  Refuses to run without `--scope`, naming the populations that exist.
+
+  #77 §2: "Missing selection must not accidentally initiate an unbounded network
+  import." Four tasks defaulted to `animals`, and `dd.rebuild` is a sixteen-stage
+  pipeline whose Wikidata and Wikipedia stages go to the network when the replay
+  archives are absent or `--live` is passed. A forgotten flag is not consent.
+
+  Raises rather than returning, so it can stand in an `opts[:scope] || …` and
+  every caller reads the same.
+  """
+  def require_scope!(task) do
+    Mix.raise("""
+    mix #{task} requires --scope.
+
+    Coverage, links and taxonomy are per-population figures and there is no
+    default population — it used to be `animals`, which meant a forgotten flag
+    silently answered for the test population (#77 §2).
+
+    Available: #{DevilsDictionary.Lexicon.scope_slugs()}
+
+        mix #{task} --scope <slug>
+    """)
+  end
+
   @doc "Writes a line."
   def say(line), do: Mix.shell().info(line)
 

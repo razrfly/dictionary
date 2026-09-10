@@ -8,6 +8,22 @@ defmodule DevilsDictionary.Health do
   encyclopedia rows — A6, A7, A10 and the four link rows L1–L4. S3 adds the
   rest and `mix dd.score` on top of them, rather than re-deriving numbers the
   tasks have already printed once.
+
+  ## Two kinds of number, and they are not interchangeable (#77 §2)
+
+  **Global integrity** takes no scope and answers for the whole corpus:
+  `index/1`, `wordnet/0`, `wordnet_edges/0`, `variants/0`, `unresolved/0`,
+  `parity/1`, `trim_saving/1`, and the page rows in `Health.Pages`.
+
+  **Population coverage** takes a `scope_slug` and answers only for that
+  population: `scope/1`, `bierce/1`, `coverage/2`, `records/1`,
+  `concept_coverage/1`, `images/1`, `links/2`, `conflicts/3`, `taxonomy/2`,
+  `disambiguation/1`.
+
+  Every one of the second group used to default to `"animals"`, so an
+  unqualified call answered for the test population and read as a whole-corpus
+  result. The argument is now required. No population's pass implies the
+  corpus's — print the population and the denominator with the figure.
   """
 
   import Ecto.Query
@@ -208,10 +224,10 @@ defmodule DevilsDictionary.Health do
   defdelegate index(lang \\ "en"), to: Coverage
 
   @doc "**A4** — scope membership and the reasons for it."
-  defdelegate scope(scope_slug \\ "animals"), to: Coverage
+  defdelegate scope(scope_slug), to: Coverage
 
   @doc "**A8** — Bierce's entries and how many of his headwords the index knew."
-  defdelegate bierce(scope_slug \\ "animals"), to: Coverage
+  defdelegate bierce(scope_slug), to: Coverage
 
   @doc "**R1** — WordNet edges resolved at absorb."
   defdelegate wordnet_edges(), to: Coverage
@@ -239,7 +255,7 @@ defmodule DevilsDictionary.Health do
   needs-fetch, changed, last run — which `mix dd.health` prints and
   `/admin/imports` renders from the same call.
   """
-  defdelegate records(scope_slug \\ "animals"), to: Coverage
+  defdelegate records(scope_slug), to: Coverage
 
   @doc """
   Everything one source page shows: the row, its pin, its ledger, what it
@@ -294,7 +310,7 @@ defmodule DevilsDictionary.Health do
   to approach 100 % because the 1,995 Linnaean binomials A5 can never cover are
   exactly what Wikidata's `P225` names are.
   """
-  def concept_coverage(scope_slug \\ "animals") do
+  def concept_coverage(scope_slug) do
     scope = Lexicon.get_scope_by_slug!(scope_slug)
 
     # Every QID a link or a relation names, and how many of those have no row.
@@ -469,7 +485,7 @@ defmodule DevilsDictionary.Health do
   (album)* having no picture says nothing about whether *cat* does. The wider
   figures are reported beside it.
   """
-  def images(scope_slug \\ "animals") do
+  def images(scope_slug) do
     scope = Lexicon.get_scope_by_slug!(scope_slug)
 
     %{rows: [[asserted, asserted_with_image, lexemes, lexemes_with_image]]} =
@@ -541,7 +557,7 @@ defmodule DevilsDictionary.Health do
   a fifth of an Animals scope, so the difference between the two numbers *is*
   the finding.
   """
-  def links(scope_slug \\ "animals", threshold \\ 0.8) do
+  def links(scope_slug, threshold \\ 0.8) do
     scope = Lexicon.get_scope_by_slug!(scope_slug)
     total = Repo.aggregate(scope_query(scope), :count)
 
@@ -582,7 +598,7 @@ defmodule DevilsDictionary.Health do
   **L2** — conflicts. One lexeme with two different concepts both above 0.7 is a
   disagreement, and #69 §5 says we surface it rather than pick a winner.
   """
-  def conflicts(scope_slug \\ "animals", threshold \\ 0.7, limit \\ 20) do
+  def conflicts(scope_slug, threshold \\ 0.7, limit \\ 20) do
     scope = Lexicon.get_scope_by_slug!(scope_slug)
 
     rows =
@@ -624,7 +640,7 @@ defmodule DevilsDictionary.Health do
   grades. Measuring the second scope against the first scope's root is how L3
   came to read 0 % and call it a failure.
   """
-  def taxonomy(scope_slug \\ "animals", root \\ nil) do
+  def taxonomy(scope_slug, root \\ nil) do
     scope = Lexicon.get_scope_by_slug!(scope_slug)
     root = root || scope.rules["wikidata_root"]
 
@@ -704,7 +720,7 @@ defmodule DevilsDictionary.Health do
   the candidate rung links nouns only, so counting lexemes would charge
   `seal/verb` for candidates that were never meant to be its.
   """
-  def disambiguation(scope_slug \\ "animals") do
+  def disambiguation(scope_slug) do
     scope = Lexicon.get_scope_by_slug!(scope_slug)
 
     hit = fn query ->

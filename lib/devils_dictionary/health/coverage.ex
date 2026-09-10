@@ -120,8 +120,14 @@ defmodule DevilsDictionary.Health.Coverage do
       disambiguation candidates the S3 audit already noted will mostly never be
       asserted; of the ones that are, four are unfetched. A dashboard column
       that says 27,742 when the outstanding work is four is a worse number.
+
+  `scope_slug` is **required** and may be `nil`, which means *no population has
+  been selected* rather than *Animals* (#77 §2). The rest of the ledger is
+  global and still answers; only Wikipedia's `needs_fetch` goes `nil` with it,
+  because its population is the scope's lemmas and there are none to count.
+  Wikidata's does not, because "asserted entities" was never scoped.
   """
-  def records(scope_slug \\ "animals") do
+  def records(scope_slug) do
     ledger = record_counts()
     runs = last_runs()
 
@@ -181,6 +187,10 @@ defmodule DevilsDictionary.Health.Coverage do
   # a relation already referenced. The left join is on the records that *answer*
   # the question — any real record, or an absent marker that has not expired —
   # so what is left is #69 §5's "needs fetch" terminal state exactly.
+  # No population selected: the question does not apply, the same way it does not
+  # apply to a dump or a book. Not a zero, which would read as an answer.
+  defp needs_fetch(%Source{slug: "wikipedia"}, nil), do: nil
+
   defp needs_fetch(%Source{slug: "wikipedia", id: id}, scope_slug) do
     now = DateTime.utc_now()
 
@@ -234,10 +244,16 @@ defmodule DevilsDictionary.Health.Coverage do
 
   The coverage figure is `Health.coverage/2`'s, unchanged, so the source page and
   the scorecard's A5 cannot disagree.
+
+  `:scope` has **no default** (#77 §2). Omitted, it means no population has been
+  selected, and `coverage` comes back `nil` — the page then shows the source's
+  identity, licence, ledger, runs and samples and simply does not make a
+  coverage claim. It used to answer for Animals, which is how a Bierce page
+  asked about Emotions came to report Animals' gaps.
   """
   def source_detail(slug, opts \\ []) do
     source = Sources.get_source_by_slug!(slug)
-    scope_slug = Keyword.get(opts, :scope, "animals")
+    scope_slug = Keyword.get(opts, :scope)
     sample_limit = Keyword.get(opts, :samples, 5)
 
     %{
@@ -395,7 +411,7 @@ defmodule DevilsDictionary.Health.Coverage do
   **A4** — the scope exists, every member records why it is in, and the counts
   per reason are the finding.
   """
-  def scope(scope_slug \\ "animals") do
+  def scope(scope_slug) do
     scope = Lexicon.get_scope_by_slug!(scope_slug)
 
     %{
@@ -417,7 +433,7 @@ defmodule DevilsDictionary.Health.Coverage do
   source had already attested, which is measured by `origin_source_id`, since
   the materializer's lexeme merge keeps the first writer.
   """
-  def bierce(scope_slug \\ "animals") do
+  def bierce(scope_slug) do
     source = Sources.get_source_by_slug!("bierce")
 
     entries = from c in ContentItem, where: c.source_id == ^source.id

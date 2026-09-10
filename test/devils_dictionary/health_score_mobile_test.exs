@@ -23,7 +23,7 @@ defmodule DevilsDictionary.HealthScoreMobileTest do
     :ok
   end
 
-  defp u4, do: Score.rows(skip_parity: true) |> Enum.find(&(&1.id == "U4"))
+  defp u4, do: Score.rows(scope: "animals", skip_parity: true) |> Enum.find(&(&1.id == "U4"))
 
   test "it passes as a dated attestation over the pages it names" do
     row = u4()

@@ -86,37 +86,27 @@ defmodule DevilsDictionaryWeb.Word do
   end
 
   @doc """
-  Where the word stands in the scopes (#71 §2.7, W5).
+  Who has defined the word (#71 §2.7, W5), and how thin that makes the page.
 
-  A scope is a browse concept and the word page is scope-free, so this is a
-  line and never a filter: it says which scopes have claimed the word, or —
-  when none has — that what is on the page is whatever the general sources
-  happened to hold. *quark* is the case it was written for: real, enriched, in
-  neither Animals nor Emotions, and thin for a reason worth printing.
+  This was `scope_line/1`, and it said *in Animals* or *not in Animals or
+  Culture or Emotions*. #77 §1 removed both halves: a scope is an operational
+  selection with an internal name, so naming one in public copy is a leak, and
+  the names linked a reader's word page at what is now an ops surface.
+
+  What survives is the half a reader can act on. #71 U2 asked the sparse states
+  to say *why* a page is thin rather than just be thin, and one source is the
+  commonest reason — *quark* is the case it was written for: real, enriched, and
+  carrying whatever the general sources happened to hold. So a single source is
+  named, and several are counted, with the cards below giving the detail.
   """
-  attr :scopes, :list, default: []
-  attr :all, :list, default: []
   attr :sources, :list, default: []
 
-  def scope_line(assigns) do
+  def source_line(assigns) do
     ~H"""
-    <p :if={@scopes != [] or @sources != []} id="scopes" class="mt-3 text-sm/7 text-mist-500">
-      <span :if={@scopes != []}>
-        in
-        <.link
-          :for={scope <- @scopes}
-          id={"scope-#{scope.slug}"}
-          navigate={~p"/s/#{scope.slug}"}
-          class="underline underline-offset-4 hover:text-mist-950 dark:hover:text-white"
-        >
-          {scope.name}
-        </.link>
-        <span :if={@sources != []}>· {count(@sources, "source")}</span>
-      </span>
-
-      <span :if={@scopes == []} id="out-of-scope">
-        not in {Enum.map_join(@all, " or ", & &1.name)}
-        <span :if={@sources != []}>· {Enum.join(@sources, " · ")} only</span>
+    <p :if={@sources != []} id="sources" class="mt-3 text-sm/7 text-mist-500">
+      <span :if={length(@sources) > 1}>Defined here by {count(@sources, "source")}</span>
+      <span :if={match?([_one], @sources)} id="one-source">
+        One source so far · {Enum.join(@sources, " · ")}
       </span>
     </p>
     """

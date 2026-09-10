@@ -120,17 +120,20 @@ defmodule DevilsDictionaryWeb.HomeLive do
     end
   end
 
+  # Three whole-corpus numbers (#77 §1). It used to add one clause per scope —
+  # "25,385 animals enriched · 5 culture enriched · 809 emotions enriched" —
+  # which named internal populations in public copy, presented a five-row pilot
+  # as a product category, and grew a clause every time a test population was
+  # added. `enriched` was already computed here and never rendered; it is the
+  # honest headline, because it is the number that says how often a reader who
+  # types a word finds anything.
   defp compute_stats do
     index = Health.index()
 
     %{
       words: index.total,
       enriched: index.enriched,
-      sources: length(Sources.list_sources()),
-      scopes:
-        for scope <- Lexicon.list_scopes() do
-          %{slug: scope.slug, name: scope.name, count: Lexicon.count_scope_lexemes(scope)}
-        end
+      sources: length(Sources.list_sources())
     }
   end
 
@@ -223,11 +226,8 @@ defmodule DevilsDictionaryWeb.HomeLive do
           <.async_result :let={stats} assign={@stats}>
             <:loading>counting…</:loading>
             <:failed :let={_reason}>the index is there; the count is not</:failed>
-            {number(stats.words)} words indexed
-            <span :for={scope <- stats.scopes}>
-              · {number(scope.count)} {String.downcase(scope.name)} enriched
-            </span>
-            · {stats.sources} sources
+            {number(stats.words)} words indexed · {number(stats.enriched)} with at least one
+            definition · {stats.sources} sources so far
           </.async_result>
         </p>
       </.container>

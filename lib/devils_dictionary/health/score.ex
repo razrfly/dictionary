@@ -37,13 +37,25 @@ defmodule DevilsDictionary.Health.Score do
   alias DevilsDictionary.Sources.ImportRun
 
   @doc """
-  Every row of #69 §7, in order. `opts[:scope]` defaults to `animals`.
+  Every row of #69 §7, in order.
+
+  **`opts[:scope]` is required** (#77 §2). The scorecard grades one population,
+  and most of it — A4, A6, A8, A10, L1–L4, U5 — is meaningless without knowing
+  which. It used to default to `animals`, so a scorecard nobody had chosen a
+  population for graded the test population and read as a whole-corpus result.
+  The rows that *are* whole-corpus (A1–A3, A9, M1–M4, D1–D6, R1–R2, X1–X3) take
+  no scope and are unaffected.
 
   `opts[:skip_parity]` omits M1, which re-runs `materialize/1` over every stored
   record: correct, but minutes rather than seconds on a full database.
   """
   def rows(opts \\ []) do
-    scope = opts[:scope] || "animals"
+    scope =
+      opts[:scope] ||
+        raise ArgumentError,
+              "Score.rows/1 requires :scope. The scorecard grades one population " <>
+                "and there is no default one. Available: #{Lexicon.scope_slugs()}."
+
     forget_page_measurements()
 
     bars = bars(scope)

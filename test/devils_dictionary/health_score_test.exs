@@ -31,8 +31,10 @@ defmodule DevilsDictionary.HealthScoreTest do
   setup do
     Fixtures.seed_catalog!()
     # Parity re-runs materialize/1 over every stored record; the assembly is
-    # what is under test, not the check.
-    %{rows: Score.rows(skip_parity: true)}
+    # what is under test, not the check. `:scope` is explicit because #77 §2
+    # removed the `animals` default — the scorecard grades one population and
+    # will not choose one for you.
+    %{rows: Score.rows(scope: "animals", skip_parity: true)}
   end
 
   describe "rows/1" do
@@ -51,7 +53,7 @@ defmodule DevilsDictionary.HealthScoreTest do
         })
       end
 
-      row = Score.rows(skip_parity: true) |> Enum.find(&(&1.id == "O2"))
+      row = Score.rows(scope: "animals", skip_parity: true) |> Enum.find(&(&1.id == "O2"))
       assert row.actual =~ "dumps 10.0 s"
       assert row.actual =~ "API/replay 20.0 s"
     end

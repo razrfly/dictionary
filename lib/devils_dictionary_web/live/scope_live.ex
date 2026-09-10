@@ -88,7 +88,7 @@ defmodule DevilsDictionaryWeb.ScopeLive do
 
   @impl true
   def handle_event("clear", _params, socket) do
-    {:noreply, push_patch(socket, to: ~p"/s/#{socket.assigns.scope.slug}")}
+    {:noreply, push_patch(socket, to: ~p"/ops/scopes/#{socket.assigns.scope.slug}")}
   end
 
   defp patch(socket, changes) do
@@ -98,7 +98,7 @@ defmodule DevilsDictionaryWeb.ScopeLive do
       |> Map.merge(Map.new(changes, fn {k, v} -> {to_string(k), v} end))
       |> compact()
 
-    push_patch(socket, to: ~p"/s/#{socket.assigns.scope.slug}?#{params}")
+    push_patch(socket, to: ~p"/ops/scopes/#{socket.assigns.scope.slug}?#{params}")
   end
 
   # Only what a reader would type: no empty keys, no `page=1`, no `false`.
@@ -361,13 +361,16 @@ defmodule DevilsDictionaryWeb.ScopeLive do
               </:failed>
 
               <nav class="flex flex-wrap items-center gap-1 text-xs/6 text-mist-500">
-                <.link patch={~p"/s/#{@scope.slug}?#{drill(@filters, nil)}"} class="hover:underline">
+                <.link
+                  patch={~p"/ops/scopes/#{@scope.slug}?#{drill(@filters, nil)}"}
+                  class="hover:underline"
+                >
                   all
                 </.link>
                 <span :for={node <- tree.path} class="flex items-center gap-1">
                   <span aria-hidden="true">›</span>
                   <.link
-                    patch={~p"/s/#{@scope.slug}?#{drill(@filters, node.qid)}"}
+                    patch={~p"/ops/scopes/#{@scope.slug}?#{drill(@filters, node.qid)}"}
                     class="hover:underline"
                   >
                     {node.label || node.qid}
@@ -394,7 +397,7 @@ defmodule DevilsDictionaryWeb.ScopeLive do
               <ul role="list" class="flex flex-col gap-1">
                 <li :for={child <- tree.children}>
                   <.link
-                    patch={~p"/s/#{@scope.slug}?#{drill(@filters, child.qid)}"}
+                    patch={~p"/ops/scopes/#{@scope.slug}?#{drill(@filters, child.qid)}"}
                     id={"tree-#{child.qid}"}
                     class="flex items-baseline justify-between gap-2 rounded-lg px-2 py-1 text-sm/7 hover:bg-mist-950/5 dark:hover:bg-white/10"
                   >
@@ -476,7 +479,7 @@ defmodule DevilsDictionaryWeb.ScopeLive do
             <nav :if={@page.pages > 1} class="mt-6 flex items-center justify-between gap-4">
               <.button_link
                 :if={@page.page > 1}
-                patch={~p"/s/#{@scope.slug}?#{page_params(@filters, @page.page - 1)}"}
+                patch={~p"/ops/scopes/#{@scope.slug}?#{page_params(@filters, @page.page - 1)}"}
                 variant="soft"
                 id="page-prev"
               >
@@ -487,7 +490,7 @@ defmodule DevilsDictionaryWeb.ScopeLive do
               </span>
               <.button_link
                 :if={@page.page < @page.pages}
-                patch={~p"/s/#{@scope.slug}?#{page_params(@filters, @page.page + 1)}"}
+                patch={~p"/ops/scopes/#{@scope.slug}?#{page_params(@filters, @page.page + 1)}"}
                 variant="soft"
                 id="page-next"
               >

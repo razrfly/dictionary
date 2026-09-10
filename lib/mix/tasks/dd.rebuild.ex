@@ -5,11 +5,17 @@ defmodule Mix.Tasks.Dd.Rebuild do
   #74's milestone 5: *"Run full re-import of the six existing sources with
   resumability and explicit unresolved/error reporting."*
 
-      mix dd.rebuild                       # everything, in order
-      mix dd.rebuild --from wiktionary     # resume at a stage
-      mix dd.rebuild --only wordnet,bierce # just these
-      mix dd.rebuild --scope culture       # the bounded pilot
-      mix dd.rebuild --dry-run             # print the plan and the inputs
+      mix dd.rebuild --scope animals                  # everything, in order
+      mix dd.rebuild --scope animals --from wiktionary # resume at a stage
+      mix dd.rebuild --scope animals --only wordnet    # just this
+      mix dd.rebuild --scope culture                   # the bounded pilot
+      mix dd.rebuild --scope animals --dry-run         # the plan and the inputs
+
+  **`--scope` is required** (#77 §2). It used to default to `animals`, so a
+  forgotten flag ran the whole sixteen-stage pipeline over the test population —
+  and stages 8 and 9 go to the Wikidata and Wikipedia APIs for hours whenever
+  `--live` is passed or `priv/replay/*.jsonl.gz` is absent. The refusal happens
+  before the plan is built, so nothing runs and nothing is written.
 
   ## The order, and why it is this order
 
@@ -115,7 +121,7 @@ defmodule Mix.Tasks.Dd.Rebuild do
         ]
       )
 
-    scope = opts[:scope] || "animals"
+    scope = opts[:scope] || require_scope!("dd.rebuild")
     plan = plan(opts)
 
     say("rebuild · scope #{scope} · #{length(plan)} stages")

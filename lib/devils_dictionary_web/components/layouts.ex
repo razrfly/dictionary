@@ -41,11 +41,6 @@ defmodule DevilsDictionaryWeb.Layouts do
           wordhoard
         </.link>
       </:logo>
-      <:links>
-        <.nav_link navigate={~p"/s/animals"}>Animals</.nav_link>
-        <.nav_link navigate={~p"/health"}>Health</.nav_link>
-        <.nav_link navigate={~p"/admin/imports"}>Imports</.nav_link>
-      </:links>
       <:actions>
         <.theme_toggle />
       </:actions>
@@ -57,15 +52,14 @@ defmodule DevilsDictionaryWeb.Layouts do
 
     <.footer>
       <:links>
-        <.footer_category title="Browse">
-          <.footer_link navigate={~p"/s/animals"}>Animals</.footer_link>
-          <.footer_link navigate={~p"/health"}>Health</.footer_link>
-          <.footer_link navigate={~p"/admin/imports"}>Imports</.footer_link>
-        </.footer_category>
         <.footer_category title="Sources">
           <.footer_link :for={source <- sources()} navigate={~p"/sources/#{source.slug}"}>
             {source.name}
           </.footer_link>
+        </.footer_category>
+        <.footer_category :if={dev_routes?()} title="Operations">
+          <.footer_link navigate={~p"/ops/health"}>Health</.footer_link>
+          <.footer_link navigate={~p"/ops/imports"}>Imports</.footer_link>
         </.footer_category>
       </:links>
       <:fineprint>
@@ -85,6 +79,13 @@ defmodule DevilsDictionaryWeb.Layouts do
   # asks for, and the fastest way to a source page. Five rows, read straight —
   # there is no cache process in the tree and this does not deserve the first.
   defp sources, do: DevilsDictionary.Sources.list_sources()
+
+  # The two consoles are reachable from the chrome in development and in test,
+  # and by URL everywhere. Not `/ops/scopes/:slug` — that route needs a slug,
+  # and choosing one for the footer is how Animals got into the navbar in the
+  # first place. It is reached from the population chooser on either console.
+  @dev_routes Application.compile_env(:devils_dictionary, :dev_routes, false)
+  defp dev_routes?, do: @dev_routes
 
   @doc """
   Shows the flash group with standard titles and content.

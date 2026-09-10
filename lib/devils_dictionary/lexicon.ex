@@ -265,8 +265,27 @@ defmodule DevilsDictionary.Lexicon do
   def get_scope_by_slug(slug), do: Repo.get_by(Scope, slug: slug)
 
   @doc """
-  The scopes a word belongs to, by lexeme id — the word page's *in Animals* and
-  its *not in Animals or Emotions* (#71 U2).
+  The slugs, comma-joined, for the "you have to pick one" messages.
+
+  Every entry point that used to fall back to `animals` now says what it could
+  have been given instead (#77 §2). Read rather than hardcoded, because a scope
+  is data — the list is right the day a fourth one is added.
+  """
+  def scope_slugs do
+    case Repo.all(from s in Scope, order_by: s.slug, select: s.slug) do
+      [] -> "none — no scopes exist yet; see mix dd.scope.new"
+      slugs -> Enum.join(slugs, ", ")
+    end
+  end
+
+  @doc """
+  The scopes a word belongs to, by lexeme id.
+
+  **No longer read by the word page.** It backed U2's *in Animals* / *not in
+  Animals or Emotions* line, which #77 §1 removed: scope names are internal, and
+  the line linked a public page at what is now an ops surface. Kept as an
+  ordinary read — browse and the ops pages are the callers a scope-membership
+  question belongs to.
 
   One indexed query over `scope_lexemes`, and deliberately **not** part of
   `WordPage.build/2`: X1 builds two hundred pages a scorecard and would pay for

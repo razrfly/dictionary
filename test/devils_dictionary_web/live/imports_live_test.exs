@@ -39,7 +39,7 @@ defmodule DevilsDictionaryWeb.Admin.ImportsLiveTest do
     record!(ctx.sources["bierce"], "CAT/n")
     record!(ctx.sources["bierce"], "DOG/n", materialized_at: nil)
 
-    {:ok, _live, html} = live(ctx.conn, ~p"/admin/imports")
+    {:ok, _live, html} = live(ctx.conn, ~p"/ops/imports")
 
     assert html =~ ~s(id="imports-rows")
 
@@ -56,7 +56,7 @@ defmodule DevilsDictionaryWeb.Admin.ImportsLiveTest do
   end
 
   test "a dump's needs-fetch is an em dash, not a zero", ctx do
-    {:ok, _live, html} = live(ctx.conn, ~p"/admin/imports")
+    {:ok, _live, html} = live(ctx.conn, ~p"/ops/imports")
 
     assert html =~ "a dump is the answer"
     assert html =~ "wikidata: asserted entities"
@@ -65,7 +65,7 @@ defmodule DevilsDictionaryWeb.Admin.ImportsLiveTest do
   end
 
   test "the health summary is on the page, and parity is not", ctx do
-    {:ok, _live, html} = live(ctx.conn, ~p"/admin/imports")
+    {:ok, _live, html} = live(ctx.conn, ~p"/ops/imports?scope=animals")
 
     assert html =~ ~s(id="health-summary")
     assert html =~ "unresolved Wiktionary relation targets"
@@ -74,7 +74,7 @@ defmodule DevilsDictionaryWeb.Admin.ImportsLiveTest do
   end
 
   test "the commands that have no worker are printed, not offered as buttons", ctx do
-    {:ok, _live, html} = live(ctx.conn, ~p"/admin/imports")
+    {:ok, _live, html} = live(ctx.conn, ~p"/ops/imports?scope=animals")
 
     assert html =~ "mix dd.resolve"
     assert html =~ "mix dd.link --scope animals"
@@ -83,7 +83,7 @@ defmodule DevilsDictionaryWeb.Admin.ImportsLiveTest do
   end
 
   test "absorb is the one button, and it enqueues the worker that exists", ctx do
-    {:ok, live, _html} = live(ctx.conn, ~p"/admin/imports")
+    {:ok, live, _html} = live(ctx.conn, ~p"/ops/imports?scope=animals")
 
     html =
       live
@@ -100,8 +100,71 @@ defmodule DevilsDictionaryWeb.Admin.ImportsLiveTest do
     assert job.args == %{"source" => "wikipedia", "scope" => "animals"}
   end
 
+  # #77 §2. The page arrived at without `?scope=` used to report Animals — twice
+  # over, because `mount/3` runs `load/1` before `handle_params/3` and each had
+  # its own `|| "animals"`.
+  describe "with no population selected" do
+    test "the whole-corpus ledger still answers, and the rest says why it cannot",
+         ctx do
+      record!(ctx.sources["bierce"], "CAT/n")
+
+      {:ok, _live, html} = live(ctx.conn, ~p"/ops/imports")
+
+      assert html =~ ~s(id="imports-rows")
+      assert html =~ "unresolved Wiktionary relation targets"
+      assert html =~ ~s(id="no-population")
+      assert html =~ ~s(id="no-population-commands")
+
+      # The chooser names the populations, because naming them is what a chooser
+      # on an ops page is for. What must not appear is a *figure* computed for
+      # one nobody picked.
+      refute html =~ "mix dd.link --scope"
+      refute html =~ "scope words linked at"
+      refute html =~ "disambiguation candidates"
+      assert html =~ "no population selected"
+    end
+
+    test "an API absorb cannot be started without one", ctx do
+      {:ok, live, html} = live(ctx.conn, ~p"/ops/imports")
+
+      assert html =~ ~s(phx-value-source="wikipedia")
+
+      assert_raise ArgumentError, ~r/because it is disabled/, fn ->
+        live |> element(~s(button[phx-value-source="wikipedia"])) |> render_click()
+      end
+
+      # And the server refuses it when the event arrives anyway: a disabled
+      # attribute is a hint to a browser, not a guarantee to a socket.
+      assert render_click(live, "absorb", %{"source" => "wikipedia"}) =~
+               "Choose one before absorbing it"
+
+      assert Repo.all(Oban.Job) == []
+    end
+
+    test "a dump absorb still can, because it has no population to bound", ctx do
+      {:ok, live, _html} = live(ctx.conn, ~p"/ops/imports")
+
+      assert live
+             |> element(~s(button[phx-value-source="wordnet"]))
+             |> render_click() =~ "Queued absorb of wordnet"
+
+      assert [job] = Repo.all(Oban.Job)
+      assert job.args == %{"source" => "wordnet"}
+    end
+
+    test "the chooser offers every population and preselects none", ctx do
+      {:ok, _live, html} = live(ctx.conn, ~p"/ops/imports")
+
+      assert html =~ ~s(id="population-chooser")
+
+      for slug <- ~w(animals culture emotions) do
+        assert html =~ ~s(id="population-#{slug}")
+      end
+    end
+  end
+
   test "refresh re-reads without navigating", ctx do
-    {:ok, live, _html} = live(ctx.conn, ~p"/admin/imports")
+    {:ok, live, _html} = live(ctx.conn, ~p"/ops/imports")
 
     before = render(live)
     record!(ctx.sources["bierce"], "CAT/n")

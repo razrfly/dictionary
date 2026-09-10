@@ -17,6 +17,21 @@ defmodule Mix.Tasks.Dd.Scope.Categories do
 
     * `--depth` — how deep to recurse (default 4)
     * `--dry-run` — print the list, write nothing
+
+  ## The exclusions are the population's, not the command's (#77 §2)
+
+  Some subtrees are *about* a scope's subject without being in it: for Animals,
+  body parts and products, equestrian equipment and sport, ethics, veterinary
+  practice, a toy franchise. Twelve such categories used to be a module
+  attribute here — animal-specific policy compiled into a command that accepts
+  any scope, so a new population either inherited them or needed this file
+  edited.
+
+  They now come from the scope's own `rules["wiktionary_category_denylist"]`,
+  beside the frozen `wiktionary_categories` they filter, in
+  `priv/scopes/<slug>.json`. A scope without the key excludes nothing but the
+  thesaurus mirror, which is a Wiktionary artefact rather than a subject
+  judgement and stays here.
   """
 
   use Mix.Task
@@ -26,26 +41,6 @@ defmodule Mix.Tasks.Dd.Scope.Categories do
   @api "https://en.wiktionary.org/w/api.php"
   @user_agent "wordhoard/0.1 (https://github.com/razrfly/dictionary)"
   @rate_limit_ms 200
-
-  # Subtrees that are about animals without being animals: body parts, ethics,
-  # veterinary practice, and the thesaurus mirror.
-  # Subtrees that are about animals without being animals: body parts and
-  # products, equestrian equipment and sport, ethics, veterinary practice,
-  # a toy franchise, and the thesaurus mirror.
-  @denylist [
-    "en:Animal body parts",
-    "en:Animal riding",
-    "en:Bestiality",
-    "en:Eggs",
-    "en:Equestrianism",
-    "en:Farriery",
-    "en:Feathers",
-    "en:Horse colors",
-    "en:Horse racing",
-    "en:Horse tack",
-    "en:My Little Pony",
-    "en:Veterinary medicine"
-  ]
 
   @requirements ["app.start"]
 
@@ -60,14 +55,16 @@ defmodule Mix.Tasks.Dd.Scope.Categories do
     root =
       scope.rules["wiktionary_category_root"] || raise "scope has no wiktionary_category_root"
 
+    denylist = scope.rules["wiktionary_category_denylist"] || []
+
     Mix.shell().info("walking Category:#{root} to depth #{depth}…")
 
     categories =
       [root]
-      |> walk(depth, MapSet.new([root]))
+      |> walk(depth, MapSet.new([root]), denylist)
       |> Enum.sort()
 
-    Mix.shell().info("#{length(categories)} categories (#{length(@denylist)} subtrees skipped)")
+    Mix.shell().info("#{length(categories)} categories (#{length(denylist)} subtrees skipped)")
     Enum.each(Enum.take(categories, 15), &Mix.shell().info("  #{&1}"))
     if length(categories) > 15, do: Mix.shell().info("  … #{length(categories) - 15} more")
 
@@ -83,20 +80,20 @@ defmodule Mix.Tasks.Dd.Scope.Categories do
   end
 
   # Breadth-first, one level at a time, so the depth limit is exact.
-  defp walk([], _depth, seen), do: MapSet.to_list(seen)
-  defp walk(_frontier, 0, seen), do: MapSet.to_list(seen)
+  defp walk([], _depth, seen, _denylist), do: MapSet.to_list(seen)
+  defp walk(_frontier, 0, seen, _denylist), do: MapSet.to_list(seen)
 
-  defp walk(frontier, depth, seen) do
+  defp walk(frontier, depth, seen, denylist) do
     next =
       frontier
       |> Enum.flat_map(&subcategories/1)
       |> Enum.reject(fn category ->
-        category in @denylist or String.starts_with?(category, "Thesaurus:") or
+        category in denylist or String.starts_with?(category, "Thesaurus:") or
           MapSet.member?(seen, category)
       end)
       |> Enum.uniq()
 
-    walk(next, depth - 1, Enum.into(next, seen))
+    walk(next, depth - 1, Enum.into(next, seen), denylist)
   end
 
   defp subcategories(category) do

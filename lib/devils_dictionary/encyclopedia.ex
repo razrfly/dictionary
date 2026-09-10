@@ -514,7 +514,7 @@ defmodule DevilsDictionary.Encyclopedia do
   attaches anywhere in the subtree — the population A10 and L3 report on, and
   the one the list filter then shows.
   """
-  def taxon_children(qid, scope_slug \\ "animals", max_depth \\ 40) do
+  def taxon_children(qid, scope_slug, max_depth \\ 40) do
     %{rows: rows} =
       Repo.query!(
         """

@@ -67,15 +67,15 @@ defmodule DevilsDictionaryWeb.WordDemoTest do
       assert index(html, "card-johnson") < index(html, "card-bierce")
     end
 
-    test "the scope line counts real sources only", ctx do
+    test "the source line counts real sources only", ctx do
       oyster!(ctx)
 
       {:ok, plain, _} = live(ctx.conn, ~p"/define/oyster")
       {:ok, demo, _} = live(ctx.conn, ~p"/define/oyster?demo=1")
 
-      # The banner says the samples are invented; the scope line must not then
-      # go and count them. Two sources on both pages.
-      assert render(element(plain, "#scopes")) == render(element(demo, "#scopes"))
+      # The banner says the samples are invented; the source line must not then
+      # go and count them. The same count on both pages.
+      assert render(element(plain, "#sources")) == render(element(demo, "#sources"))
     end
 
     test "a sample's ⓘ opens an invented drawer rather than the word's real links", ctx do
