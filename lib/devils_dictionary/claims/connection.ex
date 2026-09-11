@@ -84,7 +84,7 @@ defmodule DevilsDictionary.Claims.Connection do
         evidence: supports,
         counterevidence: contradicts,
         review: Claims.display_review_state(revision.id),
-        reviews: Claims.reviews(revision.id),
+        reviews: Claims.reviews(revision.id) |> Repo.preload(:reviewer_actor),
         score: Claims.score(revision.id),
         history: Enum.filter(Claims.history(assertion_id), &visible_revision?(&1, opts)),
         claimant: actor(assertion.origin_actor_id),
