@@ -5,7 +5,7 @@ defmodule DevilsDictionaryWeb.EvidenceLive do
 
   import Ecto.Query
 
-  alias DevilsDictionary.Claims.Visibility
+  alias DevilsDictionary.Claims.{Contributions, Visibility}
   alias DevilsDictionary.Corpus.SourceRecordRevision
   alias DevilsDictionary.Registry.{ContentItem, ContentRevision, Lexeme, Sense, SenseRevision}
   alias DevilsDictionary.Repo
@@ -18,7 +18,10 @@ defmodule DevilsDictionaryWeb.EvidenceLive do
 
   @impl true
   def handle_params(%{"id" => id}, _uri, socket) do
-    evidence = load(socket.assigns.live_action, parse_id(id))
+    visibility =
+      if Contributions.reviewer?(socket.assigns.current_scope), do: :internal, else: :public
+
+    evidence = load(socket.assigns.live_action, parse_id(id), visibility)
 
     {:noreply,
      assign(socket,
@@ -27,13 +30,15 @@ defmodule DevilsDictionaryWeb.EvidenceLive do
      )}
   end
 
-  defp load(_kind, nil), do: nil
+  defp load(_kind, nil, _visibility), do: nil
 
-  defp load(:content, id) do
+  defp load(:content, id, visibility) do
     Repo.one(
       from r in ContentRevision,
         join: c in ContentItem,
         on: c.object_id == r.content_id,
+        join: current in ContentRevision,
+        on: current.content_id == r.content_id and current.is_current,
         left_join: source in assoc(c, :source),
         where: r.id == ^id,
         select: %{
@@ -48,18 +53,22 @@ defmodule DevilsDictionaryWeb.EvidenceLive do
           lifecycle_state: r.lifecycle_state,
           current?: r.is_current,
           rights_metadata: r.rights_metadata,
+          current_lifecycle_state: current.lifecycle_state,
+          current_rights_metadata: current.rights_metadata,
           source_name: source.name,
           source_slug: source.slug
         }
     )
-    |> restrict_content()
+    |> restrict_content(visibility)
   end
 
-  defp load(:sense, id) do
+  defp load(:sense, id, visibility) do
     Repo.one(
       from r in SenseRevision,
         join: s in Sense,
         on: s.object_id == r.sense_id,
+        join: current in SenseRevision,
+        on: current.sense_id == r.sense_id and current.is_current,
         join: l in Lexeme,
         on: l.object_id == s.lexeme_id,
         left_join: source in assoc(s, :source),
@@ -74,16 +83,17 @@ defmodule DevilsDictionaryWeb.EvidenceLive do
           canonical_url: r.url,
           lifecycle_state: r.lifecycle_state,
           current?: r.is_current,
+          current_lifecycle_state: current.lifecycle_state,
           source_name: source.name,
           source_slug: source.slug,
           word_id: l.object_id,
           word_slug: l.slug
         }
     )
-    |> restrict_sense()
+    |> restrict_sense(visibility)
   end
 
-  defp load(:source_record, id) do
+  defp load(:source_record, id, _visibility) do
     Repo.one(
       from r in SourceRecordRevision,
         join: record in SourceRecord,
@@ -110,22 +120,22 @@ defmodule DevilsDictionaryWeb.EvidenceLive do
     )
   end
 
-  defp restrict_content(nil), do: nil
+  defp restrict_content(nil, _visibility), do: nil
 
-  defp restrict_content(evidence) do
-    evidence = Visibility.restrict_content(evidence)
+  defp restrict_content(evidence, visibility) do
+    current = %{
+      lifecycle_state: evidence.current_lifecycle_state,
+      rights_metadata: evidence.current_rights_metadata
+    }
 
-    if evidence.lifecycle_state == :withdrawn,
-      do: %{evidence | body: nil, display_restricted?: true},
-      else: evidence
+    Visibility.restrict_historical_content(evidence, current, visibility)
   end
 
-  defp restrict_sense(nil), do: nil
+  defp restrict_sense(nil, _visibility), do: nil
 
-  defp restrict_sense(evidence) do
-    if evidence.lifecycle_state == :withdrawn,
-      do: Map.merge(evidence, %{body: nil, display_restricted?: true}),
-      else: Map.put(evidence, :display_restricted?, false)
+  defp restrict_sense(evidence, visibility) do
+    current = %{lifecycle_state: evidence.current_lifecycle_state}
+    Visibility.restrict_historical_sense(evidence, current, visibility)
   end
 
   defp parse_id(value) do

@@ -33,19 +33,60 @@ defmodule DevilsDictionary.Claims.Visibility do
 
   def body_displayable?(_), do: true
 
+  @doc "Whether one content revision's lifecycle and rights permit public text."
+  def content_displayable?(revision) do
+    revision_displayable?(revision) and body_displayable?(revision)
+  end
+
+  @doc "Whether one sense revision's lifecycle permits its public gloss."
+  def sense_displayable?(revision), do: revision_displayable?(revision)
+
   @doc "Redacts a public content projection without erasing its provenance."
   def restrict_content(view, visibility \\ :public)
 
   def restrict_content(view, :internal), do: Map.put(view, :display_restricted?, false)
 
   def restrict_content(view, :public) do
-    if body_displayable?(view) do
+    if content_displayable?(view) do
       Map.put(view, :display_restricted?, false)
     else
-      view
-      |> Map.put(:body, nil)
-      |> Map.put(:summary, nil)
-      |> Map.put(:display_restricted?, true)
+      redact(view)
+    end
+  end
+
+  @doc """
+  Applies the effective public policy to an immutable cited content revision.
+
+  A historical citation remains identifiable, but public text is permitted
+  only when both the cited revision and the content item's current revision
+  permit it. A later withdrawal or rights restriction therefore cannot be
+  bypassed by retaining an old revision URL. Explicitly authorized internal
+  inspection continues to show the immutable cited body.
+  """
+  def restrict_historical_content(view, current, visibility \\ :public)
+
+  def restrict_historical_content(view, _current, :internal),
+    do: Map.put(view, :display_restricted?, false)
+
+  def restrict_historical_content(view, current, :public) do
+    if content_displayable?(view) and content_displayable?(current) do
+      Map.put(view, :display_restricted?, false)
+    else
+      redact(view)
+    end
+  end
+
+  @doc "The equivalent effective policy for an immutable cited sense revision."
+  def restrict_historical_sense(view, current, visibility \\ :public)
+
+  def restrict_historical_sense(view, _current, :internal),
+    do: Map.put(view, :display_restricted?, false)
+
+  def restrict_historical_sense(view, current, :public) do
+    if sense_displayable?(view) and sense_displayable?(current) do
+      Map.put(view, :display_restricted?, false)
+    else
+      redact(view)
     end
   end
 
@@ -60,6 +101,20 @@ defmodule DevilsDictionary.Claims.Visibility do
 
   defp truncate(nil), do: nil
   defp truncate(body), do: String.slice(body, 0, 80)
+
+  defp revision_displayable?(nil), do: false
+
+  defp revision_displayable?(%{lifecycle_state: state}),
+    do: state not in [:withdrawn, "withdrawn"]
+
+  defp revision_displayable?(_), do: true
+
+  defp redact(view) do
+    view
+    |> Map.put(:body, nil)
+    |> Map.put(:summary, nil)
+    |> Map.put(:display_restricted?, true)
+  end
 
   defp value(metadata, "display"), do: fetch_string_or_atom(metadata, "display", :display)
 
