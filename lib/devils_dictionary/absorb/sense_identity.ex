@@ -93,36 +93,68 @@ defmodule DevilsDictionary.Absorb.SenseIdentity do
   `stability` is the source's answer to `Absorb.Source.sense_key_stability/0`.
   Under `:stable` the key decides and nothing is scored: the same key is the
   same meaning, a key not held before is new, and two different keys are never
-  the same identity.
+  the same identity. `claimed` carries identities already reserved by unchanged
+  rows in the same materialization group.
   """
-  def decide(incoming, existing, stability \\ :positional)
+  def decide(incoming, existing, stability \\ :positional, claimed \\ MapSet.new())
 
-  def decide(incoming, existing, :stable) do
+  def decide(incoming, existing, :stable, claimed) do
     held = Map.new(existing, &{to_string(&1[:external_key]), &1})
 
-    Enum.map(incoming, fn sense ->
-      case Map.get(held, to_string(sense[:key])) do
-        nil -> {:new, nil}
-        row -> {:matched, row.object_id, 1.0}
-      end
-    end)
+    {decisions, _claimed} =
+      Enum.map_reduce(incoming, claimed, fn sense, claimed ->
+        case Map.get(held, to_string(sense[:key])) do
+          nil ->
+            {{:new, nil}, claimed}
+
+          row ->
+            if MapSet.member?(claimed, row.object_id) do
+              {{:ambiguous, [{row.object_id, 1.0}], :already_claimed}, claimed}
+            else
+              {{:matched, row.object_id, 1.0}, MapSet.put(claimed, row.object_id)}
+            end
+        end
+      end)
+
+    decisions
   end
 
-  def decide(incoming, existing, _positional) do
+  def decide(incoming, existing, _positional, initially_claimed) do
     prepared = Enum.map(existing, &{&1, trigrams(&1[:gloss])})
 
     {decisions, _claimed} =
-      Enum.map_reduce(incoming, MapSet.new(), fn sense, claimed ->
+      Enum.map_reduce(incoming, initially_claimed, fn sense, claimed ->
         available =
           Enum.reject(prepared, fn {row, _t} -> MapSet.member?(claimed, row.object_id) end)
 
         case score(sense, available) do
           {:matched, object_id, s} -> {{:matched, object_id, s}, MapSet.put(claimed, object_id)}
+          {:new, nil} -> {claimed_decision(sense, prepared, claimed), claimed}
           other -> {other, claimed}
         end
       end)
 
     decisions
+  end
+
+  # If the only convincing identity has already been taken, the row is not a
+  # genuinely new meaning. Surface the collision for review so the caller can
+  # retain the row's previous identity instead of either sharing the winner or
+  # minting a duplicate.
+  defp claimed_decision(sense, prepared, claimed) do
+    claimed_rows =
+      Enum.filter(prepared, fn {row, _t} -> MapSet.member?(claimed, row.object_id) end)
+
+    case score(sense, claimed_rows) do
+      {:matched, object_id, similarity} ->
+        {:ambiguous, [{object_id, similarity}], :already_claimed}
+
+      {:ambiguous, candidates, _reason} ->
+        {:ambiguous, candidates, :already_claimed}
+
+      {:new, nil} = decision ->
+        decision
+    end
   end
 
   # Etymology number is a hard filter, not a score: Wiktionary's four `bank`

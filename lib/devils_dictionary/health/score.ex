@@ -30,6 +30,7 @@ defmodule DevilsDictionary.Health.Score do
 
   alias DevilsDictionary.Absorb
   alias DevilsDictionary.Claims
+  alias DevilsDictionary.Encyclopedia
   alias DevilsDictionary.Health
   alias DevilsDictionary.Lexicon
   alias DevilsDictionary.Repo
@@ -998,7 +999,9 @@ defmodule DevilsDictionary.Health.Score do
   # **X2** — trigram search over the whole index, timed. The probes are fixed so
   # the number is comparable between runs: prefixes of different lengths, two
   # misspellings, a multiword lemma, a capitalised one, and one that matches
-  # nothing. #71's home search calls the same `Lexicon.search/2`.
+  # nothing. The home search runs both identity spaces and deliberately keeps
+  # same-named words and entities separate, so the budget includes both indexed
+  # queries rather than timing only the older lexical half of the UI.
   @search_probes ~w(o oy oys oyst oyster oysster monkeyz cat Cat aardvark
                     giant\u00a0tortoise mongoose zzzzzz hyena dog dogg
                     sperm\u00a0whale wolf axolotl turkey)
@@ -1010,6 +1013,7 @@ defmodule DevilsDictionary.Health.Score do
       probe = String.replace(probe, "\u00a0", " ")
       at = System.monotonic_time(:microsecond)
       Lexicon.search(probe)
+      Encyclopedia.search_entities(probe)
       (System.monotonic_time(:microsecond) - at) / 1000
     end
   end

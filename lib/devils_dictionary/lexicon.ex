@@ -122,10 +122,18 @@ defmodule DevilsDictionary.Lexicon do
 
     # Exact case only: a bare "CATS" must not answer for "cats".
     headwords = Enum.reject(matches, &(form_of_entry?(&1) or &1.lemma != word))
+    non_form_matches = Enum.reject(matches, &form_of_entry?/1)
 
     cond do
-      matches != [] and Enum.any?(matches, &enriched?/1) ->
-        resolve_canonical(matches, word, :lemma)
+      Enum.any?(headwords, &enriched?/1) ->
+        # Enrichment belongs to the record, not to a case-folded spelling. A
+        # genuine exact-case headword keeps its page, but an enriched `CATS`
+        # name/noun row must not hijack the lowercase inflection `cats` before
+        # `by_form/2` can resolve it to `cat`.
+        # Once the exact spelling establishes that this is a headword page,
+        # keep its case variants together (for example `cat` and the acronym
+        # `CAT`) so source cards and sense groups are not silently split.
+        resolve_canonical(non_form_matches, word, :lemma)
 
       headwords != [] ->
         # Bare, but a headword in its own right: it keeps its page. Whatever

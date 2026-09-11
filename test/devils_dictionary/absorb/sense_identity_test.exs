@@ -113,10 +113,12 @@ defmodule DevilsDictionary.Absorb.SenseIdentityTest do
         incoming("b", "Money; profit.")
       ]
 
-      # The first claims it; the second cannot also be it, and is ambiguous or
-      # new rather than silently sharing an identity.
-      assert [{:matched, 1, _}, second] = SenseIdentity.decide(incoming, existing)
-      refute match?({:matched, 1, _}, second)
+      # The first claims it; the second cannot also be it and is explicitly
+      # ambiguous rather than silently sharing or duplicating the identity.
+      assert [
+               {:matched, 1, _},
+               {:ambiguous, [{1, _}], :already_claimed}
+             ] = SenseIdentity.decide(incoming, existing)
     end
   end
 

@@ -101,6 +101,31 @@ defmodule DevilsDictionary.LexiconTest do
       assert lexeme.lemma == "goose"
     end
 
+    test "an enriched form-of entry still yields to the word it inflects" do
+      # The full records pass adds senses and `enriched_at` to the form row.
+      # That content is valid; lookup must continue to respect its form-of
+      # identity instead of treating enrichment as evidence of headword status.
+      enriched!("monkeys", "noun", metadata: %{"form_of" => true})
+
+      enriched!("monkey", "noun", forms: [%{"form" => "monkeys", "tags" => ["plural"]}])
+
+      assert %{via: :form, lexemes: [lexeme], matched: "monkeys"} =
+               Lexicon.lookup("monkeys")
+
+      assert lexeme.lemma == "monkey"
+    end
+
+    test "an enriched case-folded form sibling cannot hijack lookup" do
+      # The full dump has a genuine uppercase proper-name/headword beside the
+      # lowercase plural form. It is enriched and is not itself a form row.
+      enriched!("CATS", "name")
+      enriched!("cats", "noun", metadata: %{"form_of" => true})
+      enriched!("cat", "noun", forms: [%{"form" => "cats", "tags" => ["plural"]}])
+
+      assert %{via: :form, lexemes: [lexeme]} = Lexicon.lookup("cats")
+      assert lexeme.lemma == "cat"
+    end
+
     test "a bare form-of row does not veto a row that names the canonical word" do
       # Johnson defines GEESE ("The plural of goose"), so the word has an entry
       # and stops being bare — but Wiktionary's bare index row is still beside
