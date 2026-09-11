@@ -205,8 +205,15 @@ defmodule DevilsDictionary.Claims.Contributions do
         if is_nil(current) or current.id != revision_id, do: Repo.rollback(:stale_revision)
         if String.trim(reason || "") == "", do: Repo.rollback(:reason_required)
         unless decision in ~w(accepted disputed rejected), do: Repo.rollback(:invalid_decision)
-        if context_items(current) != displayed_items, do: Repo.rollback(:stale_context)
-        context = unwrap(Claims.open_review_context(revision_id, displayed_items))
+        current_input = context_items(current)
+        if current_input != displayed_items, do: Repo.rollback(:stale_context)
+        context = unwrap(Claims.open_review_context(revision_id, current_input.items))
+
+        # `open_review_context/2` re-reads the display snapshot. If an endpoint
+        # or actor changed after the comparison above, do not record a review
+        # against that different second view.
+        if context.fingerprint != current_input.fingerprint,
+          do: Repo.rollback(:stale_context)
 
         unwrap(
           Claims.review(revision_id, decision, %{
@@ -222,7 +229,7 @@ defmodule DevilsDictionary.Claims.Contributions do
   end
 
   def context_items(revision) do
-    Claims.current_context_items(revision)
+    Claims.current_review_input(revision)
   end
 
   @doc "The exact current revision target for a content item or sense."
