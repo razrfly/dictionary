@@ -77,3 +77,43 @@ the rule that a partial/bookkeeping run cannot withdraw another record or
 source's support.
 
 Further checkpoint evidence is appended below as it is completed.
+
+## Checkpoint 2 — bounded general entities
+
+The kind-dependent linker exception is removed. Scoped runs now select exactly
+scope members for every entity kind. `Linker.run_selected/2` is the only
+out-of-scope path and accepts a bounded set of lexeme, target-identity or source
+record IDs; it runs identifier-backed evidence only. The ordinary missing-scope
+path raises instead of expanding globally. The regression uses the catalog's
+real Ambrose Bierce (`Q191050`) and *The Devil's Dictionary* (`Q1197843`)
+identities, proves equal selection, source provenance and unchanged rerun
+history, and separately keeps name-only person inference excluded.
+
+Wikidata now supports exact QID selection with entity/request/depth budgets and
+restricts both materialization passes to records visited by that run. Its
+checked-in representative fixture covers person, work, organization, place and
+event projection plus two different IDs with the same label. Reclassification
+keeps an existing object ID, metadata and name attachment; a local artifact with
+no external identifier remains valid. The retention, projection and next-fetch
+policies—including deliberately omitted qualifiers/references—are recorded in
+`docs/adr/0002-bounded-general-entity-selection.md`.
+
+Bounded live smoke import (exact QIDs `Q191050,Q92640,Q180,Q270,Q43653`):
+
+```text
+selection=explicit_qids  seed_qids=5  fetched=5  records=5
+requests=1/2             entity budget=20       related depth=2
+truncated=false          unresolved references=0
+stored trim saving=98.9% concepts materialized=5
+projected kinds=person,work,organization,place,event
+```
+
+The first smoke attempt exposed that fetch caps did not constrain the existing
+stale-record materializer. That result is intentionally not acceptance
+evidence. Both materialization passes were then restricted to the run's visited
+QIDs, covered by regression tests, and the corrected smoke above was recorded.
+
+```text
+Checkpoint 2 ordinary suite: 798 tests, 0 failures
+Historical audit, unchanged:    7 tests, 0 failures
+```

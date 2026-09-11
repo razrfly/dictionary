@@ -1,0 +1,63 @@
+{
+  "records": [
+    {
+      "id": "Q191050",
+      "labels": {"en": {"language": "en", "value": "Ambrose Bierce"}},
+      "descriptions": {"en": {"language": "en", "value": "American writer and journalist"}},
+      "aliases": {"en": [{"language": "en", "value": "Ambrose Gwinett Bierce"}]},
+      "sitelinks": {"enwiki": {"site": "enwiki", "title": "Ambrose Bierce"}},
+      "claims": {
+        "P31": [{"id": "Q191050$P31", "rank": "normal", "type": "statement", "mainsnak": {"datavalue": {"type": "wikibase-entityid", "value": {"id": "Q5"}}}, "qualifiers": {"P580": []}, "references": [{"snaks": {}}]}],
+        "P999999": [{"rank": "normal", "type": "statement", "mainsnak": {"datavalue": {"type": "string", "value": "omitted"}}}]
+      }
+    },
+    {
+      "id": "Q92640",
+      "labels": {"en": {"language": "en", "value": "Alice's Adventures in Wonderland"}},
+      "descriptions": {"en": {"language": "en", "value": "1865 novel by Lewis Carroll"}},
+      "aliases": {},
+      "sitelinks": {"enwiki": {"site": "enwiki", "title": "Alice's Adventures in Wonderland"}},
+      "claims": {"P31": [{"rank": "normal", "type": "statement", "mainsnak": {"datavalue": {"type": "wikibase-entityid", "value": {"id": "Q7725634"}}}}]}
+    },
+    {
+      "id": "Q180",
+      "labels": {"en": {"language": "en", "value": "Wikimedia Foundation"}},
+      "descriptions": {"en": {"language": "en", "value": "American nonprofit organization"}},
+      "aliases": {},
+      "sitelinks": {"enwiki": {"site": "enwiki", "title": "Wikimedia Foundation"}},
+      "claims": {"P31": [{"rank": "preferred", "type": "statement", "mainsnak": {"datavalue": {"type": "wikibase-entityid", "value": {"id": "Q43229"}}}}]}
+    },
+    {
+      "id": "Q270",
+      "labels": {"en": {"language": "en", "value": "Warsaw"}},
+      "descriptions": {"en": {"language": "en", "value": "capital and largest city of Poland"}},
+      "aliases": {},
+      "sitelinks": {"enwiki": {"site": "enwiki", "title": "Warsaw"}},
+      "claims": {"P31": [{"rank": "normal", "type": "statement", "mainsnak": {"datavalue": {"type": "wikibase-entityid", "value": {"id": "Q200250"}}}}]}
+    },
+    {
+      "id": "Q43653",
+      "labels": {"en": {"language": "en", "value": "Apollo 11"}},
+      "descriptions": {"en": {"language": "en", "value": "first crewed Moon landing mission"}},
+      "aliases": {},
+      "sitelinks": {"enwiki": {"site": "enwiki", "title": "Apollo 11"}},
+      "claims": {"P31": [{"rank": "normal", "type": "statement", "mainsnak": {"datavalue": {"type": "wikibase-entityid", "value": {"id": "Q495307"}}}}]}
+    },
+    {
+      "id": "Q9000001",
+      "labels": {"en": {"language": "en", "value": "Same Name"}},
+      "descriptions": {"en": {"language": "en", "value": "a person with an ambiguous label"}},
+      "aliases": {},
+      "sitelinks": {},
+      "claims": {"P31": [{"rank": "normal", "type": "statement", "mainsnak": {"datavalue": {"type": "wikibase-entityid", "value": {"id": "Q5"}}}}]}
+    },
+    {
+      "id": "Q9000002",
+      "labels": {"en": {"language": "en", "value": "Same Name"}},
+      "descriptions": {"en": {"language": "en", "value": "a work with an ambiguous label"}},
+      "aliases": {},
+      "sitelinks": {},
+      "claims": {"P31": [{"rank": "normal", "type": "statement", "mainsnak": {"datavalue": {"type": "wikibase-entityid", "value": {"id": "Q386724"}}}}]}
+    }
+  ]
+}

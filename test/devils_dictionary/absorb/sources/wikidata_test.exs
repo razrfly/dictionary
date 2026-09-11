@@ -8,6 +8,7 @@ defmodule DevilsDictionary.Absorb.Sources.WikidataTest do
 
   defp records(lemma), do: Fixtures.raw("wikidata", lemma)
   defp all_records, do: Enum.flat_map(@lemmas, &records/1)
+  defp general_records, do: Fixtures.raw("wikidata", "general_entities")
 
   defp entity(lemma, qid), do: Enum.find(records(lemma), &(&1["id"] == qid))
 
@@ -24,6 +25,19 @@ defmodule DevilsDictionary.Absorb.Sources.WikidataTest do
   defp bytes(term), do: term |> Jason.encode!() |> byte_size()
 
   describe "trim/1" do
+    test "retains declared facts and omits unprojected statement detail" do
+      raw = Enum.find(general_records(), &(&1["id"] == "Q191050"))
+      trimmed = Wikidata.trim(raw)
+
+      assert Map.has_key?(trimmed["claims"], "P31")
+      refute Map.has_key?(trimmed["claims"], "P999999")
+
+      assert [statement] = trimmed["claims"]["P31"]
+      assert Map.keys(statement) |> Enum.sort() == ~w(mainsnak rank type)
+      refute Map.has_key?(statement, "qualifiers")
+      refute Map.has_key?(statement, "references")
+    end
+
     test "keeps only the whitelisted properties" do
       for raw <- all_records() do
         kept = raw |> Wikidata.trim() |> get_in(["claims"]) |> Map.keys()
@@ -65,6 +79,33 @@ defmodule DevilsDictionary.Absorb.Sources.WikidataTest do
   end
 
   describe "materialize/1" do
+    test "projects representative people, works, organizations, places and events" do
+      expected = %{
+        "Q191050" => :person,
+        "Q92640" => :work,
+        "Q180" => :organization,
+        "Q270" => :place,
+        "Q43653" => :event
+      }
+
+      for raw <- general_records(), Map.has_key?(expected, raw["id"]) do
+        assert [concept] = out(raw).concepts
+        assert concept.kind == expected[raw["id"]]
+        assert concept.metadata["wikidata_instance_of"] != []
+      end
+    end
+
+    test "same-name records remain distinct identities" do
+      concepts =
+        general_records()
+        |> Enum.filter(&(&1["id"] in ["Q9000001", "Q9000002"]))
+        |> Enum.map(fn raw -> out(raw).concepts |> List.first() end)
+
+      assert Enum.map(concepts, & &1.label) == ["Same Name", "Same Name"]
+      assert Enum.map(concepts, & &1.qid) == ["Q9000001", "Q9000002"]
+      assert Enum.map(concepts, & &1.kind) == [:person, :work]
+    end
+
     test "an everyday concept keeps the no-opinion kind and bridges to its taxon" do
       assert [concept] = out(entity("cat", "Q146")).concepts
 

@@ -53,10 +53,18 @@ defmodule DevilsDictionary.Absorb.Sources.Wikidata do
   # ontology (40 seeds pulled 1,372 entities and 20 tiers before this was
   # narrowed), and L3 only ever asks about `parent_taxon`.
   @parent_properties ~w(P171 P13176)
+  @general_relation_properties ~w(P31 P279)
 
   # Taxonomic chains run long: species → genus → … → Animalia passes through
   # unranked clades, so 30 is a guard against a cycle, not a real ceiling.
   @max_depth 30
+  @max_explicit_qids 100
+  @default_explicit_entity_budget 500
+  @default_explicit_request_budget 10
+  @max_explicit_entity_budget 5_000
+  @max_explicit_request_budget 100
+  @max_scope_entity_budget 2_000_000
+  @max_scope_request_budget 50_000
   @materialize_batch 500
   @record_chunk 500
 
@@ -122,20 +130,28 @@ defmodule DevilsDictionary.Absorb.Sources.Wikidata do
     # be a batch behind its child again — so this runs until nothing is left
     # unresolved rather than a fixed number of times. Without it M1 finds the
     # remainder instead.
-    first =
-      Batch.run(__MODULE__, source,
+    batch_opts =
+      [
         batch_size: @materialize_batch,
         only_stale: true,
         run_id: opts[:run_id]
-      )
+      ]
+      |> materialize_selection(stats.visited_qids, opts)
 
-    second = close_concept_relations(source, first, opts[:run_id])
+    first = Batch.run(__MODULE__, source, batch_opts)
+
+    second = close_concept_relations(source, first, opts[:run_id], stats.visited_qids, opts)
 
     {:ok,
      %{
        seed_qids: length(seeds),
+       selection: if(explicit_qids(opts) == [], do: "scope", else: "explicit_qids"),
+       entity_budget: stats.entity_budget,
+       request_budget: stats.request_budget,
+       related_depth: stats.related_depth,
        tiers: stats.tiers,
        truncated: stats.truncated,
+       unresolved_references: stats.unresolved_references,
        requests: stats.requests,
        records: stats.records,
        fetched: stats.fetched,
@@ -159,7 +175,30 @@ defmodule DevilsDictionary.Absorb.Sources.Wikidata do
   # tier named and we have not stored yet, so a shared ancestor (Animalia is
   # every leaf's great-grandparent) is fetched exactly once.
   defp walk(source, seeds, rate, opts) do
-    max_depth = opts[:max_depth] || @max_depth
+    explicit? = explicit_qids(opts) != []
+
+    max_depth =
+      positive_budget!(
+        opts[:related_depth] || opts[:max_depth] || if(explicit?, do: 2, else: @max_depth),
+        :related_depth,
+        @max_depth
+      )
+
+    entity_budget =
+      positive_budget!(
+        opts[:entity_budget] ||
+          if(explicit?, do: @default_explicit_entity_budget, else: @max_scope_entity_budget),
+        :entity_budget,
+        if(explicit?, do: @max_explicit_entity_budget, else: @max_scope_entity_budget)
+      )
+
+    request_budget =
+      positive_budget!(
+        opts[:request_budget] ||
+          if(explicit?, do: @default_explicit_request_budget, else: @max_scope_request_budget),
+        :request_budget,
+        if(explicit?, do: @max_explicit_request_budget, else: @max_scope_request_budget)
+      )
 
     stats = %{
       tiers: 0,
@@ -168,7 +207,13 @@ defmodule DevilsDictionary.Absorb.Sources.Wikidata do
       fetched: 0,
       absent: 0,
       bytes_raw: 0,
-      bytes_trimmed: 0
+      bytes_trimmed: 0,
+      requested_entities: 0,
+      unresolved_references: 0,
+      entity_budget: entity_budget,
+      request_budget: request_budget,
+      related_depth: max_depth,
+      visited_qids: []
     }
 
     # `truncated` matters: a walk cut off at `max_depth` leaves taxon chains that
@@ -184,18 +229,53 @@ defmodule DevilsDictionary.Absorb.Sources.Wikidata do
       wanted =
         if opts[:refresh] && depth == 1, do: wanted, else: wanted -- stored_qids(source, wanted)
 
+      entity_capacity = max(entity_budget - acc.requested_entities, 0)
+      request_capacity = max(request_budget - acc.requests, 0) * Client.batch_size()
+      capacity = min(entity_capacity, request_capacity)
+      bounded = Enum.take(wanted, capacity)
+      omitted = length(wanted) - length(bounded)
+
       cond do
         wanted == [] ->
           {:halt, acc}
 
+        bounded == [] ->
+          {:halt,
+           %{
+             acc
+             | truncated: true,
+               unresolved_references: acc.unresolved_references + length(wanted)
+           }}
+
         depth == max_depth ->
-          {_parents, acc} = fetch_tier(source, wanted, rate, acc, opts)
-          {:halt, %{acc | tiers: depth, truncated: true}}
+          {parents, acc} = fetch_tier(source, bounded, rate, acc, opts)
+
+          unresolved = acc.unresolved_references + omitted + length(Enum.uniq(parents))
+
+          {:halt,
+           %{
+             acc
+             | tiers: depth,
+               truncated: unresolved > 0,
+               unresolved_references: unresolved
+           }}
 
         true ->
-          {parents, acc} = fetch_tier(source, wanted, rate, acc, opts)
-          seen = MapSet.union(seen, MapSet.new(wanted))
-          {:cont, {parents, seen, %{acc | tiers: depth}}}
+          {parents, acc} = fetch_tier(source, bounded, rate, acc, opts)
+          seen = MapSet.union(seen, MapSet.new(bounded))
+
+          if omitted > 0 do
+            {:halt,
+             %{
+               acc
+               | tiers: depth,
+                 truncated: true,
+                 unresolved_references:
+                   acc.unresolved_references + omitted + length(Enum.uniq(parents))
+             }}
+          else
+            {:cont, {parents, seen, %{acc | tiers: depth}}}
+          end
       end
     end)
     |> case do
@@ -214,14 +294,17 @@ defmodule DevilsDictionary.Absorb.Sources.Wikidata do
   # walk from a stuck one.
   @max_materialize_passes 5
 
-  defp close_concept_relations(source, first, run_id) do
+  defp close_concept_relations(source, first, run_id, visited_qids, opts) do
     Enum.reduce_while(2..@max_materialize_passes, Map.put(first, :passes, 1), fn pass, previous ->
-      counts =
-        Batch.run(__MODULE__, source,
+      batch_opts =
+        [
           batch_size: @materialize_batch,
           only_stale: false,
           run_id: run_id
-        )
+        ]
+        |> materialize_selection(visited_qids, opts)
+
+      counts = Batch.run(__MODULE__, source, batch_opts)
 
       counts = Map.put(counts, :passes, pass)
 
@@ -252,16 +335,25 @@ defmodule DevilsDictionary.Absorb.Sources.Wikidata do
               absent: acc.absent + (length(chunk) - map_size(entities)),
               bytes_raw: acc.bytes_raw + Enum.sum(Enum.map(Map.values(entities), &bytes/1)),
               bytes_trimmed:
-                acc.bytes_trimmed + Enum.sum(Enum.map(Map.values(entities), &bytes(trim(&1))))
+                acc.bytes_trimmed + Enum.sum(Enum.map(Map.values(entities), &bytes(trim(&1)))),
+              visited_qids: Enum.uniq(acc.visited_qids ++ chunk)
           }
 
-          {parents ++ Enum.flat_map(Map.values(entities), &parent_qids/1), acc}
+          related = Enum.flat_map(Map.values(entities), &related_qids(&1, opts))
+
+          {parents ++ related,
+           %{acc | requested_entities: acc.requested_entities + length(chunk)}}
 
         {:error, reason} ->
           if opts[:strict] do
             raise "wikidata: #{inspect(reason)} on #{inspect(chunk)}"
           else
-            {parents, %{acc | requests: acc.requests + 1}}
+            {parents,
+             %{
+               acc
+               | requests: acc.requests + 1,
+                 requested_entities: acc.requested_entities + length(chunk)
+             }}
           end
       end
     end)
@@ -286,8 +378,21 @@ defmodule DevilsDictionary.Absorb.Sources.Wikidata do
     }
   end
 
-  defp parent_qids(entity) do
-    Enum.flat_map(@parent_properties, &Client.entity_ids(entity, &1))
+  defp related_qids(entity, opts) do
+    properties =
+      if explicit_qids(opts) == [],
+        do: @parent_properties,
+        else: @parent_properties ++ @general_relation_properties
+
+    Enum.flat_map(properties, &Client.entity_ids(entity, &1))
+  end
+
+  defp materialize_selection(batch_opts, visited_qids, opts) do
+    if explicit_qids(opts) == [] do
+      batch_opts
+    else
+      Keyword.put(batch_opts, :where, dynamic([r], r.external_id in ^visited_qids))
+    end
   end
 
   # ── enrich ───────────────────────────────────────────────────────────────
@@ -330,7 +435,7 @@ defmodule DevilsDictionary.Absorb.Sources.Wikidata do
       qid: qid,
       label: clamp(label(raw, scientific_name)),
       description: get_in(raw, ["descriptions", "en", "value"]),
-      kind: if(scientific_name, do: :taxon, else: :concept),
+      kind: entity_kind(raw, scientific_name),
       taxon_concept: taxon_concept(raw, scientific_name),
       metadata:
         raw
@@ -370,6 +475,8 @@ defmodule DevilsDictionary.Absorb.Sources.Wikidata do
 
   defp metadata(raw) do
     %{}
+    |> put_if("wikidata_instance_of", nonempty(Client.entity_ids(raw, "P31")))
+    |> put_if("wikidata_subclass_of", nonempty(Client.entity_ids(raw, "P279")))
     |> put_if("wordnet_31", Client.string(raw, "P8814"))
     |> put_if("commons_category", Client.string(raw, "P373"))
     |> put_if("gbif", Client.string(raw, "P846"))
@@ -382,6 +489,24 @@ defmodule DevilsDictionary.Absorb.Sources.Wikidata do
       list when is_list(list) and list != [] -> Enum.map(list, & &1["value"])
       _ -> nil
     end
+  end
+
+  @kind_classes %{
+    person: ~w(Q5),
+    organization: ~w(Q43229 Q4830453 Q163740 Q783794),
+    work: ~w(Q386724 Q7725634 Q47461344 Q17537576 Q571),
+    place: ~w(Q17334923 Q2221906 Q515 Q200250 Q486972 Q56061),
+    event: ~w(Q1656682 Q1190554 Q495307 Q752783)
+  }
+
+  defp entity_kind(_raw, scientific_name) when is_binary(scientific_name), do: :taxon
+
+  defp entity_kind(raw, _scientific_name) do
+    classes = MapSet.new(Client.entity_ids(raw, "P31"))
+
+    Enum.find_value(@kind_classes, :concept, fn {kind, recognized} ->
+      if Enum.any?(recognized, &MapSet.member?(classes, &1)), do: kind
+    end)
   end
 
   @relation_types %{"P171" => :parent_taxon, "P279" => :subclass_of, "P31" => :instance_of}
@@ -418,8 +543,20 @@ defmodule DevilsDictionary.Absorb.Sources.Wikidata do
   is that scope.
   """
   def seed_qids(scope, opts \\ []) do
+    selected = explicit_qids(opts)
+
     qids =
-      wordnet_qids(scope) ++ wiktionary_qids(scope) ++ concept_qids(scope) ++ root_qids(scope)
+      cond do
+        selected != [] ->
+          selected
+
+        is_nil(scope) ->
+          raise ArgumentError,
+                "Wikidata absorb requires --scope or an explicit bounded QID selection"
+
+        true ->
+          wordnet_qids(scope) ++ wiktionary_qids(scope) ++ concept_qids(scope) ++ root_qids(scope)
+      end
 
     qids =
       qids
@@ -480,16 +617,6 @@ defmodule DevilsDictionary.Absorb.Sources.Wikidata do
   # is what grew the table to 90,481 rows, 54,273 of which link to no scope
   # word at all.
   #
-  # A run with no scope still walks the whole table: that is a full refresh
-  # asking for exactly what it says.
-  defp concept_qids(nil) do
-    Repo.all(
-      from x in DevilsDictionary.Registry.ExternalIdentifier,
-        where: x.namespace == "wikidata" and x.status == :verified,
-        select: x.external_id
-    )
-  end
-
   defp concept_qids(scope) do
     Repo.all(
       from link in subquery(Encyclopedia.linked_lexemes_query()),
@@ -505,10 +632,7 @@ defmodule DevilsDictionary.Absorb.Sources.Wikidata do
     )
   end
 
-  defp root_qids(nil), do: []
   defp root_qids(scope), do: [scope.rules["wikidata_root"]] |> Enum.reject(&is_nil/1)
-
-  defp in_scope(query, nil), do: query
 
   defp in_scope(query, scope) do
     from [s, _so, _rev] in query,
@@ -517,6 +641,44 @@ defmodule DevilsDictionary.Absorb.Sources.Wikidata do
   end
 
   defp valid_qid?(qid), do: is_binary(qid) and Regex.match?(~r/^Q\d+$/, qid)
+
+  defp explicit_qids(opts) do
+    values =
+      case opts[:qids] do
+        nil -> []
+        qids when is_binary(qids) -> String.split(qids, ",", trim: true)
+        qids when is_list(qids) -> qids
+        qid -> [qid]
+      end
+
+    qids = values |> Enum.map(&to_string/1) |> Enum.map(&String.trim/1) |> Enum.uniq()
+
+    invalid = Enum.reject(qids, &valid_qid?/1)
+
+    cond do
+      invalid != [] ->
+        raise ArgumentError, "invalid Wikidata QIDs: #{Enum.join(invalid, ", ")}"
+
+      length(qids) > @max_explicit_qids ->
+        raise ArgumentError,
+              "explicit Wikidata selection exceeds #{@max_explicit_qids} QIDs"
+
+      true ->
+        qids
+    end
+  end
+
+  defp positive_budget!(value, _name, maximum)
+       when is_integer(value) and value > 0 and value <= maximum,
+       do: value
+
+  defp positive_budget!(value, name, maximum) do
+    raise ArgumentError,
+          "#{name} must be a positive integer no greater than #{maximum}, got: #{inspect(value)}"
+  end
+
+  defp nonempty([]), do: nil
+  defp nonempty(values), do: values
 
   # ── helpers ──────────────────────────────────────────────────────────────
 

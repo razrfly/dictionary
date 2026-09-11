@@ -10,7 +10,7 @@ defmodule DevilsDictionary.Absorb.LinkerTest do
   alias DevilsDictionary.Claims.AssertionRevision
   alias DevilsDictionary.Fixtures
   alias DevilsDictionary.Lexicon.ScopeMember
-  alias DevilsDictionary.{Claims, Registry, Repo, Sources}
+  alias DevilsDictionary.{Claims, Encyclopedia, Registry, Repo, Sources}
   alias DevilsDictionary.WordFixtures
 
   setup do
@@ -95,6 +95,16 @@ defmodule DevilsDictionary.Absorb.LinkerTest do
       from r in DevilsDictionary.Corpus.SourceRecordRevision,
         where: r.source_record_id == ^record.id,
         select: r.id
+    )
+  end
+
+  defp source_record_id(sense) do
+    Repo.one!(
+      from sr in DevilsDictionary.Registry.SenseRevision,
+        join: rr in DevilsDictionary.Corpus.SourceRecordRevision,
+        on: rr.id == sr.source_record_revision_id,
+        where: sr.sense_id == ^sense.object_id and sr.is_current,
+        select: rr.source_record_id
     )
   end
 
@@ -204,30 +214,63 @@ defmodule DevilsDictionary.Absorb.LinkerTest do
       assert link!(cat, :wordnet_wikidata).confidence == 0.90
     end
 
-    test "identifier-backed people link outside the reporting scope with provenance", ctx do
-      person = person!("Q424242426", "Ambrose Example")
+    test "explicit evidence selection treats out-of-scope people and works alike", ctx do
+      # These are the real catalog identities, not name-matched stand-ins.
+      person = Encyclopedia.by_qid!("Q191050")
+      work = Encyclopedia.by_qid!("Q1197843")
 
       {:ok, name} =
         Registry.create_lexeme(%{
           language_tag: "en",
-          lemma: "Ambrose Example",
+          lemma: "Ambrose Bierce",
           part_of_speech: "noun",
           metadata: %{}
         })
 
-      sense =
-        sense!(ctx, name, "wordnet", metadata: %{"wikidata" => "Q424242426", "ili" => "i94474"})
+      {:ok, title} =
+        Registry.create_lexeme(%{
+          language_tag: "en",
+          lemma: "The Devil's Dictionary",
+          part_of_speech: "noun",
+          metadata: %{}
+        })
 
-      run = Sources.start_run("link", scope_id: ctx.animals.id)
-      assert %{rungs: %{wordnet_wikidata: 1}} = Linker.run(ctx.animals, run_id: run.id)
+      person_sense =
+        sense!(ctx, name, "wordnet", metadata: %{"wikidata" => "Q191050", "ili" => "i94474"})
+
+      work_sense =
+        sense!(ctx, title, "wordnet", metadata: %{"wikidata" => "Q1197843", "ili" => "i94475"})
+
+      # Scope membership, never entity kind, bounds an ordinary run.
+      assert %{rungs: %{wordnet_wikidata: 0}} = Linker.run(ctx.animals)
+      assert links(name, :wordnet_wikidata) == []
+      assert links(title, :wordnet_wikidata) == []
+
+      person_record_id = source_record_id(person_sense)
+      person_run = Sources.start_run("link_selected")
+
+      assert %{rungs: %{wordnet_wikidata: 1}} =
+               Linker.run_selected(%{source_record_ids: [person_record_id]},
+                 run_id: person_run.id
+               )
+
+      work_run = Sources.start_run("link_selected")
+
+      assert %{rungs: %{wordnet_wikidata: 1}} =
+               Linker.run_selected(%{entity_ids: [work.object_id]}, run_id: work_run.id)
 
       link = link!(name, :wordnet_wikidata)
-      assert link.subject_object_id == sense.object_id
+      assert link.subject_object_id == person_sense.object_id
       assert link.object_object_id == person.object_id
       assert link.predicate.key == "refers_to"
       assert link.metadata["evidence"] == "sense_metadata_wikidata"
-      assert link.metadata["wikidata_qid"] == "Q424242426"
+      assert link.metadata["wikidata_qid"] == "Q191050"
       assert is_integer(link.metadata["source_record_id"])
+
+      work_link = link!(title, :wordnet_wikidata)
+      assert work_link.subject_object_id == work_sense.object_id
+      assert work_link.object_object_id == work.object_id
+      assert work_link.predicate.key == "refers_to"
 
       output =
         Repo.one!(
@@ -240,35 +283,28 @@ defmodule DevilsDictionary.Absorb.LinkerTest do
         )
 
       assert output.source_record_id == link.metadata["source_record_id"]
-      assert output.last_seen_run_id == run.id
+      assert output.last_seen_run_id == person_run.id
 
-      before = length(Claims.history(link.assertion_id))
-      rerun = Sources.start_run("link", scope_id: ctx.animals.id)
-      Linker.run(ctx.animals, run_id: rerun.id)
+      before = length(Claims.history(work_link.assertion_id))
+      rerun = Sources.start_run("link_selected")
+      Linker.run_selected(%{lexeme_ids: [title.object_id]}, run_id: rerun.id)
 
-      assert length(Claims.history(link.assertion_id)) == before
+      assert length(Claims.history(work_link.assertion_id)) == before
 
       assert Repo.one!(
                from o in "source_assertion_outputs",
-                 where: o.assertion_id == ^link.assertion_id,
+                 where: o.assertion_id == ^work_link.assertion_id,
                  select: o.last_seen_run_id
              ) == rerun.id
     end
 
-    test "identifier-backed non-people remain inside the reporting scope", ctx do
-      {:ok, outside} =
-        Registry.create_lexeme(%{
-          language_tag: "en",
-          lemma: "Outside Example",
-          part_of_speech: "noun",
-          metadata: %{}
-        })
+    test "missing and oversized populations cannot become global crawls" do
+      assert_raise ArgumentError, ~r/requires a scope/, fn -> Linker.run(nil) end
+      assert_raise ArgumentError, ~r/at least one ID/, fn -> Linker.run_selected(%{}) end
 
-      concept!("Q424242427")
-      sense!(ctx, outside, "wordnet", metadata: %{"wikidata" => "Q424242427"})
-
-      assert %{rungs: %{wordnet_wikidata: 0}} = Linker.run(ctx.animals)
-      assert links(outside, :wordnet_wikidata) == []
+      assert_raise ArgumentError, ~r/exceeds 500 IDs/, fn ->
+        Linker.run_selected(%{entity_ids: Enum.to_list(1..501)})
+      end
     end
 
     test "wordnet_wikidata reads the array form too", ctx do

@@ -12,6 +12,7 @@ defmodule Mix.Tasks.Dd.Absorb do
       mix dd.absorb wiktionary --scope animals
       mix dd.absorb wikipedia --scope animals
       mix dd.absorb wikidata --scope animals
+      mix dd.absorb wikidata --qids Q191050,Q92640 --related-depth 2
       mix dd.absorb wikipedia --scope animals --concepts
 
   Every run writes an `import_runs` row (running → done or failed) and prints
@@ -44,6 +45,14 @@ defmodule Mix.Tasks.Dd.Absorb do
       This is scorecard row A7, and it is the pass that gives the taxa and the
       disambiguation candidates their text and thumbnails.
     * `--max-depth` — Wikidata only: how many parent tiers to walk (default 30)
+    * `--qids` — Wikidata only: comma-separated, explicit QIDs. This is the
+      bounded way to import identities outside a scope; at most 100 are accepted
+    * `--related-depth` — Wikidata explicit selection only: how many P31/P279
+      and taxonomy tiers to fetch (default 2, maximum 30)
+    * `--entity-budget` — Wikidata only: maximum requested entities. Explicit
+      selections default to 500
+    * `--request-budget` — Wikidata only: maximum API requests. Explicit
+      selections default to 10
     * `--refresh` — Wikidata only: refetch seed entities already stored, rather
       than only the tiers that are missing
     * `--strict` — raise on the first HTTP failure instead of counting it and
@@ -74,6 +83,10 @@ defmodule Mix.Tasks.Dd.Absorb do
           concepts: :boolean,
           max_candidates: :integer,
           max_depth: :integer,
+          qids: :string,
+          related_depth: :integer,
+          entity_budget: :integer,
+          request_budget: :integer,
           refresh: :boolean,
           rate_limit_ms: :integer,
           strict: :boolean
