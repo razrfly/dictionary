@@ -84,6 +84,42 @@ defmodule DevilsDictionaryWeb.EntityLive do
             <.a navigate={~p"/"} class="mt-6">Start somewhere else</.a>
           </div>
         <% else %>
+          <section
+            :if={@page.identity.state == :merged}
+            id="entity-merged-notice"
+            class="mb-8 border-y border-mist-950/10 bg-mist-950/3 py-4 dark:border-white/10 dark:bg-white/5"
+          >
+            <p class="flex min-w-0 items-start gap-2 text-base/7 text-pretty sm:text-sm/6">
+              <.icon name="hero-arrow-path" class="size-4 h-lh shrink-0 stroke-mist-500" />
+              <span class="min-w-0">
+                This identity was merged into <.a navigate={
+                  ~p"/entities/#{@page.entity.object_id}/#{Connection.slugify(@page.entity.label)}"
+                }>
+                  {@page.entity.label}
+                </.a>. This old address remains meaningful, and its relationships and identity history are
+                retained.
+              </span>
+            </p>
+          </section>
+
+          <section
+            :if={@page.identity.state == :split}
+            id="entity-split-notice"
+            class="mb-8 border-y border-mist-950/10 bg-mist-950/3 py-4 dark:border-white/10 dark:bg-white/5"
+          >
+            <p class="text-base/7 text-pretty sm:text-sm/6">
+              This identity was split. Attachments remain unresolved until a reviewer deliberately maps
+              them.
+            </p>
+            <ul role="list" class="mt-2 flex flex-wrap gap-3 text-base/7 sm:text-sm/6">
+              <li :for={output <- @page.identity.outputs}>
+                <.a navigate={~p"/entities/#{output.object_id}/#{Connection.slugify(output.label)}"}>
+                  {output.label}
+                </.a>
+              </li>
+            </ul>
+          </section>
+
           <header id="entity-header">
             <.eyebrow>{@page.entity.kind}</.eyebrow>
             <.heading>{@page.entity.label}</.heading>
@@ -114,7 +150,14 @@ defmodule DevilsDictionaryWeb.EntityLive do
               id={"biography-#{article.object_id}"}
               class="prose prose-mist max-w-none dark:prose-invert"
             >
-              {Phoenix.HTML.raw(Markdown.to_html(article.body, article.body_format))}
+              <%= if article.display_restricted? do %>
+                <p id={"biography-#{article.object_id}-restricted"} class="text-mist-500">
+                  The source and revision are retained, but rights metadata does not permit displaying this
+                  text.
+                </p>
+              <% else %>
+                {Phoenix.HTML.raw(Markdown.to_html(article.body, article.body_format))}
+              <% end %>
               <p :if={article.url} class="not-prose mt-2 text-sm/7">
                 <.a href={article.url}>source ↗</.a>
               </p>

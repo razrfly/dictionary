@@ -28,8 +28,10 @@ defmodule DevilsDictionary.Claims.Connection do
   import Ecto.Query
 
   alias DevilsDictionary.Claims
+  alias DevilsDictionary.Claims.Visibility
   alias DevilsDictionary.Claims.{Assertion, AssertionRevision}
   alias DevilsDictionary.Encyclopedia
+  alias DevilsDictionary.Registry
 
   alias DevilsDictionary.Registry.{
     ContentItem,
@@ -81,7 +83,7 @@ defmodule DevilsDictionary.Claims.Connection do
         context: revision.context_object_id && endpoint(revision.context_object_id),
         evidence: supports,
         counterevidence: contradicts,
-        review: Claims.review_state(revision.id),
+        review: Claims.display_review_state(revision.id),
         reviews: Claims.reviews(revision.id),
         score: Claims.score(revision.id),
         history: Enum.filter(Claims.history(assertion_id), &visible_revision?(&1, opts)),
@@ -96,9 +98,7 @@ defmodule DevilsDictionary.Claims.Connection do
   defp visible_revision?(nil, _opts), do: false
 
   defp visible_revision?(revision, opts) do
-    opts[:visibility] == :internal or
-      (revision.lifecycle_state == :active and
-         Claims.review_state(revision.id) not in Claims.hidden_decisions())
+    opts[:visibility] == :internal or Claims.publicly_visible_revision?(revision)
   end
 
   defp revision_for(assertion_id, nil), do: Claims.current_revision(assertion_id)
@@ -121,8 +121,13 @@ defmodule DevilsDictionary.Claims.Connection do
   def endpoint(nil), do: nil
 
   def endpoint(object_id) do
-    lexeme(object_id) || sense(object_id) || entity(object_id) || content(object_id) ||
-      %{kind: :unknown, object_id: object_id, label: "##{object_id}", path: nil}
+    canonical_id = Registry.canonical_id(object_id)
+
+    result =
+      lexeme(canonical_id) || sense(canonical_id) || entity(canonical_id) || content(canonical_id) ||
+        %{kind: :unknown, object_id: canonical_id, label: "##{canonical_id}", path: nil}
+
+    if canonical_id == object_id, do: result, else: Map.put(result, :merged_from, object_id)
   end
 
   @doc """
@@ -133,13 +138,20 @@ defmodule DevilsDictionary.Claims.Connection do
   """
   def endpoint_summaries(object_ids) do
     ids = object_ids |> Enum.reject(&is_nil/1) |> Enum.uniq()
+    canonical = Map.new(ids, &{&1, Registry.canonical_id(&1)})
+    canonical_ids = canonical |> Map.values() |> Enum.uniq()
 
-    ids
-    |> Map.new(&{&1, %{label: "##{&1}", path: nil}})
-    |> Map.merge(content_summaries(ids))
-    |> Map.merge(entity_summaries(ids))
-    |> Map.merge(sense_summaries(ids))
-    |> Map.merge(lexeme_summaries(ids))
+    summaries =
+      canonical_ids
+      |> Map.new(&{&1, %{label: "##{&1}", path: nil}})
+      |> Map.merge(content_summaries(canonical_ids))
+      |> Map.merge(entity_summaries(canonical_ids))
+      |> Map.merge(sense_summaries(canonical_ids))
+      |> Map.merge(lexeme_summaries(canonical_ids))
+
+    Map.new(canonical, fn {original_id, canonical_id} ->
+      {original_id, Map.fetch!(summaries, canonical_id)}
+    end)
   end
 
   defp lexeme_summaries([]), do: %{}
@@ -202,11 +214,24 @@ defmodule DevilsDictionary.Claims.Connection do
         select:
           {c.object_id,
            %{
-             label: coalesce(r.headword, fragment("left(?, 80)", r.body)),
-             path: nil
+             headword: r.headword,
+             body: r.body,
+             rights_metadata: r.rights_metadata
            }}
     )
-    |> Map.new()
+    |> Map.new(fn {id, revision} ->
+      {id,
+       %{
+         label:
+           Visibility.content_label(
+             revision.headword,
+             revision.body,
+             id,
+             revision.rights_metadata
+           ),
+         path: nil
+       }}
+    end)
   end
 
   defp lexeme(id) do
@@ -269,22 +294,46 @@ defmodule DevilsDictionary.Claims.Connection do
   end
 
   defp content(id) do
-    Repo.one(
-      from c in ContentItem,
-        join: r in ContentRevision,
-        on: r.content_id == c.object_id and r.is_current,
-        left_join: src in assoc(c, :source),
-        where: c.object_id == ^id,
-        select: %{
-          kind: :content,
-          object_id: c.object_id,
-          content_kind: c.content_kind,
-          label: coalesce(r.headword, fragment("left(?, 80)", r.body)),
-          detail: r.body,
-          source: src.name,
-          path: nil
-        }
-    )
+    case Repo.one(
+           from c in ContentItem,
+             join: r in ContentRevision,
+             on: r.content_id == c.object_id and r.is_current,
+             left_join: src in assoc(c, :source),
+             where: c.object_id == ^id,
+             select: %{
+               kind: :content,
+               object_id: c.object_id,
+               content_kind: c.content_kind,
+               label: r.headword,
+               detail: r.body,
+               source: src.name,
+               path: nil,
+               rights_metadata: r.rights_metadata
+             }
+         ) do
+      nil ->
+        nil
+
+      endpoint ->
+        endpoint
+        |> Map.put(
+          :label,
+          Visibility.content_label(
+            endpoint.label,
+            endpoint.detail,
+            endpoint.object_id,
+            endpoint.rights_metadata
+          )
+        )
+        |> Map.put(:body, endpoint.detail)
+        |> Visibility.restrict_content()
+        |> Map.put(:detail, nil)
+        |> then(fn restricted ->
+          if restricted.display_restricted?,
+            do: Map.put(restricted, :detail, "Text withheld by rights metadata"),
+            else: Map.put(restricted, :detail, endpoint.detail)
+        end)
+    end
   end
 
   defp actor(nil), do: nil

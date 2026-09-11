@@ -395,7 +395,7 @@ defmodule DevilsDictionaryWeb.ConnectionLive do
             </div>
             <div>
               <dt class="text-mist-500">Review</dt>
-              <dd id="connection-review">{@connection.review}</dd>
+              <dd id="connection-review">{review_label(@connection.review)}</dd>
             </div>
             <div>
               <dt class="text-mist-500">Relevance</dt>
@@ -415,6 +415,23 @@ defmodule DevilsDictionaryWeb.ConnectionLive do
               </dd>
             </div>
           </dl>
+
+          <section
+            :if={@connection.review == :changed_since_review}
+            id="connection-review-stale"
+            class="mt-8 border-y border-mist-950/10 bg-mist-950/3 py-4 dark:border-white/10 dark:bg-white/5"
+          >
+            <p class="flex min-w-0 items-start gap-2 text-base/7 text-pretty sm:text-sm/6">
+              <.icon
+                name="hero-arrow-path"
+                class="size-4 h-lh shrink-0 stroke-mist-500"
+              />
+              <span class="min-w-0">
+                The displayed endpoint, evidence, or attribution changed after review. The historical
+                decision is retained, but it does not approve this displayed version.
+              </span>
+            </p>
+          </section>
 
           <section :if={@connection.revision.rationale} id="connection-rationale" class="mt-8">
             <.eyebrow>rationale</.eyebrow>
@@ -463,6 +480,20 @@ defmodule DevilsDictionaryWeb.ConnectionLive do
                   · {revision.lifecycle_state}{if revision.is_current, do: " · current", else: ""}
                 </span>
                 <span :if={revision.rationale} class="text-mist-500">— {revision.rationale}</span>
+              </li>
+            </ul>
+            <ul
+              :if={@connection.reviews != []}
+              id="review-history"
+              role="list"
+              class="mt-4 space-y-2 text-base/7 sm:text-sm/6"
+            >
+              <li :for={review <- @connection.reviews} id={"review-#{review.id}"}>
+                {review.decision}
+                <span class="text-mist-500">
+                  · reviewer actor {review.reviewer_actor_id || "unknown"} · against revision {@connection.revision.revision_number}
+                </span>
+                <span :if={review.reason} class="text-mist-500">— {review.reason}</span>
               </li>
             </ul>
           </section>
@@ -676,6 +707,9 @@ defmodule DevilsDictionaryWeb.ConnectionLive do
 
   defp actor_label(nil), do: "unknown — retained rather than invented"
   defp actor_label(actor), do: actor.label || "#{actor.actor_kind} ##{actor.id}"
+
+  defp review_label(:changed_since_review), do: "changed since review"
+  defp review_label(state), do: to_string(state)
 
   # Kept so the module's `Markdown` and `Encyclopedia` aliases are load-bearing
   # rather than decorative: a content endpoint's body is rendered, and an

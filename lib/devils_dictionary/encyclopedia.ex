@@ -27,7 +27,7 @@ defmodule DevilsDictionary.Encyclopedia do
 
   alias DevilsDictionary.Claims
   alias DevilsDictionary.Claims.AssertionRevision
-  alias DevilsDictionary.Registry.{Entity, ExternalIdentifier, Sense}
+  alias DevilsDictionary.Registry.{Entity, ExternalIdentifier, Object, ObjectName, Sense}
   alias DevilsDictionary.Repo
 
   # Sense-backed. The word page's "what this meaning names".
@@ -109,9 +109,20 @@ defmodule DevilsDictionary.Encyclopedia do
 
       Repo.all(
         from e in Entity,
+          as: :entity,
+          join: object in Object,
+          on: object.id == e.object_id and object.lifecycle_state == :active,
           where:
             ilike(e.preferred_label, ^(escape_like(query) <> "%")) or
-              fragment("? % ?", e.preferred_label, ^query),
+              fragment("? % ?", e.preferred_label, ^query) or
+              exists(
+                from name in ObjectName,
+                  where:
+                    name.object_id == parent_as(:entity).object_id and
+                      (ilike(name.name, ^(escape_like(query) <> "%")) or
+                         fragment("? % ?", name.name, ^query)),
+                  select: 1
+              ),
           order_by: [
             asc:
               fragment(
@@ -176,6 +187,7 @@ defmodule DevilsDictionary.Encyclopedia do
     |> where([r, p], r.subject_object_id in ^subjects and r.is_current)
     |> where([r, p], p.key in ^[@refers_to, @candidate])
     |> where([r], r.lifecycle_state == :active)
+    |> Claims.visible(:public)
     |> then(fn q ->
       case opts[:min_confidence] do
         nil -> q
@@ -201,38 +213,29 @@ defmodule DevilsDictionary.Encyclopedia do
   stops an importer writing it.
   """
   def link_views(lexeme_id) do
-    Repo.all(
-      from r in AssertionRevision,
-        join: p in assoc(r, :predicate),
-        left_join: s in Sense,
-        on: s.object_id == r.subject_object_id,
-        join: e in Entity,
-        on: e.object_id == r.object_object_id,
-        left_join: x in ExternalIdentifier,
-        on: x.object_id == e.object_id and x.namespace == "wikidata" and x.status == :verified,
-        where: p.key in ^[@refers_to, @candidate],
-        where: r.is_current and r.lifecycle_state == :active,
-        where: s.lexeme_id == ^lexeme_id or r.subject_object_id == ^lexeme_id,
-        order_by: [desc: r.confidence, asc: r.id],
-        select: %{
-          qid: x.external_id,
-          label: e.preferred_label,
-          predicate: p.key,
-          method: r.method,
-          confidence: r.confidence,
-          status:
-            fragment(
-              """
-              COALESCE(
-                (SELECT ar.decision FROM assertion_reviews ar
-                  WHERE ar.assertion_revision_id = ?
-                  ORDER BY ar.inserted_at DESC, ar.id DESC LIMIT 1),
-                'needs_review'
-              )
-              """,
-              r.id
-            )
-        }
+    AssertionRevision
+    |> join(:inner, [r], p in assoc(r, :predicate))
+    |> join(:left, [r], s in Sense, on: s.object_id == r.subject_object_id)
+    |> join(:inner, [r], e in Entity, on: e.object_id == r.object_object_id)
+    |> join(:left, [r, _p, _s, e], x in ExternalIdentifier,
+      on: x.object_id == e.object_id and x.namespace == "wikidata" and x.status == :verified
+    )
+    |> where([r, p], p.key in ^[@refers_to, @candidate])
+    |> where([r], r.is_current and r.lifecycle_state == :active)
+    |> where([r, _p, s], s.lexeme_id == ^lexeme_id or r.subject_object_id == ^lexeme_id)
+    |> Claims.visible(:public)
+    |> order_by([r], desc: r.confidence, asc: r.id)
+    |> select([r, p, _s, e, x], %{
+      revision_id: r.id,
+      qid: x.external_id,
+      label: e.preferred_label,
+      predicate: p.key,
+      method: r.method,
+      confidence: r.confidence
+    })
+    |> Repo.all()
+    |> Enum.map(
+      &Map.put(&1, :status, &1.revision_id |> Claims.display_review_state() |> to_string())
     )
   end
 

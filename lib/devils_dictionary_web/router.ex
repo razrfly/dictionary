@@ -126,6 +126,15 @@ defmodule DevilsDictionaryWeb.Router do
   scope "/", DevilsDictionaryWeb do
     pipe_through [:browser, :require_authenticated_user]
 
+    live_session :require_reviewer,
+      on_mount: [{DevilsDictionaryWeb.UserAuth, :require_reviewer}] do
+      live "/reconciliation", ReconciliationLive, :index
+    end
+  end
+
+  scope "/", DevilsDictionaryWeb do
+    pipe_through [:browser, :require_authenticated_user]
+
     live_session :require_internal_contributor,
       on_mount: [{DevilsDictionaryWeb.UserAuth, :require_internal_contributor}] do
       # Proposing a connection is the one thing on this site that needs an

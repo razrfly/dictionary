@@ -17,8 +17,15 @@ defmodule DevilsDictionary.Registry do
 
   import Ecto.Query
 
-  alias DevilsDictionary.Claims.AssertionRevision
+  alias DevilsDictionary.Claims.{
+    AssertionEvidence,
+    AssertionRevision,
+    ReviewContext,
+    ReviewContextItem
+  }
+
   alias DevilsDictionary.Sources.ReconciliationCase
+  alias DevilsDictionary.Sources.Actor
 
   alias DevilsDictionary.Registry.{
     ContentItem,
@@ -398,22 +405,103 @@ defmodule DevilsDictionary.Registry do
   Retirement is `merged`, not `retired`: they are different things that happened.
   """
   def merge(input_ids, output_id, opts \\ []) do
-    inputs = Enum.reject(input_ids, &(&1 == output_id))
+    with {:ok, inputs} <- lifecycle_inputs(input_ids, output_id),
+         {:ok, reason} <- lifecycle_reason(opts) do
+      Repo.transaction(fn ->
+        objects = lock_lifecycle_objects(inputs ++ [output_id])
+        validate_lifecycle_objects!(objects, inputs, [output_id])
 
-    Repo.transaction(fn ->
-      for id <- inputs do
-        move_names(id, output_id)
-        move_external_ids(id, output_id)
+        for id <- inputs do
+          preserve_entity_label_as_alias(id, output_id)
+          move_names(id, output_id)
+          move_external_ids(id, output_id)
 
-        Repo.get!(Object, id)
-        |> Ecto.Changeset.change(lifecycle_state: :merged)
-        |> Repo.update!()
-      end
+          Map.fetch!(objects, id)
+          |> Ecto.Changeset.change(lifecycle_state: :merged)
+          |> Repo.update!()
+        end
 
-      members = Enum.map(input_ids, &{&1, :input}) ++ [{output_id, :output}]
+        members = Enum.map(inputs, &{&1, :input}) ++ [{output_id, :output}]
+        record_event(:merge, members, accountable_opts(opts, reason))
+      end)
+    end
+  end
 
-      record_event(:merge, members, opts)
-    end)
+  defp lifecycle_inputs(input_ids, output_id) do
+    inputs = input_ids |> Enum.uniq()
+
+    cond do
+      inputs == [] -> {:error, :inputs_required}
+      output_id in inputs -> {:error, :output_cannot_be_input}
+      true -> {:ok, inputs}
+    end
+  end
+
+  defp lifecycle_reason(opts) do
+    case opts[:reason] |> to_string() |> String.trim() do
+      "" -> {:error, :reason_required}
+      reason -> {:ok, reason}
+    end
+  end
+
+  defp lock_lifecycle_objects(ids) do
+    Object
+    |> where([o], o.id in ^Enum.uniq(ids))
+    |> order_by([o], o.id)
+    |> lock("FOR UPDATE")
+    |> Repo.all()
+    |> Map.new(&{&1.id, &1})
+  end
+
+  defp validate_lifecycle_objects!(objects, input_ids, output_ids) do
+    ids = Enum.uniq(input_ids ++ output_ids)
+
+    if map_size(objects) != length(ids), do: Repo.rollback(:object_not_found)
+
+    if Enum.any?(ids, &(Map.fetch!(objects, &1).lifecycle_state != :active)),
+      do: Repo.rollback(:object_not_active)
+
+    signatures = ids |> Enum.map(&identity_signature(Map.fetch!(objects, &1))) |> Enum.uniq()
+    if length(signatures) != 1, do: Repo.rollback(:incompatible_kinds)
+  end
+
+  defp identity_signature(%Object{kind: :entity, id: id}),
+    do: {:entity, Repo.get!(Entity, id).entity_kind}
+
+  defp identity_signature(%Object{kind: :content, id: id}),
+    do: {:content, Repo.get!(ContentItem, id).content_kind}
+
+  defp identity_signature(%Object{kind: kind}), do: {kind, nil}
+
+  defp accountable_opts(opts, reason) do
+    actor_id = opts[:actor_id] || lifecycle_actor!().id
+    opts |> Keyword.put(:actor_id, actor_id) |> Keyword.put(:reason, reason)
+  end
+
+  defp lifecycle_actor! do
+    Repo.insert!(%Actor{
+      actor_kind: :import,
+      label: "Registry lifecycle system",
+      metadata: %{"accountability" => "caller did not supply a human actor"}
+    })
+  end
+
+  defp preserve_entity_label_as_alias(from_id, to_id) do
+    with %Entity{preferred_label: label} when is_binary(label) and label != "" <-
+           Repo.get(Entity, from_id),
+         false <-
+           Repo.exists?(
+             from n in ObjectName,
+               where:
+                 n.object_id == ^to_id and n.name == ^label and n.name_kind == "alias" and
+                   is_nil(n.language_tag)
+           ) do
+      %ObjectName{}
+      |> ObjectName.changeset(%{object_id: to_id, name: label, name_kind: "alias"})
+      |> Repo.insert!()
+    else
+      _ -> :ok
+    end
   end
 
   # A name the survivor already carries is not worth a second row; the unique
@@ -472,18 +560,35 @@ defmodule DevilsDictionary.Registry do
   and pretending otherwise is the defect this guards against.
   """
   def split(input_id, output_ids, opts \\ []) do
-    Repo.transaction(fn ->
-      members = [{input_id, :input}] ++ Enum.map(output_ids, &{&1, :output})
-      event = record_event(:split, members, opts)
+    outputs = Enum.uniq(output_ids)
 
-      open_split_cases(input_id, output_ids, event, opts)
+    with :ok <- validate_split_shape(input_id, outputs),
+         {:ok, reason} <- lifecycle_reason(opts) do
+      Repo.transaction(fn ->
+        objects = lock_lifecycle_objects([input_id | outputs])
+        validate_lifecycle_objects!(objects, [input_id], outputs)
 
-      Repo.get!(Object, input_id)
-      |> Ecto.Changeset.change(lifecycle_state: :split)
-      |> Repo.update!()
+        members = [{input_id, :input}] ++ Enum.map(outputs, &{&1, :output})
+        opts = accountable_opts(opts, reason)
+        event = record_event(:split, members, opts)
 
-      event
-    end)
+        open_split_cases(input_id, outputs, event, opts)
+
+        Map.fetch!(objects, input_id)
+        |> Ecto.Changeset.change(lifecycle_state: :split)
+        |> Repo.update!()
+
+        event
+      end)
+    end
+  end
+
+  defp validate_split_shape(input_id, outputs) do
+    cond do
+      length(outputs) < 2 -> {:error, :multiple_outputs_required}
+      input_id in outputs -> {:error, :output_cannot_be_input}
+      true -> :ok
+    end
   end
 
   defp open_split_cases(input_id, output_ids, event, opts) do
@@ -492,11 +597,62 @@ defmodule DevilsDictionary.Registry do
         from r in AssertionRevision,
           where:
             r.is_current and
-              (r.subject_object_id == ^input_id or r.object_object_id == ^input_id),
-          select: {r.assertion_id, r.id, r.subject_object_id == ^input_id}
+              (r.subject_object_id == ^input_id or r.object_object_id == ^input_id or
+                 r.context_object_id == ^input_id or r.jurisdiction_entity_id == ^input_id)
       )
 
-    for {assertion_id, revision_id, subject?} <- attached do
+    evidence_attached =
+      Repo.all(
+        from e in AssertionEvidence,
+          join: r in AssertionRevision,
+          on: r.id == e.assertion_revision_id and r.is_current,
+          left_join: c in ContentRevision,
+          on: c.id == e.content_revision_id,
+          left_join: s in SenseRevision,
+          on: s.id == e.sense_revision_id,
+          where: c.content_id == ^input_id or s.sense_id == ^input_id,
+          select: {r.assertion_id, r.id}
+      )
+
+    review_attached =
+      Repo.all(
+        from i in ReviewContextItem,
+          join: context in ReviewContext,
+          on: context.id == i.context_id,
+          join: r in AssertionRevision,
+          on: r.id == context.assertion_revision_id and r.is_current,
+          left_join: c in ContentRevision,
+          on: c.id == i.content_revision_id,
+          left_join: s in SenseRevision,
+          on: s.id == i.sense_revision_id,
+          where: c.content_id == ^input_id or s.sense_id == ^input_id,
+          select: {r.assertion_id, r.id}
+      )
+
+    attached =
+      attached
+      |> Enum.map(fn revision ->
+        roles =
+          []
+          |> maybe_role(revision.subject_object_id == input_id, "subject")
+          |> maybe_role(revision.object_object_id == input_id, "object")
+          |> maybe_role(revision.context_object_id == input_id, "context")
+          |> maybe_role(revision.jurisdiction_entity_id == input_id, "jurisdiction")
+
+        {revision.assertion_id, revision.id, roles}
+      end)
+
+    attached =
+      Enum.reduce(evidence_attached, attached, fn {assertion_id, revision_id}, rows ->
+        add_attachment_role(rows, assertion_id, revision_id, "evidence")
+      end)
+
+    attached =
+      Enum.reduce(review_attached, attached, fn {assertion_id, revision_id}, rows ->
+        add_attachment_role(rows, assertion_id, revision_id, "review_context")
+      end)
+
+    for {assertion_id, revision_id, roles} <- attached do
       %ReconciliationCase{}
       |> ReconciliationCase.changeset(%{
         kind: "identity_split",
@@ -506,11 +662,22 @@ defmodule DevilsDictionary.Registry do
         payload: %{
           "identity_event_id" => event.id,
           "assertion_revision_id" => revision_id,
-          "endpoint_role" => if(subject?, do: "subject", else: "object"),
+          "endpoint_role" => if(length(roles) == 1, do: hd(roles), else: nil),
+          "attachment_roles" => roles,
           "candidate_output_ids" => output_ids
         }
       })
       |> Repo.insert!()
+    end
+  end
+
+  defp maybe_role(roles, true, role), do: [role | roles]
+  defp maybe_role(roles, false, _role), do: roles
+
+  defp add_attachment_role(rows, assertion_id, revision_id, role) do
+    case Enum.split_with(rows, fn {id, _revision, _roles} -> id == assertion_id end) do
+      {[], rest} -> [{assertion_id, revision_id, [role]} | rest]
+      {[{id, rev, roles}], rest} -> [{id, rev, Enum.uniq([role | roles])} | rest]
     end
   end
 
@@ -522,22 +689,85 @@ defmodule DevilsDictionary.Registry do
   wants the live identity asks here rather than guessing from a label.
   """
   def resolve(object_id) do
-    case Repo.get(Object, object_id) do
-      nil ->
-        nil
+    do_resolve(object_id, MapSet.new())
+  end
 
-      %Object{lifecycle_state: state} when state in [:merged, :split] ->
-        outputs = event_outputs(object_id, state)
+  defp do_resolve(object_id, seen) do
+    if MapSet.member?(seen, object_id) do
+      {:cycle, Enum.sort(MapSet.to_list(seen))}
+    else
+      seen = MapSet.put(seen, object_id)
 
-        case {state, outputs} do
-          {:merged, [id]} -> {:merged, id}
-          {:merged, []} -> :itself
-          {:split, ids} -> {:split, ids}
-          {:merged, ids} -> {:split, ids}
-        end
+      case Repo.get(Object, object_id) do
+        nil ->
+          nil
 
-      %Object{} ->
-        :itself
+        %Object{lifecycle_state: state} when state in [:merged, :split] ->
+          operation = if(state == :merged, do: :merge, else: :split)
+          outputs = event_outputs(object_id, operation)
+
+          case {state, outputs} do
+            {:merged, [id]} ->
+              case do_resolve(id, seen) do
+                {:merged, final_id} -> {:merged, final_id}
+                :itself -> {:merged, id}
+                other -> other
+              end
+
+            {:merged, []} ->
+              :itself
+
+            {:split, ids} ->
+              {:split, ids}
+
+            {:merged, ids} ->
+              {:split, ids}
+          end
+
+        %Object{} ->
+          :itself
+      end
+    end
+  end
+
+  @doc "The live canonical id for a merged identity, or the id itself."
+  def canonical_id(object_id) do
+    case resolve(object_id) do
+      {:merged, id} -> id
+      _ -> object_id
+    end
+  end
+
+  @doc """
+  Every historical merge input that canonically resolves to the same survivor.
+
+  Claim revisions are immutable, so reads aggregate this family rather than
+  rewriting historical endpoints during a merge.
+  """
+  def canonical_family(object_id) do
+    canonical = canonical_id(object_id)
+
+    pairs =
+      Repo.all(
+        from input in IdentityEventMember,
+          join: event in assoc(input, :event),
+          join: output in IdentityEventMember,
+          on: output.event_id == event.id and output.role == :output,
+          where: event.operation == :merge and input.role == :input,
+          select: {input.object_id, output.object_id}
+      )
+
+    reverse = Enum.group_by(pairs, &elem(&1, 1), &elem(&1, 0))
+    collect_merge_inputs([canonical], reverse, MapSet.new()) |> MapSet.to_list()
+  end
+
+  defp collect_merge_inputs([], _reverse, seen), do: seen
+
+  defp collect_merge_inputs([id | rest], reverse, seen) do
+    if MapSet.member?(seen, id) do
+      collect_merge_inputs(rest, reverse, seen)
+    else
+      collect_merge_inputs(Map.get(reverse, id, []) ++ rest, reverse, MapSet.put(seen, id))
     end
   end
 

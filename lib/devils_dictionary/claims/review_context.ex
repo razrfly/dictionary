@@ -20,6 +20,8 @@ defmodule DevilsDictionary.Claims.ReviewContext do
 
   schema "review_contexts" do
     belongs_to :assertion_revision, AssertionRevision
+    field :snapshot, :map
+    field :fingerprint, :string
     has_many :items, ReviewContextItem, foreign_key: :context_id
 
     timestamps(type: :utc_datetime_usec)
@@ -27,7 +29,7 @@ defmodule DevilsDictionary.Claims.ReviewContext do
 
   def changeset(context, attrs) do
     context
-    |> cast(attrs, [:assertion_revision_id])
+    |> cast(attrs, [:assertion_revision_id, :snapshot, :fingerprint])
     |> validate_required([:assertion_revision_id])
   end
 end

@@ -36,6 +36,8 @@ defmodule DevilsDictionary.Claims do
     ReviewContextItem
   }
 
+  alias DevilsDictionary.Registry
+  alias DevilsDictionary.Registry.{ContentRevision, SenseRevision}
   alias DevilsDictionary.Repo
 
   # ── predicates ────────────────────────────────────────────────────────────
@@ -300,14 +302,18 @@ defmodule DevilsDictionary.Claims do
   def next_cursor(revisions), do: List.last(revisions).id
 
   defp outgoing_query(subject_id, opts) do
+    subject_ids = Registry.canonical_family(subject_id)
+
     AssertionRevision
-    |> where([r], r.subject_object_id == ^subject_id and r.is_current)
+    |> where([r], r.subject_object_id in ^subject_ids and r.is_current)
     |> common_filters(opts)
   end
 
   defp incoming_query(object_id, opts) do
+    object_ids = Registry.canonical_family(object_id)
+
     AssertionRevision
-    |> where([r], r.object_object_id == ^object_id and r.is_current)
+    |> where([r], r.object_object_id in ^object_ids and r.is_current)
     |> common_filters(opts)
   end
 
@@ -361,8 +367,8 @@ defmodule DevilsDictionary.Claims do
   def visible(query, :internal), do: query
 
   def visible(query, :public) do
-    where(
-      query,
+    query
+    |> where(
       [r],
       fragment(
         """
@@ -377,10 +383,71 @@ defmodule DevilsDictionary.Claims do
         r.id
       )
     )
+    |> where(
+      [r],
+      fragment(
+        """
+        NOT EXISTS (
+          SELECT 1
+            FROM objects endpoint
+           WHERE endpoint.id IN (?, ?, ?, ?)
+             AND endpoint.lifecycle_state IN ('retired', 'split')
+        )
+        """,
+        r.subject_object_id,
+        r.object_object_id,
+        r.context_object_id,
+        r.jurisdiction_entity_id
+      )
+    )
+    |> where(
+      [r],
+      fragment(
+        """
+        NOT EXISTS (
+          SELECT 1
+            FROM content_revisions content
+           WHERE content.is_current
+             AND content.content_id IN (?, ?, ?)
+             AND content.lifecycle_state <> 'active'
+        )
+        """,
+        r.subject_object_id,
+        r.object_object_id,
+        r.context_object_id
+      )
+    )
+    |> where(
+      [r],
+      fragment(
+        """
+        NOT EXISTS (
+          SELECT 1
+            FROM sense_revisions sense
+           WHERE sense.is_current
+             AND sense.sense_id IN (?, ?, ?)
+             AND sense.lifecycle_state <> 'active'
+        )
+        """,
+        r.subject_object_id,
+        r.object_object_id,
+        r.context_object_id
+      )
+    )
   end
 
   @doc "The review decisions that hide a claim from a public read."
   def hidden_decisions, do: [:rejected, :withdrawn]
+
+  @doc "Whether one revision passes the same policy as public list/count reads."
+  def publicly_visible_revision?(%AssertionRevision{id: id}) do
+    AssertionRevision
+    |> where([r], r.id == ^id and r.lifecycle_state == :active)
+    |> visible(:public)
+    |> Repo.exists?()
+  end
+
+  def publicly_visible_revision?(_), do: false
 
   defp filter_predicate(query, nil), do: query
 
@@ -431,9 +498,15 @@ defmodule DevilsDictionary.Claims do
   """
   def open_review_context(revision_id, items \\ []) do
     Repo.transaction(fn ->
+      snapshot = review_snapshot(revision_id, items)
+
       context =
         %ReviewContext{}
-        |> ReviewContext.changeset(%{assertion_revision_id: revision_id})
+        |> ReviewContext.changeset(%{
+          assertion_revision_id: revision_id,
+          snapshot: snapshot,
+          fingerprint: snapshot_fingerprint(snapshot)
+        })
         |> Repo.insert!()
 
       for {role, target} <- items do
@@ -479,6 +552,185 @@ defmodule DevilsDictionary.Claims do
         limit: 1,
         select: r.decision
     ) || :needs_review
+  end
+
+  @doc """
+  The review state that is safe to present beside the currently displayed text.
+
+  The append-only decision remains available through `review_state/1`. An
+  accepted or disputed decision is presented as `:changed_since_review` when
+  its immutable review snapshot no longer matches current endpoint revisions,
+  evidence or attribution. Rejected/withdrawn decisions remain hiding
+  decisions, regardless of freshness.
+  """
+  def display_review_state(revision_id) do
+    case latest_review(revision_id) do
+      nil ->
+        :needs_review
+
+      %{decision: decision} when decision in [:rejected, :withdrawn, :needs_review] ->
+        decision
+
+      %{decision: decision, review_context_id: context_id} ->
+        if review_context_fresh?(revision_id, context_id),
+          do: decision,
+          else: :changed_since_review
+    end
+  end
+
+  @doc "Whether a review context still describes exactly what is displayed now."
+  def review_context_fresh?(_revision_id, nil), do: false
+
+  def review_context_fresh?(revision_id, context_id) do
+    case Repo.get(ReviewContext, context_id) do
+      %ReviewContext{fingerprint: fingerprint} when is_binary(fingerprint) ->
+        snapshot_fingerprint(review_snapshot(revision_id)) == fingerprint
+
+      _ ->
+        false
+    end
+  end
+
+  @doc "The exact versioned endpoint items currently displayed for a revision."
+  def current_context_items(%AssertionRevision{} = revision) do
+    [
+      {:subject, revision.subject_object_id},
+      {:object, revision.object_object_id},
+      {:context, revision.context_object_id}
+    ]
+    |> Enum.flat_map(fn {role, id} ->
+      case current_revision_target(id) do
+        nil -> []
+        target -> [{role, Enum.sort(target)}]
+      end
+    end)
+  end
+
+  @doc "An immutable, JSON-safe description of what a reviewer saw."
+  def review_snapshot(revision_id, items \\ nil) do
+    revision = Repo.get!(AssertionRevision, revision_id)
+    assertion = Repo.get!(Assertion, revision.assertion_id)
+    items = items || current_context_items(revision)
+
+    %{
+      "assertion" => %{
+        "origin_actor_id" => assertion.origin_actor_id,
+        "submitted_by_actor_id" => assertion.submitted_by_actor_id,
+        "source_id" => assertion.source_id,
+        "origin_key" => assertion.origin_key
+      },
+      "revision" => snapshot_revision(revision),
+      "displayed_items" => snapshot_items(items),
+      "evidence" => snapshot_evidence(revision.id)
+    }
+  end
+
+  defp latest_review(revision_id) do
+    Repo.one(
+      from r in AssertionReview,
+        where: r.assertion_revision_id == ^revision_id,
+        order_by: [desc: r.inserted_at, desc: r.id],
+        limit: 1
+    )
+  end
+
+  defp current_revision_target(nil), do: nil
+
+  defp current_revision_target(id) do
+    case Registry.current_content_revision(id) do
+      %ContentRevision{id: revision_id} ->
+        %{content_revision_id: revision_id}
+
+      nil ->
+        case Registry.current_sense_revision(id) do
+          %SenseRevision{id: revision_id} -> %{sense_revision_id: revision_id}
+          nil -> nil
+        end
+    end
+  end
+
+  @snapshot_revision_fields [
+    :subject_object_id,
+    :predicate_id,
+    :object_object_id,
+    :rationale,
+    :valid_from,
+    :valid_to,
+    :language_tag,
+    :jurisdiction_entity_id,
+    :context_object_id,
+    :method,
+    :confidence,
+    :lifecycle_state,
+    :metadata
+  ]
+
+  defp snapshot_revision(revision) do
+    Map.new(@snapshot_revision_fields, fn field ->
+      {to_string(field), snapshot_value(Map.fetch!(revision, field))}
+    end)
+  end
+
+  defp snapshot_items(items) do
+    items
+    |> Enum.map(fn {role, target} ->
+      target = Map.new(target)
+
+      %{
+        "role" => to_string(role),
+        "content_revision_id" => target[:content_revision_id] || target["content_revision_id"],
+        "sense_revision_id" => target[:sense_revision_id] || target["sense_revision_id"]
+      }
+    end)
+    |> Enum.sort_by(&{&1["role"], &1["content_revision_id"] || 0, &1["sense_revision_id"] || 0})
+  end
+
+  defp snapshot_evidence(revision_id) do
+    evidence(revision_id)
+    |> Enum.map(fn item ->
+      %{
+        "id" => item.id,
+        "role" => to_string(item.evidence_role),
+        "source_record_revision_id" => item.source_record_revision_id,
+        "content_revision_id" => item.content_revision_id,
+        "sense_revision_id" => item.sense_revision_id,
+        "locator" => item.locator,
+        "attribution_text" => item.attribution_text,
+        "target_current" => evidence_target_current(item)
+      }
+    end)
+  end
+
+  defp evidence_target_current(%{content_revision_id: id}) when not is_nil(id) do
+    cited = Repo.get!(ContentRevision, id)
+    current = Registry.current_content_revision(cited.content_id)
+
+    %{
+      "revision_id" => current && current.id,
+      "lifecycle_state" => current && to_string(current.lifecycle_state)
+    }
+  end
+
+  defp evidence_target_current(%{sense_revision_id: id}) when not is_nil(id) do
+    cited = Repo.get!(SenseRevision, id)
+    current = Registry.current_sense_revision(cited.sense_id)
+
+    %{
+      "revision_id" => current && current.id,
+      "lifecycle_state" => current && to_string(current.lifecycle_state)
+    }
+  end
+
+  defp evidence_target_current(_), do: nil
+
+  defp snapshot_value(%DateTime{} = value), do: DateTime.to_iso8601(value)
+  defp snapshot_value(value) when is_atom(value), do: to_string(value)
+  defp snapshot_value(value), do: value
+
+  defp snapshot_fingerprint(snapshot) do
+    :sha256
+    |> :crypto.hash(Jason.encode!(snapshot))
+    |> Base.encode16(case: :lower)
   end
 
   @doc "Every review of a claim revision, newest first."
