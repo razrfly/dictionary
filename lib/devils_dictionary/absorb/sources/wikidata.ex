@@ -32,7 +32,7 @@ defmodule DevilsDictionary.Absorb.Sources.Wikidata do
   alias DevilsDictionary.Absorb.Clients.Wikidata, as: Client
   alias DevilsDictionary.Encyclopedia
   alias DevilsDictionary.Lexicon.ScopeMember
-  alias DevilsDictionary.Registry.{Entity, Sense, SenseRevision}
+  alias DevilsDictionary.Registry.{Entity, ExternalIdentifier, Sense, SenseRevision}
   alias DevilsDictionary.Repo
   alias DevilsDictionary.Sources
   alias DevilsDictionary.Sources.{Source, SourceRecord}
@@ -54,6 +54,8 @@ defmodule DevilsDictionary.Absorb.Sources.Wikidata do
   # narrowed), and L3 only ever asks about `parent_taxon`.
   @parent_properties ~w(P171 P13176)
   @general_relation_properties ~w(P31 P279)
+  @relation_types %{"P171" => :parent_taxon, "P279" => :subclass_of, "P31" => :instance_of}
+  @closure_relation_types Map.put(@relation_types, "P13176", :taxon_item)
 
   # Taxonomic chains run long: species → genus → … → Animalia passes through
   # unranked clades, so 30 is a guard against a cycle, not a real ceiling.
@@ -224,58 +226,79 @@ defmodule DevilsDictionary.Absorb.Sources.Wikidata do
     Enum.reduce_while(1..max_depth, {seeds, MapSet.new(), stats}, fn depth, {queue, seen, acc} ->
       wanted = queue |> Enum.uniq() |> Enum.reject(&MapSet.member?(seen, &1))
 
-      # A re-run should cost the tiers it does not already have. `--refresh`
-      # asks for the fetch anyway, which is how a pinned snapshot moves.
-      wanted =
-        if opts[:refresh] && depth == 1, do: wanted, else: wanted -- stored_qids(source, wanted)
+      if wanted == [] do
+        {:halt, acc}
+      else
+        # Stored observations are completed fetch work, not completed absorb
+        # work. Keep them in the visited/materialization selection and traverse
+        # their retained relations; only missing observations consume budgets.
+        stored =
+          if opts[:refresh] && depth == 1,
+            do: [],
+            else: stored_records(source, wanted)
 
-      entity_capacity = max(entity_budget - acc.requested_entities, 0)
-      request_capacity = max(request_budget - acc.requests, 0) * Client.batch_size()
-      capacity = min(entity_capacity, request_capacity)
-      bounded = Enum.take(wanted, capacity)
-      omitted = length(wanted) - length(bounded)
+        stored_ids = MapSet.new(stored, & &1.external_id)
+        to_fetch = Enum.reject(wanted, &MapSet.member?(stored_ids, &1))
+        stored_related = Enum.flat_map(stored, &related_qids(&1.raw, opts))
 
-      cond do
-        wanted == [] ->
-          {:halt, acc}
+        acc = %{
+          acc
+          | visited_qids: Enum.uniq(acc.visited_qids ++ MapSet.to_list(stored_ids)),
+            tiers: depth
+        }
 
-        bounded == [] ->
-          {:halt,
-           %{
-             acc
-             | truncated: true,
-               unresolved_references: acc.unresolved_references + length(wanted)
-           }}
+        entity_capacity = max(entity_budget - acc.requested_entities, 0)
+        request_capacity = max(request_budget - acc.requests, 0) * Client.batch_size()
+        capacity = min(entity_capacity, request_capacity)
+        bounded = Enum.take(to_fetch, capacity)
+        omitted = length(to_fetch) - length(bounded)
 
-        depth == max_depth ->
-          {parents, acc} = fetch_tier(source, bounded, rate, acc, opts)
+        {fetched_related, acc} =
+          if bounded == [],
+            do: {[], acc},
+            else: fetch_tier(source, bounded, rate, acc, opts)
 
-          unresolved = acc.unresolved_references + omitted + length(Enum.uniq(parents))
+        related = Enum.uniq(stored_related ++ fetched_related)
 
-          {:halt,
-           %{
-             acc
-             | tiers: depth,
-               truncated: unresolved > 0,
-               unresolved_references: unresolved
-           }}
+        seen =
+          seen
+          |> MapSet.union(stored_ids)
+          |> MapSet.union(MapSet.new(bounded))
 
-        true ->
-          {parents, acc} = fetch_tier(source, bounded, rate, acc, opts)
-          seen = MapSet.union(seen, MapSet.new(bounded))
+        unresolved = omitted + length(related)
 
-          if omitted > 0 do
+        cond do
+          to_fetch != [] and bounded == [] ->
             {:halt,
              %{
                acc
-               | tiers: depth,
-                 truncated: true,
+               | truncated: true,
                  unresolved_references:
-                   acc.unresolved_references + omitted + length(Enum.uniq(parents))
+                   acc.unresolved_references + length(to_fetch) + length(stored_related)
              }}
-          else
-            {:cont, {parents, seen, %{acc | tiers: depth}}}
-          end
+
+          depth == max_depth ->
+            {:halt,
+             %{
+               acc
+               | truncated: unresolved > 0,
+                 unresolved_references: acc.unresolved_references + unresolved
+             }}
+
+          omitted > 0 ->
+            {:halt,
+             %{
+               acc
+               | truncated: true,
+                 unresolved_references: acc.unresolved_references + unresolved
+             }}
+
+          related == [] ->
+            {:halt, acc}
+
+          true ->
+            {:cont, {related, seen, acc}}
+        end
       end
     end)
     |> case do
@@ -295,27 +318,108 @@ defmodule DevilsDictionary.Absorb.Sources.Wikidata do
   @max_materialize_passes 5
 
   defp close_concept_relations(source, first, run_id, visited_qids, opts) do
-    Enum.reduce_while(2..@max_materialize_passes, Map.put(first, :passes, 1), fn pass, previous ->
-      batch_opts =
-        [
-          batch_size: @materialize_batch,
-          only_stale: false,
-          run_id: run_id
-        ]
-        |> materialize_selection(visited_qids, opts)
+    if first.records == 0 and not relation_closure_needed?(source, visited_qids) do
+      Map.put(first, :passes, 1)
+    else
+      Enum.reduce_while(
+        2..@max_materialize_passes,
+        Map.put(first, :passes, 1),
+        fn pass, previous ->
+          batch_opts =
+            [
+              batch_size: @materialize_batch,
+              only_stale: false,
+              run_id: run_id
+            ]
+            |> materialize_selection(visited_qids, opts)
 
-      counts = Batch.run(__MODULE__, source, batch_opts)
+          counts = Batch.run(__MODULE__, source, batch_opts)
 
-      counts = Map.put(counts, :passes, pass)
+          counts = Map.put(counts, :passes, pass)
 
-      if counts.concept_relations_skipped_parent_taxon == 0 or
-           counts.concept_relations_skipped_parent_taxon >=
-             previous.concept_relations_skipped_parent_taxon do
-        {:halt, counts}
+          if counts.concept_relations_skipped_parent_taxon == 0 or
+               counts.concept_relations_skipped_parent_taxon >=
+                 previous.concept_relations_skipped_parent_taxon do
+            {:halt, counts}
+          else
+            {:cont, counts}
+          end
+        end
+      )
+    end
+  end
+
+  # If a process stopped after stale records were stamped but before the
+  # relation-closing pass, both endpoint entities now exist while the
+  # source-owned assertion does not. That durable state is enough to resume;
+  # no phase flag or broad replay is needed.
+  defp relation_closure_needed?(_source, []), do: false
+
+  defp relation_closure_needed?(source, visited_qids) do
+    relations =
+      source
+      |> stored_records(visited_qids)
+      |> Enum.flat_map(fn record ->
+        for {property, type} <- @closure_relation_types,
+            target <- Client.entity_ids(record.raw, property),
+            target != record.external_id do
+          {record.external_id, target, type}
+        end
+      end)
+
+    qids =
+      relations
+      |> Enum.flat_map(fn {from, to, _type} -> [from, to] end)
+      |> Enum.uniq()
+
+    ids =
+      qids
+      |> Enum.chunk_every(10_000)
+      |> Enum.flat_map(fn chunk ->
+        Repo.all(
+          from identifier in ExternalIdentifier,
+            where:
+              identifier.namespace == "wikidata" and identifier.status == :verified and
+                identifier.external_id in ^chunk,
+            select: {identifier.external_id, identifier.object_id}
+        )
+      end)
+      |> Map.new()
+
+    expected =
+      relations
+      |> Enum.flat_map(fn {from, to, type} ->
+        case {ids[from], ids[to]} do
+          {from_id, to_id} when not is_nil(from_id) and not is_nil(to_id) ->
+            ["ent|#{from_id}|#{type}|#{to_id}"]
+
+          _ ->
+            []
+        end
+      end)
+      |> Enum.uniq()
+
+    existing =
+      if expected == [] do
+        MapSet.new()
       else
-        {:cont, counts}
+        expected
+        |> Enum.chunk_every(10_000)
+        |> Enum.flat_map(fn chunk ->
+          Repo.all(
+            from assertion in "assertions",
+              join: revision in "assertion_revisions",
+              on: revision.assertion_id == assertion.id and revision.is_current,
+              where:
+                assertion.source_id == ^source.id and assertion.origin_key in ^chunk and
+                  revision.lifecycle_state == "active",
+              select: assertion.origin_key
+          )
+        end)
+        |> MapSet.new()
       end
-    end)
+
+    Enum.any?(expected, &(not MapSet.member?(existing, &1)))
   end
 
   defp fetch_tier(source, qids, rate, acc, opts) do
@@ -509,8 +613,6 @@ defmodule DevilsDictionary.Absorb.Sources.Wikidata do
     end)
   end
 
-  @relation_types %{"P171" => :parent_taxon, "P279" => :subclass_of, "P31" => :instance_of}
-
   defp relations(record, qid, raw) do
     for {property, type} <- @relation_types,
         target <- Client.entity_ids(raw, property),
@@ -685,15 +787,15 @@ defmodule DevilsDictionary.Absorb.Sources.Wikidata do
   # Chunked: a tier can carry more QIDs than Postgres will take bind parameters
   # for (the cap is 65,535), and a seed list of the whole scope is already
   # five figures.
-  defp stored_qids(%Source{id: id}, qids) do
+  defp stored_records(%Source{id: id}, qids) do
     qids
     |> Enum.chunk_every(10_000)
     |> Enum.flat_map(fn chunk ->
       Repo.all(
         from r in SourceRecord,
-          where: r.source_id == ^id and r.external_id in ^chunk,
-          select: r.external_id
+          where: r.source_id == ^id and r.external_id in ^chunk
       )
+      |> Sources.with_raw()
     end)
   end
 
