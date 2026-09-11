@@ -302,6 +302,57 @@ defmodule DevilsDictionary.Absorb.BatchTest do
                DevilsDictionary.Health.StateFingerprint.capture(["senses", "sense_revisions"])
     end
 
+    test "a changed sense cannot claim an unchanged neighbour's identity", ctx do
+      publish(ctx.source, [{"a", "Money; profit."}, {"b", "The edge of a river."}])
+      Batch.run(FakeSource, ctx.source)
+
+      publish(ctx.source, [{"a", "Money; profit."}, {"b", "Money; profit."}])
+
+      # The full Wiktionary corpus produced this shape inside one batch. Before
+      # the claimed-identity guard both rows were upserted with the same
+      # object_id, so PostgreSQL aborted the entire transaction with 21000.
+      Batch.run(FakeSource, ctx.source)
+
+      current =
+        Repo.all(
+          from s in "senses",
+            where: s.external_key in ["a", "b"] and s.identity_state != "retired",
+            order_by: s.external_key,
+            select: {s.external_key, s.object_id, s.identity_state}
+        )
+
+      assert [{"a", first_id, "active"}, {"b", second_id, "needs_review"}] = current
+      refute first_id == second_id
+    end
+
+    test "an ambiguous row does not reuse an identity another changed row claimed", ctx do
+      publish(ctx.source, [
+        {"Hryhorivka/name/0#0", "target gloss"},
+        {"Hryhorivka/name/0#5", "other gloss"}
+      ])
+
+      Batch.run(FakeSource, ctx.source)
+
+      publish(ctx.source, [
+        {"Hryhorivka/name/0#0", "new gloss"},
+        {"Hryhorivka/name/0#5", "target gloss"}
+      ])
+
+      # This is the exact key/order shape found by the first full restart: #5
+      # claimed #0 on content, then ambiguous #0 tried to reuse that same id.
+      Batch.run(FakeSource, ctx.source)
+
+      current_ids =
+        Repo.all(
+          from s in "senses",
+            where: s.identity_state != "retired",
+            select: s.object_id
+        )
+
+      assert length(current_ids) == 2
+      assert Enum.uniq(current_ids) == current_ids
+    end
+
     test "a source returning to an earlier payload cites that observation, not the largest revision ID",
          ctx do
       for body <- ["original", "changed", "original"] do
@@ -365,6 +416,45 @@ defmodule DevilsDictionary.Absorb.BatchTest do
       Batch.run(FakeSource, ctx.source, reconcile: false)
 
       assert state("b") == :active
+    end
+
+    test "a withdrawn pending edge cannot be resurrected by a later resolver run", ctx do
+      # The target deliberately does not exist on the first pass, so the edge
+      # waits. A later observation of the same record removes the edge before
+      # the target arrives. Reconciliation must remove that pending output too;
+      # otherwise Resolver turns history into a current assertion.
+      Sources.insert_records(ctx.source, [
+        %{
+          external_id: "bank/noun",
+          raw: %{"lemma" => "bank", "to_lemma" => "vanished-target"}
+        }
+      ])
+
+      Batch.run(FakeSource, ctx.source)
+      assert Repo.aggregate(from(p in "pending_relations"), :count) == 1
+
+      Sources.insert_records(ctx.source, [
+        %{
+          external_id: "bank/noun",
+          raw: %{"lemma" => "bank", "relations" => false}
+        }
+      ])
+
+      Batch.run(FakeSource, ctx.source)
+      assert Repo.aggregate(from(p in "pending_relations"), :count) == 0
+
+      Sources.insert_records(ctx.source, [
+        %{external_id: "target/noun", raw: %{"lemma" => "vanished-target", "relations" => false}}
+      ])
+
+      Batch.run(FakeSource, ctx.source)
+      assert %{resolved: 0} = Resolver.run()
+
+      refute Repo.exists?(
+               from(a in "assertions",
+                 where: a.origin_key == "rel|fake-bank|hypernym|vanished-target"
+               )
+             )
     end
   end
 

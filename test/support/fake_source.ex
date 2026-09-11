@@ -107,16 +107,20 @@ defmodule DevilsDictionary.FakeSource do
                }
              ]
          end,
-       relations: [
-         %{
-           source_id: source_id,
-           from_lexeme: {"en", lemma, pos},
-           from_sense: "fake-#{lemma}",
-           to_lemma: raw["to_lemma"] || "thing",
-           to_pos: "noun",
-           type: :hypernym
-         }
-       ],
+       relations:
+         if(raw["relations"] == false,
+           do: [],
+           else: [
+             %{
+               source_id: source_id,
+               from_lexeme: {"en", lemma, pos},
+               from_sense: "fake-#{lemma}",
+               to_lemma: raw["to_lemma"] || "thing",
+               to_pos: "noun",
+               type: :hypernym
+             }
+           ]
+         ),
        concepts: [],
        links: []
      }}

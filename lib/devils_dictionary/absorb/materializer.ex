@@ -631,19 +631,22 @@ defmodule DevilsDictionary.Absorb.Materializer do
     {ids, states, cases} = match_senses(rows, lexeme_ids, held, stability(module), revisions)
     ids = mint(:sense, ids, Enum.map(rows, & &1.key), now)
 
-    rows
-    |> Enum.map(fn row ->
-      %{
-        object_id: Map.fetch!(ids, row.key),
-        lexeme_id: Map.fetch!(lexeme_ids, row.lexeme),
-        source_id: row.source_id,
-        external_key: row.key,
-        identity_state: Map.get(states, row.key, "active"),
-        inserted_at: now,
-        updated_at: now
-      }
-    end)
-    |> insert_count("senses",
+    sense_rows =
+      Enum.map(rows, fn row ->
+        %{
+          object_id: Map.fetch!(ids, row.key),
+          lexeme_id: Map.fetch!(lexeme_ids, row.lexeme),
+          source_id: row.source_id,
+          external_key: row.key,
+          identity_state: Map.get(states, row.key, "active"),
+          inserted_at: now,
+          updated_at: now
+        }
+      end)
+
+    assert_unique_sense_ids!(sense_rows)
+
+    insert_count(sense_rows, "senses",
       on_conflict: {:replace, [:lexeme_id, :external_key, :identity_state, :updated_at]},
       conflict_target: [:object_id]
     )
@@ -672,8 +675,52 @@ defmodule DevilsDictionary.Absorb.Materializer do
     )
 
     own_outputs(rows, ids, "sense", run_id, now)
+    retire_displaced_senses(rows, held, ids, now)
 
     ids
+  end
+
+  defp assert_unique_sense_ids!(sense_rows) do
+    duplicates =
+      sense_rows
+      |> Enum.group_by(& &1.object_id)
+      |> Enum.filter(fn {_object_id, rows} -> length(rows) > 1 end)
+
+    if duplicates != [] do
+      detail =
+        Enum.map(duplicates, fn {object_id, rows} ->
+          %{object_id: object_id, keys: Enum.map(rows, & &1.external_key)}
+        end)
+
+      raise "sense identity collision inside one materialization batch: #{inspect(detail)}"
+    end
+  end
+
+  # A positional key can move to a different identity when the source reorders
+  # its sense list. `own_outputs/6` has just moved that key's ownership to the
+  # selected identity; retire the former identity only if no other record still
+  # attests it. Otherwise the old row remains publicly active but unreachable
+  # from ownership, which turns every substantial reorder into phantom senses.
+  defp retire_displaced_senses(rows, held, ids, now) do
+    assigned = ids |> Map.values() |> MapSet.new()
+    held_rows = held |> Map.values() |> List.flatten()
+
+    displaced =
+      rows
+      |> Enum.flat_map(fn row ->
+        assigned_id = Map.fetch!(ids, row.key)
+
+        held_rows
+        |> Enum.filter(fn own ->
+          own.external_key == to_string(row.key) and own.object_id != assigned_id and
+            not MapSet.member?(assigned, own.object_id)
+        end)
+        |> Enum.map(& &1.object_id)
+      end)
+      |> Enum.uniq()
+      |> unattested()
+
+    retire_senses(displaced, now)
   end
 
   # Every sense this source already holds for the words in this batch, with the
@@ -729,12 +776,23 @@ defmodule DevilsDictionary.Absorb.Materializer do
           {Map.put(ids, row.key, own.object_id), Map.put(states, row.key, own.identity_state)}
         end)
 
-      decisions = SenseIdentity.decide(changed, group_held, stability)
+      # `SenseIdentity.decide/4` prevents two *changed* rows from claiming the
+      # same held identity. Unchanged rows have already claimed theirs above,
+      # so seed the decision with those identities too. Without this, a changed gloss that now
+      # equals an unchanged neighbour maps both source rows to one object and
+      # the batch reaches Postgres with the same `senses.object_id` twice.
+      claimed = unchanged |> Enum.map(&Map.fetch!(ids, &1.key)) |> MapSet.new()
+      decisions = SenseIdentity.decide(changed, group_held, stability, claimed)
 
       Enum.zip(changed, decisions)
-      |> Enum.reduce({ids, states, cases}, fn
-        {row, {:matched, object_id, _score}}, {ids, states, cases} ->
-          {Map.put(ids, row.key, object_id), states, cases}
+      |> Enum.reduce({ids, states, cases, claimed}, fn
+        {row, {:matched, object_id, score}}, {ids, states, cases, claimed} ->
+          if MapSet.member?(claimed, object_id) do
+            {ids, Map.put(states, row.key, "needs_review"),
+             [{row, [{object_id, score}], :already_claimed} | cases], claimed}
+          else
+            {Map.put(ids, row.key, object_id), states, cases, MapSet.put(claimed, object_id)}
+          end
 
         {_row, {:new, nil}}, acc ->
           acc
@@ -745,15 +803,24 @@ defmodule DevilsDictionary.Absorb.Materializer do
         # declining to mint a second identity for the same unresolved case every
         # run. Without this the table grew by one sense per ambiguous sense per
         # import, for ever.
-        {row, {:ambiguous, candidates, reason}}, {ids, states, cases} ->
-          ids =
+        {row, {:ambiguous, candidates, reason}}, {ids, states, cases, claimed} ->
+          {ids, claimed} =
             case Enum.find(group_held, &(to_string(&1.external_key) == to_string(row.key))) do
-              nil -> ids
-              own -> Map.put(ids, row.key, own.object_id)
+              nil ->
+                {ids, claimed}
+
+              own ->
+                if MapSet.member?(claimed, own.object_id) do
+                  {ids, claimed}
+                else
+                  {Map.put(ids, row.key, own.object_id), MapSet.put(claimed, own.object_id)}
+                end
             end
 
-          {ids, Map.put(states, row.key, "needs_review"), [{row, candidates, reason} | cases]}
+          {ids, Map.put(states, row.key, "needs_review"), [{row, candidates, reason} | cases],
+           claimed}
       end)
+      |> then(fn {ids, states, cases, _claimed} -> {ids, states, cases} end)
     end)
   end
 
@@ -1562,6 +1629,20 @@ defmodule DevilsDictionary.Absorb.Materializer do
   def reconcile(run_id, record_ids) when is_integer(run_id) do
     now = DateTime.utc_now()
 
+    # Pending edges are outputs too. If a later observation of the same source
+    # record stops emitting one, leaving the old row here lets a subsequent
+    # resolver run resurrect the withdrawn assertion. This occurs in real dump
+    # files when two entries collapse to the same external record identity: the
+    # later entry is authoritative, while the earlier pending edge still carries
+    # the previous run stamp.
+    {stale_pending, _} =
+      Repo.delete_all(
+        from(p in "pending_relations",
+          where: p.source_record_id in ^record_ids,
+          where: is_nil(p.last_seen_run_id) or p.last_seen_run_id != ^run_id
+        )
+      )
+
     stale_outputs =
       from(o in "source_materialized_outputs",
         where: o.source_record_id in ^record_ids,
@@ -1616,7 +1697,8 @@ defmodule DevilsDictionary.Absorb.Materializer do
     %{
       senses: length(senses),
       content: length(content),
-      assertions: length(stale_assertions)
+      assertions: length(stale_assertions),
+      pending_relations: stale_pending
     }
   end
 

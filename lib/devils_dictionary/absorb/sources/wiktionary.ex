@@ -2,7 +2,7 @@ defmodule DevilsDictionary.Absorb.Sources.Wiktionary do
   @moduledoc """
   English Wiktionary, via the Kaikki raw wiktextract dump.
 
-  Two passes, and S0b only runs the first:
+  Three passes, and S0b only runs the first:
 
     * **index** (`--index`) — stream all ~2.7M records, keep the English ones,
       and write one bare `lexemes` row per (lemma, pos) with its inflected
@@ -12,6 +12,11 @@ defmodule DevilsDictionary.Absorb.Sources.Wiktionary do
 
     * **scoped** (`--scope`) — trimmed raw records plus senses, pronunciations,
       etymology and relations, for the lemmas in a scope.
+
+    * **full** (`--full`) — every trimmed English record. Completed records
+      whose source payload is unchanged are skipped before their freshness is
+      touched, so an interrupted materialization resumes from its first stale
+      record instead of replaying completed batches.
 
   Scope membership is **by lemma** (#69 §3): if `dog` is in scope, its noun,
   verb and adjective entries are all absorbed. The scope holds 21,277 lexemes
@@ -436,18 +441,26 @@ defmodule DevilsDictionary.Absorb.Sources.Wiktionary do
       opts[:sample_every] ->
         sample(opts)
 
+      opts[:full] ->
+        full(opts)
+
       true ->
         raise """
         Wiktionary needs to know which pass to run:
           mix dd.absorb wiktionary --index               # the full English index
           mix dd.absorb wiktionary --scope animals       # trimmed records for a scope
           mix dd.absorb wiktionary --sample-every 30     # 1-in-N sample, unscoped (#79 W1)
+          mix dd.absorb wiktionary --full                # every trimmed English record
         """
     end
   end
 
   def absorb(%Scope{} = scope, opts) do
-    if opts[:index], do: index(opts), else: scoped(scope, opts)
+    cond do
+      opts[:full] -> raise "--full is unscoped; do not combine it with --scope"
+      opts[:index] -> index(opts)
+      true -> scoped(scope, opts)
+    end
   end
 
   # ── scoped absorb ────────────────────────────────────────────────────────
@@ -593,10 +606,78 @@ defmodule DevilsDictionary.Absorb.Sources.Wiktionary do
      }}
   end
 
+  # The complete reader corpus. Unlike the measurement-only sample, this path
+  # makes a completeness claim and is explicitly resumable. The gzip still has
+  # to be walked from the beginning (it is not seekable), but already-current
+  # records are filtered before `fetched_at` is advanced. `Batch.run/3` then
+  # sees only new, changed or interrupted records.
+  #
+  # Materialization uses source-record id order. A scope has a product reason
+  # (`wordnet_closure`) that deserves priority; the full, subject-independent
+  # corpus does not. Stable ids give deterministic keyset pagination across
+  # restarts without inventing a privileged subject or loading 1.5M keys.
+  defp full(opts) do
+    source = Sources.get_source_by_slug!(slug())
+    path = dump_path!(source, opts)
+
+    stats =
+      path
+      |> GzipLines.stream!()
+      |> then(fn stream ->
+        case opts[:limit] do
+          nil -> stream
+          n -> Stream.take(stream, n)
+        end
+      end)
+      |> Stream.chunk_every(@decode_chunk)
+      |> Task.async_stream(&select_chunk(&1, :all),
+        max_concurrency: System.schedulers_online(),
+        ordered: true,
+        timeout: :infinity
+      )
+      |> Enum.reduce(new_scoped_stats(), fn {:ok, {rows, counts}}, acc ->
+        acc
+        |> merge_scoped_counts(counts)
+        |> buffer_records(source, rows, resume: true)
+      end)
+      |> flush_records(source, resume: true)
+
+    if is_nil(opts[:limit]) and stats.lines < @expect_min_lines do
+      raise """
+      gzip stream ended after #{stats.lines} lines, expected at least #{@expect_min_lines}.
+      Multi-member gzip files truncate silently with inflateInit/31 — check `gzip -t #{path}`.
+      """
+    end
+
+    materialized =
+      Batch.run(__MODULE__, source,
+        batch_size: @materialize_batch,
+        only_stale: true,
+        run_id: opts[:run_id]
+      )
+
+    {:ok,
+     %{
+       lines: stats.lines,
+       en_records: stats.en,
+       english_lemmas: MapSet.size(stats.matched),
+       records: stats.written,
+       resumed_records: stats.resumed,
+       materialized_records: materialized.records,
+       lexemes: materialized.lexemes,
+       senses: materialized.senses,
+       relations: materialized.relations,
+       bytes_raw: stats.bytes_raw,
+       bytes_trimmed: stats.bytes_trimmed,
+       trim_saving_pct: saving_pct(stats.bytes_raw, stats.bytes_trimmed)
+     }}
+  end
+
   # `scoped/2` selects by scope membership, `sample/1` by hash. One predicate so
   # both share `select_chunk/2` and therefore share the trim and byte accounting.
   defp selected?(%MapSet{} = wanted, word), do: MapSet.member?(wanted, word)
   defp selected?({:sample, n}, word), do: rem(:erlang.phash2(word), n) == 0
+  defp selected?(:all, _word), do: true
 
   @doc """
   The distinct lemmas of a scope, optionally narrowed to one build reason.
@@ -689,6 +770,7 @@ defmodule DevilsDictionary.Absorb.Sources.Wiktionary do
       bytes_raw: 0,
       bytes_trimmed: 0,
       written: 0,
+      resumed: 0,
       buffer: [],
       buffered: 0
     }
@@ -704,18 +786,46 @@ defmodule DevilsDictionary.Absorb.Sources.Wiktionary do
     }
   end
 
-  defp buffer_records(acc, source, rows) do
+  defp buffer_records(acc, source, rows, opts \\ []) do
     acc = %{acc | buffer: [rows | acc.buffer], buffered: acc.buffered + length(rows)}
-    if acc.buffered >= @record_chunk, do: flush_records(acc, source), else: acc
+    if acc.buffered >= @record_chunk, do: flush_records(acc, source, opts), else: acc
   end
 
-  defp flush_records(%{buffered: 0} = acc, _source), do: %{acc | buffer: []}
+  defp flush_records(acc, source, opts \\ [])
 
-  defp flush_records(acc, source) do
-    written =
-      acc.buffer |> Enum.concat() |> then(&Sources.insert_records(source, &1, @record_chunk))
+  defp flush_records(%{buffered: 0} = acc, _source, _opts), do: %{acc | buffer: []}
 
-    %{acc | buffer: [], buffered: 0, written: acc.written + written}
+  defp flush_records(acc, source, opts) do
+    rows = Enum.concat(acc.buffer)
+    {rows, resumed} = if opts[:resume], do: resume_rows(source, rows), else: {rows, 0}
+    written = Sources.insert_records(source, rows, @record_chunk)
+
+    %{
+      acc
+      | buffer: [],
+        buffered: 0,
+        written: acc.written + written,
+        resumed: acc.resumed + resumed
+    }
+  end
+
+  defp resume_rows(_source, []), do: {[], 0}
+
+  defp resume_rows(source, rows) do
+    external_ids = Enum.map(rows, & &1.external_id)
+
+    current =
+      Repo.all(
+        from r in SourceRecord,
+          where:
+            r.source_id == ^source.id and r.external_id in ^external_ids and
+              not is_nil(r.materialized_at) and r.materialized_at >= r.fetched_at,
+          select: {r.external_id, r.content_hash}
+      )
+      |> Map.new()
+
+    pending = Enum.reject(rows, &(current[&1.external_id] == &1.content_hash))
+    {pending, length(rows) - length(pending)}
   end
 
   # #70's S0 audit asks for the `wordnet_closure` lemmas (7,692, including the

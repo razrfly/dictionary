@@ -361,7 +361,9 @@ defmodule DevilsDictionary.DurabilityTest do
 
     Repo.all(
       from s in Sense,
-        where: s.source_id == ^source.id and s.lexeme_id == ^lexeme.object_id,
+        where:
+          s.source_id == ^source.id and s.lexeme_id == ^lexeme.object_id and
+            s.identity_state != :retired,
         select: {s.external_key, s}
     )
     |> Map.new()

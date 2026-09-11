@@ -8,6 +8,7 @@ defmodule Mix.Tasks.Dd.Absorb do
 
       mix dd.absorb wordnet
       mix dd.absorb wiktionary --index
+      mix dd.absorb wiktionary --full
       mix dd.absorb wiktionary --scope animals
       mix dd.absorb wikipedia --scope animals
       mix dd.absorb wikidata --scope animals
@@ -27,6 +28,9 @@ defmodule Mix.Tasks.Dd.Absorb do
       the dump, which is page order, not a representative sample
     * `--sample-every` — Wiktionary only: absorb a 1-in-N sample of English
       headwords, unscoped, by hash of the headword (#79 W1's measurement path)
+    * `--full` — Wiktionary only: absorb every trimmed English record. The pass
+      skips unchanged records already materialized, so an interrupted run can
+      be restarted without replaying completed batches
     * `--reason` — with `--scope`, only the lemmas a scope rule tagged with that
       reason (`wordnet_closure`, `wiktionary_category`, …)
     * `--rebuild-indexes` — drop the lexemes GIN indexes for the load and
@@ -60,6 +64,7 @@ defmodule Mix.Tasks.Dd.Absorb do
       OptionParser.parse(args,
         strict: [
           index: :boolean,
+          full: :boolean,
           scope: :string,
           path: :string,
           limit: :integer,
@@ -79,7 +84,12 @@ defmodule Mix.Tasks.Dd.Absorb do
     source = Sources.get_source_by_slug!(slug)
     scope = opts[:scope] && Lexicon.get_scope_by_slug!(opts[:scope])
 
-    task = if opts[:index], do: "index", else: "absorb"
+    task =
+      cond do
+        opts[:index] -> "index"
+        opts[:full] -> "full"
+        true -> "absorb"
+      end
 
     run_row =
       Sources.start_run(task, source_id: source.id, scope_id: scope && scope.id)
