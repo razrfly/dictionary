@@ -62,7 +62,11 @@ defmodule DevilsDictionary.Absorb.Linker do
   "write a claim" is how the two halves of a corpus come to disagree.
   """
 
+  import Ecto.Query
+
   alias DevilsDictionary.Absorb.Materializer
+  alias DevilsDictionary.Claims
+  alias DevilsDictionary.Claims.AssertionRevision
   alias DevilsDictionary.Encyclopedia
   alias DevilsDictionary.Lexicon.Scope
   alias DevilsDictionary.Repo
@@ -114,6 +118,8 @@ defmodule DevilsDictionary.Absorb.Linker do
   at all where nothing changed.
   """
   def run(scope \\ nil, opts \\ []) do
+    retired = withdraw_unevidenced_people()
+
     rungs = %{
       wiktionary_qid: wiktionary_qid(scope),
       wordnet_wikidata: wordnet_wikidata(scope),
@@ -124,7 +130,7 @@ defmodule DevilsDictionary.Absorb.Linker do
 
     corroboration = if opts[:skip_corroboration], do: %{}, else: corroborate(scope)
 
-    %{rungs: rungs, corroboration: corroboration}
+    %{rungs: rungs, corroboration: corroboration, retired_unevidenced_people: retired}
   end
 
   # ── rung 1 · wiktionary_qid ──────────────────────────────────────────────
@@ -215,6 +221,7 @@ defmodule DevilsDictionary.Absorb.Linker do
         JOIN entities e ON e.metadata->>'wikipedia_title' = l.metadata->>'wikipedia_title'
        #{scope_join(scope, "l.object_id")}
        WHERE l.part_of_speech IN #{nominal()}
+         AND e.entity_kind <> 'person'
          AND NOT jsonb_exists(e.metadata, 'disambiguation')
          AND NOT jsonb_exists(l.metadata, 'wikipedia_disambiguation')
       """,
@@ -254,10 +261,38 @@ defmodule DevilsDictionary.Absorb.Linker do
        #{scope_join(scope, "l.object_id")}
        WHERE jsonb_typeof(payload.raw->'_candidates') = 'array'
          AND l.part_of_speech IN #{nominal()}
+         AND e.entity_kind <> 'person'
       """,
       @word_level,
       scope
     )
+  end
+
+  @doc false
+  def withdraw_unevidenced_people do
+    candidates =
+      Repo.all(
+        from r in AssertionRevision,
+          join: p in assoc(r, :predicate),
+          join: e in "entities",
+          on: e.object_id == r.object_object_id,
+          where: r.is_current and r.lifecycle_state == :active,
+          where: p.key == ^@word_level and e.entity_kind == "person",
+          where: r.method in ["title_match", "disambiguation"],
+          select: {r.assertion_id, r.id}
+      )
+      |> Enum.filter(fn {_assertion_id, revision_id} ->
+        Claims.review_state(revision_id) == :needs_review
+      end)
+
+    Enum.each(candidates, fn {assertion_id, _revision_id} ->
+      {:ok, _} =
+        Claims.withdraw(assertion_id,
+          reason: "A name-only heuristic is not evidence that a word denotes a person."
+        )
+    end)
+
+    length(candidates)
   end
 
   # ── corroboration ────────────────────────────────────────────────────────

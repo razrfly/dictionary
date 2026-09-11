@@ -293,6 +293,41 @@ defmodule DevilsDictionaryWeb.UserAuthTest do
     end
   end
 
+  describe "on_mount :require_internal_contributor" do
+    test "registration alone is rejected server-side", %{conn: conn, user: user} do
+      token = Accounts.generate_user_session_token(user)
+      session = conn |> put_session(:user_token, token) |> get_session()
+
+      socket = %LiveView.Socket{
+        endpoint: DevilsDictionaryWeb.Endpoint,
+        assigns: %{__changed__: %{}, flash: %{}}
+      }
+
+      assert {:halt, updated_socket} =
+               UserAuth.on_mount(:require_internal_contributor, %{}, session, socket)
+
+      assert updated_socket.redirected == {:redirect, %{status: 302, to: "/"}}
+    end
+
+    test "the internal capability reaches the contribution flow", %{conn: conn, user: user} do
+      user =
+        DevilsDictionary.Repo.update!(Ecto.Changeset.change(user, internal_contributor: true))
+
+      token = Accounts.generate_user_session_token(user)
+      session = conn |> put_session(:user_token, token) |> get_session()
+
+      socket = %LiveView.Socket{
+        endpoint: DevilsDictionaryWeb.Endpoint,
+        assigns: %{__changed__: %{}, flash: %{}}
+      }
+
+      assert {:cont, updated_socket} =
+               UserAuth.on_mount(:require_internal_contributor, %{}, session, socket)
+
+      assert updated_socket.assigns.current_scope.user.internal_contributor
+    end
+  end
+
   describe "on_mount :require_sudo_mode" do
     test "allows users that have authenticated in the last 10 minutes", %{conn: conn, user: user} do
       user_token = Accounts.generate_user_session_token(user)

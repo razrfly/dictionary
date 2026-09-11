@@ -97,6 +97,7 @@ defmodule DevilsDictionaryWeb.Router do
       pipe_through :browser
 
       live_dashboard "/dashboard", metrics: DevilsDictionaryWeb.Telemetry
+      forward "/mailbox", Plug.Swoosh.MailboxPreview
     end
 
     # The theme boilerplate check (#71 §3, U0): the ported Oatmeal primitives,
@@ -117,18 +118,29 @@ defmodule DevilsDictionaryWeb.Router do
       on_mount: [{DevilsDictionaryWeb.UserAuth, :require_authenticated}] do
       live "/users/settings", UserLive.Settings, :edit
       live "/users/settings/confirm-email/:token", UserLive.Settings, :confirm_email
+    end
 
+    post "/users/update-password", UserSessionController, :update_password
+  end
+
+  scope "/", DevilsDictionaryWeb do
+    pipe_through [:browser, :require_authenticated_user]
+
+    live_session :require_internal_contributor,
+      on_mount: [{DevilsDictionaryWeb.UserAuth, :require_internal_contributor}] do
       # Proposing a connection is the one thing on this site that needs an
       # account: #74 asks for "a minimal authenticated submit/review flow", and
       # an anonymous claim has nobody to attribute it to.
+      #
+      # Registration does not grant this capability. The route is gated here,
+      # on the server, for the internal contribution-testing account and
+      # reviewers; hiding a button would not protect the write path.
       #
       # `/connect` rather than `/connections/new`: routes match in definition
       # order, and `/connections/:id` is declared in the public scope above, so
       # `new` would be read as an id and never reach this.
       live "/connect", ConnectionLive, :new
     end
-
-    post "/users/update-password", UserSessionController, :update_password
   end
 
   scope "/", DevilsDictionaryWeb do

@@ -122,17 +122,33 @@ defmodule DevilsDictionaryWeb.Word do
   from day one and enrichment arrives scope by scope, so a bare row is a
   promise rather than a mistake.
   """
+  attr :lemma, :string, required: true
+
   def bare_row(assigns) do
+    assigns = assign(assigns, :wiktionary_url, wiktionary_url(assigns.lemma))
+
     ~H"""
     <div id="bare-row" class="mt-8">
       <.text class="text-mist-500">
-        Known to exist, nothing absorbed yet. It is in the index — a headword some source listed —
-        and no dictionary here has been asked about it.
+        This word is in the index, but no definition or sense content has been absorbed for it yet.
+        The page is incomplete; the index entry alone is not a definition.
       </.text>
-      <.a navigate={~p"/"} class="mt-4">Search for another word</.a>
+      <div class="mt-4 flex flex-wrap gap-4">
+        <.a href={@wiktionary_url} target="_blank" rel="noreferrer">
+          Check Wiktionary
+          <.icon
+            name="hero-arrow-top-right-on-square"
+            class="size-4 h-lh shrink-0 stroke-current"
+          />
+        </.a>
+        <.a navigate={~p"/"}>Search for another word</.a>
+      </div>
     </div>
     """
   end
+
+  defp wiktionary_url(lemma),
+    do: "https://en.wiktionary.org/wiki/" <> URI.encode(lemma, &URI.char_unreserved?/1)
 
   @doc "The trigram's nearest answers to a word the index does not hold."
   attr :suggestions, :list, default: []
