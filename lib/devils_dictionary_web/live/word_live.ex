@@ -222,7 +222,7 @@ defmodule DevilsDictionaryWeb.WordLive do
             />
           </div>
 
-          <Word.bare_row :if={@page.cards == []} />
+          <Word.bare_row :if={@page.cards == []} lemma={@page.headword.lemma} />
 
           <Word.related_block
             :for={related <- @page.related}

@@ -58,6 +58,12 @@ defmodule DevilsDictionary.Absorb.LinkerTest do
     entity
   end
 
+  defp person!(qid, label) do
+    {:ok, person} = Registry.create_person(%{preferred_label: label, description: "a person"})
+    {:ok, _} = Registry.add_external_id(person.object_id, "wikidata", qid)
+    person
+  end
+
   defp put_some(map, _key, nil), do: map
   defp put_some(map, key, value), do: Map.put(map, key, value)
 
@@ -144,6 +150,41 @@ defmodule DevilsDictionary.Absorb.LinkerTest do
       assert link.object_object_id == concept.object_id
       # Nobody has reviewed it, which is what `auto` always meant.
       assert Claims.review_state(link.id) == :needs_review
+    end
+
+    test "wiktionary QID evidence links a sense to a non-seeded person", ctx do
+      person = person!("Q424242424", "Ada Example")
+      name = lexeme!(ctx, "Ada Example", pos: "name")
+      sense = sense!(ctx, name, "wiktionary", metadata: %{"wikidata" => ["Q424242424"]})
+
+      Linker.run(ctx.animals)
+
+      link = link!(name, :wiktionary_qid)
+      assert link.subject_object_id == sense.object_id
+      assert link.object_object_id == person.object_id
+      assert link.predicate.key == "refers_to"
+    end
+
+    test "name-only heuristics neither create nor preserve person candidates", ctx do
+      bierce = person!("Q424242425", "Ambrose Example")
+
+      ursus =
+        lexeme!(ctx, "Ursus",
+          metadata: %{
+            "wikipedia_disambiguation" => true,
+            "wikipedia_title" => "Ambrose Example"
+          }
+        )
+
+      {:ok, stale} =
+        Claims.assert(ursus.object_id, "lexeme_entity_candidate", bierce.object_id, %{
+          method: "disambiguation",
+          confidence: 0.4
+        })
+
+      assert %{retired_unevidenced_people: 1} = Linker.run(ctx.animals)
+      assert Claims.outgoing(ursus.object_id, predicate: "lexeme_entity_candidate") == []
+      assert Claims.current_revision(stale.id).lifecycle_state == :withdrawn
     end
 
     test "wordnet_wikidata reads the string form at 0.90", ctx do

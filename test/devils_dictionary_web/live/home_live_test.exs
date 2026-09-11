@@ -14,6 +14,7 @@ defmodule DevilsDictionaryWeb.HomeLiveTest do
   import Phoenix.LiveViewTest
 
   alias DevilsDictionary.Fixtures
+  alias DevilsDictionary.Registry
 
   setup ctx do
     %{sources: sources, scopes: scopes} = Fixtures.seed_catalog!()
@@ -99,6 +100,21 @@ defmodule DevilsDictionaryWeb.HomeLiveTest do
       {:ok, _live, html} = live(ctx.conn, ~p"/?q=oyster")
 
       assert length(String.split(html, ~s(id="result-oyster"))) == 2
+    end
+
+    test "a person's name returns the word and person as distinct typed results", ctx do
+      word!(ctx, "Ambrose Bierce", ~w(wiktionary), pos: "name", scope: nil)
+      bierce_id = Registry.by_external_id("wikidata", "Q191050")
+
+      {:ok, live, _html} = live(ctx.conn, ~p"/?q=Ambrose%20Bierce")
+
+      assert has_element?(live, "#result-ambrose-bierce", "Word · name")
+      assert has_element?(live, "#result-entity-#{bierce_id}", "Person")
+
+      assert has_element?(
+               live,
+               "#result-entity-#{bierce_id}[href='/entities/#{bierce_id}/ambrose-bierce']"
+             )
     end
 
     test "a search that finds nothing says so", ctx do

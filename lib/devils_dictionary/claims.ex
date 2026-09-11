@@ -259,9 +259,10 @@ defmodule DevilsDictionary.Claims do
   1,229-degree node against 2.576 ms for a pointer join. Bounded by `:limit`
   because #73 forbids an unbounded "everything related" query on page load.
 
-  Options: `:predicate`, `:lifecycle_state` (`:any` for all), `:limit`,
-  `:after` (a cursor from `next_cursor/1`), and `:visibility` — `:public` by
-  default, `:internal` for a review queue or a health check. See `visible/2`.
+  Options: `:predicate`, `:exclude_predicates`, `:subject_kind`,
+  `:lifecycle_state` (`:any` for all), `:limit`, `:after` (a cursor from
+  `next_cursor/1`), and `:visibility` — `:public` by default, `:internal` for a
+  review queue or a health check. See `visible/2`.
   """
   def outgoing(subject_id, opts \\ []) do
     subject_id |> outgoing_query(opts) |> page(opts)
@@ -313,8 +314,21 @@ defmodule DevilsDictionary.Claims do
   defp common_filters(query, opts) do
     query
     |> filter_predicate(opts[:predicate])
+    |> exclude_predicates(opts[:exclude_predicates])
+    |> filter_subject_kind(opts[:subject_kind])
     |> filter_state(opts[:lifecycle_state] || :active)
     |> visible(opts[:visibility] || :public)
+  end
+
+  defp filter_subject_kind(query, nil), do: query
+  defp filter_subject_kind(query, kind), do: where(query, [r], r.subject_kind == ^to_string(kind))
+
+  defp exclude_predicates(query, nil), do: query
+  defp exclude_predicates(query, []), do: query
+
+  defp exclude_predicates(query, keys) do
+    predicate_ids = from p in Predicate, where: p.key in ^keys, select: p.id
+    where(query, [r], r.predicate_id not in subquery(predicate_ids))
   end
 
   # Filters, then cursor, then limit -- in that order, so the page is a page of

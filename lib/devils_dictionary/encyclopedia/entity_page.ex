@@ -25,13 +25,10 @@ defmodule DevilsDictionary.Encyclopedia.EntityPage do
       `defines` and the edition it was `published_in`
     * **editions** — `edition_of` pointing at this work
     * **contents** — what an edition's definitions define
-    * **connections** — everything else, both directions, so nothing a curator
-      asserted is invisible merely because this page did not anticipate it
-
-  That last one matters. A page that renders only the predicates it knows about
-  is a page that silently hides a claim, and #73 is explicit that a claim must
-  appear from either endpoint. The named sections are presentation; the
-  connections list is the guarantee.
+  Each role is paged independently. In particular, `authored_by` is queried
+  once for work subjects and once for content subjects before either cursor is
+  applied, so hundreds of definitions cannot crowd a person's works out of the
+  reachable result set.
 
   ## Reads are public reads
 
@@ -56,9 +53,10 @@ defmodule DevilsDictionary.Encyclopedia.EntityPage do
             editions: [],
             contents: [],
             connections: %{incoming: [], outgoing: []},
-            counts: %{}
+            pagination: %{}
 
-  @section_cap 50
+  @section_cap 24
+  @presented_predicates ~w(about authored_by edition_of published_in)
 
   @doc """
   Builds the page for an object id, or nil when it is not an entity.
@@ -66,41 +64,104 @@ defmodule DevilsDictionary.Encyclopedia.EntityPage do
   Nil rather than a raise: `/entities/999/x` is a page that says so, the same
   way `/define/zzzz` is.
   """
-  def build(object_id) when is_integer(object_id) do
+  def build(object_id, opts \\ [])
+
+  def build(object_id, opts) when is_integer(object_id) do
     case Repo.get(Entity, object_id) do
       nil -> nil
-      entity -> assemble(entity)
+      entity -> assemble(entity, opts)
     end
   end
 
-  def build(_), do: nil
+  def build(_, _opts), do: nil
 
-  defp assemble(%Entity{} = entity) do
+  defp assemble(%Entity{} = entity, opts) do
     id = entity.object_id
 
-    biography = Encyclopedia.content_about(id, limit: @section_cap)
-    authored = Claims.incoming(id, predicate: "authored_by", limit: @section_cap)
-    editions = Claims.incoming(id, predicate: "edition_of", limit: @section_cap)
+    {biography, biography_page} =
+      incoming_page(id, "about", "content", opts[:biography_after])
 
-    {work_ids, content_ids} = split_authored(authored)
+    {works, works_page} =
+      incoming_page(id, "authored_by", "entity", opts[:works_after])
+
+    {definitions, definitions_page} =
+      incoming_page(id, "authored_by", "content", opts[:definitions_after])
+
+    {editions, editions_page} =
+      incoming_page(id, "edition_of", "entity", opts[:editions_after])
+
+    {contents, contents_page} = contents_of(entity, id, opts[:contents_after])
+
+    {connections_in, connections_in_page} =
+      other_connections(:incoming, id, opts[:connections_in_after])
+
+    {connections_out, connections_out_page} =
+      other_connections(:outgoing, id, opts[:connections_out_after])
 
     %__MODULE__{
       entity: Encyclopedia.view(entity),
       details: details(entity),
       biography: content_views(Enum.map(biography, & &1.subject_object_id)),
-      works: entity_views(work_ids),
-      definitions: definition_views(content_ids),
+      works: entity_views(Enum.map(works, & &1.subject_object_id)),
+      definitions: definition_views(Enum.map(definitions, & &1.subject_object_id)),
       editions: entity_views(Enum.map(editions, & &1.subject_object_id)),
-      contents: contents_of(entity, id),
-      connections: %{
-        incoming: Claims.incoming(id, limit: @section_cap),
-        outgoing: Claims.outgoing(id, limit: @section_cap)
-      },
-      counts: %{
-        incoming: Claims.count_incoming(id),
-        outgoing: Claims.count_outgoing(id)
+      contents: definition_views(Enum.map(contents, & &1.subject_object_id)),
+      connections: %{incoming: connections_in, outgoing: connections_out},
+      pagination: %{
+        biography: biography_page,
+        works: works_page,
+        definitions: definitions_page,
+        editions: editions_page,
+        contents: contents_page,
+        connections_in: connections_in_page,
+        connections_out: connections_out_page
       }
     }
+  end
+
+  defp other_connections(direction, object_id, after_cursor) do
+    filters = [exclude_predicates: @presented_predicates]
+    opts = filters ++ [after: after_cursor, limit: @section_cap + 1]
+
+    rows =
+      case direction do
+        :incoming -> Claims.incoming(object_id, opts)
+        :outgoing -> Claims.outgoing(object_id, opts)
+      end
+
+    visible = Enum.take(rows, @section_cap)
+
+    count =
+      case direction do
+        :incoming -> Claims.count_incoming(object_id, filters)
+        :outgoing -> Claims.count_outgoing(object_id, filters)
+      end
+
+    page = %{
+      count: count,
+      next: if(length(rows) > @section_cap, do: Claims.next_cursor(visible), else: nil)
+    }
+
+    {visible, page}
+  end
+
+  defp incoming_page(object_id, predicate, subject_kind, after_cursor) do
+    filters = [predicate: predicate, subject_kind: subject_kind]
+
+    rows =
+      Claims.incoming(
+        object_id,
+        filters ++ [after: after_cursor, limit: @section_cap + 1]
+      )
+
+    visible = Enum.take(rows, @section_cap)
+
+    page = %{
+      count: Claims.count_incoming(object_id, filters),
+      next: if(length(rows) > @section_cap, do: Claims.next_cursor(visible), else: nil)
+    }
+
+    {visible, page}
   end
 
   # A person's subtype row, a work's, an edition's — whichever this entity has.
@@ -120,49 +181,41 @@ defmodule DevilsDictionary.Encyclopedia.EntityPage do
 
   defp details(%Entity{}), do: %{}
 
-  # `authored_by` reaches this person from two kinds of subject: a work entity
-  # and a piece of content. They are different sections on the page and one
-  # query in the database.
-  defp split_authored(revisions) do
-    Enum.reduce(revisions, {[], []}, fn revision, {works, contents} ->
-      case revision.subject_kind do
-        "entity" -> {[revision.subject_object_id | works], contents}
-        "content" -> {works, [revision.subject_object_id | contents]}
-        _ -> {works, contents}
-      end
-    end)
-  end
-
   defp entity_views([]), do: []
 
   defp entity_views(ids) do
-    Entity
-    |> where([e], e.object_id in ^ids)
-    |> order_by([e], e.preferred_label)
-    |> Repo.all()
-    |> Enum.map(&Encyclopedia.view/1)
+    by_id =
+      Entity
+      |> where([e], e.object_id in ^ids)
+      |> Repo.all()
+      |> Map.new(&{&1.object_id, Encyclopedia.view(&1)})
+
+    Enum.map(ids, &Map.fetch!(by_id, &1))
   end
 
   defp content_views([]), do: []
 
   defp content_views(ids) do
-    Repo.all(
-      from c in ContentItem,
-        join: r in ContentRevision,
-        on: r.content_id == c.object_id and r.is_current,
-        where: c.object_id in ^ids and r.lifecycle_state == :active,
-        order_by: [asc: r.position, asc: c.object_id],
-        select: %{
-          object_id: c.object_id,
-          kind: c.content_kind,
-          source_id: c.source_id,
-          headword: r.headword,
-          body: r.body,
-          body_format: r.body_format,
-          url: r.canonical_url,
-          year: r.year
-        }
-    )
+    by_id =
+      Repo.all(
+        from c in ContentItem,
+          join: r in ContentRevision,
+          on: r.content_id == c.object_id and r.is_current,
+          where: c.object_id in ^ids and r.lifecycle_state == :active,
+          select: %{
+            object_id: c.object_id,
+            kind: c.content_kind,
+            source_id: c.source_id,
+            headword: r.headword,
+            body: r.body,
+            body_format: r.body_format,
+            url: r.canonical_url,
+            year: r.year
+          }
+      )
+      |> Map.new(&{&1.object_id, &1})
+
+    ids |> Enum.map(&Map.get(by_id, &1)) |> Enum.reject(&is_nil/1)
   end
 
   # A definition is only half a row on a person's page: the reader wants the
@@ -184,7 +237,17 @@ defmodule DevilsDictionary.Encyclopedia.EntityPage do
       content
       |> Map.put(:defines, Map.get(words, Map.get(defines, content.object_id)))
       |> Map.put(:published_in, Map.get(editions, Map.get(published, content.object_id)))
+      |> Map.put(:summary, first_line(content.body))
     end)
+  end
+
+  defp first_line(nil), do: nil
+
+  defp first_line(body) do
+    body
+    |> String.split(~r/\R/, parts: 2)
+    |> hd()
+    |> String.trim()
   end
 
   defp targets(subject_ids, predicate) do
@@ -231,12 +294,9 @@ defmodule DevilsDictionary.Encyclopedia.EntityPage do
   end
 
   # An edition's contents: the definitions printed in it, and what each defines.
-  defp contents_of(%Entity{entity_kind: :edition}, id) do
-    id
-    |> Claims.incoming(predicate: "published_in", limit: @section_cap)
-    |> Enum.map(& &1.subject_object_id)
-    |> definition_views()
-  end
+  defp contents_of(%Entity{entity_kind: :edition}, id, after_cursor),
+    do: incoming_page(id, "published_in", "content", after_cursor)
 
-  defp contents_of(%Entity{}, _id), do: []
+  defp contents_of(%Entity{}, _id, _after_cursor),
+    do: {[], %{count: 0, next: nil}}
 end

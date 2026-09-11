@@ -193,6 +193,8 @@ defmodule DevilsDictionaryWeb.UserAuth do
       and assigns the current_scope to socket assigns based
       on user_token.
       Redirects to login page if there's no logged user.
+    * `:require_internal_contributor` - Requires the non-public contribution
+      capability (reviewers also qualify). Registration alone never grants it.
 
   ## Examples
 
@@ -226,6 +228,25 @@ defmodule DevilsDictionaryWeb.UserAuth do
         socket
         |> Phoenix.LiveView.put_flash(:error, "You must log in to access this page.")
         |> Phoenix.LiveView.redirect(to: ~p"/users/log-in")
+
+      {:halt, socket}
+    end
+  end
+
+  def on_mount(:require_internal_contributor, _params, session, socket) do
+    socket = mount_current_scope(socket, session)
+    user = socket.assigns.current_scope && socket.assigns.current_scope.user
+
+    if user && (user.internal_contributor || user.reviewer) do
+      {:cont, socket}
+    else
+      socket =
+        socket
+        |> Phoenix.LiveView.put_flash(
+          :error,
+          "Contributions are in internal testing and are not open to public accounts yet."
+        )
+        |> Phoenix.LiveView.redirect(to: ~p"/")
 
       {:halt, socket}
     end

@@ -40,6 +40,10 @@ defmodule DevilsDictionaryWeb.UserLive.LoginTest do
 
       assert DevilsDictionary.Repo.get_by!(DevilsDictionary.Accounts.UserToken, user_id: user.id).context ==
                "login"
+
+      # The development-only help text points here; keep the real click target
+      # routed rather than leaving a polished login flow at a 404.
+      assert get(conn, "/dev/mailbox").status in [200, 302]
     end
 
     test "does not disclose if user is registered", %{conn: conn} do

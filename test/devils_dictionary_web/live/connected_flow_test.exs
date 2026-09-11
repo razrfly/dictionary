@@ -250,9 +250,19 @@ defmodule DevilsDictionaryWeb.ConnectedFlowTest do
     end
   end
 
+  describe "the contribution gate" do
+    test "a public registered account cannot reach the writable composer", ctx do
+      %{conn: conn} = register_and_log_in_user(%{conn: ctx.conn})
+
+      assert {:error, {:redirect, %{to: "/", flash: flash}}} = live(conn, ~p"/connect")
+      assert flash["error"] =~ "internal testing"
+    end
+  end
+
   describe "the composer" do
     setup ctx do
       %{conn: conn, user: user} = register_and_log_in_user(%{conn: ctx.conn})
+      user = Repo.update!(Ecto.Changeset.change(user, internal_contributor: true))
       Map.merge(ctx, %{conn: conn, user: user})
     end
 
@@ -415,6 +425,7 @@ defmodule DevilsDictionaryWeb.ConnectedFlowTest do
          ctx do
       ctx = anchor!(ctx)
       %{conn: conn, user: user} = register_and_log_in_user(%{conn: ctx.conn})
+      _user = Repo.update!(Ecto.Changeset.change(user, internal_contributor: true))
       {:ok, view, _} = live(conn, "/connect")
       view |> form("#composer-subject form", %{q: "untitled"}) |> render_change()
       view |> element("#composer-subject-hit-#{ctx.meme.object_id}") |> render_click()

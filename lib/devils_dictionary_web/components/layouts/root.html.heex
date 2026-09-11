@@ -48,26 +48,56 @@
     </script>
   </head>
   <body class="font-sans text-mist-950 antialiased dark:text-white">
-    <ul class="menu menu-horizontal w-full relative z-10 flex items-center gap-4 px-4 sm:px-6 lg:px-8 justify-end">
-      <%= if @current_scope do %>
-        <li>
-          {@current_scope.user.email}
-        </li>
-        <li>
-          <.link href={~p"/users/settings"}>Settings</.link>
-        </li>
-        <li>
-          <.link href={~p"/users/log-out"} method="delete">Log out</.link>
-        </li>
-      <% else %>
-        <li>
-          <.link href={~p"/users/register"}>Register</.link>
-        </li>
-        <li>
-          <.link href={~p"/users/log-in"}>Log in</.link>
-        </li>
-      <% end %>
-    </ul>
+    <nav
+      id="account-navigation"
+      aria-label="Account"
+      class={[
+        "relative z-20 border-b border-mist-950/5 bg-mist-100 dark:border-white/10 dark:bg-mist-950"
+      ]}
+    >
+      <div class={[
+        "mx-auto flex h-10 max-w-7xl items-center justify-end gap-5 px-6 text-sm/6 text-mist-600 lg:px-10 dark:text-mist-400"
+      ]}>
+        <%= if @current_scope do %>
+          <span class={["max-w-56 truncate max-md:hidden"]}>{@current_scope.user.email}</span>
+          <.link
+            id="account-settings-link"
+            href={~p"/users/settings"}
+            class={[
+              "inline-flex items-center gap-1.5 font-medium text-mist-950 hover:underline dark:text-white"
+            ]}
+          >
+            <.icon name="hero-user-circle" class="size-4 stroke-current" /> Settings
+          </.link>
+          <.link
+            id="account-logout-link"
+            href={~p"/users/log-out"}
+            method="delete"
+            class={[
+              "inline-flex items-center gap-1.5 font-medium text-mist-950 hover:underline dark:text-white"
+            ]}
+          >
+            <.icon name="hero-arrow-right-start-on-rectangle" class="size-4 stroke-current" />
+            Log out
+          </.link>
+        <% else %>
+          <.link
+            id="account-register-link"
+            href={~p"/users/register"}
+            class={["font-medium text-mist-950 hover:underline dark:text-white"]}
+          >
+            Register
+          </.link>
+          <.link
+            id="account-login-link"
+            href={~p"/users/log-in"}
+            class={["font-medium text-mist-950 hover:underline dark:text-white"]}
+          >
+            Log in
+          </.link>
+        <% end %>
+      </div>
+    </nav>
     {@inner_content}
   </body>
 </html>

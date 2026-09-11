@@ -8,8 +8,9 @@ defmodule DevilsDictionaryWeb.HomeLive do
 
   Three rules it keeps:
 
-    * **The search is `Lexicon.search/2`**, untouched — the trigram over
-      `lexemes.lemma` that scorecard row X2 times at p95 < 150 ms. Inflected
+    * **Search keeps `Lexicon.search/2` and adds an entity query** — the trigram
+      indexes over `lexemes.lemma` and `entities.preferred_label`. Words and
+      people with the same label remain separate typed results. Inflected
       forms are index rows in their own right, so *oysters* is reachable by
       prefix; pressing enter runs `Lexicon.lookup/1`, which resolves a form by
       containment and lands on the word with its *redirected from* line.
@@ -22,10 +23,12 @@ defmodule DevilsDictionaryWeb.HomeLive do
 
   use DevilsDictionaryWeb, :live_view
 
-  alias DevilsDictionary.{Health, Lexicon, Sources}
+  alias DevilsDictionary.Claims.Connection
+  alias DevilsDictionary.{Encyclopedia, Health, Lexicon, Sources}
 
   @seeds ~w(cat dog oyster joy grief)
   @limit 10
+  @entity_limit 5
   @stats_ttl :timer.minutes(10)
 
   @impl true
@@ -51,7 +54,9 @@ defmodule DevilsDictionaryWeb.HomeLive do
   # the search ranked them in, and the parts of speech are joined rather than
   # picked from: showing *oyster · adj* because "adj" sorts first would be a
   # lie about the word.
-  defp results(q) do
+  defp results(q), do: word_results(q) ++ entity_results(q)
+
+  defp word_results(q) do
     rows = Lexicon.search(q, limit: @limit * 3)
     by_slug = Enum.group_by(rows, & &1.slug)
 
@@ -63,12 +68,35 @@ defmodule DevilsDictionaryWeb.HomeLive do
       group = by_slug[slug]
 
       %{
+        kind: :word,
         slug: slug,
         lemma: group |> hd() |> Map.get(:lemma),
         pos: group |> Enum.map(& &1.pos) |> Enum.uniq() |> Enum.join(" · "),
         enriched?: Enum.any?(group, &(not is_nil(&1.enriched_at)))
       }
     end)
+  end
+
+  defp entity_results(q) do
+    q
+    |> Encyclopedia.search_entities(limit: @entity_limit)
+    |> Enum.map(fn entity ->
+      %{
+        kind: :entity,
+        object_id: entity.object_id,
+        slug: Connection.slugify(entity.label),
+        label: entity.label,
+        description: entity.description,
+        type_label: entity_type_label(entity.kind)
+      }
+    end)
+  end
+
+  defp entity_type_label(kind) do
+    kind
+    |> to_string()
+    |> String.replace("_", " ")
+    |> String.capitalize()
   end
 
   @impl true
@@ -199,18 +227,34 @@ defmodule DevilsDictionaryWeb.HomeLive do
             >
               <li :for={result <- @results}>
                 <.link
+                  :if={result.kind == :word}
                   id={"result-#{result.slug}"}
                   navigate={~p"/define/#{result.slug}"}
-                  class="flex items-baseline justify-between gap-4 py-2 hover:bg-mist-950/2.5 dark:hover:bg-white/5"
+                  class="flex min-w-0 items-baseline justify-between gap-4 py-3 hover:bg-mist-950/2.5 dark:hover:bg-white/5"
                 >
-                  <span class={[
-                    "text-base/7",
-                    result.enriched? && "font-medium text-mist-950 dark:text-white",
-                    not result.enriched? && "text-mist-500"
-                  ]}>
-                    {result.lemma}
+                  <span class="min-w-0">
+                    <span class={[
+                      result.enriched? && "font-medium text-mist-950 dark:text-white",
+                      not result.enriched? && "text-mist-500"
+                    ]}>
+                      {result.lemma}
+                    </span>
                   </span>
-                  <span class="text-sm/7 text-mist-500">{result.pos}</span>
+                  <span class="shrink-0 text-mist-500">Word · {result.pos}</span>
+                </.link>
+                <.link
+                  :if={result.kind == :entity}
+                  id={"result-entity-#{result.object_id}"}
+                  navigate={~p"/entities/#{result.object_id}/#{result.slug}"}
+                  class="flex min-w-0 items-start justify-between gap-4 py-3 hover:bg-mist-950/2.5 dark:hover:bg-white/5"
+                >
+                  <span class="min-w-0">
+                    <span class="font-medium text-mist-950 dark:text-white">{result.label}</span>
+                    <span :if={result.description} class="text-mist-500">
+                      — {result.description}
+                    </span>
+                  </span>
+                  <span class="shrink-0 text-mist-500">{result.type_label}</span>
                 </.link>
               </li>
             </ol>

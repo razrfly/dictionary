@@ -127,7 +127,8 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
 
       assert html =~ ~s(id="headword")
       assert html =~ ~s(id="bare-row")
-      assert html =~ "nothing absorbed yet"
+      assert html =~ "no definition or sense content has been absorbed"
+      assert html =~ "https://en.wiktionary.org/wiki/abrocome"
     end
 
     test "a word that does not exist is a page, not a crash", ctx do

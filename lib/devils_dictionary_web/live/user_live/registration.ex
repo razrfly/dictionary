@@ -8,36 +8,53 @@ defmodule DevilsDictionaryWeb.UserLive.Registration do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <div class="mx-auto max-w-sm">
-        <div class="text-center">
-          <.header>
-            Register for an account
-            <:subtitle>
-              Already registered?
-              <.link navigate={~p"/users/log-in"} class="font-semibold text-brand hover:underline">
-                Log in
-              </.link>
-              to your account now.
-            </:subtitle>
-          </.header>
-        </div>
+      <section
+        id="registration-page"
+        class="min-h-[calc(100dvh-var(--scroll-padding-top))] bg-white py-12 sm:py-20 dark:bg-mist-950"
+      >
+        <.container>
+          <div class="mx-auto flex max-w-xs flex-col gap-8">
+            <header class="flex flex-col gap-3 text-center">
+              <p class="text-base/7 font-semibold text-mist-600 sm:text-sm/6 dark:text-mist-400">
+                Reader account
+              </p>
+              <h1 class="font-display text-4xl tracking-tight text-balance text-mist-950 sm:text-5xl dark:text-white">
+                Register
+              </h1>
+              <p class="text-pretty text-base/7 text-mist-600 sm:text-sm/6 dark:text-mist-400">
+                Already registered? <.a navigate={~p"/users/log-in"}>Log in</.a>.
+              </p>
+            </header>
 
-        <.form for={@form} id="registration_form" phx-submit="save" phx-change="validate">
-          <.input
-            field={@form[:email]}
-            type="email"
-            label="Email"
-            autocomplete="username"
-            spellcheck="false"
-            required
-            phx-mounted={JS.focus()}
-          />
+            <.form
+              for={@form}
+              id="registration_form"
+              phx-submit="save"
+              phx-change="validate"
+              class="flex flex-col gap-2"
+            >
+              <.input
+                id="registration_form_email"
+                field={@form[:email]}
+                type="email"
+                label="Email"
+                autocomplete="username"
+                spellcheck="false"
+                required
+                phx-mounted={JS.focus()}
+              />
 
-          <.button type="submit" phx-disable-with="Creating account..." class="btn btn-primary w-full">
-            Create an account
-          </.button>
-        </.form>
-      </div>
+              <.button type="submit" size="lg" class="w-full" phx-disable-with="Creating account…">
+                Create account
+              </.button>
+            </.form>
+
+            <p class="text-pretty text-center text-base/7 text-mist-500 sm:text-sm/6">
+              Accounts are available for reading and account settings. Contributions remain in internal testing.
+            </p>
+          </div>
+        </.container>
+      </section>
     </Layouts.app>
     """
   end

@@ -91,6 +91,57 @@ defmodule DevilsDictionary.Encyclopedia do
     }
   end
 
+  @doc """
+  Searches entity identities by their preferred label.
+
+  This is deliberately independent of lexical search. A person and a word
+  with the same label are two results and remain two identities; discovery
+  never merges them on spelling or slug.
+  """
+  def search_entities(query, opts \\ []) do
+    query = String.trim(query || "")
+
+    if query == "" do
+      []
+    else
+      limit = Keyword.get(opts, :limit, 10)
+      down = String.downcase(query)
+
+      Repo.all(
+        from e in Entity,
+          where:
+            ilike(e.preferred_label, ^(escape_like(query) <> "%")) or
+              fragment("? % ?", e.preferred_label, ^query),
+          order_by: [
+            asc:
+              fragment(
+                "CASE WHEN lower(?) LIKE ? THEN 0 ELSE 1 END",
+                e.preferred_label,
+                ^(down <> "%")
+              ),
+            desc: fragment("similarity(?, ?)", e.preferred_label, ^query),
+            asc: fragment("length(?)", e.preferred_label),
+            asc: e.preferred_label,
+            asc: e.object_id
+          ],
+          limit: ^limit,
+          select: %{
+            object_id: e.object_id,
+            label: e.preferred_label,
+            kind: e.entity_kind,
+            description: e.description
+          }
+      )
+    end
+  end
+
+  defp escape_like(value) do
+    value
+    |> String.replace("\\", "\\\\")
+    |> String.replace("%", "\\%")
+    |> String.replace("_", "\\_")
+  end
+
   @doc "The QIDs of many objects at once, keyed by object id. One query."
   def qids(object_ids) do
     Repo.all(
