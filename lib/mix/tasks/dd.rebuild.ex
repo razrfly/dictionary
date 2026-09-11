@@ -271,9 +271,20 @@ defmodule Mix.Tasks.Dd.Rebuild do
 
   defp do_stage(:link, scope, _opts) do
     scope = Lexicon.get_scope_by_slug(scope)
-    %{rungs: rungs, corroboration: corroboration} = Linker.run(scope)
+    run = Sources.start_run("link", scope_id: scope && scope.id)
 
-    Map.merge(rungs, corroboration)
+    try do
+      %{rungs: rungs, corroboration: corroboration} =
+        result = Linker.run(scope, run_id: run.id)
+
+      Sources.finish_run(run, stringify(result))
+
+      Map.merge(rungs, corroboration)
+    rescue
+      error ->
+        Sources.fail_run(run, Exception.message(error))
+        reraise error, __STACKTRACE__
+    end
   end
 
   defp build_scope(slug) do

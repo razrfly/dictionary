@@ -49,7 +49,12 @@ defmodule Mix.Tasks.Dd.Link do
     Mix.shell().info("linking #{scope.slug}…")
 
     try do
-      written = Linker.run(scope, skip_corroboration: opts[:strict_only])
+      written =
+        Linker.run(scope,
+          skip_corroboration: opts[:strict_only],
+          run_id: run_row.id
+        )
+
       elapsed = System.monotonic_time(:millisecond) - started
 
       links = Health.links(scope.slug, threshold)

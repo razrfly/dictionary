@@ -57,6 +57,7 @@ defmodule DevilsDictionary.Encyclopedia.EntityPage do
 
   @section_cap 24
   @presented_predicates ~w(about authored_by edition_of published_in)
+  @summary_limit 120
 
   @doc """
   Builds the page for an object id, or nil when it is not an entity.
@@ -120,7 +121,18 @@ defmodule DevilsDictionary.Encyclopedia.EntityPage do
   end
 
   defp other_connections(direction, object_id, after_cursor) do
-    filters = [exclude_predicates: @presented_predicates]
+    # The named sections above are all reverse-role sections: biography,
+    # authored works/definitions, editions, and edition contents are incoming
+    # claims. Suppressing the same predicates while walking *out* erased the
+    # only visible work -> author and edition -> work paths. Outgoing role
+    # claims are not duplicated anywhere else on this page, so they belong in
+    # the connection section.
+    filters =
+      case direction do
+        :incoming -> [exclude_predicates: @presented_predicates]
+        :outgoing -> []
+      end
+
     opts = filters ++ [after: after_cursor, limit: @section_cap + 1]
 
     rows =
@@ -237,17 +249,50 @@ defmodule DevilsDictionary.Encyclopedia.EntityPage do
       content
       |> Map.put(:defines, Map.get(words, Map.get(defines, content.object_id)))
       |> Map.put(:published_in, Map.get(editions, Map.get(published, content.object_id)))
-      |> Map.put(:summary, first_line(content.body))
+      |> Map.put(:summary, excerpt(content.body))
     end)
   end
 
-  defp first_line(nil), do: nil
+  defp excerpt(nil), do: nil
 
-  defp first_line(body) do
+  defp excerpt(body) do
     body
-    |> String.split(~r/\R/, parts: 2)
-    |> hd()
+    |> plain_text()
+    |> truncate_excerpt()
+  end
+
+  # Definition bodies are preserved verbatim in `content_revisions`; this is a
+  # presentation-only projection for dense entity pages. It handles the small
+  # Markdown vocabulary found in source definitions without allowing markup,
+  # long one-paragraph prose, or verse line breaks to turn one list row into a
+  # miniature document.
+  defp plain_text(body) do
+    body
+    |> String.replace(~r/!\[([^\]]*)\]\([^)]*\)/u, "\\1")
+    |> String.replace(~r/\[([^\]]+)\]\([^)]*\)/u, "\\1")
+    |> String.replace(~r/^\s{0,3}(?:\#{1,6}|>|[-+*]|\d+\.)\s+/mu, "")
+    |> String.replace(~r/[`*_~]+/u, "")
+    |> String.replace(~r/<[^>]+>/u, " ")
+    |> String.replace(~r/\s+/u, " ")
     |> String.trim()
+  end
+
+  defp truncate_excerpt(text) do
+    graphemes = String.graphemes(text)
+
+    if length(graphemes) <= @summary_limit do
+      text
+    else
+      candidate = graphemes |> Enum.take(@summary_limit) |> Enum.join()
+
+      candidate =
+        case Regex.run(~r/^(.*)\s+\S*$/u, candidate, capture: :all_but_first) do
+          [at_boundary] when at_boundary != "" -> at_boundary
+          _ -> candidate
+        end
+
+      String.trim_trailing(candidate) <> "…"
+    end
   end
 
   defp targets(subject_ids, predicate) do

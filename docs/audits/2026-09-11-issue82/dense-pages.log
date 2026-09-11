@@ -1,0 +1,4 @@
+%{page: "cat", p95_ms: 22.486, max_ms: 22.541, budget_ms: 150}
+%{page: "run", p95_ms: 67.775, max_ms: 69.582, budget_ms: 150}
+%{page: "set", p95_ms: 57.771, max_ms: 58.393, budget_ms: 150}
+%{page: "entity 4", p95_ms: 73.572, max_ms: 74.498, budget_ms: 150}

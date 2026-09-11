@@ -13,7 +13,7 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
   import DevilsDictionary.WordFixtures
   import Phoenix.LiveViewTest
 
-  alias DevilsDictionary.Fixtures
+  alias DevilsDictionary.{Claims, Fixtures, Registry}
 
   setup ctx do
     %{sources: sources, scopes: scopes} = Fixtures.seed_catalog!()
@@ -326,6 +326,34 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
   end
 
   describe "the thing (U1b)" do
+    test "an evidenced sense-to-person link reaches the canonical person page", ctx do
+      name = word!(ctx, "Ada Example", ~w(wordnet), scope: nil, pos: "noun")
+      sense = sense!(ctx, name, "wordnet", gloss: "a named writer")
+      {:ok, person} = Registry.create_person(%{preferred_label: "Ada Example"})
+      {:ok, _} = Registry.add_external_id(person.object_id, "wikidata", "Q424242424")
+
+      {:ok, _} =
+        Claims.assert(sense.object_id, "refers_to", person.object_id, %{
+          source_id: ctx.sources["wordnet"].id,
+          origin_key: "wordnet_wikidata|#{sense.object_id}|#{person.object_id}",
+          method: "wordnet_wikidata",
+          confidence: 0.9,
+          metadata: %{"wikidata_qid" => "Q424242424"}
+        })
+
+      {:ok, live, _html} = live(ctx.conn, ~p"/words/#{name.object_id}/#{name.slug}")
+
+      assert has_element?(
+               live,
+               "#concept-card-entity[href='/entities/#{person.object_id}/ada-example']"
+             )
+
+      {:error, {:live_redirect, %{to: path}}} =
+        live |> element("#concept-card-entity") |> render_click()
+
+      assert path == "/entities/#{person.object_id}/ada-example"
+    end
+
     defp catwith_thing!(ctx) do
       cat = word!(ctx, "cat", ~w(wordnet))
       sense!(ctx, cat, "wordnet", group_key: "oewn-cat-n", gloss: "a feline mammal")
