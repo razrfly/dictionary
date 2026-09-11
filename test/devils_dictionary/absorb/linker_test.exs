@@ -10,7 +10,7 @@ defmodule DevilsDictionary.Absorb.LinkerTest do
   alias DevilsDictionary.Claims.AssertionRevision
   alias DevilsDictionary.Fixtures
   alias DevilsDictionary.Lexicon.ScopeMember
-  alias DevilsDictionary.{Claims, Registry, Repo}
+  alias DevilsDictionary.{Claims, Registry, Repo, Sources}
   alias DevilsDictionary.WordFixtures
 
   setup do
@@ -195,6 +195,73 @@ defmodule DevilsDictionary.Absorb.LinkerTest do
       Linker.run(ctx.animals)
 
       assert link!(cat, :wordnet_wikidata).confidence == 0.90
+    end
+
+    test "identifier-backed people link outside the reporting scope with provenance", ctx do
+      person = person!("Q424242426", "Ambrose Example")
+
+      {:ok, name} =
+        Registry.create_lexeme(%{
+          language_tag: "en",
+          lemma: "Ambrose Example",
+          part_of_speech: "noun",
+          metadata: %{}
+        })
+
+      sense =
+        sense!(ctx, name, "wordnet", metadata: %{"wikidata" => "Q424242426", "ili" => "i94474"})
+
+      run = Sources.start_run("link", scope_id: ctx.animals.id)
+      assert %{rungs: %{wordnet_wikidata: 1}} = Linker.run(ctx.animals, run_id: run.id)
+
+      link = link!(name, :wordnet_wikidata)
+      assert link.subject_object_id == sense.object_id
+      assert link.object_object_id == person.object_id
+      assert link.predicate.key == "refers_to"
+      assert link.metadata["evidence"] == "sense_metadata_wikidata"
+      assert link.metadata["wikidata_qid"] == "Q424242426"
+      assert is_integer(link.metadata["source_record_id"])
+
+      output =
+        Repo.one!(
+          from o in "source_assertion_outputs",
+            where: o.assertion_id == ^link.assertion_id,
+            select: %{
+              source_record_id: o.source_record_id,
+              last_seen_run_id: o.last_seen_run_id
+            }
+        )
+
+      assert output.source_record_id == link.metadata["source_record_id"]
+      assert output.last_seen_run_id == run.id
+
+      before = length(Claims.history(link.assertion_id))
+      rerun = Sources.start_run("link", scope_id: ctx.animals.id)
+      Linker.run(ctx.animals, run_id: rerun.id)
+
+      assert length(Claims.history(link.assertion_id)) == before
+
+      assert Repo.one!(
+               from o in "source_assertion_outputs",
+                 where: o.assertion_id == ^link.assertion_id,
+                 select: o.last_seen_run_id
+             ) == rerun.id
+    end
+
+    test "identifier-backed non-people remain inside the reporting scope", ctx do
+      {:ok, outside} =
+        Registry.create_lexeme(%{
+          language_tag: "en",
+          lemma: "Outside Example",
+          part_of_speech: "noun",
+          metadata: %{}
+        })
+
+      concept!("Q424242427")
+      sense!(ctx, outside, "wordnet", metadata: %{"wikidata" => "Q424242427"})
+
+      assert %{rungs: %{wordnet_wikidata: 0}} = Linker.run(ctx.animals)
+      assert links(outside, :wordnet_wikidata) == []
     end
 
     test "wordnet_wikidata reads the array form too", ctx do
@@ -393,7 +460,7 @@ defmodule DevilsDictionary.Absorb.LinkerTest do
       assert Repo.aggregate(AssertionRevision, :count) == before
     end
 
-    test "and it stays inside the scope it was given", ctx do
+    test "heuristic inference stays inside the scope it was given", ctx do
       {:ok, outside} =
         Registry.create_lexeme(%{
           language_tag: "en",

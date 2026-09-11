@@ -119,16 +119,24 @@ defmodule DevilsDictionary.Absorb.Linker do
   """
   def run(scope \\ nil, opts \\ []) do
     retired = withdraw_unevidenced_people()
+    run_id = opts[:run_id]
 
     rungs = %{
-      wiktionary_qid: wiktionary_qid(scope),
-      wordnet_wikidata: wordnet_wikidata(scope),
-      wordnet_ili: wordnet_ili(scope),
-      title_match: title_match(scope),
-      disambiguation: disambiguation(scope)
+      # These three rungs read durable identifiers published on a sense. The
+      # scope still bounds ordinary things, while evidenced people are allowed
+      # through globally: proper names such as Ambrose Bierce are not Animals,
+      # but their QID/ILI mapping is no less valid for that operational fact.
+      wiktionary_qid: wiktionary_qid(scope, run_id),
+      wordnet_wikidata: wordnet_wikidata(scope, run_id),
+      wordnet_ili: wordnet_ili(scope, run_id),
+      # Inference remains scoped: title and disambiguation matching are the
+      # expensive, lower-confidence population-expanding passes.
+      title_match: title_match(scope, run_id),
+      disambiguation: disambiguation(scope, run_id)
     }
 
-    corroboration = if opts[:skip_corroboration], do: %{}, else: corroborate(scope)
+    corroboration =
+      if opts[:skip_corroboration], do: %{}, else: corroborate(scope, run_id: run_id)
 
     %{rungs: rungs, corroboration: corroboration, retired_unevidenced_people: retired}
   end
@@ -136,23 +144,31 @@ defmodule DevilsDictionary.Absorb.Linker do
   # ── rung 1 · wiktionary_qid ──────────────────────────────────────────────
 
   @doc false
-  def wiktionary_qid(scope) do
+  def wiktionary_qid(scope, run_id \\ nil) do
     write(
       """
       SELECT s.object_id, e.object_id, s.source_id,
-             'wiktionary_qid', #{@confidence.wiktionary_qid}, '{}'::jsonb
+             'wiktionary_qid', #{@confidence.wiktionary_qid},
+             jsonb_build_object(
+               'evidence', 'sense_metadata_wikidata',
+               'wikidata_qid', q.qid,
+               'source_record_id', source_rev.source_record_id),
+             source_rev.source_record_id
         FROM senses s
         JOIN sources so ON so.id = s.source_id AND so.slug = 'wiktionary'
         JOIN sense_revisions rev ON rev.sense_id = s.object_id AND rev.is_current
+        JOIN source_record_revisions source_rev ON source_rev.id = rev.source_record_revision_id
         CROSS JOIN LATERAL jsonb_array_elements_text(#{jsonb_array("rev.metadata->'wikidata'")}) AS q(qid)
         JOIN external_identifiers x
           ON x.namespace = 'wikidata' AND x.external_id = q.qid AND x.status = 'verified'
         JOIN entities e ON e.object_id = x.object_id
-       #{scope_join(scope, "s.lexeme_id")}
-       WHERE jsonb_typeof(rev.metadata->'wikidata') = 'array'
+       #{evidenced_scope_join(scope, "s.lexeme_id")}
+       WHERE #{evidenced_scope_filter(scope)}
+         AND jsonb_typeof(rev.metadata->'wikidata') = 'array'
       """,
       @sense_backed,
-      scope
+      scope,
+      run_id
     )
   end
 
@@ -163,43 +179,59 @@ defmodule DevilsDictionary.Absorb.Linker do
   # shape skipped 265 references in the Animals scope, so those senses never
   # got a link however good the entity was.
   @doc false
-  def wordnet_wikidata(scope) do
+  def wordnet_wikidata(scope, run_id \\ nil) do
     write(
       """
       SELECT s.object_id, e.object_id, s.source_id,
-             'wordnet_wikidata', #{@confidence.wordnet_wikidata}, '{}'::jsonb
+             'wordnet_wikidata', #{@confidence.wordnet_wikidata},
+             jsonb_build_object(
+               'evidence', 'sense_metadata_wikidata',
+               'wikidata_qid', q.qid,
+               'source_record_id', source_rev.source_record_id),
+             source_rev.source_record_id
         FROM senses s
         JOIN sources so ON so.id = s.source_id AND so.slug = 'wordnet'
         JOIN sense_revisions rev ON rev.sense_id = s.object_id AND rev.is_current
+        JOIN source_record_revisions source_rev ON source_rev.id = rev.source_record_revision_id
         CROSS JOIN LATERAL jsonb_array_elements_text(#{jsonb_qids("rev.metadata->'wikidata'")}) AS q(qid)
         JOIN external_identifiers x
           ON x.namespace = 'wikidata' AND x.external_id = q.qid AND x.status = 'verified'
         JOIN entities e ON e.object_id = x.object_id
-       #{scope_join(scope, "s.lexeme_id")}
-       WHERE jsonb_typeof(rev.metadata->'wikidata') IN ('string', 'array')
+       #{evidenced_scope_join(scope, "s.lexeme_id")}
+       WHERE #{evidenced_scope_filter(scope)}
+         AND jsonb_typeof(rev.metadata->'wikidata') IN ('string', 'array')
       """,
       @sense_backed,
-      scope
+      scope,
+      run_id
     )
   end
 
   # ── rung 3 · wordnet_ili ─────────────────────────────────────────────────
 
   @doc false
-  def wordnet_ili(scope) do
+  def wordnet_ili(scope, run_id \\ nil) do
     write(
       """
       SELECT s.object_id, e.object_id, s.source_id,
-             'wordnet_ili', #{@confidence.wordnet_ili}, '{}'::jsonb
+             'wordnet_ili', #{@confidence.wordnet_ili},
+             jsonb_build_object(
+               'evidence', 'sense_metadata_ili',
+               'ili', rev.metadata->>'ili',
+               'source_record_id', source_rev.source_record_id),
+             source_rev.source_record_id
         FROM senses s
         JOIN sources so ON so.id = s.source_id AND so.slug = 'wordnet'
         JOIN sense_revisions rev ON rev.sense_id = s.object_id AND rev.is_current
+        JOIN source_record_revisions source_rev ON source_rev.id = rev.source_record_revision_id
         JOIN entities e ON e.metadata->>'wordnet_ili' = rev.metadata->>'ili'
-       #{scope_join(scope, "s.lexeme_id")}
-       WHERE rev.metadata->>'ili' IS NOT NULL
+       #{evidenced_scope_join(scope, "s.lexeme_id")}
+       WHERE #{evidenced_scope_filter(scope)}
+         AND rev.metadata->>'ili' IS NOT NULL
       """,
       @sense_backed,
-      scope
+      scope,
+      run_id
     )
   end
 
@@ -212,7 +244,7 @@ defmodule DevilsDictionary.Absorb.Linker do
   # Nominal parts of speech only, and never a disambiguation page — "Seal may
   # refer to…" is not a thing the word denotes.
   @doc false
-  def title_match(scope) do
+  def title_match(scope, run_id \\ nil) do
     write(
       """
       SELECT l.object_id, e.object_id, #{source_id("wikipedia")},
@@ -226,7 +258,8 @@ defmodule DevilsDictionary.Absorb.Linker do
          AND NOT jsonb_exists(l.metadata, 'wikipedia_disambiguation')
       """,
       @word_level,
-      scope
+      scope,
+      run_id
     )
   end
 
@@ -238,7 +271,7 @@ defmodule DevilsDictionary.Absorb.Linker do
   # `Encyclopedia.asserted_floor/0` is what keeps them out of the populations
   # A10 and L3 report on.
   @doc false
-  def disambiguation(scope) do
+  def disambiguation(scope, run_id \\ nil) do
     write(
       """
       SELECT l.object_id, e.object_id, r.source_id,
@@ -264,7 +297,8 @@ defmodule DevilsDictionary.Absorb.Linker do
          AND e.entity_kind <> 'person'
       """,
       @word_level,
-      scope
+      scope,
+      run_id
     )
   end
 
@@ -309,18 +343,20 @@ defmodule DevilsDictionary.Absorb.Linker do
   written through the same path — which is why a rerun that finds nothing new
   writes nothing at all rather than bumping `updated_at` on a million rows.
   """
-  def corroborate(scope \\ nil) do
+  def corroborate(scope \\ nil, opts \\ []) do
+    run_id = opts[:run_id]
+
     %{
-      taxon: corroborate_taxon(scope),
-      gloss: corroborate_gloss(scope),
-      agreement: corroborate_agreement(scope),
-      disambiguation_gloss: promote_candidates(scope)
+      taxon: corroborate_taxon(scope, run_id),
+      gloss: corroborate_gloss(scope, run_id),
+      agreement: corroborate_agreement(scope, run_id),
+      disambiguation_gloss: promote_candidates(scope, run_id)
     }
   end
 
   # The lemma is the taxon's scientific name or one of its English common names
   # — either on the entity itself, or on the taxon item it bridges to.
-  defp corroborate_taxon(scope) do
+  defp corroborate_taxon(scope, run_id) do
     write(
       """
       SELECT l.object_id, e.object_id, #{source_id("wikipedia")},
@@ -357,14 +393,15 @@ defmodule DevilsDictionary.Absorb.Linker do
               ))
       """,
       @word_level,
-      scope
+      scope,
+      run_id
     )
   end
 
   # The article and a dictionary agree about what the word means. Approximated
   # by shared content words rather than by a stopword list: four letters or more
   # is a good enough proxy, and two of them agreeing is not chance.
-  defp corroborate_gloss(scope) do
+  defp corroborate_gloss(scope, run_id) do
     write(
       """
       SELECT l.object_id, e.object_id, #{source_id("wikipedia")},
@@ -391,7 +428,8 @@ defmodule DevilsDictionary.Absorb.Linker do
                 >= #{@min_shared_words})
       """,
       @word_level,
-      scope
+      scope,
+      run_id
     )
   end
 
@@ -399,7 +437,7 @@ defmodule DevilsDictionary.Absorb.Linker do
   # `status = 'confirmed'`, which is an editorial decision nobody made; #74 asks
   # for that policy not to be preserved blindly. So agreement raises confidence
   # and records its provenance, and a review stays something a person does.
-  defp corroborate_agreement(scope) do
+  defp corroborate_agreement(scope, run_id) do
     write(
       """
       SELECT l.object_id, e.object_id, #{source_id("wikipedia")},
@@ -422,7 +460,8 @@ defmodule DevilsDictionary.Absorb.Linker do
               AND other.method IN ('wiktionary_qid', 'wordnet_wikidata', 'wordnet_ili'))
       """,
       @word_level,
-      scope
+      scope,
+      run_id
     )
   end
 
@@ -430,7 +469,7 @@ defmodule DevilsDictionary.Absorb.Linker do
   # matches the candidate's description. It stays below the asserted floor — the
   # "may refer to" panel is a list of possibilities, and promotion only reorders
   # it.
-  defp promote_candidates(scope) do
+  defp promote_candidates(scope, run_id) do
     write(
       """
       SELECT l.object_id, e.object_id, #{source_id("wikipedia")},
@@ -454,7 +493,8 @@ defmodule DevilsDictionary.Absorb.Linker do
               AND #{shared_words("srev.gloss", "e.description")} >= #{@min_shared_words})
       """,
       @word_level,
-      scope
+      scope,
+      run_id
     )
   end
 
@@ -511,21 +551,38 @@ defmodule DevilsDictionary.Absorb.Linker do
   defp scope_join(%Scope{}, column),
     do: "JOIN scope_lexeme_members sl ON sl.lexeme_id = #{column} AND sl.scope_id = $1"
 
+  # A scope is an operational population, not an epistemic boundary. Keep
+  # ordinary identifier links bounded to it, but allow a durable source ID to
+  # connect a person even when their proper-name lexeme belongs to no scope.
+  # Optional scope membership makes that exception expressible without adding
+  # a person to Animals merely to make the link visible.
+  defp evidenced_scope_join(nil, _column), do: ""
+
+  defp evidenced_scope_join(%Scope{}, column),
+    do: "LEFT JOIN scope_lexeme_members sl ON sl.lexeme_id = #{column} AND sl.scope_id = $1"
+
+  defp evidenced_scope_filter(nil), do: "TRUE"
+
+  defp evidenced_scope_filter(%Scope{}),
+    do: "(sl.lexeme_id IS NOT NULL OR e.entity_kind = 'person')"
+
   defp params(nil), do: []
   defp params(%Scope{id: id}), do: [id]
 
   # Every rung ends the same way: read set-based, write through the shared path.
   #
   # The `SELECT` yields `(subject_id, entity_id, source_id, method, confidence,
-  # metadata)`. Deduplication happens here rather than in SQL because a rung can
+  # metadata[, source_record_id])`. Deduplication happens here rather than in SQL because a rung can
   # propose the same claim twice — a Wiktionary sense listing one QID twice, two
   # candidate titles redirecting to one article — and `write_assertions/3` keys
   # on `origin_key`, which is what makes the second proposal the same claim.
-  defp write(select, predicate, scope) do
+  defp write(select, predicate, scope, run_id) do
     %{rows: rows} = Repo.query!(select, params(scope), timeout: :infinity)
 
     claims =
-      for [subject, object, source, method, confidence, metadata] <- rows do
+      Enum.map(rows, fn row ->
+        [subject, object, source, method, confidence, metadata | provenance] = row
+
         %{
           subject: subject,
           predicate: predicate,
@@ -537,15 +594,18 @@ defmodule DevilsDictionary.Absorb.Linker do
           # as `Decimal`. `assertion_revisions.confidence` is a float8, so it is
           # cast here rather than by decorating every literal in five rungs.
           confidence: to_float(confidence),
-          metadata: metadata || %{}
+          metadata: metadata || %{},
+          source_record_id: List.first(provenance)
         }
-      end
+      end)
       |> Enum.uniq_by(& &1.origin_key)
       |> filter_claims()
 
     claims
     |> Enum.chunk_every(2_000)
-    |> Enum.reduce(0, fn chunk, acc -> acc + Materializer.write_assertions(chunk) end)
+    |> Enum.reduce(0, fn chunk, acc ->
+      acc + Materializer.write_assertions(chunk, run_id)
+    end)
   end
 
   defp to_float(nil), do: nil

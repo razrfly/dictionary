@@ -1199,7 +1199,7 @@ defmodule DevilsDictionary.Absorb.Materializer do
            metadata: claim[:metadata] || %{}
          }}
       end),
-      [:subject_object_id, :predicate_id, :object_object_id, :method, :confidence],
+      [:subject_object_id, :predicate_id, :object_object_id, :method, :confidence, :metadata],
       now
     )
 

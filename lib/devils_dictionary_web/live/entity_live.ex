@@ -181,7 +181,7 @@ defmodule DevilsDictionaryWeb.EntityLive do
                   </p>
                 </div>
                 <div class="min-w-0">
-                  <p class="text-pretty text-base/7 text-mist-700 sm:text-sm/6 dark:text-mist-400">
+                  <p class="line-clamp-2 text-pretty text-base/7 text-mist-700 sm:text-sm/6 dark:text-mist-400">
                     {definition.summary}
                   </p>
                   <p :if={definition.published_in} class="text-base/7 text-mist-500 sm:text-sm/6">
@@ -269,19 +269,33 @@ defmodule DevilsDictionaryWeb.EntityLive do
                 id={"connection-in-#{claim.assertion_id}"}
                 class="flex flex-wrap items-baseline gap-x-2 py-3"
               >
-                <.a navigate={~p"/connections/#{claim.assertion_id}"}>
-                  {endpoint_label(claim.subject_object_id)}
-                </.a>
+                <% endpoint = Connection.endpoint(claim.subject_object_id) %>
+                <.a :if={endpoint.path} navigate={endpoint.path}>{endpoint.label}</.a>
+                <span :if={is_nil(endpoint.path)}>{endpoint.label}</span>
                 <span class="text-mist-500">{claim.predicate.forward_label} → this</span>
+                <.a
+                  navigate={~p"/connections/#{claim.assertion_id}"}
+                  aria-label={"Inspect #{claim.predicate.forward_label} relationship"}
+                  class="text-mist-400 transition-colors hover:text-mist-950 dark:hover:text-white"
+                >
+                  <.icon name="hero-information-circle" class="size-4 h-lh stroke-current" />
+                </.a>
               </li>
               <li
                 :for={claim <- @page.connections.outgoing}
                 id={"connection-out-#{claim.assertion_id}"}
                 class="flex flex-wrap items-baseline gap-x-2 py-3"
               >
+                <% endpoint = Connection.endpoint(claim.object_object_id) %>
                 <span class="text-mist-500">this → {claim.predicate.forward_label}</span>
-                <.a navigate={~p"/connections/#{claim.assertion_id}"}>
-                  {endpoint_label(claim.object_object_id)}
+                <.a :if={endpoint.path} navigate={endpoint.path}>{endpoint.label}</.a>
+                <span :if={is_nil(endpoint.path)}>{endpoint.label}</span>
+                <.a
+                  navigate={~p"/connections/#{claim.assertion_id}"}
+                  aria-label={"Inspect #{claim.predicate.forward_label} relationship"}
+                  class="text-mist-400 transition-colors hover:text-mist-950 dark:hover:text-white"
+                >
+                  <.icon name="hero-information-circle" class="size-4 h-lh stroke-current" />
                 </.a>
               </li>
             </ul>
@@ -383,13 +397,6 @@ defmodule DevilsDictionaryWeb.EntityLive do
       |> Map.new(fn {key, value} -> {"#{key}_after", value} end)
 
     ~p"/entities/#{id}/#{slug}?#{query}"
-  end
-
-  defp endpoint_label(object_id) do
-    case Connection.endpoint(object_id) do
-      nil -> "##{object_id}"
-      endpoint -> endpoint.label
-    end
   end
 
   defp detail_line(details) do

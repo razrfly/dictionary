@@ -59,7 +59,7 @@ defmodule DevilsDictionaryWeb.Thing do
     """
   end
 
-  @doc "Label, description, picture and the two ways out — Wikipedia and Wikidata."
+  @doc "Label, description, picture and canonical internal/external destinations."
   attr :concept, :map, required: true
   attr :thing, :map, required: true
   attr :info, :string, default: nil
@@ -83,7 +83,17 @@ defmodule DevilsDictionaryWeb.Thing do
       </figure>
 
       <div class="min-w-0">
-        <h2 class="font-display text-2xl/8 text-mist-950 dark:text-white">{@concept.label}</h2>
+        <h2 class="font-display text-2xl/8 text-mist-950 dark:text-white">
+          <.link
+            id="concept-card-entity"
+            navigate={
+              "/entities/#{@concept.object_id}/#{DevilsDictionary.Claims.Connection.slugify(@concept.label)}"
+            }
+            class="underline-offset-4 transition-colors hover:text-amber-700 hover:underline dark:hover:text-amber-300"
+          >
+            {@concept.label}
+          </.link>
+        </h2>
         <p :if={@concept.description} class="mt-1 text-sm/7 text-mist-700 dark:text-mist-400">
           {@concept.description}
         </p>

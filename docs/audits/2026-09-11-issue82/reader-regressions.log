@@ -1,0 +1,59 @@
+warning: the following files do not match any of the configured `:test_load_filters` / `:test_ignore_filters`:
+
+/private/tmp/82-reader-audit-test.exs
+
+This might indicate a typo in a test file name (for example, using "foo_tests.exs" instead of "foo_test.exs").
+
+See the configuration for `:test_pattern` under `mix help test` for more information.
+
+Running ExUnit with seed: 476257, max_cases: 32
+
+
+
+  1) test work retains a navigable author after removing duplicated edges (Reader82AuditTest)
+     /private/tmp/82-reader-audit-test.exs:15
+     Expected truthy, got false
+     code: assert has_element?(view, "a[href='/entities/#{ctx.author.object_id}/audit-author']")
+     arguments:
+
+         # 1
+         #Phoenix.LiveViewTest.View<
+           id: "phx-GNRExh4B9jcuIieB",
+           module: DevilsDictionaryWeb.EntityLive,
+           pid: #PID<0.448.0>,
+           endpoint: DevilsDictionaryWeb.Endpoint,
+           ...
+         >
+
+         # 2
+         "a[href='/entities/7/audit-author']"
+
+     stacktrace:
+       /private/tmp/82-reader-audit-test.exs:17: (test)
+
+
+
+  2) test edition retains a navigable parent work (Reader82AuditTest)
+     /private/tmp/82-reader-audit-test.exs:19
+     Expected truthy, got false
+     code: assert has_element?(view, "a[href='/entities/#{ctx.work.object_id}/audit-book']")
+     arguments:
+
+         # 1
+         #Phoenix.LiveViewTest.View<
+           id: "phx-GNRExiXhJUK2xCsB",
+           module: DevilsDictionaryWeb.EntityLive,
+           pid: #PID<0.456.0>,
+           endpoint: DevilsDictionaryWeb.Endpoint,
+           ...
+         >
+
+         # 2
+         "a[href='/entities/17/audit-book']"
+
+     stacktrace:
+       /private/tmp/82-reader-audit-test.exs:21: (test)
+
+
+Finished in 0.3 seconds (0.00s async, 0.3s sync)
+2 tests, 2 failures
