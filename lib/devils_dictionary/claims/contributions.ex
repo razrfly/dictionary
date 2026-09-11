@@ -278,18 +278,22 @@ defmodule DevilsDictionary.Claims.Contributions do
         reason = String.trim(reason || "")
         if reason == "", do: Repo.rollback(:reason_required)
 
-        kase =
-          Repo.one!(from c in ReconciliationCase, where: c.id == ^case_id, lock: "FOR UPDATE")
-
-        if kase.status != :open, do: Repo.rollback(:case_closed)
-
         actor = actor!(user)
 
         case to_string(decision) do
-          "map" -> map_reconciliation(kase, replacement_id, reason, actor)
-          "unresolved" -> note_unresolved(kase, reason, actor)
-          "decline" -> close_reconciliation(kase, :dismissed, nil, reason, actor)
-          _ -> Repo.rollback(:invalid_decision)
+          "map" ->
+            map_reconciliation(case_id, replacement_id, reason, actor)
+
+          "unresolved" ->
+            case_id |> lock_reconciliation_case!() |> note_unresolved(reason, actor)
+
+          "decline" ->
+            case_id
+            |> lock_reconciliation_case!()
+            |> close_reconciliation(:dismissed, nil, reason, actor)
+
+          _ ->
+            Repo.rollback(:invalid_decision)
         end
       end)
     else
@@ -297,7 +301,38 @@ defmodule DevilsDictionary.Claims.Contributions do
     end
   end
 
-  defp map_reconciliation(kase, replacement_id, reason, actor) do
+  defp lock_reconciliation_case!(case_id) do
+    kase =
+      Repo.one!(from c in ReconciliationCase, where: c.id == ^case_id, lock: "FOR UPDATE")
+
+    if kase.status != :open, do: Repo.rollback(:case_closed)
+    kase
+  end
+
+  defp map_reconciliation(case_id, replacement_id, reason, actor) do
+    # Lock the assertion before any of its cases. Two reviewers can resolve
+    # different split attachments concurrently, so every mapping transaction
+    # must take the shared locks in the same order and then rebase its siblings.
+    preview = Repo.get!(ReconciliationCase, case_id)
+    if preview.status != :open, do: Repo.rollback(:case_closed)
+
+    Repo.one!(
+      from assertion in Claims.Assertion,
+        where: assertion.id == ^preview.assertion_id,
+        lock: "FOR UPDATE"
+    )
+
+    open_cases =
+      Repo.all(
+        from c in ReconciliationCase,
+          where:
+            c.assertion_id == ^preview.assertion_id and c.kind == "identity_split" and
+              c.status == :open,
+          order_by: c.id,
+          lock: "FOR UPDATE"
+      )
+
+    kase = Enum.find(open_cases, &(&1.id == case_id)) || Repo.rollback(:case_closed)
     replacement_id = parse_id(replacement_id)
     candidates = kase.payload["candidate_output_ids"] || []
 
@@ -313,6 +348,18 @@ defmodule DevilsDictionary.Claims.Contributions do
 
     roles = kase.payload["attachment_roles"] || List.wrap(kase.payload["endpoint_role"])
 
+    reconciliation = %{
+      "case_id" => kase.id,
+      "from_object_id" => kase.object_id,
+      "to_object_id" => replacement_id,
+      "reason" => reason
+    }
+
+    metadata =
+      (current.metadata || %{})
+      |> Map.put("identity_split_reconciliation", reconciliation)
+      |> Map.update("identity_split_reconciliations", [reconciliation], &(&1 ++ [reconciliation]))
+
     attrs =
       roles
       |> Enum.reduce(%{}, fn
@@ -322,19 +369,64 @@ defmodule DevilsDictionary.Claims.Contributions do
         "jurisdiction", acc -> Map.put(acc, :jurisdiction_entity_id, replacement_id)
         _role, acc -> acc
       end)
-      |> Map.put(
-        :metadata,
-        Map.put(current.metadata || %{}, "identity_split_reconciliation", %{
-          "case_id" => kase.id,
-          "from_object_id" => kase.object_id,
-          "to_object_id" => replacement_id,
-          "reason" => reason
-        })
-      )
+      |> Map.put(:metadata, metadata)
 
     revision = unwrap(Claims.revise(kase.assertion_id, attrs))
     copy_reconciled_evidence(current, revision, kase.object_id, replacement_id)
+    rebase_open_split_cases(open_cases, kase, current, revision)
     close_reconciliation(kase, :resolved, replacement_id, reason, actor)
+  end
+
+  defp rebase_open_split_cases(cases, resolved_case, from_revision, to_revision) do
+    cases
+    |> Enum.reject(&(&1.id == resolved_case.id))
+    |> Enum.filter(&(&1.payload["assertion_revision_id"] == from_revision.id))
+    |> Enum.filter(&case_attached_to_revision?(&1, to_revision))
+    |> Enum.each(fn kase ->
+      lineage =
+        (kase.payload["revision_lineage"] || []) ++
+          [
+            %{
+              "from_assertion_revision_id" => from_revision.id,
+              "to_assertion_revision_id" => to_revision.id,
+              "via_reconciliation_case_id" => resolved_case.id
+            }
+          ]
+
+      payload =
+        kase.payload
+        |> Map.put("assertion_revision_id", to_revision.id)
+        |> Map.put("revision_lineage", lineage)
+
+      kase |> ReconciliationCase.changeset(%{payload: payload}) |> Repo.update!()
+    end)
+  end
+
+  defp case_attached_to_revision?(kase, revision) do
+    roles = kase.payload["attachment_roles"] || List.wrap(kase.payload["endpoint_role"])
+
+    Enum.any?(roles, fn
+      "subject" -> revision.subject_object_id == kase.object_id
+      "object" -> revision.object_object_id == kase.object_id
+      "context" -> revision.context_object_id == kase.object_id
+      "jurisdiction" -> revision.jurisdiction_entity_id == kase.object_id
+      "evidence" -> evidence_attached_to_revision?(revision.id, kase.object_id)
+      "review_context" -> false
+      _ -> false
+    end)
+  end
+
+  defp evidence_attached_to_revision?(revision_id, object_id) do
+    Repo.exists?(
+      from evidence in Claims.AssertionEvidence,
+        left_join: content in Registry.ContentRevision,
+        on: content.id == evidence.content_revision_id,
+        left_join: sense in Registry.SenseRevision,
+        on: sense.id == evidence.sense_revision_id,
+        where:
+          evidence.assertion_revision_id == ^revision_id and
+            (content.content_id == ^object_id or sense.sense_id == ^object_id)
+    )
   end
 
   defp copy_reconciled_evidence(from_revision, to_revision, split_id, replacement_id) do
