@@ -21,6 +21,38 @@ The failures were the documented stale acceptance, merged-page continuity,
 `:merged`/`:merge` mismatch, split-context reconciliation gap, and rejected
 `defines` projection leak.
 
+After the first implementation landed at `700481f`, the independent follow-up
+audit in `docs/audits/2026-09-11-issue84/reproductions_test.exs` was also run
+unchanged before its critiques were addressed:
+
+```text
+mix test docs/audits/2026-09-11-issue84/reproductions_test.exs
+5 tests, 5 failures
+```
+
+Those failures were repaired in the audit's four requested checkpoints, in
+order, without a schema migration, legacy-data rewrite or broad source import:
+
+1. `218d5c5` — historical evidence now applies both the cited revision's and
+   the current source/content lifecycle and rights restrictions. The public
+   retains provenance metadata without the body; an internal override requires
+   a fresh database-backed reviewer role.
+2. `739c1a3` — review fingerprints now include every displayed endpoint and its
+   current label, canonical identity, jurisdiction, actors, sense/content
+   display and evidence state. Review submission rechecks the fingerprint so a
+   stale client cannot approve changed inputs.
+3. `c92677d` — resolving one split attachment rebases only related sibling
+   cases through the successful reconciliation revision. Both mapping orders
+   work under ordered assertion-first locks; a genuinely unrelated semantic
+   edit still makes an old case stale.
+4. `c957e7d` — bounded Wikidata resumes retain already-fetched selected records
+   in materialization and traverse their stored retained relations while only
+   missing records consume request/entity budgets. Interrupted runs recover
+   between materialization passes; exact selection never widens and completed
+   reruns create no new materialization revisions.
+
+The exact audit now reports `5 tests, 0 failures`.
+
 ## Checkpoint 1 — reliable existing connections
 
 ### Public visibility policy
@@ -59,10 +91,12 @@ source URL, revision ID and provenance remain available.
   Mapping produces a new claim revision and preserves the original history;
   unresolved and declined outcomes are recorded distinctly with actor/reason.
 - A review context stores a canonical snapshot/fingerprint of the assertion
-  attribution, meaningful revision fields, exact displayed endpoint revisions,
-  citations and each citation target's current state. An accepted/disputed
-  decision displays as `changed_since_review` when any of those inputs changes.
-  Existing review rows are not fabricated or backfilled.
+  attribution, meaningful revision fields, every displayed entity/lexeme/sense
+  or content value, canonical IDs, jurisdiction, actors, exact citations and
+  each citation target's current state. An accepted/disputed decision displays
+  as `changed_since_review` when any of those inputs changes. Submission also
+  rechecks that fingerprint inside the review write. Existing review rows are
+  not fabricated or backfilled.
 
 ### Verification
 
@@ -187,10 +221,11 @@ a set of disconnected endpoint assertions:
 The adjacent checkpoint tests cover multiple person/organization credits, an
 anonymous work, a clearly labelled offline situationship fixture outside every
 scope, and high-degree traversal using the existing 42,729-edge production-size
-node. The actual contributor path issued 15 queries and the connection reader
-24, both within the recorded cap of 24. Claims/evidence have no application page
-cache; `:cache_scorecard` remained `false`, and a revision written after a read
-was visible on the next build.
+node. The actual contributor path and continuous connection reader each issued
+15 queries; the accepted entity-review page with the expanded display
+fingerprint issued 22. All remain within the recorded cap of 24.
+Claims/evidence have no application page cache; `:cache_scorecard` remained
+`false`, and a revision written after a read was visible on the next build.
 
 ### A genuinely unseen extension
 
@@ -240,6 +275,27 @@ harness MutationObserver console noise is the same injected observer already
 recorded in the issue #82 browser evidence; no application bundle observer was
 introduced.
 
+The post-audit walkthrough reused port 4007 and exercised the repaired cases at
+both 1280 px and 375 px. Public navigation to withdrawn revision `108479` and
+currently rights-restricted revision `108481` showed the historical metadata
+and the “not publicly displayable” notice without either private body. A fresh
+database-backed reviewer could inspect both exact immutable bodies. Connection
+`3856903` displayed the changed entity label and `changed since review` at both
+widths. On connection `3856904`, the desktop reviewer mapped the subject case;
+the remaining object case immediately referenced the new assertion revision,
+and the mobile reviewer mapped it successfully. The queue emptied and revision
+3 displayed both chosen replacements with revisions 1–3 retained.
+
+The ordinary authoring path was also driven rather than simulated: the desktop
+composer created artifact `3733888`, selected exact sense `3733885`, attached
+content revision `108483`, submitted connection `3856905`, and accepted revision
+1. At 375 px the challenge path attached counterevidence revision `108484` and
+created revision 2 at `needs_review`; revisiting revision 1 showed its accepted
+review still attached to that exact historical display. Every audited page again
+measured zero horizontal overflow. LiveView tests establish the state-machine,
+authorization, race and query-count invariants; these browser observations
+establish that the actual rendered controls complete the same workflows.
+
 ## Verification and reused rebuild evidence
 
 The changes affect connection correctness and bounded read/write paths, not the
@@ -255,14 +311,16 @@ was checked independently from input and ownership integrity:
 ```text
 mix dd.manifest:                                      5 / 5 inputs verified
 historical issue #73 audit, unchanged:                7 tests, 0 failures
-checkpoint-4/visibility/score targeted suite:         25 tests, 0 failures
-mix precommit:                                       813 tests, 0 failures
+post-audit critique reproductions, unchanged:          5 tests, 0 failures
+affected ownership/resume/query suite:                71 tests, 0 failures
+broader importer-adjacent suite:                      80 tests, 0 failures
+mix precommit:                                       830 tests, 0 failures
 animals score (--skip-parity):                       43 / 43 graded pass
-  P1 137.472 ms p95 · P2 0.778 ms p95 · X2 74 ms p95
+  P1 128.643 ms p95 · P2 0.686 ms p95 · X2 89 ms p95
 emotions score (--skip-parity):                      42 / 42 graded pass
-  P1 130.516 ms p95 · P2 0.653 ms p95 · X2 95 ms p95
+  P1 129.427 ms p95 · P2 0.667 ms p95 · X2 93 ms p95
 culture score (--skip-parity):                       41 / 41 graded pass
-  P1 131.801 ms p95 · P2 0.641 ms p95 · X2 88 ms p95
+  P1 131.015 ms p95 · P2 0.736 ms p95 · X2 86 ms p95
 ```
 
 Source ownership/history remains covered by the ordinary checkpoint-1 suite:
@@ -274,14 +332,14 @@ row/revision identity rather than semantic similarity alone.
 
 | Contract | Implementation evidence | Acceptance evidence |
 |---|---|---|
-| #84 C1A / #73 public visibility | one `Claims.visible/2`; rights-aware redaction; explicit internal historical gate | moved historical audit plus rejected/withdrawn/pending/disputed/count/history negatives |
-| #84 C1B / #73 identity safety | locked validated merge/split operations, canonical family reads, five attachment roles, reviewer reconciliation | old URL + immutable endpoint tests; continuous merge and context-split walk |
-| #84 C1C / #74 exact approval | snapshot/fingerprint of fields, attribution, displayed revisions, evidence and target state | endpoint/edit/evidence refresh/withdrawal and unchanged-context tests |
+| #84 C1A / #73 public visibility | one `Claims.visible/2`; cited-and-current lifecycle/rights redaction; fresh DB-authorized internal historical gate | both unchanged audits plus public/reviewer withdrawn and rights-change browser walks |
+| #84 C1B / #73 identity safety | locked validated merge/split operations, canonical family reads, five attachment roles, lineage-aware sibling reconciliation | both mapping orders, unrelated-edit stale case, real concurrent COMMIT test and two-width walk |
+| #84 C1C / #74 exact approval | snapshot/fingerprint of all displayed identities, fields, actors, canonical IDs, evidence and target state; submission-time recheck | endpoint/edit/evidence/entity refresh and stale-client tests; changed-label browser walk |
 | #84 C1D / #74 source ownership | run-owned stamping and source-independent support preserved | completed/partial/resumed/multi-source targeted suite; two-source withdrawal walk |
 | #84 C2A | uniform scoped linker plus bounded explicit selection | Bierce person/work symmetry, missing-scope refusal, no name-only inference |
-| #84 C2B / #74 extensibility | bounded Wikidata QID traversal and ADR 0002 policy | five-kind live smoke, representative fixtures, ambiguity/reclassification/local-ID tests |
+| #84 C2B / #74 extensibility | bounded resumable Wikidata QID traversal and ADR 0002 policy | after-fetch, between-pass, budget-resume, no-widening and unchanged-rerun tests plus five-kind smoke |
 | #84 C3 / #73 contribution model | gated local creation, typed composer, distinct actors, exact multi-evidence, revise/challenge/history | command and LiveView suites including stale-role refusal and one-object/many-claims |
-| #84 C4 / #74 durability | data-only `adaptation_of`, indexed public reads, uncached fresh connection builds | continuous acceptance walk, 15/24 query counts, all scorecards and two-width browser walk |
+| #84 C4 / #74 durability | data-only `adaptation_of`, indexed public reads, uncached fresh connection builds | continuous acceptance walk, 15/15 and 22/24 query evidence, all scorecards and two-width browser walk |
 
 ## Remaining release boundaries
 
@@ -290,4 +348,8 @@ the polished mixed-media/relevance-voting wall from #67/#66, add exhaustive
 Wikidata crawling or new #72 integrations, or perform deployment/CI
 authorization. Those remain independent product/release work. Parent #73/#74
 and issue #84 should be closed only after an independent audit; this branch and
-its PR deliberately do not merge or close them.
+its PR deliberately do not merge or close them. The full M1 rebuild was not
+rerun: the semantic projection itself did not change, so the previously audited
+1,807,819-record fingerprints were reused while the changed bounded resume
+orchestration was covered directly. Issue #85/#86 provider and product work is
+also deliberately outside this branch.
