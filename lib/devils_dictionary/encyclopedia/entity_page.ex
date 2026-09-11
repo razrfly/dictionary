@@ -40,6 +40,7 @@ defmodule DevilsDictionary.Encyclopedia.EntityPage do
   import Ecto.Query
 
   alias DevilsDictionary.Claims
+  alias DevilsDictionary.Claims.Connection
   alias DevilsDictionary.Encyclopedia
   alias DevilsDictionary.Registry
   alias DevilsDictionary.Registry.{ContentItem, ContentRevision, Entity, Lexeme, Sense}
@@ -154,7 +155,30 @@ defmodule DevilsDictionary.Encyclopedia.EntityPage do
       next: if(length(rows) > @section_cap, do: Claims.next_cursor(visible), else: nil)
     }
 
-    {visible, page}
+    endpoint_ids =
+      Enum.map(visible, fn row ->
+        case direction do
+          :incoming -> row.subject_object_id
+          :outgoing -> row.object_object_id
+        end
+      end)
+
+    endpoints = Connection.endpoint_summaries(endpoint_ids)
+
+    connection_rows =
+      Enum.map(visible, fn row ->
+        endpoint_id =
+          case direction do
+            :incoming -> row.subject_object_id
+            :outgoing -> row.object_object_id
+          end
+
+        row
+        |> Map.from_struct()
+        |> Map.merge(Map.fetch!(endpoints, endpoint_id))
+      end)
+
+    {connection_rows, page}
   end
 
   defp incoming_page(object_id, predicate, subject_kind, after_cursor) do

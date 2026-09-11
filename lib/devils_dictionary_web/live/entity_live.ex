@@ -269,9 +269,8 @@ defmodule DevilsDictionaryWeb.EntityLive do
                 id={"connection-in-#{claim.assertion_id}"}
                 class="flex flex-wrap items-baseline gap-x-2 py-3"
               >
-                <% endpoint = Connection.endpoint(claim.subject_object_id) %>
-                <.a :if={endpoint.path} navigate={endpoint.path}>{endpoint.label}</.a>
-                <span :if={is_nil(endpoint.path)}>{endpoint.label}</span>
+                <.a :if={claim.path} navigate={claim.path}>{claim.label}</.a>
+                <span :if={is_nil(claim.path)}>{claim.label}</span>
                 <span class="text-mist-500">{claim.predicate.forward_label} → this</span>
                 <.a
                   navigate={~p"/connections/#{claim.assertion_id}"}
@@ -286,10 +285,9 @@ defmodule DevilsDictionaryWeb.EntityLive do
                 id={"connection-out-#{claim.assertion_id}"}
                 class="flex flex-wrap items-baseline gap-x-2 py-3"
               >
-                <% endpoint = Connection.endpoint(claim.object_object_id) %>
                 <span class="text-mist-500">this → {claim.predicate.forward_label}</span>
-                <.a :if={endpoint.path} navigate={endpoint.path}>{endpoint.label}</.a>
-                <span :if={is_nil(endpoint.path)}>{endpoint.label}</span>
+                <.a :if={claim.path} navigate={claim.path}>{claim.label}</.a>
+                <span :if={is_nil(claim.path)}>{claim.label}</span>
                 <.a
                   navigate={~p"/connections/#{claim.assertion_id}"}
                   aria-label={"Inspect #{claim.predicate.forward_label} relationship"}

@@ -1,0 +1,69 @@
+
+MVP-0 scorecard — 2m 23s
+
+  ABSORB
+  PASS  A1  every source absorbed          6 / 6 absorbed, 6 pinned
+  PASS  A2  WordNet is full (plus edition) 120,564 synsets / 161,814 lexemes
+  PASS  A3  Wiktionary index is full       1,541,668 lexemes, 568,589 with forms
+  PASS  A4  scope built with reasons       5 lexemes, 0 without a reason · explicit_lemmas 5
+  PASS  A5  Wiktionary coverage of scope   100.0% raw · 100.0% excl. 0 scientific names
+  PASS  A6  Wikidata coverage              57,849 referenced, 0 dangling · union 100.0%
+  PASS  A7  Wikipedia coverage             10,399 / 10,399 asserted = 100.0% · 70,224 / 90,481 incl. candidates = 77.6%
+  PASS  A8  Bierce is full and attached    997 entries, 100.0% attached · 93.0% already in the index
+  PASS  A9  links back everywhere          2,098,053 / 2,098,053 = 100.0%
+  PASS  A10 images                         0 / 0 = 0.0%
+
+  MATERIALIZE
+  PASS  M1  parity, every source           0 gaps over 1,807,819 records · 4 alternate publication observations
+  PASS  M2  idempotent, offline            semantic fingerprints identical over 1,807,819 records, all 6 sources
+  PASS  M3  atomic writes                  proven by test
+  PASS  M4  trimmed raw                    2277.2 MB → 879.3 MB = 61.4% smaller
+
+  DURABILITY
+  PASS  D1  refresh reconciles             proven by test
+  PASS  D2  meaning identity is durable    proven by test
+  PASS  D3  editorial decisions survive    proven by test
+  PASS  D4  review context is pinned       proven by test
+  PASS  D5  integrity holds on bulk writes proven by test
+  PASS  D6  inputs are pinned              5 / 5 verified
+
+  BUDGETS
+  PASS  P1  page composition               p95 58.372 ms (words 49.071, entities 58.372) · max 74.049 ms over 200 pages
+  PASS  P2  bounded traversal              p95 0.552 ms (out 0.51, in 0.552) · top degree 42,729
+
+  RESOLVE
+  PASS  R1  WordNet edges resolved         1,056,779 / 1,056,779 = 100.0%
+  PASS  R2  Wiktionary edges resolved      2,466,084 / 2,629,595 = 93.8%
+  PASS  R3  chains render                  cat: WordNet feline > carnivore > placental > mammal, Wiktionary broader 7 · dog: WordNet domestic animal > animal > organism > living thing, Wiktionary broader 12
+
+  LINK
+  PASS  L1  link rate                      0.0% of 0 reachable · raw 0.0% · any 0.0%
+    ·   L2  conflicts surfaced             0 lexemes with two concepts >= 0.7
+    ·   L3  taxonomy reaches the scope root no wikidata_root
+    ·   L4  disambiguation handled         no disambiguation hits in this scope
+
+  EXPERIENCE
+  PASS  X1  every word has a page          200 / 200 random index lexemes render · 1 of them bare
+  PASS  X2  search is fast                 p95 83 ms over 20 probes · median 27 ms · slowest 150 ms
+  PASS  X3  forms and variants resolve     4 / 4 probes land: monkeys, cats, geese, spat
+
+  PAGES
+  PASS  U1  six pages exist                10 / 10 routes
+  PASS  U2  the flagship words             cat 10 cards / 2 tiers · dog 9 cards / 2 tiers · oyster 9 cards / 2 tiers
+  PASS  U3  provenance everywhere          48 / 48 cards over 6 words open a record · 187 / 187 citations carry one · thing panel 5 / 5, reported
+  PASS  U4  mobile                         2026-09-07: 12 pages at 375 px — home, the word page, its relation groups, its thing panel, the provenance drawer, fake-data mode, the evidence wall, browse, one source, imports, health, /kit
+  PASS  U5  coverage is legible            6 / 6 sources agree with dd.health · bierce 1 · johnson 3 · wikidata 0 · wikipedia 0 · wiktionary 5 · wordnet 4
+  PASS  U6  every card links out           58 / 58 resolve a link out = 100% (48 cards + 10 thing-panel links)
+
+  EXTENSIBILITY
+  PASS  E1  a new source is cheap          johnson: 1 sources row, 1 module, 1 registry line; 2 / 2 predicates registered from priv/predicates; entity kind taxon present
+  PASS  E2  a new scope is data            animals 25,385 from 1 WordNet root (oewn-00015568-n) · culture 5 from its rules · emotions 809 from 1 WordNet root (oewn-00026390-n); 0 code changes
+  PASS  E3  a new kind of thing fits       translated poem passage: 4 / 4 predicates, 4 / 4 kinds, 8 of 8 migrations applied
+
+  OPERATIONS
+  PASS  O1  the scorecard runs itself      this table
+  PASS  O2  it is fast enough              recorded runs: dumps 22m 10s · API/replay 2m 20s
+  PASS  O3  clean and offline-testable     `mix precommit`: compile, format, full suite
+  PASS  O4  health page                    proven by test
+
+  42 / 42 graded rows pass, 3 reported, 0 pending

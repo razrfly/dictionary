@@ -48,6 +48,7 @@ defmodule DevilsDictionary.Absorb.Sources.Wiktionary do
 
   alias DevilsDictionary.Absorb.{Batch, GzipLines}
   alias DevilsDictionary.Absorb.Materializer
+  alias DevilsDictionary.Corpus.SourceRecordRevision
   alias DevilsDictionary.Lexicon.{Scope, ScopeMember}
   alias DevilsDictionary.Registry.Lexeme
   alias DevilsDictionary.Repo
@@ -630,7 +631,7 @@ defmodule DevilsDictionary.Absorb.Sources.Wiktionary do
         end
       end)
       |> Stream.chunk_every(@decode_chunk)
-      |> Task.async_stream(&select_chunk(&1, :all),
+      |> Task.async_stream(&select_chunk(&1, :all, false),
         max_concurrency: System.schedulers_online(),
         ordered: true,
         timeout: :infinity
@@ -660,7 +661,7 @@ defmodule DevilsDictionary.Absorb.Sources.Wiktionary do
      %{
        lines: stats.lines,
        en_records: stats.en,
-       english_lemmas: MapSet.size(stats.matched),
+       english_lemmas: persisted_lemma_count(source),
        records: stats.written,
        resumed_records: stats.resumed,
        materialized_records: materialized.records,
@@ -705,7 +706,7 @@ defmodule DevilsDictionary.Absorb.Sources.Wiktionary do
 
   # Same shape as the index pass's projection: decode in a task, hand back rows
   # plus counts, never touch the database from inside the task.
-  defp select_chunk(lines, wanted) do
+  defp select_chunk(lines, wanted, track_matched? \\ true) do
     Enum.reduce(lines, {[], new_chunk_counts(length(lines))}, fn line, {rows, counts} ->
       if :binary.match(line, @en_marker) == :nomatch do
         {rows, counts}
@@ -720,7 +721,7 @@ defmodule DevilsDictionary.Absorb.Sources.Wiktionary do
               {[row | rows],
                %{
                  counts
-                 | matched: MapSet.put(counts.matched, word),
+                 | matched: maybe_track_match(counts.matched, word, track_matched?),
                    bytes_raw: counts.bytes_raw + encoded_size(record),
                    bytes_trimmed: counts.bytes_trimmed + encoded_size(row.raw)
                }}
@@ -733,6 +734,25 @@ defmodule DevilsDictionary.Absorb.Sources.Wiktionary do
         end
       end
     end)
+  end
+
+  defp maybe_track_match(matched, word, true), do: MapSet.put(matched, word)
+  defp maybe_track_match(matched, _word, false), do: matched
+
+  # The full pass stores every selected English record, so its exact lemma
+  # census is the distinct set of words in the source's current persisted
+  # revisions. Let PostgreSQL aggregate it instead of retaining roughly 1.5M
+  # strings in the ingest process until materialization finishes.
+  defp persisted_lemma_count(source) do
+    Repo.one!(
+      from record in SourceRecord,
+        join: revision in SourceRecordRevision,
+        on:
+          revision.source_record_id == record.id and
+            revision.revision_key == record.content_hash,
+        where: record.source_id == ^source.id,
+        select: count(fragment("?->>'word'", revision.payload), :distinct)
+    )
   end
 
   @doc """

@@ -157,7 +157,7 @@ defmodule DevilsDictionary.Absorb.Linker do
         FROM senses s
         JOIN sources so ON so.id = s.source_id AND so.slug = 'wiktionary'
         JOIN sense_revisions rev ON rev.sense_id = s.object_id AND rev.is_current
-        JOIN source_record_revisions source_rev ON source_rev.id = rev.source_record_revision_id
+        LEFT JOIN source_record_revisions source_rev ON source_rev.id = rev.source_record_revision_id
         CROSS JOIN LATERAL jsonb_array_elements_text(#{jsonb_array("rev.metadata->'wikidata'")}) AS q(qid)
         JOIN external_identifiers x
           ON x.namespace = 'wikidata' AND x.external_id = q.qid AND x.status = 'verified'
@@ -192,7 +192,7 @@ defmodule DevilsDictionary.Absorb.Linker do
         FROM senses s
         JOIN sources so ON so.id = s.source_id AND so.slug = 'wordnet'
         JOIN sense_revisions rev ON rev.sense_id = s.object_id AND rev.is_current
-        JOIN source_record_revisions source_rev ON source_rev.id = rev.source_record_revision_id
+        LEFT JOIN source_record_revisions source_rev ON source_rev.id = rev.source_record_revision_id
         CROSS JOIN LATERAL jsonb_array_elements_text(#{jsonb_qids("rev.metadata->'wikidata'")}) AS q(qid)
         JOIN external_identifiers x
           ON x.namespace = 'wikidata' AND x.external_id = q.qid AND x.status = 'verified'
@@ -223,7 +223,7 @@ defmodule DevilsDictionary.Absorb.Linker do
         FROM senses s
         JOIN sources so ON so.id = s.source_id AND so.slug = 'wordnet'
         JOIN sense_revisions rev ON rev.sense_id = s.object_id AND rev.is_current
-        JOIN source_record_revisions source_rev ON source_rev.id = rev.source_record_revision_id
+        LEFT JOIN source_record_revisions source_rev ON source_rev.id = rev.source_record_revision_id
         JOIN entities e ON e.metadata->>'wordnet_ili' = rev.metadata->>'ili'
        #{evidenced_scope_join(scope, "s.lexeme_id")}
        WHERE #{evidenced_scope_filter(scope)}
