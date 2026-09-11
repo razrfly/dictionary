@@ -66,11 +66,7 @@ defmodule DevilsDictionary.Lexicon.Browse do
 
       Lexeme
       |> where([l], l.language_tag == ^lang)
-      |> where(
-        [l],
-        ilike(l.lemma, ^(escape_like(query) <> "%")) or
-          fragment("? % ?", l.lemma, ^query)
-      )
+      |> search_match(query)
       |> maybe_in_scope(opts[:scope])
       |> order_by([l],
         asc: fragment("CASE WHEN lower(?) LIKE ? THEN 0 ELSE 1 END", l.lemma, ^(down <> "%")),
@@ -88,6 +84,22 @@ defmodule DevilsDictionary.Lexicon.Browse do
         enriched_at: l.enriched_at
       })
       |> Repo.all()
+    end
+  end
+
+  # pg_trgm's `%` candidate set is extremely broad below three characters: on
+  # the production-size index `oy` produced 97,315 index candidates for 203
+  # real matches. Short input is a prefix affordance, not a useful fuzzy query,
+  # so keep it on the same trigram index without paying that recheck cost.
+  defp search_match(queryable, query) do
+    if String.length(query) < 3 do
+      where(queryable, [l], ilike(l.lemma, ^(escape_like(query) <> "%")))
+    else
+      where(
+        queryable,
+        [l],
+        ilike(l.lemma, ^(escape_like(query) <> "%")) or fragment("? % ?", l.lemma, ^query)
+      )
     end
   end
 

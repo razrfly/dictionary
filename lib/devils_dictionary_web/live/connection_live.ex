@@ -82,6 +82,7 @@ defmodule DevilsDictionaryWeb.ConnectionLive do
        evidence_form:
          to_form(%{"evidence_role" => "supports", "locator" => "", "attribution_text" => ""}),
        claimant_query: "",
+       local_open: false,
        local_author: nil,
        local_author_query: "",
        local_kind: "artifact",
@@ -258,6 +259,10 @@ defmodule DevilsDictionaryWeb.ConnectionLive do
      socket |> assign(:local_author_query, q) |> stream(:author_hits, hits, reset: true)}
   end
 
+  def handle_event("toggle-local", _params, socket) do
+    {:noreply, assign(socket, :local_open, !socket.assigns.local_open)}
+  end
+
   def handle_event("pick-author", %{"id" => id}, socket) do
     {:noreply,
      socket
@@ -403,6 +408,7 @@ defmodule DevilsDictionaryWeb.ConnectionLive do
         {:noreply,
          socket
          |> put_flash(:info, "Local #{entity.entity_kind} created and selected.")
+         |> assign(:local_open, false)
          |> assign(:local_author, nil)
          |> stream(:duplicate_hits, [], reset: true)}
 
@@ -1139,9 +1145,13 @@ defmodule DevilsDictionaryWeb.ConnectionLive do
         <div class="mt-8 space-y-8">
           <details
             id="local-entity-creator"
+            open={@local_open}
             class="group border-y border-mist-950/10 py-5 dark:border-white/10"
           >
-            <summary class="flex cursor-pointer list-none items-center justify-between gap-4 text-sm/7 font-semibold">
+            <summary
+              phx-click="toggle-local"
+              class="flex cursor-pointer list-none items-center justify-between gap-4 text-sm/7 font-semibold"
+            >
               Create a local person, work, artifact, event or concept
               <.icon name="hero-plus" class="size-4 transition-transform group-open:rotate-45" />
             </summary>

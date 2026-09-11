@@ -30,7 +30,7 @@ defmodule DevilsDictionary.Registry.SenseRevision do
     field :position, :integer, default: 0
     field :tags, {:array, :string}, default: []
     field :topics, {:array, :string}, default: []
-    field :examples, :map, default: %{}
+    field :examples, DevilsDictionary.Types.JsonValue, default: []
     field :url, :string
     field :metadata, :map, default: %{}
     field :lifecycle_state, Ecto.Enum, values: @states, default: :active

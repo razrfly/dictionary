@@ -302,19 +302,37 @@ defmodule DevilsDictionary.Claims do
   def next_cursor(revisions), do: List.last(revisions).id
 
   defp outgoing_query(subject_id, opts) do
-    subject_ids = Registry.canonical_family(subject_id)
+    query =
+      case Registry.canonical_family(subject_id) do
+        [canonical_id] ->
+          where(
+            AssertionRevision,
+            [r],
+            r.subject_object_id == ^canonical_id and r.is_current
+          )
 
-    AssertionRevision
-    |> where([r], r.subject_object_id in ^subject_ids and r.is_current)
-    |> common_filters(opts)
+        subject_ids ->
+          where(AssertionRevision, [r], r.subject_object_id in ^subject_ids and r.is_current)
+      end
+
+    common_filters(query, opts)
   end
 
   defp incoming_query(object_id, opts) do
-    object_ids = Registry.canonical_family(object_id)
+    query =
+      case Registry.canonical_family(object_id) do
+        [canonical_id] ->
+          where(
+            AssertionRevision,
+            [r],
+            r.object_object_id == ^canonical_id and r.is_current
+          )
 
-    AssertionRevision
-    |> where([r], r.object_object_id in ^object_ids and r.is_current)
-    |> common_filters(opts)
+        object_ids ->
+          where(AssertionRevision, [r], r.object_object_id in ^object_ids and r.is_current)
+      end
+
+    common_filters(query, opts)
   end
 
   defp common_filters(query, opts) do
@@ -367,21 +385,27 @@ defmodule DevilsDictionary.Claims do
   def visible(query, :internal), do: query
 
   def visible(query, :public) do
+    latest_review_states =
+      from review in AssertionReview,
+        distinct: review.assertion_revision_id,
+        order_by: [
+          asc: review.assertion_revision_id,
+          desc: review.inserted_at,
+          desc: review.id
+        ],
+        select: %{
+          assertion_revision_id: review.assertion_revision_id,
+          decision: review.decision
+        }
+
     query
+    |> join(:left, [r], review in subquery(latest_review_states),
+      on: review.assertion_revision_id == r.id,
+      as: :latest_review
+    )
     |> where(
-      [r],
-      fragment(
-        """
-        COALESCE(
-          (SELECT ar.decision FROM assertion_reviews ar
-            WHERE ar.assertion_revision_id = ?
-            ORDER BY ar.inserted_at DESC, ar.id DESC
-            LIMIT 1),
-          'needs_review'
-        ) NOT IN ('rejected', 'withdrawn')
-        """,
-        r.id
-      )
+      [latest_review: review],
+      is_nil(review.decision) or review.decision not in [:rejected, :withdrawn]
     )
     |> where(
       [r],

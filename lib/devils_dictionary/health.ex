@@ -903,20 +903,15 @@ defmodule DevilsDictionary.Health do
   end
 
   defp scope_with_link(scope, threshold, opts \\ []) do
-    query =
-      scope_query(scope)
-      |> where(exists(linked_to_word(min_confidence: threshold)))
+    # The strict population is a narrower alternative, not an extra condition
+    # layered on top of the ordinary population. Building both correlated
+    # EXISTS branches repeated the complete public-visibility query and could
+    # push a small-scope scorecard past the connection checkout timeout.
+    link = linked_to_word(min_confidence: threshold, strict: opts[:strict] || false)
 
-    # The strict reading ignores anything corroboration lifted, which is what
-    # makes the two L1 numbers comparable.
-    query =
-      if opts[:strict] do
-        where(query, exists(linked_to_word(min_confidence: threshold, strict: true)))
-      else
-        query
-      end
-
-    Repo.aggregate(query, :count)
+    scope_query(scope)
+    |> where(exists(link))
+    |> Repo.aggregate(:count)
   end
 
   defp corroboration_counts(scope) do

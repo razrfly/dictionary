@@ -107,22 +107,25 @@ defmodule DevilsDictionary.Encyclopedia do
       limit = Keyword.get(opts, :limit, 10)
       down = String.downcase(query)
 
+      preferred_candidates =
+        Entity
+        |> entity_name_match(:preferred, query)
+        |> select([e], %{object_id: e.object_id})
+
+      alias_candidates =
+        ObjectName
+        |> entity_name_match(:alias, query)
+        |> select([name], %{object_id: name.object_id})
+
+      candidates = union_all(preferred_candidates, ^alias_candidates)
+
       Repo.all(
         from e in Entity,
-          as: :entity,
+          join: candidate in subquery(candidates),
+          on: candidate.object_id == e.object_id,
           join: object in Object,
           on: object.id == e.object_id and object.lifecycle_state == :active,
-          where:
-            ilike(e.preferred_label, ^(escape_like(query) <> "%")) or
-              fragment("? % ?", e.preferred_label, ^query) or
-              exists(
-                from name in ObjectName,
-                  where:
-                    name.object_id == parent_as(:entity).object_id and
-                      (ilike(name.name, ^(escape_like(query) <> "%")) or
-                         fragment("? % ?", name.name, ^query)),
-                  select: 1
-              ),
+          group_by: e.object_id,
           order_by: [
             asc:
               fragment(
@@ -142,6 +145,35 @@ defmodule DevilsDictionary.Encyclopedia do
             kind: e.entity_kind,
             description: e.description
           }
+      )
+    end
+  end
+
+  # Keep preferred labels and aliases in separate indexed arms. Combining them
+  # with a correlated EXISTS under one OR forced a sequential scan of every
+  # entity even when only a handful matched. The outer group preserves one
+  # identity when both a preferred label and an alias match.
+  defp entity_name_match(queryable, :preferred, query) do
+    if String.length(query) < 3 do
+      where(queryable, [e], ilike(e.preferred_label, ^(escape_like(query) <> "%")))
+    else
+      where(
+        queryable,
+        [e],
+        ilike(e.preferred_label, ^(escape_like(query) <> "%")) or
+          fragment("? % ?", e.preferred_label, ^query)
+      )
+    end
+  end
+
+  defp entity_name_match(queryable, :alias, query) do
+    if String.length(query) < 3 do
+      where(queryable, [name], ilike(name.name, ^(escape_like(query) <> "%")))
+    else
+      where(
+        queryable,
+        [name],
+        ilike(name.name, ^(escape_like(query) <> "%")) or fragment("? % ?", name.name, ^query)
       )
     end
   end

@@ -664,7 +664,7 @@ defmodule DevilsDictionary.Absorb.Materializer do
            position: row[:position] || 0,
            tags: row[:tags] || [],
            topics: row[:topics] || [],
-           examples: row[:examples] || %{},
+           examples: row[:examples] || [],
            url: row[:url],
            metadata: row[:metadata] || %{},
            source_record_revision_id: revisions[row[:source_record_id]]

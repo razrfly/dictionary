@@ -1,0 +1,17 @@
+{
+  "$comment": [
+    "Issue #84 checkpoint 4's post-baseline extension exercise.",
+    "An adaptation is a relationship between distinct work identities; it is",
+    "not an edition, excerpt, translation, or inferred equivalence. Adding it",
+    "costs one controlled data definition and no schema change."
+  ],
+  "predicates": [
+    {
+      "key": "adaptation_of",
+      "forward_label": "an adaptation of",
+      "reverse_label": "Adaptations",
+      "description": "One work deliberately adapts another while remaining its own identity.",
+      "endpoints": [["entity/work", "entity/work"]]
+    }
+  ]
+}
