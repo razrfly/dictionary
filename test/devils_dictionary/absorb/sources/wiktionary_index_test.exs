@@ -78,16 +78,19 @@ defmodule DevilsDictionary.Absorb.Sources.WiktionaryIndexTest do
   end
 
   test "the full pass absorbs every English record and resumes completed batches" do
-    path = dump(~w(cat dog oyster))
+    path = dump(~w(cat dog cat oyster))
 
     assert {:ok, first} = Wiktionary.absorb(nil, full: true, path: path, limit: 10)
+    assert first.en_records == 4
+    assert first.english_lemmas == 3
     assert first.records == 3
     assert first.materialized_records == 3
     assert first.senses == 3
 
     assert {:ok, resumed} = Wiktionary.absorb(nil, full: true, path: path, limit: 10)
+    assert resumed.english_lemmas == 3
     assert resumed.records == 0
-    assert resumed.resumed_records == 3
+    assert resumed.resumed_records == 4
     assert resumed.materialized_records == 0
     assert resumed.senses == 0
     assert orphaned() == 0

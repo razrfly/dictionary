@@ -1,0 +1,86 @@
+warning: the following files do not match any of the configured `:test_load_filters` / `:test_ignore_filters`:
+
+docs/audits/2026-09-09-issue73/reproductions.exs
+
+This might indicate a typo in a test file name (for example, using "foo_tests.exs" instead of "foo_test.exs").
+
+See the configuration for `:test_pattern` under `mix help test` for more information.
+
+Running ExUnit with seed: 642631, max_cases: 32
+
+
+
+  1) test splitting a claim context opens reconciliation (Issue73AuditTest)
+     docs/audits/2026-09-09-issue73/reproductions.exs:25
+     Expected truthy, got false
+     code: assert Repo.exists?(from(c in "reconciliation_cases", where: c.assertion_id == ^claim.id))
+     arguments:
+
+         # 1
+         #Ecto.Query<from r0 in "reconciliation_cases",
+          where: r0.assertion_id == ^17>
+
+     stacktrace:
+       docs/audits/2026-09-09-issue73/reproductions.exs:32: (test)
+
+.
+
+  2) test changed endpoint text does not display an old review as current acceptance (Issue73AuditTest)
+     docs/audits/2026-09-09-issue73/reproductions.exs:58
+     Refute with == failed, both sides are exactly equal
+     code: refute page.review == :accepted
+     left: :accepted
+     stacktrace:
+       docs/audits/2026-09-09-issue73/reproductions.exs:69: (test)
+
+.
+
+  3) test rejected defines relationship is hidden from authored definition summary (Issue73AuditTest)
+     docs/audits/2026-09-09-issue73/reproductions.exs:47
+     Assertion with == failed
+     code:  assert hd(EntityPage.build(p.object_id).definitions).defines == nil
+     left:  %{pos: "noun", slug: "auditword", object_id: 60, lemma: "auditword"}
+     right: nil
+     stacktrace:
+       docs/audits/2026-09-09-issue73/reproductions.exs:55: (test)
+
+
+
+  4) test merged input page does not continue presenting a separate identity (Issue73AuditTest)
+     docs/audits/2026-09-09-issue73/reproductions.exs:41
+     Assertion with == failed
+     code:  assert EntityPage.build(old.object_id).entity.object_id == survivor.object_id
+     left:  68
+     right: 69
+     stacktrace:
+       docs/audits/2026-09-09-issue73/reproductions.exs:45: (test)
+
+
+
+  5) test merged identity resolves on public person builder (Issue73AuditTest)
+     docs/audits/2026-09-09-issue73/reproductions.exs:18
+     ** (Ecto.Query.CastError) lib/devils_dictionary/registry.ex:549: value `:merged` in `where` cannot be cast to type #Ecto.Enum<values: [:retire, :merge, :split, :restore]> in query:
+
+     from i0 in DevilsDictionary.Registry.IdentityEventMember,
+       join: i1 in DevilsDictionary.Registry.IdentityEvent,
+       on: i1.id == i0.event_id,
+       where: i0.object_id == ^76 and i0.role == :input and i1.operation == ^:merged,
+       order_by: [desc: i1.id],
+       limit: 1,
+       select: i1.id
+
+     code: assert {:merged, _} = Registry.resolve(old.object_id)
+     stacktrace:
+       (elixir 1.19.0) lib/enum.ex:2520: Enum."-reduce/3-lists^foldl/2-0-"/3
+       (elixir 1.19.0) lib/enum.ex:1814: Enum."-map_reduce/3-lists^mapfoldl/2-0-"/3
+       (elixir 1.19.0) lib/enum.ex:2520: Enum."-reduce/3-lists^foldl/2-0-"/3
+       (ecto 3.14.2) lib/ecto/repo/queryable.ex:230: Ecto.Repo.Queryable.execute/4
+       (ecto 3.14.2) lib/ecto/repo/queryable.ex:19: Ecto.Repo.Queryable.all/3
+       (ecto 3.14.2) lib/ecto/repo/queryable.ex:168: Ecto.Repo.Queryable.one/3
+       (devils_dictionary 0.1.0) lib/devils_dictionary/registry.ex:548: DevilsDictionary.Registry.event_outputs/2
+       (devils_dictionary 0.1.0) lib/devils_dictionary/registry.ex:530: DevilsDictionary.Registry.resolve/1
+       docs/audits/2026-09-09-issue73/reproductions.exs:22: (test)
+
+
+Finished in 0.5 seconds (0.00s async, 0.5s sync)
+7 tests, 5 failures

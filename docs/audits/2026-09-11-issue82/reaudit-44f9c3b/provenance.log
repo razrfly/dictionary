@@ -1,0 +1,6 @@
+ assertion_id |      method      |                                            metadata                                            | source_record_id | last_seen_run_id | status 
+--------------+------------------+------------------------------------------------------------------------------------------------+------------------+------------------+--------
+      3850230 | wordnet_wikidata | {"evidence": "sense_metadata_wikidata", "wikidata_qid": "Q191050", "source_record_id": 109124} |           109124 |              142 | done
+      3855647 | wordnet_ili      | {"ili": "i94474", "evidence": "sense_metadata_ili", "source_record_id": 109124}                |           109124 |              142 | done
+(2 rows)
+

@@ -125,6 +125,90 @@ defmodule DevilsDictionary.Claims.Connection do
       %{kind: :unknown, object_id: object_id, label: "##{object_id}", path: nil}
   end
 
+  @doc """
+  Resolves labels and canonical paths for many endpoints in a bounded set of queries.
+
+  The returned map is keyed by object id. Unknown ids keep the same fallback
+  label and nil path as `endpoint/1`.
+  """
+  def endpoint_summaries(object_ids) do
+    ids = object_ids |> Enum.reject(&is_nil/1) |> Enum.uniq()
+
+    ids
+    |> Map.new(&{&1, %{label: "##{&1}", path: nil}})
+    |> Map.merge(content_summaries(ids))
+    |> Map.merge(entity_summaries(ids))
+    |> Map.merge(sense_summaries(ids))
+    |> Map.merge(lexeme_summaries(ids))
+  end
+
+  defp lexeme_summaries([]), do: %{}
+
+  defp lexeme_summaries(ids) do
+    Repo.all(
+      from l in Lexeme,
+        where: l.object_id in ^ids,
+        select:
+          {l.object_id,
+           %{
+             label: l.lemma,
+             path: fragment("'/words/' || ? || '/' || ?", l.object_id, l.slug)
+           }}
+    )
+    |> Map.new()
+  end
+
+  defp sense_summaries([]), do: %{}
+
+  defp sense_summaries(ids) do
+    Repo.all(
+      from s in Sense,
+        join: r in SenseRevision,
+        on: r.sense_id == s.object_id and r.is_current,
+        join: l in Lexeme,
+        on: l.object_id == s.lexeme_id,
+        where: s.object_id in ^ids,
+        select:
+          {s.object_id,
+           %{
+             label: l.lemma,
+             path: fragment("'/words/' || ? || '/' || ?", l.object_id, l.slug)
+           }}
+    )
+    |> Map.new()
+  end
+
+  defp entity_summaries([]), do: %{}
+
+  defp entity_summaries(ids) do
+    Entity
+    |> where([e], e.object_id in ^ids)
+    |> select([e], {e.object_id, e.preferred_label})
+    |> Repo.all()
+    |> Map.new(fn {id, label} ->
+      %{label: label || "##{id}", path: "/entities/#{id}/#{slugify(label)}"}
+      |> then(&{id, &1})
+    end)
+  end
+
+  defp content_summaries([]), do: %{}
+
+  defp content_summaries(ids) do
+    Repo.all(
+      from c in ContentItem,
+        join: r in ContentRevision,
+        on: r.content_id == c.object_id and r.is_current,
+        where: c.object_id in ^ids,
+        select:
+          {c.object_id,
+           %{
+             label: coalesce(r.headword, fragment("left(?, 80)", r.body)),
+             path: nil
+           }}
+    )
+    |> Map.new()
+  end
+
   defp lexeme(id) do
     case Repo.get(Lexeme, id) do
       nil ->

@@ -1,0 +1,6 @@
+Compiling 5 files (.ex)
+Generated devils_dictionary app
+%{page: "cat", budget_ms: 150, p95_ms: 187.858, max_ms: 214.996}
+%{page: "run", budget_ms: 150, p95_ms: 150.883, max_ms: 186.765}
+%{page: "set", budget_ms: 150, p95_ms: 95.581, max_ms: 129.594}
+%{page: "entity 4", budget_ms: 150, p95_ms: 161.712, max_ms: 188.44}

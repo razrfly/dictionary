@@ -70,6 +70,13 @@ defmodule DevilsDictionary.Absorb.LinkerTest do
   defp sense!(ctx, lexeme, source_slug, attrs) do
     record = WordFixtures.record!(ctx, source_slug, raw: %{})
 
+    source_record_revision_id =
+      if Keyword.has_key?(attrs, :source_record_revision_id) do
+        attrs[:source_record_revision_id]
+      else
+        revision_id(record)
+      end
+
     {:ok, sense} =
       Registry.create_sense(%{
         lexeme_id: lexeme.object_id,
@@ -77,7 +84,7 @@ defmodule DevilsDictionary.Absorb.LinkerTest do
         external_key: "#{lexeme.lemma}##{System.unique_integer([:positive])}",
         gloss: attrs[:gloss],
         metadata: attrs[:metadata] || %{},
-        source_record_revision_id: revision_id(record)
+        source_record_revision_id: source_record_revision_id
       })
 
     sense
@@ -288,6 +295,36 @@ defmodule DevilsDictionary.Absorb.LinkerTest do
       Linker.run(ctx.animals)
 
       assert link!(cat, :wordnet_ili).confidence == 0.85
+    end
+
+    test "identifier rungs retain senses without source-record provenance", ctx do
+      entity = concept!("Q424242428", wordnet_ili: "i424242428")
+      wiktionary_word = lexeme!(ctx, "provenance-free Wiktionary")
+      wordnet_word = lexeme!(ctx, "provenance-free WordNet")
+
+      sense!(ctx, wiktionary_word, "wiktionary",
+        metadata: %{"wikidata" => ["Q424242428"]},
+        source_record_revision_id: nil
+      )
+
+      sense!(ctx, wordnet_word, "wordnet",
+        metadata: %{"wikidata" => "Q424242428", "ili" => "i424242428"},
+        source_record_revision_id: nil
+      )
+
+      assert %{
+               rungs: %{wiktionary_qid: 1, wordnet_wikidata: 1, wordnet_ili: 1}
+             } = Linker.run(ctx.animals)
+
+      for {word, method} <- [
+            {wiktionary_word, :wiktionary_qid},
+            {wordnet_word, :wordnet_wikidata},
+            {wordnet_word, :wordnet_ili}
+          ] do
+        link = link!(word, method)
+        assert link.object_object_id == entity.object_id
+        assert link.metadata["source_record_id"] == nil
+      end
     end
 
     test "title_match links a noun to its article at 0.70, with no source", ctx do

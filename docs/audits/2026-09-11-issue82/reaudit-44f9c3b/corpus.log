@@ -1,0 +1,31 @@
+ indexed_lexemes 
+-----------------
+         1541668
+(1 row)
+
+ defined_lexemes 
+-----------------
+         1533898
+(1 row)
+
+ entity_kind | count 
+-------------+-------
+ concept     | 75849
+ edition     |     2
+ person      |     2
+ taxon       | 17097
+ work        |     2
+(5 rows)
+
+ subject_object_id |    key    | object_object_id |      method      
+-------------------+-----------+------------------+------------------
+            342580 | other     |           144333 | source
+            342580 | other     |           144788 | source
+            342514 | refers_to |                1 | wordnet_wikidata
+            342534 | refers_to |                1 | wordnet_wikidata
+            342580 | refers_to |                1 | wordnet_wikidata
+            342580 | refers_to |                1 | wordnet_ili
+            342534 | refers_to |                1 | wordnet_ili
+            342514 | refers_to |                1 | wordnet_ili
+(8 rows)
+

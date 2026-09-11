@@ -72,7 +72,7 @@ The real server ran on port 4007 through an in-app browser at explicit 1280×800
 
 ## Verification
 
-`mix precommit` passes **766 tests with zero failures**. The final focused mailbox regression adds one more passing test assertion without adding a new test case; rerun the full suite after any further edit.
+`mix precommit` passes **774 tests with zero failures**, including the focused mailbox regression assertion and the linker provenance regression added during review.
 
 The scope configuration item inherited from N1 was applied with `mix dd.scope.new animals`; the denylist is now represented in the development database's scope rules as well as in `priv/scopes/animals.json`.
 
