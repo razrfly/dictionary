@@ -94,7 +94,8 @@ Artsy ownership without separate evidence/authorization.
 
 ## Verification commands
 
-- Focused repository regressions: **48 tests, 0 failures** across the Artsy client,
+- Focused repository regressions: **72 tests, 0 failures** across every test file
+  changed for issue #86, including the Artsy client,
   seeder, Wikidata adapter and artwork LiveViews.
 - Original external audit file: **4 of 5 expectations pass**. Its remaining line reads
   `SourceRecordRevision.payload` directly even though issue #93 intentionally declares
@@ -102,7 +103,7 @@ Artsy ownership without separate evidence/authorization.
   regression uses `Sources.raw/1`, verifies exact payload equality (including P18), and
   passes. Re-enabling payloads on every ordinary revision query would regress the shared
   identity foundation's memory-safety fix.
-- Full suite through the required `mix precommit`: **934 tests, 0 failures**. The two
+- Full suite through the required `mix precommit`: **944 tests, 0 failures**. The two
   ignored corpus archives were temporarily linked read-only from the original
   Dictionary checkout so the real source-manifest digests were verified; the links
   were removed immediately afterward and are not branch artifacts.
