@@ -185,54 +185,109 @@ defmodule DevilsDictionary.Discovery do
 
   @doc "Runs one admitted attempt. Called by Oban and directly by focused tests."
   def execute_run(run_id) do
-    with {:ok, run} <- start_run(run_id),
-         true <- run.mapping.enabled || {:error, "mapping_disabled"},
-         :ok <- validate_target(run.mapping.target_object_id),
-         {:ok, provider, _source} <- eligible_provider_for_mapping(run.mapping),
-         true <-
-           run.adapter_version == provider.adapter_version() ||
-             {:error, "adapter_version_changed"},
-         :ok <- provider.validate_mapping(run.mapping.operation, run.mapping.parameters) do
-      request_fun = fn stage, payload ->
-        DevilsDictionary.Discovery.Transport.graphql(provider, run.id, stage, payload)
-      end
-
-      case provider.retrieve(
-             run.mapping.operation,
-             run.mapping.parameters,
-             run.request_parameters,
-             request_fun
-           ) do
-        {:ok, response} -> complete_success(run, provider, response)
-        {:error, code} -> complete_failure(run, code)
-        {:deferred, code, seconds, params} -> defer_run(run, code, seconds, params)
-      end
-    else
+    case start_run(run_id) do
+      {:ok, run} -> execute_owned_run(run)
       {:already_finished, _run} -> :ok
       {:deferred, seconds} -> {:snooze, seconds}
       {:capacity, seconds} -> {:snooze, seconds}
-      {:error, code} when is_binary(code) -> fail_if_possible(run_id, code)
-      {:error, _reason} -> fail_if_possible(run_id, "mapping_ineligible")
+      {:error, reason} -> {:error, reason}
     end
   end
 
-  @doc false
-  def release_run_for_retry(run_id, code) do
-    now = DateTime.utc_now()
+  defp execute_owned_run(run) do
+    try do
+      with true <- run.mapping.enabled || {:error, "mapping_disabled"},
+           :ok <- validate_target(run.mapping.target_object_id),
+           {:ok, provider, _source} <- eligible_provider_for_mapping(run.mapping),
+           true <-
+             run.adapter_version == provider.adapter_version() ||
+               {:error, "adapter_version_changed"},
+           :ok <- provider.validate_mapping(run.mapping.operation, run.mapping.parameters) do
+        request_fun = fn stage, payload ->
+          DevilsDictionary.Discovery.Transport.graphql(provider, run.id, stage, payload)
+        end
 
-    Repo.update_all(
-      from(r in Run, where: r.id == ^run_id and r.status == :running),
-      set: [
-        status: :pending,
-        started_at: nil,
-        retry_at: now,
-        error_code: safe_code(code),
-        execution_lease_expires_at: nil,
-        updated_at: now
-      ]
-    )
+        response =
+          provider.retrieve(
+            run.mapping.operation,
+            run.mapping.parameters,
+            run.request_parameters,
+            request_fun
+          )
 
-    :ok
+        finish_owned_run(run, fn ->
+          case response do
+            {:ok, result} -> complete_success(run, provider, result)
+            {:error, code} -> complete_failure(run, code)
+            {:deferred, code, seconds, params} -> defer_run(run, code, seconds, params)
+          end
+        end)
+      else
+        {:error, code} when is_binary(code) ->
+          finish_owned_run(run, fn -> complete_failure(run, code) end)
+
+        {:error, _reason} ->
+          finish_owned_run(run, fn -> complete_failure(run, "mapping_ineligible") end)
+      end
+    rescue
+      exception ->
+        release_owned_run(run, "worker_exception")
+        reraise exception, __STACKTRACE__
+    catch
+      kind, reason ->
+        release_owned_run(run, "worker_#{kind}")
+        :erlang.raise(kind, reason, __STACKTRACE__)
+    end
+  end
+
+  # The lease identifies this execution. Recovery may have handed the same run
+  # to another worker while an old request was still in flight.
+  defp finish_owned_run(run, callback) do
+    {:ok, result} =
+      Repo.transaction(fn ->
+        current = Repo.one(from r in Run, where: r.id == ^run.id, lock: "FOR UPDATE")
+
+        if current && current.status == :running &&
+             current.execution_lease_expires_at == run.execution_lease_expires_at do
+          callback.()
+        else
+          :ok
+        end
+      end)
+
+    case result do
+      {:notify, completed, transient_items, outcome} ->
+        broadcast(
+          completed.mapping.target_object_id,
+          completed.mapping_id,
+          completed.mapping.source.slug,
+          transient_items
+        )
+
+        outcome
+
+      outcome ->
+        outcome
+    end
+  end
+
+  defp release_owned_run(run, code) do
+    finish_owned_run(run, fn ->
+      now = DateTime.utc_now()
+
+      Repo.update_all(from(r in Run, where: r.id == ^run.id),
+        set: [
+          status: :pending,
+          started_at: nil,
+          retry_at: now,
+          error_code: safe_code(code),
+          execution_lease_expires_at: nil,
+          updated_at: now
+        ]
+      )
+
+      :ok
+    end)
   end
 
   @doc "Recovers abandoned attempts and deletes one bounded batch of disposable cache rows."
@@ -418,6 +473,17 @@ defmodule DevilsDictionary.Discovery do
     Repo.transaction(fn ->
       advisory_lock("mapping-version:#{key}")
 
+      automatic_prefix = "automatic/#{source_slug(attrs.source_id)}/#{attrs.target_object_id}/%"
+
+      Repo.update_all(
+        from(m in Mapping,
+          where:
+            m.target_object_id == ^attrs.target_object_id and m.source_id == ^attrs.source_id and
+              m.enabled and like(m.mapping_key, ^automatic_prefix) and m.mapping_key != ^key
+        ),
+        set: [enabled: false, updated_at: DateTime.utc_now()]
+      )
+
       case Repo.one(from m in Mapping, where: m.mapping_key == ^key and m.enabled, limit: 1) do
         %Mapping{} = mapping ->
           mapping
@@ -573,6 +639,7 @@ defmodule DevilsDictionary.Discovery do
              true <- predecessor.next_cursor == after_cursor do
           parameters =
             root.request_parameters
+            |> Map.delete("transport_attempts")
             |> Map.put("after", after_cursor)
             |> Map.put("first", limit)
 
@@ -777,14 +844,7 @@ defmodule DevilsDictionary.Discovery do
       {:ok, completed} ->
         transient_items = if persistent?, do: [], else: items
 
-        broadcast(
-          completed.mapping.target_object_id,
-          completed.mapping_id,
-          provider.slug(),
-          transient_items
-        )
-
-        :ok
+        {:notify, completed, transient_items, :ok}
 
       {:error, _} ->
         complete_failure(run, "persistence_failed")
@@ -806,14 +866,7 @@ defmodule DevilsDictionary.Discovery do
       })
       |> Repo.update!()
 
-    broadcast(
-      completed.mapping.target_object_id,
-      completed.mapping_id,
-      completed.mapping.source.slug,
-      []
-    )
-
-    :ok
+    {:notify, completed, [], :ok}
   end
 
   defp defer_run(run, code, seconds, params) do
@@ -829,14 +882,7 @@ defmodule DevilsDictionary.Discovery do
       })
       |> Repo.update!()
 
-    broadcast(
-      deferred.mapping.target_object_id,
-      deferred.mapping_id,
-      deferred.mapping.source.slug,
-      []
-    )
-
-    {:snooze, seconds}
+    {:notify, deferred, [], {:snooze, seconds}}
   end
 
   defp persist_results(run, items) do
@@ -850,9 +896,7 @@ defmodule DevilsDictionary.Discovery do
           url: item.preview_metadata["source_url"],
           raw: %{
             "external_namespace" => item.external_namespace,
-            "external_id" => item.external_id,
-            "match_details" => item.match_details,
-            "preview_metadata" => item.preview_metadata
+            "external_id" => item.external_id
           }
         })
 
@@ -889,6 +933,10 @@ defmodule DevilsDictionary.Discovery do
   defp start_run(run_id) do
     Repo.transaction(fn ->
       run = Repo.get!(Run, run_id) |> Repo.preload(mapping: :source)
+      advisory_lock("discovery-execute-provider:#{run.mapping.source_id}")
+      # Another worker may have claimed this run while we waited for the provider.
+      run = Repo.one!(from r in Run, where: r.id == ^run_id, lock: "FOR UPDATE")
+      run = Repo.preload(run, mapping: :source)
 
       case run.status do
         :pending ->
@@ -897,8 +945,6 @@ defmodule DevilsDictionary.Discovery do
           if run.retry_at && DateTime.compare(run.retry_at, now) == :gt do
             Repo.rollback({:deferred, seconds_until(run.retry_at, now)})
           end
-
-          advisory_lock("discovery-execute-provider:#{run.mapping.source_id}")
 
           active =
             Repo.aggregate(
@@ -943,19 +989,6 @@ defmodule DevilsDictionary.Discovery do
     end
   end
 
-  defp fail_if_possible(run_id, code) do
-    case Repo.get(Run, run_id) |> maybe_preload_mapping() do
-      %Run{status: status} = run when status in [:pending, :running] ->
-        complete_failure(run, code)
-
-      _ ->
-        :ok
-    end
-  end
-
-  defp maybe_preload_mapping(nil), do: nil
-  defp maybe_preload_mapping(run), do: Repo.preload(run, mapping: :source)
-
   defp validate_target(object_id) do
     case Repo.get(Object, object_id) do
       %Object{kind: :lexeme, lifecycle_state: :active} ->
@@ -973,16 +1006,33 @@ defmodule DevilsDictionary.Discovery do
   end
 
   defp enabled_mapping(target_id, provider_slug) do
-    Repo.one(
-      from m in Mapping,
-        join: source in assoc(m, :source),
-        where:
-          m.target_object_id == ^target_id and source.slug == ^provider_slug and m.enabled and
-            source.active,
-        order_by: [desc: m.version],
-        preload: [source: source],
-        limit: 1
-    )
+    case Providers.get(provider_slug) do
+      nil ->
+        nil
+
+      provider ->
+        current_automatic_key =
+          "automatic/#{provider_slug}/#{target_id}/#{provider.adapter_version()}"
+
+        automatic_prefix = "automatic/#{provider_slug}/#{target_id}/%"
+
+        Repo.one(
+          from m in Mapping,
+            join: source in assoc(m, :source),
+            where:
+              m.target_object_id == ^target_id and source.slug == ^provider_slug and m.enabled and
+                source.active and
+                (not like(m.mapping_key, ^automatic_prefix) or
+                   m.mapping_key == ^current_automatic_key),
+            order_by: [desc: m.version],
+            preload: [source: source],
+            limit: 1
+        )
+    end
+  end
+
+  defp source_slug(source_id) do
+    Repo.get!(Source, source_id).slug
   end
 
   defp provider(slug) do

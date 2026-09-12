@@ -320,7 +320,13 @@ defmodule DevilsDictionary.Discovery.Providers.CineGraph do
   defp year(_), do: nil
 
   defp poster_url(path) when is_binary(path) and path != "" do
-    String.trim_trailing(config()[:image_base_url], "/") <> "/" <> String.trim_leading(path, "/")
+    case config()[:image_base_url] do
+      base when is_binary(base) and base != "" ->
+        String.trim_trailing(base, "/") <> "/" <> String.trim_leading(path, "/")
+
+      _ ->
+        nil
+    end
   end
 
   defp poster_url(_path), do: nil

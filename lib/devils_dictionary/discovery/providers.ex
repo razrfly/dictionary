@@ -15,7 +15,7 @@ defmodule DevilsDictionary.Discovery.Providers do
     Enum.find(all(), &(&1.slug() == slug))
   end
 
-  def source_catalog, do: Enum.map(@default, & &1.source_attrs())
+  def source_catalog, do: Enum.map(all(), & &1.source_attrs())
 
   def capabilities do
     Enum.map(all(), fn provider ->
@@ -25,10 +25,19 @@ defmodule DevilsDictionary.Discovery.Providers do
     end)
   end
 
-  def server_providers do
+  def server_providers(content_type \\ nil) do
     Enum.filter(all(), fn provider ->
       capabilities = provider.capabilities()
-      provider.enabled?() and capabilities.background and capabilities.transport == :server
+
+      provider.enabled?() and capabilities.background and capabilities.transport == :server and
+        (is_nil(content_type) or content_type in capabilities.content_types)
     end)
+  end
+
+  def supports?(slug, content_type) do
+    case get(slug) do
+      nil -> false
+      provider -> content_type in provider.capabilities().content_types
+    end
   end
 end

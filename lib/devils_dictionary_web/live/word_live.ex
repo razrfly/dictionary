@@ -134,6 +134,7 @@ defmodule DevilsDictionaryWeb.WordLive do
   defp prepare_discovery(socket, page, demo) do
     target = Discovery.target_for_page(page, socket.assigns.object_id, demo)
     old_target = socket.assigns.discovery_target
+    film_providers = Providers.server_providers(:film)
 
     if (connected?(socket) and old_target) &&
          (!target || old_target.object_id != target.object_id) do
@@ -142,7 +143,7 @@ defmodule DevilsDictionaryWeb.WordLive do
 
     cultures =
       cond do
-        is_nil(target) or Providers.server_providers() == [] ->
+        is_nil(target) or film_providers == [] ->
           %{}
 
         connected?(socket) ->
@@ -150,8 +151,10 @@ defmodule DevilsDictionaryWeb.WordLive do
             :ok = Discovery.subscribe(target.object_id)
           end
 
-          target
-          |> Discovery.request_all()
+          film_providers
+          |> Enum.map(fn provider ->
+            {provider.slug(), Discovery.request(target, provider.slug())}
+          end)
           |> Enum.reduce(%{}, fn {provider_slug, outcome}, states ->
             state =
               target.object_id
@@ -165,7 +168,7 @@ defmodule DevilsDictionaryWeb.WordLive do
           end)
 
         true ->
-          Providers.server_providers()
+          film_providers
           |> Enum.map(fn provider ->
             attrs = provider.source_attrs()
 
@@ -200,11 +203,14 @@ defmodule DevilsDictionaryWeb.WordLive do
   @impl true
   def handle_info(
         {:discovery_updated, target_id, mapping_id, provider_slug, transient_items},
-        %{assigns: %{discovery_target: %{object_id: target_id}}} = socket
+        %{assigns: %{discovery_target: %{object_id: target_id} = target}} = socket
       ) do
     current = Discovery.state(target_id, provider_slug)
 
     cond do
+      not Providers.supports?(provider_slug, :film) ->
+        {:noreply, socket}
+
       current.mapping_id == mapping_id ->
         state =
           if transient_items == [] do
@@ -212,6 +218,8 @@ defmodule DevilsDictionaryWeb.WordLive do
           else
             Map.merge(current, %{status: :ready, items: transient_items})
           end
+
+        state = Map.merge(state, %{term: target.term, relevance: target.relevance})
 
         {:noreply, update(socket, :cultures, &Map.put(&1, provider_slug, state))}
 
@@ -243,10 +251,19 @@ defmodule DevilsDictionaryWeb.WordLive do
 
       state =
         case result do
-          {:queued, _run} -> Map.put(culture, :loading_more, true)
-          {:cached, _run} -> Discovery.state(target.object_id, provider_slug)
-          {:deferred, _reason} -> Map.put(culture, :status, :deferred)
-          {:error, _reason} -> Discovery.state(target.object_id, provider_slug)
+          {:queued, _run} ->
+            Map.put(culture, :loading_more, true)
+
+          {:cached, _run} ->
+            Discovery.state(target.object_id, provider_slug)
+
+          {:deferred, _reason} ->
+            culture |> Map.put(:status, :deferred) |> Map.put(:loading_more, false)
+
+          {:error, _reason} ->
+            target.object_id
+            |> Discovery.state(provider_slug)
+            |> Map.merge(%{term: target.term, relevance: target.relevance, loading_more: false})
         end
 
       {:noreply, update(socket, :cultures, &Map.put(&1, provider_slug, state))}

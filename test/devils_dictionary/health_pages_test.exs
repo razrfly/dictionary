@@ -110,7 +110,14 @@ defmodule DevilsDictionary.HealthPagesTest do
 
       cat = Lexicon.get_lexeme("en", "cat", "noun")
       concept = concept!("Q146", "cat", wikipedia_title: "Cat")
-      link!(cat, concept, confidence: 0.95)
+
+      sense =
+        Repo.one!(
+          from s in DevilsDictionary.Registry.Sense,
+            where: s.lexeme_id == ^cat.object_id and s.source_id == ^ctx.sources["wordnet"].id
+        )
+
+      link!(cat, concept, confidence: 0.95, sense: sense)
 
       result = Health.cards_link_out()
 
@@ -173,7 +180,14 @@ defmodule DevilsDictionary.HealthPagesTest do
       flagships!(ctx)
       cat = Lexicon.get_lexeme("en", "cat", "noun")
       concept = concept!("Q146", "cat", wikipedia_title: "Cat")
-      link!(cat, concept, confidence: 0.95)
+
+      sense =
+        Repo.one!(
+          from s in DevilsDictionary.Registry.Sense,
+            where: s.lexeme_id == ^cat.object_id and s.source_id == ^ctx.sources["wordnet"].id
+        )
+
+      link!(cat, concept, confidence: 0.95, sense: sense)
 
       # No `source_records` row exists for Q146 in this fixture, so the panel
       # reports 0 of 1 — and the graded figure is untouched by it.

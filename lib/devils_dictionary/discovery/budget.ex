@@ -3,7 +3,7 @@ defmodule DevilsDictionary.Discovery.Budget do
 
   import Ecto.Query
 
-  alias DevilsDictionary.Discovery.{Mapping, Run}
+  alias DevilsDictionary.Discovery.{Mapping, RequestAttempt, Run}
   alias DevilsDictionary.Repo
   alias DevilsDictionary.Sources.Source
 
@@ -22,12 +22,11 @@ defmodule DevilsDictionary.Discovery.Budget do
       max_attempts = config(:max_retries) + 1
 
       used =
-        Repo.one(
-          from r in Run,
-            join: m in Mapping,
-            on: m.id == r.mapping_id,
-            where: m.source_id == ^mapping.source_id and r.last_request_at > ^cutoff,
-            select: coalesce(sum(r.request_count), 0)
+        Repo.aggregate(
+          from(attempt in RequestAttempt,
+            where: attempt.source_id == ^mapping.source_id and attempt.attempted_at > ^cutoff
+          ),
+          :count
         )
 
       cond do
@@ -42,6 +41,15 @@ defmodule DevilsDictionary.Discovery.Budget do
           Repo.rollback({:budget_exhausted, 60})
 
         true ->
+          %RequestAttempt{}
+          |> RequestAttempt.changeset(%{
+            run_id: run.id,
+            source_id: mapping.source_id,
+            stage: stage,
+            attempted_at: now
+          })
+          |> Repo.insert!()
+
           transport_attempts =
             run.request_parameters
             |> Map.get("transport_attempts", %{})

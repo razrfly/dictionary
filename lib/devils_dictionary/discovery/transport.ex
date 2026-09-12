@@ -15,6 +15,7 @@ defmodule DevilsDictionary.Discovery.Transport do
           provider.request_options(payload)
           |> Keyword.merge(
             receive_timeout: Keyword.fetch!(config, :timeout_ms),
+            connect_options: [timeout: Keyword.fetch!(config, :timeout_ms)],
             retry: false
           )
           |> Keyword.merge(Application.get_env(:devils_dictionary, :discovery_req_options, []))
@@ -92,13 +93,17 @@ defmodule DevilsDictionary.Discovery.Transport do
   end
 
   defp parse_http_date(value, now) do
-    case :httpd_util.convert_request_date(String.to_charlist(value)) do
-      {{_, _, _}, {_, _, _}} = erl_datetime ->
-        retry_at = erl_datetime |> NaiveDateTime.from_erl!() |> DateTime.from_naive!("Etc/UTC")
-        max(DateTime.diff(retry_at, now, :second), 0)
+    try do
+      case :httpd_util.convert_request_date(String.to_charlist(value)) do
+        {{_, _, _}, {_, _, _}} = erl_datetime ->
+          retry_at = erl_datetime |> NaiveDateTime.from_erl!() |> DateTime.from_naive!("Etc/UTC")
+          max(DateTime.diff(retry_at, now, :second), 0)
 
-      _ ->
-        nil
+        _ ->
+          nil
+      end
+    rescue
+      FunctionClauseError -> nil
     end
   end
 

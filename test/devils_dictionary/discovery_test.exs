@@ -6,7 +6,7 @@ defmodule DevilsDictionary.DiscoveryTest do
 
   alias DevilsDictionary.Claims
   alias DevilsDictionary.Discovery
-  alias DevilsDictionary.Discovery.{Mapping, Result, Run, Transport}
+  alias DevilsDictionary.Discovery.{Budget, Mapping, RequestAttempt, Result, Run, Transport}
   alias DevilsDictionary.Discovery.Providers.CineGraph
   alias DevilsDictionary.Registry
   alias DevilsDictionary.Registry.Object
@@ -68,6 +68,26 @@ defmodule DevilsDictionary.DiscoveryTest do
     assert :ok = Discovery.execute_run(run.id)
     assert %{status: :empty, empty_reason: :no_results} = Discovery.state(barren.object_id)
     assert Repo.get!(Run, run.id).request_count == 2
+  end
+
+  test "missing image configuration degrades to a posterless result", ctx do
+    original = Application.fetch_env!(:devils_dictionary, :cinegraph)
+    on_exit(fn -> Application.put_env(:devils_dictionary, :cinegraph, original) end)
+
+    Application.put_env(
+      :devils_dictionary,
+      :cinegraph,
+      Keyword.put(original, :image_base_url, nil)
+    )
+
+    word = word!(ctx, "poster-config", ~w(wordnet))
+    stub_success("poster-config", 808, [movie(808, "Posterless by configuration")])
+
+    assert {:queued, run} = Discovery.request(target(word), "cinegraph")
+    assert :ok = Discovery.execute_run(run.id)
+
+    assert [%Result{preview_metadata: %{"poster_url" => nil}}] =
+             Discovery.state(word.object_id).items
   end
 
   test "timeouts retry within the request budget and malformed responses fail safely", ctx do
@@ -199,6 +219,117 @@ defmodule DevilsDictionary.DiscoveryTest do
              )
   end
 
+  test "each cursor page gets its own transport retry allowance", ctx do
+    word = word!(ctx, "paged", ~w(wordnet))
+    counter = start_supervised!({Agent, fn -> 0 end})
+
+    Req.Test.stub(CineGraph, fn conn ->
+      body = request_body(conn)
+
+      if String.contains?(body["query"], "searchMovieKeywords") do
+        keyword_response(conn, "paged", 42)
+      else
+        call = Agent.get_and_update(counter, &{&1, &1 + 1})
+
+        cond do
+          call in [0, 1, 3, 4] -> Req.Test.transport_error(conn, :timeout)
+          call == 2 -> discovery_response(conn, [movie(1, "First")], "cursor-1")
+          true -> discovery_response(conn, [movie(2, "Second")], nil)
+        end
+      end
+    end)
+
+    assert {:queued, first} = Discovery.request(target(word), "cinegraph")
+    assert :ok = Discovery.execute_run(first.id)
+    state = Discovery.state(word.object_id)
+
+    assert {:queued, second} =
+             Discovery.request_next(
+               word.object_id,
+               "cinegraph",
+               state.page_context,
+               state.page,
+               state.next_cursor
+             )
+
+    assert :ok = Discovery.execute_run(second.id)
+    assert Repo.get!(Run, second.id).status == :succeeded
+    assert Repo.get!(Run, second.id).request_count == 3
+    assert Enum.map(Discovery.state(word.object_id).items, & &1.external_id) == ["1", "2"]
+  end
+
+  for late_outcome <- [:success, :failure, :exception] do
+    @late_outcome late_outcome
+    test "a recovered worker ignores the old #{@late_outcome} response", ctx do
+      word = word!(ctx, "paged", ~w(wordnet))
+      assert {:queued, run} = Discovery.request(target(word), "cinegraph")
+      counter = start_supervised!({Agent, fn -> 0 end})
+
+      Req.Test.stub(CineGraph, fn conn ->
+        body = request_body(conn)
+
+        if String.contains?(body["query"], "searchMovieKeywords") do
+          keyword_response(conn, "paged", 42)
+        else
+          call = Agent.get_and_update(counter, &{&1, &1 + 1})
+
+          if call == 0 do
+            past = DateTime.add(DateTime.utc_now(), -1, :second)
+
+            Repo.update_all(from(r in Run, where: r.id == ^run.id),
+              set: [execution_lease_expires_at: past]
+            )
+
+            assert %{recovered: 1} = Discovery.cleanup()
+            assert :ok = Discovery.execute_run(run.id)
+
+            case @late_outcome do
+              :success -> discovery_response(conn, [movie(1, "Late old result")], nil)
+              :failure -> json(conn, %{"data" => %{"unexpected" => []}})
+              :exception -> raise "old worker crashed"
+            end
+          else
+            discovery_response(conn, [movie(2, "Recovered result")], nil)
+          end
+        end
+      end)
+
+      if @late_outcome == :exception do
+        assert_raise RuntimeError, "old worker crashed", fn -> Discovery.execute_run(run.id) end
+      else
+        assert :ok = Discovery.execute_run(run.id)
+      end
+
+      assert Repo.get!(Run, run.id).status == :succeeded
+      assert [%Result{external_id: "2"}] = Discovery.state(word.object_id).items
+    end
+  end
+
+  test "durable discovery identity does not archive disposable previews or keyword matches",
+       ctx do
+    for {term, keyword_id, title} <- [{"war", 42, "First title"}, {"peace", 43, "Updated title"}] do
+      word = word!(ctx, term, ~w(wordnet))
+      stub_success(term, keyword_id, [movie(10, title)])
+      assert {:queued, run} = Discovery.request(target(word), "cinegraph")
+      assert :ok = Discovery.execute_run(run.id)
+    end
+
+    results = Repo.all(Result)
+    assert length(results) == 2
+    assert [record_id] = results |> Enum.map(& &1.source_record_id) |> Enum.uniq()
+
+    payloads =
+      Repo.all(
+        from revision in DevilsDictionary.Corpus.SourceRecordRevision,
+          where: revision.source_record_id == ^record_id,
+          select: revision.payload
+      )
+
+    assert [payload] = payloads
+    assert Map.keys(payload) |> Enum.sort() == ["external_id", "external_namespace"]
+    assert payload["external_id"] == "10"
+  end
+
   test "refresh-due previews remain usable, hard expiry and withdrawal do not", ctx do
     original = Application.fetch_env!(:devils_dictionary, :discovery)
     on_exit(fn -> Application.put_env(:devils_dictionary, :discovery, original) end)
@@ -278,6 +409,9 @@ defmodule DevilsDictionary.DiscoveryTest do
       |> Req.Response.put_header("retry-after", "Sat, 12 Sep 2026 10:02:00 GMT")
 
     assert Transport.retry_after_seconds(dated, now) == 120
+
+    negative = Req.Response.new() |> Req.Response.put_header("retry-after", "-1")
+    assert Transport.retry_after_seconds(negative, now) == nil
   end
 
   test "Retry-After defers the existing run and blocks fresh visits provider-wide", ctx do
@@ -392,6 +526,12 @@ defmodule DevilsDictionary.DiscoveryTest do
     assert pending.error_code == "request_budget"
     assert pending.request_count == 1
     assert pending.request_parameters["resolved_keyword_ids"] == [71]
+
+    Repo.update_all(RequestAttempt,
+      set: [attempted_at: DateTime.add(DateTime.utc_now(), -61, :second)]
+    )
+
+    assert :ok = Budget.claim(run.id, "movie_discovery")
   end
 
   test "concurrent mapping changes serialize and leave exactly one enabled version", ctx do
@@ -597,7 +737,7 @@ defmodule DevilsDictionary.DiscoveryTest do
     assert %{completion_reason: :transient_results, result_count: 1} = Repo.get!(Run, run.id)
   end
 
-  test "retired, split and merged targets suspend discovery at domain and database boundaries",
+  test "retired, split and merged targets suspend queued work at domain and database boundaries",
        ctx do
     word = word!(ctx, "retired", ~w(wordnet))
     assert {:queued, run} = Discovery.request(target(word), "cinegraph")
@@ -606,6 +746,10 @@ defmodule DevilsDictionary.DiscoveryTest do
 
     assert {:error, :invalid_target} = Discovery.request(target(word), "cinegraph")
     assert Discovery.state(word.object_id).status == :idle
+    assert :ok = Discovery.execute_run(run.id)
+
+    assert %{status: :failed, error_code: "mapping_ineligible", request_count: 0} =
+             Repo.get!(Run, run.id)
 
     assert_raise Postgrex.Error, ~r/discovery target must be an active lexeme or sense/, fn ->
       %Mapping{}
@@ -625,7 +769,7 @@ defmodule DevilsDictionary.DiscoveryTest do
     split_input = word!(ctx, "split-input", ~w(wordnet))
     split_a = word!(ctx, "split-a", ~w(wordnet))
     split_b = word!(ctx, "split-b", ~w(wordnet))
-    assert {:queued, _run} = Discovery.request(target(split_input), "cinegraph")
+    assert {:queued, split_run} = Discovery.request(target(split_input), "cinegraph")
 
     assert {:ok, _event} =
              Registry.split(split_input.object_id, [split_a.object_id, split_b.object_id],
@@ -634,10 +778,14 @@ defmodule DevilsDictionary.DiscoveryTest do
 
     assert {:error, :invalid_target} = Discovery.request(target(split_input), "cinegraph")
     assert Discovery.state(split_input.object_id).status == :idle
+    assert :ok = Discovery.execute_run(split_run.id)
+
+    assert %{status: :failed, error_code: "mapping_ineligible", request_count: 0} =
+             Repo.get!(Run, split_run.id)
 
     merged_input = word!(ctx, "merged-input", ~w(wordnet))
     merged_output = word!(ctx, "merged-output", ~w(wordnet))
-    assert {:queued, _run} = Discovery.request(target(merged_input), "cinegraph")
+    assert {:queued, merged_run} = Discovery.request(target(merged_input), "cinegraph")
 
     assert {:ok, _event} =
              Registry.merge([merged_input.object_id], merged_output.object_id,
@@ -646,6 +794,52 @@ defmodule DevilsDictionary.DiscoveryTest do
 
     assert {:error, :invalid_target} = Discovery.request(target(merged_input), "cinegraph")
     assert Discovery.state(merged_input.object_id).status == :idle
+    assert :ok = Discovery.execute_run(merged_run.id)
+
+    assert %{status: :failed, error_code: "mapping_ineligible", request_count: 0} =
+             Repo.get!(Run, merged_run.id)
+  end
+
+  test "automatic mappings supersede stale adapter versions and configured catalogs", ctx do
+    original = Application.get_env(:devils_dictionary, :discovery_providers)
+    fixture = DevilsDictionary.FakeTransientDiscoveryProvider
+
+    on_exit(fn ->
+      if original,
+        do: Application.put_env(:devils_dictionary, :discovery_providers, original),
+        else: Application.delete_env(:devils_dictionary, :discovery_providers)
+    end)
+
+    Application.put_env(:devils_dictionary, :discovery_providers, [fixture])
+
+    assert Enum.map(DevilsDictionary.Discovery.Providers.source_catalog(), & &1.slug) == [
+             fixture.slug()
+           ]
+
+    Application.put_env(:devils_dictionary, :discovery_providers, [CineGraph])
+    word = word!(ctx, "adapter-version", ~w(wordnet))
+    target = target(word)
+    actor = Repo.insert!(%Actor{actor_kind: :import, label: "stale adapter fixture"})
+    {operation, parameters} = CineGraph.automatic_mapping(target)
+
+    stale =
+      %Mapping{}
+      |> Mapping.create_changeset(%{
+        mapping_key: "automatic/cinegraph/#{word.object_id}/cinegraph.old",
+        version: 1,
+        target_object_id: word.object_id,
+        source_id: ctx.sources["cinegraph"].id,
+        operation: operation,
+        parameters: parameters,
+        configured_by_actor_id: actor.id,
+        enabled: true
+      })
+      |> Repo.insert!()
+
+    assert {:queued, run} = Discovery.request(target, "cinegraph")
+    refute Repo.get!(Mapping, stale.id).enabled
+    assert Repo.get!(Mapping, run.mapping_id).mapping_key =~ CineGraph.adapter_version()
+    assert Discovery.state(word.object_id).mapping_id == run.mapping_id
   end
 
   defp target(word) do
