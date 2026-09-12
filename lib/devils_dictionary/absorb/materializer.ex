@@ -1099,10 +1099,10 @@ defmodule DevilsDictionary.Absorb.Materializer do
   # compares as itself.
   defp same?(nil, []), do: true
   defp same?([], nil), do: true
-  defp same?(nil, %{}), do: true
-  defp same?(%{}, nil), do: true
-  defp same?(%{}, []), do: true
-  defp same?([], %{}), do: true
+  defp same?(nil, map) when is_map(map) and map_size(map) == 0, do: true
+  defp same?(map, nil) when is_map(map) and map_size(map) == 0, do: true
+  defp same?(map, []) when is_map(map) and map_size(map) == 0, do: true
+  defp same?([], map) when is_map(map) and map_size(map) == 0, do: true
   defp same?(a, b), do: a == b
 
   # ── assertions ───────────────────────────────────────────────────────────

@@ -161,6 +161,27 @@ defmodule DevilsDictionary.Absorb.MaterializerTest do
       assert counts() == before
     end
 
+    test "a non-empty examples object is not mistaken for an empty list" do
+      source = source!()
+
+      record =
+        record!(source, %{
+          "lemma" => "map-example",
+          "examples" => %{"note" => "must trigger a later revision"}
+        })
+
+      {:ok, _} = Materializer.run(record, FakeSource)
+      sense = Repo.get_by!(Sense, external_key: "fake-map-example")
+      assert Registry.current_sense_revision(sense.object_id).revision_number == 1
+
+      replacement = record!(source, %{"lemma" => "map-example", "examples" => []})
+      {:ok, _} = Materializer.run(replacement, FakeSource)
+
+      current = Registry.current_sense_revision(sense.object_id)
+      assert current.revision_number == 2
+      assert current.examples == []
+    end
+
     test "a second source attesting the same word adds to source_ids, not rows" do
       first = source!("fake-a")
       second = source!("fake-b")

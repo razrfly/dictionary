@@ -46,6 +46,7 @@ defmodule DevilsDictionary.FakeSource do
               source_id: source_id,
               source_record_id: Map.get(record, :id),
               gloss: raw["gloss"] || "a gloss",
+              examples: raw["examples"] || [],
               group_key: "fake-group"
             }
           ]
@@ -58,6 +59,7 @@ defmodule DevilsDictionary.FakeSource do
               source_id: source_id,
               source_record_id: Map.get(record, :id),
               gloss: sense["gloss"],
+              examples: sense["examples"] || [],
               group_key: "fake-group"
             }
           end)
