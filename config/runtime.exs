@@ -23,6 +23,15 @@ end
 config :devils_dictionary, DevilsDictionaryWeb.Endpoint,
   http: [port: String.to_integer(System.get_env("PORT", "4007"))]
 
+# The existing CineGraph server-to-server Bearer key never reaches LiveView
+# assigns or browser code. A missing key disables the provider cleanly; it does
+# not stop definitions or the rest of the application from starting.
+if cinegraph_api_key = System.get_env("CINEGRAPH_API_KEY") do
+  config :devils_dictionary, :cinegraph,
+    api_key: cinegraph_api_key,
+    endpoint: System.get_env("CINEGRAPH_GRAPHQL_URL", "https://cinegraph.org/api/graphql")
+end
+
 if config_env() == :dev do
   # Reload browser tabs when matching files change.
   config :devils_dictionary, DevilsDictionaryWeb.Endpoint,

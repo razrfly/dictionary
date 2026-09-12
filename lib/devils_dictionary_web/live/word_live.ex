@@ -33,9 +33,11 @@ defmodule DevilsDictionaryWeb.WordLive do
   use DevilsDictionaryWeb, :live_view
 
   alias DevilsDictionary.Demo, as: Samples
+  alias DevilsDictionary.Discovery
+  alias DevilsDictionary.Discovery.Providers
   alias DevilsDictionary.Lexicon
   alias DevilsDictionary.Lexicon.WordPage
-  alias DevilsDictionaryWeb.{Demo, Provenance, Thing, Word}
+  alias DevilsDictionaryWeb.{Culture, Demo, Provenance, Thing, Word}
 
   @trail_cap 12
   @suggestions 5
@@ -50,7 +52,9 @@ defmodule DevilsDictionaryWeb.WordLive do
        demo: false,
        evidence: [],
        object_id: nil,
-       choices: []
+       choices: [],
+       discovery_target: nil,
+       culture: nil
      )}
   end
 
@@ -112,16 +116,98 @@ defmodule DevilsDictionaryWeb.WordLive do
     card_sources = page.cards |> Enum.map(& &1.source.name) |> Enum.uniq()
     page = if demo, do: Samples.decorate(page, samples), else: page
 
+    socket =
+      socket
+      |> assign(:slug, slug)
+      |> assign(:trail, trail)
+      |> assign(:demo, demo)
+      |> assign(:evidence, samples.evidence)
+      |> assign(:page, page)
+      |> assign(:page_title, title(page, slug))
+      |> assign(:card_sources, card_sources)
+      |> assign(:suggestions, suggestions(page, slug))
+      |> assign(:choices, choices(slug, socket.assigns.object_id))
+
+    prepare_discovery(socket, page, demo)
+  end
+
+  defp prepare_discovery(socket, page, demo) do
+    target = Discovery.target_for_page(page, socket.assigns.object_id, demo)
+    old_target = socket.assigns.discovery_target
+
+    if (connected?(socket) and old_target) &&
+         (!target || old_target.object_id != target.object_id) do
+      Discovery.unsubscribe(old_target.object_id)
+    end
+
+    culture =
+      cond do
+        is_nil(target) or Providers.server_providers() == [] ->
+          nil
+
+        connected?(socket) ->
+          if is_nil(old_target) or old_target.object_id != target.object_id do
+            :ok = Discovery.subscribe(target.object_id)
+          end
+
+          outcomes = Discovery.request_all(target)
+          state = Discovery.state(target.object_id)
+
+          if state.status == :idle and
+               Enum.any?(outcomes, fn {_slug, result} -> match?({:deferred, _}, result) end) do
+            Map.merge(state, %{status: :deferred, term: target.term, relevance: target.relevance})
+          else
+            Map.merge(state, %{term: target.term, relevance: target.relevance})
+          end
+
+        true ->
+          %{status: :loading, items: [], term: target.term, relevance: target.relevance}
+      end
+
     socket
-    |> assign(:slug, slug)
-    |> assign(:trail, trail)
-    |> assign(:demo, demo)
-    |> assign(:evidence, samples.evidence)
-    |> assign(:page, page)
-    |> assign(:page_title, title(page, slug))
-    |> assign(:card_sources, card_sources)
-    |> assign(:suggestions, suggestions(page, slug))
-    |> assign(:choices, choices(slug, socket.assigns.object_id))
+    |> assign(:discovery_target, target)
+    |> assign(:culture, culture)
+  end
+
+  @impl true
+  def handle_info(
+        {:discovery_updated, target_id, _mapping_id, provider_slug, transient_items},
+        %{assigns: %{discovery_target: %{object_id: target_id}}} = socket
+      ) do
+    state = Discovery.state(target_id, provider_slug)
+
+    state =
+      if transient_items == [] do
+        state
+      else
+        Map.merge(state, %{status: :ready, items: transient_items})
+      end
+
+    {:noreply, assign(socket, :culture, state)}
+  end
+
+  def handle_info({:discovery_updated, _target_id, _mapping_id, _provider, _items}, socket),
+    do: {:noreply, socket}
+
+  @impl true
+  def handle_event("discovery_more", _params, socket) do
+    culture = socket.assigns.culture
+    target = socket.assigns.discovery_target
+
+    if target && culture && culture[:next_cursor] do
+      _ =
+        Discovery.request_next(
+          target.object_id,
+          culture.provider,
+          culture.page_context,
+          culture.page,
+          culture.next_cursor
+        )
+
+      {:noreply, assign(socket, :culture, Map.put(culture, :loading_more, true))}
+    else
+      {:noreply, socket}
+    end
   end
 
   # A slug that names more than one *distinct lemma* is ambiguous, and #74 says
@@ -223,6 +309,8 @@ defmodule DevilsDictionaryWeb.WordLive do
           </div>
 
           <Word.bare_row :if={@page.cards == []} lemma={@page.headword.lemma} />
+
+          <Culture.section :if={@culture} state={@culture} />
 
           <Word.related_block
             :for={related <- @page.related}
