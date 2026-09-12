@@ -50,25 +50,38 @@ defmodule DevilsDictionary.FakeTransientDiscoveryProvider do
   def validate_mapping(_operation, _mapping), do: {:error, :invalid_mapping}
 
   def retrieve("search", mapping, request, _request_fun) do
+    cond do
+      String.starts_with?(mapping["term"], "fixture-failure") ->
+        {:error, "fixture_failure"}
+
+      String.starts_with?(mapping["term"], "fixture-empty") ->
+        success(request, [])
+
+      true ->
+        success(request, [
+          %{
+            external_namespace: "fixture_art",
+            external_id: "one",
+            position: 0,
+            match_details: %{"kind" => "search", "query" => mapping["term"]},
+            preview_metadata: %{
+              "title" => "Transient work",
+              "content_type" => "art",
+              "provider" => "Transient fixture"
+            },
+            display_allowed: true
+          }
+        ])
+    end
+  end
+
+  defp success(request, items) do
     {:ok,
      %{
        request_parameters: request,
        next_cursor: nil,
-       completion_reason: :results,
-       items: [
-         %{
-           external_namespace: "fixture_art",
-           external_id: "one",
-           position: 0,
-           match_details: %{"kind" => "search", "query" => mapping["term"]},
-           preview_metadata: %{
-             "title" => "Transient work",
-             "content_type" => "art",
-             "provider" => "Transient fixture"
-           },
-           display_allowed: true
-         }
-       ]
+       completion_reason: if(items == [], do: :no_results, else: :results),
+       items: items
      }}
   end
 end

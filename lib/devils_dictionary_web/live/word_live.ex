@@ -54,7 +54,7 @@ defmodule DevilsDictionaryWeb.WordLive do
        object_id: nil,
        choices: [],
        discovery_target: nil,
-       culture: nil
+       cultures: %{}
      )}
   end
 
@@ -140,62 +140,99 @@ defmodule DevilsDictionaryWeb.WordLive do
       Discovery.unsubscribe(old_target.object_id)
     end
 
-    culture =
+    cultures =
       cond do
         is_nil(target) or Providers.server_providers() == [] ->
-          nil
+          %{}
 
         connected?(socket) ->
           if is_nil(old_target) or old_target.object_id != target.object_id do
             :ok = Discovery.subscribe(target.object_id)
           end
 
-          outcomes = Discovery.request_all(target)
-          state = Discovery.state(target.object_id)
+          target
+          |> Discovery.request_all()
+          |> Enum.reduce(%{}, fn {provider_slug, outcome}, states ->
+            state =
+              target.object_id
+              |> Discovery.state(provider_slug)
+              |> Map.merge(%{term: target.term, relevance: target.relevance})
+              |> state_for_outcome(outcome)
 
-          if state.status == :idle and
-               Enum.any?(outcomes, fn {_slug, result} -> match?({:deferred, _}, result) end) do
-            Map.merge(state, %{status: :deferred, term: target.term, relevance: target.relevance})
-          else
-            Map.merge(state, %{term: target.term, relevance: target.relevance})
-          end
+            if state.mapping_id || state.status != :idle,
+              do: Map.put(states, provider_slug, state),
+              else: states
+          end)
 
         true ->
-          %{status: :loading, items: [], term: target.term, relevance: target.relevance}
+          Providers.server_providers()
+          |> Enum.map(fn provider ->
+            attrs = provider.source_attrs()
+
+            {provider.slug(),
+             %{
+               status: :loading,
+               items: [],
+               provider: provider.slug(),
+               provider_name: attrs.name,
+               content_types: provider.capabilities().content_types,
+               mapping_id: nil,
+               term: target.term,
+               relevance: target.relevance
+             }}
+          end)
+          |> Map.new()
       end
 
     socket
     |> assign(:discovery_target, target)
-    |> assign(:culture, culture)
+    |> assign(:cultures, cultures)
   end
+
+  defp state_for_outcome(state, {:deferred, _reason}) when state.status == :idle,
+    do: Map.put(state, :status, :deferred)
+
+  defp state_for_outcome(state, {:error, _reason}) when state.status == :idle,
+    do: Map.put(state, :status, :failed)
+
+  defp state_for_outcome(state, _outcome), do: state
 
   @impl true
   def handle_info(
-        {:discovery_updated, target_id, _mapping_id, provider_slug, transient_items},
+        {:discovery_updated, target_id, mapping_id, provider_slug, transient_items},
         %{assigns: %{discovery_target: %{object_id: target_id}}} = socket
       ) do
-    state = Discovery.state(target_id, provider_slug)
+    current = Discovery.state(target_id, provider_slug)
 
-    state =
-      if transient_items == [] do
-        state
-      else
-        Map.merge(state, %{status: :ready, items: transient_items})
-      end
+    cond do
+      current.mapping_id == mapping_id ->
+        state =
+          if transient_items == [] do
+            current
+          else
+            Map.merge(current, %{status: :ready, items: transient_items})
+          end
 
-    {:noreply, assign(socket, :culture, state)}
+        {:noreply, update(socket, :cultures, &Map.put(&1, provider_slug, state))}
+
+      is_nil(current.mapping_id) ->
+        {:noreply, update(socket, :cultures, &Map.delete(&1, provider_slug))}
+
+      true ->
+        {:noreply, socket}
+    end
   end
 
   def handle_info({:discovery_updated, _target_id, _mapping_id, _provider, _items}, socket),
     do: {:noreply, socket}
 
   @impl true
-  def handle_event("discovery_more", _params, socket) do
-    culture = socket.assigns.culture
+  def handle_event("discovery_more", %{"provider" => provider_slug}, socket) do
+    culture = socket.assigns.cultures[provider_slug]
     target = socket.assigns.discovery_target
 
     if target && culture && culture[:next_cursor] do
-      _ =
+      result =
         Discovery.request_next(
           target.object_id,
           culture.provider,
@@ -204,7 +241,15 @@ defmodule DevilsDictionaryWeb.WordLive do
           culture.next_cursor
         )
 
-      {:noreply, assign(socket, :culture, Map.put(culture, :loading_more, true))}
+      state =
+        case result do
+          {:queued, _run} -> Map.put(culture, :loading_more, true)
+          {:cached, _run} -> Discovery.state(target.object_id, provider_slug)
+          {:deferred, _reason} -> Map.put(culture, :status, :deferred)
+          {:error, _reason} -> Discovery.state(target.object_id, provider_slug)
+        end
+
+      {:noreply, update(socket, :cultures, &Map.put(&1, provider_slug, state))}
     else
       {:noreply, socket}
     end
@@ -310,7 +355,7 @@ defmodule DevilsDictionaryWeb.WordLive do
 
           <Word.bare_row :if={@page.cards == []} lemma={@page.headword.lemma} />
 
-          <Culture.section :if={@culture} state={@culture} />
+          <Culture.section :if={@cultures != %{}} states={@cultures} />
 
           <Word.related_block
             :for={related <- @page.related}

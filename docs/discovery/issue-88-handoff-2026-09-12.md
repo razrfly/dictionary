@@ -34,13 +34,18 @@ Migration `20260912085220_create_discovery_cache` adds exactly three tables:
 - `discovery_results` stores stable namespaced provider identity, response
   position, validated match details, and the permitted bounded preview. An
   optional nullable FK links only to a pre-existing verified object identity.
-  Results are unique by external identity and position within one response.
+  A second FK points to the provider's existing durable `source_records`
+  identity; display policy lives there so cache deletion or refresh cannot
+  resurrect a withdrawn item. Results are unique by external identity and
+  position within one response.
 
 Runs delete their disposable results; mappings delete their disposable runs.
 Registry objects use `nilify_all`, while mapping target/source/actor FKs use
 `restrict`. Cleanup therefore cannot cascade into objects, claims, or evidence.
-The cleanup service removes completed attempts older than seven days and keeps
-at most three attempts per mapping/request position.
+An Oban cron worker runs bounded cleanup independently of successful requests,
+removes completed attempts older than seven days, keeps at most three attempts
+per mapping/request position, and requeues abandoned leased runs. Source-record
+display policy survives this disposable-cache cleanup.
 
 Reader selection uses only the current enabled mapping and a successful,
 display-allowed, unexpired root response. It selects the newest successful root
@@ -49,7 +54,9 @@ not hide or extend an older still-permitted response. Cursor pages must share
 the root's mapping and UUID context. The visible feed deduplicates evidenced
 object identity first and provider identity otherwise; matching titles do not
 merge unrelated films. Withdrawal is enforced even when an independently
-retained object or claim survives.
+retained object or claim survives. Reinstatement is a separate explicit
+operation requiring an existing actor and reason; ordinary visits, refreshes,
+and provider responses cannot do it.
 
 ## Provider contract and CineGraph behavior
 
@@ -94,7 +101,7 @@ The initial values are adjustable application configuration:
 |---|---:|
 | Root/page result limit | 12 |
 | Cursor pages retained per context | 5 maximum, only on reader demand |
-| Oban provider concurrency | 2 |
+| Database-enforced provider execution leases | 2 |
 | Admission queue cap per provider | 100 pending/running runs |
 | Rolling provider budget | 30 outbound attempts/minute, retries included |
 | Positive and negative refresh eligibility | 24 hours, demand-triggered |
@@ -105,11 +112,14 @@ The initial values are adjustable application configuration:
 | Retention | 7 days; 3 completed attempts per mapping/position |
 
 Budget claims use a PostgreSQL advisory lock and are charged before every HTTP
-attempt. Exhaustion keeps the run pending and snoozes its existing Oban job; it
-does not create unbounded attempts. Resolution progress is stored in the run so
-a resumed film stage does not repeat a successful keyword lookup. Admission,
-mapping version creation, and refresh deduplication use database locks and
-constraints rather than browser-local flags.
+attempt. Per-stage attempt counters persist in the run across Oban snoozes, so
+deferral cannot reset retry accounting. Numeric and HTTP-date `Retry-After`
+values become a provider-wide database not-before time; long waits snooze the
+job and never block a worker process. Resolution progress is stored in the run
+so a resumed film stage does not repeat a successful keyword lookup. Admission,
+provider-wide queue capacity, provider-wide execution leases, mapping version
+creation, and refresh deduplication use database locks and constraints rather
+than browser-local flags or node-local Oban concurrency claims.
 
 ## Reusable task
 
@@ -119,8 +129,12 @@ the SQL limit before enumeration, and invokes the same target, mapping,
 admission, cache, Oban, transport, and normalization services as a page visit.
 
 Examples and all supported flags are in `mix help dd.discovery`. The bounded
-default is 20 and maximum is 100. `--after OBJECT_ID` is its deterministic
-checkpoint. `--providers all` means enabled, server-executable background
+default is 20 and maximum is 100. `--after OBJECT_ID` starts the next
+deterministic selection batch; it is never printed as proof that unfinished
+work completed. Failed, queued, or deferred work produces an exact `--resume
+ID,...` command, and missing/retired resume identities fail explicitly. Dry-run
+labels its next checkpoint as a preview rather than progress. `--providers all`
+means enabled, active, server-executable background
 providers; incompatible providers are reported rather than coerced. `--dry-run`
 performs only local selection/capability checks and makes no discovery writes,
 jobs, or external requests. Its completion report keeps positive caches,
@@ -195,6 +209,34 @@ rejection, cross-process admission, budget/queue deferral, object identity
 reuse, independent `illustrates` claim durability, and transient-provider
 no-persist behavior.
 
+### Audit repair verification
+
+The follow-up pass for issue comment 5645185791 reran its seven independent
+reproductions: all seven pass. The final `mix precommit` completed 863 tests
+with zero failures. New repository assertions cover durable
+withdrawal and accountable reinstatement, provider-wide execution leases and
+recovery, numeric and HTTP-date `Retry-After`, global provider backoff,
+successful empty transient delivery, exact transient refetch, multi-provider
+failure isolation, mounted deactivation, stale transient-event rejection, and
+exact task resume diagnostics.
+
+Authenticated live CineGraph checks used the existing local server credential
+without printing it. A fresh `impenitence` request completed as a one-request
+successful negative cache; a fresh exact-resume request for `redemption`
+completed with 12 items in two requests; rerunning it reused the positive cache
+with no new work; and explicit refresh of the existing `influence` target
+completed with 12 items in two requests. The unauthenticated endpoint correctly
+returned a GraphQL `unauthorized` error, confirming the credential boundary.
+
+Browser verification used the revised application and current cached provider
+responses. At 1280×720, `war` rendered 12 cards in a 1200 px three-column grid
+(386.7 px cards) with document width equal to viewport width. At an explicit
+390×844 viewport, `nepotism` rendered five cards in one 342 px column with no
+horizontal overflow; the details disclosure opened and exposed both rationale
+and source link. `peroration` retained its definition and showed successful
+empty rather than provider failure. Both browser sessions had zero console
+errors.
+
 ## Remaining limitations and intentionally open work
 
 - Exact spelling is discovery, not semantic interpretation. Polysemous terms
@@ -206,8 +248,8 @@ no-persist behavior.
 - Provider cursors do not promise a corpus snapshot. Five pages is the current
   safety cap, and only the reader can request pages after the first.
 - Cached previews depend on provider display permission and hard expiry.
-  Withdrawal can be enforced locally; this slice does not add a separate remote
-  takedown feed.
+  Withdrawal is durable locally and can be explicitly reinstated; this slice
+  does not add a separate remote takedown feed.
 - Queue and budget deferrals are retried by the existing Oban job or a later
   visit/task resume. This feature does not continuously warm unused pages.
 - Public deployment, more live providers, curation, approval/review, voting,

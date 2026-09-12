@@ -31,6 +31,7 @@ defmodule DevilsDictionary.Discovery.Run do
     field :request_count, :integer, default: 0
     field :last_request_at, :utc_datetime_usec
     field :display_allowed, :boolean, default: true
+    field :execution_lease_expires_at, :utc_datetime_usec
 
     has_many :results, DevilsDictionary.Discovery.Result
 
@@ -85,7 +86,8 @@ defmodule DevilsDictionary.Discovery.Run do
       :result_count,
       :request_count,
       :last_request_at,
-      :display_allowed
+      :display_allowed,
+      :execution_lease_expires_at
     ])
     |> validate_number(:result_count, greater_than_or_equal_to: 0)
     |> validate_number(:request_count, greater_than_or_equal_to: 0)

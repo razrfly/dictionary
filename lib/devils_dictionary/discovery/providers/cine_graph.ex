@@ -111,7 +111,7 @@ defmodule DevilsDictionary.Discovery.Providers.CineGraph do
   defp resolve(mapping, request, request_fun) do
     payload = %{query: @keyword_query, variables: %{query: mapping["term"]}}
 
-    case request_fun.(payload) do
+    case request_fun.("keyword_lookup", payload) do
       {:ok, %{"errors" => _errors}} ->
         {:error, "provider_graphql_error"}
 
@@ -179,7 +179,7 @@ defmodule DevilsDictionary.Discovery.Providers.CineGraph do
       variables: %{keywords: ids, first: first, after: after_cursor}
     }
 
-    case request_fun.(payload) do
+    case request_fun.("movie_discovery", payload) do
       {:ok, %{"errors" => _errors}} ->
         {:error, "provider_graphql_error"}
 

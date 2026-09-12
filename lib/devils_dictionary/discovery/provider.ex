@@ -9,7 +9,8 @@ defmodule DevilsDictionary.Discovery.Provider do
   """
 
   @type request_fun ::
-          (map() -> {:ok, map()} | {:error, String.t()} | {:deferred, String.t(), pos_integer()})
+          (String.t(), map() ->
+             {:ok, map()} | {:error, String.t()} | {:deferred, String.t(), pos_integer()})
 
   @callback slug() :: String.t()
   @callback source_attrs() :: map()

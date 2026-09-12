@@ -6,12 +6,12 @@ defmodule DevilsDictionary.DiscoveryTest do
 
   alias DevilsDictionary.Claims
   alias DevilsDictionary.Discovery
-  alias DevilsDictionary.Discovery.{Mapping, Result, Run}
+  alias DevilsDictionary.Discovery.{Mapping, Result, Run, Transport}
   alias DevilsDictionary.Discovery.Providers.CineGraph
   alias DevilsDictionary.Registry
   alias DevilsDictionary.Registry.Object
   alias DevilsDictionary.Repo
-  alias DevilsDictionary.Sources.Actor
+  alias DevilsDictionary.Sources.{Actor, SourceRecord}
 
   setup do
     catalog = DevilsDictionary.Fixtures.seed_catalog!()
@@ -235,6 +235,144 @@ defmodule DevilsDictionary.DiscoveryTest do
     assert Repo.aggregate(Run, :count) == 1
   end
 
+  test "withdrawal survives refresh and cleanup until an accountable reinstatement", ctx do
+    original = Application.fetch_env!(:devils_dictionary, :discovery)
+    on_exit(fn -> Application.put_env(:devils_dictionary, :discovery, original) end)
+    configure_discovery(refresh_cooldown_seconds: 0, retained_attempts_per_position: 1)
+
+    word = word!(ctx, "durable-withdrawal", ~w(wordnet))
+    stub_success("durable-withdrawal", 501, [movie(501, "Policy-bound")])
+    assert {:queued, first} = Discovery.request(target(word), "cinegraph")
+    assert :ok = Discovery.execute_run(first.id)
+    [first_result] = Discovery.state(word.object_id).items
+
+    assert {1, %SourceRecord{display_allowed: false}} =
+             Discovery.withdraw_result(first_result.id, "provider requested withdrawal")
+
+    assert {:queued, refreshed} =
+             Discovery.request(target(word), "cinegraph", refresh: true)
+
+    assert :ok = Discovery.execute_run(refreshed.id)
+    assert Discovery.state(word.object_id).items == []
+    assert %{deleted: 1} = Discovery.cleanup()
+    assert Repo.get(SourceRecord, first_result.source_record_id).display_allowed == false
+
+    actor = Repo.get!(Actor, Repo.get!(Mapping, refreshed.mapping_id).configured_by_actor_id)
+    [latest_result] = Repo.all(from r in Result, where: r.run_id == ^refreshed.id)
+
+    assert {1, %SourceRecord{display_allowed: true, display_policy_actor_id: actor_id}} =
+             Discovery.reinstate_result(latest_result.id, actor.id, "provider restored listing")
+
+    assert actor_id == actor.id
+    assert [%Result{external_id: "501"}] = Discovery.state(word.object_id).items
+  end
+
+  test "Retry-After accepts delta seconds and HTTP dates without a five-second cap" do
+    numeric = Req.Response.new() |> Req.Response.put_header("retry-after", "120")
+    assert Transport.retry_after_seconds(numeric) == 120
+
+    now = ~U[2026-09-12 10:00:00Z]
+
+    dated =
+      Req.Response.new()
+      |> Req.Response.put_header("retry-after", "Sat, 12 Sep 2026 10:02:00 GMT")
+
+    assert Transport.retry_after_seconds(dated, now) == 120
+  end
+
+  test "Retry-After defers the existing run and blocks fresh visits provider-wide", ctx do
+    first = word!(ctx, "throttled-first", ~w(wordnet))
+    second = word!(ctx, "throttled-second", ~w(wordnet))
+
+    Req.Test.stub(CineGraph, fn conn ->
+      conn
+      |> Plug.Conn.put_resp_header("retry-after", "120")
+      |> Plug.Conn.send_resp(429, "slow down")
+    end)
+
+    assert {:queued, run} = Discovery.request(target(first), "cinegraph")
+    assert {:snooze, 120} = Discovery.execute_run(run.id)
+
+    assert %{status: :pending, request_count: 1, error_code: "provider_retry_after"} =
+             Repo.get!(Run, run.id)
+
+    assert {:deferred, :provider_backoff} =
+             Discovery.request(target(second), "cinegraph", refresh: true)
+
+    assert Repo.aggregate(Run, :count) == 1
+  end
+
+  test "provider-wide execution leases cap independent targets and scheduled cleanup recovers",
+       ctx do
+    original = Application.fetch_env!(:devils_dictionary, :discovery)
+    providers = Application.get_env(:devils_dictionary, :discovery_providers)
+    fixture = DevilsDictionary.FakeTransientDiscoveryProvider
+
+    on_exit(fn ->
+      Application.put_env(:devils_dictionary, :discovery, original)
+
+      if providers,
+        do: Application.put_env(:devils_dictionary, :discovery_providers, providers),
+        else: Application.delete_env(:devils_dictionary, :discovery_providers)
+    end)
+
+    Application.put_env(:devils_dictionary, :discovery_providers, [fixture])
+    configure_discovery(provider_concurrency: 2, execution_lease_seconds: 60)
+
+    runs =
+      for index <- 1..3 do
+        word = word!(ctx, "lease-#{index}", ~w(wordnet))
+        assert {:queued, run} = Discovery.request(target(word), fixture.slug())
+        run
+      end
+
+    lease = DateTime.add(DateTime.utc_now(), 60, :second)
+
+    for run <- Enum.take(runs, 2) do
+      run
+      |> Run.lifecycle_changeset(%{
+        status: :running,
+        started_at: DateTime.utc_now(),
+        execution_lease_expires_at: lease
+      })
+      |> Repo.update!()
+    end
+
+    assert {:snooze, 5} = Discovery.execute_run(List.last(runs).id)
+
+    first = hd(runs)
+    past = DateTime.add(DateTime.utc_now(), -1, :second)
+
+    Repo.update_all(from(r in Run, where: r.id == ^first.id),
+      set: [execution_lease_expires_at: past]
+    )
+
+    assert %{recovered: 1} = Discovery.cleanup()
+    assert Repo.get!(Run, first.id).status == :pending
+  end
+
+  test "transient empty is successful and a later visit fetches again", ctx do
+    providers = Application.get_env(:devils_dictionary, :discovery_providers)
+    fixture = DevilsDictionary.FakeTransientDiscoveryProvider
+
+    on_exit(fn ->
+      if providers,
+        do: Application.put_env(:devils_dictionary, :discovery_providers, providers),
+        else: Application.delete_env(:devils_dictionary, :discovery_providers)
+    end)
+
+    Application.put_env(:devils_dictionary, :discovery_providers, [fixture])
+    word = word!(ctx, "fixture-empty-result", ~w(wordnet))
+    assert {:queued, first} = Discovery.request(target(word), fixture.slug())
+    assert :ok = Discovery.execute_run(first.id)
+
+    assert %{status: :empty, empty_reason: :transient_results} =
+             Discovery.state(word.object_id, fixture.slug())
+
+    assert {:queued, second} = Discovery.request(target(word), fixture.slug())
+    refute second.id == first.id
+  end
+
   test "queue and rolling request budgets defer work without creating unbounded attempts", ctx do
     original = Application.fetch_env!(:devils_dictionary, :discovery)
     on_exit(fn -> Application.put_env(:devils_dictionary, :discovery, original) end)
@@ -430,6 +568,7 @@ defmodule DevilsDictionary.DiscoveryTest do
       end)
 
     first = hd(runs)
+    assert %{deleted: 1} = Discovery.cleanup()
     assert Repo.get(Run, first.id) == nil
     assert Repo.get(Object, film.object_id)
     assert Claims.current_revision(claim.id).object_object_id == sense.object_id

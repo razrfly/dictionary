@@ -9,6 +9,7 @@ defmodule Mix.Tasks.Dd.Discovery do
       mix dd.discovery --definition-source bierce --providers cinegraph --limit 20 --dry-run
       mix dd.discovery --definition-source bierce --providers cinegraph --limit 20
       mix dd.discovery --definition-source johnson --providers all --limit 20 --refresh
+      mix dd.discovery --definition-source bierce --providers cinegraph --resume 42,57
 
   Options:
 
@@ -17,8 +18,10 @@ defmodule Mix.Tasks.Dd.Discovery do
     * `--providers LIST` is a comma-separated list or `all` (default).
     * `--limit N` bounds selection before the corpus is enumerated (default 20,
       maximum 100).
-    * `--after OBJECT_ID` is the deterministic resume checkpoint. Re-running is
-      safe because fresh positive/negative caches and in-flight jobs deduplicate.
+    * `--after OBJECT_ID` starts the next deterministic selection batch. It is
+      not a claim that unfinished requests in an earlier batch completed.
+    * `--resume IDS` retries an exact comma-separated set of unfinished target
+      identities. Missing or no-longer-eligible identities fail explicitly.
     * `--refresh` asks for fresh work but does not bypass budgets, backoff,
       queue caps, in-flight deduplication, retention or display restrictions.
     * `--dry-run` performs local selection and capability checks only. It makes
@@ -42,6 +45,7 @@ defmodule Mix.Tasks.Dd.Discovery do
     providers: :string,
     limit: :integer,
     after: :integer,
+    resume: :string,
     refresh: :boolean,
     dry_run: :boolean,
     wait_ms: :integer
@@ -55,24 +59,31 @@ defmodule Mix.Tasks.Dd.Discovery do
 
     limit = opts[:limit] || 20
     after_id = opts[:after]
+    resume_ids = parse_resume!(opts[:resume])
     source = opts[:definition_source]
     requested = opts[:providers] || "all"
     wait_ms = opts[:wait_ms] || discovery_config()[:task_wait_ms]
 
-    with {:ok, targets} <- Discovery.targets_for_definition_source(source, limit, after_id) do
-      selection_header(source, targets, limit, after_id)
+    selection =
+      if resume_ids == [],
+        do: Discovery.targets_for_definition_source(source, limit, after_id),
+        else: Discovery.targets_for_definition_source_ids(source, resume_ids)
+
+    with {:ok, targets} <- selection do
+      expected = if(resume_ids == [], do: limit, else: length(resume_ids))
+      selection_header(source, targets, expected, after_id)
       {eligible, skipped} = select_providers(requested)
       print_provider_report(eligible, skipped)
 
       if opts[:dry_run] do
         dry_run_report(targets, eligible)
+        print_checkpoint(targets, :dry_run)
       else
         outcomes = execute(targets, eligible, opts[:refresh] == true)
         report = wait_and_classify(outcomes, wait_ms)
         print_completion(report, length(targets) * length(eligible), skipped)
+        print_checkpoint(targets, report, skipped)
       end
-
-      print_checkpoint(targets)
     else
       {:error, :definition_source_not_found} ->
         Mix.raise("definition source #{inspect(source)} is not registered")
@@ -82,6 +93,11 @@ defmodule Mix.Tasks.Dd.Discovery do
 
       {:error, :definition_source_disabled} ->
         Mix.raise("definition source #{inspect(source)} is disabled")
+
+      {:error, {:missing_resume_targets, ids}} ->
+        Mix.raise(
+          "resume targets are missing, retired or no longer defined by #{source}: #{Enum.join(ids, ",")}"
+        )
     end
   end
 
@@ -95,6 +111,9 @@ defmodule Mix.Tasks.Dd.Discovery do
 
     limit = opts[:limit] || 20
     unless limit in 1..100, do: Mix.raise("--limit must be between 1 and 100")
+
+    if opts[:after] && present?(opts[:resume]),
+      do: Mix.raise("--after and --resume are mutually exclusive")
 
     wait_ms = opts[:wait_ms] || discovery_config()[:task_wait_ms]
 
@@ -135,8 +154,9 @@ defmodule Mix.Tasks.Dd.Discovery do
         is_nil(provider) ->
           {eligible, [{to_string(requested_provider), "unsupported"} | skipped]}
 
-        !provider.enabled?() ->
-          {eligible, [{provider.slug(), "disabled or missing server credentials"} | skipped]}
+        Discovery.provider_eligibility(provider.slug()) != :ok ->
+          {eligible,
+           [{provider.slug(), "disabled, inactive or missing server credentials"} | skipped]}
 
         provider.capabilities().transport != :server ->
           {eligible, [{provider.slug(), "not server-executable"} | skipped]}
@@ -278,11 +298,66 @@ defmodule Mix.Tasks.Dd.Discovery do
     end)
   end
 
-  defp print_checkpoint([]), do: :ok
+  defp print_checkpoint([], _result) do
+    Mix.shell().info("Selection checkpoint produced no current targets; no progress was implied.")
+  end
 
-  defp print_checkpoint(targets) do
+  defp print_checkpoint(targets, :dry_run) do
     last = List.last(targets)
-    Mix.shell().info("Resume after this batch with --after #{last.object_id}.")
+
+    Mix.shell().info(
+      "Next selection checkpoint preview: --after #{last.object_id}. Dry-run did not complete this batch."
+    )
+  end
+
+  defp print_checkpoint(targets, report, skipped) do
+    last = List.last(targets)
+    unfinished = Enum.filter(report, &(&1.kind in [:failed, :queued, :deferred]))
+
+    cond do
+      skipped != [] ->
+        ids = targets |> Enum.map(& &1.object_id) |> Enum.uniq() |> Enum.sort()
+
+        Mix.shell().info(
+          "Provider selection changed or is ineligible. Retry this batch with --resume #{Enum.join(ids, ",")}; checkpoint not advanced."
+        )
+
+      unfinished == [] ->
+        Mix.shell().info(
+          "Batch complete. Start the next selection batch with --after #{last.object_id}."
+        )
+
+      true ->
+        ids = unfinished |> Enum.map(& &1.target.object_id) |> Enum.uniq() |> Enum.sort()
+
+        Mix.shell().info(
+          "Batch incomplete. Retry unfinished work with --resume #{Enum.join(ids, ",")}."
+        )
+
+        Mix.shell().info(
+          "Do not advance to --after #{last.object_id} until the unfinished target-provider requests complete."
+        )
+    end
+  end
+
+  defp parse_resume!(nil), do: []
+
+  defp parse_resume!(value) do
+    ids =
+      value
+      |> String.split(",", trim: true)
+      |> Enum.map(fn part ->
+        case Integer.parse(String.trim(part)) do
+          {id, ""} when id > 0 -> id
+          _ -> Mix.raise("--resume must be a comma-separated list of positive object ids")
+        end
+      end)
+      |> Enum.uniq()
+
+    if ids == [] or length(ids) > 100,
+      do: Mix.raise("--resume must contain between 1 and 100 object ids")
+
+    ids
   end
 
   defp present?(value), do: is_binary(value) and String.trim(value) != ""

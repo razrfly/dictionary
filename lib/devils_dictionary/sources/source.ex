@@ -36,6 +36,8 @@ defmodule DevilsDictionary.Sources.Source do
     field :attribution, :string
     field :active, :boolean, default: true
     field :config, :map, default: %{}
+    field :discovery_retry_after, :utc_datetime_usec
+    field :discovery_retry_reason, :string
 
     has_many :source_records, DevilsDictionary.Sources.SourceRecord
 
@@ -58,7 +60,9 @@ defmodule DevilsDictionary.Sources.Source do
       :url_template,
       :attribution,
       :active,
-      :config
+      :config,
+      :discovery_retry_after,
+      :discovery_retry_reason
     ])
     |> validate_required([:slug, :name, :tier, :kind, :access])
     |> unique_constraint(:slug)
