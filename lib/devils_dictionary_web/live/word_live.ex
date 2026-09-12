@@ -372,7 +372,10 @@ defmodule DevilsDictionaryWeb.WordLive do
 
           <Word.bare_row :if={@page.cards == []} lemma={@page.headword.lemma} />
 
-          <Culture.section :if={@cultures != %{}} states={@cultures} />
+          <Culture.section
+            :if={@cultures != %{}}
+            states={@cultures}
+          />
 
           <Word.related_block
             :for={related <- @page.related}

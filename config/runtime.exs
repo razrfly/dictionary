@@ -26,10 +26,53 @@ config :devils_dictionary, DevilsDictionaryWeb.Endpoint,
 # The existing CineGraph server-to-server Bearer key never reaches LiveView
 # assigns or browser code. A missing key disables the provider cleanly; it does
 # not stop definitions or the rest of the application from starting.
-if cinegraph_api_key = System.get_env("CINEGRAPH_API_KEY") do
+# Load the two CineGraph settings from a local .env only in development.
+# Exported environment variables take precedence. Values are literal: no shell
+# expansion or evaluation, and secrets never appear in parsing errors.
+local_cinegraph_env =
+  if config_env() == :dev do
+    case File.read(Path.expand("../.env", __DIR__)) do
+      {:ok, contents} ->
+        contents
+        |> String.split("\n")
+        |> Enum.reduce(%{}, fn line, values ->
+          case String.split(String.trim(line), "=", parts: 2) do
+            [name, value] when name in ["CINEGRAPH_API_KEY", "CINEGRAPH_GRAPHQL_URL"] ->
+              value = String.trim(value)
+
+              value =
+                if String.length(value) >= 2 and
+                     ((String.starts_with?(value, "\"") and String.ends_with?(value, "\"")) or
+                        (String.starts_with?(value, "'") and String.ends_with?(value, "'"))) do
+                  String.slice(value, 1, String.length(value) - 2)
+                else
+                  value
+                end
+
+              Map.put(values, name, value)
+
+            _ ->
+              values
+          end
+        end)
+
+      {:error, :enoent} ->
+        %{}
+
+      {:error, _} ->
+        raise "Could not read the development .env file"
+    end
+  else
+    %{}
+  end
+
+if cinegraph_api_key =
+     System.get_env("CINEGRAPH_API_KEY") || local_cinegraph_env["CINEGRAPH_API_KEY"] do
   config :devils_dictionary, :cinegraph,
     api_key: cinegraph_api_key,
-    endpoint: System.get_env("CINEGRAPH_GRAPHQL_URL", "https://cinegraph.org/api/graphql")
+    endpoint:
+      System.get_env("CINEGRAPH_GRAPHQL_URL") ||
+        local_cinegraph_env["CINEGRAPH_GRAPHQL_URL"] || "https://cinegraph.org/api/graphql"
 end
 
 if config_env() == :dev do

@@ -259,3 +259,24 @@ Evidence categories are deliberately separate: provider-shaped fixtures prove
 deterministic edge behavior, the local application proves the full server and
 browser integration, and the deployed calls prove current CineGraph contract
 and authentication. None is presented as a production throughput benchmark.
+
+## Credential preflight (CineGraph #1128)
+
+Run `mix dd.discovery.check` in the same environment as the server before a demo
+or deployment. Missing/blank keys, a disabled provider, and an invalid endpoint
+fail the command. Success confirms configuration only; it does not prove the
+credential works. After provisioning a dedicated key, restart the server and
+verify fresh war/nepotism/grief discovery, cache reuse and a genuine empty result.
+Keep the production cutover gate open until live verification is recorded.
+
+## Local development secrets
+
+Copy `.env.example` to `.env` and paste the CineGraph key after
+`CINEGRAPH_API_KEY=`. The file is ignored by Git and loaded only in development.
+Restart the development server after editing. Exported environment variables
+have precedence. Values may be unquoted or enclosed in matching single/double
+quotes; shell expansion and inline comments are not supported. Only the two
+CineGraph settings are read. Tests and production do not load this file.
+
+The default endpoint is production CineGraph. For a local CineGraph server,
+change `CINEGRAPH_GRAPHQL_URL` and use a key issued by that local server.
