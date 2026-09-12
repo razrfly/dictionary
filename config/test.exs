@@ -37,6 +37,11 @@ config :devils_dictionary, :giphy,
   rating: "g",
   enabled: false
 
+# Test clients use deterministic injected transports. Focused coordinator tests
+# start their own named process; transaction rollbacks must not leave the global
+# withdrawal generation disabled for unrelated cases.
+config :devils_dictionary, :artsy, coordinator: nil
+
 config :devils_dictionary, :discovery_req_options,
   plug: {Req.Test, DevilsDictionary.Discovery.Providers.CineGraph}
 

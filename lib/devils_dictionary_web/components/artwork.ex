@@ -59,6 +59,23 @@ defmodule DevilsDictionaryWeb.Artwork do
         >
           {@artwork.description}
         </p>
+        <dl
+          :if={@artwork.date || @artwork.medium || @artwork.collection}
+          class="mt-2 flex flex-wrap gap-x-2 text-sm/6 text-mist-500"
+        >
+          <div :if={@artwork.date} class="contents">
+            <dt class="sr-only">Date</dt><dd>{@artwork.date}</dd>
+          </div>
+          <div :if={@artwork.medium} class="contents">
+            <dt class="sr-only">Medium</dt><dd>· {@artwork.medium}</dd>
+          </div>
+          <div :if={@artwork.collection} class="contents">
+            <dt class="sr-only">Collection</dt><dd>· {@artwork.collection}</dd>
+          </div>
+        </dl>
+        <p :if={@artwork.image_attribution} class="mt-1 text-xs/5 text-mist-400">
+          Image: {@artwork.image_attribution}
+        </p>
 
         <div :if={@candidate} class="mt-3 text-sm/6">
           <p id={"#{@id}-meaning"} class="text-mist-700 dark:text-mist-200">
@@ -66,7 +83,10 @@ defmodule DevilsDictionaryWeb.Artwork do
             <span class="text-mist-500">({@candidate.language})</span>
           </p>
           <p class="text-mist-500">
-            Direct Artsy gene “{@candidate.match_reason.gene_name}” · not yet reviewed
+            {candidate_relation(@candidate.match_type)} Artsy gene “{@candidate.match_reason.gene_name}” · not yet reviewed
+          </p>
+          <p class="mt-1 text-mist-500">
+            {@candidate.match_reason.note}
           </p>
         </div>
 
@@ -74,7 +94,7 @@ defmodule DevilsDictionaryWeb.Artwork do
           <.link navigate={entity_path(@artwork)} class="font-medium underline underline-offset-4">Open work</.link>
           <.link
             :if={@connect}
-            navigate={~p"/connect?subject=#{@artwork.object_id}"}
+            navigate={connect_path(@artwork, @candidate)}
             class="font-medium underline underline-offset-4"
           >
             Connect to a meaning
@@ -97,4 +117,15 @@ defmodule DevilsDictionaryWeb.Artwork do
 
   defp creator_path(creator),
     do: ~p"/entities/#{creator.object_id}/#{Connection.slugify(creator.label)}"
+
+  defp connect_path(artwork, nil), do: ~p"/connect?subject=#{artwork.object_id}"
+
+  defp connect_path(artwork, candidate) do
+    ~p"/connect?#{%{subject: artwork.object_id, object: candidate.sense_id, predicate: "illustrates", evidence_revision: candidate.source_record_revision_id, evidence_locator: "Artsy direct gene #{candidate.match_reason.gene_id}", rationale: candidate.match_reason.note}}"
+  end
+
+  defp candidate_relation(:broader), do: "Broader-context"
+  defp candidate_relation(:related), do: "Related"
+  defp candidate_relation("broader"), do: "Broader-context"
+  defp candidate_relation(_), do: "Direct"
 end

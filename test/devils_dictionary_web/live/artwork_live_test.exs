@@ -32,9 +32,16 @@ defmodule DevilsDictionaryWeb.ArtworkLiveTest do
             "id" => "opaque-live-86",
             "slug" => "fixture-of-war",
             "title" => "The Fixture of War",
+            "date" => "1814",
+            "medium" => "Oil on canvas",
+            "collecting_institution" => "Fixture Museum",
+            "thumbnail_url" => "https://images.example.test/fixture.jpg",
+            "image_rights" => "Fixture credit",
             "permalink" => "https://www.artsy.net/artwork/fixture-of-war"
           },
-          "genes" => [%{"id" => "gene-conflict", "name" => "Conflict"}]
+          "genes" => [
+            %{"id" => "4db9b645db68d133c600123e", "name" => "Conflict"}
+          ]
         }
       })
 
@@ -81,8 +88,43 @@ defmodule DevilsDictionaryWeb.ArtworkLiveTest do
     html = view |> form("#artwork-search", search: %{q: "Fixture Painter"}) |> render_change()
     assert html =~ ~s(id="artwork-#{ctx.work.object_id}")
 
+    html = view |> form("#artwork-search", search: %{q: "Conflict"}) |> render_change()
+    assert html =~ ~s(id="artwork-#{ctx.work.object_id}")
+
     html = view |> form("#artwork-search", search: %{q: "no such work"}) |> render_change()
     refute html =~ ~s(id="artwork-#{ctx.work.object_id}")
+
+    {:ok, unrelated} =
+      Registry.create_work(%{
+        preferred_label: "Unrelated Search Target",
+        work_kind: "book"
+      })
+
+    {:ok, _claim} = Claims.assert(ctx.work.object_id, "adaptation_of", unrelated.object_id)
+
+    html =
+      view
+      |> form("#artwork-search", search: %{q: "Unrelated Search Target"})
+      |> render_change()
+
+    refute html =~ ~s(id="artwork-#{ctx.work.object_id}")
+  end
+
+  test "catalog pages beyond the first 24 reusable artworks", ctx do
+    for index <- 1..24 do
+      {:ok, _work} =
+        Registry.create_work(%{
+          preferred_label: "Page Fixture #{String.pad_leading(to_string(index), 2, "0")}",
+          work_kind: "artwork"
+        })
+    end
+
+    {:ok, view, _html} = live(ctx.conn, ~p"/artworks")
+    assert has_element?(view, "#artwork-pagination")
+    refute has_element?(view, "#artwork-#{ctx.work.object_id}")
+
+    view |> element("#artwork-next-page") |> render_click()
+    assert has_element?(view, "#artwork-#{ctx.work.object_id}")
   end
 
   test "a contributor opens the existing composer with the exact artwork selected", ctx do
@@ -97,7 +139,14 @@ defmodule DevilsDictionaryWeb.ArtworkLiveTest do
 
   test "a direct gene produces a labeled candidate for the exact sense, never a claim", ctx do
     war = word!(ctx, "war", ["wordnet"])
-    sense = sense!(ctx, war, "wordnet", gloss: "organized armed conflict or warfare")
+
+    sense =
+      sense!(ctx, war, "wordnet",
+        external_id: "oewn-00975181-n#war",
+        gloss: "organized armed conflict or warfare"
+      )
+
+    assert %{installed: 1} = Artworks.install_meaning_mappings!()
 
     {:ok, view, _html} = live(ctx.conn, ~p"/define/war")
     assert has_element?(view, "#artwork-candidates")
@@ -108,6 +157,20 @@ defmodule DevilsDictionaryWeb.ArtworkLiveTest do
            )
 
     assert render(view) =~ "not yet reviewed"
+
+    wrong_id_payload =
+      Map.put(ctx.record.raw, "genes", [
+        %{"id" => "not-the-conflict-gene", "name" => "Conflict"}
+      ])
+
+    {:ok, _record} =
+      Sources.upsert_record(ctx.sources["artsy"], %{
+        external_id: ctx.record.external_id,
+        url: ctx.record.url,
+        raw: wrong_id_payload
+      })
+
+    assert Artworks.suggestions([war.object_id]) == []
   end
 
   test "provider withdrawal deletes Artsy payloads but preserves Wikidata identity", ctx do
@@ -128,5 +191,53 @@ defmodule DevilsDictionaryWeb.ArtworkLiveTest do
     assert record.content_hash == nil
     assert Artworks.search("Fixture") |> Enum.any?(&(&1.object_id == ctx.work.object_id))
     assert Artworks.get(ctx.work.object_id).artsy == nil
+  end
+
+  test "artwork page exposes rich metadata and a working creator destination", ctx do
+    {:ok, view, _html} =
+      live(
+        ctx.conn,
+        ~p"/entities/#{ctx.work.object_id}/#{DevilsDictionary.Claims.Connection.slugify(ctx.work.preferred_label)}"
+      )
+
+    assert has_element?(view, "#artwork-metadata")
+    assert has_element?(view, "#artwork-metadata a[href^='/entities/#{ctx.creator.object_id}/']")
+    assert render(view) =~ "Oil on canvas"
+    assert render(view) =~ "Fixture Museum"
+  end
+
+  test "candidate link preselects exact meaning, predicate, rationale and provider revision",
+       ctx do
+    war = word!(ctx, "war", ["wordnet"])
+
+    sense =
+      sense!(ctx, war, "wordnet",
+        external_id: "oewn-00975181-n#war",
+        gloss: "organized armed conflict or warfare"
+      )
+
+    %{conn: conn, user: user} = register_and_log_in_user(%{conn: ctx.conn})
+    _user = Repo.update!(Ecto.Changeset.change(user, internal_contributor: true))
+
+    path =
+      ~p"/connect?#{%{subject: ctx.work.object_id, object: sense.object_id, predicate: "illustrates", rationale: "Related provider vocabulary; inspect the depicted event.", evidence_revision: ctx.record.current_revision.id, evidence_locator: "Artsy direct gene 4db9b645db68d133c600123e"}}"
+
+    {:ok, view, _html} = live(conn, path)
+    assert has_element?(view, "#composer-subject-chosen")
+    assert has_element?(view, "#composer-object-chosen")
+    assert has_element?(view, "#predicate-illustrates")
+    assert has_element?(view, "#selected-evidence-source-#{ctx.record.current_revision.id}")
+
+    assert render(view) =~ "Related provider vocabulary; inspect the depicted event."
+
+    refute ctx.work.object_id == sense.object_id
+  end
+
+  test "rejected creator relationship is hidden from cards and search", ctx do
+    revision = Claims.current_revision(ctx.claim.id)
+    {:ok, _review} = Claims.review(revision.id, :rejected)
+
+    assert Artworks.get(ctx.work.object_id).creators == []
+    refute Enum.any?(Artworks.search("Fixture Painter"), &(&1.object_id == ctx.work.object_id))
   end
 end

@@ -29,18 +29,29 @@ defmodule DevilsDictionary.Artsy.Client do
             rate_limit_ms: @default_rate_limit_ms,
             request_fun: nil,
             sleep_fun: nil,
-            now_fun: nil
+            now_fun: nil,
+            availability_fun: nil,
+            coordinator: DevilsDictionary.Artsy.RequestCoordinator
 
   @type t :: %__MODULE__{}
 
   @doc "Creates a client. Missing credentials produce an explicit authentication failure on use."
   def new(opts \\ []) do
     config = Application.get_env(:devils_dictionary, :artsy, [])
+    client_id = opts[:client_id] || config[:client_id]
+    client_secret = opts[:client_secret] || config[:client_secret]
+
+    coordinator =
+      Keyword.get(
+        opts,
+        :coordinator,
+        Keyword.get(config, :coordinator, DevilsDictionary.Artsy.RequestCoordinator)
+      )
 
     %__MODULE__{
       base_url: opts[:base_url] || config[:endpoint] || @base_url,
-      client_id: opts[:client_id] || config[:client_id],
-      client_secret: opts[:client_secret] || config[:client_secret],
+      client_id: client_id,
+      client_secret: client_secret,
       request_limit: positive!(opts[:request_limit] || @default_request_limit, :request_limit),
       max_retries: non_negative!(opts[:max_retries] || @default_retries, :max_retries),
       timeout_ms: positive!(opts[:timeout_ms] || @default_timeout, :timeout_ms),
@@ -51,13 +62,27 @@ defmodule DevilsDictionary.Artsy.Client do
         ),
       request_fun: opts[:request_fun] || (&Req.request/1),
       sleep_fun: opts[:sleep_fun] || (&Process.sleep/1),
-      now_fun: opts[:now_fun] || (&DateTime.utc_now/0)
+      now_fun: opts[:now_fun] || (&DateTime.utc_now/0),
+      availability_fun:
+        opts[:availability_fun] ||
+          fn ->
+            DevilsDictionary.Artsy.Availability.status_with_credentials(
+              client_id,
+              client_secret,
+              coordinator
+            )
+          end,
+      coordinator: coordinator
     }
   end
 
   @doc "True when the server has both credentials. Values are never exposed."
   def configured?(%__MODULE__{} = client),
     do: present?(client.client_id) and present?(client.client_secret)
+
+  @doc "True only while configuration and the persisted source lifecycle permit requests."
+  def available?(%__MODULE__{} = client),
+    do: configured?(client) and client.availability_fun.() == :ok
 
   @doc "Hydrates one artwork by opaque API ID or validated slug."
   def artwork(client, identifier) do
@@ -80,13 +105,36 @@ defmodule DevilsDictionary.Artsy.Client do
   @doc "Returns every creator on one hydrated artwork page, bounded by `size`."
   def artwork_artists(client, artwork_id, opts \\ []) do
     size = page_size(opts[:size] || @max_page_size)
-    authorized(client, :get, "/api/artists", params: [artwork_id: artwork_id, size: size])
+    offset = cursor_offset(opts[:cursor])
+
+    with :ok <- valid_identifier(artwork_id),
+         true <- offset != :error do
+      collection_page(client, :artists, artwork_id, size, offset)
+    else
+      _ -> {:error, failure(:invalid_cursor, nil, "/api/artists"), client}
+    end
   end
 
   @doc "Returns direct gene assignments for one work. This is not gene traversal."
   def artwork_genes(client, artwork_id, opts \\ []) do
     size = page_size(opts[:size] || @max_page_size)
-    authorized(client, :get, "/api/genes", params: [artwork_id: artwork_id, size: size])
+    offset = cursor_offset(opts[:cursor])
+
+    with :ok <- valid_identifier(artwork_id),
+         true <- offset != :error do
+      collection_page(client, :genes, artwork_id, size, offset)
+    else
+      _ -> {:error, failure(:invalid_cursor, nil, "/api/genes"), client}
+    end
+  end
+
+  @doc "Fetches one gene by opaque ID or slug for bounded feasibility verification."
+  def gene(client, identifier) do
+    with :ok <- valid_identifier(identifier) do
+      authorized(client, :get, "/api/genes/#{identifier}", [])
+    else
+      {:error, reason} -> {:error, failure(reason, nil, "/api/genes"), client}
+    end
   end
 
   @doc """
@@ -122,7 +170,7 @@ defmodule DevilsDictionary.Artsy.Client do
                query: query,
                items: items,
                mixed_type_count: Enum.count(hits, &(&1["type"] != "artwork")),
-               next_cursor: next_cursor(next_url, query, size),
+               next_cursor: next_cursor(client, next_url, query, size),
                returned_next_preserved_filter: query_param(next_url, "type") == "artwork",
                request_meta: meta
              }, client}
@@ -144,6 +192,7 @@ defmodule DevilsDictionary.Artsy.Client do
       "date" => body["date"],
       "collecting_institution" => body["collecting_institution"],
       "image_rights" => body["image_rights"],
+      "description" => body["blurb"] || body["description"],
       "thumbnail_url" => link(body, "thumbnail"),
       "permalink" => public_link(body, "permalink"),
       "artists_url" => api_link(body, "artists"),
@@ -230,9 +279,11 @@ defmodule DevilsDictionary.Artsy.Client do
   end
 
   defp authorized_url(client, method, url, opts) do
-    with {:ok, client} <- ensure_token(client) do
+    with :ok <- provider_available(client),
+         {:ok, client} <- ensure_token(client) do
       do_authorized(client, method, url, opts, false)
     else
+      {:error, failure} -> {:error, failure, client}
       {:error, failure, client} -> {:error, failure, client}
     end
   end
@@ -294,82 +345,174 @@ defmodule DevilsDictionary.Artsy.Client do
   end
 
   defp request(client, method, url, opts, retry_number, redirects) do
-    if client.request_count >= client.request_limit do
-      {:error, failure(:request_limit, nil, URI.parse(url).path), client}
-    else
-      client.sleep_fun.(client.rate_limit_ms)
-      client = %{client | request_count: client.request_count + 1}
+    cond do
+      client.request_count >= client.request_limit ->
+        {:error, failure(:request_limit, nil, URI.parse(url).path), client}
 
-      request_opts =
-        [
-          method: method,
-          url: url,
-          redirect: false,
-          retry: false,
-          receive_timeout: client.timeout_ms,
-          connect_options: [timeout: client.timeout_ms]
-        ] ++ opts
+      provider_available(client) != :ok ->
+        {:error, failure(:provider_disabled, nil, URI.parse(url).path), client}
 
-      case client.request_fun.(request_opts) do
-        {:ok, %Req.Response{status: status} = response}
-        when status in [429, 500, 502, 503, 504] and retry_number < client.max_retries ->
-          delay = retry_delay(response, retry_number)
-          client.sleep_fun.(delay)
+      true ->
+        with {:ok, generation, wait_ms} <- acquire(client) do
+          client.sleep_fun.(wait_ms)
+          client = %{client | request_count: client.request_count + 1}
 
-          request(
-            %{client | retry_count: client.retry_count + 1},
-            method,
-            url,
-            opts,
-            retry_number + 1,
-            redirects
-          )
+          request_opts =
+            [
+              method: method,
+              url: url,
+              redirect: false,
+              retry: false,
+              receive_timeout: client.timeout_ms,
+              connect_options: [timeout: client.timeout_ms]
+            ] ++ opts
 
-        {:ok, %Req.Response{status: status} = response}
-        when status in 300..399 and redirects < 2 ->
-          case redirect_url(response) do
-            redirect when is_binary(redirect) ->
-              if safe_api_url?(client, redirect) do
-                request(
-                  client,
-                  :get,
-                  redirect,
-                  Keyword.delete(opts, :json),
-                  retry_number,
-                  redirects + 1
-                )
-              else
-                {:error, failure(:unsafe_redirect, status, URI.parse(url).path), client}
-              end
+          response = client.request_fun.(request_opts)
 
-            _ ->
-              {:ok, response, client, request_meta(retry_number, redirects)}
+          if generation_current?(client, generation) and provider_available(client) == :ok do
+            handle_response(
+              response,
+              client,
+              method,
+              url,
+              opts,
+              retry_number,
+              redirects
+            )
+          else
+            {:error, failure(:provider_disabled, nil, URI.parse(url).path), client}
           end
+        else
+          {:error, :provider_disabled} ->
+            {:error, failure(:provider_disabled, nil, URI.parse(url).path), client}
+        end
+    end
+  end
 
-        {:ok, response} ->
-          {:ok, response, client, request_meta(retry_number, redirects)}
+  defp handle_response(
+         {:ok, %Req.Response{status: 429} = response},
+         client,
+         method,
+         url,
+         opts,
+         retry_number,
+         redirects
+       ) do
+    case DevilsDictionary.Discovery.Transport.retry_after_seconds(response) do
+      seconds when is_integer(seconds) and seconds > 0 ->
+        defer(client, seconds * 1_000)
 
-        {:error, _reason} when retry_number < client.max_retries ->
-          client.sleep_fun.(retry_delay(nil, retry_number))
+        {:ok, response, client,
+         request_meta(retry_number, redirects) |> Map.put(:retry_after_seconds, seconds)}
 
+      _ ->
+        retry_response(response, client, method, url, opts, retry_number, redirects)
+    end
+  end
+
+  defp handle_response(
+         {:ok, %Req.Response{status: status} = response},
+         client,
+         method,
+         url,
+         opts,
+         retry_number,
+         redirects
+       )
+       when status in [500, 502, 503, 504] do
+    retry_response(response, client, method, url, opts, retry_number, redirects)
+  end
+
+  defp handle_response(
+         {:ok, %Req.Response{status: status} = response},
+         client,
+         _method,
+         url,
+         opts,
+         retry_number,
+         redirects
+       )
+       when status in 300..399 and redirects < 2 do
+    case redirect_url(response) do
+      redirect when is_binary(redirect) ->
+        if safe_api_url?(client, redirect) do
           request(
-            %{client | retry_count: client.retry_count + 1},
-            method,
-            url,
-            opts,
-            retry_number + 1,
-            redirects
+            client,
+            :get,
+            redirect,
+            Keyword.delete(opts, :json),
+            retry_number,
+            redirects + 1
           )
+        else
+          {:error, failure(:unsafe_redirect, status, URI.parse(url).path), client}
+        end
 
-        {:error, reason} ->
-          {:error,
-           failure(
-             transport_code(reason),
-             nil,
-             URI.parse(url).path,
-             request_meta(retry_number, redirects)
-           ), client}
-      end
+      _ ->
+        {:ok, response, client, request_meta(retry_number, redirects)}
+    end
+  end
+
+  defp handle_response({:ok, response}, client, _method, _url, _opts, retry_number, redirects),
+    do: {:ok, response, client, request_meta(retry_number, redirects)}
+
+  defp handle_response({:error, reason}, client, method, url, opts, retry_number, redirects) do
+    if retry_number < client.max_retries do
+      client.sleep_fun.(retry_delay(nil, retry_number))
+
+      request(
+        %{client | retry_count: client.retry_count + 1},
+        method,
+        url,
+        opts,
+        retry_number + 1,
+        redirects
+      )
+    else
+      {:error,
+       failure(
+         transport_code(reason),
+         nil,
+         URI.parse(url).path,
+         request_meta(retry_number, redirects)
+       ), client}
+    end
+  end
+
+  defp retry_response(response, client, method, url, opts, retry_number, redirects) do
+    if retry_number < client.max_retries do
+      client.sleep_fun.(retry_delay(response, retry_number))
+
+      request(
+        %{client | retry_count: client.retry_count + 1},
+        method,
+        url,
+        opts,
+        retry_number + 1,
+        redirects
+      )
+    else
+      {:ok, response, client, request_meta(retry_number, redirects)}
+    end
+  end
+
+  defp collection_page(client, kind, artwork_id, size, offset) do
+    path = if kind == :artists, do: "/api/artists", else: "/api/genes"
+
+    case authorized(client, :get, path,
+           params: [artwork_id: artwork_id, size: size, offset: offset]
+         ) do
+      {:ok, body, client, meta} ->
+        next_url = get_in(body, ["_links", "next", "href"])
+
+        {:ok, body, client,
+         Map.merge(meta, %{
+           next_cursor: collection_cursor(client, next_url, path, artwork_id),
+           returned_next_preserved_filter: query_param(next_url, "artwork_id") == artwork_id
+         })}
+
+      error ->
+        error
     end
   end
 
@@ -379,11 +522,13 @@ defmodule DevilsDictionary.Artsy.Client do
     present?(token) and DateTime.compare(expires, DateTime.add(now_fun.(), 60, :second)) == :gt
   end
 
-  defp next_cursor(url, query, _size) do
+  defp next_cursor(client, url, query, _size) do
     with true <- is_binary(url),
          uri <- URI.parse(url),
+         expected <- URI.parse(client.base_url),
          true <-
-           uri.scheme == "https" and uri.host == "api.artsy.net" and uri.path == "/api/search",
+           uri.scheme == "https" and uri.host == expected.host and uri.port == expected.port and
+             uri.path == "/api/search",
          params <- URI.decode_query(uri.query || ""),
          true <- params["q"] == query,
          {offset, ""} when offset >= 0 <- Integer.parse(params["offset"] || "") do
@@ -447,14 +592,56 @@ defmodule DevilsDictionary.Artsy.Client do
   defp query_param(url, key),
     do: URI.parse(url).query |> then(&URI.decode_query(&1 || "")) |> Map.get(key)
 
-  defp retry_delay(response, retry_number) do
-    retry_after =
-      if response, do: DevilsDictionary.Discovery.Transport.retry_after_seconds(response)
-
-    min((retry_after || trunc(:math.pow(2, retry_number))) * 1_000, 10_000)
-  end
+  defp retry_delay(_response, retry_number),
+    do: min(trunc(:math.pow(2, retry_number)) * 1_000, 10_000)
 
   defp request_meta(retries, redirects), do: %{retries: retries, redirects: redirects}
+
+  defp collection_cursor(client, url, path, artwork_id) do
+    with true <- is_binary(url),
+         uri <- URI.parse(url),
+         expected <- URI.parse(client.base_url),
+         true <- uri.scheme == "https" and uri.host == expected.host and uri.path == path,
+         params <- URI.decode_query(uri.query || ""),
+         true <- params["artwork_id"] in [nil, artwork_id],
+         {offset, ""} when offset >= 0 <- Integer.parse(params["offset"] || "") do
+      Integer.to_string(offset)
+    else
+      _ -> nil
+    end
+  end
+
+  defp provider_available(client) do
+    case client.availability_fun.() do
+      :ok -> :ok
+      {:error, reason} -> {:error, failure(reason, nil, "/api")}
+      _ -> {:error, failure(:provider_disabled, nil, "/api")}
+    end
+  end
+
+  defp acquire(%{coordinator: nil}), do: {:ok, 0, 0}
+
+  defp acquire(client) do
+    DevilsDictionary.Artsy.RequestCoordinator.acquire(client.coordinator, client.rate_limit_ms)
+  catch
+    :exit, _ -> {:ok, 0, client.rate_limit_ms}
+  end
+
+  defp generation_current?(%{coordinator: nil}, _generation), do: true
+
+  defp generation_current?(client, generation) do
+    DevilsDictionary.Artsy.RequestCoordinator.current?(generation, client.coordinator)
+  catch
+    :exit, _ -> true
+  end
+
+  defp defer(%{coordinator: nil}, _milliseconds), do: :ok
+
+  defp defer(client, milliseconds) do
+    DevilsDictionary.Artsy.RequestCoordinator.defer(milliseconds, client.coordinator)
+  catch
+    :exit, _ -> :ok
+  end
 
   defp parse_datetime(value) when is_binary(value) do
     case DateTime.from_iso8601(value) do
@@ -476,13 +663,17 @@ defmodule DevilsDictionary.Artsy.Client do
   defp transport_code(_), do: :provider_unavailable
 
   defp failure(code, status, path, meta \\ %{}) do
-    %{
+    failure = %{
       code: to_string(code),
       status: status,
       path: path,
       retries: meta[:retries] || 0,
       redirects: meta[:redirects] || 0
     }
+
+    if meta[:retry_after_seconds],
+      do: Map.put(failure, :retry_after_seconds, meta[:retry_after_seconds]),
+      else: failure
   end
 
   defp user_agent, do: Application.fetch_env!(:devils_dictionary, :user_agent)

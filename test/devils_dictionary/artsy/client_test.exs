@@ -1,7 +1,7 @@
 defmodule DevilsDictionary.Artsy.ClientTest do
   use ExUnit.Case, async: true
 
-  alias DevilsDictionary.Artsy.Client
+  alias DevilsDictionary.Artsy.{Client, RequestCoordinator}
 
   test "reports stale search hits and rebuilds pagination with the artwork filter" do
     responses = [
@@ -93,6 +93,48 @@ defmodule DevilsDictionary.Artsy.ClientTest do
     assert normalized["id"] == "opaque-1"
     assert normalized["slug"] == "work-one"
     refute normalized["id"] == normalized["slug"]
+  end
+
+  test "Retry-After is retained in full and shared with every client" do
+    clock = start_supervised!({Agent, fn -> 0 end}, id: make_ref())
+
+    coordinator =
+      start_supervised!(
+        {RequestCoordinator,
+         name: nil, interval_ms: 0, now_fun: fn -> Agent.get(clock, & &1) end},
+        id: make_ref()
+      )
+
+    response = response(429, %{}) |> Req.Response.put_header("retry-after", "120")
+
+    {client, _calls} =
+      client([response(201, %{"token" => "fixture-token"}), response],
+        coordinator: coordinator
+      )
+
+    assert {:error, %{code: "quota_exhausted"}, _client} = Client.artwork(client, "work-one")
+    assert RequestCoordinator.stats(coordinator).next_at == 120_000
+  end
+
+  test "shared coordinator serializes attempts across otherwise independent clients" do
+    # System.monotonic_time/1 may be negative; initialization must use the same
+    # clock rather than assuming a zero epoch and sleeping for years.
+    clock = start_supervised!({Agent, fn -> -1_000 end}, id: make_ref())
+
+    coordinator =
+      start_supervised!(
+        {RequestCoordinator,
+         name: nil, interval_ms: 250, now_fun: fn -> Agent.get(clock, & &1) end},
+        id: make_ref()
+      )
+
+    assert {:ok, generation, 0} = RequestCoordinator.acquire(coordinator, 250)
+    assert {:ok, ^generation, 250} = RequestCoordinator.acquire(coordinator, 250)
+    assert RequestCoordinator.stats(coordinator).attempts == 2
+
+    assert {:ok, _new_generation} = RequestCoordinator.disable(coordinator)
+    refute RequestCoordinator.current?(generation, coordinator)
+    assert {:error, :provider_disabled} = RequestCoordinator.acquire(coordinator, 250)
   end
 
   defp client(responses, opts \\ []) do

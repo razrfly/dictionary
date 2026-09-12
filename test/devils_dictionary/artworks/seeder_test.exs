@@ -7,6 +7,7 @@ defmodule DevilsDictionary.Artworks.SeederTest do
   alias DevilsDictionary.Claims.Assertion
   alias DevilsDictionary.Registry
   alias DevilsDictionary.Registry.{Entity, ExternalIdentifier, WorkDetails}
+  alias DevilsDictionary.Sources
   alias DevilsDictionary.Sources.SourceRecord
   alias DevilsDictionary.Sources.ReconciliationCase
 
@@ -102,6 +103,161 @@ defmodule DevilsDictionary.Artworks.SeederTest do
     assert summary.requests == 0
   end
 
+  test "request exhaustion checkpoints artwork and resumes the same manifest without duplicates" do
+    {partial_manifest, partial_summary} =
+      Seeder.run(Manifest.new([candidate()]),
+        artsy_client:
+          client(
+            [token(), response(200, artwork("opaque-work-86", "fixture-work", "Painting"))],
+            request_limit: 2
+          ),
+        record_limit: 1
+      )
+
+    assert partial_summary.request_exhausted
+    assert partial_summary.partial == 1
+    refute Manifest.completed?(hd(partial_manifest["candidates"]))
+
+    assert get_in(partial_manifest, [
+             "candidates",
+             Access.at(0),
+             "import",
+             "stages",
+             "artists",
+             "status"
+           ]) == "partial"
+
+    {completed_manifest, resumed} =
+      Seeder.run(partial_manifest,
+        artsy_client:
+          client([
+            token(),
+            Enum.at(painting_responses(), 2),
+            Enum.at(painting_responses(), 3)
+          ]),
+        record_limit: 1,
+        resume: true
+      )
+
+    assert resumed.matched == 1
+    assert Manifest.completed?(hd(completed_manifest["candidates"]))
+
+    {_same_manifest, rerun} =
+      Seeder.run(completed_manifest,
+        artsy_client: client([]),
+        record_limit: 1,
+        resume: true
+      )
+
+    assert rerun.requests == 0
+    assert rerun.processed == 0
+
+    assert Repo.aggregate(
+             from(identifier in ExternalIdentifier,
+               where: identifier.namespace == "artsy_artwork_id"
+             ),
+             :count
+           ) == 1
+  end
+
+  test "seeding materializes but never replaces a rich current Wikidata record" do
+    %{sources: sources} = Sources.Catalog.seed!()
+
+    rich = %{
+      "id" => "Q900086",
+      "labels" => %{"en" => %{"language" => "en", "value" => "Fixture Work"}},
+      "descriptions" => %{"en" => %{"language" => "en", "value" => "Source description"}},
+      "claims" => %{
+        "P31" => [entity_statement("Q3305213")],
+        "P18" => [string_statement("Picture.jpg")],
+        "P11005" => [string_statement("fixture-work")]
+      }
+    }
+
+    {:ok, record} =
+      Sources.upsert_record(sources["wikidata"], %{external_id: "Q900086", raw: rich})
+
+    original_hash = record.content_hash
+
+    {_manifest, _summary} =
+      Seeder.run(Manifest.new([candidate()]), artsy_client: client(painting_responses()))
+
+    record = Repo.get!(SourceRecord, record.id)
+    assert record.content_hash == original_hash
+    assert Sources.raw(record) == rich
+  end
+
+  test "Wikidata creator link remains when the exact Artsy artwork endpoint is missing" do
+    {_manifest, summary} =
+      Seeder.run(Manifest.new([candidate()]),
+        artsy_client: client(unavailable_responses()),
+        record_limit: 1
+      )
+
+    assert summary.unavailable == 1
+    work_id = Registry.by_external_id("wikidata", "Q900086")
+    creator_id = Registry.by_external_id("wikidata", "Q900087")
+    assert Enum.any?(Artworks.get(work_id).creators, &(&1.object_id == creator_id))
+  end
+
+  test "artist collection pagination retains multiple exact creators" do
+    candidate =
+      put_in(candidate()["creators"], [
+        %{
+          "qid" => "Q900087",
+          "name" => "Fixture Artist",
+          "artsy_artist_slug" => "fixture-artist"
+        },
+        %{
+          "qid" => "Q900088",
+          "name" => "Second Artist",
+          "artsy_artist_slug" => "second-artist"
+        }
+      ])
+
+    first_page =
+      response(200, %{
+        "_embedded" => %{
+          "artists" => [artist("opaque-artist-87", "fixture-artist", "Fixture Artist")]
+        },
+        "_links" => %{
+          "next" => %{
+            "href" =>
+              "https://api.artsy.net/api/artists?artwork_id=opaque-work-86&size=50&offset=1"
+          }
+        }
+      })
+
+    second_page =
+      response(200, %{
+        "_embedded" => %{
+          "artists" => [artist("opaque-artist-88", "second-artist", "Second Artist")]
+        }
+      })
+
+    genes = response(200, %{"_embedded" => %{"genes" => []}})
+
+    {_manifest, summary} =
+      Seeder.run(Manifest.new([candidate]),
+        artsy_client:
+          client([
+            token(),
+            response(200, artwork("opaque-work-86", "fixture-work", "Painting")),
+            first_page,
+            second_page,
+            genes
+          ])
+      )
+
+    assert summary.creators_resolved == 2
+    work_id = Registry.by_external_id("wikidata", "Q900086")
+
+    assert Enum.map(Artworks.get(work_id).creators, & &1.label) == [
+             "Fixture Artist",
+             "Second Artist"
+           ]
+  end
+
   test "withdrawal succeeds after a seeded creator citation and keeps durable QIDs" do
     {_manifest, _summary} =
       Seeder.run(Manifest.new([candidate()]),
@@ -115,14 +271,31 @@ defmodule DevilsDictionary.Artworks.SeederTest do
     assert {:ok, summary} = Artworks.withdraw_artsy("fixture provider shutdown")
     assert summary.claims_withdrawn == 1
     assert summary.evidence_removed == 1
-    assert summary.payloads_deleted == 2
+    # Artwork collection checkpoints are immutable revisions too; withdrawal
+    # removes the entire provider-owned history, not only its final snapshot.
+    assert summary.payloads_deleted >= 2
     assert Registry.by_external_id("wikidata", "Q900086") == work_id
     assert Registry.by_external_id("wikidata", "Q900087") == artist_id
+    assert Registry.by_external_id("artsy_artwork_slug", "fixture-work") == work_id
+    assert Registry.by_external_id("artsy_artist_slug", "fixture-artist") == artist_id
     assert Registry.by_external_id("artsy_artwork_id", "opaque-work-86") == nil
     assert Registry.by_external_id("artsy_artist_id", "opaque-artist-87") == nil
+
+    record_count = Repo.aggregate(SourceRecord, :count)
+
+    {_manifest, stopped} =
+      Seeder.run(Manifest.new([candidate()]),
+        artsy_client: client(painting_responses()),
+        record_limit: 1
+      )
+
+    assert stopped.provider_disabled
+    assert stopped.requests == 0
+    assert stopped.processed == 0
+    assert Repo.aggregate(SourceRecord, :count) == record_count
   end
 
-  defp client(responses) do
+  defp client(responses, opts \\ []) do
     queue = start_supervised!({Agent, fn -> responses end}, id: make_ref())
 
     request_fun = fn _options ->
@@ -133,12 +306,19 @@ defmodule DevilsDictionary.Artworks.SeederTest do
     end
 
     Client.new(
-      client_id: "fixture-id",
-      client_secret: "fixture-secret",
-      request_fun: request_fun,
-      sleep_fun: fn _ -> :ok end,
-      rate_limit_ms: 0,
-      request_limit: 20
+      Keyword.merge(
+        [
+          client_id: "fixture-id",
+          client_secret: "fixture-secret",
+          request_fun: request_fun,
+          sleep_fun: fn _ -> :ok end,
+          rate_limit_ms: 0,
+          request_limit: 20,
+          availability_fun: fn -> :ok end,
+          coordinator: nil
+        ],
+        opts
+      )
     )
   end
 
@@ -202,6 +382,35 @@ defmodule DevilsDictionary.Artworks.SeederTest do
     }
   end
 
+  defp artist(id, slug, name) do
+    %{
+      "id" => id,
+      "slug" => slug,
+      "name" => name,
+      "_links" => %{
+        "permalink" => %{"href" => "https://www.artsy.net/artist/#{slug}"}
+      }
+    }
+  end
+
   defp token, do: response(201, %{"token" => "fixture-token"})
   defp response(status, body), do: %Req.Response{status: status, body: body}
+
+  defp entity_statement(qid) do
+    %{
+      "type" => "statement",
+      "rank" => "normal",
+      "mainsnak" => %{
+        "datavalue" => %{"value" => %{"id" => qid}, "type" => "wikibase-entityid"}
+      }
+    }
+  end
+
+  defp string_statement(value) do
+    %{
+      "type" => "statement",
+      "rank" => "normal",
+      "mainsnak" => %{"datavalue" => %{"value" => value, "type" => "string"}}
+    }
+  end
 end

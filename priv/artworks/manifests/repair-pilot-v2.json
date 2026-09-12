@@ -1,0 +1,140 @@
+{
+  "candidates": [
+    {
+      "artsy_artwork_slug": "titian-cupid-with-the-wheel-of-fortune",
+      "creators": [
+        {
+          "artsy_artist_slug": "titian",
+          "name": "Titian",
+          "qid": "Q47551"
+        }
+      ],
+      "description": "painting by Titian",
+      "import": {
+        "artsy_artwork_id": "515d39335eeb1c524c0039df",
+        "artsy_artwork_slug": "titian-cupid-with-the-wheel-of-fortune",
+        "cache_fresh": true,
+        "creator_count": 1,
+        "creator_links": 0,
+        "gene_count": 13,
+        "missing_creators": 0,
+        "object_id": 3733930,
+        "source_record_id": 6984025,
+        "stages": {
+          "artists": {
+            "next_cursor": null,
+            "pages": 1,
+            "returned_next_preserved_filter": true,
+            "status": "complete"
+          },
+          "artwork": {
+            "status": "complete"
+          },
+          "creators": {
+            "missing": 0,
+            "resolved": 1,
+            "status": "complete"
+          },
+          "genes": {
+            "next_cursor": null,
+            "pages": 1,
+            "returned_next_preserved_filter": true,
+            "status": "complete"
+          },
+          "identity": {
+            "status": "complete"
+          },
+          "wikidata": {
+            "preserved": true,
+            "source_record_id": 6984024,
+            "source_record_revision_id": 6984036,
+            "status": "materialized_full_record"
+          }
+        },
+        "status": "matched",
+        "updated_at": "2026-09-12T19:32:52Z"
+      },
+      "kind": "painting",
+      "origin": "local_registry",
+      "qid": "Q12115903",
+      "selection_reason": "existing_local_wikidata_p11005",
+      "title": "Cupid with the Wheel of Time",
+      "wikipedia_title": null
+    },
+    {
+      "artsy_artwork_slug": "titian-ranuccio-farnese-1",
+      "creators": [
+        {
+          "artsy_artist_slug": "titian",
+          "name": "Titian",
+          "qid": "Q47551"
+        }
+      ],
+      "description": "painting by Titian",
+      "import": {
+        "artsy_artwork_id": "515b4aee38ad2d25a7001435",
+        "artsy_artwork_slug": "titian-ranuccio-farnese-1",
+        "cache_fresh": true,
+        "creator_count": 1,
+        "creator_links": 0,
+        "gene_count": 15,
+        "missing_creators": 0,
+        "object_id": 3733932,
+        "source_record_id": 6984048,
+        "stages": {
+          "artists": {
+            "next_cursor": null,
+            "pages": 1,
+            "returned_next_preserved_filter": true,
+            "status": "complete"
+          },
+          "artwork": {
+            "status": "complete"
+          },
+          "creators": {
+            "missing": 0,
+            "resolved": 1,
+            "status": "complete"
+          },
+          "genes": {
+            "next_cursor": null,
+            "pages": 1,
+            "returned_next_preserved_filter": true,
+            "status": "complete"
+          },
+          "identity": {
+            "status": "complete"
+          },
+          "wikidata": {
+            "preserved": true,
+            "source_record_id": 6984038,
+            "source_record_revision_id": 6984038,
+            "status": "materialized_full_record"
+          }
+        },
+        "status": "matched",
+        "updated_at": "2026-09-12T19:32:52Z"
+      },
+      "kind": "painting",
+      "origin": "wikidata_sparql",
+      "qid": "Q12146958",
+      "selection_reason": "wikidata_p11005_with_english_wikipedia",
+      "title": "Portrait of Ranuccio Farnese",
+      "wikipedia_title": "Portrait of Ranuccio Farnese"
+    }
+  ],
+  "checksum": "a86427de706045c3fb9fd3c6defd8e9503ace24dbf7c6722757a731b7fe6fca7",
+  "generated_at": "2026-09-12T21:30:00Z",
+  "schema_version": 2,
+  "selection": {
+    "artwork_kinds": [
+      "painting"
+    ],
+    "identity": "Wikidata QID plus P11005; title is never identity",
+    "pilot_cap": 2,
+    "selection_reason": "bounded repair verification: one existing local identity and one missing local candidate",
+    "source": "Wikidata P11005/P2042",
+    "wikipedia_required": false
+  },
+  "updated_at": "2026-09-12T19:32:52Z"
+}

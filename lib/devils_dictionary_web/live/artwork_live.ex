@@ -13,7 +13,9 @@ defmodule DevilsDictionaryWeb.ArtworkLive do
 
   @impl true
   def mount(_params, _session, socket) do
-    configured? = Client.new() |> Client.configured?()
+    client = Client.new()
+    available? = Client.available?(client)
+    catalog = Artworks.catalog("")
 
     {:ok,
      socket
@@ -21,29 +23,58 @@ defmodule DevilsDictionaryWeb.ArtworkLive do
        page_title: "artworks",
        search_form: to_form(%{"q" => ""}, as: :search),
        artsy_form: to_form(%{"q" => ""}, as: :artsy),
-       artsy_configured: configured?,
+       artsy_configured: available?,
        artsy_requests_used: 0,
        artsy_status: :idle,
        artsy_items: [],
        artsy_query: "",
-       contributor: Contributions.internal_contributor?(socket.assigns[:current_scope])
+       contributor: Contributions.internal_contributor?(socket.assigns[:current_scope]),
+       catalog_query: "",
+       catalog_page: catalog.page,
+       catalog_count: catalog.count,
+       catalog_previous_page: catalog.previous_page,
+       catalog_next_page: catalog.next_page
      )
-     |> stream(:artworks, Artworks.search(""), dom_id: &"artwork-#{&1.object_id}")}
+     |> stream(:artworks, catalog.items, dom_id: &"artwork-#{&1.object_id}")}
   end
 
   @impl true
   def handle_event("search-local", %{"search" => %{"q" => query}}, socket) do
+    catalog = Artworks.catalog(query)
+
     {:noreply,
      socket
-     |> assign(:search_form, to_form(%{"q" => query}, as: :search))
-     |> stream(:artworks, Artworks.search(query), reset: true)}
+     |> assign(
+       search_form: to_form(%{"q" => query}, as: :search),
+       catalog_query: query,
+       catalog_page: catalog.page,
+       catalog_count: catalog.count,
+       catalog_previous_page: catalog.previous_page,
+       catalog_next_page: catalog.next_page
+     )
+     |> stream(:artworks, catalog.items, reset: true)}
+  end
+
+  def handle_event("catalog-page", %{"page" => page}, socket) do
+    page = parse_page(page)
+    catalog = Artworks.catalog(socket.assigns.catalog_query, page: page)
+
+    {:noreply,
+     socket
+     |> assign(
+       catalog_page: catalog.page,
+       catalog_count: catalog.count,
+       catalog_previous_page: catalog.previous_page,
+       catalog_next_page: catalog.next_page
+     )
+     |> stream(:artworks, catalog.items, reset: true)}
   end
 
   def handle_event("search-artsy", %{"artsy" => %{"q" => query}}, socket) do
     query = String.trim(query)
 
     cond do
-      not socket.assigns.artsy_configured ->
+      not Client.available?(Client.new()) ->
         {:noreply, assign(socket, artsy_status: :disabled, artsy_items: [])}
 
       query == "" ->
@@ -138,6 +169,9 @@ defmodule DevilsDictionaryWeb.ArtworkLive do
         </.form>
 
         <section id="artwork-catalog" class="mt-8 max-w-3xl">
+          <p id="artwork-result-count" class="mb-3 text-sm/6 text-mist-500">
+            {@catalog_count} saved {if @catalog_count == 1, do: "artwork", else: "artworks"}
+          </p>
           <div id="artwork-results" phx-update="stream">
             <p id="artwork-results-empty" class="hidden only:block py-8 text-mist-500">
               No saved artwork matches that search.
@@ -149,6 +183,34 @@ defmodule DevilsDictionaryWeb.ArtworkLive do
               connect={@contributor}
             />
           </div>
+          <nav
+            :if={@catalog_previous_page || @catalog_next_page}
+            id="artwork-pagination"
+            aria-label="Artwork catalog pages"
+            class="mt-6 flex items-center justify-between border-t border-mist-950/10 pt-4 text-sm/6 dark:border-white/10"
+          >
+            <button
+              id="artwork-previous-page"
+              type="button"
+              phx-click="catalog-page"
+              phx-value-page={@catalog_previous_page}
+              disabled={!@catalog_previous_page}
+              class="underline underline-offset-4 disabled:invisible"
+            >
+              Previous
+            </button>
+            <span class="text-mist-500">Page {@catalog_page}</span>
+            <button
+              id="artwork-next-page"
+              type="button"
+              phx-click="catalog-page"
+              phx-value-page={@catalog_next_page}
+              disabled={!@catalog_next_page}
+              class="underline underline-offset-4 disabled:invisible"
+            >
+              Next
+            </button>
+          </nav>
         </section>
 
         <section
@@ -224,15 +286,28 @@ defmodule DevilsDictionaryWeb.ArtworkLive do
                 </.link>
                 <p class="mt-1 text-sm/6 text-mist-500">Already saved · exact P11005 match</p>
               <% else %>
-                <p class="font-medium">{item.search["title"] || "Untitled result"}</p>
-                <p class="mt-1 text-sm/6 text-mist-500">{artsy_result_label(item.status)}</p>
-                <a
-                  :if={item.search["permalink"]}
-                  href={item.search["permalink"]}
-                  target="_blank"
-                  rel="noreferrer"
-                  class="mt-1 inline-flex text-sm/6 underline underline-offset-4"
-                >Open source ↗</a>
+                <div class="grid grid-cols-[3.5rem_minmax(0,1fr)] gap-3">
+                  <div class="aspect-[4/5] overflow-hidden rounded-sm bg-mist-950/5 dark:bg-white/5">
+                    <img
+                      :if={item.search["thumbnail_url"]}
+                      src={item.search["thumbnail_url"]}
+                      alt=""
+                      referrerpolicy="no-referrer"
+                      class="size-full object-cover"
+                    />
+                  </div>
+                  <div class="min-w-0">
+                    <p class="font-medium">{item.search["title"] || "Untitled result"}</p>
+                    <p class="mt-1 text-sm/6 text-mist-500">{artsy_result_label(item.status)}</p>
+                    <a
+                      :if={item.search["permalink"]}
+                      href={item.search["permalink"]}
+                      target="_blank"
+                      rel="noreferrer"
+                      class="mt-1 inline-flex text-sm/6 underline underline-offset-4"
+                    >Open source ↗</a>
+                  </div>
+                </div>
               <% end %>
             </li>
           </ul>
@@ -249,4 +324,15 @@ defmodule DevilsDictionaryWeb.ArtworkLive do
   defp artsy_result_label(:unsupported_type), do: "Unsupported non-artwork result"
   defp artsy_result_label(:invalid_endpoint), do: "Ignored unsafe provider endpoint"
   defp artsy_result_label(_), do: "Source lookup failed for this result"
+
+  defp parse_page(value) when is_integer(value) and value > 0, do: value
+
+  defp parse_page(value) when is_binary(value) do
+    case Integer.parse(value) do
+      {page, ""} when page > 0 -> page
+      _ -> 1
+    end
+  end
+
+  defp parse_page(_), do: 1
 end

@@ -56,7 +56,13 @@ defmodule DevilsDictionary.Absorb.Sources.Wikidata do
   # narrowed), and L3 only ever asks about `parent_taxon`.
   @parent_properties ~w(P171 P13176)
   @general_relation_properties ~w(P31 P279)
-  @relation_types %{"P171" => :parent_taxon, "P279" => :subclass_of, "P31" => :instance_of}
+  @relation_types %{
+    "P171" => :parent_taxon,
+    "P279" => :subclass_of,
+    "P31" => :instance_of,
+    "P170" => :authored_by
+  }
+  @artwork_relation_properties ~w(P170)
   @closure_relation_types Map.put(@relation_types, "P13176", :taxon_item)
 
   # Taxonomic chains run long: species → genus → … → Animalia passes through
@@ -497,7 +503,7 @@ defmodule DevilsDictionary.Absorb.Sources.Wikidata do
     properties =
       if explicit_qids(opts) == [],
         do: @parent_properties,
-        else: @parent_properties ++ @general_relation_properties
+        else: @parent_properties ++ @general_relation_properties ++ @artwork_relation_properties
 
     Enum.flat_map(properties, &Client.entity_ids(entity, &1))
   end

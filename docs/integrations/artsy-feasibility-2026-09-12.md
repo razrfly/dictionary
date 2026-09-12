@@ -24,6 +24,11 @@ title search. Widen only after the pilot reports its actual coverage.
 - Completion probe: 93 Artsy requests, including 2 token exchanges; no retries and no
   429 responses. Combined issue evidence: **132 Artsy requests**, below the 200-request
   initial-probe ceiling.
+- The implementation-validation runs added at most 57 requests: 28 for the original
+  five-record import/rerun/browser check, 16 bounded gene-resource probes, at most 3
+  in an interrupted legacy-cache repair run, 7 in the two-record repair pilot, and 3
+  in the one-record new-entry proof. The cumulative ceiling is therefore **189 Artsy
+  requests**, still below 200. Both final manifest resumes made zero provider requests.
 - Open-source comparison: 68 Met requests against the current paginated
   `/public/collection/v1.1/search` endpoint and object hydration endpoint.
 - No image bytes were requested or downloaded.
@@ -49,7 +54,62 @@ title search. Widen only after the pilot reports its actual coverage.
 | P2042 artist crosswalk | Wikidata P2042 is an artist slug | `vincent-van-gogh` redirected, then returned opaque ID `4d8b92944eb68a1b2c000264` | Resolve creators through exact slug/ID evidence, never through a name string. |
 | Direct gene assignments | Artwork links expose assigned genes | Goya returned 5 assignments: 19th Century, Chiaroscuro, Collective History, Conflict, Cultural Commentary | Preserve as attributed Artsy vocabulary. No string-to-meaning equivalence. |
 | Gene-filtered acquisition | Gene resources link to artworks | The first 10 `gene_id=19th Century` artwork IDs were identical to the unfiltered first 10 | **Unverified/unsafe.** Do not seed through gene traversal. A direct per-work assignment may label a review candidate only. |
-| Retry/quota signal | 5 requests/sec documented | Probe throttled below 3/sec; 0 retries, 0 quota responses | One shared bounded client handles 429/5xx with capped exponential delay and reports exhaustion. |
+| Retry/quota signal | 5 requests/sec documented | Probe throttled below 3/sec; 0 retries, 0 quota responses | One application-wide coordinator paces all callers. It honors the full `Retry-After`, bounds retries and total attempts, and reports local request exhaustion separately from provider quota exhaustion. |
+
+## Repair feasibility findings
+
+The independent audit correctly identified that human-readable gene names were not
+stable identifiers. A final bounded resource probe resolved four mappings to exact
+opaque Artsy gene IDs:
+
+| Mapping | Exact Artsy gene ID | Exact Dictionary meaning | Status |
+| --- | --- | --- | --- |
+| Conflict | `4db9b645db68d133c600123e` | `oewn-00975181-n#war` | enabled, related |
+| Family | `50b99005c2f9a4a28b00015a` | `oewn-07986853-n#family` | enabled, related |
+| Family | `50b99005c2f9a4a28b00015a` | `oewn-01157387-n#nepotism` | enabled, broader association with an explicit review note |
+| Love | `4de292fcef72520001005fe5` | `oewn-07558676-n#love` | enabled, related |
+
+The same probe returned 404 for the candidate slugs `grief`, `solitude`, `justice`,
+`power`, `death`, and `freedom`. Those six definitions remain in the versioned
+registry as disabled evidence records; the product does not pretend that their names
+are IDs. Consequently the supported mapping set is four exact mappings, not ten.
+
+The final repair pilot used one bounded Wikidata request and seven Artsy attempts for
+two manifest records. Both exact identities matched. One previously enriched record
+was reused and one existing Wikidata artwork was newly hydrated with Artsy metadata;
+no local identity was created, no conflict/reproduction/quota event occurred, and one
+creator link was added. A resume of the saved manifest processed zero records, made
+zero Artsy requests, and created no duplicates.
+
+A final one-candidate proof started from Q122978100, which was absent from the local
+catalog. One bounded Wikidata request materialized *Les Âmes Déçues* and its creator,
+Ferdinand Hodler, as reusable local identities with an `authored_by` route and source
+link. The exact Artsy endpoint was unavailable after three attempts, so no Artsy
+fields or image were invented. Its saved manifest records `unavailable`; resuming it
+made zero requests and no duplicates. This deliberately separates “new local identity
+created from independent Wikidata evidence” from the Artsy import summary's honest
+`created: 0, unavailable: 1`.
+
+The pilot also exposed and fixed a coordinator initialization bug: monotonic clocks
+may start at a negative value, so an absolute zero deadline could sleep indefinitely.
+The coordinator now initializes from the injected/current monotonic time, with a
+negative-epoch regression test.
+
+### Live-audit findings and enforced behavior
+
+1. Search hits whose artwork endpoint returns 404 are retained only as an explicit
+   unavailable discovery result. They never become an identity or claim.
+2. Search and collection pagination never follows a provider URL verbatim. The client
+   validates scheme/host/path and reconstructs the next request with the immutable
+   `type=artwork` or `artwork_id` filter.
+3. Gene traversal remains disabled. Only direct assignments returned by an exact,
+   hydrated artwork can meet a versioned opaque-ID mapping.
+4. Every import validates category and exact Wikidata P11005/P2042 crosswalks.
+   Prints/reproductions and conflicting slugs are skipped or opened for reconciliation;
+   titles never merge records.
+5. API access is treated as freshness-limited cache permission, not permanent rights.
+   Provider payloads, URLs, genes, opaque IDs, and provider-only claims can be removed
+   while independently supported Wikidata/Wikipedia identity and open imagery remain.
 
 The three hydrated search records were:
 

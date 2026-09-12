@@ -1,7 +1,8 @@
 defmodule DevilsDictionary.Artworks.Manifest do
   @moduledoc "Versioned, credential-free artwork seed manifests with resumable per-record outcomes."
 
-  @schema_version 1
+  @schema_version 2
+  @terminal_statuses ~w(matched created skipped conflict unavailable)
 
   def new(candidates, metadata \\ %{}) when is_list(candidates) do
     %{
@@ -11,7 +12,12 @@ defmodule DevilsDictionary.Artworks.Manifest do
       "candidates" =>
         candidates
         |> Enum.uniq_by(&{&1["qid"], &1["artsy_artwork_slug"]})
-        |> Enum.map(&Map.put_new(&1, "import", %{"status" => "pending"}))
+        |> Enum.map(
+          &Map.put_new(&1, "import", %{
+            "status" => "pending",
+            "stages" => default_stages()
+          })
+        )
     }
     |> put_checksum()
   end
@@ -19,7 +25,8 @@ defmodule DevilsDictionary.Artworks.Manifest do
   def load!(path) do
     manifest = path |> File.read!() |> Jason.decode!()
 
-    unless manifest["schema_version"] == @schema_version and is_list(manifest["candidates"]) do
+    unless manifest["schema_version"] in [1, @schema_version] and
+             is_list(manifest["candidates"]) do
       raise ArgumentError, "unsupported artwork seed manifest"
     end
 
@@ -28,7 +35,7 @@ defmodule DevilsDictionary.Artworks.Manifest do
     unless manifest["checksum"] == expected,
       do: raise(ArgumentError, "artwork manifest checksum mismatch")
 
-    manifest
+    upgrade(manifest)
   end
 
   def save!(manifest, path) do
@@ -44,15 +51,16 @@ defmodule DevilsDictionary.Artworks.Manifest do
   def update_candidate(manifest, index, outcome) when is_integer(index) and is_map(outcome) do
     candidates =
       List.update_at(manifest["candidates"], index, fn candidate ->
-        Map.put(candidate, "import", stringify(outcome))
+        previous = candidate["import"] || %{}
+        Map.put(candidate, "import", deep_merge(previous, stringify(outcome)))
       end)
 
     manifest |> Map.put("candidates", candidates) |> put_checksum()
   end
 
-  def completed?(candidate),
-    do:
-      get_in(candidate, ["import", "status"]) in ~w(matched created skipped conflict unavailable)
+  def completed?(candidate), do: get_in(candidate, ["import", "status"]) in @terminal_statuses
+
+  def terminal_statuses, do: @terminal_statuses
 
   def checksum(value) do
     :sha256
@@ -70,6 +78,39 @@ defmodule DevilsDictionary.Artworks.Manifest do
       "pilot_cap" => 500,
       "wikipedia_required" => false
     }
+  end
+
+  defp default_stages do
+    %{
+      "wikidata" => %{"status" => "pending"},
+      "artwork" => %{"status" => "pending"},
+      "artists" => %{"status" => "pending", "next_cursor" => nil},
+      "genes" => %{"status" => "pending", "next_cursor" => nil},
+      "identity" => %{"status" => "pending"},
+      "creators" => %{"status" => "pending"}
+    }
+  end
+
+  defp upgrade(%{"schema_version" => @schema_version} = manifest), do: manifest
+
+  defp upgrade(manifest) do
+    manifest
+    |> Map.put("schema_version", @schema_version)
+    |> Map.update!("candidates", fn candidates ->
+      Enum.map(candidates, fn candidate ->
+        import = candidate["import"] || %{"status" => "pending"}
+        Map.put(candidate, "import", Map.put_new(import, "stages", default_stages()))
+      end)
+    end)
+    |> put_checksum()
+  end
+
+  defp deep_merge(left, right) when is_map(left) and is_map(right) do
+    Map.merge(left, right, fn _key, left_value, right_value ->
+      if is_map(left_value) and is_map(right_value),
+        do: deep_merge(left_value, right_value),
+        else: right_value
+    end)
   end
 
   defp stringify(map) do

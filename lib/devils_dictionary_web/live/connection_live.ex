@@ -169,12 +169,47 @@ defmodule DevilsDictionaryWeb.ConnectionLive do
   def handle_params(params, _uri, socket) do
     subject = preselected_subject(params["subject"])
 
+    object = preselected_subject(params["object"])
+    predicates = predicates_for(subject)
+
+    predicate =
+      Enum.find_value(predicates, fn option ->
+        if option.key == params["predicate"], do: option.key
+      end)
+
+    object =
+      if object && predicate && valid_object_hits([object], subject, predicate) != [],
+        do: object,
+        else: nil
+
+    rationale = String.trim(params["rationale"] || "")
+    locator = String.trim(params["evidence_locator"] || "")
+
+    {evidence_items, evidence_rows} =
+      preselected_evidence(params["evidence_revision"], locator)
+
     {:noreply,
-     assign(socket,
+     socket
+     |> assign(
        page_title: "propose a connection",
        subject: subject,
-       predicates: predicates_for(subject)
-     )}
+       object: object,
+       predicate: predicate,
+       predicates: predicates,
+       rationale: rationale,
+       locator: locator,
+       evidence_items: evidence_items,
+       contribution_form:
+         to_form(%{
+           "rationale" => rationale,
+           "locator" => locator,
+           "claimant" => "me",
+           "language_tag" => "",
+           "valid_from" => "",
+           "valid_to" => ""
+         })
+     )
+     |> stream(:selected_evidence, evidence_rows, reset: true)}
   end
 
   defp preselected_subject(nil), do: nil
@@ -183,6 +218,33 @@ defmodule DevilsDictionaryWeb.ConnectionLive do
     case Integer.parse(value) do
       {id, ""} when id > 0 -> Connection.endpoint(id)
       _ -> nil
+    end
+  end
+
+  defp preselected_evidence(nil, _locator), do: {%{}, []}
+
+  defp preselected_evidence(value, locator) do
+    with {id, ""} when id > 0 <- Integer.parse(value),
+         true <- locator != "",
+         true <-
+           Repo.exists?(
+             from revision in DevilsDictionary.Corpus.SourceRecordRevision,
+               where: revision.id == ^id
+           ) do
+      item = %{
+        id: "selected-evidence-source-#{id}",
+        object_id: nil,
+        label: "Artsy source observation",
+        detail: "Direct provider assignment retained for review",
+        target: %{source_record_revision_id: id},
+        evidence_role: "supports",
+        locator: locator,
+        attribution_text: "Artsy direct artwork gene assignment"
+      }
+
+      {%{item.id => item}, [item]}
+    else
+      _ -> {%{}, []}
     end
   end
 

@@ -108,7 +108,8 @@ defmodule DevilsDictionary.Absorb.Sources.WikidataTest do
           }
         }
 
-      assert [work] = out(artwork).concepts
+      artwork_output = out(artwork)
+      assert [work] = artwork_output.concepts
       assert work.kind == :work
       assert work.work_kind == "artwork"
       assert work.metadata["wikidata_creators"] == ["Q900087"]
@@ -117,6 +118,11 @@ defmodule DevilsDictionary.Absorb.Sources.WikidataTest do
                work.external_identifiers,
                &(&1.namespace == "artsy_artwork_slug" and &1.external_id == "fixture-work")
              )
+
+      assert Enum.any?(artwork_output.concept_relations, fn relation ->
+               relation.type == :authored_by and relation.from_concept == "Q900086" and
+                 relation.to_concept == "Q900087"
+             end)
 
       assert [person] = out(artist).concepts
       assert person.kind == :person

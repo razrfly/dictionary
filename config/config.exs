@@ -135,6 +135,7 @@ config :devils_dictionary, :giphy,
 config :devils_dictionary, :artsy,
   endpoint: "https://api.artsy.net",
   rate_limit_ms: 340,
+  freshness_seconds: 24 * 60 * 60,
   enabled: true
 
 # Oban (#69 §5). `absorb: 1` because a dump absorb is a single long stream.

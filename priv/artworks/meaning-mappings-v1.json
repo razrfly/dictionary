@@ -1,96 +1,136 @@
 {
-  "version": 1,
-  "policy": "Exact sense and language mappings only. Artsy genes are attributed source vocabulary; these rows create candidates, never accepted illustrates claims.",
+  "version": 2,
+  "policy": "Mappings target one stable source sense and one verified opaque Artsy gene ID. They create review candidates only; names and glosses are display text, never identity.",
   "mappings": [
     {
-      "version": 1,
+      "version": 2,
+      "enabled": true,
+      "sense_source_slug": "wordnet",
+      "sense_external_key": "oewn-00975181-n#war",
       "lemma": "war",
       "language": "en",
-      "gloss_contains": ["armed conflict", "warfare", "hostilities"],
+      "gene_id": "4db9b645db68d133c600123e",
       "gene_name": "Conflict",
       "match_type": "related",
-      "note": "A direct Conflict assignment is related evidence, not proof that the work illustrates this exact sense."
+      "mapping_review_status": "approved_for_candidate_generation_only",
+      "mapping_review_actor": "issue-86 bounded feasibility review",
+      "mapping_reviewed_at": "2026-09-12",
+      "mapping_review_basis": "Exact Artsy gene resource and exact Open English WordNet source sense were verified; semantic use remains related and requires per-artwork review.",
+      "note": "Conflict is related subject vocabulary. It does not establish that a work illustrates armed warfare; a reviewer must inspect the depicted event."
     },
     {
-      "version": 1,
+      "version": 2,
+      "enabled": true,
+      "sense_source_slug": "wordnet",
+      "sense_external_key": "oewn-07986853-n#family",
       "lemma": "family",
       "language": "en",
-      "gloss_contains": ["related", "parents", "children", "household"],
+      "gene_id": "50b99005c2f9a4a28b00015a",
       "gene_name": "Family",
-      "match_type": "exact",
-      "note": "The exact sense still requires review of the depicted relationship."
+      "match_type": "related",
+      "mapping_review_status": "approved_for_candidate_generation_only",
+      "mapping_review_actor": "issue-86 bounded feasibility review",
+      "mapping_reviewed_at": "2026-09-12",
+      "mapping_review_basis": "Exact Artsy gene resource and exact Open English WordNet source sense were verified; semantic use remains related and requires per-artwork review.",
+      "note": "Family is related subject vocabulary; review must verify the depicted relationship for this specific social-group sense."
     },
     {
-      "version": 1,
-      "lemma": "love",
-      "language": "en",
-      "gloss_contains": ["affection", "romantic", "attachment"],
-      "gene_name": "Love",
-      "match_type": "exact",
-      "note": "Provider vocabulary is candidate evidence only."
-    },
-    {
-      "version": 1,
-      "lemma": "grief",
-      "language": "en",
-      "gloss_contains": ["sorrow", "loss", "sadness"],
-      "gene_name": "Grief",
-      "match_type": "exact",
-      "note": "Provider vocabulary is candidate evidence only."
-    },
-    {
-      "version": 1,
-      "lemma": "solitude",
-      "language": "en",
-      "gloss_contains": ["alone", "seclusion", "solitary"],
-      "gene_name": "Solitude",
-      "match_type": "exact",
-      "note": "A title match alone never satisfies this mapping."
-    },
-    {
-      "version": 1,
-      "lemma": "justice",
-      "language": "en",
-      "gloss_contains": ["fair", "law", "right"],
-      "gene_name": "Justice",
-      "match_type": "exact",
-      "note": "The allegorical or political sense must be reviewed."
-    },
-    {
-      "version": 1,
-      "lemma": "power",
-      "language": "en",
-      "gloss_contains": ["control", "authority", "influence"],
-      "gene_name": "Power",
-      "match_type": "exact",
-      "note": "Wrong-sense physical-power matches must be dismissed."
-    },
-    {
-      "version": 1,
+      "version": 2,
+      "enabled": true,
+      "sense_source_slug": "wordnet",
+      "sense_external_key": "oewn-01157387-n#nepotism",
       "lemma": "nepotism",
       "language": "en",
-      "gloss_contains": ["relative", "family", "favoritism", "favouritism"],
+      "gene_id": "50b99005c2f9a4a28b00015a",
       "gene_name": "Family",
       "match_type": "broader",
-      "note": "Family is exploratory context, not evidence of favoritism or nepotism."
+      "mapping_review_status": "approved_for_candidate_generation_only",
+      "mapping_review_actor": "issue-86 bounded feasibility review",
+      "mapping_reviewed_at": "2026-09-12",
+      "mapping_review_basis": "Exact IDs were verified and the Family-to-nepotism gap was explicitly classified as broader exploratory context, never direct evidence.",
+      "note": "Family is only broader exploratory context. It is not evidence of favoritism, appointment, or nepotism without independent review evidence."
     },
     {
-      "version": 1,
+      "version": 2,
+      "enabled": true,
+      "sense_source_slug": "wordnet",
+      "sense_external_key": "oewn-07558676-n#love",
+      "lemma": "love",
+      "language": "en",
+      "gene_id": "4de292fcef72520001005fe5",
+      "gene_name": "Love",
+      "match_type": "related",
+      "mapping_review_status": "approved_for_candidate_generation_only",
+      "mapping_review_actor": "issue-86 bounded feasibility review",
+      "mapping_reviewed_at": "2026-09-12",
+      "mapping_review_basis": "Exact Artsy gene resource and exact Open English WordNet source sense were verified; semantic use remains related and requires per-artwork review.",
+      "note": "The provider subject is related evidence only; a reviewer must distinguish affection, romance, attachment, and other senses."
+    },
+    {
+      "version": 2,
+      "enabled": false,
+      "sense_source_slug": "wordnet",
+      "sense_external_key": "oewn-07550398-n#grief",
+      "lemma": "grief",
+      "language": "en",
+      "gene_slug_probe": "grief",
+      "probe_result": "404 on 2026-09-12",
+      "note": "Disabled: no stable Artsy gene ID was verified within the bounded feasibility audit."
+    },
+    {
+      "version": 2,
+      "enabled": false,
+      "sense_source_slug": "wordnet",
+      "sense_external_key": "oewn-14438384-n#solitude",
+      "lemma": "solitude",
+      "language": "en",
+      "gene_slug_probe": "solitude",
+      "probe_result": "404 on 2026-09-12",
+      "note": "Disabled: no stable Artsy gene ID was verified within the bounded feasibility audit."
+    },
+    {
+      "version": 2,
+      "enabled": false,
+      "sense_source_slug": "wordnet",
+      "sense_external_key": "oewn-04857348-n#justice",
+      "lemma": "justice",
+      "language": "en",
+      "gene_slug_probe": "justice",
+      "probe_result": "404 on 2026-09-12",
+      "note": "Disabled: no stable Artsy gene ID was verified within the bounded feasibility audit."
+    },
+    {
+      "version": 2,
+      "enabled": false,
+      "sense_source_slug": "wordnet",
+      "sense_external_key": "oewn-05198072-n#power",
+      "lemma": "power",
+      "language": "en",
+      "gene_slug_probe": "power",
+      "probe_result": "404 on 2026-09-12",
+      "note": "Disabled: no stable Artsy gene ID was verified within the bounded feasibility audit."
+    },
+    {
+      "version": 2,
+      "enabled": false,
+      "sense_source_slug": "wordnet",
+      "sense_external_key": "oewn-11464213-n#death",
       "lemma": "death",
       "language": "en",
-      "gloss_contains": ["end of life", "dying", "ceasing to live"],
-      "gene_name": "Death",
-      "match_type": "exact",
-      "note": "A direct Death assignment proposes a candidate; the depicted event and exact lexical sense still require review."
+      "gene_slug_probe": "death",
+      "probe_result": "404 on 2026-09-12",
+      "note": "Disabled: no stable Artsy gene ID was verified within the bounded feasibility audit."
     },
     {
-      "version": 1,
+      "version": 2,
+      "enabled": false,
+      "sense_source_slug": "wordnet",
+      "sense_external_key": "oewn-14015308-n#freedom",
       "lemma": "freedom",
       "language": "en",
-      "gloss_contains": ["liberty", "free", "restraint"],
-      "gene_name": "Freedom",
-      "match_type": "exact",
-      "note": "Political, physical, and allegorical freedom must not be conflated during review."
+      "gene_slug_probe": "freedom",
+      "probe_result": "404 on 2026-09-12",
+      "note": "Disabled: no stable Artsy gene ID was verified within the bounded feasibility audit."
     }
   ]
 }
