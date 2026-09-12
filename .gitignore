@@ -5,7 +5,7 @@
 /cover/
 
 # The directory Mix downloads your dependencies sources to.
-/deps/
+/deps
 
 # Where 3rd-party dependencies like ExDoc output generated docs.
 /doc/
@@ -44,3 +44,9 @@ npm-debug.log
 # verifiable even though the bytes are not in git.
 /priv/replay/*
 !/priv/replay/MANIFEST.json
+
+# Local development credentials.
+/.env
+/.env.*
+!/.env.example
+/config/dev.secret.exs

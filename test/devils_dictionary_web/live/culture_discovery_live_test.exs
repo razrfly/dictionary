@@ -34,7 +34,7 @@ defmodule DevilsDictionaryWeb.CultureDiscoveryLiveTest do
     assert has_element?(live, "#culture-results")
     assert has_element?(live, "#culture-result-tmdb_movie-301")
     assert has_element?(live, "#culture-source-301[href^='https://cinegraph.org/']")
-    assert has_element?(live, "#culture-result-tmdb_movie-301 details")
+    assert has_element?(live, "#culture-about-cinegraph")
     refute has_element?(live, "#culture-failed")
   end
 
@@ -104,7 +104,7 @@ defmodule DevilsDictionaryWeb.CultureDiscoveryLiveTest do
 
     assert has_element?(
              live,
-             "#culture-result-tmdb_movie-303",
+             "#culture-about-cinegraph",
              "Keyword relevance to this particular meaning is unverified."
            )
   end
