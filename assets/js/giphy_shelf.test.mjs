@@ -39,7 +39,7 @@ test('destroy cancels requests and clears transient results', () => {
   assert.equal(ctx.alive,false); assert.ok(aborted); assert.ok(cleared)
 })
 function context() {
-  return {alive:true,busy:false,offset:0,el:{dataset:{query:'mountain',language:'en',apiKey:'test'}},status:{textContent:''},more:{hidden:true},addItem(){throw new Error('Unexpected item')}}
+  return {alive:true,busy:false,offset:0,pagesLoaded:0,el:{dataset:{query:'mountain',language:'en',apiKey:'test'}},status:{textContent:''},more:{hidden:true},addItem(){throw new Error('Unexpected item')}}
 }
 test('network failure is nonblocking and does not automatically retry', async () => {
   const old=globalThis.fetch; let calls=0
@@ -54,6 +54,19 @@ test('response arriving after navigation cannot append stale GIFs', async () => 
     ctx.alive=false
     release({ok:true,status:200,json:async()=>page([item('a')])})
     await pending;assert.equal(ctx.offset,0)
+  } finally {globalThis.fetch=old}
+})
+test('three partial pages stop pagination before a fourth request', async () => {
+  const old=globalThis.fetch;let calls=0
+  globalThis.fetch=async url=>{
+    const offset=Number(new URL(url).searchParams.get('offset'))
+    calls++
+    return {ok:true,status:200,json:async()=>page([item(`partial-${calls}`)],offset)}
+  }
+  try {
+    const ctx=context();ctx.addItem=()=>{}
+    await Hook.load.call(ctx);await Hook.load.call(ctx);await Hook.load.call(ctx);await Hook.load.call(ctx)
+    assert.equal(calls,3);assert.equal(ctx.offset,3);assert.equal(ctx.pagesLoaded,3);assert.equal(ctx.more.hidden,true)
   } finally {globalThis.fetch=old}
 })
 test('rate limit pauses subsequent visits without further fetches', async () => {

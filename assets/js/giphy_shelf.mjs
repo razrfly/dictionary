@@ -39,6 +39,7 @@ export default {
   mounted() {
     this.alive = true
     this.offset = 0
+    this.pagesLoaded = 0
     this.busy = false
     this.status = this.el.querySelector('[data-status]')
     this.list = this.el.querySelector('[data-results]')
@@ -51,7 +52,7 @@ export default {
     this.load()
   },
   async load() {
-    if (this.busy || !this.alive || this.offset >= 24) return
+    if (this.busy || !this.alive || this.pagesLoaded >= 3) return
     const now = Date.now()
     while (attempts.length && attempts[0] <= now - 3600_000) attempts.shift()
     if (retryAt > now || attempts.length >= 100) {
@@ -78,8 +79,9 @@ export default {
       if (!this.alive) return
       for (const item of page.items) this.addItem(item)
       this.offset += page.items.length
+      this.pagesLoaded += 1
       this.status.textContent = this.offset ? '' : 'No matching GIFs for this term yet.'
-      this.more.hidden = !page.more
+      this.more.hidden = !page.more || this.pagesLoaded >= 3
     } catch (error) {
       if (this.alive) {
         this.status.textContent = error.name === 'AbortError' ? 'GIF search timed out. Try another visit later.' :
