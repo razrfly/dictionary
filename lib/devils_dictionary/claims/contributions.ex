@@ -452,9 +452,15 @@ defmodule DevilsDictionary.Claims.Contributions do
     cited = Repo.get!(Registry.ContentRevision, id)
 
     if cited.content_id == split_id do
-      attrs
-      |> Map.put(:content_revision_id, revision_target(replacement_id)[:content_revision_id])
-      |> Map.put(:sense_revision_id, nil)
+      case revision_target(replacement_id) do
+        %{content_revision_id: target_id} ->
+          attrs
+          |> Map.put(:content_revision_id, target_id)
+          |> Map.put(:sense_revision_id, nil)
+
+        _ ->
+          Repo.rollback(:replacement_revision_missing)
+      end
     else
       attrs
     end
@@ -465,9 +471,15 @@ defmodule DevilsDictionary.Claims.Contributions do
     cited = Repo.get!(Registry.SenseRevision, id)
 
     if cited.sense_id == split_id do
-      attrs
-      |> Map.put(:sense_revision_id, revision_target(replacement_id)[:sense_revision_id])
-      |> Map.put(:content_revision_id, nil)
+      case revision_target(replacement_id) do
+        %{sense_revision_id: target_id} ->
+          attrs
+          |> Map.put(:sense_revision_id, target_id)
+          |> Map.put(:content_revision_id, nil)
+
+        _ ->
+          Repo.rollback(:replacement_revision_missing)
+      end
     else
       attrs
     end
@@ -718,6 +730,8 @@ defmodule DevilsDictionary.Claims.Contributions do
 
   defp add_authorship!(entity, :work, author_id, submitter) do
     author_id = parse_id(author_id)
+
+    if is_nil(author_id), do: Repo.rollback(:invalid_author)
 
     author =
       Repo.one(

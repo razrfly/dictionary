@@ -88,11 +88,15 @@ defmodule DevilsDictionary.Absorb.Sources.WikidataTest do
         "Q43653" => :event
       }
 
-      for raw <- general_records(), Map.has_key?(expected, raw["id"]) do
-        assert [concept] = out(raw).concepts
-        assert concept.kind == expected[raw["id"]]
-        assert concept.metadata["wikidata_instance_of"] != []
-      end
+      visited =
+        for raw <- general_records(), Map.has_key?(expected, raw["id"]) do
+          assert [concept] = out(raw).concepts
+          assert concept.kind == expected[raw["id"]]
+          assert [_ | _] = concept.metadata["wikidata_instance_of"]
+          raw["id"]
+        end
+
+      assert Enum.sort(visited) == expected |> Map.keys() |> Enum.sort()
     end
 
     test "same-name records remain distinct identities" do

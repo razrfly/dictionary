@@ -203,6 +203,38 @@ defmodule DevilsDictionaryWeb.Issue84Checkpoint3LiveTest do
              live(challenger_conn, ~p"/connections/#{claim.id}/edit")
   end
 
+  test "mutation citation validation is visible and blank duplicate searches stay empty", ctx do
+    {:ok, claim} =
+      Contributions.propose(
+        ctx.scope,
+        ctx.artifact.object_id,
+        "illustrates",
+        ctx.sense.object_id,
+        %{rationale: "Initial interpretation"},
+        []
+      )
+
+    {:ok, edit_view, _html} = live(ctx.conn, ~p"/connections/#{claim.id}/edit")
+
+    edit_view
+    |> form("#mutation-evidence-form", %{"locator" => "page 1"})
+    |> render_submit()
+
+    assert has_element?(edit_view, "#flash-error", "Choose a source meaning or passage")
+
+    {:ok, composer, _html} = live(ctx.conn, ~p"/connect")
+
+    composer
+    |> form("#local-entity-form", %{
+      "entity_kind" => "artifact",
+      "target_role" => "subject",
+      "preferred_label" => "   "
+    })
+    |> render_change()
+
+    refute has_element?(composer, "[id^='duplicate-result-']")
+  end
+
   test "stable evidence URLs retain exact historical versions and redact restricted text", ctx do
     old = Registry.current_content_revision(ctx.support.object_id)
 

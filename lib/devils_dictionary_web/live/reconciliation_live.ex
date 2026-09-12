@@ -19,10 +19,17 @@ defmodule DevilsDictionaryWeb.ReconciliationLive do
 
   @impl true
   def handle_event("decide", %{"_case_id" => id, "decision" => decision} = params, socket) do
+    case Integer.parse(id) do
+      {case_id, ""} -> decide(case_id, decision, params, socket)
+      _ -> {:noreply, put_flash(socket, :error, "Decision not saved: invalid case.")}
+    end
+  end
+
+  defp decide(case_id, decision, params, socket) do
     result =
       Contributions.reconcile(
         socket.assigns.current_scope,
-        String.to_integer(id),
+        case_id,
         decision,
         params["replacement_object_id"],
         params["reason"]
@@ -71,7 +78,11 @@ defmodule DevilsDictionaryWeb.ReconciliationLive do
     }
   end
 
-  defp error_label(reason), do: reason |> to_string() |> String.replace("_", " ")
+  defp error_label(reason) when is_atom(reason) or is_binary(reason),
+    do: reason |> to_string() |> String.replace("_", " ")
+
+  defp error_label(%Ecto.Changeset{}), do: "the change was rejected"
+  defp error_label(_reason), do: "the change could not be completed"
 
   @impl true
   def render(assigns) do

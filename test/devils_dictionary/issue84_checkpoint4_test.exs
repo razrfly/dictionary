@@ -60,6 +60,33 @@ defmodule DevilsDictionary.Issue84Checkpoint4Test do
     assert "does not allow these endpoint kinds" in errors_on(changeset).predicate_id
   end
 
+  test "batched canonical resolution preserves merge chains and lifecycle events reuse one actor" do
+    first = entity!(:artifact, "First historical artifact")
+    second = entity!(:artifact, "Second historical artifact")
+    survivor = entity!(:artifact, "Canonical artifact")
+
+    assert {:ok, _} = Registry.merge([first.object_id], second.object_id, reason: "first merge")
+
+    assert {:ok, _} =
+             Registry.merge([second.object_id], survivor.object_id, reason: "second merge")
+
+    assert Registry.canonical_ids([first.object_id, second.object_id, survivor.object_id]) == %{
+             first.object_id => survivor.object_id,
+             second.object_id => survivor.object_id,
+             survivor.object_id => survivor.object_id
+           }
+
+    assert MapSet.new(Registry.canonical_family(first.object_id)) ==
+             MapSet.new([first.object_id, second.object_id, survivor.object_id])
+
+    assert Repo.aggregate(
+             from(actor in DevilsDictionary.Sources.Actor,
+               where: actor.actor_kind == :import and actor.label == "Registry lifecycle system"
+             ),
+             :count
+           ) == 1
+  end
+
   test "multiple, organization and anonymous credits work outside every scope", ctx do
     {:ok, person} = Registry.create_person(%{preferred_label: "Avery Credit"})
 
@@ -231,6 +258,11 @@ defmodule DevilsDictionary.Issue84Checkpoint4Test do
              Encyclopedia.search_entities("Retired search needle"),
              &(&1.object_id == retired.object_id)
            )
+  end
+
+  defp entity!(kind, label) do
+    {:ok, entity} = Registry.create_entity(%{entity_kind: kind, preferred_label: label})
+    entity
   end
 
   defp count_queries(fun) do

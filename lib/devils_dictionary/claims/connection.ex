@@ -90,7 +90,7 @@ defmodule DevilsDictionary.Claims.Connection do
         review: Claims.display_review_state(revision.id),
         reviews: Claims.reviews(revision.id) |> Repo.preload(:reviewer_actor),
         score: Claims.score(revision.id),
-        history: Enum.filter(Claims.history(assertion_id), &visible_revision?(&1, opts)),
+        history: visible_history(assertion_id, opts),
         claimant: actor(assertion.origin_actor_id),
         submitted_by: actor(assertion.submitted_by_actor_id)
       }
@@ -99,10 +99,19 @@ defmodule DevilsDictionary.Claims.Connection do
     end
   end
 
-  defp visible_revision?(nil, _opts), do: false
-
   defp visible_revision?(revision, opts) do
     opts[:visibility] == :internal or Claims.publicly_visible_revision?(revision)
+  end
+
+  defp visible_history(assertion_id, opts) do
+    history = Claims.history(assertion_id)
+
+    if opts[:visibility] == :internal do
+      history
+    else
+      visible_ids = Claims.publicly_visible_revision_ids(Enum.map(history, & &1.id))
+      Enum.filter(history, &MapSet.member?(visible_ids, &1.id))
+    end
   end
 
   defp revision_for(_assertion_id, nil, current), do: current

@@ -248,7 +248,8 @@ defmodule DevilsDictionary.Encyclopedia.EntityPage do
   defp entity_views([]), do: []
 
   defp entity_views(ids) do
-    canonical_ids = Enum.map(ids, &Registry.canonical_id/1)
+    canonical = Registry.canonical_ids(ids)
+    canonical_ids = Enum.map(ids, &Map.fetch!(canonical, &1))
 
     by_id =
       Entity
@@ -262,7 +263,8 @@ defmodule DevilsDictionary.Encyclopedia.EntityPage do
   defp content_views([]), do: []
 
   defp content_views(ids) do
-    canonical_ids = Enum.map(ids, &Registry.canonical_id/1)
+    canonical = Registry.canonical_ids(ids)
+    canonical_ids = Enum.map(ids, &Map.fetch!(canonical, &1))
 
     by_id =
       Repo.all(
@@ -297,6 +299,8 @@ defmodule DevilsDictionary.Encyclopedia.EntityPage do
   defp definition_views([]), do: []
 
   defp definition_views(ids) do
+    canonical = Registry.canonical_ids(ids)
+    ids = Enum.map(ids, &Map.fetch!(canonical, &1))
     defines = targets(ids, "defines")
     published = targets(ids, "published_in")
 

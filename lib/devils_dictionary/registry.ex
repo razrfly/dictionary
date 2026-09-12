@@ -479,11 +479,21 @@ defmodule DevilsDictionary.Registry do
   end
 
   defp lifecycle_actor! do
-    Repo.insert!(%Actor{
-      actor_kind: :import,
-      label: "Registry lifecycle system",
-      metadata: %{"accountability" => "caller did not supply a human actor"}
-    })
+    label = "Registry lifecycle system"
+
+    Repo.insert!(
+      %Actor{
+        actor_kind: :import,
+        label: label,
+        metadata: %{"accountability" => "caller did not supply a human actor"}
+      },
+      on_conflict: :nothing,
+      conflict_target:
+        {:unsafe_fragment,
+         "(label) WHERE actor_kind = 'import' AND label = 'Registry lifecycle system'"}
+    )
+
+    Repo.get_by!(Actor, actor_kind: :import, label: label)
   end
 
   defp preserve_entity_label_as_alias(from_id, to_id) do
@@ -682,7 +692,8 @@ defmodule DevilsDictionary.Registry do
   end
 
   @doc """
-  Where a retired identity went: `{:merged, id}`, `{:split, ids}`, or `:itself`.
+  Where an identity went: `{:merged, id}`, `{:split, ids}`, `{:cycle, ids}`,
+  `:itself`, or `nil` when the object does not exist.
 
   This is what keeps an old link meaningful after a merge. The link still points
   at the object it always pointed at — nothing was rewritten — and a reader that
@@ -738,6 +749,14 @@ defmodule DevilsDictionary.Registry do
     end
   end
 
+  @doc "The live canonical ids for a collection, resolved in bounded batches."
+  def canonical_ids(object_ids) do
+    ids = Enum.uniq(object_ids)
+    merge_edges = load_merge_edges(ids, MapSet.new(), %{})
+
+    Map.new(ids, fn id -> {id, canonical_from_edges(id, id, merge_edges, MapSet.new())} end)
+  end
+
   @doc """
   Every historical merge input that canonically resolves to the same survivor.
 
@@ -747,27 +766,103 @@ defmodule DevilsDictionary.Registry do
   def canonical_family(object_id) do
     canonical = canonical_id(object_id)
 
-    pairs =
+    collect_merge_inputs([canonical], MapSet.new()) |> MapSet.to_list()
+  end
+
+  defp collect_merge_inputs([], seen), do: seen
+
+  defp collect_merge_inputs(ids, seen) do
+    ids = Enum.reject(ids, &MapSet.member?(seen, &1))
+    seen = Enum.reduce(ids, seen, &MapSet.put(&2, &1))
+
+    inputs =
       Repo.all(
         from input in IdentityEventMember,
           join: event in assoc(input, :event),
           join: output in IdentityEventMember,
           on: output.event_id == event.id and output.role == :output,
-          where: event.operation == :merge and input.role == :input,
-          select: {input.object_id, output.object_id}
+          where: event.operation == :merge and input.role == :input and output.object_id in ^ids,
+          select: input.object_id
       )
+      |> Enum.uniq()
 
-    reverse = Enum.group_by(pairs, &elem(&1, 1), &elem(&1, 0))
-    collect_merge_inputs([canonical], reverse, MapSet.new()) |> MapSet.to_list()
+    collect_merge_inputs(inputs, seen)
   end
 
-  defp collect_merge_inputs([], _reverse, seen), do: seen
+  defp load_merge_edges([], _seen, edges), do: edges
 
-  defp collect_merge_inputs([id | rest], reverse, seen) do
-    if MapSet.member?(seen, id) do
-      collect_merge_inputs(rest, reverse, seen)
+  defp load_merge_edges(frontier, seen, edges) do
+    frontier = Enum.reject(frontier, &MapSet.member?(seen, &1))
+
+    if frontier == [] do
+      edges
     else
-      collect_merge_inputs(Map.get(reverse, id, []) ++ rest, reverse, MapSet.put(seen, id))
+      seen = Enum.reduce(frontier, seen, &MapSet.put(&2, &1))
+
+      objects =
+        Repo.all(
+          from object in Object,
+            where: object.id in ^frontier,
+            select: {object.id, object.lifecycle_state}
+        )
+
+      existing_ids = MapSet.new(objects, &elem(&1, 0))
+
+      merged_ids =
+        for {id, :merged} <- objects, do: id
+
+      rows =
+        Repo.all(
+          from input in IdentityEventMember,
+            join: event in assoc(input, :event),
+            join: output in IdentityEventMember,
+            on: output.event_id == event.id and output.role == :output,
+            where:
+              input.object_id in ^merged_ids and input.role == :input and
+                event.operation == :merge,
+            order_by: [asc: input.object_id, desc: event.id, asc: output.object_id],
+            select: {input.object_id, event.id, output.object_id}
+        )
+
+      latest_edges =
+        rows
+        |> Enum.group_by(fn {input_id, _event_id, _output_id} -> input_id end)
+        |> Map.new(fn {input_id, input_rows} ->
+          latest_event_id = input_rows |> List.first() |> elem(1)
+
+          outputs =
+            input_rows
+            |> Enum.take_while(fn {_input_id, event_id, _output_id} ->
+              event_id == latest_event_id
+            end)
+            |> Enum.map(&elem(&1, 2))
+
+          {input_id, outputs}
+        end)
+
+      missing_edges =
+        frontier
+        |> Enum.reject(&MapSet.member?(existing_ids, &1))
+        |> Map.new(&{&1, :missing})
+
+      edges = edges |> Map.merge(missing_edges) |> Map.merge(latest_edges)
+      next = latest_edges |> Map.values() |> List.flatten() |> Enum.uniq()
+      load_merge_edges(next, seen, edges)
+    end
+  end
+
+  defp canonical_from_edges(current, original, edges, seen) do
+    cond do
+      MapSet.member?(seen, current) ->
+        original
+
+      true ->
+        case Map.get(edges, current) do
+          [next] -> canonical_from_edges(next, original, edges, MapSet.put(seen, current))
+          :missing -> original
+          nil -> current
+          _ -> original
+        end
     end
   end
 

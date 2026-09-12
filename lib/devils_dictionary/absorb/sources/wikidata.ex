@@ -265,7 +265,8 @@ defmodule DevilsDictionary.Absorb.Sources.Wikidata do
           |> MapSet.union(stored_ids)
           |> MapSet.union(MapSet.new(bounded))
 
-        unresolved = omitted + length(related)
+        outstanding_related = outstanding(related, seen)
+        unresolved = omitted + length(outstanding_related)
 
         cond do
           to_fetch != [] and bounded == [] ->
@@ -274,7 +275,8 @@ defmodule DevilsDictionary.Absorb.Sources.Wikidata do
                acc
                | truncated: true,
                  unresolved_references:
-                   acc.unresolved_references + length(to_fetch) + length(stored_related)
+                   acc.unresolved_references + length(to_fetch) +
+                     length(outstanding(stored_related, seen))
              }}
 
           depth == max_depth ->
@@ -305,6 +307,12 @@ defmodule DevilsDictionary.Absorb.Sources.Wikidata do
       %{} = acc -> acc
       {_queue, _seen, acc} -> acc
     end
+  end
+
+  defp outstanding(qids, seen) do
+    qids
+    |> Enum.uniq()
+    |> Enum.reject(&MapSet.member?(seen, &1))
   end
 
   # Repeat the full re-materialize while it is still closing edges. Capped, and

@@ -42,7 +42,6 @@ defmodule DevilsDictionary.Claims do
     ContentItem,
     ContentRevision,
     Entity,
-    ExternalIdentifier,
     Lexeme,
     Object,
     Sense,
@@ -485,6 +484,16 @@ defmodule DevilsDictionary.Claims do
 
   def publicly_visible_revision?(_), do: false
 
+  @doc "The revision ids that pass the public visibility policy, in one query."
+  def publicly_visible_revision_ids(ids) when is_list(ids) do
+    AssertionRevision
+    |> where([r], r.id in ^ids and r.lifecycle_state == :active)
+    |> visible(:public)
+    |> select([r], r.id)
+    |> Repo.all()
+    |> MapSet.new()
+  end
+
   defp filter_predicate(query, nil), do: query
 
   defp filter_predicate(query, keys) when is_list(keys) do
@@ -614,6 +623,72 @@ defmodule DevilsDictionary.Claims do
     end
   end
 
+  @doc "The display-safe review states for many revisions, with bounded snapshot reads."
+  def display_review_states([]), do: %{}
+
+  def display_review_states(revision_ids) when is_list(revision_ids) do
+    ids = Enum.uniq(revision_ids)
+
+    latest =
+      Repo.all(
+        from review in AssertionReview,
+          where: review.assertion_revision_id in ^ids,
+          distinct: review.assertion_revision_id,
+          order_by: [asc: review.assertion_revision_id, desc: review.inserted_at, desc: review.id]
+      )
+      |> Map.new(&{&1.assertion_revision_id, &1})
+
+    context_ids =
+      latest
+      |> Map.values()
+      |> Enum.map(& &1.review_context_id)
+      |> Enum.reject(&is_nil/1)
+      |> Enum.uniq()
+
+    contexts =
+      if context_ids == [] do
+        %{}
+      else
+        Repo.all(from context in ReviewContext, where: context.id in ^context_ids)
+        |> Map.new(&{&1.id, &1})
+      end
+
+    fresh_ids =
+      latest
+      |> Enum.filter(fn {_id, review} ->
+        case Map.get(contexts, review.review_context_id) do
+          %ReviewContext{fingerprint: fingerprint} when is_binary(fingerprint) -> true
+          _ -> false
+        end
+      end)
+      |> Enum.map(&elem(&1, 0))
+
+    snapshots = batch_review_snapshots(fresh_ids)
+
+    Map.new(ids, fn id ->
+      state =
+        case Map.get(latest, id) do
+          nil ->
+            :needs_review
+
+          %{decision: decision} when decision in [:rejected, :withdrawn, :needs_review] ->
+            decision
+
+          %{decision: decision, review_context_id: context_id} ->
+            with %ReviewContext{fingerprint: fingerprint} when is_binary(fingerprint) <-
+                   Map.get(contexts, context_id),
+                 snapshot when is_map(snapshot) <- Map.get(snapshots, id),
+                 true <- snapshot_fingerprint(snapshot) == fingerprint do
+              decision
+            else
+              _ -> :changed_since_review
+            end
+        end
+
+      {id, state}
+    end)
+  end
+
   @doc "Whether a review context still describes exactly what is displayed now."
   def review_context_fresh?(_revision_id, nil), do: false
 
@@ -703,6 +778,216 @@ defmodule DevilsDictionary.Claims do
     )
   end
 
+  defp batch_review_snapshots([]), do: %{}
+
+  defp batch_review_snapshots(revision_ids) do
+    revisions =
+      Repo.all(from revision in AssertionRevision, where: revision.id in ^revision_ids)
+      |> Map.new(&{&1.id, &1})
+
+    assertions =
+      revisions
+      |> Map.values()
+      |> Enum.map(& &1.assertion_id)
+      |> Enum.uniq()
+      |> then(fn ids -> Repo.all(from assertion in Assertion, where: assertion.id in ^ids) end)
+      |> Map.new(&{&1.id, &1})
+
+    actors = batch_snapshot_actors(assertions)
+
+    endpoint_ids =
+      revisions
+      |> Map.values()
+      |> Enum.flat_map(&revision_endpoint_ids/1)
+      |> Enum.uniq()
+
+    canonical = Registry.canonical_ids(endpoint_ids)
+    display = endpoint_display_rows(canonical |> Map.values() |> Enum.uniq())
+    items = batch_context_items(revisions)
+    evidence = batch_snapshot_evidence(Map.keys(revisions))
+
+    Map.new(revisions, fn {revision_id, revision} ->
+      assertion = Map.fetch!(assertions, revision.assertion_id)
+
+      snapshot = %{
+        "assertion" => %{
+          "origin_actor_id" => assertion.origin_actor_id,
+          "submitted_by_actor_id" => assertion.submitted_by_actor_id,
+          "source_id" => assertion.source_id,
+          "origin_key" => assertion.origin_key,
+          "actors" => Map.get(actors, assertion.id, [])
+        },
+        "revision" => snapshot_revision(revision),
+        "displayed_items" => snapshot_items(Map.get(items, revision_id, [])),
+        "displayed_endpoints" => snapshot_endpoints(revision, canonical, display),
+        "evidence" => Map.get(evidence, revision_id, [])
+      }
+
+      {revision_id, snapshot}
+    end)
+  end
+
+  defp batch_snapshot_actors(assertions) do
+    actor_ids =
+      assertions
+      |> Map.values()
+      |> Enum.flat_map(&[&1.origin_actor_id, &1.submitted_by_actor_id])
+      |> Enum.reject(&is_nil/1)
+      |> Enum.uniq()
+
+    actors =
+      Repo.all(from actor in Actor, where: actor.id in ^actor_ids)
+      |> Map.new(&{&1.id, &1})
+
+    canonical =
+      actors
+      |> Map.values()
+      |> Enum.map(& &1.entity_id)
+      |> Enum.reject(&is_nil/1)
+      |> Registry.canonical_ids()
+
+    Map.new(assertions, fn {assertion_id, assertion} ->
+      views =
+        [assertion.origin_actor_id, assertion.submitted_by_actor_id]
+        |> Enum.reject(&is_nil/1)
+        |> Enum.uniq()
+        |> Enum.map(&Map.fetch!(actors, &1))
+        |> Enum.map(fn actor ->
+          %{
+            "id" => actor.id,
+            "actor_kind" => to_string(actor.actor_kind),
+            "label" => actor.label,
+            "user_id" => actor.user_id,
+            "bot_source_id" => actor.bot_source_id,
+            "entity_id" => actor.entity_id,
+            "canonical_entity_id" => actor.entity_id && Map.fetch!(canonical, actor.entity_id)
+          }
+        end)
+        |> Enum.sort_by(& &1["id"])
+
+      {assertion_id, views}
+    end)
+  end
+
+  defp batch_context_items(revisions) do
+    endpoint_ids =
+      revisions
+      |> Map.values()
+      |> Enum.flat_map(fn revision ->
+        [revision.subject_object_id, revision.object_object_id, revision.context_object_id]
+      end)
+      |> Enum.reject(&is_nil/1)
+      |> Enum.uniq()
+
+    targets =
+      Repo.all(
+        from revision in ContentRevision,
+          where: revision.content_id in ^endpoint_ids and revision.is_current,
+          select: {revision.content_id, %{content_revision_id: revision.id}}
+      )
+      |> Map.new()
+      |> Map.merge(
+        Repo.all(
+          from revision in SenseRevision,
+            where: revision.sense_id in ^endpoint_ids and revision.is_current,
+            select: {revision.sense_id, %{sense_revision_id: revision.id}}
+        )
+        |> Map.new()
+      )
+
+    Map.new(revisions, fn {revision_id, revision} ->
+      roles = [
+        {:subject, revision.subject_object_id},
+        {:object, revision.object_object_id},
+        {:context, revision.context_object_id}
+      ]
+
+      items =
+        Enum.flat_map(roles, fn {role, id} ->
+          case targets[id] do
+            nil -> []
+            target -> [{role, Enum.sort(target)}]
+          end
+        end)
+
+      {revision_id, items}
+    end)
+  end
+
+  defp batch_snapshot_evidence(revision_ids) do
+    rows =
+      Repo.all(
+        from item in AssertionEvidence,
+          where: item.assertion_revision_id in ^revision_ids,
+          order_by: [item.assertion_revision_id, item.evidence_role, item.id]
+      )
+
+    content_ids =
+      rows |> Enum.map(& &1.content_revision_id) |> Enum.reject(&is_nil/1) |> Enum.uniq()
+
+    sense_ids = rows |> Enum.map(& &1.sense_revision_id) |> Enum.reject(&is_nil/1) |> Enum.uniq()
+
+    cited_content =
+      Repo.all(from revision in ContentRevision, where: revision.id in ^content_ids)
+      |> Map.new(&{&1.id, &1.content_id})
+
+    cited_senses =
+      Repo.all(from revision in SenseRevision, where: revision.id in ^sense_ids)
+      |> Map.new(&{&1.id, &1.sense_id})
+
+    current_content =
+      Repo.all(
+        from revision in ContentRevision,
+          where: revision.content_id in ^Map.values(cited_content) and revision.is_current
+      )
+      |> Map.new(&{&1.content_id, &1})
+
+    current_senses =
+      Repo.all(
+        from revision in SenseRevision,
+          where: revision.sense_id in ^Map.values(cited_senses) and revision.is_current
+      )
+      |> Map.new(&{&1.sense_id, &1})
+
+    rows
+    |> Enum.map(fn item ->
+      target_current =
+        cond do
+          item.content_revision_id ->
+            current = current_content[Map.fetch!(cited_content, item.content_revision_id)]
+
+            %{
+              "revision_id" => current && current.id,
+              "lifecycle_state" => current && to_string(current.lifecycle_state)
+            }
+
+          item.sense_revision_id ->
+            current = current_senses[Map.fetch!(cited_senses, item.sense_revision_id)]
+
+            %{
+              "revision_id" => current && current.id,
+              "lifecycle_state" => current && to_string(current.lifecycle_state)
+            }
+
+          true ->
+            nil
+        end
+
+      {item.assertion_revision_id,
+       %{
+         "id" => item.id,
+         "role" => to_string(item.evidence_role),
+         "source_record_revision_id" => item.source_record_revision_id,
+         "content_revision_id" => item.content_revision_id,
+         "sense_revision_id" => item.sense_revision_id,
+         "locator" => item.locator,
+         "attribution_text" => item.attribution_text,
+         "target_current" => target_current
+       }}
+    end)
+    |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
+  end
+
   @snapshot_revision_fields [
     :subject_object_id,
     :predicate_id,
@@ -751,6 +1036,33 @@ defmodule DevilsDictionary.Claims do
     end)
   end
 
+  defp snapshot_endpoints(revision, canonical, display) do
+    revision
+    |> endpoint_roles()
+    |> Enum.map(fn {role, id} ->
+      canonical_id = Map.fetch!(canonical, id)
+
+      %{
+        "role" => role,
+        "object_id" => id,
+        "canonical_object_id" => canonical_id,
+        "display" => Map.get(display, canonical_id)
+      }
+    end)
+  end
+
+  defp revision_endpoint_ids(revision), do: revision |> endpoint_roles() |> Enum.map(&elem(&1, 1))
+
+  defp endpoint_roles(revision) do
+    [
+      {"subject", revision.subject_object_id},
+      {"object", revision.object_object_id},
+      {"context", revision.context_object_id},
+      {"jurisdiction", revision.jurisdiction_entity_id}
+    ]
+    |> Enum.reject(fn {_role, id} -> is_nil(id) end)
+  end
+
   defp canonical_object_ids([]), do: %{}
 
   defp canonical_object_ids(ids) do
@@ -776,10 +1088,6 @@ defmodule DevilsDictionary.Claims do
       from object in Object,
         left_join: entity in Entity,
         on: entity.object_id == object.id,
-        left_join: qid in ExternalIdentifier,
-        on:
-          qid.object_id == entity.object_id and qid.namespace == "wikidata" and
-            qid.status == :verified,
         left_join: lexeme in Lexeme,
         on: lexeme.object_id == object.id,
         left_join: sense in Sense,
@@ -805,7 +1113,11 @@ defmodule DevilsDictionary.Claims do
              "entity_kind" => entity.entity_kind,
              "entity_label" => entity.preferred_label,
              "entity_description" => entity.description,
-             "entity_qid" => qid.external_id,
+             "entity_qid" =>
+               fragment(
+                 "(SELECT external_id FROM external_identifiers WHERE object_id = ? AND namespace = 'wikidata' AND status = 'verified' ORDER BY external_id LIMIT 1)",
+                 entity.object_id
+               ),
              "lexeme_language" => lexeme.language_tag,
              "lexeme_lemma" => lexeme.lemma,
              "lexeme_part_of_speech" => lexeme.part_of_speech,

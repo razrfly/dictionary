@@ -18,6 +18,21 @@ defmodule DevilsDictionary.Issue84Checkpoint3Test do
     %{sources: sources, user: user, scope: Scope.for_user(user)}
   end
 
+  test "malformed work author ids fail cleanly and structured display values fail closed", ctx do
+    assert {:error, :invalid_author} =
+             Contributions.create_local_entity(ctx.scope, %{
+               entity_kind: "work",
+               preferred_label: "Malformed author work",
+               author_entity_id: "not-an-id"
+             })
+
+    refute Repo.get_by(Registry.Entity, preferred_label: "Malformed author work")
+
+    refute DevilsDictionary.Claims.Visibility.body_displayable?(%{
+             rights_metadata: %{"display" => %{"unexpected" => true}}
+           })
+  end
+
   defp entity(kind, label) do
     {:ok, entity} = Registry.create_entity(%{entity_kind: kind, preferred_label: label})
     entity

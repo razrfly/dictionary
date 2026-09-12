@@ -361,7 +361,9 @@ defmodule DevilsDictionaryWeb.ConnectionLive do
     else
       _ ->
         {:noreply,
-         assign(socket, :error, "Choose a source meaning or passage and give its exact locator.")}
+         socket
+         |> assign(:error, "Choose a source meaning or passage and give its exact locator.")
+         |> put_flash(:error, "Choose a source meaning or passage and give its exact locator.")}
     end
   end
 
@@ -379,8 +381,10 @@ defmodule DevilsDictionaryWeb.ConnectionLive do
   end
 
   def handle_event("change-local", params, socket) do
-    label = params["preferred_label"] || ""
-    duplicates = Contributions.duplicate_candidates(label)
+    label = String.trim(params["preferred_label"] || "")
+
+    duplicates =
+      if byte_size(label) < 2, do: [], else: Contributions.duplicate_candidates(label)
 
     {:noreply,
      socket

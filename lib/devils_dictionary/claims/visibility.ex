@@ -28,7 +28,12 @@ defmodule DevilsDictionary.Claims.Visibility do
     allow = value(metadata, "allow_display")
     allowed = value(metadata, "display_allowed")
 
-    to_string(display || "") not in @restricted_display and allow != false and allowed != false
+    display_allowed? =
+      is_nil(display) or
+        (is_binary(display) and display not in @restricted_display) or
+        (is_atom(display) and to_string(display) not in @restricted_display)
+
+    display_allowed? and allow != false and allowed != false
   end
 
   def body_displayable?(_), do: true

@@ -78,4 +78,15 @@ defmodule DevilsDictionaryWeb.ReconciliationLiveTest do
     assert length(Claims.history(ctx.claim.id)) == 2
     refute has_element?(fresh, "#reconciliation-form-#{ctx.kase.id}")
   end
+
+  test "a malformed client-supplied case id reports an error without crashing", ctx do
+    %{user: user} = register_and_log_in_user(%{conn: ctx.conn})
+    reviewer = Repo.update!(Ecto.Changeset.change(user, reviewer: true))
+    {:ok, view, _html} = live(log_in_user(build_conn(), reviewer), ~p"/reconciliation")
+
+    render_submit(view, "decide", %{"_case_id" => "not-an-id", "decision" => "map"})
+
+    assert has_element?(view, "#flash-error", "Decision not saved: invalid case.")
+    assert Repo.get!(ReconciliationCase, ctx.kase.id).status == :open
+  end
 end

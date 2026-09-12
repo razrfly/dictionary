@@ -249,26 +249,28 @@ defmodule DevilsDictionary.Encyclopedia do
     |> join(:inner, [r], p in assoc(r, :predicate))
     |> join(:left, [r], s in Sense, on: s.object_id == r.subject_object_id)
     |> join(:inner, [r], e in Entity, on: e.object_id == r.object_object_id)
-    |> join(:left, [r, _p, _s, e], x in ExternalIdentifier,
-      on: x.object_id == e.object_id and x.namespace == "wikidata" and x.status == :verified
-    )
     |> where([r, p], p.key in ^[@refers_to, @candidate])
     |> where([r], r.is_current and r.lifecycle_state == :active)
     |> where([r, _p, s], s.lexeme_id == ^lexeme_id or r.subject_object_id == ^lexeme_id)
     |> Claims.visible(:public)
     |> order_by([r], desc: r.confidence, asc: r.id)
-    |> select([r, p, _s, e, x], %{
+    |> select([r, p, _s, e], %{
       revision_id: r.id,
-      qid: x.external_id,
+      qid:
+        fragment(
+          "(SELECT external_id FROM external_identifiers WHERE object_id = ? AND namespace = 'wikidata' AND status = 'verified' ORDER BY external_id LIMIT 1)",
+          e.object_id
+        ),
       label: e.preferred_label,
       predicate: p.key,
       method: r.method,
       confidence: r.confidence
     })
     |> Repo.all()
-    |> Enum.map(
-      &Map.put(&1, :status, &1.revision_id |> Claims.display_review_state() |> to_string())
-    )
+    |> then(fn rows ->
+      states = Claims.display_review_states(Enum.map(rows, & &1.revision_id))
+      Enum.map(rows, &Map.put(&1, :status, states |> Map.fetch!(&1.revision_id) |> to_string()))
+    end)
   end
 
   @doc """

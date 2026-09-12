@@ -29,6 +29,7 @@ defmodule DevilsDictionary.Issue84ReviewDisplayFingerprintTest do
 
     {accepted, query_count} = count_queries(fn -> Connection.build(claim.id) end)
     assert accepted.review == :accepted
+    assert Claims.display_review_states([accepted.revision.id])[accepted.revision.id] == :accepted
     assert query_count <= 24
 
     Repo.update!(Ecto.Changeset.change(artifact, metadata: %{"internal_note" => "not displayed"}))
@@ -44,6 +45,9 @@ defmodule DevilsDictionary.Issue84ReviewDisplayFingerprintTest do
     page = Connection.build(claim.id)
     assert page.subject.label == "A DIFFERENT DISPLAYED WORK"
     assert page.review == :changed_since_review
+
+    assert Claims.display_review_states([page.revision.id])[page.revision.id] ==
+             :changed_since_review
   end
 
   test "merge to a differently described survivor stales the old endpoint review" do

@@ -39,7 +39,8 @@ config :devils_dictionary,
 config :devils_dictionary, DevilsDictionary.Repo,
   migration_primary_key: [name: :id, type: :identity],
   migration_foreign_key: [type: :bigint],
-  migration_timestamps: [type: :utc_datetime_usec]
+  migration_timestamps: [type: :utc_datetime_usec],
+  migration_lock: :pg_advisory_lock
 
 # Configure the endpoint
 config :devils_dictionary, DevilsDictionaryWeb.Endpoint,
