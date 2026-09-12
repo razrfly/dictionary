@@ -6,8 +6,18 @@ defmodule DevilsDictionary.DiscoveryTest do
 
   alias DevilsDictionary.Claims
   alias DevilsDictionary.Discovery
-  alias DevilsDictionary.Discovery.{Budget, Mapping, RequestAttempt, Result, Run, Transport}
-  alias DevilsDictionary.Discovery.Providers.CineGraph
+
+  alias DevilsDictionary.Discovery.{
+    Budget,
+    Mapping,
+    Policy,
+    RequestAttempt,
+    Result,
+    Run,
+    Transport
+  }
+
+  alias DevilsDictionary.Discovery.Providers.{CineGraph, Giphy}
   alias DevilsDictionary.Registry
   alias DevilsDictionary.Registry.Object
   alias DevilsDictionary.Repo
@@ -68,6 +78,135 @@ defmodule DevilsDictionary.DiscoveryTest do
     assert :ok = Discovery.execute_run(run.id)
     assert %{status: :empty, empty_reason: :no_results} = Discovery.state(barren.object_id)
     assert Repo.get!(Run, run.id).request_count == 2
+  end
+
+  test "positive and empty successes use distinct configurable source freshness", ctx do
+    original = Application.fetch_env!(:devils_dictionary, :discovery)
+    on_exit(fn -> Application.put_env(:devils_dictionary, :discovery, original) end)
+
+    positive = word!(ctx, "fresh-positive", ~w(wordnet))
+    stub_success("fresh-positive", 31, [movie(31, "Positive")])
+    assert {:queued, positive_run} = Discovery.request(target(positive), "cinegraph")
+    assert :ok = Discovery.execute_run(positive_run.id)
+
+    empty = word!(ctx, "fresh-empty", ~w(wordnet))
+    stub_success("fresh-empty", 32, [])
+    assert {:queued, empty_run} = Discovery.request(target(empty), "cinegraph")
+    assert :ok = Discovery.execute_run(empty_run.id)
+
+    positive_run = Repo.get!(Run, positive_run.id)
+    empty_run = Repo.get!(Run, empty_run.id)
+
+    assert DateTime.diff(positive_run.refresh_after, positive_run.completed_at) == 3_600
+    assert DateTime.diff(empty_run.refresh_after, empty_run.completed_at) == 1_800
+
+    assert %{request_budget_limit: 100, request_budget_window_seconds: 3_600} =
+             Policy.for!("giphy")
+
+    configure_discovery(
+      source_policies: %{
+        "cinegraph" => [empty_refresh_seconds: 7 * 24 * 60 * 60]
+      }
+    )
+
+    assert Policy.refresh_seconds("cinegraph", 0) == 7 * 24 * 60 * 60
+    assert Policy.refresh_seconds("cinegraph", 1) == 3_600
+  end
+
+  test "GIPHY remains browser-only and cannot enter server ingestion", ctx do
+    assert Giphy.enabled?() == false
+
+    assert Giphy.capabilities() == %{
+             background: false,
+             transport: :browser,
+             persistence: :transient,
+             pagination: :offset,
+             operations: ["gif_search"],
+             content_types: [:gif]
+           }
+
+    assert Giphy in DevilsDictionary.Discovery.Providers.all()
+    refute Giphy in DevilsDictionary.Discovery.Providers.server_providers()
+
+    word = word!(ctx, "no-giphy-ingestion", ~w(wordnet))
+    assert {:error, :provider_disabled} = Discovery.request(target(word), "giphy")
+    assert Repo.aggregate(Mapping, :count) == 0
+    assert Repo.aggregate(Run, :count) == 0
+  end
+
+  test "discovery policy rejects missing, unknown and invalid values" do
+    original = Application.fetch_env!(:devils_dictionary, :discovery)
+    on_exit(fn -> Application.put_env(:devils_dictionary, :discovery, original) end)
+
+    configure_discovery(source_policies: %{"cinegraph" => [invented_setting: 1]})
+
+    assert_raise ArgumentError, ~r/unknown discovery policy overrides/, fn ->
+      Policy.for!("cinegraph")
+    end
+
+    Application.put_env(:devils_dictionary, :discovery, original)
+    configure_discovery(source_policies: %{"cinegraph" => [request_budget_limit: 0]})
+    assert_raise ArgumentError, ~r/invalid duration or limit/, fn -> Policy.for!("cinegraph") end
+
+    Application.put_env(
+      :devils_dictionary,
+      :discovery,
+      Keyword.delete(original, :empty_refresh_seconds)
+    )
+
+    assert_raise ArgumentError, ~r/missing discovery policy defaults/, fn ->
+      Policy.for!("cinegraph")
+    end
+  end
+
+  test "a successful empty refresh replaces the old visible set", ctx do
+    original = Application.fetch_env!(:devils_dictionary, :discovery)
+    on_exit(fn -> Application.put_env(:devils_dictionary, :discovery, original) end)
+    configure_discovery(positive_refresh_seconds: 0, refresh_cooldown_seconds: 0)
+
+    word = word!(ctx, "now-empty", ~w(wordnet))
+    stub_success("now-empty", 41, [movie(41, "Old visible result")])
+    assert {:queued, old_run} = Discovery.request(target(word), "cinegraph")
+    assert :ok = Discovery.execute_run(old_run.id)
+    assert [%Result{external_id: "41"}] = Discovery.state(word.object_id).items
+
+    stub_success("now-empty", 41, [])
+    assert {:queued, empty_run} = Discovery.request(target(word), "cinegraph")
+    assert :ok = Discovery.execute_run(empty_run.id)
+
+    assert %{status: :empty, empty_reason: :no_results, items: []} =
+             Discovery.state(word.object_id)
+
+    assert Repo.get!(Run, old_run.id).result_count == 1
+    assert Repo.get!(Run, empty_run.id).result_count == 0
+  end
+
+  test "failed and quota-deferred refreshes retain stale results", ctx do
+    original = Application.fetch_env!(:devils_dictionary, :discovery)
+    on_exit(fn -> Application.put_env(:devils_dictionary, :discovery, original) end)
+    configure_discovery(positive_refresh_seconds: 0, refresh_cooldown_seconds: 0)
+
+    failed_word = word!(ctx, "stale-failure", ~w(wordnet))
+    stub_success("stale-failure", 51, [movie(51, "Retained through failure")])
+    assert {:queued, first} = Discovery.request(target(failed_word), "cinegraph")
+    assert :ok = Discovery.execute_run(first.id)
+
+    Req.Test.stub(CineGraph, fn conn -> json(conn, %{"data" => %{"unexpected" => []}}) end)
+    assert {:queued, failed_refresh} = Discovery.request(target(failed_word), "cinegraph")
+    assert :ok = Discovery.execute_run(failed_refresh.id)
+    assert Repo.get!(Run, failed_refresh.id).status == :failed
+    assert [%Result{external_id: "51"}] = Discovery.state(failed_word.object_id).items
+
+    quota_word = word!(ctx, "stale-quota", ~w(wordnet))
+    stub_success("stale-quota", 52, [movie(52, "Retained through quota")])
+    assert {:queued, first} = Discovery.request(target(quota_word), "cinegraph")
+    assert :ok = Discovery.execute_run(first.id)
+
+    configure_discovery(request_budget_limit: 1)
+    assert {:queued, deferred_refresh} = Discovery.request(target(quota_word), "cinegraph")
+    assert {:snooze, seconds} = Discovery.execute_run(deferred_refresh.id)
+    assert seconds in 1..60
+    assert [%Result{external_id: "52"}] = Discovery.state(quota_word.object_id).items
   end
 
   test "missing image configuration degrades to a posterless result", ctx do
@@ -330,12 +469,12 @@ defmodule DevilsDictionary.DiscoveryTest do
     assert payload["external_id"] == "10"
   end
 
-  test "refresh-due previews remain usable, hard expiry and withdrawal do not", ctx do
+  test "refresh-due and legacy-expired previews remain usable while withdrawal does not", ctx do
     original = Application.fetch_env!(:devils_dictionary, :discovery)
     on_exit(fn -> Application.put_env(:devils_dictionary, :discovery, original) end)
 
     refreshable = word!(ctx, "refreshable", ~w(wordnet))
-    configure_discovery(refresh_seconds: 0, hard_expiry_seconds: 3_600)
+    configure_discovery(positive_refresh_seconds: 0)
     stub_success("refreshable", 8, [movie(8, "Still visible")])
     assert {:queued, run} = Discovery.request(target(refreshable), "cinegraph")
     assert :ok = Discovery.execute_run(run.id)
@@ -348,11 +487,16 @@ defmodule DevilsDictionary.DiscoveryTest do
     assert %{status: :empty, empty_reason: :withdrawn} = Discovery.state(refreshable.object_id)
 
     expired = word!(ctx, "expired", ~w(wordnet))
-    configure_discovery(refresh_seconds: 0, hard_expiry_seconds: 0)
-    stub_success("expired", 9, [movie(9, "Must not display")])
+    configure_discovery(positive_refresh_seconds: 0)
+    stub_success("expired", 9, [movie(9, "Still displayable")])
     assert {:queued, run} = Discovery.request(target(expired), "cinegraph")
     assert :ok = Discovery.execute_run(run.id)
-    assert Discovery.state(expired.object_id).status == :expired
+    assert DateTime.compare(Repo.get!(Run, run.id).expires_at, DateTime.utc_now()) == :lt
+    assert Discovery.state(expired.object_id).status == :ready
+    configure_discovery(retention_seconds: 0)
+    _summary = Discovery.cleanup()
+    assert Repo.get(Run, run.id)
+    assert Discovery.state(expired.object_id).status == :ready
   end
 
   test "explicit refresh honors the per-mapping cooldown", ctx do
@@ -511,7 +655,7 @@ defmodule DevilsDictionary.DiscoveryTest do
     original = Application.fetch_env!(:devils_dictionary, :discovery)
     on_exit(fn -> Application.put_env(:devils_dictionary, :discovery, original) end)
 
-    configure_discovery(queue_cap: 1, request_budget_per_minute: 1)
+    configure_discovery(queue_cap: 1, request_budget_limit: 1)
     first = word!(ctx, "budget-one", ~w(wordnet))
     second = word!(ctx, "budget-two", ~w(wordnet))
     stub_success("budget-one", 71, [movie(71, "Budgeted")])

@@ -11,7 +11,7 @@ defmodule DevilsDictionary.Discovery do
   import Ecto.Query
 
   alias DevilsDictionary.Claims.AssertionRevision
-  alias DevilsDictionary.Discovery.{Mapping, Providers, Result, Run}
+  alias DevilsDictionary.Discovery.{Mapping, Policy, Providers, Result, Run}
   alias DevilsDictionary.Discovery.RunWorker
   alias DevilsDictionary.Registry.{ExternalIdentifier, Lexeme, Object, Sense}
   alias DevilsDictionary.Repo
@@ -301,7 +301,22 @@ defmodule DevilsDictionary.Discovery do
     %{rows: [[count]]} =
       Repo.query!(
         """
-        WITH ranked AS (
+        WITH current_roots AS (
+          SELECT DISTINCT ON (runs.mapping_id)
+                 runs.mapping_id, runs.page_context
+            FROM discovery_runs AS runs
+            JOIN discovery_mappings AS mappings ON mappings.id = runs.mapping_id
+           WHERE mappings.enabled AND runs.page = 0 AND runs.status = 'succeeded'
+             AND runs.display_allowed
+           ORDER BY runs.mapping_id, runs.completed_at DESC NULLS LAST, runs.id DESC
+        ), protected AS (
+          SELECT runs.id
+            FROM discovery_runs AS runs
+            JOIN current_roots
+              ON current_roots.mapping_id = runs.mapping_id
+             AND current_roots.page_context = runs.page_context
+           WHERE runs.status = 'succeeded' AND runs.display_allowed
+        ), ranked AS (
           SELECT id, completed_at,
                  row_number() OVER (
                    PARTITION BY mapping_id, position_key
@@ -312,7 +327,11 @@ defmodule DevilsDictionary.Discovery do
         ), deleted AS (
           DELETE FROM discovery_runs
            WHERE id IN (
-             SELECT id FROM ranked WHERE completed_at < $1 OR rank > $2 LIMIT $3
+             SELECT ranked.id
+               FROM ranked
+               LEFT JOIN protected ON protected.id = ranked.id
+              WHERE protected.id IS NULL AND (ranked.completed_at < $1 OR ranked.rank > $2)
+              LIMIT $3
            )
           RETURNING id
         )
@@ -630,12 +649,10 @@ defmodule DevilsDictionary.Discovery do
         {:ok, keyed_request(parameters, context, 0)}
 
       is_binary(after_cursor) and is_binary(page_context) and page > 0 and page < max_pages ->
-        now = DateTime.utc_now()
-
-        with %Run{} = root <- latest_display_root(mapping.id, now, provider.adapter_version()),
+        with %Run{} = root <- latest_display_root(mapping.id, provider.adapter_version()),
              true <- root.page_context == page_context,
              %Run{} = predecessor <-
-               page_run(mapping.id, page_context, page - 1, now, provider.adapter_version()),
+               page_run(mapping.id, page_context, page - 1, provider.adapter_version()),
              true <- predecessor.next_cursor == after_cursor do
           parameters =
             root.request_parameters
@@ -687,14 +704,14 @@ defmodule DevilsDictionary.Discovery do
   defp state_for_mapping(mapping, provider) do
     now = DateTime.utc_now()
 
-    case latest_display_root(mapping.id, now, provider.adapter_version()) do
+    case latest_display_root(mapping.id, provider.adapter_version()) do
       %Run{} = root ->
         runs =
           Repo.all(
             from r in Run,
               where:
                 r.mapping_id == ^mapping.id and r.page_context == ^root.page_context and
-                  r.status == :succeeded and r.display_allowed and r.expires_at > ^now,
+                  r.status == :succeeded and r.display_allowed,
               order_by: [asc: r.page, desc: r.started_at, desc: r.id]
           )
           |> Enum.uniq_by(& &1.page)
@@ -814,7 +831,6 @@ defmodule DevilsDictionary.Discovery do
 
   defp publish_success(run, provider, response) do
     now = DateTime.utc_now()
-    config = config()
     persistent? = provider.capabilities().persistence == :persistent
     items = Enum.uniq_by(response.items, &{&1.external_namespace, &1.external_id})
 
@@ -827,8 +843,11 @@ defmodule DevilsDictionary.Discovery do
           request_parameters: merge_transport_state(run.id, response.request_parameters),
           status: :succeeded,
           completed_at: now,
-          refresh_after: DateTime.add(now, config[:refresh_seconds], :second),
-          expires_at: DateTime.add(now, config[:hard_expiry_seconds], :second),
+          refresh_after:
+            DateTime.add(now, Policy.refresh_seconds(provider.slug(), length(items)), :second),
+          # Kept non-null for the rollout-compatible schema. It is deliberately
+          # not a display deadline: identity and policy, never age, govern use.
+          expires_at: now,
           retry_at: nil,
           next_cursor: response.next_cursor,
           error_code: nil,
@@ -1082,13 +1101,13 @@ defmodule DevilsDictionary.Discovery do
   defp cached_run(mapping_id, %{page: 0}, now, adapter_version),
     do: fresh_run(mapping_id, now, adapter_version)
 
-  defp cached_run(mapping_id, request, now, adapter_version) do
+  defp cached_run(mapping_id, request, _now, adapter_version) do
     Repo.one(
       from r in Run,
         where:
           r.mapping_id == ^mapping_id and r.request_key == ^request.request_key and
             r.page_context == ^request.page_context and r.page == ^request.page and
-            r.status == :succeeded and r.display_allowed and r.expires_at > ^now and
+            r.status == :succeeded and r.display_allowed and
             r.adapter_version == ^adapter_version,
         order_by: [desc: r.started_at, desc: r.id],
         limit: 1
@@ -1106,26 +1125,24 @@ defmodule DevilsDictionary.Discovery do
     )
   end
 
-  defp latest_display_root(mapping_id, now, adapter_version) do
+  defp latest_display_root(mapping_id, adapter_version) do
     Repo.one(
       from r in Run,
         where:
           r.mapping_id == ^mapping_id and r.page == 0 and r.status == :succeeded and
-            r.display_allowed and r.expires_at > ^now and
-            r.adapter_version == ^adapter_version,
+            r.display_allowed and r.adapter_version == ^adapter_version,
         order_by: [desc: r.started_at, desc: r.id],
         preload: [:results],
         limit: 1
     )
   end
 
-  defp page_run(mapping_id, page_context, page, now, adapter_version) do
+  defp page_run(mapping_id, page_context, page, adapter_version) do
     Repo.one(
       from r in Run,
         where:
           r.mapping_id == ^mapping_id and r.page_context == ^page_context and r.page == ^page and
-            r.status == :succeeded and r.display_allowed and r.expires_at > ^now and
-            r.adapter_version == ^adapter_version,
+            r.status == :succeeded and r.display_allowed and r.adapter_version == ^adapter_version,
         order_by: [desc: r.started_at, desc: r.id],
         limit: 1
     )

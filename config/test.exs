@@ -32,6 +32,11 @@ config :devils_dictionary, :cinegraph,
   endpoint: "https://cinegraph.test/api/graphql",
   enabled: true
 
+config :devils_dictionary, :giphy,
+  endpoint: "https://api.giphy.test/v1/gifs/search",
+  rating: "g",
+  enabled: false
+
 config :devils_dictionary, :discovery_req_options,
   plug: {Req.Test, DevilsDictionary.Discovery.Providers.CineGraph}
 
@@ -39,10 +44,14 @@ config :devils_dictionary, :discovery,
   result_limit: 3,
   max_pages_per_context: 5,
   queue_cap: 10,
-  request_budget_per_minute: 30,
-  refresh_seconds: 3_600,
+  positive_refresh_seconds: 3_600,
+  empty_refresh_seconds: 1_800,
+  request_budget_limit: 30,
+  request_budget_window_seconds: 60,
+  source_policies: %{
+    "giphy" => [request_budget_limit: 100, request_budget_window_seconds: 3_600]
+  },
   refresh_cooldown_seconds: 60,
-  hard_expiry_seconds: 7_200,
   failure_backoff_seconds: 60,
   retention_seconds: 7_200,
   retained_attempts_per_position: 3,

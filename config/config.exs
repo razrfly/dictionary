@@ -104,10 +104,14 @@ config :devils_dictionary, :discovery,
   capacity_retry_seconds: 5,
   execution_lease_seconds: 30 * 60,
   cleanup_batch_size: 500,
-  request_budget_per_minute: 30,
-  refresh_seconds: 24 * 60 * 60,
+  positive_refresh_seconds: 30 * 24 * 60 * 60,
+  empty_refresh_seconds: 24 * 60 * 60,
+  request_budget_limit: 30,
+  request_budget_window_seconds: 60,
+  source_policies: %{
+    "giphy" => [request_budget_limit: 100, request_budget_window_seconds: 60 * 60]
+  },
   refresh_cooldown_seconds: 60,
-  hard_expiry_seconds: 7 * 24 * 60 * 60,
   failure_backoff_seconds: 5 * 60,
   retention_seconds: 7 * 24 * 60 * 60,
   retained_attempts_per_position: 3,
@@ -120,6 +124,12 @@ config :devils_dictionary, :discovery,
 config :devils_dictionary, :cinegraph,
   endpoint: "https://cinegraph.org/api/graphql",
   image_base_url: "https://image.tmdb.org/t/p/w342",
+  enabled: true
+
+# Direct-browser automatic discovery uses the dedicated public Web API key.
+config :devils_dictionary, :giphy,
+  endpoint: "https://api.giphy.com/v1/gifs/search",
+  rating: "g",
   enabled: true
 
 # Oban (#69 §5). `absorb: 1` because a dump absorb is a single long stream.

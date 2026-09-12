@@ -15,6 +15,24 @@ defmodule DevilsDictionaryWeb.CultureDiscoveryLiveTest do
     Map.merge(catalog, %{conn: conn, animals: catalog.scopes["animals"]})
   end
 
+  test "configured GIF shelf mounts automatically without initial search control", ctx do
+    original = Application.fetch_env!(:devils_dictionary, :giphy)
+
+    Application.put_env(:devils_dictionary, :giphy,
+      enabled: true,
+      api_key: "public-giphy-test-key"
+    )
+
+    on_exit(fn -> Application.put_env(:devils_dictionary, :giphy, original) end)
+    word = word!(ctx, "mountain", ~w(wordnet))
+    sense!(ctx, word, "wordnet", gloss: "a large hill")
+    {:ok, view, _} = live(ctx.conn, ~p"/define/mountain")
+    assert has_element?(view, "[phx-hook=GiphyShelf][data-query=mountain]")
+    assert has_element?(view, "[data-more][hidden]")
+    refute has_element?(view, "button", "Find GIFs")
+    refute has_element?(view, "[data-api-key='cinegraph-test-key']")
+  end
+
   test "definitions render while discovery is queued, then cards arrive without a page reload",
        ctx do
     word = word!(ctx, "war", ~w(bierce))

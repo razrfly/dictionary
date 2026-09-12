@@ -26,10 +26,10 @@ config :devils_dictionary, DevilsDictionaryWeb.Endpoint,
 # The existing CineGraph server-to-server Bearer key never reaches LiveView
 # assigns or browser code. A missing key disables the provider cleanly; it does
 # not stop definitions or the rest of the application from starting.
-# Load the two CineGraph settings from a local .env only in development.
+# Load provider settings from a local .env only in development.
 # Exported environment variables take precedence. Values are literal: no shell
 # expansion or evaluation, and secrets never appear in parsing errors.
-local_cinegraph_env =
+local_provider_env =
   if config_env() == :dev do
     case File.read(Path.expand("../.env", __DIR__)) do
       {:ok, contents} ->
@@ -37,7 +37,18 @@ local_cinegraph_env =
         |> String.split("\n")
         |> Enum.reduce(%{}, fn line, values ->
           case String.split(String.trim(line), "=", parts: 2) do
-            [name, value] when name in ["CINEGRAPH_API_KEY", "CINEGRAPH_GRAPHQL_URL"] ->
+            [name, value]
+            when name in [
+                   "CINEGRAPH_API_KEY",
+                   "CINEGRAPH_GRAPHQL_URL",
+                   "GIPHY_API_KEY",
+                   "DISCOVERY_POSITIVE_REFRESH_SECONDS",
+                   "DISCOVERY_EMPTY_REFRESH_SECONDS",
+                   "CINEGRAPH_DISCOVERY_POSITIVE_REFRESH_SECONDS",
+                   "CINEGRAPH_DISCOVERY_EMPTY_REFRESH_SECONDS",
+                   "GIPHY_DISCOVERY_POSITIVE_REFRESH_SECONDS",
+                   "GIPHY_DISCOVERY_EMPTY_REFRESH_SECONDS"
+                 ] ->
               value = String.trim(value)
 
               value =
@@ -67,13 +78,64 @@ local_cinegraph_env =
   end
 
 if cinegraph_api_key =
-     System.get_env("CINEGRAPH_API_KEY") || local_cinegraph_env["CINEGRAPH_API_KEY"] do
+     System.get_env("CINEGRAPH_API_KEY") || local_provider_env["CINEGRAPH_API_KEY"] do
   config :devils_dictionary, :cinegraph,
     api_key: cinegraph_api_key,
     endpoint:
       System.get_env("CINEGRAPH_GRAPHQL_URL") ||
-        local_cinegraph_env["CINEGRAPH_GRAPHQL_URL"] || "https://cinegraph.org/api/graphql"
+        local_provider_env["CINEGRAPH_GRAPHQL_URL"] || "https://cinegraph.org/api/graphql"
 end
+
+# Dedicated public Web API key; only eligible GIF shelves receive it.
+if giphy_api_key = System.get_env("GIPHY_API_KEY") || local_provider_env["GIPHY_API_KEY"] do
+  config :devils_dictionary, :giphy, api_key: giphy_api_key
+end
+
+parse_policy_integer = fn name ->
+  case System.get_env(name) || local_provider_env[name] do
+    value when value in [nil, ""] ->
+      nil
+
+    value ->
+      case Integer.parse(value) do
+        {integer, ""} when integer >= 0 -> integer
+        _ -> raise "#{name} must be a non-negative integer number of seconds"
+      end
+  end
+end
+
+discovery_config = Application.fetch_env!(:devils_dictionary, :discovery)
+
+discovery_config =
+  [
+    positive_refresh_seconds: parse_policy_integer.("DISCOVERY_POSITIVE_REFRESH_SECONDS"),
+    empty_refresh_seconds: parse_policy_integer.("DISCOVERY_EMPTY_REFRESH_SECONDS")
+  ]
+  |> Enum.reject(fn {_key, value} -> is_nil(value) end)
+  |> then(&Keyword.merge(discovery_config, &1))
+
+source_policies = Keyword.fetch!(discovery_config, :source_policies)
+
+source_policies =
+  Enum.reduce(["cinegraph", "giphy"], source_policies, fn slug, policies ->
+    prefix = String.upcase(slug)
+
+    overrides =
+      [
+        positive_refresh_seconds:
+          parse_policy_integer.("#{prefix}_DISCOVERY_POSITIVE_REFRESH_SECONDS"),
+        empty_refresh_seconds: parse_policy_integer.("#{prefix}_DISCOVERY_EMPTY_REFRESH_SECONDS")
+      ]
+      |> Enum.reject(fn {_key, value} -> is_nil(value) end)
+
+    if overrides == [],
+      do: policies,
+      else: Map.update(policies, slug, overrides, &Keyword.merge(&1, overrides))
+  end)
+
+config :devils_dictionary,
+       :discovery,
+       Keyword.put(discovery_config, :source_policies, source_policies)
 
 if config_env() == :dev do
   # Reload browser tabs when matching files change.
