@@ -94,6 +94,34 @@ config :devils_dictionary,
        :user_agent,
        "wordhoard/0.1 (https://github.com/razrfly/dictionary; holden.thomas@gmail.com)"
 
+# Culture discovery is visit-driven and bounded. Provider modules own their
+# capability differences; these are operating limits for the shared lifecycle.
+config :devils_dictionary, :discovery,
+  result_limit: 12,
+  max_pages_per_context: 5,
+  queue_cap: 100,
+  provider_concurrency: 2,
+  capacity_retry_seconds: 5,
+  execution_lease_seconds: 30 * 60,
+  cleanup_batch_size: 500,
+  request_budget_per_minute: 30,
+  refresh_seconds: 24 * 60 * 60,
+  refresh_cooldown_seconds: 60,
+  hard_expiry_seconds: 7 * 24 * 60 * 60,
+  failure_backoff_seconds: 5 * 60,
+  retention_seconds: 7 * 24 * 60 * 60,
+  retained_attempts_per_position: 3,
+  timeout_ms: 10_000,
+  max_retries: 2,
+  retry_delay_ms: 250,
+  task_wait_ms: 30_000,
+  report_sample: 5
+
+config :devils_dictionary, :cinegraph,
+  endpoint: "https://cinegraph.org/api/graphql",
+  image_base_url: "https://image.tmdb.org/t/p/w342",
+  enabled: true
+
 # Oban (#69 §5). `absorb: 1` because a dump absorb is a single long stream.
 # `enrich` is **1**, not the spec's 3: `EnrichWorker` paces with a per-process
 # `Process.sleep(rate_limit_ms)`, so three concurrent jobs would triple the rate
@@ -101,10 +129,14 @@ config :devils_dictionary,
 # once a limiter shared across the queue exists (or one queue per source).
 config :devils_dictionary, Oban,
   repo: DevilsDictionary.Repo,
-  queues: [absorb: 1, enrich: 1, link: 2, maintenance: 1],
+  queues: [absorb: 1, enrich: 1, link: 2, discovery: 2, maintenance: 1],
   plugins: [
     {Oban.Plugins.Pruner, max_age: 60 * 60 * 24 * 7},
-    {Oban.Plugins.Lifeline, rescue_after: :timer.minutes(30)}
+    {Oban.Plugins.Lifeline, rescue_after: :timer.minutes(30)},
+    {Oban.Plugins.Cron,
+     crontab: [
+       {"*/15 * * * *", DevilsDictionary.Discovery.CleanupWorker}
+     ]}
   ]
 
 # Import environment specific config. This must remain at the bottom

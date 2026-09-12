@@ -2,15 +2,17 @@ defmodule DevilsDictionary.Sources.Catalog do
   @moduledoc """
   The registry of what we absorb from, as data.
 
-  Six open sources, the scopes read from `priv/scopes/`, and the authors of the
-  two historical dictionaries — as **entities**, with the works they wrote and
-  the editions we imported. Lives in `lib` rather than in `seeds.exs` because
+  Six open absorbed sources plus registered discovery providers, the scopes read
+  from `priv/scopes/`, and the authors of the two historical dictionaries — as
+  **entities**, with the works they wrote and the editions we imported. Lives in
+  `lib` rather than in `seeds.exs` because
   seeds do **not** run in `:test` — the test alias is `ecto.create, ecto.migrate,
   test` — so tests and seeds need one shared definition. `mix dd.score`'s A1 row
   checks reality against this list.
 
-  Adding a source is a row here plus a module under `Absorb.Sources`
-  (scorecard E1: zero migrations).
+  Adding an absorbed source is a row here plus a module under `Absorb.Sources`
+  (scorecard E1: zero migrations). Provider-owned source rows are appended by
+  `Discovery.Providers` without making them absorb adapters.
   """
 
   import Ecto.Query
@@ -186,7 +188,7 @@ defmodule DevilsDictionary.Sources.Catalog do
           "related_url" => "https://johnsonsdictionaryonline.com/"
         }
       }
-    ]
+    ] ++ DevilsDictionary.Discovery.Providers.source_catalog()
   end
 
   @doc """

@@ -27,6 +27,31 @@ config :devils_dictionary, DevilsDictionaryWeb.Endpoint,
 # are synchronous by design, so nothing in the suite waits on Oban.
 config :devils_dictionary, Oban, testing: :manual
 
+config :devils_dictionary, :cinegraph,
+  api_key: "cinegraph-test-key",
+  endpoint: "https://cinegraph.test/api/graphql",
+  enabled: true
+
+config :devils_dictionary, :discovery_req_options,
+  plug: {Req.Test, DevilsDictionary.Discovery.Providers.CineGraph}
+
+config :devils_dictionary, :discovery,
+  result_limit: 3,
+  max_pages_per_context: 5,
+  queue_cap: 10,
+  request_budget_per_minute: 30,
+  refresh_seconds: 3_600,
+  refresh_cooldown_seconds: 60,
+  hard_expiry_seconds: 7_200,
+  failure_backoff_seconds: 60,
+  retention_seconds: 7_200,
+  retained_attempts_per_position: 3,
+  timeout_ms: 1_000,
+  max_retries: 2,
+  retry_delay_ms: 0,
+  task_wait_ms: 250,
+  report_sample: 3
+
 # Every HTTP call goes through a `Req.Test` stub in the suite. An unstubbed call
 # raises rather than reaching the network, which is what keeps O3 honest.
 config :devils_dictionary, :req_options, plug: {Req.Test, DevilsDictionary.Absorb.Clients}

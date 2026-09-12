@@ -221,6 +221,7 @@ defmodule DevilsDictionary.Lexicon.WordPage do
         |> Enum.map(fn l ->
           %{
             id: l.object_id,
+            language: l.language_tag,
             pos: l.part_of_speech,
             etymology: l.etymology,
             etymology_source: source_name(sources, l.etymology_source_id),

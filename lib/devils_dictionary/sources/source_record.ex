@@ -24,7 +24,7 @@ defmodule DevilsDictionary.Sources.SourceRecord do
   import Ecto.Changeset
 
   alias DevilsDictionary.Corpus.SourceRecordRevision
-  alias DevilsDictionary.Sources.Source
+  alias DevilsDictionary.Sources.{Actor, Source}
 
   schema "source_records" do
     belongs_to :source, Source
@@ -35,6 +35,10 @@ defmodule DevilsDictionary.Sources.SourceRecord do
     field :changed_at, :utc_datetime_usec
     field :materialized_at, :utc_datetime_usec
     field :absent_until, :utc_datetime_usec
+    field :display_allowed, :boolean, default: true
+    field :display_policy_reason, :string
+    field :display_policy_changed_at, :utc_datetime_usec
+    belongs_to :display_policy_actor, Actor
 
     has_many :revisions, SourceRecordRevision
 
@@ -49,7 +53,8 @@ defmodule DevilsDictionary.Sources.SourceRecord do
   end
 
   @castable ~w(source_id external_id url content_hash fetched_at changed_at
-               materialized_at absent_until)a
+               materialized_at absent_until display_allowed display_policy_reason
+               display_policy_changed_at display_policy_actor_id)a
 
   def changeset(record, attrs) do
     record
