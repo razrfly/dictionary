@@ -127,9 +127,10 @@ defmodule DevilsDictionary.HealthScoreTest do
       e3 = Enum.find(rows, &(&1.id == "E3"))
 
       assert e3.status == :pass
+      assert e3.detail =~ "issue84_checkpoint4_test.exs"
       assert e3.detail =~ "extension_test.exs"
-      assert e3.actual =~ "translated poem passage"
-      assert e3.actual =~ "4 / 4 predicates"
+      assert e3.actual =~ "post-baseline adaptation"
+      assert e3.actual =~ "5 / 5 predicates"
       assert e3.actual =~ "4 / 4 kinds"
 
       # The community-layer sketch is retired: the layer it sketched is shipped

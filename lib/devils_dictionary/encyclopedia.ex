@@ -27,7 +27,7 @@ defmodule DevilsDictionary.Encyclopedia do
 
   alias DevilsDictionary.Claims
   alias DevilsDictionary.Claims.AssertionRevision
-  alias DevilsDictionary.Registry.{Entity, ExternalIdentifier, Sense}
+  alias DevilsDictionary.Registry.{Entity, ExternalIdentifier, Object, ObjectName, Sense}
   alias DevilsDictionary.Repo
 
   # Sense-backed. The word page's "what this meaning names".
@@ -107,11 +107,25 @@ defmodule DevilsDictionary.Encyclopedia do
       limit = Keyword.get(opts, :limit, 10)
       down = String.downcase(query)
 
+      preferred_candidates =
+        Entity
+        |> entity_name_match(:preferred, query)
+        |> select([e], %{object_id: e.object_id})
+
+      alias_candidates =
+        ObjectName
+        |> entity_name_match(:alias, query)
+        |> select([name], %{object_id: name.object_id})
+
+      candidates = union_all(preferred_candidates, ^alias_candidates)
+
       Repo.all(
         from e in Entity,
-          where:
-            ilike(e.preferred_label, ^(escape_like(query) <> "%")) or
-              fragment("? % ?", e.preferred_label, ^query),
+          join: candidate in subquery(candidates),
+          on: candidate.object_id == e.object_id,
+          join: object in Object,
+          on: object.id == e.object_id and object.lifecycle_state == :active,
+          group_by: e.object_id,
           order_by: [
             asc:
               fragment(
@@ -131,6 +145,35 @@ defmodule DevilsDictionary.Encyclopedia do
             kind: e.entity_kind,
             description: e.description
           }
+      )
+    end
+  end
+
+  # Keep preferred labels and aliases in separate indexed arms. Combining them
+  # with a correlated EXISTS under one OR forced a sequential scan of every
+  # entity even when only a handful matched. The outer group preserves one
+  # identity when both a preferred label and an alias match.
+  defp entity_name_match(queryable, :preferred, query) do
+    if String.length(query) < 3 do
+      where(queryable, [e], ilike(e.preferred_label, ^(escape_like(query) <> "%")))
+    else
+      where(
+        queryable,
+        [e],
+        ilike(e.preferred_label, ^(escape_like(query) <> "%")) or
+          fragment("? % ?", e.preferred_label, ^query)
+      )
+    end
+  end
+
+  defp entity_name_match(queryable, :alias, query) do
+    if String.length(query) < 3 do
+      where(queryable, [name], ilike(name.name, ^(escape_like(query) <> "%")))
+    else
+      where(
+        queryable,
+        [name],
+        ilike(name.name, ^(escape_like(query) <> "%")) or fragment("? % ?", name.name, ^query)
       )
     end
   end
@@ -176,6 +219,7 @@ defmodule DevilsDictionary.Encyclopedia do
     |> where([r, p], r.subject_object_id in ^subjects and r.is_current)
     |> where([r, p], p.key in ^[@refers_to, @candidate])
     |> where([r], r.lifecycle_state == :active)
+    |> Claims.visible(:public)
     |> then(fn q ->
       case opts[:min_confidence] do
         nil -> q
@@ -201,39 +245,32 @@ defmodule DevilsDictionary.Encyclopedia do
   stops an importer writing it.
   """
   def link_views(lexeme_id) do
-    Repo.all(
-      from r in AssertionRevision,
-        join: p in assoc(r, :predicate),
-        left_join: s in Sense,
-        on: s.object_id == r.subject_object_id,
-        join: e in Entity,
-        on: e.object_id == r.object_object_id,
-        left_join: x in ExternalIdentifier,
-        on: x.object_id == e.object_id and x.namespace == "wikidata" and x.status == :verified,
-        where: p.key in ^[@refers_to, @candidate],
-        where: r.is_current and r.lifecycle_state == :active,
-        where: s.lexeme_id == ^lexeme_id or r.subject_object_id == ^lexeme_id,
-        order_by: [desc: r.confidence, asc: r.id],
-        select: %{
-          qid: x.external_id,
-          label: e.preferred_label,
-          predicate: p.key,
-          method: r.method,
-          confidence: r.confidence,
-          status:
-            fragment(
-              """
-              COALESCE(
-                (SELECT ar.decision FROM assertion_reviews ar
-                  WHERE ar.assertion_revision_id = ?
-                  ORDER BY ar.inserted_at DESC, ar.id DESC LIMIT 1),
-                'needs_review'
-              )
-              """,
-              r.id
-            )
-        }
-    )
+    AssertionRevision
+    |> join(:inner, [r], p in assoc(r, :predicate))
+    |> join(:left, [r], s in Sense, on: s.object_id == r.subject_object_id)
+    |> join(:inner, [r], e in Entity, on: e.object_id == r.object_object_id)
+    |> where([r, p], p.key in ^[@refers_to, @candidate])
+    |> where([r], r.is_current and r.lifecycle_state == :active)
+    |> where([r, _p, s], s.lexeme_id == ^lexeme_id or r.subject_object_id == ^lexeme_id)
+    |> Claims.visible(:public)
+    |> order_by([r], desc: r.confidence, asc: r.id)
+    |> select([r, p, _s, e], %{
+      revision_id: r.id,
+      qid:
+        fragment(
+          "(SELECT external_id FROM external_identifiers WHERE object_id = ? AND namespace = 'wikidata' AND status = 'verified' ORDER BY external_id LIMIT 1)",
+          e.object_id
+        ),
+      label: e.preferred_label,
+      predicate: p.key,
+      method: r.method,
+      confidence: r.confidence
+    })
+    |> Repo.all()
+    |> then(fn rows ->
+      states = Claims.display_review_states(Enum.map(rows, & &1.revision_id))
+      Enum.map(rows, &Map.put(&1, :status, states |> Map.fetch!(&1.revision_id) |> to_string()))
+    end)
   end
 
   @doc """

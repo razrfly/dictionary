@@ -664,7 +664,7 @@ defmodule DevilsDictionary.Absorb.Materializer do
            position: row[:position] || 0,
            tags: row[:tags] || [],
            topics: row[:topics] || [],
-           examples: row[:examples] || %{},
+           examples: row[:examples] || [],
            url: row[:url],
            metadata: row[:metadata] || %{},
            source_record_revision_id: revisions[row[:source_record_id]]
@@ -1094,11 +1094,15 @@ defmodule DevilsDictionary.Absorb.Materializer do
     end
   end
 
-  # `[]` and nil are the same absence, and a float read back from Postgres is
-  # the same number it was written as. Everything else compares as itself.
+  # Empty JSON containers and nil are the same absence, and a float read back
+  # from Postgres is the same number it was written as. Everything else
+  # compares as itself.
   defp same?(nil, []), do: true
   defp same?([], nil), do: true
-  defp same?(nil, %{}), do: true
+  defp same?(nil, map) when is_map(map) and map_size(map) == 0, do: true
+  defp same?(map, nil) when is_map(map) and map_size(map) == 0, do: true
+  defp same?(map, []) when is_map(map) and map_size(map) == 0, do: true
+  defp same?([], map) when is_map(map) and map_size(map) == 0, do: true
   defp same?(a, b), do: a == b
 
   # ── assertions ───────────────────────────────────────────────────────────

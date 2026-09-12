@@ -868,13 +868,12 @@ defmodule DevilsDictionary.Health.Score do
   # preserved in `docs/sketches/README.md`; what is withdrawn is only its use as
   # a *current* measurement.
   #
-  # E3 is milestone 5's **extension exercise** instead: one challenging new type
-  # — a translated poem passage, with a translator who is not its author, an
-  # edition, and a quotation drawn from it — and what allowing it cost. #74 says
-  # a small additive migration is acceptable and that rewriting identities or
-  # hiding fields in JSON is a failure. It cost none of them, and this measures
-  # that live rather than asserting it.
-  @extension_predicates ~w(excerpt_of translated_by published_in illustrates)
+  # E3 includes #84's post-baseline extension exercise: an `adaptation_of`
+  # relationship that was not present for the earlier translated-passage proof.
+  # It costs one controlled catalog entry and no table, column or identity
+  # rewrite. The earlier, structurally richer fixture remains part of the row so
+  # the scorecard proves both the new relationship and the established kinds.
+  @extension_predicates ~w(adaptation_of excerpt_of translated_by published_in illustrates)
   @extension_kinds [work: :entity, edition: :entity, passage: :content, quotation: :content]
 
   defp e3_row do
@@ -899,14 +898,16 @@ defmodule DevilsDictionary.Health.Score do
     row(
       "E3",
       "a new kind of thing fits",
-      "translated poem passage: #{length(registered)} / #{length(@extension_predicates)} " <>
+      "post-baseline adaptation plus translated passage: " <>
+        "#{length(registered)} / #{length(@extension_predicates)} " <>
         "predicates, #{length(kinds)} / #{length(@extension_kinds)} kinds, " <>
         "#{applied} of #{on_disk} migrations applied",
       "no new table, no new column, no rewritten identity",
       ok?,
       detail:
-        "extension_test.exs — a work, a translator, an edition, a passage and a quotation, " <>
-          "and the cost of allowing them"
+        "issue84_checkpoint4_test.exs adds adaptation_of as catalog data and proves " <>
+          "an existing authored_by attachment and identity do not move; extension_test.exs " <>
+          "retains the work, translator, edition, passage and quotation exercise"
     )
   end
 

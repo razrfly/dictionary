@@ -10,7 +10,7 @@ defmodule DevilsDictionary.Absorb.Sources.WikidataAbsorbTest do
   alias DevilsDictionary.Claims.AssertionRevision
   alias DevilsDictionary.Lexicon.ScopeMember
   alias DevilsDictionary.Registry.{Entity, Lexeme}
-  alias DevilsDictionary.{Claims, Fixtures, Registry, Repo}
+  alias DevilsDictionary.{Claims, Encyclopedia, Fixtures, Registry, Repo}
   alias DevilsDictionary.WordFixtures
 
   setup do
@@ -156,8 +156,10 @@ defmodule DevilsDictionary.Absorb.Sources.WikidataAbsorbTest do
     assert "Q9001" in seeds
     refute "Q9002" in seeds
 
-    # A run with no scope is a full refresh and still walks everything.
-    assert "Q9002" in Wikidata.seed_qids(nil)
+    # Missing scope is never interpreted as a full-table refresh.
+    assert_raise ArgumentError, ~r/requires --scope/, fn -> Wikidata.seed_qids(nil) end
+
+    assert Wikidata.seed_qids(nil, qids: ["Q9002"]) == ["Q9002"]
   end
 
   test "a candidate below the promotion line is not chased", ctx do
@@ -258,6 +260,107 @@ defmodule DevilsDictionary.Absorb.Sources.WikidataAbsorbTest do
 
     assert {:ok, %{fetched: 1}} =
              Wikidata.absorb(ctx.animals, rate_limit_ms: 0, refresh: true)
+  end
+
+  test "an explicit non-animal selection fetches only its identities and next relations", ctx do
+    _ = ctx
+
+    records = Fixtures.raw("wikidata", "general_entities")
+    selected = ~w(Q191050 Q92640 Q180 Q270 Q43653)
+    classes = ~w(Q5 Q7725634 Q43229 Q200250 Q495307)
+
+    entities =
+      records
+      |> Enum.filter(&(&1["id"] in selected))
+      |> Map.new(&{&1["id"], &1})
+      |> Map.merge(Map.new(classes, &{&1, entity(&1, %{})}))
+
+    counter = stub(entities)
+
+    assert {:ok, stats} =
+             Wikidata.absorb(nil,
+               qids: selected,
+               related_depth: 2,
+               entity_budget: 10,
+               request_budget: 2,
+               rate_limit_ms: 0
+             )
+
+    assert stats.selection == "explicit_qids"
+    assert stats.seed_qids == 5
+    assert stats.fetched == 10
+    assert stats.requests == 2
+    assert stats.entity_budget == 10
+    assert stats.request_budget == 2
+    assert stats.related_depth == 2
+    assert stats.unresolved_references == 0
+    refute stats.truncated
+
+    assert Encyclopedia.by_qid!("Q191050").entity_kind == :person
+    assert Encyclopedia.by_qid!("Q92640").entity_kind == :work
+    assert Encyclopedia.by_qid!("Q180").entity_kind == :organization
+    assert Encyclopedia.by_qid!("Q270").entity_kind == :place
+    assert Encyclopedia.by_qid!("Q43653").entity_kind == :event
+
+    assert Enum.any?(
+             Encyclopedia.search_entities("Warsaw"),
+             &(&1.object_id == Encyclopedia.by_qid!("Q270").object_id)
+           )
+
+    assert Enum.any?(
+             Encyclopedia.search_entities("Apollo 11"),
+             &(&1.object_id == Encyclopedia.by_qid!("Q43653").object_id)
+           )
+
+    first_requests = :counters.get(counter, 1)
+
+    assert {:ok, %{requests: 0, fetched: 0}} =
+             Wikidata.absorb(nil,
+               qids: selected,
+               related_depth: 2,
+               entity_budget: 10,
+               request_budget: 2,
+               rate_limit_ms: 0
+             )
+
+    assert :counters.get(counter, 1) == first_requests
+  end
+
+  test "explicit budgets stop and report unresolved related identities", ctx do
+    _ = ctx
+    [person | _] = Fixtures.raw("wikidata", "general_entities")
+    stub(%{"Q191050" => person, "Q5" => entity("Q5", %{})})
+
+    assert {:ok,
+            %{
+              fetched: 1,
+              requests: 1,
+              truncated: true,
+              unresolved_references: 1
+            }} =
+             Wikidata.absorb(nil,
+               qids: ["Q191050"],
+               related_depth: 2,
+               entity_budget: 1,
+               request_budget: 1,
+               rate_limit_ms: 0
+             )
+  end
+
+  test "missing or invalid explicit selection cannot widen into a crawl", ctx do
+    _ = ctx
+
+    assert_raise ArgumentError, ~r/requires --scope/, fn ->
+      Wikidata.absorb(nil, rate_limit_ms: 0)
+    end
+
+    assert_raise ArgumentError, ~r/invalid Wikidata QIDs/, fn ->
+      Wikidata.absorb(nil, qids: ["Ambrose Bierce"], rate_limit_ms: 0)
+    end
+
+    assert_raise ArgumentError, ~r/exceeds 100 QIDs/, fn ->
+      Wikidata.absorb(nil, qids: Enum.map(1..101, &"Q#{&1}"), rate_limit_ms: 0)
+    end
   end
 
   test "refuses to run before anything has seeded a QID", ctx do

@@ -40,13 +40,14 @@ defmodule DevilsDictionary.Encyclopedia.EntityPage do
   import Ecto.Query
 
   alias DevilsDictionary.Claims
-  alias DevilsDictionary.Claims.Connection
+  alias DevilsDictionary.Claims.{Connection, Visibility}
   alias DevilsDictionary.Encyclopedia
   alias DevilsDictionary.Registry
   alias DevilsDictionary.Registry.{ContentItem, ContentRevision, Entity, Lexeme, Sense}
   alias DevilsDictionary.Repo
 
   defstruct entity: nil,
+            identity: %{state: :active, requested_id: nil, canonical_id: nil, outputs: []},
             details: %{},
             biography: [],
             works: [],
@@ -69,15 +70,36 @@ defmodule DevilsDictionary.Encyclopedia.EntityPage do
   def build(object_id, opts \\ [])
 
   def build(object_id, opts) when is_integer(object_id) do
-    case Repo.get(Entity, object_id) do
-      nil -> nil
-      entity -> assemble(entity, opts)
+    case Registry.resolve(object_id) do
+      nil ->
+        nil
+
+      {:merged, canonical_id} ->
+        case Repo.get(Entity, canonical_id) do
+          nil -> nil
+          entity -> assemble(entity, opts, :merged, object_id, [canonical_id])
+        end
+
+      {:split, output_ids} ->
+        case Repo.get(Entity, object_id) do
+          nil -> nil
+          entity -> assemble(entity, opts, :split, object_id, output_ids)
+        end
+
+      {:cycle, _ids} ->
+        nil
+
+      :itself ->
+        case Repo.get(Entity, object_id) do
+          nil -> nil
+          entity -> assemble(entity, opts, :active, object_id, [])
+        end
     end
   end
 
   def build(_, _opts), do: nil
 
-  defp assemble(%Entity{} = entity, opts) do
+  defp assemble(%Entity{} = entity, opts, identity_state, requested_id, outputs) do
     id = entity.object_id
 
     {biography, biography_page} =
@@ -102,6 +124,12 @@ defmodule DevilsDictionary.Encyclopedia.EntityPage do
 
     %__MODULE__{
       entity: Encyclopedia.view(entity),
+      identity: %{
+        state: identity_state,
+        requested_id: requested_id,
+        canonical_id: entity.object_id,
+        outputs: entity_views(outputs)
+      },
       details: details(entity),
       biography: content_views(Enum.map(biography, & &1.subject_object_id)),
       works: entity_views(Enum.map(works, & &1.subject_object_id)),
@@ -220,24 +248,30 @@ defmodule DevilsDictionary.Encyclopedia.EntityPage do
   defp entity_views([]), do: []
 
   defp entity_views(ids) do
+    canonical = Registry.canonical_ids(ids)
+    canonical_ids = Enum.map(ids, &Map.fetch!(canonical, &1))
+
     by_id =
       Entity
-      |> where([e], e.object_id in ^ids)
+      |> where([e], e.object_id in ^canonical_ids)
       |> Repo.all()
       |> Map.new(&{&1.object_id, Encyclopedia.view(&1)})
 
-    Enum.map(ids, &Map.fetch!(by_id, &1))
+    canonical_ids |> Enum.map(&Map.get(by_id, &1)) |> Enum.reject(&is_nil/1)
   end
 
   defp content_views([]), do: []
 
   defp content_views(ids) do
+    canonical = Registry.canonical_ids(ids)
+    canonical_ids = Enum.map(ids, &Map.fetch!(canonical, &1))
+
     by_id =
       Repo.all(
         from c in ContentItem,
           join: r in ContentRevision,
           on: r.content_id == c.object_id and r.is_current,
-          where: c.object_id in ^ids and r.lifecycle_state == :active,
+          where: c.object_id in ^canonical_ids and r.lifecycle_state == :active,
           select: %{
             object_id: c.object_id,
             kind: c.content_kind,
@@ -246,12 +280,16 @@ defmodule DevilsDictionary.Encyclopedia.EntityPage do
             body: r.body,
             body_format: r.body_format,
             url: r.canonical_url,
-            year: r.year
+            year: r.year,
+            rights_metadata: r.rights_metadata
           }
       )
       |> Map.new(&{&1.object_id, &1})
 
-    ids |> Enum.map(&Map.get(by_id, &1)) |> Enum.reject(&is_nil/1)
+    canonical_ids
+    |> Enum.map(&Map.get(by_id, &1))
+    |> Enum.reject(&is_nil/1)
+    |> Enum.map(&Visibility.restrict_content/1)
   end
 
   # A definition is only half a row on a person's page: the reader wants the
@@ -261,6 +299,8 @@ defmodule DevilsDictionary.Encyclopedia.EntityPage do
   defp definition_views([]), do: []
 
   defp definition_views(ids) do
+    canonical = Registry.canonical_ids(ids)
+    ids = Enum.map(ids, &Map.fetch!(canonical, &1))
     defines = targets(ids, "defines")
     published = targets(ids, "published_in")
 
@@ -320,13 +360,13 @@ defmodule DevilsDictionary.Encyclopedia.EntityPage do
   end
 
   defp targets(subject_ids, predicate) do
-    Repo.all(
-      from r in Claims.AssertionRevision,
-        join: p in assoc(r, :predicate),
-        where: r.subject_object_id in ^subject_ids and r.is_current,
-        where: r.lifecycle_state == :active and p.key == ^predicate,
-        select: {r.subject_object_id, r.object_object_id}
-    )
+    Claims.AssertionRevision
+    |> join(:inner, [r], p in assoc(r, :predicate))
+    |> where([r, p], r.subject_object_id in ^subject_ids and r.is_current)
+    |> where([r, p], r.lifecycle_state == :active and p.key == ^predicate)
+    |> Claims.visible(:public)
+    |> select([r], {r.subject_object_id, r.object_object_id})
+    |> Repo.all()
     |> Map.new()
   end
 

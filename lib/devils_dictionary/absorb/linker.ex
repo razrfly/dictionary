@@ -101,6 +101,7 @@ defmodule DevilsDictionary.Absorb.Linker do
 
   @sense_backed "refers_to"
   @word_level "lexeme_entity_candidate"
+  @max_explicit_selection 500
 
   @doc "The confidence each method is written at, before corroboration."
   def confidence, do: @confidence
@@ -117,15 +118,20 @@ defmodule DevilsDictionary.Absorb.Linker do
   claims it made last time rather than duplicating them — and writes no revision
   at all where nothing changed.
   """
-  def run(scope \\ nil, opts \\ []) do
-    retired = withdraw_unevidenced_people()
+  def run(scope \\ nil, opts \\ [])
+
+  def run(nil, _opts) do
+    raise ArgumentError,
+          "Linker.run/2 requires a scope; use run_selected/2 for bounded out-of-scope evidence"
+  end
+
+  def run(%Scope{} = scope, opts) do
+    retired = withdraw_unevidenced_people(scope)
     run_id = opts[:run_id]
 
     rungs = %{
-      # These three rungs read durable identifiers published on a sense. The
-      # scope still bounds ordinary things, while evidenced people are allowed
-      # through globally: proper names such as Ambrose Bierce are not Animals,
-      # but their QID/ILI mapping is no less valid for that operational fact.
+      # A scoped run means exactly that population. Entity kind never changes
+      # membership; evidence outside it uses run_selected/2 below.
       wiktionary_qid: wiktionary_qid(scope, run_id),
       wordnet_wikidata: wordnet_wikidata(scope, run_id),
       wordnet_ili: wordnet_ili(scope, run_id),
@@ -139,6 +145,31 @@ defmodule DevilsDictionary.Absorb.Linker do
       if opts[:skip_corroboration], do: %{}, else: corroborate(scope, run_id: run_id)
 
     %{rungs: rungs, corroboration: corroboration, retired_unevidenced_people: retired}
+  end
+
+  @doc """
+  Runs only the identifier-backed rungs for an explicit bounded population.
+
+  Selection is independent of entity kind and may name lexeme IDs, target
+  entity IDs, or source-record IDs. At least one ID is required and no more
+  than #{@max_explicit_selection} total IDs are accepted. Name-only inference
+  and corroboration deliberately remain scope-only.
+  """
+  def run_selected(selection, opts \\ []) when is_map(selection) or is_list(selection) do
+    population = {:selected, normalize_selection!(selection)}
+    run_id = opts[:run_id]
+
+    %{
+      rungs: %{
+        wiktionary_qid: wiktionary_qid(population, run_id),
+        wordnet_wikidata: wordnet_wikidata(population, run_id),
+        wordnet_ili: wordnet_ili(population, run_id),
+        title_match: 0,
+        disambiguation: 0
+      },
+      corroboration: %{},
+      retired_unevidenced_people: 0
+    }
   end
 
   # ── rung 1 · wiktionary_qid ──────────────────────────────────────────────
@@ -162,8 +193,8 @@ defmodule DevilsDictionary.Absorb.Linker do
         JOIN external_identifiers x
           ON x.namespace = 'wikidata' AND x.external_id = q.qid AND x.status = 'verified'
         JOIN entities e ON e.object_id = x.object_id
-       #{evidenced_scope_join(scope, "s.lexeme_id")}
-       WHERE #{evidenced_scope_filter(scope)}
+       #{identifier_population_join(scope, "s.lexeme_id")}
+       WHERE #{identifier_population_filter(scope, "s.lexeme_id", "e.object_id", "source_rev.source_record_id")}
          AND jsonb_typeof(rev.metadata->'wikidata') = 'array'
       """,
       @sense_backed,
@@ -197,8 +228,8 @@ defmodule DevilsDictionary.Absorb.Linker do
         JOIN external_identifiers x
           ON x.namespace = 'wikidata' AND x.external_id = q.qid AND x.status = 'verified'
         JOIN entities e ON e.object_id = x.object_id
-       #{evidenced_scope_join(scope, "s.lexeme_id")}
-       WHERE #{evidenced_scope_filter(scope)}
+       #{identifier_population_join(scope, "s.lexeme_id")}
+       WHERE #{identifier_population_filter(scope, "s.lexeme_id", "e.object_id", "source_rev.source_record_id")}
          AND jsonb_typeof(rev.metadata->'wikidata') IN ('string', 'array')
       """,
       @sense_backed,
@@ -225,8 +256,8 @@ defmodule DevilsDictionary.Absorb.Linker do
         JOIN sense_revisions rev ON rev.sense_id = s.object_id AND rev.is_current
         LEFT JOIN source_record_revisions source_rev ON source_rev.id = rev.source_record_revision_id
         JOIN entities e ON e.metadata->>'wordnet_ili' = rev.metadata->>'ili'
-       #{evidenced_scope_join(scope, "s.lexeme_id")}
-       WHERE #{evidenced_scope_filter(scope)}
+       #{identifier_population_join(scope, "s.lexeme_id")}
+       WHERE #{identifier_population_filter(scope, "s.lexeme_id", "e.object_id", "source_rev.source_record_id")}
          AND rev.metadata->>'ili' IS NOT NULL
       """,
       @sense_backed,
@@ -303,13 +334,15 @@ defmodule DevilsDictionary.Absorb.Linker do
   end
 
   @doc false
-  def withdraw_unevidenced_people do
+  def withdraw_unevidenced_people(%Scope{} = scope) do
     candidates =
       Repo.all(
         from r in AssertionRevision,
           join: p in assoc(r, :predicate),
           join: e in "entities",
           on: e.object_id == r.object_object_id,
+          join: sl in "scope_lexeme_members",
+          on: sl.lexeme_id == r.subject_object_id and sl.scope_id == ^scope.id,
           where: r.is_current and r.lifecycle_state == :active,
           where: p.key == ^@word_level and e.entity_kind == "person",
           where: r.method in ["title_match", "disambiguation"],
@@ -546,28 +579,74 @@ defmodule DevilsDictionary.Absorb.Linker do
     end
   end
 
-  defp scope_join(nil, _column), do: ""
+  defp scope_join(nil, _column) do
+    raise ArgumentError, "link population requires a scope or explicit selection"
+  end
 
   defp scope_join(%Scope{}, column),
     do: "JOIN scope_lexeme_members sl ON sl.lexeme_id = #{column} AND sl.scope_id = $1"
 
-  # A scope is an operational population, not an epistemic boundary. Keep
-  # ordinary identifier links bounded to it, but allow a durable source ID to
-  # connect a person even when their proper-name lexeme belongs to no scope.
-  # Optional scope membership makes that exception expressible without adding
-  # a person to Animals merely to make the link visible.
-  defp evidenced_scope_join(nil, _column), do: ""
+  defp identifier_population_join(%Scope{} = scope, column), do: scope_join(scope, column)
+  defp identifier_population_join({:selected, _selection}, _column), do: ""
 
-  defp evidenced_scope_join(%Scope{}, column),
-    do: "LEFT JOIN scope_lexeme_members sl ON sl.lexeme_id = #{column} AND sl.scope_id = $1"
+  defp identifier_population_filter(%Scope{}, _lexeme, _entity, _record), do: "TRUE"
 
-  defp evidenced_scope_filter(nil), do: "TRUE"
+  defp identifier_population_filter({:selected, _selection}, lexeme, entity, record) do
+    "(#{lexeme} = ANY($1::bigint[]) OR #{entity} = ANY($2::bigint[]) OR " <>
+      "#{record} = ANY($3::bigint[]))"
+  end
 
-  defp evidenced_scope_filter(%Scope{}),
-    do: "(sl.lexeme_id IS NOT NULL OR e.entity_kind = 'person')"
-
-  defp params(nil), do: []
   defp params(%Scope{id: id}), do: [id]
+
+  defp params({:selected, selection}) do
+    [selection.lexeme_ids, selection.entity_ids, selection.source_record_ids]
+  end
+
+  defp normalize_selection!(selection) do
+    selection = if is_list(selection), do: Map.new(selection), else: selection
+
+    normalized = %{
+      lexeme_ids: normalize_ids(selection[:lexeme_ids] || selection["lexeme_ids"]),
+      entity_ids: normalize_ids(selection[:entity_ids] || selection["entity_ids"]),
+      source_record_ids:
+        normalize_ids(selection[:source_record_ids] || selection["source_record_ids"])
+    }
+
+    count =
+      normalized
+      |> Map.values()
+      |> Enum.map(&length/1)
+      |> Enum.sum()
+
+    cond do
+      count == 0 ->
+        raise ArgumentError, "explicit link selection must contain at least one ID"
+
+      count > @max_explicit_selection ->
+        raise ArgumentError,
+              "explicit link selection exceeds #{@max_explicit_selection} IDs (got #{count})"
+
+      true ->
+        normalized
+    end
+  end
+
+  defp normalize_ids(nil), do: []
+
+  defp normalize_ids(ids) when is_list(ids) do
+    ids
+    |> Enum.map(fn
+      id when is_integer(id) and id > 0 ->
+        id
+
+      id ->
+        raise ArgumentError,
+              "explicit selection IDs must be positive integers, got: #{inspect(id)}"
+    end)
+    |> Enum.uniq()
+  end
+
+  defp normalize_ids(id), do: normalize_ids([id])
 
   # Every rung ends the same way: read set-based, write through the shared path.
   #

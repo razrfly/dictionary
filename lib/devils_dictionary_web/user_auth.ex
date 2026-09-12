@@ -195,6 +195,7 @@ defmodule DevilsDictionaryWeb.UserAuth do
       Redirects to login page if there's no logged user.
     * `:require_internal_contributor` - Requires the non-public contribution
       capability (reviewers also qualify). Registration alone never grants it.
+    * `:require_reviewer` - Requires the current database-backed reviewer role.
 
   ## Examples
 
@@ -246,6 +247,22 @@ defmodule DevilsDictionaryWeb.UserAuth do
           :error,
           "Contributions are in internal testing and are not open to public accounts yet."
         )
+        |> Phoenix.LiveView.redirect(to: ~p"/")
+
+      {:halt, socket}
+    end
+  end
+
+  def on_mount(:require_reviewer, _params, session, socket) do
+    socket = mount_current_scope(socket, session)
+    user = socket.assigns.current_scope && socket.assigns.current_scope.user
+
+    if user && DevilsDictionary.Claims.Contributions.reviewer?(socket.assigns.current_scope) do
+      {:cont, socket}
+    else
+      socket =
+        socket
+        |> Phoenix.LiveView.put_flash(:error, "Reviewer access is required.")
         |> Phoenix.LiveView.redirect(to: ~p"/")
 
       {:halt, socket}

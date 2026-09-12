@@ -12,7 +12,7 @@ defmodule DevilsDictionary.Absorb.ConceptsTest do
   alias DevilsDictionary.Absorb.Materializer
   alias DevilsDictionary.Absorb.Sources.{Wikidata, Wikipedia}
   alias DevilsDictionary.Claims.AssertionRevision
-  alias DevilsDictionary.Registry.Lexeme
+  alias DevilsDictionary.Registry.{ExternalIdentifier, Lexeme, ObjectName}
   alias DevilsDictionary.{Claims, Encyclopedia, Fixtures, Registry, Repo, Sources}
   alias DevilsDictionary.Sources.{Source, SourceRecord}
 
@@ -156,6 +156,42 @@ defmodule DevilsDictionary.Absorb.ConceptsTest do
       )
 
       assert concept("Q20980826").kind == :taxon
+    end
+
+    test "a sharper kind preserves an existing identity and its attachments" do
+      {:ok, local} =
+        Registry.create_entity(%{
+          entity_kind: :concept,
+          preferred_label: "Local Warsaw",
+          metadata: %{"curator_note" => "keep me"}
+        })
+
+      {:ok, _} = Registry.add_name(local.object_id, "Warszawa", name_kind: "alias")
+      {:ok, _} = Registry.add_external_id(local.object_id, "wikidata", "Q270")
+
+      raw =
+        Fixtures.raw("wikidata", "general_entities")
+        |> Enum.find(&(&1["id"] == "Q270"))
+        |> Wikidata.trim()
+
+      source = source!("wikidata-general", :knowledge_graph)
+      record = record!(source, "Q270", raw)
+
+      assert {:ok, _} = Materializer.run(record, Wikidata)
+
+      place = Encyclopedia.by_qid!("Q270")
+      assert place.object_id == local.object_id
+      assert place.entity_kind == :place
+      assert place.metadata["curator_note"] == "keep me"
+      assert Repo.get_by!(ObjectName, object_id: local.object_id, name: "Warszawa")
+    end
+
+    test "a local entity remains valid without an external identifier" do
+      {:ok, local} =
+        Registry.create_entity(%{entity_kind: :artifact, preferred_label: "Uncatalogued mask"})
+
+      refute Repo.get_by(ExternalIdentifier, object_id: local.object_id)
+      assert Repo.get!(DevilsDictionary.Registry.Entity, local.object_id).entity_kind == :artifact
     end
   end
 

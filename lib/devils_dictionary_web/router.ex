@@ -44,6 +44,9 @@ defmodule DevilsDictionaryWeb.Router do
     # One claim, from either endpoint, with its evidence, its review state and
     # its history (#74 §F's connection detail).
     live "/connections/:id", ConnectionLive, :show
+    live "/evidence/content/:id", EvidenceLive, :content
+    live "/evidence/sense/:id", EvidenceLive, :sense
+    live "/evidence/source-record/:id", EvidenceLive, :source_record
 
     # A source's identity, licence and attribution are reader-facing provenance
     # — #69 backbone rule 1, the thing the footer's Sources column links to — so
@@ -126,6 +129,15 @@ defmodule DevilsDictionaryWeb.Router do
   scope "/", DevilsDictionaryWeb do
     pipe_through [:browser, :require_authenticated_user]
 
+    live_session :require_reviewer,
+      on_mount: [{DevilsDictionaryWeb.UserAuth, :require_reviewer}] do
+      live "/reconciliation", ReconciliationLive, :index
+    end
+  end
+
+  scope "/", DevilsDictionaryWeb do
+    pipe_through [:browser, :require_authenticated_user]
+
     live_session :require_internal_contributor,
       on_mount: [{DevilsDictionaryWeb.UserAuth, :require_internal_contributor}] do
       # Proposing a connection is the one thing on this site that needs an
@@ -140,6 +152,8 @@ defmodule DevilsDictionaryWeb.Router do
       # order, and `/connections/:id` is declared in the public scope above, so
       # `new` would be read as an id and never reach this.
       live "/connect", ConnectionLive, :new
+      live "/connections/:id/edit", ConnectionLive, :edit
+      live "/connections/:id/challenge", ConnectionLive, :challenge
     end
   end
 
