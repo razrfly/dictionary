@@ -11,35 +11,7 @@
       ],
       "description": "1892 painting by Ferdinand Hodler",
       "import": {
-        "object_id": 3733934,
-        "reason": "artsy_artwork_not_found",
-        "stages": {
-          "artists": {
-            "next_cursor": null,
-            "status": "pending"
-          },
-          "artwork": {
-            "status": "unavailable"
-          },
-          "creators": {
-            "status": "pending"
-          },
-          "genes": {
-            "next_cursor": null,
-            "status": "pending"
-          },
-          "identity": {
-            "status": "pending"
-          },
-          "wikidata": {
-            "preserved": true,
-            "source_record_id": 6984052,
-            "source_record_revision_id": 6984052,
-            "status": "materialized_full_record"
-          }
-        },
-        "status": "unavailable",
-        "updated_at": "2026-09-12T19:28:24Z"
+        "status": "pending"
       },
       "kind": "painting",
       "qid": "Q122978100",
@@ -48,8 +20,8 @@
       "wikipedia_title": null
     }
   ],
-  "checksum": "206b3b4691c739f14a9e68416cf57e5aac484db3251fcde4c410af7595e9f381",
-  "generated_at": "2026-09-12T19:28:05Z",
+  "checksum": "6ca607c0fe4214e8355994e7113c21f60995f28a4472f5a7928c9e8e8bcb882f",
+  "generated_at": "2026-09-12T19:52:19Z",
   "schema_version": 2,
   "selection": {
     "artwork_kinds": [
@@ -61,5 +33,5 @@
     "source": "issue-86 repair new-entry proof",
     "wikipedia_required": false
   },
-  "updated_at": "2026-09-12T19:35:20Z"
+  "updated_at": "2026-09-12T19:54:47Z"
 }

@@ -31,6 +31,8 @@ defmodule DevilsDictionary.Artsy.Client do
             sleep_fun: nil,
             now_fun: nil,
             availability_fun: nil,
+            shared_scope: nil,
+            shared_request_limit: nil,
             coordinator: DevilsDictionary.Artsy.RequestCoordinator
 
   @type t :: %__MODULE__{}
@@ -72,6 +74,9 @@ defmodule DevilsDictionary.Artsy.Client do
               coordinator
             )
           end,
+      shared_scope: opts[:shared_scope],
+      shared_request_limit:
+        optional_positive!(opts[:shared_request_limit], :shared_request_limit),
       coordinator: coordinator
     }
   end
@@ -202,6 +207,7 @@ defmodule DevilsDictionary.Artsy.Client do
     }
   end
 
+  @doc "Normalizes retained artist fields while keeping opaque ID and slug distinct."
   def normalize_artist(body) when is_map(body) do
     %{
       "id" => body["id"],
@@ -214,6 +220,7 @@ defmodule DevilsDictionary.Artsy.Client do
     }
   end
 
+  @doc "Normalizes the direct gene identity fields used by versioned meaning mappings."
   def normalize_gene(body) when is_map(body) do
     %{"id" => body["id"], "name" => body["name"], "type" => body["type"]}
   end
@@ -339,7 +346,17 @@ defmodule DevilsDictionary.Artsy.Client do
              client}
 
           {:error, failure, client} ->
-            {:error, %{failure | code: "authentication_unavailable"}, client}
+            code =
+              if failure.code in [
+                   "request_limit",
+                   "shared_request_limit",
+                   "provider_disabled",
+                   "coordinator_unavailable"
+                 ],
+                 do: failure.code,
+                 else: "authentication_unavailable"
+
+            {:error, %{failure | code: code}, client}
         end
     end
   end
@@ -385,6 +402,12 @@ defmodule DevilsDictionary.Artsy.Client do
         else
           {:error, :provider_disabled} ->
             {:error, failure(:provider_disabled, nil, URI.parse(url).path), client}
+
+          {:error, :shared_request_limit} ->
+            {:error, failure(:shared_request_limit, nil, URI.parse(url).path), client}
+
+          {:error, :coordinator_unavailable} ->
+            {:error, failure(:coordinator_unavailable, nil, URI.parse(url).path), client}
         end
     end
   end
@@ -583,7 +606,8 @@ defmodule DevilsDictionary.Artsy.Client do
   defp redirect_url(response) do
     case Req.Response.get_header(response, "location") do
       [url | _] -> url
-      _ -> get_in(response.body, ["_links", "location", "href"])
+      _ when is_map(response.body) -> get_in(response.body, ["_links", "location", "href"])
+      _ -> nil
     end
   end
 
@@ -622,9 +646,12 @@ defmodule DevilsDictionary.Artsy.Client do
   defp acquire(%{coordinator: nil}), do: {:ok, 0, 0}
 
   defp acquire(client) do
-    DevilsDictionary.Artsy.RequestCoordinator.acquire(client.coordinator, client.rate_limit_ms)
+    DevilsDictionary.Artsy.RequestCoordinator.acquire(client.coordinator, client.rate_limit_ms,
+      scope: client.shared_scope,
+      limit: client.shared_request_limit
+    )
   catch
-    :exit, _ -> {:ok, 0, client.rate_limit_ms}
+    :exit, _ -> {:error, :coordinator_unavailable}
   end
 
   defp generation_current?(%{coordinator: nil}, _generation), do: true
@@ -684,4 +711,6 @@ defmodule DevilsDictionary.Artsy.Client do
   defp positive!(_value, name), do: raise(ArgumentError, "#{name} must be positive")
   defp non_negative!(value, _name) when is_integer(value) and value >= 0, do: value
   defp non_negative!(_value, name), do: raise(ArgumentError, "#{name} must be non-negative")
+  defp optional_positive!(nil, _name), do: nil
+  defp optional_positive!(value, name), do: positive!(value, name)
 end

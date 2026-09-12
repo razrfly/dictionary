@@ -11,6 +11,7 @@ defmodule DevilsDictionary.Artsy.RequestCoordinator do
 
   @default_name __MODULE__
 
+  @doc false
   def start_link(opts \\ []) do
     name = Keyword.get(opts, :name, @default_name)
 
@@ -19,22 +20,32 @@ defmodule DevilsDictionary.Artsy.RequestCoordinator do
       else: GenServer.start_link(__MODULE__, opts)
   end
 
-  def acquire(server \\ @default_name, interval_ms \\ nil) do
-    GenServer.call(server, {:acquire, interval_ms})
+  @doc "Reserves one globally paced request attempt."
+  def acquire(server \\ @default_name, interval_ms \\ nil, opts \\ []) do
+    GenServer.call(server, {:acquire, interval_ms, opts[:scope], opts[:limit]})
   end
 
+  @doc "Checks that a request generation is still current after an HTTP response."
   def current?(generation, server \\ @default_name) do
     GenServer.call(server, {:current?, generation})
   end
 
+  @doc "Defers every client until at least the supplied number of milliseconds has elapsed."
   def defer(milliseconds, server \\ @default_name)
       when is_integer(milliseconds) and milliseconds >= 0 do
     GenServer.call(server, {:defer, milliseconds})
   end
 
+  @doc "Atomically disables requests and invalidates responses already in flight."
   def disable(server \\ @default_name), do: GenServer.call(server, :disable)
+
+  @doc "Re-enables requests without resetting request-attempt accounting."
   def enable(server \\ @default_name), do: GenServer.call(server, :enable)
+
+  @doc "Returns whether provider requests are currently enabled."
   def enabled?(server \\ @default_name), do: GenServer.call(server, :enabled?)
+
+  @doc "Returns global attempt, pacing, and scoped-budget counters."
   def stats(server \\ @default_name), do: GenServer.call(server, :stats)
 
   @impl true
@@ -49,26 +60,39 @@ defmodule DevilsDictionary.Artsy.RequestCoordinator do
        next_at: now_fun.(),
        attempts: 0,
        interval_ms: Keyword.get(opts, :interval_ms, config[:rate_limit_ms] || 340),
+       scope_attempts: %{},
        now_fun: now_fun
      }}
   end
 
   @impl true
-  def handle_call({:acquire, _interval_ms}, _from, %{enabled: false} = state),
+  def handle_call({:acquire, _interval_ms, _scope, _limit}, _from, %{enabled: false} = state),
     do: {:reply, {:error, :provider_disabled}, state}
 
-  def handle_call({:acquire, interval_ms}, _from, state) do
-    now = state.now_fun.()
-    wait_ms = max(state.next_at - now, 0)
-    interval_ms = if is_integer(interval_ms), do: max(interval_ms, 0), else: state.interval_ms
+  def handle_call({:acquire, interval_ms, scope, limit}, _from, state) do
+    used = if is_nil(scope), do: 0, else: Map.get(state.scope_attempts, scope, 0)
 
-    state = %{
-      state
-      | next_at: now + wait_ms + interval_ms,
-        attempts: state.attempts + 1
-    }
+    if is_integer(limit) and used >= limit do
+      {:reply, {:error, :shared_request_limit}, state}
+    else
+      now = state.now_fun.()
+      wait_ms = max(state.next_at - now, 0)
+      interval_ms = if is_integer(interval_ms), do: max(interval_ms, 0), else: state.interval_ms
 
-    {:reply, {:ok, state.generation, wait_ms}, state}
+      scope_attempts =
+        if is_nil(scope),
+          do: state.scope_attempts,
+          else: Map.put(state.scope_attempts, scope, used + 1)
+
+      state = %{
+        state
+        | next_at: now + wait_ms + interval_ms,
+          attempts: state.attempts + 1,
+          scope_attempts: scope_attempts
+      }
+
+      {:reply, {:ok, state.generation, wait_ms}, state}
+    end
   end
 
   def handle_call({:current?, generation}, _from, state),
@@ -85,10 +109,12 @@ defmodule DevilsDictionary.Artsy.RequestCoordinator do
   end
 
   def handle_call(:enable, _from, state),
-    do: {:reply, :ok, %{state | enabled: true, next_at: 0}}
+    do: {:reply, :ok, %{state | enabled: true, next_at: state.now_fun.()}}
 
   def handle_call(:enabled?, _from, state), do: {:reply, state.enabled, state}
 
   def handle_call(:stats, _from, state),
-    do: {:reply, Map.take(state, [:enabled, :generation, :attempts, :next_at]), state}
+    do:
+      {:reply, Map.take(state, [:enabled, :generation, :attempts, :next_at, :scope_attempts]),
+       state}
 end

@@ -24,7 +24,6 @@ defmodule DevilsDictionaryWeb.ArtworkLive do
        search_form: to_form(%{"q" => ""}, as: :search),
        artsy_form: to_form(%{"q" => ""}, as: :artsy),
        artsy_configured: available?,
-       artsy_requests_used: 0,
        artsy_status: :idle,
        artsy_items: [],
        artsy_query: "",
@@ -80,13 +79,15 @@ defmodule DevilsDictionaryWeb.ArtworkLive do
       query == "" ->
         {:noreply, assign(socket, artsy_status: :idle, artsy_items: [], artsy_query: "")}
 
-      socket.assigns.artsy_requests_used >= 30 ->
-        {:noreply, assign(socket, artsy_status: :quota, artsy_items: [])}
-
       true ->
         # The credential-bearing client exists only inside this server task;
         # it is never retained in LiveView assigns or rendered state.
-        client = Client.new(request_limit: 30 - socket.assigns.artsy_requests_used)
+        client =
+          Client.new(
+            request_limit: 30,
+            shared_scope: :interactive_search,
+            shared_request_limit: 30
+          )
 
         {:noreply,
          socket
@@ -101,23 +102,22 @@ defmodule DevilsDictionaryWeb.ArtworkLive do
   end
 
   @impl true
-  def handle_async(:artsy_search, {:ok, {:ok, result, client}}, socket) do
+  def handle_async(:artsy_search, {:ok, {:ok, result, _client}}, socket) do
     items = Enum.map(result.items, &decorate_result/1)
 
     {:noreply,
      assign(socket,
-       artsy_requests_used: socket.assigns.artsy_requests_used + client.request_count,
        artsy_status: if(items == [], do: :empty, else: :ready),
        artsy_items: items
      )}
   end
 
-  def handle_async(:artsy_search, {:ok, {:error, failure, client}}, socket) do
-    status = if failure.code == "request_limit", do: :quota, else: :failed
+  def handle_async(:artsy_search, {:ok, {:error, failure, _client}}, socket) do
+    status =
+      if failure.code in ["request_limit", "shared_request_limit"], do: :quota, else: :failed
 
     {:noreply,
      assign(socket,
-       artsy_requests_used: socket.assigns.artsy_requests_used + client.request_count,
        artsy_status: status,
        artsy_items: []
      )}

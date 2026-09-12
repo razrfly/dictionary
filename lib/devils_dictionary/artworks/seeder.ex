@@ -31,6 +31,7 @@ defmodule DevilsDictionary.Artworks.Seeder do
   @max_collection_pages 20
   @freshness_seconds 86_400
 
+  @doc "Imports a checksummed candidate manifest with bounded, resumable provider work."
   def run(manifest, opts \\ []) when is_map(manifest) do
     dry_run? = Keyword.get(opts, :dry_run, false)
     resume? = Keyword.get(opts, :resume, false)
@@ -205,27 +206,40 @@ defmodule DevilsDictionary.Artworks.Seeder do
       {:ok, body, client, request_meta} ->
         artwork = Client.normalize_artwork(body)
 
-        payload =
-          artsy_payload(candidate, artwork)
-          |> put_in(["request_meta"], stringify(request_meta))
+        if valid_provider_artwork?(artwork) do
+          payload =
+            artsy_payload(candidate, artwork)
+            |> put_in(["request_meta"], stringify(request_meta))
 
-        case guarded_store(payload, sources["artsy"], run.id) do
-          {:ok, record} ->
-            cached = %{record: record, payload: payload, fresh?: true}
+          case guarded_store(payload, sources["artsy"], run.id) do
+            {:ok, record} ->
+              cached = %{record: record, payload: payload, fresh?: true}
 
-            continue_hydrated(
-              candidate,
-              work_id,
-              existing_id,
-              cached,
-              client,
-              sources,
-              run,
-              Map.put(stages, "artwork", %{"status" => "complete"})
-            )
+              continue_hydrated(
+                candidate,
+                work_id,
+                existing_id,
+                cached,
+                client,
+                sources,
+                run,
+                Map.put(stages, "artwork", %{"status" => "complete"})
+              )
 
-          {:error, :provider_disabled} ->
-            {partial(work_id, stages, "provider_disabled", :provider_disabled), client}
+            {:error, :provider_disabled} ->
+              {partial(work_id, stages, "provider_disabled", :provider_disabled), client}
+          end
+        else
+          {%{
+             status: :unavailable,
+             object_id: work_id,
+             reason: "artsy_artwork_missing_identity",
+             stages:
+               Map.put(stages, "artwork", %{
+                 "status" => "unavailable",
+                 "error" => "missing_opaque_id_or_slug"
+               })
+           }, client}
         end
 
       {:error, %{code: "not_found"}, client} ->
@@ -254,6 +268,19 @@ defmodule DevilsDictionary.Artworks.Seeder do
     artwork = cached.payload["artwork"] || %{}
 
     cond do
+      not valid_provider_artwork?(artwork) ->
+        {%{
+           status: :unavailable,
+           object_id: work_id,
+           source_record_id: cached.record.id,
+           reason: "artsy_artwork_missing_identity",
+           stages:
+             Map.put(stages, "artwork", %{
+               "status" => "unavailable",
+               "error" => "missing_opaque_id_or_slug"
+             })
+         }, client}
+
       artwork["slug"] != candidate["artsy_artwork_slug"] ->
         entry = artsy_entry(candidate, artwork, cached.record, sources["artsy"], run.id, true)
         resolution = guarded_resolve(entry)
@@ -682,10 +709,26 @@ defmodule DevilsDictionary.Artworks.Seeder do
       |> Enum.filter(&valid_slug?(&1["artsy_artist_slug"]))
       |> Map.new(&{&1["artsy_artist_slug"], &1})
 
+    returned_slugs =
+      artists
+      |> Enum.map(& &1["slug"])
+      |> Enum.filter(&valid_slug?/1)
+      |> MapSet.new()
+
+    missing_candidates =
+      Enum.count(candidate["creators"] || [], fn creator ->
+        slug = creator["artsy_artist_slug"]
+        not valid_slug?(slug) or not MapSet.member?(returned_slugs, slug)
+      end)
+
     stats =
-      Enum.reduce(artists, %{resolved: 0, links: 0, missing: 0}, fn artist, stats ->
-        case creator_by_slug[artist["slug"]] do
-          %{"qid" => qid} = creator when is_binary(qid) ->
+      Enum.reduce(artists, %{resolved: 0, links: 0, missing: missing_candidates}, fn artist,
+                                                                                     stats ->
+        case {valid_provider_artist?(artist), creator_by_slug[artist["slug"]]} do
+          {false, _creator} ->
+            %{stats | missing: stats.missing + 1}
+
+          {true, %{"qid" => qid} = creator} when is_binary(qid) ->
             person_id = Registry.by_external_id("wikidata", qid)
 
             if person_id do
@@ -722,7 +765,7 @@ defmodule DevilsDictionary.Artworks.Seeder do
               %{stats | missing: stats.missing + 1}
             end
 
-          _ ->
+          {_valid?, _creator} ->
             %{stats | missing: stats.missing + 1}
         end
       end)
@@ -778,32 +821,42 @@ defmodule DevilsDictionary.Artworks.Seeder do
 
     case Repo.get_by(Assertion, source_id: source_id, origin_key: origin_key) do
       nil ->
-        case Claims.assert(work_id, "authored_by", person_id, %{
-               source_id: source_id,
-               origin_key: origin_key,
-               method: "source_relationship",
-               metadata: %{
-                 "provider" => provider,
-                 "review" => "attributed_source_fact",
-                 "identity_independent_of_artwork_provider" => provider == "wikidata_manifest"
-               }
-             }) do
-          {:ok, claim} ->
-            if artwork_record do
-              revision = Claims.current_revision(claim.id)
+        result =
+          Repo.transaction(fn ->
+            case Claims.assert(work_id, "authored_by", person_id, %{
+                   source_id: source_id,
+                   origin_key: origin_key,
+                   method: "source_relationship",
+                   metadata: %{
+                     "provider" => provider,
+                     "review" => "attributed_source_fact",
+                     "identity_independent_of_artwork_provider" => provider == "wikidata_manifest"
+                   }
+                 }) do
+              {:ok, claim} ->
+                if artwork_record do
+                  revision = Claims.current_revision(claim.id)
 
-              {:ok, _evidence} =
-                Claims.add_evidence(revision.id, %{
-                  source_record_revision_id: artwork_record.current_revision.id,
-                  evidence_role: :supports,
-                  attribution_text: "Artsy artwork creator link"
-                })
+                  case Claims.add_evidence(revision.id, %{
+                         source_record_revision_id: artwork_record.current_revision.id,
+                         evidence_role: :supports,
+                         attribution_text: "Artsy artwork creator link"
+                       }) do
+                    {:ok, _evidence} -> :ok
+                    {:error, reason} -> Repo.rollback(reason)
+                  end
+                end
+
+                true
+
+              {:error, reason} ->
+                Repo.rollback(reason)
             end
+          end)
 
-            true
-
-          {:error, _reason} ->
-            false
+        case result do
+          {:ok, true} -> true
+          {:error, _reason} -> false
         end
 
       _existing ->
@@ -891,6 +944,14 @@ defmodule DevilsDictionary.Artworks.Seeder do
   defp valid_slug?(value),
     do: is_binary(value) and Regex.match?(~r/\A[a-z0-9][a-z0-9-]{1,254}\z/, value)
 
+  defp valid_provider_artwork?(artwork),
+    do: valid_slug?(artwork["slug"]) and present?(artwork["id"])
+
+  defp valid_provider_artist?(artist),
+    do: valid_slug?(artist["slug"]) and present?(artist["id"])
+
+  defp present?(value), do: is_binary(value) and String.trim(value) != ""
+
   defp dedupe_source_rows(rows) do
     Enum.uniq_by(rows, fn row -> row["id"] || row["slug"] || :erlang.phash2(row) end)
   end
@@ -963,7 +1024,12 @@ defmodule DevilsDictionary.Artworks.Seeder do
 
   defp maybe_save(manifest, nil), do: manifest
   defp maybe_save(manifest, path), do: Manifest.save!(manifest, path)
-  defp bounded(value, min, max) when is_integer(value), do: value |> max(min) |> min(max)
+
+  defp bounded(value, min, max) when is_integer(value) and value >= min and value <= max,
+    do: value
+
+  defp bounded(_value, min, max),
+    do: raise(ArgumentError, "value is outside the supported bound #{min}..#{max}")
 
   defp stringify(map) when is_map(map),
     do: Map.new(map, fn {key, value} -> {to_string(key), stringify(value)} end)

@@ -68,6 +68,25 @@ defmodule DevilsDictionary.Artworks.SeederTest do
     assert Registry.by_external_id("artsy_artwork_id", "opaque-work-86") == nil
   end
 
+  test "a provider artwork without both opaque id and slug is unavailable and never stored" do
+    malformed = artwork(nil, "fixture-work", "Painting")
+
+    {manifest, summary} =
+      Seeder.run(Manifest.new([candidate()]),
+        artsy_client: client([token(), response(200, malformed)]),
+        record_limit: 1
+      )
+
+    assert summary.unavailable == 1
+
+    assert get_in(manifest, ["candidates", Access.at(0), "import", "reason"]) ==
+             "artsy_artwork_missing_identity"
+
+    refute Repo.exists?(
+             from(record in SourceRecord, where: record.source_id == ^sources_artsy_id())
+           )
+  end
+
   test "a print/reproduction never collapses into the painting identity" do
     manifest = Manifest.new([candidate()])
 
@@ -101,6 +120,37 @@ defmodule DevilsDictionary.Artworks.SeederTest do
 
     assert summary.processed == 0
     assert summary.requests == 0
+  end
+
+  @tag :tmp_dir
+  test "progress is saved to a separate resumable checkpoint without mutating the base manifest",
+       %{tmp_dir: directory} do
+    base_path = Path.join(directory, "portable.json")
+    checkpoint_path = base_path <> ".checkpoint.json"
+    base = Manifest.save!(Manifest.new([candidate()]), base_path)
+    base_bytes = File.read!(base_path)
+
+    {_manifest, first} =
+      Seeder.run(base,
+        artsy_client: client(unavailable_responses()),
+        record_limit: 1,
+        manifest_path: checkpoint_path
+      )
+
+    assert first.unavailable == 1
+    assert File.exists?(checkpoint_path)
+    assert File.read!(base_path) == base_bytes
+
+    {_manifest, resumed} =
+      Seeder.run(Manifest.load!(checkpoint_path),
+        artsy_client: client([]),
+        record_limit: 1,
+        resume: true,
+        manifest_path: checkpoint_path
+      )
+
+    assert resumed.processed == 0
+    assert resumed.requests == 0
   end
 
   test "request exhaustion checkpoints artwork and resumes the same manifest without duplicates" do
@@ -258,6 +308,54 @@ defmodule DevilsDictionary.Artworks.SeederTest do
            ]
   end
 
+  test "missing and malformed provider artists are counted without losing Wikidata creators" do
+    candidate =
+      put_in(candidate()["creators"], [
+        %{
+          "qid" => "Q900087",
+          "name" => "Fixture Artist",
+          "artsy_artist_slug" => "fixture-artist"
+        },
+        %{
+          "qid" => "Q900088",
+          "name" => "Missing Artist",
+          "artsy_artist_slug" => "missing-artist"
+        }
+      ])
+
+    malformed_artist_page =
+      response(200, %{
+        "_embedded" => %{
+          "artists" => [artist(nil, "fixture-artist", "Fixture Artist")]
+        }
+      })
+
+    genes = response(200, %{"_embedded" => %{"genes" => []}})
+
+    {_manifest, summary} =
+      Seeder.run(Manifest.new([candidate]),
+        artsy_client:
+          client([
+            token(),
+            response(200, artwork("opaque-work-86", "fixture-work", "Painting")),
+            malformed_artist_page,
+            genes
+          ])
+      )
+
+    assert summary.missing_links == 2
+    assert summary.creators_resolved == 0
+    assert Registry.by_external_id("wikidata", "Q900087")
+    assert Registry.by_external_id("wikidata", "Q900088")
+    assert Registry.by_external_id("artsy_artist_id", "") == nil
+  end
+
+  test "operator limits outside the documented bounds are rejected" do
+    assert_raise ArgumentError, ~r/supported bound 1\.\.5000/, fn ->
+      Seeder.run(Manifest.new([candidate()]), record_limit: 0)
+    end
+  end
+
   test "withdrawal succeeds after a seeded creator citation and keeps durable QIDs" do
     {_manifest, _summary} =
       Seeder.run(Manifest.new([candidate()]),
@@ -368,6 +466,11 @@ defmodule DevilsDictionary.Artworks.SeederTest do
   end
 
   defp unavailable_responses, do: [token(), response(404, %{})]
+
+  defp sources_artsy_id do
+    %{sources: sources} = Sources.Catalog.seed!()
+    sources["artsy"].id
+  end
 
   defp print_responses,
     do: [token(), response(200, artwork("opaque-print-86", "fixture-work", "Print"))]

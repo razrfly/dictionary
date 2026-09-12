@@ -57,6 +57,19 @@ defmodule DevilsDictionary.Artsy.ClientTest do
     assert client.retry_count == 1
   end
 
+  test "terminal 429 remains a quota failure after the bounded retry" do
+    responses = [
+      response(201, %{"token" => "fixture-token"}),
+      response(429, %{}) |> Req.Response.put_header("retry-after", "0"),
+      response(429, %{}) |> Req.Response.put_header("retry-after", "0")
+    ]
+
+    {client, _calls} = client(responses, max_retries: 1)
+    assert {:error, %{code: "quota_exhausted"}, client} = Client.artwork(client, "work-one")
+    assert client.request_count == 3
+    assert client.retry_count == 1
+  end
+
   test "refreshes an expired token once after 401" do
     responses = [
       response(201, %{"token" => "first"}),
@@ -80,6 +93,14 @@ defmodule DevilsDictionary.Artsy.ClientTest do
     assert {:error, %{code: "unsafe_redirect"}, client} = Client.artwork(client, "work-one")
     assert client.request_count == 2
     assert length(Agent.get(calls, & &1)) == 2
+  end
+
+  test "a redirect with a non-map body and no location fails without crashing" do
+    {client, _calls} =
+      client([response(201, %{"token" => "fixture-token"}), response(302, "moved")])
+
+    assert {:error, %{code: "http_error", status: 302}, _client} =
+             Client.artwork(client, "work-one")
   end
 
   test "fails closed when the request budget is consumed by authentication" do
@@ -135,10 +156,83 @@ defmodule DevilsDictionary.Artsy.ClientTest do
     assert {:ok, _new_generation} = RequestCoordinator.disable(coordinator)
     refute RequestCoordinator.current?(generation, coordinator)
     assert {:error, :provider_disabled} = RequestCoordinator.acquire(coordinator, 250)
+
+    assert :ok = RequestCoordinator.enable(coordinator)
+    assert {:ok, _generation, 0} = RequestCoordinator.acquire(coordinator, 250)
+  end
+
+  test "shared coordinator enforces one allowance across independent clients" do
+    coordinator =
+      start_supervised!({RequestCoordinator, name: nil, interval_ms: 0}, id: make_ref())
+
+    shared = [coordinator: coordinator, shared_scope: :interactive, shared_request_limit: 2]
+
+    {first, _first_calls} =
+      client([response(201, %{"token" => "fixture-token"}), artwork_response("work-one")], shared)
+
+    assert {:ok, _body, first, _meta} = Client.artwork(first, "work-one")
+    assert first.request_count == 2
+
+    {second, second_calls} = client([response(201, %{"token" => "unused"})], shared)
+
+    assert {:error, %{code: "shared_request_limit"}, second} =
+             Client.artwork(second, "work-two")
+
+    assert second.request_count == 0
+    assert Agent.get(second_calls, & &1) == []
+    assert RequestCoordinator.stats(coordinator).scope_attempts == %{interactive: 2}
+  end
+
+  test "concurrent clients cannot race past a shared allowance" do
+    coordinator =
+      start_supervised!({RequestCoordinator, name: nil, interval_ms: 0}, id: make_ref())
+
+    {client, calls} =
+      client([artwork_response("work-one")],
+        coordinator: coordinator,
+        shared_scope: :interactive,
+        shared_request_limit: 1
+      )
+
+    client = %{
+      client
+      | token: "fixture-token",
+        token_expires_at: DateTime.add(DateTime.utc_now(), 3_600, :second)
+    }
+
+    results =
+      1..8
+      |> Task.async_stream(
+        fn index -> Client.artwork(client, "work-#{index}") end,
+        max_concurrency: 8,
+        ordered: false,
+        timeout: :infinity
+      )
+      |> Enum.map(fn {:ok, result} -> result end)
+
+    assert Enum.count(results, &match?({:ok, _, _, _}, &1)) == 1
+
+    assert Enum.count(
+             results,
+             &match?({:error, %{code: "shared_request_limit"}, _}, &1)
+           ) == 7
+
+    assert length(Agent.get(calls, & &1)) == 1
+  end
+
+  test "a missing coordinator fails closed before authentication leaves the server" do
+    {client, calls} =
+      client([response(201, %{"token" => "unused"})], coordinator: :missing_artsy_coordinator)
+
+    assert {:error, %{code: "coordinator_unavailable"}, client} =
+             Client.artwork(client, "work-one")
+
+    assert client.request_count == 0
+    assert Agent.get(calls, & &1) == []
   end
 
   defp client(responses, opts \\ []) do
-    calls = start_supervised!({Agent, fn -> [] end})
+    calls = start_supervised!({Agent, fn -> [] end}, id: make_ref())
     queue = start_supervised!({Agent, fn -> responses end}, id: make_ref())
 
     request_fun = fn options ->

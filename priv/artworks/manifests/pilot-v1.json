@@ -11,10 +11,7 @@
       ],
       "description": "painting by Anna Rimbaut-Borrel",
       "import": {
-        "object_id": 3733926,
-        "reason": "artsy_artwork_not_found",
-        "status": "unavailable",
-        "updated_at": "2026-09-12T18:23:13Z"
+        "status": "pending"
       },
       "kind": "painting",
       "qid": "Q106249870",
@@ -33,10 +30,7 @@
       ],
       "description": "painting by Paul Klee",
       "import": {
-        "object_id": 3733927,
-        "reason": "artsy_artwork_not_found",
-        "status": "unavailable",
-        "updated_at": "2026-09-12T18:23:14Z"
+        "status": "pending"
       },
       "kind": "painting",
       "qid": "Q116689343",
@@ -55,10 +49,7 @@
       ],
       "description": "painting by Raphael in the National Gallery, London",
       "import": {
-        "object_id": 3733928,
-        "reason": "artsy_artwork_not_found",
-        "status": "unavailable",
-        "updated_at": "2026-09-12T18:23:15Z"
+        "status": "pending"
       },
       "kind": "painting",
       "qid": "Q11918714",
@@ -77,10 +68,7 @@
       ],
       "description": "painting by Titian",
       "import": {
-        "object_id": 3733929,
-        "reason": "artsy_artwork_not_found",
-        "status": "unavailable",
-        "updated_at": "2026-09-12T18:23:16Z"
+        "status": "pending"
       },
       "kind": "painting",
       "qid": "Q1206860",
@@ -99,19 +87,7 @@
       ],
       "description": "painting by Titian",
       "import": {
-        "artist_failure": null,
-        "artsy_artwork_id": "515d39335eeb1c524c0039df",
-        "artsy_artwork_slug": "titian-cupid-with-the-wheel-of-fortune",
-        "creator_count": 1,
-        "creator_links": 0,
-        "gene_count": 13,
-        "gene_failure": null,
-        "missing_creators": 0,
-        "object_id": 3733930,
-        "redirects": 1,
-        "source_record_id": 6984025,
-        "status": "matched",
-        "updated_at": "2026-09-12T18:23:18Z"
+        "status": "pending"
       },
       "kind": "painting",
       "qid": "Q12115903",
@@ -835,9 +811,9 @@
       "wikipedia_title": "Christ at the Sea of Galilee"
     }
   ],
-  "checksum": "a8f0a0c01f239e8d54d4f648e37f3d6de30271f0b3f2d7a879c527d0e3e3b398",
-  "generated_at": "2026-09-12T18:22:45Z",
-  "schema_version": 1,
+  "checksum": "8ca842026087267545fee9e3df0740a79247e924fd6dd3e83daa533d04476921",
+  "generated_at": "2026-09-12T19:52:19Z",
+  "schema_version": 2,
   "selection": {
     "artwork_kinds": [
       "painting"
@@ -860,5 +836,5 @@
     "source": "Wikidata P11005/P2042",
     "wikipedia_required": false
   },
-  "updated_at": "2026-09-12T18:23:18Z"
+  "updated_at": "2026-09-12T19:54:47Z"
 }

@@ -4,7 +4,7 @@ defmodule DevilsDictionaryWeb.ArtworkLiveTest do
   import DevilsDictionary.WordFixtures
 
   alias DevilsDictionary.{Artworks, Claims, Fixtures, Registry, Repo, Sources}
-  alias DevilsDictionary.Claims.AssertionEvidence
+  alias DevilsDictionary.Claims.{Assertion, AssertionEvidence}
   alias DevilsDictionary.Corpus.SourceRecordRevision
   alias DevilsDictionary.Sources.{MaterializedOutput, Source}
 
@@ -147,6 +147,7 @@ defmodule DevilsDictionaryWeb.ArtworkLiveTest do
       )
 
     assert %{installed: 1} = Artworks.install_meaning_mappings!()
+    assertion_count = Repo.aggregate(Assertion, :count)
 
     {:ok, view, _html} = live(ctx.conn, ~p"/define/war")
     assert has_element?(view, "#artwork-candidates")
@@ -157,6 +158,7 @@ defmodule DevilsDictionaryWeb.ArtworkLiveTest do
            )
 
     assert render(view) =~ "not yet reviewed"
+    assert Repo.aggregate(Assertion, :count) == assertion_count
 
     wrong_id_payload =
       Map.put(ctx.record.raw, "genes", [

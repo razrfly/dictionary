@@ -4,6 +4,7 @@ defmodule DevilsDictionary.Artworks.Manifest do
   @schema_version 2
   @terminal_statuses ~w(matched created skipped conflict unavailable)
 
+  @doc "Creates a portable manifest with every unique exact identity pending."
   def new(candidates, metadata \\ %{}) when is_list(candidates) do
     %{
       "schema_version" => @schema_version,
@@ -22,6 +23,7 @@ defmodule DevilsDictionary.Artworks.Manifest do
     |> put_checksum()
   end
 
+  @doc "Loads and verifies a supported checksummed manifest."
   def load!(path) do
     manifest = path |> File.read!() |> Jason.decode!()
 
@@ -38,6 +40,7 @@ defmodule DevilsDictionary.Artworks.Manifest do
     upgrade(manifest)
   end
 
+  @doc "Atomically saves a manifest with a refreshed checksum."
   def save!(manifest, path) do
     manifest = manifest |> Map.put("updated_at", timestamp()) |> put_checksum()
     directory = Path.dirname(path)
@@ -48,6 +51,7 @@ defmodule DevilsDictionary.Artworks.Manifest do
     manifest
   end
 
+  @doc "Merges one resumable import outcome into a candidate by index."
   def update_candidate(manifest, index, outcome) when is_integer(index) and is_map(outcome) do
     candidates =
       List.update_at(manifest["candidates"], index, fn candidate ->
@@ -58,10 +62,13 @@ defmodule DevilsDictionary.Artworks.Manifest do
     manifest |> Map.put("candidates", candidates) |> put_checksum()
   end
 
+  @doc "Returns true only for an import outcome that does not need resuming."
   def completed?(candidate), do: get_in(candidate, ["import", "status"]) in @terminal_statuses
 
+  @doc "Lists terminal candidate status strings."
   def terminal_statuses, do: @terminal_statuses
 
+  @doc "Returns the deterministic SHA-256 digest used by manifest verification."
   def checksum(value) do
     :sha256
     |> :crypto.hash(Jason.encode!(value))

@@ -46,6 +46,7 @@ defmodule DevilsDictionary.Artsy.Availability do
     status_with_credentials(client_id, client_secret, DevilsDictionary.Artsy.RequestCoordinator)
   end
 
+  @doc "The explicit-credential lifecycle check with an injectable request coordinator."
   def status_with_credentials(client_id, client_secret, coordinator) do
     cond do
       config()[:enabled] == false -> {:error, :configured_off}
@@ -92,9 +93,12 @@ defmodule DevilsDictionary.Artsy.Availability do
 
   defp coordinator_enabled?(nil), do: true
 
+  defp coordinator_enabled?(coordinator) when is_pid(coordinator),
+    do: Process.alive?(coordinator)
+
   defp coordinator_enabled?(coordinator) do
     case Process.whereis(coordinator) do
-      nil -> true
+      nil -> false
       _pid -> DevilsDictionary.Artsy.RequestCoordinator.enabled?(coordinator)
     end
   end

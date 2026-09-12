@@ -214,16 +214,18 @@ defmodule DevilsDictionaryWeb.ConnectionLive do
 
   defp preselected_subject(nil), do: nil
 
-  defp preselected_subject(value) do
+  defp preselected_subject(value) when is_binary(value) do
     case Integer.parse(value) do
       {id, ""} when id > 0 -> Connection.endpoint(id)
       _ -> nil
     end
   end
 
+  defp preselected_subject(_value), do: nil
+
   defp preselected_evidence(nil, _locator), do: {%{}, []}
 
-  defp preselected_evidence(value, locator) do
+  defp preselected_evidence(value, locator) when is_binary(value) do
     with {id, ""} when id > 0 <- Integer.parse(value),
          true <- locator != "",
          true <-
@@ -247,6 +249,8 @@ defmodule DevilsDictionaryWeb.ConnectionLive do
       _ -> {%{}, []}
     end
   end
+
+  defp preselected_evidence(_value, _locator), do: {%{}, []}
 
   defp revision_number(nil), do: {:ok, nil}
 

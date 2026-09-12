@@ -91,6 +91,7 @@ defmodule DevilsDictionary.Artworks do
     }
   end
 
+  @doc "Returns one reusable artwork view by local object identity, or nil."
   def get(object_id) when is_integer(object_id) do
     case Repo.one(
            from entity in Entity,

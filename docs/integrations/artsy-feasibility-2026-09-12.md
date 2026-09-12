@@ -13,6 +13,9 @@ identity. Independently licensed museum metadata and images, starting with the M
 are preferred for durable display. Artsy descriptions, gene assignments, image URLs,
 and cached responses must remain source-specific and removable.
 
+This is a feasibility/pilot decision only. Merge, deployment, and issue closure remain
+blocked until an independent audit verifies the implementation and its evidence.
+
 The first pilot stays capped at 500 manifest candidates and 500 created/matched
 records, with smaller operator-configured request and batch limits. Given the live
 search hydration rate, start with Wikidata P11005-linked records rather than broad
@@ -54,7 +57,7 @@ title search. Widen only after the pilot reports its actual coverage.
 | P2042 artist crosswalk | Wikidata P2042 is an artist slug | `vincent-van-gogh` redirected, then returned opaque ID `4d8b92944eb68a1b2c000264` | Resolve creators through exact slug/ID evidence, never through a name string. |
 | Direct gene assignments | Artwork links expose assigned genes | Goya returned 5 assignments: 19th Century, Chiaroscuro, Collective History, Conflict, Cultural Commentary | Preserve as attributed Artsy vocabulary. No string-to-meaning equivalence. |
 | Gene-filtered acquisition | Gene resources link to artworks | The first 10 `gene_id=19th Century` artwork IDs were identical to the unfiltered first 10 | **Unverified/unsafe.** Do not seed through gene traversal. A direct per-work assignment may label a review candidate only. |
-| Retry/quota signal | 5 requests/sec documented | Probe throttled below 3/sec; 0 retries, 0 quota responses | One application-wide coordinator paces all callers. It honors the full `Retry-After`, bounds retries and total attempts, and reports local request exhaustion separately from provider quota exhaustion. |
+| Retry/quota signal | 5 requests/sec documented | Probe throttled below 3/sec; 0 retries, 0 quota responses | One application-wide coordinator paces all callers. It honors the full `Retry-After`, bounds retries and total attempts, and reports local request exhaustion separately from provider quota exhaustion. Interactive discovery has one atomic 30-attempt server-boot allowance that browser reloads and concurrent LiveViews cannot reset. |
 
 ## Repair feasibility findings
 
@@ -78,15 +81,17 @@ The final repair pilot used one bounded Wikidata request and seven Artsy attempt
 two manifest records. Both exact identities matched. One previously enriched record
 was reused and one existing Wikidata artwork was newly hydrated with Artsy metadata;
 no local identity was created, no conflict/reproduction/quota event occurred, and one
-creator link was added. A resume of the saved manifest processed zero records, made
-zero Artsy requests, and created no duplicates.
+creator link was added. A resume of the environment-local checkpoint processed zero
+records, made zero Artsy requests, and created no duplicates. The committed repair
+manifest remains a portable, pending input rather than carrying database row IDs.
 
 A final one-candidate proof started from Q122978100, which was absent from the local
 catalog. One bounded Wikidata request materialized *Les Âmes Déçues* and its creator,
 Ferdinand Hodler, as reusable local identities with an `authored_by` route and source
 link. The exact Artsy endpoint was unavailable after three attempts, so no Artsy
-fields or image were invented. Its saved manifest records `unavailable`; resuming it
-made zero requests and no duplicates. This deliberately separates “new local identity
+fields or image were invented. Its environment-local checkpoint recorded
+`unavailable`; resuming it made zero requests and no duplicates. The committed
+one-candidate manifest remains pending and portable. This deliberately separates “new local identity
 created from independent Wikidata evidence” from the Artsy import summary's honest
 `created: 0, unavailable: 1`.
 

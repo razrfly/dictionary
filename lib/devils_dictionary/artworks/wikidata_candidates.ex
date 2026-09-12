@@ -197,8 +197,9 @@ defmodule DevilsDictionary.Artworks.WikidataCandidates do
         {"user-agent", Application.fetch_env!(:devils_dictionary, :user_agent)}
       ],
       receive_timeout: 15_000,
-      retry: :transient,
-      max_retries: 2
+      # Discovery accounting is per physical request. Disable Req's hidden
+      # retries so the bounded loop and reported count cannot diverge.
+      retry: false
     ]
   end
 
