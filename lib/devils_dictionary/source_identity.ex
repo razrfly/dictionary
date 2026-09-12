@@ -62,7 +62,7 @@ defmodule DevilsDictionary.SourceIdentity do
   def resolve(%Entry{} = entry) do
     {:ok, resolution} =
       Repo.transaction(fn ->
-        lock_entry(entry)
+        lock_entries([entry])
         matches = identifier_matches(entry.identifiers)
         object_ids = matches |> Map.values() |> Enum.map(&Registry.canonical_id/1) |> Enum.uniq()
         proposal_conflicts = exclusive_proposal_conflicts(entry.identifiers)
@@ -104,17 +104,22 @@ defmodule DevilsDictionary.SourceIdentity do
     resolution
   end
 
-  defp lock_entry(entry) do
-    keys =
-      Enum.map(entry.identifiers, &"#{&1.namespace}:#{&1.external_id}") ++
-        if(entry.source_record_id, do: ["source-record:#{entry.source_record_id}"], else: [])
-
-    keys
+  @doc "Acquires one deterministic transaction-lock set for adapter entries."
+  def lock_entries(entries) when is_list(entries) do
+    entries
+    |> Enum.flat_map(&lock_keys/1)
     |> Enum.uniq()
     |> Enum.sort()
     |> Enum.each(fn key ->
       Repo.query!("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [key])
     end)
+
+    :ok
+  end
+
+  defp lock_keys(%Entry{} = entry) do
+    Enum.map(entry.identifiers, &"#{&1.namespace}:#{&1.external_id}") ++
+      if(entry.source_record_id, do: ["source-record:#{entry.source_record_id}"], else: [])
   end
 
   defp identifier_matches([]), do: %{}

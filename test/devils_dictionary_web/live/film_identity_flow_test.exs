@@ -9,6 +9,7 @@ defmodule DevilsDictionaryWeb.FilmIdentityFlowTest do
   alias DevilsDictionary.Discovery
   alias DevilsDictionary.Discovery.{Result, Run}
   alias DevilsDictionary.Discovery.Providers.CineGraph
+  alias DevilsDictionary.Encyclopedia.EntityPage
   alias DevilsDictionary.Registry
   alias DevilsDictionary.Repo
 
@@ -133,16 +134,22 @@ defmodule DevilsDictionaryWeb.FilmIdentityFlowTest do
       illustrates!(film.object_id, sense, "Supported connection #{n}")
     end
 
-    {:ok, view, _} = live(ctx.conn, "/entities/#{film.object_id}/pagination-film")
-    first = DevilsDictionary.Encyclopedia.EntityPage.build(film.object_id)
+    {:ok, view, _} =
+      live(
+        ctx.conn,
+        "/entities/#{film.object_id}/pagination-film?from=%2Fdefine%2Fpaging"
+      )
+
+    first = EntityPage.build(film.object_id)
     assert length(first.meaning_connections) == 24
     assert first.pagination.meaning_connections.count == 26
     assert has_element?(view, "#more-meaning-connections")
     view |> element("#more-meaning-connections") |> render_click()
     refute has_element?(view, "#more-meaning-connections")
+    assert has_element?(view, "#entity-back-link[href='/define/paging']")
 
     second =
-      DevilsDictionary.Encyclopedia.EntityPage.build(film.object_id,
+      EntityPage.build(film.object_id,
         meaning_connections_after: first.pagination.meaning_connections.next
       )
 
@@ -154,6 +161,72 @@ defmodule DevilsDictionaryWeb.FilmIdentityFlowTest do
            )
   end
 
+  test "discovery appearances are bounded, reachable and retain the definition return path",
+       ctx do
+    {:ok, film} = Registry.create_work(%{preferred_label: "Discovery pages", work_kind: "film"})
+    now = DateTime.utc_now()
+
+    for n <- 1..26 do
+      word = word!(ctx, "appearance-#{n}", ~w(wordnet))
+      assert {:queued, run} = Discovery.request(target_for(word), "cinegraph")
+
+      run
+      |> Run.lifecycle_changeset(%{
+        status: :succeeded,
+        started_at: now,
+        completed_at: DateTime.add(now, n, :second),
+        refresh_after: now,
+        expires_at: now,
+        completion_reason: :results,
+        result_count: 1
+      })
+      |> Repo.update!()
+
+      %Result{}
+      |> Result.changeset(%{
+        run_id: run.id,
+        external_namespace: "tmdb_movie",
+        external_id: "appearance-#{n}",
+        object_id: film.object_id,
+        position: 0,
+        match_details: %{},
+        preview_metadata: %{},
+        resolution_state: :matched
+      })
+      |> Repo.insert!()
+    end
+
+    first = EntityPage.build(film.object_id)
+    assert length(first.discovery_appearances) == 24
+    assert first.pagination.discovery_appearances.count == 26
+    assert first.pagination.discovery_appearances.next
+
+    second =
+      EntityPage.build(film.object_id,
+        discovery_appearances_after: first.pagination.discovery_appearances.next
+      )
+
+    assert length(second.discovery_appearances) == 2
+    assert second.pagination.discovery_appearances.next == nil
+
+    assert MapSet.disjoint?(
+             MapSet.new(first.discovery_appearances, & &1.target_object_id),
+             MapSet.new(second.discovery_appearances, & &1.target_object_id)
+           )
+
+    {:ok, view, _html} =
+      live(
+        ctx.conn,
+        "/entities/#{film.object_id}/discovery-pages?from=%2Fdefine%2Fappearance-1"
+      )
+
+    assert has_element?(view, "#entity-discovery-appearances", "26 total")
+    assert has_element?(view, "#discovery-appearances-next")
+    view |> element("#discovery-appearances-next") |> render_click()
+    refute has_element?(view, "#discovery-appearances-next")
+    assert has_element?(view, "#entity-back-link[href='/define/appearance-1']")
+  end
+
   defp illustrates!(film_id, sense, rationale) do
     {:ok, assertion} =
       Claims.assert(film_id, "illustrates", sense.object_id, %{
@@ -162,6 +235,10 @@ defmodule DevilsDictionaryWeb.FilmIdentityFlowTest do
       })
 
     assertion
+  end
+
+  defp target_for(word) do
+    %{object_id: word.object_id, term: word.lemma, language: word.language_tag, relevance: "term"}
   end
 
   defp stub_titanic(term) do

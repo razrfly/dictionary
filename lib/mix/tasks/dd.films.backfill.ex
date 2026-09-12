@@ -12,8 +12,9 @@ defmodule Mix.Tasks.Dd.Films.Backfill do
       mix dd.films.backfill --limit 100 --after 4200
 
   The report separates matched, newly created, insufficient and conflicting
-  records. Pass the reported `--after` checkpoint to continue. Rerunning a
-  batch is safe: exact identifiers converge through the shared resolver.
+  records. The Wikidata phase also reports malformed records as failed without
+  stopping its batch. Pass the reported `--after` checkpoint to continue.
+  Rerunning a batch is safe: exact identifiers converge through the shared resolver.
   """
 
   use Mix.Task

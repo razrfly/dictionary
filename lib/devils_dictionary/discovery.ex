@@ -911,7 +911,16 @@ defmodule DevilsDictionary.Discovery do
   defp persist_results(run, provider, items) do
     source = run.mapping.source
 
-    Enum.each(items, fn item ->
+    proposed = Enum.map(items, &{&1, identity_proposal(provider, &1)})
+
+    proposed
+    |> Enum.flat_map(fn
+      {_item, {:ok, entry}} -> [entry]
+      _ -> []
+    end)
+    |> SourceIdentity.lock_entries()
+
+    Enum.each(proposed, fn {item, proposal} ->
       {:ok, record} =
         Sources.upsert_record(source, %{
           external_id: "#{item.external_namespace}:#{item.external_id}",
@@ -919,7 +928,7 @@ defmodule DevilsDictionary.Discovery do
           raw: source_payload(item)
         })
 
-      resolution = resolve_identity(provider, source, record, item)
+      resolution = resolve_identity(proposal, source, record)
 
       attrs =
         item
@@ -951,28 +960,35 @@ defmodule DevilsDictionary.Discovery do
     }
   end
 
-  defp resolve_identity(provider, source, record, item) do
+  defp identity_proposal(provider, item) do
     if function_exported?(provider, :identity_record, 1) do
       case provider.identity_record(item) do
         {:ok, entry} ->
-          entry
-          |> Map.merge(%{
-            source_id: source.id,
-            source_record_id: record.id,
-            source_record_revision_id: record.current_revision.id
-          })
-          |> SourceIdentity.resolve()
+          {:ok, entry}
 
         :ignore ->
-          %Resolution{state: :insufficient_evidence, reason: "adapter_ignored"}
+          {:resolution, %Resolution{state: :insufficient_evidence, reason: "adapter_ignored"}}
 
         {:error, reason} ->
-          %Resolution{state: :insufficient_evidence, reason: to_string(reason)}
+          {:resolution, %Resolution{state: :insufficient_evidence, reason: to_string(reason)}}
       end
     else
-      %Resolution{state: :insufficient_evidence, reason: "adapter_has_no_identity_contract"}
+      {:resolution,
+       %Resolution{state: :insufficient_evidence, reason: "adapter_has_no_identity_contract"}}
     end
   end
+
+  defp resolve_identity({:ok, entry}, source, record) do
+    entry
+    |> Map.merge(%{
+      source_id: source.id,
+      source_record_id: record.id,
+      source_record_revision_id: record.current_revision.id
+    })
+    |> SourceIdentity.resolve()
+  end
+
+  defp resolve_identity({:resolution, resolution}, _source, _record), do: resolution
 
   defp start_run(run_id) do
     Repo.transaction(fn ->

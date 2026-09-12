@@ -77,14 +77,18 @@ defmodule DevilsDictionary.Encyclopedia do
   """
   def view(nil), do: nil
 
-  def view(%Entity{} = entity) do
+  def view(%Entity{} = entity),
+    do: view(entity, DevilsDictionary.SourceIdentity.Display.preload([entity]))
+
+  @doc "Projects an entity using already-loaded source visibility evidence."
+  def view(%Entity{} = entity, image_evidence) when is_map(image_evidence) do
     %{
       object_id: entity.object_id,
       qid: qid(entity.object_id),
       label: entity.preferred_label,
       description: entity.description,
       kind: entity.entity_kind,
-      image_url: DevilsDictionary.SourceIdentity.Display.image_url(entity),
+      image_url: DevilsDictionary.SourceIdentity.Display.image_url(entity, image_evidence),
       image_attribution: entity.metadata["image_attribution"],
       wikipedia_title: entity.metadata["wikipedia_title"],
       taxon: entity.metadata["taxon"]

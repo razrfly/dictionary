@@ -270,6 +270,62 @@ defmodule DevilsDictionary.DiscoveryTest do
     assert Repo.aggregate(Oban.Job, :count) == 1
   end
 
+  @tag :unboxed
+  test "concurrent reversed film batches acquire one global identifier lock order", ctx do
+    first_word = word!(ctx, "lock-order-a", ~w(wordnet))
+    second_word = word!(ctx, "lock-order-b", ~w(wordnet))
+    first_movie = movie(840, "First lock film") |> Map.put("imdbId", "tt0000840")
+    second_movie = movie(841, "Second lock film") |> Map.put("imdbId", "tt0000841")
+    parent = self()
+    gate = make_ref()
+
+    Req.Test.stub(CineGraph, fn conn ->
+      body = request_body(conn)
+
+      if String.contains?(body["query"], "searchMovieKeywords") do
+        term = body["variables"]["query"]
+        keyword_response(conn, term, if(term == first_word.lemma, do: 840, else: 841))
+      else
+        [keyword_id] = body["variables"]["keywords"]
+        send(parent, {:discovery_ready, self()})
+
+        receive do
+          {:publish, ^gate} ->
+            movies =
+              if keyword_id == 840,
+                do: [first_movie, second_movie],
+                else: [second_movie, first_movie]
+
+            discovery_response(conn, movies, nil, "lock-order", keyword_id)
+        end
+      end
+    end)
+
+    assert {:queued, first_run} = Discovery.request(target(first_word), "cinegraph")
+    assert {:queued, second_run} = Discovery.request(target(second_word), "cinegraph")
+
+    tasks =
+      Enum.map([first_run, second_run], fn run ->
+        Task.async(fn -> Discovery.execute_run(run.id) end)
+      end)
+
+    publishers =
+      for _task <- tasks do
+        assert_receive {:discovery_ready, publisher}, 5_000
+        publisher
+      end
+
+    Enum.each(publishers, &send(&1, {:publish, gate}))
+    assert Enum.map(tasks, &Task.await(&1, 10_000)) == [:ok, :ok]
+    assert Enum.all?([first_run, second_run], &(Repo.get!(Run, &1.id).status == :succeeded))
+
+    assert Registry.by_external_id("tmdb_movie", "840") ==
+             Registry.by_external_id("imdb_title", "tt0000840")
+
+    assert Registry.by_external_id("tmdb_movie", "841") ==
+             Registry.by_external_id("imdb_title", "tt0000841")
+  end
+
   test "mapping versions isolate old work and a slow old response cannot replace the new one",
        ctx do
     word = word!(ctx, "changeable", ~w(wordnet))

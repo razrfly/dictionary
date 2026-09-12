@@ -1,6 +1,8 @@
 defmodule DevilsDictionary.SourceIdentity.DisplayTest do
   use DevilsDictionary.DataCase, async: false
   alias DevilsDictionary.{Sources, SourceIdentity, Repo}
+  alias DevilsDictionary.Registry.Entity
+  alias DevilsDictionary.SourceIdentity.Display
   alias DevilsDictionary.SourceIdentity.Entry
   alias DevilsDictionary.Encyclopedia.EntityPage
 
@@ -12,7 +14,12 @@ defmodule DevilsDictionary.SourceIdentity.DisplayTest do
       Sources.upsert_record(source, %{
         external_id: "audit-film",
         url: "https://cinegraph.org/movies/audit",
-        raw: %{"title" => "Audit film"}
+        raw: %{
+          "title" => "Audit film",
+          "preview_metadata" => %{
+            "poster_url" => "https://image.tmdb.org/t/p/w342/withdrawn.jpg"
+          }
+        }
       })
 
     {:ok, entry} =
@@ -29,6 +36,12 @@ defmodule DevilsDictionary.SourceIdentity.DisplayTest do
 
     resolution = SourceIdentity.resolve(entry)
     assert EntityPage.build(resolution.object_id).entity.image_url
+
+    entity = Repo.get!(Entity, resolution.object_id)
+    legacy = %{entity | metadata: Map.delete(entity.metadata, "source_identity_evidence")}
+    evidence = Display.preload([legacy])
+    assert Display.image_url(legacy, evidence) == entity.metadata["image_url"]
+
     record |> Ecto.Changeset.change(display_allowed: false) |> Repo.update!()
     page = EntityPage.build(resolution.object_id)
     assert page.sources == []

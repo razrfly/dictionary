@@ -68,37 +68,15 @@ defmodule DevilsDictionary.SourceIdentity.Backfill do
       |> Repo.all()
 
     summary =
-      Enum.reduce(records, %{scanned: 0, queued: 0, current: 0, skipped: 0}, fn record, acc ->
-        raw = Sources.raw(record) || %{}
-        adapter = DevilsDictionary.Absorb.Sources.Wikidata
-        {:ok, materialized} = adapter.materialize(%{record | raw: raw})
-        concept = materialized |> Map.get(:concepts, []) |> List.first() || %{}
+      Enum.reduce(
+        records,
+        %{scanned: 0, queued: 0, current: 0, skipped: 0, failed: 0},
+        fn record, acc ->
+          state = wikidata_record_state(record)
 
-        state =
-          if concept[:work_kind] == "film" do
-            if raw["_film_identity_version"] == 1 do
-              # Replay even an already-materialized record to register its crosswalks.
-              {:ok, _} = DevilsDictionary.Absorb.Materializer.run(%{record | raw: raw}, adapter)
-              :current
-            else
-              %{"source" => "wikidata", "target" => record.external_id}
-              |> DevilsDictionary.Workers.EnrichWorker.new(
-                unique: [
-                  period: :infinity,
-                  fields: [:worker, :args],
-                  states: [:available, :scheduled, :executing, :retryable]
-                ]
-              )
-              |> Oban.insert!()
-
-              :queued
-            end
-          else
-            :skipped
-          end
-
-        acc |> Map.update!(:scanned, &(&1 + 1)) |> Map.update!(state, &(&1 + 1))
-      end)
+          acc |> Map.update!(:scanned, &(&1 + 1)) |> Map.update!(state, &(&1 + 1))
+        end
+      )
 
     Map.put(summary, :next_after, if(length(records) == limit, do: List.last(records).id))
   end
@@ -134,13 +112,51 @@ defmodule DevilsDictionary.SourceIdentity.Backfill do
 
     result
     |> Result.changeset(%{
-      object_id: resolution.object_id,
+      object_id: resolution.object_id || result.object_id,
       source_record_id: record.id,
       resolution_state: resolution.state
     })
     |> Repo.update!()
 
     resolution
+  end
+
+  defp wikidata_record_state(record) do
+    raw = Sources.raw(record) || %{}
+    adapter = DevilsDictionary.Absorb.Sources.Wikidata
+
+    with {:ok, materialized} <- adapter.materialize(%{record | raw: raw}) do
+      concept = materialized |> Map.get(:concepts, []) |> List.first() || %{}
+
+      cond do
+        concept[:work_kind] != "film" ->
+          :skipped
+
+        raw["_film_identity_version"] == 1 ->
+          # Replay even an already-materialized record to register its crosswalks.
+          case DevilsDictionary.Absorb.Materializer.run(%{record | raw: raw}, adapter) do
+            {:ok, _} -> :current
+            _ -> :failed
+          end
+
+        true ->
+          %{"source" => "wikidata", "target" => record.external_id}
+          |> DevilsDictionary.Workers.EnrichWorker.new(
+            unique: [
+              period: :infinity,
+              fields: [:worker, :args],
+              states: [:available, :scheduled, :executing, :retryable]
+            ]
+          )
+          |> Oban.insert!()
+
+          :queued
+      end
+    else
+      _ -> :failed
+    end
+  rescue
+    _error -> :failed
   end
 
   defp ensure_record(%Result{source_record: nil} = result, source) do

@@ -213,7 +213,8 @@ defmodule DevilsDictionaryWeb.EntityLive do
                   @entity_slug,
                   @cursors,
                   :meaning_connections,
-                  @page.pagination.meaning_connections.next
+                  @page.pagination.meaning_connections.next,
+                  @back_path
                 )
               }
             />
@@ -223,12 +224,12 @@ defmodule DevilsDictionaryWeb.EntityLive do
             :if={@page.discovery_appearances != []}
             id="entity-discovery-appearances"
             label="also appeared in discovery for"
-            count={length(@page.discovery_appearances)}
+            count={@page.pagination.discovery_appearances.count}
           >
             <ul role="list" class="divide-y divide-mist-950/5 dark:divide-white/10">
               <li
                 :for={appearance <- @page.discovery_appearances}
-                id={"discovery-appearance-#{appearance.target_object_id}"}
+                id={"discovery-appearance-#{appearance.target_object_id}-#{appearance.provider_slug}"}
                 class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-3"
               >
                 <.a :if={appearance.path} navigate={appearance.path} class="font-medium">
@@ -240,6 +241,21 @@ defmodule DevilsDictionaryWeb.EntityLive do
                 </span>
               </li>
             </ul>
+            <.pager
+              :if={@page.pagination.discovery_appearances.next}
+              id="discovery-appearances-next"
+              label="More discovery appearances"
+              path={
+                next_path(
+                  @id,
+                  @entity_slug,
+                  @cursors,
+                  :discovery_appearances,
+                  @page.pagination.discovery_appearances.next,
+                  @back_path
+                )
+              }
+            />
           </.panel>
 
           <.panel
@@ -269,7 +285,14 @@ defmodule DevilsDictionaryWeb.EntityLive do
               :if={@page.pagination.biography.next}
               id="biography-next"
               path={
-                next_path(@id, @entity_slug, @cursors, :biography, @page.pagination.biography.next)
+                next_path(
+                  @id,
+                  @entity_slug,
+                  @cursors,
+                  :biography,
+                  @page.pagination.biography.next,
+                  @back_path
+                )
               }
               label="More biography"
             />
@@ -298,7 +321,16 @@ defmodule DevilsDictionaryWeb.EntityLive do
             <.pager
               :if={@page.pagination.works.next}
               id="works-next"
-              path={next_path(@id, @entity_slug, @cursors, :works, @page.pagination.works.next)}
+              path={
+                next_path(
+                  @id,
+                  @entity_slug,
+                  @cursors,
+                  :works,
+                  @page.pagination.works.next,
+                  @back_path
+                )
+              }
               label="More works"
             />
           </.panel>
@@ -350,7 +382,8 @@ defmodule DevilsDictionaryWeb.EntityLive do
                   @entity_slug,
                   @cursors,
                   :definitions,
-                  @page.pagination.definitions.next
+                  @page.pagination.definitions.next,
+                  @back_path
                 )
               }
               label="More definitions"
@@ -373,7 +406,16 @@ defmodule DevilsDictionaryWeb.EntityLive do
             <.pager
               :if={@page.pagination.editions.next}
               id="editions-next"
-              path={next_path(@id, @entity_slug, @cursors, :editions, @page.pagination.editions.next)}
+              path={
+                next_path(
+                  @id,
+                  @entity_slug,
+                  @cursors,
+                  :editions,
+                  @page.pagination.editions.next,
+                  @back_path
+                )
+              }
               label="More editions"
             />
           </.panel>
@@ -398,7 +440,16 @@ defmodule DevilsDictionaryWeb.EntityLive do
             <.pager
               :if={@page.pagination.contents.next}
               id="contents-next"
-              path={next_path(@id, @entity_slug, @cursors, :contents, @page.pagination.contents.next)}
+              path={
+                next_path(
+                  @id,
+                  @entity_slug,
+                  @cursors,
+                  :contents,
+                  @page.pagination.contents.next,
+                  @back_path
+                )
+              }
               label="More contents"
             />
           </.panel>
@@ -453,7 +504,8 @@ defmodule DevilsDictionaryWeb.EntityLive do
                     @entity_slug,
                     @cursors,
                     :connections_in,
-                    @page.pagination.connections_in.next
+                    @page.pagination.connections_in.next,
+                    @back_path
                   )
                 }
                 label="More incoming connections"
@@ -467,7 +519,8 @@ defmodule DevilsDictionaryWeb.EntityLive do
                     @entity_slug,
                     @cursors,
                     :connections_out,
-                    @page.pagination.connections_out.next
+                    @page.pagination.connections_out.next,
+                    @back_path
                   )
                 }
                 label="More outgoing connections"
@@ -524,17 +577,13 @@ defmodule DevilsDictionaryWeb.EntityLive do
     """
   end
 
-  @cursor_keys ~w(biography works definitions editions contents connections_in connections_out meaning_connections)a
+  @cursor_keys ~w(biography works definitions editions contents connections_in connections_out meaning_connections discovery_appearances)a
 
   defp cursor_params(params) do
     Map.new(@cursor_keys, fn key ->
       param = "#{key}_after"
 
-      value =
-        case Integer.parse(params[param] || "") do
-          {cursor, ""} when cursor > 0 -> cursor
-          _ -> nil
-        end
+      value = cursor_value(key, params[param])
 
       {key, value}
     end)
@@ -543,12 +592,32 @@ defmodule DevilsDictionaryWeb.EntityLive do
   defp page_opts(cursors),
     do: Enum.map(cursors, fn {key, value} -> {String.to_atom("#{key}_after"), value} end)
 
-  defp next_path(id, slug, cursors, section, cursor) do
+  defp cursor_value(:discovery_appearances, value) when is_binary(value) do
+    with [target, source_slug] <- String.split(value, ":", parts: 2),
+         {target_object_id, ""} when target_object_id > 0 <- Integer.parse(target),
+         true <- Regex.match?(~r/\A[a-z0-9_-]+\z/, source_slug) do
+      value
+    else
+      _ -> nil
+    end
+  end
+
+  defp cursor_value(_key, value) when is_binary(value) do
+    case Integer.parse(value) do
+      {cursor, ""} when cursor > 0 -> cursor
+      _ -> nil
+    end
+  end
+
+  defp cursor_value(_key, _value), do: nil
+
+  defp next_path(id, slug, cursors, section, cursor, back_path) do
     query =
       cursors
       |> Map.put(section, cursor)
       |> Enum.reject(fn {_key, value} -> is_nil(value) end)
       |> Map.new(fn {key, value} -> {"#{key}_after", value} end)
+      |> then(fn query -> if back_path, do: Map.put(query, "from", back_path), else: query end)
 
     ~p"/entities/#{id}/#{slug}?#{query}"
   end

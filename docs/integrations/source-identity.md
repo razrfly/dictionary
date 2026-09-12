@@ -70,7 +70,8 @@ Run `mix dd.films.backfill --wikidata --limit 100` and continue with the printed
 Legacy film records queue deduplicated jobs through the existing enrichment worker;
 these jobs fetch the fields older projections discarded, then materialize them onto
 the existing Wikidata identity. Current projections are replayed locally. Counts
-separate queued, current and skipped records; queued does not mean completed.
+separate queued, current, skipped and failed records; a malformed retained record is
+reported without stopping the batch, and queued does not mean completed.
 
 Wait for enrichment jobs to succeed, inspect failures/conflicts, then run the
 CineGraph backfill above. Rerunning the Wikidata phase is safe. Completed refreshes

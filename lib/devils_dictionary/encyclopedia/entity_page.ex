@@ -46,6 +46,7 @@ defmodule DevilsDictionary.Encyclopedia.EntityPage do
   alias DevilsDictionary.Registry
   alias DevilsDictionary.Registry.{ContentItem, ContentRevision, Entity, Lexeme, Sense}
   alias DevilsDictionary.Repo
+  alias DevilsDictionary.SourceIdentity.Display
   alias DevilsDictionary.Sources.{MaterializedOutput, Source, SourceRecord}
 
   defstruct entity: nil,
@@ -124,7 +125,8 @@ defmodule DevilsDictionary.Encyclopedia.EntityPage do
     {meaning_connections, meaning_connections_page} =
       meaning_connections(id, opts[:meaning_connections_after])
 
-    discovery_appearances = discovery_appearances(id)
+    {discovery_appearances, discovery_appearances_page} =
+      discovery_appearances(id, opts[:discovery_appearances_after])
 
     {connections_in, connections_in_page} =
       other_connections(:incoming, id, opts[:connections_in_after])
@@ -157,6 +159,7 @@ defmodule DevilsDictionary.Encyclopedia.EntityPage do
         editions: editions_page,
         contents: contents_page,
         meaning_connections: meaning_connections_page,
+        discovery_appearances: discovery_appearances_page,
         connections_in: connections_in_page,
         connections_out: connections_out_page
       }
@@ -250,39 +253,98 @@ defmodule DevilsDictionary.Encyclopedia.EntityPage do
      }}
   end
 
-  defp discovery_appearances(object_id) do
+  defp discovery_appearances(object_id, after_cursor) do
     family = Registry.canonical_family(object_id)
 
-    rows =
-      Repo.all(
-        from result in Result,
-          join: run in Run,
-          on: run.id == result.run_id,
-          join: mapping in Mapping,
-          on: mapping.id == run.mapping_id,
-          join: source in Source,
-          on: source.id == mapping.source_id,
-          left_join: record in SourceRecord,
-          on: record.id == result.source_record_id,
-          where:
-            result.object_id in ^family and result.display_allowed and run.display_allowed and
-              run.status == :succeeded and mapping.enabled and source.active and
-              (is_nil(record.id) or record.display_allowed),
-          distinct: [mapping.target_object_id, source.slug],
-          order_by: [asc: mapping.target_object_id, asc: source.slug, desc: run.completed_at],
-          select: %{
-            target_object_id: mapping.target_object_id,
-            provider: source.name,
-            term: mapping.parameters["term"]
-          }
+    base = discovery_appearance_query(family)
+
+    count =
+      base
+      |> distinct([_result, _run, mapping, source, _record], [
+        mapping.target_object_id,
+        source.slug
+      ])
+      |> select([_result, _run, mapping, source, _record], %{
+        target_object_id: mapping.target_object_id,
+        provider_slug: source.slug
+      })
+      |> subquery()
+      |> Repo.aggregate(:count)
+
+    all_rows =
+      base
+      |> after_discovery_appearance(after_cursor)
+      |> distinct([_result, _run, mapping, source, _record], [
+        mapping.target_object_id,
+        source.slug
+      ])
+      |> order_by([_result, run, mapping, source, _record],
+        asc: mapping.target_object_id,
+        asc: source.slug,
+        desc: run.completed_at,
+        desc: run.id
       )
+      |> limit(^(@section_cap + 1))
+      |> select([_result, _run, mapping, source, _record], %{
+        target_object_id: mapping.target_object_id,
+        provider: source.name,
+        provider_slug: source.slug,
+        term: mapping.parameters["term"]
+      })
+      |> Repo.all()
+
+    rows = Enum.take(all_rows, @section_cap)
 
     endpoints = Connection.endpoint_summaries(Enum.map(rows, & &1.target_object_id))
 
-    Enum.map(rows, fn row ->
-      Map.merge(row, Map.fetch!(endpoints, row.target_object_id))
-    end)
+    views =
+      Enum.map(rows, fn row ->
+        Map.merge(row, Map.fetch!(endpoints, row.target_object_id))
+      end)
+
+    next =
+      if length(all_rows) > @section_cap do
+        row = List.last(rows)
+        "#{row.target_object_id}:#{row.provider_slug}"
+      end
+
+    {views, %{count: count, next: next}}
   end
+
+  defp discovery_appearance_query(family) do
+    from result in Result,
+      join: run in Run,
+      on: run.id == result.run_id,
+      join: mapping in Mapping,
+      on: mapping.id == run.mapping_id,
+      join: source in Source,
+      on: source.id == mapping.source_id,
+      left_join: record in SourceRecord,
+      on: record.id == result.source_record_id,
+      where:
+        result.object_id in ^family and result.display_allowed and run.display_allowed and
+          run.status == :succeeded and mapping.enabled and source.active and
+          (is_nil(record.id) or record.display_allowed)
+  end
+
+  defp after_discovery_appearance(query, nil), do: query
+
+  defp after_discovery_appearance(query, cursor) when is_binary(cursor) do
+    with [target, source_slug] <- String.split(cursor, ":", parts: 2),
+         {target_object_id, ""} when target_object_id > 0 <- Integer.parse(target),
+         true <- source_slug != "" do
+      where(
+        query,
+        [_result, _run, mapping, source, _record],
+        mapping.target_object_id > ^target_object_id or
+          (mapping.target_object_id == ^target_object_id and source.slug > ^source_slug)
+      )
+    else
+      _ -> query
+    end
+  end
+
+  defp after_discovery_appearance(query, _cursor), do: query
 
   defp source_views(object_id) do
     family = Registry.canonical_family(object_id)
@@ -357,11 +419,13 @@ defmodule DevilsDictionary.Encyclopedia.EntityPage do
     canonical = Registry.canonical_ids(ids)
     canonical_ids = Enum.map(ids, &Map.fetch!(canonical, &1))
 
-    by_id =
+    entities =
       Entity
       |> where([e], e.object_id in ^canonical_ids)
       |> Repo.all()
-      |> Map.new(&{&1.object_id, Encyclopedia.view(&1)})
+
+    image_evidence = Display.preload(entities)
+    by_id = Map.new(entities, &{&1.object_id, Encyclopedia.view(&1, image_evidence)})
 
     canonical_ids |> Enum.map(&Map.get(by_id, &1)) |> Enum.reject(&is_nil/1)
   end

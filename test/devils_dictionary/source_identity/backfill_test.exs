@@ -9,6 +9,8 @@ defmodule DevilsDictionary.SourceIdentity.BackfillTest do
   alias DevilsDictionary.Registry.Object
   alias DevilsDictionary.Repo
   alias DevilsDictionary.SourceIdentity.Backfill
+  alias DevilsDictionary.Sources
+  alias DevilsDictionary.Sources.SourceRecord
 
   setup do
     catalog = DevilsDictionary.Fixtures.seed_catalog!()
@@ -59,6 +61,27 @@ defmodule DevilsDictionary.SourceIdentity.BackfillTest do
     assert Repo.get!(Result, legacy.id).object_id == resolved.object_id
     assert Repo.aggregate(Object, :count) == object_count + 1
 
+    record = Repo.get!(SourceRecord, resolved.source_record_id)
+
+    {:ok, _record} =
+      Sources.upsert_record(ctx.sources["cinegraph"], %{
+        external_id: record.external_id,
+        url: record.url,
+        raw: %{
+          "identifiers" => [
+            %{"namespace" => "tmdb_movie", "external_id" => "597"},
+            %{"namespace" => "tmdb_movie", "external_id" => "598"}
+          ],
+          "preview_metadata" => legacy.preview_metadata,
+          "match_details" => legacy.match_details
+        }
+      })
+
+    assert %{scanned: 1, conflicting_identifiers: 1} = Backfill.run(limit: 1)
+    conflicted = Repo.get!(Result, legacy.id)
+    assert conflicted.object_id == resolved.object_id
+    assert conflicted.resolution_state == :conflicting_identifiers
+
     assert %{scanned: 0, next_after: nil} =
              Backfill.run(limit: 1, after_id: legacy.id)
   end
@@ -75,7 +98,6 @@ defmodule DevilsDictionary.SourceIdentity.BackfillTest do
 
   test "legacy Wikidata films queue a deduplicated refresh and current records replay", ctx do
     alias DevilsDictionary.Absorb.Sources.Wikidata
-    alias DevilsDictionary.Sources
     alias DevilsDictionary.Registry
     raw = DevilsDictionary.Fixtures.raw("wikidata", "films") |> Enum.find(&(&1["id"] == "Q44578"))
 
@@ -110,6 +132,33 @@ defmodule DevilsDictionary.SourceIdentity.BackfillTest do
     assert Registry.by_external_id("tmdb_movie", "597") == entity.object_id
     assert Registry.by_external_id("imdb_title", "tt0120338") == entity.object_id
     assert %{current: 1} = Backfill.wikidata(limit: 100)
+  end
+
+  test "malformed Wikidata records are counted without stopping the batch", ctx do
+    {:ok, malformed} =
+      Sources.upsert_record(ctx.sources["wikidata"], %{
+        external_id: "Q-malformed",
+        raw: %{"id" => "Q-malformed", "labels" => %{}, "claims" => []}
+      })
+
+    {:ok, valid} =
+      Sources.upsert_record(ctx.sources["wikidata"], %{
+        external_id: "Q-empty",
+        raw: %{}
+      })
+
+    assert malformed.id < valid.id
+
+    assert %{
+             scanned: 2,
+             failed: 1,
+             skipped: 1,
+             queued: 0,
+             current: 0,
+             next_after: next_after
+           } = Backfill.wikidata(limit: 2)
+
+    assert next_after == valid.id
   end
 
   defp target(word) do

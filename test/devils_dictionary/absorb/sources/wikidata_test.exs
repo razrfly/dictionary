@@ -96,6 +96,20 @@ defmodule DevilsDictionary.Absorb.Sources.WikidataTest do
                ])
     end
 
+    test "publication years preserve BCE signs" do
+      raw = Enum.find(film_records(), &(&1["id"] == "Q44578"))
+
+      bce =
+        put_in(
+          raw,
+          ["claims", "P577", Access.at(0), "mainsnak", "datavalue", "value", "time"],
+          "-0500-01-01T00:00:00Z"
+        )
+
+      assert [concept] = out(bce).concepts
+      assert concept.first_published_year == -500
+    end
+
     test "film crosswalks honor preferred and deprecated Wikidata ranks" do
       raw = Enum.find(film_records(), &(&1["id"] == "Q44578"))
 

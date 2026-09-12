@@ -715,7 +715,7 @@ defmodule DevilsDictionary.Absorb.Sources.Wikidata do
     |> Enum.find_value(fn
       %{value: %{"time" => <<sign::binary-size(1), year::binary-size(4), _rest::binary>>}}
       when sign in ["+", "-"] ->
-        case Integer.parse(year) do
+        case Integer.parse(sign <> year) do
           {value, ""} -> value
           _ -> nil
         end
