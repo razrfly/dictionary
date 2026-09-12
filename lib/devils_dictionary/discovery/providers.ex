@@ -1,9 +1,9 @@
 defmodule DevilsDictionary.Discovery.Providers do
   @moduledoc "The configured provider registry used by pages, workers and `mix dd.discovery`."
 
-  alias DevilsDictionary.Discovery.Providers.CineGraph
+  alias DevilsDictionary.Discovery.Providers.{CineGraph, Giphy}
 
-  @default [CineGraph]
+  @default [CineGraph, Giphy]
 
   def all do
     Application.get_env(:devils_dictionary, :discovery_providers, @default)

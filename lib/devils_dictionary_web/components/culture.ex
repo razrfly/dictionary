@@ -1,5 +1,5 @@
 defmodule DevilsDictionaryWeb.Culture do
-  @moduledoc "Compact poster shelf for factual film discovery."
+  @moduledoc "Compact, provider-neutral shelf for automatic cultural discovery."
   use DevilsDictionaryWeb, :html
 
   attr :states, :map, required: true
@@ -32,17 +32,19 @@ defmodule DevilsDictionaryWeb.Culture do
         <%= if state.status == :ready do %>
           <div class="flex flex-wrap items-baseline justify-between gap-2">
             <h2
-              id="culture-filter-film"
+              id={"culture-filter-#{content_type(state)}"}
               class="font-display text-xl text-balance text-mist-950 dark:text-white"
             >
-              Films
+              {content_heading(state)}
             </h2>
-            <p class="text-base text-mist-500 sm:text-sm">{state.provider_name} · keywords: TMDb</p>
+            <p class="text-base text-mist-500 sm:text-sm">
+              {state.provider_name}{provider_detail(state)}
+            </p>
           </div>
           <ul
             role="list"
             tabindex="0"
-            aria-label="Film matches; scroll for more"
+            aria-label={"#{content_heading(state)} matches; scroll for more"}
             id={status_id("culture-results", state, @provider_count)}
             class="flex snap-x snap-proximity gap-5 overflow-x-auto overscroll-x-contain pb-3 focus-visible:outline-2 focus-visible:outline-offset-2"
           >
@@ -51,7 +53,7 @@ defmodule DevilsDictionaryWeb.Culture do
               id={"culture-result-#{item.external_namespace}-#{item.external_id}"}
               class="w-24 shrink-0 snap-start sm:w-28"
             >
-              <.film_thumbnail item={item} />
+              <.culture_thumbnail item={item} type={content_type(state)} />
             </li>
           </ul>
           <div class="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
@@ -59,7 +61,9 @@ defmodule DevilsDictionaryWeb.Culture do
             <.compact_more state={state} />
           </div>
         <% else %>
-          <h2 class="font-display text-xl text-mist-950 dark:text-white">In film</h2>
+          <h2 class="font-display text-xl text-mist-950 dark:text-white">
+            In {content_label(state)}
+          </h2>
           <p
             id={status_id(status_base(state.status), state, @provider_count)}
             role="status"
@@ -67,13 +71,13 @@ defmodule DevilsDictionaryWeb.Culture do
           >
             <%= case state.status do %>
               <% :empty -> %>
-                No matching films for this term yet.
+                No matching {content_label(state)} for this term yet.
               <% :failed -> %>
-                Film discovery is temporarily unavailable.
+                {content_heading(state)} discovery is temporarily unavailable.
               <% status when status in [:deferred, :expired, :withdrawn] -> %>
-                Film discovery will retry when available.
+                {content_heading(state)} discovery will retry when available.
               <% _ -> %>
-                Looking for matching films…
+                Looking for matching {content_label(state)}…
             <% end %>
           </p>
         <% end %>
@@ -83,14 +87,11 @@ defmodule DevilsDictionaryWeb.Culture do
   end
 
   attr :item, :map, required: true
+  attr :type, :atom, required: true
 
-  defp film_thumbnail(assigns) do
+  defp culture_thumbnail(assigns) do
     assigns =
-      assign(
-        assigns,
-        :image,
-        assigns.item.preview_metadata["poster_url"] || assigns.item.preview_metadata["image_url"]
-      )
+      assign(assigns, :image, thumbnail_url(assigns.item.preview_metadata))
 
     ~H"""
     <a
@@ -100,7 +101,10 @@ defmodule DevilsDictionaryWeb.Culture do
       id={"culture-source-#{@item.external_id}"}
       class="group flex min-w-0 flex-col gap-2 rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2"
     >
-      <div class="aspect-[2/3] w-full shrink-0 overflow-hidden rounded-sm bg-mist-950/5 dark:bg-white/5">
+      <div class={[
+        "w-full shrink-0 overflow-hidden rounded-sm bg-mist-950/5 dark:bg-white/5",
+        if(@type == :film, do: "aspect-[2/3]", else: "aspect-square")
+      ]}>
         <img
           :if={@image}
           src={@image}
@@ -114,14 +118,17 @@ defmodule DevilsDictionaryWeb.Culture do
           id={"culture-missing-poster-#{@item.external_id}"}
           class="flex size-full items-center justify-center text-mist-400"
         >
-          <.icon name="hero-film" class="size-5" />
+          <.icon name={if(@type == :film, do: "hero-film", else: "hero-photo")} class="size-5" />
         </div>
       </div>
       <div class="min-w-0 space-y-1">
         <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-950 group-hover:underline sm:text-sm dark:text-white">
           {@item.preview_metadata["title"]}
         </h3>
-        <p class="text-base tabular-nums text-mist-500 sm:text-sm">
+        <p
+          :if={@item.preview_metadata["year"]}
+          class="text-base tabular-nums text-mist-500 sm:text-sm"
+        >
           {@item.preview_metadata["year"] || "Year unknown"}
         </p>
       </div>
@@ -135,11 +142,11 @@ defmodule DevilsDictionaryWeb.Culture do
     ~H"""
     <details id={"culture-about-#{@state.provider}"}>
       <summary class="w-fit cursor-pointer text-base text-mist-500 hover:text-mist-700 sm:text-sm dark:text-mist-400">
-        Keyword matches for “{@state.term}” · About these results
+        Matches for “{@state.term}” · About these results
       </summary>
       <div class="space-y-2 pt-2 text-base text-mist-600 sm:text-sm dark:text-mist-300">
         <p class="text-pretty">
-          Source matches from {@state.provider_name}, using TMDb keywords. These are search results, not curated examples.
+          Search matches from {@state.provider_name}. These are provider results, not curated examples or dictionary interpretations.
         </p>
         <p :if={@state.relevance == "term_unverified"} class="text-pretty">
           Keyword relevance to this particular meaning is unverified.
@@ -165,7 +172,7 @@ defmodule DevilsDictionaryWeb.Culture do
       phx-value-provider={@state.provider}
       disabled={@state[:loading_more] == true}
       class="rounded-sm py-1 text-sm text-mist-600 underline underline-offset-4 hover:text-mist-950 disabled:opacity-50 dark:text-mist-300"
-    >{if @state[:loading_more], do: "Loading…", else: "Find more films"}</button>
+    >{if @state[:loading_more], do: "Loading…", else: "Load more"}</button>
     """
   end
 
@@ -196,4 +203,23 @@ defmodule DevilsDictionaryWeb.Culture do
 
   defp keyword_label([_one]), do: "the keyword"
   defp keyword_label(_many), do: "keywords"
+
+  defp content_type(%{content_types: [type | _]}) when type in [:film, :gif], do: type
+  defp content_type(_state), do: :film
+
+  defp content_heading(state) do
+    if content_type(state) == :gif, do: "GIFs", else: "Films"
+  end
+
+  defp content_label(state) do
+    if content_type(state) == :gif, do: "GIFs", else: "film"
+  end
+
+  defp provider_detail(%{provider: "cinegraph"}), do: " · keywords: TMDb"
+  defp provider_detail(_state), do: ""
+
+  defp thumbnail_url(metadata) do
+    metadata["poster_url"] || metadata["still_url"] || metadata["image_url"] ||
+      metadata["media_url"]
+  end
 end

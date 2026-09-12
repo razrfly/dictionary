@@ -134,7 +134,12 @@ defmodule DevilsDictionaryWeb.WordLive do
   defp prepare_discovery(socket, page, demo) do
     target = Discovery.target_for_page(page, socket.assigns.object_id, demo)
     old_target = socket.assigns.discovery_target
-    film_providers = Providers.server_providers(:film)
+
+    culture_providers =
+      Providers.server_providers()
+      |> Enum.filter(fn provider ->
+        Enum.any?(provider.capabilities().content_types, &(&1 in [:film, :gif]))
+      end)
 
     if (connected?(socket) and old_target) &&
          (!target || old_target.object_id != target.object_id) do
@@ -143,7 +148,7 @@ defmodule DevilsDictionaryWeb.WordLive do
 
     cultures =
       cond do
-        is_nil(target) or film_providers == [] ->
+        is_nil(target) or culture_providers == [] ->
           %{}
 
         connected?(socket) ->
@@ -151,7 +156,7 @@ defmodule DevilsDictionaryWeb.WordLive do
             :ok = Discovery.subscribe(target.object_id)
           end
 
-          film_providers
+          culture_providers
           |> Enum.map(fn provider ->
             {provider.slug(), Discovery.request(target, provider.slug())}
           end)
@@ -168,7 +173,7 @@ defmodule DevilsDictionaryWeb.WordLive do
           end)
 
         true ->
-          film_providers
+          culture_providers
           |> Enum.map(fn provider ->
             attrs = provider.source_attrs()
 
@@ -190,6 +195,7 @@ defmodule DevilsDictionaryWeb.WordLive do
     socket
     |> assign(:discovery_target, target)
     |> assign(:cultures, cultures)
+    |> assign(:giphy, DevilsDictionary.Discovery.Providers.Giphy.browser_config(target))
   end
 
   defp state_for_outcome(state, {:deferred, _reason}) when state.status == :idle,
@@ -208,7 +214,7 @@ defmodule DevilsDictionaryWeb.WordLive do
     current = Discovery.state(target_id, provider_slug)
 
     cond do
-      not Providers.supports?(provider_slug, :film) ->
+      not (Providers.supports?(provider_slug, :film) or Providers.supports?(provider_slug, :gif)) ->
         {:noreply, socket}
 
       current.mapping_id == mapping_id ->
@@ -376,6 +382,8 @@ defmodule DevilsDictionaryWeb.WordLive do
             :if={@cultures != %{}}
             states={@cultures}
           />
+
+          <DevilsDictionaryWeb.GiphyShelf.section :if={@giphy} config={@giphy} />
 
           <Word.related_block
             :for={related <- @page.related}

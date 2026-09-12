@@ -3,21 +3,21 @@ defmodule DevilsDictionary.Discovery.Budget do
 
   import Ecto.Query
 
-  alias DevilsDictionary.Discovery.{Mapping, RequestAttempt, Run}
+  alias DevilsDictionary.Discovery.{Mapping, Policy, RequestAttempt, Run}
   alias DevilsDictionary.Repo
   alias DevilsDictionary.Sources.Source
 
   @doc "Claims one outbound request for a run, or returns a conservative retry delay."
   def claim(run_id, stage) when is_binary(stage) do
-    limit = config(:request_budget_per_minute)
     now = DateTime.utc_now()
-    cutoff = DateTime.add(now, -60, :second)
 
     Repo.transaction(fn ->
       run = Repo.get!(Run, run_id)
       mapping = Repo.get!(Mapping, run.mapping_id)
       _ = Repo.query!("SELECT pg_advisory_xact_lock($1)", [mapping.source_id])
       source = Repo.get!(Source, mapping.source_id)
+      policy = Policy.for!(source.slug)
+      cutoff = DateTime.add(now, -policy.request_budget_window_seconds, :second)
       attempts = get_in(run.request_parameters, ["transport_attempts", stage]) || 0
       max_attempts = config(:max_retries) + 1
 
@@ -37,8 +37,15 @@ defmodule DevilsDictionary.Discovery.Budget do
         attempts >= max_attempts ->
           Repo.rollback(:attempts_exhausted)
 
-        used >= limit ->
-          Repo.rollback({:budget_exhausted, 60})
+        used >= policy.request_budget_limit ->
+          retry_at = oldest_attempt_at(mapping.source_id, cutoff)
+
+          seconds =
+            retry_at
+            |> DateTime.add(policy.request_budget_window_seconds, :second)
+            |> seconds_until(now)
+
+          Repo.rollback({:budget_exhausted, seconds})
 
         true ->
           %RequestAttempt{}
@@ -106,7 +113,18 @@ defmodule DevilsDictionary.Discovery.Budget do
     end)
   end
 
-  defp seconds_until(future, now), do: max(DateTime.diff(future, now, :second), 1)
+  defp seconds_until(future, now) do
+    milliseconds = DateTime.diff(future, now, :millisecond)
+    max(div(milliseconds + 999, 1_000), 1)
+  end
+
+  defp oldest_attempt_at(source_id, cutoff) do
+    Repo.one!(
+      from attempt in RequestAttempt,
+        where: attempt.source_id == ^source_id and attempt.attempted_at > ^cutoff,
+        select: min(attempt.attempted_at)
+    )
+  end
 
   defp config(key),
     do: Application.fetch_env!(:devils_dictionary, :discovery) |> Keyword.fetch!(key)

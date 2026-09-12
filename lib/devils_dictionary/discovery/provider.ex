@@ -3,9 +3,13 @@ defmodule DevilsDictionary.Discovery.Provider do
   The deliberately small contract shared by cultural discovery providers.
 
   Providers may differ in transport, operations, persistence, pagination and
-  attribution. The shared boundary is identity, factual match provenance and a
-  normalized card; it is not a promise that every provider supports the same
-  search operation.
+  attribution. The shared boundary is identity and capability declaration; it
+  is not a promise that every provider supports the same search operation.
+
+  Server callback implementations are optional so a provider can remain in the
+  source catalog while legal or transport prerequisites are unresolved. Callers
+  must select providers by their declared capabilities before invoking a
+  transport-specific callback.
   """
 
   @type request_fun ::
@@ -24,4 +28,9 @@ defmodule DevilsDictionary.Discovery.Provider do
               {:ok, map()}
               | {:error, String.t()}
               | {:deferred, String.t(), pos_integer(), map()}
+
+  @optional_callbacks automatic_mapping: 1,
+                      request_options: 1,
+                      validate_mapping: 2,
+                      retrieve: 4
 end
