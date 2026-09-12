@@ -124,6 +124,36 @@ defmodule DevilsDictionaryWeb.FilmIdentityFlowTest do
 
   defp mountain_sense_gloss, do: "a very high natural elevation"
 
+  test "all connected meanings are reachable through pagination", ctx do
+    {:ok, film} = Registry.create_work(%{preferred_label: "Pagination film", work_kind: "film"})
+
+    for n <- 1..26 do
+      word = word!(ctx, "paging-#{n}", ~w(wordnet))
+      sense = sense!(ctx, word, "wordnet", gloss: "meaning #{n}")
+      illustrates!(film.object_id, sense, "Supported connection #{n}")
+    end
+
+    {:ok, view, _} = live(ctx.conn, "/entities/#{film.object_id}/pagination-film")
+    first = DevilsDictionary.Encyclopedia.EntityPage.build(film.object_id)
+    assert length(first.meaning_connections) == 24
+    assert first.pagination.meaning_connections.count == 26
+    assert has_element?(view, "#more-meaning-connections")
+    view |> element("#more-meaning-connections") |> render_click()
+    refute has_element?(view, "#more-meaning-connections")
+
+    second =
+      DevilsDictionary.Encyclopedia.EntityPage.build(film.object_id,
+        meaning_connections_after: first.pagination.meaning_connections.next
+      )
+
+    assert length(second.meaning_connections) == 2
+
+    assert MapSet.disjoint?(
+             MapSet.new(first.meaning_connections, & &1.assertion_id),
+             MapSet.new(second.meaning_connections, & &1.assertion_id)
+           )
+  end
+
   defp illustrates!(film_id, sense, rationale) do
     {:ok, assertion} =
       Claims.assert(film_id, "illustrates", sense.object_id, %{

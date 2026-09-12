@@ -84,7 +84,7 @@ defmodule DevilsDictionary.Encyclopedia do
       label: entity.preferred_label,
       description: entity.description,
       kind: entity.entity_kind,
-      image_url: entity.metadata["image_url"],
+      image_url: DevilsDictionary.SourceIdentity.Display.image_url(entity),
       image_attribution: entity.metadata["image_attribution"],
       wikipedia_title: entity.metadata["wikipedia_title"],
       taxon: entity.metadata["taxon"]

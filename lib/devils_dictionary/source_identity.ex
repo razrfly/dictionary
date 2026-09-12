@@ -208,7 +208,7 @@ defmodule DevilsDictionary.SourceIdentity do
     Registry.create_work(%{
       preferred_label: entry.label,
       description: entry.description,
-      metadata: entry.metadata,
+      metadata: evidence_metadata(entry.metadata, entry),
       work_kind: entry.work_kind,
       original_language: entry.original_language,
       first_published_year: entry.year
@@ -253,7 +253,7 @@ defmodule DevilsDictionary.SourceIdentity do
         entity_kind: target_kind,
         preferred_label: preferred_label,
         description: first_present(entity.description, entry.description),
-        metadata: fill_missing(entity.metadata, entry.metadata)
+        metadata: evidence_metadata(fill_missing(entity.metadata, entry.metadata), entry)
       })
       |> Repo.update!()
 
@@ -419,6 +419,23 @@ defmodule DevilsDictionary.SourceIdentity do
 
   defp created(entry, object_id) do
     %Resolution{state: :newly_created, object_id: object_id, identifiers: entry.identifiers}
+  end
+
+  defp evidence_metadata(metadata, entry) do
+    if entry.source_record_id do
+      evidence = metadata["source_identity_evidence"] || %{}
+
+      evidence =
+        Enum.reduce(["image_url"], evidence, fn field, acc ->
+          if present?(entry.metadata[field]) and metadata[field] == entry.metadata[field],
+            do: Map.put(acc, field, entry.source_record_id),
+            else: acc
+        end)
+
+      Map.put(metadata, "source_identity_evidence", evidence)
+    else
+      metadata
+    end
   end
 
   defp fill_missing(held, offered) do

@@ -51,6 +51,58 @@ defmodule DevilsDictionary.SourceIdentity.Backfill do
     Map.put(summary, :next_after, if(length(results) == limit, do: List.last(results).id))
   end
 
+  @doc "Refreshes legacy Wikidata film records through bounded, deduplicated Oban jobs."
+  def wikidata(opts \\ []) do
+    limit = opts |> Keyword.get(:limit, @default_limit) |> bounded_limit!()
+
+    records =
+      DevilsDictionary.Sources.SourceRecord
+      |> join(:inner, [record], source in assoc(record, :source))
+      |> where(
+        [record, source],
+        source.slug == "wikidata" and source.active and record.display_allowed
+      )
+      |> after_result(Keyword.get(opts, :after_id))
+      |> order_by([record], asc: record.id)
+      |> limit(^limit)
+      |> Repo.all()
+
+    summary =
+      Enum.reduce(records, %{scanned: 0, queued: 0, current: 0, skipped: 0}, fn record, acc ->
+        raw = Sources.raw(record) || %{}
+        adapter = DevilsDictionary.Absorb.Sources.Wikidata
+        {:ok, materialized} = adapter.materialize(%{record | raw: raw})
+        concept = materialized |> Map.get(:concepts, []) |> List.first() || %{}
+
+        state =
+          if concept[:work_kind] == "film" do
+            if raw["_film_identity_version"] == 1 do
+              # Replay even an already-materialized record to register its crosswalks.
+              {:ok, _} = DevilsDictionary.Absorb.Materializer.run(%{record | raw: raw}, adapter)
+              :current
+            else
+              %{"source" => "wikidata", "target" => record.external_id}
+              |> DevilsDictionary.Workers.EnrichWorker.new(
+                unique: [
+                  period: :infinity,
+                  fields: [:worker, :args],
+                  states: [:available, :scheduled, :executing, :retryable]
+                ]
+              )
+              |> Oban.insert!()
+
+              :queued
+            end
+          else
+            :skipped
+          end
+
+        acc |> Map.update!(:scanned, &(&1 + 1)) |> Map.update!(state, &(&1 + 1))
+      end)
+
+    Map.put(summary, :next_after, if(length(records) == limit, do: List.last(records).id))
+  end
+
   defp reconcile_result(result) do
     source = result.run.mapping.source
     record = ensure_record(result, source)

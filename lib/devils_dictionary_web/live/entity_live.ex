@@ -203,6 +203,20 @@ defmodule DevilsDictionaryWeb.EntityLive do
                 </div>
               </li>
             </ul>
+            <.pager
+              :if={@page.pagination.meaning_connections.next}
+              id="more-meaning-connections"
+              label="More connected meanings"
+              path={
+                next_path(
+                  @id,
+                  @entity_slug,
+                  @cursors,
+                  :meaning_connections,
+                  @page.pagination.meaning_connections.next
+                )
+              }
+            />
           </.panel>
 
           <.panel
@@ -510,7 +524,7 @@ defmodule DevilsDictionaryWeb.EntityLive do
     """
   end
 
-  @cursor_keys ~w(biography works definitions editions contents connections_in connections_out)a
+  @cursor_keys ~w(biography works definitions editions contents connections_in connections_out meaning_connections)a
 
   defp cursor_params(params) do
     Map.new(@cursor_keys, fn key ->

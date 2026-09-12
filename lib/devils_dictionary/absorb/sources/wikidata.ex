@@ -84,6 +84,7 @@ defmodule DevilsDictionary.Absorb.Sources.Wikidata do
   @impl true
   def trim(raw) do
     %{
+      "_film_identity_version" => 1,
       "id" => raw["id"],
       "labels" => take_lang(raw["labels"]),
       "descriptions" => take_lang(raw["descriptions"]),
@@ -488,7 +489,7 @@ defmodule DevilsDictionary.Absorb.Sources.Wikidata do
       external_id: qid,
       url: entity_url(qid),
       raw: trim(entity),
-      content_hash: SourceRecord.content_hash(entity)
+      content_hash: SourceRecord.content_hash(%{"entity" => entity, "projection_version" => 1})
     }
   end
 

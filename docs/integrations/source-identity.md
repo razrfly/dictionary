@@ -62,3 +62,30 @@ The report separates matched, newly created, insufficient-evidence and
 conflicting-identifier outcomes. Use the printed checkpoint for the next batch.
 Rerunning a batch is safe because the same exact-identifier resolver handles
 both live ingestion and backfill.
+
+## Upgrade existing Wikidata entries first
+
+Run `mix dd.films.backfill --wikidata --limit 100` and continue with the printed
+`--after` checkpoint. This scans a bounded batch of allowed Wikidata source records.
+Legacy film records queue deduplicated jobs through the existing enrichment worker;
+these jobs fetch the fields older projections discarded, then materialize them onto
+the existing Wikidata identity. Current projections are replayed locally. Counts
+separate queued, current and skipped records; queued does not mean completed.
+
+Wait for enrichment jobs to succeed, inspect failures/conflicts, then run the
+CineGraph backfill above. Rerunning the Wikidata phase is safe. Completed refreshes
+carry a projection-version marker so a successful negative crosswalk does not cause
+endless refreshes. Requests use the existing Wikimedia timeout, retry and rate-limit
+handling. The version participates in the source revision hash so an unchanged
+upstream payload can still upgrade an older local projection without overwriting its
+historical revision. Source records not classified as films are skipped; this is a
+film migration, not a full Wikidata crawl or automatic title search.
+
+If separate objects already exist, contradictory IDs enter reconciliation rather
+than being silently merged. Missing crosswalks remain valid source-backed local films.
+
+Film image projections record their source-record evidence. Public display checks
+source activation, record visibility and output retirement. Legacy posters without
+that marker must be supported by an allowed record with the exact same URL. Withdrawn
+posters disappear without deleting the film or its connections. Connected meanings
+use the existing cursor pagination so all public relationships remain reachable.

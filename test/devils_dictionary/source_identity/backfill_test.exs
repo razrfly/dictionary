@@ -73,6 +73,45 @@ defmodule DevilsDictionary.SourceIdentity.BackfillTest do
     end
   end
 
+  test "legacy Wikidata films queue a deduplicated refresh and current records replay", ctx do
+    alias DevilsDictionary.Absorb.Sources.Wikidata
+    alias DevilsDictionary.Sources
+    alias DevilsDictionary.Registry
+    raw = DevilsDictionary.Fixtures.raw("wikidata", "films") |> Enum.find(&(&1["id"] == "Q44578"))
+
+    legacy =
+      raw
+      |> Wikidata.trim()
+      |> Map.delete("_film_identity_version")
+      |> update_in(["claims"], &Map.drop(&1, ["P345", "P4947"]))
+
+    {:ok, record} =
+      Sources.upsert_record(ctx.sources["wikidata"], %{external_id: "Q44578", raw: legacy})
+
+    {:ok, entity} = Registry.create_entity(%{entity_kind: :concept, preferred_label: "Titanic"})
+    {:ok, _} = Registry.add_external_id(entity.object_id, "wikidata", "Q44578")
+    assert %{queued: 1} = Backfill.wikidata(limit: 100)
+    assert %{queued: 1} = Backfill.wikidata(limit: 100)
+    assert length(all_enqueued(worker: DevilsDictionary.Workers.EnrichWorker)) == 1
+
+    Req.Test.stub(DevilsDictionary.Absorb.Clients, fn conn ->
+      conn
+      |> Plug.Conn.put_resp_content_type("application/json")
+      |> Plug.Conn.send_resp(200, Jason.encode!(%{"entities" => %{"Q44578" => raw}}))
+    end)
+
+    assert :ok =
+             perform_job(
+               DevilsDictionary.Workers.EnrichWorker,
+               %{"source" => "wikidata", "target" => record.external_id}
+             )
+
+    assert %{current: 1, queued: 0} = Backfill.wikidata(limit: 100)
+    assert Registry.by_external_id("tmdb_movie", "597") == entity.object_id
+    assert Registry.by_external_id("imdb_title", "tt0120338") == entity.object_id
+    assert %{current: 1} = Backfill.wikidata(limit: 100)
+  end
+
   defp target(word) do
     %{object_id: word.object_id, term: word.lemma, language: word.language_tag, relevance: "term"}
   end

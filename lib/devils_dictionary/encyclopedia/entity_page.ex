@@ -120,7 +120,10 @@ defmodule DevilsDictionary.Encyclopedia.EntityPage do
       incoming_page(id, "edition_of", "entity", opts[:editions_after])
 
     {contents, contents_page} = contents_of(entity, id, opts[:contents_after])
-    {meaning_connections, meaning_connections_count} = meaning_connections(id)
+
+    {meaning_connections, meaning_connections_page} =
+      meaning_connections(id, opts[:meaning_connections_after])
+
     discovery_appearances = discovery_appearances(id)
 
     {connections_in, connections_in_page} =
@@ -153,7 +156,7 @@ defmodule DevilsDictionary.Encyclopedia.EntityPage do
         definitions: definitions_page,
         editions: editions_page,
         contents: contents_page,
-        meaning_connections: %{count: meaning_connections_count, next: nil},
+        meaning_connections: meaning_connections_page,
         connections_in: connections_in_page,
         connections_out: connections_out_page
       }
@@ -220,8 +223,15 @@ defmodule DevilsDictionary.Encyclopedia.EntityPage do
     {connection_rows, page}
   end
 
-  defp meaning_connections(object_id) do
-    rows = Claims.outgoing(object_id, predicate: "illustrates", limit: @section_cap)
+  defp meaning_connections(object_id, after_cursor) do
+    all_rows =
+      Claims.outgoing(object_id,
+        predicate: "illustrates",
+        after: after_cursor,
+        limit: @section_cap + 1
+      )
+
+    rows = Enum.take(all_rows, @section_cap)
     endpoints = Connection.endpoint_summaries(Enum.map(rows, & &1.object_object_id))
     review_states = Claims.display_review_states(Enum.map(rows, & &1.id))
 
@@ -233,7 +243,11 @@ defmodule DevilsDictionary.Encyclopedia.EntityPage do
         |> Map.put(:review_state, Map.fetch!(review_states, row.id))
       end)
 
-    {views, Claims.count_outgoing(object_id, predicate: "illustrates")}
+    {views,
+     %{
+       count: Claims.count_outgoing(object_id, predicate: "illustrates"),
+       next: if(length(all_rows) > @section_cap, do: Claims.next_cursor(rows))
+     }}
   end
 
   defp discovery_appearances(object_id) do
