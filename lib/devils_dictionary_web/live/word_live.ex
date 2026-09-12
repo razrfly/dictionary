@@ -35,9 +35,10 @@ defmodule DevilsDictionaryWeb.WordLive do
   alias DevilsDictionary.Demo, as: Samples
   alias DevilsDictionary.Discovery
   alias DevilsDictionary.Discovery.Providers
+  alias DevilsDictionary.Artworks
   alias DevilsDictionary.Lexicon
   alias DevilsDictionary.Lexicon.WordPage
-  alias DevilsDictionaryWeb.{Culture, Demo, Provenance, Thing, Word}
+  alias DevilsDictionaryWeb.{Artwork, Culture, Demo, Provenance, Thing, Word}
 
   @trail_cap 12
   @suggestions 5
@@ -53,6 +54,7 @@ defmodule DevilsDictionaryWeb.WordLive do
        evidence: [],
        object_id: nil,
        choices: [],
+       artwork_candidates: [],
        discovery_target: nil,
        cultures: %{}
      )}
@@ -126,6 +128,7 @@ defmodule DevilsDictionaryWeb.WordLive do
       |> assign(:page_title, title(page, slug))
       |> assign(:card_sources, card_sources)
       |> assign(:suggestions, suggestions(page, slug))
+      |> assign(:artwork_candidates, artwork_candidates(page))
       |> assign(:choices, choices(slug, socket.assigns.object_id))
 
     prepare_discovery(socket, page, demo)
@@ -326,6 +329,10 @@ defmodule DevilsDictionaryWeb.WordLive do
 
   defp suggestions(_page, _slug), do: []
 
+  defp artwork_candidates(%{headword: %{lexemes: lexemes}}) do
+    Artworks.suggestions(Enum.map(lexemes, & &1.id))
+  end
+
   # The trail is user input arriving in a URL, so it is parsed rather than
   # trusted: slugs only, deduplicated, and the most recent twelve. #71 §10
   # keeps it here instead of in socket state so a walk survives a reload and
@@ -382,6 +389,32 @@ defmodule DevilsDictionaryWeb.WordLive do
           </div>
 
           <Word.bare_row :if={@page.cards == []} lemma={@page.headword.lemma} />
+
+          <section
+            :if={@artwork_candidates != []}
+            id="artwork-candidates"
+            class="mt-8 border-y border-mist-950/10 py-6 dark:border-white/10"
+          >
+            <div class="flex flex-wrap items-baseline justify-between gap-3">
+              <div>
+                <.eyebrow>artwork candidates</.eyebrow>
+                <.subheading class="mt-1">Works to consider for an exact meaning</.subheading>
+              </div>
+              <.a navigate={~p"/artworks"}>Browse saved artworks</.a>
+            </div>
+            <p class="mt-2 max-w-2xl text-sm/6 text-mist-500">
+              Direct source tags produced these candidates. They are not accepted interpretations;
+              a contributor must connect an exact sense and reviewers decide the claim.
+            </p>
+            <div class="mt-3">
+              <Artwork.card
+                :for={candidate <- @artwork_candidates}
+                id={"artwork-candidate-#{candidate.artwork.object_id}-#{candidate.sense_id}"}
+                artwork={candidate.artwork}
+                candidate={candidate}
+              />
+            </div>
+          </section>
 
           <Culture.section
             :if={@cultures != %{}}

@@ -46,7 +46,7 @@ defmodule DevilsDictionary.Absorb.Sources.Wikidata do
 
   # The fifteen properties the pipeline reads. Everything else is dropped before
   # storage; a 130 KB entity becomes a couple of KB.
-  @keep_properties ~w(P18 P31 P279 P171 P105 P225 P1843 P5063 P8814 P13176 P1420 P910 P373 P846 P685 P345 P4947 P577)
+  @keep_properties ~w(P18 P31 P279 P171 P105 P225 P1843 P5063 P8814 P13176 P1420 P910 P373 P846 P685 P345 P4947 P577 P170 P2042 P11005)
 
   # Parent properties walked to closure. **Only these two**: P171 is the
   # taxonomy proper and terminates at Animalia, and P13176 is the one hop from
@@ -587,6 +587,21 @@ defmodule DevilsDictionary.Absorb.Sources.Wikidata do
     })
   end
 
+  def identity_record(%{kind: :person} = row) do
+    Entry.new(%{
+      source_slug: slug(),
+      object_kind: :entity,
+      entity_kind: :person,
+      stable_identifier: %{namespace: "wikidata", external_id: row.qid},
+      identifiers: row.external_identifiers,
+      label: row.label,
+      description: row.description,
+      metadata: row.metadata,
+      eligibility: :eligible,
+      retention: :durable
+    })
+  end
+
   def identity_record(_row), do: :ignore
 
   # English first, then the multilingual label a taxon carries instead, then the
@@ -621,6 +636,7 @@ defmodule DevilsDictionary.Absorb.Sources.Wikidata do
     |> put_if("gbif", Client.string(raw, "P846"))
     |> put_if("ncbi", Client.string(raw, "P685"))
     |> put_if("aliases", alias_values(raw))
+    |> put_if("wikidata_creators", nonempty(Client.entity_ids(raw, "P170")))
   end
 
   defp alias_values(raw) do
@@ -679,7 +695,9 @@ defmodule DevilsDictionary.Absorb.Sources.Wikidata do
       }
     ] ++
       external_identifier_values(raw, "P4947", "tmdb_movie", &valid_tmdb_movie_id?/1) ++
-      external_identifier_values(raw, "P345", "imdb_title", &valid_imdb_title_id?/1)
+      external_identifier_values(raw, "P345", "imdb_title", &valid_imdb_title_id?/1) ++
+      external_identifier_values(raw, "P11005", "artsy_artwork_slug", &valid_artsy_slug?/1) ++
+      external_identifier_values(raw, "P2042", "artsy_artist_slug", &valid_artsy_slug?/1)
   end
 
   defp external_identifier_values(raw, property, namespace, valid?) do
@@ -708,6 +726,11 @@ defmodule DevilsDictionary.Absorb.Sources.Wikidata do
     do: Regex.match?(~r/\Att\d{7,10}\z/, value)
 
   defp valid_imdb_title_id?(_value), do: false
+
+  defp valid_artsy_slug?(value) when is_binary(value),
+    do: Regex.match?(~r/\A[a-z0-9][a-z0-9-]{1,254}\z/, value)
+
+  defp valid_artsy_slug?(_value), do: false
 
   defp publication_year(raw) do
     raw

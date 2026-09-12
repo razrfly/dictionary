@@ -132,6 +132,11 @@ config :devils_dictionary, :giphy,
   rating: "g",
   enabled: true
 
+config :devils_dictionary, :artsy,
+  endpoint: "https://api.artsy.net",
+  rate_limit_ms: 340,
+  enabled: true
+
 # Oban (#69 §5). `absorb: 1` because a dump absorb is a single long stream.
 # `enrich` is **1**, not the spec's 3: `EnrichWorker` paces with a per-process
 # `Process.sleep(rate_limit_ms)`, so three concurrent jobs would triple the rate

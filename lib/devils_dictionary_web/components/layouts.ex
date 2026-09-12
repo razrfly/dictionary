@@ -52,6 +52,9 @@ defmodule DevilsDictionaryWeb.Layouts do
 
     <.footer>
       <:links>
+        <.footer_category title="Browse">
+          <.footer_link navigate={~p"/artworks"}>Artworks</.footer_link>
+        </.footer_category>
         <.footer_category title="Sources">
           <.footer_link :for={source <- sources()} navigate={~p"/sources/#{source.slug}"}>
             {source.name}

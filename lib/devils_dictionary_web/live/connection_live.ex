@@ -166,8 +166,24 @@ defmodule DevilsDictionaryWeb.ConnectionLive do
     end
   end
 
-  def handle_params(_params, _uri, socket) do
-    {:noreply, assign(socket, page_title: "propose a connection")}
+  def handle_params(params, _uri, socket) do
+    subject = preselected_subject(params["subject"])
+
+    {:noreply,
+     assign(socket,
+       page_title: "propose a connection",
+       subject: subject,
+       predicates: predicates_for(subject)
+     )}
+  end
+
+  defp preselected_subject(nil), do: nil
+
+  defp preselected_subject(value) do
+    case Integer.parse(value) do
+      {id, ""} when id > 0 -> Connection.endpoint(id)
+      _ -> nil
+    end
   end
 
   defp revision_number(nil), do: {:ok, nil}

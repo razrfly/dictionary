@@ -1,0 +1,96 @@
+{
+  "version": 1,
+  "policy": "Exact sense and language mappings only. Artsy genes are attributed source vocabulary; these rows create candidates, never accepted illustrates claims.",
+  "mappings": [
+    {
+      "version": 1,
+      "lemma": "war",
+      "language": "en",
+      "gloss_contains": ["armed conflict", "warfare", "hostilities"],
+      "gene_name": "Conflict",
+      "match_type": "related",
+      "note": "A direct Conflict assignment is related evidence, not proof that the work illustrates this exact sense."
+    },
+    {
+      "version": 1,
+      "lemma": "family",
+      "language": "en",
+      "gloss_contains": ["related", "parents", "children", "household"],
+      "gene_name": "Family",
+      "match_type": "exact",
+      "note": "The exact sense still requires review of the depicted relationship."
+    },
+    {
+      "version": 1,
+      "lemma": "love",
+      "language": "en",
+      "gloss_contains": ["affection", "romantic", "attachment"],
+      "gene_name": "Love",
+      "match_type": "exact",
+      "note": "Provider vocabulary is candidate evidence only."
+    },
+    {
+      "version": 1,
+      "lemma": "grief",
+      "language": "en",
+      "gloss_contains": ["sorrow", "loss", "sadness"],
+      "gene_name": "Grief",
+      "match_type": "exact",
+      "note": "Provider vocabulary is candidate evidence only."
+    },
+    {
+      "version": 1,
+      "lemma": "solitude",
+      "language": "en",
+      "gloss_contains": ["alone", "seclusion", "solitary"],
+      "gene_name": "Solitude",
+      "match_type": "exact",
+      "note": "A title match alone never satisfies this mapping."
+    },
+    {
+      "version": 1,
+      "lemma": "justice",
+      "language": "en",
+      "gloss_contains": ["fair", "law", "right"],
+      "gene_name": "Justice",
+      "match_type": "exact",
+      "note": "The allegorical or political sense must be reviewed."
+    },
+    {
+      "version": 1,
+      "lemma": "power",
+      "language": "en",
+      "gloss_contains": ["control", "authority", "influence"],
+      "gene_name": "Power",
+      "match_type": "exact",
+      "note": "Wrong-sense physical-power matches must be dismissed."
+    },
+    {
+      "version": 1,
+      "lemma": "nepotism",
+      "language": "en",
+      "gloss_contains": ["relative", "family", "favoritism", "favouritism"],
+      "gene_name": "Family",
+      "match_type": "broader",
+      "note": "Family is exploratory context, not evidence of favoritism or nepotism."
+    },
+    {
+      "version": 1,
+      "lemma": "death",
+      "language": "en",
+      "gloss_contains": ["end of life", "dying", "ceasing to live"],
+      "gene_name": "Death",
+      "match_type": "exact",
+      "note": "A direct Death assignment proposes a candidate; the depicted event and exact lexical sense still require review."
+    },
+    {
+      "version": 1,
+      "lemma": "freedom",
+      "language": "en",
+      "gloss_contains": ["liberty", "free", "restraint"],
+      "gene_name": "Freedom",
+      "match_type": "exact",
+      "note": "Political, physical, and allegorical freedom must not be conflated during review."
+    }
+  ]
+}
