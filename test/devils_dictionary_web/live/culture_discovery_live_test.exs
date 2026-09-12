@@ -51,6 +51,8 @@ defmodule DevilsDictionaryWeb.CultureDiscoveryLiveTest do
 
     assert has_element?(live, "#culture-results")
     assert has_element?(live, "#culture-result-tmdb_movie-301")
+    assert has_element?(live, "#culture-entry-image-301[href^='/entities/']")
+    assert has_element?(live, "#culture-entry-title-301[href^='/entities/']")
     assert has_element?(live, "#culture-source-301[href^='https://cinegraph.org/']")
     assert has_element?(live, "#culture-about-cinegraph")
     refute has_element?(live, "#culture-failed")

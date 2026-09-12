@@ -346,6 +346,7 @@ defmodule DevilsDictionary.Claims.Connection do
           {s.object_id,
            %{
              label: l.lemma,
+             detail: r.gloss,
              path: fragment("'/words/' || ? || '/' || ?", l.object_id, l.slug)
            }}
     )

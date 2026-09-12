@@ -1,0 +1,20 @@
+{
+  "records": [
+    {
+      "tmdbId": 597,
+      "imdbId": "tt0120338",
+      "title": "Titanic",
+      "releaseDate": "1997-11-18",
+      "posterPath": "/titanic.jpg",
+      "cinegraphUrl": "https://cinegraph.org/movies/597"
+    },
+    {
+      "tmdbId": 253412,
+      "imdbId": "tt2719848",
+      "title": "Everest",
+      "releaseDate": "2015-09-10",
+      "posterPath": "/everest.jpg",
+      "cinegraphUrl": "https://cinegraph.org/movies/253412"
+    }
+  ]
+}

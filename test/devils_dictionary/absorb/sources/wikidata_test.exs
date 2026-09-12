@@ -9,6 +9,7 @@ defmodule DevilsDictionary.Absorb.Sources.WikidataTest do
   defp records(lemma), do: Fixtures.raw("wikidata", lemma)
   defp all_records, do: Enum.flat_map(@lemmas, &records/1)
   defp general_records, do: Fixtures.raw("wikidata", "general_entities")
+  defp film_records, do: Fixtures.raw("wikidata", "films")
 
   defp entity(lemma, qid), do: Enum.find(records(lemma), &(&1["id"] == qid))
 
@@ -79,6 +80,46 @@ defmodule DevilsDictionary.Absorb.Sources.WikidataTest do
   end
 
   describe "materialize/1" do
+    test "film records expose exact cross-provider identifiers and release year" do
+      titanic = film_records() |> Enum.find(&(&1["id"] == "Q44578")) |> out()
+      assert [concept] = titanic.concepts
+
+      assert concept.kind == :work
+      assert concept.work_kind == "film"
+      assert concept.first_published_year == 1997
+
+      assert MapSet.new(concept.external_identifiers, &{&1.namespace, &1.external_id}) ==
+               MapSet.new([
+                 {"wikidata", "Q44578"},
+                 {"tmdb_movie", "597"},
+                 {"imdb_title", "tt0120338"}
+               ])
+    end
+
+    test "film crosswalks honor preferred and deprecated Wikidata ranks" do
+      raw = Enum.find(film_records(), &(&1["id"] == "Q44578"))
+
+      ranked =
+        put_in(raw, ["claims", "P345"], [
+          string_statement("tt0000001", "normal"),
+          string_statement("tt0120338", "preferred"),
+          string_statement("tt9999999", "deprecated")
+        ])
+
+      assert [concept] = out(ranked).concepts
+
+      assert Enum.filter(concept.external_identifiers, &(&1.namespace == "imdb_title")) == [
+               %{
+                 namespace: "imdb_title",
+                 external_id: "tt0120338",
+                 metadata: %{
+                   "statement_policy" => "preferred_else_normal",
+                   "wikidata_property" => "P345"
+                 }
+               }
+             ]
+    end
+
     test "projects representative people, works, organizations, places and events" do
       expected = %{
         "Q191050" => :person,
@@ -212,5 +253,16 @@ defmodule DevilsDictionary.Absorb.Sources.WikidataTest do
       assert Wikidata.slug() == "wikidata"
       assert Wikidata.rate_limit_ms() >= 200
     end
+  end
+
+  defp string_statement(value, rank) do
+    %{
+      "rank" => rank,
+      "type" => "statement",
+      "mainsnak" => %{
+        "snaktype" => "value",
+        "datavalue" => %{"type" => "string", "value" => value}
+      }
+    }
   end
 end

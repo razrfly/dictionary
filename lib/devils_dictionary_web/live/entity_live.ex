@@ -26,7 +26,7 @@ defmodule DevilsDictionaryWeb.EntityLive do
 
   @impl true
   def mount(_params, _session, socket),
-    do: {:ok, assign(socket, page: nil, id: nil, cursors: %{}, entity_slug: nil)}
+    do: {:ok, assign(socket, page: nil, id: nil, cursors: %{}, entity_slug: nil, back_path: nil)}
 
   @impl true
   def handle_params(%{"id" => id, "slug" => slug} = params, _uri, socket) do
@@ -38,6 +38,7 @@ defmodule DevilsDictionaryWeb.EntityLive do
 
   defp load(socket, object_id, slug, params) do
     cursors = cursor_params(params)
+    back_path = safe_back_path(params["from"])
 
     case EntityPage.build(object_id, page_opts(cursors)) do
       nil ->
@@ -53,11 +54,14 @@ defmodule DevilsDictionaryWeb.EntityLive do
            |> assign(:id, object_id)
            |> assign(:cursors, cursors)
            |> assign(:entity_slug, canonical)
+           |> assign(:back_path, back_path)
            |> assign(:page_title, page.entity.label)}
         else
           # The slug is cosmetic, so a wrong one is not an error — it is a
           # redirect to the readable form of the identity that was asked for.
-          {:noreply, push_navigate(socket, to: ~p"/entities/#{object_id}/#{canonical}")}
+          query = if back_path, do: %{from: back_path}, else: %{}
+
+          {:noreply, push_navigate(socket, to: ~p"/entities/#{object_id}/#{canonical}?#{query}")}
         end
     end
   end
@@ -84,6 +88,15 @@ defmodule DevilsDictionaryWeb.EntityLive do
             <.a navigate={~p"/"} class="mt-6">Start somewhere else</.a>
           </div>
         <% else %>
+          <.a
+            :if={@back_path}
+            id="entity-back-link"
+            navigate={@back_path}
+            class="mb-7 inline-flex items-center gap-2 text-sm text-mist-500 transition-colors hover:text-mist-950 dark:hover:text-white"
+          >
+            <.icon name="hero-arrow-left" class="size-4 stroke-current" /> Back to definition
+          </.a>
+
           <section
             :if={@page.identity.state == :merged}
             id="entity-merged-notice"
@@ -120,29 +133,105 @@ defmodule DevilsDictionaryWeb.EntityLive do
             </ul>
           </section>
 
-          <header id="entity-header">
-            <.eyebrow>{@page.entity.kind}</.eyebrow>
-            <.heading>{@page.entity.label}</.heading>
-            <.text :if={@page.entity.description} class="mt-2">
-              {@page.entity.description}
-            </.text>
-            <p
-              :if={@page.details != %{} and @page.details != nil}
-              class="mt-2 text-sm/7 text-mist-500"
+          <header
+            id="entity-header"
+            class="grid items-start gap-6 sm:grid-cols-[8rem_minmax(0,1fr)] sm:gap-8"
+          >
+            <div
+              :if={@page.entity.image_url || @page.details[:work_kind] == "film"}
+              id="entity-artwork"
+              class="aspect-[2/3] w-28 overflow-hidden rounded-sm bg-mist-950/5 sm:w-32 dark:bg-white/5"
             >
-              {detail_line(@page.details)}
-            </p>
-            <p :if={@page.entity.qid} class="mt-2 text-sm/7">
-              <.a href={"https://www.wikidata.org/wiki/#{@page.entity.qid}"}>
-                {@page.entity.qid} ↗
-              </.a>
-            </p>
+              <img
+                :if={@page.entity.image_url}
+                src={@page.entity.image_url}
+                alt={"Poster for #{@page.entity.label}"}
+                referrerpolicy="no-referrer"
+                class="size-full object-cover"
+              />
+              <div
+                :if={!@page.entity.image_url}
+                id="entity-artwork-fallback"
+                class="flex size-full items-center justify-center text-mist-400"
+              >
+                <.icon name="hero-film" class="size-7 stroke-current" />
+              </div>
+            </div>
+            <div class="min-w-0">
+              <.eyebrow>{@page.entity.kind}</.eyebrow>
+              <.heading>{@page.entity.label}</.heading>
+              <p
+                :if={@page.details != %{} and @page.details != nil}
+                class="mt-2 text-sm/7 text-mist-500"
+              >
+                {detail_line(@page.details)}
+              </p>
+              <.text :if={@page.entity.description} class="mt-3 max-w-2xl">
+                {@page.entity.description}
+              </.text>
+            </div>
           </header>
+
+          <.panel
+            :if={@page.meaning_connections != []}
+            id="entity-meaning-connections"
+            label="connected meanings"
+            count={@page.pagination.meaning_connections.count}
+          >
+            <ul role="list" class="divide-y divide-mist-950/5 dark:divide-white/10">
+              <li
+                :for={claim <- @page.meaning_connections}
+                id={"connection-out-#{claim.assertion_id}"}
+                class="grid gap-1 py-3 sm:grid-cols-[minmax(0,10rem)_minmax(0,1fr)] sm:gap-5"
+              >
+                <.a :if={claim.path} navigate={claim.path} class="font-medium">{claim.label}</.a>
+                <span :if={is_nil(claim.path)} class="font-medium">{claim.label}</span>
+                <div class="min-w-0">
+                  <p :if={claim.detail} class="text-sm/6 text-pretty text-mist-700 dark:text-mist-300">
+                    {claim.detail}
+                  </p>
+                  <p class="text-sm/6 text-mist-500">
+                    {review_label(claim.review_state)}<span :if={claim.rationale}> · {claim.rationale}</span>
+                    <.a
+                      navigate={~p"/connections/#{claim.assertion_id}"}
+                      aria-label="Inspect meaning connection"
+                      class="ml-1 inline-flex align-text-bottom text-mist-400 hover:text-mist-950 dark:hover:text-white"
+                    >
+                      <.icon name="hero-information-circle" class="size-4 stroke-current" />
+                    </.a>
+                  </p>
+                </div>
+              </li>
+            </ul>
+          </.panel>
+
+          <.panel
+            :if={@page.discovery_appearances != []}
+            id="entity-discovery-appearances"
+            label="also appeared in discovery for"
+            count={length(@page.discovery_appearances)}
+          >
+            <ul role="list" class="divide-y divide-mist-950/5 dark:divide-white/10">
+              <li
+                :for={appearance <- @page.discovery_appearances}
+                id={"discovery-appearance-#{appearance.target_object_id}"}
+                class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-3"
+              >
+                <.a :if={appearance.path} navigate={appearance.path} class="font-medium">
+                  {appearance.label}
+                </.a>
+                <span :if={is_nil(appearance.path)} class="font-medium">{appearance.term}</span>
+                <span class="text-sm text-mist-500">
+                  Automatic match · {appearance.provider}
+                </span>
+              </li>
+            </ul>
+          </.panel>
 
           <.panel
             :if={@page.biography != []}
             id="entity-biography"
-            label="biography"
+            label={if(@page.entity.kind == :person, do: "biography", else: "about")}
             count={@page.pagination.biography.count}
           >
             <article
@@ -371,6 +460,16 @@ defmodule DevilsDictionaryWeb.EntityLive do
               />
             </div>
           </.panel>
+
+          <.panel :if={@page.sources != []} id="entity-sources" label="sources">
+            <ul role="list" class="flex flex-wrap gap-x-5 gap-y-2">
+              <li :for={source <- @page.sources} id={"entity-source-#{source.slug}"}>
+                <.a href={source.url} target="_blank" rel="noreferrer">
+                  {source.name} ↗
+                </.a>
+              </li>
+            </ul>
+          </.panel>
         <% end %>
       </.container>
     </Layouts.app>
@@ -440,11 +539,36 @@ defmodule DevilsDictionaryWeb.EntityLive do
     ~p"/entities/#{id}/#{slug}?#{query}"
   end
 
+  defp safe_back_path(path) when is_binary(path) do
+    uri = URI.parse(path)
+
+    if is_nil(uri.scheme) and is_nil(uri.host) and
+         (String.starts_with?(uri.path || "", "/words/") or
+            String.starts_with?(uri.path || "", "/define/")),
+       do: path,
+       else: nil
+  end
+
+  defp safe_back_path(_path), do: nil
+
+  defp review_label(:accepted), do: "Reviewed connection"
+  defp review_label(:disputed), do: "Disputed connection"
+  defp review_label(:changed_since_review), do: "Changed since review"
+  defp review_label(_state), do: "Awaiting review"
+
   defp detail_line(details) do
-    details
-    |> Enum.reject(fn {_k, v} -> is_nil(v) end)
-    |> Enum.map_join(" · ", fn {key, value} ->
-      "#{key |> to_string() |> String.replace("_", " ")}: #{value}"
-    end)
+    case details do
+      %{work_kind: work_kind} when is_binary(work_kind) ->
+        [String.capitalize(work_kind), details[:first_published_year]]
+        |> Enum.reject(&is_nil/1)
+        |> Enum.join(" · ")
+
+      _ ->
+        details
+        |> Enum.reject(fn {_k, v} -> is_nil(v) end)
+        |> Enum.map_join(" · ", fn {key, value} ->
+          "#{key |> to_string() |> String.replace("_", " ")}: #{value}"
+        end)
+    end
   end
 end

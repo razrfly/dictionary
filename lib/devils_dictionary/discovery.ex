@@ -4,8 +4,10 @@ defmodule DevilsDictionary.Discovery do
 
   Definitions never wait for this context. A valid page creates an automatic
   term recipe lazily, admits at most one database-coordinated refresh, and lets
-  an Oban worker perform provider I/O. Discovery results remain search cache:
-  they never create `illustrates` claims or permanent objects.
+  an Oban worker perform provider I/O. Discovery appearances remain search
+  cache and never create `illustrates` claims. Approved adapters may resolve an
+  eligible result to a durable registry identity, whose lifecycle is separate
+  from this cache.
   """
 
   import Ecto.Query
@@ -13,8 +15,10 @@ defmodule DevilsDictionary.Discovery do
   alias DevilsDictionary.Claims.AssertionRevision
   alias DevilsDictionary.Discovery.{Mapping, Policy, Providers, Result, Run}
   alias DevilsDictionary.Discovery.RunWorker
-  alias DevilsDictionary.Registry.{ExternalIdentifier, Lexeme, Object, Sense}
+  alias DevilsDictionary.Registry.{Lexeme, Object, Sense}
   alias DevilsDictionary.Repo
+  alias DevilsDictionary.SourceIdentity
+  alias DevilsDictionary.SourceIdentity.Resolution
   alias DevilsDictionary.Sources
   alias DevilsDictionary.Sources.{Actor, Source, SourceRecord}
 
@@ -836,7 +840,7 @@ defmodule DevilsDictionary.Discovery do
 
     result =
       Repo.transaction(fn ->
-        if persistent?, do: persist_results(run, items)
+        if persistent?, do: persist_results(run, provider, items)
 
         run
         |> Run.lifecycle_changeset(%{
@@ -904,8 +908,7 @@ defmodule DevilsDictionary.Discovery do
     {:notify, deferred, [], {:snooze, seconds}}
   end
 
-  defp persist_results(run, items) do
-    identity_map = existing_object_ids(items)
+  defp persist_results(run, provider, items) do
     source = run.mapping.source
 
     Enum.each(items, fn item ->
@@ -913,40 +916,62 @@ defmodule DevilsDictionary.Discovery do
         Sources.upsert_record(source, %{
           external_id: "#{item.external_namespace}:#{item.external_id}",
           url: item.preview_metadata["source_url"],
-          raw: %{
-            "external_namespace" => item.external_namespace,
-            "external_id" => item.external_id
-          }
+          raw: source_payload(item)
         })
+
+      resolution = resolve_identity(provider, source, record, item)
 
       attrs =
         item
         |> Map.put(:run_id, run.id)
-        |> Map.put(:object_id, identity_map[{item.external_namespace, item.external_id}])
+        |> Map.put(:object_id, resolution.object_id)
         |> Map.put(:source_record_id, record.id)
+        |> Map.put(:resolution_state, resolution.state)
 
       %Result{} |> Result.changeset(attrs) |> Repo.insert!()
     end)
   end
 
-  defp existing_object_ids(items) do
-    identities = Enum.map(items, &{&1.external_namespace, &1.external_id})
-    namespaces = identities |> Enum.map(&elem(&1, 0)) |> Enum.uniq()
-    external_ids = identities |> Enum.map(&elem(&1, 1)) |> Enum.uniq()
+  defp source_payload(item) do
+    %{
+      "external_namespace" => item.external_namespace,
+      "external_id" => item.external_id,
+      "identifiers" => Enum.map(item[:identifiers] || [], &stringify_identifier/1),
+      "preview_metadata" => item.preview_metadata,
+      "match_details" => item.match_details
+    }
+  end
 
-    Repo.all(
-      from identifier in ExternalIdentifier,
-        where:
-          identifier.status == :verified and identifier.namespace in ^namespaces and
-            identifier.external_id in ^external_ids,
-        select: {identifier.namespace, identifier.external_id, identifier.object_id}
-    )
-    |> Enum.filter(fn {namespace, external_id, _object_id} ->
-      {namespace, external_id} in identities
-    end)
-    |> Map.new(fn {namespace, external_id, object_id} ->
-      {{namespace, external_id}, object_id}
-    end)
+  defp stringify_identifier(identifier) do
+    %{
+      "namespace" => identifier.namespace,
+      "external_id" => identifier.external_id,
+      "metadata" => identifier[:metadata] || %{},
+      "exclusive" => Map.get(identifier, :exclusive, true)
+    }
+  end
+
+  defp resolve_identity(provider, source, record, item) do
+    if function_exported?(provider, :identity_record, 1) do
+      case provider.identity_record(item) do
+        {:ok, entry} ->
+          entry
+          |> Map.merge(%{
+            source_id: source.id,
+            source_record_id: record.id,
+            source_record_revision_id: record.current_revision.id
+          })
+          |> SourceIdentity.resolve()
+
+        :ignore ->
+          %Resolution{state: :insufficient_evidence, reason: "adapter_ignored"}
+
+        {:error, reason} ->
+          %Resolution{state: :insufficient_evidence, reason: to_string(reason)}
+      end
+    else
+      %Resolution{state: :insufficient_evidence, reason: "adapter_has_no_identity_contract"}
+    end
   end
 
   defp start_run(run_id) do

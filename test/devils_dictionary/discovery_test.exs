@@ -54,7 +54,9 @@ defmodule DevilsDictionary.DiscoveryTest do
     assert [%Result{external_id: "10"} = item] = state.items
     assert item.match_details["keywords"] == [%{"id" => 273_967, "name" => "war"}]
     assert item.preview_metadata["title"] == "A title without the query"
-    assert Repo.aggregate(Object, :count) == object_count
+    assert item.object_id
+    assert item.resolution_state == :newly_created
+    assert Repo.aggregate(Object, :count) == object_count + 1
 
     assert {:cached, %Run{id: cached_id}} = Discovery.request(target(word), "cinegraph")
     assert cached_id == run.id
@@ -464,9 +466,19 @@ defmodule DevilsDictionary.DiscoveryTest do
           select: revision.payload
       )
 
-    assert [payload] = payloads
-    assert Map.keys(payload) |> Enum.sort() == ["external_id", "external_namespace"]
-    assert payload["external_id"] == "10"
+    assert Enum.map(payloads, & &1["external_id"]) == ["10", "10"]
+
+    assert Enum.map(payloads, &get_in(&1, ["preview_metadata", "title"])) |> Enum.sort() ==
+             ["First title", "Updated title"]
+
+    [object_id] = results |> Enum.map(& &1.object_id) |> Enum.uniq()
+
+    assert Repo.aggregate(
+             from(c in DevilsDictionary.Claims.AssertionRevision,
+               where: c.subject_object_id == ^object_id
+             ),
+             :count
+           ) == 0
   end
 
   test "refresh-due and legacy-expired previews remain usable while withdrawal does not", ctx do

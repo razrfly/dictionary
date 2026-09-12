@@ -74,6 +74,7 @@ defmodule DevilsDictionary.Absorb.Materializer do
   alias DevilsDictionary.Claims
   alias DevilsDictionary.Repo
   alias DevilsDictionary.Registry.Lexeme
+  alias DevilsDictionary.SourceIdentity
   alias DevilsDictionary.Sources.SourceRecord
 
   # Postgres caps a statement at 65,535 bind parameters; the widest row here is
@@ -134,7 +135,9 @@ defmodule DevilsDictionary.Absorb.Materializer do
     |> Ecto.Multi.run(:forms, fn _repo, changes ->
       {:ok, upsert_forms(merged.lexemes, changes.lexemes, revisions, now)}
     end)
-    |> Ecto.Multi.run(:concepts, fn _repo, _ -> {:ok, upsert_entities(merged.concepts, now)} end)
+    |> Ecto.Multi.run(:concepts, fn _repo, _ ->
+      {:ok, upsert_entities(merged.concepts, now, module, revisions, run_id)}
+    end)
     |> Ecto.Multi.run(:senses, fn _repo, changes ->
       {:ok,
        upsert_senses(merged.senses, changes.lexemes, records, revisions, run_id, now, module)}
@@ -551,9 +554,52 @@ defmodule DevilsDictionary.Absorb.Materializer do
 
   defp initial_projection(metadata), do: metadata
 
-  defp upsert_entities([], _now), do: %{}
+  defp upsert_entities([], _now, _module, _revisions, _run_id), do: %{}
 
-  defp upsert_entities(rows, now) do
+  defp upsert_entities(rows, now, module, revisions, run_id) do
+    {identity_rows, ordinary_rows} = identity_rows(rows, module)
+
+    ordinary_ids = upsert_ordinary_entities(ordinary_rows, now)
+
+    identity_ids =
+      identity_rows
+      |> Enum.uniq_by(fn {row, _entry} -> row.key end)
+      |> Enum.flat_map(fn {row, entry} ->
+        entry = %{
+          entry
+          | source_id: row[:source_id],
+            source_record_id: row[:source_record_id],
+            source_record_revision_id: revisions[row[:source_record_id]],
+            import_run_id: run_id
+        }
+
+        case SourceIdentity.resolve(entry) do
+          %{object_id: object_id} when is_integer(object_id) -> [{row.key, object_id}]
+          _resolution -> []
+        end
+      end)
+      |> Map.new()
+
+    Map.merge(ordinary_ids, identity_ids)
+  end
+
+  defp identity_rows(rows, module) do
+    if function_exported?(module, :identity_record, 1) do
+      Enum.reduce(rows, {[], []}, fn row, {identity, ordinary} ->
+        case module.identity_record(row) do
+          {:ok, entry} -> {[{row, entry} | identity], ordinary}
+          :ignore -> {identity, [row | ordinary]}
+          {:error, reason} -> throw({:materialize_failed, row.source_id, row.key, reason})
+        end
+      end)
+    else
+      {[], rows}
+    end
+  end
+
+  defp upsert_ordinary_entities([], _now), do: %{}
+
+  defp upsert_ordinary_entities(rows, now) do
     qids = Enum.map(rows, & &1.key)
 
     existing =

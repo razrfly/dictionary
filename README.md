@@ -6,7 +6,7 @@ Internal name: `devils_dictionary` (the Phoenix app, the repo). Product name is 
 
 This file is the **living record** of the project: what it is, what it is not, the decisions we've made, and what we plan to build next. Update it whenever a decision changes. The encyclopedia foundation is specified in [issue #74](https://github.com/razrfly/dictionary/issues/74); [issue #69](https://github.com/razrfly/dictionary/issues/69) defines the original source-coverage scorecard.
 
-Automatic cultural discovery and the direct-browser GIPHY integration are documented in [`docs/integrations/giphy.md`](docs/integrations/giphy.md).
+Automatic cultural discovery and the direct-browser GIPHY integration are documented in [`docs/integrations/giphy.md`](docs/integrations/giphy.md). Durable cross-provider film identity and its adapter/backfill contract are documented in [`docs/integrations/source-identity.md`](docs/integrations/source-identity.md).
 
 ## Current delivery — 11 September 2026
 

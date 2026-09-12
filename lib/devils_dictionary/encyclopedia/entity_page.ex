@@ -41,10 +41,12 @@ defmodule DevilsDictionary.Encyclopedia.EntityPage do
 
   alias DevilsDictionary.Claims
   alias DevilsDictionary.Claims.{Connection, Visibility}
+  alias DevilsDictionary.Discovery.{Mapping, Result, Run}
   alias DevilsDictionary.Encyclopedia
   alias DevilsDictionary.Registry
   alias DevilsDictionary.Registry.{ContentItem, ContentRevision, Entity, Lexeme, Sense}
   alias DevilsDictionary.Repo
+  alias DevilsDictionary.Sources.{MaterializedOutput, Source, SourceRecord}
 
   defstruct entity: nil,
             identity: %{state: :active, requested_id: nil, canonical_id: nil, outputs: []},
@@ -54,6 +56,9 @@ defmodule DevilsDictionary.Encyclopedia.EntityPage do
             definitions: [],
             editions: [],
             contents: [],
+            meaning_connections: [],
+            discovery_appearances: [],
+            sources: [],
             connections: %{incoming: [], outgoing: []},
             pagination: %{}
 
@@ -115,6 +120,8 @@ defmodule DevilsDictionary.Encyclopedia.EntityPage do
       incoming_page(id, "edition_of", "entity", opts[:editions_after])
 
     {contents, contents_page} = contents_of(entity, id, opts[:contents_after])
+    {meaning_connections, meaning_connections_count} = meaning_connections(id)
+    discovery_appearances = discovery_appearances(id)
 
     {connections_in, connections_in_page} =
       other_connections(:incoming, id, opts[:connections_in_after])
@@ -136,6 +143,9 @@ defmodule DevilsDictionary.Encyclopedia.EntityPage do
       definitions: definition_views(Enum.map(definitions, & &1.subject_object_id)),
       editions: entity_views(Enum.map(editions, & &1.subject_object_id)),
       contents: definition_views(Enum.map(contents, & &1.subject_object_id)),
+      meaning_connections: meaning_connections,
+      discovery_appearances: discovery_appearances,
+      sources: source_views(id),
       connections: %{incoming: connections_in, outgoing: connections_out},
       pagination: %{
         biography: biography_page,
@@ -143,6 +153,7 @@ defmodule DevilsDictionary.Encyclopedia.EntityPage do
         definitions: definitions_page,
         editions: editions_page,
         contents: contents_page,
+        meaning_connections: %{count: meaning_connections_count, next: nil},
         connections_in: connections_in_page,
         connections_out: connections_out_page
       }
@@ -159,7 +170,7 @@ defmodule DevilsDictionary.Encyclopedia.EntityPage do
     filters =
       case direction do
         :incoming -> [exclude_predicates: @presented_predicates]
-        :outgoing -> []
+        :outgoing -> [exclude_predicates: ["illustrates"]]
       end
 
     opts = filters ++ [after: after_cursor, limit: @section_cap + 1]
@@ -209,6 +220,77 @@ defmodule DevilsDictionary.Encyclopedia.EntityPage do
     {connection_rows, page}
   end
 
+  defp meaning_connections(object_id) do
+    rows = Claims.outgoing(object_id, predicate: "illustrates", limit: @section_cap)
+    endpoints = Connection.endpoint_summaries(Enum.map(rows, & &1.object_object_id))
+    review_states = Claims.display_review_states(Enum.map(rows, & &1.id))
+
+    views =
+      Enum.map(rows, fn row ->
+        row
+        |> Map.from_struct()
+        |> Map.merge(Map.fetch!(endpoints, row.object_object_id))
+        |> Map.put(:review_state, Map.fetch!(review_states, row.id))
+      end)
+
+    {views, Claims.count_outgoing(object_id, predicate: "illustrates")}
+  end
+
+  defp discovery_appearances(object_id) do
+    family = Registry.canonical_family(object_id)
+
+    rows =
+      Repo.all(
+        from result in Result,
+          join: run in Run,
+          on: run.id == result.run_id,
+          join: mapping in Mapping,
+          on: mapping.id == run.mapping_id,
+          join: source in Source,
+          on: source.id == mapping.source_id,
+          left_join: record in SourceRecord,
+          on: record.id == result.source_record_id,
+          where:
+            result.object_id in ^family and result.display_allowed and run.display_allowed and
+              run.status == :succeeded and mapping.enabled and source.active and
+              (is_nil(record.id) or record.display_allowed),
+          distinct: [mapping.target_object_id, source.slug],
+          order_by: [asc: mapping.target_object_id, asc: source.slug, desc: run.completed_at],
+          select: %{
+            target_object_id: mapping.target_object_id,
+            provider: source.name,
+            term: mapping.parameters["term"]
+          }
+      )
+
+    endpoints = Connection.endpoint_summaries(Enum.map(rows, & &1.target_object_id))
+
+    Enum.map(rows, fn row ->
+      Map.merge(row, Map.fetch!(endpoints, row.target_object_id))
+    end)
+  end
+
+  defp source_views(object_id) do
+    family = Registry.canonical_family(object_id)
+
+    Repo.all(
+      from output in MaterializedOutput,
+        join: record in assoc(output, :source_record),
+        join: source in assoc(record, :source),
+        where:
+          output.output_object_id in ^family and is_nil(output.retired_at) and
+            record.display_allowed and source.active,
+        distinct: [source.slug, record.url],
+        order_by: [asc: source.slug, asc: record.url],
+        select: %{
+          slug: source.slug,
+          name: source.name,
+          attribution: source.attribution,
+          url: record.url
+        }
+    )
+  end
+
   defp incoming_page(object_id, predicate, subject_kind, after_cursor) do
     filters = [predicate: predicate, subject_kind: subject_kind]
 
@@ -231,19 +313,29 @@ defmodule DevilsDictionary.Encyclopedia.EntityPage do
   # A person's subtype row, a work's, an edition's — whichever this entity has.
   # One query, and nil for a kind that has no detail table.
   defp details(%Entity{entity_kind: :person, object_id: id}),
-    do: Repo.get(Registry.PersonDetails, id) |> Map.take([:birth_date, :death_date])
+    do: detail_fields(Repo.get(Registry.PersonDetails, id), [:birth_date, :death_date])
 
   defp details(%Entity{entity_kind: :work, object_id: id}),
     do:
-      Repo.get(Registry.WorkDetails, id)
-      |> Map.take([:work_kind, :original_language, :first_published_year])
+      detail_fields(Repo.get(Registry.WorkDetails, id), [
+        :work_kind,
+        :original_language,
+        :first_published_year
+      ])
 
   defp details(%Entity{entity_kind: :edition, object_id: id}),
     do:
-      Repo.get(Registry.EditionDetails, id)
-      |> Map.take([:work_id, :edition_label, :publication_year, :language_tag])
+      detail_fields(Repo.get(Registry.EditionDetails, id), [
+        :work_id,
+        :edition_label,
+        :publication_year,
+        :language_tag
+      ])
 
   defp details(%Entity{}), do: %{}
+
+  defp detail_fields(nil, _fields), do: %{}
+  defp detail_fields(details, fields), do: Map.take(details, fields)
 
   defp entity_views([]), do: []
 
