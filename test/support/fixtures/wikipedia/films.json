@@ -1,0 +1,26 @@
+{
+  "records": [
+    {
+      "title": "Titanic (1997 film)",
+      "pageid": 26964606,
+      "ns": 0,
+      "description": "1997 film by James Cameron",
+      "extract": "Titanic is a 1997 epic romance and disaster film directed by James Cameron.",
+      "thumbnail": {"source": "https://upload.wikimedia.org/wikipedia/commons/thumb/f/fd/RMS_Titanic_3.jpg/500px-RMS_Titanic_3.jpg"},
+      "pageprops": {"wikibase_item": "Q44578"},
+      "fullurl": "https://en.wikipedia.org/wiki/Titanic_(1997_film)",
+      "_probe": {"qid": "Q44578", "title": "Titanic (1997 film)"}
+    },
+    {
+      "title": "Everest (2015 film)",
+      "pageid": 41931150,
+      "ns": 0,
+      "description": "2015 film by Baltasar Kormákur",
+      "extract": "Everest is a 2015 biographical survival adventure film directed by Baltasar Kormákur.",
+      "thumbnail": {"source": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4b/Mount_Everest_as_seen_from_Drukair2_PLW_edit.jpg/500px-Mount_Everest_as_seen_from_Drukair2_PLW_edit.jpg"},
+      "pageprops": {"wikibase_item": "Q15631013"},
+      "fullurl": "https://en.wikipedia.org/wiki/Everest_(2015_film)",
+      "_probe": {"qid": "Q15631013", "title": "Everest (2015 film)"}
+    }
+  ]
+}

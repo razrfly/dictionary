@@ -344,6 +344,11 @@ defmodule DevilsDictionaryWeb.WordLive do
   defp title(%{headword: %{lemma: nil}}, slug), do: "#{slug} — no such word"
   defp title(%{headword: %{lemma: lemma}}, _slug), do: lemma
 
+  defp word_path(%{headword: %{lemma: lemma, lexemes: [lexeme | _]}}),
+    do: ~p"/words/#{lexeme.id}/#{DevilsDictionary.Registry.Lexeme.slug(lemma)}"
+
+  defp word_path(_page), do: nil
+
   @impl true
   def render(assigns) do
     ~H"""
@@ -381,6 +386,7 @@ defmodule DevilsDictionaryWeb.WordLive do
           <Culture.section
             :if={@cultures != %{}}
             states={@cultures}
+            return_path={word_path(@page)}
           />
 
           <DevilsDictionaryWeb.GiphyShelf.section :if={@giphy} config={@giphy} />

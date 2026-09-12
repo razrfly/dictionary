@@ -2,8 +2,11 @@ defmodule DevilsDictionary.Discovery.Providers.CineGraph do
   @moduledoc "CineGraph keyword discovery normalized into provider-neutral culture cards."
 
   @behaviour DevilsDictionary.Discovery.Provider
+  @behaviour DevilsDictionary.SourceIdentity.Adapter
 
-  @adapter_version "cinegraph.graphql.v1"
+  alias DevilsDictionary.SourceIdentity.Entry
+
+  @adapter_version "cinegraph.graphql.v2"
   @operation "keyword_discovery"
 
   @keyword_query """
@@ -52,6 +55,40 @@ defmodule DevilsDictionary.Discovery.Providers.CineGraph do
       content_types: [:film]
     }
   end
+
+  @impl DevilsDictionary.SourceIdentity.Adapter
+  def identity_record(
+        %{
+          external_namespace: "tmdb_movie",
+          external_id: tmdb_id,
+          preview_metadata: metadata
+        } = item
+      ) do
+    identifiers =
+      item
+      |> Map.get(:identifiers, [%{namespace: "tmdb_movie", external_id: tmdb_id}])
+
+    Entry.new(%{
+      source_slug: slug(),
+      object_kind: :entity,
+      entity_kind: :work,
+      work_kind: "film",
+      stable_identifier: %{namespace: "tmdb_movie", external_id: tmdb_id},
+      identifiers: identifiers,
+      label: metadata["title"],
+      year: integer_year(metadata["year"]),
+      metadata: %{
+        "image_url" => metadata["poster_url"],
+        "image_attribution" => "Poster delivered by TMDb through CineGraph",
+        "release_date" => metadata["release_date"],
+        "content_type" => "film"
+      },
+      eligibility: :eligible,
+      retention: :durable
+    })
+  end
+
+  def identity_record(_item), do: {:error, :unsupported_cinegraph_identity}
 
   @impl true
   def enabled? do
@@ -251,11 +288,22 @@ defmodule DevilsDictionary.Discovery.Providers.CineGraph do
               is_list(keywords) and
               is_list(genres) do
     with {:ok, keywords} <- normalize_tags(keywords),
-         {:ok, genres} <- normalize_tags(genres) do
+         {:ok, genres} <- normalize_tags(genres),
+         {:ok, imdb_id} <- normalize_imdb_id(movie["imdbId"]) do
+      tmdb_id = Integer.to_string(tmdb_id)
+
       {:ok,
        %{
          external_namespace: "tmdb_movie",
-         external_id: Integer.to_string(tmdb_id),
+         external_id: tmdb_id,
+         identifiers:
+           [
+             %{
+               namespace: "tmdb_movie",
+               external_id: tmdb_id,
+               metadata: %{"provider_field" => "tmdbId"}
+             }
+           ] ++ imdb_identifier(imdb_id),
          position: position,
          match_details: %{
            "kind" => "keyword",
@@ -266,6 +314,7 @@ defmodule DevilsDictionary.Discovery.Providers.CineGraph do
          preview_metadata: %{
            "title" => title,
            "year" => year(movie["releaseDate"]),
+           "release_date" => movie["releaseDate"],
            "source_url" => source_url(movie["cinegraphUrl"]),
            "poster_url" => poster_url(movie["posterPath"]),
            "content_type" => "film",
@@ -310,6 +359,28 @@ defmodule DevilsDictionary.Discovery.Providers.CineGraph do
     end
   end
 
+  defp normalize_imdb_id(nil), do: {:ok, nil}
+
+  defp normalize_imdb_id(imdb_id) when is_binary(imdb_id) do
+    if Regex.match?(~r/\Att\d{7,10}\z/, imdb_id),
+      do: {:ok, imdb_id},
+      else: {:error, "malformed_response"}
+  end
+
+  defp normalize_imdb_id(_imdb_id), do: {:error, "malformed_response"}
+
+  defp imdb_identifier(nil), do: []
+
+  defp imdb_identifier(imdb_id) do
+    [
+      %{
+        namespace: "imdb_title",
+        external_id: imdb_id,
+        metadata: %{"provider_field" => "imdbId"}
+      }
+    ]
+  end
+
   defp next_cursor(%{"hasNextPage" => true, "endCursor" => cursor})
        when is_binary(cursor) and byte_size(cursor) <= 2_048,
        do: cursor
@@ -318,6 +389,15 @@ defmodule DevilsDictionary.Discovery.Providers.CineGraph do
 
   defp year(<<year::binary-size(4), _rest::binary>>), do: year
   defp year(_), do: nil
+
+  defp integer_year(<<year::binary-size(4)>>) do
+    case Integer.parse(year) do
+      {value, ""} -> value
+      _ -> nil
+    end
+  end
+
+  defp integer_year(_year), do: nil
 
   defp poster_url(path) when is_binary(path) and path != "" do
     case config()[:image_base_url] do

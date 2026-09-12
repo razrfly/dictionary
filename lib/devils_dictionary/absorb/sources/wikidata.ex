@@ -25,6 +25,7 @@ defmodule DevilsDictionary.Absorb.Sources.Wikidata do
   """
 
   @behaviour DevilsDictionary.Absorb.Source
+  @behaviour DevilsDictionary.SourceIdentity.Adapter
 
   import Ecto.Query
 
@@ -34,6 +35,7 @@ defmodule DevilsDictionary.Absorb.Sources.Wikidata do
   alias DevilsDictionary.Lexicon.ScopeMember
   alias DevilsDictionary.Registry.{Entity, ExternalIdentifier, Sense, SenseRevision}
   alias DevilsDictionary.Repo
+  alias DevilsDictionary.SourceIdentity.Entry
   alias DevilsDictionary.Sources
   alias DevilsDictionary.Sources.{Source, SourceRecord}
 
@@ -44,7 +46,7 @@ defmodule DevilsDictionary.Absorb.Sources.Wikidata do
 
   # The fifteen properties the pipeline reads. Everything else is dropped before
   # storage; a 130 KB entity becomes a couple of KB.
-  @keep_properties ~w(P18 P31 P279 P171 P105 P225 P1843 P5063 P8814 P13176 P1420 P910 P373 P846 P685)
+  @keep_properties ~w(P18 P31 P279 P171 P105 P225 P1843 P5063 P8814 P13176 P1420 P910 P373 P846 P685 P345 P4947 P577)
 
   # Parent properties walked to closure. **Only these two**: P171 is the
   # taxonomy proper and terminates at Animalia, and P13176 is the one hop from
@@ -82,6 +84,7 @@ defmodule DevilsDictionary.Absorb.Sources.Wikidata do
   @impl true
   def trim(raw) do
     %{
+      "_film_identity_version" => 1,
       "id" => raw["id"],
       "labels" => take_lang(raw["labels"]),
       "descriptions" => take_lang(raw["descriptions"]),
@@ -486,7 +489,7 @@ defmodule DevilsDictionary.Absorb.Sources.Wikidata do
       external_id: qid,
       url: entity_url(qid),
       raw: trim(entity),
-      content_hash: SourceRecord.content_hash(entity)
+      content_hash: SourceRecord.content_hash(%{"entity" => entity, "projection_version" => 1})
     }
   end
 
@@ -548,6 +551,9 @@ defmodule DevilsDictionary.Absorb.Sources.Wikidata do
       label: clamp(label(raw, scientific_name)),
       description: get_in(raw, ["descriptions", "en", "value"]),
       kind: entity_kind(raw, scientific_name),
+      work_kind: work_kind(raw),
+      first_published_year: publication_year(raw),
+      external_identifiers: external_identifiers(qid, raw),
       taxon_concept: taxon_concept(raw, scientific_name),
       metadata:
         raw
@@ -561,6 +567,27 @@ defmodule DevilsDictionary.Absorb.Sources.Wikidata do
 
     {:ok, %{concepts: [concept], concept_relations: relations(record, qid, raw)}}
   end
+
+  @impl DevilsDictionary.SourceIdentity.Adapter
+  def identity_record(%{kind: :work, work_kind: work_kind} = row)
+      when work_kind in ["film", "artwork"] do
+    Entry.new(%{
+      source_slug: slug(),
+      object_kind: :entity,
+      entity_kind: :work,
+      work_kind: work_kind,
+      stable_identifier: %{namespace: "wikidata", external_id: row.qid},
+      identifiers: row.external_identifiers,
+      label: row.label,
+      description: row.description,
+      year: row.first_published_year,
+      metadata: row.metadata,
+      eligibility: :eligible,
+      retention: :durable
+    })
+  end
+
+  def identity_record(_row), do: :ignore
 
   # English first, then the multilingual label a taxon carries instead, then the
   # scientific name itself. A concept with no name at all is not worth a card.
@@ -603,6 +630,9 @@ defmodule DevilsDictionary.Absorb.Sources.Wikidata do
     end
   end
 
+  @film_classes ~w(Q11424 Q202866 Q506240)
+  @artwork_classes ~w(Q3305213)
+
   @kind_classes %{
     person: ~w(Q5),
     organization: ~w(Q43229 Q4830453 Q163740 Q783794),
@@ -616,8 +646,82 @@ defmodule DevilsDictionary.Absorb.Sources.Wikidata do
   defp entity_kind(raw, _scientific_name) do
     classes = MapSet.new(Client.entity_ids(raw, "P31"))
 
-    Enum.find_value(@kind_classes, :concept, fn {kind, recognized} ->
-      if Enum.any?(recognized, &MapSet.member?(classes, &1)), do: kind
+    cond do
+      Enum.any?(@film_classes, &MapSet.member?(classes, &1)) ->
+        :work
+
+      Enum.any?(@artwork_classes, &MapSet.member?(classes, &1)) ->
+        :work
+
+      true ->
+        Enum.find_value(@kind_classes, :concept, fn {kind, recognized} ->
+          if Enum.any?(recognized, &MapSet.member?(classes, &1)), do: kind
+        end)
+    end
+  end
+
+  defp work_kind(raw) do
+    classes = MapSet.new(Client.entity_ids(raw, "P31"))
+
+    cond do
+      Enum.any?(@film_classes, &MapSet.member?(classes, &1)) -> "film"
+      Enum.any?(@artwork_classes, &MapSet.member?(classes, &1)) -> "artwork"
+      true -> nil
+    end
+  end
+
+  defp external_identifiers(qid, raw) do
+    [
+      %{
+        namespace: "wikidata",
+        external_id: qid,
+        metadata: %{"provider_field" => "id"}
+      }
+    ] ++
+      external_identifier_values(raw, "P4947", "tmdb_movie", &valid_tmdb_movie_id?/1) ++
+      external_identifier_values(raw, "P345", "imdb_title", &valid_imdb_title_id?/1)
+  end
+
+  defp external_identifier_values(raw, property, namespace, valid?) do
+    raw
+    |> Client.strings(property)
+    |> Enum.filter(valid?)
+    |> Enum.uniq()
+    |> Enum.map(fn external_id ->
+      %{
+        namespace: namespace,
+        external_id: external_id,
+        metadata: %{
+          "wikidata_property" => property,
+          "statement_policy" => "preferred_else_normal"
+        }
+      }
+    end)
+  end
+
+  defp valid_tmdb_movie_id?(value) when is_binary(value),
+    do: Regex.match?(~r/\A[1-9]\d*\z/, value)
+
+  defp valid_tmdb_movie_id?(_value), do: false
+
+  defp valid_imdb_title_id?(value) when is_binary(value),
+    do: Regex.match?(~r/\Att\d{7,10}\z/, value)
+
+  defp valid_imdb_title_id?(_value), do: false
+
+  defp publication_year(raw) do
+    raw
+    |> Client.statements("P577")
+    |> Enum.find_value(fn
+      %{value: %{"time" => <<sign::binary-size(1), year::binary-size(4), _rest::binary>>}}
+      when sign in ["+", "-"] ->
+        case Integer.parse(sign <> year) do
+          {value, ""} -> value
+          _ -> nil
+        end
+
+      _ ->
+        nil
     end)
   end
 

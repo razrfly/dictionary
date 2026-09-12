@@ -20,6 +20,10 @@ defmodule DevilsDictionary.Discovery.Result do
     field :preview_metadata, :map, default: %{}
     field :display_allowed, :boolean, default: true
 
+    field :resolution_state, Ecto.Enum,
+      values: [:matched, :newly_created, :insufficient_evidence, :conflicting_identifiers],
+      default: :insufficient_evidence
+
     timestamps(type: :utc_datetime_usec)
   end
 
@@ -34,7 +38,8 @@ defmodule DevilsDictionary.Discovery.Result do
       :position,
       :match_details,
       :preview_metadata,
-      :display_allowed
+      :display_allowed,
+      :resolution_state
     ])
     |> validate_required([
       :run_id,
@@ -43,7 +48,8 @@ defmodule DevilsDictionary.Discovery.Result do
       :position,
       :match_details,
       :preview_metadata,
-      :display_allowed
+      :display_allowed,
+      :resolution_state
     ])
     |> validate_number(:position, greater_than_or_equal_to: 0)
     |> unique_constraint([:run_id, :external_namespace, :external_id])
@@ -51,5 +57,6 @@ defmodule DevilsDictionary.Discovery.Result do
     |> foreign_key_constraint(:run_id)
     |> foreign_key_constraint(:object_id)
     |> foreign_key_constraint(:source_record_id)
+    |> check_constraint(:resolution_state, name: :discovery_results_resolution_state)
   end
 end

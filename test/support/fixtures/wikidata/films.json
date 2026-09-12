@@ -1,0 +1,30 @@
+{
+  "records": [
+    {
+      "id": "Q44578",
+      "labels": {"en": {"language": "en", "value": "Titanic"}},
+      "descriptions": {"en": {"language": "en", "value": "1997 film directed by James Cameron"}},
+      "aliases": {"en": []},
+      "sitelinks": {"enwiki": {"site": "enwiki", "title": "Titanic (1997 film)"}},
+      "claims": {
+        "P31": [{"rank": "normal", "type": "statement", "mainsnak": {"snaktype": "value", "datavalue": {"type": "wikibase-entityid", "value": {"id": "Q11424"}}}}],
+        "P4947": [{"rank": "normal", "type": "statement", "mainsnak": {"snaktype": "value", "datavalue": {"type": "string", "value": "597"}}}],
+        "P345": [{"rank": "normal", "type": "statement", "mainsnak": {"snaktype": "value", "datavalue": {"type": "string", "value": "tt0120338"}}}],
+        "P577": [{"rank": "normal", "type": "statement", "mainsnak": {"snaktype": "value", "datavalue": {"type": "time", "value": {"time": "+1997-11-18T00:00:00Z", "precision": 11}}}}]
+      }
+    },
+    {
+      "id": "Q15631013",
+      "labels": {"en": {"language": "en", "value": "Everest"}},
+      "descriptions": {"en": {"language": "en", "value": "2015 film directed by Baltasar Kormákur"}},
+      "aliases": {"en": []},
+      "sitelinks": {"enwiki": {"site": "enwiki", "title": "Everest (2015 film)"}},
+      "claims": {
+        "P31": [{"rank": "normal", "type": "statement", "mainsnak": {"snaktype": "value", "datavalue": {"type": "wikibase-entityid", "value": {"id": "Q11424"}}}}],
+        "P4947": [{"rank": "normal", "type": "statement", "mainsnak": {"snaktype": "value", "datavalue": {"type": "string", "value": "253412"}}}],
+        "P345": [{"rank": "normal", "type": "statement", "mainsnak": {"snaktype": "value", "datavalue": {"type": "string", "value": "tt2719848"}}}],
+        "P577": [{"rank": "normal", "type": "statement", "mainsnak": {"snaktype": "value", "datavalue": {"type": "time", "value": {"time": "+2015-09-10T00:00:00Z", "precision": 11}}}}]
+      }
+    }
+  ]
+}

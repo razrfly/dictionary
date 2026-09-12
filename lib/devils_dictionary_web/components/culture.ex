@@ -3,6 +3,7 @@ defmodule DevilsDictionaryWeb.Culture do
   use DevilsDictionaryWeb, :html
 
   attr :states, :map, required: true
+  attr :return_path, :string, default: nil
 
   def section(assigns) do
     assigns =
@@ -13,11 +14,16 @@ defmodule DevilsDictionaryWeb.Culture do
       )
 
     ~H"""
-    <.compact_section :if={@provider_states != []} states={@provider_states} />
+    <.compact_section
+      :if={@provider_states != []}
+      states={@provider_states}
+      return_path={@return_path}
+    />
     """
   end
 
   attr :states, :list, required: true
+  attr :return_path, :string, default: nil
 
   defp compact_section(assigns) do
     assigns = assign(assigns, :provider_count, length(assigns.states))
@@ -53,7 +59,11 @@ defmodule DevilsDictionaryWeb.Culture do
               id={"culture-result-#{item.external_namespace}-#{item.external_id}"}
               class="w-24 shrink-0 snap-start sm:w-28"
             >
-              <.culture_thumbnail item={item} type={content_type(state)} />
+              <.culture_thumbnail
+                item={item}
+                type={content_type(state)}
+                return_path={@return_path}
+              />
             </li>
           </ul>
           <div class="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
@@ -88,53 +98,110 @@ defmodule DevilsDictionaryWeb.Culture do
 
   attr :item, :map, required: true
   attr :type, :atom, required: true
+  attr :return_path, :string, default: nil
 
   defp culture_thumbnail(assigns) do
     assigns =
-      assign(assigns, :image, thumbnail_url(assigns.item.preview_metadata))
+      assigns
+      |> assign(:image, thumbnail_url(assigns.item.preview_metadata))
+      |> assign(:entry_path, entry_path(assigns.item, assigns.return_path))
 
     ~H"""
-    <a
-      href={@item.preview_metadata["source_url"]}
-      target="_blank"
-      rel="noreferrer"
-      id={"culture-source-#{@item.external_id}"}
-      class="group flex min-w-0 flex-col gap-2 rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2"
-    >
-      <div class={[
-        "w-full shrink-0 overflow-hidden rounded-sm bg-mist-950/5 dark:bg-white/5",
-        if(@type == :film, do: "aspect-[2/3]", else: "aspect-square")
-      ]}>
-        <img
-          :if={@image}
-          src={@image}
-          alt=""
-          loading="lazy"
-          referrerpolicy="no-referrer"
-          class="size-full object-cover"
-        />
-        <div
-          :if={!@image}
-          id={"culture-missing-poster-#{@item.external_id}"}
-          class="flex size-full items-center justify-center text-mist-400"
-        >
-          <.icon name={if(@type == :film, do: "hero-film", else: "hero-photo")} class="size-5" />
-        </div>
-      </div>
+    <div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+      <.link
+        :if={@entry_path}
+        navigate={@entry_path}
+        id={"culture-entry-image-#{@item.external_id}"}
+        aria-label={"Open #{@item.preview_metadata["title"]} in Dictionary"}
+        class="rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2"
+      >
+        <.culture_image item={@item} image={@image} type={@type} />
+      </.link>
+      <a
+        :if={is_nil(@entry_path)}
+        href={@item.preview_metadata["source_url"]}
+        target="_blank"
+        rel="noreferrer"
+        aria-label={"Open source for #{@item.preview_metadata["title"]}"}
+        class="rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2"
+      >
+        <.culture_image item={@item} image={@image} type={@type} />
+      </a>
       <div class="min-w-0 space-y-1">
-        <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-950 group-hover:underline sm:text-sm dark:text-white">
-          {@item.preview_metadata["title"]}
+        <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-950 sm:text-sm dark:text-white">
+          <.link
+            :if={@entry_path}
+            navigate={@entry_path}
+            id={"culture-entry-title-#{@item.external_id}"}
+            class="rounded-sm group-hover:underline focus-visible:outline-2 focus-visible:outline-offset-2"
+          >
+            {@item.preview_metadata["title"]}
+          </.link>
+          <a
+            :if={is_nil(@entry_path)}
+            href={@item.preview_metadata["source_url"]}
+            target="_blank"
+            rel="noreferrer"
+            class="rounded-sm group-hover:underline focus-visible:outline-2 focus-visible:outline-offset-2"
+          >
+            {@item.preview_metadata["title"]}
+          </a>
         </h3>
-        <p
-          :if={@item.preview_metadata["year"]}
-          class="text-base tabular-nums text-mist-500 sm:text-sm"
-        >
+        <p class="text-base tabular-nums text-mist-500 sm:text-sm">
           {@item.preview_metadata["year"] || "Year unknown"}
+          <span :if={@type == :film}>· Film</span>
         </p>
+        <a
+          href={@item.preview_metadata["source_url"]}
+          target="_blank"
+          rel="noreferrer"
+          id={"culture-source-#{@item.external_id}"}
+          class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 transition-colors hover:text-mist-950 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 dark:hover:text-white"
+        >
+          Source ↗
+        </a>
       </div>
-    </a>
+    </div>
     """
   end
+
+  attr :item, :map, required: true
+  attr :image, :string, default: nil
+  attr :type, :atom, required: true
+
+  defp culture_image(assigns) do
+    ~H"""
+    <div class={[
+      "w-full shrink-0 overflow-hidden rounded-sm bg-mist-950/5 transition-transform duration-200 group-hover:-translate-y-0.5 dark:bg-white/5",
+      if(@type == :film, do: "aspect-[2/3]", else: "aspect-square")
+    ]}>
+      <img
+        :if={@image}
+        src={@image}
+        alt=""
+        loading="lazy"
+        referrerpolicy="no-referrer"
+        class="size-full object-cover"
+      />
+      <div
+        :if={!@image}
+        id={"culture-missing-poster-#{@item.external_id}"}
+        class="flex size-full items-center justify-center text-mist-400"
+      >
+        <.icon name={if(@type == :film, do: "hero-film", else: "hero-photo")} class="size-5" />
+      </div>
+    </div>
+    """
+  end
+
+  defp entry_path(%{object_id: object_id, preview_metadata: metadata}, return_path)
+       when is_integer(object_id) do
+    slug = DevilsDictionary.Claims.Connection.slugify(metadata["title"])
+    query = if return_path, do: %{from: return_path}, else: %{}
+    ~p"/entities/#{object_id}/#{slug}?#{query}"
+  end
+
+  defp entry_path(_item, _return_path), do: nil
 
   attr :state, :map, required: true
 
