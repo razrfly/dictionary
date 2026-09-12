@@ -259,3 +259,12 @@ Evidence categories are deliberately separate: provider-shaped fixtures prove
 deterministic edge behavior, the local application proves the full server and
 browser integration, and the deployed calls prove current CineGraph contract
 and authentication. None is presented as a production throughput benchmark.
+
+## Credential preflight (CineGraph #1128)
+
+Run `mix dd.discovery.check` in the same environment as the server before a demo
+or deployment. Missing/blank keys, a disabled provider, and an invalid endpoint
+fail the command. Success confirms configuration only; it does not prove the
+credential works. After provisioning a dedicated key, restart the server and
+verify fresh war/nepotism/grief discovery, cache reuse and a genuine empty result.
+Keep the production cutover gate open until live verification is recorded.
