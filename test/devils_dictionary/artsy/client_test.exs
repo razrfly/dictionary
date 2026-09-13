@@ -371,4 +371,84 @@ defmodule DevilsDictionary.Artsy.ClientTest do
     refute printed =~ "fixture-secret-value"
     refute printed =~ "fixture-xapp-token-value"
   end
+
+  test "search hits of another type or on a foreign endpoint are labeled, never fetched" do
+    responses = [
+      response(201, %{"token" => "fixture-token"}),
+      response(200, %{
+        "_embedded" => %{
+          "results" => [
+            %{
+              "type" => "artist",
+              "title" => "Some Artist",
+              "_links" => %{
+                "self" => %{"href" => "https://api.artsy.net/api/artists/some-artist"}
+              }
+            },
+            %{
+              "type" => "artwork",
+              "title" => "Elsewhere",
+              "_links" => %{"self" => %{"href" => "https://evil.example.test/api/artworks/x"}}
+            },
+            %{
+              "type" => "artwork",
+              "title" => "Downgraded",
+              "_links" => %{"self" => %{"href" => "http://api.artsy.net/api/artworks/y"}}
+            }
+          ]
+        },
+        "_links" => %{}
+      })
+    ]
+
+    {client, calls} = client(responses)
+    assert {:ok, result, _client} = Client.search_artworks(client, "war", size: 3)
+
+    assert Enum.map(result.items, & &1.status) ==
+             [:unsupported_type, :invalid_endpoint, :invalid_endpoint]
+
+    # Token and search only: none of the three hits was fetched.
+    assert length(Agent.get(calls, & &1)) == 2
+  end
+
+  test "only https URLs on the configured host under /api/ without userinfo are safe" do
+    client = Client.new(client_id: "id", client_secret: "secret", coordinator: nil)
+
+    assert Client.safe_api_url?(client, "https://api.artsy.net/api/artworks/x")
+    refute Client.safe_api_url?(client, "http://api.artsy.net/api/artworks/x")
+    refute Client.safe_api_url?(client, "https://api.artsy.net:8443/api/artworks/x")
+    refute Client.safe_api_url?(client, "https://api.artsy.net/artworks/x")
+    refute Client.safe_api_url?(client, "https://user:pw@api.artsy.net/api/artworks/x")
+    refute Client.safe_api_url?(client, "https://www.artsy.net/api/artworks/x")
+    refute Client.safe_api_url?(client, nil)
+  end
+
+  test "a response that arrives after withdrawal is discarded, never published" do
+    coordinator =
+      start_supervised!({RequestCoordinator, name: nil, interval_ms: 0}, id: make_ref())
+
+    queue =
+      start_supervised!(
+        {Agent,
+         fn -> [response(201, %{"token" => "fixture-token"}), artwork_response("work-one")] end},
+        id: make_ref()
+      )
+
+    transmitted = start_supervised!({Agent, fn -> 0 end}, id: make_ref())
+
+    request_fun = fn options ->
+      Agent.update(transmitted, &(&1 + 1))
+      reply = Agent.get_and_update(queue, fn [r | rest] -> {{:ok, r}, rest} end)
+      # Withdrawal lands while the artwork request is in flight.
+      if String.contains?(options[:url], "/api/artworks/"),
+        do: RequestCoordinator.disable(coordinator)
+
+      reply
+    end
+
+    {client, _calls} = client([], coordinator: coordinator, request_fun: request_fun)
+
+    assert {:error, %{code: "provider_disabled"}, _client} = Client.artwork(client, "work-one")
+    assert Agent.get(transmitted, & &1) == 2
+  end
 end

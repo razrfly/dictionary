@@ -519,4 +519,67 @@ defmodule DevilsDictionary.Artworks.SeederTest do
       "mainsnak" => %{"datavalue" => %{"value" => value, "type" => "string"}}
     }
   end
+
+  test "a renamed provider slug on a known opaque ID reconciles instead of rebinding" do
+    {:ok, work} = Registry.create_work(%{preferred_label: "Fixture Work", work_kind: "artwork"})
+    {:ok, _} = Registry.add_external_id(work.object_id, "wikidata", "Q900086")
+    {:ok, _} = Registry.add_external_id(work.object_id, "artsy_artwork_slug", "fixture-work")
+    {:ok, _} = Registry.add_external_id(work.object_id, "artsy_artwork_id", "opaque-work-86")
+
+    responses = [
+      token(),
+      response(200, artwork("opaque-work-86", "fixture-work-renamed", "Painting"))
+    ]
+
+    {_manifest, summary} =
+      Seeder.run(Manifest.new([candidate()]), artsy_client: client(responses), record_limit: 1)
+
+    assert summary.conflicts == 1
+    assert summary.created == 0
+    assert Registry.by_external_id("artsy_artwork_id", "opaque-work-86") == work.object_id
+    assert Registry.by_external_id("artsy_artwork_slug", "fixture-work") == work.object_id
+    assert Registry.by_external_id("artsy_artwork_slug", "fixture-work-renamed") == nil
+    assert Repo.aggregate(ReconciliationCase, :count) == 1
+  end
+
+  test "a candidate without Wikidata identity is never seeded and never title-merged" do
+    {:ok, same_title} =
+      Registry.create_work(%{preferred_label: "Fixture Work", work_kind: "artwork"})
+
+    orphan = Map.delete(candidate(), "qid")
+
+    {_manifest, summary} =
+      Seeder.run(Manifest.new([orphan]),
+        artsy_client: client(painting_responses()),
+        record_limit: 1
+      )
+
+    assert summary.requests == 0
+    assert summary.created == 0
+    assert summary.matched == 0
+    assert Registry.by_external_id("artsy_artwork_slug", "fixture-work") == nil
+    assert Registry.by_external_id("artsy_artwork_id", "opaque-work-86") == nil
+    assert Registry.by_external_id("artsy_artwork_slug", "fixture-work") != same_title.object_id
+  end
+
+  test "a hydrated artwork with no genes completes and carries no candidate vocabulary" do
+    responses = [
+      token(),
+      response(200, artwork("opaque-work-86", "fixture-work", "Painting")),
+      response(200, %{"_embedded" => %{"artists" => []}}),
+      response(200, %{"_embedded" => %{"genes" => []}})
+    ]
+
+    {manifest, summary} =
+      Seeder.run(Manifest.new([candidate()]), artsy_client: client(responses), record_limit: 1)
+
+    assert summary.unavailable == 0
+    assert summary.created + summary.matched == 1
+
+    assert get_in(manifest, ["candidates", Access.at(0), "import", "stages", "genes", "status"]) ==
+             "complete"
+
+    work_id = Registry.by_external_id("wikidata", "Q900086")
+    assert Artworks.get(work_id).genes == []
+  end
 end

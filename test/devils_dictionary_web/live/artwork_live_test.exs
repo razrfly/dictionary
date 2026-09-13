@@ -455,4 +455,48 @@ defmodule DevilsDictionaryWeb.ArtworkLiveTest do
     {:ok, view, _html} = live(ctx.conn, "/connections/#{ctx.claim.id}?revision=1")
     assert render(view) =~ "revision 1"
   end
+
+  test "with the provider unconfigured the catalog, search and word page work locally", ctx do
+    refute DevilsDictionary.Artsy.Availability.configured?()
+
+    {:ok, view, _html} = live(ctx.conn, ~p"/artworks")
+    assert has_element?(view, "#artsy-disabled")
+    assert has_element?(view, "#artsy-search-submit[disabled]")
+
+    html = view |> form("#artwork-search", search: %{q: "Fixture Painter"}) |> render_change()
+    assert html =~ ~s(id="artwork-#{ctx.work.object_id}")
+
+    war = word!(ctx, "war", ["wordnet"])
+    sense!(ctx, war, "wordnet", external_id: "oewn-00975181-n#war", gloss: "armed conflict")
+    assert %{installed: 1} = Artworks.install_meaning_mappings!()
+
+    {:ok, word_view, _html} = live(ctx.conn, ~p"/define/war")
+    assert has_element?(word_view, "#artwork-candidates")
+  end
+
+  test "an artwork with no image renders an honest placeholder, not a broken entry", ctx do
+    {:ok, bare} =
+      Registry.create_work(%{preferred_label: "Bare Fixture", work_kind: "artwork"})
+
+    {:ok, view, _html} = live(ctx.conn, ~p"/artworks")
+
+    assert has_element?(view, "#artwork-#{bare.object_id}-image[data-image-state='empty']")
+
+    assert has_element?(
+             view,
+             "#artwork-#{bare.object_id}-image [data-artwork-fallback]:not([hidden])"
+           )
+
+    refute has_element?(view, "#artwork-#{bare.object_id}-image img[data-artwork-image]")
+    assert render(view) =~ "Bare Fixture"
+
+    {:ok, page, _html} =
+      live(
+        ctx.conn,
+        ~p"/entities/#{bare.object_id}/#{DevilsDictionary.Claims.Connection.slugify("Bare Fixture")}"
+      )
+
+    assert has_element?(page, "#entity-artwork[data-image-state='empty']")
+    assert has_element?(page, "#entity-artwork [data-artwork-fallback]:not([hidden])")
+  end
 end
