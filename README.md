@@ -299,6 +299,38 @@ Everything below is designed for in the MVP-0 schema and adds tables rather than
 
 ## Development
 
+### Setting up a second machine
+
+The toolchain comes from `.tool-versions`, so nothing has to be installed by hand
+beyond `mise` and a Postgres server:
+
+```bash
+gh repo clone razrfly/dictionary && cd dictionary
+mise install                               # erlang 28.1, elixir 1.19.0-otp-28, exactly
+mix setup                                  # deps, empty db, assets
+```
+
+That leaves a working app with an **empty** database. Two things are deliberately
+not in git and have to arrive another way:
+
+- **`.env`** — five provider keys. It is ignored on purpose; copy it out of band.
+- **`data/`** — the WordNet zip and the 2.6 GB Wiktionary dump. Only
+  `mix dd.rebuild` and `mix dd.manifest` read them, so the app runs without them.
+
+For the corpus itself, prefer a snapshot over a rebuild:
+
+```bash
+mix dd.snapshot --out ~/dictionary.dump                    # on the machine that has it
+mix dd.snapshot --restore ~/dictionary.dump --database devils_dictionary_v2
+mix ecto.migrate                                           # in case the snapshot is older
+```
+
+A 13 GB database dumps to about 1 GB in a minute and restores in proportion.
+`mix dd.rebuild` remains the reproducible path and the source of truth, but it is
+not the fast one, and the Wiktionary input is `url_is_rolling` in
+`priv/sources/MANIFEST.json` — re-downloading it gives different bytes than the
+pinned digest, so a rebuild produces a *similar* corpus, not the same one.
+
 Toolchain is pinned in `.tool-versions` (Elixir 1.19 on OTP 28; `mise` picks it up automatically). Phoenix 1.8.13, LiveView 1.2.11, Oban 2.24, Req 0.7. Dumps live in `data/` (ignored). The old dev database from the skeleton still exists: run `mix ecto.drop` once before the first `mix ecto.create`. After S0:
 
 ```bash
