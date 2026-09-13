@@ -56,11 +56,20 @@ defmodule DevilsDictionary.Artsy.Availability do
       true -> :ok
     end
   rescue
+    # Without the database we cannot read source lifecycle, but the coordinator
+    # is in-memory and still authoritative. Skipping it here would report a
+    # withdrawn provider as available.
     DBConnection.OwnershipError ->
-      if(present?(client_id) and present?(client_secret),
-        do: :ok,
-        else: {:error, :credentials_missing}
-      )
+      cond do
+        not (present?(client_id) and present?(client_secret)) ->
+          {:error, :credentials_missing}
+
+        not coordinator_enabled?(coordinator) ->
+          {:error, :source_withdrawn}
+
+        true ->
+          :ok
+      end
   end
 
   @doc "Runs a provider-data write while holding the same source lock as withdrawal."
@@ -93,14 +102,22 @@ defmodule DevilsDictionary.Artsy.Availability do
 
   defp coordinator_enabled?(nil), do: true
 
-  defp coordinator_enabled?(coordinator) when is_pid(coordinator),
-    do: Process.alive?(coordinator)
+  # Liveness is not permission: a running coordinator that withdrawal has
+  # disabled must still report the provider as unavailable.
+  defp coordinator_enabled?(coordinator) when is_pid(coordinator) do
+    Process.alive?(coordinator) and
+      DevilsDictionary.Artsy.RequestCoordinator.enabled?(coordinator)
+  catch
+    :exit, _ -> false
+  end
 
   defp coordinator_enabled?(coordinator) do
     case Process.whereis(coordinator) do
       nil -> false
       _pid -> DevilsDictionary.Artsy.RequestCoordinator.enabled?(coordinator)
     end
+  catch
+    :exit, _ -> false
   end
 
   defp config, do: Application.get_env(:devils_dictionary, :artsy, [])

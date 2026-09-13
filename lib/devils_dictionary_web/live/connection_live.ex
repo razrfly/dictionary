@@ -270,12 +270,16 @@ defmodule DevilsDictionaryWeb.ConnectionLive do
 
   defp revision_number(nil), do: {:ok, nil}
 
-  defp revision_number(value) do
+  defp revision_number(value) when is_binary(value) do
     case Integer.parse(value) do
       {n, ""} when n > 0 -> {:ok, n}
       _ -> :error
     end
   end
+
+  # `?revision[]=1` arrives as a list. A malformed query string is a bad
+  # request, not a crash.
+  defp revision_number(_value), do: :error
 
   defp maybe_reject_edit(socket, :edit, false, id) do
     socket

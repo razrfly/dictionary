@@ -445,4 +445,14 @@ defmodule DevilsDictionaryWeb.ArtworkLiveTest do
              "#artwork-candidates a[href^='/connect?'][href*='predicate=illustrates']"
            )
   end
+
+  test "a malformed revision query parameter is rejected, not a crash", ctx do
+    # `?revision[]=1` arrives as a list rather than a binary.
+    {:ok, malformed, html} = live(ctx.conn, "/connections/#{ctx.claim.id}?revision[]=1")
+    assert html =~ "no such connection"
+    refute render(malformed) =~ "revision 1"
+
+    {:ok, view, _html} = live(ctx.conn, "/connections/#{ctx.claim.id}?revision=1")
+    assert render(view) =~ "revision 1"
+  end
 end

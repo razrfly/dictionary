@@ -244,7 +244,11 @@ defmodule DevilsDictionary.Artsy.ClientTest do
     {client, calls} =
       client([response(201, %{"token" => "unused"})], coordinator: :missing_artsy_coordinator)
 
-    assert {:error, %{code: "coordinator_unavailable"}, client} =
+    # An absent coordinator is refused at the availability boundary, which is
+    # earlier than the reservation. `Availability` reports an unreachable
+    # coordinator as a withdrawn source whether or not the database is
+    # readable; what matters here is that nothing leaves the server.
+    assert {:error, %{code: "source_withdrawn"}, client} =
              Client.artwork(client, "work-one")
 
     assert client.request_count == 0

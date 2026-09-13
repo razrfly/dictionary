@@ -40,6 +40,23 @@ defmodule DevilsDictionary.Artworks.Manifest do
     upgrade(manifest)
   end
 
+  @doc """
+  Whether two manifests describe the same ordered set of exact identities.
+
+  A checkpoint is a manifest whose import state has moved on, so its own
+  checksum always differs from the base manifest's. Identity is what must not
+  differ: resuming a checkpoint built from a different selection would silently
+  process the wrong candidates.
+  """
+  def same_selection?(left, right) when is_map(left) and is_map(right),
+    do: identities(left) == identities(right)
+
+  defp identities(manifest) do
+    manifest
+    |> Map.get("candidates", [])
+    |> Enum.map(&{&1["qid"], &1["artsy_artwork_slug"]})
+  end
+
   @doc "Atomically saves a manifest with a refreshed checksum."
   def save!(manifest, path) do
     manifest = manifest |> Map.put("updated_at", timestamp()) |> put_checksum()

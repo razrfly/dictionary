@@ -92,7 +92,7 @@ defmodule Mix.Tasks.Dd.Artworks.Seed do
 
         manifest =
           if opts[:resume] && File.exists?(checkpoint_path),
-            do: Manifest.load!(checkpoint_path),
+            do: resumed_manifest!(checkpoint_path, base_manifest, path),
             else: base_manifest
 
         wikidata_stats =
@@ -166,20 +166,41 @@ defmodule Mix.Tasks.Dd.Artworks.Seed do
     )
   end
 
+  # Resuming a checkpoint that belongs to a different manifest would silently
+  # import the wrong candidate set. `--build --resume` makes that easy: the base
+  # manifest is rediscovered while a stale checkpoint still wins.
+  defp resumed_manifest!(checkpoint_path, base_manifest, path) do
+    checkpoint = Manifest.load!(checkpoint_path)
+
+    unless Manifest.same_selection?(checkpoint, base_manifest) do
+      Mix.raise(
+        "checkpoint #{checkpoint_path} does not match the manifest #{path}. " <>
+          "Its exact identities differ, so resuming it would import a different " <>
+          "candidate set. Pass --checkpoint for the matching checkpoint, or rerun " <>
+          "without --resume."
+      )
+    end
+
+    checkpoint
+  end
+
   defp hydrate_wikidata(manifest, opts, hydrate_opts \\ []) do
     existing_only? = hydrate_opts[:existing_only] || false
 
+    # The rule is "hydrate identities that already exist locally". Applying it
+    # per candidate instead of per QID dropped creators who do exist locally
+    # merely because one of their artworks does not.
     qids =
       manifest["candidates"]
-      |> Enum.filter(fn candidate ->
-        not existing_only? or
-          not is_nil(DevilsDictionary.Registry.by_external_id("wikidata", candidate["qid"]))
-      end)
       |> Enum.flat_map(fn candidate ->
         [candidate["qid"] | Enum.map(candidate["creators"] || [], & &1["qid"])]
       end)
       |> Enum.filter(&is_binary/1)
       |> Enum.uniq()
+      |> Enum.filter(fn qid ->
+        not existing_only? or
+          not is_nil(DevilsDictionary.Registry.by_external_id("wikidata", qid))
+      end)
 
     if qids == [] do
       %{skipped: true, reason: "no_matching_local_identities", requests: 0, records: 0}

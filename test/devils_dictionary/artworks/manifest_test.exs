@@ -18,6 +18,25 @@ defmodule DevilsDictionary.Artworks.ManifestTest do
     assert_raise ArgumentError, ~r/checksum mismatch/, fn -> Manifest.load!(path) end
   end
 
+  test "a checkpoint matches its own manifest and never a different selection" do
+    one = %{"qid" => "Q1", "artsy_artwork_slug" => "one", "kind" => "painting"}
+    two = %{"qid" => "Q2", "artsy_artwork_slug" => "two", "kind" => "painting"}
+
+    base = Manifest.new([one, two])
+
+    # A checkpoint is the same selection with import state moved on. Its own
+    # checksum differs, but its identities must not.
+    checkpoint = Manifest.update_candidate(base, 0, %{"status" => "matched"})
+    refute checkpoint["checksum"] == base["checksum"]
+    assert Manifest.same_selection?(checkpoint, base)
+
+    refute Manifest.same_selection?(Manifest.new([one]), base)
+    refute Manifest.same_selection?(Manifest.new([two, one]), base)
+
+    renamed = %{"qid" => "Q2", "artsy_artwork_slug" => "two-b", "kind" => "painting"}
+    refute Manifest.same_selection?(Manifest.new([one, renamed]), base)
+  end
+
   test "completed statuses are resumable while quota is retried" do
     for status <- ~w(matched created skipped conflict unavailable) do
       assert Manifest.completed?(%{"import" => %{"status" => status}})
