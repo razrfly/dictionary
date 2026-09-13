@@ -21,12 +21,22 @@ defmodule DevilsDictionaryWeb.EntityLive do
   use DevilsDictionaryWeb, :live_view
 
   alias DevilsDictionary.Claims.Connection
+  alias DevilsDictionary.Artworks
   alias DevilsDictionary.Encyclopedia.EntityPage
   alias DevilsDictionary.Markdown
 
   @impl true
   def mount(_params, _session, socket),
-    do: {:ok, assign(socket, page: nil, id: nil, cursors: %{}, entity_slug: nil, back_path: nil)}
+    do:
+      {:ok,
+       assign(socket,
+         page: nil,
+         artwork: nil,
+         id: nil,
+         cursors: %{},
+         entity_slug: nil,
+         back_path: nil
+       )}
 
   @impl true
   def handle_params(%{"id" => id, "slug" => slug} = params, _uri, socket) do
@@ -51,6 +61,7 @@ defmodule DevilsDictionaryWeb.EntityLive do
           {:noreply,
            socket
            |> assign(:page, page)
+           |> assign(:artwork, Artworks.get(object_id))
            |> assign(:id, object_id)
            |> assign(:cursors, cursors)
            |> assign(:entity_slug, canonical)
@@ -69,6 +80,7 @@ defmodule DevilsDictionaryWeb.EntityLive do
   defp missing(socket, id) do
     socket
     |> assign(:page, nil)
+    |> assign(:artwork, nil)
     |> assign(:id, id)
     |> assign(:page_title, "no such thing")
   end
@@ -138,23 +150,36 @@ defmodule DevilsDictionaryWeb.EntityLive do
             class="grid items-start gap-6 sm:grid-cols-[8rem_minmax(0,1fr)] sm:gap-8"
           >
             <div
-              :if={@page.entity.image_url || @page.details[:work_kind] == "film"}
+              :if={@page.entity.image_url || @artwork || @page.details[:work_kind] == "film"}
               id="entity-artwork"
+              phx-hook="ArtworkImage"
+              phx-update="ignore"
+              data-image-state={
+                if(@page.entity.image_url || (@artwork && @artwork.image_url),
+                  do: "loading",
+                  else: "empty"
+                )
+              }
               class="aspect-[2/3] w-28 overflow-hidden rounded-sm bg-mist-950/5 sm:w-32 dark:bg-white/5"
             >
               <img
-                :if={@page.entity.image_url}
-                src={@page.entity.image_url}
-                alt={"Poster for #{@page.entity.label}"}
+                :if={@page.entity.image_url || (@artwork && @artwork.image_url)}
+                src={@page.entity.image_url || (@artwork && @artwork.image_url)}
+                alt={if(@artwork, do: @page.entity.label, else: "Poster for #{@page.entity.label}")}
                 referrerpolicy="no-referrer"
+                data-artwork-image
                 class="size-full object-cover"
               />
               <div
-                :if={!@page.entity.image_url}
                 id="entity-artwork-fallback"
+                data-artwork-fallback
+                hidden={!!(@page.entity.image_url || (@artwork && @artwork.image_url))}
                 class="flex size-full items-center justify-center text-mist-400"
               >
-                <.icon name="hero-film" class="size-7 stroke-current" />
+                <.icon
+                  name={if(@artwork, do: "hero-photo", else: "hero-film")}
+                  class="size-7 stroke-current"
+                />
               </div>
             </div>
             <div class="min-w-0">
@@ -171,6 +196,54 @@ defmodule DevilsDictionaryWeb.EntityLive do
               </.text>
             </div>
           </header>
+
+          <section
+            :if={@artwork}
+            id="artwork-metadata"
+            class="mt-8 max-w-3xl border-y border-mist-950/10 py-6 dark:border-white/10"
+          >
+            <.eyebrow>artwork record</.eyebrow>
+            <dl class="mt-3 grid gap-x-8 gap-y-3 text-sm/6 sm:grid-cols-2">
+              <div :if={@artwork.creators != []}>
+                <dt class="text-mist-500">Creator</dt>
+                <dd>
+                  <span :for={{creator, index} <- Enum.with_index(@artwork.creators)}>
+                    <span :if={index > 0}>, </span><.a navigate={
+                      ~p"/entities/#{creator.object_id}/#{Connection.slugify(creator.label)}"
+                    }>
+                      {creator.label}
+                    </.a>
+                  </span>
+                </dd>
+              </div>
+              <div :if={@artwork.date}>
+                <dt class="text-mist-500">Date</dt><dd>{@artwork.date}</dd>
+              </div>
+              <div :if={@artwork.medium}>
+                <dt class="text-mist-500">Medium</dt><dd>{@artwork.medium}</dd>
+              </div>
+              <div :if={@artwork.collection}>
+                <dt class="text-mist-500">Collection</dt><dd>{@artwork.collection}</dd>
+              </div>
+              <div :if={@artwork.image_attribution} class="sm:col-span-2">
+                <dt class="text-mist-500">Image credit or rights notice</dt>
+                <dd>{@artwork.image_attribution}</dd>
+              </div>
+            </dl>
+            <div :if={@artwork.source_links != []} class="mt-4 flex flex-wrap gap-4 text-sm/6">
+              <a
+                :for={source <- @artwork.source_links}
+                href={source.url}
+                target="_blank"
+                rel="noreferrer"
+                class="underline underline-offset-4"
+              >{source.label} ↗</a>
+            </div>
+            <p :if={@artwork.freshness} class="mt-4 text-xs/5 text-mist-500">
+              Artsy fields are a freshness-limited source cache and may become stale. Dictionary keeps
+              Wikidata and independently supported identity data when that provider is unavailable.
+            </p>
+          </section>
 
           <.panel
             :if={@page.meaning_connections != []}

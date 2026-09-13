@@ -40,7 +40,7 @@ defmodule DevilsDictionary.Encyclopedia.EntityPage do
   import Ecto.Query
 
   alias DevilsDictionary.Claims
-  alias DevilsDictionary.Claims.{Connection, Visibility}
+  alias DevilsDictionary.Claims.{AssertionRevision, Connection, Visibility}
   alias DevilsDictionary.Discovery.{Mapping, Result, Run}
   alias DevilsDictionary.Encyclopedia
   alias DevilsDictionary.Registry
@@ -107,6 +107,7 @@ defmodule DevilsDictionary.Encyclopedia.EntityPage do
 
   defp assemble(%Entity{} = entity, opts, identity_state, requested_id, outputs) do
     id = entity.object_id
+    entity_details = details(entity)
 
     {biography, biography_page} =
       incoming_page(id, "about", "content", opts[:biography_after])
@@ -132,7 +133,7 @@ defmodule DevilsDictionary.Encyclopedia.EntityPage do
       other_connections(:incoming, id, opts[:connections_in_after])
 
     {connections_out, connections_out_page} =
-      other_connections(:outgoing, id, opts[:connections_out_after])
+      other_connections(:outgoing, id, opts[:connections_out_after], entity_details)
 
     %__MODULE__{
       entity: Encyclopedia.view(entity),
@@ -142,7 +143,7 @@ defmodule DevilsDictionary.Encyclopedia.EntityPage do
         canonical_id: entity.object_id,
         outputs: entity_views(outputs)
       },
-      details: details(entity),
+      details: entity_details,
       biography: content_views(Enum.map(biography, & &1.subject_object_id)),
       works: entity_views(Enum.map(works, & &1.subject_object_id)),
       definitions: definition_views(Enum.map(definitions, & &1.subject_object_id)),
@@ -166,7 +167,7 @@ defmodule DevilsDictionary.Encyclopedia.EntityPage do
     }
   end
 
-  defp other_connections(direction, object_id, after_cursor) do
+  defp other_connections(direction, object_id, after_cursor, details \\ %{}) do
     # The named sections above are all reverse-role sections: biography,
     # authored works/definitions, editions, and edition contents are incoming
     # claims. Suppressing the same predicates while walking *out* erased the
@@ -175,30 +176,21 @@ defmodule DevilsDictionary.Encyclopedia.EntityPage do
     # the connection section.
     filters =
       case direction do
-        :incoming -> [exclude_predicates: @presented_predicates]
-        :outgoing -> [exclude_predicates: ["illustrates"]]
+        :incoming ->
+          [exclude_predicates: @presented_predicates]
+
+        :outgoing ->
+          exclusions =
+            if details[:work_kind] == "artwork",
+              do: ["illustrates", "authored_by"],
+              else: ["illustrates"]
+
+          [exclude_predicates: exclusions]
       end
 
     opts = filters ++ [after: after_cursor, limit: @section_cap + 1]
 
-    rows =
-      case direction do
-        :incoming -> Claims.incoming(object_id, opts)
-        :outgoing -> Claims.outgoing(object_id, opts)
-      end
-
-    visible = Enum.take(rows, @section_cap)
-
-    count =
-      case direction do
-        :incoming -> Claims.count_incoming(object_id, filters)
-        :outgoing -> Claims.count_outgoing(object_id, filters)
-      end
-
-    page = %{
-      count: count,
-      next: if(length(rows) > @section_cap, do: Claims.next_cursor(visible), else: nil)
-    }
+    {visible, page} = semantic_claim_page(direction, object_id, opts)
 
     endpoint_ids =
       Enum.map(visible, fn row ->
@@ -227,14 +219,13 @@ defmodule DevilsDictionary.Encyclopedia.EntityPage do
   end
 
   defp meaning_connections(object_id, after_cursor) do
-    all_rows =
-      Claims.outgoing(object_id,
+    {rows, page} =
+      semantic_claim_page(:outgoing, object_id,
         predicate: "illustrates",
         after: after_cursor,
         limit: @section_cap + 1
       )
 
-    rows = Enum.take(all_rows, @section_cap)
     endpoints = Connection.endpoint_summaries(Enum.map(rows, & &1.object_object_id))
     review_states = Claims.display_review_states(Enum.map(rows, & &1.id))
 
@@ -246,11 +237,7 @@ defmodule DevilsDictionary.Encyclopedia.EntityPage do
         |> Map.put(:review_state, Map.fetch!(review_states, row.id))
       end)
 
-    {views,
-     %{
-       count: Claims.count_outgoing(object_id, predicate: "illustrates"),
-       next: if(length(all_rows) > @section_cap, do: Claims.next_cursor(rows))
-     }}
+    {views, page}
   end
 
   defp discovery_appearances(object_id, after_cursor) do
@@ -368,23 +355,109 @@ defmodule DevilsDictionary.Encyclopedia.EntityPage do
   end
 
   defp incoming_page(object_id, predicate, subject_kind, after_cursor) do
-    filters = [predicate: predicate, subject_kind: subject_kind]
-
-    rows =
-      Claims.incoming(
-        object_id,
-        filters ++ [after: after_cursor, limit: @section_cap + 1]
-      )
-
-    visible = Enum.take(rows, @section_cap)
-
-    page = %{
-      count: Claims.count_incoming(object_id, filters),
-      next: if(length(rows) > @section_cap, do: Claims.next_cursor(visible), else: nil)
-    }
-
-    {visible, page}
+    semantic_claim_page(:incoming, object_id,
+      predicate: predicate,
+      subject_kind: subject_kind,
+      after: after_cursor,
+      limit: @section_cap + 1
+    )
   end
+
+  defp semantic_claim_page(direction, object_id, opts) do
+    family = Registry.canonical_family(object_id)
+
+    query =
+      case direction do
+        :incoming ->
+          where(
+            AssertionRevision,
+            [revision],
+            revision.object_object_id in ^family and revision.is_current and
+              revision.lifecycle_state == :active
+          )
+
+        :outgoing ->
+          where(
+            AssertionRevision,
+            [revision],
+            revision.subject_object_id in ^family and revision.is_current and
+              revision.lifecycle_state == :active
+          )
+      end
+
+    grouped =
+      query
+      |> join(:inner, [revision], predicate in Claims.Predicate,
+        on: predicate.id == revision.predicate_id,
+        as: :semantic_predicate
+      )
+      |> semantic_predicate(opts[:predicate])
+      |> semantic_exclusions(opts[:exclude_predicates])
+      |> semantic_subject_kind(opts[:subject_kind])
+      |> Claims.visible(:public)
+      |> group_by([revision], [
+        revision.subject_object_id,
+        revision.predicate_id,
+        revision.object_object_id,
+        revision.context_object_id,
+        revision.jurisdiction_entity_id,
+        revision.language_tag,
+        revision.valid_from,
+        revision.valid_to
+      ])
+      |> select([revision], %{id: min(revision.id)})
+
+    count = grouped |> subquery() |> Repo.aggregate(:count)
+
+    grouped =
+      case opts[:after] do
+        id when is_integer(id) -> having(grouped, [revision], min(revision.id) > ^id)
+        _ -> grouped
+      end
+
+    representative_ids =
+      grouped
+      |> order_by([revision], asc: min(revision.id))
+      |> limit(^(opts[:limit] || @section_cap + 1))
+      |> Repo.all()
+      |> Enum.map(& &1.id)
+
+    by_id =
+      Repo.all(
+        from revision in AssertionRevision,
+          where: revision.id in ^representative_ids,
+          preload: :predicate
+      )
+      |> Map.new(&{&1.id, &1})
+
+    rows = representative_ids |> Enum.map(&Map.fetch!(by_id, &1)) |> Enum.take(@section_cap)
+
+    {rows,
+     %{
+       count: count,
+       next:
+         if(length(representative_ids) > @section_cap,
+           do: List.last(rows).id,
+           else: nil
+         )
+     }}
+  end
+
+  defp semantic_predicate(query, nil), do: query
+
+  defp semantic_predicate(query, key),
+    do: where(query, [semantic_predicate: predicate], predicate.key == ^key)
+
+  defp semantic_exclusions(query, nil), do: query
+  defp semantic_exclusions(query, []), do: query
+
+  defp semantic_exclusions(query, keys),
+    do: where(query, [semantic_predicate: predicate], predicate.key not in ^keys)
+
+  defp semantic_subject_kind(query, nil), do: query
+
+  defp semantic_subject_kind(query, kind),
+    do: where(query, [revision], revision.subject_kind == ^kind)
 
   # A person's subtype row, a work's, an edition's — whichever this entity has.
   # One query, and nil for a kind that has no detail table.

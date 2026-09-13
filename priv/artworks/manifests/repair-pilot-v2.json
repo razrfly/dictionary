@@ -1,0 +1,58 @@
+{
+  "candidates": [
+    {
+      "artsy_artwork_slug": "titian-cupid-with-the-wheel-of-fortune",
+      "creators": [
+        {
+          "artsy_artist_slug": "titian",
+          "name": "Titian",
+          "qid": "Q47551"
+        }
+      ],
+      "description": "painting by Titian",
+      "import": {
+        "status": "pending"
+      },
+      "kind": "painting",
+      "origin": "local_registry",
+      "qid": "Q12115903",
+      "selection_reason": "existing_local_wikidata_p11005",
+      "title": "Cupid with the Wheel of Time",
+      "wikipedia_title": null
+    },
+    {
+      "artsy_artwork_slug": "titian-ranuccio-farnese-1",
+      "creators": [
+        {
+          "artsy_artist_slug": "titian",
+          "name": "Titian",
+          "qid": "Q47551"
+        }
+      ],
+      "description": "painting by Titian",
+      "import": {
+        "status": "pending"
+      },
+      "kind": "painting",
+      "origin": "wikidata_sparql",
+      "qid": "Q12146958",
+      "selection_reason": "wikidata_p11005_with_english_wikipedia",
+      "title": "Portrait of Ranuccio Farnese",
+      "wikipedia_title": "Portrait of Ranuccio Farnese"
+    }
+  ],
+  "checksum": "cb0e39e1655c66f87533216dcd827d762a8b759be8416f8d1833f20dbc6cc0ca",
+  "generated_at": "2026-09-12T19:52:19Z",
+  "schema_version": 2,
+  "selection": {
+    "artwork_kinds": [
+      "painting"
+    ],
+    "identity": "Wikidata QID plus P11005; title is never identity",
+    "pilot_cap": 2,
+    "selection_reason": "bounded repair verification: one existing local identity and one missing local candidate",
+    "source": "Wikidata P11005/P2042",
+    "wikipedia_required": false
+  },
+  "updated_at": "2026-09-12T19:54:47Z"
+}

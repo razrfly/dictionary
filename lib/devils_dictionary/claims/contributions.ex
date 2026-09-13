@@ -95,7 +95,7 @@ defmodule DevilsDictionary.Claims.Contributions do
       claim = unwrap(Claims.assert(subject, predicate, object, attrs))
       revision = Claims.current_revision(claim.id)
 
-      Enum.each(evidence, &add_exact_evidence!(revision.id, &1, user))
+      Enum.each(evidence, &add_exact_evidence!(revision.id, &1, user, subject))
 
       claim
     end)
@@ -593,7 +593,7 @@ defmodule DevilsDictionary.Claims.Contributions do
 
       revision = unwrap(Claims.revise(assertion_id, revision_attrs))
       copy_evidence!(current.id, revision.id)
-      Enum.each(evidence, &add_exact_evidence!(revision.id, &1, user))
+      Enum.each(evidence, &add_exact_evidence!(revision.id, &1, user, current.subject_object_id))
       revision
     end)
   end
@@ -616,7 +616,7 @@ defmodule DevilsDictionary.Claims.Contributions do
     end)
   end
 
-  defp add_exact_evidence!(revision_id, attrs, user) do
+  defp add_exact_evidence!(revision_id, attrs, user, subject_object_id) do
     attrs = atomize_known(attrs)
     if attrs[:invalid_target], do: Repo.rollback(:invalid_evidence)
 
@@ -624,10 +624,12 @@ defmodule DevilsDictionary.Claims.Contributions do
       Map.take(attrs, [
         :source_record_revision_id,
         :content_revision_id,
-        :sense_revision_id
+        :sense_revision_id,
+        :expected_source_slug,
+        :expected_object_id
       ])
 
-    validate_evidence_target!(target)
+    validate_evidence_target!(target, subject_object_id)
 
     role = parse_evidence_role(attrs[:evidence_role])
     locator = String.trim(attrs[:locator] || "")
@@ -635,6 +637,7 @@ defmodule DevilsDictionary.Claims.Contributions do
 
     evidence_attrs =
       target
+      |> Map.take([:source_record_revision_id, :content_revision_id, :sense_revision_id])
       |> Map.put(:evidence_role, role)
       |> Map.put(:locator, locator)
       |> Map.put(
@@ -645,9 +648,30 @@ defmodule DevilsDictionary.Claims.Contributions do
     unwrap(Claims.add_evidence(revision_id, evidence_attrs))
   end
 
-  defp validate_evidence_target!(target) do
+  defp validate_evidence_target!(target, subject_object_id) do
     valid? =
       case target do
+        %{
+          source_record_revision_id: id,
+          expected_source_slug: source_slug,
+          expected_object_id: expected_object_id
+        }
+        when is_integer(id) and is_binary(source_slug) and is_integer(expected_object_id) ->
+          expected_object_id == subject_object_id and
+            Repo.exists?(
+              from revision in DevilsDictionary.Corpus.SourceRecordRevision,
+                join: record in DevilsDictionary.Sources.SourceRecord,
+                on: record.id == revision.source_record_id and record.display_allowed,
+                join: source in DevilsDictionary.Sources.Source,
+                on:
+                  source.id == record.source_id and source.slug == ^source_slug and source.active,
+                join: output in DevilsDictionary.Sources.MaterializedOutput,
+                on:
+                  output.source_record_id == record.id and
+                    output.output_object_id == ^expected_object_id and is_nil(output.retired_at),
+                where: revision.id == ^id
+            )
+
         %{source_record_revision_id: id} when is_integer(id) ->
           Repo.exists?(from r in DevilsDictionary.Corpus.SourceRecordRevision, where: r.id == ^id)
 
@@ -783,6 +807,8 @@ defmodule DevilsDictionary.Claims.Contributions do
     "locator" => :locator,
     "attribution_text" => :attribution_text,
     "invalid_target" => :invalid_target,
+    "expected_source_slug" => :expected_source_slug,
+    "expected_object_id" => :expected_object_id,
     "entity_kind" => :entity_kind,
     "preferred_label" => :preferred_label,
     "description" => :description,

@@ -166,18 +166,120 @@ defmodule DevilsDictionaryWeb.ConnectionLive do
     end
   end
 
-  def handle_params(_params, _uri, socket) do
-    {:noreply, assign(socket, page_title: "propose a connection")}
+  def handle_params(params, _uri, socket) do
+    subject = preselected_subject(params["subject"])
+
+    object = preselected_subject(params["object"])
+    predicates = predicates_for(subject)
+
+    predicate =
+      Enum.find_value(predicates, fn option ->
+        if option.key == params["predicate"], do: option.key
+      end)
+
+    object =
+      if object && predicate && valid_object_hits([object], subject, predicate) != [],
+        do: object,
+        else: nil
+
+    rationale = trim_param(params["rationale"])
+    locator = trim_param(params["evidence_locator"])
+
+    {evidence_items, evidence_rows} =
+      preselected_evidence(params["evidence_revision"], locator, subject)
+
+    {:noreply,
+     socket
+     |> assign(
+       page_title: "propose a connection",
+       subject: subject,
+       object: object,
+       predicate: predicate,
+       predicates: predicates,
+       rationale: rationale,
+       locator: locator,
+       evidence_items: evidence_items,
+       contribution_form:
+         to_form(%{
+           "rationale" => rationale,
+           "locator" => locator,
+           "claimant" => "me",
+           "language_tag" => "",
+           "valid_from" => "",
+           "valid_to" => ""
+         })
+     )
+     |> stream(:selected_evidence, evidence_rows, reset: true)}
   end
+
+  defp preselected_subject(nil), do: nil
+
+  defp preselected_subject(value) when is_binary(value) do
+    case Integer.parse(value) do
+      {id, ""} when id > 0 -> Connection.endpoint(id)
+      _ -> nil
+    end
+  end
+
+  defp preselected_subject(_value), do: nil
+
+  defp preselected_evidence(nil, _locator, _subject), do: {%{}, []}
+
+  defp preselected_evidence(value, locator, %{object_id: subject_id})
+       when is_binary(value) and is_integer(subject_id) do
+    with {id, ""} when id > 0 <- Integer.parse(value),
+         true <- locator != "",
+         true <-
+           Repo.exists?(
+             from revision in DevilsDictionary.Corpus.SourceRecordRevision,
+               join: record in DevilsDictionary.Sources.SourceRecord,
+               on: record.id == revision.source_record_id and record.display_allowed,
+               join: source in DevilsDictionary.Sources.Source,
+               on: source.id == record.source_id and source.slug == "artsy" and source.active,
+               join: output in DevilsDictionary.Sources.MaterializedOutput,
+               on:
+                 output.source_record_id == record.id and
+                   output.output_object_id == ^subject_id and is_nil(output.retired_at),
+               where: revision.id == ^id
+           ) do
+      item = %{
+        id: "selected-evidence-source-#{id}",
+        object_id: nil,
+        label: "Artsy source observation",
+        detail: "Direct provider assignment retained for review",
+        target: %{
+          source_record_revision_id: id,
+          expected_source_slug: "artsy",
+          expected_object_id: subject_id
+        },
+        evidence_role: "supports",
+        locator: locator,
+        attribution_text: "Artsy direct artwork gene assignment"
+      }
+
+      {%{item.id => item}, [item]}
+    else
+      _ -> {%{}, []}
+    end
+  end
+
+  defp preselected_evidence(_value, _locator, _subject), do: {%{}, []}
+
+  defp trim_param(value) when is_binary(value), do: String.trim(value)
+  defp trim_param(_value), do: ""
 
   defp revision_number(nil), do: {:ok, nil}
 
-  defp revision_number(value) do
+  defp revision_number(value) when is_binary(value) do
     case Integer.parse(value) do
       {n, ""} when n > 0 -> {:ok, n}
       _ -> :error
     end
   end
+
+  # `?revision[]=1` arrives as a list. A malformed query string is a bad
+  # request, not a crash.
+  defp revision_number(_value), do: :error
 
   defp maybe_reject_edit(socket, :edit, false, id) do
     socket

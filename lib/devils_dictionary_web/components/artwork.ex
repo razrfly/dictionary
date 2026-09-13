@@ -1,0 +1,138 @@
+defmodule DevilsDictionaryWeb.Artwork do
+  @moduledoc "Reusable, identity-addressed artwork entries and meaning candidates."
+
+  use DevilsDictionaryWeb, :html
+
+  alias DevilsDictionary.Claims.Connection
+
+  attr :artwork, :map, required: true
+  attr :candidate, :map, default: nil
+  attr :connect, :boolean, default: false
+  attr :id, :string, required: true
+
+  def card(assigns) do
+    ~H"""
+    <article
+      id={@id}
+      class="group grid grid-cols-[4.5rem_minmax(0,1fr)] gap-4 border-t border-mist-950/10 py-5 first:border-t-0 dark:border-white/10 sm:grid-cols-[6rem_minmax(0,1fr)]"
+    >
+      <.link
+        id={"#{@id}-image"}
+        navigate={entity_path(@artwork)}
+        phx-hook="ArtworkImage"
+        phx-update="ignore"
+        data-image-state={if(@artwork.image_url, do: "loading", else: "empty")}
+        class="aspect-[4/5] overflow-hidden rounded-sm bg-mist-950/5 transition-transform duration-200 group-hover:-translate-y-0.5 dark:bg-white/5"
+        aria-label={"Open #{@artwork.title}"}
+      >
+        <img
+          :if={@artwork.image_url}
+          src={@artwork.image_url}
+          alt=""
+          loading="lazy"
+          referrerpolicy="no-referrer"
+          data-artwork-image
+          class="size-full object-cover"
+        />
+        <span
+          data-artwork-fallback
+          hidden={!!@artwork.image_url}
+          class="flex size-full items-center justify-center text-mist-400"
+        >
+          <.icon name="hero-photo" class="size-6 stroke-current" />
+        </span>
+      </.link>
+
+      <div class="min-w-0">
+        <.link
+          navigate={entity_path(@artwork)}
+          class="font-display text-xl text-balance text-mist-950 underline-offset-4 group-hover:underline dark:text-white"
+        >
+          {@artwork.title}
+        </.link>
+        <p :if={@artwork.creators != []} class="mt-1 text-sm/6 text-mist-500">
+          by
+          <span :for={{creator, index} <- Enum.with_index(@artwork.creators)}>
+            <span :if={index > 0}>, </span><.link
+              navigate={creator_path(creator)}
+              class="hover:underline"
+            >{creator.label}</.link>
+          </span>
+        </p>
+        <p
+          :if={@artwork.description}
+          class="mt-2 line-clamp-2 text-sm/6 text-mist-600 dark:text-mist-300"
+        >
+          {@artwork.description}
+        </p>
+        <dl
+          :if={@artwork.date || @artwork.medium || @artwork.collection}
+          class="mt-2 flex flex-wrap gap-x-2 text-sm/6 text-mist-500"
+        >
+          <div :if={@artwork.date} class="contents">
+            <dt class="sr-only">Date</dt><dd>{@artwork.date}</dd>
+          </div>
+          <div :if={@artwork.medium} class="contents">
+            <dt class="sr-only">Medium</dt><dd>· {@artwork.medium}</dd>
+          </div>
+          <div :if={@artwork.collection} class="contents">
+            <dt class="sr-only">Collection</dt><dd>· {@artwork.collection}</dd>
+          </div>
+        </dl>
+        <p :if={@artwork.image_attribution} class="mt-1 text-xs/5 text-mist-400">
+          Image: {@artwork.image_attribution}
+        </p>
+
+        <div :if={@candidate} class="mt-3 text-sm/6">
+          <p id={"#{@id}-meaning"} class="text-mist-700 dark:text-mist-200">
+            Candidate for “{@candidate.meaning}”
+            <span class="text-mist-500">({@candidate.language})</span>
+          </p>
+          <p class="text-mist-500">
+            {candidate_relation(@candidate.match_type)} Artsy gene “{@candidate.match_reason.gene_name}” · not yet reviewed
+          </p>
+          <p class="mt-1 text-mist-500">
+            {@candidate.match_reason.note}
+          </p>
+        </div>
+
+        <div class="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-sm/6">
+          <.link navigate={entity_path(@artwork)} class="font-medium underline underline-offset-4">Open work</.link>
+          <.link
+            :if={@connect}
+            navigate={connect_path(@artwork, @candidate)}
+            class="font-medium underline underline-offset-4"
+          >
+            Connect to a meaning
+          </.link>
+          <a
+            :if={@artwork.artsy && @artwork.artsy["permalink"]}
+            href={@artwork.artsy["permalink"]}
+            target="_blank"
+            rel="noreferrer"
+            class="text-mist-500 underline underline-offset-4 hover:text-mist-950 dark:hover:text-white"
+          >Artsy source ↗</a>
+        </div>
+      </div>
+    </article>
+    """
+  end
+
+  defp entity_path(artwork),
+    do: ~p"/entities/#{artwork.object_id}/#{Connection.slugify(artwork.title)}"
+
+  defp creator_path(creator),
+    do: ~p"/entities/#{creator.object_id}/#{Connection.slugify(creator.label)}"
+
+  defp connect_path(artwork, nil), do: ~p"/connect?subject=#{artwork.object_id}"
+
+  defp connect_path(artwork, candidate) do
+    ~p"/connect?#{%{subject: artwork.object_id, object: candidate.sense_id, predicate: "illustrates", evidence_revision: candidate.source_record_revision_id, evidence_locator: "Artsy direct gene #{candidate.match_reason.gene_id}", rationale: candidate.match_reason.note}}"
+  end
+
+  defp candidate_relation(:broader), do: "Broader-context"
+  defp candidate_relation(:related), do: "Related"
+  defp candidate_relation("broader"), do: "Broader-context"
+  defp candidate_relation("related"), do: "Related"
+  defp candidate_relation(_), do: "Direct"
+end

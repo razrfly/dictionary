@@ -1,0 +1,37 @@
+{
+  "candidates": [
+    {
+      "artsy_artwork_slug": "ferdinand-hodler-the-disappointed-souls-les-ames-decues",
+      "creators": [
+        {
+          "artsy_artist_slug": "ferdinand-hodler",
+          "name": "Ferdinand Hodler",
+          "qid": "Q214564"
+        }
+      ],
+      "description": "1892 painting by Ferdinand Hodler",
+      "import": {
+        "status": "pending"
+      },
+      "kind": "painting",
+      "qid": "Q122978100",
+      "selection_reason": "wikidata_p11005_painting",
+      "title": "Les Âmes Déçues",
+      "wikipedia_title": null
+    }
+  ],
+  "checksum": "6ca607c0fe4214e8355994e7113c21f60995f28a4472f5a7928c9e8e8bcb882f",
+  "generated_at": "2026-09-12T19:52:19Z",
+  "schema_version": 2,
+  "selection": {
+    "artwork_kinds": [
+      "painting"
+    ],
+    "identity": "Wikidata QID plus P11005; title is never identity",
+    "pilot_cap": 1,
+    "selection_reason": "exact Wikidata P11005 painting; bounded independent audit repair",
+    "source": "issue-86 repair new-entry proof",
+    "wikipedia_required": false
+  },
+  "updated_at": "2026-09-12T19:54:47Z"
+}

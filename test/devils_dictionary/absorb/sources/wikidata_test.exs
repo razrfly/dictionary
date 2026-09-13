@@ -80,6 +80,59 @@ defmodule DevilsDictionary.Absorb.Sources.WikidataTest do
   end
 
   describe "materialize/1" do
+    test "artwork and artist crosswalks keep Wikidata properties and namespaces exact" do
+      artwork =
+        %{
+          "id" => "Q900086",
+          "labels" => %{"en" => %{"value" => "Fixture Work"}},
+          "descriptions" => %{},
+          "aliases" => %{},
+          "sitelinks" => %{},
+          "claims" => %{
+            "P31" => [entity_statement("Q3305213")],
+            "P11005" => [string_statement("fixture-work", "normal")],
+            "P170" => [entity_statement("Q900087")]
+          }
+        }
+
+      artist =
+        %{
+          "id" => "Q900087",
+          "labels" => %{"en" => %{"value" => "Fixture Artist"}},
+          "descriptions" => %{},
+          "aliases" => %{},
+          "sitelinks" => %{},
+          "claims" => %{
+            "P31" => [entity_statement("Q5")],
+            "P2042" => [string_statement("fixture-artist", "normal")]
+          }
+        }
+
+      artwork_output = out(artwork)
+      assert [work] = artwork_output.concepts
+      assert work.kind == :work
+      assert work.work_kind == "artwork"
+      assert work.metadata["wikidata_creators"] == ["Q900087"]
+
+      assert Enum.any?(
+               work.external_identifiers,
+               &(&1.namespace == "artsy_artwork_slug" and &1.external_id == "fixture-work")
+             )
+
+      assert Enum.any?(artwork_output.concept_relations, fn relation ->
+               relation.type == :authored_by and relation.from_concept == "Q900086" and
+                 relation.to_concept == "Q900087"
+             end)
+
+      assert [person] = out(artist).concepts
+      assert person.kind == :person
+
+      assert Enum.any?(
+               person.external_identifiers,
+               &(&1.namespace == "artsy_artist_slug" and &1.external_id == "fixture-artist")
+             )
+    end
+
     test "film records expose exact cross-provider identifiers and release year" do
       titanic = film_records() |> Enum.find(&(&1["id"] == "Q44578")) |> out()
       assert [concept] = titanic.concepts
@@ -276,6 +329,16 @@ defmodule DevilsDictionary.Absorb.Sources.WikidataTest do
       "mainsnak" => %{
         "snaktype" => "value",
         "datavalue" => %{"type" => "string", "value" => value}
+      }
+    }
+  end
+
+  defp entity_statement(qid) do
+    %{
+      "rank" => "normal",
+      "type" => "statement",
+      "mainsnak" => %{
+        "datavalue" => %{"value" => %{"id" => qid}, "type" => "wikibase-entityid"}
       }
     }
   end

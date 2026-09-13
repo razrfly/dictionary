@@ -1,0 +1,840 @@
+{
+  "candidates": [
+    {
+      "artsy_artwork_slug": "anna-rimbault-borrel-valentine-de-milan-and-odette-de-champs-divers-from-the-alexander-dumas-novel-isabelle-de-baviere",
+      "creators": [
+        {
+          "artsy_artist_slug": "anna-rimbault-borrel",
+          "name": "Anna Rimbaut-Borrel",
+          "qid": "Q86617778"
+        }
+      ],
+      "description": "painting by Anna Rimbaut-Borrel",
+      "import": {
+        "status": "pending"
+      },
+      "kind": "painting",
+      "qid": "Q106249870",
+      "selection_reason": "wikidata_p11005_painting",
+      "title": "Valentine of Milan and Odette de Champdivers",
+      "wikipedia_title": null
+    },
+    {
+      "artsy_artwork_slug": "paul-klee-tor-im-garten-gate-in-the-garden",
+      "creators": [
+        {
+          "artsy_artist_slug": "paul-klee",
+          "name": "Paul Klee",
+          "qid": "Q44007"
+        }
+      ],
+      "description": "painting by Paul Klee",
+      "import": {
+        "status": "pending"
+      },
+      "kind": "painting",
+      "qid": "Q116689343",
+      "selection_reason": "wikidata_p11005_painting",
+      "title": "Gate in the Garden",
+      "wikipedia_title": null
+    },
+    {
+      "artsy_artwork_slug": "raphael-portrait-of-pope-julius-ii",
+      "creators": [
+        {
+          "artsy_artist_slug": "raphael",
+          "name": "Raphael",
+          "qid": "Q5597"
+        }
+      ],
+      "description": "painting by Raphael in the National Gallery, London",
+      "import": {
+        "status": "pending"
+      },
+      "kind": "painting",
+      "qid": "Q11918714",
+      "selection_reason": "wikidata_p11005_painting",
+      "title": "Portrait of Pope Julius II",
+      "wikipedia_title": null
+    },
+    {
+      "artsy_artwork_slug": "titian-bacchus-and-ariadne-1",
+      "creators": [
+        {
+          "artsy_artist_slug": "titian",
+          "name": "Titian",
+          "qid": "Q47551"
+        }
+      ],
+      "description": "painting by Titian",
+      "import": {
+        "status": "pending"
+      },
+      "kind": "painting",
+      "qid": "Q1206860",
+      "selection_reason": "wikidata_p11005_with_english_wikipedia",
+      "title": "Bacchus and Ariadne",
+      "wikipedia_title": "Bacchus and Ariadne"
+    },
+    {
+      "artsy_artwork_slug": "titian-cupid-with-the-wheel-of-fortune",
+      "creators": [
+        {
+          "artsy_artist_slug": "titian",
+          "name": "Titian",
+          "qid": "Q47551"
+        }
+      ],
+      "description": "painting by Titian",
+      "import": {
+        "status": "pending"
+      },
+      "kind": "painting",
+      "qid": "Q12115903",
+      "selection_reason": "wikidata_p11005_painting",
+      "title": "Cupid with the Wheel of Time",
+      "wikipedia_title": null
+    },
+    {
+      "artsy_artwork_slug": "titian-ranuccio-farnese-1",
+      "creators": [
+        {
+          "artsy_artist_slug": "titian",
+          "name": "Titian",
+          "qid": "Q47551"
+        }
+      ],
+      "description": "painting by Titian",
+      "import": {
+        "status": "pending"
+      },
+      "kind": "painting",
+      "qid": "Q12146958",
+      "selection_reason": "wikidata_p11005_with_english_wikipedia",
+      "title": "Portrait of Ranuccio Farnese",
+      "wikipedia_title": "Portrait of Ranuccio Farnese"
+    },
+    {
+      "artsy_artwork_slug": "ferdinand-hodler-the-disappointed-souls-les-ames-decues",
+      "creators": [
+        {
+          "artsy_artist_slug": "ferdinand-hodler",
+          "name": "Ferdinand Hodler",
+          "qid": "Q214564"
+        }
+      ],
+      "description": "1892 painting by Ferdinand Hodler",
+      "import": {
+        "status": "pending"
+      },
+      "kind": "painting",
+      "qid": "Q122978100",
+      "selection_reason": "wikidata_p11005_painting",
+      "title": "Les Âmes Déçues",
+      "wikipedia_title": null
+    },
+    {
+      "artsy_artwork_slug": "amable-paul-coutan-portrait-of-francisco-pizarro",
+      "creators": [
+        {
+          "artsy_artist_slug": "amable-paul-coutan",
+          "name": "Amable-Paul Coutan",
+          "qid": "Q4738989"
+        }
+      ],
+      "description": "painting by Amable-Paul Coutan",
+      "import": {
+        "status": "pending"
+      },
+      "kind": "painting",
+      "qid": "Q123239773",
+      "selection_reason": "wikidata_p11005_painting",
+      "title": "Francisco Pizarro, conqueror (1475–1541)",
+      "wikipedia_title": null
+    },
+    {
+      "artsy_artwork_slug": "tiziano-vecellio-possible-portrait-of-jan-van-haanen",
+      "creators": [
+        {
+          "artsy_artist_slug": "titian",
+          "name": "Titian",
+          "qid": "Q47551"
+        }
+      ],
+      "description": "painting by Titian",
+      "import": {
+        "status": "pending"
+      },
+      "kind": "painting",
+      "qid": "Q123905131",
+      "selection_reason": "wikidata_p11005_painting",
+      "title": "Possible portrait of Giovanni d'Anna",
+      "wikipedia_title": null
+    },
+    {
+      "artsy_artwork_slug": "jacopo-palma-il-giovane-self-portrait",
+      "creators": [
+        {
+          "artsy_artist_slug": "jacopo-palma-il-giovane",
+          "name": "Palma il Giovane",
+          "qid": "Q651795"
+        }
+      ],
+      "description": "painting by Palma il Giovane in the Pinacoteca di Brera",
+      "import": {
+        "status": "pending"
+      },
+      "kind": "painting",
+      "qid": "Q126709512",
+      "selection_reason": "wikidata_p11005_painting",
+      "title": "Self-portrait",
+      "wikipedia_title": null
+    },
+    {
+      "artsy_artwork_slug": "louise-abbema-sarah-bernhardt-hunting-with-hounds",
+      "creators": [
+        {
+          "artsy_artist_slug": "louise-abbema",
+          "name": "Louise Abbéma",
+          "qid": "Q237911"
+        }
+      ],
+      "description": "painting by Louise Abbéma",
+      "import": {
+        "status": "pending"
+      },
+      "kind": "painting",
+      "qid": "Q130206451",
+      "selection_reason": "wikidata_p11005_painting",
+      "title": "Sarah Bernhardt Hunting with Hounds",
+      "wikipedia_title": null
+    },
+    {
+      "artsy_artwork_slug": "sandro-botticelli-the-birth-of-venus",
+      "creators": [
+        {
+          "artsy_artist_slug": "sandro-botticelli",
+          "name": "Sandro Botticelli",
+          "qid": "Q5669"
+        }
+      ],
+      "description": "painting by Sandro Botticelli, Uffizi",
+      "import": {
+        "status": "pending"
+      },
+      "kind": "painting",
+      "qid": "Q151047",
+      "selection_reason": "wikidata_p11005_with_english_wikipedia",
+      "title": "The Birth of Venus",
+      "wikipedia_title": "The Birth of Venus"
+    },
+    {
+      "artsy_artwork_slug": "titian-portrait-of-a-lady-in-white",
+      "creators": [
+        {
+          "artsy_artist_slug": "titian",
+          "name": "Titian",
+          "qid": "Q47551"
+        }
+      ],
+      "description": "painting by Titian",
+      "import": {
+        "status": "pending"
+      },
+      "kind": "painting",
+      "qid": "Q17072626",
+      "selection_reason": "wikidata_p11005_with_english_wikipedia",
+      "title": "Portrait of a Lady in White",
+      "wikipedia_title": "Portrait of a Lady in White"
+    },
+    {
+      "artsy_artwork_slug": "titian-assumption-of-the-virgin",
+      "creators": [
+        {
+          "artsy_artist_slug": "titian",
+          "name": "Titian",
+          "qid": "Q47551"
+        }
+      ],
+      "description": "painting by Titian in Venice",
+      "import": {
+        "status": "pending"
+      },
+      "kind": "painting",
+      "qid": "Q1899740",
+      "selection_reason": "wikidata_p11005_with_english_wikipedia",
+      "title": "Assumption of the Virgin",
+      "wikipedia_title": "Assumption of the Virgin (Titian)"
+    },
+    {
+      "artsy_artwork_slug": "robert-rauschenberg-rebus",
+      "creators": [
+        {
+          "artsy_artist_slug": "robert-rauschenberg",
+          "name": "Robert Rauschenberg",
+          "qid": "Q164358"
+        }
+      ],
+      "description": "painting by Robert Rauschenberg",
+      "import": {
+        "status": "pending"
+      },
+      "kind": "painting",
+      "qid": "Q19887272",
+      "selection_reason": "wikidata_p11005_painting",
+      "title": "Rebus",
+      "wikipedia_title": null
+    },
+    {
+      "artsy_artwork_slug": "robert-rauschenberg-canyon",
+      "creators": [
+        {
+          "artsy_artist_slug": "robert-rauschenberg",
+          "name": "Robert Rauschenberg",
+          "qid": "Q164358"
+        }
+      ],
+      "description": "painting by Robert Rauschenberg",
+      "import": {
+        "status": "pending"
+      },
+      "kind": "painting",
+      "qid": "Q19887473",
+      "selection_reason": "wikidata_p11005_with_english_wikipedia",
+      "title": "Canyon",
+      "wikipedia_title": "Canyon (Rauschenberg)"
+    },
+    {
+      "artsy_artwork_slug": "henri-rousseau-tropical-forest-with-monkeys",
+      "creators": [
+        {
+          "artsy_artist_slug": "henri-rousseau",
+          "name": "Henri Rousseau",
+          "qid": "Q156386"
+        }
+      ],
+      "description": "painting by Henri Rousseau",
+      "import": {
+        "status": "pending"
+      },
+      "kind": "painting",
+      "qid": "Q20191494",
+      "selection_reason": "wikidata_p11005_painting",
+      "title": "Tropical Forest with Monkeys",
+      "wikipedia_title": null
+    },
+    {
+      "artsy_artwork_slug": "roger-de-la-fresnaye-the-bathers",
+      "creators": [
+        {
+          "artsy_artist_slug": "roger-de-la-fresnaye",
+          "name": "Roger de La Fresnaye",
+          "qid": "Q718882"
+        }
+      ],
+      "description": "painting by Roger de La Fresnaye",
+      "import": {
+        "status": "pending"
+      },
+      "kind": "painting",
+      "qid": "Q20191624",
+      "selection_reason": "wikidata_p11005_painting",
+      "title": "The Bathers",
+      "wikipedia_title": null
+    },
+    {
+      "artsy_artwork_slug": "sir-william-orpen-mrs-charles-s-carstairs",
+      "creators": [
+        {
+          "artsy_artist_slug": "sir-william-orpen",
+          "name": "William Orpen",
+          "qid": "Q922483"
+        }
+      ],
+      "description": "painting by William Orpen",
+      "import": {
+        "status": "pending"
+      },
+      "kind": "painting",
+      "qid": "Q20191834",
+      "selection_reason": "wikidata_p11005_painting",
+      "title": "Mrs. Charles S. Carstairs",
+      "wikipedia_title": null
+    },
+    {
+      "artsy_artwork_slug": "giovanni-cariani-portrait-of-a-young-man-with-a-green-book",
+      "creators": [
+        {
+          "artsy_artist_slug": "giovanni-cariani",
+          "name": "Giovanni Cariani",
+          "qid": "Q976391"
+        }
+      ],
+      "description": "painting attributed to Giovanni Cariani",
+      "import": {
+        "status": "pending"
+      },
+      "kind": "painting",
+      "qid": "Q20202605",
+      "selection_reason": "wikidata_p11005_painting",
+      "title": "Portrait of a Young Man with a Green Book",
+      "wikipedia_title": null
+    },
+    {
+      "artsy_artwork_slug": "diego-rivera-retrato-de-ramon-gomez-de-la-serna",
+      "creators": [
+        {
+          "artsy_artist_slug": "diego-rivera",
+          "name": "Diego Rivera",
+          "qid": "Q171128"
+        }
+      ],
+      "description": "painting by Diego Rivera",
+      "import": {
+        "status": "pending"
+      },
+      "kind": "painting",
+      "qid": "Q21606628",
+      "selection_reason": "wikidata_p11005_with_english_wikipedia",
+      "title": "Portrait of Ramón Gómez de la Serna",
+      "wikipedia_title": "Portrait of Ramón Gómez de la Serna"
+    },
+    {
+      "artsy_artwork_slug": "titian-venus-rising-from-the-sea-a-venus-anadyomenea",
+      "creators": [
+        {
+          "artsy_artist_slug": "titian",
+          "name": "Titian",
+          "qid": "Q47551"
+        }
+      ],
+      "description": "painting by Titian",
+      "import": {
+        "status": "pending"
+      },
+      "kind": "painting",
+      "qid": "Q2466780",
+      "selection_reason": "wikidata_p11005_with_english_wikipedia",
+      "title": "Venus Anadyomene",
+      "wikipedia_title": "Venus Anadyomene (Titian)"
+    },
+    {
+      "artsy_artwork_slug": "titian-diana-and-actaeon",
+      "creators": [
+        {
+          "artsy_artist_slug": "titian",
+          "name": "Titian",
+          "qid": "Q47551"
+        }
+      ],
+      "description": "painting by Titian",
+      "import": {
+        "status": "pending"
+      },
+      "kind": "painting",
+      "qid": "Q2528177",
+      "selection_reason": "wikidata_p11005_with_english_wikipedia",
+      "title": "Diana and Actaeon",
+      "wikipedia_title": "Diana and Actaeon (Titian)"
+    },
+    {
+      "artsy_artwork_slug": "titian-pieta",
+      "creators": [
+        {
+          "artsy_artist_slug": "jacopo-palma-il-giovane",
+          "name": "Palma il Giovane",
+          "qid": "Q651795"
+        },
+        {
+          "artsy_artist_slug": "titian",
+          "name": "Titian",
+          "qid": "Q47551"
+        }
+      ],
+      "description": "painting by Titian, finished by Palma il Giovane",
+      "import": {
+        "status": "pending"
+      },
+      "kind": "painting",
+      "qid": "Q2665840",
+      "selection_reason": "wikidata_p11005_with_english_wikipedia",
+      "title": "Pietà",
+      "wikipedia_title": "Pietà (Titian)"
+    },
+    {
+      "artsy_artwork_slug": "gustav-klimt-portrait-of-hermine-gallia",
+      "creators": [
+        {
+          "artsy_artist_slug": "gustav-klimt",
+          "name": "Gustav Klimt",
+          "qid": "Q34661"
+        }
+      ],
+      "description": "painting by Gustav Klimt",
+      "import": {
+        "status": "pending"
+      },
+      "kind": "painting",
+      "qid": "Q26713913",
+      "selection_reason": "wikidata_p11005_painting",
+      "title": "Portrait of Hermine Gallia",
+      "wikipedia_title": null
+    },
+    {
+      "artsy_artwork_slug": "john-pettie-bonnie-prince-charlie-entering-the-ballroom-at-holyroodhouse",
+      "creators": [
+        {
+          "artsy_artist_slug": "john-pettie",
+          "name": "John Pettie",
+          "qid": "Q3182289"
+        }
+      ],
+      "description": "painting by John Pettie",
+      "import": {
+        "status": "pending"
+      },
+      "kind": "painting",
+      "qid": "Q28027545",
+      "selection_reason": "wikidata_p11005_with_english_wikipedia",
+      "title": "Bonnie Prince Charlie Entering the Ballroom at Holyroodhouse",
+      "wikipedia_title": "Bonnie Prince Charlie Entering the Ballroom at Holyroodhouse"
+    },
+    {
+      "artsy_artwork_slug": "giovanni-battista-moroni-gian-gerolamo-grumelli",
+      "creators": [
+        {
+          "artsy_artist_slug": "giovanni-battista-moroni",
+          "name": "Giovanni Battista Moroni",
+          "qid": "Q504949"
+        }
+      ],
+      "description": "painting in Palazzo Moroni, Bergamo, Italy, by Giovanni Battista Moroni",
+      "import": {
+        "status": "pending"
+      },
+      "kind": "painting",
+      "qid": "Q28952741",
+      "selection_reason": "wikidata_p11005_with_english_wikipedia",
+      "title": "Portrait of Gian Gerolamo Grumelli (The Gentleman in Pink)",
+      "wikipedia_title": "The Knight in Pink"
+    },
+    {
+      "artsy_artwork_slug": "titian-christ-and-the-adultresess",
+      "creators": [
+        {
+          "artsy_artist_slug": "titian",
+          "name": "Titian",
+          "qid": "Q47551"
+        }
+      ],
+      "description": "painting by Titian",
+      "import": {
+        "status": "pending"
+      },
+      "kind": "painting",
+      "qid": "Q3697619",
+      "selection_reason": "wikidata_p11005_with_english_wikipedia",
+      "title": "Christ and the Woman Taken in Adultery",
+      "wikipedia_title": "Christ and the Adulteress (Titian, Glasgow)"
+    },
+    {
+      "artsy_artwork_slug": "odilon-redon-the-cyclops",
+      "creators": [
+        {
+          "artsy_artist_slug": "odilon-redon",
+          "name": "Odilon Redon",
+          "qid": "Q154349"
+        }
+      ],
+      "description": "painting by Odilon Redon",
+      "import": {
+        "status": "pending"
+      },
+      "kind": "painting",
+      "qid": "Q3793426",
+      "selection_reason": "wikidata_p11005_with_english_wikipedia",
+      "title": "The Cyclops",
+      "wikipedia_title": "The Cyclops (Redon)"
+    },
+    {
+      "artsy_artwork_slug": "titian-isabella-deste",
+      "creators": [
+        {
+          "artsy_artist_slug": "titian",
+          "name": "Titian",
+          "qid": "Q47551"
+        }
+      ],
+      "description": "painting by Titian",
+      "import": {
+        "status": "pending"
+      },
+      "kind": "painting",
+      "qid": "Q3853901",
+      "selection_reason": "wikidata_p11005_with_english_wikipedia",
+      "title": "Portrait of Isabella d'Este",
+      "wikipedia_title": "Portrait of Isabella d'Este (Titian)"
+    },
+    {
+      "artsy_artwork_slug": "titian-portrait-of-the-venetian-painter-giovanni-bellini",
+      "creators": [
+        {
+          "artsy_artist_slug": "titian",
+          "name": "Titian",
+          "qid": "Q47551"
+        }
+      ],
+      "description": "painting by Titian",
+      "import": {
+        "status": "pending"
+      },
+      "kind": "painting",
+      "qid": "Q3937402",
+      "selection_reason": "wikidata_p11005_painting",
+      "title": "Portrait of the Venetian Painter Giovanni Bellini (?)",
+      "wikipedia_title": null
+    },
+    {
+      "artsy_artwork_slug": "titian-portrait-of-girolamo-fracastoro",
+      "creators": [
+        {
+          "artsy_artist_slug": "titian",
+          "name": "Titian",
+          "qid": "Q47551"
+        }
+      ],
+      "description": "painting by Titian",
+      "import": {
+        "status": "pending"
+      },
+      "kind": "painting",
+      "qid": "Q3937551",
+      "selection_reason": "wikidata_p11005_painting",
+      "title": "Portrait of Girolamo Fracastoro",
+      "wikipedia_title": null
+    },
+    {
+      "artsy_artwork_slug": "titian-portrait-of-giacomo-dolfin",
+      "creators": [
+        {
+          "artsy_artist_slug": "titian",
+          "name": "Titian",
+          "qid": "Q47551"
+        }
+      ],
+      "description": "painting by Titian",
+      "import": {
+        "status": "pending"
+      },
+      "kind": "painting",
+      "qid": "Q3937574",
+      "selection_reason": "wikidata_p11005_with_english_wikipedia",
+      "title": "Portrait of Giacomo di Andrea Dolfin",
+      "wikipedia_title": "Portrait of Giacomo di Andrea Dolfin"
+    },
+    {
+      "artsy_artwork_slug": "titian-diana-and-callisto",
+      "creators": [
+        {
+          "artsy_artist_slug": "titian",
+          "name": "Titian",
+          "qid": "Q47551"
+        }
+      ],
+      "description": "painting by Titian",
+      "import": {
+        "status": "pending"
+      },
+      "kind": "painting",
+      "qid": "Q4161055",
+      "selection_reason": "wikidata_p11005_with_english_wikipedia",
+      "title": "Diana and Callisto",
+      "wikipedia_title": "Diana and Callisto"
+    },
+    {
+      "artsy_artwork_slug": "titian-cardinal-pietro-bembo",
+      "creators": [
+        {
+          "artsy_artist_slug": "titian",
+          "name": "Titian",
+          "qid": "Q47551"
+        }
+      ],
+      "description": "painting by Titian in Washington, D.C.",
+      "import": {
+        "status": "pending"
+      },
+      "kind": "painting",
+      "qid": "Q4252531",
+      "selection_reason": "wikidata_p11005_with_english_wikipedia",
+      "title": "Portrait of Cardinal Pietro Bembo",
+      "wikipedia_title": "Portrait of Cardinal Pietro Bembo"
+    },
+    {
+      "artsy_artwork_slug": "rembrandt-van-rijn-the-anatomy-lesson-of-dr-nicolaes-tulp",
+      "creators": [
+        {
+          "artsy_artist_slug": "rembrandt-van-rijn",
+          "name": "Rembrandt",
+          "qid": "Q5598"
+        }
+      ],
+      "description": "painting by Rembrandt von Rijn",
+      "import": {
+        "status": "pending"
+      },
+      "kind": "painting",
+      "qid": "Q661378",
+      "selection_reason": "wikidata_p11005_with_english_wikipedia",
+      "title": "The Anatomy Lesson of Dr. Nicolaes Tulp",
+      "wikipedia_title": "The Anatomy Lesson of Dr. Nicolaes Tulp"
+    },
+    {
+      "artsy_artwork_slug": "charles-demuth-i-saw-the-figure-5-in-gold",
+      "creators": [
+        {
+          "artsy_artist_slug": "charles-demuth",
+          "name": "Charles Demuth",
+          "qid": "Q380494"
+        }
+      ],
+      "description": "painting by Charles Demuth",
+      "import": {
+        "status": "pending"
+      },
+      "kind": "painting",
+      "qid": "Q6622215",
+      "selection_reason": "wikidata_p11005_with_english_wikipedia",
+      "title": "I Saw the Figure 5 in Gold",
+      "wikipedia_title": "I Saw the Figure 5 in Gold"
+    },
+    {
+      "artsy_artwork_slug": "titian-venus-of-urbino-1",
+      "creators": [
+        {
+          "artsy_artist_slug": "titian",
+          "name": "Titian",
+          "qid": "Q47551"
+        }
+      ],
+      "description": "painting by Titian",
+      "import": {
+        "status": "pending"
+      },
+      "kind": "painting",
+      "qid": "Q727875",
+      "selection_reason": "wikidata_p11005_with_english_wikipedia",
+      "title": "Venus of Urbino",
+      "wikipedia_title": "Venus of Urbino"
+    },
+    {
+      "artsy_artwork_slug": "titian-st-jerome-in-penitence",
+      "creators": [
+        {
+          "artsy_artist_slug": "titian",
+          "name": "Titian",
+          "qid": "Q47551"
+        }
+      ],
+      "description": "painting by Titian in the Pinacoteca di Brera",
+      "import": {
+        "status": "pending"
+      },
+      "kind": "painting",
+      "qid": "Q7401416",
+      "selection_reason": "wikidata_p11005_with_english_wikipedia",
+      "title": "Saint Jerome in Penitence",
+      "wikipedia_title": "Saint Jerome in Penitence (Titian, 1552)"
+    },
+    {
+      "artsy_artwork_slug": "titian-christ-shown-to-the-people-ecce-homo",
+      "creators": [
+        {
+          "artsy_artist_slug": "titian",
+          "name": "Titian",
+          "qid": "Q47551"
+        }
+      ],
+      "description": "painting by Titian in the Saint Louis Art Museum, St. Louis, Missouri",
+      "import": {
+        "status": "pending"
+      },
+      "kind": "painting",
+      "qid": "Q78644404",
+      "selection_reason": "wikidata_p11005_painting",
+      "title": "Christ Shown to the People (Ecce Homo)",
+      "wikipedia_title": null
+    },
+    {
+      "artsy_artwork_slug": "titian-venus-with-a-mirror",
+      "creators": [
+        {
+          "artsy_artist_slug": "titian",
+          "name": "Titian",
+          "qid": "Q47551"
+        }
+      ],
+      "description": "painting by Titian in Washington, D.C.",
+      "import": {
+        "status": "pending"
+      },
+      "kind": "painting",
+      "qid": "Q7920648",
+      "selection_reason": "wikidata_p11005_with_english_wikipedia",
+      "title": "Venus with a Mirror",
+      "wikipedia_title": "Venus with a Mirror"
+    },
+    {
+      "artsy_artwork_slug": "titian-la-sultana-rossa",
+      "creators": [],
+      "description": "painting by the workshop of Titian",
+      "import": {
+        "status": "pending"
+      },
+      "kind": "painting",
+      "qid": "Q79400367",
+      "selection_reason": "wikidata_p11005_painting",
+      "title": "Portrait of a Woman",
+      "wikipedia_title": null
+    },
+    {
+      "artsy_artwork_slug": "jacopo-tintoretto-christ-at-the-sea-of-galilee",
+      "creators": [],
+      "description": "painting from the circle of Jacopo Tintoretto, possibly by Lambert Sustris",
+      "import": {
+        "status": "pending"
+      },
+      "kind": "painting",
+      "qid": "Q9191534",
+      "selection_reason": "wikidata_p11005_with_english_wikipedia",
+      "title": "Christ at the Sea of Galilee",
+      "wikipedia_title": "Christ at the Sea of Galilee"
+    }
+  ],
+  "checksum": "8ca842026087267545fee9e3df0740a79247e924fd6dd3e83daa533d04476921",
+  "generated_at": "2026-09-12T19:52:19Z",
+  "schema_version": 2,
+  "selection": {
+    "artwork_kinds": [
+      "painting"
+    ],
+    "discovery": {
+      "discovered": 43,
+      "kinds": [
+        "painting"
+      ],
+      "limit": 50,
+      "local": 0,
+      "next_offset": 57,
+      "remote": 43,
+      "requests": 2,
+      "truncated": false
+    },
+    "identity": "Wikidata QID plus P11005; title is never identity",
+    "pilot_cap": 500,
+    "selection_reason": "painting with exact Artsy artwork identifier",
+    "source": "Wikidata P11005/P2042",
+    "wikipedia_required": false
+  },
+  "updated_at": "2026-09-12T19:54:47Z"
+}

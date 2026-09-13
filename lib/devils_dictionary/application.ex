@@ -12,6 +12,7 @@ defmodule DevilsDictionary.Application do
       DevilsDictionary.Repo,
       {DNSCluster, query: Application.get_env(:devils_dictionary, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: DevilsDictionary.PubSub},
+      DevilsDictionary.Artsy.RequestCoordinator,
       {Oban, Application.fetch_env!(:devils_dictionary, Oban)},
       # Health figures that are seconds of queries (the scorecard) are cached
       # here so a page can show them without recomputing them on every mount.

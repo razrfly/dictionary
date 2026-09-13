@@ -42,6 +42,8 @@ local_provider_env =
                    "CINEGRAPH_API_KEY",
                    "CINEGRAPH_GRAPHQL_URL",
                    "GIPHY_API_KEY",
+                   "ARTSY_CLIENT_ID",
+                   "ARTSY_CLIENT_SECRET",
                    "DISCOVERY_POSITIVE_REFRESH_SECONDS",
                    "DISCOVERY_EMPTY_REFRESH_SECONDS",
                    "CINEGRAPH_DISCOVERY_POSITIVE_REFRESH_SECONDS",
@@ -89,6 +91,20 @@ end
 # Dedicated public Web API key; only eligible GIF shelves receive it.
 if giphy_api_key = System.get_env("GIPHY_API_KEY") || local_provider_env["GIPHY_API_KEY"] do
   config :devils_dictionary, :giphy, api_key: giphy_api_key
+end
+
+# Artsy credentials remain server-only. They are read from the ignored local
+# development file or exported environment and are never placed in LiveView
+# assigns, URLs, logs, manifests, or source records.
+artsy_client_id = System.get_env("ARTSY_CLIENT_ID") || local_provider_env["ARTSY_CLIENT_ID"]
+
+artsy_client_secret =
+  System.get_env("ARTSY_CLIENT_SECRET") || local_provider_env["ARTSY_CLIENT_SECRET"]
+
+if artsy_client_id && artsy_client_secret do
+  config :devils_dictionary, :artsy,
+    client_id: artsy_client_id,
+    client_secret: artsy_client_secret
 end
 
 parse_policy_integer = fn name ->

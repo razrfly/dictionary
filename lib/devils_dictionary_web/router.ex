@@ -36,6 +36,10 @@ defmodule DevilsDictionaryWeb.Router do
     live "/words/:id/:slug", WordLive, :canonical
     live "/define/:slug", WordLive, :show
 
+    # Saved, reusable works are local-first. The optional Artsy check on this
+    # page is explicitly transient and never runs during a word-page render.
+    live "/artworks", ArtworkLive, :index
+
     # The thing page (#74 §F): one identity, asked different questions. Bierce's
     # biography, his works and his definitions are three sections of the same
     # object id, which is the whole of #74's goal 2.
