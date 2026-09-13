@@ -6,6 +6,7 @@ defmodule DevilsDictionaryWeb.ArtworkLiveTest do
   alias DevilsDictionary.{Artworks, Claims, Fixtures, Registry, Repo, Sources}
   alias DevilsDictionary.Claims.{Assertion, AssertionEvidence}
   alias DevilsDictionary.Corpus.SourceRecordRevision
+  alias DevilsDictionary.Encyclopedia.EntityPage
   alias DevilsDictionary.Sources.{MaterializedOutput, Source}
 
   setup ctx do
@@ -74,6 +75,16 @@ defmodule DevilsDictionaryWeb.ArtworkLiveTest do
   test "catalog search links both the work and its creator", ctx do
     {:ok, view, _html} = live(ctx.conn, ~p"/artworks")
     assert has_element?(view, "#artwork-#{ctx.work.object_id}")
+
+    assert has_element?(
+             view,
+             "#artwork-#{ctx.work.object_id}-image[phx-hook='ArtworkImage'][data-image-state='loading'] img[data-artwork-image]"
+           )
+
+    assert has_element?(
+             view,
+             "#artwork-#{ctx.work.object_id}-image [data-artwork-fallback][hidden]"
+           )
 
     assert has_element?(
              view,
@@ -203,6 +214,8 @@ defmodule DevilsDictionaryWeb.ArtworkLiveTest do
       )
 
     assert has_element?(view, "#artwork-metadata")
+    assert has_element?(view, "#entity-artwork[phx-hook='ArtworkImage'] img[data-artwork-image]")
+    assert has_element?(view, "#entity-artwork [data-artwork-fallback][hidden]")
     assert has_element?(view, "#artwork-metadata a[href^='/entities/#{ctx.creator.object_id}/']")
     assert render(view) =~ "Oil on canvas"
     assert render(view) =~ "Fixture Museum"
@@ -235,11 +248,201 @@ defmodule DevilsDictionaryWeb.ArtworkLiveTest do
     refute ctx.work.object_id == sense.object_id
   end
 
+  test "composer ignores non-text and unrelated preselected evidence", ctx do
+    %{conn: conn, user: user} = register_and_log_in_user(%{conn: ctx.conn})
+    _user = Repo.update!(Ecto.Changeset.change(user, internal_contributor: true))
+
+    {:ok, view, _html} =
+      live(
+        conn,
+        "/connect?rationale[]=bad&evidence_locator[]=bad&evidence_revision[]=1"
+      )
+
+    refute has_element?(view, "[id^='selected-evidence-source-']")
+
+    {:ok, other_record} =
+      Sources.upsert_record(ctx.sources["wikidata"], %{
+        external_id: "Q900199",
+        raw: %{"id" => "Q900199"}
+      })
+
+    path =
+      ~p"/connect?#{%{subject: ctx.work.object_id, evidence_revision: other_record.current_revision.id, evidence_locator: "unrelated"}}"
+
+    {:ok, view, _html} = live(conn, path)
+    refute has_element?(view, "#selected-evidence-source-#{other_record.current_revision.id}")
+  end
+
+  test "related mapping labels and assignments beyond catalog page one remain discoverable",
+       ctx do
+    love = word!(ctx, "love", ["wordnet"])
+
+    sense =
+      sense!(ctx, love, "wordnet",
+        external_id: "oewn-07558676-n#love",
+        gloss: "a strong positive emotion of regard and affection"
+      )
+
+    target =
+      Enum.reduce(1..501, nil, fn index, target ->
+        label = "Scale Artwork #{String.pad_leading(to_string(index), 3, "0")}"
+        slug = "scale-artwork-#{index}"
+        {:ok, work} = Registry.create_work(%{preferred_label: label, work_kind: "artwork"})
+
+        genes =
+          if index == 501,
+            do: [%{"id" => "4de292fcef72520001005fe5", "name" => "Love"}],
+            else: [%{"id" => "irrelevant-gene", "name" => "Irrelevant"}]
+
+        {:ok, record} =
+          Sources.upsert_record(ctx.sources["artsy"], %{
+            external_id: "artwork:scale-#{index}",
+            url: "https://www.artsy.net/artwork/#{slug}",
+            raw: %{
+              "artwork" => %{
+                "id" => "scale-#{index}",
+                "slug" => slug,
+                "title" => label,
+                "category" => "Painting"
+              },
+              "genes" => genes
+            }
+          })
+
+        Repo.insert!(%MaterializedOutput{
+          source_record_id: record.id,
+          output_role: "concept",
+          output_key: "scale-#{index}",
+          output_object_id: work.object_id
+        })
+
+        if index == 501, do: work, else: target
+      end)
+
+    assert %{installed: 1} = Artworks.install_meaning_mappings!()
+
+    assert [%{artwork: artwork, sense_id: sense_id, match_type: "related"}] =
+             Artworks.suggestions([love.object_id])
+
+    assert artwork.object_id == target.object_id
+    assert sense_id == sense.object_id
+
+    {:ok, view, _html} = live(ctx.conn, ~p"/define/love")
+    assert render(view) =~ "Related Artsy gene"
+  end
+
   test "rejected creator relationship is hidden from cards and search", ctx do
     revision = Claims.current_revision(ctx.claim.id)
     {:ok, _review} = Claims.review(revision.id, :rejected)
 
     assert Artworks.get(ctx.work.object_id).creators == []
     refute Enum.any?(Artworks.search("Fixture Painter"), &(&1.object_id == ctx.work.object_id))
+  end
+
+  test "duplicate source relationships render once while their assertions remain", ctx do
+    assertion_count = Repo.aggregate(Assertion, :count)
+
+    {:ok, _wikidata_claim} =
+      Claims.assert(ctx.work.object_id, "authored_by", ctx.creator.object_id, %{
+        source_id: ctx.sources["wikidata"].id,
+        origin_key: "wikidata:duplicate-creator"
+      })
+
+    {:ok, _artsy_claim} =
+      Claims.assert(ctx.work.object_id, "authored_by", ctx.creator.object_id, %{
+        source_id: ctx.sources["artsy"].id,
+        origin_key: "artsy:duplicate-creator"
+      })
+
+    assert Repo.aggregate(Assertion, :count) == assertion_count + 2
+    assert [%{object_id: creator_id}] = Artworks.get(ctx.work.object_id).creators
+    assert creator_id == ctx.creator.object_id
+
+    page = EntityPage.build(ctx.creator.object_id)
+    assert page.pagination.works.count == 1
+    assert [%{object_id: work_id}] = page.works
+    assert work_id == ctx.work.object_id
+
+    {:ok, view, _html} =
+      live(
+        ctx.conn,
+        ~p"/entities/#{ctx.work.object_id}/#{DevilsDictionary.Claims.Connection.slugify(ctx.work.preferred_label)}"
+      )
+
+    assert has_element?(view, "#artwork-metadata a[href^='/entities/#{ctx.creator.object_id}/']")
+
+    refute has_element?(
+             view,
+             "#entity-connections a[href^='/entities/#{ctx.creator.object_id}/']"
+           )
+  end
+
+  test "a retained provider thumbnail is displayed with the provider's own credit", ctx do
+    # The independent image projection can be withheld (source-identity gating,
+    # or a provider-only record) while its credit string survives in metadata.
+    # Pairing them separately printed a Wikimedia credit under an Artsy image.
+    Repo.get_by!(Registry.Entity, object_id: ctx.work.object_id)
+    |> Ecto.Changeset.change(
+      metadata: %{"image_attribution" => "Some_File.jpg \u00b7 Wikimedia Commons"}
+    )
+    |> Repo.update!()
+
+    artwork = Artworks.get(ctx.work.object_id)
+
+    assert artwork.image_url == "https://images.example.test/fixture.jpg"
+    assert artwork.image_attribution == "Fixture credit"
+    refute artwork.image_attribution =~ "Wikimedia"
+  end
+
+  test "the displayed credit always describes the displayed image", ctx do
+    provider_thumbnail = "https://images.example.test/fixture.jpg"
+
+    Repo.get_by!(Registry.Entity, object_id: ctx.work.object_id)
+    |> Ecto.Changeset.change(
+      metadata: %{
+        "image_url" => "https://upload.example.test/independent.jpg",
+        "image_attribution" => "Independent_File.jpg \u00b7 Wikimedia Commons"
+      }
+    )
+    |> Repo.update!()
+
+    artwork = Artworks.get(ctx.work.object_id)
+
+    if artwork.image_url == provider_thumbnail do
+      assert artwork.image_attribution == "Fixture credit"
+    else
+      refute artwork.image_attribution == "Fixture credit"
+    end
+  end
+
+  test "a definition's artwork candidate reaches the composer only for a contributor", ctx do
+    war = word!(ctx, "war", ["wordnet"])
+
+    sense =
+      sense!(ctx, war, "wordnet",
+        external_id: "oewn-00975181-n#war",
+        gloss: "organized armed conflict or warfare"
+      )
+
+    assert %{installed: 1} = Artworks.install_meaning_mappings!()
+
+    {:ok, anonymous, _html} = live(ctx.conn, ~p"/define/war")
+
+    assert has_element?(
+             anonymous,
+             "#artwork-candidate-#{ctx.work.object_id}-#{sense.object_id}"
+           )
+
+    refute has_element?(anonymous, "#artwork-candidates a[href^='/connect?']")
+
+    %{conn: conn, user: user} = register_and_log_in_user(%{conn: ctx.conn})
+    Repo.update!(Ecto.Changeset.change(user, internal_contributor: true))
+
+    {:ok, contributor, _html} = live(conn, ~p"/define/war")
+
+    assert has_element?(
+             contributor,
+             "#artwork-candidates a[href^='/connect?'][href*='predicate=illustrates']"
+           )
   end
 end

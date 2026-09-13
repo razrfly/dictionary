@@ -182,11 +182,11 @@ defmodule DevilsDictionaryWeb.ConnectionLive do
         do: object,
         else: nil
 
-    rationale = String.trim(params["rationale"] || "")
-    locator = String.trim(params["evidence_locator"] || "")
+    rationale = trim_param(params["rationale"])
+    locator = trim_param(params["evidence_locator"])
 
     {evidence_items, evidence_rows} =
-      preselected_evidence(params["evidence_revision"], locator)
+      preselected_evidence(params["evidence_revision"], locator, subject)
 
     {:noreply,
      socket
@@ -223,14 +223,23 @@ defmodule DevilsDictionaryWeb.ConnectionLive do
 
   defp preselected_subject(_value), do: nil
 
-  defp preselected_evidence(nil, _locator), do: {%{}, []}
+  defp preselected_evidence(nil, _locator, _subject), do: {%{}, []}
 
-  defp preselected_evidence(value, locator) when is_binary(value) do
+  defp preselected_evidence(value, locator, %{object_id: subject_id})
+       when is_binary(value) and is_integer(subject_id) do
     with {id, ""} when id > 0 <- Integer.parse(value),
          true <- locator != "",
          true <-
            Repo.exists?(
              from revision in DevilsDictionary.Corpus.SourceRecordRevision,
+               join: record in DevilsDictionary.Sources.SourceRecord,
+               on: record.id == revision.source_record_id and record.display_allowed,
+               join: source in DevilsDictionary.Sources.Source,
+               on: source.id == record.source_id and source.slug == "artsy" and source.active,
+               join: output in DevilsDictionary.Sources.MaterializedOutput,
+               on:
+                 output.source_record_id == record.id and
+                   output.output_object_id == ^subject_id and is_nil(output.retired_at),
                where: revision.id == ^id
            ) do
       item = %{
@@ -238,7 +247,11 @@ defmodule DevilsDictionaryWeb.ConnectionLive do
         object_id: nil,
         label: "Artsy source observation",
         detail: "Direct provider assignment retained for review",
-        target: %{source_record_revision_id: id},
+        target: %{
+          source_record_revision_id: id,
+          expected_source_slug: "artsy",
+          expected_object_id: subject_id
+        },
         evidence_role: "supports",
         locator: locator,
         attribution_text: "Artsy direct artwork gene assignment"
@@ -250,7 +263,10 @@ defmodule DevilsDictionaryWeb.ConnectionLive do
     end
   end
 
-  defp preselected_evidence(_value, _locator), do: {%{}, []}
+  defp preselected_evidence(_value, _locator, _subject), do: {%{}, []}
+
+  defp trim_param(value) when is_binary(value), do: String.trim(value)
+  defp trim_param(_value), do: ""
 
   defp revision_number(nil), do: {:ok, nil}
 

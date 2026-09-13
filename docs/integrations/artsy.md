@@ -128,7 +128,7 @@ and an image fallback. The Artsy summary is separately and accurately `created: 
 unavailable: 1`; resuming that manifest also made zero calls and no duplicates.
 
 Browser verification used real permitted retained data at desktop and in a narrow
-mobile-width Chrome window. It covered the six-work local catalog, local search to
+mobile-width Chrome window. It covered the local catalog, local search to
 one result, the rich *Portrait of Ranuccio Farnese* page, navigation to Titian, and
 the authenticated review composer preselected with the exact Cupid artwork, exact
 WordNet `war` sense, `illustrates` predicate, immutable Artsy source-record revision,
@@ -141,6 +141,28 @@ the 10-work/10-meaning probe, unsafe gene-filter finding, pagination defect,
 comparison. The independent-audit finding ledger, final live manifests, and browser
 acceptance are in
 [`2026-09-12-issue86-repair.md`](../audits/2026-09-12-issue86-repair.md).
+
+## Existing-record backfill
+
+Enrich artwork identities that already exist locally, without adding catalog
+entries and without spending Artsy requests:
+
+```sh
+mix dd.artworks.seed \
+  --manifest priv/artworks/manifests/pilot-v1.json \
+  --wikidata-only --refresh-wikidata --wikidata-request-limit 2
+```
+
+It selects only manifest candidates whose QID already resolves to a local
+identity, hydrates those plus their linked creator QIDs through the shared
+bounded Wikidata adapter, and then prints candidates, local identities, images,
+Commons images, Artsy-thumbnail fallbacks, visible creator links and unavailable
+records separately. Re-running it is idempotent: the second pass created no new
+identity, claim or visible creator link.
+
+Images and displayed credits are resolved as a pair. A retained Artsy thumbnail
+is always shown with Artsy's own rights notice, never under an independent
+Wikimedia credit.
 
 ## Retention and shutdown
 
@@ -167,8 +189,14 @@ editorial claims remain. The operation is transactional and tested.
   expected source unavailability, not a reason to weaken identity matching.
 - Artsy's `gene_id` search filter did not change the sampled result page, so
   gene traversal/filter acquisition is disabled. Only direct genes from an
-  exact hydrated artwork are considered. Four exact mappings are enabled; the six
-  unresolved resource slugs remain documented and disabled.
+  exact hydrated artwork are considered. Seven exact mappings are enabled; the six
+  unresolved resource slugs remain documented and disabled. Three of the seven
+  (Allegory, Classical Mythology, Portrait) use gene IDs observed directly on
+  retained artwork records, so they cost no provider requests to verify.
+- No record in the catalog currently displays an Artsy thumbnail, because every
+  Artsy-enriched record also has a Wikidata P18 image, which correctly wins. The
+  fallback is verified by temporarily withholding the independent image in a
+  development database; see the 2026-09-13 re-audit repair note.
 - The Metropolitan Museum API remains the better open-image/reference source,
   but its broad text search is noisy and four audit concepts had no results.
 - The committed manifest is a reproducible seed set, not an assertion that all

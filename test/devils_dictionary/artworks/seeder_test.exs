@@ -69,18 +69,21 @@ defmodule DevilsDictionary.Artworks.SeederTest do
   end
 
   test "a provider artwork without both opaque id and slug is unavailable and never stored" do
-    malformed = artwork(nil, "fixture-work", "Painting")
+    for malformed <- [
+          artwork(nil, "fixture-work", "Painting"),
+          artwork("opaque-work-86", nil, "Painting")
+        ] do
+      {manifest, summary} =
+        Seeder.run(Manifest.new([candidate()]),
+          artsy_client: client([token(), response(200, malformed)]),
+          record_limit: 1
+        )
 
-    {manifest, summary} =
-      Seeder.run(Manifest.new([candidate()]),
-        artsy_client: client([token(), response(200, malformed)]),
-        record_limit: 1
-      )
+      assert summary.unavailable == 1
 
-    assert summary.unavailable == 1
-
-    assert get_in(manifest, ["candidates", Access.at(0), "import", "reason"]) ==
-             "artsy_artwork_missing_identity"
+      assert get_in(manifest, ["candidates", Access.at(0), "import", "reason"]) ==
+               "artsy_artwork_missing_identity"
+    end
 
     refute Repo.exists?(
              from(record in SourceRecord, where: record.source_id == ^sources_artsy_id())
@@ -367,7 +370,7 @@ defmodule DevilsDictionary.Artworks.SeederTest do
     artist_id = Registry.by_external_id("wikidata", "Q900087")
 
     assert {:ok, summary} = Artworks.withdraw_artsy("fixture provider shutdown")
-    assert summary.claims_withdrawn == 1
+    assert summary.claims_withdrawn == 0
     assert summary.evidence_removed == 1
     # Artwork collection checkpoints are immutable revisions too; withdrawal
     # removes the entire provider-owned history, not only its final snapshot.

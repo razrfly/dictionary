@@ -32,10 +32,16 @@ defmodule DevilsDictionaryWeb.WordLive do
 
   use DevilsDictionaryWeb, :live_view
 
+  # Read-only: it tells the page whether the reader may carry an artwork
+  # candidate into the review composer. It grants nothing; `/connect` is still
+  # gated on the server by `:require_internal_contributor`.
+  on_mount {DevilsDictionaryWeb.UserAuth, :mount_current_scope}
+
   alias DevilsDictionary.Demo, as: Samples
   alias DevilsDictionary.Discovery
   alias DevilsDictionary.Discovery.Providers
   alias DevilsDictionary.Artworks
+  alias DevilsDictionary.Claims.Contributions
   alias DevilsDictionary.Lexicon
   alias DevilsDictionary.Lexicon.WordPage
   alias DevilsDictionaryWeb.{Artwork, Culture, Demo, Provenance, Thing, Word}
@@ -55,6 +61,11 @@ defmodule DevilsDictionaryWeb.WordLive do
        object_id: nil,
        choices: [],
        artwork_candidates: [],
+       # A definition's artwork candidate is only a candidate. An internal
+       # contributor needs the composer link here to carry it into the review
+       # flow with its exact sense and source-record evidence preselected;
+       # everyone else sees the candidate and no write path.
+       contributor: Contributions.internal_contributor?(socket.assigns[:current_scope]),
        discovery_target: nil,
        cultures: %{}
      )}
@@ -412,6 +423,7 @@ defmodule DevilsDictionaryWeb.WordLive do
                 id={"artwork-candidate-#{candidate.artwork.object_id}-#{candidate.sense_id}"}
                 artwork={candidate.artwork}
                 candidate={candidate}
+                connect={@contributor}
               />
             </div>
           </section>

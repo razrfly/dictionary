@@ -224,14 +224,14 @@ defmodule DevilsDictionary.Artworks.WikidataCandidates do
 
   defp normalize_bindings(bindings) do
     bindings
-    |> Enum.group_by(&qid(value(&1, "item")))
-    |> Enum.reject(fn {qid, _} -> is_nil(qid) end)
-    |> Enum.map(fn {qid, rows} ->
+    |> Enum.group_by(&{qid(value(&1, "item")), value(&1, "artsy")})
+    |> Enum.reject(fn {{qid, artsy}, _} -> is_nil(qid) or is_nil(artsy) end)
+    |> Enum.map(fn {{qid, artsy}, rows} ->
       first = hd(rows)
 
       %{
         "qid" => qid,
-        "artsy_artwork_slug" => value(first, "artsy"),
+        "artsy_artwork_slug" => artsy,
         "title" => value(first, "itemLabel"),
         "description" => value(first, "itemDescription"),
         "wikipedia_title" => wikipedia_title(value(first, "article")),

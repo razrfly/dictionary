@@ -17,7 +17,11 @@ defmodule DevilsDictionaryWeb.Artwork do
       class="group grid grid-cols-[4.5rem_minmax(0,1fr)] gap-4 border-t border-mist-950/10 py-5 first:border-t-0 dark:border-white/10 sm:grid-cols-[6rem_minmax(0,1fr)]"
     >
       <.link
+        id={"#{@id}-image"}
         navigate={entity_path(@artwork)}
+        phx-hook="ArtworkImage"
+        phx-update="ignore"
+        data-image-state={if(@artwork.image_url, do: "loading", else: "empty")}
         class="aspect-[4/5] overflow-hidden rounded-sm bg-mist-950/5 transition-transform duration-200 group-hover:-translate-y-0.5 dark:bg-white/5"
         aria-label={"Open #{@artwork.title}"}
       >
@@ -27,10 +31,12 @@ defmodule DevilsDictionaryWeb.Artwork do
           alt=""
           loading="lazy"
           referrerpolicy="no-referrer"
+          data-artwork-image
           class="size-full object-cover"
         />
         <span
-          :if={!@artwork.image_url}
+          data-artwork-fallback
+          hidden={!!@artwork.image_url}
           class="flex size-full items-center justify-center text-mist-400"
         >
           <.icon name="hero-photo" class="size-6 stroke-current" />
@@ -127,5 +133,6 @@ defmodule DevilsDictionaryWeb.Artwork do
   defp candidate_relation(:broader), do: "Broader-context"
   defp candidate_relation(:related), do: "Related"
   defp candidate_relation("broader"), do: "Broader-context"
+  defp candidate_relation("related"), do: "Related"
   defp candidate_relation(_), do: "Direct"
 end

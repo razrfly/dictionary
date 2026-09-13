@@ -23,6 +23,7 @@ import "phoenix_html"
 import {Socket} from "phoenix"
 import {LiveSocket} from "phoenix_live_view"
 import {hooks as colocatedHooks} from "phoenix-colocated/devils_dictionary"
+import ArtworkImage from "./artwork_image.mjs"
 import GiphyShelf from "./giphy_shelf.mjs"
 import topbar from "../vendor/topbar"
 
@@ -30,7 +31,7 @@ const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,
   params: {_csrf_token: csrfToken},
-  hooks: {...colocatedHooks, GiphyShelf},
+  hooks: {...colocatedHooks, ArtworkImage, GiphyShelf},
 })
 
 // Show progress bar on live navigation and form submits

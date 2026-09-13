@@ -16,7 +16,7 @@ defmodule DevilsDictionary.Artworks.Seeder do
   alias DevilsDictionary.Artsy.{Availability, Client}
   alias DevilsDictionary.Artworks.Manifest
   alias DevilsDictionary.Claims
-  alias DevilsDictionary.Claims.Assertion
+  alias DevilsDictionary.Claims.{Assertion, AssertionEvidence, AssertionRevision}
   alias DevilsDictionary.Corpus.SourceRecordRevision
   alias DevilsDictionary.Registry
   alias DevilsDictionary.Repo
@@ -752,7 +752,9 @@ defmodule DevilsDictionary.Artworks.Seeder do
                     %{
                       stats
                       | resolved: stats.resolved + 1,
-                        links: stats.links + if(linked?, do: 1, else: 0)
+                        links:
+                          stats.links +
+                            if(linked? in [:created, :evidence_added], do: 1, else: 0)
                     }
                   else
                     %{stats | missing: stats.missing + 1}
@@ -819,7 +821,7 @@ defmodule DevilsDictionary.Artworks.Seeder do
   defp ensure_creator_link(work_id, person_id, source_id, artwork_record, provider) do
     origin_key = "#{provider}:creator:#{work_id}:#{person_id}"
 
-    case Repo.get_by(Assertion, source_id: source_id, origin_key: origin_key) do
+    case semantic_creator_assertion(work_id, person_id) do
       nil ->
         result =
           Repo.transaction(fn ->
@@ -847,7 +849,7 @@ defmodule DevilsDictionary.Artworks.Seeder do
                   end
                 end
 
-                true
+                :created
 
               {:error, reason} ->
                 Repo.rollback(reason)
@@ -855,12 +857,59 @@ defmodule DevilsDictionary.Artworks.Seeder do
           end)
 
         case result do
-          {:ok, true} -> true
-          {:error, _reason} -> false
+          {:ok, :created} -> :created
+          {:error, _reason} -> :failed
         end
 
-      _existing ->
-        false
+      existing ->
+        add_creator_evidence(existing, artwork_record)
+    end
+  end
+
+  defp semantic_creator_assertion(work_id, person_id) do
+    Repo.one(
+      from assertion in Assertion,
+        join: revision in AssertionRevision,
+        on: revision.assertion_id == assertion.id and revision.is_current,
+        join: predicate in Claims.Predicate,
+        on: predicate.id == revision.predicate_id and predicate.key == "authored_by",
+        where:
+          revision.subject_object_id == ^work_id and revision.object_object_id == ^person_id and
+            revision.lifecycle_state == :active,
+        order_by: [asc: assertion.id],
+        limit: 1,
+        select: {assertion, revision}
+    )
+  end
+
+  defp add_creator_evidence(_existing, nil), do: :unchanged
+
+  defp add_creator_evidence({_assertion, revision}, artwork_record) do
+    revision_id = revision.id
+    source_revision_id = artwork_record.current_revision.id
+
+    if Repo.exists?(
+         from evidence in AssertionEvidence,
+           where:
+             evidence.assertion_revision_id == ^revision_id and
+               evidence.source_record_revision_id == ^source_revision_id and
+               evidence.evidence_role == :supports
+       ) do
+      :unchanged
+    else
+      case Repo.transaction(fn ->
+             case Claims.add_evidence(revision_id, %{
+                    source_record_revision_id: source_revision_id,
+                    evidence_role: :supports,
+                    attribution_text: "Artsy artwork creator link"
+                  }) do
+               {:ok, _evidence} -> :evidence_added
+               {:error, reason} -> Repo.rollback(reason)
+             end
+           end) do
+        {:ok, :evidence_added} -> :evidence_added
+        {:error, _reason} -> :failed
+      end
     end
   end
 

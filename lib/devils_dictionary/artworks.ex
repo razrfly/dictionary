@@ -24,8 +24,8 @@ defmodule DevilsDictionary.Artworks do
 
   @catalog_limit 24
   @catalog_max 100
-  @candidate_scan_limit 500
-  @mapping_path Application.app_dir(:devils_dictionary, "priv/artworks/meaning-mappings-v1.json")
+  @candidate_page_size 500
+  @mapping_file "artworks/meaning-mappings-v1.json"
 
   @doc "Searches reusable local artwork identities by title or creator name. No provider call."
   def search(query \\ "", opts \\ []) do
@@ -138,8 +138,8 @@ defmodule DevilsDictionary.Artworks do
           select: mapping
       )
 
-    assignments = active_artsy_assignments()
-    catalog = Map.new(search("", limit: @candidate_scan_limit), &{&1.object_id, &1})
+    assignments = active_artsy_assignments(Enum.map(mappings, & &1.parameters["gene_id"]))
+    catalog = artworks_by_ids(Enum.map(assignments, & &1.object_id))
 
     for sense <- senses,
         mapping <- mappings,
@@ -389,13 +389,14 @@ defmodule DevilsDictionary.Artworks do
     Enum.map(entities, fn entity ->
       view = Encyclopedia.view(entity)
       source = details[entity.object_id]
+      {image_url, image_attribution} = image_with_credit(view, source)
 
       %{
         object_id: entity.object_id,
         title: entity.preferred_label,
         description: entity.description || (source && source.artwork["description"]),
-        image_url: view.image_url || (source && source.artwork["thumbnail_url"]),
-        image_attribution: view.image_attribution || (source && source.artwork["image_rights"]),
+        image_url: image_url,
+        image_attribution: image_attribution,
         qid: view.qid,
         wikipedia_title: view.wikipedia_title,
         creators: Map.get(creators, entity.object_id, []),
@@ -510,29 +511,95 @@ defmodule DevilsDictionary.Artworks do
     |> Map.new(&{&1.object_id, &1})
   end
 
-  defp active_artsy_assignments do
-    artsy_details(
+  defp active_artsy_assignments([]), do: []
+
+  defp active_artsy_assignments(gene_ids) do
+    gene_ids = gene_ids |> Enum.filter(&is_binary/1) |> Enum.uniq()
+    paged_artsy_assignments(gene_ids, 0, [])
+  end
+
+  defp paged_artsy_assignments([], _after_id, accumulated), do: accumulated
+
+  defp paged_artsy_assignments(gene_ids, after_id, accumulated) do
+    rows =
       Repo.all(
-        from details in WorkDetails,
+        from output in MaterializedOutput,
+          join: record in SourceRecord,
+          on: record.id == output.source_record_id and record.display_allowed,
+          join: source in Source,
+          on: source.id == record.source_id and source.slug == "artsy" and source.active,
+          join: revision in SourceRecordRevision,
+          on:
+            revision.source_record_id == record.id and
+              revision.revision_key == record.content_hash,
+          join: details in WorkDetails,
+          on: details.entity_id == output.output_object_id and details.work_kind == "artwork",
           join: object in Object,
-          on: object.id == details.entity_id and object.lifecycle_state == :active,
-          where: details.work_kind == "artwork",
-          order_by: details.entity_id,
-          limit: @candidate_scan_limit,
-          select: details.entity_id
+          on: object.id == output.output_object_id and object.lifecycle_state == :active,
+          where: is_nil(output.retired_at) and output.output_object_id > ^after_id,
+          where:
+            fragment(
+              "EXISTS (SELECT 1 FROM jsonb_array_elements(COALESCE(?->'genes', '[]'::jsonb)) AS gene WHERE gene->>'id' = ANY(?))",
+              revision.payload,
+              type(^gene_ids, {:array, :string})
+            ),
+          distinct: output.output_object_id,
+          order_by: [asc: output.output_object_id],
+          limit: ^@candidate_page_size,
+          select: %{
+            object_id: output.output_object_id,
+            genes: revision.payload["genes"],
+            source_record_revision_id: revision.id
+          }
       )
+
+    accumulated = accumulated ++ rows
+
+    if length(rows) == @candidate_page_size do
+      paged_artsy_assignments(gene_ids, List.last(rows).object_id, accumulated)
+    else
+      accumulated
+    end
+  end
+
+  defp artworks_by_ids([]), do: %{}
+
+  defp artworks_by_ids(object_ids) do
+    Repo.all(
+      from entity in Entity,
+        join: object in Object,
+        on: object.id == entity.object_id and object.lifecycle_state == :active,
+        join: details in WorkDetails,
+        on: details.entity_id == entity.object_id and details.work_kind == "artwork",
+        where: entity.object_id in ^Enum.uniq(object_ids),
+        select: entity
     )
-    |> Enum.map(fn {object_id, detail} ->
-      %{
-        object_id: object_id,
-        genes: detail.genes || [],
-        source_record_revision_id: detail.source_record_revision_id
-      }
-    end)
+    |> views()
+    |> Map.new(&{&1.object_id, &1})
   end
 
   defp meaning_mappings do
-    @mapping_path |> File.read!() |> Jason.decode!() |> Map.fetch!("mappings")
+    :devils_dictionary
+    |> Application.app_dir(Path.join("priv", @mapping_file))
+    |> File.read!()
+    |> Jason.decode!()
+    |> Map.fetch!("mappings")
+  end
+
+  # An image and its credit must describe the same picture. Falling back to the
+  # retained Artsy thumbnail while keeping an independent Wikimedia credit would
+  # misattribute the displayed image, so the pair is resolved together.
+  defp image_with_credit(view, source) do
+    cond do
+      is_binary(view.image_url) ->
+        {view.image_url, view.image_attribution}
+
+      is_binary(source && source.artwork["thumbnail_url"]) ->
+        {source.artwork["thumbnail_url"], source.artwork["image_rights"]}
+
+      true ->
+        {nil, nil}
+    end
   end
 
   defp gene_matches?(gene_id, genes) when is_binary(gene_id),

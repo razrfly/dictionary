@@ -33,6 +33,7 @@ defmodule DevilsDictionary.Artsy.Client do
             availability_fun: nil,
             shared_scope: nil,
             shared_request_limit: nil,
+            shared_request_window_ms: nil,
             coordinator: DevilsDictionary.Artsy.RequestCoordinator
 
   @type t :: %__MODULE__{}
@@ -77,6 +78,8 @@ defmodule DevilsDictionary.Artsy.Client do
       shared_scope: opts[:shared_scope],
       shared_request_limit:
         optional_positive!(opts[:shared_request_limit], :shared_request_limit),
+      shared_request_window_ms:
+        optional_positive!(opts[:shared_request_window_ms], :shared_request_window_ms),
       coordinator: coordinator
     }
   end
@@ -372,32 +375,39 @@ defmodule DevilsDictionary.Artsy.Client do
       true ->
         with {:ok, generation, wait_ms} <- acquire(client) do
           client.sleep_fun.(wait_ms)
-          client = %{client | request_count: client.request_count + 1}
 
-          request_opts =
-            [
-              method: method,
-              url: url,
-              redirect: false,
-              retry: false,
-              receive_timeout: client.timeout_ms,
-              connect_options: [timeout: client.timeout_ms]
-            ] ++ opts
+          with :ok <- await_ready(client, generation),
+               :ok <- provider_available(client),
+               true <- generation_current?(client, generation) do
+            client = %{client | request_count: client.request_count + 1}
 
-          response = client.request_fun.(request_opts)
+            request_opts =
+              [
+                method: method,
+                url: url,
+                redirect: false,
+                retry: false,
+                receive_timeout: client.timeout_ms,
+                connect_options: [timeout: client.timeout_ms]
+              ] ++ opts
 
-          if generation_current?(client, generation) and provider_available(client) == :ok do
-            handle_response(
-              response,
-              client,
-              method,
-              url,
-              opts,
-              retry_number,
-              redirects
-            )
+            response = client.request_fun.(request_opts)
+
+            if generation_current?(client, generation) and provider_available(client) == :ok do
+              handle_response(
+                response,
+                client,
+                method,
+                url,
+                opts,
+                retry_number,
+                redirects
+              )
+            else
+              {:error, failure(:provider_disabled, nil, URI.parse(url).path), client}
+            end
           else
-            {:error, failure(:provider_disabled, nil, URI.parse(url).path), client}
+            _ -> {:error, failure(:provider_disabled, nil, URI.parse(url).path), client}
           end
         else
           {:error, :provider_disabled} ->
@@ -648,10 +658,29 @@ defmodule DevilsDictionary.Artsy.Client do
   defp acquire(client) do
     DevilsDictionary.Artsy.RequestCoordinator.acquire(client.coordinator, client.rate_limit_ms,
       scope: client.shared_scope,
-      limit: client.shared_request_limit
+      limit: client.shared_request_limit,
+      window_ms: client.shared_request_window_ms
     )
   catch
     :exit, _ -> {:error, :coordinator_unavailable}
+  end
+
+  defp await_ready(%{coordinator: nil}, _generation), do: :ok
+
+  defp await_ready(client, generation) do
+    case DevilsDictionary.Artsy.RequestCoordinator.revalidate(generation, client.coordinator) do
+      {:ok, 0} ->
+        :ok
+
+      {:ok, wait_ms} ->
+        client.sleep_fun.(wait_ms)
+        await_ready(client, generation)
+
+      {:error, :provider_disabled} ->
+        {:error, :provider_disabled}
+    end
+  catch
+    :exit, _ -> {:error, :provider_disabled}
   end
 
   defp generation_current?(%{coordinator: nil}, _generation), do: true
@@ -659,7 +688,7 @@ defmodule DevilsDictionary.Artsy.Client do
   defp generation_current?(client, generation) do
     DevilsDictionary.Artsy.RequestCoordinator.current?(generation, client.coordinator)
   catch
-    :exit, _ -> true
+    :exit, _ -> false
   end
 
   defp defer(%{coordinator: nil}, _milliseconds), do: :ok

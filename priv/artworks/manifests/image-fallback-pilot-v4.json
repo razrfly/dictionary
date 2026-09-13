@@ -1,0 +1,56 @@
+{
+  "candidates": [
+    {
+      "artsy_artwork_slug": "robert-rauschenberg-rebus",
+      "creators": [
+        {
+          "artsy_artist_slug": "robert-rauschenberg",
+          "name": "Robert Rauschenberg",
+          "qid": "Q164358"
+        }
+      ],
+      "description": "painting by Robert Rauschenberg",
+      "import": {
+        "status": "pending"
+      },
+      "kind": "painting",
+      "qid": "Q19887272",
+      "selection_reason": "wikidata_p11005_painting",
+      "title": "Rebus",
+      "wikipedia_title": null
+    },
+    {
+      "artsy_artwork_slug": "robert-rauschenberg-canyon",
+      "creators": [
+        {
+          "artsy_artist_slug": "robert-rauschenberg",
+          "name": "Robert Rauschenberg",
+          "qid": "Q164358"
+        }
+      ],
+      "description": "painting by Robert Rauschenberg",
+      "import": {
+        "status": "pending"
+      },
+      "kind": "painting",
+      "qid": "Q19887473",
+      "selection_reason": "wikidata_p11005_with_english_wikipedia",
+      "title": "Canyon",
+      "wikipedia_title": "Canyon (Rauschenberg)"
+    }
+  ],
+  "checksum": "26342f93867a844f86461539ba9524dc7459b19762d65a0f8febf242b2f06e4f",
+  "generated_at": "2026-09-12T20:16:10Z",
+  "schema_version": 2,
+  "selection": {
+    "artwork_kinds": [
+      "painting"
+    ],
+    "identity": "Wikidata QID plus P11005; title is never identity",
+    "parent_manifest_checksum": "8ca842026087267545fee9e3df0740a79247e924fd6dd3e83daa533d04476921",
+    "pilot_cap": 500,
+    "selection_reason": "exact-linked paintings without Wikidata P18 for thumbnail fallback verification",
+    "source": "Wikidata P11005/P2042",
+    "wikipedia_required": false
+  }
+}

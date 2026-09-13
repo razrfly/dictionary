@@ -152,6 +152,14 @@ defmodule DevilsDictionaryWeb.EntityLive do
             <div
               :if={@page.entity.image_url || @artwork || @page.details[:work_kind] == "film"}
               id="entity-artwork"
+              phx-hook="ArtworkImage"
+              phx-update="ignore"
+              data-image-state={
+                if(@page.entity.image_url || (@artwork && @artwork.image_url),
+                  do: "loading",
+                  else: "empty"
+                )
+              }
               class="aspect-[2/3] w-28 overflow-hidden rounded-sm bg-mist-950/5 sm:w-32 dark:bg-white/5"
             >
               <img
@@ -159,11 +167,13 @@ defmodule DevilsDictionaryWeb.EntityLive do
                 src={@page.entity.image_url || (@artwork && @artwork.image_url)}
                 alt={if(@artwork, do: @page.entity.label, else: "Poster for #{@page.entity.label}")}
                 referrerpolicy="no-referrer"
+                data-artwork-image
                 class="size-full object-cover"
               />
               <div
-                :if={!@page.entity.image_url && !(@artwork && @artwork.image_url)}
                 id="entity-artwork-fallback"
+                data-artwork-fallback
+                hidden={!!(@page.entity.image_url || (@artwork && @artwork.image_url))}
                 class="flex size-full items-center justify-center text-mist-400"
               >
                 <.icon

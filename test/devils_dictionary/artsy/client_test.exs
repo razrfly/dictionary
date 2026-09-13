@@ -183,6 +183,26 @@ defmodule DevilsDictionary.Artsy.ClientTest do
     assert RequestCoordinator.stats(coordinator).scope_attempts == %{interactive: 2}
   end
 
+  test "shared allowances renew independently from finite client import ceilings" do
+    clock = start_supervised!({Agent, fn -> 5_000 end}, id: make_ref())
+
+    coordinator =
+      start_supervised!(
+        {RequestCoordinator,
+         name: nil, interval_ms: 0, now_fun: fn -> Agent.get(clock, & &1) end},
+        id: make_ref()
+      )
+
+    opts = [scope: :interactive, limit: 2, window_ms: 1_000]
+    assert {:ok, generation, 0} = RequestCoordinator.acquire(coordinator, 0, opts)
+    assert {:ok, ^generation, 0} = RequestCoordinator.acquire(coordinator, 0, opts)
+    assert {:error, :shared_request_limit} = RequestCoordinator.acquire(coordinator, 0, opts)
+
+    Agent.update(clock, &(&1 + 1_000))
+    assert {:ok, ^generation, 0} = RequestCoordinator.acquire(coordinator, 0, opts)
+    assert RequestCoordinator.stats(coordinator).scope_attempts == %{interactive: 1}
+  end
+
   test "concurrent clients cannot race past a shared allowance" do
     coordinator =
       start_supervised!({RequestCoordinator, name: nil, interval_ms: 0}, id: make_ref())
@@ -231,6 +251,63 @@ defmodule DevilsDictionary.Artsy.ClientTest do
     assert Agent.get(calls, & &1) == []
   end
 
+  test "a queued request is cancelled before transmission when the provider is disabled" do
+    coordinator =
+      start_supervised!({RequestCoordinator, name: nil, interval_ms: 50}, id: make_ref())
+
+    assert {:ok, _generation, 0} = RequestCoordinator.acquire(coordinator, 50)
+
+    sleep_fun = fn wait_ms ->
+      if wait_ms > 0, do: RequestCoordinator.disable(coordinator)
+      :ok
+    end
+
+    {client, calls} =
+      client([response(201, %{"token" => "unused"})],
+        coordinator: coordinator,
+        sleep_fun: sleep_fun
+      )
+
+    assert {:error, %{code: "provider_disabled"}, client} =
+             Client.artwork(client, "work-one")
+
+    assert client.request_count == 0
+    assert Agent.get(calls, & &1) == []
+  end
+
+  test "Retry-After deferrals delay clients that already share the coordinator" do
+    clock = start_supervised!({Agent, fn -> 0 end}, id: make_ref())
+    sleeps = start_supervised!({Agent, fn -> [] end}, id: make_ref())
+
+    coordinator =
+      start_supervised!(
+        {RequestCoordinator,
+         name: nil, interval_ms: 0, now_fun: fn -> Agent.get(clock, & &1) end},
+        id: make_ref()
+      )
+
+    quota = response(429, %{}) |> Req.Response.put_header("retry-after", "2")
+
+    {first, _calls} =
+      client([response(201, %{"token" => "fixture-token"}), quota], coordinator: coordinator)
+
+    assert {:error, %{code: "quota_exhausted"}, _client} = Client.artwork(first, "work-one")
+
+    sleep_fun = fn milliseconds ->
+      Agent.update(sleeps, &[milliseconds | &1])
+      Agent.update(clock, &(&1 + milliseconds))
+    end
+
+    {second, _calls} =
+      client([response(201, %{"token" => "second-token"}), artwork_response("work-two")],
+        coordinator: coordinator,
+        sleep_fun: sleep_fun
+      )
+
+    assert {:ok, _body, _client, _meta} = Client.artwork(second, "work-two")
+    assert 2_000 in Agent.get(sleeps, & &1)
+  end
+
   defp client(responses, opts \\ []) do
     calls = start_supervised!({Agent, fn -> [] end}, id: make_ref())
     queue = start_supervised!({Agent, fn -> responses end}, id: make_ref())
@@ -246,13 +323,16 @@ defmodule DevilsDictionary.Artsy.ClientTest do
 
     client =
       Client.new(
-        [
-          client_id: "fixture-id",
-          client_secret: "fixture-secret",
-          request_fun: request_fun,
-          sleep_fun: fn _ -> :ok end,
-          rate_limit_ms: 0
-        ] ++ opts
+        Keyword.merge(
+          [
+            client_id: "fixture-id",
+            client_secret: "fixture-secret",
+            request_fun: request_fun,
+            sleep_fun: fn _ -> :ok end,
+            rate_limit_ms: 0
+          ],
+          opts
+        )
       )
 
     {client, calls}

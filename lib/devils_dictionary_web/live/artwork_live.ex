@@ -82,11 +82,14 @@ defmodule DevilsDictionaryWeb.ArtworkLive do
       true ->
         # The credential-bearing client exists only inside this server task;
         # it is never retained in LiveView assigns or rendered state.
+        config = Application.get_env(:devils_dictionary, :artsy, [])
+
         client =
           Client.new(
-            request_limit: 30,
+            request_limit: config[:interactive_request_limit] || 30,
             shared_scope: :interactive_search,
-            shared_request_limit: 30
+            shared_request_limit: config[:interactive_request_limit] || 30,
+            shared_request_window_ms: config[:interactive_request_window_ms] || 60_000
           )
 
         {:noreply,
