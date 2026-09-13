@@ -355,4 +355,20 @@ defmodule DevilsDictionary.Artsy.ClientTest do
   end
 
   defp response(status, body), do: %Req.Response{status: status, body: body}
+
+  test "inspecting a client never prints the credential or the token" do
+    client =
+      Client.new(
+        client_id: "fixture-id",
+        client_secret: "fixture-secret-value",
+        coordinator: nil
+      )
+
+    client = %{client | token: "fixture-xapp-token-value"}
+    printed = inspect(client)
+
+    assert printed =~ "fixture-id"
+    refute printed =~ "fixture-secret-value"
+    refute printed =~ "fixture-xapp-token-value"
+  end
 end

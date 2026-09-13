@@ -16,6 +16,9 @@ defmodule DevilsDictionary.Artsy.Client do
   @default_retries 2
   @default_rate_limit_ms 340
 
+  # A crash report or a stray `inspect/1` must never print the credential or
+  # the bearer token this struct carries.
+  @derive {Inspect, except: [:client_secret, :token]}
   defstruct base_url: @base_url,
             client_id: nil,
             client_secret: nil,
