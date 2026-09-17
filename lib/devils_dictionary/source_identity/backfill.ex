@@ -31,7 +31,7 @@ defmodule DevilsDictionary.SourceIdentity.Backfill do
       |> join(:inner, [result], run in assoc(result, :run))
       |> join(:inner, [_result, run], mapping in assoc(run, :mapping))
       |> join(:inner, [_result, _run, mapping], source in assoc(mapping, :source))
-      |> where([_result, _run, _mapping, source], source.slug == "cinegraph")
+      |> where([_result, _run, _mapping, source], source.slug == ^CineGraph.slug())
       |> after_result(after_id)
       |> order_by([result], asc: result.id)
       |> limit(^limit)

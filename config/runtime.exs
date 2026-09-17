@@ -133,7 +133,10 @@ discovery_config =
 source_policies = Keyword.fetch!(discovery_config, :source_policies)
 
 source_policies =
-  Enum.reduce(["cinegraph", "giphy"], source_policies, fn slug, policies ->
+  :devils_dictionary
+  |> Application.get_env(:discovery_providers, [])
+  |> Enum.map(& &1.slug())
+  |> Enum.reduce(source_policies, fn slug, policies ->
     prefix = String.upcase(slug)
 
     overrides =

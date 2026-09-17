@@ -1,13 +1,16 @@
 defmodule DevilsDictionary.Discovery.Providers do
-  @moduledoc "The configured provider registry used by pages, workers and `mix dd.discovery`."
+  @moduledoc """
+  The configured provider registry used by pages, workers and `mix dd.discovery`.
 
-  alias DevilsDictionary.Discovery.Providers.{Artsy, CineGraph, Giphy}
+  The list lives in `config :devils_dictionary, :discovery_providers`, so adding
+  a provider is one config line and nothing else. Registration is deliberately
+  weaker than retrieval: a module may stay in the registry — and therefore in
+  the source catalog — while its transport or legal prerequisites are
+  unresolved. `server_providers/1` is the gate that separates the two, and it
+  admits only modules that can actually be driven through the pipeline.
+  """
 
-  @default [Artsy, CineGraph, Giphy]
-
-  def all do
-    Application.get_env(:devils_dictionary, :discovery_providers, @default)
-  end
+  def all, do: Application.fetch_env!(:devils_dictionary, :discovery_providers)
 
   def get(slug) when is_atom(slug), do: get(Atom.to_string(slug))
 
@@ -25,13 +28,26 @@ defmodule DevilsDictionary.Discovery.Providers do
     end)
   end
 
+  @doc """
+  Providers the background pipeline can actually run.
+
+  A declaration of `transport: :server, background: true` is a claim; exporting
+  `retrieve/4` is the proof. Without it the run worker has nothing to call, so
+  such a module is registered but never scheduled.
+  """
   def server_providers(content_type \\ nil) do
     Enum.filter(all(), fn provider ->
       capabilities = provider.capabilities()
 
       provider.enabled?() and capabilities.background and capabilities.transport == :server and
+        retrievable?(provider) and
         (is_nil(content_type) or content_type in capabilities.content_types)
     end)
+  end
+
+  @doc "True when the module exports the server-side retrieval callbacks."
+  def retrievable?(provider) do
+    Code.ensure_loaded?(provider) and function_exported?(provider, :retrieve, 4)
   end
 
   def supports?(slug, content_type) do
@@ -39,5 +55,10 @@ defmodule DevilsDictionary.Discovery.Providers do
       nil -> false
       provider -> content_type in provider.capabilities().content_types
     end
+  end
+
+  @doc "True when the provider declares any of `content_types`."
+  def supports_any?(slug, content_types) do
+    Enum.any?(content_types, &supports?(slug, &1))
   end
 end

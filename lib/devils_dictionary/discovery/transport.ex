@@ -3,7 +3,14 @@ defmodule DevilsDictionary.Discovery.Transport do
 
   alias DevilsDictionary.Discovery.Budget
 
-  def graphql(provider, run_id, stage, payload) do
+  @doc """
+  Performs one budgeted provider request.
+
+  The method and any query parameters come from the provider's
+  `request_options/1`, so a REST provider returns `method: :get, params: %{...}`
+  and a GraphQL provider returns a `:json` body and gets `:post` by default.
+  """
+  def request(provider, run_id, stage, payload) do
     config = Application.fetch_env!(:devils_dictionary, :discovery)
     do_request(provider, run_id, stage, payload, config)
   end
@@ -20,8 +27,10 @@ defmodule DevilsDictionary.Discovery.Transport do
           )
           |> Keyword.merge(Application.get_env(:devils_dictionary, :discovery_req_options, []))
 
-        case Req.post(options) do
-          {:ok, %Req.Response{status: 200, body: body}} when is_map(body) ->
+        case Req.request(Keyword.put_new(options, :method, :post)) do
+          # A JSON object or a JSON array are both well-formed provider answers;
+          # PoetryDB-shaped REST providers return a bare list.
+          {:ok, %Req.Response{status: 200, body: body}} when is_map(body) or is_list(body) ->
             {:ok, body}
 
           {:ok, %Req.Response{status: status} = response} when status == 429 or status >= 500 ->

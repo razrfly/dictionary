@@ -29,8 +29,19 @@ defmodule DevilsDictionary.Discovery.Provider do
               | {:error, String.t()}
               | {:deferred, String.t(), pos_integer(), map()}
 
+  @doc """
+  One short qualifier shown beside the provider name on a shelf, or `nil`.
+
+  It exists so the reader can say "CineGraph · keywords: TMDb" without any
+  component knowing that CineGraph exists. It is not persisted: `source_attrs/0`
+  is upserted into `sources` column by column, so a key that is not a column
+  breaks the catalog seed.
+  """
+  @callback shelf_detail() :: String.t() | nil
+
   @optional_callbacks automatic_mapping: 1,
                       request_options: 1,
                       validate_mapping: 2,
-                      retrieve: 4
+                      retrieve: 4,
+                      shelf_detail: 0
 end

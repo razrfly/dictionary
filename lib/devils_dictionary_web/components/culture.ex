@@ -2,6 +2,8 @@ defmodule DevilsDictionaryWeb.Culture do
   @moduledoc "Compact, provider-neutral shelf for automatic cultural discovery."
   use DevilsDictionaryWeb, :html
 
+  alias DevilsDictionary.Discovery.ContentTypes
+
   attr :states, :map, required: true
   attr :return_path, :string, default: nil
 
@@ -101,15 +103,19 @@ defmodule DevilsDictionaryWeb.Culture do
   attr :return_path, :string, default: nil
 
   defp culture_thumbnail(assigns) do
+    presentation = ContentTypes.get(assigns.type)
+
     assigns =
       assigns
-      |> assign(:image, thumbnail_url(assigns.item.preview_metadata))
+      |> assign(:image, ContentTypes.thumbnail_url(assigns.type, assigns.item.preview_metadata))
       |> assign(:entry_path, entry_path(assigns.item, assigns.return_path))
+      |> assign(:aspect, presentation.aspect)
+      |> assign(:badge, presentation.badge)
 
     ~H"""
     <div class="group flex min-w-0 flex-col gap-2 rounded-sm">
       <.link
-        :if={@entry_path}
+        :if={@entry_path && @aspect}
         navigate={@entry_path}
         id={"culture-entry-image-#{@item.external_id}"}
         aria-label={"Open #{@item.preview_metadata["title"]} in Dictionary"}
@@ -118,7 +124,7 @@ defmodule DevilsDictionaryWeb.Culture do
         <.culture_image item={@item} image={@image} type={@type} />
       </.link>
       <a
-        :if={is_nil(@entry_path)}
+        :if={is_nil(@entry_path) && @aspect}
         href={@item.preview_metadata["source_url"]}
         target="_blank"
         rel="noreferrer"
@@ -149,7 +155,7 @@ defmodule DevilsDictionaryWeb.Culture do
         </h3>
         <p class="text-base tabular-nums text-mist-500 sm:text-sm">
           {@item.preview_metadata["year"] || "Year unknown"}
-          <span :if={@type == :film}>· Film</span>
+          <span :if={@badge}>· {@badge}</span>
         </p>
         <a
           href={@item.preview_metadata["source_url"]}
@@ -170,10 +176,17 @@ defmodule DevilsDictionaryWeb.Culture do
   attr :type, :atom, required: true
 
   defp culture_image(assigns) do
+    presentation = ContentTypes.get(assigns.type)
+
+    assigns =
+      assigns
+      |> assign(:aspect, presentation.aspect)
+      |> assign(:icon, presentation.icon)
+
     ~H"""
     <div class={[
       "w-full shrink-0 overflow-hidden rounded-sm bg-mist-950/5 transition-transform duration-200 group-hover:-translate-y-0.5 dark:bg-white/5",
-      if(@type == :film, do: "aspect-[2/3]", else: "aspect-square")
+      @aspect
     ]}>
       <img
         :if={@image}
@@ -188,7 +201,7 @@ defmodule DevilsDictionaryWeb.Culture do
         id={"culture-missing-poster-#{@item.external_id}"}
         class="flex size-full items-center justify-center text-mist-400"
       >
-        <.icon name={if(@type == :film, do: "hero-film", else: "hero-photo")} class="size-5" />
+        <.icon name={@icon} class="size-5" />
       </div>
     </div>
     """
@@ -271,22 +284,20 @@ defmodule DevilsDictionaryWeb.Culture do
   defp keyword_label([_one]), do: "the keyword"
   defp keyword_label(_many), do: "keywords"
 
-  defp content_type(%{content_types: [type | _]}) when type in [:film, :gif], do: type
+  defp content_type(%{content_types: [_ | _] = types}) do
+    Enum.find(types, :film, &(&1 in ContentTypes.known()))
+  end
+
   defp content_type(_state), do: :film
 
-  defp content_heading(state) do
-    if content_type(state) == :gif, do: "GIFs", else: "Films"
-  end
+  defp content_heading(state),
+    do: state |> content_type() |> ContentTypes.fetch!() |> Map.fetch!(:heading)
 
-  defp content_label(state) do
-    if content_type(state) == :gif, do: "GIFs", else: "film"
-  end
+  defp content_label(state),
+    do: state |> content_type() |> ContentTypes.fetch!() |> Map.fetch!(:label)
 
-  defp provider_detail(%{provider: "cinegraph"}), do: " · keywords: TMDb"
+  defp provider_detail(%{provider_detail: detail}) when is_binary(detail) and detail != "",
+    do: " · " <> detail
+
   defp provider_detail(_state), do: ""
-
-  defp thumbnail_url(metadata) do
-    metadata["poster_url"] || metadata["still_url"] || metadata["image_url"] ||
-      metadata["media_url"]
-  end
 end
