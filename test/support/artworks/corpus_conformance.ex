@@ -134,16 +134,20 @@ defmodule DevilsDictionary.Artworks.Corpus.Conformance do
       describe "#{Path.basename(unquote(path))} — the seed" do
         test "is idempotent: a second run matches every row and mints nothing",
              %{manifest: manifest} do
+          # `@slice` is a ceiling, not a promise: a corpus smaller than it seeds
+          # all of itself and `Seeder.run/2` reports what it actually had.
+          expected = slice(manifest)
+
           assert {:ok, first} = Seeder.run(manifest, limit: @slice)
-          assert first.rows == @slice
-          assert first.newly_created + first.matched == @slice
+          assert first.rows == expected
+          assert first.newly_created + first.matched == expected
           assert first.invalid == 0, "invalid rows: #{inspect(first.invalid_reasons)}"
 
           objects = Repo.aggregate(Object, :count)
           artworks = artwork_count()
 
           assert {:ok, again} = Seeder.run(manifest, limit: @slice)
-          assert again.matched == @slice
+          assert again.matched == expected
           assert again.newly_created == 0
           assert Repo.aggregate(Object, :count) == objects
           assert artwork_count() == artworks
@@ -151,7 +155,7 @@ defmodule DevilsDictionary.Artworks.Corpus.Conformance do
 
         test "a dry run counts what it would seed and writes nothing", %{manifest: manifest} do
           assert {:ok, summary} = Seeder.run(manifest, limit: @slice, dry_run: true)
-          assert summary.would_seed == @slice
+          assert summary.would_seed == slice(manifest)
           assert artwork_count() == 0
         end
 
@@ -183,7 +187,7 @@ defmodule DevilsDictionary.Artworks.Corpus.Conformance do
           assert summary.invalid == 0
 
           identity = Map.fetch!(row, manifest["identity"])
-          namespace = namespace(manifest["kind"])
+          namespace = Manifest.identity_namespace(manifest["kind"])
           object_id = Registry.by_external_id(namespace, identity)
 
           assert String.length(Repo.get!(Entity, object_id).preferred_label) == 255
@@ -211,7 +215,9 @@ defmodule DevilsDictionary.Artworks.Corpus.Conformance do
           {:ok, _} = Claims.assert(sense.object_id, "refers_to", entity.object_id, %{})
 
           identity = Map.fetch!(row, manifest["identity"])
-          object_id = Registry.by_external_id(namespace(manifest["kind"]), identity)
+
+          object_id =
+            Registry.by_external_id(Manifest.identity_namespace(manifest["kind"]), identity)
 
           items = Artworks.shelf_items([word.object_id])
 
@@ -228,8 +234,7 @@ defmodule DevilsDictionary.Artworks.Corpus.Conformance do
           |> Enum.filter(&(is_map(&1) and is_binary(&1["qid"])))
         end
 
-        defp namespace("met-highlights"), do: "met_object_id"
-        defp namespace("wikidata-famous"), do: "wikidata"
+        defp slice(manifest), do: min(@slice, length(manifest["rows"]))
 
         defp artwork_count do
           Repo.aggregate(from(d in WorkDetails, where: d.work_kind == "artwork"), :count)

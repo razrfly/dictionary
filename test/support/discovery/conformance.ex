@@ -163,10 +163,21 @@ defmodule DevilsDictionary.Discovery.Conformance do
         test "pacing declarations, where present, are non-negative milliseconds" do
           capabilities = @provider.capabilities()
 
-          for key <- [:min_retry_interval_ms, :request_interval_ms],
-              value = Map.get(capabilities, key) do
-            assert is_integer(value) and value >= 0,
-                   "#{@slug} declares #{inspect(key)} as #{inspect(value)}"
+          # `Map.fetch/2` and not `Map.get/2` in a `for` qualifier: a qualifier
+          # drops a falsy value, so a provider declaring `request_interval_ms:
+          # nil` would skip the assertion entirely. Absent is the only thing
+          # that may be skipped — the transport reads a declared key and
+          # normalises anything non-integer to unpaced, which is a rate this
+          # provider did not ask for.
+          for key <- [:min_retry_interval_ms, :request_interval_ms] do
+            case Map.fetch(capabilities, key) do
+              :error ->
+                :ok
+
+              {:ok, value} ->
+                assert is_integer(value) and value >= 0,
+                       "#{@slug} declares #{inspect(key)} as #{inspect(value)}"
+            end
           end
         end
 

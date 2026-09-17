@@ -30,7 +30,21 @@ mix precommit
 
 One failure is environmental and not yours: `test/devils_dictionary/sources/manifest_test.exs`
 needs the untracked `data/` dumps and fails in every fresh worktree. Anything
-else is a real failure.
+else is a real failure — **unless another checkout is running tests at the same
+time**. Every checkout defaults to the same `devils_dictionary_test`, so two
+concurrent runs trample each other's sandboxes and produce dozens of
+`Ecto.StaleEntryError`, `MatchError` and `query_canceled` failures scattered
+across modules you never touched. Measured on this repository: 45 failures
+concurrent, **1 failure** on its own. Take your own database rather than
+guessing which failures are real:
+
+```bash
+MIX_TEST_PARTITION=p1b mix precommit
+```
+
+`config/test.exs` appends that value to the database name, and the `test` alias
+creates and migrates it. It is the same rule as one dev server per database, one
+layer down.
 
 ---
 
@@ -112,13 +126,20 @@ a `config :devils_dictionary, :<slug>` stanza) and `config/test.exs` (the test
 stanza that makes `enabled?/0` true and points the endpoint at a `.test` host).
 
 An unknown `--content-type`, an out-of-range flag value or a missing flag is
-refused with the list of valid values. An existing file is never overwritten.
+refused with the list of valid values. Every output path is checked before the
+first one is written, so a collision on *any* of them refuses the whole run and
+leaves nothing behind.
 
 `--archetype corpus` writes `lib/devils_dictionary/artworks/corpus/<slug>.ex` and
 then tells you about **two edits it cannot make**, both pattern matches in shared
 modules:
 
-1. the kind in `@kinds` in `lib/devils_dictionary/artworks/corpus/manifest.ex`
+1. the kind in `@kinds` in `lib/devils_dictionary/artworks/corpus/manifest.ex` —
+   its `source`, its `identity` (the row field it is keyed on) and its
+   `namespace` (the `external_identifiers` namespace that field is written to).
+   All three: the last two differ for Wikidata, whose rows are keyed on `qid`
+   and identified as `wikidata`, and `Corpus.Conformance` reads a seeded row
+   back through `Manifest.identity_namespace/1`.
 2. an `entry/3` clause in `lib/devils_dictionary/artworks/corpus/seeder.ex`
    mapping one row onto a `DevilsDictionary.SourceIdentity.Entry`
 

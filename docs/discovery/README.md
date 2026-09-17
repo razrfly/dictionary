@@ -415,6 +415,14 @@ code; the proof was in the run's own row, whose `next_cursor` came back in the
 pre-#109 format. If port 4007 is taken, use another port — never the same
 database from two nodes. The development database is `devils_dictionary_v2`.
 
+**One test run per test database, too.** Every checkout defaults to
+`devils_dictionary_test`, so two concurrent `mix test` runs trample each other's
+sandboxes: 45 failures scattered across unrelated modules —
+`Ecto.StaleEntryError`, `MatchError`, `query_canceled` — where an isolated run
+of the same commit has one. `MIX_TEST_PARTITION=<name> mix test` appends the
+name to the database and the `test` alias creates it, which is the cheap way to
+be sure a failure is yours.
+
 **Tests never reach the network.** Every HTTP call goes through a `Req.Test`
 stub; an unstubbed call raises. `config :devils_dictionary, :discovery_req_options`
 names the plug for the discovery transport — `{Req.Test, <the provider module>}` —

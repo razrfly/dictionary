@@ -57,12 +57,14 @@ defmodule Mix.Tasks.Dd.Provider.New do
 
   A corpus has two registration points that are pattern matches in shared
   modules rather than configuration: the kind in
-  `DevilsDictionary.Artworks.Corpus.Manifest`'s `@kinds`, and the
-  `entry/3` clause in `DevilsDictionary.Artworks.Corpus.Seeder` that maps a row
-  onto a `SourceIdentity.Entry`. Only the person who has read the source's rows
-  can write the second one, so the task prints both rather than guessing at
-  them. This is a real gap between #109's K7 and the code, recorded here rather
-  than papered over.
+  `DevilsDictionary.Artworks.Corpus.Manifest`'s `@kinds` — its source, its
+  identity field **and** the `external_identifiers` namespace that field is
+  written to — and the `entry/3` clause in
+  `DevilsDictionary.Artworks.Corpus.Seeder` that maps a row onto a
+  `SourceIdentity.Entry`. Only the person who has read the source's rows can
+  write the second one, so the task prints both rather than guessing at them.
+  This is a real gap between #109's K7 and the code, recorded here rather than
+  papered over.
   """
 
   use Mix.Task
@@ -96,12 +98,20 @@ defmodule Mix.Tasks.Dd.Provider.New do
 
     assigns = assigns(slug, archetype, opts)
 
-    written =
+    # Every path is decided, and every collision refused, before the first
+    # `File.write!/2`. Checking as it went would leave a half-written scaffold
+    # behind when the fourth output collided with something already there, and
+    # a partial scaffold is worse than none: the next run refuses the files it
+    # wrote itself.
+    planned =
       List.flatten([
-        if(archetype in ~w(discovery both), do: discovery_files(root, assigns), else: []),
-        if(archetype in ~w(corpus both), do: corpus_files(root, assigns), else: []),
-        ledger(root, assigns)
+        if(archetype in ~w(discovery both), do: discovery_files(assigns), else: []),
+        if(archetype in ~w(corpus both), do: corpus_files(assigns), else: []),
+        ledger(assigns)
       ])
+
+    refuse_collisions!(root, planned)
+    written = Enum.map(planned, fn {relative, contents} -> write(root, relative, contents) end)
 
     Enum.each(written, &Mix.shell().info("  created  #{Path.relative_to(&1, root)}"))
 
@@ -202,47 +212,44 @@ defmodule Mix.Tasks.Dd.Provider.New do
     end
   end
 
-  defp discovery_files(root, assigns) do
+  defp discovery_files(assigns) do
     [
-      write(
-        root,
-        "lib/devils_dictionary/discovery/providers/#{assigns.underscored}.ex",
-        provider_template(assigns)
-      ),
-      write(
-        root,
-        "test/support/discovery/conformance/#{assigns.underscored}_fixture.ex",
-        fixture_template(assigns)
-      ),
-      write(
-        root,
-        "test/devils_dictionary/discovery/conformance/#{assigns.underscored}_conformance_test.exs",
-        suite_template(assigns)
-      )
+      {"lib/devils_dictionary/discovery/providers/#{assigns.underscored}.ex",
+       provider_template(assigns)},
+      {"test/support/discovery/conformance/#{assigns.underscored}_fixture.ex",
+       fixture_template(assigns)},
+      {"test/devils_dictionary/discovery/conformance/#{assigns.underscored}_conformance_test.exs",
+       suite_template(assigns)}
     ]
   end
 
-  defp corpus_files(root, assigns) do
+  defp corpus_files(assigns) do
     [
-      write(
-        root,
-        "lib/devils_dictionary/artworks/corpus/#{assigns.underscored}.ex",
-        corpus_template(assigns)
-      )
+      {"lib/devils_dictionary/artworks/corpus/#{assigns.underscored}.ex",
+       corpus_template(assigns)}
     ]
   end
 
-  defp ledger(root, assigns) do
-    [write(root, "docs/integrations/#{assigns.slug}.md", ledger_template(assigns))]
+  defp ledger(assigns) do
+    [{"docs/integrations/#{assigns.slug}.md", ledger_template(assigns)}]
+  end
+
+  defp refuse_collisions!(root, planned) do
+    case Enum.filter(planned, fn {relative, _} -> File.exists?(Path.join(root, relative)) end) do
+      [] ->
+        :ok
+
+      collisions ->
+        Mix.raise("""
+        refusing to overwrite #{length(collisions)} existing #{if length(collisions) == 1, do: "file", else: "files"}; nothing was written:
+
+        #{Enum.map_join(collisions, "\n", fn {relative, _} -> "  " <> relative end)}
+        """)
+    end
   end
 
   defp write(root, relative, contents) do
     path = Path.join(root, relative)
-
-    if File.exists?(path) do
-      Mix.raise("#{relative} already exists; refusing to overwrite it")
-    end
-
     File.mkdir_p!(Path.dirname(path))
     File.write!(path, format(relative, contents))
     path
@@ -351,8 +358,9 @@ defmodule Mix.Tasks.Dd.Provider.New do
       two edits this task cannot make for a corpus:
 
         * add "#{assigns.slug}" to @kinds in
-          lib/devils_dictionary/artworks/corpus/manifest.ex, with its source and
-          its identity field
+          lib/devils_dictionary/artworks/corpus/manifest.ex, with its source,
+          its identity field and the external_identifiers namespace that field
+          is written to — all three, or a seeded row cannot be read back
         * add an `entry("#{assigns.slug}", version, row)` clause to
           lib/devils_dictionary/artworks/corpus/seeder.ex that maps a row onto a
           SourceIdentity.Entry
@@ -772,7 +780,12 @@ defmodule Mix.Tasks.Dd.Provider.New do
       modules:
 
         1. `@kinds` in `DevilsDictionary.Artworks.Corpus.Manifest` needs
-           `"<%= @slug %>" => %{source: "<%= @slug %>", identity: "..."}`.
+           `"<%= @slug %>" => %{source: "<%= @slug %>", identity: "...", namespace: "..."}`.
+           `identity` is the row field this kind is keyed on; `namespace` is the
+           `external_identifiers` namespace the seeder writes it to. They are
+           not always the same — a Wikidata row is keyed on `qid` and identified
+           as `wikidata` — and `Corpus.Conformance` reads a seeded row back
+           through `Manifest.identity_namespace/1`.
         2. `DevilsDictionary.Artworks.Corpus.Seeder.entry/3` needs a clause for
            `"<%= @slug %>"` mapping one row onto a
            `DevilsDictionary.SourceIdentity.Entry` — the identity namespace, the

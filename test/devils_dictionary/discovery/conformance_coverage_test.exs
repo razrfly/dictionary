@@ -38,11 +38,14 @@ defmodule DevilsDictionary.Discovery.ConformanceCoverageTest do
     end
 
     test "every fixture is actually run by a suite" do
-      sources = suite_sources(@provider_suites)
+      # Parsed, not grepped: a comment naming the fixture would satisfy a
+      # substring search, and this test's whole job is to be unfoolable.
+      driven = suites(@provider_suites, Conformance, :fixture)
 
       for fixture <- fixtures() do
-        assert Enum.any?(sources, &String.contains?(&1, inspect(fixture))),
-               "#{inspect(fixture)} exists but no suite in #{@provider_suites} uses it"
+        assert fixture in driven,
+               "#{inspect(fixture)} exists but no suite in #{@provider_suites} runs it through " <>
+                 "`use #{inspect(Conformance)}, fixture: #{inspect(fixture)}`"
       end
     end
 
@@ -71,10 +74,10 @@ defmodule DevilsDictionary.Discovery.ConformanceCoverageTest do
 
   describe "artwork corpora" do
     test "every committed corpus manifest has a conformance suite" do
-      sources = suite_sources(@corpus_suites)
+      covered = suites(@corpus_suites, Corpus.Conformance, :manifest)
 
       for path <- Corpus.Conformance.paths() do
-        assert Enum.any?(sources, &String.contains?(&1, path)),
+        assert path in covered,
                """
                #{path} is a committed corpus manifest with no conformance suite.
 
@@ -97,7 +100,12 @@ defmodule DevilsDictionary.Discovery.ConformanceCoverageTest do
 
       for path <- Path.wildcard(Path.join(Corpus.Conformance.dir(), "*.json")) do
         manifest = path |> File.read!() |> Jason.decode!()
-        assert manifest["schema_version"] >= 1, "#{path} has no schema_version"
+        version = manifest["schema_version"]
+
+        # `nil >= 1` and `"1" >= 1` are both true under Elixir's term ordering,
+        # so the comparison alone asserts nothing about the type.
+        assert is_integer(version) and version >= 1,
+               "#{path} must carry an integer schema_version >= 1, got #{inspect(version)}"
 
         if path in corpora do
           assert manifest["rows"], "#{path} is a corpus manifest with no rows"
@@ -121,10 +129,40 @@ defmodule DevilsDictionary.Discovery.ConformanceCoverageTest do
     end)
   end
 
-  defp suite_sources(directory) do
+  # What each suite in `directory` actually passes to `use <case>, <key>: value`,
+  # read off the parsed file rather than matched in its text.
+  defp suites(directory, case_module, key) do
     directory
     |> Path.join("*.exs")
     |> Path.wildcard()
-    |> Enum.map(&File.read!/1)
+    |> Enum.flat_map(fn path ->
+      path
+      |> File.read!()
+      |> Code.string_to_quoted!(file: path)
+      |> uses(case_module)
+      |> Enum.flat_map(fn opts -> List.wrap(Keyword.get(opts, key)) end)
+    end)
   end
+
+  # The options of every `use <case_module>, opts` in one quoted file.
+  defp uses(ast, case_module) do
+    {_ast, found} =
+      Macro.prewalk(ast, [], fn
+        {:use, _meta, [{:__aliases__, _, segments}, opts]} = node, acc when is_list(opts) ->
+          if Module.concat(segments) == case_module,
+            do: {node, [literal(opts) | acc]},
+            else: {node, acc}
+
+        node, acc ->
+          {node, acc}
+      end)
+
+    found
+  end
+
+  defp literal(opts) when is_list(opts),
+    do: Enum.map(opts, fn {key, value} -> {key, literal(value)} end)
+
+  defp literal({:__aliases__, _meta, segments}), do: Module.concat(segments)
+  defp literal(value), do: value
 end

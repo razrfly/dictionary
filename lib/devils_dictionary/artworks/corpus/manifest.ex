@@ -20,9 +20,19 @@ defmodule DevilsDictionary.Artworks.Corpus.Manifest do
 
   @schema_version 1
 
+  # `identity` is the row field this kind is keyed and ordered on; `namespace`
+  # is the `external_identifiers` namespace `Corpus.Seeder.entry/3` writes that
+  # field to. They differ — a Wikidata row is keyed on `qid` and identified as
+  # `wikidata` — so neither can be derived from the other, and a kind that
+  # declared only the first left anything reading the seeded row back with a
+  # hard-coded list of its own.
   @kinds %{
-    "met-highlights" => %{source: "met", identity: "met_object_id"},
-    "wikidata-famous" => %{source: "wikidata", identity: "qid"}
+    "met-highlights" => %{
+      source: "met",
+      identity: "met_object_id",
+      namespace: "met_object_id"
+    },
+    "wikidata-famous" => %{source: "wikidata", identity: "qid", namespace: "wikidata"}
   }
 
   @doc "The manifest kinds this module can build and read."
@@ -30,6 +40,15 @@ defmodule DevilsDictionary.Artworks.Corpus.Manifest do
 
   @doc "The identity field of one manifest kind's rows."
   def identity_field(kind), do: Map.fetch!(@kinds, kind).identity
+
+  @doc """
+  The `external_identifiers` namespace this kind's identity field is written to.
+
+  `Registry.by_external_id(identity_namespace(kind), row[identity_field(kind)])`
+  is how a seeded row is found again, so a kind that registers one without the
+  other cannot be read back.
+  """
+  def identity_namespace(kind), do: Map.fetch!(@kinds, kind).namespace
 
   @doc "Builds a manifest, deduplicated on its kind's identity field and ordered by it."
   def new(kind, rows, metadata \\ %{}) when is_binary(kind) and is_list(rows) do

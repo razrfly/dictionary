@@ -71,9 +71,37 @@ defmodule DevilsDictionary.Tasks.DdProviderNewTest do
 
       run(~w(#{slug} --archetype corpus --root #{root}))
 
-      assert_raise Mix.Error, ~r/already exists/, fn ->
+      assert_raise Mix.Error, ~r/refusing to overwrite/, fn ->
         run(~w(#{slug} --archetype corpus --root #{root}))
       end
+    end
+
+    test "a collision on a later output leaves nothing behind", %{} do
+      root = tmp!()
+      slug = slug()
+      flags = ~w(--archetype discovery --content-type text --transport get --pagination offset)
+
+      # The ledger is the last of the four files the discovery scaffold writes.
+      # Only it exists, so the first three paths are free and a task that
+      # checked as it went would write them and then raise.
+      ledger = Path.join(root, "docs/integrations/#{slug}.md")
+      File.mkdir_p!(Path.dirname(ledger))
+      File.write!(ledger, "a ledger somebody already started\n")
+
+      assert_raise Mix.Error, ~r/docs\/integrations\/#{slug}\.md/, fn ->
+        run([slug, "--root", root] ++ flags)
+      end
+
+      for relative <- [
+            "lib/devils_dictionary/discovery/providers/#{underscore(slug)}.ex",
+            "test/support/discovery/conformance/#{underscore(slug)}_fixture.ex",
+            "test/devils_dictionary/discovery/conformance/#{underscore(slug)}_conformance_test.exs"
+          ] do
+        refute File.exists?(Path.join(root, relative)),
+               "#{relative} was written despite a collision on a later output"
+      end
+
+      assert File.read!(ledger) == "a ledger somebody already started\n"
     end
   end
 
