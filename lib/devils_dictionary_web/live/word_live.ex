@@ -153,7 +153,8 @@ defmodule DevilsDictionaryWeb.WordLive do
     culture_providers =
       Providers.server_providers()
       |> Enum.filter(fn provider ->
-        ContentTypes.any_known?(provider.capabilities().content_types)
+        ContentTypes.any_known?(provider.capabilities().content_types) and
+          Discovery.covers?(provider, target)
       end)
 
     if (connected?(socket) and old_target) &&

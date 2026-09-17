@@ -49,6 +49,11 @@ defmodule DevilsDictionary.Discovery.Providers.Met do
   # most `1 + @scan_window`.
   @scan_window 25
 
+  # A page can be seven lexemes with fifteen senses between them. The QID set is
+  # a match key, not a summary, and the highest-confidence handful is what a
+  # search and a tag comparison can actually use.
+  @max_entities 8
+
   @impl true
   def slug, do: "met"
 
@@ -106,15 +111,44 @@ defmodule DevilsDictionary.Discovery.Providers.Met do
   end
 
   @doc """
-  The QIDs this target's senses already point at, with the labels to search for.
+  The QIDs the page's senses already point at, with the labels to search for.
 
   This is the whole of the Met's association evidence, and it is read from the
   encyclopedia rather than from the provider: a sense's active `refers_to`
-  entity is a claim someone can inspect and withdraw. A target whose senses
-  point at nothing yields an empty set, and `retrieve/4` then answers *no
-  results* without spending a request.
+  entity is a claim someone can inspect and withdraw. A target with no such
+  claim yields an empty set, and `covers?/1` then declines it outright.
+
+  ## Why this reads the page and not the target lexeme
+
+  `Discovery.target_for_page/3` resolves a page to **one** lexeme — the lowest
+  id when several share the address — and marks the target `term_unverified`
+  when there is more than one. `/define/war` is seven lexemes: the verb, the
+  noun, a prefix, and four names. The lowest id is the *verb*, and the QID for
+  Q198 hangs off a sense of the *noun*. Reading only the target lexeme would
+  have put no artwork on `/define/war` while the encyclopedia plainly says what
+  *war* means.
+
+  So the evidence is scoped the way the page itself is scoped
+  (`Lexicon.by_lemma_or_slug/2`: same language, matching lemma or slug), which
+  is also the scope the shelf already admits to when it says *keyword relevance
+  to this particular meaning is unverified*. Narrowing this to one sense is a
+  sense-level-target change, and that belongs to whatever phase moves
+  `target_for_page/3` — not to a provider reaching around it.
   """
   def target_entities(object_id) do
+    case Repo.one(
+           from lx in Lexeme,
+             where: lx.object_id == ^object_id,
+             select: {lx.lemma, lx.slug, lx.language_tag}
+         ) do
+      nil -> []
+      {lemma, slug, language} -> entities_for_page(lemma, slug, language)
+    end
+  end
+
+  defp entities_for_page(lemma, slug, language) do
+    down = String.downcase(lemma)
+
     Repo.all(
       from s in Sense,
         join: lx in Lexeme,
@@ -127,8 +161,10 @@ defmodule DevilsDictionary.Discovery.Providers.Met do
         on: e.object_id == r.object_object_id,
         join: ei in DevilsDictionary.Registry.ExternalIdentifier,
         on: ei.object_id == e.object_id and ei.namespace == "wikidata",
-        where: lx.object_id == ^object_id and r.lifecycle_state == :active,
-        where: ei.status == :verified,
+        where:
+          lx.language_tag == ^language and
+            (fragment("lower(?)", lx.lemma) == ^down or lx.slug == ^slug),
+        where: r.lifecycle_state == :active and ei.status == :verified,
         select: %{
           qid: ei.external_id,
           label: e.preferred_label,
@@ -138,6 +174,7 @@ defmodule DevilsDictionary.Discovery.Providers.Met do
         order_by: [desc: r.confidence, asc: e.object_id]
     )
     |> Enum.uniq_by(& &1.qid)
+    |> Enum.take(@max_entities)
     |> Enum.map(&Map.new(&1, fn {k, v} -> {Atom.to_string(k), v} end))
   end
 

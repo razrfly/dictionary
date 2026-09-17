@@ -321,6 +321,36 @@ defmodule DevilsDictionaryWeb.CultureDiscoveryLiveTest do
     refute has_element?(live, "#culture-result-met_object-999")
   end
 
+  test "a word the Met cannot match never gets an artwork shelf, even while loading", ctx do
+    original = Application.fetch_env!(:devils_dictionary, :discovery_providers)
+    Application.put_env(:devils_dictionary, :discovery_providers, [CineGraph, Met])
+    on_exit(fn -> Application.put_env(:devils_dictionary, :discovery_providers, original) end)
+
+    # No `refers_to`, so the Met has no match key and never will for this word.
+    word = word!(ctx, "nepotism", ~w(wordnet))
+    sense!(ctx, word, "wordnet", gloss: "favouritism to relatives")
+    stub_success("nepotism", 902, [movie(902, "A filmed favour")])
+
+    # The very first, disconnected render is where a promise gets made: a
+    # "Looking for matching artwork…" that resolves to nothing is worse than no
+    # shelf, so the reader asks the same question the admission gate asks.
+    html = ctx.conn |> get(~p"/define/nepotism") |> html_response(200)
+    refute html =~ "In artwork"
+    assert html =~ "In film"
+
+    {:ok, live, _html} = live(ctx.conn, ~p"/define/nepotism")
+    for run <- Repo.all(Run), do: assert(:ok = Discovery.execute_run(run.id))
+    _ = render(live)
+
+    refute has_element?(live, "#culture-provider-met")
+    refute has_element?(live, "#culture-filter-artwork")
+    assert has_element?(live, "#culture-filter-film", "Films")
+    assert has_element?(live, "#culture-result-tmdb_movie-902")
+
+    # And no run, mapping or request was spent finding that out.
+    assert Repo.all(Run) |> Enum.map(& &1.mapping_id) |> Enum.uniq() |> length() == 1
+  end
+
   test "a broader tag says which narrower thing carried it", ctx do
     original = Application.fetch_env!(:devils_dictionary, :discovery_providers)
     Application.put_env(:devils_dictionary, :discovery_providers, [Met])

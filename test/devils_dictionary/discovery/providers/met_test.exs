@@ -80,6 +80,43 @@ defmodule DevilsDictionary.Discovery.Providers.MetTest do
                Met.automatic_mapping(target(word))
     end
 
+    test "the evidence is the page's, not the one lexeme the target resolved to", ctx do
+      # `/define/war` is seven lexemes sharing one address, and
+      # `target_for_page/3` resolves it to the lowest id — the verb. The QID for
+      # Q198 hangs off a sense of the noun. Scoping the evidence to the target
+      # lexeme alone would put no artwork on `/define/war` at all.
+      verb = word!(ctx, "war", ~w(wordnet), pos: "verb")
+      noun = word!(ctx, "war", ~w(wordnet), pos: "noun")
+      assert verb.object_id < noun.object_id
+
+      sense = sense!(ctx, noun, "wordnet")
+      entity = concept!("Q198", "War")
+
+      {:ok, _} =
+        Claims.assert(sense.object_id, "refers_to", entity.object_id, %{confidence: 0.95})
+
+      target = %{
+        object_id: verb.object_id,
+        term: "war",
+        language: "en",
+        relevance: "term_unverified"
+      }
+
+      assert Met.covers?(target)
+      assert {_operation, %{"entities" => [%{"qid" => "Q198"}]}} = Met.automatic_mapping(target)
+    end
+
+    test "another word's senses are not this page's evidence", ctx do
+      war = word!(ctx, "war", ~w(wordnet))
+      peace = word!(ctx, "peace", ~w(wordnet))
+      sense = sense!(ctx, peace, "wordnet")
+      entity = concept!("Q454", "peace")
+      {:ok, _} = Claims.assert(sense.object_id, "refers_to", entity.object_id, %{})
+
+      refute Met.covers?(target(war))
+      assert Met.covers?(target(peace))
+    end
+
     test "an entity with no QID cannot be a match key", ctx do
       word = word!(ctx, "nepotism", ~w(wordnet))
       sense = sense!(ctx, word, "wordnet")

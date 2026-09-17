@@ -78,16 +78,26 @@ defmodule DevilsDictionary.Discovery do
     end
   end
 
+  @doc """
+  Whether a provider has anything to work with for a target.
+
+  Public because the reader asks it too: the first, disconnected render builds a
+  *looking for…* shelf before any run exists, and a shelf for a provider that
+  will decline is a promise the page cannot keep.
+  """
+  def covers?(_provider, nil), do: false
+
+  def covers?(provider, target) do
+    if Code.ensure_loaded?(provider) and function_exported?(provider, :covers?, 1),
+      do: provider.covers?(target),
+      else: true
+  end
+
   # A provider that cannot match this target is not failing and is not
   # deferred — there is simply nothing to ask. Declining here is what stops a
   # mapping, a run and a shelf being created for an answer already known.
   defp provider_covers(provider, target) do
-    covers? =
-      if Code.ensure_loaded?(provider) and function_exported?(provider, :covers?, 1),
-        do: provider.covers?(target),
-        else: true
-
-    if covers?, do: :ok, else: {:error, :target_not_covered}
+    if covers?(provider, target), do: :ok, else: {:error, :target_not_covered}
   end
 
   @doc "Admits a refresh or pagination run without bypassing cache, backoff or queue limits."
