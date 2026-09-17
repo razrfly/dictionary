@@ -536,21 +536,59 @@ defmodule DevilsDictionary.Discovery.Providers.MetTest do
       word = word!(ctx, "war", ~w(wordnet))
       sense = sense!(ctx, word, "wordnet")
 
-      assert Met.mapping_identity(word.object_id) == "no-entities"
+      assert Met.mapping_identity(recipe(word)) == "no-entities"
 
       war = concept!("Q198", "War")
       {:ok, _} = Claims.assert(sense.object_id, "refers_to", war.object_id, %{confidence: 0.95})
 
-      one = Met.mapping_identity(word.object_id)
+      one = Met.mapping_identity(recipe(word))
       assert one =~ ~r/\A[0-9a-f]{16}\z/
-      assert Met.mapping_identity(word.object_id) == one
+      assert Met.mapping_identity(recipe(word)) == one
 
       conflict = concept!("Q350604", "armed conflict")
 
       {:ok, _} =
         Claims.assert(sense.object_id, "refers_to", conflict.object_id, %{confidence: 0.8})
 
-      refute Met.mapping_identity(word.object_id) == one
+      refute Met.mapping_identity(recipe(word)) == one
+    end
+
+    test "reads the recipe and never the database", ctx do
+      word = soldier_word(ctx)
+      {_operation, parameters} = Met.automatic_mapping(target(word))
+
+      assert queries(fn -> Met.mapping_identity(parameters) end) == 0
+    end
+
+    test "a recipe with no entities, or a malformed one, still names itself", _ctx do
+      assert Met.mapping_identity(%{"entities" => []}) == "no-entities"
+      assert Met.mapping_identity(%{}) == "no-entities"
+      assert Met.mapping_identity(%{"entities" => "not a list"}) == "no-entities"
+    end
+  end
+
+  describe "reading the evidence" do
+    test "the page's QID set is one query, and coverage is one row", ctx do
+      word = soldier_word(ctx)
+
+      assert queries(fn -> Met.target_entities(word.object_id) end) == 1
+      assert queries(fn -> Met.covers?(target(word)) end) == 1
+    end
+
+    test "versioning the mapping by its evidence costs no extra read", ctx do
+      word = soldier_word(ctx)
+
+      stub(fn
+        :search -> %{"total" => 0, "objectIDs" => nil}
+      end)
+
+      # `covers?/1` plus the one recipe the key is derived from — the whole
+      # evidence cost of admitting a run, cache hit or miss alike.
+      created = queries(fn -> {:queued, _} = Discovery.request(target(word), ctx.slug) end)
+      reused = queries(fn -> Discovery.request(target(word), ctx.slug) end)
+
+      assert created == 2
+      assert reused == 2
     end
   end
 
@@ -562,6 +600,41 @@ defmodule DevilsDictionary.Discovery.Providers.MetTest do
     entity = concept!("Q4991371", "soldier")
     {:ok, _} = Claims.assert(sense.object_id, "refers_to", entity.object_id, %{confidence: 0.9})
     word
+  end
+
+  # Only this provider's own evidence reads are counted: `Discovery.request/3`
+  # does plenty of other database work, and none of it is what this is about.
+  defp queries(fun) do
+    parent = self()
+    ref = make_ref()
+
+    handler = fn _event, _measurements, %{query: query}, _config ->
+      if query =~ "FROM \"senses\"" and query =~ "\"lexemes\"",
+        do: send(parent, {ref, :evidence_query})
+    end
+
+    :telemetry.attach({__MODULE__, ref}, [:devils_dictionary, :repo, :query], handler, nil)
+
+    try do
+      fun.()
+    after
+      :telemetry.detach({__MODULE__, ref})
+    end
+
+    count_evidence_queries(ref, 0)
+  end
+
+  defp count_evidence_queries(ref, seen) do
+    receive do
+      {^ref, :evidence_query} -> count_evidence_queries(ref, seen + 1)
+    after
+      0 -> seen
+    end
+  end
+
+  defp recipe(word) do
+    {_operation, parameters} = Met.automatic_mapping(target(word))
+    parameters
   end
 
   defp entity_snapshot(entity, label, confidence) do

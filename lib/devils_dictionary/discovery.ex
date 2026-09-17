@@ -486,8 +486,12 @@ defmodule DevilsDictionary.Discovery do
     end
   end
 
+  # The recipe is built first and the key is derived from it, so the evidence
+  # behind a mapping is read once per request rather than once to name the
+  # mapping and again to fill it.
   defp ensure_automatic_mapping(target, provider, source) do
-    key = automatic_mapping_key(provider, target.object_id)
+    {operation, parameters} = provider.automatic_mapping(target)
+    key = automatic_mapping_key(provider, target.object_id, parameters)
 
     case Repo.one(
            from m in Mapping,
@@ -499,8 +503,6 @@ defmodule DevilsDictionary.Discovery do
 
       nil ->
         with {:ok, actor} <- ensure_process_actor() do
-          {operation, parameters} = provider.automatic_mapping(target)
-
           attrs = %{
             target_object_id: target.object_id,
             source_id: source.id,
@@ -521,38 +523,56 @@ defmodule DevilsDictionary.Discovery do
   # Appending the provider's evidence fingerprint is therefore what stops a
   # mapping created for one QID set being reused, parameters and all, after the
   # encyclopedia has moved to another.
-  defp automatic_mapping_key(provider, target_object_id) do
+  defp automatic_mapping_key(provider, target_object_id, parameters) do
     base = "automatic/#{provider.slug()}/#{target_object_id}/#{provider.adapter_version()}"
 
-    case mapping_identity(provider, target_object_id) do
+    case mapping_identity(provider, parameters) do
       nil -> base
       identity -> base <> "/" <> identity
     end
   end
 
-  defp mapping_identity(provider, target_object_id) do
-    if Code.ensure_loaded?(provider) and function_exported?(provider, :mapping_identity, 1),
-      do: provider.mapping_identity(target_object_id),
-      else: nil
+  defp mapping_identity(provider, parameters) do
+    if evidence_versioned?(provider), do: provider.mapping_identity(parameters), else: nil
+  end
+
+  defp evidence_versioned?(provider) do
+    Code.ensure_loaded?(provider) and function_exported?(provider, :mapping_identity, 1)
   end
 
   # A run outlives the claim it rests on: it is queued, it waits behind a rate
-  # limit, it retries. Recomputing the key here is what makes the withdrawal of
-  # the supporting `refers_to` claim reach a run already in flight, instead of
-  # that run publishing results whose evidence no longer exists.
+  # limit, it retries. Rebuilding the recipe here is what makes the withdrawal
+  # of the supporting `refers_to` claim reach a run already in flight, instead
+  # of that run publishing results whose evidence no longer exists.
   #
-  # Only an automatic mapping is checked. A hand-configured recipe was not
-  # derived from claims, so claims are not what makes it current; and for a
-  # provider with no `mapping_identity/1` the recomputed key is the old key, so
-  # this is a no-op.
+  # A provider that does not version by evidence is not asked, so this costs
+  # nothing for CineGraph. Nor is a hand-configured mapping: it was not derived
+  # from claims, so claims are not what makes it current.
   defp mapping_evidence_current(%Mapping{} = mapping, provider) do
     automatic_prefix = "automatic/#{provider.slug()}/#{mapping.target_object_id}/"
 
-    cond do
-      not String.starts_with?(mapping.mapping_key, automatic_prefix) -> :ok
-      mapping.mapping_key == automatic_mapping_key(provider, mapping.target_object_id) -> :ok
-      true -> {:error, :mapping_evidence_changed}
+    if evidence_versioned?(provider) and
+         String.starts_with?(mapping.mapping_key, automatic_prefix) do
+      {_operation, parameters} = provider.automatic_mapping(mapping_target(mapping))
+
+      if mapping.mapping_key ==
+           automatic_mapping_key(provider, mapping.target_object_id, parameters),
+         do: :ok,
+         else: {:error, :mapping_evidence_changed}
+    else
+      :ok
     end
+  end
+
+  # A mapping's parameters record the target that produced them, so the recipe
+  # can be rebuilt from the mapping alone — at publication there is no page.
+  defp mapping_target(%Mapping{} = mapping) do
+    %{
+      object_id: mapping.target_object_id,
+      term: mapping.parameters["term"],
+      language: mapping.parameters["language"],
+      relevance: mapping.parameters["relevance"]
+    }
   end
 
   defp ensure_mapping_version(key, attrs) do

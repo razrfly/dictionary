@@ -136,55 +136,63 @@ defmodule DevilsDictionary.Discovery.Providers.Met do
   `target_for_page/3` — not to a provider reaching around it.
   """
   def target_entities(object_id) do
-    case Repo.one(
-           from lx in Lexeme,
-             where: lx.object_id == ^object_id,
-             select: {lx.lemma, lx.slug, lx.language_tag}
-         ) do
-      nil -> []
-      {lemma, slug, language} -> entities_for_page(lemma, slug, language)
-    end
-  end
-
-  defp entities_for_page(lemma, slug, language) do
-    down = String.downcase(lemma)
-
-    Repo.all(
-      from s in Sense,
-        join: lx in Lexeme,
-        on: lx.object_id == s.lexeme_id,
-        join: r in DevilsDictionary.Claims.AssertionRevision,
-        on: r.subject_object_id == s.object_id and r.is_current,
-        join: p in DevilsDictionary.Claims.Predicate,
-        on: p.id == r.predicate_id and p.key == "refers_to",
-        join: e in Entity,
-        on: e.object_id == r.object_object_id,
-        join: ei in DevilsDictionary.Registry.ExternalIdentifier,
-        on: ei.object_id == e.object_id and ei.namespace == "wikidata",
-        where:
-          lx.language_tag == ^language and
-            (fragment("lower(?)", lx.lemma) == ^down or lx.slug == ^slug),
-        where: r.lifecycle_state == :active and ei.status == :verified,
-        select: %{
-          qid: ei.external_id,
-          label: e.preferred_label,
-          object_id: e.object_id,
-          confidence: r.confidence
-        },
-        order_by: [desc: r.confidence, asc: e.object_id]
-    )
+    object_id
+    |> page_evidence()
+    |> select([revision: r, entity: e, identifier: ei], %{
+      qid: ei.external_id,
+      label: e.preferred_label,
+      object_id: e.object_id,
+      confidence: r.confidence
+    })
+    |> order_by([revision: r, entity: e], desc: r.confidence, asc: e.object_id)
+    |> Repo.all()
     |> Enum.uniq_by(& &1.qid)
     |> Enum.take(@max_entities)
     |> Enum.map(&Map.new(&1, fn {k, v} -> {Atom.to_string(k), v} end))
   end
 
+  # The page's scope is expressed as a join on the target lexeme rather than a
+  # lookup of it, so reading the evidence is one round trip and not two. The
+  # `lower(?) = lower(?)` pair is the same comparison the two-query form made
+  # in Elixir, moved into the database where the other half of it already was.
+  defp page_evidence(object_id) do
+    from s in Sense,
+      as: :sense,
+      join: lx in Lexeme,
+      as: :lexeme,
+      on: lx.object_id == s.lexeme_id,
+      join: target in Lexeme,
+      as: :target,
+      on: target.object_id == ^object_id,
+      join: r in DevilsDictionary.Claims.AssertionRevision,
+      as: :revision,
+      on: r.subject_object_id == s.object_id and r.is_current,
+      join: p in DevilsDictionary.Claims.Predicate,
+      as: :predicate,
+      on: p.id == r.predicate_id and p.key == "refers_to",
+      join: e in Entity,
+      as: :entity,
+      on: e.object_id == r.object_object_id,
+      join: ei in DevilsDictionary.Registry.ExternalIdentifier,
+      as: :identifier,
+      on: ei.object_id == e.object_id and ei.namespace == "wikidata",
+      where:
+        lx.language_tag == target.language_tag and
+          (fragment("lower(?) = lower(?)", lx.lemma, target.lemma) or lx.slug == target.slug),
+      where: r.lifecycle_state == :active and ei.status == :verified
+  end
+
   @impl true
   def covers?(target) do
-    target_entities(target.object_id) != []
+    # Coverage is an existence question and is asked as one. Every word page
+    # renders this before any run exists, and the answer is no for about 99% of
+    # them — so it must not pay for the ordering, the dedup and the labels that
+    # only a mapping about to be built has any use for.
+    Repo.exists?(page_evidence(target.object_id))
   end
 
   @doc """
-  The QID set this target's mapping was built from, as a short digest.
+  The QID set a recipe was built from, as a short digest.
 
   `automatic_mapping/1` freezes the QIDs into the mapping parameters, and
   `retrieve/4` matches tags against those frozen QIDs — so a `refers_to` claim
@@ -193,24 +201,32 @@ defmodule DevilsDictionary.Discovery.Providers.Met do
   not catch this: swapping QID A for QID B leaves the set non-empty and
   `covers?/1` still says yes.
 
+  This reads the parameters and never the database, so versioning the mapping by
+  its evidence costs no query beyond the one that built the recipe.
+
   The digest covers the QIDs **in order**, because order is what
   `search_terms/2` reads, and not the labels, because a relabelled entity is the
   same evidence — the match key is the QID.
   """
   @impl true
-  def mapping_identity(object_id) do
-    case target_entities(object_id) do
+  def mapping_identity(%{"entities" => entities}) when is_list(entities) do
+    case Enum.map(entities, &entity_qid/1) do
       [] ->
         "no-entities"
 
-      entities ->
-        entities
-        |> Enum.map_join(",", & &1["qid"])
+      qids ->
+        qids
+        |> Enum.join(",")
         |> then(&:crypto.hash(:sha256, &1))
         |> Base.encode16(case: :lower)
         |> binary_part(0, 16)
     end
   end
+
+  def mapping_identity(_parameters), do: "no-entities"
+
+  defp entity_qid(%{"qid" => qid}) when is_binary(qid), do: qid
+  defp entity_qid(_entity), do: ""
 
   @impl true
   def automatic_mapping(target) do
