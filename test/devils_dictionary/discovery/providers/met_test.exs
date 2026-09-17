@@ -281,7 +281,9 @@ defmodule DevilsDictionary.Discovery.Providers.MetTest do
 
       state = Discovery.state(word.object_id, ctx.slug)
       assert state.pagination == :offset
-      assert state.next_cursor == Integer.to_string(window)
+      # `"<term index>:<offset>"`. One search term, so the cycle is one leg long
+      # and the next page is the next window of the same term.
+      assert state.next_cursor == "0:#{window}"
 
       assert {:queued, second} =
                Discovery.request_next(
@@ -578,7 +580,7 @@ defmodule DevilsDictionary.Discovery.Providers.MetTest do
       word = soldier_word(ctx)
       {_operation, parameters} = Met.automatic_mapping(target(word))
 
-      assert queries(fn -> Met.mapping_identity(parameters) end) == 0
+      assert evidence_queries(fn -> Met.mapping_identity(parameters) end) == 0
     end
 
     test "a recipe with no entities, or a malformed one, still names itself", _ctx do
@@ -592,8 +594,19 @@ defmodule DevilsDictionary.Discovery.Providers.MetTest do
     test "the page's QID set is one query, and coverage is one row", ctx do
       word = soldier_word(ctx)
 
-      assert queries(fn -> Met.target_entities(word.object_id) end) == 1
-      assert queries(fn -> Met.covers?(target(word)) end) == 1
+      assert evidence_queries(fn -> Met.automatic_mapping(target(word)) end) == 1
+      assert evidence_queries(fn -> Met.covers?(target(word)) end) == 1
+    end
+
+    test "a target that already knows its page does not read the scope again", ctx do
+      word = soldier_word(ctx)
+      page_target = Map.put(target(word), :lexeme_ids, [word.object_id])
+
+      # K4 of #109: the page's lexeme set is the target. A target built by
+      # `target_for_page/3` carries it, so coverage is the evidence row and
+      # nothing else; one built from a mapping pays a query to resolve it.
+      assert scope_queries(fn -> Met.covers?(page_target) end) == 0
+      assert scope_queries(fn -> Met.covers?(target(word)) end) == 1
     end
 
     test "versioning the mapping by its evidence costs no extra read", ctx do
@@ -605,11 +618,245 @@ defmodule DevilsDictionary.Discovery.Providers.MetTest do
 
       # `covers?/1` plus the one recipe the key is derived from — the whole
       # evidence cost of admitting a run, cache hit or miss alike.
-      created = queries(fn -> {:queued, _} = Discovery.request(target(word), ctx.slug) end)
-      reused = queries(fn -> Discovery.request(target(word), ctx.slug) end)
+      created =
+        evidence_queries(fn -> {:queued, _} = Discovery.request(target(word), ctx.slug) end)
+
+      reused = evidence_queries(fn -> Discovery.request(target(word), ctx.slug) end)
 
       assert created == 2
       assert reused == 2
+    end
+  end
+
+  describe "pacing and search terms are capabilities, not private habits" do
+    test "the sustained interval is declared where the shared transport reads it", _ctx do
+      original = Application.fetch_env!(:devils_dictionary, :met)
+      on_exit(fn -> Application.put_env(:devils_dictionary, :met, original) end)
+
+      # The test environment pins it to 0; the measured rate is the default a
+      # deployment gets, and it reaches the transport as a capability.
+      assert Met.capabilities().request_interval_ms == 0
+      assert DevilsDictionary.Discovery.Transport.request_interval_ms(Met) == 0
+
+      Application.put_env(:devils_dictionary, :met, enabled: true)
+      assert Met.capabilities().request_interval_ms == 3_000
+      assert DevilsDictionary.Discovery.Transport.request_interval_ms(Met) == 3_000
+    end
+
+    test "the shared transport waits the declared interval between every request", ctx do
+      original = Application.fetch_env!(:devils_dictionary, :met)
+      Application.put_env(:devils_dictionary, :met, enabled: true, request_interval_ms: 150)
+      on_exit(fn -> Application.put_env(:devils_dictionary, :met, original) end)
+
+      word = soldier_word(ctx)
+
+      stub(fn
+        :search -> %{"total" => 3, "objectIDs" => [1, 2, 3]}
+        id -> object(id, "Piece #{id}", tags: [{"Soldiers", "Q4991371"}])
+      end)
+
+      assert {:queued, run} = Discovery.request(target(word), ctx.slug)
+
+      started = System.monotonic_time(:millisecond)
+      assert :ok = Discovery.execute_run(run.id)
+      elapsed = System.monotonic_time(:millisecond) - started
+
+      # One search and three hydrations is four requests through the transport,
+      # and three gaps between them, each the interval wide. The provider no
+      # longer sleeps between its own hydrations, so if this held only inside
+      # `fetch_objects/3` the search would be unpaced and the floor would be 300.
+      assert Repo.get!(Run, run.id).request_count == 4
+      assert elapsed >= 450
+    end
+
+    test "two concurrent runs on one provider share the interval instead of doubling it", ctx do
+      original = Application.fetch_env!(:devils_dictionary, :met)
+      Application.put_env(:devils_dictionary, :met, enabled: true, request_interval_ms: 150)
+      on_exit(fn -> Application.put_env(:devils_dictionary, :met, original) end)
+
+      soldier = soldier_word(ctx)
+      war = word!(ctx, "war", ~w(wordnet))
+      sense = sense!(ctx, war, "wordnet")
+
+      {:ok, _} =
+        Claims.assert(sense.object_id, "refers_to", concept!("Q198", "War").object_id, %{})
+
+      stub(fn
+        :search -> %{"total" => 3, "objectIDs" => [1, 2, 3]}
+        id -> object(id, "Piece #{id}", tags: [{"Soldiers", "Q4991371"}])
+      end)
+
+      assert {:queued, first} = Discovery.request(target(soldier), ctx.slug)
+      assert {:queued, second} = Discovery.request(target(war), ctx.slug)
+
+      started = System.monotonic_time(:millisecond)
+
+      outcomes =
+        [first, second]
+        |> Task.async_stream(&Discovery.execute_run(&1.id),
+          max_concurrency: 2,
+          timeout: :infinity
+        )
+        |> Enum.map(fn {:ok, outcome} -> outcome end)
+
+      elapsed = System.monotonic_time(:millisecond) - started
+
+      # `:provider_concurrency` lets both run at once. Four requests each is
+      # eight through the transport and seven gaps between them, and the gap is
+      # the Met's, not each run's: had each run kept the interval privately,
+      # the two would have overlapped and finished in about three gaps.
+      assert outcomes == [:ok, :ok]
+      assert Repo.get!(Run, first.id).request_count == 4
+      assert Repo.get!(Run, second.id).request_count == 4
+      assert elapsed >= 1_050
+    end
+
+    test "every search term in the recipe is queried, round-robin across pages", ctx do
+      word = word!(ctx, "war", ~w(wordnet))
+      sense = sense!(ctx, word, "wordnet")
+
+      {:ok, _} =
+        Claims.assert(sense.object_id, "refers_to", concept!("Q198", "War").object_id, %{})
+
+      {:ok, _} =
+        Claims.assert(
+          sense.object_id,
+          "refers_to",
+          concept!("Q350604", "armed conflict").object_id,
+          %{}
+        )
+
+      # Both entity labels lead; the headword itself dedups against "War".
+      {_operation, parameters} = Met.automatic_mapping(target(word))
+      assert parameters["search_terms"] == ["War", "armed conflict"]
+
+      asked = start_supervised!({Agent, fn -> [] end})
+      stub_wikidata(%{})
+
+      Req.Test.stub(Met, fn conn ->
+        conn = fetch_query_params(conn)
+
+        if term = conn.params["q"] do
+          Agent.update(asked, &(&1 ++ [{term, conn.params["offset"]}]))
+          Req.Test.json(conn, %{"total" => 0, "objectIDs" => nil})
+        else
+          send_resp(conn, 404, "not found")
+        end
+      end)
+
+      assert {:queued, first} = Discovery.request(target(word), ctx.slug)
+      assert :ok = Discovery.execute_run(first.id)
+
+      # Only the first term was ever asked before K5. Each further page asks the
+      # next term at the same offset.
+      state = Discovery.state(word.object_id, ctx.slug)
+      assert state.next_cursor == "1:0"
+
+      assert {:queued, second} =
+               Discovery.request_next(
+                 word.object_id,
+                 ctx.slug,
+                 state.page_context,
+                 state.page,
+                 state.next_cursor
+               )
+
+      assert :ok = Discovery.execute_run(second.id)
+
+      assert Agent.get(asked, & &1) == [
+               {Enum.at(parameters["search_terms"], 0), "0"},
+               {Enum.at(parameters["search_terms"], 1), "0"}
+             ]
+    end
+
+    test "a full window earlier in the cycle advances the offset when the last leg is short",
+         ctx do
+      word = word!(ctx, "war", ~w(wordnet))
+      sense = sense!(ctx, word, "wordnet")
+
+      {:ok, _} =
+        Claims.assert(sense.object_id, "refers_to", concept!("Q198", "War").object_id, %{})
+
+      {:ok, _} =
+        Claims.assert(
+          sense.object_id,
+          "refers_to",
+          concept!("Q350604", "armed conflict").object_id,
+          %{}
+        )
+
+      window = Met.scan_window()
+      asked = start_supervised!({Agent, fn -> [] end})
+      stub_wikidata(%{})
+
+      # "War" has a full window at offset 0 and one more object behind it;
+      # "armed conflict" has nothing at all.
+      Req.Test.stub(Met, fn conn ->
+        conn = fetch_query_params(conn)
+
+        case {conn.params["q"], conn.params["offset"]} do
+          {nil, _} ->
+            id = conn.request_path |> Path.basename() |> String.to_integer()
+            Req.Test.json(conn, object(id, "Piece #{id}", tags: [{"War", "Q198"}]))
+
+          {"War", "0"} ->
+            Agent.update(asked, &(&1 ++ [{"War", "0"}]))
+            Req.Test.json(conn, %{"total" => window + 1, "objectIDs" => Enum.to_list(1..window)})
+
+          {"War", offset} ->
+            Agent.update(asked, &(&1 ++ [{"War", offset}]))
+            Req.Test.json(conn, %{"total" => window + 1, "objectIDs" => [900]})
+
+          {term, offset} ->
+            Agent.update(asked, &(&1 ++ [{term, offset}]))
+            Req.Test.json(conn, %{"total" => 0, "objectIDs" => nil})
+        end
+      end)
+
+      assert {:queued, first} = Discovery.request(target(word), ctx.slug)
+      assert :ok = Discovery.execute_run(first.id)
+
+      # The first leg was full, and the cursor remembers that across the cycle.
+      state = Discovery.state(word.object_id, ctx.slug)
+      assert state.next_cursor == "1:0:more"
+
+      assert {:queued, second} =
+               Discovery.request_next(
+                 word.object_id,
+                 ctx.slug,
+                 state.page_context,
+                 state.page,
+                 state.next_cursor
+               )
+
+      assert :ok = Discovery.execute_run(second.id)
+
+      # The last leg came up empty, but the cycle had a full window in it, so
+      # the next page is "War" at the next offset rather than the end. Judging
+      # by the last leg alone would have returned nil here and lost object 900.
+      state = Discovery.state(word.object_id, ctx.slug)
+      assert state.next_cursor == "0:#{window}"
+
+      assert {:queued, third} =
+               Discovery.request_next(
+                 word.object_id,
+                 ctx.slug,
+                 state.page_context,
+                 state.page,
+                 state.next_cursor
+               )
+
+      assert :ok = Discovery.execute_run(third.id)
+
+      assert Agent.get(asked, & &1) == [
+               {"War", "0"},
+               {"armed conflict", "0"},
+               {"War", Integer.to_string(window)}
+             ]
+
+      # A short first leg with nothing full behind it in this cycle: the flag
+      # is not carried, and the cycle ends when its last leg is short too.
+      assert Discovery.state(word.object_id, ctx.slug).next_cursor == "1:#{window}"
     end
   end
 
@@ -623,15 +870,22 @@ defmodule DevilsDictionary.Discovery.Providers.MetTest do
     word
   end
 
+  # The `refers_to` read: every sense on the page, and the QIDs it points at.
+  defp evidence_queries(fun), do: queries(fun, &(&1 =~ "FROM \"senses\""))
+
+  # The page scope itself — lexemes and nothing else. Since K4 it is a shared
+  # query a target can arrive already holding.
+  defp scope_queries(fun),
+    do: queries(fun, &(&1 =~ "FROM \"lexemes\"" and not (&1 =~ "\"senses\"")))
+
   # Only this provider's own evidence reads are counted: `Discovery.request/3`
   # does plenty of other database work, and none of it is what this is about.
-  defp queries(fun) do
+  defp queries(fun, match?) do
     parent = self()
     ref = make_ref()
 
     handler = fn _event, _measurements, %{query: query}, _config ->
-      if query =~ "FROM \"senses\"" and query =~ "\"lexemes\"",
-        do: send(parent, {ref, :evidence_query})
+      if match?.(query), do: send(parent, {ref, :evidence_query})
     end
 
     :telemetry.attach({__MODULE__, ref}, [:devils_dictionary, :repo, :query], handler, nil)

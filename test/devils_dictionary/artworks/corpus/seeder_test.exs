@@ -298,6 +298,38 @@ defmodule DevilsDictionary.Artworks.Corpus.SeederTest do
       assert Enum.sort(sense_ids) == Enum.sort([ctx.sense.object_id, second.object_id])
     end
 
+    test "the shelf keeps one item per work before the limit, not after it", ctx do
+      # The Met row matches both meanings of "war", and so would hold two of the
+      # twelve slots if the limit were applied to (work, meaning) pairs and the
+      # per-work collapse came afterwards: with thirteen works available, the
+      # shelf would show six and call it full.
+      second = sense!(ctx, ctx.war, "wordnet", gloss: "a sustained campaign against something")
+      link!(ctx.war, ctx.entity, sense: second, confidence: 0.9)
+
+      {:ok, _} =
+        Seeder.run(
+          famous_manifest(
+            for n <- 1..12 do
+              famous_row(%{
+                "qid" => "Q30#{n}",
+                "title" => "Famous #{n}",
+                "sitelinks" => 100 - n,
+                "depicts" => [%{"qid" => "Q198", "term" => "war"}]
+              })
+            end
+          )
+        )
+
+      # Every (work, meaning) pair is still offered where the pairs are wanted.
+      candidates = Artworks.suggestions([ctx.war.object_id])
+      assert length(candidates) == 12
+      assert candidates |> Enum.map(& &1.artwork.object_id) |> Enum.uniq() |> length() < 12
+
+      items = Artworks.shelf_items([ctx.war.object_id])
+      assert length(items) == 12
+      assert items |> Enum.map(& &1.object_id) |> Enum.uniq() |> length() == 12
+    end
+
     test "a QID nothing in the catalog depicts yields nothing", ctx do
       ship = word!(ctx, "ship", ["wordnet"])
       sense = sense!(ctx, ship, "wordnet", gloss: "a large vessel")

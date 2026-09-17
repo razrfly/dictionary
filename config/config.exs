@@ -134,12 +134,14 @@ config :devils_dictionary, :discovery,
   task_wait_ms: 30_000,
   report_sample: 5
 
-# The Met is keyless. `request_interval_ms` is the sustained pace between this
-# provider's own hydrations; `min_retry_interval_ms` in its capabilities is the
-# separate, longer gap after a refusal.
+# The Met is keyless. `request_interval_ms` is the sustained pace the shared
+# transport keeps between *every* request this provider makes — the measured
+# rate at which none of 2,600 requests were refused, where 1 req/s refused 44%.
+# `min_retry_interval_ms` is the separate, shorter gap after one refusal.
+# Both reach the transport through `Met.capabilities/0`; this is its override.
 config :devils_dictionary, :met,
   enabled: true,
-  request_interval_ms: 1_000
+  request_interval_ms: 3_000
 
 config :devils_dictionary, :cinegraph,
   endpoint: "https://cinegraph.org/api/graphql",

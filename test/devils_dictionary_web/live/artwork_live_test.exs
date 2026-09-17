@@ -161,14 +161,15 @@ defmodule DevilsDictionaryWeb.ArtworkLiveTest do
     assertion_count = Repo.aggregate(Assertion, :count)
 
     {:ok, view, _html} = live(ctx.conn, ~p"/define/war")
-    assert has_element?(view, "#artwork-candidates")
 
-    assert has_element?(
-             view,
-             "#artwork-candidate-#{ctx.work.object_id}-#{sense.object_id}"
-           )
-
-    assert render(view) =~ "not yet reviewed"
+    # The one reader surface (K2 of #109): a gene candidate is a shelf item on
+    # the artwork shelf, not a tall card of its own beside it.
+    assert has_element?(view, "#culture-filter-artwork", "Artworks")
+    assert has_element?(view, "#culture-result-catalog_artwork-c#{ctx.work.object_id}")
+    assert has_element?(view, "#culture-about-catalog", "Artsy gene \u201CConflict\u201D")
+    assert has_element?(view, "#culture-about-catalog", "not yet reviewed")
+    refute has_element?(view, "#artwork-candidates")
+    assert is_integer(sense.object_id)
     assert Repo.aggregate(Assertion, :count) == assertion_count
 
     wrong_id_payload =
@@ -328,7 +329,7 @@ defmodule DevilsDictionaryWeb.ArtworkLiveTest do
     assert sense_id == sense.object_id
 
     {:ok, view, _html} = live(ctx.conn, ~p"/define/love")
-    assert render(view) =~ "Related Artsy gene"
+    assert has_element?(view, "#culture-about-catalog", "Related Artsy gene")
   end
 
   test "rejected creator relationship is hidden from cards and search", ctx do
@@ -428,21 +429,24 @@ defmodule DevilsDictionaryWeb.ArtworkLiveTest do
 
     {:ok, anonymous, _html} = live(ctx.conn, ~p"/define/war")
 
-    assert has_element?(
-             anonymous,
-             "#artwork-candidate-#{ctx.work.object_id}-#{sense.object_id}"
-           )
-
-    refute has_element?(anonymous, "#artwork-candidates a[href^='/connect?']")
+    assert has_element?(anonymous, "#culture-result-catalog_artwork-c#{ctx.work.object_id}")
+    refute has_element?(anonymous, "#in-culture a[href^='/connect?']")
 
     %{conn: conn, user: user} = register_and_log_in_user(%{conn: ctx.conn})
     Repo.update!(Ecto.Changeset.change(user, internal_contributor: true))
 
     {:ok, contributor, _html} = live(conn, ~p"/define/war")
 
+    # The composer link followed the candidate onto the shelf, with the exact
+    # sense and the evidence locator still preselected.
     assert has_element?(
              contributor,
-             "#artwork-candidates a[href^='/connect?'][href*='predicate=illustrates']"
+             "#culture-connect-c#{ctx.work.object_id}[href^='/connect?'][href*='predicate=illustrates']"
+           )
+
+    assert has_element?(
+             contributor,
+             "#culture-connect-c#{ctx.work.object_id}[href*='object=#{sense.object_id}']"
            )
   end
 
@@ -471,7 +475,7 @@ defmodule DevilsDictionaryWeb.ArtworkLiveTest do
     assert %{installed: 1} = Artworks.install_meaning_mappings!()
 
     {:ok, word_view, _html} = live(ctx.conn, ~p"/define/war")
-    assert has_element?(word_view, "#artwork-candidates")
+    assert has_element?(word_view, "#culture-filter-artwork", "Artworks")
   end
 
   test "an artwork with no image renders an honest placeholder, not a broken entry", ctx do

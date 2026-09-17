@@ -160,6 +160,34 @@ defmodule DevilsDictionary.Lexicon do
   defp enriched?(lexeme),
     do: not is_nil(lexeme.enriched_at) or not is_nil(lexeme.canonical_lexeme_id)
 
+  @doc """
+  Every lexeme on the page one lexeme belongs to, as a query of object ids.
+
+  The scope is the one `lookup/2` already uses — same language, matching lemma
+  (case-folded) or matching slug — asked of a **lexeme id** rather than of a
+  string a reader typed, because that is what a discovery target, a mapping and
+  a catalog read all hold. `by_lemma_or_slug/2` cannot answer it: it anchors on
+  the input word, so the same page reached by `/words/:id/:slug` and by
+  `/define/:slug` would resolve to different sets.
+
+  It is a query and not a list so a caller can join senses onto it in one round
+  trip; `page_lexeme_ids/1` is the list.
+  """
+  def page_scope(object_id) when is_integer(object_id) do
+    from l in Lexeme,
+      join: target in Lexeme,
+      on: target.object_id == ^object_id,
+      where:
+        l.language_tag == target.language_tag and
+          (fragment("lower(?) = lower(?)", l.lemma, target.lemma) or l.slug == target.slug),
+      select: l.object_id
+  end
+
+  @doc "The page's lexeme ids, sorted, so the set is the same however it is read."
+  def page_lexeme_ids(object_id) when is_integer(object_id) do
+    object_id |> page_scope() |> Repo.all() |> Enum.sort()
+  end
+
   defp by_lemma_or_slug(word, lang) do
     down = String.downcase(word)
 

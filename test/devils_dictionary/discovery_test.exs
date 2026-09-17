@@ -18,6 +18,7 @@ defmodule DevilsDictionary.DiscoveryTest do
   }
 
   alias DevilsDictionary.Discovery.Providers.{CineGraph, Giphy}
+  alias DevilsDictionary.Lexicon.WordPage
   alias DevilsDictionary.FakeOffsetDiscoveryProvider
   alias DevilsDictionary.FakePartialDiscoveryProvider
   alias DevilsDictionary.Registry
@@ -29,6 +30,72 @@ defmodule DevilsDictionary.DiscoveryTest do
     catalog = DevilsDictionary.Fixtures.seed_catalog!()
     %{sources: catalog.sources, animals: catalog.scopes["animals"]}
   end
+
+  describe "target_for_page/3 — the target is the page's lexeme set (K4 of #109)" do
+    test "opens on the word the page opens on, and carries every lexeme with it", ctx do
+      # `/define/war` is a verb, a noun and a prefix sharing one address. The
+      # lowest object id is the verb this fixture inserts first; the page itself
+      # ranks noun before verb, and the noun is what the page is about.
+      verb = word!(ctx, "war", ~w(wordnet), pos: "verb")
+      noun = word!(ctx, "war", ~w(wordnet), pos: "noun")
+      prefix = word!(ctx, "war", ~w(wordnet), pos: "prefix")
+      assert verb.object_id < noun.object_id
+
+      target = page_target("war")
+
+      assert target.object_id == noun.object_id
+      assert target.term == "war"
+      assert target.relevance == "term_unverified"
+
+      assert Enum.sort(target.lexeme_ids) ==
+               Enum.sort([verb.object_id, noun.object_id, prefix.object_id])
+    end
+
+    test "the canonical address still names its own lexeme, with the same page", ctx do
+      verb = word!(ctx, "war", ~w(wordnet), pos: "verb")
+      noun = word!(ctx, "war", ~w(wordnet), pos: "noun")
+
+      target = page_target("war", verb.object_id)
+
+      assert target.object_id == verb.object_id
+      assert Enum.sort(target.lexeme_ids) == Enum.sort([verb.object_id, noun.object_id])
+    end
+
+    test "the set a mapping rebuilds at publication is the set that created it", ctx do
+      # The two have to agree exactly or an evidence-versioned mapping is stale
+      # the moment it publishes. The page's own lexeme list cannot be the source
+      # of truth for that reason: `/words/:id/:slug` renders one lexeme.
+      verb = word!(ctx, "war", ~w(wordnet), pos: "verb")
+      noun = word!(ctx, "war", ~w(wordnet), pos: "noun")
+
+      assert page_target("war").lexeme_ids ==
+               Discovery.page_lexeme_ids(%{object_id: verb.object_id})
+
+      assert Discovery.page_lexeme_ids(%{object_id: noun.object_id}) ==
+               Discovery.page_lexeme_ids(%{object_id: verb.object_id})
+    end
+
+    test "a target that already knows its page is taken at its word", _ctx do
+      assert Discovery.page_lexeme_ids(%{object_id: -1, lexeme_ids: [7, 9]}) == [7, 9]
+    end
+
+    test "a single-lexeme page is a verified term, a miss and a demo are no target", ctx do
+      word = word!(ctx, "nepotism", ~w(wordnet))
+
+      target = page_target("nepotism")
+      assert target.object_id == word.object_id
+      assert target.lexeme_ids == [word.object_id]
+      assert target.relevance == "term"
+
+      refute page_target("no-such-word-at-all")
+      refute Discovery.target_for_page(page("nepotism"), nil, true)
+    end
+  end
+
+  defp page(slug), do: slug |> DevilsDictionary.Lexicon.lookup() |> WordPage.build()
+
+  defp page_target(slug, canonical_object_id \\ nil),
+    do: Discovery.target_for_page(page(slug), canonical_object_id, false)
 
   test "an unprepared target resolves, discovers, deduplicates and then reuses its cache", ctx do
     word = word!(ctx, "war", ~w(wordnet))
@@ -762,7 +829,7 @@ defmodule DevilsDictionary.DiscoveryTest do
       set: [attempted_at: DateTime.add(DateTime.utc_now(), -61, :second)]
     )
 
-    assert :ok = Budget.claim(run.id, "movie_discovery")
+    assert {:ok, 0} = Budget.claim(run.id, "movie_discovery")
   end
 
   test "concurrent mapping changes serialize and leave exactly one enabled version", ctx do

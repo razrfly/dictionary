@@ -15,6 +15,7 @@ defmodule DevilsDictionary.Discovery do
   alias DevilsDictionary.Claims.AssertionRevision
   alias DevilsDictionary.Discovery.{Mapping, Policy, Providers, Result, Run}
   alias DevilsDictionary.Discovery.RunWorker
+  alias DevilsDictionary.Lexicon
   alias DevilsDictionary.Registry.{Lexeme, Object, Sense}
   alias DevilsDictionary.Repo
   alias DevilsDictionary.SourceIdentity
@@ -26,29 +27,55 @@ defmodule DevilsDictionary.Discovery do
 
   @type target :: %{
           object_id: integer(),
+          lexeme_ids: [integer()],
           term: String.t(),
           language: String.t(),
           relevance: String.t()
         }
 
-  @doc "Derives a deterministic, term-level target from the actual rendered word page."
+  @doc """
+  Derives a deterministic, term-level target from the actual rendered word page.
+
+  The target is **the page's lexeme set** (K4 of #109). `object_id` still names
+  one lexeme, because a mapping's `target_object_id` is a registry identity and
+  a set is not one — but it is the lexeme the page itself opens on (its first,
+  which `WordPage` has already ranked noun before verb before the rest), not the
+  lowest object id. `/define/war` is seven lexemes and the lowest id is a
+  prefix; the noun is the word the page is about.
+
+  `lexeme_ids` is the whole page, read by the shared rule in
+  `DevilsDictionary.Lexicon.page_scope/1` rather than taken from the rendered
+  page, because `mapping_target/1` has to rebuild the identical set at
+  publication time when there is no page — and a set that differed between the
+  two would make every evidence-versioned run fail as stale.
+  """
   def target_for_page(_page, _canonical_object_id, true), do: nil
 
   def target_for_page(%{headword: %{lexemes: []}}, _canonical_object_id, _demo), do: nil
 
   def target_for_page(page, canonical_object_id, _demo) do
     lexemes = page.headword.lexemes
-
-    selected =
-      Enum.find(lexemes, &(&1.id == canonical_object_id)) || Enum.min_by(lexemes, & &1.id)
+    selected = Enum.find(lexemes, &(&1.id == canonical_object_id)) || hd(lexemes)
 
     %{
       object_id: selected.id,
+      lexeme_ids: Lexicon.page_lexeme_ids(selected.id),
       term: page.headword.lemma,
       language: selected.language,
       relevance: if(length(lexemes) > 1, do: "term_unverified", else: "term")
     }
   end
+
+  @doc """
+  The page's lexeme set for a target, however the target was built.
+
+  A provider reads the whole page's evidence rather than one lexeme's, so this
+  is the shared scope it asks for. A target from `target_for_page/3` carries the
+  set already; one built from a mapping or a maintenance task does not, and pays
+  a query for it.
+  """
+  def page_lexeme_ids(%{lexeme_ids: [_ | _] = ids}), do: ids
+  def page_lexeme_ids(%{object_id: object_id}), do: Lexicon.page_lexeme_ids(object_id)
 
   @doc "The PubSub topic for one exact registry target."
   def topic(target_id), do: "discovery:target:#{target_id}"
@@ -569,6 +596,10 @@ defmodule DevilsDictionary.Discovery do
   defp mapping_target(%Mapping{} = mapping) do
     %{
       object_id: mapping.target_object_id,
+      # Not in the parameters: the page's lexeme set is derived, not frozen, so
+      # a lexeme joining or leaving the page is evidence moving and has to move
+      # the mapping's fingerprint with it.
+      lexeme_ids: Lexicon.page_lexeme_ids(mapping.target_object_id),
       term: mapping.parameters["term"],
       language: mapping.parameters["language"],
       relevance: mapping.parameters["relevance"]

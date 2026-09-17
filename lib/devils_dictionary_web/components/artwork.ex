@@ -1,12 +1,19 @@
 defmodule DevilsDictionaryWeb.Artwork do
-  @moduledoc "Reusable, identity-addressed artwork entries and meaning candidates."
+  @moduledoc """
+  Reusable, identity-addressed artwork entries for the `/artworks` browse page.
+
+  It used to carry a meaning candidate too, with a relation word and a match
+  sentence of its own — the second of the three artwork chromes K2 of #109
+  retired. A candidate is now a shelf item in `DevilsDictionaryWeb.Culture`, and
+  its reason is a `DevilsDictionary.Discovery.MatchReason`. This is the browse
+  card and nothing else.
+  """
 
   use DevilsDictionaryWeb, :html
 
   alias DevilsDictionary.Claims.Connection
 
   attr :artwork, :map, required: true
-  attr :candidate, :map, default: nil
   attr :connect, :boolean, default: false
   attr :id, :string, required: true
 
@@ -91,24 +98,11 @@ defmodule DevilsDictionaryWeb.Artwork do
           Image: {@artwork.image_attribution}
         </p>
 
-        <div :if={@candidate} class="mt-3 text-sm/6">
-          <p id={"#{@id}-meaning"} class="text-mist-700 dark:text-mist-200">
-            Candidate for “{@candidate.meaning}”
-            <span class="text-mist-500">({@candidate.language})</span>
-          </p>
-          <p class="text-mist-500">
-            {candidate_relation(@candidate.match_type)} {@candidate.match_reason.detail} · not yet reviewed
-          </p>
-          <p :if={@candidate.match_reason.note} class="mt-1 text-mist-500">
-            {@candidate.match_reason.note}
-          </p>
-        </div>
-
         <div class="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-sm/6">
           <.link navigate={entity_path(@artwork)} class="font-medium underline underline-offset-4">Open work</.link>
           <.link
             :if={@connect}
-            navigate={connect_path(@artwork, @candidate)}
+            navigate={~p"/connect?subject=#{@artwork.object_id}"}
             class="font-medium underline underline-offset-4"
           >
             Connect to a meaning
@@ -131,31 +125,4 @@ defmodule DevilsDictionaryWeb.Artwork do
 
   defp creator_path(creator),
     do: ~p"/entities/#{creator.object_id}/#{Connection.slugify(creator.label)}"
-
-  defp connect_path(artwork, nil), do: ~p"/connect?subject=#{artwork.object_id}"
-
-  # A catalog candidate has no retained provider revision to cite, so the
-  # evidence parameters are dropped rather than sent empty: a connect form
-  # prefilled with `evidence_revision=` would be citing nothing.
-  defp connect_path(artwork, candidate) do
-    params =
-      %{
-        subject: artwork.object_id,
-        object: candidate.sense_id,
-        predicate: "illustrates",
-        evidence_revision: candidate.source_record_revision_id,
-        evidence_locator: candidate.match_reason.locator,
-        rationale: candidate.match_reason.note
-      }
-      |> Enum.reject(fn {_key, value} -> is_nil(value) end)
-      |> Map.new()
-
-    ~p"/connect?#{params}"
-  end
-
-  defp candidate_relation(:broader), do: "Broader-context"
-  defp candidate_relation(:related), do: "Related"
-  defp candidate_relation("broader"), do: "Broader-context"
-  defp candidate_relation("related"), do: "Related"
-  defp candidate_relation(_), do: "Direct"
 end

@@ -59,19 +59,35 @@ defmodule DevilsDictionaryWeb.WordArtworkCatalogTest do
 
     {:ok, view, html} = live(ctx.conn, ~p"/define/war")
 
-    # One section, both sources inside it. Two artwork sections on one page is
-    # the thing 2b is not allowed to produce.
-    assert has_element?(view, "#artwork-candidates")
-    assert html |> String.split(~s(id="artwork-candidates")) |> length() == 2
+    # One shelf, both sources inside it, on the one reader surface (K2 of #109).
+    # Two artwork sections on one page is the thing this is not allowed to
+    # produce — and the tall cards beside the Met's shelf were exactly that.
+    assert has_element?(view, "#in-culture")
+    assert has_element?(view, "#culture-filter-artwork", "Artworks")
+    assert html |> String.split(~s(id="culture-filter-artwork")) |> length() == 2
+    refute has_element?(view, "#artwork-candidates")
 
     met_id = DevilsDictionary.Registry.by_external_id("met_object_id", "11417")
     famous_id = DevilsDictionary.Registry.by_external_id("wikidata", "Q12418")
 
-    assert has_element?(view, "#artwork-candidate-#{met_id}-#{sense.object_id}")
-    assert has_element?(view, "#artwork-candidate-#{famous_id}-#{sense.object_id}")
+    assert has_element?(view, "#culture-result-catalog_artwork-c#{met_id}")
+    assert has_element?(view, "#culture-result-catalog_artwork-c#{famous_id}")
 
-    assert render(view) =~ "Direct depiction of"
-    assert render(view) =~ "Q198"
+    # Both reach their local identity rather than an outside page.
+    assert has_element?(view, "#culture-entry-image-c#{met_id}[href^='/entities/']")
+    assert has_element?(view, "#culture-entry-image-c#{famous_id}[href^='/entities/']")
+
+    # The reason is a fact with an identifier in it, and it names the concept
+    # this page's sense refers to rather than a phrase composed for the reader.
+    assert has_element?(
+             view,
+             "#culture-about-catalog",
+             "Direct depiction of \u201CWar\u201D (Q198)"
+           )
+
+    assert has_element?(view, "#culture-about-catalog", "not yet reviewed")
+
+    # Whoever made it, from a manifest display name and from a local identity.
     assert render(view) =~ "Emanuel Leutze"
     assert render(view) =~ "Leonardo da Vinci"
   end
@@ -85,8 +101,13 @@ defmodule DevilsDictionaryWeb.WordArtworkCatalogTest do
 
     {:ok, view, _html} = live(ctx.conn, ~p"/define/love")
 
-    assert has_element?(view, "#artwork-candidates")
-    assert render(view) =~ "matched to the word and not to this meaning"
+    assert has_element?(view, "#culture-filter-artwork", "Artworks")
+
+    assert has_element?(
+             view,
+             "#culture-about-catalog",
+             "matched to the word and not to this meaning"
+           )
   end
 
   test "a word the encyclopedia has not linked to a QID shows no artwork section", ctx do
@@ -97,7 +118,8 @@ defmodule DevilsDictionaryWeb.WordArtworkCatalogTest do
 
     {:ok, view, _html} = live(ctx.conn, ~p"/define/family")
 
-    refute has_element?(view, "#artwork-candidates")
+    refute has_element?(view, "#culture-filter-artwork")
+    refute has_element?(view, "#culture-about-catalog")
   end
 
   test "the catalog page lists both corpus sources", ctx do
