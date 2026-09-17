@@ -416,6 +416,27 @@ defmodule DevilsDictionary.Discovery.Providers.MetTest do
       assert entry.retention == :durable
     end
 
+    test "a title longer than the label column is clamped to it, not to 300", ctx do
+      word = soldier_word(ctx)
+      long_title = String.duplicate("Rebel Caisson Destroyed by Federal Shells. ", 8)
+      assert String.length(long_title) > 255
+
+      stub(fn
+        :search -> %{"total" => 1, "objectIDs" => [61]}
+        61 -> object(61, long_title, tags: [{"Soldiers", "Q4991371"}])
+      end)
+
+      assert {:queued, run} = Discovery.request(target(word), ctx.slug)
+      assert :ok = Discovery.execute_run(run.id)
+
+      [result] = Repo.all(from r in Result, where: r.run_id == ^run.id)
+      assert result.resolution_state == :newly_created
+
+      entity = Repo.get_by!(DevilsDictionary.Registry.Entity, object_id: result.object_id)
+      assert String.length(entity.preferred_label) == 255
+      assert String.starts_with?(long_title, entity.preferred_label)
+    end
+
     test "an item from another provider is refused rather than guessed at", _ctx do
       assert {:error, :unsupported_met_identity} =
                Met.identity_record(%{external_namespace: "tmdb_movie", external_id: "10"})

@@ -537,10 +537,14 @@ defmodule DevilsDictionary.Discovery.Providers.Met do
       end
   end
 
+  # `entities.preferred_label` is varchar(255) and Postgres counts characters,
+  # so this is the column's own width. 16 of the 1,644 highlight titles in
+  # `met-highlights-v1` exceed it (the longest is 498), and a 300-character
+  # clamp reached the database as a 22001 and killed the run.
   defp title(object) do
     case presence(object["title"]) do
       nil -> "Untitled"
-      title -> String.slice(title, 0, 300)
+      title -> String.slice(title, 0, 255)
     end
   end
 
