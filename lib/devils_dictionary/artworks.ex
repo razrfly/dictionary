@@ -25,6 +25,8 @@ defmodule DevilsDictionary.Artworks do
   @catalog_limit 24
   @catalog_max 100
   @candidate_page_size 500
+  @suggestion_limit 12
+  @qid_catalog_limit 24
   @mapping_file "artworks/meaning-mappings-v1.json"
 
   @doc "Searches reusable local artwork identities by title or creator name. No provider call."
@@ -107,24 +109,54 @@ defmodule DevilsDictionary.Artworks do
     end
   end
 
-  @doc "Returns local, exact-sense suggestions from direct retained Artsy gene assignments."
-  def suggestions(lexeme_ids) when is_list(lexeme_ids) do
-    senses =
-      Repo.all(
-        from sense in Sense,
-          join: revision in SenseRevision,
-          on: revision.sense_id == sense.object_id and revision.is_current,
-          join: lexeme in DevilsDictionary.Registry.Lexeme,
-          on: lexeme.object_id == sense.lexeme_id,
-          where: sense.lexeme_id in ^lexeme_ids and sense.identity_state == :active,
-          select: %{
-            id: sense.object_id,
-            lemma: lexeme.lemma,
-            language: lexeme.language_tag,
-            gloss: revision.gloss
-          }
-      )
+  @doc """
+  Local, exact suggestions for a page's lexemes, from the whole catalog.
 
+  Two independent kinds of evidence, one section. The Artsy pilot's evidence is a
+  retained **gene assignment** on a source record. The Met's and Wikidata's is a
+  **depicted QID**: the catalog records what each work depicts (a Met subject tag
+  or a `P180` statement, both carrying QIDs), the encyclopedia records what a
+  meaning refers to, and an equal QID is the match — the same identity-not-text
+  rule (D11) the Phase 2a provider matches on, asked of the committed corpus
+  instead of a live search.
+
+  Neither path makes a provider call, and the result is one list so a page shows
+  one artwork section.
+
+  ## Options
+
+    * `:exclude_met_object_ids` — Met object ids to leave out, so a work already
+      on the page's discovery shelf is not also offered here. Defaults to the
+      ids this page's own persisted Met results already carry.
+  """
+  def suggestions(lexeme_ids, opts \\ []) when is_list(lexeme_ids) do
+    senses = page_senses(lexeme_ids)
+
+    (artsy_suggestions(senses) ++ qid_suggestions(lexeme_ids, senses, opts))
+    |> Enum.uniq_by(&{&1.artwork.object_id, &1.sense_id})
+    |> Enum.take(@suggestion_limit)
+  end
+
+  defp page_senses(lexeme_ids) do
+    Repo.all(
+      from sense in Sense,
+        join: revision in SenseRevision,
+        on: revision.sense_id == sense.object_id and revision.is_current,
+        join: lexeme in DevilsDictionary.Registry.Lexeme,
+        on: lexeme.object_id == sense.lexeme_id,
+        where: sense.lexeme_id in ^lexeme_ids and sense.identity_state == :active,
+        order_by: [asc: sense.object_id],
+        select: %{
+          id: sense.object_id,
+          lexeme_id: sense.lexeme_id,
+          lemma: lexeme.lemma,
+          language: lexeme.language_tag,
+          gloss: revision.gloss
+        }
+    )
+  end
+
+  defp artsy_suggestions(senses) do
     sense_ids = Enum.map(senses, & &1.id)
 
     mappings =
@@ -159,6 +191,8 @@ defmodule DevilsDictionary.Artworks do
         match_reason: %{
           provider: "Artsy",
           kind: "direct_gene_assignment",
+          detail: "Artsy gene \u201C#{mapping.parameters["gene_name"]}\u201D",
+          locator: "Artsy direct gene #{mapping.parameters["gene_id"]}",
           gene_id: mapping.parameters["gene_id"],
           gene_name: mapping.parameters["gene_name"],
           mapping_version: mapping.version,
@@ -168,6 +202,197 @@ defmodule DevilsDictionary.Artworks do
       }
     end
     |> Enum.uniq_by(&{&1.artwork.object_id, &1.sense_id, &1.match_reason.gene_id})
+  end
+
+  # The QID path. Sense-level `refers_to` is the exact evidence D11 describes;
+  # a lexeme-level `lexeme_entity_candidate` is the same QID asserted about the
+  # word rather than one of its meanings, so it is admitted and labelled as such
+  # rather than silently promoted to a meaning it was never claimed about.
+  defp qid_suggestions(lexeme_ids, senses, opts) do
+    evidence = sense_qid_evidence(senses) ++ lexeme_qid_evidence(lexeme_ids, senses)
+    qids = evidence |> Enum.map(& &1.qid) |> Enum.uniq()
+
+    if qids == [] do
+      []
+    else
+      excluded =
+        Keyword.get_lazy(opts, :exclude_met_object_ids, fn ->
+          shelved_met_object_ids(lexeme_ids)
+        end)
+
+      artworks = depicting_artworks(qids, excluded)
+      by_sense = Map.new(senses, &{&1.id, &1})
+
+      for artwork <- artworks,
+          item <- artwork.depicts,
+          match = Enum.find(evidence, &(&1.qid == item["qid"])),
+          not is_nil(match),
+          sense = by_sense[match.sense_id],
+          not is_nil(sense) do
+        %{
+          artwork: artwork,
+          sense_id: sense.id,
+          meaning: sense.gloss,
+          language: sense.language,
+          mapping_id: nil,
+          source_record_revision_id: nil,
+          match_type: if(match.scope == :sense, do: "direct", else: "related"),
+          match_reason: %{
+            provider: artwork.catalog_provider,
+            kind: "depicted_qid",
+            detail: qid_detail(match, item),
+            locator: "#{artwork.catalog_provider} depiction #{item["qid"]}",
+            qid: item["qid"],
+            term: item["term"],
+            entity_label: match.label,
+            scope: match.scope,
+            note: qid_note(match, item, artwork)
+          },
+          review_state: :not_yet_reviewed
+        }
+      end
+      |> Enum.uniq_by(&{&1.artwork.object_id, &1.sense_id})
+      |> Enum.sort_by(&{sort_rank(&1), -(&1.artwork.sitelinks || 0), &1.artwork.object_id})
+    end
+  end
+
+  defp sort_rank(%{match_type: "direct"}), do: 0
+  defp sort_rank(_candidate), do: 1
+
+  defp qid_detail(match, item) do
+    subject = "depiction of \u201C#{match.label}\u201D (#{match.qid})"
+
+    case {match.scope, item["term"]} do
+      {:sense, nil} -> subject
+      {:sense, term} -> subject <> " tagged \u201C#{term}\u201D"
+      {:lexeme, _term} -> subject <> ", matched to the word and not to this meaning"
+    end
+  end
+
+  defp qid_note(match, item, artwork) do
+    "The catalog records this work as depicting #{item["qid"]}" <>
+      if(item["term"], do: " (\u201C#{item["term"]}\u201D)", else: "") <>
+      ", from #{depiction_source(artwork)}. The encyclopedia links this " <>
+      "#{if match.scope == :sense, do: "meaning", else: "word"} to #{match.qid}."
+  end
+
+  defp depiction_source(%{catalog_source: "met"}), do: "the Met's own subject tags"
+  defp depiction_source(%{catalog_source: "wikidata"}), do: "Wikidata P180 depicts"
+  defp depiction_source(_artwork), do: "the catalog"
+
+  defp sense_qid_evidence([]), do: []
+
+  defp sense_qid_evidence(senses) do
+    sense_ids = Enum.map(senses, & &1.id)
+
+    Repo.all(
+      from revision in AssertionRevision,
+        join: predicate in Claims.Predicate,
+        on: predicate.id == revision.predicate_id and predicate.key == "refers_to",
+        join: entity in Entity,
+        on: entity.object_id == revision.object_object_id,
+        join: identifier in ExternalIdentifier,
+        on:
+          identifier.object_id == entity.object_id and identifier.namespace == "wikidata" and
+            identifier.status == :verified,
+        where:
+          revision.subject_object_id in ^sense_ids and revision.is_current and
+            revision.lifecycle_state == :active,
+        order_by: [desc: revision.confidence, asc: entity.object_id],
+        select: %{
+          qid: identifier.external_id,
+          label: entity.preferred_label,
+          sense_id: revision.subject_object_id
+        }
+    )
+    |> Enum.map(&Map.put(&1, :scope, :sense))
+    |> Enum.uniq_by(&{&1.qid, &1.sense_id})
+  end
+
+  # A `lexeme_entity_candidate` names the word, so there is no sense on it. The
+  # page's first meaning carries the card, and `scope: :lexeme` is what makes the
+  # card say so instead of implying the claim was about that meaning.
+  defp lexeme_qid_evidence(_lexeme_ids, []), do: []
+
+  defp lexeme_qid_evidence(lexeme_ids, senses) do
+    primary = senses |> Enum.reverse() |> Map.new(&{&1.lexeme_id, &1.id})
+
+    Repo.all(
+      from revision in AssertionRevision,
+        join: predicate in Claims.Predicate,
+        on: predicate.id == revision.predicate_id and predicate.key == "lexeme_entity_candidate",
+        join: entity in Entity,
+        on: entity.object_id == revision.object_object_id,
+        join: identifier in ExternalIdentifier,
+        on:
+          identifier.object_id == entity.object_id and identifier.namespace == "wikidata" and
+            identifier.status == :verified,
+        where:
+          revision.subject_object_id in ^lexeme_ids and revision.is_current and
+            revision.lifecycle_state == :active,
+        order_by: [desc: revision.confidence, asc: entity.object_id],
+        select: %{
+          qid: identifier.external_id,
+          label: entity.preferred_label,
+          lexeme_id: revision.subject_object_id
+        }
+    )
+    |> Enum.flat_map(fn row ->
+      case primary[row.lexeme_id] do
+        nil -> []
+        sense_id -> [%{qid: row.qid, label: row.label, sense_id: sense_id, scope: :lexeme}]
+      end
+    end)
+    |> Enum.uniq_by(&{&1.qid, &1.sense_id})
+  end
+
+  # Whatever the page's own Met shelf is already showing. Offering the same
+  # object twice under two headings is the duplicate this guards against; the
+  # shelf and the catalog share the `met_object_id` identity, so the comparison
+  # is exact rather than by title.
+  defp shelved_met_object_ids(lexeme_ids) do
+    Repo.all(
+      from result in Result,
+        join: run in Run,
+        on: run.id == result.run_id,
+        join: mapping in Mapping,
+        on: mapping.id == run.mapping_id,
+        where:
+          mapping.target_object_id in ^lexeme_ids and result.external_namespace == "met_object" and
+            result.display_allowed and run.display_allowed,
+        distinct: true,
+        select: result.external_id
+    )
+  end
+
+  defp depicting_artworks(qids, excluded_met_ids) do
+    matches =
+      from entity in Entity,
+        join: object in Object,
+        on: object.id == entity.object_id and object.lifecycle_state == :active,
+        join: details in WorkDetails,
+        on: details.entity_id == entity.object_id and details.work_kind == "artwork",
+        left_join: met in ExternalIdentifier,
+        on:
+          met.object_id == entity.object_id and met.namespace == "met_object_id" and
+            met.status == :verified,
+        where:
+          fragment(
+            "EXISTS (SELECT 1 FROM jsonb_array_elements_text(COALESCE(?, '[]'::jsonb)) AS depicted WHERE depicted = ANY(?))",
+            entity.metadata["depicts_qids"],
+            ^qids
+          ),
+        where: is_nil(met.external_id) or met.external_id not in ^excluded_met_ids,
+        order_by: [
+          desc: fragment("COALESCE((? ->> 'sitelinks')::int, 0)", entity.metadata),
+          asc: entity.object_id
+        ],
+        limit: @qid_catalog_limit,
+        select: entity
+
+    matches
+    |> Repo.all()
+    |> views()
   end
 
   @doc "Installs versioned Artsy-gene recipes for exact, stable source senses."
@@ -404,9 +629,23 @@ defmodule DevilsDictionary.Artworks do
         genes: (source && source.genes) || [],
         source_record_id: source && source.source_record_id,
         source_record_revision_id: source && source.source_record_revision_id,
-        date: source && source.artwork["date"],
-        medium: source && source.artwork["medium"],
-        collection: source && source.artwork["collecting_institution"],
+        # A catalog artwork's date, medium and holding institution come from the
+        # committed manifest rather than from a retained provider payload, so
+        # each falls back to the identity's own metadata. The Artsy pilot's
+        # values still win where it has them.
+        date: (source && source.artwork["date"]) || entity.metadata["object_date"],
+        medium: (source && source.artwork["medium"]) || entity.metadata["medium"],
+        collection:
+          (source && source.artwork["collecting_institution"]) || entity.metadata["collection"],
+        # A display-only artist name. It is not a `creators` entry because that
+        # list is of local identities the card links to, and a name on a
+        # manifest row is not one.
+        artist: entity.metadata["artist_display_name"],
+        catalog_source: entity.metadata["catalog_source"],
+        catalog_provider: catalog_provider(entity.metadata["catalog_source"]),
+        corpus: entity.metadata["corpus"],
+        sitelinks: entity.metadata["sitelinks"],
+        depicts: List.wrap(entity.metadata["depicts"]),
         freshness: source && source.freshness,
         source_links:
           Enum.reject(
@@ -418,13 +657,28 @@ defmodule DevilsDictionary.Artworks do
                   url: "https://en.wikipedia.org/wiki/#{URI.encode(view.wikipedia_title)}"
                 },
               source && source.artwork["permalink"] &&
-                %{label: "Artsy", url: source.artwork["permalink"]}
+                %{label: "Artsy", url: source.artwork["permalink"]},
+              catalog_link(entity.metadata)
             ],
             &is_nil/1
           )
       }
     end)
   end
+
+  defp catalog_provider("met"), do: "The Met"
+  defp catalog_provider("wikidata"), do: "Wikidata"
+
+  # No default. An artwork that reached the registry by some other route — the
+  # Artsy pilot, or a Phase 2a discovery resolution — is not from a committed
+  # corpus, and naming a source it did not come from would be a guess printed
+  # as a fact.
+  defp catalog_provider(_source), do: nil
+
+  defp catalog_link(%{"catalog_source" => "met", "source_url" => url}) when is_binary(url),
+    do: %{label: "The Met", url: url}
+
+  defp catalog_link(_metadata), do: nil
 
   defp artsy_gene_matches(pattern) do
     from output in MaterializedOutput,
