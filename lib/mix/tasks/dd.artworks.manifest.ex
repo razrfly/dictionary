@@ -6,6 +6,7 @@ defmodule Mix.Tasks.Dd.Artworks.Manifest do
 
       mix dd.artworks.manifest met-highlights
       mix dd.artworks.manifest met-highlights --request-limit 3000 --id-limit 50
+      mix dd.artworks.manifest met-highlights --from-cache
       mix dd.artworks.manifest wikidata-famous --measure
       mix dd.artworks.manifest wikidata-famous --min-sitelinks 20
 
@@ -33,6 +34,7 @@ defmodule Mix.Tasks.Dd.Artworks.Manifest do
     progress: :string,
     id_limit: :integer,
     max_attempts: :integer,
+    from_cache: :boolean,
     min_sitelinks: :integer,
     measure: :boolean,
     page_size: :integer
@@ -62,7 +64,8 @@ defmodule Mix.Tasks.Dd.Artworks.Manifest do
            interval_ms: opts[:interval_ms],
            progress: opts[:progress],
            id_limit: opts[:id_limit],
-           max_attempts: opts[:max_attempts]
+           max_attempts: opts[:max_attempts],
+           from_cache: opts[:from_cache]
          ) do
       {:ok, manifest, ledger} -> write(manifest, ledger, opts, "met-highlights")
       {:error, reason} -> Mix.raise("met highlights manifest failed: #{reason}")

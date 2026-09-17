@@ -178,7 +178,7 @@ defmodule DevilsDictionary.Artworks.Corpus.Seeder do
         identifiers:
           [%{namespace: "met_object_id", external_id: met_id}] ++
             qid_identifier(row["qid"]),
-        label: String.slice(title, 0, 300),
+        label: label(title),
         year: begin_year(row["date"]),
         metadata:
           base_metadata(row, version, "met")
@@ -203,7 +203,7 @@ defmodule DevilsDictionary.Artworks.Corpus.Seeder do
         work_kind: "artwork",
         stable_identifier: %{namespace: "wikidata", external_id: qid},
         identifiers: [%{namespace: "wikidata", external_id: qid}],
-        label: String.slice(title, 0, 300),
+        label: label(title),
         year: begin_year(row["date"]),
         metadata:
           base_metadata(row, version, "wikidata")
@@ -219,6 +219,12 @@ defmodule DevilsDictionary.Artworks.Corpus.Seeder do
   end
 
   def entry(kind, _version, _row), do: {:error, "unsupported_manifest_kind_#{kind}"}
+
+  # `entities.preferred_label` is varchar(255) and Postgres counts characters,
+  # not bytes, so this is the column's own width. Met highlight titles reach it:
+  # "Rebel Cassion Destroyed by Federal Shells. At Fredericksburgh, May 3, 1863.
+  # Eight Horses Killed." is one of the shorter long ones.
+  defp label(title), do: String.slice(title, 0, 255)
 
   defp base_metadata(row, version, catalog_source) do
     depicts = depicts(row)

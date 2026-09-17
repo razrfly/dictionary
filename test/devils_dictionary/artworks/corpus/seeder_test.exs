@@ -169,6 +169,17 @@ defmodule DevilsDictionary.Artworks.Corpus.SeederTest do
              "https://example.test/held.jpg"
   end
 
+  test "a title longer than the label column is clamped to it, not refused by Postgres" do
+    long = String.duplicate("Rebel Cassion Destroyed by Federal Shells. ", 10)
+
+    assert {:ok, summary} = Seeder.run(met_manifest([met_row(%{"title" => long})]))
+    assert summary.newly_created == 1
+
+    label = Repo.get!(Entity, Registry.by_external_id("met_object_id", "436535")).preferred_label
+    assert String.length(label) == 255
+    assert String.starts_with?(long, label)
+  end
+
   test "a row with no identity is counted invalid rather than half-seeded" do
     assert {:ok, summary} =
              Seeder.run(met_manifest([met_row()]) |> put_in(["rows", Access.at(0), "title"], ""))
@@ -232,6 +243,43 @@ defmodule DevilsDictionary.Artworks.Corpus.SeederTest do
       assert candidate.match_reason.provider == "Wikidata"
       assert candidate.match_reason.detail =~ "matched to the word and not to this meaning"
       assert candidate.artwork.title == "Mona Lisa"
+    end
+
+    test "the section alternates between catalog sources instead of ranking by sitelinks", ctx do
+      # Only Wikidata rows carry a sitelink count, so one merged ordering would
+      # put every Met row last and the section would be one source's section.
+      {:ok, _} =
+        Seeder.run(
+          famous_manifest(
+            for {qid, sitelinks} <- [{"Q1001", 90}, {"Q1002", 80}] do
+              famous_row(%{
+                "qid" => qid,
+                "title" => "Famous #{qid}",
+                "sitelinks" => sitelinks,
+                "depicts" => [%{"qid" => "Q198", "term" => "war"}]
+              })
+            end
+          )
+        )
+
+      {:ok, _} =
+        Seeder.run(
+          met_manifest([
+            met_row(%{
+              "met_object_id" => "777",
+              "title" => "A Met object",
+              "tags" => [%{"term" => "Soldiers", "qid" => "Q198"}]
+            })
+          ])
+        )
+
+      sources =
+        [ctx.war.object_id]
+        |> Artworks.suggestions()
+        |> Enum.map(& &1.artwork.catalog_source)
+
+      assert ["wikidata", "met" | _] = sources
+      assert "met" in sources
     end
 
     test "a QID nothing in the catalog depicts yields nothing", ctx do

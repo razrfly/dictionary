@@ -27,6 +27,7 @@ defmodule DevilsDictionary.Artworks do
   @candidate_page_size 500
   @suggestion_limit 12
   @qid_catalog_limit 24
+  @qid_source_limit 12
   @mapping_file "artworks/meaning-mappings-v1.json"
 
   @doc "Searches reusable local artwork identities by title or creator name. No provider call."
@@ -252,9 +253,30 @@ defmodule DevilsDictionary.Artworks do
         }
       end
       |> Enum.uniq_by(&{&1.artwork.object_id, &1.sense_id})
-      |> Enum.sort_by(&{sort_rank(&1), -(&1.artwork.sitelinks || 0), &1.artwork.object_id})
+      |> interleave_by_source()
     end
   end
+
+  # Exact matches before word-level ones, and then one source at a time. Ranking
+  # the merged list by sitelinks alone would be the same mistake the catalog
+  # query makes without its window: only Wikidata carries that number, so the
+  # Met's 1,644 objects sort last and the section's twelve slots go entirely to
+  # one source. Interleaving costs nothing and is what makes this one section
+  # rather than one source's section.
+  defp interleave_by_source(candidates) do
+    candidates
+    |> Enum.sort_by(&{sort_rank(&1), -(&1.artwork.sitelinks || 0), &1.artwork.object_id})
+    |> Enum.group_by(&{sort_rank(&1), &1.artwork.catalog_source})
+    |> Enum.flat_map(fn {{rank, source}, items} ->
+      Enum.with_index(items, fn item, index -> {{rank, index, source_order(source)}, item} end)
+    end)
+    |> Enum.sort_by(&elem(&1, 0))
+    |> Enum.map(&elem(&1, 1))
+  end
+
+  defp source_order("wikidata"), do: 0
+  defp source_order("met"), do: 1
+  defp source_order(_source), do: 2
 
   defp sort_rank(%{match_type: "direct"}), do: 0
   defp sort_rank(_candidate), do: 1
@@ -365,8 +387,13 @@ defmodule DevilsDictionary.Artworks do
     )
   end
 
+  # Ranked per catalog source, not across them. Sitelinks are the only quality
+  # signal either source carries and only one of them has it, so a single
+  # ordering hands every slot to Wikidata and the Met's 1,644 objects never
+  # reach a page at all — measured, before this window existed. Each source gets
+  # its own top slice and they are merged afterwards.
   defp depicting_artworks(qids, excluded_met_ids) do
-    matches =
+    ranked =
       from entity in Entity,
         join: object in Object,
         on: object.id == entity.object_id and object.lifecycle_state == :active,
@@ -383,15 +410,31 @@ defmodule DevilsDictionary.Artworks do
             ^qids
           ),
         where: is_nil(met.external_id) or met.external_id not in ^excluded_met_ids,
+        select: %{
+          object_id: entity.object_id,
+          rank:
+            over(row_number(),
+              partition_by:
+                fragment("COALESCE(? ->> 'catalog_source', 'other')", entity.metadata),
+              order_by: [
+                desc: fragment("COALESCE((? ->> 'sitelinks')::int, 0)", entity.metadata),
+                asc: entity.object_id
+              ]
+            )
+        }
+
+    Repo.all(
+      from entity in Entity,
+        join: candidate in subquery(ranked),
+        on: candidate.object_id == entity.object_id,
+        where: candidate.rank <= @qid_source_limit,
         order_by: [
           desc: fragment("COALESCE((? ->> 'sitelinks')::int, 0)", entity.metadata),
           asc: entity.object_id
         ],
         limit: @qid_catalog_limit,
         select: entity
-
-    matches
-    |> Repo.all()
+    )
     |> views()
   end
 

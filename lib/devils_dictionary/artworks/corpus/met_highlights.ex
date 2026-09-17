@@ -72,6 +72,36 @@ defmodule DevilsDictionary.Artworks.Corpus.MetHighlights do
     progress = opts[:progress] || default_progress()
     cached = load_progress(progress)
 
+    if opts[:from_cache] do
+      from_cache(cached, state)
+    else
+      from_search(cached, progress, state, opts)
+    end
+  end
+
+  @doc """
+  Writes the manifest from what has already been hydrated, spending nothing.
+
+  The hydration cache is the expensive artifact — thousands of paced requests —
+  and turning it into a manifest is a local operation. A run that was stopped
+  before it could write its manifest must not have to re-ask the Met for the id
+  list just to write down what it already holds.
+  """
+  def from_cache(cached, state) do
+    rows = cached |> Map.values() |> Enum.sort_by(&object_id(&1["met_object_id"]))
+    kept = Enum.filter(rows, & &1["public_domain"])
+
+    manifest =
+      Manifest.new(
+        "met-highlights",
+        Enum.map(kept, &Map.delete(&1, "public_domain")),
+        selection(nil, length(rows), rows, kept, "hydration cache of the isHighlight query")
+      )
+
+    {:ok, manifest, ledger(state, nil, rows, rows, kept)}
+  end
+
+  defp from_search(cached, progress, state, opts) do
     with {:ok, ids, total, state} <- collect_ids(state, opts[:id_limit]) do
       {rows, state} = hydrate(ids, cached, progress, state)
 
@@ -81,19 +111,31 @@ defmodule DevilsDictionary.Artworks.Corpus.MetHighlights do
         Manifest.new(
           "met-highlights",
           Enum.map(kept, &Map.delete(&1, "public_domain")),
-          %{
-            "query" => @search_params,
-            "search_total" => total,
-            "candidate_ids" => length(ids),
-            "hydrated" => length(rows),
-            "public_domain_with_image" => length(kept),
-            "gate" => "isPublicDomain and primaryImageSmall on the hydrated object",
-            "images" => "primaryImageSmall URL plus creditLine; no image bytes are fetched",
-            "identity" => "Met object ID, plus the object's own P3634 QID when published"
-          }
+          selection(total, length(ids), rows, kept, "live isHighlight search")
         )
 
       {:ok, manifest, ledger(state, total, ids, rows, kept)}
+    end
+  end
+
+  defp selection(total, candidates, rows, kept, built_from) do
+    %{
+      "query" => @search_params,
+      "search_total" => total,
+      "candidate_ids" => candidates,
+      "hydrated" => length(rows),
+      "public_domain_with_image" => length(kept),
+      "built_from" => built_from,
+      "gate" => "isPublicDomain and primaryImageSmall on the hydrated object",
+      "images" => "primaryImageSmall URL plus creditLine; no image bytes are fetched",
+      "identity" => "Met object ID, plus the object's own P3634 QID when published"
+    }
+  end
+
+  defp object_id(value) do
+    case Integer.parse(to_string(value)) do
+      {id, ""} -> id
+      _ -> 0
     end
   end
 
@@ -152,6 +194,10 @@ defmodule DevilsDictionary.Artworks.Corpus.MetHighlights do
   defp dedupe(ids, nil), do: Enum.uniq(ids)
   defp dedupe(ids, limit) when is_integer(limit), do: ids |> Enum.uniq() |> Enum.take(limit)
 
+  # Exhausting the budget stops the *requests*, not the walk. A cached row costs
+  # nothing, and the ids are not hydrated in one contiguous block — a pass that
+  # gave up on an object leaves a hole that a later pass fills — so halting at
+  # the first refused request would throw away rows already paid for.
   defp hydrate(ids, cached, progress, state) do
     Enum.reduce(ids, {[], state}, fn id, {rows, state} ->
       key = Integer.to_string(id)
@@ -161,20 +207,24 @@ defmodule DevilsDictionary.Artworks.Corpus.MetHighlights do
           {[row | rows], state}
 
         :error ->
-          case request(state, "object:#{key}", url: "#{@base}#{@object_path}/#{id}") do
-            {:ok, object, state} when is_map(object) ->
-              row = row(object, key)
-              append_progress(progress, row)
-              {[row | rows], %{state | hydrations: state.hydrations + 1}}
+          if state.requests >= state.request_limit do
+            {rows, state}
+          else
+            case request(state, "object:#{key}", url: "#{@base}#{@object_path}/#{id}") do
+              {:ok, object, state} when is_map(object) ->
+                row = row(object, key)
+                append_progress(progress, row)
+                {[row | rows], %{state | hydrations: state.hydrations + 1}}
 
-            {:ok, _body, state} ->
-              {rows, %{state | failed: state.failed + 1}}
+              {:ok, _body, state} ->
+                {rows, %{state | failed: state.failed + 1}}
 
-            {:error, :request_limit, state} ->
-              {rows, state}
+              {:error, :request_limit, state} ->
+                {rows, state}
 
-            {:error, _reason, state} ->
-              {rows, %{state | failed: state.failed + 1}}
+              {:error, _reason, state} ->
+                {rows, %{state | failed: state.failed + 1}}
+            end
           end
       end
     end)

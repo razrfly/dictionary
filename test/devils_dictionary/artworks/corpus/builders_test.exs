@@ -117,6 +117,82 @@ defmodule DevilsDictionary.Artworks.Corpus.BuildersTest do
       assert ledger.failed == 0
     end
 
+    test "exhausting the budget stops the requests, not the walk" do
+      path = progress_path()
+
+      # The cache is not a contiguous prefix: a pass that gave up on object 41
+      # leaves a hole that a later pass fills, so 42 is cached and 41 is not.
+      for id <- [40, 42] do
+        File.write!(
+          path,
+          Jason.encode!(%{
+            "met_object_id" => Integer.to_string(id),
+            "public_domain" => true,
+            "title" => "Cached #{id}",
+            "tags" => [],
+            "image_url" => "https://images.example.test/#{id}.jpg"
+          }) <> "\n",
+          [:append]
+        )
+      end
+
+      request_fun = fn options ->
+        url = Keyword.fetch!(options, :url)
+
+        if String.contains?(url, "/search") do
+          case options |> Keyword.fetch!(:params) |> Map.fetch!("offset") do
+            "0" -> response(%{"total" => 3, "objectIDs" => [40, 41, 42]})
+            _ -> response(%{"total" => 3, "objectIDs" => []})
+          end
+        else
+          flunk("object #{url} was requested with no budget left")
+        end
+      end
+
+      assert {:ok, manifest, ledger} =
+               MetHighlights.build(
+                 request_fun: request_fun,
+                 interval_ms: 0,
+                 progress: path,
+                 # One search page and nothing else.
+                 request_limit: 1
+               )
+
+      assert Enum.map(manifest["rows"], & &1["met_object_id"]) == ["40", "42"]
+      assert ledger.hydrations == 0
+      assert ledger.met_requests == 1
+    end
+
+    test "--from-cache writes the manifest without asking the Met anything" do
+      path = progress_path()
+
+      for {id, pd} <- [{"9", true}, {"10", false}, {"8", true}] do
+        File.write!(
+          path,
+          Jason.encode!(%{
+            "met_object_id" => id,
+            "public_domain" => pd,
+            "title" => "Cached #{id}",
+            "tags" => [%{"term" => "Soldiers", "qid" => "Q4991371"}],
+            "image_url" => "https://images.example.test/#{id}.jpg"
+          }) <> "\n",
+          [:append]
+        )
+      end
+
+      request_fun = fn _options -> flunk("--from-cache must spend nothing") end
+
+      assert {:ok, manifest, ledger} =
+               MetHighlights.build(from_cache: true, progress: path, request_fun: request_fun)
+
+      assert Enum.map(manifest["rows"], & &1["met_object_id"]) == ["8", "9"]
+      assert ledger.met_requests == 0
+      assert ledger.hydrated == 3
+      assert ledger.public_domain_kept == 2
+      assert manifest["selection"]["built_from"] == "hydration cache of the isHighlight query"
+      refute Map.has_key?(hd(manifest["rows"]), "public_domain")
+    end
+
     test "a hydration already in the progress file costs no request" do
       path = progress_path()
 
