@@ -59,6 +59,14 @@ defmodule DevilsDictionaryWeb.Artwork do
             >{creator.label}</.link>
           </span>
         </p>
+        <%!-- A catalog row names its artist without carrying a local identity
+             for them, so the name is shown as text rather than as a dead link. --%>
+        <p
+          :if={@artwork.creators == [] && Map.get(@artwork, :artist)}
+          class="mt-1 text-sm/6 text-mist-500"
+        >
+          by {@artwork.artist}
+        </p>
         <p
           :if={@artwork.description}
           class="mt-2 line-clamp-2 text-sm/6 text-mist-600 dark:text-mist-300"
@@ -89,9 +97,9 @@ defmodule DevilsDictionaryWeb.Artwork do
             <span class="text-mist-500">({@candidate.language})</span>
           </p>
           <p class="text-mist-500">
-            {candidate_relation(@candidate.match_type)} Artsy gene “{@candidate.match_reason.gene_name}” · not yet reviewed
+            {candidate_relation(@candidate.match_type)} {@candidate.match_reason.detail} · not yet reviewed
           </p>
-          <p class="mt-1 text-mist-500">
+          <p :if={@candidate.match_reason.note} class="mt-1 text-mist-500">
             {@candidate.match_reason.note}
           </p>
         </div>
@@ -126,8 +134,23 @@ defmodule DevilsDictionaryWeb.Artwork do
 
   defp connect_path(artwork, nil), do: ~p"/connect?subject=#{artwork.object_id}"
 
+  # A catalog candidate has no retained provider revision to cite, so the
+  # evidence parameters are dropped rather than sent empty: a connect form
+  # prefilled with `evidence_revision=` would be citing nothing.
   defp connect_path(artwork, candidate) do
-    ~p"/connect?#{%{subject: artwork.object_id, object: candidate.sense_id, predicate: "illustrates", evidence_revision: candidate.source_record_revision_id, evidence_locator: "Artsy direct gene #{candidate.match_reason.gene_id}", rationale: candidate.match_reason.note}}"
+    params =
+      %{
+        subject: artwork.object_id,
+        object: candidate.sense_id,
+        predicate: "illustrates",
+        evidence_revision: candidate.source_record_revision_id,
+        evidence_locator: candidate.match_reason.locator,
+        rationale: candidate.match_reason.note
+      }
+      |> Enum.reject(fn {_key, value} -> is_nil(value) end)
+      |> Map.new()
+
+    ~p"/connect?#{params}"
   end
 
   defp candidate_relation(:broader), do: "Broader-context"

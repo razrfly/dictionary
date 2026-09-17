@@ -24,6 +24,17 @@ defmodule Mix.Tasks.Dd.Artworks.Seed do
   `--skip-wikidata-hydration` only when that stage is already complete, and
   `--refresh-wikidata` when current Wikidata records must be refreshed.
 
+  It also seeds the committed **corpus** manifests built by
+  `mix dd.artworks.manifest` — `met-highlights` and `wikidata-famous` — which are
+  recognised by their contents rather than by a flag:
+
+      mix dd.artworks.seed --manifest priv/artworks/manifests/met-highlights-v1.json
+      mix dd.artworks.seed --manifest priv/artworks/manifests/wikidata-famous-v1.json --dry-run
+
+  A corpus manifest is the whole input: nothing is searched, fetched or resumed,
+  and rerunning it matches every row on its exact identifier, so the counts come
+  back identical.
+
   All discovery and provider calls are bounded. Import progress is written to
   an ignored, environment-local `MANIFEST.checkpoint.json` (or `--checkpoint`),
   so `--resume` continues partial records without mutating the portable base
@@ -34,6 +45,7 @@ defmodule Mix.Tasks.Dd.Artworks.Seed do
   use Mix.Task
 
   alias DevilsDictionary.Artworks
+  alias DevilsDictionary.Artworks.Corpus
   alias DevilsDictionary.Artworks.{Manifest, Seeder, WikidataCandidates}
 
   @switches [
@@ -53,6 +65,7 @@ defmodule Mix.Tasks.Dd.Artworks.Seed do
     offset: :integer,
     skip_wikidata_hydration: :boolean,
     refresh_wikidata: :boolean,
+    refresh: :boolean,
     wikidata_request_limit: :integer,
     wikidata_entity_limit: :integer
   ]
@@ -67,6 +80,46 @@ defmodule Mix.Tasks.Dd.Artworks.Seed do
     end
 
     path = Path.expand(opts[:manifest])
+
+    if Corpus.Manifest.corpus_manifest?(path) do
+      seed_corpus(path, opts)
+    else
+      seed_artsy_pilot(path, opts)
+    end
+  end
+
+  # A committed corpus manifest (`met-highlights`, `wikidata-famous`) is the
+  # whole input: the seeder reads it from disk, resolves each row on its exact
+  # identifier and makes no provider call at all. None of the Artsy pilot's
+  # build, checkpoint, resume or hydration stages apply, because there is
+  # nothing to fetch and nothing partial to resume.
+  defp seed_corpus(path, opts) do
+    if opts[:build],
+      do: Mix.raise("--build does not apply to a corpus manifest; use mix dd.artworks.manifest")
+
+    manifest = Corpus.Manifest.load!(path)
+
+    {:ok, summary} =
+      Corpus.Seeder.run(manifest,
+        dry_run: opts[:dry_run] || false,
+        limit: opts[:record_limit],
+        refresh: opts[:refresh] || false
+      )
+
+    Mix.shell().info(
+      "Corpus manifest #{path}: #{manifest["row_count"]} rows, checksum #{manifest["checksum"]}"
+    )
+
+    Mix.shell().info("Corpus seed summary: " <> inspect(summary, pretty: true))
+
+    Mix.shell().info(
+      "Artwork catalog by source: " <> inspect(Corpus.Seeder.catalog_counts(), pretty: true)
+    )
+  rescue
+    error in [ArgumentError, File.Error, Jason.DecodeError] -> Mix.raise(Exception.message(error))
+  end
+
+  defp seed_artsy_pilot(path, opts) do
     base_manifest = if opts[:build], do: build(path, opts), else: Manifest.load!(path)
 
     cond do
