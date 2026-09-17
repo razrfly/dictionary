@@ -430,6 +430,13 @@ mix dd.discovery.check
 mix dd.artworks.seed --manifest priv/artworks/manifests/met-highlights-v1.json --dry-run
 ```
 
+The first two need provider credentials from the ignored `.env`, which a fresh
+worktree does not have: `dd.discovery.check` exits with *CINEGRAPH_API_KEY is
+missing or blank*, and `dd.discovery --dry-run` still selects its targets and
+then reports *0 eligible providers*. Both are the tasks working correctly. The
+Met needs no key, so it is the provider a keyless checkout can actually drive.
+`dd.artworks.seed --dry-run` needs nothing but the committed manifest.
+
 ---
 
 ## Conformance

@@ -205,9 +205,12 @@ existing tests red — the registry assertion in
 `test/devils_dictionary/discovery/providers_test.exs`, the source count in
 `test/devils_dictionary_web/live/home_live_test.exs`, and the
 `Repo.one!(Run)` assertions in
-`test/devils_dictionary_web/live/culture_discovery_live_test.exs` that assume one
-server provider makes one run. Those tests are the ones to update; none of them
-is a defect in your provider. Run the full suite and look at every failure before
+`test/devils_dictionary_web/live/culture_discovery_live_test.exs` and
+`test/devils_dictionary_web/live/film_identity_flow_test.exs` that assume one
+server provider makes one run. Measured: scaffolding `demo` into the real config
+and running `mix test` gave **1,207 tests, 11 failures** — ten of them in those
+four files, plus the environmental manifest test. Those tests are the ones to
+update; none of them is a defect in your provider. Run the full suite and look at every failure before
 deciding which are yours:
 
 ```bash
