@@ -115,6 +115,60 @@ defmodule DevilsDictionary.Artworks.Corpus.SeederTest do
     assert Repo.get!(WorkDetails, object_id).first_published_year == 1503
   end
 
+  test "refresh rewrites the display facts the manifest owns, and nothing else" do
+    assert {:ok, _} = Seeder.run(famous_manifest([famous_row()]))
+    object_id = Registry.by_external_id("wikidata", "Q12418")
+
+    corrected =
+      famous_manifest([
+        famous_row(%{
+          "image_url" =>
+            "https://upload.wikimedia.org/wikipedia/commons/thumb/x/xx/500px-Mona.jpg",
+          "depicts" => [
+            %{"qid" => "Q26513196", "term" => "Lisa del Giocondo"},
+            %{"qid" => "Q316", "term" => "love"}
+          ],
+          "title" => "A title the manifest must not impose"
+        })
+      ])
+
+    assert {:ok, without} = Seeder.run(corrected)
+    assert without.refreshed == 0
+    assert Repo.get!(Entity, object_id).metadata["depicts_qids"] == ["Q26513196"]
+
+    assert {:ok, with_refresh} = Seeder.run(corrected, refresh: true)
+    assert with_refresh.refreshed == 1
+    assert with_refresh.matched == 1
+
+    entity = Repo.get!(Entity, object_id)
+    assert entity.metadata["depicts_qids"] == ["Q26513196", "Q316"]
+    assert entity.metadata["image_url"] =~ "500px-Mona.jpg"
+    # Identity and display title are not the manifest's to rewrite.
+    assert entity.preferred_label == "Mona Lisa"
+
+    assert {:ok, settled} = Seeder.run(corrected, refresh: true)
+    assert settled.refreshed == 0
+  end
+
+  test "refresh leaves an identity this manifest does not own alone" do
+    {:ok, entity} =
+      Registry.create_work(%{
+        preferred_label: "Someone else's painting",
+        work_kind: "artwork",
+        metadata: %{"image_url" => "https://example.test/held.jpg"}
+      })
+
+    {:ok, _} = Registry.add_external_id(entity.object_id, "wikidata", "Q12418")
+
+    assert {:ok, summary} = Seeder.run(famous_manifest([famous_row()]), refresh: true)
+
+    assert summary.matched == 1
+    assert summary.refreshed == 0
+
+    assert Repo.get!(Entity, entity.object_id).metadata["image_url"] ==
+             "https://example.test/held.jpg"
+  end
+
   test "a row with no identity is counted invalid rather than half-seeded" do
     assert {:ok, summary} =
              Seeder.run(met_manifest([met_row()]) |> put_in(["rows", Access.at(0), "title"], ""))

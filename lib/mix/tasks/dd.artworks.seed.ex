@@ -65,6 +65,7 @@ defmodule Mix.Tasks.Dd.Artworks.Seed do
     offset: :integer,
     skip_wikidata_hydration: :boolean,
     refresh_wikidata: :boolean,
+    refresh: :boolean,
     wikidata_request_limit: :integer,
     wikidata_entity_limit: :integer
   ]
@@ -99,7 +100,11 @@ defmodule Mix.Tasks.Dd.Artworks.Seed do
     manifest = Corpus.Manifest.load!(path)
 
     {:ok, summary} =
-      Corpus.Seeder.run(manifest, dry_run: opts[:dry_run] || false, limit: opts[:record_limit])
+      Corpus.Seeder.run(manifest,
+        dry_run: opts[:dry_run] || false,
+        limit: opts[:record_limit],
+        refresh: opts[:refresh] || false
+      )
 
     Mix.shell().info(
       "Corpus manifest #{path}: #{manifest["row_count"]} rows, checksum #{manifest["checksum"]}"

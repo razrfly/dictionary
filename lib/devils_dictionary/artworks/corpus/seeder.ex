@@ -37,8 +37,21 @@ defmodule DevilsDictionary.Artworks.Corpus.Seeder do
   @doc """
   Seeds one loaded manifest and returns a summary.
 
-  Options: `:dry_run` (resolve nothing, just count what would be seeded) and
-  `:limit` (seed only the first N rows).
+  Options: `:dry_run` (resolve nothing, just count what would be seeded),
+  `:limit` (seed only the first N rows) and `:refresh`.
+
+  ## `:refresh`
+
+  `SourceIdentity.resolve/1` never replaces a field an identity already holds —
+  an absorbed record must not be overwritten by a manifest-shaped summary. That
+  is right for identity and description, and wrong for the handful of display
+  facts a committed manifest *is* the source of: the image URL and the credit
+  that travels with it, and the depicted QIDs the lookup matches on. Correcting
+  a manifest would otherwise reach the database only by deleting rows.
+
+  So `refresh: true` rewrites exactly those keys, and only on an identity this
+  manifest already owns — one whose metadata carries this manifest's `corpus`
+  version. It mints nothing and touches no other row.
   """
   def run(manifest, opts \\ []) when is_map(manifest) do
     rows = manifest["rows"] |> List.wrap() |> take(opts[:limit])
@@ -52,8 +65,17 @@ defmodule DevilsDictionary.Artworks.Corpus.Seeder do
             if opts[:dry_run] do
               tally(summary, :would_seed, row)
             else
+              # Ownership is read before the resolve, not after: resolving fills
+              # this manifest's missing keys onto whatever identity it matched,
+              # so afterwards an absorbed record carries the `corpus` marker too
+              # and would look owned when it is not.
+              owned? = opts[:refresh] && corpus_owned?(entry, version)
               resolution = SourceIdentity.resolve(entry)
-              tally(summary, resolution.state, row)
+              refreshed? = owned? && refresh(resolution, entry)
+
+              summary
+              |> tally(resolution.state, row)
+              |> Map.update!(:refreshed, &if(refreshed?, do: &1 + 1, else: &1))
             end
 
           {:error, reason} ->
@@ -89,6 +111,7 @@ defmodule DevilsDictionary.Artworks.Corpus.Seeder do
       conflicting_identifiers: 0,
       invalid: 0,
       invalid_reasons: %{},
+      refreshed: 0,
       with_image: 0,
       with_depicts: 0,
       depicted_qids: 0,
@@ -108,6 +131,39 @@ defmodule DevilsDictionary.Artworks.Corpus.Seeder do
     end)
     |> then(&Map.put(&1, :depicted_qids, MapSet.size(&1.depicted_qid_set)))
   end
+
+  @owned_display_keys ~w(image_url image_attribution credit_line depicts depicts_qids sitelinks)
+
+  # A row this manifest has not seeded yet is its own to write; a row it seeded
+  # before carries its version. Anything else belongs to whoever put it there.
+  defp corpus_owned?(entry, version) do
+    identifier = entry.stable_identifier
+
+    case Registry.by_external_id(identifier.namespace, identifier.external_id) do
+      nil ->
+        true
+
+      object_id ->
+        DevilsDictionary.Repo.get!(Registry.Entity, object_id).metadata["corpus"] == version
+    end
+  end
+
+  defp refresh(%{object_id: object_id}, entry) when is_integer(object_id) do
+    entity = DevilsDictionary.Repo.get!(Registry.Entity, object_id)
+    owned = Map.take(entry.metadata, @owned_display_keys)
+
+    if Map.take(entity.metadata, Map.keys(owned)) == owned do
+      false
+    else
+      entity
+      |> Registry.Entity.changeset(%{metadata: Map.merge(entity.metadata, owned)})
+      |> DevilsDictionary.Repo.update!()
+
+      true
+    end
+  end
+
+  defp refresh(_resolution, _entry), do: false
 
   @doc "The provider-neutral identity proposal for one manifest row."
   def entry("met-highlights", version, row) do

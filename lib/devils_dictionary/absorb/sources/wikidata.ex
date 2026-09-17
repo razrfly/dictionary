@@ -970,9 +970,10 @@ defmodule DevilsDictionary.Absorb.Sources.Wikidata do
   # take this path.
   @thumb_width 500
 
-  defp commons_url(nil), do: nil
+  defp commons_url(file, max_bytes \\ 255)
+  defp commons_url(nil, _max_bytes), do: nil
 
-  defp commons_url(file) do
+  defp commons_url(file, max_bytes) do
     name = String.replace(file, " ", "_")
     encoded = URI.encode(name)
     dir = commons_dir(name)
@@ -984,7 +985,9 @@ defmodule DevilsDictionary.Absorb.Sources.Wikidata do
 
     thumb_url = String.replace(dir, "/commons/", "/commons/thumb/") <> "#{encoded}/#{thumb}"
 
-    if byte_size(thumb_url) <= 255, do: thumb_url, else: dir <> encoded
+    if max_bytes == :unbounded or byte_size(thumb_url) <= max_bytes,
+      do: thumb_url,
+      else: dir <> encoded
   end
 
   defp commons_dir(name) do
@@ -993,8 +996,17 @@ defmodule DevilsDictionary.Absorb.Sources.Wikidata do
     "https://upload.wikimedia.org/wikipedia/commons/#{String.first(hash)}/#{String.slice(hash, 0, 2)}/"
   end
 
-  @doc "The Commons thumbnail URL for a file name. Public so the test can pin it."
-  def thumbnail_url(file), do: commons_url(file)
+  @doc """
+  The Commons thumbnail URL for a file name. Public so the test can pin it.
+
+  `max_bytes` is the `concepts.image_url` column's width, which is why a long
+  thumbnail path falls back to the original file — half a URL 404s, and a
+  full-size image is worse than a thumbnail but much better than no picture. A
+  caller storing the URL somewhere without that limit passes `:unbounded` and
+  always gets the 500px thumbnail, because a 7,000-pixel original on a word page
+  is a several-megabyte download to fill a 96-pixel box.
+  """
+  def thumbnail_url(file, max_bytes \\ 255), do: commons_url(file, max_bytes)
 
   defp commons_attribution(nil), do: nil
   defp commons_attribution(file), do: file <> " · Wikimedia Commons"

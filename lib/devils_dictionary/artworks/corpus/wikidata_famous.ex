@@ -248,7 +248,7 @@ defmodule DevilsDictionary.Artworks.Corpus.WikidataFamous do
       "title" => (described && described["title"]) || selected["qid"],
       "sitelinks" => selected["sitelinks"],
       "date" => described && described["date"],
-      "image_url" => WikidataSource.thumbnail_url(file),
+      "image_url" => WikidataSource.thumbnail_url(file, :unbounded),
       "commons_file" => file,
       "credit_line" => file <> " · Wikimedia Commons",
       "source_url" => "https://www.wikidata.org/wiki/" <> selected["qid"],
