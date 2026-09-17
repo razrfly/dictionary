@@ -1119,6 +1119,11 @@ defmodule DevilsDictionary.Discovery do
     end
   end
 
+  # The capability map is a claim and the exported callbacks are the proof, so
+  # this gate has to ask for both. `Providers.server_providers/1` already does,
+  # but `request/3` resolves from `Providers.all/0` and arrives here instead —
+  # without this clause a module declaring the pipeline and exporting none of it
+  # would get a mapping and a queued run, and raise where nothing can recover.
   defp provider_eligible(provider, %Source{} = source) do
     capabilities = provider.capabilities()
 
@@ -1127,6 +1132,7 @@ defmodule DevilsDictionary.Discovery do
       !provider.enabled?() -> {:error, :provider_disabled}
       !capabilities.background -> {:error, :provider_not_background}
       capabilities.transport != :server -> {:error, :provider_not_server}
+      !Providers.retrievable?(provider) -> {:error, :provider_not_retrievable}
       true -> :ok
     end
   end

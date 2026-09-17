@@ -45,6 +45,8 @@ defmodule DevilsDictionary.Discovery.Providers do
     end)
   end
 
+  @pipeline_callbacks [retrieve: 4, automatic_mapping: 1, request_options: 1]
+
   @doc """
   True when the module exports every callback the pipeline drives it through.
 
@@ -53,8 +55,6 @@ defmodule DevilsDictionary.Discovery.Providers do
   `request_options/1`, so a module exporting one of the three and not the others
   would pass the gate and then raise mid-run. All three, or none.
   """
-  @pipeline_callbacks [retrieve: 4, automatic_mapping: 1, request_options: 1]
-
   def retrievable?(provider) do
     Code.ensure_loaded?(provider) and
       Enum.all?(@pipeline_callbacks, fn {callback, arity} ->

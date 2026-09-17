@@ -12,6 +12,7 @@ defmodule DevilsDictionary.Discovery.ProvidersTest do
   alias DevilsDictionary.Discovery.Providers
   alias DevilsDictionary.Discovery.Providers.{Artsy, CineGraph, Giphy}
   alias DevilsDictionary.FakeOffsetDiscoveryProvider
+  alias DevilsDictionary.FakePartialDiscoveryProvider
   alias DevilsDictionary.FakeUnretrievableDiscoveryProvider
 
   setup do
@@ -64,6 +65,37 @@ defmodule DevilsDictionary.Discovery.ProvidersTest do
     # It stays registered, so its source row and catalog entry survive.
     assert Providers.get("unretrievable-fixture") == FakeUnretrievableDiscoveryProvider
     assert [%{slug: "unretrievable-fixture"}] = Providers.source_catalog()
+  end
+
+  test "exporting retrieve/4 alone does not make a provider retrievable" do
+    register([FakePartialDiscoveryProvider])
+    Code.ensure_loaded!(FakePartialDiscoveryProvider)
+
+    assert function_exported?(FakePartialDiscoveryProvider, :retrieve, 4)
+    refute function_exported?(FakePartialDiscoveryProvider, :automatic_mapping, 1)
+    refute function_exported?(FakePartialDiscoveryProvider, :request_options, 1)
+
+    # `retrieve/4` is the last callback a run reaches, not the only one. Admitting
+    # this module would raise inside a queued run rather than at the gate.
+    refute Providers.retrievable?(FakePartialDiscoveryProvider)
+    assert Providers.server_providers() == []
+    assert Providers.get("partial-fixture") == FakePartialDiscoveryProvider
+  end
+
+  test "the gate asks for exactly the callbacks the pipeline drives" do
+    assert Providers.pipeline_callbacks() == [
+             retrieve: 4,
+             automatic_mapping: 1,
+             request_options: 1
+           ]
+
+    Code.ensure_loaded!(CineGraph)
+
+    for {callback, arity} <- Providers.pipeline_callbacks() do
+      assert function_exported?(CineGraph, callback, arity)
+    end
+
+    assert Providers.retrievable?(CineGraph)
   end
 
   test "every registered provider that claims the pipeline exports its callbacks", ctx do

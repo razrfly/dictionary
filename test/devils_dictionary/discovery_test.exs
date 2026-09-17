@@ -19,6 +19,7 @@ defmodule DevilsDictionary.DiscoveryTest do
 
   alias DevilsDictionary.Discovery.Providers.{CineGraph, Giphy}
   alias DevilsDictionary.FakeOffsetDiscoveryProvider
+  alias DevilsDictionary.FakePartialDiscoveryProvider
   alias DevilsDictionary.Registry
   alias DevilsDictionary.Registry.Object
   alias DevilsDictionary.Repo
@@ -1090,6 +1091,26 @@ defmodule DevilsDictionary.DiscoveryTest do
     # The point of the default: no retry is spent arguing with a refusal.
     assert Agent.get(calls, & &1) == 1
     assert Discovery.state(word.object_id, "cinegraph").status == :failed
+  end
+
+  test "a provider that cannot be driven is refused at the gate, not inside a run", ctx do
+    providers = Application.fetch_env!(:devils_dictionary, :discovery_providers)
+    Application.put_env(:devils_dictionary, :discovery_providers, [FakePartialDiscoveryProvider])
+    on_exit(fn -> Application.put_env(:devils_dictionary, :discovery_providers, providers) end)
+
+    word = word!(ctx, "partial", ~w(wordnet))
+    slug = FakePartialDiscoveryProvider.slug()
+
+    # It is registered and enabled, and it claims the pipeline.
+    assert Discovery.Providers.get(slug) == FakePartialDiscoveryProvider
+
+    # `request/3` resolves from the registry rather than `server_providers/1`,
+    # so the eligibility check is the only thing standing between a half-built
+    # provider and a queued run that raises where nothing can recover it.
+    assert {:error, :provider_not_retrievable} = Discovery.request(target(word), slug)
+    assert {:error, :provider_not_retrievable} = Discovery.provider_eligibility(slug)
+    assert Repo.aggregate(Run, :count) == 0
+    assert Discovery.state(word.object_id, slug).status == :idle
   end
 
   describe "a GET, offset-paged, text provider on the same pipeline" do
