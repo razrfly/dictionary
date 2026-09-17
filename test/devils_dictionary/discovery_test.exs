@@ -18,6 +18,8 @@ defmodule DevilsDictionary.DiscoveryTest do
   }
 
   alias DevilsDictionary.Discovery.Providers.{CineGraph, Giphy}
+  alias DevilsDictionary.FakeOffsetDiscoveryProvider
+  alias DevilsDictionary.FakePartialDiscoveryProvider
   alias DevilsDictionary.Registry
   alias DevilsDictionary.Registry.Object
   alias DevilsDictionary.Repo
@@ -39,7 +41,7 @@ defmodule DevilsDictionary.DiscoveryTest do
     mapping = Repo.get!(Mapping, run.mapping_id)
     actor = Repo.get!(Actor, mapping.configured_by_actor_id)
     completed = Repo.get!(Run, run.id)
-    state = Discovery.state(word.object_id)
+    state = Discovery.state(word.object_id, "cinegraph")
 
     assert mapping.target_object_id == word.object_id
     assert mapping.source_id == ctx.sources["cinegraph"].id
@@ -69,7 +71,10 @@ defmodule DevilsDictionary.DiscoveryTest do
 
     assert {:queued, run} = Discovery.request(target(unknown), "cinegraph")
     assert :ok = Discovery.execute_run(run.id)
-    assert %{status: :empty, empty_reason: :no_exact_keyword} = Discovery.state(unknown.object_id)
+
+    assert %{status: :empty, empty_reason: :no_exact_keyword} =
+             Discovery.state(unknown.object_id, "cinegraph")
+
     assert {:cached, _} = Discovery.request(target(unknown), "cinegraph")
     assert Repo.get!(Run, run.id).request_count == 1
 
@@ -78,7 +83,10 @@ defmodule DevilsDictionary.DiscoveryTest do
 
     assert {:queued, run} = Discovery.request(target(barren), "cinegraph")
     assert :ok = Discovery.execute_run(run.id)
-    assert %{status: :empty, empty_reason: :no_results} = Discovery.state(barren.object_id)
+
+    assert %{status: :empty, empty_reason: :no_results} =
+             Discovery.state(barren.object_id, "cinegraph")
+
     assert Repo.get!(Run, run.id).request_count == 2
   end
 
@@ -170,14 +178,14 @@ defmodule DevilsDictionary.DiscoveryTest do
     stub_success("now-empty", 41, [movie(41, "Old visible result")])
     assert {:queued, old_run} = Discovery.request(target(word), "cinegraph")
     assert :ok = Discovery.execute_run(old_run.id)
-    assert [%Result{external_id: "41"}] = Discovery.state(word.object_id).items
+    assert [%Result{external_id: "41"}] = Discovery.state(word.object_id, "cinegraph").items
 
     stub_success("now-empty", 41, [])
     assert {:queued, empty_run} = Discovery.request(target(word), "cinegraph")
     assert :ok = Discovery.execute_run(empty_run.id)
 
     assert %{status: :empty, empty_reason: :no_results, items: []} =
-             Discovery.state(word.object_id)
+             Discovery.state(word.object_id, "cinegraph")
 
     assert Repo.get!(Run, old_run.id).result_count == 1
     assert Repo.get!(Run, empty_run.id).result_count == 0
@@ -197,7 +205,9 @@ defmodule DevilsDictionary.DiscoveryTest do
     assert {:queued, failed_refresh} = Discovery.request(target(failed_word), "cinegraph")
     assert :ok = Discovery.execute_run(failed_refresh.id)
     assert Repo.get!(Run, failed_refresh.id).status == :failed
-    assert [%Result{external_id: "51"}] = Discovery.state(failed_word.object_id).items
+
+    assert [%Result{external_id: "51"}] =
+             Discovery.state(failed_word.object_id, "cinegraph").items
 
     quota_word = word!(ctx, "stale-quota", ~w(wordnet))
     stub_success("stale-quota", 52, [movie(52, "Retained through quota")])
@@ -208,7 +218,7 @@ defmodule DevilsDictionary.DiscoveryTest do
     assert {:queued, deferred_refresh} = Discovery.request(target(quota_word), "cinegraph")
     assert {:snooze, seconds} = Discovery.execute_run(deferred_refresh.id)
     assert seconds in 1..60
-    assert [%Result{external_id: "52"}] = Discovery.state(quota_word.object_id).items
+    assert [%Result{external_id: "52"}] = Discovery.state(quota_word.object_id, "cinegraph").items
   end
 
   test "missing image configuration degrades to a posterless result", ctx do
@@ -228,7 +238,7 @@ defmodule DevilsDictionary.DiscoveryTest do
     assert :ok = Discovery.execute_run(run.id)
 
     assert [%Result{preview_metadata: %{"poster_url" => nil}}] =
-             Discovery.state(word.object_id).items
+             Discovery.state(word.object_id, "cinegraph").items
   end
 
   test "timeouts retry within the request budget and malformed responses fail safely", ctx do
@@ -241,7 +251,7 @@ defmodule DevilsDictionary.DiscoveryTest do
     assert failed.status == :failed
     assert failed.error_code == "timeout"
     assert failed.request_count == 3
-    assert Discovery.state(slow.object_id).status == :failed
+    assert Discovery.state(slow.object_id, "cinegraph").status == :failed
 
     malformed = word!(ctx, "malformed", ~w(wordnet))
     Req.Test.stub(CineGraph, fn conn -> json(conn, %{"data" => %{"unexpected" => []}}) end)
@@ -351,7 +361,7 @@ defmodule DevilsDictionary.DiscoveryTest do
     assert :ok = Discovery.execute_run(new_run.id)
     assert :ok = Discovery.execute_run(old_run.id)
 
-    assert [%Result{external_id: "2"}] = Discovery.state(word.object_id).items
+    assert [%Result{external_id: "2"}] = Discovery.state(word.object_id, "cinegraph").items
     assert Repo.get!(Run, old_run.id).error_code == "mapping_disabled"
 
     assert Repo.aggregate(
@@ -389,7 +399,7 @@ defmodule DevilsDictionary.DiscoveryTest do
 
     assert {:queued, first} = Discovery.request(target(word), "cinegraph")
     assert :ok = Discovery.execute_run(first.id)
-    state = Discovery.state(word.object_id)
+    state = Discovery.state(word.object_id, "cinegraph")
     assert state.next_cursor == "cursor-1"
 
     assert {:queued, second} =
@@ -402,7 +412,7 @@ defmodule DevilsDictionary.DiscoveryTest do
              )
 
     assert :ok = Discovery.execute_run(second.id)
-    state = Discovery.state(word.object_id)
+    state = Discovery.state(word.object_id, "cinegraph")
     assert Enum.map(state.items, & &1.external_id) == ["1", "2"]
     assert state.next_cursor == nil
 
@@ -438,7 +448,7 @@ defmodule DevilsDictionary.DiscoveryTest do
 
     assert {:queued, first} = Discovery.request(target(word), "cinegraph")
     assert :ok = Discovery.execute_run(first.id)
-    state = Discovery.state(word.object_id)
+    state = Discovery.state(word.object_id, "cinegraph")
 
     assert {:queued, second} =
              Discovery.request_next(
@@ -452,7 +462,11 @@ defmodule DevilsDictionary.DiscoveryTest do
     assert :ok = Discovery.execute_run(second.id)
     assert Repo.get!(Run, second.id).status == :succeeded
     assert Repo.get!(Run, second.id).request_count == 3
-    assert Enum.map(Discovery.state(word.object_id).items, & &1.external_id) == ["1", "2"]
+
+    assert Enum.map(Discovery.state(word.object_id, "cinegraph").items, & &1.external_id) == [
+             "1",
+             "2"
+           ]
   end
 
   for late_outcome <- [:success, :failure, :exception] do
@@ -498,7 +512,7 @@ defmodule DevilsDictionary.DiscoveryTest do
       end
 
       assert Repo.get!(Run, run.id).status == :succeeded
-      assert [%Result{external_id: "2"}] = Discovery.state(word.object_id).items
+      assert [%Result{external_id: "2"}] = Discovery.state(word.object_id, "cinegraph").items
     end
   end
 
@@ -546,13 +560,18 @@ defmodule DevilsDictionary.DiscoveryTest do
     stub_success("refreshable", 8, [movie(8, "Still visible")])
     assert {:queued, run} = Discovery.request(target(refreshable), "cinegraph")
     assert :ok = Discovery.execute_run(run.id)
-    assert %{status: :ready, refresh_due: true} = Discovery.state(refreshable.object_id)
+
+    assert %{status: :ready, refresh_due: true} =
+             Discovery.state(refreshable.object_id, "cinegraph")
+
     assert {:queued, _refresh} = Discovery.request(target(refreshable), "cinegraph")
-    assert Discovery.state(refreshable.object_id).status == :ready
+    assert Discovery.state(refreshable.object_id, "cinegraph").status == :ready
 
     [result] = Repo.all(from r in Result, where: r.run_id == ^run.id)
     assert {1, _} = Discovery.withdraw_result(result.id)
-    assert %{status: :empty, empty_reason: :withdrawn} = Discovery.state(refreshable.object_id)
+
+    assert %{status: :empty, empty_reason: :withdrawn} =
+             Discovery.state(refreshable.object_id, "cinegraph")
 
     expired = word!(ctx, "expired", ~w(wordnet))
     configure_discovery(positive_refresh_seconds: 0)
@@ -560,11 +579,11 @@ defmodule DevilsDictionary.DiscoveryTest do
     assert {:queued, run} = Discovery.request(target(expired), "cinegraph")
     assert :ok = Discovery.execute_run(run.id)
     assert DateTime.compare(Repo.get!(Run, run.id).expires_at, DateTime.utc_now()) == :lt
-    assert Discovery.state(expired.object_id).status == :ready
+    assert Discovery.state(expired.object_id, "cinegraph").status == :ready
     configure_discovery(retention_seconds: 0)
     _summary = Discovery.cleanup()
     assert Repo.get(Run, run.id)
-    assert Discovery.state(expired.object_id).status == :ready
+    assert Discovery.state(expired.object_id, "cinegraph").status == :ready
   end
 
   test "explicit refresh honors the per-mapping cooldown", ctx do
@@ -587,7 +606,7 @@ defmodule DevilsDictionary.DiscoveryTest do
     stub_success("durable-withdrawal", 501, [movie(501, "Policy-bound")])
     assert {:queued, first} = Discovery.request(target(word), "cinegraph")
     assert :ok = Discovery.execute_run(first.id)
-    [first_result] = Discovery.state(word.object_id).items
+    [first_result] = Discovery.state(word.object_id, "cinegraph").items
 
     assert {1, %SourceRecord{display_allowed: false}} =
              Discovery.withdraw_result(first_result.id, "provider requested withdrawal")
@@ -596,7 +615,7 @@ defmodule DevilsDictionary.DiscoveryTest do
              Discovery.request(target(word), "cinegraph", refresh: true)
 
     assert :ok = Discovery.execute_run(refreshed.id)
-    assert Discovery.state(word.object_id).items == []
+    assert Discovery.state(word.object_id, "cinegraph").items == []
     assert %{deleted: 1} = Discovery.cleanup()
     assert Repo.get(SourceRecord, first_result.source_record_id).display_allowed == false
 
@@ -607,7 +626,7 @@ defmodule DevilsDictionary.DiscoveryTest do
              Discovery.reinstate_result(latest_result.id, actor.id, "provider restored listing")
 
     assert actor_id == actor.id
-    assert [%Result{external_id: "501"}] = Discovery.state(word.object_id).items
+    assert [%Result{external_id: "501"}] = Discovery.state(word.object_id, "cinegraph").items
   end
 
   test "Retry-After accepts delta seconds and HTTP dates without a five-second cap" do
@@ -840,8 +859,8 @@ defmodule DevilsDictionary.DiscoveryTest do
       assert :ok = Discovery.execute_run(run.id)
     end
 
-    assert [%Result{external_id: "501"}] = Discovery.state(financial.object_id).items
-    assert [%Result{external_id: "502"}] = Discovery.state(riverside.object_id).items
+    assert [%Result{external_id: "501"}] = Discovery.state(financial.object_id, "cinegraph").items
+    assert [%Result{external_id: "502"}] = Discovery.state(riverside.object_id, "cinegraph").items
   end
 
   test "several exact keyword identities use explicit ANY and retain several match reasons",
@@ -891,7 +910,7 @@ defmodule DevilsDictionary.DiscoveryTest do
     assert :ok = Discovery.execute_run(run.id)
 
     assert [%Result{match_details: %{"keywords" => reasons}}] =
-             Discovery.state(word.object_id).items
+             Discovery.state(word.object_id, "cinegraph").items
 
     assert Enum.map(reasons, & &1["id"]) == [10, 11]
   end
@@ -957,7 +976,7 @@ defmodule DevilsDictionary.DiscoveryTest do
     {:ok, _event} = Registry.retire(word.object_id, reason: "test")
 
     assert {:error, :invalid_target} = Discovery.request(target(word), "cinegraph")
-    assert Discovery.state(word.object_id).status == :idle
+    assert Discovery.state(word.object_id, "cinegraph").status == :idle
     assert :ok = Discovery.execute_run(run.id)
 
     assert %{status: :failed, error_code: "mapping_ineligible", request_count: 0} =
@@ -989,7 +1008,7 @@ defmodule DevilsDictionary.DiscoveryTest do
              )
 
     assert {:error, :invalid_target} = Discovery.request(target(split_input), "cinegraph")
-    assert Discovery.state(split_input.object_id).status == :idle
+    assert Discovery.state(split_input.object_id, "cinegraph").status == :idle
     assert :ok = Discovery.execute_run(split_run.id)
 
     assert %{status: :failed, error_code: "mapping_ineligible", request_count: 0} =
@@ -1005,7 +1024,7 @@ defmodule DevilsDictionary.DiscoveryTest do
              )
 
     assert {:error, :invalid_target} = Discovery.request(target(merged_input), "cinegraph")
-    assert Discovery.state(merged_input.object_id).status == :idle
+    assert Discovery.state(merged_input.object_id, "cinegraph").status == :idle
     assert :ok = Discovery.execute_run(merged_run.id)
 
     assert %{status: :failed, error_code: "mapping_ineligible", request_count: 0} =
@@ -1051,7 +1070,214 @@ defmodule DevilsDictionary.DiscoveryTest do
     assert {:queued, run} = Discovery.request(target, "cinegraph")
     refute Repo.get!(Mapping, stale.id).enabled
     assert Repo.get!(Mapping, run.mapping_id).mapping_key =~ CineGraph.adapter_version()
-    assert Discovery.state(word.object_id).mapping_id == run.mapping_id
+    assert Discovery.state(word.object_id, "cinegraph").mapping_id == run.mapping_id
+  end
+
+  test "a 403 stays a terminal authentication verdict for a provider that says nothing", ctx do
+    word = word!(ctx, "forbidden", ~w(wordnet))
+    calls = start_supervised!({Agent, fn -> 0 end})
+
+    Req.Test.stub(CineGraph, fn conn ->
+      Agent.update(calls, &(&1 + 1))
+      Plug.Conn.send_resp(conn, 403, "forbidden")
+    end)
+
+    assert {:queued, run} = Discovery.request(target(word), "cinegraph")
+    assert :ok = Discovery.execute_run(run.id)
+
+    completed = Repo.get!(Run, run.id)
+    assert completed.status == :failed
+    assert completed.error_code == "authentication_failed"
+    # The point of the default: no retry is spent arguing with a refusal.
+    assert Agent.get(calls, & &1) == 1
+    assert Discovery.state(word.object_id, "cinegraph").status == :failed
+  end
+
+  test "a provider that cannot be driven is refused at the gate, not inside a run", ctx do
+    providers = Application.fetch_env!(:devils_dictionary, :discovery_providers)
+    Application.put_env(:devils_dictionary, :discovery_providers, [FakePartialDiscoveryProvider])
+    on_exit(fn -> Application.put_env(:devils_dictionary, :discovery_providers, providers) end)
+
+    word = word!(ctx, "partial", ~w(wordnet))
+    slug = FakePartialDiscoveryProvider.slug()
+
+    # It is registered and enabled, and it claims the pipeline.
+    assert Discovery.Providers.get(slug) == FakePartialDiscoveryProvider
+
+    # `request/3` resolves from the registry rather than `server_providers/1`,
+    # so the eligibility check is the only thing standing between a half-built
+    # provider and a queued run that raises where nothing can recover it.
+    assert {:error, :provider_not_retrievable} = Discovery.request(target(word), slug)
+    assert {:error, :provider_not_retrievable} = Discovery.provider_eligibility(slug)
+    assert Repo.aggregate(Run, :count) == 0
+    assert Discovery.state(word.object_id, slug).status == :idle
+  end
+
+  describe "a GET, offset-paged, text provider on the same pipeline" do
+    setup do
+      providers = Application.fetch_env!(:devils_dictionary, :discovery_providers)
+      req_options = Application.fetch_env!(:devils_dictionary, :discovery_req_options)
+      discovery = Application.fetch_env!(:devils_dictionary, :discovery)
+
+      Application.put_env(:devils_dictionary, :discovery_providers, [
+        FakeOffsetDiscoveryProvider
+      ])
+
+      Application.put_env(:devils_dictionary, :discovery_req_options,
+        plug: {Req.Test, FakeOffsetDiscoveryProvider}
+      )
+
+      on_exit(fn ->
+        Application.put_env(:devils_dictionary, :discovery_providers, providers)
+        Application.put_env(:devils_dictionary, :discovery_req_options, req_options)
+        Application.put_env(:devils_dictionary, :discovery, discovery)
+      end)
+
+      %{slug: FakeOffsetDiscoveryProvider.slug()}
+    end
+
+    test "completes a run over GET and pages to page 2 by offset", ctx do
+      word = word!(ctx, "elegy", ~w(wordnet))
+      requests = start_supervised!({Agent, fn -> [] end})
+      stub_texts(text_rows(5), requests)
+
+      assert {:queued, first} = Discovery.request(target(word), ctx.slug)
+      assert :ok = Discovery.execute_run(first.id)
+
+      state = Discovery.state(word.object_id, ctx.slug)
+      assert state.status == :ready
+      assert state.pagination == :offset
+      assert state.provider_name == "Offset fixture"
+      assert state.provider_detail == "public domain"
+      assert Enum.map(state.items, & &1.external_id) == ["1", "2", "3"]
+      assert state.next_cursor == "3"
+
+      assert {:queued, second} =
+               Discovery.request_next(
+                 word.object_id,
+                 ctx.slug,
+                 state.page_context,
+                 state.page,
+                 state.next_cursor
+               )
+
+      assert :ok = Discovery.execute_run(second.id)
+
+      state = Discovery.state(word.object_id, ctx.slug)
+      assert Enum.map(state.items, & &1.external_id) == ~w(1 2 3 4 5)
+      assert state.page == 1
+      assert state.next_cursor == nil
+
+      # The second page asked the provider for the offset the first one handed
+      # back, and it travelled as a query parameter on a GET.
+      assert Agent.get(requests, &Enum.reverse/1) == [
+               {"GET", "0", "3"},
+               {"GET", "3", "3"}
+             ]
+
+      assert Repo.get!(Run, second.id).request_parameters["after"] == "3"
+
+      [%Result{preview_metadata: preview}] =
+        Repo.all(from r in Result, where: r.run_id == ^second.id, order_by: r.position, limit: 1)
+
+      assert preview["content_type"] == "text"
+    end
+
+    test "an empty page is negatively cached and not fetched again", ctx do
+      word = word!(ctx, "unsung", ~w(wordnet))
+      requests = start_supervised!({Agent, fn -> [] end})
+      stub_texts([], requests)
+
+      assert {:queued, run} = Discovery.request(target(word), ctx.slug)
+      assert :ok = Discovery.execute_run(run.id)
+
+      assert %{status: :empty, empty_reason: :no_results} =
+               Discovery.state(word.object_id, ctx.slug)
+
+      assert {:cached, cached} = Discovery.request(target(word), ctx.slug)
+      assert cached.id == run.id
+      assert Repo.aggregate(Run, :count) == 1
+      assert length(Agent.get(requests, & &1)) == 1
+    end
+
+    test "a provider may declare 403 retryable, and the run recovers", ctx do
+      word = word!(ctx, "throttled", ~w(wordnet))
+      calls = start_supervised!({Agent, fn -> 0 end})
+      rows = text_rows(5)
+
+      # The Met's shape: the first request is refused with a bare 403 and no
+      # Retry-After, the next one succeeds.
+      Req.Test.stub(FakeOffsetDiscoveryProvider, fn conn ->
+        case Agent.get_and_update(calls, &{&1, &1 + 1}) do
+          0 ->
+            Plug.Conn.send_resp(conn, 403, "forbidden")
+
+          _ ->
+            conn = Plug.Conn.fetch_query_params(conn)
+            page = Enum.slice(rows, String.to_integer(conn.params["offset"]), 3)
+            json(conn, page)
+        end
+      end)
+
+      assert {:queued, run} = Discovery.request(target(word), ctx.slug)
+      assert :ok = Discovery.execute_run(run.id)
+
+      completed = Repo.get!(Run, run.id)
+      assert completed.status == :succeeded
+      assert completed.result_count == 3
+      assert Agent.get(calls, & &1) == 2
+      assert Discovery.state(word.object_id, ctx.slug).status == :ready
+    end
+
+    test "declaring one status retryable does not drop the default ones", _ctx do
+      assert FakeOffsetDiscoveryProvider.retryable_status?(403)
+      assert FakeOffsetDiscoveryProvider.retryable_status?(429)
+      assert FakeOffsetDiscoveryProvider.retryable_status?(503)
+      refute FakeOffsetDiscoveryProvider.retryable_status?(404)
+      refute FakeOffsetDiscoveryProvider.retryable_status?(401)
+    end
+
+    test "an abandoned run is recovered by the shared cleanup", ctx do
+      word = word!(ctx, "threnody", ~w(wordnet))
+      requests = start_supervised!({Agent, fn -> [] end})
+      stub_texts(text_rows(5), requests)
+
+      assert {:queued, run} = Discovery.request(target(word), ctx.slug)
+
+      run
+      |> Run.lifecycle_changeset(%{
+        status: :running,
+        started_at: DateTime.utc_now(),
+        execution_lease_expires_at: DateTime.add(DateTime.utc_now(), -1, :second)
+      })
+      |> Repo.update!()
+
+      assert %{recovered: 1} = Discovery.cleanup()
+      assert Repo.get!(Run, run.id).status == :pending
+
+      assert :ok = Discovery.execute_run(run.id)
+      assert Discovery.state(word.object_id, ctx.slug).status == :ready
+    end
+  end
+
+  defp text_rows(count) do
+    Enum.map(1..count, fn id ->
+      %{"id" => id, "title" => "Elegy #{id}", "year" => "1751"}
+    end)
+  end
+
+  defp stub_texts(rows, requests) do
+    Req.Test.stub(FakeOffsetDiscoveryProvider, fn conn ->
+      conn = Plug.Conn.fetch_query_params(conn)
+      offset = conn.params["offset"]
+      limit = conn.params["limit"]
+      Agent.update(requests, &[{conn.method, offset, limit} | &1])
+
+      page = Enum.slice(rows, String.to_integer(offset), String.to_integer(limit))
+
+      # A bare JSON array, which is what a REST text provider returns.
+      json(conn, page)
+    end)
   end
 
   defp target(word) do

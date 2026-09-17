@@ -39,6 +39,7 @@ defmodule DevilsDictionaryWeb.WordLive do
 
   alias DevilsDictionary.Demo, as: Samples
   alias DevilsDictionary.Discovery
+  alias DevilsDictionary.Discovery.ContentTypes
   alias DevilsDictionary.Discovery.Providers
   alias DevilsDictionary.Artworks
   alias DevilsDictionary.Claims.Contributions
@@ -152,7 +153,7 @@ defmodule DevilsDictionaryWeb.WordLive do
     culture_providers =
       Providers.server_providers()
       |> Enum.filter(fn provider ->
-        Enum.any?(provider.capabilities().content_types, &(&1 in [:film, :gif]))
+        ContentTypes.any_known?(provider.capabilities().content_types)
       end)
 
     if (connected?(socket) and old_target) &&
@@ -228,7 +229,7 @@ defmodule DevilsDictionaryWeb.WordLive do
     current = Discovery.state(target_id, provider_slug)
 
     cond do
-      not (Providers.supports?(provider_slug, :film) or Providers.supports?(provider_slug, :gif)) ->
+      not Providers.supports_any?(provider_slug, ContentTypes.known()) ->
         {:noreply, socket}
 
       current.mapping_id == mapping_id ->

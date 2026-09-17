@@ -94,6 +94,15 @@ config :devils_dictionary,
        :user_agent,
        "wordhoard/0.1 (https://github.com/razrfly/dictionary; holden.thomas@gmail.com)"
 
+# The registry. Adding a provider is this list plus its module: the source
+# catalog, `mix dd.discovery`, the freshness overrides in runtime.exs and the
+# page all read it, and none of them names a provider itself.
+config :devils_dictionary, :discovery_providers, [
+  DevilsDictionary.Discovery.Providers.Artsy,
+  DevilsDictionary.Discovery.Providers.CineGraph,
+  DevilsDictionary.Discovery.Providers.Giphy
+]
+
 # Culture discovery is visit-driven and bounded. Provider modules own their
 # capability differences; these are operating limits for the shared lifecycle.
 config :devils_dictionary, :discovery,

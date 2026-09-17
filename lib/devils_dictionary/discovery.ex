@@ -95,7 +95,7 @@ defmodule DevilsDictionary.Discovery do
   end
 
   @doc "Returns the reader state for an enabled provider without making external requests."
-  def state(target_id, provider_slug \\ "cinegraph") do
+  def state(target_id, provider_slug) do
     with {:ok, provider} <- provider(provider_slug),
          %Mapping{} = mapping <- enabled_mapping(target_id, provider.slug()),
          {:ok, ^provider, _source} <- eligible_provider_for_mapping(mapping),
@@ -208,7 +208,7 @@ defmodule DevilsDictionary.Discovery do
                {:error, "adapter_version_changed"},
            :ok <- provider.validate_mapping(run.mapping.operation, run.mapping.parameters) do
         request_fun = fn stage, payload ->
-          DevilsDictionary.Discovery.Transport.graphql(provider, run.id, stage, payload)
+          DevilsDictionary.Discovery.Transport.request(provider, run.id, stage, payload)
         end
 
         response =
@@ -1119,6 +1119,11 @@ defmodule DevilsDictionary.Discovery do
     end
   end
 
+  # The capability map is a claim and the exported callbacks are the proof, so
+  # this gate has to ask for both. `Providers.server_providers/1` already does,
+  # but `request/3` resolves from `Providers.all/0` and arrives here instead —
+  # without this clause a module declaring the pipeline and exporting none of it
+  # would get a mapping and a queued run, and raise where nothing can recover.
   defp provider_eligible(provider, %Source{} = source) do
     capabilities = provider.capabilities()
 
@@ -1127,6 +1132,7 @@ defmodule DevilsDictionary.Discovery do
       !provider.enabled?() -> {:error, :provider_disabled}
       !capabilities.background -> {:error, :provider_not_background}
       capabilities.transport != :server -> {:error, :provider_not_server}
+      !Providers.retrievable?(provider) -> {:error, :provider_not_retrievable}
       true -> :ok
     end
   end
@@ -1203,15 +1209,24 @@ defmodule DevilsDictionary.Discovery do
   end
 
   defp provider_metadata(provider, source) do
+    attrs = provider.source_attrs()
     content_types = provider.capabilities().content_types
 
     %{
-      provider_name: if(source, do: source.name, else: provider.source_attrs().name),
-      provider_attribution:
-        if(source, do: source.attribution, else: provider.source_attrs().attribution),
+      provider_name: if(source, do: source.name, else: attrs.name),
+      provider_attribution: if(source, do: source.attribution, else: attrs.attribution),
+      # The one-line qualifier a provider wants beside its name on the shelf
+      # ("keywords: TMDb"). The reader renders whatever is here and knows no
+      # provider by name.
+      provider_detail: shelf_detail(provider),
       content_types: content_types,
       pagination: provider.capabilities().pagination
     }
+  end
+
+  defp shelf_detail(provider) do
+    if Code.ensure_loaded?(provider) and function_exported?(provider, :shelf_detail, 0),
+      do: provider.shelf_detail()
   end
 
   defp in_flight(mapping_id, request_key) do

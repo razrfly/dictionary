@@ -8,6 +8,7 @@ defmodule DevilsDictionaryWeb.CultureDiscoveryLiveTest do
   alias DevilsDictionary.Discovery
   alias DevilsDictionary.Discovery.{Mapping, Run}
   alias DevilsDictionary.Discovery.Providers.CineGraph
+  alias DevilsDictionary.FakeOffsetDiscoveryProvider
   alias DevilsDictionary.Repo
 
   setup %{conn: conn} do
@@ -217,41 +218,104 @@ defmodule DevilsDictionaryWeb.CultureDiscoveryLiveTest do
     }
   end
 
-  defp stub_success(term, keyword_id, movies) do
+  test "a text provider gets its own shelf while the film shelf is unchanged", ctx do
+    original = Application.fetch_env!(:devils_dictionary, :discovery_providers)
+    fixture = FakeOffsetDiscoveryProvider
+
+    Application.put_env(:devils_dictionary, :discovery_providers, [CineGraph, fixture])
+    on_exit(fn -> Application.put_env(:devils_dictionary, :discovery_providers, original) end)
+
+    word = word!(ctx, "elegy", ~w(wordnet))
+    sense!(ctx, word, "wordnet", gloss: "a lament for the dead")
+    stub_films_and_texts("elegy", 900, [movie(900, "A filmed lament")])
+
+    {:ok, live, _html} = live(ctx.conn, ~p"/define/elegy")
+
+    for run <- Repo.all(Run), do: assert(:ok = Discovery.execute_run(run.id))
+    _ = render(live)
+
+    # The film shelf reads exactly as it did before the content-type table.
+    assert has_element?(live, "#culture-filter-film", "Films")
+    assert has_element?(live, "#culture-provider-cinegraph", "CineGraph · keywords: TMDb")
+    assert has_element?(live, "#culture-result-tmdb_movie-900")
+    assert has_element?(live, "#culture-entry-image-900[href^='/entities/']")
+    assert has_element?(live, "#culture-result-tmdb_movie-900 .aspect-\\[2\\/3\\]")
+    assert has_element?(live, "#culture-result-tmdb_movie-900 img")
+    assert has_element?(live, "#culture-about-cinegraph")
+
+    # The text shelf is a second heading with its own label and no image slot.
+    assert has_element?(live, "#culture-filter-text", "Texts")
+
+    assert has_element?(
+             live,
+             "#culture-provider-offset-fixture",
+             "Offset fixture · public domain"
+           )
+
+    assert has_element?(live, "#culture-result-fixture_text-1", "Elegy 1")
+    assert has_element?(live, "#culture-about-offset-fixture")
+    refute has_element?(live, "#culture-result-fixture_text-1 img")
+    refute has_element?(live, "#culture-missing-poster-1")
+    refute has_element?(live, "#culture-entry-image-1")
+    assert has_element?(live, "#culture-source-1[href^='https://fixture.invalid/texts/']")
+  end
+
+  defp stub_films_and_texts(term, keyword_id, movies) do
     Req.Test.stub(CineGraph, fn conn ->
-      body = request_body(conn)
+      if conn.method == "GET" do
+        conn = Plug.Conn.fetch_query_params(conn)
+        offset = String.to_integer(conn.params["offset"])
+        limit = String.to_integer(conn.params["limit"])
 
-      if String.contains?(body["query"], "searchMovieKeywords") do
-        json(conn, %{
-          "data" => %{
-            "searchMovieKeywords" => [
-              %{"tmdbId" => keyword_id, "name" => term, "movieCount" => length(movies)}
-            ]
-          }
-        })
+        rows =
+          Enum.map(1..5, fn id -> %{"id" => id, "title" => "Elegy #{id}", "year" => "1751"} end)
+
+        json(conn, Enum.slice(rows, offset, limit))
       else
-        edges =
-          Enum.map(movies, fn movie ->
-            %{
-              "cursor" => "cursor-#{movie["tmdbId"]}",
-              "node" => %{
-                "movie" => movie,
-                "matchedKeywords" => [%{"tmdbId" => keyword_id, "name" => term}],
-                "matchedGenres" => []
-              }
-            }
-          end)
-
-        json(conn, %{
-          "data" => %{
-            "discoverMovies" => %{
-              "edges" => edges,
-              "pageInfo" => %{"endCursor" => nil, "hasNextPage" => false}
-            }
-          }
-        })
+        graphql_response(conn, term, keyword_id, movies)
       end
     end)
+  end
+
+  defp stub_success(term, keyword_id, movies) do
+    Req.Test.stub(CineGraph, fn conn ->
+      graphql_response(conn, term, keyword_id, movies)
+    end)
+  end
+
+  defp graphql_response(conn, term, keyword_id, movies) do
+    body = request_body(conn)
+
+    if String.contains?(body["query"], "searchMovieKeywords") do
+      json(conn, %{
+        "data" => %{
+          "searchMovieKeywords" => [
+            %{"tmdbId" => keyword_id, "name" => term, "movieCount" => length(movies)}
+          ]
+        }
+      })
+    else
+      edges =
+        Enum.map(movies, fn movie ->
+          %{
+            "cursor" => "cursor-#{movie["tmdbId"]}",
+            "node" => %{
+              "movie" => movie,
+              "matchedKeywords" => [%{"tmdbId" => keyword_id, "name" => term}],
+              "matchedGenres" => []
+            }
+          }
+        end)
+
+      json(conn, %{
+        "data" => %{
+          "discoverMovies" => %{
+            "edges" => edges,
+            "pageInfo" => %{"endCursor" => nil, "hasNextPage" => false}
+          }
+        }
+      })
+    end
   end
 
   defp request_body(conn) do

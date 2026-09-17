@@ -3,7 +3,14 @@ defmodule DevilsDictionary.Discovery.Transport do
 
   alias DevilsDictionary.Discovery.Budget
 
-  def graphql(provider, run_id, stage, payload) do
+  @doc """
+  Performs one budgeted provider request.
+
+  The method and any query parameters come from the provider's
+  `request_options/1`, so a REST provider returns `method: :get, params: %{...}`
+  and a GraphQL provider returns a `:json` body and gets `:post` by default.
+  """
+  def request(provider, run_id, stage, payload) do
     config = Application.fetch_env!(:devils_dictionary, :discovery)
     do_request(provider, run_id, stage, payload, config)
   end
@@ -20,18 +27,14 @@ defmodule DevilsDictionary.Discovery.Transport do
           )
           |> Keyword.merge(Application.get_env(:devils_dictionary, :discovery_req_options, []))
 
-        case Req.post(options) do
-          {:ok, %Req.Response{status: 200, body: body}} when is_map(body) ->
+        case Req.request(Keyword.put_new(options, :method, :post)) do
+          # A JSON object or a JSON array are both well-formed provider answers;
+          # PoetryDB-shaped REST providers return a bare list.
+          {:ok, %Req.Response{status: 200, body: body}} when is_map(body) or is_list(body) ->
             {:ok, body}
 
-          {:ok, %Req.Response{status: status} = response} when status == 429 or status >= 500 ->
-            retry_or_fail(provider, run_id, stage, payload, config, response)
-
-          {:ok, %Req.Response{status: status}} when status in [401, 403] ->
-            {:error, "authentication_failed"}
-
-          {:ok, %Req.Response{}} ->
-            {:error, "provider_http_error"}
+          {:ok, %Req.Response{} = response} ->
+            classify(provider, run_id, stage, payload, config, response)
 
           {:error, %Req.TransportError{reason: :timeout}} ->
             retry_transport(provider, run_id, stage, payload, config, "timeout")
@@ -55,6 +58,46 @@ defmodule DevilsDictionary.Discovery.Transport do
     end
   end
 
+  # A status is a provider's dialect, not a fact: the same 403 is an
+  # authentication verdict from a keyed API and a throttle from a keyless one.
+  # The provider decides, and the default decides for those that do not.
+  defp classify(
+         provider,
+         run_id,
+         stage,
+         payload,
+         config,
+         %Req.Response{status: status} = response
+       ) do
+    cond do
+      retryable_status?(provider, status) ->
+        retry_or_fail(provider, run_id, stage, payload, config, response)
+
+      status in [401, 403] ->
+        {:error, "authentication_failed"}
+
+      true ->
+        {:error, "provider_http_error"}
+    end
+  end
+
+  defp retryable_status?(provider, status) do
+    if Code.ensure_loaded?(provider) and function_exported?(provider, :retryable_status?, 1) do
+      provider.retryable_status?(status)
+    else
+      default_retryable_status?(status)
+    end
+  end
+
+  @doc """
+  The statuses every provider retries unless it says otherwise: `429` and `5xx`.
+
+  Public so a provider widening `c:DevilsDictionary.Discovery.Provider.retryable_status?/1`
+  can delegate its remaining clause here instead of restating the rule and
+  drifting from it.
+  """
+  def default_retryable_status?(status), do: status == 429 or status >= 500
+
   defp retry_or_fail(provider, run_id, stage, payload, config, response) do
     case retry_after_seconds(response) do
       seconds when is_integer(seconds) and seconds > 0 ->
@@ -64,7 +107,9 @@ defmodule DevilsDictionary.Discovery.Transport do
 
       _ ->
         maybe_sleep(Keyword.fetch!(config, :retry_delay_ms))
-        code = if response.status == 429, do: "provider_throttled", else: "provider_unavailable"
+        # 429 and a provider-declared retryable 4xx are both backpressure; only a
+        # 5xx is the provider itself being unwell.
+        code = if response.status >= 500, do: "provider_unavailable", else: "provider_throttled"
         do_request(provider, run_id, stage, payload, config, code)
     end
   end

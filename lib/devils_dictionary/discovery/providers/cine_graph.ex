@@ -56,6 +56,9 @@ defmodule DevilsDictionary.Discovery.Providers.CineGraph do
     }
   end
 
+  @impl true
+  def shelf_detail, do: "keywords: TMDb"
+
   @impl DevilsDictionary.SourceIdentity.Adapter
   def identity_record(
         %{

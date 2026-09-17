@@ -29,6 +29,34 @@ config :devils_dictionary, DevilsDictionaryWeb.Endpoint,
 # Load provider settings from a local .env only in development.
 # Exported environment variables take precedence. Values are literal: no shell
 # expansion or evaluation, and secrets never appear in parsing errors.
+# The per-provider policy variables are derived from the same registry the
+# override loop below reads, so a provider added to the registry cannot have its
+# .env overrides silently discarded by an allowlist nobody remembered to edit.
+discovery_provider_policy_env =
+  :devils_dictionary
+  |> Application.get_env(:discovery_providers, [])
+  |> Enum.flat_map(fn provider ->
+    prefix = String.upcase(provider.slug())
+
+    [
+      "#{prefix}_DISCOVERY_POSITIVE_REFRESH_SECONDS",
+      "#{prefix}_DISCOVERY_EMPTY_REFRESH_SECONDS"
+    ]
+  end)
+
+# Credentials stay an explicit list: each one is a deliberate decision about a
+# secret, and no naming rule should be able to widen it.
+allowed_provider_env =
+  [
+    "CINEGRAPH_API_KEY",
+    "CINEGRAPH_GRAPHQL_URL",
+    "GIPHY_API_KEY",
+    "ARTSY_CLIENT_ID",
+    "ARTSY_CLIENT_SECRET",
+    "DISCOVERY_POSITIVE_REFRESH_SECONDS",
+    "DISCOVERY_EMPTY_REFRESH_SECONDS"
+  ] ++ discovery_provider_policy_env
+
 local_provider_env =
   if config_env() == :dev do
     case File.read(Path.expand("../.env", __DIR__)) do
@@ -37,32 +65,23 @@ local_provider_env =
         |> String.split("\n")
         |> Enum.reduce(%{}, fn line, values ->
           case String.split(String.trim(line), "=", parts: 2) do
-            [name, value]
-            when name in [
-                   "CINEGRAPH_API_KEY",
-                   "CINEGRAPH_GRAPHQL_URL",
-                   "GIPHY_API_KEY",
-                   "ARTSY_CLIENT_ID",
-                   "ARTSY_CLIENT_SECRET",
-                   "DISCOVERY_POSITIVE_REFRESH_SECONDS",
-                   "DISCOVERY_EMPTY_REFRESH_SECONDS",
-                   "CINEGRAPH_DISCOVERY_POSITIVE_REFRESH_SECONDS",
-                   "CINEGRAPH_DISCOVERY_EMPTY_REFRESH_SECONDS",
-                   "GIPHY_DISCOVERY_POSITIVE_REFRESH_SECONDS",
-                   "GIPHY_DISCOVERY_EMPTY_REFRESH_SECONDS"
-                 ] ->
-              value = String.trim(value)
+            [name, value] when name != "" ->
+              if name in allowed_provider_env do
+                value = String.trim(value)
 
-              value =
-                if String.length(value) >= 2 and
-                     ((String.starts_with?(value, "\"") and String.ends_with?(value, "\"")) or
-                        (String.starts_with?(value, "'") and String.ends_with?(value, "'"))) do
-                  String.slice(value, 1, String.length(value) - 2)
-                else
-                  value
-                end
+                value =
+                  if String.length(value) >= 2 and
+                       ((String.starts_with?(value, "\"") and String.ends_with?(value, "\"")) or
+                          (String.starts_with?(value, "'") and String.ends_with?(value, "'"))) do
+                    String.slice(value, 1, String.length(value) - 2)
+                  else
+                    value
+                  end
 
-              Map.put(values, name, value)
+                Map.put(values, name, value)
+              else
+                values
+              end
 
             _ ->
               values
@@ -133,7 +152,10 @@ discovery_config =
 source_policies = Keyword.fetch!(discovery_config, :source_policies)
 
 source_policies =
-  Enum.reduce(["cinegraph", "giphy"], source_policies, fn slug, policies ->
+  :devils_dictionary
+  |> Application.get_env(:discovery_providers, [])
+  |> Enum.map(& &1.slug())
+  |> Enum.reduce(source_policies, fn slug, policies ->
     prefix = String.upcase(slug)
 
     overrides =
