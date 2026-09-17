@@ -5,6 +5,7 @@ defmodule DevilsDictionaryWeb.CultureDiscoveryLiveTest do
   import Ecto.Query
   import Phoenix.LiveViewTest
 
+  alias DevilsDictionary.Artworks.Corpus.{Manifest, Seeder}
   alias DevilsDictionary.Discovery
   alias DevilsDictionary.Discovery.{Mapping, Run}
   alias DevilsDictionary.Discovery.Providers.{CineGraph, Met}
@@ -126,7 +127,7 @@ defmodule DevilsDictionaryWeb.CultureDiscoveryLiveTest do
     assert has_element?(
              live,
              "#culture-about-cinegraph",
-             "Keyword relevance to this particular meaning is unverified."
+             "Relevance to this particular meaning is unverified."
            )
   end
 
@@ -319,6 +320,101 @@ defmodule DevilsDictionaryWeb.CultureDiscoveryLiveTest do
 
     # The candidate the Met's text search returned and identity rejected.
     refute has_element?(live, "#culture-result-met_object-999")
+  end
+
+  test "the live shelf and the committed catalog are one artwork shelf, live first", ctx do
+    original = Application.fetch_env!(:devils_dictionary, :discovery_providers)
+    Application.put_env(:devils_dictionary, :discovery_providers, [CineGraph, Met])
+    on_exit(fn -> Application.put_env(:devils_dictionary, :discovery_providers, original) end)
+
+    word = word!(ctx, "soldier", ~w(wordnet))
+    sense = sense!(ctx, word, "wordnet", gloss: "one who serves in an army")
+    entity = concept!("Q4991371", "soldier")
+
+    {:ok, _} =
+      DevilsDictionary.Claims.assert(sense.object_id, "refers_to", entity.object_id, %{
+        confidence: 0.9
+      })
+
+    # A committed corpus work depicting the same QID. It is not searched for on
+    # this visit; it is already local, and before K2 of #109 it rendered as a
+    # tall card in its own section beside the Met's shelf.
+    {:ok, %{newly_created: 1}} =
+      Manifest.new("wikidata-famous", [
+        %{
+          "qid" => "Q12418",
+          "title" => "Mona Lisa",
+          "sitelinks" => 146,
+          "image_url" => "https://upload.wikimedia.org/wikipedia/commons/x/Mona.jpg",
+          "commons_file" => "Mona Lisa.jpg",
+          "credit_line" => "Mona Lisa.jpg · Wikimedia Commons",
+          "creators" => [%{"qid" => "Q762", "term" => "Leonardo da Vinci"}],
+          "depicts" => [%{"term" => "soldier", "qid" => "Q4991371"}]
+        }
+      ])
+      |> Seeder.run()
+
+    stub_films_and_artworks("soldier", 903, [movie(903, "A filmed enlistment")])
+
+    Req.Test.stub(DevilsDictionary.Absorb.Clients, fn conn ->
+      conn = Plug.Conn.fetch_query_params(conn)
+
+      entities =
+        conn.params["ids"] |> String.split("|") |> Map.new(&{&1, %{"id" => &1, "claims" => %{}}})
+
+      json(conn, %{"entities" => entities})
+    end)
+
+    {:ok, live, _html} = live(ctx.conn, ~p"/define/soldier")
+    for run <- Repo.all(Run), do: assert(:ok = Discovery.execute_run(run.id))
+    html = render(live)
+
+    catalog_id = DevilsDictionary.Registry.by_external_id("wikidata", "Q12418")
+
+    # Exactly one Artworks shelf, and no tall candidate section anywhere.
+    assert html |> String.split(~s(id="culture-filter-artwork")) |> length() == 2
+    refute has_element?(live, "#artwork-candidates")
+
+    # Both items are in the same list, and both providers are in its byline.
+    assert has_element?(live, "#culture-results-artwork #culture-result-met_object-194038")
+
+    assert has_element?(
+             live,
+             "#culture-results-artwork #culture-result-catalog_artwork-c#{catalog_id}"
+           )
+
+    assert has_element?(live, "#culture-provider-met", "The Met · tags: Wikidata")
+    assert has_element?(live, "#culture-provider-catalog", "Saved catalog · Wikidata")
+
+    # And the rail does not scroll-snap: snapping re-snaps a container to its
+    # previously snapped box after a layout change, so prepending the live
+    # results to the already-painted corpus items opened the shelf past them.
+    refute html =~ "snap-x"
+
+    # The live result the page went and got comes before the catalog's.
+    {live_at, _} = :binary.match(html, "culture-result-met_object-194038")
+    {corpus_at, _} = :binary.match(html, "culture-result-catalog_artwork-c#{catalog_id}")
+    assert live_at < corpus_at
+
+    # Each names its own reason, in its own words about its own evidence.
+    assert has_element?(
+             live,
+             "#culture-about-met",
+             "Tagged “Soldiers” (Q4991371), the concept this meaning refers to."
+           )
+
+    assert has_element?(
+             live,
+             "#culture-about-catalog",
+             "Direct depiction of “soldier” (Q4991371) tagged “soldier”."
+           )
+
+    assert has_element?(live, "#culture-about-catalog", "held locally rather than searched for")
+
+    # And the film shelf is still the first shelf on the page.
+    {film_at, _} = :binary.match(html, ~s(id="culture-filter-film"))
+    {artwork_at, _} = :binary.match(html, ~s(id="culture-filter-artwork"))
+    assert film_at < artwork_at
   end
 
   test "a word the Met cannot match never gets an artwork shelf, even while loading", ctx do

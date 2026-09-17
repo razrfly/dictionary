@@ -7,7 +7,7 @@ defmodule DevilsDictionary.Artworks do
   alias DevilsDictionary.Claims.{Assertion, AssertionEvidence, AssertionRevision}
   alias DevilsDictionary.Corpus.SourceRecordRevision
   alias DevilsDictionary.Discovery
-  alias DevilsDictionary.Discovery.{Mapping, Result, Run}
+  alias DevilsDictionary.Discovery.{Mapping, MatchReason, Result, Run}
   alias DevilsDictionary.Encyclopedia
 
   alias DevilsDictionary.Registry.{
@@ -136,6 +136,89 @@ defmodule DevilsDictionary.Artworks do
     (artsy_suggestions(senses) ++ qid_suggestions(lexeme_ids, senses, opts))
     |> Enum.uniq_by(&{&1.artwork.object_id, &1.sense_id})
     |> Enum.take(@suggestion_limit)
+  end
+
+  @doc """
+  The page's catalog candidates as items for the shared shelf.
+
+  K2 of #109: every result renders through `DevilsDictionaryWeb.Culture.section`
+  keyed by the content-type table, live or from a corpus, so a corpus candidate
+  is a shelf item with a match reason rather than a tall card of its own. The
+  tall `#artwork-candidates` section this replaced was the second artwork chrome
+  on `/define/soldier`, beside the Met's compact shelf.
+
+  One item per **work**, not per (work, meaning): a shelf is addressed by
+  identity, and the same picture twice under two glosses is the duplicate the
+  compact chrome cannot explain. The reason names the meaning it matched, and
+  the candidates arrive already interleaved across their catalog sources.
+
+  The shape is a live `Discovery.Result`'s shape — `external_namespace`,
+  `external_id`, `object_id`, `preview_metadata` — plus the pre-built
+  `match_reasons`, which is how the renderer tells a corpus item from a
+  persisted one without knowing that either exists.
+  """
+  def shelf_items(lexeme_ids, opts \\ []) when is_list(lexeme_ids) do
+    lexeme_ids
+    |> suggestions(opts)
+    |> Enum.uniq_by(& &1.artwork.object_id)
+    |> Enum.map(&shelf_item/1)
+  end
+
+  defp shelf_item(candidate) do
+    artwork = candidate.artwork
+
+    %{
+      # `"c"` and not the bare object id: a local identity and a Met object id
+      # are both integers, and two items on one shelf whose DOM ids collided
+      # would be an invisible bug.
+      external_namespace: "catalog_artwork",
+      external_id: "c#{artwork.object_id}",
+      object_id: artwork.object_id,
+      preview_metadata: %{
+        "title" => artwork.title,
+        "year" => artwork.date,
+        "image_url" => artwork.image_url,
+        "thumbnail_url" => artwork.image_url,
+        "source_url" => source_url(artwork),
+        "credit_line" => artwork.image_attribution,
+        "artist" => shelf_artist(artwork),
+        "content_type" => "artwork",
+        "provider" => shelf_provider(artwork)
+      },
+      match_reasons: [MatchReason.from_candidate(candidate)],
+      review_state: candidate.review_state,
+      sense_id: candidate.sense_id,
+      source_record_revision_id: candidate.source_record_revision_id
+    }
+  end
+
+  # Whoever made it, however the catalog knows them. A local `authored_by`
+  # identity is the better answer and only some works have one; a manifest row's
+  # display name is the rest. The shelf shows a name either way rather than
+  # showing the Mona Lisa with no Leonardo on it.
+  defp shelf_artist(%{creators: [_ | _] = creators}),
+    do: Enum.map_join(creators, ", ", & &1.label)
+
+  defp shelf_artist(%{artist: artist}) when is_binary(artist), do: artist
+  defp shelf_artist(_artwork), do: nil
+
+  # Who the shelf credits. A committed corpus names itself; the Artsy pilot's 43
+  # works reached the registry by another route and carry no `catalog_source`,
+  # so their retained payload is what names them.
+  defp shelf_provider(%{catalog_provider: provider}) when is_binary(provider), do: provider
+  defp shelf_provider(%{artsy: artsy}) when is_map(artsy), do: "Artsy"
+  defp shelf_provider(_artwork), do: nil
+
+  # The holding institution's own page for the work comes first: the shelf names
+  # the catalog provider, so *Source ↗* should reach what it named. Wikidata and
+  # Wikipedia are the fallback for a work reachable only there — the Mona Lisa.
+  defp source_url(artwork) do
+    label = shelf_provider(artwork)
+
+    case Enum.find(artwork.source_links, &(&1.label == label)) do
+      %{url: url} -> url
+      nil -> artwork.source_links |> List.first(%{}) |> Map.get(:url)
+    end
   end
 
   defp page_senses(lexeme_ids) do

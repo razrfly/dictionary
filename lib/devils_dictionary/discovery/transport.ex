@@ -18,6 +18,8 @@ defmodule DevilsDictionary.Discovery.Transport do
   defp do_request(provider, run_id, stage, payload, config, failure_code \\ nil) do
     case Budget.claim(run_id, stage) do
       :ok ->
+        maybe_sleep(request_interval_ms(provider))
+
         options =
           provider.request_options(payload)
           |> Keyword.merge(
@@ -133,10 +135,26 @@ defmodule DevilsDictionary.Discovery.Transport do
     max(Keyword.fetch!(config, :retry_delay_ms), min_retry_interval_ms(provider))
   end
 
-  defp min_retry_interval_ms(provider) do
+  defp min_retry_interval_ms(provider), do: interval(provider, :min_retry_interval_ms)
+
+  @doc """
+  The sustained gap this provider's API tolerates between its requests, in ms.
+
+  Pacing is a capability, not a provider's private `Process.sleep/1` (K5 of
+  #109): a run's cost is `1 + n` requests through this transport whoever issues
+  them, so the one place that can hold a rate is the one place they all pass
+  through. The Met's is 3,000 — measured, and the difference between 44% of
+  2,600 requests refused and none of them.
+
+  A provider that does not declare one is not paced, which is right for a keyed
+  API with a published budget.
+  """
+  def request_interval_ms(provider), do: interval(provider, :request_interval_ms)
+
+  defp interval(provider, key) do
     if Code.ensure_loaded?(provider) and function_exported?(provider, :capabilities, 0) do
-      case provider.capabilities() do
-        %{min_retry_interval_ms: ms} when is_integer(ms) and ms >= 0 -> ms
+      case Map.get(provider.capabilities(), key) do
+        ms when is_integer(ms) and ms >= 0 -> ms
         _ -> 0
       end
     else

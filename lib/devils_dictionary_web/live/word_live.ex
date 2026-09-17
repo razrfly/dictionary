@@ -45,10 +45,15 @@ defmodule DevilsDictionaryWeb.WordLive do
   alias DevilsDictionary.Claims.Contributions
   alias DevilsDictionary.Lexicon
   alias DevilsDictionary.Lexicon.WordPage
-  alias DevilsDictionaryWeb.{Artwork, Culture, Demo, Provenance, Thing, Word}
+  alias DevilsDictionaryWeb.{Culture, Demo, Provenance, Thing, Word}
 
   @trail_cap 12
   @suggestions 5
+
+  # The key the committed catalog's shelf state travels under. It is not a
+  # provider slug and never reaches `Discovery`, which is why it cannot collide
+  # with one.
+  @catalog_shelf "catalog"
 
   @impl true
   def mount(_params, _session, socket) do
@@ -61,11 +66,10 @@ defmodule DevilsDictionaryWeb.WordLive do
        evidence: [],
        object_id: nil,
        choices: [],
-       artwork_candidates: [],
        # A definition's artwork candidate is only a candidate. An internal
-       # contributor needs the composer link here to carry it into the review
-       # flow with its exact sense and source-record evidence preselected;
-       # everyone else sees the candidate and no write path.
+       # contributor needs the composer link on the shelf to carry it into the
+       # review flow with its exact sense and source-record evidence
+       # preselected; everyone else sees the candidate and no write path.
        contributor: Contributions.internal_contributor?(socket.assigns[:current_scope]),
        discovery_target: nil,
        cultures: %{}
@@ -140,7 +144,6 @@ defmodule DevilsDictionaryWeb.WordLive do
       |> assign(:page_title, title(page, slug))
       |> assign(:card_sources, card_sources)
       |> assign(:suggestions, suggestions(page, slug))
-      |> assign(:artwork_candidates, artwork_candidates(page))
       |> assign(:choices, choices(slug, socket.assigns.object_id))
 
     prepare_discovery(socket, page, demo)
@@ -210,8 +213,61 @@ defmodule DevilsDictionaryWeb.WordLive do
 
     socket
     |> assign(:discovery_target, target)
-    |> assign(:cultures, cultures)
+    |> assign(:cultures, Map.merge(cultures, catalog_shelf(page, target)))
     |> assign(:giphy, DevilsDictionary.Discovery.Providers.Giphy.browser_config(target))
+  end
+
+  # The committed catalog as one more state on the shared shelf (K2 of #109).
+  # It is not a provider: nothing is requested, no mapping exists and no run is
+  # admitted — the works are already local and the match is a QID the
+  # encyclopedia already asserts. `archetype: :corpus` is what sorts it after
+  # the live results and what makes its note say *held locally* rather than
+  # *searched for*.
+  defp catalog_shelf(%{headword: %{lexemes: []}}, _target), do: %{}
+
+  defp catalog_shelf(page, target) do
+    lexeme_ids =
+      if target,
+        do: Discovery.page_lexeme_ids(target),
+        else: Enum.map(page.headword.lexemes, & &1.id)
+
+    case Artworks.shelf_items(lexeme_ids) do
+      [] ->
+        %{}
+
+      items ->
+        %{
+          @catalog_shelf => %{
+            status: :ready,
+            archetype: :corpus,
+            items: items,
+            provider: @catalog_shelf,
+            provider_name: "Saved catalog",
+            provider_detail: catalog_providers(items),
+            corpora: catalog_providers(items),
+            content_types: [:artwork],
+            mapping_id: nil,
+            term: page.headword.lemma,
+            relevance: if(length(page.headword.lexemes) > 1, do: "term_unverified", else: "term")
+          }
+        }
+    end
+  end
+
+  # Whoever is actually on this shelf, in the order the interleave put them, so
+  # the byline is a fact about the items rather than a list of the corpora that
+  # exist.
+  defp catalog_providers(items) do
+    items
+    |> Enum.map(& &1.preview_metadata["provider"])
+    |> Enum.reject(&is_nil/1)
+    |> Enum.uniq()
+    |> case do
+      [] -> "the local catalog"
+      # Commas, not the interpuncts the byline itself is joined with: "Saved
+      # catalog · Wikidata · The Met" reads as three providers.
+      providers -> Enum.join(providers, ", ")
+    end
   end
 
   # A provider that declined the target is not a provider in trouble: there is
@@ -346,10 +402,6 @@ defmodule DevilsDictionaryWeb.WordLive do
 
   defp suggestions(_page, _slug), do: []
 
-  defp artwork_candidates(%{headword: %{lexemes: lexemes}}) do
-    Artworks.suggestions(Enum.map(lexemes, & &1.id))
-  end
-
   # The trail is user input arriving in a URL, so it is parsed rather than
   # trusted: slugs only, deduplicated, and the most recent twelve. #71 §10
   # keeps it here instead of in socket state so a walk survives a reload and
@@ -407,37 +459,11 @@ defmodule DevilsDictionaryWeb.WordLive do
 
           <Word.bare_row :if={@page.cards == []} lemma={@page.headword.lemma} />
 
-          <section
-            :if={@artwork_candidates != []}
-            id="artwork-candidates"
-            class="mt-8 border-y border-mist-950/10 py-6 dark:border-white/10"
-          >
-            <div class="flex flex-wrap items-baseline justify-between gap-3">
-              <div>
-                <.eyebrow>artwork candidates</.eyebrow>
-                <.subheading class="mt-1">Works to consider for an exact meaning</.subheading>
-              </div>
-              <.a navigate={~p"/artworks"}>Browse saved artworks</.a>
-            </div>
-            <p class="mt-2 max-w-2xl text-sm/6 text-mist-500">
-              Direct source tags produced these candidates. They are not accepted interpretations;
-              a contributor must connect an exact sense and reviewers decide the claim.
-            </p>
-            <div class="mt-3">
-              <Artwork.card
-                :for={candidate <- @artwork_candidates}
-                id={"artwork-candidate-#{candidate.artwork.object_id}-#{candidate.sense_id}"}
-                artwork={candidate.artwork}
-                candidate={candidate}
-                connect={@contributor}
-              />
-            </div>
-          </section>
-
           <Culture.section
             :if={@cultures != %{}}
             states={@cultures}
             return_path={word_path(@page)}
+            contributor={@contributor}
           />
 
           <DevilsDictionaryWeb.GiphyShelf.section :if={@giphy} config={@giphy} />

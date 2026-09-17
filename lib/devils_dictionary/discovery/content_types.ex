@@ -47,7 +47,9 @@ defmodule DevilsDictionary.Discovery.ContentTypes do
     }
   }
 
-  @known [:film, :artwork, :gif, :text]
+  # Shelf order (K2 of #109), not insertion order: a page shows films, then
+  # artworks, then texts, then GIFs.
+  @known [:film, :artwork, :text, :gif]
 
   @doc "Every content type the reader can present, in shelf order."
   def known, do: @known

@@ -373,8 +373,14 @@ mix dd.materialize --dry-run               # parity: raw vs derived, no network 
 mix dd.materialize --all                   # rebuild every derived row offline (M2)
 mix dd.health                              # coverage, resolution, links, parity
 mix dd.score                               # the MVP-0 scorecard, PASS/FAIL with actuals
+mix compile                                # ALWAYS to completion before the next line
 mix phx.server                             # http://localhost:4007 (4000–4005 belong to sibling projects)
 ```
+
+`mix compile` before `mix phx.server`, every time, and let it finish. `phx.server`
+compiles lazily, and an Oban worker whose module is not loaded yet is a job Oban
+**discards** — *module is not a worker* — so discovery silently does nothing on the
+first page you open. Three sessions have been caught by this.
 
 Order matters three times. Wikidata is seeded from the QIDs the Wikipedia pass finds,
 so Wikipedia goes first. The second `dd.scope.build` must **not** take `--reset`,

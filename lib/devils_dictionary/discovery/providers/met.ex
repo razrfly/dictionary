@@ -33,7 +33,7 @@ defmodule DevilsDictionary.Discovery.Providers.Met do
   import Ecto.Query
 
   alias DevilsDictionary.Discovery.Providers.Met.BroaderWalk
-  alias DevilsDictionary.Registry.{Entity, Lexeme, Sense}
+  alias DevilsDictionary.Registry.{Entity, Sense}
   alias DevilsDictionary.Repo
   alias DevilsDictionary.SourceIdentity.Entry
 
@@ -53,6 +53,11 @@ defmodule DevilsDictionary.Discovery.Providers.Met do
   # a match key, not a summary, and the highest-confidence handful is what a
   # search and a tag comparison can actually use.
   @max_entities 8
+
+  # The sustained gap between this provider's requests, when the environment
+  # does not override it. Measured, not documented: the Met's published 80
+  # req/s refused 44% of 2,600 requests at 1 req/s and none at 3 s/request.
+  @request_interval_ms 3_000
 
   @impl true
   def slug, do: "met"
@@ -98,8 +103,20 @@ defmodule DevilsDictionary.Discovery.Providers.Met do
       content_types: [:artwork],
       # The probe measured 21 of 100 hydrations refused at ~6.7 req/s. 1.5 s is
       # the interval that recovered 17 of those 21 on one retry.
-      min_retry_interval_ms: 1_500
+      min_retry_interval_ms: 1_500,
+      # K5 of #109: pacing is a capability the shared transport honours, not a
+      # `Process.sleep/1` this provider hides inside its own hydration loop.
+      # 3 s is the measured sustainable rate: 44% of 2,600 requests were refused
+      # at 1 req/s and none at 3 s/request.
+      request_interval_ms: request_interval_ms()
     }
+  end
+
+  defp request_interval_ms do
+    case config()[:request_interval_ms] do
+      ms when is_integer(ms) and ms >= 0 -> ms
+      _ -> @request_interval_ms
+    end
   end
 
   @impl true
@@ -110,34 +127,23 @@ defmodule DevilsDictionary.Discovery.Providers.Met do
     config()[:enabled] != false
   end
 
-  @doc """
-  The QIDs the page's senses already point at, with the labels to search for.
-
-  This is the whole of the Met's association evidence, and it is read from the
-  encyclopedia rather than from the provider: a sense's active `refers_to`
-  entity is a claim someone can inspect and withdraw. A target with no such
-  claim yields an empty set, and `covers?/1` then declines it outright.
-
-  ## Why this reads the page and not the target lexeme
-
-  `Discovery.target_for_page/3` resolves a page to **one** lexeme — the lowest
-  id when several share the address — and marks the target `term_unverified`
-  when there is more than one. `/define/war` is seven lexemes: the verb, the
-  noun, a prefix, and four names. The lowest id is the *verb*, and the QID for
-  Q198 hangs off a sense of the *noun*. Reading only the target lexeme would
-  have put no artwork on `/define/war` while the encyclopedia plainly says what
-  *war* means.
-
-  So the evidence is scoped the way the page itself is scoped
-  (`Lexicon.by_lemma_or_slug/2`: same language, matching lemma or slug), which
-  is also the scope the shelf already admits to when it says *keyword relevance
-  to this particular meaning is unverified*. Narrowing this to one sense is a
-  sense-level-target change, and that belongs to whatever phase moves
-  `target_for_page/3` — not to a provider reaching around it.
-  """
-  def target_entities(object_id) do
-    object_id
-    |> page_evidence()
+  # The QIDs the page's senses already point at, with the labels to search for.
+  #
+  # This is the whole of the Met's association evidence, and it is read from the
+  # encyclopedia rather than from the provider: a sense's active `refers_to`
+  # entity is a claim someone can inspect and withdraw. A target with no such
+  # claim yields an empty set, and `covers?/1` then declines it outright.
+  #
+  # The scope is the page's whole lexeme set, which since K4 of #109 is what a
+  # target *is* — `Discovery.page_lexeme_ids/1`, shared, rather than the lemma
+  # and slug join this provider used to build privately. `/define/war` is seven
+  # lexemes, and the QID for Q198 hangs off a sense of the noun; reading one
+  # lexeme would put no artwork on that page while the encyclopedia plainly says
+  # what *war* means. The shelf still says relevance to a particular meaning is
+  # unverified, and narrowing it to one sense belongs to #101.
+  defp page_entities(lexeme_ids) do
+    lexeme_ids
+    |> sense_evidence()
     |> select([revision: r, entity: e, identifier: ei], %{
       qid: ei.external_id,
       label: e.preferred_label,
@@ -151,19 +157,12 @@ defmodule DevilsDictionary.Discovery.Providers.Met do
     |> Enum.map(&Map.new(&1, fn {k, v} -> {Atom.to_string(k), v} end))
   end
 
-  # The page's scope is expressed as a join on the target lexeme rather than a
-  # lookup of it, so reading the evidence is one round trip and not two. The
-  # `lower(?) = lower(?)` pair is the same comparison the two-query form made
-  # in Elixir, moved into the database where the other half of it already was.
-  defp page_evidence(object_id) do
+  # Every verified Wikidata identity an active `refers_to` on any of these
+  # lexemes' senses points at. The lexeme set arrives resolved, so this is one
+  # round trip whether it is asked for existence or for the labels.
+  defp sense_evidence(lexeme_ids) do
     from s in Sense,
       as: :sense,
-      join: lx in Lexeme,
-      as: :lexeme,
-      on: lx.object_id == s.lexeme_id,
-      join: target in Lexeme,
-      as: :target,
-      on: target.object_id == ^object_id,
       join: r in DevilsDictionary.Claims.AssertionRevision,
       as: :revision,
       on: r.subject_object_id == s.object_id and r.is_current,
@@ -176,9 +175,7 @@ defmodule DevilsDictionary.Discovery.Providers.Met do
       join: ei in DevilsDictionary.Registry.ExternalIdentifier,
       as: :identifier,
       on: ei.object_id == e.object_id and ei.namespace == "wikidata",
-      where:
-        lx.language_tag == target.language_tag and
-          (fragment("lower(?) = lower(?)", lx.lemma, target.lemma) or lx.slug == target.slug),
+      where: s.lexeme_id in ^lexeme_ids,
       where: r.lifecycle_state == :active and ei.status == :verified
   end
 
@@ -188,7 +185,7 @@ defmodule DevilsDictionary.Discovery.Providers.Met do
     # renders this before any run exists, and the answer is no for about 99% of
     # them — so it must not pay for the ordering, the dedup and the labels that
     # only a mapping about to be built has any use for.
-    Repo.exists?(page_evidence(target.object_id))
+    Repo.exists?(sense_evidence(DevilsDictionary.Discovery.page_lexeme_ids(target)))
   end
 
   @doc """
@@ -230,7 +227,7 @@ defmodule DevilsDictionary.Discovery.Providers.Met do
 
   @impl true
   def automatic_mapping(target) do
-    entities = target_entities(target.object_id)
+    entities = target |> DevilsDictionary.Discovery.page_lexeme_ids() |> page_entities()
     term = String.trim(target.term)
 
     {@operation,
@@ -242,11 +239,11 @@ defmodule DevilsDictionary.Discovery.Providers.Met do
        "entities" => entities,
        # The entity's own label is a better query than the headword — the sense
        # picked the entity, so its label is the sense, not the spelling.
-       "search_terms" => search_terms(entities, term)
+       "search_terms" => mapping_search_terms(entities, term)
      }}
   end
 
-  defp search_terms(entities, term) do
+  defp mapping_search_terms(entities, term) do
     entities
     |> Enum.map(& &1["label"])
     |> Kernel.++([term])
@@ -306,8 +303,9 @@ defmodule DevilsDictionary.Discovery.Providers.Met do
   end
 
   defp search(mapping, entities, request, request_fun) do
-    offset = offset(request["after"])
-    term = mapping["search_terms"] |> List.wrap() |> List.first() || mapping["term"]
+    terms = search_terms(mapping)
+    {index, offset} = cursor(request["after"], length(terms))
+    term = Enum.at(terms, index)
 
     payload = %{
       "endpoint" => "search",
@@ -320,14 +318,28 @@ defmodule DevilsDictionary.Discovery.Providers.Met do
       }
     }
 
+    position = {index, offset, length(terms)}
+
     case request_fun.("search", payload) do
       {:ok, %{"objectIDs" => ids}} when is_list(ids) ->
-        hydrate(entities, request, term, offset, ids, request_fun)
+        hydrate(entities, request, term, position, ids, request_fun)
 
       # The Met answers a search with no matches with a null `objectIDs`, so
-      # this is an ordinary empty page rather than a malformed body.
+      # this is an ordinary empty page rather than a malformed body. It still
+      # advances the cursor: one term coming up empty is not the other terms
+      # coming up empty, and stopping here is how only the first was ever asked.
       {:ok, %{"total" => total}} when is_integer(total) ->
-        {:ok, empty(request, :no_results)}
+        {:ok,
+         %{
+           request_parameters:
+             request
+             |> Map.put("term_index", index)
+             |> Map.put("offset", Integer.to_string(offset))
+             |> Map.put("scanned", 0),
+           items: [],
+           next_cursor: next_cursor(position, 0),
+           completion_reason: :no_results
+         }}
 
       {:ok, _body} ->
         {:error, "malformed_response"}
@@ -340,7 +352,49 @@ defmodule DevilsDictionary.Discovery.Providers.Met do
     end
   end
 
-  defp hydrate(entities, request, term, offset, ids, request_fun) do
+  # The terms a recipe actually holds, never just the first of them (K5 of
+  # #109). `automatic_mapping/1` puts the entity labels ahead of the headword
+  # precisely because the sense chose the entity, and until now only the
+  # headword's neighbour at position 0 was ever asked.
+  defp search_terms(mapping) do
+    case mapping["search_terms"] |> List.wrap() |> Enum.filter(&presence(&1)) do
+      [] -> [mapping["term"]]
+      terms -> terms
+    end
+  end
+
+  # `"<term index>:<offset>"`. A page asks one term, and the next page asks the
+  # next term at the same offset — round-robin — so a mapping's second and third
+  # terms are reached within the first three pages rather than never. Completing
+  # a cycle advances the window.
+  #
+  # A bare integer is the pre-#109 cursor, read as term 0 so a cursor persisted
+  # by the previous adapter version still resolves.
+  defp cursor(nil, _count), do: {0, 0}
+
+  defp cursor(value, count) when is_binary(value) do
+    case String.split(value, ":", parts: 2) do
+      [index, offset] -> {rem(max(integer(index), 0), max(count, 1)), max(integer(offset), 0)}
+      [offset] -> {0, max(integer(offset), 0)}
+    end
+  end
+
+  defp cursor(_value, _count), do: {0, 0}
+
+  # The cycle's last leg coming up short is what ends the pagination: a term
+  # still unasked at this offset always has a page, and a full page means this
+  # term's window has more behind it. A term exhausted early in a cycle is asked
+  # once more in the next one and answers empty, which costs one search and is
+  # bounded by `:max_pages_per_context`.
+  defp next_cursor({index, offset, count}, scanned) do
+    cond do
+      index + 1 < count -> "#{index + 1}:#{offset}"
+      scanned == @scan_window -> "0:#{offset + @scan_window}"
+      true -> nil
+    end
+  end
+
+  defp hydrate(entities, request, term, position, ids, request_fun) do
     ids = Enum.take(ids, @scan_window)
 
     case fetch_objects(ids, request_fun, []) do
@@ -348,7 +402,7 @@ defmodule DevilsDictionary.Discovery.Providers.Met do
         {:deferred, code, seconds, request}
 
       {:ok, objects} ->
-        keep(entities, request, term, offset, ids, objects)
+        keep(entities, request, term, position, ids, objects)
     end
   end
 
@@ -359,8 +413,6 @@ defmodule DevilsDictionary.Discovery.Providers.Met do
   defp fetch_objects([], _request_fun, acc), do: {:ok, Enum.reverse(acc)}
 
   defp fetch_objects([id | rest], request_fun, acc) do
-    pace()
-
     case request_fun.("object:#{id}", %{"endpoint" => "object", "object_id" => id}) do
       {:ok, object} when is_map(object) ->
         fetch_objects(rest, request_fun, [object | acc])
@@ -376,14 +428,7 @@ defmodule DevilsDictionary.Discovery.Providers.Met do
     end
   end
 
-  defp pace do
-    case config()[:request_interval_ms] do
-      ms when is_integer(ms) and ms > 0 -> Process.sleep(ms)
-      _ -> :ok
-    end
-  end
-
-  defp keep(entities, request, term, offset, ids, objects) do
+  defp keep(entities, request, term, {term_index, offset, _count} = position, ids, objects) do
     index = Enum.into(entities, %{}, &{&1["qid"], &1})
     {matcher, walk} = BroaderWalk.build(objects, Map.keys(index), request["broader_index"])
 
@@ -404,13 +449,12 @@ defmodule DevilsDictionary.Discovery.Providers.Met do
      %{
        request_parameters:
          request
+         |> Map.put("term_index", term_index)
          |> Map.put("offset", Integer.to_string(offset))
          |> Map.put("scanned", length(ids))
          |> Map.put("broader_index", walk),
        items: items,
-       # A short page means the search is out of candidates; a full one means
-       # there is at least one more window behind it.
-       next_cursor: if(length(ids) == @scan_window, do: Integer.to_string(offset + @scan_window)),
+       next_cursor: next_cursor(position, length(ids)),
        completion_reason: if(items == [], do: :no_results, else: :results)
      }}
   end
@@ -593,16 +637,12 @@ defmodule DevilsDictionary.Discovery.Providers.Met do
   def retryable_status?(status),
     do: DevilsDictionary.Discovery.Transport.default_retryable_status?(status)
 
-  defp offset(nil), do: 0
-
-  defp offset(value) when is_binary(value) do
+  defp integer(value) when is_binary(value) do
     case Integer.parse(value) do
-      {offset, ""} when offset >= 0 -> offset
+      {integer, ""} -> integer
       _ -> 0
     end
   end
-
-  defp offset(_value), do: 0
 
   defp presence(value) when is_binary(value) do
     case String.trim(value) do

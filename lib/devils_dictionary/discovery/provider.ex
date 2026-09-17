@@ -23,13 +23,17 @@ defmodule DevilsDictionary.Discovery.Provider do
   What this provider can do, as data the shared pipeline branches on.
 
   Required keys: `background`, `transport`, `persistence`, `pagination`,
-  `operations`, `content_types`. One optional key is read by the shared
-  transport:
+  `operations`, `content_types`. Two optional keys are read by the shared
+  transport, and both are pacing the provider knows and the pipeline does not:
 
     * `min_retry_interval_ms` — the shortest gap this provider's API tolerates
       between a failed attempt and the next one. `Discovery.Transport` waits the
       longer of this and the shared `:retry_delay_ms`, so a provider that
       answers a burst with a throttle does not retry straight back into it.
+    * `request_interval_ms` — the sustained gap between this provider's
+      *successful* requests. `Discovery.Transport` waits it before every
+      attempt, so a run of `1 + n` requests holds the rate however many stages
+      it runs. Absent means unpaced.
   """
   @callback capabilities() :: map()
   @callback enabled?() :: boolean()
