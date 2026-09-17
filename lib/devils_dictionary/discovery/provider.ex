@@ -19,6 +19,18 @@ defmodule DevilsDictionary.Discovery.Provider do
   @callback slug() :: String.t()
   @callback source_attrs() :: map()
   @callback adapter_version() :: String.t()
+  @doc """
+  What this provider can do, as data the shared pipeline branches on.
+
+  Required keys: `background`, `transport`, `persistence`, `pagination`,
+  `operations`, `content_types`. One optional key is read by the shared
+  transport:
+
+    * `min_retry_interval_ms` — the shortest gap this provider's API tolerates
+      between a failed attempt and the next one. `Discovery.Transport` waits the
+      longer of this and the shared `:retry_delay_ms`, so a provider that
+      answers a burst with a throttle does not retry straight back into it.
+  """
   @callback capabilities() :: map()
   @callback enabled?() :: boolean()
   @callback automatic_mapping(map()) :: {String.t(), map()}
