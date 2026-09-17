@@ -10,7 +10,7 @@ defmodule DevilsDictionary.Discovery.ProvidersTest do
   use ExUnit.Case, async: false
 
   alias DevilsDictionary.Discovery.Providers
-  alias DevilsDictionary.Discovery.Providers.{Artsy, CineGraph, Giphy}
+  alias DevilsDictionary.Discovery.Providers.{Artsy, CineGraph, Giphy, Met}
   alias DevilsDictionary.FakeOffsetDiscoveryProvider
   alias DevilsDictionary.FakePartialDiscoveryProvider
   alias DevilsDictionary.FakeUnretrievableDiscoveryProvider
@@ -25,8 +25,51 @@ defmodule DevilsDictionary.Discovery.ProvidersTest do
     do: Application.put_env(:devils_dictionary, :discovery_providers, providers)
 
   test "the shipped registry is the configured one, not a literal in the module", ctx do
-    assert ctx.configured == [Artsy, CineGraph, Giphy]
+    assert ctx.configured == [Artsy, CineGraph, Giphy, Met]
     assert Providers.all() == ctx.configured
+  end
+
+  test "the pipeline runs two providers, over two transports and two content types", ctx do
+    # The whole point of Phase 1, cashed in: the Met is GET, offset-paged and
+    # `:artwork`, CineGraph is GraphQL POST, cursor-paged and `:film`, and both
+    # are driven by the same run/budget/cache/lease machine. Artsy and GIPHY
+    # stay registered for their source rows and are not scheduled.
+    assert Providers.server_providers() == [CineGraph, Met]
+    assert Providers.server_providers(:film) == [CineGraph]
+    assert Providers.server_providers(:artwork) == [Met]
+
+    assert Enum.map(Providers.server_providers(), & &1.capabilities().transport) == [
+             :server,
+             :server
+           ]
+
+    assert Enum.map(Providers.server_providers(), & &1.capabilities().pagination) == [
+             :cursor,
+             :offset
+           ]
+
+    for provider <- ctx.configured -- Providers.server_providers() do
+      assert provider in Providers.all()
+      refute Providers.retrievable?(provider)
+    end
+  end
+
+  test "the Met registers by config alone and declares what the Met needs", _ctx do
+    assert Providers.get("met") == Met
+    assert Providers.supports?("met", :artwork)
+    refute Providers.supports?("met", :film)
+
+    capabilities = Met.capabilities()
+    assert capabilities.content_types == [:artwork]
+    assert capabilities.pagination == :offset
+
+    # D13's pair: 403 is a throttle for this provider, and the retry that makes
+    # it survivable is paced at the interval the probe measured.
+    assert Met.retryable_status?(403)
+    assert capabilities.min_retry_interval_ms == 1_500
+
+    assert %{slug: "met", name: "The Met"} =
+             Enum.find(Providers.source_catalog(), &(&1.slug == "met"))
   end
 
   test "adding a module to the config list is the whole registration" do
@@ -142,9 +185,9 @@ defmodule DevilsDictionary.Discovery.ProvidersTest do
     end
 
     # Artsy and GIPHY are registered so their source rows exist; neither is a
-    # pipeline provider today, and Phase 1 does not change that.
+    # pipeline provider, and adding the Met does not change that either way.
     assert Providers.get("artsy") == Artsy
     assert Providers.get("giphy") == Giphy
-    assert Enum.map(Providers.server_providers(), & &1.slug()) == ["cinegraph"]
+    assert Enum.map(Providers.server_providers(), & &1.slug()) == ["cinegraph", "met"]
   end
 end

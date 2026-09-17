@@ -72,9 +72,22 @@ defmodule DevilsDictionary.Discovery do
          :ok <- validate_target(target.object_id),
          {:ok, source} <- ensure_source(provider),
          :ok <- provider_eligible(provider, source),
+         :ok <- provider_covers(provider, target),
          {:ok, mapping} <- ensure_automatic_mapping(target, provider, source) do
       request_mapping(mapping, opts)
     end
+  end
+
+  # A provider that cannot match this target is not failing and is not
+  # deferred — there is simply nothing to ask. Declining here is what stops a
+  # mapping, a run and a shelf being created for an answer already known.
+  defp provider_covers(provider, target) do
+    covers? =
+      if Code.ensure_loaded?(provider) and function_exported?(provider, :covers?, 1),
+        do: provider.covers?(target),
+        else: true
+
+    if covers?, do: :ok, else: {:error, :target_not_covered}
   end
 
   @doc "Admits a refresh or pagination run without bypassing cache, backoff or queue limits."

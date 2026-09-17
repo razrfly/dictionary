@@ -100,7 +100,8 @@ config :devils_dictionary,
 config :devils_dictionary, :discovery_providers, [
   DevilsDictionary.Discovery.Providers.Artsy,
   DevilsDictionary.Discovery.Providers.CineGraph,
-  DevilsDictionary.Discovery.Providers.Giphy
+  DevilsDictionary.Discovery.Providers.Giphy,
+  DevilsDictionary.Discovery.Providers.Met
 ]
 
 # Culture discovery is visit-driven and bounded. Provider modules own their
@@ -118,7 +119,10 @@ config :devils_dictionary, :discovery,
   request_budget_limit: 30,
   request_budget_window_seconds: 60,
   source_policies: %{
-    "giphy" => [request_budget_limit: 100, request_budget_window_seconds: 60 * 60]
+    "giphy" => [request_budget_limit: 100, request_budget_window_seconds: 60 * 60],
+    # One Met page is a search plus up to `Met.scan_window/0` hydrations, and the
+    # probe put the sustainable rate near 1 req/s rather than the documented 80.
+    "met" => [request_budget_limit: 1_000, request_budget_window_seconds: 3_600]
   },
   refresh_cooldown_seconds: 60,
   failure_backoff_seconds: 5 * 60,
@@ -129,6 +133,13 @@ config :devils_dictionary, :discovery,
   retry_delay_ms: 250,
   task_wait_ms: 30_000,
   report_sample: 5
+
+# The Met is keyless. `request_interval_ms` is the sustained pace between this
+# provider's own hydrations; `min_retry_interval_ms` in its capabilities is the
+# separate, longer gap after a refusal.
+config :devils_dictionary, :met,
+  enabled: true,
+  request_interval_ms: 1_000
 
 config :devils_dictionary, :cinegraph,
   endpoint: "https://cinegraph.org/api/graphql",

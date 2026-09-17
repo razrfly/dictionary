@@ -42,6 +42,22 @@ defmodule DevilsDictionary.Discovery.Provider do
               | {:deferred, String.t(), pos_integer(), map()}
 
   @doc """
+  Whether this provider has anything to work with for a target, before any run.
+
+  The default, applied when a provider does not define this, is `true` — a
+  keyword search can be run for any word, so CineGraph and GIPHY never decline.
+  The Met can not: its match key is a Wikidata QID the target's senses already
+  refer to, and for a target with no such link there is no query to make and no
+  result that could pass the identity gate. Declining is how that provider
+  avoids admitting a run whose only possible outcome is empty, and how the page
+  avoids showing a shelf that was never going to hold anything.
+
+  This is not eligibility — the provider is enabled, configured and permitted.
+  It is the provider reading the target and saying *not this one*.
+  """
+  @callback covers?(map()) :: boolean()
+
+  @doc """
   Whether an HTTP status is worth another bounded attempt.
 
   The default, applied when a provider does not define this, is `429` or any
@@ -68,6 +84,7 @@ defmodule DevilsDictionary.Discovery.Provider do
   @callback shelf_detail() :: String.t() | nil
 
   @optional_callbacks automatic_mapping: 1,
+                      covers?: 1,
                       request_options: 1,
                       validate_mapping: 2,
                       retrieve: 4,

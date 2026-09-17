@@ -56,7 +56,9 @@ defmodule DevilsDictionaryWeb.HomeLiveTest do
       # template and the sentence is what is under test, not its indentation.
       stats = live |> element("#stats") |> render() |> squash()
 
-      assert stats =~ "3 words indexed · 2 with at least one definition · 9 sources so far"
+      # 10 since the Met joined the source catalog; registering a provider seeds
+      # its source row, which is the number this line counts.
+      assert stats =~ "3 words indexed · 2 with at least one definition · 10 sources so far"
 
       refute stats =~ "animals enriched"
       refute stats =~ "Animals"

@@ -7,7 +7,7 @@ defmodule DevilsDictionaryWeb.CultureDiscoveryLiveTest do
 
   alias DevilsDictionary.Discovery
   alias DevilsDictionary.Discovery.{Mapping, Run}
-  alias DevilsDictionary.Discovery.Providers.CineGraph
+  alias DevilsDictionary.Discovery.Providers.{CineGraph, Met}
   alias DevilsDictionary.FakeOffsetDiscoveryProvider
   alias DevilsDictionary.Repo
 
@@ -258,6 +258,162 @@ defmodule DevilsDictionaryWeb.CultureDiscoveryLiveTest do
     refute has_element?(live, "#culture-missing-poster-1")
     refute has_element?(live, "#culture-entry-image-1")
     assert has_element?(live, "#culture-source-1[href^='https://fixture.invalid/texts/']")
+  end
+
+  test "an artwork shelf renders beside the film shelf, matched by tag identity", ctx do
+    original = Application.fetch_env!(:devils_dictionary, :discovery_providers)
+    Application.put_env(:devils_dictionary, :discovery_providers, [CineGraph, Met])
+    on_exit(fn -> Application.put_env(:devils_dictionary, :discovery_providers, original) end)
+
+    word = word!(ctx, "soldier", ~w(wordnet))
+    sense = sense!(ctx, word, "wordnet", gloss: "one who serves in an army")
+    entity = concept!("Q4991371", "soldier")
+
+    {:ok, _} =
+      DevilsDictionary.Claims.assert(sense.object_id, "refers_to", entity.object_id, %{
+        confidence: 0.9
+      })
+
+    stub_films_and_artworks("soldier", 901, [movie(901, "A filmed enlistment")])
+
+    # The rejected candidate's tag is not the sense's QID, so the broader walk
+    # asks Wikidata about it and is told there is no path.
+    Req.Test.stub(DevilsDictionary.Absorb.Clients, fn conn ->
+      conn = Plug.Conn.fetch_query_params(conn)
+
+      entities =
+        conn.params["ids"]
+        |> String.split("|")
+        |> Map.new(&{&1, %{"id" => &1, "claims" => %{}}})
+
+      json(conn, %{"entities" => entities})
+    end)
+
+    {:ok, live, _html} = live(ctx.conn, ~p"/define/soldier")
+
+    for run <- Repo.all(Run), do: assert(:ok = Discovery.execute_run(run.id))
+    _ = render(live)
+
+    # The film shelf is untouched by the Met arriving beside it.
+    assert has_element?(live, "#culture-filter-film", "Films")
+    assert has_element?(live, "#culture-provider-cinegraph", "CineGraph · keywords: TMDb")
+    assert has_element?(live, "#culture-result-tmdb_movie-901")
+    assert has_element?(live, "#culture-result-tmdb_movie-901 .aspect-\\[2\\/3\\]")
+
+    # The artwork shelf: its own heading, the Met's own qualifier, and the
+    # square aspect the `:artwork` row of the content-type table declares.
+    assert has_element?(live, "#culture-filter-artwork", "Artworks")
+    assert has_element?(live, "#culture-provider-met", "The Met · tags: Wikidata")
+    assert has_element?(live, "#culture-result-met_object-194038", "Watch")
+    assert has_element?(live, "#culture-result-met_object-194038 .aspect-square")
+    assert has_element?(live, "#culture-result-met_object-194038 img")
+    assert has_element?(live, "#culture-source-194038[href^='https://www.metmuseum.org/']")
+
+    # The reason names the tag that actually matched, and its QID — never a
+    # phrase composed for the reader.
+    assert has_element?(
+             live,
+             "#culture-about-met",
+             "Tagged “Soldiers” (Q4991371), the concept this meaning refers to."
+           )
+
+    # The candidate the Met's text search returned and identity rejected.
+    refute has_element?(live, "#culture-result-met_object-999")
+  end
+
+  test "a broader tag says which narrower thing carried it", ctx do
+    original = Application.fetch_env!(:devils_dictionary, :discovery_providers)
+    Application.put_env(:devils_dictionary, :discovery_providers, [Met])
+    on_exit(fn -> Application.put_env(:devils_dictionary, :discovery_providers, original) end)
+
+    word = word!(ctx, "war", ~w(wordnet))
+    sense = sense!(ctx, word, "wordnet", gloss: "armed conflict between states")
+    entity = concept!("Q198", "War")
+
+    {:ok, _} =
+      DevilsDictionary.Claims.assert(sense.object_id, "refers_to", entity.object_id, %{
+        confidence: 0.95
+      })
+
+    Req.Test.stub(DevilsDictionary.Absorb.Clients, fn conn ->
+      conn = Plug.Conn.fetch_query_params(conn)
+      parents = %{"Q361" => "Q103495", "Q103495" => "Q198"}
+
+      entities =
+        conn.params["ids"]
+        |> String.split("|")
+        |> Map.new(fn qid ->
+          claims =
+            case parents[qid] do
+              nil -> []
+              parent -> [%{"mainsnak" => %{"datavalue" => %{"value" => %{"id" => parent}}}}]
+            end
+
+          {qid, %{"id" => qid, "claims" => %{"P279" => claims}}}
+        end)
+
+      json(conn, %{"entities" => entities})
+    end)
+
+    Req.Test.stub(CineGraph, fn conn ->
+      conn = Plug.Conn.fetch_query_params(conn)
+
+      if conn.params["q"] do
+        json(conn, %{"total" => 1, "objectIDs" => [261_944]})
+      else
+        json(conn, met_object(261_944, "Battlefield at Vaux", [{"World War I", "Q361"}]))
+      end
+    end)
+
+    {:ok, live, _html} = live(ctx.conn, ~p"/define/war")
+    for run <- Repo.all(Run), do: assert(:ok = Discovery.execute_run(run.id))
+    _ = render(live)
+
+    assert has_element?(live, "#culture-filter-artwork", "Artworks")
+
+    assert has_element?(
+             live,
+             "#culture-about-met",
+             "Related to “War” through the tag “World War I” (Q361)."
+           )
+  end
+
+  defp stub_films_and_artworks(term, keyword_id, movies) do
+    Req.Test.stub(CineGraph, fn conn ->
+      conn = Plug.Conn.fetch_query_params(conn)
+
+      cond do
+        conn.params["q"] ->
+          json(conn, %{"total" => 2, "objectIDs" => [194_038, 999]})
+
+        conn.method == "GET" ->
+          case conn.request_path |> Path.basename() |> String.to_integer() do
+            194_038 -> json(conn, met_object(194_038, "Watch", [{"Soldiers", "Q4991371"}]))
+            999 -> json(conn, met_object(999, "Unrelated teapot", [{"Flowers", "Q506"}]))
+          end
+
+        true ->
+          graphql_response(conn, term, keyword_id, movies)
+      end
+    end)
+  end
+
+  defp met_object(id, title, tags) do
+    %{
+      "objectID" => id,
+      "title" => title,
+      "objectDate" => "ca. 1780",
+      "isPublicDomain" => true,
+      "primaryImageSmall" => "https://images.metmuseum.org/CRDImages/#{id}.jpg",
+      "objectURL" => "https://www.metmuseum.org/art/collection/search/#{id}",
+      "creditLine" => "Gift of J. Pierpont Morgan, 1917",
+      "artistDisplayName" => "Anonymous",
+      "objectWikidata_URL" => "",
+      "tags" =>
+        Enum.map(tags, fn {term, qid} ->
+          %{"term" => term, "Wikidata_URL" => "https://www.wikidata.org/wiki/#{qid}"}
+        end)
+    }
   end
 
   defp stub_films_and_texts(term, keyword_id, movies) do
