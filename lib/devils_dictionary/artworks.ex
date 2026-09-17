@@ -226,8 +226,7 @@ defmodule DevilsDictionary.Artworks do
 
       for artwork <- artworks,
           item <- artwork.depicts,
-          match = Enum.find(evidence, &(&1.qid == item["qid"])),
-          not is_nil(match),
+          match <- Enum.filter(evidence, &(&1.qid == item["qid"])),
           sense = by_sense[match.sense_id],
           not is_nil(sense) do
         %{

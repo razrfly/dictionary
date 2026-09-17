@@ -36,8 +36,7 @@ defmodule Mix.Tasks.Dd.Artworks.Manifest do
     max_attempts: :integer,
     from_cache: :boolean,
     min_sitelinks: :integer,
-    measure: :boolean,
-    page_size: :integer
+    measure: :boolean
   ]
 
   @impl Mix.Task
@@ -53,6 +52,10 @@ defmodule Mix.Tasks.Dd.Artworks.Manifest do
 
     unless kind in Manifest.kinds() do
       Mix.raise("unknown manifest kind #{kind}; known: #{Enum.join(Manifest.kinds(), ", ")}")
+    end
+
+    if kind != "wikidata-famous" and opts[:measure] do
+      Mix.raise("--measure only applies to wikidata-famous; #{kind} has nothing to measure")
     end
 
     build(kind, opts)
@@ -75,8 +78,8 @@ defmodule Mix.Tasks.Dd.Artworks.Manifest do
   defp build("wikidata-famous", opts) do
     if opts[:measure] do
       case WikidataFamous.measure(
-             page_size: opts[:page_size],
-             request_limit: opts[:request_limit]
+             request_limit: opts[:request_limit],
+             interval_ms: opts[:interval_ms]
            ) do
         {:ok, measurement} ->
           Mix.shell().info("Sitelink threshold measurement (paged; nothing written):")
@@ -89,7 +92,7 @@ defmodule Mix.Tasks.Dd.Artworks.Manifest do
       case WikidataFamous.build(
              min_sitelinks: opts[:min_sitelinks],
              request_limit: opts[:request_limit],
-             page_size: opts[:page_size]
+             interval_ms: opts[:interval_ms]
            ) do
         {:ok, manifest, ledger} -> write(manifest, ledger, opts, "wikidata-famous")
         {:error, reason} -> Mix.raise("wikidata famous manifest failed: #{reason}")

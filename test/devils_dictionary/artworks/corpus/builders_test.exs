@@ -223,6 +223,48 @@ defmodule DevilsDictionary.Artworks.Corpus.BuildersTest do
       assert Enum.map(manifest["rows"], & &1["title"]) == ["Cached highlight"]
       assert ledger.hydrations == 0
     end
+
+    test "an omitted interval still paces; an explicit zero still does not" do
+      # The Mix task forwards `interval_ms: opts[:interval_ms]`, which is nil
+      # when `--interval-ms` is absent. A lookup that kept that nil would run the
+      # 2,290-object hydration with no pause at all, which is what the Met
+      # refuses in volume. One request is enough to tell the two apart.
+      request_fun = fn _options -> response(%{"total" => 1, "objectIDs" => [31]}) end
+
+      paced =
+        elapsed(fn ->
+          assert {:ok, _manifest, ledger} =
+                   MetHighlights.build(
+                     request_fun: request_fun,
+                     interval_ms: nil,
+                     request_limit: 1,
+                     id_limit: 1,
+                     progress: progress_path()
+                   )
+
+          assert ledger.met_requests == 1
+        end)
+
+      unpaced =
+        elapsed(fn ->
+          assert {:ok, _manifest, _ledger} =
+                   MetHighlights.build(
+                     request_fun: request_fun,
+                     interval_ms: 0,
+                     request_limit: 1,
+                     id_limit: 1,
+                     progress: progress_path()
+                   )
+        end)
+
+      assert paced >= 1_000
+      assert unpaced < 1_000
+    end
+  end
+
+  defp elapsed(fun) do
+    {microseconds, _result} = :timer.tc(fun)
+    div(microseconds, 1_000)
   end
 
   describe "wikidata-famous" do

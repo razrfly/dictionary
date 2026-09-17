@@ -58,7 +58,7 @@ defmodule DevilsDictionary.Artworks.Corpus.MetHighlights do
   def build(opts \\ []) do
     state = %{
       request_limit: opts[:request_limit] || @default_request_limit,
-      interval_ms: Keyword.get(opts, :interval_ms, @default_interval_ms),
+      interval_ms: Keyword.get(opts, :interval_ms) || @default_interval_ms,
       request_fun: opts[:request_fun] || (&Req.request/1),
       max_attempts: opts[:max_attempts] || @default_max_attempts,
       requests: 0,

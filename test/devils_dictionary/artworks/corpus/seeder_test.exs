@@ -282,6 +282,22 @@ defmodule DevilsDictionary.Artworks.Corpus.SeederTest do
       assert "met" in sources
     end
 
+    test "every sense that refers to the depicted QID gets the artwork, not just the first",
+         ctx do
+      # Two meanings of the same word can refer to one entity. The section is
+      # rendered per sense, so a lookup that stopped at the first evidence row
+      # would leave the second meaning showing nothing about the same painting.
+      second = sense!(ctx, ctx.war, "wordnet", gloss: "a sustained campaign against something")
+      link!(ctx.war, ctx.entity, sense: second, confidence: 0.9)
+
+      sense_ids =
+        [ctx.war.object_id]
+        |> Artworks.suggestions()
+        |> Enum.map(& &1.sense_id)
+
+      assert Enum.sort(sense_ids) == Enum.sort([ctx.sense.object_id, second.object_id])
+    end
+
     test "a QID nothing in the catalog depicts yields nothing", ctx do
       ship = word!(ctx, "ship", ["wordnet"])
       sense = sense!(ctx, ship, "wordnet", gloss: "a large vessel")

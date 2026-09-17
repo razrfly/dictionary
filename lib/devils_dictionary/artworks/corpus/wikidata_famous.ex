@@ -52,6 +52,7 @@ defmodule DevilsDictionary.Artworks.Corpus.WikidataFamous do
 
   @default_min_sitelinks 10
   @default_request_limit 80
+  @default_interval_ms 1_000
   @describe_batch 50
   @max_attempts 2
   @smoke_test_qid "Q12418"
@@ -175,7 +176,7 @@ defmodule DevilsDictionary.Artworks.Corpus.WikidataFamous do
     %{
       request_limit: opts[:request_limit] || @default_request_limit,
       request_fun: opts[:request_fun] || (&Req.request/1),
-      interval_ms: Keyword.get(opts, :interval_ms, 1_000),
+      interval_ms: Keyword.get(opts, :interval_ms) || @default_interval_ms,
       requests: 0,
       failures: []
     }
