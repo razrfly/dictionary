@@ -145,13 +145,23 @@ defmodule Mix.Tasks.Dd.Provider.New do
     end
   end
 
+  # Hyphen-separated segments, and no empty ones: a trailing or doubled hyphen
+  # would make the slug → module name mapping lossy. `Macro.camelize/1` folds
+  # `demo_` and `demo` to `Demo`, and `a__b` and `a_b` to `AB`, so `demo-` would
+  # generate a second file quietly redefining the module `demo` generated — a
+  # collision the path check cannot see, because the paths differ.
+  @slug ~r/\A[a-z][a-z0-9]*(-[a-z0-9]+)*\z/
+
   defp slug!([slug]) do
-    unless Regex.match?(~r/\A[a-z][a-z0-9-]*\z/, slug) do
+    unless Regex.match?(@slug, slug) do
       Mix.raise("""
       #{inspect(slug)} is not a usable provider slug.
 
-      A slug is lowercase letters, digits and hyphens, starting with a letter —
-      it names the source row, the config key and the generated files.
+      A slug is lowercase letters and digits in hyphen-separated words, starting
+      with a letter — `poetrydb`, `open-library`, `chronicling-america`. No
+      leading, trailing or doubled hyphen: it names the source row, the config
+      key, the generated files *and* the module, and `demo-` and `demo` would
+      both be `Demo`.
       """)
     end
 
