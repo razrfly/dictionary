@@ -266,11 +266,41 @@ defmodule DevilsDictionaryWeb.Culture do
 
   defp status_base(_), do: "culture-loading"
 
+  # The reason a result is here is a fact the provider recorded, never a phrase
+  # composed for the reader: a CineGraph film carries the TMDb keyword ids it
+  # matched, a Met object carries the tag whose Wikidata QID equalled — or
+  # reached — the QID this sense already refers to. Both are named out loud.
   defp match_detail(details, term) do
-    case keyword_names(details) do
-      [] -> "The provider returned this result for “#{term}”."
-      names -> "Matched #{keyword_label(names)} “#{Enum.join(names, "”, “")}” for this term."
+    cond do
+      (tags = matched_tags(details)) != [] -> tag_detail(tags)
+      (names = keyword_names(details)) != [] -> keyword_detail(names)
+      true -> "The provider returned this result for “#{term}”."
     end
+  end
+
+  defp keyword_detail(names),
+    do: "Matched #{keyword_label(names)} “#{Enum.join(names, "”, “")}” for this term."
+
+  defp tag_detail(tags) do
+    tags
+    |> Enum.map(&one_tag/1)
+    |> Enum.join(" ")
+  end
+
+  defp one_tag(%{"relation" => "broader", "term" => tag, "entity_label" => entity} = details)
+       when is_binary(entity) do
+    "Related to “#{entity}” through the tag “#{tag}” (#{details["qid"]})."
+  end
+
+  defp one_tag(%{"term" => tag} = details) do
+    "Tagged “#{tag}” (#{details["qid"]}), the concept this meaning refers to."
+  end
+
+  defp matched_tags(details) do
+    details
+    |> Map.get("tags", [])
+    |> Enum.filter(&(is_map(&1) and is_binary(&1["term"]) and is_binary(&1["qid"])))
+    |> Enum.uniq_by(& &1["qid"])
   end
 
   defp keyword_names(details),

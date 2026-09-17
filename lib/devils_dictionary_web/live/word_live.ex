@@ -153,7 +153,8 @@ defmodule DevilsDictionaryWeb.WordLive do
     culture_providers =
       Providers.server_providers()
       |> Enum.filter(fn provider ->
-        ContentTypes.any_known?(provider.capabilities().content_types)
+        ContentTypes.any_known?(provider.capabilities().content_types) and
+          Discovery.covers?(provider, target)
       end)
 
     if (connected?(socket) and old_target) &&
@@ -212,6 +213,10 @@ defmodule DevilsDictionaryWeb.WordLive do
     |> assign(:cultures, cultures)
     |> assign(:giphy, DevilsDictionary.Discovery.Providers.Giphy.browser_config(target))
   end
+
+  # A provider that declined the target is not a provider in trouble: there is
+  # nothing to report and nothing to wait for, so the shelf never appears.
+  defp state_for_outcome(state, {:error, :target_not_covered}), do: state
 
   defp state_for_outcome(state, {:deferred, _reason}) when state.status == :idle,
     do: Map.put(state, :status, :deferred)

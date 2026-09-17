@@ -57,7 +57,10 @@ defmodule DevilsDictionary.FakeOffsetDiscoveryProvider do
       persistence: :persistent,
       pagination: :offset,
       operations: [@operation],
-      content_types: [:text]
+      content_types: [:text],
+      # Met-shaped again: a provider that throttles has to be retried slower
+      # than the shared 250 ms floor, or the retry collects the same refusal.
+      min_retry_interval_ms: 40
     }
   end
 

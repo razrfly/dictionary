@@ -106,7 +106,7 @@ defmodule DevilsDictionary.Discovery.Transport do
         {:deferred, "provider_retry_after", seconds}
 
       _ ->
-        maybe_sleep(Keyword.fetch!(config, :retry_delay_ms))
+        maybe_sleep(retry_delay_ms(provider, config))
         # 429 and a provider-declared retryable 4xx are both backpressure; only a
         # 5xx is the provider itself being unwell.
         code = if response.status >= 500, do: "provider_unavailable", else: "provider_throttled"
@@ -115,8 +115,33 @@ defmodule DevilsDictionary.Discovery.Transport do
   end
 
   defp retry_transport(provider, run_id, stage, payload, config, code) do
-    maybe_sleep(Keyword.fetch!(config, :retry_delay_ms))
+    maybe_sleep(retry_delay_ms(provider, config))
     do_request(provider, run_id, stage, payload, config, code)
+  end
+
+  @doc """
+  How long to wait before the next bounded attempt, in milliseconds.
+
+  The shared `:retry_delay_ms` is a floor, not a ceiling. A provider that knows
+  its own throttle declares `min_retry_interval_ms` in `capabilities/0` and the
+  longer of the two wins, so retrying into the same throttle that produced the
+  failure is not the shared code's decision to get wrong. The Met answers a
+  keyless burst with `403` and no `Retry-After`, and a 250 ms retry simply
+  collects another one.
+  """
+  def retry_delay_ms(provider, config) do
+    max(Keyword.fetch!(config, :retry_delay_ms), min_retry_interval_ms(provider))
+  end
+
+  defp min_retry_interval_ms(provider) do
+    if Code.ensure_loaded?(provider) and function_exported?(provider, :capabilities, 0) do
+      case provider.capabilities() do
+        %{min_retry_interval_ms: ms} when is_integer(ms) and ms >= 0 -> ms
+        _ -> 0
+      end
+    else
+      0
+    end
   end
 
   @doc "Parses delta-seconds and IMF-fixdate Retry-After values without shortening them."

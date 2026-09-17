@@ -1229,6 +1229,38 @@ defmodule DevilsDictionary.DiscoveryTest do
       assert Discovery.state(word.object_id, ctx.slug).status == :ready
     end
 
+    test "a declared retry interval paces the retries it enables", ctx do
+      word = word!(ctx, "forbidding", ~w(wordnet))
+      calls = start_supervised!({Agent, fn -> [] end})
+      rows = text_rows(5)
+
+      # 403, 403, 200 — the Met's shape at a burst rate, twice over. The run has
+      # to survive it, and the attempts have to be spaced by the interval the
+      # provider declared rather than by the shared 250 ms floor.
+      Req.Test.stub(FakeOffsetDiscoveryProvider, fn conn ->
+        at = System.monotonic_time(:millisecond)
+        attempt = Agent.get_and_update(calls, &{length(&1), &1 ++ [at]})
+
+        if attempt < 2 do
+          Plug.Conn.send_resp(conn, 403, "forbidden")
+        else
+          conn = Plug.Conn.fetch_query_params(conn)
+          json(conn, Enum.slice(rows, String.to_integer(conn.params["offset"]), 3))
+        end
+      end)
+
+      assert {:queued, run} = Discovery.request(target(word), ctx.slug)
+      assert :ok = Discovery.execute_run(run.id)
+
+      assert Repo.get!(Run, run.id).status == :succeeded
+      assert Discovery.state(word.object_id, ctx.slug).status == :ready
+
+      interval = FakeOffsetDiscoveryProvider.capabilities().min_retry_interval_ms
+      assert [first, second, third] = Agent.get(calls, & &1)
+      assert second - first >= interval
+      assert third - second >= interval
+    end
+
     test "declaring one status retryable does not drop the default ones", _ctx do
       assert FakeOffsetDiscoveryProvider.retryable_status?(403)
       assert FakeOffsetDiscoveryProvider.retryable_status?(429)

@@ -42,6 +42,10 @@ config :devils_dictionary, :giphy,
 # withdrawal generation disabled for unrelated cases.
 config :devils_dictionary, :artsy, coordinator: nil
 
+# No pacing in the suite: the interval is a live-rate concern and 25 hydrations
+# would otherwise cost 25 seconds of wall clock per test.
+config :devils_dictionary, :met, enabled: true, request_interval_ms: 0
+
 config :devils_dictionary, :discovery_req_options,
   plug: {Req.Test, DevilsDictionary.Discovery.Providers.CineGraph}
 
@@ -54,7 +58,8 @@ config :devils_dictionary, :discovery,
   request_budget_limit: 30,
   request_budget_window_seconds: 60,
   source_policies: %{
-    "giphy" => [request_budget_limit: 100, request_budget_window_seconds: 3_600]
+    "giphy" => [request_budget_limit: 100, request_budget_window_seconds: 3_600],
+    "met" => [request_budget_limit: 1_000, request_budget_window_seconds: 3_600]
   },
   refresh_cooldown_seconds: 60,
   failure_backoff_seconds: 60,

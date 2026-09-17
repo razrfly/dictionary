@@ -19,6 +19,18 @@ defmodule DevilsDictionary.Discovery.Provider do
   @callback slug() :: String.t()
   @callback source_attrs() :: map()
   @callback adapter_version() :: String.t()
+  @doc """
+  What this provider can do, as data the shared pipeline branches on.
+
+  Required keys: `background`, `transport`, `persistence`, `pagination`,
+  `operations`, `content_types`. One optional key is read by the shared
+  transport:
+
+    * `min_retry_interval_ms` — the shortest gap this provider's API tolerates
+      between a failed attempt and the next one. `Discovery.Transport` waits the
+      longer of this and the shared `:retry_delay_ms`, so a provider that
+      answers a burst with a throttle does not retry straight back into it.
+  """
   @callback capabilities() :: map()
   @callback enabled?() :: boolean()
   @callback automatic_mapping(map()) :: {String.t(), map()}
@@ -28,6 +40,47 @@ defmodule DevilsDictionary.Discovery.Provider do
               {:ok, map()}
               | {:error, String.t()}
               | {:deferred, String.t(), pos_integer(), map()}
+
+  @doc """
+  Whether this provider has anything to work with for a target, before any run.
+
+  The default, applied when a provider does not define this, is `true` — a
+  keyword search can be run for any word, so CineGraph and GIPHY never decline.
+  The Met can not: its match key is a Wikidata QID the target's senses already
+  refer to, and for a target with no such link there is no query to make and no
+  result that could pass the identity gate. Declining is how that provider
+  avoids admitting a run whose only possible outcome is empty, and how the page
+  avoids showing a shelf that was never going to hold anything.
+
+  This is not eligibility — the provider is enabled, configured and permitted.
+  It is the provider reading the target and saying *not this one*.
+  """
+  @callback covers?(map()) :: boolean()
+
+  @doc """
+  A fingerprint of the evidence a recipe from `automatic_mapping/1` rests on.
+
+  Not defining this — the default — means the mapping for a target is
+  identified by provider, target and adapter version alone, which is right for
+  a provider whose recipe is just the word.
+
+  A provider whose recipe freezes data that can change out from under it
+  returns a short, stable digest of that data instead. It is appended to the
+  automatic mapping key, so evidence moving produces a *new mapping version*
+  rather than a reused row still carrying the old parameters, and it is
+  recomputed before a run publishes, so a run cannot outlive the claim that
+  justified it.
+
+  The Met needs this: its mapping parameters freeze the QIDs the target's
+  senses refer to, and a `refers_to` claim can be withdrawn or replaced while
+  coverage stays non-empty. Without the fingerprint a mapping created for QID A
+  would keep querying A after the encyclopedia had moved to B.
+
+  It takes the parameters and not the target so that it is a pure function of
+  the recipe: the pipeline builds the recipe once and derives the key from it,
+  rather than reading the same evidence a second time to name it.
+  """
+  @callback mapping_identity(parameters :: map()) :: String.t() | nil
 
   @doc """
   Whether an HTTP status is worth another bounded attempt.
@@ -56,6 +109,8 @@ defmodule DevilsDictionary.Discovery.Provider do
   @callback shelf_detail() :: String.t() | nil
 
   @optional_callbacks automatic_mapping: 1,
+                      covers?: 1,
+                      mapping_identity: 1,
                       request_options: 1,
                       validate_mapping: 2,
                       retrieve: 4,
