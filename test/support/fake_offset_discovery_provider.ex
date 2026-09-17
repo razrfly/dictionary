@@ -15,6 +15,8 @@ defmodule DevilsDictionary.FakeOffsetDiscoveryProvider do
 
   @behaviour DevilsDictionary.Discovery.Provider
 
+  alias DevilsDictionary.Discovery.Transport
+
   @operation "text_search"
   @endpoint "https://fixture.invalid/texts"
 
@@ -61,6 +63,14 @@ defmodule DevilsDictionary.FakeOffsetDiscoveryProvider do
 
   @impl true
   def shelf_detail, do: "public domain"
+
+  # Met-shaped: a keyless API that answers a throttled request with 403 and no
+  # Retry-After. Treating that as an authentication verdict would fail a run
+  # that one more bounded attempt completes. The rest of the rule is delegated
+  # rather than restated.
+  @impl true
+  def retryable_status?(403), do: true
+  def retryable_status?(status), do: Transport.default_retryable_status?(status)
 
   @impl true
   def automatic_mapping(target) do

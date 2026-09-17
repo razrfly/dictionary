@@ -86,6 +86,21 @@ defmodule DevilsDictionary.Discovery.ProvidersTest do
     end
   end
 
+  test "no provider may narrow the default retryable statuses", ctx do
+    overriding =
+      Enum.filter(ctx.configured ++ [FakeOffsetDiscoveryProvider], fn provider ->
+        Code.ensure_loaded?(provider) and function_exported?(provider, :retryable_status?, 1)
+      end)
+
+    assert FakeOffsetDiscoveryProvider in overriding
+
+    for provider <- overriding, status <- [429, 500, 502, 503, 504] do
+      assert provider.retryable_status?(status),
+             "#{inspect(provider)} stopped retrying #{status}; widening " <>
+               "retryable_status?/1 must not drop the default cases"
+    end
+  end
+
   test "registration without the pipeline claim stays legal", ctx do
     for provider <- ctx.configured, not Providers.retrievable?(provider) do
       capabilities = provider.capabilities()

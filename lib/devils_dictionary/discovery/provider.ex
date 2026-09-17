@@ -30,6 +30,22 @@ defmodule DevilsDictionary.Discovery.Provider do
               | {:deferred, String.t(), pos_integer(), map()}
 
   @doc """
+  Whether an HTTP status is worth another bounded attempt.
+
+  The default, applied when a provider does not define this, is `429` or any
+  `5xx` — a throttle or a server fault. A provider overrides it when its API
+  reports backpressure some other way, and must keep the default cases
+  retryable; `Discovery.Transport.default_retryable_status?/1` is public so an
+  implementation can delegate to it rather than restate it.
+
+  This exists because a status code is a provider's dialect, not a fact. The Met
+  answers a keyless, throttled request with `403` and no `Retry-After`, so for
+  that provider a `403` is a backoff signal and treating it as an
+  authentication verdict is both wrong and unrecoverable.
+  """
+  @callback retryable_status?(non_neg_integer()) :: boolean()
+
+  @doc """
   One short qualifier shown beside the provider name on a shelf, or `nil`.
 
   It exists so the reader can say "CineGraph · keywords: TMDb" without any
@@ -43,5 +59,6 @@ defmodule DevilsDictionary.Discovery.Provider do
                       request_options: 1,
                       validate_mapping: 2,
                       retrieve: 4,
-                      shelf_detail: 0
+                      shelf_detail: 0,
+                      retryable_status?: 1
 end

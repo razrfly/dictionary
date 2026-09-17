@@ -1072,6 +1072,26 @@ defmodule DevilsDictionary.DiscoveryTest do
     assert Discovery.state(word.object_id, "cinegraph").mapping_id == run.mapping_id
   end
 
+  test "a 403 stays a terminal authentication verdict for a provider that says nothing", ctx do
+    word = word!(ctx, "forbidden", ~w(wordnet))
+    calls = start_supervised!({Agent, fn -> 0 end})
+
+    Req.Test.stub(CineGraph, fn conn ->
+      Agent.update(calls, &(&1 + 1))
+      Plug.Conn.send_resp(conn, 403, "forbidden")
+    end)
+
+    assert {:queued, run} = Discovery.request(target(word), "cinegraph")
+    assert :ok = Discovery.execute_run(run.id)
+
+    completed = Repo.get!(Run, run.id)
+    assert completed.status == :failed
+    assert completed.error_code == "authentication_failed"
+    # The point of the default: no retry is spent arguing with a refusal.
+    assert Agent.get(calls, & &1) == 1
+    assert Discovery.state(word.object_id, "cinegraph").status == :failed
+  end
+
   describe "a GET, offset-paged, text provider on the same pipeline" do
     setup do
       providers = Application.fetch_env!(:devils_dictionary, :discovery_providers)
@@ -1157,6 +1177,43 @@ defmodule DevilsDictionary.DiscoveryTest do
       assert cached.id == run.id
       assert Repo.aggregate(Run, :count) == 1
       assert length(Agent.get(requests, & &1)) == 1
+    end
+
+    test "a provider may declare 403 retryable, and the run recovers", ctx do
+      word = word!(ctx, "throttled", ~w(wordnet))
+      calls = start_supervised!({Agent, fn -> 0 end})
+      rows = text_rows(5)
+
+      # The Met's shape: the first request is refused with a bare 403 and no
+      # Retry-After, the next one succeeds.
+      Req.Test.stub(FakeOffsetDiscoveryProvider, fn conn ->
+        case Agent.get_and_update(calls, &{&1, &1 + 1}) do
+          0 ->
+            Plug.Conn.send_resp(conn, 403, "forbidden")
+
+          _ ->
+            conn = Plug.Conn.fetch_query_params(conn)
+            page = Enum.slice(rows, String.to_integer(conn.params["offset"]), 3)
+            json(conn, page)
+        end
+      end)
+
+      assert {:queued, run} = Discovery.request(target(word), ctx.slug)
+      assert :ok = Discovery.execute_run(run.id)
+
+      completed = Repo.get!(Run, run.id)
+      assert completed.status == :succeeded
+      assert completed.result_count == 3
+      assert Agent.get(calls, & &1) == 2
+      assert Discovery.state(word.object_id, ctx.slug).status == :ready
+    end
+
+    test "declaring one status retryable does not drop the default ones", _ctx do
+      assert FakeOffsetDiscoveryProvider.retryable_status?(403)
+      assert FakeOffsetDiscoveryProvider.retryable_status?(429)
+      assert FakeOffsetDiscoveryProvider.retryable_status?(503)
+      refute FakeOffsetDiscoveryProvider.retryable_status?(404)
+      refute FakeOffsetDiscoveryProvider.retryable_status?(401)
     end
 
     test "an abandoned run is recovered by the shared cleanup", ctx do

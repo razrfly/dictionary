@@ -32,8 +32,8 @@ defmodule DevilsDictionary.Discovery.Providers do
   Providers the background pipeline can actually run.
 
   A declaration of `transport: :server, background: true` is a claim; exporting
-  `retrieve/4` is the proof. Without it the run worker has nothing to call, so
-  such a module is registered but never scheduled.
+  the retrieval callbacks is the proof. Without them the run worker has nothing
+  to call, so such a module is registered but never scheduled.
   """
   def server_providers(content_type \\ nil) do
     Enum.filter(all(), fn provider ->
@@ -45,10 +45,25 @@ defmodule DevilsDictionary.Discovery.Providers do
     end)
   end
 
-  @doc "True when the module exports the server-side retrieval callbacks."
+  @doc """
+  True when the module exports every callback the pipeline drives it through.
+
+  `retrieve/4` alone is not enough: `Discovery` builds the automatic mapping
+  with `automatic_mapping/1` and `Transport` builds the request with
+  `request_options/1`, so a module exporting one of the three and not the others
+  would pass the gate and then raise mid-run. All three, or none.
+  """
+  @pipeline_callbacks [retrieve: 4, automatic_mapping: 1, request_options: 1]
+
   def retrievable?(provider) do
-    Code.ensure_loaded?(provider) and function_exported?(provider, :retrieve, 4)
+    Code.ensure_loaded?(provider) and
+      Enum.all?(@pipeline_callbacks, fn {callback, arity} ->
+        function_exported?(provider, callback, arity)
+      end)
   end
+
+  @doc "The callbacks `retrievable?/1` requires, as `{name, arity}` pairs."
+  def pipeline_callbacks, do: @pipeline_callbacks
 
   def supports?(slug, content_type) do
     case get(slug) do
