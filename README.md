@@ -6,7 +6,7 @@ Internal name: `devils_dictionary` (the Phoenix app, the repo). Product name is 
 
 This file is the **living record** of the project: what it is, what it is not, the decisions we've made, and what we plan to build next. Update it whenever a decision changes. The encyclopedia foundation is specified in [issue #74](https://github.com/razrfly/dictionary/issues/74); [issue #69](https://github.com/razrfly/dictionary/issues/69) defines the original source-coverage scorecard.
 
-Automatic cultural discovery and the direct-browser GIPHY integration are documented in [`docs/integrations/giphy.md`](docs/integrations/giphy.md). Durable cross-provider film identity and its adapter/backfill contract are documented in [`docs/integrations/source-identity.md`](docs/integrations/source-identity.md).
+Automatic cultural discovery is documented in [`docs/discovery/`](docs/discovery/README.md) — the architecture in [`README.md`](docs/discovery/README.md) and the checklist for adding a source in [`adding-a-provider.md`](docs/discovery/adding-a-provider.md). The direct-browser GIPHY integration is documented in [`docs/integrations/giphy.md`](docs/integrations/giphy.md). Durable cross-provider film identity and its adapter/backfill contract are documented in [`docs/integrations/source-identity.md`](docs/integrations/source-identity.md).
 
 ## Current delivery — 17 September 2026 (evening)
 
@@ -276,6 +276,7 @@ Everything below is designed for in the MVP-0 schema and adds tables rather than
 - **The audit** — [`docs/audits/`](docs/audits/2026-09-07-project-audit.md): the 7 September review that ended MVP-0's "only design remains" reading, with its reproduction scripts and the two scorecards it ran.
 - **The model decision** — [`docs/adr/0001`](docs/adr/0001-encyclopedia-model.md): the registry, the assertion contract, and what was rejected and why.
 - **The proof behind it** — [`docs/spikes/2026-09-gate0/`](docs/spikes/2026-09-gate0/README.md): the executable gate — integrity rejections, the current-revision benchmark on the full 1.16 M-assertion corpus, and the sense-drift reproduction on the real Wiktionary `bank` record.
+- **Cultural discovery** — [`docs/discovery/`](docs/discovery/README.md): the pipeline stage by stage, the identity-not-text rule, the two archetypes, the content-type table, budgets and pacing — and [`adding-a-provider.md`](docs/discovery/adding-a-provider.md), the checklist from the bounded probe to the report. `mix dd.provider.new` scaffolds a provider that passes conformance unedited.
 - **The rebuild inventory** — [`docs/rebuild/`](docs/rebuild/port-checklist.md): what ports, what is rewritten, what is retired, and [every scorecard row's fate](docs/rebuild/score-rows.md).
 - **The spec** — [#69](https://github.com/razrfly/dictionary/issues/69): decisions, schema, pipeline, the scorecard (§7), the build order. Its first comment is the v1 research draft: every source evaluated, the probe log, the licensing table.
 - **The build history** — [#70](https://github.com/razrfly/dictionary/issues/70): sessions S0–S5 with per-session expectations, audit notes and grades; the reset procedure; the directory structure.

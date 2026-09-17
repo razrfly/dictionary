@@ -35,3 +35,30 @@ while refresh fails or is deferred. Cleanup protects the current successful set.
 Source disablement and withdrawal still override display. Database request admission
 coordinates server-provider budgets across processes. These cache and admission
 settings do not govern the direct-browser GIPHY transport.
+
+## Where GIPHY sits in the discovery kit (2026-09-18, #109 Phase 1a/1b)
+
+`DevilsDictionary.Discovery.Providers.Giphy` is registered in
+`config :devils_dictionary, :discovery_providers`, and that registration is the
+whole of its relationship to the server pipeline. It declares
+`transport: :browser`, `persistence: :transient` and `background: false`, and it
+exports no `retrieve/4` — so `Providers.server_providers/1` never offers it to
+the run worker, `Discovery.state/2` answers `:idle` for it on every page, and no
+GIF result is ever written to the database. That is K10 of #109: nothing changes
+here until written caching approval exists.
+
+It is covered by `DevilsDictionary.Discovery.Conformance` in the **registry-only**
+profile, which asserts the contract half — the slug, the source attributes, the
+capability shape, the `:gif` content type — and then asserts that the pipeline
+gate refuses to schedule it.
+
+**The shelf is still its own component.** K10 says the kit renders GIPHY's shelf
+through K2's chrome; the shipped code does not, and cannot as things stand:
+`DevilsDictionaryWeb.Culture.section/1` draws from `Discovery.state/2` items, and
+a browser-transport provider has none. `WordLive` therefore renders
+`DevilsDictionaryWeb.GiphyShelf.section/1` beneath the shared section, fed by
+`Giphy.browser_config/1`, exactly where it always was. Folding it into the shared
+chrome means giving it a server transport first.
+
+`config/test.exs` sets `enabled: false`, so the suite never builds a browser
+config. See [`../discovery/README.md`](../discovery/README.md).

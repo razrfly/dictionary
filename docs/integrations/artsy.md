@@ -16,11 +16,36 @@ never identity keys.
 The public `/artworks` page searches the local catalog without network calls.
 Its separate Artsy form is an explicit, transient source-availability check.
 Word pages use only retained direct gene assignments and a versioned mapping registry
-to display **not-yet-reviewed candidates**. Four mappings currently have verified
-opaque Artsy gene IDs; six researched names remain explicitly disabled because their
-bounded resource probes returned 404. A contributor
+to display **not-yet-reviewed candidates**. Seven of the thirteen mappings in
+`priv/artworks/meaning-mappings-v1.json` are enabled with verified opaque Artsy
+gene IDs (Conflict, Family ×2, Love, Allegory, Classical Mythology, Portrait);
+the other six remain explicitly disabled because their bounded resource probes
+returned 404. A contributor
 selects a local work and exact meaning in the existing `/connect` composer;
 normal attribution, evidence, review, revision, and dispute rules apply.
+
+> **Updated 2026-09-18 (#109 Phase 1a/1b).** Two things this page described have
+> changed in the code, and one has not.
+>
+> * **The candidates no longer have chrome of their own.** K2 of #109 retired the
+>   tall `#artwork-candidates` section and `Artwork.card` from the word page; an
+>   Artsy candidate is now an item on the shared *Artworks* shelf rendered by
+>   `DevilsDictionaryWeb.Culture.section/1`, beside the Met's live results and the
+>   committed corpora, carrying a `DevilsDictionary.Discovery.MatchReason` that
+>   reads *Related Artsy gene “Allegory”*. The contributor's `/connect` link moved
+>   into that shelf's *About these results* list and is still server-gated.
+>   `/artworks` is unchanged and remains the browse page.
+> * **The provider module is registry-only, deliberately.**
+>   `DevilsDictionary.Discovery.Providers.Artsy` declares `background: false` and
+>   exports no `retrieve/4`, so `Providers.server_providers/1` never offers it to
+>   the run worker and no Artsy request is ever made from a word page. It is
+>   covered by `DevilsDictionary.Discovery.Conformance` in the registry-only
+>   profile, which asserts exactly that. K9 of #109 freezes the client, the
+>   coordinator and the availability check until Phase 3 retires or folds them.
+> * **The earlier "four mappings" count was wrong**, and the *Known limits*
+>   section below already said seven. Seven is what the committed file holds.
+>
+> See [`../discovery/README.md`](../discovery/README.md).
 
 No Artsy image bytes or hosted derivatives are downloaded. Remote thumbnails
 are only reference fields in removable source payloads. Durable encyclopedia
