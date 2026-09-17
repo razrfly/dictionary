@@ -58,6 +58,27 @@ defmodule DevilsDictionary.Discovery.Provider do
   @callback covers?(map()) :: boolean()
 
   @doc """
+  A fingerprint of the evidence this provider's automatic mapping rests on.
+
+  The default, applied when a provider does not define this, is `nil` — the
+  mapping for a target is then identified by provider, target and adapter
+  version alone, which is right for a provider whose recipe is just the word.
+
+  A provider whose recipe is built from data that can change out from under it
+  returns a short, stable digest of that data instead. It is appended to the
+  automatic mapping key, so evidence moving produces a *new mapping version*
+  rather than a reused row still carrying the old parameters, and it is
+  recomputed before a run publishes, so a run cannot outlive the claim that
+  justified it.
+
+  The Met needs this: its mapping parameters freeze the QIDs the target's
+  senses refer to, and a `refers_to` claim can be withdrawn or replaced while
+  coverage stays non-empty. Without the fingerprint a mapping created for QID A
+  would keep querying A after the encyclopedia had moved to B.
+  """
+  @callback mapping_identity(integer()) :: String.t() | nil
+
+  @doc """
   Whether an HTTP status is worth another bounded attempt.
 
   The default, applied when a provider does not define this, is `429` or any
@@ -85,6 +106,7 @@ defmodule DevilsDictionary.Discovery.Provider do
 
   @optional_callbacks automatic_mapping: 1,
                       covers?: 1,
+                      mapping_identity: 1,
                       request_options: 1,
                       validate_mapping: 2,
                       retrieve: 4,

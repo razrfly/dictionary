@@ -183,6 +183,35 @@ defmodule DevilsDictionary.Discovery.Providers.Met do
     target_entities(target.object_id) != []
   end
 
+  @doc """
+  The QID set this target's mapping was built from, as a short digest.
+
+  `automatic_mapping/1` freezes the QIDs into the mapping parameters, and
+  `retrieve/4` matches tags against those frozen QIDs — so a `refers_to` claim
+  withdrawn or replaced after the mapping was created would otherwise keep the
+  Met querying a concept the encyclopedia has stopped asserting. Coverage does
+  not catch this: swapping QID A for QID B leaves the set non-empty and
+  `covers?/1` still says yes.
+
+  The digest covers the QIDs **in order**, because order is what
+  `search_terms/2` reads, and not the labels, because a relabelled entity is the
+  same evidence — the match key is the QID.
+  """
+  @impl true
+  def mapping_identity(object_id) do
+    case target_entities(object_id) do
+      [] ->
+        "no-entities"
+
+      entities ->
+        entities
+        |> Enum.map_join(",", & &1["qid"])
+        |> then(&:crypto.hash(:sha256, &1))
+        |> Base.encode16(case: :lower)
+        |> binary_part(0, 16)
+    end
+  end
+
   @impl true
   def automatic_mapping(target) do
     entities = target_entities(target.object_id)

@@ -12,6 +12,8 @@ defmodule DevilsDictionary.Discovery.Providers.MetTest do
   use DevilsDictionary.DataCase, async: false
   use Oban.Testing, repo: DevilsDictionary.Repo
 
+  import Ecto.Query
+
   import DevilsDictionary.WordFixtures
   import Plug.Conn, only: [fetch_query_params: 1, send_resp: 3]
 
@@ -461,6 +463,95 @@ defmodule DevilsDictionary.Discovery.Providers.MetTest do
       assert mapping.mapping_key =~ Met.adapter_version()
       assert mapping.source_id == ctx.sources[Met.slug()].id
     end
+
+    test "the QID set keys it too, so swapping the entity versions the mapping", ctx do
+      word = word!(ctx, "soldier", ~w(wordnet))
+      sense = sense!(ctx, word, "wordnet")
+      soldiers = concept!("Q4991371", "soldier")
+
+      {:ok, assertion} =
+        Claims.assert(sense.object_id, "refers_to", soldiers.object_id, %{confidence: 0.9})
+
+      stub(fn
+        :search -> %{"total" => 0, "objectIDs" => nil}
+      end)
+
+      assert {:queued, first} = Discovery.request(target(word), ctx.slug)
+      before = Repo.get!(Mapping, first.mapping_id)
+      assert before.parameters["entities"] == [entity_snapshot(soldiers, "soldier", 0.9)]
+
+      # The encyclopedia changes its mind: this sense refers to an infantryman,
+      # not to a soldier in general. The set stays non-empty, so `covers?/1`
+      # still says yes and nothing about coverage notices.
+      {:ok, _} = Claims.withdraw(assertion.id, reason: "wrong concept")
+      infantry = concept!("Q1071056", "infantry")
+
+      {:ok, _} =
+        Claims.assert(sense.object_id, "refers_to", infantry.object_id, %{confidence: 0.9})
+
+      assert Met.covers?(target(word))
+      assert {:queued, second} = Discovery.request(target(word), ctx.slug)
+      refute second.mapping_id == first.mapping_id
+
+      versioned = Repo.get!(Mapping, second.mapping_id)
+      assert versioned.parameters["entities"] == [entity_snapshot(infantry, "infantry", 0.9)]
+      refute versioned.mapping_key == before.mapping_key
+
+      # And the mapping still holding Q4991371 is no longer readable, so no
+      # later page or pagination run can query the withdrawn concept.
+      refute Repo.get!(Mapping, before.id).enabled
+      assert Discovery.state(word.object_id, ctx.slug).mapping_id == versioned.id
+    end
+
+    test "a run whose evidence is withdrawn while it is queued does not publish", ctx do
+      word = word!(ctx, "soldier", ~w(wordnet))
+      sense = sense!(ctx, word, "wordnet")
+      entity = concept!("Q4991371", "soldier")
+
+      {:ok, assertion} =
+        Claims.assert(sense.object_id, "refers_to", entity.object_id, %{confidence: 0.9})
+
+      stub(fn
+        :search -> %{"total" => 1, "objectIDs" => [1]}
+        1 -> object(1, "Watch", tags: [{"Soldiers", "Q4991371"}])
+      end)
+
+      assert {:queued, run} = Discovery.request(target(word), ctx.slug)
+
+      # A run waits: behind Oban, behind the 1.5 s retry floor, behind a 403
+      # ladder. The claim can be withdrawn in that window.
+      {:ok, _} = Claims.withdraw(assertion.id, reason: "withdrawn mid-flight")
+
+      assert :ok = Discovery.execute_run(run.id)
+
+      completed = Repo.get!(Run, run.id)
+      assert completed.status == :failed
+      assert completed.error_code == "mapping_evidence_changed"
+      assert Repo.aggregate(Result, :count) == 0
+    end
+  end
+
+  describe "mapping_identity/1" do
+    test "is nil-free, stable, and moves only when the QID set moves", ctx do
+      word = word!(ctx, "war", ~w(wordnet))
+      sense = sense!(ctx, word, "wordnet")
+
+      assert Met.mapping_identity(word.object_id) == "no-entities"
+
+      war = concept!("Q198", "War")
+      {:ok, _} = Claims.assert(sense.object_id, "refers_to", war.object_id, %{confidence: 0.95})
+
+      one = Met.mapping_identity(word.object_id)
+      assert one =~ ~r/\A[0-9a-f]{16}\z/
+      assert Met.mapping_identity(word.object_id) == one
+
+      conflict = concept!("Q350604", "armed conflict")
+
+      {:ok, _} =
+        Claims.assert(sense.object_id, "refers_to", conflict.object_id, %{confidence: 0.8})
+
+      refute Met.mapping_identity(word.object_id) == one
+    end
   end
 
   # ── helpers ───────────────────────────────────────────────────────────────
@@ -471,6 +562,22 @@ defmodule DevilsDictionary.Discovery.Providers.MetTest do
     entity = concept!("Q4991371", "soldier")
     {:ok, _} = Claims.assert(sense.object_id, "refers_to", entity.object_id, %{confidence: 0.9})
     word
+  end
+
+  defp entity_snapshot(entity, label, confidence) do
+    %{
+      "qid" =>
+        hd(
+          Repo.all(
+            from ei in DevilsDictionary.Registry.ExternalIdentifier,
+              where: ei.object_id == ^entity.object_id and ei.namespace == "wikidata",
+              select: ei.external_id
+          )
+        ),
+      "label" => label,
+      "object_id" => entity.object_id,
+      "confidence" => confidence
+    }
   end
 
   defp target(word) do

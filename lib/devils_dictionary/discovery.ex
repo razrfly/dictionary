@@ -487,7 +487,7 @@ defmodule DevilsDictionary.Discovery do
   end
 
   defp ensure_automatic_mapping(target, provider, source) do
-    key = "automatic/#{provider.slug()}/#{target.object_id}/#{provider.adapter_version()}"
+    key = automatic_mapping_key(provider, target.object_id)
 
     case Repo.one(
            from m in Mapping,
@@ -512,6 +512,46 @@ defmodule DevilsDictionary.Discovery do
 
           ensure_mapping_version(key, attrs)
         end
+    end
+  end
+
+  # The automatic mapping key is the mapping's identity: `ensure_mapping_version/2`
+  # disables every other automatic mapping for the same target and source, so a
+  # key that changes is a new version and the old row stops being readable.
+  # Appending the provider's evidence fingerprint is therefore what stops a
+  # mapping created for one QID set being reused, parameters and all, after the
+  # encyclopedia has moved to another.
+  defp automatic_mapping_key(provider, target_object_id) do
+    base = "automatic/#{provider.slug()}/#{target_object_id}/#{provider.adapter_version()}"
+
+    case mapping_identity(provider, target_object_id) do
+      nil -> base
+      identity -> base <> "/" <> identity
+    end
+  end
+
+  defp mapping_identity(provider, target_object_id) do
+    if Code.ensure_loaded?(provider) and function_exported?(provider, :mapping_identity, 1),
+      do: provider.mapping_identity(target_object_id),
+      else: nil
+  end
+
+  # A run outlives the claim it rests on: it is queued, it waits behind a rate
+  # limit, it retries. Recomputing the key here is what makes the withdrawal of
+  # the supporting `refers_to` claim reach a run already in flight, instead of
+  # that run publishing results whose evidence no longer exists.
+  #
+  # Only an automatic mapping is checked. A hand-configured recipe was not
+  # derived from claims, so claims are not what makes it current; and for a
+  # provider with no `mapping_identity/1` the recomputed key is the old key, so
+  # this is a no-op.
+  defp mapping_evidence_current(%Mapping{} = mapping, provider) do
+    automatic_prefix = "automatic/#{provider.slug()}/#{mapping.target_object_id}/"
+
+    cond do
+      not String.starts_with?(mapping.mapping_key, automatic_prefix) -> :ok
+      mapping.mapping_key == automatic_mapping_key(provider, mapping.target_object_id) -> :ok
+      true -> {:error, :mapping_evidence_changed}
     end
   end
 
@@ -849,9 +889,11 @@ defmodule DevilsDictionary.Discovery do
     with true <- run.mapping.enabled,
          :ok <- validate_target(run.mapping.target_object_id),
          {:ok, ^provider, _source} <- eligible_provider_for_mapping(run.mapping),
-         true <- run.adapter_version == provider.adapter_version() do
+         true <- run.adapter_version == provider.adapter_version(),
+         :ok <- mapping_evidence_current(run.mapping, provider) do
       publish_success(run, provider, response)
     else
+      {:error, :mapping_evidence_changed} -> complete_failure(run, "mapping_evidence_changed")
       _ -> complete_failure(run, "publication_ineligible")
     end
   end
@@ -1097,6 +1139,12 @@ defmodule DevilsDictionary.Discovery do
         current_automatic_key =
           "automatic/#{provider_slug}/#{target_id}/#{provider.adapter_version()}"
 
+        # An evidence fingerprint lives one segment past the adapter version, and
+        # a stale one is already disabled by `ensure_mapping_version/2` — so this
+        # admits the suffix rather than recomputing it on every reader render.
+        # Matching `"#{key}/%"` and not `"#{key}%"` keeps `v1` from admitting `v10`.
+        current_automatic_prefix = current_automatic_key <> "/%"
+
         automatic_prefix = "automatic/#{provider_slug}/#{target_id}/%"
 
         Repo.one(
@@ -1106,7 +1154,8 @@ defmodule DevilsDictionary.Discovery do
               m.target_object_id == ^target_id and source.slug == ^provider_slug and m.enabled and
                 source.active and
                 (not like(m.mapping_key, ^automatic_prefix) or
-                   m.mapping_key == ^current_automatic_key),
+                   m.mapping_key == ^current_automatic_key or
+                   like(m.mapping_key, ^current_automatic_prefix)),
             order_by: [desc: m.version],
             preload: [source: source],
             limit: 1
