@@ -16,9 +16,9 @@ defmodule DevilsDictionary.Discovery.Transport do
   end
 
   defp do_request(provider, run_id, stage, payload, config, failure_code \\ nil) do
-    case Budget.claim(run_id, stage) do
-      :ok ->
-        maybe_sleep(request_interval_ms(provider))
+    case Budget.claim(run_id, stage, request_interval_ms: request_interval_ms(provider)) do
+      {:ok, wait_ms} ->
+        maybe_sleep(wait_ms)
 
         options =
           provider.request_options(payload)
@@ -145,6 +145,12 @@ defmodule DevilsDictionary.Discovery.Transport do
   them, so the one place that can hold a rate is the one place they all pass
   through. The Met's is 3,000 — measured, and the difference between 44% of
   2,600 requests refused and none of them.
+
+  The interval is held per *provider*, not per process: `Budget.claim/3` places
+  each request in a slot the interval after the provider's latest one, under the
+  source's advisory lock, and this transport sleeps until its slot. Two
+  concurrent runs on the same provider therefore alternate at the declared gap
+  rather than each keeping the gap privately and issuing together.
 
   A provider that does not declare one is not paced, which is right for a keyed
   API with a published budget.

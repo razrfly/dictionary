@@ -7,9 +7,22 @@ defmodule DevilsDictionary.Discovery.Budget do
   alias DevilsDictionary.Repo
   alias DevilsDictionary.Sources.Source
 
-  @doc "Claims one outbound request for a run, or returns a conservative retry delay."
-  def claim(run_id, stage) when is_binary(stage) do
+  @doc """
+  Claims one outbound request for a run, or returns a conservative retry delay.
+
+  `{:ok, wait_ms}` is a reserved slot: the caller waits `wait_ms` and then
+  issues the request. With `:request_interval_ms` the slot is placed at least
+  that far after the provider's most recent attempt, whichever run made it, and
+  the placement happens under the same per-source advisory lock the budget
+  count uses. Two runs on one provider — `:provider_concurrency` allows two —
+  therefore get slots the interval apart instead of each sleeping the interval
+  on its own and issuing together. The reservation is the attempt row itself,
+  so it outlives the transaction and is visible to the next claimant on any
+  node.
+  """
+  def claim(run_id, stage, opts \\ []) when is_binary(stage) do
     now = DateTime.utc_now()
+    interval_ms = Keyword.get(opts, :request_interval_ms, 0)
 
     Repo.transaction(fn ->
       run = Repo.get!(Run, run_id)
@@ -48,12 +61,14 @@ defmodule DevilsDictionary.Discovery.Budget do
           Repo.rollback({:budget_exhausted, seconds})
 
         true ->
+          scheduled_at = next_slot(mapping.source_id, now, interval_ms)
+
           %RequestAttempt{}
           |> RequestAttempt.changeset(%{
             run_id: run.id,
             source_id: mapping.source_id,
             stage: stage,
-            attempted_at: now
+            attempted_at: scheduled_at
           })
           |> Repo.insert!()
 
@@ -71,16 +86,16 @@ defmodule DevilsDictionary.Discovery.Budget do
               inc: [request_count: 1],
               set: [
                 request_parameters: request_parameters,
-                last_request_at: now,
+                last_request_at: scheduled_at,
                 updated_at: now
               ]
             )
 
-          :ok
+          {:ok, max(DateTime.diff(scheduled_at, now, :millisecond), 0)}
       end
     end)
     |> case do
-      {:ok, :ok} -> :ok
+      {:ok, {:ok, wait_ms}} -> {:ok, wait_ms}
       {:error, {:budget_exhausted, seconds}} -> {:deferred, seconds}
       {:error, {:provider_backoff, seconds}} -> {:deferred, seconds}
       {:error, :attempts_exhausted} -> {:error, :attempts_exhausted}
@@ -116,6 +131,24 @@ defmodule DevilsDictionary.Discovery.Budget do
   defp seconds_until(future, now) do
     milliseconds = DateTime.diff(future, now, :millisecond)
     max(div(milliseconds + 999, 1_000), 1)
+  end
+
+  # Where this request may go: now, or the interval after the provider's latest
+  # reserved slot, whichever is later. Unpaced providers are always "now".
+  defp next_slot(_source_id, now, 0), do: now
+
+  defp next_slot(source_id, now, interval_ms) do
+    latest =
+      Repo.one!(
+        from attempt in RequestAttempt,
+          where: attempt.source_id == ^source_id,
+          select: max(attempt.attempted_at)
+      )
+
+    case latest do
+      nil -> now
+      latest -> Enum.max([now, DateTime.add(latest, interval_ms, :millisecond)], DateTime)
+    end
   end
 
   defp oldest_attempt_at(source_id, cutoff) do

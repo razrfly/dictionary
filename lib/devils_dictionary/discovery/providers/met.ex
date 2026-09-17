@@ -304,7 +304,7 @@ defmodule DevilsDictionary.Discovery.Providers.Met do
 
   defp search(mapping, entities, request, request_fun) do
     terms = search_terms(mapping)
-    {index, offset} = cursor(request["after"], length(terms))
+    {index, offset, more} = cursor(request["after"], length(terms))
     term = Enum.at(terms, index)
 
     payload = %{
@@ -318,7 +318,7 @@ defmodule DevilsDictionary.Discovery.Providers.Met do
       }
     }
 
-    position = {index, offset, length(terms)}
+    position = {index, offset, length(terms), more}
 
     case request_fun.("search", payload) do
       {:ok, %{"objectIDs" => ids}} when is_list(ids) ->
@@ -363,33 +363,41 @@ defmodule DevilsDictionary.Discovery.Providers.Met do
     end
   end
 
-  # `"<term index>:<offset>"`. A page asks one term, and the next page asks the
-  # next term at the same offset — round-robin — so a mapping's second and third
-  # terms are reached within the first three pages rather than never. Completing
-  # a cycle advances the window.
+  # `"<term index>:<offset>"`, with a trailing `":more"` once any term in the
+  # current cycle has answered a full window. A page asks one term, and the next
+  # page asks the next term at the same offset — round-robin — so a mapping's
+  # second and third terms are reached within the first three pages rather than
+  # never. Completing a cycle advances the window.
   #
   # A bare integer is the pre-#109 cursor, read as term 0 so a cursor persisted
   # by the previous adapter version still resolves.
-  defp cursor(nil, _count), do: {0, 0}
+  defp cursor(nil, _count), do: {0, 0, false}
 
   defp cursor(value, count) when is_binary(value) do
-    case String.split(value, ":", parts: 2) do
-      [index, offset] -> {rem(max(integer(index), 0), max(count, 1)), max(integer(offset), 0)}
-      [offset] -> {0, max(integer(offset), 0)}
+    case String.split(value, ":") do
+      [index, offset | rest] ->
+        {rem(max(integer(index), 0), max(count, 1)), max(integer(offset), 0), rest == ["more"]}
+
+      [offset] ->
+        {0, max(integer(offset), 0), false}
     end
   end
 
-  defp cursor(_value, _count), do: {0, 0}
+  defp cursor(_value, _count), do: {0, 0, false}
 
-  # The cycle's last leg coming up short is what ends the pagination: a term
-  # still unasked at this offset always has a page, and a full page means this
-  # term's window has more behind it. A term exhausted early in a cycle is asked
-  # once more in the next one and answers empty, which costs one search and is
-  # bounded by `:max_pages_per_context`.
-  defp next_cursor({index, offset, count}, scanned) do
+  # A cycle with every leg short is what ends the pagination: a term still
+  # unasked at this offset always has a page, and a full page from *any* term
+  # means that term's window has more behind it, so the whole cycle advances
+  # even when the last leg came up short. The `more` flag carries that fact
+  # from leg to leg, because only the cursor survives between pages. A term
+  # exhausted early in a cycle is asked once more in the next one and answers
+  # empty, which costs one search and is bounded by `:max_pages_per_context`.
+  defp next_cursor({index, offset, count, more}, scanned) do
+    more = more or scanned == @scan_window
+
     cond do
-      index + 1 < count -> "#{index + 1}:#{offset}"
-      scanned == @scan_window -> "0:#{offset + @scan_window}"
+      index + 1 < count -> "#{index + 1}:#{offset}" <> if(more, do: ":more", else: "")
+      more -> "0:#{offset + @scan_window}"
       true -> nil
     end
   end
@@ -428,7 +436,7 @@ defmodule DevilsDictionary.Discovery.Providers.Met do
     end
   end
 
-  defp keep(entities, request, term, {term_index, offset, _count} = position, ids, objects) do
+  defp keep(entities, request, term, {term_index, offset, _count, _more} = position, ids, objects) do
     index = Enum.into(entities, %{}, &{&1["qid"], &1})
     {matcher, walk} = BroaderWalk.build(objects, Map.keys(index), request["broader_index"])
 

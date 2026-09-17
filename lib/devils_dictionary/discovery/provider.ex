@@ -31,9 +31,11 @@ defmodule DevilsDictionary.Discovery.Provider do
       longer of this and the shared `:retry_delay_ms`, so a provider that
       answers a burst with a throttle does not retry straight back into it.
     * `request_interval_ms` — the sustained gap between this provider's
-      *successful* requests. `Discovery.Transport` waits it before every
-      attempt, so a run of `1 + n` requests holds the rate however many stages
-      it runs. Absent means unpaced.
+      *successful* requests. `Discovery.Transport` reserves every attempt a
+      slot that far after the provider's latest one, across every run on every
+      node, so a run of `1 + n` requests holds the rate however many stages it
+      runs and two concurrent runs share the rate instead of doubling it.
+      Absent means unpaced.
   """
   @callback capabilities() :: map()
   @callback enabled?() :: boolean()

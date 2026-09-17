@@ -829,7 +829,7 @@ defmodule DevilsDictionary.DiscoveryTest do
       set: [attempted_at: DateTime.add(DateTime.utc_now(), -61, :second)]
     )
 
-    assert :ok = Budget.claim(run.id, "movie_discovery")
+    assert {:ok, 0} = Budget.claim(run.id, "movie_discovery")
   end
 
   test "concurrent mapping changes serialize and leave exactly one enabled version", ctx do

@@ -129,14 +129,25 @@ defmodule DevilsDictionary.Artworks do
     * `:exclude_met_object_ids` — Met object ids to leave out, so a work already
       on the page's discovery shelf is not also offered here. Defaults to the
       ids this page's own persisted Met results already carry.
+    * `:per_work` — keep one candidate per work before the limit is applied, so
+      a work matching several meanings does not take several of the slots.
+      `shelf_items/2` asks for this; the default offers every (work, meaning).
   """
   def suggestions(lexeme_ids, opts \\ []) when is_list(lexeme_ids) do
     senses = page_senses(lexeme_ids)
 
     (artsy_suggestions(senses) ++ qid_suggestions(lexeme_ids, senses, opts))
     |> Enum.uniq_by(&{&1.artwork.object_id, &1.sense_id})
+    |> per_work(opts[:per_work])
     |> Enum.take(@suggestion_limit)
   end
+
+  # One candidate per work, kept *before* the limit is applied: a work that
+  # matches two meanings would otherwise hold two of the twelve slots and push
+  # a distinct work off the end, which is not what one-item-per-work promises.
+  # The first candidate in the merged order survives, with its sense and reason.
+  defp per_work(candidates, true), do: Enum.uniq_by(candidates, & &1.artwork.object_id)
+  defp per_work(candidates, _), do: candidates
 
   @doc """
   The page's catalog candidates as items for the shared shelf.
@@ -159,8 +170,7 @@ defmodule DevilsDictionary.Artworks do
   """
   def shelf_items(lexeme_ids, opts \\ []) when is_list(lexeme_ids) do
     lexeme_ids
-    |> suggestions(opts)
-    |> Enum.uniq_by(& &1.artwork.object_id)
+    |> suggestions(Keyword.put(opts, :per_work, true))
     |> Enum.map(&shelf_item/1)
   end
 
