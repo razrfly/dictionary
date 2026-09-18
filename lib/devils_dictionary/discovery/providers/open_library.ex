@@ -341,7 +341,15 @@ defmodule DevilsDictionary.Discovery.Providers.OpenLibrary do
     {attested, consumed} = attest_window(term, language, Enum.drop(docs, within), limit)
 
     if attested == [] do
-      {:ok, empty(request, offset + max(consumed, length(docs) - within), length(docs))}
+      next_offset = offset + max(consumed, length(docs) - within)
+
+      # A full page on which every candidate failed the gate is not the end of
+      # the search: the next page may attest. Only a short page — the API's
+      # own last page — ends pagination. Without the cursor the pipeline
+      # caches this as a negative and never asks again (CodeRabbit on #121).
+      next_cursor = if length(docs) == @page_size, do: Integer.to_string(next_offset)
+
+      {:ok, empty(request, next_offset, length(docs), next_cursor)}
     else
       hydrate(term, request, attested, docs, offset, within, consumed, request_fun)
     end
@@ -434,11 +442,11 @@ defmodule DevilsDictionary.Discovery.Providers.OpenLibrary do
     Regex.compile!("(?<![\\p{L}\\p{N}])#{escaped}(?![\\p{L}\\p{N}])", "iu")
   end
 
-  defp empty(request, next_offset, scanned) do
+  defp empty(request, next_offset, scanned, next_cursor \\ nil) do
     %{
       request_parameters: request_parameters(request, next_offset, scanned, 0),
       items: [],
-      next_cursor: nil,
+      next_cursor: next_cursor,
       completion_reason: :no_results
     }
   end
