@@ -48,10 +48,39 @@ defmodule DevilsDictionary.Artworks.Corpus.Conformance do
   @doc "How many rows of a committed manifest the suite seeds."
   def slice, do: @slice
 
+  @doc """
+  The `kind` of a committed manifest, read without verifying it.
+
+  `__using__/1` needs it at compile time to decide which cases this corpus is
+  owed, and a checksum that has gone bad should fail the suite loudly rather
+  than fail the build. So this reads the field and nothing else, and answers
+  `nil` for a file it cannot parse — which leaves every case emitted, including
+  the ones that will report the real problem.
+  """
+  def kind_at(path) do
+    with {:ok, body} <- File.read(path),
+         {:ok, %{"kind" => kind}} <- Jason.decode(body) do
+      kind
+    else
+      _ -> nil
+    end
+  end
+
   defmacro __using__(opts) do
     path = Keyword.fetch!(opts, :manifest)
 
+    # A corpus is asked for the evidence it declares, and only for that. The
+    # depiction round trip is the artwork corpora's contract; a corpus that
+    # declares `:none` is not given a case it could only pass by inventing a
+    # claim, and `evidence` below is what holds it to the declaration instead.
+    evidence =
+      case DevilsDictionary.Artworks.Corpus.Conformance.kind_at(path) do
+        nil -> nil
+        kind -> DevilsDictionary.Artworks.Corpus.Manifest.evidence(kind)
+      end
+
     quote do
+      @evidence unquote(evidence)
       use DevilsDictionary.DataCase, async: false
 
       import Ecto.Query
@@ -113,7 +142,7 @@ defmodule DevilsDictionary.Artworks.Corpus.Conformance do
             |> then(&Map.put(&1, "checksum", Manifest.checksum(&1)))
             |> write()
 
-          assert_raise ArgumentError, ~r/unsupported artwork corpus manifest/, fn ->
+          assert_raise ArgumentError, ~r/unsupported corpus manifest/, fn ->
             Manifest.load!(path)
           end
         end
@@ -144,30 +173,32 @@ defmodule DevilsDictionary.Artworks.Corpus.Conformance do
           assert first.invalid == 0, "invalid rows: #{inspect(first.invalid_reasons)}"
 
           objects = Repo.aggregate(Object, :count)
-          artworks = artwork_count()
+          works = work_count(manifest)
 
           assert {:ok, again} = Seeder.run(manifest, limit: @slice)
           assert again.matched == expected
           assert again.newly_created == 0
           assert Repo.aggregate(Object, :count) == objects
-          assert artwork_count() == artworks
+          assert work_count(manifest) == works
         end
 
         test "a dry run counts what it would seed and writes nothing", %{manifest: manifest} do
           assert {:ok, summary} = Seeder.run(manifest, limit: @slice, dry_run: true)
           assert summary.would_seed == slice(manifest)
-          assert artwork_count() == 0
+          assert work_count(manifest) == 0
         end
 
         test "every label fits entities.preferred_label, cutting the ones that do not",
              %{manifest: manifest} do
           assert {:ok, _summary} = Seeder.run(manifest, limit: @slice)
 
+          work_kind = Manifest.work_kind(manifest["kind"])
+
           labels =
             Repo.all(
               from entity in Entity,
                 join: details in WorkDetails,
-                on: details.entity_id == entity.object_id and details.work_kind == "artwork",
+                on: details.entity_id == entity.object_id and details.work_kind == ^work_kind,
                 select: entity.preferred_label
             )
 
@@ -193,16 +224,66 @@ defmodule DevilsDictionary.Artworks.Corpus.Conformance do
           assert String.length(Repo.get!(Entity, object_id).preferred_label) == 255
         end
 
-        test "a depicted QID reaches the page whose meaning refers to it", context do
+        # A corpus of texts has no depiction to make. A poem does not depict the
+        # word it uses — that is the attestation rule, and recording a QID here
+        # to satisfy this case would be inventing the one claim the corpus is
+        # careful not to make. So the case splits on what the manifest records:
+        # a corpus with depicted QIDs must round-trip one onto a page, and a
+        # corpus without them must still round-trip its identity, which is the
+        # part every corpus has.
+        test "a seeded row is found again by the identity its kind registers", context do
           manifest = context.manifest
+          row = List.first(manifest["rows"])
 
-          row =
-            Enum.find(manifest["rows"], fn row ->
-              row |> depicted() |> Enum.any?()
-            end)
+          assert {:ok, summary} = Seeder.run(%{manifest | "rows" => [row]})
+          assert summary.invalid == 0
 
-          assert row, "#{@path} records no depicted QIDs, so nothing could ever match a page"
+          identity = Map.fetch!(row, manifest["identity"])
+          namespace = Manifest.identity_namespace(manifest["kind"])
 
+          assert object_id = Registry.by_external_id(namespace, identity),
+                 "#{@path} seeded a row that #{namespace} cannot find again"
+
+          assert Repo.get_by!(WorkDetails, entity_id: object_id).work_kind ==
+                   Manifest.work_kind(manifest["kind"])
+        end
+
+        test "the rows carry the evidence this kind declares", %{manifest: manifest} do
+          declared = Manifest.evidence(manifest["kind"])
+          assert declared in Manifest.evidence_values()
+
+          carrying = Enum.count(manifest["rows"], &(&1 |> depicted() |> Enum.any?()))
+
+          case declared do
+            :depiction ->
+              assert carrying > 0,
+                     "#{@path} declares `evidence: :depiction` and no row carries a QID, " <>
+                       "so nothing in it could ever match a page"
+
+            :none ->
+              assert carrying == 0,
+                     "#{@path} declares `evidence: :none` and #{carrying} rows carry depicted " <>
+                       "QIDs. Either the manifest is making a claim it should not, or the kind " <>
+                       "should declare `:depiction` and be held to the round trip."
+          end
+        end
+
+        if @evidence in [:depiction, nil] do
+          test "a depicted QID reaches the page whose meaning refers to it", context do
+            manifest = context.manifest
+
+            row =
+              Enum.find(manifest["rows"], fn row ->
+                row |> depicted() |> Enum.any?()
+              end)
+
+            assert row, "#{@path} records no depicted QIDs, so nothing could ever match a page"
+
+            depicted_round_trip(context, manifest, row)
+          end
+        end
+
+        defp depicted_round_trip(context, manifest, row) do
           %{"qid" => qid, "term" => term} = row |> depicted() |> List.first()
 
           assert {:ok, _summary} = Seeder.run(%{manifest | "rows" => [row]})
@@ -236,8 +317,12 @@ defmodule DevilsDictionary.Artworks.Corpus.Conformance do
 
         defp slice(manifest), do: min(@slice, length(manifest["rows"]))
 
-        defp artwork_count do
-          Repo.aggregate(from(d in WorkDetails, where: d.work_kind == "artwork"), :count)
+        # The kind's own `work_kind`, read from `Manifest` rather than assumed.
+        # This counted `"artwork"` literally, which was true of every corpus
+        # until one held poems — and a count that is always zero asserts nothing.
+        defp work_count(manifest) do
+          kind = Manifest.work_kind(manifest["kind"])
+          Repo.aggregate(from(d in WorkDetails, where: d.work_kind == ^kind), :count)
         end
       end
     end

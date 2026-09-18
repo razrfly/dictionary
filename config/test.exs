@@ -104,3 +104,15 @@ config :devils_dictionary, cache_scorecard: false
 
 # Mail goes nowhere in tests; assert on it with Swoosh.TestAssertions.
 config :devils_dictionary, DevilsDictionary.Mailer, adapter: Swoosh.Adapters.Test
+
+# Scaffolded by `mix dd.provider.new poetrydb`. Every request in the
+# suite goes through the `Req.Test` stub named after the provider module.
+# No pacing in the suite, for the same reason the Met declares none above: the
+# intervals are a live-rate courtesy to a free public service, and a suite that
+# paid them would spend a second per stubbed request and five more per stubbed
+# refusal.
+config :devils_dictionary, :poetrydb,
+  endpoint: "https://poetrydb.test/api",
+  enabled: true,
+  request_interval_ms: 0,
+  min_retry_interval_ms: 0

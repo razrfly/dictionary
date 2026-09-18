@@ -19,6 +19,14 @@ defmodule DevilsDictionaryWeb.FilmIdentityFlowTest do
   end
 
   test "definition → film card → local film → connected definition is a reversible flow", ctx do
+    # One provider, because this is the film flow end to end and `Repo.one!(Run)`
+    # below means *CineGraph's* run. Since PoetryDB joined the registry a page
+    # that names none admits three, and counting them here would be asserting
+    # how many providers ship rather than what this flow does.
+    original = Application.fetch_env!(:devils_dictionary, :discovery_providers)
+    Application.put_env(:devils_dictionary, :discovery_providers, [CineGraph])
+    on_exit(fn -> Application.put_env(:devils_dictionary, :discovery_providers, original) end)
+
     mountain = word!(ctx, "mountain", ~w(wordnet))
     mountain_sense = sense!(ctx, mountain, "wordnet", gloss: "a very high natural elevation")
     grief = word!(ctx, "grief", ~w(wiktionary))

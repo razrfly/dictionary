@@ -1,6 +1,6 @@
 defmodule DevilsDictionary.Artworks.Corpus.Manifest do
   @moduledoc """
-  A committed, checksummed artwork corpus manifest.
+  A committed, checksummed corpus manifest.
 
   The #99 P0 probe measured the Met's search totals as parameter-sensitive: the
   same highlight query answered 2,310, 2,299 and 62 depending on the order the
@@ -26,14 +26,51 @@ defmodule DevilsDictionary.Artworks.Corpus.Manifest do
   # `wikidata` — so neither can be derived from the other, and a kind that
   # declared only the first left anything reading the seeded row back with a
   # hard-coded list of its own.
+  # `work_kind` and `evidence` are the third and fourth registrations, and they
+  # are here for the same reason the first two are: nothing outside this table
+  # should hold its own list of what corpora are like.
+  #
+  # `work_kind` is the `work_details.work_kind` the seeder writes.
+  # `evidence` is what a row of this kind can match a page on:
+  #
+  #   * `:depiction` — the row records the concepts the work *shows*, as
+  #     `tags` or `depicts` QIDs, and `Artworks.shelf_items/1` matches them
+  #     against the QIDs a page's senses refer to. Identity, not text.
+  #   * `:none` — the row records identity and display facts and nothing a
+  #     page can match on. It reaches a reader another way or not at all: a
+  #     PoetryDB poem reaches one through the live provider's attestation, and
+  #     a corpus row that claimed to *depict* the word it uses would be
+  #     inventing the one claim a text corpus exists to avoid.
+  #
+  # Both were assumptions before they were declarations. `Corpus.Conformance`
+  # counted seeded rows as `work_kind == "artwork"` literally and required
+  # every corpus to round-trip a depicted QID, which was true of both corpora
+  # until one held poems.
   @kinds %{
     "met-highlights" => %{
       source: "met",
       identity: "met_object_id",
-      namespace: "met_object_id"
+      namespace: "met_object_id",
+      work_kind: "artwork",
+      evidence: :depiction
     },
-    "wikidata-famous" => %{source: "wikidata", identity: "qid", namespace: "wikidata"}
+    "wikidata-famous" => %{
+      source: "wikidata",
+      identity: "qid",
+      namespace: "wikidata",
+      work_kind: "artwork",
+      evidence: :depiction
+    },
+    "poetrydb" => %{
+      source: "poetrydb",
+      identity: "poem_id",
+      namespace: "poetrydb_poem",
+      work_kind: "poem",
+      evidence: :none
+    }
   }
+
+  @evidence ~w(depiction none)a
 
   @doc "The manifest kinds this module can build and read."
   def kinds, do: Map.keys(@kinds)
@@ -49,6 +86,27 @@ defmodule DevilsDictionary.Artworks.Corpus.Manifest do
   other cannot be read back.
   """
   def identity_namespace(kind), do: Map.fetch!(@kinds, kind).namespace
+
+  @doc """
+  The `work_details.work_kind` this kind's rows are seeded as.
+
+  A corpus is a selection of *works*, and which kind of work is the manifest's
+  own fact: `met-highlights` and `wikidata-famous` are artworks, `poetrydb` is
+  poems. Anything counting seeded rows reads it from here rather than assuming.
+  """
+  def work_kind(kind), do: Map.fetch!(@kinds, kind).work_kind
+
+  @doc """
+  What a row of this kind can match a page on — `:depiction` or `:none`.
+
+  See `@kinds`. It is a declaration and `Corpus.Conformance` holds it to it:
+  a kind that declares `:depiction` must have rows carrying QIDs, and one that
+  declares `:none` must have none, so neither can drift into the other quietly.
+  """
+  def evidence(kind), do: Map.fetch!(@kinds, kind).evidence
+
+  @doc "The evidence values a kind may declare."
+  def evidence_values, do: @evidence
 
   @doc "Builds a manifest, deduplicated on its kind's identity field and ordered by it."
   def new(kind, rows, metadata \\ %{}) when is_binary(kind) and is_list(rows) do
@@ -80,11 +138,11 @@ defmodule DevilsDictionary.Artworks.Corpus.Manifest do
 
     unless manifest["schema_version"] == @schema_version and
              is_map_key(@kinds, manifest["kind"]) and is_list(manifest["rows"]) do
-      raise ArgumentError, "unsupported artwork corpus manifest: #{path}"
+      raise ArgumentError, "unsupported corpus manifest: #{path}"
     end
 
     unless manifest["checksum"] == checksum(Map.delete(manifest, "checksum")) do
-      raise ArgumentError, "artwork corpus manifest checksum mismatch: #{path}"
+      raise ArgumentError, "corpus manifest checksum mismatch: #{path}"
     end
 
     manifest
