@@ -168,6 +168,7 @@ defmodule DevilsDictionary.Lexicon.WordPage do
   end
 
   def build(%{lexemes: lexemes} = lookup, opts) do
+    lexemes = rank_lexemes(lexemes)
     ids = Enum.map(lexemes, & &1.object_id)
     sources = Map.new(Sources.list_sources(), &{&1.id, &1})
 
@@ -197,6 +198,32 @@ defmodule DevilsDictionary.Lexicon.WordPage do
       thing: thing(entity, ids, sources),
       trail: trail(opts[:trail])
     }
+  end
+
+  # The bare lemma opens the page. `/define/dog` is seven rows and the lexeme
+  # query orders them by lemma, where the database's collation puts `'dog`
+  # (#1547258) ahead of `dog` (#51134) — so the page led with an apostrophe, and
+  # so did everything downstream of it, including the lexeme a discovery target
+  # names. The slug is what the reader actually asked for, so the row whose
+  # lemma *is* the slug wins, then the row that differs from it only in case,
+  # then everything else. 17,403 English pages had a bare row that a decorated
+  # one was beating.
+  #
+  # Ranking here, once, rather than in each consumer is what makes `headword/3`'s
+  # first row, `primary_concept/1`'s first noun and
+  # `Discovery.target_for_page/3`'s `object_id` agree without any of them
+  # knowing about the others. The sort is stable and keyed only on the lemma's
+  # rank, so within a tier the query's `[lemma, part_of_speech]` order survives,
+  # and `headword/3`'s own stable sort by `pos_rank/1` then keeps the bare lemma
+  # first *within* its part of speech, which is where the reader meets it.
+  defp rank_lexemes(lexemes), do: Enum.sort_by(lexemes, &lemma_rank(&1.lemma, &1.slug))
+
+  defp lemma_rank(lemma, slug) do
+    cond do
+      lemma == slug -> 0
+      String.downcase(lemma) == slug -> 1
+      true -> 2
+    end
   end
 
   # ── headword ─────────────────────────────────────────────────────────────

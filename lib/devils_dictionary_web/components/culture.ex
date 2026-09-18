@@ -117,7 +117,7 @@ defmodule DevilsDictionaryWeb.Culture do
             <li
               :for={entry <- shelf.entries}
               id={"culture-result-#{entry.item.external_namespace}-#{entry.item.external_id}"}
-              class="w-24 shrink-0 sm:w-28"
+              class={["shrink-0", ContentTypes.column(shelf.type)]}
             >
               <.culture_thumbnail
                 item={entry.item}
@@ -229,7 +229,10 @@ defmodule DevilsDictionaryWeb.Culture do
         <.culture_image item={@item} image={@image} type={@type} />
       </a>
       <div class="min-w-0 space-y-1">
-        <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-950 sm:text-sm dark:text-white">
+        <h3 class={[
+          "text-base font-medium text-balance text-mist-950 sm:text-sm dark:text-white",
+          ContentTypes.title_clamp(@type)
+        ]}>
           <.link
             :if={@entry_path}
             navigate={@entry_path}

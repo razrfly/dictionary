@@ -241,6 +241,14 @@ verdict would be both wrong and unrecoverable. A `Retry-After` header — delta
 seconds or IMF-fixdate — is honoured at its full length and written to the
 source, not to the run, so every run on that provider waits.
 
+A status code is not the only place a throttle hides. MediaWiki-style APIs
+answer an overloaded replica with **HTTP 200** and put the complaint in the
+body — a `maxlag` error carrying its own `Retry-After` header beside a status
+that says everything is fine. A provider on such an API has to read its own
+envelope for the error before it reads it for results, and return
+`{:deferred, code, seconds, request_parameters}`; a transport that only watches
+status codes will retry straight back into the lag it was asked to wait out.
+
 ### 7. Persistence — cache first, identity only if earned
 
 `persist_results/3` writes, for every item:

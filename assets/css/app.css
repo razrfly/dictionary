@@ -6,6 +6,12 @@
 @source "../css";
 @source "../js";
 @source "../../lib/devils_dictionary_web";
+/* The content-type table is data the reader renders, and it carries the classes
+   for a shelf's image slot and column width. It lives outside the web tree, so
+   Tailwind never scanned it: `aspect-[2/3]` and `aspect-square` were emitted
+   only because a template elsewhere happened to use the same class, and the
+   text card's wider column (#109 Phase 3b) was emitted not at all. */
+@source "../../lib/devils_dictionary/discovery/content_types.ex";
 /* Required for Tailwind to automatically pick up changes in colocated CSS files in dev */
 @source "../../_build/dev/phoenix-colocated/devils_dictionary/*/";
 
