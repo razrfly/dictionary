@@ -141,12 +141,27 @@ someone else generated.
 then tells you about **two edits it cannot make**, both pattern matches in shared
 modules:
 
-1. the kind in `@kinds` in `lib/devils_dictionary/artworks/corpus/manifest.ex` —
-   its `source`, its `identity` (the row field it is keyed on) and its
-   `namespace` (the `external_identifiers` namespace that field is written to).
-   All three: the last two differ for Wikidata, whose rows are keyed on `qid`
-   and identified as `wikidata`, and `Corpus.Conformance` reads a seeded row
-   back through `Manifest.identity_namespace/1`.
+1. the kind in `@kinds` in `lib/devils_dictionary/artworks/corpus/manifest.ex`,
+   with all five keys:
+
+   | key | what |
+   |---|---|
+   | `source` | the source slug the rows are attributed to |
+   | `identity` | the row field this kind is keyed on |
+   | `namespace` | the `external_identifiers` namespace that field is written to |
+   | `work_kind` | the `work_details.work_kind` the seeder writes — `"artwork"`, `"poem"` |
+   | `evidence` | `:depiction` when a row records the QIDs of what the work *shows* and a page can match on them; `:none` when it records identity and display facts only |
+
+   `identity` and `namespace` differ for Wikidata, whose rows are keyed on
+   `qid` and identified as `wikidata`, and `Corpus.Conformance` reads a seeded
+   row back through `Manifest.identity_namespace/1`.
+
+   `work_kind` and `evidence` exist because they used to be assumptions. The
+   suite counted seeded rows as `work_kind == "artwork"` and asked every corpus
+   to round-trip a depicted QID onto a page — both true of every corpus until
+   one held poems, and a poem does not depict the word it uses. A corpus is now
+   asked for the contract its `evidence` declares and held to that declaration:
+   `:depiction` must have rows carrying QIDs, `:none` must have none.
 2. an `entry/3` clause in `lib/devils_dictionary/artworks/corpus/seeder.ex`
    mapping one row onto a `DevilsDictionary.SourceIdentity.Entry`
 

@@ -58,8 +58,9 @@ defmodule Mix.Tasks.Dd.Provider.New do
   A corpus has two registration points that are pattern matches in shared
   modules rather than configuration: the kind in
   `DevilsDictionary.Artworks.Corpus.Manifest`'s `@kinds` — its source, its
-  identity field **and** the `external_identifiers` namespace that field is
-  written to — and the `entry/3` clause in
+  identity field, the `external_identifiers` namespace that field is written
+  to, the `work_kind` it is seeded as and the `evidence` it carries — and the
+  `entry/3` clause in
   `DevilsDictionary.Artworks.Corpus.Seeder` that maps a row onto a
   `SourceIdentity.Entry`. Only the person who has read the source's rows can
   write the second one, so the task prints both rather than guessing at them.
@@ -368,9 +369,19 @@ defmodule Mix.Tasks.Dd.Provider.New do
       two edits this task cannot make for a corpus:
 
         * add "#{assigns.slug}" to @kinds in
-          lib/devils_dictionary/artworks/corpus/manifest.ex, with its source,
-          its identity field and the external_identifiers namespace that field
-          is written to — all three, or a seeded row cannot be read back
+          lib/devils_dictionary/artworks/corpus/manifest.ex, with all five keys:
+            source      the source slug the rows are attributed to
+            identity    the row field this kind is keyed on
+            namespace   the external_identifiers namespace that field is
+                        written to — not always the same as identity
+            work_kind   the work_details.work_kind the seeder writes
+                        ("artwork", "poem", ...)
+            evidence    :depiction when a row records the QIDs of what the work
+                        shows and a page can match on them, :none when it
+                        records identity and display facts only
+          Anything short of all five and either a seeded row cannot be read
+          back or Corpus.Conformance asks this corpus for a contract it does
+          not have.
         * add an `entry("#{assigns.slug}", version, row)` clause to
           lib/devils_dictionary/artworks/corpus/seeder.ex that maps a row onto a
           SourceIdentity.Entry
@@ -790,12 +801,18 @@ defmodule Mix.Tasks.Dd.Provider.New do
       modules:
 
         1. `@kinds` in `DevilsDictionary.Artworks.Corpus.Manifest` needs
-           `"<%= @slug %>" => %{source: "<%= @slug %>", identity: "...", namespace: "..."}`.
+           `"<%= @slug %>" => %{source: "<%= @slug %>", identity: "...",
+           namespace: "...", work_kind: "...", evidence: :depiction | :none}`.
            `identity` is the row field this kind is keyed on; `namespace` is the
            `external_identifiers` namespace the seeder writes it to. They are
            not always the same — a Wikidata row is keyed on `qid` and identified
            as `wikidata` — and `Corpus.Conformance` reads a seeded row back
-           through `Manifest.identity_namespace/1`.
+           through `Manifest.identity_namespace/1`. `work_kind` is what the
+           seeder writes to `work_details`, and `evidence` is whether a row of
+           this kind carries depicted QIDs a page can match on (`:depiction`)
+           or identity and display facts only (`:none`). The suite asks a
+           corpus only for the contract its `evidence` declares, and holds it
+           to that declaration.
         2. `DevilsDictionary.Artworks.Corpus.Seeder.entry/3` needs a clause for
            `"<%= @slug %>"` mapping one row onto a
            `DevilsDictionary.SourceIdentity.Entry` — the identity namespace, the

@@ -48,10 +48,39 @@ defmodule DevilsDictionary.Artworks.Corpus.Conformance do
   @doc "How many rows of a committed manifest the suite seeds."
   def slice, do: @slice
 
+  @doc """
+  The `kind` of a committed manifest, read without verifying it.
+
+  `__using__/1` needs it at compile time to decide which cases this corpus is
+  owed, and a checksum that has gone bad should fail the suite loudly rather
+  than fail the build. So this reads the field and nothing else, and answers
+  `nil` for a file it cannot parse — which leaves every case emitted, including
+  the ones that will report the real problem.
+  """
+  def kind_at(path) do
+    with {:ok, body} <- File.read(path),
+         {:ok, %{"kind" => kind}} <- Jason.decode(body) do
+      kind
+    else
+      _ -> nil
+    end
+  end
+
   defmacro __using__(opts) do
     path = Keyword.fetch!(opts, :manifest)
 
+    # A corpus is asked for the evidence it declares, and only for that. The
+    # depiction round trip is the artwork corpora's contract; a corpus that
+    # declares `:none` is not given a case it could only pass by inventing a
+    # claim, and `evidence` below is what holds it to the declaration instead.
+    evidence =
+      case DevilsDictionary.Artworks.Corpus.Conformance.kind_at(path) do
+        nil -> nil
+        kind -> DevilsDictionary.Artworks.Corpus.Manifest.evidence(kind)
+      end
+
     quote do
+      @evidence unquote(evidence)
       use DevilsDictionary.DataCase, async: false
 
       import Ecto.Query
@@ -113,7 +142,7 @@ defmodule DevilsDictionary.Artworks.Corpus.Conformance do
             |> then(&Map.put(&1, "checksum", Manifest.checksum(&1)))
             |> write()
 
-          assert_raise ArgumentError, ~r/unsupported artwork corpus manifest/, fn ->
+          assert_raise ArgumentError, ~r/unsupported corpus manifest/, fn ->
             Manifest.load!(path)
           end
         end
@@ -219,23 +248,38 @@ defmodule DevilsDictionary.Artworks.Corpus.Conformance do
                    Manifest.work_kind(manifest["kind"])
         end
 
-        test "a depicted QID reaches the page whose meaning refers to it", context do
-          manifest = context.manifest
+        test "the rows carry the evidence this kind declares", %{manifest: manifest} do
+          declared = Manifest.evidence(manifest["kind"])
+          assert declared in Manifest.evidence_values()
 
-          row =
-            Enum.find(manifest["rows"], fn row ->
-              row |> depicted() |> Enum.any?()
-            end)
+          carrying = Enum.count(manifest["rows"], &(&1 |> depicted() |> Enum.any?()))
 
-          if row do
+          case declared do
+            :depiction ->
+              assert carrying > 0,
+                     "#{@path} declares `evidence: :depiction` and no row carries a QID, " <>
+                       "so nothing in it could ever match a page"
+
+            :none ->
+              assert carrying == 0,
+                     "#{@path} declares `evidence: :none` and #{carrying} rows carry depicted " <>
+                       "QIDs. Either the manifest is making a claim it should not, or the kind " <>
+                       "should declare `:depiction` and be held to the round trip."
+          end
+        end
+
+        if @evidence in [:depiction, nil] do
+          test "a depicted QID reaches the page whose meaning refers to it", context do
+            manifest = context.manifest
+
+            row =
+              Enum.find(manifest["rows"], fn row ->
+                row |> depicted() |> Enum.any?()
+              end)
+
+            assert row, "#{@path} records no depicted QIDs, so nothing could ever match a page"
+
             depicted_round_trip(context, manifest, row)
-          else
-            # Named rather than skipped: a corpus whose rows carry no depicted
-            # QIDs makes no depiction claim, and the assertion above is the one
-            # that applies to it.
-            assert Manifest.work_kind(manifest["kind"]) != "artwork",
-                   "#{@path} is an artwork corpus that records no depicted QIDs, " <>
-                     "so nothing in it could ever match a page"
           end
         end
 
