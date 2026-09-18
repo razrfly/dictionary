@@ -37,11 +37,6 @@ config :devils_dictionary, :giphy,
   rating: "g",
   enabled: false
 
-# Test clients use deterministic injected transports. Focused coordinator tests
-# start their own named process; transaction rollbacks must not leave the global
-# withdrawal generation disabled for unrelated cases.
-config :devils_dictionary, :artsy, coordinator: nil
-
 # No pacing in the suite: the interval is a live-rate concern and 25 hydrations
 # would otherwise cost 25 seconds of wall clock per test.
 config :devils_dictionary, :met, enabled: true, request_interval_ms: 0
@@ -113,6 +108,15 @@ config :devils_dictionary, DevilsDictionary.Mailer, adapter: Swoosh.Adapters.Tes
 # refusal.
 config :devils_dictionary, :poetrydb,
   endpoint: "https://poetrydb.test/api",
+  enabled: true,
+  request_interval_ms: 0,
+  min_retry_interval_ms: 0
+
+# Every Commons request in the suite goes through the `Req.Test` stub named
+# after the provider module. No pacing, for the same reason as the Met and
+# PoetryDB above: the intervals are a live-rate courtesy, not a suite's cost.
+config :devils_dictionary, :commons,
+  endpoint: "https://commons.test/w/api.php",
   enabled: true,
   request_interval_ms: 0,
   min_retry_interval_ms: 0

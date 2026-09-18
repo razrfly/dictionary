@@ -30,11 +30,8 @@ defmodule DevilsDictionary.Discovery.Providers.Met do
   @behaviour DevilsDictionary.Discovery.Provider
   @behaviour DevilsDictionary.SourceIdentity.Adapter
 
-  import Ecto.Query
-
+  alias DevilsDictionary.Discovery.PageEvidence
   alias DevilsDictionary.Discovery.Providers.Met.BroaderWalk
-  alias DevilsDictionary.Registry.{Entity, Sense}
-  alias DevilsDictionary.Repo
   alias DevilsDictionary.SourceIdentity.Entry
 
   @adapter_version "met.openaccess.v1"
@@ -130,54 +127,10 @@ defmodule DevilsDictionary.Discovery.Providers.Met do
   # The QIDs the page's senses already point at, with the labels to search for.
   #
   # This is the whole of the Met's association evidence, and it is read from the
-  # encyclopedia rather than from the provider: a sense's active `refers_to`
-  # entity is a claim someone can inspect and withdraw. A target with no such
+  # encyclopedia rather than from the provider — `PageEvidence` is the shared
+  # read, since #109 Phase 3a also Wikimedia Commons's. A target with no such
   # claim yields an empty set, and `covers?/1` then declines it outright.
-  #
-  # The scope is the page's whole lexeme set, which since K4 of #109 is what a
-  # target *is* — `Discovery.page_lexeme_ids/1`, shared, rather than the lemma
-  # and slug join this provider used to build privately. `/define/war` is seven
-  # lexemes, and the QID for Q198 hangs off a sense of the noun; reading one
-  # lexeme would put no artwork on that page while the encyclopedia plainly says
-  # what *war* means. The shelf still says relevance to a particular meaning is
-  # unverified, and narrowing it to one sense belongs to #101.
-  defp page_entities(lexeme_ids) do
-    lexeme_ids
-    |> sense_evidence()
-    |> select([revision: r, entity: e, identifier: ei], %{
-      qid: ei.external_id,
-      label: e.preferred_label,
-      object_id: e.object_id,
-      confidence: r.confidence
-    })
-    |> order_by([revision: r, entity: e], desc: r.confidence, asc: e.object_id)
-    |> Repo.all()
-    |> Enum.uniq_by(& &1.qid)
-    |> Enum.take(@max_entities)
-    |> Enum.map(&Map.new(&1, fn {k, v} -> {Atom.to_string(k), v} end))
-  end
-
-  # Every verified Wikidata identity an active `refers_to` on any of these
-  # lexemes' senses points at. The lexeme set arrives resolved, so this is one
-  # round trip whether it is asked for existence or for the labels.
-  defp sense_evidence(lexeme_ids) do
-    from s in Sense,
-      as: :sense,
-      join: r in DevilsDictionary.Claims.AssertionRevision,
-      as: :revision,
-      on: r.subject_object_id == s.object_id and r.is_current,
-      join: p in DevilsDictionary.Claims.Predicate,
-      as: :predicate,
-      on: p.id == r.predicate_id and p.key == "refers_to",
-      join: e in Entity,
-      as: :entity,
-      on: e.object_id == r.object_object_id,
-      join: ei in DevilsDictionary.Registry.ExternalIdentifier,
-      as: :identifier,
-      on: ei.object_id == e.object_id and ei.namespace == "wikidata",
-      where: s.lexeme_id in ^lexeme_ids,
-      where: r.lifecycle_state == :active and ei.status == :verified
-  end
+  defp page_entities(lexeme_ids), do: PageEvidence.entities(lexeme_ids, @max_entities)
 
   @impl true
   def covers?(target) do
@@ -185,7 +138,7 @@ defmodule DevilsDictionary.Discovery.Providers.Met do
     # renders this before any run exists, and the answer is no for about 99% of
     # them — so it must not pay for the ordering, the dedup and the labels that
     # only a mapping about to be built has any use for.
-    Repo.exists?(sense_evidence(DevilsDictionary.Discovery.page_lexeme_ids(target)))
+    PageEvidence.any?(DevilsDictionary.Discovery.page_lexeme_ids(target))
   end
 
   @doc """
@@ -206,24 +159,10 @@ defmodule DevilsDictionary.Discovery.Providers.Met do
   same evidence — the match key is the QID.
   """
   @impl true
-  def mapping_identity(%{"entities" => entities}) when is_list(entities) do
-    case Enum.map(entities, &entity_qid/1) do
-      [] ->
-        "no-entities"
-
-      qids ->
-        qids
-        |> Enum.join(",")
-        |> then(&:crypto.hash(:sha256, &1))
-        |> Base.encode16(case: :lower)
-        |> binary_part(0, 16)
-    end
-  end
+  def mapping_identity(%{"entities" => entities}) when is_list(entities),
+    do: PageEvidence.digest(entities)
 
   def mapping_identity(_parameters), do: "no-entities"
-
-  defp entity_qid(%{"qid" => qid}) when is_binary(qid), do: qid
-  defp entity_qid(_entity), do: ""
 
   @impl true
   def automatic_mapping(target) do
@@ -261,15 +200,10 @@ defmodule DevilsDictionary.Discovery.Providers.Met do
       })
       when is_binary(term) and byte_size(term) > 0 and byte_size(term) <= 100 and
              is_list(entities) do
-    if Enum.all?(entities, &valid_entity?/1), do: :ok, else: {:error, :invalid_mapping}
+    if PageEvidence.valid_entities?(entities), do: :ok, else: {:error, :invalid_mapping}
   end
 
   def validate_mapping(_operation, _parameters), do: {:error, :invalid_mapping}
-
-  defp valid_entity?(%{"qid" => qid}) when is_binary(qid),
-    do: Regex.match?(~r/\AQ\d+\z/, qid)
-
-  defp valid_entity?(_), do: false
 
   @impl true
   def request_options(%{"endpoint" => "search", "params" => params}) do

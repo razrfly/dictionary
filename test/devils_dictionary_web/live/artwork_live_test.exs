@@ -460,12 +460,12 @@ defmodule DevilsDictionaryWeb.ArtworkLiveTest do
     assert render(view) =~ "revision 1"
   end
 
-  test "with the provider unconfigured the catalog, search and word page work locally", ctx do
-    refute DevilsDictionary.Artsy.Availability.configured?()
-
+  test "with no provider client at all the catalog, search and word page work locally", ctx do
+    # #109 Phase 3a retired the Artsy client and the page's live-search form
+    # with it. The page is the local catalog and nothing else.
     {:ok, view, _html} = live(ctx.conn, ~p"/artworks")
-    assert has_element?(view, "#artsy-disabled")
-    assert has_element?(view, "#artsy-search-submit[disabled]")
+    refute has_element?(view, "#artsy-lookup")
+    refute has_element?(view, "#artsy-search")
 
     html = view |> form("#artwork-search", search: %{q: "Fixture Painter"}) |> render_change()
     assert html =~ ~s(id="artwork-#{ctx.work.object_id}")

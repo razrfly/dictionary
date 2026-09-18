@@ -1,32 +1,10 @@
 defmodule Mix.Tasks.Dd.Artworks.Seed do
-  @shortdoc "Builds or runs a bounded Wikidata/Artsy artwork seed manifest"
+  @shortdoc "Seeds a committed corpus manifest, or builds the Artsy pilot's Wikidata half"
 
   @moduledoc """
-  Builds a credential-free, checksummed manifest from exact Wikidata P11005
-  identifiers, or imports an existing manifest through the shared source
-  identity resolver.
-
-      mix dd.artworks.seed --manifest priv/artworks/manifests/pilot-v1.json --build
-      mix dd.artworks.seed --manifest priv/artworks/manifests/pilot-v1.json --build --import --dry-run
-      mix dd.artworks.seed --manifest priv/artworks/manifests/pilot-v1.json \
-        --wikidata-only --refresh-wikidata --wikidata-request-limit 2
-      mix dd.artworks.seed --manifest priv/artworks/manifests/pilot-v1.json \
-        --record-limit 50 --request-limit 160 \
-        --wikidata-entity-limit 100 --wikidata-request-limit 4 --resume
-
-  `--build` always makes bounded Wikidata discovery calls and writes the base
-  manifest. `--dry-run` applies only to the import stage and never writes the
-  database; add `--import` to build and dry-run the import in one command.
-  Imports hydrate selected artwork and creator QIDs through the existing bounded
-  Wikidata adapter before optional Artsy enrichment. Use
-  `--wikidata-only --refresh-wikidata` for a safe, repeatable rich-data backfill
-  of existing identities without spending Artsy requests. Use
-  `--skip-wikidata-hydration` only when that stage is already complete, and
-  `--refresh-wikidata` when current Wikidata records must be refreshed.
-
-  It also seeds the committed **corpus** manifests built by
-  `mix dd.artworks.manifest` — `met-highlights` and `wikidata-famous` — which are
-  recognised by their contents rather than by a flag:
+  Seeds the committed **corpus** manifests built by `mix dd.artworks.manifest`
+  — `met-highlights`, `wikidata-famous`, `poetrydb` — which are recognised by
+  their contents rather than by a flag:
 
       mix dd.artworks.seed --manifest priv/artworks/manifests/met-highlights-v1.json
       mix dd.artworks.seed --manifest priv/artworks/manifests/wikidata-famous-v1.json --dry-run
@@ -35,35 +13,40 @@ defmodule Mix.Tasks.Dd.Artworks.Seed do
   and rerunning it matches every row on its exact identifier, so the counts come
   back identical.
 
-  All discovery and provider calls are bounded. Import progress is written to
-  an ignored, environment-local `MANIFEST.checkpoint.json` (or `--checkpoint`),
-  so `--resume` continues partial records without mutating the portable base
-  manifest or replaying completed pages. Reruns converge on exact Wikidata,
-  P11005/P2042 and opaque Artsy identifiers; titles never identify.
+  It also still builds and backfills the Artsy pilot's Wikidata half — the part
+  that never needed Artsy:
+
+      mix dd.artworks.seed --manifest priv/artworks/manifests/pilot-v1.json --build
+      mix dd.artworks.seed --manifest priv/artworks/manifests/pilot-v1.json \
+        --wikidata-only --refresh-wikidata --wikidata-request-limit 2
+
+  `--build` makes bounded Wikidata discovery calls for exact P11005 identifiers
+  and writes the checksummed base manifest. `--wikidata-only` hydrates the
+  manifest's already-local artwork and creator QIDs through the shared bounded
+  Wikidata adapter and installs the meaning mappings.
+
+  **The Artsy import stage is retired** (#109 Phase 3a, with the private Artsy
+  client). Running this task on an Artsy import manifest without `--build` or
+  `--wikidata-only` is refused with that explanation: the 43 pilot works are
+  already catalog rows, and there is no client left to enrich them with.
   """
 
   use Mix.Task
 
   alias DevilsDictionary.Artworks
   alias DevilsDictionary.Artworks.Corpus
-  alias DevilsDictionary.Artworks.{Manifest, Seeder, WikidataCandidates}
+  alias DevilsDictionary.Artworks.{Manifest, WikidataCandidates}
 
   @switches [
     manifest: :string,
-    checkpoint: :string,
     build: :boolean,
-    import: :boolean,
     wikidata_only: :boolean,
     dry_run: :boolean,
-    resume: :boolean,
     local_only: :boolean,
     candidate_limit: :integer,
-    request_limit: :integer,
     discovery_request_limit: :integer,
     record_limit: :integer,
-    batch_size: :integer,
     offset: :integer,
-    skip_wikidata_hydration: :boolean,
     refresh_wikidata: :boolean,
     refresh: :boolean,
     wikidata_request_limit: :integer,
@@ -123,7 +106,7 @@ defmodule Mix.Tasks.Dd.Artworks.Seed do
     base_manifest = if opts[:build], do: build(path, opts), else: Manifest.load!(path)
 
     cond do
-      opts[:build] == true and opts[:import] != true and opts[:wikidata_only] != true ->
+      opts[:build] == true and opts[:wikidata_only] != true ->
         print_manifest(base_manifest, path)
 
       opts[:wikidata_only] == true ->
@@ -141,46 +124,12 @@ defmodule Mix.Tasks.Dd.Artworks.Seed do
         Mix.shell().info("Meaning mapping summary: " <> inspect(mapping_stats, pretty: true))
 
       true ->
-        checkpoint_path = Path.expand(opts[:checkpoint] || path <> ".checkpoint.json")
-
-        manifest =
-          if opts[:resume] && File.exists?(checkpoint_path),
-            do: resumed_manifest!(checkpoint_path, base_manifest, path),
-            else: base_manifest
-
-        wikidata_stats =
-          if opts[:dry_run] || opts[:skip_wikidata_hydration] do
-            %{
-              skipped: true,
-              reason: if(opts[:dry_run], do: "dry_run", else: "operator_requested")
-            }
-          else
-            hydrate_wikidata(manifest, opts)
-          end
-
-        {manifest, summary} =
-          Seeder.run(manifest,
-            dry_run: opts[:dry_run] || false,
-            resume: opts[:resume] || false,
-            manifest_path: if(opts[:dry_run], do: nil, else: checkpoint_path),
-            request_limit: opts[:request_limit] || 500,
-            record_limit: opts[:record_limit] || 500,
-            batch_size: opts[:batch_size] || 25
-          )
-
-        mapping_stats =
-          if opts[:dry_run], do: %{skipped: "dry_run"}, else: Artworks.install_meaning_mappings!()
-
-        print_manifest(manifest, if(opts[:dry_run], do: path, else: checkpoint_path))
-        Mix.shell().info("Portable base manifest unchanged: " <> path)
-        Mix.shell().info("Wikidata hydration summary: " <> inspect(wikidata_stats, pretty: true))
-        Mix.shell().info("Artwork seed summary: " <> inspect(summary, pretty: true))
-
-        Mix.shell().info(
-          "Selected catalog coverage: " <> inspect(coverage(manifest), pretty: true)
+        Mix.raise(
+          "#{path} is an Artsy import manifest, and the Artsy import stage was retired " <>
+            "with the private Artsy client in #109 Phase 3a. The pilot's 43 works are " <>
+            "already catalog rows. Pass --build to rediscover the manifest's Wikidata " <>
+            "candidates, or --wikidata-only to backfill their Wikidata records."
         )
-
-        Mix.shell().info("Meaning mapping summary: " <> inspect(mapping_stats, pretty: true))
     end
   rescue
     error in [ArgumentError, File.Error, Jason.DecodeError] -> Mix.raise(Exception.message(error))
@@ -219,25 +168,7 @@ defmodule Mix.Tasks.Dd.Artworks.Seed do
     )
   end
 
-  # Resuming a checkpoint that belongs to a different manifest would silently
-  # import the wrong candidate set. `--build --resume` makes that easy: the base
-  # manifest is rediscovered while a stale checkpoint still wins.
-  defp resumed_manifest!(checkpoint_path, base_manifest, path) do
-    checkpoint = Manifest.load!(checkpoint_path)
-
-    unless Manifest.same_selection?(checkpoint, base_manifest) do
-      Mix.raise(
-        "checkpoint #{checkpoint_path} does not match the manifest #{path}. " <>
-          "Its exact identities differ, so resuming it would import a different " <>
-          "candidate set. Pass --checkpoint for the matching checkpoint, or rerun " <>
-          "without --resume."
-      )
-    end
-
-    checkpoint
-  end
-
-  defp hydrate_wikidata(manifest, opts, hydrate_opts \\ []) do
+  defp hydrate_wikidata(manifest, opts, hydrate_opts) do
     existing_only? = hydrate_opts[:existing_only] || false
 
     # The rule is "hydrate identities that already exist locally". Applying it

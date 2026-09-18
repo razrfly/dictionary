@@ -602,8 +602,8 @@ defmodule DevilsDictionary.Artworks do
   physically removed.
   """
   def withdraw_artsy(reason) when is_binary(reason) and byte_size(reason) > 0 do
-    _ = DevilsDictionary.Artsy.RequestCoordinator.disable()
-
+    # Nothing to switch off first: the client and its coordinator were retired
+    # in #109 Phase 3a, so no Artsy request can be in flight to invalidate.
     Repo.transaction(fn ->
       source = Repo.one!(from source in Source, where: source.slug == "artsy", lock: "FOR UPDATE")
       actor = withdrawal_actor!()
