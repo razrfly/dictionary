@@ -51,6 +51,22 @@ defmodule DevilsDictionary.DiscoveryTest do
                Enum.sort([verb.object_id, noun.object_id, prefix.object_id])
     end
 
+    test "the target opens on the bare lemma, not a decorated row (#109 Phase 3b)", ctx do
+      # K4's target inherits whatever lexeme the page opens on, so the `'dog`
+      # defect reached every discovery run on such a page: the mapping named a
+      # lexeme the reader never saw. Fixed in `WordPage`, asserted here because
+      # this is where it was doing damage.
+      apostrophe = word!(ctx, "'dog", ~w(wordnet), slug: "dog")
+      bare = word!(ctx, "dog", ~w(wordnet), slug: "dog")
+      assert apostrophe.object_id < bare.object_id
+
+      target = page_target("dog")
+
+      assert target.object_id == bare.object_id
+      assert target.term == "dog"
+      assert Enum.sort(target.lexeme_ids) == Enum.sort([apostrophe.object_id, bare.object_id])
+    end
+
     test "the canonical address still names its own lexeme, with the same page", ctx do
       verb = word!(ctx, "war", ~w(wordnet), pos: "verb")
       noun = word!(ctx, "war", ~w(wordnet), pos: "noun")

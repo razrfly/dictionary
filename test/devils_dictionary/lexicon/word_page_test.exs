@@ -474,6 +474,28 @@ defmodule DevilsDictionary.Lexicon.WordPageTest do
       assert [%{text: "From Middle English oystre.", parts: ~w(noun verb)}] = headword.etymologies
     end
 
+    test "the bare lemma opens the page, not a decorated row that sorts before it", ctx do
+      # `/define/dog` in the shipped index is seven rows, and the database's
+      # collation puts Wiktionary's `'dog` (#1547258) ahead of `dog` (#51134).
+      # Before #109 Phase 3b the page opened on the apostrophe, and so did the
+      # discovery target built from it. 17,403 English pages were in this state.
+      apostrophe = word!(ctx, "'dog", ~w(wiktionary), slug: "dog")
+      bare = word!(ctx, "dog", ~w(wiktionary), slug: "dog")
+      capital = word!(ctx, "Dog", ~w(wiktionary), slug: "dog")
+      sense!(ctx, bare, "wiktionary", gloss: "A domesticated canine.")
+
+      headword = page("dog").headword
+
+      assert headword.lemma == "dog"
+      assert headword.slug == "dog"
+
+      # The decorated rows keep their place on the page. They just stop leading
+      # it: the slug is what the reader asked for, so the row whose lemma is the
+      # slug comes first, then the one that differs only in case.
+      assert Enum.map(headword.lexemes, & &1.id) ==
+               [bare.object_id, capital.object_id, apostrophe.object_id]
+    end
+
     test "a form redirects to the word it belongs to and says where it came from", ctx do
       word!(ctx, "oyster", ~w(wiktionary), forms: [%{"form" => "oysters"}])
 
