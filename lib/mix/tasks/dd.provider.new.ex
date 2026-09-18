@@ -133,7 +133,8 @@ defmodule Mix.Tasks.Dd.Provider.New do
       name: opts[:name] || slug |> String.split("-") |> Enum.map_join(" ", &String.capitalize/1),
       archetype: archetype,
       operation: "#{underscored}_search",
-      namespace: "#{underscored}_item"
+      namespace: "#{underscored}_item",
+      conformance: conformance_commands(archetype, underscored)
     }
 
     if archetype in ~w(discovery both) do
@@ -353,26 +354,76 @@ defmodule Mix.Tasks.Dd.Provider.New do
     """
   end
 
+  # The suites an archetype actually has. A corpus scaffold writes no provider,
+  # no stub and no discovery suite, so naming `<slug>_conformance_test.exs` for
+  # it — in the ledger it writes as well as in the next steps it prints — sent a
+  # corpus session to run a file that does not exist. `both` has two suites and
+  # was being told about one.
+  defp conformance_commands(archetype, underscored) do
+    case archetype do
+      "discovery" -> [discovery_suite(underscored)]
+      "corpus" -> [corpus_suite(underscored)]
+      "both" -> [discovery_suite(underscored), corpus_suite(underscored)]
+    end
+    |> Enum.map_join("\n", &("    " <> &1))
+  end
+
+  defp discovery_suite(underscored),
+    do:
+      "mix test test/devils_dictionary/discovery/conformance/" <>
+        "#{underscored}_conformance_test.exs"
+
+  # A corpus suite is one `use DevilsDictionary.Artworks.Corpus.Conformance,
+  # manifest: ...` module, written by hand once the manifest exists, and
+  # `conformance_coverage_test.exs` requires one of every committed manifest.
+  defp corpus_suite(underscored),
+    do:
+      "mix test test/devils_dictionary/artworks/corpus/conformance/" <>
+        "#{underscored}_corpus_conformance_test.exs"
+
   # A corpus scaffold writes no provider, no stub and no conformance suite, so
   # naming them here sent a corpus session to run a test that does not exist.
   defp next_steps(assigns) do
+    corpus_suite_step =
+      """
+      write its conformance suite — one module,
+           `use DevilsDictionary.Artworks.Corpus.Conformance, manifest: ...`, which
+           conformance_coverage_test.exs requires of every committed manifest — then
+           #{corpus_suite(assigns.underscored)}
+      """
+      |> String.trim_trailing()
+
+    ledger_step =
+      "record the probe in docs/integrations/#{assigns.slug}.md — " <>
+        "running totals, not a total at the end"
+
     steps =
-      if assigns.archetype in ~w(discovery both) do
-        """
-          1. mix compile
-          2. mix test test/devils_dictionary/discovery/conformance/#{assigns.underscored}_conformance_test.exs
-          3. replace the scaffolded response envelope and its stub with the real one
-          4. record the probe in docs/integrations/#{assigns.slug}.md — running totals, not a total at the end
-        """
-      else
-        """
-          1. make the two registrations below, then mix compile
-          2. build the manifest from the probe's rows and commit it
-          3. mix test test/devils_dictionary/artworks/corpus/ — add the one-line
-             suite `use DevilsDictionary.Artworks.Corpus.Conformance, manifest: ...`,
-             which the coverage test requires of every committed manifest
-          4. record the probe in docs/integrations/#{assigns.slug}.md — running totals, not a total at the end
-        """
+      case assigns.archetype do
+        "discovery" ->
+          """
+            1. mix compile
+            2. #{discovery_suite(assigns.underscored)}
+            3. replace the scaffolded response envelope and its stub with the real one
+            4. #{ledger_step}
+          """
+
+        "corpus" ->
+          """
+            1. make the two registrations below, then mix compile
+            2. build the manifest from the probe's rows and commit it
+            3. #{corpus_suite_step}
+            4. #{ledger_step}
+          """
+
+        "both" ->
+          """
+            1. make the two registrations below, then mix compile
+            2. #{discovery_suite(assigns.underscored)}
+            3. replace the scaffolded response envelope and its stub with the real one
+            4. build the manifest from the probe's rows and commit it
+            5. #{corpus_suite_step}
+            6. #{ledger_step}
+          """
       end
 
     Mix.shell().info("""
@@ -950,7 +1001,7 @@ defmodule Mix.Tasks.Dd.Provider.New do
 
     ## Conformance
 
-        mix test test/devils_dictionary/discovery/conformance/<%= @underscored %>_conformance_test.exs
+    <%= @conformance %>
     '''
   end
 end

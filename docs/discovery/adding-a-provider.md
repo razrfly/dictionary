@@ -230,7 +230,9 @@ The architecture test fails if a registered provider has no fixture, if a fixtur
 is never run by a suite, or if a committed corpus manifest has no suite. That is
 how this checklist stays a checklist.
 
-For a corpus, add its suite by hand — one line naming the committed file:
+For a corpus, add its suite by hand — one line naming the committed file, at
+`test/devils_dictionary/artworks/corpus/conformance/<slug>_corpus_conformance_test.exs`,
+which is the path `mix dd.provider.new` prints and the ledger it writes records:
 
 ```elixir
 defmodule DevilsDictionary.Artworks.Corpus.Conformance.MyCorpusTest do
@@ -254,7 +256,7 @@ providers now assert **membership and per-provider runs** instead of totals:
 | `test/devils_dictionary_web/live/film_identity_flow_test.exs` | the same, for the film flow |
 
 It was eleven red tests when PoetryDB registered in Phase 2, and the fix is
-#109's Phase 1c. Measured after it: scaffolding `demo` into the real config and
+`#109`'s Phase 1c. Measured after it: scaffolding `demo` into the real config and
 running the full suite gives **1,244 tests, 1 failure** — the environmental
 manifest test and nothing else.
 
@@ -289,9 +291,24 @@ different port does not prevent that, it guarantees it:
 
 ```bash
 lsof -a -p <pid> -d cwd          # which checkout it is
-psql -tAc "select datname, count(*) from pg_stat_activity \
-  where datname is not null group by datname"
+
+# and which database that process is actually on — its pool's client ports,
+# looked up in pg_stat_activity
+ports=$(lsof -a -p <pid> -iTCP -sTCP:ESTABLISHED -nP |
+  awk 'NR>1 {split($9,a,"->"); split(a[1],b,":"); print b[2]}' | paste -sd, -)
+psql -tAc "select distinct datname from pg_stat_activity where client_port in ($ports)"
 ```
+
+Ask the connection, not the configuration. A per-database connection count
+answers "which databases are busy", which is not the question: with two
+databases in the list you still cannot say which one *that* server is on. And
+the checkout's `config/dev.exs` is not the answer either — `DD_DATABASE` or a
+runtime `DATABASE_URL` in the environment that server was started with beats
+it, and you are not in that shell. Its own sockets cannot be wrong.
+
+If the pool connects over a unix socket rather than TCP there are no client
+ports to match; then read the environment the process was started with
+(`ps -E -p <pid>` on macOS) before falling back to the checkout's config.
 
 - **Same database as yours** → that server has to stop. Another port does not
   help: both nodes poll the same `oban_jobs` table, and your run will be
