@@ -18,7 +18,9 @@ Probed 2026-09-18 for #109 Phase 2. Scaffolded by `mix dd.provider.new poetrydb
 
 ## Probe
 
-Ceiling: **200 requests**. Spent: **172**. Written as the probe ran.
+Ceiling: **200 requests** for the Phase 2 probe, spent **172**; #109 Phase 1c
+was given a second ceiling of **40** for the Byron/Shelley recovery and spent
+**40**. Written as each run went, never totalled at the end.
 
 | # | requests | what was asked | what came back | running total |
 |---|---|---|---|---|
@@ -38,6 +40,20 @@ Ceiling: **200 requests**. Spent: **172**. Written as the probe ran.
 | B3 | 1 | `/define/zyzzyva`, one run | 200 with the in-body 404 → `no_results`, refresh in 24 h | **167 / 200** |
 | V1 | 2 | answering a review: `/lines,author/war;<Byron>` and `;<Shelley>` | **503** both, ~16 s — narrowing by poet alone does not rescue them | **169 / 200** |
 | V2 | 3 | the same two poets narrowed by line count as well | 200 in 246–785 ms, **one poem each** | **172 / 200** |
+
+#109 Phase 1c, 2026-09-18 — its own ceiling of **40**, spent **40**:
+
+| # | requests | what was asked | what came back | running total |
+|---|---|---|---|---|
+| C1 | 2 | `/author/<poet>/title,linecount` for Byron and Shelley | never left the process — `Req.Finch` was not started in the script. Counted anyway, the way P3 was: a request budgeted is a request spent | **2 / 40** |
+| C2 | 2 | the same two, with `:req` started | 200 in 0.98–1.23 s — Byron **325** poems / 69,650 lines, Shelley **312** / 37,898 | **4 / 40** |
+| C3 | 1 | `/author,linecount/Percy%20Bysshe%20Shelley;4/title,linecount` | 200 in 736 ms, **18 rows, all `linecount` 4** — so `linecount` matches exactly and a bucket is a partition, not a filter | **5 / 40** |
+| C4 | 1 | `query.wikidata.org/sparql`, POST, both poet names in one `VALUES` block with `wikibase:sitelinks` | 200 in 6.9 s — Shelley one candidate (**Q93343**, 142 sitelinks); *George Gordon, Lord Byron* **no candidate at all** | **6 / 40** |
+| C5 | 34 | `/author,linecount/<poet>;<n>/title,author,linecount,lines`, the 34 largest buckets, 1 s apart | **34 × 200**, 232 ms–923 ms, no `503` of any kind. **380 poems**: Byron 198 of 325, Shelley 182 of 312 | **40 / 40** |
+
+Every C5 row returned exactly the number of poems C2's title list predicted for
+that bucket — 34 of 34 — which is the check that the bucket route sees the same
+corpus the author route does.
 
 B1–B3 were spent by the running application rather than by a script, and they
 are the rows of `discovery_request_attempts` for this source — which is the
@@ -66,13 +82,16 @@ this line. It renders as *Uses “war” at line 16* and never as *about war*.
 The author crosswalk is a stated rule, not a judgement: the most-linked
 Wikidata human whose label or alias is exactly the poet's name, with `P31`
 human and `P106` poet / writer / author / lyricist, at least 5 sitelinks and at
-least 3× the runner-up. **115 of 127 poets** clear it and 2,317 of the 2,523
-rows carry a QID. The other twelve carry none — three are namesakes nothing
-separates (*James Thomson* is two poets, 38 sitelinks against 19), and nine are
+least 3× the runner-up. **116 of 129 poets** clear it and 2,499 of the 2,903
+rows carry a QID. The other thirteen carry none — three are namesakes nothing
+separates (*James Thomson* is two poets, 38 sitelinks against 19), and ten are
 names PoetryDB spells its own way: *Lord Alfred Tennyson*, *Samuel Coleridge*,
 *Sir Walter Scott*, *Henry Wadsworth Longfellow*, *James Henry Leigh Hunt*,
 *John Wilmot*, *Anne Kingsmill Finch*, *Major Henry Livingston, Jr.*,
-*Robinson*. A guess would be worse than a gap.
+*Robinson*, and — since Phase 1c — *George Gordon, Lord Byron*, which is
+neither a Wikidata label nor an alias of anything. Shelley clears it as the
+sole candidate for his own name (Q93343, 142 sitelinks). A guess would be worse
+than a gap.
 
 ## Measured facts
 
@@ -111,8 +130,18 @@ Things nobody should have to measure twice.
    `503` after ~16 s, and so — measured while answering a review on #115 — does
    the narrower `/lines,author/war;<poet>`. Their collected works are too large
    to serialize in one response: *Don Juan* alone is 16,092 lines, and
-   Shelley's 312 poems total 37,898. The corpus holds 127 of 129 poets and
-   names the two it does not.
+   Shelley's 312 poems total 37,898. **A third axis reaches them in bulk:**
+   `/author,linecount/<poet>;<n>` returns the `lines` field for these two where
+   `/author/<poet>` will not, in 232–923 ms, because a bucket is a fraction of
+   the payload. `linecount` matches **exactly** — `Shelley;4` answers with the
+   eighteen four-line poems and nothing else — so the buckets partition a
+   poet's poems rather than filtering them, and full coverage is one request
+   per distinct linecount: 111 for Byron, 108 for Shelley, **219** in all. #109
+   Phase 1c had a ceiling of 40 and took the 34 largest buckets, so the corpus
+   now holds **129 of 129 poets** and **380 of those two poets' 637 poems**.
+   The manifest's `selection.recovery` block lists every bucket taken, so what
+   is absent is derivable rather than merely admitted: 257 poems, *Don Juan*
+   among them.
 9. **A third axis reaches them.** `/lines,author,linecount/war;<poet>;<n>`
    answers with **one poem**, in 246–785 ms, for the same poet whose two-axis
    query times out. The candidate list already carries `linecount`, so this
@@ -122,8 +151,9 @@ Things nobody should have to measure twice.
    twelve-candidate window of `war` is four poets, so one request per poet is
    five requests where one per candidate would be thirteen.
 8. **Duplicates exist.** 18 (poet, title) pairs occur twice; for 3 of them the
-   text is identical too, so the manifest's 2,526 fetched rows deduplicate to
-   **2,523**.
+   text is identical too, so the P7 fetch's 2,526 rows deduplicate to **2,523**.
+   The 380 rows Phase 1c added deduplicate to 380 — `Manifest.new/3` is
+   idempotent on `poem_id`, and none of them collided.
 
 ### Pacing
 
@@ -137,8 +167,9 @@ straight back buys another 16 s timeout.
 
 ## The corpus
 
-`priv/artworks/manifests/poetrydb-v1.json` — 2,523 poems, 127 poets, 2,317
-with an author QID. Built once from the P7 fetch and committed;
+`priv/artworks/manifests/poetrydb-v1.json` — **2,903 poems, 129 poets, 2,499
+with an author QID**, checksum `9fa17133…`. Built from the P7 fetch and
+extended once by Phase 1c's C5 buckets, then committed;
 `DevilsDictionary.Artworks.Corpus.Poetrydb` is the builder. Seeded as
 `work_kind: "poem"` under the `poetrydb_poem` identity namespace, which is the
 same namespace and the same `poem_id` a live result resolves to — a poem found

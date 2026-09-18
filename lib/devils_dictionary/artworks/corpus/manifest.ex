@@ -72,8 +72,32 @@ defmodule DevilsDictionary.Artworks.Corpus.Manifest do
 
   @evidence ~w(depiction none)a
 
+  # The keys every kind registers, in the order above reads. `mix dd.provider.new`
+  # prints one line per key as the edit it cannot make, and its test holds the
+  # printout to this list — so a sixth registration added to `@kinds` is a red
+  # test in the generator rather than something the next corpus session
+  # discovers from a `KeyError` halfway through a build.
+  #
+  # A kind registering a different set is a compile error here, which is the
+  # earliest place it can be one: otherwise the first accessor to be called
+  # decides which key was the missing one.
+  @registration_keys [:source, :identity, :namespace, :work_kind, :evidence]
+
+  for {kind, spec} <- @kinds, Enum.sort(Map.keys(spec)) != Enum.sort(@registration_keys) do
+    raise "corpus kind #{inspect(kind)} registers #{inspect(Enum.sort(Map.keys(spec)))}, " <>
+            "not #{inspect(Enum.sort(@registration_keys))}"
+  end
+
   @doc "The manifest kinds this module can build and read."
   def kinds, do: Map.keys(@kinds)
+
+  @doc """
+  The keys one `@kinds` entry registers, in a stable order.
+
+  This is the registration a generator cannot write and a corpus session must:
+  see `mix dd.provider.new`, which prints one line per key.
+  """
+  def registration_keys, do: @registration_keys
 
   @doc "The identity field of one manifest kind's rows."
   def identity_field(kind), do: Map.fetch!(@kinds, kind).identity

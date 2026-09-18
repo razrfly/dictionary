@@ -56,9 +56,15 @@ defmodule DevilsDictionaryWeb.HomeLiveTest do
       # template and the sentence is what is under test, not its indentation.
       stats = live |> element("#stats") |> render() |> squash()
 
-      # 11 since PoetryDB joined the source catalog; registering a provider seeds
-      # its source row, which is the number this line counts.
-      assert stats =~ "3 words indexed · 2 with at least one definition · 11 sources so far"
+      # The third number counts source rows, and registering a discovery
+      # provider seeds one (`Catalog.sources/0` ends in
+      # `Providers.source_catalog/0`), so a constant here meant this test also
+      # asserted how many providers ship. Read from what the fixture seeded
+      # instead: the claim is that the line counts sources, not scopes.
+      sources = map_size(ctx.sources)
+
+      assert stats =~
+               "3 words indexed · 2 with at least one definition · #{sources} sources so far"
 
       refute stats =~ "animals enriched"
       refute stats =~ "Animals"

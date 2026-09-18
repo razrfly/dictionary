@@ -412,8 +412,11 @@ steal each other's jobs, and the one that wins runs *its* code. A Phase 1a
 verification session measured the Met pacing at 1.17 s instead of 3 s because the
 main checkout's server on port 4007 executed the branch's queued run with `main`'s
 code; the proof was in the run's own row, whose `next_cursor` came back in the
-pre-#109 format. If port 4007 is taken, use another port — never the same
-database from two nodes. The development database is `devils_dictionary_v2`.
+pre-#109 format. If port 4007 is taken, the question is not which port to use
+next — it is **which database that server is on**. If it is on yours, it has to
+stop; another port does not help, because both nodes poll the same `oban_jobs`
+table. If it is on a different database, use another port. The development
+database is `devils_dictionary_v2`.
 
 **One test run per test database, too.** Every checkout defaults to
 `devils_dictionary_test`, so two concurrent `mix test` runs trample each other's

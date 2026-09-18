@@ -239,22 +239,28 @@ defmodule DevilsDictionary.Artworks.Corpus.Conformance.MyCorpusTest do
 end
 ```
 
-### Registering a provider changes tests that count providers
+### Registering a provider should turn no test red
 
 `:discovery_providers` is read by the source catalog, the home page's stats line
-and several reader tests, so a fifth entry is not invisible. Scaffolding a
-provider into the real config and running the full suite turns roughly a dozen
-existing tests red — the registry assertion in
-`test/devils_dictionary/discovery/providers_test.exs`, the source count in
-`test/devils_dictionary_web/live/home_live_test.exs`, and the
-`Repo.one!(Run)` assertions in
-`test/devils_dictionary_web/live/culture_discovery_live_test.exs` and
-`test/devils_dictionary_web/live/film_identity_flow_test.exs` that assume one
-server provider makes one run. Measured: scaffolding `demo` into the real config
-and running `mix test` gave **1,207 tests, 11 failures** — ten of them in those
-four files, plus the environmental manifest test. Those tests are the ones to
-update; none of them is a defect in your provider. Run the full suite and look at every failure before
-deciding which are yours:
+and several reader tests, so a new entry is not invisible — but it is not
+supposed to cost you anything either. The four files that used to count
+providers now assert **membership and per-provider runs** instead of totals:
+
+| File | What it asserts now |
+|---|---|
+| `test/devils_dictionary/discovery/providers_test.exs` | the shipped modules are *in* the registry, and each pipeline provider is scheduled for its own content type, transport and pagination |
+| `test/devils_dictionary_web/live/home_live_test.exs` | the stats line counts the source rows the fixture seeded, whatever that number is |
+| `test/devils_dictionary_web/live/culture_discovery_live_test.exs` | each test registers the one provider it is about, so `Repo.one!(Run)` means *that provider's run* |
+| `test/devils_dictionary_web/live/film_identity_flow_test.exs` | the same, for the film flow |
+
+It was eleven red tests when PoetryDB registered in Phase 2, and the fix is
+#109's Phase 1c. Measured after it: scaffolding `demo` into the real config and
+running the full suite gives **1,244 tests, 1 failure** — the environmental
+manifest test and nothing else.
+
+So if registering your provider *does* redden something, do not update the test
+to match your provider. Read it: either it is counting again, which is a finding
+against this checklist, or your provider is doing something the others do not.
 
 ```bash
 mix precommit
@@ -277,13 +283,31 @@ first:
 lsof -nP -iTCP:4007 -sTCP:LISTEN
 ```
 
-If something is listening, use another port rather than pointing a second node at
-`devils_dictionary_v2`:
+If something is listening, find out **which database it is on** before you do
+anything about the port — the hazard is a second node on one database, and a
+different port does not prevent that, it guarantees it:
+
+```bash
+lsof -a -p <pid> -d cwd          # which checkout it is
+psql -tAc "select datname, count(*) from pg_stat_activity \
+  where datname is not null group by datname"
+```
+
+- **Same database as yours** → that server has to stop. Another port does not
+  help: both nodes poll the same `oban_jobs` table, and your run will be
+  executed by whichever code the other checkout compiled. Ask the owner, stop
+  it, run one node.
+- **A different database** → use another port and leave it alone.
 
 ```bash
 mix compile
 PORT=4017 mix phx.server
 ```
+
+The same rule one layer down applies to tests: **one test run per test
+database**. Four BEAM VMs on `devils_dictionary_test` produced 41 phantom
+failures during the Phase 1b audit. Take your own with `MIX_TEST_PARTITION`, as
+§0 says.
 
 `mix compile` to completion **before** `mix phx.server`, every time. `phx.server`
 compiles lazily, and an Oban worker whose module is not loaded yet is a job Oban
@@ -296,7 +320,14 @@ Then open two or three word pages that exercise the provider, at **1280** and at
 - the shelf appears under the right heading, with the provider named in the
   byline
 - every item carries a reason naming an **identifier**, not just a term
-- a page the provider declines shows no shelf for it at all, and spends no run
+- a page the provider declines shows no shelf for it at all, and spends no run.
+  **A provider that declines nothing has no subject here** — a text provider
+  matching by attestation covers every word, and the default `covers?/1` of
+  `true` is right for it. Do not tick this box; verify the nearest true thing
+  and say that is what you did: open a word the source has no result for and
+  check that the shelf is empty, that the run is recorded `no_results`, that it
+  spent **one** request, and that reloading the page spends none because the
+  negative cache answered.
 - `document.documentElement.scrollWidth === 375` at 375 — no horizontal page
   scroll
 

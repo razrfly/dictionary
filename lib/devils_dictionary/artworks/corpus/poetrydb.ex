@@ -67,8 +67,17 @@ defmodule DevilsDictionary.Artworks.Corpus.Poetrydb do
 
   `poem` is `%{"author" => _, "title" => _, "lines" => [_], "linecount" => _}`
   and `crosswalk` maps a poet's name to a QID where the rule named one.
+
+  `:source_url` overrides the locator the row records. It defaults to the
+  `/author/<poet>` route every row came from until Phase 1c, and it is passed
+  when a row came from somewhere else: Byron's and Shelley's poems arrive one
+  `linecount` bucket at a time, because the author route answers `503` for
+  them, and a row that claimed the author route would be naming a locator that
+  does not resolve for it.
   """
-  def row(%{"author" => author, "title" => title, "lines" => lines} = poem, crosswalk \\ %{}) do
+  def row(poem, crosswalk \\ %{}, opts \\ [])
+
+  def row(%{"author" => author, "title" => title, "lines" => lines} = poem, crosswalk, opts) do
     author = String.trim(author)
     title = String.trim(title)
 
@@ -79,9 +88,23 @@ defmodule DevilsDictionary.Artworks.Corpus.Poetrydb do
       "line_count" => length(lines),
       "source_line_count" => poem["linecount"],
       "lines_sha256" => Poetrydb.lines_hash(lines),
-      "source_url" => source_url(author)
+      "source_url" => Keyword.get(opts, :source_url) || source_url(author)
     }
     |> put_author_qid(Map.get(crosswalk, author))
+  end
+
+  @doc """
+  The locator one `linecount` bucket of one poet's poems came back from.
+
+  `/author,linecount/<poet>;<n>` is the only route that returns the `lines`
+  field for a poet whose collected works are too large for `/author/<poet>` to
+  serialize. `linecount` matches exactly — measured: `Shelley;4` answers with
+  the eighteen four-line poems and nothing else — so a bucket is a partition of
+  that poet's poems and not a filter over them.
+  """
+  def bucket_url(author, line_count) do
+    encoded = URI.encode(String.trim(author), &URI.char_unreserved?/1)
+    "https://poetrydb.org/author,linecount/#{encoded};#{line_count}/title,author,linecount,lines"
   end
 
   defp put_author_qid(row, qid) when is_binary(qid) do

@@ -25,32 +25,48 @@ defmodule DevilsDictionary.Discovery.ProvidersTest do
     do: Application.put_env(:devils_dictionary, :discovery_providers, providers)
 
   test "the shipped registry is the configured one, not a literal in the module", ctx do
-    assert ctx.configured == [Artsy, CineGraph, Giphy, Met, Poetrydb]
+    # Membership, not the list. What this test is about is that `all/0` reads
+    # config rather than a literal, and that the five shipped modules are in it;
+    # a sixth provider joining is a one-line registration (#109 K1) and is not a
+    # change to either claim. Asserting the whole list made "how many providers
+    # ship" this file's business, which turned it red for Phase 2 and again for
+    # the Phase 1c scaffold.
+    for provider <- [Artsy, CineGraph, Giphy, Met, Poetrydb] do
+      assert provider in ctx.configured
+    end
+
     assert Providers.all() == ctx.configured
   end
 
-  test "the pipeline runs three providers, over two transports and three content types", ctx do
+  test "each pipeline provider is scheduled for its own content type, transport and pagination",
+       ctx do
     # The whole point of Phase 1, cashed in: the Met is GET, offset-paged and
     # `:artwork`, CineGraph is GraphQL POST, cursor-paged and `:film`, PoetryDB
     # is GET, offset-paged and `:text`, and all three are driven by the same
     # run/budget/cache/lease machine. Artsy and GIPHY stay registered for their
     # source rows and are not scheduled.
-    assert Providers.server_providers() == [CineGraph, Met, Poetrydb]
-    assert Providers.server_providers(:film) == [CineGraph]
-    assert Providers.server_providers(:artwork) == [Met]
-    assert Providers.server_providers(:text) == [Poetrydb]
+    #
+    # Stated per provider rather than as three lists in registry order, so that
+    # the claim survives a fourth pipeline provider joining. A list said both
+    # "CineGraph is cursor-paged" and "nobody else ships", and only the first
+    # was ever the point.
+    for {provider, content_type, pagination} <- [
+          {CineGraph, :film, :cursor},
+          {Met, :artwork, :offset},
+          {Poetrydb, :text, :offset}
+        ] do
+      capabilities = provider.capabilities()
 
-    assert Enum.map(Providers.server_providers(), & &1.capabilities().transport) == [
-             :server,
-             :server,
-             :server
-           ]
+      assert provider in Providers.server_providers()
+      assert provider in Providers.server_providers(content_type)
+      assert capabilities.content_types == [content_type]
+      assert capabilities.transport == :server
+      assert capabilities.pagination == pagination
 
-    assert Enum.map(Providers.server_providers(), & &1.capabilities().pagination) == [
-             :cursor,
-             :offset,
-             :offset
-           ]
+      for other <- [:film, :artwork, :text] -- [content_type] do
+        refute provider in Providers.server_providers(other)
+      end
+    end
 
     for provider <- ctx.configured -- Providers.server_providers() do
       assert provider in Providers.all()
@@ -193,10 +209,13 @@ defmodule DevilsDictionary.Discovery.ProvidersTest do
     assert Providers.get("artsy") == Artsy
     assert Providers.get("giphy") == Giphy
 
-    assert Enum.map(Providers.server_providers(), & &1.slug()) == [
-             "cinegraph",
-             "met",
-             "poetrydb"
-           ]
+    scheduled = Enum.map(Providers.server_providers(), & &1.slug())
+
+    for slug <- ~w(cinegraph met poetrydb), do: assert(slug in scheduled)
+
+    # The claim is that these two are *not* scheduled, which is what registering
+    # without the pipeline claim means. Who else is scheduled is not this test's.
+    refute "artsy" in scheduled
+    refute "giphy" in scheduled
   end
 end
