@@ -103,6 +103,7 @@ config :devils_dictionary, :discovery_providers, [
   DevilsDictionary.Discovery.Providers.Commons,
   DevilsDictionary.Discovery.Providers.Giphy,
   DevilsDictionary.Discovery.Providers.Met,
+  DevilsDictionary.Discovery.Providers.OpenLibrary,
   DevilsDictionary.Discovery.Providers.Poetrydb
 ]
 
@@ -189,6 +190,10 @@ config :devils_dictionary, :poetrydb,
 # refusal), not a second declaration of them; `maxlag=5` rides on every request.
 config :devils_dictionary, :commons,
   endpoint: "https://commons.wikimedia.org/w/api.php",
+  enabled: true
+
+config :devils_dictionary, :open_library,
+  endpoint: "https://openlibrary.org",
   enabled: true
 
 # Import environment specific config. This must remain at the bottom

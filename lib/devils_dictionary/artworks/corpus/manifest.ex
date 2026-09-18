@@ -67,6 +67,20 @@ defmodule DevilsDictionary.Artworks.Corpus.Manifest do
       namespace: "poetrydb_poem",
       work_kind: "poem",
       evidence: :none
+    },
+    # The first kind whose identity namespace is one a *live* provider also
+    # writes: `DevilsDictionary.Discovery.Providers.OpenLibrary` resolves an
+    # attested book to the same `olid`, so a book found on a visit and a book
+    # held here are one registry entity rather than two. `evidence: :none` for
+    # the reason PoetryDB's is — a book that uses a word does not depict it,
+    # and a row claiming otherwise would invent the one claim a text corpus
+    # exists to avoid.
+    "open-library" => %{
+      source: "open-library",
+      identity: "olid",
+      namespace: "olid",
+      work_kind: "book",
+      evidence: :none
     }
   }
 

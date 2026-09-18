@@ -252,7 +252,63 @@ defmodule DevilsDictionary.Artworks.Corpus.Seeder do
     end
   end
 
+  @doc false
+  def entry("open-library", version, row) do
+    with {:ok, olid} <- required(row["olid"]),
+         {:ok, title} <- required(row["title"]) do
+      Entry.new(%{
+        source_slug: "open-library",
+        object_kind: :entity,
+        entity_kind: :work,
+        work_kind: "book",
+        stable_identifier: %{namespace: "olid", external_id: olid},
+        # The work's own Wikidata QID belongs here — unlike PoetryDB's
+        # `author_qid`, this one is about *this work* and not about the person
+        # who wrote it, so registering it collides with nothing. The authors'
+        # QIDs stay in metadata, where they are facts about the authors.
+        identifiers: [%{namespace: "olid", external_id: olid}] ++ wikidata_identifier(row["qid"]),
+        label: label(title),
+        year: row["year"],
+        metadata:
+          %{
+            "content_type" => "text",
+            "catalog_source" => "open-library",
+            "corpus" => version
+          }
+          |> put_present("author_display_name", author_names(row))
+          |> put_present("author_qids", author_qids(row))
+          |> put_present("public_domain_basis", row["pd_basis"])
+          |> put_present("source_url", row["source_url"])
+          |> put_present("wikidata_url", row["wikidata_url"])
+          |> put_sitelinks(row["sitelinks"]),
+        eligibility: :eligible,
+        retention: :durable
+      })
+    end
+  end
+
   def entry(kind, _version, _row), do: {:error, "unsupported_manifest_kind_#{kind}"}
+
+  defp wikidata_identifier(qid) do
+    if is_binary(qid) and valid_qid?(qid),
+      do: [%{namespace: "wikidata", external_id: qid, metadata: %{"field" => "P648_subject"}}],
+      else: []
+  end
+
+  defp author_names(%{"authors" => authors}) when is_list(authors) do
+    authors |> Enum.map(& &1["name"]) |> Enum.filter(&present?/1) |> Enum.join(", ") |> presence()
+  end
+
+  defp author_names(_row), do: nil
+
+  defp author_qids(%{"authors" => authors}) when is_list(authors) do
+    case authors |> Enum.map(& &1["qid"]) |> Enum.filter(&(is_binary(&1) and valid_qid?(&1))) do
+      [] -> nil
+      qids -> qids
+    end
+  end
+
+  defp author_qids(_row), do: nil
 
   # `entities.preferred_label` is varchar(255) and Postgres counts characters,
   # not bytes, so this is the column's own width. Met highlight titles reach it:
