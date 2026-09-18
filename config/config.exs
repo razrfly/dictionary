@@ -101,7 +101,8 @@ config :devils_dictionary, :discovery_providers, [
   DevilsDictionary.Discovery.Providers.Artsy,
   DevilsDictionary.Discovery.Providers.CineGraph,
   DevilsDictionary.Discovery.Providers.Giphy,
-  DevilsDictionary.Discovery.Providers.Met
+  DevilsDictionary.Discovery.Providers.Met,
+  DevilsDictionary.Discovery.Providers.Poetrydb
 ]
 
 # Culture discovery is visit-driven and bounded. Provider modules own their
@@ -178,6 +179,12 @@ config :devils_dictionary, Oban,
        {"*/15 * * * *", DevilsDictionary.Discovery.CleanupWorker}
      ]}
   ]
+
+# PoetryDB is keyless and public. `request_interval_ms` is an override for the
+# measured default in the provider, not a second declaration of it.
+config :devils_dictionary, :poetrydb,
+  endpoint: "https://poetrydb.org",
+  enabled: true
 
 # Import environment specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.

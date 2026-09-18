@@ -26,13 +26,30 @@ defmodule DevilsDictionary.Artworks.Corpus.Manifest do
   # `wikidata` — so neither can be derived from the other, and a kind that
   # declared only the first left anything reading the seeded row back with a
   # hard-coded list of its own.
+  # `work_kind` is the third registration, and it is here for the same reason
+  # the other two are: nothing outside this table should hold a list of which
+  # corpora are artworks. `Corpus.Conformance` counted seeded rows as
+  # `work_kind == "artwork"` literally, which was true of both corpora until a
+  # corpus of poems existed.
   @kinds %{
     "met-highlights" => %{
       source: "met",
       identity: "met_object_id",
-      namespace: "met_object_id"
+      namespace: "met_object_id",
+      work_kind: "artwork"
     },
-    "wikidata-famous" => %{source: "wikidata", identity: "qid", namespace: "wikidata"}
+    "wikidata-famous" => %{
+      source: "wikidata",
+      identity: "qid",
+      namespace: "wikidata",
+      work_kind: "artwork"
+    },
+    "poetrydb" => %{
+      source: "poetrydb",
+      identity: "poem_id",
+      namespace: "poetrydb_poem",
+      work_kind: "poem"
+    }
   }
 
   @doc "The manifest kinds this module can build and read."
@@ -49,6 +66,15 @@ defmodule DevilsDictionary.Artworks.Corpus.Manifest do
   other cannot be read back.
   """
   def identity_namespace(kind), do: Map.fetch!(@kinds, kind).namespace
+
+  @doc """
+  The `work_details.work_kind` this kind's rows are seeded as.
+
+  A corpus is a selection of *works*, and which kind of work is the manifest's
+  own fact: `met-highlights` and `wikidata-famous` are artworks, `poetrydb` is
+  poems. Anything counting seeded rows reads it from here rather than assuming.
+  """
+  def work_kind(kind), do: Map.fetch!(@kinds, kind).work_kind
 
   @doc "Builds a manifest, deduplicated on its kind's identity field and ordered by it."
   def new(kind, rows, metadata \\ %{}) when is_binary(kind) and is_list(rows) do

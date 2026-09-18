@@ -144,30 +144,32 @@ defmodule DevilsDictionary.Artworks.Corpus.Conformance do
           assert first.invalid == 0, "invalid rows: #{inspect(first.invalid_reasons)}"
 
           objects = Repo.aggregate(Object, :count)
-          artworks = artwork_count()
+          works = work_count(manifest)
 
           assert {:ok, again} = Seeder.run(manifest, limit: @slice)
           assert again.matched == expected
           assert again.newly_created == 0
           assert Repo.aggregate(Object, :count) == objects
-          assert artwork_count() == artworks
+          assert work_count(manifest) == works
         end
 
         test "a dry run counts what it would seed and writes nothing", %{manifest: manifest} do
           assert {:ok, summary} = Seeder.run(manifest, limit: @slice, dry_run: true)
           assert summary.would_seed == slice(manifest)
-          assert artwork_count() == 0
+          assert work_count(manifest) == 0
         end
 
         test "every label fits entities.preferred_label, cutting the ones that do not",
              %{manifest: manifest} do
           assert {:ok, _summary} = Seeder.run(manifest, limit: @slice)
 
+          work_kind = Manifest.work_kind(manifest["kind"])
+
           labels =
             Repo.all(
               from entity in Entity,
                 join: details in WorkDetails,
-                on: details.entity_id == entity.object_id and details.work_kind == "artwork",
+                on: details.entity_id == entity.object_id and details.work_kind == ^work_kind,
                 select: entity.preferred_label
             )
 
@@ -193,6 +195,30 @@ defmodule DevilsDictionary.Artworks.Corpus.Conformance do
           assert String.length(Repo.get!(Entity, object_id).preferred_label) == 255
         end
 
+        # A corpus of texts has no depiction to make. A poem does not depict the
+        # word it uses — that is the attestation rule, and recording a QID here
+        # to satisfy this case would be inventing the one claim the corpus is
+        # careful not to make. So the case splits on what the manifest records:
+        # a corpus with depicted QIDs must round-trip one onto a page, and a
+        # corpus without them must still round-trip its identity, which is the
+        # part every corpus has.
+        test "a seeded row is found again by the identity its kind registers", context do
+          manifest = context.manifest
+          row = List.first(manifest["rows"])
+
+          assert {:ok, summary} = Seeder.run(%{manifest | "rows" => [row]})
+          assert summary.invalid == 0
+
+          identity = Map.fetch!(row, manifest["identity"])
+          namespace = Manifest.identity_namespace(manifest["kind"])
+
+          assert object_id = Registry.by_external_id(namespace, identity),
+                 "#{@path} seeded a row that #{namespace} cannot find again"
+
+          assert Repo.get_by!(WorkDetails, entity_id: object_id).work_kind ==
+                   Manifest.work_kind(manifest["kind"])
+        end
+
         test "a depicted QID reaches the page whose meaning refers to it", context do
           manifest = context.manifest
 
@@ -201,8 +227,19 @@ defmodule DevilsDictionary.Artworks.Corpus.Conformance do
               row |> depicted() |> Enum.any?()
             end)
 
-          assert row, "#{@path} records no depicted QIDs, so nothing could ever match a page"
+          if row do
+            depicted_round_trip(context, manifest, row)
+          else
+            # Named rather than skipped: a corpus whose rows carry no depicted
+            # QIDs makes no depiction claim, and the assertion above is the one
+            # that applies to it.
+            assert Manifest.work_kind(manifest["kind"]) != "artwork",
+                   "#{@path} is an artwork corpus that records no depicted QIDs, " <>
+                     "so nothing in it could ever match a page"
+          end
+        end
 
+        defp depicted_round_trip(context, manifest, row) do
           %{"qid" => qid, "term" => term} = row |> depicted() |> List.first()
 
           assert {:ok, _summary} = Seeder.run(%{manifest | "rows" => [row]})
@@ -236,8 +273,12 @@ defmodule DevilsDictionary.Artworks.Corpus.Conformance do
 
         defp slice(manifest), do: min(@slice, length(manifest["rows"]))
 
-        defp artwork_count do
-          Repo.aggregate(from(d in WorkDetails, where: d.work_kind == "artwork"), :count)
+        # The kind's own `work_kind`, read from `Manifest` rather than assumed.
+        # This counted `"artwork"` literally, which was true of every corpus
+        # until one held poems — and a count that is always zero asserts nothing.
+        defp work_count(manifest) do
+          kind = Manifest.work_kind(manifest["kind"])
+          Repo.aggregate(from(d in WorkDetails, where: d.work_kind == ^kind), :count)
         end
       end
     end

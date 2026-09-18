@@ -218,6 +218,40 @@ defmodule DevilsDictionary.Artworks.Corpus.Seeder do
     end
   end
 
+  @doc false
+  def entry("poetrydb", version, row) do
+    with {:ok, poem_id} <- required(row["poem_id"]),
+         {:ok, title} <- required(row["title"]),
+         {:ok, author} <- required(row["author"]) do
+      Entry.new(%{
+        source_slug: "poetrydb",
+        object_kind: :entity,
+        entity_kind: :work,
+        work_kind: "poem",
+        stable_identifier: %{namespace: "poetrydb_poem", external_id: poem_id},
+        # The poet's QID is **not** among these. A poem is not the person who
+        # wrote it, and registering `wikidata: Q82083` on *Ode to a Nightingale*
+        # would claim it is Keats — and collide with the entity that actually is.
+        # The crosswalk is recorded as what it is: a fact about the author.
+        identifiers: [%{namespace: "poetrydb_poem", external_id: poem_id}],
+        label: label(title),
+        metadata:
+          %{
+            "content_type" => "text",
+            "catalog_source" => "poetrydb",
+            "corpus" => version,
+            "author_display_name" => author
+          }
+          |> put_present("author_qid", row["author_qid"])
+          |> put_present("lines_sha256", row["lines_sha256"])
+          |> put_present("source_url", row["source_url"])
+          |> put_line_count(row["line_count"]),
+        eligibility: :eligible,
+        retention: :durable
+      })
+    end
+  end
+
   def entry(kind, _version, _row), do: {:error, "unsupported_manifest_kind_#{kind}"}
 
   # `entities.preferred_label` is varchar(255) and Postgres counts characters,
@@ -302,6 +336,9 @@ defmodule DevilsDictionary.Artworks.Corpus.Seeder do
   defp required(value) do
     if present?(value), do: {:ok, String.trim(value)}, else: {:error, :missing_required_field}
   end
+
+  defp put_line_count(map, count) when is_integer(count), do: Map.put(map, "line_count", count)
+  defp put_line_count(map, _count), do: map
 
   defp put_present(map, _key, nil), do: map
   defp put_present(map, _key, ""), do: map

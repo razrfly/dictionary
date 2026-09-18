@@ -10,7 +10,7 @@ defmodule DevilsDictionary.Discovery.ProvidersTest do
   use ExUnit.Case, async: false
 
   alias DevilsDictionary.Discovery.Providers
-  alias DevilsDictionary.Discovery.Providers.{Artsy, CineGraph, Giphy, Met}
+  alias DevilsDictionary.Discovery.Providers.{Artsy, CineGraph, Giphy, Met, Poetrydb}
   alias DevilsDictionary.FakeOffsetDiscoveryProvider
   alias DevilsDictionary.FakePartialDiscoveryProvider
   alias DevilsDictionary.FakeUnretrievableDiscoveryProvider
@@ -25,26 +25,30 @@ defmodule DevilsDictionary.Discovery.ProvidersTest do
     do: Application.put_env(:devils_dictionary, :discovery_providers, providers)
 
   test "the shipped registry is the configured one, not a literal in the module", ctx do
-    assert ctx.configured == [Artsy, CineGraph, Giphy, Met]
+    assert ctx.configured == [Artsy, CineGraph, Giphy, Met, Poetrydb]
     assert Providers.all() == ctx.configured
   end
 
-  test "the pipeline runs two providers, over two transports and two content types", ctx do
+  test "the pipeline runs three providers, over two transports and three content types", ctx do
     # The whole point of Phase 1, cashed in: the Met is GET, offset-paged and
-    # `:artwork`, CineGraph is GraphQL POST, cursor-paged and `:film`, and both
-    # are driven by the same run/budget/cache/lease machine. Artsy and GIPHY
-    # stay registered for their source rows and are not scheduled.
-    assert Providers.server_providers() == [CineGraph, Met]
+    # `:artwork`, CineGraph is GraphQL POST, cursor-paged and `:film`, PoetryDB
+    # is GET, offset-paged and `:text`, and all three are driven by the same
+    # run/budget/cache/lease machine. Artsy and GIPHY stay registered for their
+    # source rows and are not scheduled.
+    assert Providers.server_providers() == [CineGraph, Met, Poetrydb]
     assert Providers.server_providers(:film) == [CineGraph]
     assert Providers.server_providers(:artwork) == [Met]
+    assert Providers.server_providers(:text) == [Poetrydb]
 
     assert Enum.map(Providers.server_providers(), & &1.capabilities().transport) == [
+             :server,
              :server,
              :server
            ]
 
     assert Enum.map(Providers.server_providers(), & &1.capabilities().pagination) == [
              :cursor,
+             :offset,
              :offset
            ]
 
@@ -188,6 +192,11 @@ defmodule DevilsDictionary.Discovery.ProvidersTest do
     # pipeline provider, and adding the Met does not change that either way.
     assert Providers.get("artsy") == Artsy
     assert Providers.get("giphy") == Giphy
-    assert Enum.map(Providers.server_providers(), & &1.slug()) == ["cinegraph", "met"]
+
+    assert Enum.map(Providers.server_providers(), & &1.slug()) == [
+             "cinegraph",
+             "met",
+             "poetrydb"
+           ]
   end
 end

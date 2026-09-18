@@ -104,3 +104,9 @@ config :devils_dictionary, cache_scorecard: false
 
 # Mail goes nowhere in tests; assert on it with Swoosh.TestAssertions.
 config :devils_dictionary, DevilsDictionary.Mailer, adapter: Swoosh.Adapters.Test
+
+# Scaffolded by `mix dd.provider.new poetrydb`. Every request in the
+# suite goes through the `Req.Test` stub named after the provider module.
+config :devils_dictionary, :poetrydb,
+  endpoint: "https://poetrydb.test/api",
+  enabled: true

@@ -17,6 +17,16 @@ defmodule DevilsDictionaryWeb.CultureDiscoveryLiveTest do
     Map.merge(catalog, %{conn: conn, animals: catalog.scopes["animals"]})
   end
 
+  # A test about one provider's shelf registers one provider. The registry is
+  # config, and since PoetryDB joined it a page that names no provider admits
+  # three runs rather than one — so `Repo.one!(Run)` would be asserting how many
+  # providers ship, which is `ProvidersTest`'s job and not this file's.
+  defp only(providers) do
+    original = Application.fetch_env!(:devils_dictionary, :discovery_providers)
+    Application.put_env(:devils_dictionary, :discovery_providers, providers)
+    on_exit(fn -> Application.put_env(:devils_dictionary, :discovery_providers, original) end)
+  end
+
   test "configured GIF shelf mounts automatically without initial search control", ctx do
     original = Application.fetch_env!(:devils_dictionary, :giphy)
 
@@ -37,6 +47,7 @@ defmodule DevilsDictionaryWeb.CultureDiscoveryLiveTest do
 
   test "definitions render while discovery is queued, then cards arrive without a page reload",
        ctx do
+    only([CineGraph])
     word = word!(ctx, "war", ~w(bierce))
     entry!(ctx, word, "bierce", body: "A public definition that must not wait.")
     stub_success("war", 273_967, [movie(301, "Title-independent match")])
@@ -61,6 +72,7 @@ defmodule DevilsDictionaryWeb.CultureDiscoveryLiveTest do
   end
 
   test "missing posters use an intentional text treatment", ctx do
+    only([CineGraph])
     word = word!(ctx, "grief", ~w(wordnet))
     sense!(ctx, word, "wordnet", gloss: "deep sorrow")
     stub_success("grief", 9_872, [movie(302, "Posterless", poster_path: nil)])
@@ -74,6 +86,7 @@ defmodule DevilsDictionaryWeb.CultureDiscoveryLiveTest do
   end
 
   test "successful empty and provider failure are visibly distinct", ctx do
+    only([CineGraph])
     empty = word!(ctx, "empty", ~w(wordnet))
     sense!(ctx, empty, "wordnet", gloss: "having nothing")
 
@@ -115,6 +128,7 @@ defmodule DevilsDictionaryWeb.CultureDiscoveryLiveTest do
   end
 
   test "polysemous resolver pages label spelling-only relevance honestly", ctx do
+    only([CineGraph])
     noun = word!(ctx, "bank", ~w(wordnet), pos: "noun")
     _verb = word!(ctx, "bank", ~w(wiktionary), pos: "verb")
     sense!(ctx, noun, "wordnet", gloss: "a financial institution")
@@ -160,6 +174,7 @@ defmodule DevilsDictionaryWeb.CultureDiscoveryLiveTest do
   end
 
   test "mounted pages remove cached previews when provider eligibility is revoked", ctx do
+    only([CineGraph])
     word = word!(ctx, "deactivated-live", ~w(wordnet))
     sense!(ctx, word, "wordnet", gloss: "visible until policy changes")
     stub_success("deactivated-live", 701, [movie(701, "Policy preview")])
