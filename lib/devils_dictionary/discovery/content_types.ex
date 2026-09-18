@@ -10,6 +10,13 @@ defmodule DevilsDictionary.Discovery.ContentTypes do
   `thumbnail_keys` is the ordered ladder read from a result's preview metadata.
   A type with no `aspect` has no image slot at all, so a text result renders as
   a title and its source rather than an empty poster frame.
+
+  `column` is how wide that card is on the rail. It is here rather than in the
+  shelf markup because the right width is a property of what the card holds: a
+  poster frame sets its own width and the title sits under it, but a text card
+  is *only* a title, and a 96 px poster column clipped “Ode in Memory of the
+  American Volunteers Fallen for France” to two lines of a title that wanted
+  seven. Measured on `/define/war` at 375 px (#109 Phase 3b).
   """
 
   @table %{
@@ -19,6 +26,8 @@ defmodule DevilsDictionary.Discovery.ContentTypes do
       badge: "Film",
       aspect: "aspect-[2/3]",
       icon: "hero-film",
+      column: "w-24 sm:w-28",
+      title_clamp: "line-clamp-2",
       thumbnail_keys: ~w(poster_url still_url image_url media_url)
     },
     artwork: %{
@@ -27,6 +36,8 @@ defmodule DevilsDictionary.Discovery.ContentTypes do
       badge: "Artwork",
       aspect: "aspect-square",
       icon: "hero-photo",
+      column: "w-24 sm:w-28",
+      title_clamp: "line-clamp-2",
       thumbnail_keys: ~w(image_url thumbnail_url)
     },
     # A photograph of a soldier is a visual work but it is not an artwork, and a
@@ -40,6 +51,8 @@ defmodule DevilsDictionary.Discovery.ContentTypes do
       badge: "Image",
       aspect: "aspect-square",
       icon: "hero-camera",
+      column: "w-24 sm:w-28",
+      title_clamp: "line-clamp-2",
       thumbnail_keys: ~w(thumbnail_url image_url)
     },
     gif: %{
@@ -48,6 +61,8 @@ defmodule DevilsDictionary.Discovery.ContentTypes do
       badge: nil,
       aspect: "aspect-square",
       icon: "hero-photo",
+      column: "w-24 sm:w-28",
+      title_clamp: "line-clamp-2",
       thumbnail_keys: ~w(media_url image_url)
     },
     text: %{
@@ -56,6 +71,11 @@ defmodule DevilsDictionary.Discovery.ContentTypes do
       badge: "Text",
       aspect: nil,
       icon: "hero-document-text",
+      # No poster frame to set the width, and a title that has to carry the card
+      # on its own. Two of these fit a 375 px rail with the third showing that
+      # the rail scrolls.
+      column: "w-44 sm:w-52",
+      title_clamp: "line-clamp-3",
       thumbnail_keys: []
     }
   }
@@ -78,6 +98,12 @@ defmodule DevilsDictionary.Discovery.ContentTypes do
 
   def get(type, _default) when is_map_key(@table, type), do: Map.fetch!(@table, type)
   def get(_type, default), do: fetch!(default)
+
+  @doc "The rail column width for a content type."
+  def column(type), do: type |> get() |> Map.fetch!(:column)
+
+  @doc "How many lines this content type's card gives its title."
+  def title_clamp(type), do: type |> get() |> Map.fetch!(:title_clamp)
 
   @doc "Reads a preview thumbnail using this content type's key ladder."
   def thumbnail_url(type, metadata) when is_map(metadata) do

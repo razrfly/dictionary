@@ -484,6 +484,14 @@ defmodule DevilsDictionary.Discovery.Conformance do
 
             assert Enum.map(state.items, & &1.external_id) == ids
 
+            # The card's column width and title clamp come from the
+            # content-type table rather than from the shelf markup. A text card
+            # has no poster frame to set its width, and the shared 96 px poster
+            # column clipped a poem's title to two lines of the seven it wanted
+            # at 375 px (#109 Phase 3b).
+            assert html =~ ContentTypes.column(type)
+            assert html =~ ContentTypes.title_clamp(type)
+
             # A provider ships zero components: the byline is the source row's
             # name plus whatever `shelf_detail/0` returned, rendered by shared
             # code that names no provider.
