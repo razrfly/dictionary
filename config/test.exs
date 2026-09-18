@@ -37,11 +37,6 @@ config :devils_dictionary, :giphy,
   rating: "g",
   enabled: false
 
-# Test clients use deterministic injected transports. Focused coordinator tests
-# start their own named process; transaction rollbacks must not leave the global
-# withdrawal generation disabled for unrelated cases.
-config :devils_dictionary, :artsy, coordinator: nil
-
 # No pacing in the suite: the interval is a live-rate concern and 25 hydrations
 # would otherwise cost 25 seconds of wall clock per test.
 config :devils_dictionary, :met, enabled: true, request_interval_ms: 0

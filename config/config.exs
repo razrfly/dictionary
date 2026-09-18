@@ -156,13 +156,10 @@ config :devils_dictionary, :giphy,
   rating: "g",
   enabled: true
 
-config :devils_dictionary, :artsy,
-  endpoint: "https://api.artsy.net",
-  rate_limit_ms: 340,
-  freshness_seconds: 24 * 60 * 60,
-  interactive_request_limit: 30,
-  interactive_request_window_ms: 60_000,
-  enabled: true
+# Artsy is registry-only: its 43 pilot works are catalog rows and no request is
+# ever made. The private client, its coordinator and the availability check
+# were retired in #109 Phase 3a; `enabled` is read by the registry gate alone.
+config :devils_dictionary, :artsy, enabled: true
 
 # Oban (#69 §5). `absorb: 1` because a dump absorb is a single long stream.
 # `enrich` is **1**, not the spec's 3: `EnrichWorker` paces with a per-process

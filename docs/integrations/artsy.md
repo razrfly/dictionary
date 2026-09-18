@@ -1,8 +1,55 @@
 # Artsy artwork integration
 
-Status: optional, server-side, bounded, and removable. Implemented for issue
-[#86](https://github.com/razrfly/dictionary/issues/86) on top of the shared
-source-identity work from issue #93.
+Status: **client retired 2026-09-18 (#109 Phase 3a); the pilot's rows remain.**
+Implemented for issue [#86](https://github.com/razrfly/dictionary/issues/86) on
+top of the shared source-identity work from issue #93, frozen by K9 of #109,
+and reduced in Phase 3a to what a page can read without a network.
+
+## What was removed on 2026-09-18, and why
+
+Artsy's public API is being retired and its terms never granted the durable
+licence the encyclopedia needs, so a private client that could still be pointed
+at it was a liability and not a capability: K9 froze it in Phase 1a and Phase 3a
+took it out. Deleted, in one commit:
+
+| Gone | What it was |
+|---|---|
+| `lib/devils_dictionary/artsy/client.ex` | the XAPP-token client: auth, redirects, search, artwork, artist and gene requests |
+| `lib/devils_dictionary/artsy/request_coordinator.ex` | the application-wide pacing and withdrawal-generation process, and its entry in `DevilsDictionary.Application` |
+| `lib/devils_dictionary/artsy/availability.ex` | the credentials-and-coordinator availability check |
+| `lib/devils_dictionary/artworks/seeder.ex` | the Wikidata-to-Artsy importer — every stage of it called the client |
+| the `/artworks` page's *Look in Artsy* form | the transient live lookup (`search-artsy`, `handle_async`, the `#artsy-lookup` section) |
+| the Artsy import stage of `mix dd.artworks.seed` | `--import`, `--resume`, `--checkpoint`, `--request-limit`, `--batch-size`, `--skip-wikidata-hydration`; the task now refuses an import manifest without `--build` or `--wikidata-only` and says why |
+| `test/devils_dictionary/artsy/*`, `test/devils_dictionary/artworks/seeder_test.exs` | their tests, including the one withdrawal case that first seeded through the client |
+| `config :devils_dictionary, :artsy`'s client keys | `endpoint`, `rate_limit_ms`, `freshness_seconds`, `interactive_request_*`; only `enabled` remains, read by the registry gate |
+
+Kept, deliberately:
+
+- **The 43 pilot works, their creators and their source records** — catalog
+  rows on `/artworks` and on entity pages, with the Artsy source's own rights
+  notice beside any retained thumbnail.
+- **The seven enabled gene mappings** in `priv/artworks/meaning-mappings-v1.json`,
+  which `Artworks.install_meaning_mappings!/0` still installs and which put a
+  pilot work on a word page's *Artworks* shelf as *Related Artsy gene “Conflict”*.
+- **`DevilsDictionary.Discovery.Providers.Artsy`**, registered and
+  registry-only: `background: false`, no `retrieve/4`, covered by the
+  conformance suite's registry-only profile, which asserts that nothing can
+  schedule it. Its `enabled?/0` still reads `ARTSY_CLIENT_ID` and
+  `ARTSY_CLIENT_SECRET` from `config/runtime.exs`; with the client gone they
+  gate nothing but that flag.
+- **`Artworks.withdraw_artsy/1`** and `mix dd.artsy.withdraw`, the transactional
+  path that disables the source, withdraws its claims and removes its payloads.
+  It no longer has a coordinator to switch off first.
+- **`DevilsDictionary.Artworks.Manifest`** and the four committed import
+  manifests, which the architecture test still checks are the format they
+  claim to be, and `mix dd.artworks.seed --build` / `--wikidata-only`, the two
+  stages that only ever spoke to Wikidata.
+
+Everything below this line describes the integration as it was built and run
+in September 2026, and is kept as the record of that. Where it says a request
+is made, none can be any more.
+
+---
 
 ## Product role
 
