@@ -60,8 +60,31 @@ defmodule DevilsDictionary.Tasks.DdProviderNewTest do
     end
 
     test "a slug that cannot name a source row, a config key and a file is refused" do
-      assert_raise Mix.Error, ~r/is not a usable provider slug/, fn ->
-        run(~w(Open_Library --archetype corpus))
+      # A leading hyphen never reaches the slug rule — OptionParser reads it as
+      # flags and refuses it first, which is also correct.
+      for bad <- ~w(Open_Library open_library 9lives UPPER has.dot) do
+        assert_raise Mix.Error, ~r/is not a usable provider slug/, fn ->
+          run([bad, "--archetype", "corpus"])
+        end
+      end
+    end
+
+    test "a slug whose module name another slug already owns is refused" do
+      # `Macro.camelize/1` folds a trailing or doubled hyphen away, so `demo-`
+      # and `demo` are both `Demo`. Two generations would write different files
+      # defining the same module, and the path check cannot see it.
+      for ambiguous <- ~w(demo- a--b trailing- double--hyphen) do
+        assert_raise Mix.Error, ~r/is not a usable provider slug/, fn ->
+          run([ambiguous, "--archetype", "corpus"])
+        end
+      end
+    end
+
+    test "the slugs the roadmap names are all accepted" do
+      root = tmp!()
+
+      for slug <- ~w(poetrydb open-library openverse chronicling-america) do
+        assert run(~w(#{slug} --archetype corpus --root #{root}))
       end
     end
 

@@ -130,6 +130,13 @@ refused with the list of valid values. Every output path is checked before the
 first one is written, so a collision on *any* of them refuses the whole run and
 leaves nothing behind.
 
+A slug is lowercase letters and digits in hyphen-separated words —
+`poetrydb`, `open-library`, `chronicling-america` — with no leading, trailing or
+doubled hyphen. It names the source row, the config key, the generated files
+*and* the module, and `Macro.camelize/1` folds `demo-` and `demo` to the same
+`Demo`, so anything ambiguous is refused rather than quietly redefining a module
+someone else generated.
+
 `--archetype corpus` writes `lib/devils_dictionary/artworks/corpus/<slug>.ex` and
 then tells you about **two edits it cannot make**, both pattern matches in shared
 modules:
