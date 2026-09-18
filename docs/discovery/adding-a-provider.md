@@ -50,8 +50,10 @@ layer down.
 
 ## 1. A bounded probe, with a ceiling and a running ledger
 
-**Ceiling: 200 requests.** Decide it before you start and stop at it. A probe
-answers questions the documentation cannot:
+**The ceiling is per phase, and the phase states it.** 200 requests is the
+default; #109's Phase 3 sessions were each given **300**. Read your own brief
+for the number, decide it before you start, and stop at it. A probe answers
+questions the documentation cannot:
 
 - What does the source actually return, field by field, for a word we care about?
 - What **identifier** does it publish, and does the encyclopedia already hold the
@@ -419,6 +421,7 @@ file — not "green".
 | The content-type table | `lib/devils_dictionary/discovery/content_types.ex` |
 | The match reason | `lib/devils_dictionary/discovery/match_reason.ex` |
 | The one reader surface | `lib/devils_dictionary_web/components/culture.ex` |
+| The shared sense-evidence read (`covers?/1`) | `lib/devils_dictionary/discovery/page_evidence.ex` |
 | Corpus manifests | `lib/devils_dictionary/artworks/corpus/manifest.ex`, `priv/artworks/manifests/` |
 | Corpus seeding | `lib/devils_dictionary/artworks/corpus/seeder.ex` |
 | Conformance | `test/support/discovery/conformance.ex`, `test/support/artworks/corpus_conformance.ex` |
