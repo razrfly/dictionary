@@ -120,3 +120,11 @@ config :devils_dictionary, :commons,
   enabled: true,
   request_interval_ms: 0,
   min_retry_interval_ms: 0
+
+# Scaffolded by `mix dd.provider.new open-library`. Every request in the
+# suite goes through the `Req.Test` stub named after the provider module.
+config :devils_dictionary, :open_library,
+  endpoint: "https://open-library.test",
+  enabled: true,
+  request_interval_ms: 0,
+  min_retry_interval_ms: 0
