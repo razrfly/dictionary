@@ -155,12 +155,47 @@ defmodule DevilsDictionary.Discovery.Providers.CommonsTest do
 
   describe "retrieve/4" do
     test "a lag refusal is a 200 with an error body, and the run is deferred" do
-      request_fun = fn "search", _payload ->
-        {:ok, %{"error" => %{"code" => "maxlag", "lag" => 7.2, "info" => "Waiting"}}}
+      # MediaWiki reports `lag` as a float, but a whole number of seconds
+      # arrives as an integer; both defer, never below the 5 s Retry-After.
+      for {lag, seconds} <- [{7.2, 8}, {7, 7}, {0.445, 5}, {3, 5}] do
+        request_fun = fn "search", _payload ->
+          {:ok, %{"error" => %{"code" => "maxlag", "lag" => lag, "info" => "Waiting"}}}
+        end
+
+        assert {:deferred, "maxlag", ^seconds, %{"first" => 3}} =
+                 Commons.retrieve(@operation, @mapping, %{"first" => 3}, request_fun),
+               "lag #{inspect(lag)} did not defer for #{seconds} s"
+      end
+    end
+
+    test "the uploader is requested, and is the author when the file names no Artist" do
+      parent = self()
+
+      request_fun = fn
+        "search", %{"params" => params} ->
+          send(parent, {:search, params})
+
+          bare =
+            update_in(
+              page(1011, "cc-by-4.0", "CC BY 4.0"),
+              ["imageinfo", Access.at(0), "extmetadata"],
+              &Map.delete(&1, "Artist")
+            )
+
+          {:ok, %{"batchcomplete" => true, "query" => %{"pages" => [bare]}}}
+
+        "entities", _payload ->
+          {:ok, %{"entities" => %{"M1011" => entity(["Q4991371"])}}}
       end
 
-      assert {:deferred, "maxlag", 8, %{"first" => 3}} =
+      assert {:ok, %{items: [item]}} =
                Commons.retrieve(@operation, @mapping, %{"first" => 3}, request_fun)
+
+      assert item.preview_metadata["author"] == "Fixture"
+      assert item.preview_metadata["artist"] == "Fixture · CC BY 4.0"
+
+      assert_received {:search, params}
+      assert "user" in String.split(params["iiprop"], "|")
     end
 
     test "sends maxlag, the OR'd QIDs and the page size, and hands back MediaWiki's continue" do

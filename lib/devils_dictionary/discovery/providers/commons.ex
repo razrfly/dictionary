@@ -12,9 +12,10 @@ defmodule DevilsDictionary.Discovery.Providers.Commons do
   `statements.P180` carries one of those QIDs: the search proposes, the
   statements dispose. No broader walk; equal QID or nothing (#109 Phase 3a).
 
-  A page costs exactly **two** requests: one `generator=search` that returns
+  A page costs at most **two** requests: one `generator=search` that returns
   the window with `prop=imageinfo` (thumbnail URL and `extmetadata` licence in
-  the same answer), and one `wbgetentities` for the window's `M`-ids. The
+  the same answer), and one `wbgetentities` for the window's `M`-ids — skipped
+  when the licence and mime gates leave nothing to hydrate. The
   probe (`docs/integrations/commons.md`) measured no throttle at 250 ms
   spacing; the 1 s interval is what a public service is owed by something that
   visits it on every word page, and `maxlag=5` rides on every request as the
@@ -234,7 +235,7 @@ defmodule DevilsDictionary.Discovery.Providers.Commons do
           # the search can sort on.
           "gsrsort" => "incoming_links_desc",
           "prop" => "imageinfo",
-          "iiprop" => "url|mime|extmetadata",
+          "iiprop" => "url|mime|user|extmetadata",
           "iiurlwidth" => Integer.to_string(@thumb_width),
           "iiextmetadatafilter" => Enum.join(@extmetadata, "|")
         }
@@ -306,6 +307,7 @@ defmodule DevilsDictionary.Discovery.Providers.Commons do
   defp lag_seconds(%{"lag" => lag}) when is_number(lag), do: max(@maxlag, ceil_seconds(lag))
   defp lag_seconds(_error), do: @maxlag
 
+  defp ceil_seconds(lag) when is_integer(lag), do: lag
   defp ceil_seconds(lag), do: lag |> Float.ceil() |> trunc()
 
   # The candidates the licence and mime gates admit, then one `wbgetentities`

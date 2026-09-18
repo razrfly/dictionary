@@ -14,12 +14,12 @@ showed it needed (see *Measured facts*, 9).
 | Content type | `:image` — a fifth row in `DevilsDictionary.Discovery.ContentTypes`, added in this phase |
 | Base | `https://commons.wikimedia.org/w/api.php` |
 | Transport, pagination | GET; MediaWiki `continue` cursor (`{"continue":"gsroffset\|\|","gsroffset":12}`, JSON-encoded as the cursor and handed back as the parameters it names) |
-| Licence | per **file**, read from the hydrated file's `extmetadata`. Only `pd`, `cc0`, `cc-by-*` and `cc-by-sa-*` codes (or, when the code is absent, the short names *Public domain*, *CC0*, *CC BY x*, *CC BY-SA x*) are shown. Everything else — Commons's own `Attribution` template, GFDL, every `NC`/`ND` variant — is dropped. What is stored is a thumbnail URL, the author and the licence; nothing else may be, and nothing else is. |
+| Licence | per **file**, read from the hydrated file's `extmetadata`. Only `pd`, `cc0`, `cc-by-*` and `cc-by-sa-*` codes (or, when the code is absent, the short names *Public domain*, *CC0*, *CC BY x*, *CC BY-SA x*) are shown. Everything else — Commons's own `Attribution` template, GFDL, every `NC`/`ND` variant — is dropped. What is stored per file is the thumbnail URL with the author and licence it must be shown with, plus the display facts a card needs — title, year, source URL — and the QIDs it was matched on; never image bytes, never the description text. |
 | Key required | none. The third keyless provider after the Met and PoetryDB. |
 | Published rate limit | none for reads; the [API etiquette](https://www.mediawiki.org/wiki/API:Etiquette) asks for a contact `User-Agent`, requests in series, and `maxlag` |
 | Measured sustainable rate | 30 request pairs at **250 ms** and 30 at 1 s drew no `429`, no `maxlag` refusal and no `Retry-After`; latency 284–2,449 ms, mean about 500 ms. Shipped at **1,000 ms** anyway, with `maxlag=5` on every request — see *Pacing*. |
 | Images | thumbnail URLs (`iiurlwidth=640`) only; bytes are never downloaded |
-| A page costs | exactly **2** requests: one `generator=search` carrying `prop=imageinfo`, one `wbgetentities` for the window's `M`-ids |
+| A page costs | at most **2** requests: one `generator=search` carrying `prop=imageinfo`, then one `wbgetentities` for the window's `M`-ids — skipped, so the page costs 1, when the licence and mime gates leave nothing to hydrate |
 
 ## Probe
 
@@ -31,16 +31,16 @@ probe that is killed leaves the number it had reached and not a blank.
 
 | # | requests | what was asked | what came back | running total |
 |---|---|---|---|---|
-| A1 | 1 | `list=search haswbstatement:P180=Q4991371`, ns 6, limit 5 | 200 in 590 ms — 8852 total hits; `continue` = `{"continue":"-||","sroffset":5}` | **1 / 300** |
-| A2 | 1 | the same search as `generator=search` with `prop=imageinfo` (`url`, `extmetadata`, `iiurlwidth=640`) | 200 in 476 ms — 5 pages with thumbnail URL and `extmetadata` licence in one answer; `continue` = `{"continue":"gsroffset||","gsroffset":5}` | **2 / 300** |
-| A3 | 1 | `wbgetentities ids=M6659002|M7887852|M8841536|M17040973|M23538787` (`props=claims`) | 200 in 369 ms — every entity carries `statements.P180` with `mainsnak.datavalue.value.id` QIDs | **3 / 300** |
-| A4 | 3 | `haswbstatement:P180=Q144|P180=Q25324`, then `Q144` alone, then `Q25324` alone | 200/200/200 in 212/537/206 ms — 26220 hits for the OR, 26131 for dog, 115 for Canidae | **6 / 300** |
+| A1 | 1 | `list=search haswbstatement:P180=Q4991371`, ns 6, limit 5 | 200 in 590 ms — 8852 total hits; `continue` = `{"continue":"-\|\|","sroffset":5}` | **1 / 300** |
+| A2 | 1 | the same search as `generator=search` with `prop=imageinfo` (`url`, `extmetadata`, `iiurlwidth=640`) | 200 in 476 ms — 5 pages with thumbnail URL and `extmetadata` licence in one answer; `continue` = `{"continue":"gsroffset\|\|","gsroffset":5}` | **2 / 300** |
+| A3 | 1 | `wbgetentities ids=M6659002\|M7887852\|M8841536\|M17040973\|M23538787` (`props=claims`) | 200 in 369 ms — every entity carries `statements.P180` with `mainsnak.datavalue.value.id` QIDs | **3 / 300** |
+| A4 | 3 | `haswbstatement:P180=Q144\|P180=Q25324`, then `Q144` alone, then `Q25324` alone | 200/200/200 in 212/537/206 ms — 26220 hits for the OR, 26131 for dog, 115 for Canidae | **6 / 300** |
 | A5 | 1 | `haswbstatement:P180=Q4991371 filetype:bitmap` | 200 in 487 ms — 8840 hits (A1 had 8852 without the filter) | **7 / 300** |
 | A6 | 1 | the same search with `maxlag=-1`, to see the lag refusal | 200 in 237 ms — body `{"error":{"code":"maxlag","docref":"See https://commons.wikimedia.org/w/api.php for API usage. Subscribe to the mediawiki-api-announce mailing list at &lt;https://lists.wikimedia.org/postorius/lists/mediawiki-api-announce.lists.wikimedia.org/&gt; for notice of API deprecations and breaking changes.","host":"10.64.16.149","info":"Waiting for 10.64.16.149: 0.445356 seconds lagged.","lag":0.445356,"type":"db"},"servedby":"mw-api-ext.eqiad.main-77d9d4c448-9vthq"}`; `Retry-After: ["5"]` | **8 / 300** |
-| A7 | 1 | page 2 of A2 by handing back its `continue` (`gsroffset=5`, `continue=gsroffset||`) | 200 in 404 ms — 5 new pages, none from page 1; `continue` = `{"continue":"gsroffset||","gsroffset":10}` | **9 / 300** |
-| A8 | 1 | `haswbstatement:P180=Q262026` (andiron), the empty case | 200 in 411 ms — body `{"batchcomplete":true,"continue":{"continue":"gsroffset||","gsroffset":5},"query":{"pages":[{"imageinfo":[{"descriptions` | **10 / 300** |
+| A7 | 1 | page 2 of A2 by handing back its `continue` (`gsroffset=5`, `continue=gsroffset\|\|`) | 200 in 404 ms — 5 new pages, none from page 1; `continue` = `{"continue":"gsroffset\|\|","gsroffset":10}` | **9 / 300** |
+| A8 | 1 | `haswbstatement:P180=Q262026` (andiron), the empty case | 200 in 411 ms — body `{"batchcomplete":true,"continue":{"continue":"gsroffset\|\|","gsroffset":5},"query":{"pages":[{"imageinfo":[{"descriptions` | **10 / 300** |
 | B1 | 2 | `haswbstatement:P180=Q4115189` (the Wikidata sandbox item) as `generator=search` and as `list=search` | 200/200 in 480/244 ms — **not** the empty case: five test uploads depict the sandbox item (a keyboard, a logo, a roundabout, a `video/webm`, a park), so the window has to gate on `mime` as well as on licence. Written wrongly at first as "no `query` key"; corrected after reading the body | **12 / 300** |
-| B2 | 1 | `wbgetentities ids=M116369|M1|M999999999999`: a real file, a very early page id, an id that cannot exist | 200 in 220 ms — []; error `"no-such-entity"` | **13 / 300** |
+| B2 | 1 | `wbgetentities ids=M116369\|M1\|M999999999999`: a real file, a very early page id, an id that cannot exist | 200 in 220 ms — []; error `"no-such-entity"` | **13 / 300** |
 | B3 | 30 | 15 pages of soldier, each a `generator=search` (limit 10) then a `wbgetentities` of its ten M-ids, **1 s** apart | 15 of 15 pairs clean; latency 308–2449 ms, mean 615 ms; statuses [200]; errors [nil]; Retry-After [nil] | **43 / 300** |
 | B4 | 30 | 15 more pages the same way, **250 ms** apart | 15 of 15 pairs clean; latency 284–1746 ms, mean 495 ms; statuses [200]; errors [nil]; Retry-After [nil] | **73 / 300** |
 | C1 | 2 | `haswbstatement:P180=Q999999999999 filetype:bitmap` as generator and as list | 200/200 in 492/312 ms — generator body `{"batchcomplete":true}`; list body `{"batchcomplete":true,"query":{"search":[],"searchinfo":{"totalhits":0}}}` | **75 / 300** |
@@ -89,9 +89,10 @@ nothing.
 Things nobody should have to measure twice.
 
 1. **`generator=search` + `prop=imageinfo` answers search and licence in one
-   request.** `iiprop=url|mime|extmetadata` with `iiurlwidth=640` returns the
-   thumbnail URL, the mime type and the licence fields for every hit, so the
-   licence gate costs no request of its own. The whole page is two requests.
+   request.** `iiprop=url|mime|user|extmetadata` with `iiurlwidth=640` returns
+   the thumbnail URL, the mime type, the uploader and the licence fields for
+   every hit, so the licence gate costs no request of its own. The whole page
+   is at most two requests, and one when the gates leave nothing to hydrate.
 2. **The empty answer has no `query` key.** A `generator=search` that proposes
    nothing answers `{"batchcomplete": true}` and nothing else (C1). The
    provider treats that as an ordinary empty page — a negative cache, not a
