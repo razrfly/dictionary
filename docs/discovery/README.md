@@ -27,8 +27,9 @@ encyclopedia already asserts**:
 |---|---|---|---|
 | CineGraph | a TMDb keyword id | the lemma | exact keyword match on the word |
 | The Met | a Wikidata QID on a subject tag | a QID a sense `refers_to` | equal, or reached in ≤2 `P31`/`P279` steps |
+| Wikimedia Commons | a `P180` *depicts* QID in the file's own structured data | a QID a sense `refers_to` | equal QID; the search proposes, the hydrated statements dispose |
 | The committed corpora | a `P180` depiction or a Met tag QID | the same `refers_to` | equal QID |
-| Artsy (frozen) | a gene id | a gene recipe on a sense | equal gene |
+| Artsy (retired client) | a gene id | a gene recipe on a sense | equal gene, read from the committed pilot only |
 
 A **text** provider is the exception that proves it: a text has no identity claim
 to make about a word, so its evidence is **attestation** — this work *uses* this
@@ -121,14 +122,17 @@ sense is the assessor's job (#101), not this pipeline's.
 for any word, so CineGraph never declines. The Met can and does — its match key
 is a QID the target's senses already refer to, and for a target with no such link
 there is no query to make and no result that could pass the identity gate. About
-99% of pages are in that state.
+99% of pages are in that state. Wikimedia Commons declines on exactly the same
+question, and since Phase 3a both read it through
+`DevilsDictionary.Discovery.PageEvidence` rather than each holding its own copy
+of the query.
 
 Declining is how a run whose only possible outcome is empty is never admitted,
 and how a page avoids showing a shelf that was never going to hold anything. The
 word page asks it too, on the first disconnected render, before any run exists.
 
-It must be answerable as an **existence** question. The Met's is
-`Repo.exists?(sense_evidence(...))` — it must not pay for the ordering, the
+It must be answerable as an **existence** question. The Met's and Commons's is
+`PageEvidence.any?/1`, a `Repo.exists?` — it must not pay for the ordering, the
 dedup and the labels that only a mapping about to be built has any use for.
 
 ### 3. The mapping — a versioned recipe
@@ -305,11 +309,16 @@ type is an entry here and nothing else — not a new branch in `Culture` or
 |---|---|---|---|---|
 | `:film` | Films | Film | `aspect-[2/3]` | `poster_url`, `still_url`, `image_url`, `media_url` |
 | `:artwork` | Artworks | Artwork | `aspect-square` | `image_url`, `thumbnail_url` |
+| `:image` | Images | Image | `aspect-square` | `thumbnail_url`, `image_url` |
 | `:text` | Texts | Text | **none** | — |
 | `:gif` | GIFs | — | `aspect-square` | `media_url`, `image_url` |
 
-Shelf order is film · artwork · text · gif, and it is the order of
-`ContentTypes.known/0` rather than insertion order.
+Shelf order is film · artwork · image · text · gif, and it is the order of
+`ContentTypes.known/0` rather than insertion order. `:image` arrived with
+Wikimedia Commons (#109 Phase 3a): a photograph of a soldier is a visual work
+but it is not an artwork, and a shelf headed *Artworks* over a US Army
+photograph was the page misnaming what it shows. The row was the whole of the
+change.
 
 A type with no `aspect` has **no image slot at all**, so a text result renders as
 a title and its source rather than an empty poster frame. That is the whole
@@ -350,8 +359,9 @@ both without one of them meaning two different things.
 what separates a reason from an impression: *tagged “Soldiers”* is what a reader
 thinks and *tagged “Soldiers” (Q4991371)* is a fact anyone can go and check.
 
-`from_result/2` reads a live provider's `match_details` — `"tags"`, `"keywords"`,
-`"lines"` — and falls back to a `:query` reason when the provider named none.
+`from_result/2` reads a live provider's `match_details` — `"tags"`, `"depicts"`,
+`"keywords"`, `"lines"` — and falls back to a `:query` reason when the provider
+named none.
 `from_candidate/1` reads a corpus candidate. Both end as the same struct and the
 same sentence.
 
@@ -495,7 +505,9 @@ suite red.
 | CineGraph | discovery (GraphQL POST, cursor, keyword-id match) | `Culture.section` | live-verified, #88 |
 | The Met | discovery (GET, offset, tag-QID identity + ≤2-step broader walk) **and** corpus (`met-highlights-v1`, 1,644) | `Culture.section` | #102 2a/2b |
 | Wikidata famous paintings | corpus (`wikidata-famous-v1`, 1,575) | `Culture.section` | #102 2b |
-| Artsy | registered, frozen — its 43 artworks reach a page through the catalog, not this pipeline | `Culture.section` | #86, K9 of #109 |
+| PoetryDB | discovery (GET, offset, attestation) **and** corpus (`poetrydb-v1`, 2,903 poems) | `Culture.section` | #109 Phase 2 and 1c |
+| Wikimedia Commons | discovery (GET, MediaWiki `continue` cursor, `P180` depicts-QID identity, per-file licence gate) | `Culture.section`, the `:image` shelf | #109 Phase 3a |
+| Artsy | registered, registry-only — its 43 artworks and their gene mappings reach a page through the catalog; the private client was retired in #109 Phase 3a | `Culture.section` | #86, K9 of #109 |
 | GIPHY | registered, browser-only, transient | its own `GiphyShelf` component, **not** `Culture.section` | parked pending caching approval, K10 |
 
 `priv/artworks/manifests/` also holds four Artsy **import** manifests

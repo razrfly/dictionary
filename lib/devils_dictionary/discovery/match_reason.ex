@@ -56,7 +56,7 @@ defmodule DevilsDictionary.Discovery.MatchReason do
   saying so is better than inventing one.
   """
   def from_result(details, term) when is_map(details) do
-    case tags(details) ++ keywords(details) ++ attestations(details) do
+    case tags(details) ++ depictions(details) ++ keywords(details) ++ attestations(details) do
       [] -> [%__MODULE__{kind: :query, relation: :exact, term: term}]
       reasons -> reasons
     end
@@ -79,6 +79,28 @@ defmodule DevilsDictionary.Discovery.MatchReason do
         scope: :sense,
         reached: tag["entity_label"],
         locator: "tag #{tag["qid"]}"
+      }
+    end)
+  end
+
+  # A live depiction (#109 Phase 3a): a Wikimedia Commons file's own `P180`
+  # statement names a QID a sense refers to. The same fact a corpus row records
+  # as `depicted_qid`, read from a provider result instead of a manifest, so it
+  # ends as the same struct and the same sentence.
+  defp depictions(details) do
+    details
+    |> Map.get("depicts", [])
+    |> List.wrap()
+    |> Enum.filter(&(is_map(&1) and is_binary(&1["qid"]) and &1["qid"] != ""))
+    |> Enum.uniq_by(& &1["qid"])
+    |> Enum.map(fn depiction ->
+      %__MODULE__{
+        kind: :depiction,
+        identifier: depiction["qid"],
+        relation: relation(depiction["relation"]),
+        scope: :sense,
+        reached: depiction["entity_label"],
+        locator: "depicts #{depiction["qid"]}"
       }
     end)
   end

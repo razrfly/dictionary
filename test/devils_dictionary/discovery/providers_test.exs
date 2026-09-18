@@ -10,7 +10,7 @@ defmodule DevilsDictionary.Discovery.ProvidersTest do
   use ExUnit.Case, async: false
 
   alias DevilsDictionary.Discovery.Providers
-  alias DevilsDictionary.Discovery.Providers.{Artsy, CineGraph, Giphy, Met, Poetrydb}
+  alias DevilsDictionary.Discovery.Providers.{Artsy, CineGraph, Commons, Giphy, Met, Poetrydb}
   alias DevilsDictionary.FakeOffsetDiscoveryProvider
   alias DevilsDictionary.FakePartialDiscoveryProvider
   alias DevilsDictionary.FakeUnretrievableDiscoveryProvider
@@ -52,6 +52,7 @@ defmodule DevilsDictionary.Discovery.ProvidersTest do
     # was ever the point.
     for {provider, content_type, pagination} <- [
           {CineGraph, :film, :cursor},
+          {Commons, :image, :cursor},
           {Met, :artwork, :offset},
           {Poetrydb, :text, :offset}
         ] do
@@ -63,7 +64,7 @@ defmodule DevilsDictionary.Discovery.ProvidersTest do
       assert capabilities.transport == :server
       assert capabilities.pagination == pagination
 
-      for other <- [:film, :artwork, :text] -- [content_type] do
+      for other <- [:film, :artwork, :image, :text] -- [content_type] do
         refute provider in Providers.server_providers(other)
       end
     end

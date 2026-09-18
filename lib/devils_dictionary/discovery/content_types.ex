@@ -29,6 +29,19 @@ defmodule DevilsDictionary.Discovery.ContentTypes do
       icon: "hero-photo",
       thumbnail_keys: ~w(image_url thumbnail_url)
     },
+    # A photograph of a soldier is a visual work but it is not an artwork, and a
+    # shelf headed *Artworks* over a US Army photograph is the page misnaming
+    # what it shows. Wikimedia Commons (#109 Phase 3a) is the first provider
+    # whose files are mostly photographs, and this row is the whole of the
+    # change it needed in shared code.
+    image: %{
+      heading: "Images",
+      label: "images",
+      badge: "Image",
+      aspect: "aspect-square",
+      icon: "hero-camera",
+      thumbnail_keys: ~w(thumbnail_url image_url)
+    },
     gif: %{
       heading: "GIFs",
       label: "GIFs",
@@ -48,8 +61,8 @@ defmodule DevilsDictionary.Discovery.ContentTypes do
   }
 
   # Shelf order (K2 of #109), not insertion order: a page shows films, then
-  # artworks, then texts, then GIFs.
-  @known [:film, :artwork, :text, :gif]
+  # artworks, then images, then texts, then GIFs.
+  @known [:film, :artwork, :image, :text, :gif]
 
   @doc "Every content type the reader can present, in shelf order."
   def known, do: @known

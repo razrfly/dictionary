@@ -29,7 +29,7 @@ defmodule DevilsDictionary.Tasks.DdProviderNewTest do
 
   describe "refusals" do
     test "an unknown content type is refused with the list of valid ones", %{} do
-      assert_raise Mix.Error, ~r/film, artwork, text, gif/, fn ->
+      assert_raise Mix.Error, ~r/film, artwork, image, text, gif/, fn ->
         run(~w(thing --archetype discovery --content-type sculpture --transport get
                --pagination offset))
       end

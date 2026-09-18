@@ -64,6 +64,32 @@ defmodule DevilsDictionary.Discovery.MatchReasonTest do
                "Related to “War” through the tag “World War I” (Q361)."
     end
 
+    test "a Commons depiction names what the file depicts and its QID, as one meaning's" do
+      assert [reason] =
+               MatchReason.from_result(
+                 %{
+                   "kind" => "depiction",
+                   "depicts" => [
+                     %{
+                       "qid" => "Q4991371",
+                       "relation" => "exact",
+                       "entity_qid" => "Q4991371",
+                       "entity_label" => "soldier"
+                     }
+                   ]
+                 },
+                 "soldier"
+               )
+
+      assert reason.kind == :depiction
+      assert reason.identifier == "Q4991371"
+      assert reason.relation == :exact
+      assert reason.scope == :sense
+      assert reason.locator == "depicts Q4991371"
+
+      assert MatchReason.describe(reason) == "Direct depiction of “soldier” (Q4991371)."
+    end
+
     test "a CineGraph keyword names the keyword and its TMDb id" do
       assert [reason] =
                MatchReason.from_result(

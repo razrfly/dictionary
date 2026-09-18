@@ -100,6 +100,7 @@ config :devils_dictionary,
 config :devils_dictionary, :discovery_providers, [
   DevilsDictionary.Discovery.Providers.Artsy,
   DevilsDictionary.Discovery.Providers.CineGraph,
+  DevilsDictionary.Discovery.Providers.Commons,
   DevilsDictionary.Discovery.Providers.Giphy,
   DevilsDictionary.Discovery.Providers.Met,
   DevilsDictionary.Discovery.Providers.Poetrydb
@@ -184,6 +185,13 @@ config :devils_dictionary, Oban,
 # measured default in the provider, not a second declaration of it.
 config :devils_dictionary, :poetrydb,
   endpoint: "https://poetrydb.org",
+  enabled: true
+
+# Wikimedia Commons is keyless and public. The interval keys are overrides for
+# the measured defaults in the provider (1 s between requests, 5 s after a lag
+# refusal), not a second declaration of them; `maxlag=5` rides on every request.
+config :devils_dictionary, :commons,
+  endpoint: "https://commons.wikimedia.org/w/api.php",
   enabled: true
 
 # Import environment specific config. This must remain at the bottom

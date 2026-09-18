@@ -116,3 +116,12 @@ config :devils_dictionary, :poetrydb,
   enabled: true,
   request_interval_ms: 0,
   min_retry_interval_ms: 0
+
+# Every Commons request in the suite goes through the `Req.Test` stub named
+# after the provider module. No pacing, for the same reason as the Met and
+# PoetryDB above: the intervals are a live-rate courtesy, not a suite's cost.
+config :devils_dictionary, :commons,
+  endpoint: "https://commons.test/w/api.php",
+  enabled: true,
+  request_interval_ms: 0,
+  min_retry_interval_ms: 0
