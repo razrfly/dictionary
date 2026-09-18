@@ -60,6 +60,16 @@ defmodule DevilsDictionary.Discovery.Conformance do
     if function_exported?(provider, :shelf_detail, 0), do: provider.shelf_detail()
   end
 
+  @doc """
+  The tier a provider's source row is seeded with.
+
+  Through an opaque module for the same reason as `declares_pipeline?/1`: a
+  provider's `source_attrs/0` is a literal, and the type checker would fold
+  `attrs.tier in [...]` into a constant and warn that the comparison is
+  always true.
+  """
+  def tier(provider), do: provider.source_attrs()[:tier]
+
   @doc "True when this provider can actually be driven through the pipeline."
   def pipeline?(provider) do
     declares_pipeline?(provider) and Providers.retrievable?(provider)
@@ -132,6 +142,13 @@ defmodule DevilsDictionary.Discovery.Conformance do
           assert is_binary(attrs.name) and attrs.name != ""
           assert is_binary(attrs.attribution) and attrs.attribution != ""
           assert is_binary(@provider.adapter_version()) and @provider.adapter_version() != ""
+
+          # The tier is where this source sorts among the others on a shelf
+          # (#116 M2), so it has to be one the shelf can rank.
+          tier = DevilsDictionary.Discovery.Conformance.tier(@provider)
+
+          assert tier in [:aristocracy, :middle, :plebs],
+                 "#{@slug} declares tier #{inspect(tier)}"
         end
 
         test "declares capabilities the shared pipeline can branch on" do
@@ -496,6 +513,23 @@ defmodule DevilsDictionary.Discovery.Conformance do
             # name plus whatever `shelf_detail/0` returned, rendered by shared
             # code that names no provider.
             assert html =~ state.provider_name
+
+            # The state carries the tier the shelf orders sources by (#116 M2).
+            assert state.tier in [:aristocracy, :middle, :plebs]
+
+            # M4 of #116: on a shelf whose row requires attribution, every item
+            # renders its credit beneath the thumbnail, always visible. The
+            # line is `preview_metadata["attribution"]` or `"credit_line"`; a
+            # provider delivering an item with neither onto such a shelf is
+            # the defect this catches.
+            if ContentTypes.attribution(type) == :required do
+              for item <- state.items do
+                assert html =~
+                         ~s(id="culture-attribution-#{item.external_namespace}-#{item.external_id}"),
+                       "#{@slug} delivered #{item.external_id} onto the #{type} shelf " <>
+                         "without an attribution line, and that shelf requires one"
+              end
+            end
           end
 
           test "every result carries a reason that renders as one sentence", context do
@@ -507,6 +541,9 @@ defmodule DevilsDictionary.Discovery.Conformance do
 
             state = Discovery.state(target.object_id, @slug)
 
+            type =
+              Enum.find(@provider.capabilities().content_types, &(&1 in ContentTypes.known()))
+
             for item <- state.items do
               reasons = MatchReason.from_result(item.match_details, state.term)
               assert reasons != []
@@ -514,6 +551,18 @@ defmodule DevilsDictionary.Discovery.Conformance do
               sentence = MatchReason.describe_all(reasons)
               assert is_binary(sentence) and sentence != ""
               assert String.ends_with?(sentence, ".")
+
+              # M6 of #116, as data: the content-type row says which classes
+              # of reason it admits, and every reason this provider delivers
+              # onto it has to be one of them. A text provider whose result
+              # named no attestation, or an artwork provider whose result is
+              # a bare search, is caught here rather than by a reviewer.
+              for reason <- reasons do
+                assert ContentTypes.admits?(type, reason),
+                       "#{@slug} delivered a #{inspect(MatchReason.evidence(reason))} reason " <>
+                         "onto the #{type} shelf, whose row admits " <>
+                         inspect(ContentTypes.evidence(type))
+              end
             end
           end
         end

@@ -13,6 +13,7 @@ defmodule DevilsDictionary.Discovery do
   import Ecto.Query
 
   alias DevilsDictionary.Claims.AssertionRevision
+  alias DevilsDictionary.Corpus.SourceRecordRevision
   alias DevilsDictionary.Discovery.{Mapping, Policy, Providers, Result, Run}
   alias DevilsDictionary.Discovery.RunWorker
   alias DevilsDictionary.Lexicon
@@ -919,14 +920,26 @@ defmodule DevilsDictionary.Discovery do
     else
       pages = Map.new(runs, &{&1.id, &1.page})
 
+      # The identifiers the provider proposed travel in the source record's
+      # payload, which lives on its current revision (`Sources.raw/1`). They
+      # come back onto the result as a virtual field so a shelf can dedup two
+      # providers' copies of one thing on a shared namespace (#116 M3).
       Repo.all(
         from result in Result,
           left_join: record in assoc(result, :source_record),
+          left_join: revision in SourceRecordRevision,
+          on:
+            revision.source_record_id == record.id and
+              revision.revision_key == record.content_hash,
           where:
             result.run_id in ^run_ids and result.display_allowed and
               (is_nil(result.source_record_id) or record.display_allowed),
-          order_by: [asc: result.run_id, asc: result.position]
+          order_by: [asc: result.run_id, asc: result.position],
+          select: {result, revision.payload["identifiers"]}
       )
+      |> Enum.map(fn {result, identifiers} ->
+        %{result | identifiers: Enum.filter(List.wrap(identifiers), &is_map/1)}
+      end)
       |> Enum.sort_by(&{pages[&1.run_id], &1.position, &1.id})
       |> Enum.uniq_by(fn result ->
         result.object_id || {result.external_namespace, result.external_id}
@@ -1338,6 +1351,10 @@ defmodule DevilsDictionary.Discovery do
     %{
       provider_name: if(source, do: source.name, else: attrs.name),
       provider_attribution: if(source, do: source.attribution, else: attrs.attribution),
+      # Where this source sorts among the others on a shelf (#116 M2). Read
+      # from the source row, which is where tier lives; the provider's own
+      # declaration is what seeded it.
+      tier: if(source, do: source.tier, else: attrs[:tier]),
       # The one-line qualifier a provider wants beside its name on the shelf
       # ("keywords: TMDb"). The reader renders whatever is here and knows no
       # provider by name.

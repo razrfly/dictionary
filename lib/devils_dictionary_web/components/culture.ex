@@ -14,11 +14,19 @@ defmodule DevilsDictionaryWeb.Culture do
   `DevilsDictionary.Discovery.ContentTypes`; why an item matched is a
   `DevilsDictionary.Discovery.MatchReason`; nothing here knows which providers
   exist.
+
+  A shelf with several sources on it is one rail, not one rail per source
+  (#116): the order across sources and the duplicates between them are
+  `DevilsDictionary.Discovery.Shelf`'s two rules, applied here at read time
+  and never to a provider's persisted results. What a card owes its maker,
+  and which reasons a shelf may show at all, are two more columns of the
+  content-type table, read here rather than remembered.
   """
   use DevilsDictionaryWeb, :html
 
   alias DevilsDictionary.Discovery.ContentTypes
   alias DevilsDictionary.Discovery.MatchReason
+  alias DevilsDictionary.Discovery.Shelf
 
   attr :states, :map, required: true
   attr :return_path, :string, default: nil
@@ -46,8 +54,16 @@ defmodule DevilsDictionaryWeb.Culture do
     """
   end
 
-  # One shelf per content type, in the table's order: film · artwork · text ·
-  # gif. A provider that declares a type nobody can present is not a shelf.
+  # One shelf per content type, in the table's order: film · artwork · image ·
+  # text · gif. A provider that declares a type nobody can present is not a
+  # shelf.
+  #
+  # The entries are every contributing state's items, composed by the shelf's
+  # two rules (#116 M2, M3): live before corpus, then one item from each
+  # source in turn — sources by tier and then slug — with one item per
+  # identity and one per media URL, the better-tiered source's copy kept.
+  # Before this the rail was one provider's items and then the next's, which
+  # is the sectioned grid a many-source shelf exists to avoid.
   defp shelves(states) do
     for type <- ContentTypes.known(),
         group = Enum.filter(states, &(content_type(&1) == type)),
@@ -56,9 +72,9 @@ defmodule DevilsDictionaryWeb.Culture do
         type: type,
         states: group,
         entries:
-          Enum.flat_map(group, fn state ->
-            Enum.map(state.items, &%{state: state, item: &1})
-          end)
+          group
+          |> Enum.flat_map(fn state -> Enum.map(state.items, &%{state: state, item: &1}) end)
+          |> Shelf.compose(&archetype_rank(&1.state), &source/1, &Shelf.keys(&1.item))
       }
     end
   end
@@ -68,6 +84,17 @@ defmodule DevilsDictionaryWeb.Culture do
   # this visit, and a shelf that opened with the catalog would bury the answer
   # the page actually went and got.
   defp archetype_rank(state), do: if(Map.get(state, :archetype) == :corpus, do: 1, else: 0)
+
+  # Where an entry's source sorts on its shelf: tier, then slug. A live state
+  # is one provider and carries its tier; the catalog state carries several
+  # corpora, and each of its items names its own source, so the corpus group
+  # takes turns between the Met and Wikidata rather than treating "the
+  # catalog" as one source. `Map.get/2`, not access: a persisted item is a
+  # `Result` struct.
+  defp source(%{state: state, item: item}) do
+    {Shelf.tier_rank(Map.get(item, :source_tier) || Map.get(state, :tier)),
+     Map.get(item, :source_slug) || state.provider}
+  end
 
   attr :shelves, :list, required: true
   attr :provider_count, :integer, required: true
@@ -150,6 +177,7 @@ defmodule DevilsDictionaryWeb.Culture do
               <.compact_note
                 :for={state <- contributing(shelf)}
                 state={state}
+                type={shelf.type}
                 contributor={@contributor}
               />
             </div>
@@ -199,13 +227,26 @@ defmodule DevilsDictionaryWeb.Culture do
 
   defp culture_thumbnail(assigns) do
     presentation = ContentTypes.get(assigns.type)
+    metadata = assigns.item.preview_metadata
+    attribution = attribution_line(presentation.attribution, metadata)
 
     assigns =
       assigns
-      |> assign(:image, ContentTypes.thumbnail_url(assigns.type, assigns.item.preview_metadata))
+      |> assign(:image, ContentTypes.thumbnail_url(assigns.type, metadata))
       |> assign(:entry_path, entry_path(assigns.item, assigns.return_path))
       |> assign(:aspect, presentation.aspect)
       |> assign(:badge, presentation.badge)
+      |> assign(:attribution, attribution)
+      # A required credit names the creator by construction, so on a shelf
+      # that requires one the credit *is* the creator line; anywhere else the
+      # two are different facts and both are shown.
+      |> assign(
+        :artist,
+        if(presentation.attribution == :required and attribution,
+          do: nil,
+          else: metadata["artist"]
+        )
+      )
 
     ~H"""
     <div class="group flex min-w-0 flex-col gap-2 rounded-sm">
@@ -258,11 +299,18 @@ defmodule DevilsDictionaryWeb.Culture do
         <%!-- Whoever made it, when the provider or the catalog named them. It
              is a metadata key and not a content type's business: a film's
              director and an artwork's painter arrive under the same one. --%>
+        <p :if={@artist} class="line-clamp-2 text-sm text-mist-500 text-pretty">
+          {@artist}
+        </p>
+        <%!-- The credit, beneath the thumbnail and always visible (#116 M4). A
+             required credit hidden behind a hover is the sister project's
+             mistake; a CC licence's one condition is that this line be seen. --%>
         <p
-          :if={@item.preview_metadata["artist"]}
+          :if={@attribution}
+          id={"culture-attribution-#{@item.external_namespace}-#{@item.external_id}"}
           class="line-clamp-2 text-sm text-mist-500 text-pretty"
         >
-          {@item.preview_metadata["artist"]}
+          {@attribution}
         </p>
         <a
           :if={@item.preview_metadata["source_url"]}
@@ -315,6 +363,25 @@ defmodule DevilsDictionaryWeb.Culture do
     """
   end
 
+  # What the card shows for the item's maker, by the row's `attribution`:
+  # nothing on a `:none` row, and otherwise the ready-made `attribution` line
+  # when the provider wrote one, the `credit_line` when it did not.
+  defp attribution_line(:none, _metadata), do: nil
+
+  defp attribution_line(_mode, metadata) when is_map(metadata),
+    do: presence(metadata["attribution"]) || presence(metadata["credit_line"])
+
+  defp attribution_line(_mode, _metadata), do: nil
+
+  defp presence(value) when is_binary(value) do
+    case String.trim(value) do
+      "" -> nil
+      trimmed -> trimmed
+    end
+  end
+
+  defp presence(_value), do: nil
+
   defp entry_path(%{object_id: object_id, preview_metadata: metadata}, return_path)
        when is_integer(object_id) do
     slug = DevilsDictionary.Claims.Connection.slugify(metadata["title"])
@@ -325,9 +392,12 @@ defmodule DevilsDictionaryWeb.Culture do
   defp entry_path(_item, _return_path), do: nil
 
   attr :state, :map, required: true
+  attr :type, :atom, required: true
   attr :contributor, :boolean, default: false
 
   defp compact_note(assigns) do
+    assigns = assign(assigns, :admits, ContentTypes.evidence(assigns.type))
+
     ~H"""
     <details id={"culture-about-#{@state.provider}"}>
       <summary class="w-fit cursor-pointer text-base text-mist-500 hover:text-mist-700 sm:text-sm dark:text-mist-400">
@@ -352,11 +422,16 @@ defmodule DevilsDictionaryWeb.Culture do
         <p :if={@state.relevance == "term_unverified"} class="text-pretty">
           Relevance to this particular meaning is unverified.
         </p>
+        <%!-- Each reason as one sentence, read against the shelf's own
+             `evidence` row (#116 M6): a search result on the one shelf that
+             admits one is called a search result; anywhere else a reason with
+             nothing in it keeps the sentence that prompts someone to fix it. --%>
         <ul role="list" class="space-y-1">
           <li :for={item <- @state.items}>
-            {item.preview_metadata["title"]}: {MatchReason.describe_all(reasons(item, @state.term))}{review_note(
-              item
-            )}
+            {item.preview_metadata["title"]}: {MatchReason.describe_all(
+              reasons(item, @state.term),
+              @admits
+            )}{review_note(item)}
             <.link
               :if={@contributor && connect_path(item)}
               navigate={connect_path(item)}

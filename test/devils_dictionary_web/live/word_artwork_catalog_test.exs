@@ -92,6 +92,95 @@ defmodule DevilsDictionaryWeb.WordArtworkCatalogTest do
     assert render(view) =~ "Leonardo da Vinci"
   end
 
+  test "two corpora take turns on the one shelf, and a credited row shows its credit line",
+       ctx do
+    war = word!(ctx, "war", ["wordnet"])
+    sense = sense!(ctx, war, "wordnet", gloss: "the waging of armed conflict")
+    link!(war, concept!("Q198", "War"), sense: sense, confidence: 0.95)
+
+    {:ok, _} =
+      Manifest.new("met-highlights", [
+        %{
+          "met_object_id" => "11417",
+          "title" => "Washington Crossing the Delaware",
+          "artist" => "Emanuel Leutze",
+          "date" => "1851",
+          "image_url" => "https://images.metmuseum.org/11417.jpg",
+          "credit_line" => "Gift of John Stewart Kennedy, 1897",
+          "source_url" => "https://www.metmuseum.org/art/collection/search/11417",
+          "tags" => [%{"term" => "Soldiers", "qid" => "Q198"}]
+        },
+        %{
+          "met_object_id" => "11418",
+          "title" => "The Battle",
+          "artist" => "Anonymous",
+          "date" => "1860",
+          "image_url" => "https://images.metmuseum.org/11418.jpg",
+          "credit_line" => "Purchase, 1900",
+          "source_url" => "https://www.metmuseum.org/art/collection/search/11418",
+          "tags" => [%{"term" => "Soldiers", "qid" => "Q198"}]
+        }
+      ])
+      |> Seeder.run()
+
+    {:ok, _} =
+      Manifest.new("wikidata-famous", [
+        %{
+          "qid" => "Q12418",
+          "title" => "Mona Lisa",
+          "sitelinks" => 146,
+          "image_url" => "https://upload.wikimedia.org/wikipedia/commons/thumb/x/xx/Mona.jpg",
+          "commons_file" => "Mona Lisa.jpg",
+          "credit_line" => "Mona Lisa.jpg · Wikimedia Commons",
+          "creators" => [%{"qid" => "Q762", "term" => "Leonardo da Vinci"}],
+          "depicts" => [%{"term" => "war", "qid" => "Q198"}]
+        },
+        %{
+          "qid" => "Q12419",
+          "title" => "Guernica",
+          "sitelinks" => 120,
+          "image_url" => "https://upload.wikimedia.org/wikipedia/commons/thumb/x/xx/Guernica.jpg",
+          "commons_file" => "Guernica.jpg",
+          "credit_line" => "Guernica.jpg · Wikimedia Commons",
+          "creators" => [%{"qid" => "Q5593", "term" => "Pablo Picasso"}],
+          "depicts" => [%{"term" => "war", "qid" => "Q198"}]
+        }
+      ])
+      |> Seeder.run()
+
+    {:ok, view, html} = live(ctx.conn, ~p"/define/war")
+
+    met = fn id -> DevilsDictionary.Registry.by_external_id("met_object_id", id) end
+    famous = fn qid -> DevilsDictionary.Registry.by_external_id("wikidata", qid) end
+
+    # #116 M2: one item from each source in turn, sources by tier and then
+    # slug — both corpora are middle-tier, so the Met's slug leads. Read off
+    # the rail's DOM order, which is what a reader sees. The rail is addressed
+    # through its shelf: with the full registry the page has more than one.
+    ids =
+      html
+      |> LazyHTML.from_fragment()
+      |> LazyHTML.query("#culture-shelf-artwork [id^='culture-results'] > li")
+      |> LazyHTML.attribute("id")
+
+    assert ids == [
+             "culture-result-catalog_artwork-c#{met.("11417")}",
+             "culture-result-catalog_artwork-c#{famous.("Q12418")}",
+             "culture-result-catalog_artwork-c#{met.("11418")}",
+             "culture-result-catalog_artwork-c#{famous.("Q12419")}"
+           ]
+
+    # #116 M4: the `:artwork` row is `:credited`, so a work carrying a credit
+    # line shows it beneath the thumbnail, beside the creator, without hover.
+    assert has_element?(
+             view,
+             "#culture-attribution-catalog_artwork-c#{met.("11417")}",
+             "Gift of John Stewart Kennedy, 1897"
+           )
+
+    assert render(view) =~ "Emanuel Leutze"
+  end
+
   test "a word-level entity candidate says the match is about the word", ctx do
     love = word!(ctx, "love", ["wordnet"])
     sense!(ctx, love, "wordnet", gloss: "a strong affection")

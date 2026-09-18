@@ -48,7 +48,16 @@ defmodule DevilsDictionary.Discovery.Conformance.OffsetFixture do
   end
 
   defp rows(count) do
-    Enum.map(1..count//1, &%{"id" => &1, "title" => "Elegy #{&1}", "year" => "1751"})
+    Enum.map(
+      1..count//1,
+      &%{
+        "id" => &1,
+        "title" => "Elegy #{&1}",
+        "year" => "1751",
+        "page" => &1 * 3,
+        "text" => "an elegy, line #{&1}"
+      }
+    )
   end
 
   defp respond(rows) do

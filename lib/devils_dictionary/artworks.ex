@@ -7,7 +7,7 @@ defmodule DevilsDictionary.Artworks do
   alias DevilsDictionary.Claims.{Assertion, AssertionEvidence, AssertionRevision}
   alias DevilsDictionary.Corpus.SourceRecordRevision
   alias DevilsDictionary.Discovery
-  alias DevilsDictionary.Discovery.{Mapping, MatchReason, Result, Run}
+  alias DevilsDictionary.Discovery.{Mapping, MatchReason, Result, Run, Shelf}
   alias DevilsDictionary.Encyclopedia
 
   alias DevilsDictionary.Registry.{
@@ -139,6 +139,7 @@ defmodule DevilsDictionary.Artworks do
     (artsy_suggestions(senses) ++ qid_suggestions(lexeme_ids, senses, opts))
     |> Enum.uniq_by(&{&1.artwork.object_id, &1.sense_id})
     |> per_work(opts[:per_work])
+    |> interleave_by_source()
     |> Enum.take(@suggestion_limit)
   end
 
@@ -146,7 +147,15 @@ defmodule DevilsDictionary.Artworks do
   # matches two meanings would otherwise hold two of the twelve slots and push
   # a distinct work off the end, which is not what one-item-per-work promises.
   # The first candidate in the merged order survives, with its sense and reason.
-  defp per_work(candidates, true), do: Enum.uniq_by(candidates, & &1.artwork.object_id)
+  #
+  # The dedup is the shelf's own (`Shelf.dedup/2`, #116 M3), keyed on the one
+  # identity every catalog work has. The shelf dedups again at read time
+  # across everything on it — a live Met result and the catalog's copy of the
+  # same object — but that happens after the limit, which is why this call
+  # stays.
+  defp per_work(candidates, true),
+    do: Shelf.dedup(candidates, &[{:object, &1.artwork.object_id}])
+
   defp per_work(candidates, _), do: candidates
 
   @doc """
@@ -169,15 +178,21 @@ defmodule DevilsDictionary.Artworks do
   persisted one without knowing that either exists.
   """
   def shelf_items(lexeme_ids, opts \\ []) when is_list(lexeme_ids) do
-    lexeme_ids
-    |> suggestions(Keyword.put(opts, :per_work, true))
-    |> Enum.map(&shelf_item/1)
+    candidates = suggestions(lexeme_ids, Keyword.put(opts, :per_work, true))
+    tiers = source_tiers(candidates)
+    Enum.map(candidates, &shelf_item(&1, tiers))
   end
 
-  defp shelf_item(candidate) do
+  defp shelf_item(candidate, tiers) do
     artwork = candidate.artwork
+    slug = catalog_slug(artwork)
 
     %{
+      # Which source this item is, for the shelf's own interleave (#116 M2):
+      # the catalog is one state carrying several corpora, and the rail takes
+      # turns between them only if each item says which it came from.
+      source_slug: slug,
+      source_tier: tiers[slug],
       # `"c"` and not the bare object id: a local identity and a Met object id
       # are both integers, and two items on one shelf whose DOM ids collided
       # would be an invisible bug.
@@ -345,7 +360,6 @@ defmodule DevilsDictionary.Artworks do
         }
       end
       |> Enum.uniq_by(&{&1.artwork.object_id, &1.sense_id})
-      |> interleave_by_source()
     end
   end
 
@@ -355,20 +369,51 @@ defmodule DevilsDictionary.Artworks do
   # Met's 1,644 objects sort last and the section's twelve slots go entirely to
   # one source. Interleaving costs nothing and is what makes this one section
   # rather than one source's section.
+  #
+  # The turn-taking is the shelf's own (`Shelf.interleave/3`, #116 M2), with
+  # sources ordered by tier and then slug rather than by a list kept here;
+  # the sort is each source's own order, which the interleave preserves.
+  # Before the limit, so that both sources get slots; the shelf interleaves
+  # again at read time across everything on it, live and catalog alike.
   defp interleave_by_source(candidates) do
+    tiers = source_tiers(candidates)
+
     candidates
     |> Enum.sort_by(&{sort_rank(&1), -(&1.artwork.sitelinks || 0), &1.artwork.object_id})
-    |> Enum.group_by(&{sort_rank(&1), &1.artwork.catalog_source})
-    |> Enum.flat_map(fn {{rank, source}, items} ->
-      Enum.with_index(items, fn item, index -> {{rank, index, source_order(source)}, item} end)
-    end)
-    |> Enum.sort_by(&elem(&1, 0))
-    |> Enum.map(&elem(&1, 1))
+    |> Shelf.interleave(&sort_rank/1, &source_key(&1.artwork, tiers))
   end
 
-  defp source_order("wikidata"), do: 0
-  defp source_order("met"), do: 1
-  defp source_order(_source), do: 2
+  defp source_key(artwork, tiers) do
+    slug = catalog_slug(artwork)
+    {Shelf.tier_rank(tiers[slug]), slug || ""}
+  end
+
+  # The tier of each catalog source on this page, from the source rows, once
+  # per page. A tier is a fact about a source and lives on its row; the
+  # candidates carry only the slug.
+  defp source_tiers(candidates) do
+    slugs =
+      candidates
+      |> Enum.map(&catalog_slug(&1.artwork))
+      |> Enum.reject(&is_nil/1)
+      |> Enum.uniq()
+
+    if slugs == [] do
+      %{}
+    else
+      Repo.all(
+        from source in Source, where: source.slug in ^slugs, select: {source.slug, source.tier}
+      )
+      |> Map.new()
+    end
+  end
+
+  # Which source a catalog work came from, as the slug of its source row. A
+  # committed corpus stamps `catalog_source`; the Artsy pilot's 43 works reached
+  # the registry by another route and carry the retained payload instead.
+  defp catalog_slug(%{catalog_source: slug}) when is_binary(slug) and slug != "", do: slug
+  defp catalog_slug(%{artsy: artsy}) when is_map(artsy), do: "artsy"
+  defp catalog_slug(_artwork), do: nil
 
   defp sort_rank(%{match_type: "direct"}), do: 0
   defp sort_rank(_candidate), do: 1

@@ -293,8 +293,11 @@ page merges those states with the catalog's shelf and hands the map to
 `DevilsDictionaryWeb.Culture.section/1`.
 
 **A pipeline provider ships zero components.** One shelf per content type, in
-the table's order, live results before corpus items, each item carrying the
-reason it is there. Nothing in `Culture` knows which providers exist.
+the table's order, live results before corpus items, then one item from each
+source in turn, one item per identity, each item carrying the reason it is
+there and the credit its shelf requires. Nothing in `Culture` knows which
+providers exist; how several sources become one rail is
+[*Many sources, one shelf*](#many-sources-one-shelf) below.
 
 GIPHY is the one exception, and it is a transport exception rather than a
 licence to add chrome: its requests are made by the reader's own browser, so it
@@ -313,24 +316,172 @@ first, which is parked until written caching approval exists.
 type is an entry here and nothing else — not a new branch in `Culture` or
 `WordLive`.
 
-| type | heading | badge | image slot | thumbnail keys, in order |
-|---|---|---|---|---|
-| `:film` | Films | Film | `aspect-[2/3]` | `poster_url`, `still_url`, `image_url`, `media_url` |
-| `:artwork` | Artworks | Artwork | `aspect-square` | `image_url`, `thumbnail_url` |
-| `:image` | Images | Image | `aspect-square` | `thumbnail_url`, `image_url` |
-| `:text` | Texts | Text | **none** | — |
-| `:gif` | GIFs | — | `aspect-square` | `media_url`, `image_url` |
+| type | heading | badge | image slot | thumbnail keys, in order | attribution | evidence admitted |
+|---|---|---|---|---|---|---|
+| `:film` | Films | Film | `aspect-[2/3]` | `poster_url`, `still_url`, `image_url`, `media_url` | `:none` | identity |
+| `:artwork` | Artworks | Artwork | `aspect-square` | `image_url`, `thumbnail_url` | `:credited` | identity |
+| `:image` | Images | Image | `aspect-square` | `thumbnail_url`, `image_url` | `:required` | identity, query |
+| `:text` | Texts | Text | **none** | — | `:none` | attestation |
+| `:gif` | GIFs | — | `aspect-square` | `media_url`, `image_url` | `:none` | query |
 
 Shelf order is film · artwork · image · text · gif, and it is the order of
 `ContentTypes.known/0` rather than insertion order. `:image` arrived with
 Wikimedia Commons (#109 Phase 3a): a photograph of a soldier is a visual work
 but it is not an artwork, and a shelf headed *Artworks* over a US Army
 photograph was the page misnaming what it shows. The row was the whole of the
-change.
+change. It is headed *Images* and not *Photos* — #116's M4 said *Photos*, and
+Phase 1 settled it the other way: Commons's `image/*` files are photographs but
+also engravings, maps, posters and diagrams, and *Photos* over a 1916
+recruiting poster would be the misnaming the row was added to end.
 
 A type with no `aspect` has **no image slot at all**, so a text result renders as
 a title and its source rather than an empty poster frame. That is the whole
 reason the table has an aspect column.
+
+The last two columns are #116's, and every row carries both — the module
+raises at compile time if one does not:
+
+- **`attribution`** is what a card owes the item's maker, read by the
+  renderer. `:required` means every item carries a credit and the card shows it
+  beneath the thumbnail, always visible, in place of the creator line (a
+  required credit names the creator by construction). `:credited` means the
+  card shows a credit line when the item carries one, beside the creator line.
+  `:none` means the shelf byline is the whole credit. The line is
+  `preview_metadata["attribution"]` when the provider wrote one and
+  `"credit_line"` otherwise; the conformance suite asserts it is rendered for
+  every item on a `:required` shelf.
+- **`evidence`** is the classes of match reason a row admits, from
+  `MatchReason.evidence/1`: `:identity` (a tag, depiction, gene or keyword —
+  an identifier the encyclopedia already asserts), `:attestation` (the work
+  uses the word, at a locator) or `:query` (a text search's own ranking).
+  The conformance suite asserts every result a provider delivers against its
+  shelf's row, and the renderer reads it to describe an admitted `:query`
+  reason as *Search result for “war”, ranked by the provider and not matched
+  on an identifier* — and, on any shelf that does not admit one, to leave the
+  prompt-shaped sentence alone.
+
+---
+
+## Many sources, one shelf
+
+A reader looking up *war* sees **one** row of images, not a row from Commons
+and then a row from whatever joins it. This is what the code does to make that
+true for every content type that takes more than one source (#116, Phase 1),
+written from the code at this commit. Nothing here is a provider's business: a
+provider declares a type, writes its items honestly, and the shelf does the
+rest.
+
+### A shelf is a content type; a source is a row on it
+
+K2, restated so nobody reopens it. The reader never shows a shelf per provider.
+Adding a source to an existing shelf is a provider through the kit declaring
+the type ([*Adding a source to an existing shelf*](adding-a-provider.md#adding-a-source-to-an-existing-shelf));
+adding a *type* is a row in `ContentTypes` and nothing else. A **content type**
+is a shelf; a **work kind** (`work_details.work_kind`) is a registry identity;
+they are many-to-one, and a corpus declares the second where a provider
+declares the first.
+
+| type | sources now — live | sources now — corpora | next | reaches a page by |
+|---|---|---|---|---|
+| `:film` | CineGraph | — | none: single-source by decision, CineGraph aggregates on its side | identity |
+| `:artwork` | The Met | `met-highlights-v1`, `wikidata-famous-v1`, the Artsy pilot | AIC, Cleveland via corpora (#100) | identity |
+| `:image` | Wikimedia Commons | — | Openverse (#116 Phase 2), Unsplash and Pexels (Phase 3) | identity, or a labelled search |
+| `:text` | PoetryDB, Open Library | `poetrydb-v1`, `open-library-v1` — **identity only, by decision; neither reaches a page** | Chronicling America as a corpus, Gutenberg | attestation, live only |
+| `:gif` | GIPHY, browser-only, outside this chrome | — | Tenor, after K10 | a labelled search |
+| `:quote` | — | — | Wikiquote, Gutenberg extraction, after #65 | identity (`(author_id, body hash)`) |
+
+The `:text` decision is #109's second residual, settled here: the two text
+corpora are seeded `evidence: :none` and stay that way. Serving attestation
+from held text would mean storing the lines or snippets that attest the word,
+which is a retention decision — Open Library's snippets come from the Internet
+Archive's full-text search and are not ours to hold, and the same argument
+that keeps image bytes out (D14) keeps them out. The live text providers
+already answer attestation on a visit and resolve to the **same** registry
+identity as the corpus rows (`olid`, `poetrydb_poem`), so a corpus's job on the
+Texts shelf is nil and its job on the entity page is identity and display
+facts. A text corpus that wants to reach a page needs its own retention
+decision, recorded in its manifest kind, not a quiet change to `:none`.
+
+### Order: archetype, then turns across sources, then position
+
+`DevilsDictionaryWeb.Culture.shelves/1` hands every state's items on one shelf
+to `DevilsDictionary.Discovery.Shelf.compose/4`. Live before corpus stays (K2).
+Within each archetype the shelf takes item 1 from every contributing source,
+then item 2, and so on; sources are ordered by **tier** (aristocracy → middle →
+plebs, from the source row, carried on the state as `tier`) and then by slug;
+within a source, the order the source gave. No relevance ranking across sources
+(#101's), no trust weighting beyond tier.
+
+A live state is one source. The catalog state is several — `Artworks.shelf_items/2`
+stamps each item with its corpus's `source_slug` and `source_tier` — so the
+corpus group takes turns between the Met and Wikidata instead of treating
+"the catalog" as one source. `Artworks` still interleaves its own candidates
+before the twelve-slot limit, through the same `Shelf.interleave/3`, so that
+both corpora get slots; the list it used to keep for the order of the turns
+(Wikidata, then the Met) is gone, and because both corpora are middle-tier the
+Met's slug now leads. That is the one visible change on `/define/soldier` and
+`/define/ox`, and Phase 1's browser proof records it.
+
+### Duplicates: identity first, then media
+
+`Shelf.dedup/2` keeps one item per identity, first wins, computed at read time
+and never by rewriting a provider's persisted results. `Shelf.keys/1` says what
+makes two items one thing:
+
+- the registry object they resolved to (`object_id`);
+- every `{namespace, external_id}` in the item's `identifiers` — the ones the
+  provider proposed, read back onto a persisted `Result` from its source
+  record's current revision as a virtual field — and the item's own
+  `external_namespace`/`external_id`, so an aggregator that names the Commons
+  file it came from joins the Commons item without Commons knowing;
+- the **canonical** full-size media URL (`image_url`, then `media_url`): host
+  and path, lower-cased host, no scheme, port, query or trailing slash. Never
+  the thumbnail, which is each provider's own derivative.
+
+The composition sorts by archetype, tier and slug **before** dedup, so the
+better-tiered source's copy of a duplicate is the one that survives, and takes
+turns afterwards among what is left. A dropped duplicate's keys join the kept
+item's, so a third item sharing only the dropped one's other key collapses too.
+`Artworks.per_work/2` — one candidate per work before the limit — is a caller
+of the same function keyed on the object. Perceptual-hash dedup is out of scope
+until a ledger shows it is needed.
+
+### Licence and attribution are item fields with fixed names
+
+Every item on a shelf whose row requires attribution carries, in
+`preview_metadata`: `license` (a short form — `CC-BY-4.0`, `CC0-1.0`,
+`Unsplash`), `license_url`, `creator`, `creator_url`, `attribution` (a
+ready-made line the renderer shows verbatim), and `source_url` (the landing
+page). Commons, which predates the rule, carries `license`, `license_url`,
+`author` and a `credit_line`, which is what the renderer falls back to; its
+`artist` line doubles as the credit and the `:required` rule shows one line,
+not two. The renderer shows the line beneath the thumbnail, always visible,
+never on hover; the table's `attribution` column says which shelves show it.
+
+### Hotlink only, no bytes
+
+Unchanged by Phase 1 and stated here because the next sources are gated on it
+(D14). The pipeline persists URLs and metadata, never image bytes; the card is
+an `<img>` with the provider's own URL and `referrerpolicy="no-referrer"`; there
+is no proxy and no re-hosting. A source whose terms require download and forbid
+hotlinking (Pixabay) is not a candidate; a source whose terms forbid persisting
+URLs at all (GIPHY) stays outside this chrome.
+
+### The multi-source check
+
+`test/devils_dictionary/discovery/conformance/multi_source_conformance_test.exs`
+is the check none of the single-provider suites can be: two stub providers
+(`DevilsDictionary.Discovery.MultiSource.Middle` and `.Plebs`, written by one
+macro, differing in tier, slug and the class of reason they write) declare
+`:image`, each answers eight items with one shared upstream identity and one
+shared media URL spelled two ways, and the shelf read back through
+`Discovery.states/1` and `Culture.section/1` is one rail of **fourteen**,
+interleaved by tier before slug, each provider credited once, the attribution
+line present on every item, the search stub's reason described as a search
+result and the identity stub's naming its QID. The single-provider suite
+asserts the two table columns for every registered provider: a `:required`
+shelf renders every item's credit, and every reason is of a class the row
+admits.
 
 ---
 
@@ -369,7 +520,11 @@ thinks and *tagged “Soldiers” (Q4991371)* is a fact anyone can go and check.
 
 `from_result/2` reads a live provider's `match_details` — `"tags"`, `"depicts"`,
 `"keywords"`, `"lines"` — and falls back to a `:query` reason when the provider
-named none.
+named none. A line map may name its own `"locator"` (*page 12*, *stanza 2*);
+the `"number"` form (*line 4*) is the fallback, and a line with neither attests
+without a locator. `evidence/1` folds the kinds into the three classes the
+content-type table admits, and `describe/2` takes the admitted classes so a
+search result is called one only where the row allows it.
 `from_candidate/1` reads a corpus candidate. Both end as the same struct and the
 same sentence.
 
@@ -514,7 +669,7 @@ suite red.
 | The Met | discovery (GET, offset, tag-QID identity + ≤2-step broader walk) **and** corpus (`met-highlights-v1`, 1,644) | `Culture.section` | #102 2a/2b |
 | Wikidata famous paintings | corpus (`wikidata-famous-v1`, 1,575) | `Culture.section` | #102 2b |
 | PoetryDB | discovery (GET, offset, attestation) **and** corpus (`poetrydb-v1`, 2,903 poems) | `Culture.section` | #109 Phase 2 and 1c |
-| Wikimedia Commons | discovery (GET, MediaWiki `continue` cursor, `P180` depicts-QID identity, per-file licence gate) | `Culture.section`, the `:image` shelf | #109 Phase 3a |
+| Wikimedia Commons | discovery (GET, MediaWiki `continue` cursor, `P180` depicts-QID identity, per-file licence gate) | `Culture.section`, the `:image` shelf, attribution `:required` | #109 Phase 3a |
 | Artsy | registered, registry-only — its 43 artworks and their gene mappings reach a page through the catalog; the private client was retired in #109 Phase 3a | `Culture.section` | #86, K9 of #109 |
 | GIPHY | registered, browser-only, transient | its own `GiphyShelf` component, **not** `Culture.section` | parked pending caching approval, K10 |
 

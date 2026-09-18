@@ -136,10 +136,83 @@ defmodule DevilsDictionary.Discovery.MatchReasonTest do
       assert MatchReason.describe(reason) == "Uses “war” at line 12."
     end
 
+    test "an attestation cites the locator the provider named, or the line, or nothing" do
+      # Before #116 Phase 1 the locator was hardcoded as `"line N"`, and Open
+      # Library left its number empty rather than call a page a line.
+      assert [page] =
+               MatchReason.from_result(
+                 %{
+                   "query" => "war",
+                   "lines" => [%{"number" => nil, "locator" => "page 12", "text" => "of war"}]
+                 },
+                 "war"
+               )
+
+      assert page.locator == "page 12"
+      assert page.identifier == "page 12"
+      assert MatchReason.describe(page) == "Uses “war” at page 12."
+
+      # A locator beats a number when both are present: the provider said
+      # where, and the line form is only the fallback.
+      assert [both] =
+               MatchReason.from_result(
+                 %{
+                   "query" => "war",
+                   "lines" => [%{"number" => 3, "locator" => "stanza 2", "text" => "war"}]
+                 },
+                 "war"
+               )
+
+      assert both.locator == "stanza 2"
+      assert both.identifier == "3"
+
+      assert [none] =
+               MatchReason.from_result(
+                 %{"query" => "war", "lines" => [%{"number" => nil, "text" => "of war"}]},
+                 "war"
+               )
+
+      assert none.locator == nil
+      assert MatchReason.describe(none) == "Uses “war”."
+    end
+
     test "a provider that named no reason is not given one" do
       assert [reason] = MatchReason.from_result(%{"kind" => "keyword"}, "war")
       assert reason.kind == :query
       assert MatchReason.describe(reason) == "The provider returned this result for “war”."
+    end
+
+    test "evidence/1 folds the kinds into the three classes the content-type table admits" do
+      assert MatchReason.evidence(%MatchReason{kind: :tag}) == :identity
+      assert MatchReason.evidence(%MatchReason{kind: :depiction}) == :identity
+      assert MatchReason.evidence(%MatchReason{kind: :gene}) == :identity
+      assert MatchReason.evidence(%MatchReason{kind: :keyword}) == :identity
+      assert MatchReason.evidence(%MatchReason{kind: :attestation}) == :attestation
+      assert MatchReason.evidence(%MatchReason{kind: :query}) == :query
+    end
+
+    test "a search result is called one only on a shelf that admits it (M6 of #116)" do
+      [reason] = MatchReason.from_result(%{}, "war")
+
+      assert MatchReason.describe(reason, [:identity, :query]) ==
+               "Search result for “war”, ranked by the provider and not matched on an identifier."
+
+      # Anywhere else the empty reason keeps the sentence that prompts a fix.
+      assert MatchReason.describe(reason, [:identity]) ==
+               "The provider returned this result for “war”."
+
+      # And every other kind reads the same whichever shelf it is on.
+      [tag] =
+        MatchReason.from_result(
+          %{"tags" => [%{"term" => "Soldiers", "qid" => "Q4991371", "relation" => "exact"}]},
+          "soldier"
+        )
+
+      assert MatchReason.describe(tag, [:identity, :query]) == MatchReason.describe(tag)
+
+      assert MatchReason.describe_all([tag, reason], [:identity, :query]) ==
+               MatchReason.describe(tag) <>
+                 " Search result for “war”, ranked by the provider and not matched on an identifier."
     end
 
     test "a malformed tag or keyword is not a reason" do

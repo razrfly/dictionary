@@ -146,7 +146,22 @@ defmodule DevilsDictionary.FakeOffsetDiscoveryProvider do
           external_namespace: "fixture_text",
           external_id: to_string(row["id"]),
           position: index,
-          match_details: %{"kind" => "text", "query" => mapping["term"]},
+          # A text provider's evidence is attestation (K11): the work uses the
+          # word at a locator. The locator is the line map's own — a *page*,
+          # the shape Open Library left empty rather than call a line — which
+          # is what `MatchReason.attestations/1` reads since #116 Phase 1. A
+          # row without one attests without a locator, as a real snippet may.
+          match_details: %{
+            "kind" => "attestation",
+            "query" => mapping["term"],
+            "lines" => [
+              %{
+                "number" => nil,
+                "locator" => row["page"] && "page #{row["page"]}",
+                "text" => row["text"] || row["title"]
+              }
+            ]
+          },
           preview_metadata: %{
             "title" => row["title"],
             "year" => row["year"],
