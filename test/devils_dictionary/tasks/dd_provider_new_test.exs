@@ -174,6 +174,12 @@ defmodule DevilsDictionary.Tasks.DdProviderNewTest do
       ledger = File.read!(Path.join(root, "docs/integrations/#{slug}.md"))
       assert ledger =~ "| # | requests | what was asked | what came back | running total |"
       assert ledger =~ "**0 / 200**"
+
+      # A ledger's Conformance section names the suites this archetype has and
+      # no others. It named the discovery suite for every archetype, so a corpus
+      # scaffold shipped with a command for a file `corpus_files/1` never wrote.
+      assert ledger =~ "conformance/#{underscore(slug)}_conformance_test.exs"
+      refute ledger =~ "corpus/conformance/"
     end
 
     for transport <- ~w(get graphql), pagination <- ~w(offset cursor) do
@@ -274,6 +280,19 @@ defmodule DevilsDictionary.Tasks.DdProviderNewTest do
              )
     end
 
+    test "names the corpus suite, and only that one, in the ledger and the next steps" do
+      %{root: root, slug: slug, output: output} = generate(~w(--archetype corpus))
+
+      ledger = File.read!(Path.join(root, "docs/integrations/#{slug}.md"))
+      corpus_suite = "corpus/conformance/#{underscore(slug)}_corpus_conformance_test.exs"
+
+      assert ledger =~ corpus_suite
+      refute ledger =~ "discovery/conformance/"
+
+      assert output =~ corpus_suite
+      refute output =~ "discovery/conformance/"
+    end
+
     test "prints every registration @kinds holds, rather than a list of its own" do
       %{output: output} = generate(~w(--archetype corpus))
 
@@ -301,6 +320,21 @@ defmodule DevilsDictionary.Tasks.DdProviderNewTest do
 
       for key <- Manifest.registration_keys() do
         assert output =~ ~r/^\s+#{key}\s+\S/m
+      end
+    end
+
+    test "--archetype both names both suites, in the ledger and the next steps" do
+      %{root: root, slug: slug, output: output} =
+        generate(~w(--archetype both --content-type text --transport get --pagination offset))
+
+      ledger = File.read!(Path.join(root, "docs/integrations/#{slug}.md"))
+
+      for suite <- [
+            "discovery/conformance/#{underscore(slug)}_conformance_test.exs",
+            "corpus/conformance/#{underscore(slug)}_corpus_conformance_test.exs"
+          ] do
+        assert ledger =~ suite
+        assert output =~ suite
       end
     end
   end

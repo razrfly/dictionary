@@ -288,7 +288,7 @@ GIPHY is the one exception, and it is a transport exception rather than a
 licence to add chrome: its requests are made by the reader's own browser, so it
 has no pipeline state to render and it still draws through
 `DevilsDictionaryWeb.GiphyShelf.section/1` beneath the shared section. K10 of
-#109 says the kit renders its shelf through K2's chrome; the shipped code does
+`#109` says the kit renders its shelf through K2's chrome; the shipped code does
 not, because a browser-transport provider has no `Discovery.state/2` items for
 `Culture.section` to draw. Folding it in means giving it a server transport
 first, which is parked until written caching approval exists.

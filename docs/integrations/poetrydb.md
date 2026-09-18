@@ -41,7 +41,7 @@ was given a second ceiling of **40** for the Byron/Shelley recovery and spent
 | V1 | 2 | answering a review: `/lines,author/war;<Byron>` and `;<Shelley>` | **503** both, ~16 s — narrowing by poet alone does not rescue them | **169 / 200** |
 | V2 | 3 | the same two poets narrowed by line count as well | 200 in 246–785 ms, **one poem each** | **172 / 200** |
 
-#109 Phase 1c, 2026-09-18 — its own ceiling of **40**, spent **40**:
+`#109` Phase 1c, 2026-09-18 — its own ceiling of **40**, spent **40**:
 
 | # | requests | what was asked | what came back | running total |
 |---|---|---|---|---|
