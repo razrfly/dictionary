@@ -33,6 +33,13 @@ Ceiling: **200 requests**. Spent: **157**. Written as the probe ran.
 | P9 | 2 | `query.wikidata.org/sparql`, POST, 127 poet labels in one `VALUES` block, then again with sitelinks | 200 in 1.0 s and 2.0 s — 324 candidate bindings | **150 / 200** |
 | P10 | 6 | fixture capture: `/lines/war/…`, `/lines/love/…`, two poet hydrations, a colon-titled poet, and a miss | all 200 | **156 / 200** |
 | P11 | 1 | `/lines/zzzzqqqx/title,author,linecount` | 200 with the in-body 404 | **157 / 200** |
+| B1 | 5 | the browser proof: `/define/war`, one run | 200 — 12 candidates, 4 poets, **3 kept** by the gate | **162 / 200** |
+| B2 | 4 | `/define/love`, one run | 200 — 12 candidates, 3 poets, **10 kept** | **166 / 200** |
+| B3 | 1 | `/define/zyzzyva`, one run | 200 with the in-body 404 → `no_results`, refresh in 24 h | **167 / 200** |
+
+B1–B3 were spent by the running application rather than by a script, and they
+are the rows of `discovery_request_attempts` for this source — which is the
+record of what was actually spent, per the checklist.
 
 Requests 9 and 10 are the two SPARQL calls; they are on this ledger rather than
 a separate one because the ceiling is a ceiling on the probe, not on one host.
@@ -124,6 +131,29 @@ with an author QID. Built once from the P7 fetch and committed;
 `work_kind: "poem"` under the `poetrydb_poem` identity namespace, which is the
 same namespace and the same `poem_id` a live result resolves to — a poem found
 on a page and the same poem held here are one identity, not two.
+
+## Browser proof
+
+Port 4017, one node on `devils_dictionary_v2`, `mix compile` to completion
+first. Screenshots at 1280 and 375 CSS px, driven over CDP with
+`Emulation.setDeviceMetricsOverride` rather than `--window-size`:
+
+    docs/discovery/issue-109-phase2-war-1280-2026-09-18.jpg
+    docs/discovery/issue-109-phase2-war-375-2026-09-18.jpg
+    docs/discovery/issue-109-phase2-love-1280-2026-09-18.jpg
+    docs/discovery/issue-109-phase2-love-375-2026-09-18.jpg
+
+`document.documentElement.scrollWidth === 375` at 375 on both pages, and
+`=== 1280` at 1280: no horizontal page scroll at either width.
+
+The shelf is *Texts*, bylined **PoetryDB · attested lines**, with no image
+slot. Every item names a line: *Uses “war” at line 16*, *at line 118*, *at line
+35*; *Uses “love” at line 19*, *at line 14*, *at line 28*, and so on for ten.
+
+The live results resolved to `poetrydb_poem` identities whose ids are the ones
+in the committed manifest — `69b7e022…` is *Ode in Memory of the American
+Volunteers Fallen for France* in both — so a poem found on a page and the same
+poem held in the corpus are one entity with `work_kind: "poem"`, not two.
 
 ## Conformance
 
