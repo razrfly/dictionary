@@ -23,7 +23,7 @@ showed it needed (see *Measured facts*, 9).
 
 ## Probe
 
-Ceiling: **300 requests** (#109 Phase 3's ceiling; the generator's template says 200). Stop at it. Spent: **81**.
+Ceiling: **300 requests** (#109 Phase 3's ceiling; the generator's template says 200). Stop at it. Spent: **90**.
 
 One row per batch, written when the batch finishes rather than when the
 probe does. The last column is the running total against the ceiling, so a
@@ -48,6 +48,14 @@ probe that is killed leaves the number it had reached and not a blank.
 | C3 | 2 | soldier, `gsrlimit=12`, default sort, then `wbgetentities` for the twelve | 200/200 in 618/363 ms — 12 files, **12 of 12** carry `P180=Q4991371` in their statements; licences %{"Attribution" => 2, "CC BY-SA 3.0" => 1, "CC BY-SA 4.0" => 1, "Public domain" => 8} | **78 / 300** |
 | C4 | 2 | dog: the five QIDs `/define/dog` refers to OR'd in one `haswbstatement`, `gsrlimit=12`, links-desc, then `wbgetentities` | 200/200 in 747/468 ms — 12 files, **12 of 12** carry one of the five QIDs; licences %{"CC BY 2.0" => 1, "CC BY-SA 2.5" => 1, "CC BY-SA 3.0" => 4, "CC0" => 1, "Public domain" => 5} | **80 / 300** |
 | C5 | 1 | `wbgetentities ids=M116369` alone | 200 in 183 ms — [{"M116369", ["statements"], ["P1163", "P180", "P2048", "P2049", "P3575", "P4092", "P571", "P6216", "P6731"]}] | **81 / 300** |
+| B5 | 2 | **browser proof, first visit to `/define/soldier`** on port 4007, one node on `devils_dictionary_v2`: one search, one `wbgetentities` | 12 proposed, **11 kept**, 1 dropped by the licence gate (the `Attribution` Polish Army photograph); every item reasoned *Direct depiction of “soldier” (Q4991371)*. Three titles carried hidden QuickStatements text out of `ObjectName` — fixed in the provider (hidden blocks dropped, description blocks yield to the file name), the run deleted and the three entity labels corrected by hand in the dev database, so the page is visited again below | **83 / 300** |
+| D1 | 1 | `prop=imageinfo` for pageids 283006 and 8715577: the raw `ObjectName` HTML behind the two titles the first browser proof got wrong | 200 in 446 ms — see *Measured facts* 9: the multi-language title block is `<div class="description">`/`<span class="language">`-free; it is nested `<div style="display:inline-block">` blocks with `<b>French:</b>` labels | **84 / 300** |
+| B6 | 2 | browser proof, `/define/soldier` again on the fixed provider | 11 kept of 12 again; the hidden blocks were gone but *Napoleon crossing the Alps* still rendered as its French-then-English title block, because that block has no `language` class — D1 fetched the raw HTML, the rule became *take the `lang="en"` element*, and this run too was deleted and the one label corrected by hand before the third visit below | **86 / 300** |
+| B7 | 2 | browser proof, `/define/soldier`, third visit, port 4007, one node on `devils_dictionary_v2`, 1280 CSS px | 12 proposed, **11 kept** (the `Attribution` file dropped), every item *Direct depiction of “soldier” (Q4991371)*, titles clean; `scrollWidth === 1280`; no console errors | **88 / 300** |
+| B8 | 0 | `/define/soldier` at 375 CSS px over CDP (`Emulation.setDeviceMetricsOverride`) | the positive cache answered: no request; `scrollWidth === 375`; 11 items | **88 / 300** |
+| B9 | 2 | `/define/dog` at 1280: the five QIDs `/define/dog` refers to, OR'd | 12 proposed, **12 kept**, every one *Direct depiction of “dog” (Q144)*; `scrollWidth === 1280`; no console errors | **90 / 300** |
+| B10 | 0 | `/define/dog` at 375 | cached; `scrollWidth === 375`; 12 items | **90 / 300** |
+| B11 | 0 | `/define/zyzzyva` at 1280 — a page with no `refers_to` claim | no Images shelf, no Commons run, no request: `covers?/1` declined it before admission. `discovery_request_attempts` for `commons` reads **4** after the four proofs, which is B7 + B9 | **90 / 300** |
 <!-- ledger -->
 
 Browser-proof requests belong on this ledger too: they are the rows of
@@ -119,7 +127,14 @@ Things nobody should have to measure twice.
    class="fn">…</div>`), `Artist` (a user link, a museum credit block) and
    `DateTimeOriginal` (`1887<div style="display: none;">date QS:P571,…</div>`).
    Tags are stripped, entities decoded, whitespace folded; the year is the
-   first four-digit run.
+   first four-digit run. The first browser proof caught two more shapes (B5,
+   B6, D1): hidden `display: none` blocks carry QuickStatements lines
+   (`title QS:P1476,…`, `label QS:Len,…`) that tag-stripping alone leaves
+   behind, and a museum upload's `ObjectName` is a whole title block — one
+   `<div lang="xx">` per language with a `French:` label and no `language`
+   class. Hidden blocks are dropped first; a `lang="en"` element is the title
+   when there is one; anything still longer than 120 characters yields to the
+   file name.
 10. **What the search returns for a soldier is mostly photographs**: a Javelin
     launch, D-Day landings, a Polish Army parade, a Confederate infantryman —
     with a Prang chromolithograph and *Napoleon crossing the Alps* among them.
@@ -145,8 +160,12 @@ MediaWiki's own `Retry-After` for a lag refusal. Both are overridable in
 
 ## Browser proof
 
-See the *Browser proof* rows of the ledger above and the screenshots named in
-the #109 report:
+Port 4007, one node on `devils_dictionary_v2`, `mix compile` to completion
+first. Headless Chrome over CDP with `Emulation.setDeviceMetricsOverride`
+(1280 × 900 at scale 1; 375 × 812 at scale 2, mobile) rather than
+`--window-size`. Each screenshot is a clip from the page header through the
+*Images* shelf with the Commons *About these results* list open, so the
+reasons are legible; rows B5–B11 of the ledger are what each visit spent.
 
     docs/discovery/issue-109-phase3a-soldier-1280-2026-09-18.jpg
     docs/discovery/issue-109-phase3a-soldier-375-2026-09-18.jpg

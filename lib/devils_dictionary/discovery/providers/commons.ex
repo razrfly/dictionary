@@ -468,22 +468,50 @@ defmodule DevilsDictionary.Discovery.Providers.Commons do
 
   defp restricted?(code), do: String.contains?(code, "-nc") or String.contains?(code, "-nd")
 
-  # `ObjectName` when the uploader gave one, else the file name without its
-  # namespace and extension. Clamped to `entities.preferred_label`'s 255.
-  defp file_title(metadata, title) do
-    name =
-      case presence(text(metadata, "ObjectName")) do
-        nil ->
-          title
-          |> String.replace_prefix("File:", "")
-          |> String.replace(~r/\.[A-Za-z0-9]{2,5}\z/, "")
-          |> String.replace("_", " ")
+  # `ObjectName` when the uploader gave a title-sized one, else the file name
+  # without its namespace and extension. Measured on `/define/soldier`: a
+  # museum upload's `ObjectName` is a whole title block — one
+  # `<div lang="xx">` per language, plus hidden `title QS:P1476,…`
+  # QuickStatements lines. The English element is the title when there is one;
+  # a block that is still description-sized after that yields to the file
+  # name. Clamped to `entities.preferred_label`'s 255.
+  @title_length 120
+  @english ~r/<(\w+)\b[^>]*\blang="en"[^>]*>(.*?)<\/\1>/s
 
-        object_name ->
-          object_name
+  defp file_title(metadata, title) do
+    raw = get_in(metadata, ["ObjectName", "value"])
+
+    name =
+      case english(raw) do
+        nil -> presence(text(metadata, "ObjectName"))
+        english -> english
       end
 
-    String.slice(name, 0, 255)
+    chosen =
+      cond do
+        not is_binary(name) -> file_name(title)
+        String.length(name) > @title_length -> file_name(title)
+        String.contains?(name, "QS:") -> file_name(title)
+        true -> name
+      end
+
+    String.slice(chosen, 0, 255)
+  end
+
+  defp english(raw) when is_binary(raw) do
+    case Regex.run(@english, drop_hidden(raw)) do
+      [_, _tag, inner] -> presence(strip(inner))
+      _ -> nil
+    end
+  end
+
+  defp english(_raw), do: nil
+
+  defp file_name(title) do
+    title
+    |> String.replace_prefix("File:", "")
+    |> String.replace(~r/\.[A-Za-z0-9]{2,5}\z/, "")
+    |> String.replace("_", " ")
   end
 
   # `Artist` is HTML — a user link, a `<div class="fn">`, a museum credit — so
@@ -503,8 +531,11 @@ defmodule DevilsDictionary.Discovery.Providers.Commons do
     end
   end
 
+  # Hidden blocks first — `<div style="display: none;">date QS:P571,…</div>` is
+  # machine-readable text a reader was never meant to see — then every tag.
   defp strip(html) do
     html
+    |> drop_hidden()
     |> String.replace(~r/<[^>]*>/, " ")
     |> String.replace("&amp;", "&")
     |> String.replace("&lt;", "<")
@@ -514,6 +545,15 @@ defmodule DevilsDictionary.Discovery.Providers.Commons do
     |> String.replace("&nbsp;", " ")
     |> String.replace(~r/\s+/u, " ")
     |> String.trim()
+  end
+
+  @hidden ~r/<(\w+)\b[^>]*style="[^"]*display:\s*none[^"]*"[^>]*>(?:(?!<\1\b).)*?<\/\1>/s
+
+  defp drop_hidden(html) do
+    case Regex.replace(@hidden, html, " ") do
+      ^html -> html
+      stripped -> drop_hidden(stripped)
+    end
   end
 
   defp item(candidate, depicts) do

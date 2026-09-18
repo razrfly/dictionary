@@ -54,6 +54,83 @@ defmodule DevilsDictionary.Discovery.Providers.CommonsTest do
     end
   end
 
+  describe "text/2 and the title — extmetadata is HTML" do
+    test "hidden QuickStatements blocks and tags go, entities are decoded" do
+      metadata = %{
+        "DateTimeOriginal" => %{
+          "value" =>
+            ~s(1887<div style="display: none;">date QS:P571,+1887-00-00T00:00:00Z/9</div>)
+        },
+        "Artist" => %{
+          "value" =>
+            ~s(<bdi><a href="/wiki/Thure">Thure de Thulstrup</a></bdi> &amp; <span style="display:none">hidden</span>co)
+        }
+      }
+
+      assert Commons.text(metadata, "DateTimeOriginal") == "1887"
+      assert Commons.text(metadata, "Artist") == "Thure de Thulstrup & co"
+      assert Commons.text(metadata, "Missing") == ""
+    end
+
+    test "a multi-language title block yields its English element; a description-sized one the file name" do
+      # The shape measured on File:David - Napoleon crossing the Alps - Malmaison1.jpg.
+      napoleon_name =
+        ~s(<div class="fn">\n<div style="font-size:0.9em;display:inline-block;">French:  <div style="display:inline-block" dir="ltr" lang="fr"><i>Bonaparte franchissant les Alpes au Grand-Saint-Bernard&nbsp;<span class="noprint"><a href="https://www.wikidata.org/wiki/Q19801071#P1476"><img alt="Edit this at Wikidata" src="x"></a></span></i></div></div><br>) <>
+          ~s(<div style="font-weight:bold;display:inline-block;"><div style="display:inline-block" dir="ltr" lang="en"><i>Napoleon Crossing the Alps</i></div></div>) <>
+          ~s(<div style="display: none;">title QS:P1476,fr:"Bonaparte franchissant les Alpes au Grand-Saint-Bernard"</div>) <>
+          ~s(<div style="display: none;">label QS:Len,"Napoleon Crossing the Alps"</div></div>)
+
+      description_name =
+        ~s(Second World War: Europe; "<a href="https://en.wikipedia.org/wiki/Into_the_Jaws_of_Death" class="extiw">Into the Jaws of Death</a> — U.S. Troops wading through water and Nazi gunfire”, <i>circa</i> 1944-06-06.)
+
+      gettysburg_name =
+        ~s(<div class="fn"><div style="font-weight:bold;display:inline-block;">Battle of Gettysburg</div></div>)
+
+      with_name = fn pageid, title, name ->
+        page(pageid, "pd", "Public domain")
+        |> put_in(["imageinfo", Access.at(0), "extmetadata", "ObjectName"], %{"value" => name})
+        |> Map.put("title", title)
+      end
+
+      request_fun = fn
+        "search", _payload ->
+          {:ok,
+           %{
+             "batchcomplete" => true,
+             "query" => %{
+               "pages" => [
+                 with_name.(
+                   1008,
+                   "File:David_-_Napoleon_crossing_the_Alps_-_Malmaison1.jpg",
+                   napoleon_name
+                 ),
+                 with_name.(
+                   1009,
+                   "File:Into the Jaws of Death 23-0455M edit.jpg",
+                   description_name
+                 ),
+                 with_name.(
+                   1010,
+                   "File:Thure de Thulstrup - Battle of Gettysburg.jpg",
+                   gettysburg_name
+                 )
+               ]
+             }
+           }}
+
+        "entities", _payload ->
+          {:ok, %{"entities" => Map.new(~w(M1008 M1009 M1010), &{&1, entity(["Q4991371"])})}}
+      end
+
+      assert {:ok, %{items: [napoleon, jaws, gettysburg]}} =
+               Commons.retrieve(@operation, @mapping, %{"first" => 3}, request_fun)
+
+      assert napoleon.preview_metadata["title"] == "Napoleon Crossing the Alps"
+      assert jaws.preview_metadata["title"] == "Into the Jaws of Death 23-0455M edit"
+      assert gettysburg.preview_metadata["title"] == "Battle of Gettysburg"
+    end
+  end
+
   describe "depicted/2 — the statements dispose" do
     test "keeps the QIDs in the page's index and nothing else" do
       entity = %{
