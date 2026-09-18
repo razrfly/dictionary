@@ -14,6 +14,7 @@ defmodule DevilsDictionary.Tasks.DdProviderNewTest do
 
   use DevilsDictionary.DataCase, async: false
 
+  alias DevilsDictionary.Artworks.Corpus.Manifest
   alias DevilsDictionary.Discovery
   alias DevilsDictionary.Discovery.Conformance
   alias DevilsDictionary.Discovery.Providers
@@ -166,6 +167,13 @@ defmodule DevilsDictionary.Tasks.DdProviderNewTest do
 
       assert suite =~ "use DevilsDictionary.Discovery.Conformance"
       assert suite =~ inspect(fixture)
+
+      # #109 Phase 1c item 4. §1 of the checklist says to write running totals
+      # and never a total at the end, and the template it points at had no
+      # column to write them in, so Phase 2 added one to its own ledger by hand.
+      ledger = File.read!(Path.join(root, "docs/integrations/#{slug}.md"))
+      assert ledger =~ "| # | requests | what was asked | what came back | running total |"
+      assert ledger =~ "**0 / 200**"
     end
 
     for transport <- ~w(get graphql), pagination <- ~w(offset cursor) do
@@ -264,6 +272,36 @@ defmodule DevilsDictionary.Tasks.DdProviderNewTest do
       refute File.exists?(
                Path.join(root, "lib/devils_dictionary/discovery/providers/#{underscore(slug)}.ex")
              )
+    end
+
+    test "prints every registration @kinds holds, rather than a list of its own" do
+      %{output: output} = generate(~w(--archetype corpus))
+
+      keys = Manifest.registration_keys()
+
+      # #109 Phase 1c item 2. The printout named two of the registrations while
+      # `@kinds` held four, so a corpus session learned about `work_kind` from a
+      # conformance failure. The list is one place now and this is the check
+      # that keeps it one: a sixth registration added to `@kinds` reddens here
+      # until the task prints it too.
+      for key <- keys do
+        assert output =~ ~r/^\s+#{key}\s+\S/m,
+               "mix dd.provider.new --archetype corpus does not print the " <>
+                 "#{key} registration:\n\n#{output}"
+      end
+
+      # And the count it claims is the number of lines it went on to print, so
+      # "all five keys" cannot outlive the fifth one.
+      assert output =~ "all #{length(keys)} of its"
+    end
+
+    test "--archetype both prints the corpus registrations too" do
+      %{output: output} =
+        generate(~w(--archetype both --content-type text --transport get --pagination offset))
+
+      for key <- Manifest.registration_keys() do
+        assert output =~ ~r/^\s+#{key}\s+\S/m
+      end
     end
   end
 

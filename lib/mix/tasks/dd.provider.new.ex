@@ -70,6 +70,7 @@ defmodule Mix.Tasks.Dd.Provider.New do
 
   use Mix.Task
 
+  alias DevilsDictionary.Artworks.Corpus
   alias DevilsDictionary.Discovery.ContentTypes
 
   @archetypes ~w(discovery corpus both)
@@ -352,34 +353,47 @@ defmodule Mix.Tasks.Dd.Provider.New do
     """
   end
 
+  # A corpus scaffold writes no provider, no stub and no conformance suite, so
+  # naming them here sent a corpus session to run a test that does not exist.
   defp next_steps(assigns) do
+    steps =
+      if assigns.archetype in ~w(discovery both) do
+        """
+          1. mix compile
+          2. mix test test/devils_dictionary/discovery/conformance/#{assigns.underscored}_conformance_test.exs
+          3. replace the scaffolded response envelope and its stub with the real one
+          4. record the probe in docs/integrations/#{assigns.slug}.md — running totals, not a total at the end
+        """
+      else
+        """
+          1. make the two registrations below, then mix compile
+          2. build the manifest from the probe's rows and commit it
+          3. mix test test/devils_dictionary/artworks/corpus/ — add the one-line
+             suite `use DevilsDictionary.Artworks.Corpus.Conformance, manifest: ...`,
+             which the coverage test requires of every committed manifest
+          4. record the probe in docs/integrations/#{assigns.slug}.md — running totals, not a total at the end
+        """
+      end
+
     Mix.shell().info("""
 
     next:
-      1. mix compile
-      2. mix test test/devils_dictionary/discovery/conformance/#{assigns.underscored}_conformance_test.exs
-      3. replace the scaffolded response envelope and its stub with the real one
-      4. record the probe in docs/integrations/#{assigns.slug}.md — running totals, not a total at the end
+    #{steps}
 
     docs/discovery/adding-a-provider.md is the whole checklist.
     """)
 
     if assigns.archetype in ~w(corpus both) do
+      keys = Corpus.Manifest.registration_keys()
+
       Mix.shell().error("""
       two edits this task cannot make for a corpus:
 
         * add "#{assigns.slug}" to @kinds in
-          lib/devils_dictionary/artworks/corpus/manifest.ex, with all five keys:
-            source      the source slug the rows are attributed to
-            identity    the row field this kind is keyed on
-            namespace   the external_identifiers namespace that field is
-                        written to — not always the same as identity
-            work_kind   the work_details.work_kind the seeder writes
-                        ("artwork", "poem", ...)
-            evidence    :depiction when a row records the QIDs of what the work
-                        shows and a page can match on them, :none when it
-                        records identity and display facts only
-          Anything short of all five and either a seeded row cannot be read
+          lib/devils_dictionary/artworks/corpus/manifest.ex, with all #{length(keys)} of its
+          registrations:
+      #{registration_lines(keys)}
+          Anything short of all #{length(keys)} and either a seeded row cannot be read
           back or Corpus.Conformance asks this corpus for a contract it does
           not have.
         * add an `entry("#{assigns.slug}", version, row)` clause to
@@ -391,6 +405,40 @@ defmodule Mix.Tasks.Dd.Provider.New do
       """)
     end
   end
+
+  # The registrations are `Corpus.Manifest`'s to name, not this task's: the
+  # printout is one line per key of `@kinds`, in that module's order. A sixth
+  # registration added there without a line here raises the `KeyError` below
+  # the first time a corpus is scaffolded, and reddens this task's own test
+  # before that.
+  @registration_notes %{
+    source: ["the source slug the rows are attributed to"],
+    identity: ["the row field this kind is keyed on"],
+    namespace: [
+      "the external_identifiers namespace that field is",
+      "written to — not always the same as identity"
+    ],
+    work_kind: [
+      "the work_details.work_kind the seeder writes",
+      "(\"artwork\", \"poem\", ...)"
+    ],
+    evidence: [
+      ":depiction when a row records the QIDs of what the work",
+      "shows and a page can match on them, :none when it",
+      "records identity and display facts only"
+    ]
+  }
+
+  defp registration_lines(keys) do
+    Enum.map_join(keys, "\n", fn key ->
+      [first | rest] = Map.fetch!(@registration_notes, key)
+      name = key |> to_string() |> String.pad_trailing(11)
+
+      Enum.map_join([String.trim_trailing("      #{name}#{first}") | indent(rest)], "\n", & &1)
+    end)
+  end
+
+  defp indent(lines), do: Enum.map(lines, &("                 " <> &1))
 
   # ------------------------------------------------------------- templates
 
@@ -870,13 +918,19 @@ defmodule Mix.Tasks.Dd.Provider.New do
 
     ## Probe
 
-    Ceiling: **200 requests**. Stop at it.
+    Ceiling: **200 requests**. Stop at it. Spent: **0**.
 
-    | date | requests | what was asked | what came back |
-    |---|---|---|---|
-    | | | | |
+    One row per batch, written when the batch finishes rather than when the
+    probe does. The last column is the running total against the ceiling, so a
+    probe that is killed leaves the number it had reached and not a blank.
 
-    **Running total: 0 / 200.**
+    | # | requests | what was asked | what came back | running total |
+    |---|---|---|---|---|
+    | P1 | | | | **0 / 200** |
+
+    Browser-proof requests belong on this ledger too: they are the rows of
+    `discovery_request_attempts` for this source, which is the record of what
+    was actually spent.
 
     ## What identity a result carries
 

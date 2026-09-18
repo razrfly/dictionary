@@ -372,8 +372,8 @@ mix dd.absorb wiktionary --scope emotions  # then wikidata, wikipedia, dd.link a
 
 mix dd.materialize --dry-run               # parity: raw vs derived, no network (M1)
 mix dd.materialize --all                   # rebuild every derived row offline (M2)
-mix dd.health                              # coverage, resolution, links, parity
-mix dd.score                               # the MVP-0 scorecard, PASS/FAIL with actuals
+mix dd.health --scope animals              # coverage, resolution, links, parity
+mix dd.score --scope animals               # the MVP-0 scorecard, PASS/FAIL with actuals
 mix compile                                # ALWAYS to completion before the next line
 mix phx.server                             # http://localhost:4007 (4000–4005 belong to sibling projects)
 ```
