@@ -13,6 +13,14 @@ defmodule DevilsDictionary.Discovery.Conformance.PoetrydbFixture do
   provider which stopped verifying the hydrated lines would fail here rather
   than on a word page, and the expected ids below say so by leaving it out.
 
+  Byron is here for the opposite reason. `/lines,author/war;<poet>` answers
+  `503` for him however long you wait — his collected works cannot be
+  serialized in one response — so the stub refuses that route for him exactly
+  as PoetryDB does, and answers the three-axis route that names one poem. He is
+  in the expected ids, so a provider that dropped the straggler pass would lose
+  him and fail here rather than leaving two of PoetryDB's poets permanently
+  invisible.
+
   The external ids are written as literals rather than computed from the
   provider, so that changing how a poem is identified breaks this suite instead
   of quietly agreeing with itself.
@@ -28,7 +36,7 @@ defmodule DevilsDictionary.Discovery.Conformance.PoetrydbFixture do
   @seeger_paris "119e4a6e84e566620ed9ae85b4eb13f8"
   @pope_cecilia "3c87d8c91055c41e2aa07a542e661c21"
   @swinburne_tiresias "aaf035b023859e5b086dcf9520632802"
-  @swinburne_eve "b36585af05ced49cb4109841bbdbf744"
+  @byron_prayer "7ff5b0eee309f2a35a3eb1e04919edfe"
 
   @impl true
   def provider, do: Poetrydb
@@ -66,12 +74,14 @@ defmodule DevilsDictionary.Discovery.Conformance.PoetrydbFixture do
     # Six candidates, three to a page. The first page carries the unattested
     # Gordon candidate, which is why it yields two items and not three: the
     # window is a window of candidates, and the gate decides what survives it.
+    # The second closes on Byron, who is reachable only through the straggler
+    # pass — the poet route refuses him and the page has him anyway.
     respond(candidates(6), poems())
 
     %{
       pages: [
         [@seeger_ode, @seeger_paris],
-        [@pope_cecilia, @swinburne_tiresias, @swinburne_eve]
+        [@pope_cecilia, @swinburne_tiresias, @byron_prayer]
       ]
     }
   end
@@ -94,9 +104,9 @@ defmodule DevilsDictionary.Discovery.Conformance.PoetrydbFixture do
       },
       %{"author" => "Algernon Charles Swinburne", "title" => "Tiresias", "linecount" => "386"},
       %{
-        "author" => "Algernon Charles Swinburne",
-        "title" => "The Eve Of Revolution",
-        "linecount" => "432"
+        "author" => "George Gordon, Lord Byron",
+        "title" => "The Prayer of Nature",
+        "linecount" => "64"
       }
     ]
     |> Enum.take(count)
@@ -143,6 +153,15 @@ defmodule DevilsDictionary.Discovery.Conformance.PoetrydbFixture do
           ""
         ])
       ],
+      "George Gordon, Lord Byron" => [
+        poem("George Gordon, Lord Byron", "The Prayer of Nature", "64", [
+          "Thou, who canst guide the wandering star,",
+          "  Through trackless realms of aether's space;",
+          "Who calm'st the elemental war,",
+          "  Whose hand from pole to pole I trace:",
+          ""
+        ])
+      ],
       "Algernon Charles Swinburne" => [
         poem("Algernon Charles Swinburne", "Tiresias", "386", [
           "Which only fate, not force, can bring to nought,",
@@ -150,13 +169,6 @@ defmodule DevilsDictionary.Discovery.Conformance.PoetrydbFixture do
           "War's child and love's, most sweet and wise and strong,",
           "Order of things and rule and guiding song.",
           ""
-        ]),
-        poem("Algernon Charles Swinburne", "The Eve Of Revolution", "432", [
-          "The first live light of man",
-          "And first-born fire of deeds to burn and leap,",
-          "The first war fair as peace",
-          "To shine and lighten Greece,",
-          "And the first freedom moved upon the deep,"
         ])
       ]
     }
@@ -166,10 +178,15 @@ defmodule DevilsDictionary.Discovery.Conformance.PoetrydbFixture do
     %{"author" => author, "title" => title, "linecount" => linecount, "lines" => lines}
   end
 
-  # Two endpoints on one stub, told apart the way the real API tells them apart
+  # The poet whose collected works PoetryDB cannot serialize. Measured: every
+  # `/lines,author/<word>;<poet>` for him is a 503 at about sixteen seconds.
+  @unserializable "George Gordon, Lord Byron"
+
+  # Three routes on one stub, told apart the way the real API tells them apart
   # — by the path segment naming the input fields. `/lines/<word>/...` is the
   # candidate search; `/lines,author/<word>;<poet>/...` is the hydration that
-  # can actually return the lines.
+  # usually returns the lines; `/lines,author,linecount/<word>;<poet>;<n>/...`
+  # is the one that returns them for anybody.
   defp respond(candidate_body, poems) do
     Req.Test.stub(Poetrydb, fn conn ->
       case Enum.drop(conn.path_info, 1) do
@@ -177,14 +194,44 @@ defmodule DevilsDictionary.Discovery.Conformance.PoetrydbFixture do
           Req.Test.json(conn, candidate_body)
 
         ["lines,author", query, _fields] ->
-          # `path_info` arrives as it was written, so the poet's name is still
-          # percent-encoded here — the same encoding the provider applied.
-          [_word, author] = query |> URI.decode() |> String.split(";", parts: 2)
-          Req.Test.json(conn, Map.get(poems, author, %{"status" => 404, "reason" => "Not found"}))
+          case author(query) do
+            @unserializable -> Plug.Conn.send_resp(conn, 503, "Application Error")
+            author -> Req.Test.json(conn, poems_for(poems, author))
+          end
+
+        ["lines,author,linecount", query, _fields] ->
+          {author, linecount} = author_and_linecount(query)
+
+          poems
+          |> poems_for(author)
+          |> narrow(linecount)
+          |> then(&Req.Test.json(conn, &1))
 
         _other ->
           conn |> Plug.Conn.put_status(404) |> Req.Test.json(%{"status" => 404})
       end
     end)
   end
+
+  # `path_info` arrives as it was written, so the poet's name is still
+  # percent-encoded here — the same encoding the provider applied.
+  defp author(query) do
+    [_word, author | _rest] = query |> URI.decode() |> String.split(";")
+    author
+  end
+
+  defp author_and_linecount(query) do
+    [_word, author, linecount | _rest] = query |> URI.decode() |> String.split(";")
+    {author, linecount}
+  end
+
+  defp poems_for(poems, author),
+    do: Map.get(poems, author, %{"status" => 404, "reason" => "Not found"})
+
+  # The third axis really does narrow: asking for one poet and one length is
+  # answered with the poems of that length and nothing else.
+  defp narrow(rows, linecount) when is_list(rows),
+    do: Enum.filter(rows, &(&1["linecount"] == linecount))
+
+  defp narrow(body, _linecount), do: body
 end

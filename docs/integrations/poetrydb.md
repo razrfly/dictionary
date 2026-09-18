@@ -18,7 +18,7 @@ Probed 2026-09-18 for #109 Phase 2. Scaffolded by `mix dd.provider.new poetrydb
 
 ## Probe
 
-Ceiling: **200 requests**. Spent: **157**. Written as the probe ran.
+Ceiling: **200 requests**. Spent: **172**. Written as the probe ran.
 
 | # | requests | what was asked | what came back | running total |
 |---|---|---|---|---|
@@ -36,12 +36,14 @@ Ceiling: **200 requests**. Spent: **157**. Written as the probe ran.
 | B1 | 5 | the browser proof: `/define/war`, one run | 200 — 12 candidates, 4 poets, **3 kept** by the gate | **162 / 200** |
 | B2 | 4 | `/define/love`, one run | 200 — 12 candidates, 3 poets, **10 kept** | **166 / 200** |
 | B3 | 1 | `/define/zyzzyva`, one run | 200 with the in-body 404 → `no_results`, refresh in 24 h | **167 / 200** |
+| V1 | 2 | answering a review: `/lines,author/war;<Byron>` and `;<Shelley>` | **503** both, ~16 s — narrowing by poet alone does not rescue them | **169 / 200** |
+| V2 | 3 | the same two poets narrowed by line count as well | 200 in 246–785 ms, **one poem each** | **172 / 200** |
 
 B1–B3 were spent by the running application rather than by a script, and they
 are the rows of `discovery_request_attempts` for this source — which is the
 record of what was actually spent, per the checklist.
 
-Requests 9 and 10 are the two SPARQL calls; they are on this ledger rather than
+Requests 149 and 150 are the two SPARQL calls; they are on this ledger rather than
 a separate one because the ceiling is a ceiling on the probe, not on one host.
 No image bytes were fetched at any point — there are none to fetch.
 
@@ -104,11 +106,21 @@ Things nobody should have to measure twice.
    **1,694 of 2,526** poems. A line number a reader can count to is an index
    into the array, so that is what `line_count` and the match reason use, and
    PoetryDB's own figure is kept beside it as `source_line_count`.
-7. **Two poets are unreachable by author.** `/author/George Gordon, Lord Byron`
-   and `/author/Percy Bysshe Shelley` both `503` after ~16 s. Their collected
-   works are simply too large to serialize in one response — *Don Juan* alone
-   is 16,092 lines, and Shelley's 312 poems total 37,898. The corpus holds 127
-   of 129 poets and names the two it does not.
+7. **Two poets cannot be fetched in bulk, by any route that names only them.**
+   `/author/George Gordon, Lord Byron` and `/author/Percy Bysshe Shelley` both
+   `503` after ~16 s, and so — measured while answering a review on #115 — does
+   the narrower `/lines,author/war;<poet>`. Their collected works are too large
+   to serialize in one response: *Don Juan* alone is 16,092 lines, and
+   Shelley's 312 poems total 37,898. The corpus holds 127 of 129 poets and
+   names the two it does not.
+9. **A third axis reaches them.** `/lines,author,linecount/war;<poet>;<n>`
+   answers with **one poem**, in 246–785 ms, for the same poet whose two-axis
+   query times out. The candidate list already carries `linecount`, so this
+   costs no extra lookup — it is why the provider has a straggler pass and why
+   a result's `source_url` is the three-axis query. It is not the normal
+   hydration route because candidates arrive clustered by poet: a
+   twelve-candidate window of `war` is four poets, so one request per poet is
+   five requests where one per candidate would be thirteen.
 8. **Duplicates exist.** 18 (poet, title) pairs occur twice; for 3 of them the
    text is identical too, so the manifest's 2,526 fetched rows deduplicate to
    **2,523**.

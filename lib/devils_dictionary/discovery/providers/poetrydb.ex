@@ -16,7 +16,7 @@ defmodule DevilsDictionary.Discovery.Providers.Poetrydb do
   `Corpus.Seeder` writes it onto the seeded poem. A live result carries the
   poet's name; it does not invent the poet's QID.
 
-  ## Two stages, because the API cannot answer in one
+  ## Two stages and a straggler, because the API cannot answer in one
 
   `/lines/<word>` is the attestation search. Asking it for the `lines` output
   field returns a 503 **every time** — measured at 25 results and at 1,026,
@@ -34,6 +34,20 @@ defmodule DevilsDictionary.Discovery.Providers.Poetrydb do
   constraint rather than a preference: `:` `;` and `/` are PoetryDB's own
   operators, 434 of the 2,526 titles contain one, and **no** author name does.
   A title-keyed hydration would be broken for one poem in six.
+
+  Two of PoetryDB's 129 poets cannot be fetched by stage 2 either. Byron's
+  collected works and Shelley's are too large to serialize whatever query names
+  only them — *Don Juan* on its own is 16,092 lines — so both answer `503` at
+  about sixteen seconds. A third axis fixes it:
+  `/lines,author,linecount/<word>;<poet>;<n>` names **one** poem and is
+  answered in under a second. The candidate list already carries `linecount`,
+  so `fetch_poems/4` runs it as a straggler pass over exactly the candidates
+  stage 2 failed to deliver. Without it those two poets would be permanently
+  invisible while still charging every page that reached them for the attempt.
+
+  It is a straggler pass and not the normal route because candidates arrive
+  clustered by poet: a twelve-candidate window of `war` is four poets, so one
+  request per poet is five requests where one per candidate would be thirteen.
 
   ## The search proposes, the lines dispose
 
@@ -117,15 +131,18 @@ defmodule DevilsDictionary.Discovery.Providers.Poetrydb do
       pagination: :offset,
       operations: [@operation],
       content_types: [:text],
-      min_retry_interval_ms: @min_retry_interval_ms,
-      request_interval_ms: request_interval_ms()
+      min_retry_interval_ms: interval(:min_retry_interval_ms, @min_retry_interval_ms),
+      request_interval_ms: interval(:request_interval_ms, @request_interval_ms)
     }
   end
 
-  defp request_interval_ms do
-    case config()[:request_interval_ms] do
+  # Both paces are overridable for the same reason the Met's is: an interval is
+  # a live-rate courtesy, and a suite that paid it would spend a second per
+  # stubbed request to be polite to a server it never calls.
+  defp interval(key, default) do
+    case config()[key] do
       ms when is_integer(ms) and ms >= 0 -> ms
-      _ -> @request_interval_ms
+      _ -> default
     end
   end
 
@@ -178,6 +195,23 @@ defmodule DevilsDictionary.Discovery.Providers.Poetrydb do
       url: "#{base()}/lines,author/#{segment(term)};#{segment(author)}/#{@poem_fields}",
       headers: headers()
     ]
+  end
+
+  def request_options(%{"endpoint" => "poem"} = payload) do
+    %{"term" => term, "author" => author, "linecount" => linecount} = payload
+
+    [
+      method: :get,
+      url: "#{base()}#{poem_path(term, author, linecount)}",
+      headers: headers()
+    ]
+  end
+
+  # Three axes: the word, the poet, and the poet's own line count for this
+  # poem. PoetryDB answers it with exactly that poem, and it is the only route
+  # measured to work for *every* poet — see `fetch_poems/5`.
+  defp poem_path(term, author, linecount) do
+    "/lines,author,linecount/#{segment(term)};#{segment(author)};#{segment(linecount)}/#{@poem_fields}"
   end
 
   defp base, do: config()[:endpoint] |> to_string() |> String.trim_trailing("/")
@@ -238,11 +272,22 @@ defmodule DevilsDictionary.Discovery.Providers.Poetrydb do
   # turn every unattested word into a provider failure and a backoff.
   defp candidates(%{"status" => 404}), do: {:ok, []}
 
+  # `linecount` is carried through because it is the third axis of the only
+  # hydration route that works for every poet, and because a locator a reader
+  # can click needs it too. It is PoetryDB's own count, which is not
+  # `length(lines)` — but it is the number *its* query filters on, so it is the
+  # right one to hand back to it.
   defp candidates(rows) when is_list(rows) do
     {:ok,
      rows
      |> Enum.filter(&(is_map(&1) and present?(&1["title"]) and present?(&1["author"])))
-     |> Enum.map(&%{title: String.trim(&1["title"]), author: String.trim(&1["author"])})
+     |> Enum.map(
+       &%{
+         title: String.trim(&1["title"]),
+         author: String.trim(&1["author"]),
+         linecount: presence(&1["linecount"])
+       }
+     )
      |> Enum.uniq()}
   end
 
@@ -268,65 +313,117 @@ defmodule DevilsDictionary.Discovery.Providers.Poetrydb do
     window = Enum.slice(all, offset, limit)
     authors = window |> Enum.map(& &1.author) |> Enum.uniq()
 
-    case fetch_authors(term, authors, request_fun, %{}) do
-      {:deferred, code, seconds} ->
-        {:deferred, code, seconds, request}
+    with {:ok, poems, failed} <- fetch_authors(term, authors, request_fun, %{}, []),
+         {:ok, poems} <- fetch_poems(term, stragglers(window, poems, failed), request_fun, poems) do
+      items =
+        window
+        |> Enum.flat_map(&attest(term, &1, poems))
+        |> Enum.uniq_by(& &1.external_id)
+        |> Enum.with_index(&Map.put(&1, :position, &2))
 
-      {:ok, poems} ->
-        items =
-          window
-          |> Enum.flat_map(&attest(term, &1, poems))
-          |> Enum.uniq_by(& &1.external_id)
-          |> Enum.with_index(&Map.put(&1, :position, &2))
-
-        {:ok,
-         %{
-           request_parameters: request_parameters(request, offset, length(window), length(all)),
-           items: items,
-           next_cursor: if(offset + limit < length(all), do: Integer.to_string(offset + limit)),
-           completion_reason: if(items == [], do: :no_results, else: :results)
-         }}
+      {:ok,
+       %{
+         request_parameters: request_parameters(request, offset, length(window), length(all)),
+         items: items,
+         next_cursor: if(offset + limit < length(all), do: Integer.to_string(offset + limit)),
+         completion_reason: if(items == [], do: :no_results, else: :results)
+       }}
+    else
+      {:deferred, code, seconds} -> {:deferred, code, seconds, request}
     end
   end
 
   # One poet at a time, each with its own stage name. The stage is the retry
   # ladder's key, so sharing one across a window's poets would spend the whole
-  # page's attempts on the third of them. A poet whose fetch will not come back
-  # is dropped and the page is still a page without them.
-  defp fetch_authors(_term, [], _request_fun, acc), do: {:ok, acc}
+  # page's attempts on the third of them.
+  #
+  # A poet whose fetch does not come back is *not* silently dropped: the name is
+  # collected, because two of PoetryDB's 129 poets can never be fetched this way
+  # and dropping them would make their poems permanently invisible while still
+  # charging every page that reaches them for the attempt.
+  defp fetch_authors(_term, [], _request_fun, acc, failed), do: {:ok, acc, failed}
 
-  defp fetch_authors(term, [author | rest], request_fun, acc) do
+  defp fetch_authors(term, [author | rest], request_fun, acc, failed) do
     payload = %{"endpoint" => "poems", "term" => term, "author" => author}
 
     case request_fun.("poems:#{author}", payload) do
       {:ok, rows} when is_list(rows) ->
-        fetch_authors(term, rest, request_fun, Map.put(acc, author, index_poems(rows)))
+        fetch_authors(term, rest, request_fun, index_poems(acc, author, rows), failed)
 
+      # A well-formed body that is not a list is PoetryDB saying *nothing here*,
+      # and it is believed: re-asking one poem at a time would spend a request
+      # per candidate to be told the same thing again.
       {:ok, _body} ->
-        fetch_authors(term, rest, request_fun, acc)
+        fetch_authors(term, rest, request_fun, acc, failed)
 
+      # An error is not an answer. This is the poet whose works are too large to
+      # serialize, and the narrower route is how their poems are reached.
       {:error, _code} ->
-        fetch_authors(term, rest, request_fun, acc)
+        fetch_authors(term, rest, request_fun, acc, [author | failed])
 
       {:deferred, code, seconds} ->
         {:deferred, code, seconds}
     end
   end
 
-  defp index_poems(rows) do
+  # The candidates a poet-wide fetch did not deliver, which is how the two
+  # unfetchable poets are reached. Byron's collected works are 503 at sixteen
+  # seconds however the query is narrowed by poet alone — *Don Juan* on its own
+  # is 16,092 lines — and the same is true of Shelley. Adding the line count as
+  # a third axis asks for one poem and is answered in under a second.
+  #
+  # It is a straggler pass and not the normal route because candidates arrive
+  # clustered by poet: a twelve-candidate window of `war` is four poets, so one
+  # request each is five requests where one per candidate would be thirteen.
+  defp stragglers(window, poems, failed) do
+    Enum.filter(window, fn candidate ->
+      candidate.author in failed and candidate.linecount != nil and
+        not is_map_key(poems, {candidate.author, candidate.title})
+    end)
+  end
+
+  defp fetch_poems(_term, [], _request_fun, acc), do: {:ok, acc}
+
+  defp fetch_poems(term, [candidate | rest], request_fun, acc) do
+    payload = %{
+      "endpoint" => "poem",
+      "term" => term,
+      "author" => candidate.author,
+      "linecount" => candidate.linecount
+    }
+
+    case request_fun.("poem:#{candidate.author}:#{candidate.linecount}", payload) do
+      {:ok, rows} when is_list(rows) ->
+        fetch_poems(term, rest, request_fun, index_poems(acc, candidate.author, rows))
+
+      {:ok, _body} ->
+        fetch_poems(term, rest, request_fun, acc)
+
+      {:error, _code} ->
+        fetch_poems(term, rest, request_fun, acc)
+
+      {:deferred, code, seconds} ->
+        {:deferred, code, seconds}
+    end
+  end
+
+  # Keyed on poet *and* title, because a title alone is not unique across poets
+  # and both hydration routes can answer with either.
+  defp index_poems(acc, author, rows) do
     rows
     |> Enum.filter(&(is_map(&1) and present?(&1["title"]) and is_list(&1["lines"])))
-    |> Enum.into(%{}, &{String.trim(&1["title"]), &1})
+    |> Enum.reduce(acc, fn poem, index ->
+      Map.put_new(index, {author, String.trim(poem["title"])}, poem)
+    end)
   end
 
   # The gate. A candidate becomes an item only when the poet's own text shows
   # the term at a word boundary; the substring the search matched on is not
   # evidence and never reaches the shelf.
-  defp attest(term, %{title: title, author: author}, poems) do
-    with %{} = by_title <- Map.get(poems, author),
-         %{"lines" => lines} = poem <- Map.get(by_title, title),
+  defp attest(term, %{title: title, author: author} = candidate, poems) do
+    with %{"lines" => lines} = poem <- Map.get(poems, {author, title}),
          {number, text} <- first_attestation(term, lines) do
-      [item(term, author, title, poem, lines, number, text)]
+      [item(term, candidate, poem, lines, number, text)]
     else
       _ -> []
     end
@@ -362,7 +459,7 @@ defmodule DevilsDictionary.Discovery.Providers.Poetrydb do
     Regex.compile!("(?<![\\p{L}\\p{N}])#{escaped}(?![\\p{L}\\p{N}])", "iu")
   end
 
-  defp item(term, author, title, poem, lines, number, text) do
+  defp item(term, %{title: title, author: author} = candidate, poem, lines, number, text) do
     external_id = poem_id(author, title, lines)
 
     %{
@@ -387,7 +484,7 @@ defmodule DevilsDictionary.Discovery.Providers.Poetrydb do
         "author" => author,
         "line_count" => length(lines),
         "source_line_count" => poem["linecount"],
-        "source_url" => source_url(author),
+        "source_url" => source_url(term, candidate),
         "content_type" => "text",
         "provider" => "PoetryDB"
       },
@@ -418,11 +515,27 @@ defmodule DevilsDictionary.Discovery.Providers.Poetrydb do
     lines |> Enum.join("\n") |> then(&:crypto.hash(:sha256, &1)) |> Base.encode16(case: :lower)
   end
 
-  # PoetryDB serves no page for a poem, so the citable locator is the query that
-  # returns it. It is keyed on the poet for the same reason the hydration is:
-  # a title may carry the API's own operators and an author name may not.
-  defp source_url(author) do
-    "https://poetrydb.org/author/#{segment(author)}/#{@poem_fields}"
+  # PoetryDB serves no page for a poem, so the citable locator is a query that
+  # returns it — and it is the *three-axis* query, which names one poem rather
+  # than a poet's whole shelf.
+  #
+  # It is keyed on the poet and never on the title, because `:` `;` and `/` are
+  # PoetryDB's own operators and 434 of its 2,526 titles carry one. The earlier
+  # `/author/<poet>` form was worse than imprecise: it is the request measured
+  # at a 503 for Byron and for Shelley, so for the two poets with the most to
+  # cite it was a link to an error page. This form is answered for them in
+  # under a second.
+  #
+  # The public host is written out rather than read from `:endpoint`, because
+  # this is where a reader is sent and that is where we make our own calls.
+  defp source_url(term, %{author: author, linecount: linecount}) when is_binary(linecount) do
+    "https://poetrydb.org" <> poem_path(term, author, linecount)
+  end
+
+  # A candidate whose line count PoetryDB withheld can still be cited, one axis
+  # coarser: the poet's poems that use this word.
+  defp source_url(term, %{author: author}) do
+    "https://poetrydb.org/lines,author/#{segment(term)};#{segment(author)}/#{@poem_fields}"
   end
 
   # `entities.preferred_label` is varchar(255) and Postgres counts characters.
@@ -468,6 +581,15 @@ defmodule DevilsDictionary.Discovery.Providers.Poetrydb do
   defp offset(_value), do: 0
 
   defp present?(value), do: is_binary(value) and String.trim(value) != ""
+
+  defp presence(value) when is_binary(value) do
+    case String.trim(value) do
+      "" -> nil
+      trimmed -> trimmed
+    end
+  end
+
+  defp presence(_value), do: nil
 
   defp config, do: Application.get_env(:devils_dictionary, :poetrydb, [])
 end
