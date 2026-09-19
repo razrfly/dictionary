@@ -10,6 +10,12 @@ defmodule DevilsDictionary.Discovery.Conformance.OpenverseFixture do
   `license_version` apart from it, `attribution` already composed, `thumbnail`
   a proxy URL on `api.openverse.org` and `url` the upstream file.
 
+  Openverse's own `attribution` — the full CC boilerplate, two sentences and a
+  URL — is kept on every row **although the provider no longer forwards it**
+  (D2 of #126). A row without it would let a provider that went back to
+  forwarding it pass this suite by accident; with it there, the composed line
+  is the only line that can appear on a card.
+
   Four rows are here to be more than a row:
 
     * **`086e0224-…`** is `by-nc-nd`, a real result for *soldier*. The search
@@ -115,12 +121,24 @@ defmodule DevilsDictionary.Discovery.Conformance.OpenverseFixture do
   # Openverse's own envelope: `result_count`, `page_count`, `page`, `results`.
   # The stub honours `page` and `page_size` the way the API does, and reports
   # the page count the rows it holds would make.
+  #
+  # **And it honours `filter_dead` the way the API does**, which is the part
+  # that is not obvious. Openverse validates upstream links against a cached
+  # dead-link mask per query, and when that cache is cold it answers the
+  # requested page from the *start* of the ranking. Measured live on
+  # `q="war"`, `page_size=12`, 2026-09-19: `filter_dead=true` answered page 2
+  # with page 1's twelve ids, and `filter_dead=false` walked pages 1, 2 and 3
+  # contiguously on three cold misses (#126 Phase 2, #128). So a provider that
+  # asks for the filter on a page after the first gets the first page back
+  # here too, and the shared pagination suite — which asserts the second page
+  # *appends* — is what fails.
   defp respond(rows) do
     Req.Test.stub(Openverse, fn conn ->
       conn = Plug.Conn.fetch_query_params(conn)
       page_size = String.to_integer(conn.params["page_size"])
       page = String.to_integer(conn.params["page"] || "1")
-      window = Enum.slice(rows, (page - 1) * page_size, page_size)
+      served = if page > 1 and conn.params["filter_dead"] == "true", do: 1, else: page
+      window = Enum.slice(rows, (served - 1) * page_size, page_size)
 
       Req.Test.json(conn, %{
         "result_count" => length(rows),

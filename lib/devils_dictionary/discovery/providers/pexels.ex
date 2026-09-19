@@ -35,7 +35,9 @@ defmodule DevilsDictionary.Discovery.Providers.Pexels do
       sentence describing the picture, and that is every word Pexels
       publishes about it. `alt` was present on all 120 results measured, and
       it is the card's title. There is no creation date anywhere in the
-      response, so the card says *Year unknown* and that is the truth.
+      response, so the card prints no year at all — D5 of #126 made the
+      `year · badge` line `badge` alone when there is no year, where it used
+      to print *Year unknown* on every one of these cards.
 
     * **`next_page` is malformed, and a short page is not the last page.**
       Pexels answers `next_page` as
@@ -327,7 +329,8 @@ defmodule DevilsDictionary.Discovery.Providers.Pexels do
 
   # M4's six fixed names, plus the title and the ladder the `:image` row reads.
   # No `year`: Pexels publishes no date for a photo, and an invented one would
-  # be worse than the card's own *Year unknown*.
+  # be worse than the card saying nothing. Since D5 of #126 the card does say
+  # nothing — the badge stands alone — rather than printing *Year unknown*.
   defp preview(row, title, thumbnail, full) do
     creator = presence(row["photographer"])
 

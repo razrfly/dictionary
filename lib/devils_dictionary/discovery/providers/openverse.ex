@@ -13,7 +13,7 @@ defmodule DevilsDictionary.Discovery.Providers.Openverse do
   is no `identity_record/1`, so every result persists as
   `:insufficient_evidence`, which is what a text match deserves.
 
-  Four things the 2026-09-19 probe found
+  Five things the 2026-09-19 probes found
   (`docs/integrations/openverse.md`) are built in rather than documented:
 
     * **The query is an exact phrase.** Bare `q=war` answers twenty copies of
@@ -37,6 +37,26 @@ defmodule DevilsDictionary.Discovery.Providers.Openverse do
       proposes it as a second identifier, so `Shelf.dedup/2` folds this copy
       into the Commons item on the same page without either provider knowing
       about the other (M3).
+
+    * **`filter_dead` is what makes a second page unreliable, so only the
+      first page asks for it.** Openverse validates upstream links against a
+      cached *dead-link mask* per query; when that cache is cold it serves
+      the requested page from the **start** of the ranking rather than from
+      the page's own offset. Measured live 2026-09-19 on `q="war"`,
+      `page_size=12`: with `filter_dead=true`, page 2 answered with page 1's
+      twelve ids (`cf-cache-status: HIT`, `age: 7603`, the entry written at
+      the moment #126 Phase 1 clicked *Load more*), and a cold-cache repeat
+      on a fresh key answered from index 0 again; with `filter_dead=false`,
+      pages 1, 2 and 3 were three cold misses and perfectly contiguous. The
+      same walk at `page_size` 6, 10 and 20 was contiguous only because the
+      mask was warm by then. So the first page — the one every reader sees —
+      keeps the filter, and a page after it does not, which is the only
+      reading of this API under which *Load more* can move a count. The cost
+      is stated rather than hidden: an item on page 2 or later has not been
+      link-checked, so its thumbnail may be dead. The two rankings differ by
+      the items the filter removed, so the unfiltered page 2 can repeat one
+      item from the filtered page 1 — exactly one, measured — and
+      `Shelf.dedup/2` folds it at read time.
 
     * **The rate limit is advertised but not enforced.** Every response
       carries `x-ratelimit-limit-anon_burst: 20/min` and
@@ -79,6 +99,22 @@ defmodule DevilsDictionary.Discovery.Providers.Openverse do
   # This project's posture, unchanged from Commons: public domain, CC0, CC BY
   # and CC BY-SA. Openverse spells them without the `cc-` prefix.
   @licenses ~w(cc0 pdm by by-sa)
+
+  # D2 of #126. The ceiling conformance asserts on every `:required` row is
+  # 160; this provider keeps its own sentence inside it with room to spare,
+  # and clamps the one part of the sentence a licence does not require.
+  #
+  # 72 rather than 160, because 160 characters is a paragraph in the column
+  # this line is rendered in. Measured through the card component on the 131
+  # real image credits this project holds for `war` and `soldier`: at the
+  # `:image` row's 96 px column a credit needs about 46 characters to fit
+  # three rows, Pexels's longest is 44 and Unsplash's 47, and Openverse — the
+  # only one of the four whose line carries a *title* — reached 91 and nine
+  # rows before this. 72 puts its worst case beside its peers instead of
+  # beside Commons's, and the title is the part that pays for it: the card's
+  # own `h3` two lines above already says it in full.
+  @credit_limit 72
+  @credit_title_limit 32
 
   # `https://commons.wikimedia.org/w/index.php?curid=73850232`
   @commons_curid ~r{^https?://commons\.wikimedia\.org/w/index\.php\?curid=(\d+)$}
@@ -193,13 +229,19 @@ defmodule DevilsDictionary.Discovery.Providers.Openverse do
         "page_size" => page_size,
         "license" => Enum.join(@licenses, ","),
         "mature" => "false",
-        # Openverse checks the upstream URL still resolves. A dead hotlink is
-        # the one failure D14 cannot recover from: we hold no bytes.
-        "filter_dead" => "true"
+        "filter_dead" => filter_dead(page)
       },
       headers: headers()
     ]
   end
+
+  # Openverse checks the upstream URL still resolves, and a dead hotlink is the
+  # one failure D14 cannot recover from: we hold no bytes. It is also what
+  # breaks the walk — a cold dead-link mask serves any page from index 0 — so
+  # the first page is filtered and the pages after it are paged. See the
+  # moduledoc for the measurement, and #128.
+  defp filter_dead("1"), do: "true"
+  defp filter_dead(_page), do: "false"
 
   defp headers do
     [{"user-agent", Application.fetch_env!(:devils_dictionary, :user_agent)}]
@@ -346,9 +388,9 @@ defmodule DevilsDictionary.Discovery.Providers.Openverse do
   defp item(_mapping, _row), do: nil
 
   # M4's six fixed names, plus the title and the ladder the `:image` row reads.
-  # `attribution` is Openverse's own ready-made line, shown verbatim beneath
-  # the thumbnail; `credit_line` is the fallback the renderer uses for a
-  # provider that has none, and Openverse always has one.
+  # `attribution` is the one line this provider composes (D2 of #126) and the
+  # card shows beneath the thumbnail; `row["attribution"]`, the CC boilerplate
+  # Openverse ships, is deliberately not forwarded — see `attribution/3`.
   defp preview(row, license, thumbnail, landing) do
     creator = presence(row["creator"])
 
@@ -373,24 +415,57 @@ defmodule DevilsDictionary.Discovery.Providers.Openverse do
     |> Map.new()
   end
 
-  # Openverse composes the line a CC licence asks for — `"Title" by Creator is
-  # licensed under CC BY-SA 2.0. To view a copy of this license, visit …` — and
-  # it is shown verbatim. The composed fallback is for the item that carries
-  # none; it names the same three things in the same order.
-  defp attribution(row, license, creator) do
-    case presence(row["attribution"]) do
-      nil ->
-        [
-          title(row) && ~s("#{title(row)}"),
-          creator && "by #{creator}",
-          "licensed under #{license}"
-        ]
-        |> Enum.reject(&is_nil/1)
-        |> Enum.join(" ")
-        |> Kernel.<>(", via Openverse")
+  @doc """
+  The credit line, composed here from this item's own fields (D2 of #126).
 
-      line ->
-        line
+  Openverse ships a ready-made `attribution`, and forwarding it was what M4's
+  *verbatim* was read to mean. It is the full CC boilerplate — *"war" by
+  zbigphotography (1M+ views) is licensed under CC BY-SA 2.0. To view a copy
+  of this license, visit https://creativecommons.org/licenses/by-sa/2.0/.* —
+  **155 characters**, two sentences and an unbreakable URL. Measured through
+  the card component on `/define/war`, that one credit is **fourteen rows**
+  at 375 and eleven at 1280, which is four times the card it belongs to and
+  the tallest thing on it (#126 item 2 recorded seven; the number on this
+  card is worse). D2 settles it: a
+  credit is at most one sentence naming the creator and the licence, with no
+  URL in the prose, because the licence link `Culture.credit_parts/2` puts on
+  the licence name is where *view a copy* lives.
+
+  So the line is `"{title}" by {creator}, {licence}`, and what is missing is
+  simply absent rather than filled with a word. The **title** is the part
+  that gives, because it is the one a CC licence does not ask for: it is
+  clamped to #{@credit_title_limit} characters, and dropped outright if the
+  sentence still would not fit #{@credit_limit}. The creator and the licence
+  are never cut — they are the two runs the card turns into links, and a
+  truncated creator matches no needle and therefore carries no link, which is
+  the condition itself.
+  """
+  def attribution(row, license, creator) do
+    line = credit(credit_title(title(row)), creator, license)
+
+    if String.length(line) <= @credit_limit, do: line, else: credit(nil, creator, license)
+  end
+
+  defp credit(title, creator, license) do
+    [title && ~s("#{title}"), creator && "by #{creator}"]
+    |> Enum.reject(&is_nil/1)
+    |> Enum.join(" ")
+    |> case do
+      "" -> license
+      lead -> "#{lead}, #{license}"
+    end
+  end
+
+  defp credit_title(nil), do: nil
+
+  defp credit_title(title) do
+    if String.length(title) > @credit_title_limit do
+      title
+      |> String.slice(0, @credit_title_limit - 1)
+      |> String.trim_trailing()
+      |> Kernel.<>("…")
+    else
+      title
     end
   end
 

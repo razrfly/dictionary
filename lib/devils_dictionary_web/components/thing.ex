@@ -249,6 +249,20 @@ defmodule DevilsDictionaryWeb.Thing do
   attr :concepts, :list, required: true
 
   def disagreement(assigns) do
+    # One line per thing, for the same reason `may_refer_to/1` has one: the
+    # list is built from the `refers_to` revisions on a word's senses, and a
+    # word with several senses can have them all refer to the *same* entity —
+    # two revisions, one thing, two elements under one DOM id. Not observed on
+    # a page, unlike `may-refer-to-Q4991371` on `/define/soldier` (#126,
+    # residual 7); the shape is the same and so is the fix. Deduplicating
+    # keeps the first revision's method and confidence, which is the same
+    # trade the possibility list makes: the panel lists the things the sources
+    # name, and a thing named twice is still one thing. `distinct` — what
+    # decides whether there is a disagreement at all — is already counted on
+    # the entity in `Encyclopedia.candidates_for/2`, so this cannot make a
+    # disagreement disappear.
+    assigns = assign(assigns, :concepts, Enum.uniq_by(assigns.concepts, & &1.object_id))
+
     ~H"""
     <div
       id="disagreement"
@@ -256,7 +270,7 @@ defmodule DevilsDictionaryWeb.Thing do
     >
       <p class="text-mist-500">the sources name more than one thing</p>
       <ul class="mt-1 space-y-1">
-        <li :for={concept <- @concepts} id={"disagreement-#{concept.qid}"}>
+        <li :for={concept <- @concepts} id={"disagreement-#{concept.qid || concept.object_id}"}>
           <span class="text-mist-950 dark:text-white">{concept.label}</span>
           <span :if={concept.description} class="text-mist-700 dark:text-mist-400">
             — {concept.description}

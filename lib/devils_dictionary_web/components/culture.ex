@@ -389,15 +389,40 @@ defmodule DevilsDictionaryWeb.Culture do
              `phx-no-format`, because the runs of a sentence are inline and
              adjacent: a newline the formatter put between a link and the
              text after it would render as a space before a full stop.
-             `break-words`, because an unclamped credit contains URLs —
-             Openverse composes *…To view a copy of this license, visit
+             `break-words`, because a credit carries names no soft break
+             fits — and, before D2 of #126, URLs: Openverse forwarded
+             *…To view a copy of this license, visit
              https://creativecommons.org/licenses/by-sa/2.0/.* and that
              unbreakable token ran straight out of the 112 px column and
-             over the next card. --%>
+             over the next card.
+
+             `text-xs`, and that is the card's whole type scale doing its
+             job: the title is `text-base sm:text-sm`, the year and badge
+             the same, the artist `text-sm`, and the credit — the one line
+             here that is an obligation rather than reading matter — a step
+             below them. Measured on the 131 real image credits this
+             database holds for `war` and `soldier` (Commons, Openverse,
+             Pexels, Unsplash), rendered through this component at the
+             `:image` row's own column:
+
+               at 375 (96 px column): text-sm → median 4 rows, longest 10,
+                 85 of 131 over three rows;  text-xs → median 3, longest 8,
+                 59 over three
+               at 1280 (112 px): text-sm → 59 over three;  text-xs → 42
+
+             Three rows for *every* credit is not reachable here and the
+             number says why: at this size a credit has to be about 46
+             characters to fit three rows in 96 px, and `{author}, {licence},
+             via Wikimedia Commons` spends 23 of them on its tail before it
+             names anybody. Reaching it would take either a clamp — which
+             the `:required` rule forbids, for the reason two comments up —
+             or a wider column, which is D6 and wants a crop measurement
+             this session does not have. Recorded in #126 rather than
+             solved by making the licence smaller still. --%>
         <p
           :if={@attribution}
           id={"culture-attribution-#{@item.external_namespace}-#{@item.external_id}"}
-          class={["text-sm break-words text-mist-500 text-pretty", @credit_clamp]}
+          class={["text-xs break-words text-mist-500 text-pretty", @credit_clamp]}
           phx-no-format
         >
           <%= for part <- @credit do %><a :if={part.url} href={part.url} target="_blank" rel="noreferrer" class="underline underline-offset-4 transition-colors hover:text-mist-950 dark:hover:text-white">{part.text}</a><span :if={is_nil(part.url)}>{part.text}</span><% end %>
