@@ -347,10 +347,11 @@ changed is still the old one in the database you are about to browse, and the
 shelf you measure is ordered by the old tier (Openverse, #116 Phase 3). Check
 the row and update it by hand before the proof, and say in the PR body that the
 row changed, because there is no deployment step in this repository that will
-do it for you:
+do it for you. Query the database the server you are about to browse is on —
+`devils_dictionary_v2` unless `DD_DATABASE` says otherwise:
 
 ```bash
-psql -d devils_dictionary_v2 -c "select slug, tier, name from sources where slug = '<slug>'"
+psql -d "${DD_DATABASE:-devils_dictionary_v2}" -c "select slug, tier, name from sources where slug = '<slug>'"
 ```
 
 Then open two or three word pages that exercise the provider, at **1280** and at
