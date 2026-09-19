@@ -339,6 +339,20 @@ compiles lazily, and an Oban worker whose module is not loaded yet is a job Oban
 discards — *module is not a worker* — so discovery silently does nothing on the
 first page you open.
 
+**A changed `source_attrs/0` does not reach a row that already exists.**
+`Discovery.ensure_source/1` inserts `on_conflict: :nothing`, and it is the only
+writer of a provider's `sources` row — `Sources.Catalog.seed!/0` seeds the six
+MVP-0 sources and not the providers — so a tier, a name or an attribution you
+changed is still the old one in the database you are about to browse, and the
+shelf you measure is ordered by the old tier (Openverse, #116 Phase 3). Check
+the row and update it by hand before the proof, and say in the PR body that the
+row changed, because there is no deployment step in this repository that will
+do it for you:
+
+```bash
+psql -d devils_dictionary_v2 -c "select slug, tier, name from sources where slug = '<slug>'"
+```
+
 Then open two or three word pages that exercise the provider, at **1280** and at
 **375** CSS pixels, and check:
 
@@ -444,7 +458,12 @@ Nothing in shared code changes; if you find yourself editing `Culture`,
    ready to show) and `source_url` in `preview_metadata`; the renderer shows
    the line beneath the thumbnail, always, and conformance fails the first
    item without one. On a `:credited` shelf, write `credit_line` when the
-   source has one. On a `:none` shelf, write nothing per item.
+   source has one. On a `:none` shelf, write nothing per item. Every one of
+   those URLs reaches an `href` straight out of your response, so the renderer
+   allows only an **absolute `http(s)` URL with a host** (`Culture`'s
+   `external_href/1`, #116 Phase 3) — anything else, a relative path or a
+   `javascript:` scheme an upstream record carried, is silently not a link,
+   so write absolute URLs or none.
 5. **Read the row's `evidence`.** Your reasons must be of a class the row
    admits, and conformance asserts each one. An identity-bearing source writes
    `"tags"` or `"depicts"`; a text source writes `"lines"` (with a `"locator"`

@@ -134,13 +134,29 @@ defmodule DevilsDictionary.Artworks do
       `shelf_items/2` asks for this; the default offers every (work, meaning).
   """
   def suggestions(lexeme_ids, opts \\ []) when is_list(lexeme_ids) do
+    {candidates, _tiers} = suggestions_with_tiers(lexeme_ids, opts)
+    candidates
+  end
+
+  # The candidates and the tiers of the sources they came from, read together.
+  # The tiers are one `sources` query and both callers need them — the
+  # interleave to order the turns, `shelf_items/2` to stamp each item with its
+  # own source's tier — and before this each asked for them separately, so a
+  # page with a catalog shelf ran the same query twice (#126, residual 7). A
+  # tier is a fact about a source row and does not change between the two
+  # reads; the map is over the pre-limit candidates, which is a superset of
+  # the slugs that survive.
+  defp suggestions_with_tiers(lexeme_ids, opts) do
     senses = page_senses(lexeme_ids)
 
-    (artsy_suggestions(senses) ++ qid_suggestions(lexeme_ids, senses, opts))
-    |> Enum.uniq_by(&{&1.artwork.object_id, &1.sense_id})
-    |> per_work(opts[:per_work])
-    |> interleave_by_source()
-    |> Enum.take(@suggestion_limit)
+    candidates =
+      (artsy_suggestions(senses) ++ qid_suggestions(lexeme_ids, senses, opts))
+      |> Enum.uniq_by(&{&1.artwork.object_id, &1.sense_id})
+      |> per_work(opts[:per_work])
+
+    tiers = source_tiers(candidates)
+
+    {candidates |> interleave_by_source(tiers) |> Enum.take(@suggestion_limit), tiers}
   end
 
   # One candidate per work, kept *before* the limit is applied: a work that
@@ -178,8 +194,7 @@ defmodule DevilsDictionary.Artworks do
   persisted one without knowing that either exists.
   """
   def shelf_items(lexeme_ids, opts \\ []) when is_list(lexeme_ids) do
-    candidates = suggestions(lexeme_ids, Keyword.put(opts, :per_work, true))
-    tiers = source_tiers(candidates)
+    {candidates, tiers} = suggestions_with_tiers(lexeme_ids, Keyword.put(opts, :per_work, true))
     Enum.map(candidates, &shelf_item(&1, tiers))
   end
 
@@ -375,9 +390,7 @@ defmodule DevilsDictionary.Artworks do
   # the sort is each source's own order, which the interleave preserves.
   # Before the limit, so that both sources get slots; the shelf interleaves
   # again at read time across everything on it, live and catalog alike.
-  defp interleave_by_source(candidates) do
-    tiers = source_tiers(candidates)
-
+  defp interleave_by_source(candidates, tiers) do
     candidates
     |> Enum.sort_by(&{sort_rank(&1), -(&1.artwork.sitelinks || 0), &1.artwork.object_id})
     |> Shelf.interleave(&sort_rank/1, &source_key(&1.artwork, tiers))

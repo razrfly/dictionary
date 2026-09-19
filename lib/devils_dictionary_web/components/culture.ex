@@ -68,14 +68,28 @@ defmodule DevilsDictionaryWeb.Culture do
     for type <- ContentTypes.known(),
         group = Enum.filter(states, &(content_type(&1) == type)),
         group != [] do
-      %{
-        type: type,
-        states: group,
-        entries:
-          group
-          |> Enum.flat_map(fn state -> Enum.map(state.items, &%{state: state, item: &1}) end)
-          |> Shelf.compose(&archetype_rank(&1.state), &source/1, &Shelf.keys(&1.item))
-      }
+      entries =
+        group
+        |> Enum.flat_map(fn state -> Enum.map(state.items, &%{state: state, item: &1}) end)
+        |> Shelf.compose(&archetype_rank(&1.state), &source/1, &Shelf.keys(&1.item))
+
+      # D1 of #126. A shelf nothing identified and nothing attested is a
+      # search's ranking and says so on every card; it still shows — M6's
+      # honesty is the whole point of the label — but it is not allowed to
+      # take a page per source. Measured on `/define/nepotism` 2026-09-19:
+      # three keyword sources declining nothing made thirty-six stock
+      # photographs, which is a results page. One page across the searches
+      # in turn instead, with *Load more* to go on.
+      #
+      # Read from the entries' own reasons rather than from the row: the
+      # `:image` row admits both classes, and whether *this* page got an
+      # identity out of it is a fact about what arrived. An empty shelf is
+      # not demoted — there is nothing to demote, and a shelf still loading
+      # would otherwise jump down the page and back.
+      searched? = entries != [] and not Enum.any?(entries, &attested?/1)
+      entries = if searched?, do: Enum.take(entries, page_cap(group)), else: entries
+
+      %{type: type, states: group, entries: entries, searched?: searched?}
       |> then(fn shelf ->
         # What each state actually put on the rail, after the fold: the byline
         # credits and the About note describes these, not `state.items`. A
@@ -85,6 +99,31 @@ defmodule DevilsDictionaryWeb.Culture do
         Map.put(shelf, :shown, Enum.group_by(shelf.entries, & &1.state.provider, & &1.item))
       end)
     end
+    # A demoted shelf renders after every shelf that identified or attested
+    # something (D1). `Enum.sort_by/2` is stable and `false < true`, so the
+    # content-type table's order survives inside each of the two groups.
+    |> Enum.sort_by(& &1.searched?)
+  end
+
+  # One page of a shelf that only searched: twelve items across its sources
+  # in turn, and one more page for every page its sources have loaded, so
+  # *Load more* still goes on. Twelve because that is the shelf's page
+  # everywhere else — `Artworks`' own limit, and a rail of twelve is what
+  # every other shelf on the page opens with.
+  @searched_page 12
+
+  defp page_cap(states) do
+    pages = states |> Enum.map(&(Map.get(&1, :page) || 0)) |> Enum.max(fn -> 0 end)
+    @searched_page * (pages + 1)
+  end
+
+  # Did anything on this rail arrive by identity or attestation? One entry is
+  # enough: an Images shelf with one Commons depiction on it is not a results
+  # page, and the searches that follow it are labelled either way.
+  defp attested?(%{state: state, item: item}) do
+    item
+    |> reasons(Map.get(state, :term))
+    |> Enum.any?(&(MatchReason.evidence(&1) != :query))
   end
 
   # A corpus candidate sorts after every live result on its shelf. It is the
@@ -127,12 +166,16 @@ defmodule DevilsDictionaryWeb.Culture do
             >
               {shelf_heading(shelf.type)}
             </h2>
+            <%!-- D4 of #126: the byline is names. Each provider's own
+                 qualifier — *depicts: Wikidata*, *search: CC and public
+                 domain* — is a sentence about how that source matched, which
+                 is what the About section is for; four of them in the header
+                 wrapped to four lines above the rail at 375 px, measured on
+                 `/define/war` 2026-09-19. --%>
             <p class="text-base text-mist-500 sm:text-sm">
               <span :for={{state, index} <- Enum.with_index(contributing(shelf))}>
                 <span :if={index > 0} aria-hidden="true">·</span>
-                <span id={"culture-provider-#{state.provider}"}>
-                  {state.provider_name}{provider_detail(state)}
-                </span>
+                <span id={"culture-provider-#{state.provider}"}>{state.provider_name}</span>
               </span>
             </p>
           </div>
@@ -181,16 +224,8 @@ defmodule DevilsDictionaryWeb.Culture do
             <% end %>
           </p>
           <div class="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
-            <div class="space-y-2">
-              <.compact_note
-                :for={state <- contributing(shelf)}
-                state={state}
-                items={shelf.shown[state.provider]}
-                type={shelf.type}
-                contributor={@contributor}
-              />
-            </div>
-            <.compact_more :for={state <- shelf.states} state={state} />
+            <.compact_note shelf={shelf} contributor={@contributor} />
+            <.compact_more shelf={shelf} />
           </div>
         <% else %>
           <h2 class="font-display text-xl text-mist-950 dark:text-white">
@@ -224,7 +259,16 @@ defmodule DevilsDictionaryWeb.Culture do
   # succeeded is reported in its note, not in a byline for results it did not
   # supply; one whose every item the shelf folded into another source's copy
   # is in the same position.
-  defp contributing(shelf), do: Enum.filter(shelf.states, &Map.has_key?(shelf.shown, &1.provider))
+  # Tier, then slug (D3): the order the rail itself takes its turns in, so the
+  # byline and the About sections read down in the order the cards read
+  # across. The catalog state names no tier of its own — its items each carry
+  # their corpus's — and an unnamed tier sorts after every named one, which
+  # is where a corpus belongs anyway.
+  defp contributing(shelf) do
+    shelf.states
+    |> Enum.filter(&Map.has_key?(shelf.shown, &1.provider))
+    |> Enum.sort_by(&{Shelf.tier_rank(Map.get(&1, :tier)), &1.provider})
+  end
 
   # Worth reporting beside a shelf that is not empty. A provider whose own
   # answer was *nothing* is not: "no matching artwork for this term" under six
@@ -247,6 +291,7 @@ defmodule DevilsDictionaryWeb.Culture do
       |> assign(:entry_path, entry_path(assigns.item, assigns.return_path))
       |> assign(:aspect, presentation.aspect)
       |> assign(:badge, presentation.badge)
+      |> assign(:year, year(metadata))
       |> assign(:attribution, attribution)
       |> assign(:credit, credit_parts(attribution, metadata))
       # Every href on this card comes out of a provider response. Phoenix
@@ -320,9 +365,16 @@ defmodule DevilsDictionaryWeb.Culture do
             {@item.preview_metadata["title"]}
           </a>
         </h3>
-        <p class="text-base tabular-nums text-mist-500 sm:text-sm">
-          {@item.preview_metadata["year"] || "Year unknown"}
-          <span :if={@badge}>· {@badge}</span>
+        <%!-- D5 of #126: a card shows a year only when it has one. A stock
+             photograph publishes no date, so *Year unknown* was printed on
+             every Pexels card and on most Unsplash and Openverse ones —
+             noise in the position a fact would hold. The badge stands alone
+             when there is no year, and the line is not rendered at all when
+             the row has no badge either. --%>
+        <p :if={@year || @badge} class="text-base tabular-nums text-mist-500 sm:text-sm">
+          <span :if={@year}>{@year}</span>
+          <span :if={@year && @badge} aria-hidden="true">·</span>
+          <span :if={@badge}>{@badge}</span>
         </p>
         <%!-- Whoever made it, when the provider or the catalog named them. It
              is a metadata key and not a content type's business: a film's
@@ -523,6 +575,19 @@ defmodule DevilsDictionaryWeb.Culture do
 
   defp presence(_value), do: nil
 
+  # The year a card prints, or nothing. A manifest records it as a string and a
+  # provider may hand back a number; neither an empty string nor an absent key
+  # is a year, and D5 says an absent year is printed as nothing at all.
+  defp year(metadata) when is_map(metadata) do
+    case metadata["year"] do
+      value when is_binary(value) -> presence(value)
+      value when is_integer(value) -> Integer.to_string(value)
+      _value -> nil
+    end
+  end
+
+  defp year(_metadata), do: nil
+
   defp entry_path(%{object_id: object_id, preview_metadata: metadata}, return_path)
        when is_integer(object_id) do
     slug = DevilsDictionary.Claims.Connection.slugify(metadata["title"])
@@ -532,58 +597,78 @@ defmodule DevilsDictionaryWeb.Culture do
 
   defp entry_path(_item, _return_path), do: nil
 
-  attr :state, :map, required: true
-  attr :items, :list, required: true
-  attr :type, :atom, required: true
+  attr :shelf, :map, required: true
   attr :contributor, :boolean, default: false
 
+  # D3 of #126: one About per shelf. Four contributing sources meant four
+  # disclosures and four *Load more* controls under one rail of images; the
+  # shelf is one thing, so its note is one thing, with a section per source
+  # inside it in the rail's own order.
   defp compact_note(assigns) do
-    assigns = assign(assigns, :admits, ContentTypes.evidence(assigns.type))
+    contributors = contributing(assigns.shelf)
+
+    assigns =
+      assigns
+      |> assign(:contributors, contributors)
+      |> assign(:term, contributors |> Enum.find_value(& &1[:term]))
+      |> assign(:admits, ContentTypes.evidence(assigns.shelf.type))
 
     ~H"""
-    <details id={"culture-about-#{@state.provider}"}>
+    <details :if={@contributors != []} id={"culture-about-#{@shelf.type}"} class="min-w-0">
       <summary class="w-fit cursor-pointer text-base text-mist-500 hover:text-mist-700 sm:text-sm dark:text-mist-400">
-        {@state.provider_name} matches for “{@state.term}” · About these results
+        Matches for “{@term}” · About these results
       </summary>
-      <div class="space-y-2 pt-2 text-base text-mist-600 sm:text-sm dark:text-mist-300">
-        <p :if={Map.get(@state, :archetype) == :corpus} class="text-pretty">
-          Catalog matches from {Map.get(@state, :corpora, @state.provider_name)}, held locally
-          rather than searched for on this visit. None is an accepted interpretation: a
-          contributor connects an exact meaning and reviewers decide the claim.
-          <.link navigate={~p"/artworks"} class="underline underline-offset-4">
-            Browse saved artworks
-          </.link>
-        </p>
-        <p :if={Map.get(@state, :archetype) != :corpus} class="text-pretty">
-          Search matches from {@state.provider_name}. These are provider results, not curated examples or dictionary interpretations.
-        </p>
-        <%!-- Not "keyword relevance": one shelf now carries keyword matches,
-             tag identities and depicted QIDs, and the caveat is about the page
-             resolving to several meanings, not about how a match was made.
-             Sense-level relevance is #101's. --%>
-        <p :if={@state.relevance == "term_unverified"} class="text-pretty">
-          Relevance to this particular meaning is unverified.
-        </p>
-        <%!-- Each reason as one sentence, read against the shelf's own
-             `evidence` row (#116 M6): a search result on the one shelf that
-             admits one is called a search result; anywhere else a reason with
-             nothing in it keeps the sentence that prompts someone to fix it. --%>
-        <ul role="list" class="space-y-1">
-          <li :for={item <- @items}>
-            {item.preview_metadata["title"]}: {MatchReason.describe_all(
-              reasons(item, @state.term),
-              @admits
-            )}{review_note(item)}
-            <.link
-              :if={@contributor && connect_path(item)}
-              navigate={connect_path(item)}
-              id={"culture-connect-#{item.external_id}"}
-              class="underline underline-offset-4"
-            >
-              Connect to a meaning
+      <div class="space-y-3 pt-2">
+        <section
+          :for={state <- @contributors}
+          id={"culture-about-#{@shelf.type}-#{state.provider}"}
+          class="space-y-2 text-base text-mist-600 sm:text-sm dark:text-mist-300"
+        >
+          <%!-- The source's name and its own qualifier, which D4 moved off the
+               byline and onto the section that explains what the qualifier
+               means. --%>
+          <p class="font-medium text-mist-950 dark:text-white">
+            {state.provider_name}{provider_detail(state)}
+          </p>
+          <p :if={Map.get(state, :archetype) == :corpus} class="text-pretty">
+            Catalog matches from {Map.get(state, :corpora, state.provider_name)}, held locally
+            rather than searched for on this visit. None is an accepted interpretation: a
+            contributor connects an exact meaning and reviewers decide the claim.
+            <.link navigate={~p"/artworks"} class="underline underline-offset-4">
+              Browse saved artworks
             </.link>
-          </li>
-        </ul>
+          </p>
+          <p :if={Map.get(state, :archetype) != :corpus} class="text-pretty">
+            Search matches from {state.provider_name}. These are provider results, not curated examples or dictionary interpretations.
+          </p>
+          <%!-- Not "keyword relevance": one shelf now carries keyword matches,
+               tag identities and depicted QIDs, and the caveat is about the page
+               resolving to several meanings, not about how a match was made.
+               Sense-level relevance is #101's. --%>
+          <p :if={state.relevance == "term_unverified"} class="text-pretty">
+            Relevance to this particular meaning is unverified.
+          </p>
+          <%!-- Each reason as one sentence, read against the shelf's own
+               `evidence` row (#116 M6): a search result on the one shelf that
+               admits one is called a search result; anywhere else a reason with
+               nothing in it keeps the sentence that prompts someone to fix it. --%>
+          <ul role="list" class="space-y-1">
+            <li :for={item <- @shelf.shown[state.provider] || []}>
+              {item.preview_metadata["title"]}: {MatchReason.describe_all(
+                reasons(item, state.term),
+                @admits
+              )}{review_note(item)}
+              <.link
+                :if={@contributor && connect_path(item)}
+                navigate={connect_path(item)}
+                id={"culture-connect-#{item.external_id}"}
+                class="underline underline-offset-4"
+              >
+                Connect to a meaning
+              </.link>
+            </li>
+          </ul>
+        </section>
       </div>
     </details>
     """
@@ -622,18 +707,36 @@ defmodule DevilsDictionaryWeb.Culture do
 
   defp connect_path(_item), do: nil
 
-  attr :state, :map, required: true
+  attr :shelf, :map, required: true
 
+  # D3 of #126: one *Load more* per shelf, advancing every source on it that
+  # has another page. Per-source controls made the counts drift — one click on
+  # Pexels put 24 of its photographs on a rail where the other three held 12
+  # each, measured on `/define/war` 2026-09-19 — and the interleave's turns
+  # only read as turns while the sources are level.
+  #
+  # Every source with a cursor, not only the ones currently on the rail: a
+  # source whose whole page folded into a better-tiered copy contributes
+  # nothing to the byline, and leaving it behind here would keep it off the
+  # shelf for good.
   defp compact_more(assigns) do
+    advancing = Enum.filter(assigns.shelf.states, & &1[:next_cursor])
+
+    assigns =
+      assigns
+      |> assign(:providers, Enum.map_join(advancing, ",", & &1.provider))
+      |> assign(:loading, Enum.any?(advancing, &(&1[:loading_more] == true)))
+
     ~H"""
     <button
-      :if={@state[:next_cursor]}
+      :if={@providers != ""}
+      id={"culture-more-#{@shelf.type}"}
       type="button"
       phx-click="discovery_more"
-      phx-value-provider={@state.provider}
-      disabled={@state[:loading_more] == true}
+      phx-value-providers={@providers}
+      disabled={@loading}
       class="rounded-sm py-1 text-sm text-mist-600 underline underline-offset-4 hover:text-mist-950 disabled:opacity-50 dark:text-mist-300"
-    >{if @state[:loading_more], do: "Loading…", else: "Load more"}</button>
+    >{if @loading, do: "Loading…", else: "Load more"}</button>
     """
   end
 

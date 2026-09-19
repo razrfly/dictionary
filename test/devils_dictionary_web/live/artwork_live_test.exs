@@ -166,8 +166,8 @@ defmodule DevilsDictionaryWeb.ArtworkLiveTest do
     # the artwork shelf, not a tall card of its own beside it.
     assert has_element?(view, "#culture-filter-artwork", "Artworks")
     assert has_element?(view, "#culture-result-catalog_artwork-c#{ctx.work.object_id}")
-    assert has_element?(view, "#culture-about-catalog", "Artsy gene \u201CConflict\u201D")
-    assert has_element?(view, "#culture-about-catalog", "not yet reviewed")
+    assert has_element?(view, "#culture-about-artwork-catalog", "Artsy gene \u201CConflict\u201D")
+    assert has_element?(view, "#culture-about-artwork-catalog", "not yet reviewed")
     refute has_element?(view, "#artwork-candidates")
     assert is_integer(sense.object_id)
     assert Repo.aggregate(Assertion, :count) == assertion_count
@@ -329,7 +329,7 @@ defmodule DevilsDictionaryWeb.ArtworkLiveTest do
     assert sense_id == sense.object_id
 
     {:ok, view, _html} = live(ctx.conn, ~p"/define/love")
-    assert has_element?(view, "#culture-about-catalog", "Related Artsy gene")
+    assert has_element?(view, "#culture-about-artwork-catalog", "Related Artsy gene")
   end
 
   test "rejected creator relationship is hidden from cards and search", ctx do

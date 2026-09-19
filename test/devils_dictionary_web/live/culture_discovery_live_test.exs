@@ -67,7 +67,7 @@ defmodule DevilsDictionaryWeb.CultureDiscoveryLiveTest do
     assert has_element?(live, "#culture-entry-image-301[href^='/entities/']")
     assert has_element?(live, "#culture-entry-title-301[href^='/entities/']")
     assert has_element?(live, "#culture-source-301[href^='https://cinegraph.org/']")
-    assert has_element?(live, "#culture-about-cinegraph")
+    assert has_element?(live, "#culture-about-film-cinegraph")
     refute has_element?(live, "#culture-failed")
   end
 
@@ -140,7 +140,7 @@ defmodule DevilsDictionaryWeb.CultureDiscoveryLiveTest do
 
     assert has_element?(
              live,
-             "#culture-about-cinegraph",
+             "#culture-about-film-cinegraph",
              "Relevance to this particular meaning is unverified."
            )
   end
@@ -252,24 +252,27 @@ defmodule DevilsDictionaryWeb.CultureDiscoveryLiveTest do
 
     # The film shelf reads exactly as it did before the content-type table.
     assert has_element?(live, "#culture-filter-film", "Films")
-    assert has_element?(live, "#culture-provider-cinegraph", "CineGraph · keywords: TMDb")
+    assert has_element?(live, "#culture-provider-cinegraph", "CineGraph")
+    assert has_element?(live, "#culture-about-film-cinegraph", "CineGraph · keywords: TMDb")
     assert has_element?(live, "#culture-result-tmdb_movie-900")
     assert has_element?(live, "#culture-entry-image-900[href^='/entities/']")
     assert has_element?(live, "#culture-result-tmdb_movie-900 .aspect-\\[2\\/3\\]")
     assert has_element?(live, "#culture-result-tmdb_movie-900 img")
-    assert has_element?(live, "#culture-about-cinegraph")
+    assert has_element?(live, "#culture-about-film-cinegraph")
 
     # The text shelf is a second heading with its own label and no image slot.
     assert has_element?(live, "#culture-filter-text", "Texts")
 
+    assert has_element?(live, "#culture-provider-offset-fixture", "Offset fixture")
+
     assert has_element?(
              live,
-             "#culture-provider-offset-fixture",
+             "#culture-about-text-offset-fixture",
              "Offset fixture · public domain"
            )
 
     assert has_element?(live, "#culture-result-fixture_text-1", "Elegy 1")
-    assert has_element?(live, "#culture-about-offset-fixture")
+    assert has_element?(live, "#culture-about-text-offset-fixture")
     refute has_element?(live, "#culture-result-fixture_text-1 img")
     refute has_element?(live, "#culture-missing-poster-1")
     refute has_element?(live, "#culture-entry-image-1")
@@ -312,14 +315,16 @@ defmodule DevilsDictionaryWeb.CultureDiscoveryLiveTest do
 
     # The film shelf is untouched by the Met arriving beside it.
     assert has_element?(live, "#culture-filter-film", "Films")
-    assert has_element?(live, "#culture-provider-cinegraph", "CineGraph · keywords: TMDb")
+    assert has_element?(live, "#culture-provider-cinegraph", "CineGraph")
+    assert has_element?(live, "#culture-about-film-cinegraph", "CineGraph · keywords: TMDb")
     assert has_element?(live, "#culture-result-tmdb_movie-901")
     assert has_element?(live, "#culture-result-tmdb_movie-901 .aspect-\\[2\\/3\\]")
 
     # The artwork shelf: its own heading, the Met's own qualifier, and the
     # square aspect the `:artwork` row of the content-type table declares.
     assert has_element?(live, "#culture-filter-artwork", "Artworks")
-    assert has_element?(live, "#culture-provider-met", "The Met · tags: Wikidata")
+    assert has_element?(live, "#culture-provider-met", "The Met")
+    assert has_element?(live, "#culture-about-artwork-met", "The Met · tags: Wikidata")
     assert has_element?(live, "#culture-result-met_object-194038", "Watch")
     assert has_element?(live, "#culture-result-met_object-194038 .aspect-square")
     assert has_element?(live, "#culture-result-met_object-194038 img")
@@ -329,7 +334,7 @@ defmodule DevilsDictionaryWeb.CultureDiscoveryLiveTest do
     # phrase composed for the reader.
     assert has_element?(
              live,
-             "#culture-about-met",
+             "#culture-about-artwork-met",
              "Tagged “Soldiers” (Q4991371), the concept this meaning refers to."
            )
 
@@ -398,8 +403,10 @@ defmodule DevilsDictionaryWeb.CultureDiscoveryLiveTest do
              "#culture-results-artwork #culture-result-catalog_artwork-c#{catalog_id}"
            )
 
-    assert has_element?(live, "#culture-provider-met", "The Met · tags: Wikidata")
-    assert has_element?(live, "#culture-provider-catalog", "Saved catalog · Wikidata")
+    assert has_element?(live, "#culture-provider-met", "The Met")
+    assert has_element?(live, "#culture-about-artwork-met", "The Met · tags: Wikidata")
+    assert has_element?(live, "#culture-provider-catalog", "Saved catalog")
+    assert has_element?(live, "#culture-about-artwork-catalog", "Saved catalog · Wikidata")
 
     # And the rail does not scroll-snap: snapping re-snaps a container to its
     # previously snapped box after a layout change, so prepending the live
@@ -414,17 +421,21 @@ defmodule DevilsDictionaryWeb.CultureDiscoveryLiveTest do
     # Each names its own reason, in its own words about its own evidence.
     assert has_element?(
              live,
-             "#culture-about-met",
+             "#culture-about-artwork-met",
              "Tagged “Soldiers” (Q4991371), the concept this meaning refers to."
            )
 
     assert has_element?(
              live,
-             "#culture-about-catalog",
+             "#culture-about-artwork-catalog",
              "Direct depiction of “soldier” (Q4991371) tagged “soldier”."
            )
 
-    assert has_element?(live, "#culture-about-catalog", "held locally rather than searched for")
+    assert has_element?(
+             live,
+             "#culture-about-artwork-catalog",
+             "held locally rather than searched for"
+           )
 
     # And the film shelf is still the first shelf on the page.
     {film_at, _} = :binary.match(html, ~s(id="culture-filter-film"))
@@ -514,7 +525,7 @@ defmodule DevilsDictionaryWeb.CultureDiscoveryLiveTest do
 
     assert has_element?(
              live,
-             "#culture-about-met",
+             "#culture-about-artwork-met",
              "Related to “War” through the tag “World War I” (Q361)."
            )
   end
