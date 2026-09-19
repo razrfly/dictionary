@@ -615,7 +615,11 @@ defmodule DevilsDictionaryWeb.Culture do
 
     ~H"""
     <details :if={@contributors != []} id={"culture-about-#{@shelf.type}"} class="min-w-0">
-      <summary class="w-fit cursor-pointer text-base text-mist-500 hover:text-mist-700 sm:text-sm dark:text-mist-400">
+      <%!-- `dark:hover:text-mist-200`: the light-mode hover darkens toward the
+           ink, and without a dark counterpart hovering in dark mode moved the
+           summary *towards* its background. The same shape as the credit
+           links' `dark:hover:text-white` two components down. --%>
+      <summary class="w-fit cursor-pointer text-base text-mist-500 hover:text-mist-700 focus-visible:outline-2 focus-visible:outline-offset-2 sm:text-sm dark:text-mist-400 dark:hover:text-mist-200">
         Matches for “{@term}” · About these results
       </summary>
       <div class="space-y-3 pt-2">
@@ -735,8 +739,13 @@ defmodule DevilsDictionaryWeb.Culture do
       phx-click="discovery_more"
       phx-value-providers={@providers}
       disabled={@loading}
-      class="rounded-sm py-1 text-sm text-mist-600 underline underline-offset-4 hover:text-mist-950 disabled:opacity-50 dark:text-mist-300"
-    >{if @loading, do: "Loading…", else: "Load more"}</button>
+      class="relative rounded-sm py-1 text-base text-mist-600 underline underline-offset-4 hover:text-mist-950 focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50 sm:text-sm dark:text-mist-300 dark:hover:text-white"
+    ><%!-- The shelf's one control, so it is worth being able to hit. At 375 it
+           is 32 px tall, under the 48 px a thumb needs; the span is the touch
+           target and is not there for a mouse. --%><span
+      class="pointer-fine:hidden absolute top-1/2 left-1/2 size-[max(100%,3rem)] -translate-1/2"
+      aria-hidden="true"
+    ></span>{if @loading, do: "Loading…", else: "Load more"}</button>
     """
   end
 
