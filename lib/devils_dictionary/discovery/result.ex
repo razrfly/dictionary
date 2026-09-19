@@ -20,6 +20,12 @@ defmodule DevilsDictionary.Discovery.Result do
     field :preview_metadata, :map, default: %{}
     field :display_allowed, :boolean, default: true
 
+    # The identifiers the provider proposed for this item, read back from its
+    # source record's current revision at display time (#116 M3). Not a column:
+    # the payload already holds them, and a shelf dedups across sources on them
+    # without any provider's persisted results being rewritten.
+    field :identifiers, {:array, :map}, virtual: true, default: []
+
     field :resolution_state, Ecto.Enum,
       values: [:matched, :newly_created, :insufficient_evidence, :conflicting_identifiers],
       default: :insufficient_evidence

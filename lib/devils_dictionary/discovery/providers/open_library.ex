@@ -442,7 +442,7 @@ defmodule DevilsDictionary.Discovery.Providers.OpenLibrary do
     Regex.compile!("(?<![\\p{L}\\p{N}])#{escaped}(?![\\p{L}\\p{N}])", "iu")
   end
 
-  defp empty(request, next_offset, scanned, next_cursor \\ nil) do
+  defp empty(request, next_offset, scanned, next_cursor) do
     %{
       request_parameters: request_parameters(request, next_offset, scanned, 0),
       items: [],

@@ -27,6 +27,11 @@ defmodule DevilsDictionary.Discovery.MatchReason do
     * `note` — one further sentence of context, or `nil`.
     * `reached` — the label of the identity a non-`:exact` relation arrived at.
 
+  `evidence/1` folds the kinds into the three classes the content-type table's
+  `evidence` column is written in — `:identity`, `:attestation`, `:query` —
+  so whether a shelf may show a reason at all is data the conformance suite
+  asserts and the renderer reads (#116).
+
   `reached` is an eighth field #109's K3 does not list, and the shelf cannot be
   built without it: the Met's two-step broader walk says *Related to “War”
   through the tag “World War I” (Q361)*, in which `Q361` is the tag's QID and
@@ -125,6 +130,11 @@ defmodule DevilsDictionary.Discovery.MatchReason do
 
   # A text provider's evidence (K11): the word appears at a locator in a work,
   # which is evidence the word is used and never evidence of what it means.
+  #
+  # The locator is the line map's own `"locator"` when it names one, and the
+  # line form otherwise. Before #116 Phase 1 it was hardcoded as `"line N"`,
+  # and Open Library (#109 Phase 3c) left its locator empty rather than call a
+  # page a line; a newspaper page or a dated article is the next shape.
   defp attestations(details) do
     details
     |> Map.get("lines", [])
@@ -133,15 +143,24 @@ defmodule DevilsDictionary.Discovery.MatchReason do
     |> Enum.map(fn line ->
       %__MODULE__{
         kind: :attestation,
-        identifier: identifier(line["number"]),
+        identifier: identifier(line["number"]) || identifier(line["locator"]),
         term: details["query"],
         relation: :attests,
         scope: :lexeme,
-        locator: line["number"] && "line #{line["number"]}",
+        locator: attestation_locator(line),
         note: line["text"]
       }
     end)
   end
+
+  defp attestation_locator(%{"locator" => locator}) when is_binary(locator) and locator != "",
+    do: locator
+
+  defp attestation_locator(%{"number" => number})
+       when is_integer(number) or (is_binary(number) and number != ""),
+       do: "line #{number}"
+
+  defp attestation_locator(_line), do: nil
 
   @doc """
   The reason a catalog candidate is on a page.
@@ -178,6 +197,17 @@ defmodule DevilsDictionary.Discovery.MatchReason do
   defp identifier(value) when is_integer(value), do: Integer.to_string(value)
   defp identifier(value) when is_binary(value) and value != "", do: value
   defp identifier(_value), do: nil
+
+  @doc """
+  Which class of evidence a reason is, for the content-type table's
+  `evidence` column (#116): `:identity` for a tag, depiction, gene or
+  keyword — an identifier the encyclopedia already asserts; `:attestation`
+  for a text that uses the word; `:query` for a provider that named no
+  reason at all, or a stock-photo search that is honest about being one.
+  """
+  def evidence(%__MODULE__{kind: :attestation}), do: :attestation
+  def evidence(%__MODULE__{kind: :query}), do: :query
+  def evidence(%__MODULE__{}), do: :identity
 
   @doc """
   One sentence, composed from the fields and nothing else.
@@ -227,9 +257,33 @@ defmodule DevilsDictionary.Discovery.MatchReason do
 
   def describe(%__MODULE__{}), do: "The provider returned this result."
 
-  @doc "Every reason on one item, as one paragraph."
-  def describe_all(reasons) when is_list(reasons),
+  @doc """
+  One sentence, on a shelf that admits the classes in `admits`.
+
+  The same as `describe/1` for every reason but a `:query`. A search result
+  on a shelf whose row admits `:query` (the content-type table's `evidence`,
+  M6 of #116) is described as the search result it is; on any other shelf a
+  reason with nothing in it stays the prompt it was meant to be — *the
+  provider returned this result*, which is embarrassing enough to get fixed.
+  """
+  def describe(%__MODULE__{kind: :query, term: term}, admits)
+      when is_list(admits) and is_binary(term) and term != "" do
+    if :query in admits,
+      do:
+        "Search result for #{quoted(term)}, ranked by the provider and not matched on an identifier.",
+      else: describe(%__MODULE__{kind: :query, term: term})
+  end
+
+  def describe(%__MODULE__{} = reason, admits) when is_list(admits), do: describe(reason)
+
+  @doc "Every reason on one item, as one paragraph; `admits` as in `describe/2`."
+  def describe_all(reasons, admits \\ nil)
+
+  def describe_all(reasons, nil) when is_list(reasons),
     do: reasons |> Enum.map(&describe/1) |> Enum.join(" ")
+
+  def describe_all(reasons, admits) when is_list(reasons) and is_list(admits),
+    do: reasons |> Enum.map(&describe(&1, admits)) |> Enum.join(" ")
 
   defp relation_word(:broader), do: "Broader-context"
   defp relation_word(:related), do: "Related"

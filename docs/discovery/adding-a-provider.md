@@ -93,7 +93,7 @@ the generator's flags, and changing one afterwards means regenerating.
 | Decision | Values | How to choose |
 |---|---|---|
 | **archetype** | `discovery`, `corpus`, `both` | Live answers to a page → discovery. A fixed, checksummed selection seeded once → corpus. Both is legitimate; the Met is both. |
-| **content type** | `film`, `artwork`, `text`, `gif` | Which shelf it lands on. It must already be in `DevilsDictionary.Discovery.ContentTypes`; adding a fifth is an entry in that table and nothing else. |
+| **content type** | `film`, `artwork`, `image`, `text`, `gif` | Which shelf it lands on. It must already be in `DevilsDictionary.Discovery.ContentTypes`; adding a sixth is an entry in that table and nothing else. If the shelf already has a source, read [*Adding a source to an existing shelf*](#adding-a-source-to-an-existing-shelf) — the row's `attribution` and `evidence` columns are obligations on your items. |
 | **transport** | `get`, `graphql` | What the API is. |
 | **pagination** | `offset`, `cursor` | Whether the next page is an offset you compute or a token the source hands back. |
 
@@ -409,6 +409,52 @@ file — not "green".
 
 ---
 
+## Adding a source to an existing shelf
+
+The case where the content type already exists — a second image source, a
+second GIF source once K10 opens, a second quote source once #65 lands. It is
+the same checklist as above with less to decide, and three obligations the
+row's own columns state (README, [*Many sources, one shelf*](README.md#many-sources-one-shelf)).
+Nothing in shared code changes; if you find yourself editing `Culture`,
+`ContentTypes` or `Shelf`, stop and say why in the report.
+
+1. **Declare the type and nothing else.** `content_types: [:image]` in
+   `capabilities/0`; the shelf, its heading, its card and its order already
+   exist. Do not add a heading, a badge colour, a section or a tab: a shelf
+   never shows one provider's items in their own box.
+2. **Your tier is your place in the turns.** `Shelf.interleave/3` orders
+   sources by `tier` from your `source_attrs/0` and then by slug. Declare the
+   tier the source deserves, not the one that puts you first.
+3. **Name your identity, and the upstream one.** `identifiers` on every item:
+   your own `{namespace, external_id}`, and, if you are an aggregator, the
+   namespace and id of the file you aggregate — Openverse's Commons title,
+   Openverse's Flickr id — so `Shelf.dedup/2` folds your copy into the
+   original's without either provider knowing about the other. Put the
+   **full-size** media URL in `image_url`; it is the join key of last resort,
+   compared canonically (host and path only). The thumbnail is yours alone and
+   is never compared.
+4. **Read the row's `attribution`.** On a `:required` shelf every item carries
+   `license`, `license_url`, `creator`, `creator_url`, `attribution` (the line,
+   ready to show) and `source_url` in `preview_metadata`; the renderer shows
+   the line beneath the thumbnail, always, and conformance fails the first
+   item without one. On a `:credited` shelf, write `credit_line` when the
+   source has one. On a `:none` shelf, write nothing per item.
+5. **Read the row's `evidence`.** Your reasons must be of a class the row
+   admits, and conformance asserts each one. An identity-bearing source writes
+   `"tags"` or `"depicts"`; a text source writes `"lines"` (with a `"locator"`
+   when the source has a better one than a line number); a stock-photo search
+   on the `:image` shelf writes nothing and is described as the search result
+   it is — the only shelf where that is allowed. A search result on any other
+   shelf is a red suite, not a product decision to make in a provider.
+6. **Conformance, then the browser.** Your own suite (§5), the whole set, and
+   the multi-source check, which runs on two stubs and does not need you.
+   Then open a page where the shelf already has another source and check the
+   three things a single-source proof cannot: the items take turns, a file both
+   sources hold appears once, and the credit line is readable on every card
+   without a pointer, at 375 px too.
+
+---
+
 ## Quick reference
 
 | Thing | Where |
@@ -420,6 +466,8 @@ file — not "green".
 | Freshness and quota policy | `lib/devils_dictionary/discovery/policy.ex` |
 | The content-type table | `lib/devils_dictionary/discovery/content_types.ex` |
 | The match reason | `lib/devils_dictionary/discovery/match_reason.ex` |
+| Order and duplicates across sources on one shelf | `lib/devils_dictionary/discovery/shelf.ex` |
+| The multi-source shelf check | `test/devils_dictionary/discovery/conformance/multi_source_conformance_test.exs`, stubs in `test/support/discovery/multi_source/` |
 | The one reader surface | `lib/devils_dictionary_web/components/culture.ex` |
 | The shared sense-evidence read (`covers?/1`) | `lib/devils_dictionary/discovery/page_evidence.ex` |
 | Corpus manifests | `lib/devils_dictionary/artworks/corpus/manifest.ex`, `priv/artworks/manifests/` |

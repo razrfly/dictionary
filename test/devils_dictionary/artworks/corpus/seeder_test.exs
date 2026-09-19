@@ -278,8 +278,12 @@ defmodule DevilsDictionary.Artworks.Corpus.SeederTest do
         |> Artworks.suggestions()
         |> Enum.map(& &1.artwork.catalog_source)
 
-      assert ["wikidata", "met" | _] = sources
-      assert "met" in sources
+      # Tier, then slug (#116 M2): both corpora are middle-tier, so the Met's
+      # slug puts it first. Before Phase 1 of #116 a list kept in `Artworks`
+      # put Wikidata first; the alternation was always the point, and the order
+      # of the turns is now the shelf's one rule rather than that list.
+      assert ["met", "wikidata", "met", "wikidata" | _] = sources
+      assert "wikidata" in sources
     end
 
     test "every sense that refers to the depicted QID gets the artwork, not just the first",
