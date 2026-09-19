@@ -528,6 +528,27 @@ defmodule DevilsDictionary.Discovery.Conformance do
                          ~s(id="culture-attribution-#{item.external_namespace}-#{item.external_id}"),
                        "#{@slug} delivered #{item.external_id} onto the #{type} shelf " <>
                          "without an attribution line, and that shelf requires one"
+
+                # D2 of #126: that line is **one sentence**, not a paragraph.
+                # M4's *verbatim* was always about the fields; Openverse read
+                # it as licence boilerplate and rendered seven rows under a
+                # 112 px thumbnail. The licence link `Culture.credit_parts/2`
+                # puts on the licence name is where "view a copy of this
+                # license" lives, so a URL in the prose is a URL twice.
+                line =
+                  item.preview_metadata["attribution"] ||
+                    item.preview_metadata["credit_line"]
+
+                assert is_binary(line)
+
+                refute String.contains?(String.downcase(line), "http"),
+                       "#{@slug} put a URL in the credit for #{item.external_id}; the " <>
+                         "licence link is on the licence name (D2 of #126): #{inspect(line)}"
+
+                assert String.length(line) < 160,
+                       "#{@slug}'s credit for #{item.external_id} is " <>
+                         "#{String.length(line)} characters; a required credit is at most " <>
+                         "one sentence, under 160 (D2 of #126): #{inspect(line)}"
               end
             end
           end

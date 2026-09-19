@@ -218,8 +218,11 @@ defmodule DevilsDictionary.Discovery.Conformance.OpenverseCommonsFoldTest do
     html = render_component(&Culture.section/1, states: states)
     document = LazyHTML.from_fragment(html)
 
-    # Openverse's own composed line spells its licence with spaces while its
-    # `license` field spells it with hyphens, and both names are linked.
+    # D2 of #126: the line Openverse composes is one sentence naming the two
+    # things the licence asks for, and both of them are linked. Its licence
+    # is now spelled the same way in the prose and in the field — the needle
+    # matcher still treats hyphens and spaces alike, which is what lets a
+    # provider that spells them differently link anyway.
     openverse = item!(states, Openverse.slug(), "c80387bb-2dd9-489e-a748-75a1be138f5a")
     credit = credit(document, openverse)
 
@@ -229,8 +232,21 @@ defmodule DevilsDictionary.Discovery.Conformance.OpenverseCommonsFoldTest do
 
     assert {"zbigphotography (1M+ views)", openverse.preview_metadata["creator_url"]} in links
 
-    assert {"CC BY-SA 2.0", openverse.preview_metadata["license_url"]} in links
+    assert {"CC-BY-SA-2.0", openverse.preview_metadata["license_url"]} in links
     assert openverse.preview_metadata["license"] == "CC-BY-SA-2.0"
+
+    # Nothing else in the sentence is a link, and the sentence is the whole
+    # credit: two anchors, and every other run plain. The only underlined
+    # thing on the card's credit is what the licence asks to be underlined.
+    assert length(links) == 2
+    assert credit |> LazyHTML.query("[class*=underline]") |> Enum.count() == 2
+
+    # The credit's own step on the card's type scale (#126 Phase 2). Measured
+    # on 131 real image credits: at `text-sm` the median credit was four rows
+    # under a 96 px thumbnail and the longest ten; at `text-xs` the median is
+    # three. A credit is an obligation, not reading matter, and it sits below
+    # the title, the year and the artist rather than beside them.
+    assert credit |> LazyHTML.attribute("class") |> hd() =~ "text-xs"
 
     # Commons's public-domain file names an author page and no licence URL, so
     # the creator links and the licence stays plain text. The sentence is the
@@ -302,10 +318,17 @@ defmodule DevilsDictionary.Discovery.Conformance.OpenverseCommonsFoldTest do
     # No `Attribution` on this file, so the line is the composed one.
     assert commons.preview_metadata["attribution"] == commons.preview_metadata["credit_line"]
 
-    # Openverse carries its own, and its licence is the short form M4 names.
+    # Openverse composes its own, and its licence is the short form M4 names.
+    # D2 of #126: one sentence, the creator and the licence in it, no URL —
+    # where it used to forward Openverse's *…To view a copy of this license,
+    # visit https://…* boilerplate and render seven rows under the thumbnail.
     assert openverse.preview_metadata["license"] == "CC-BY-SA-2.0"
     assert openverse.preview_metadata["creator"] == "zbigphotography (1M+ views)"
-    assert openverse.preview_metadata["attribution"] =~ "is licensed under CC BY-SA 2.0"
+
+    assert openverse.preview_metadata["attribution"] ==
+             "\"war\" by zbigphotography (1M+ views), CC-BY-SA-2.0"
+
+    refute openverse.preview_metadata["attribution"] =~ "http"
     assert openverse.preview_metadata["source_url"] =~ "flickr.com"
     # The upstream file, not the Openverse thumbnail: the join key of last resort.
     assert openverse.preview_metadata["image_url"] =~ "live.staticflickr.com"
