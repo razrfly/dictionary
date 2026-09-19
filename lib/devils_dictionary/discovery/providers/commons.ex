@@ -537,7 +537,9 @@ defmodule DevilsDictionary.Discovery.Providers.Commons do
   @href ~r/<a\b[^>]*\bhref="([^"]+)"/
 
   defp author_url(metadata, user) do
-    case Regex.run(@href, get_in(metadata, ["Artist", "value"]) || "") do
+    artist = get_in(metadata, ["Artist", "value"])
+
+    case is_binary(artist) and Regex.run(@href, artist) do
       [_, href] -> absolute(href)
       _ -> user_page(metadata, user)
     end

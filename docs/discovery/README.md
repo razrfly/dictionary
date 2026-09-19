@@ -385,7 +385,7 @@ declares the first.
 |---|---|---|---|---|
 | `:film` | CineGraph | — | none: single-source by decision, CineGraph aggregates on its side | identity |
 | `:artwork` | The Met | `met-highlights-v1`, `wikidata-famous-v1`, the Artsy pilot | AIC, Cleveland via corpora (#100) | identity |
-| `:image` | Wikimedia Commons | — | Openverse (#116 Phase 2), Unsplash and Pexels (Phase 3) | identity, or a labelled search |
+| `:image` | Wikimedia Commons, Openverse | — | Unsplash and Pexels (#116 Phase 3) | identity (Commons), or a labelled search (Openverse) |
 | `:text` | PoetryDB, Open Library | `poetrydb-v1`, `open-library-v1` — **identity only, by decision; neither reaches a page** | Chronicling America as a corpus, Gutenberg | attestation, live only |
 | `:gif` | GIPHY, browser-only, outside this chrome | — | Tenor, after K10 | a labelled search |
 | `:quote` | — | — | Wikiquote, Gutenberg extraction, after #65 | identity (`(author_id, body hash)`) |

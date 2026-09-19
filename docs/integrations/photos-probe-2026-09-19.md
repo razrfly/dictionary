@@ -187,8 +187,11 @@ of the advertised burst window; it is a floor, not a measurement, and the first
 real `429` should replace it. `retryable_status?/1` is the shared default
 (`429` and `5xx`), which is right for a DRF service.
 
-**The 200/day is the binding number, and it binds.** One word page is one
-Openverse request; 200 cache misses a day is a small site. M8's answer stands —
+**The advertised 200/day is the number this project binds itself to.** Nothing
+measured here shows Openverse enforcing it — no `429`, counters that never
+moved, `DISABLE_GLOBAL_THROTTLING` defaulting on — so honouring it is a policy
+of ours, not an observed ceiling. One word page is one Openverse request; 200
+cache misses a day is a small site. M8's answer stands —
 the 30-day positive cache and the 24-hour empty cache are the mechanism, and
 they were measured working (§6). A registered key raises it to 10,000/day and
 100/min and is the owner's action to take; this session holds no key and

@@ -328,6 +328,12 @@ database**. Four BEAM VMs on `devils_dictionary_test` produced 41 phantom
 failures during the Phase 1b audit. Take your own with `MIX_TEST_PARTITION`, as
 §0 says.
 
+And if you clear a provider's cache mid-session to force a re-fetch, delete the
+**result**, not the run: `discovery_request_attempts.run_id` is `ON DELETE
+CASCADE`, so deleting a run takes its ledger rows with it, and the count you
+report afterwards is short by exactly the requests you are trying to account
+for (four rows, #116 Phase 2).
+
 `mix compile` to completion **before** `mix phx.server`, every time. `phx.server`
 compiles lazily, and an Oban worker whose module is not loaded yet is a job Oban
 discards — *module is not a worker* — so discovery silently does nothing on the
