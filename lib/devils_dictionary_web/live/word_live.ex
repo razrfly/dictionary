@@ -316,8 +316,21 @@ defmodule DevilsDictionaryWeb.WordLive do
   def handle_info({:discovery_updated, _target_id, _mapping_id, _provider, _items}, socket),
     do: {:noreply, socket}
 
+  # One *Load more* per shelf, advancing every source on it (#126 D3). The
+  # control names the sources it advances, because which sources are on which
+  # shelf is the reader's composition and not this module's: `Culture` reads
+  # the content-type table to build the shelf, and a second copy of that
+  # reading here would be a second answer to the same question. A slug that
+  # names no state on this page advances nothing.
   @impl true
-  def handle_event("discovery_more", %{"provider" => provider_slug}, socket) do
+  def handle_event("discovery_more", %{"providers" => providers}, socket) do
+    {:noreply,
+     providers
+     |> String.split(",", trim: true)
+     |> Enum.reduce(socket, &advance_page/2)}
+  end
+
+  defp advance_page(provider_slug, socket) do
     culture = socket.assigns.cultures[provider_slug]
     target = socket.assigns.discovery_target
 
@@ -348,9 +361,9 @@ defmodule DevilsDictionaryWeb.WordLive do
             |> Map.merge(%{term: target.term, relevance: target.relevance, loading_more: false})
         end
 
-      {:noreply, update(socket, :cultures, &Map.put(&1, provider_slug, state))}
+      update(socket, :cultures, &Map.put(&1, provider_slug, state))
     else
-      {:noreply, socket}
+      socket
     end
   end
 

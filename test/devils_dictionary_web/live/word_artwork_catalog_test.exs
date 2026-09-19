@@ -81,11 +81,11 @@ defmodule DevilsDictionaryWeb.WordArtworkCatalogTest do
     # this page's sense refers to rather than a phrase composed for the reader.
     assert has_element?(
              view,
-             "#culture-about-catalog",
+             "#culture-about-artwork-catalog",
              "Direct depiction of \u201CWar\u201D (Q198)"
            )
 
-    assert has_element?(view, "#culture-about-catalog", "not yet reviewed")
+    assert has_element?(view, "#culture-about-artwork-catalog", "not yet reviewed")
 
     # Whoever made it, from a manifest display name and from a local identity.
     assert render(view) =~ "Emanuel Leutze"
@@ -194,7 +194,7 @@ defmodule DevilsDictionaryWeb.WordArtworkCatalogTest do
 
     assert has_element?(
              view,
-             "#culture-about-catalog",
+             "#culture-about-artwork-catalog",
              "matched to the word and not to this meaning"
            )
   end
@@ -208,7 +208,7 @@ defmodule DevilsDictionaryWeb.WordArtworkCatalogTest do
     {:ok, view, _html} = live(ctx.conn, ~p"/define/family")
 
     refute has_element?(view, "#culture-filter-artwork")
-    refute has_element?(view, "#culture-about-catalog")
+    refute has_element?(view, "#culture-about-artwork-catalog")
   end
 
   test "the catalog page lists both corpus sources", ctx do

@@ -219,11 +219,20 @@ defmodule DevilsDictionaryWeb.Thing do
   attr :concepts, :list, required: true
 
   def may_refer_to(assigns) do
+    # One line per thing. A word with several lexemes can carry the same
+    # candidate on more than one of them — `/define/soldier` listed Q4991371
+    # twice, and rendered two elements under one DOM id (#126, residual 7) —
+    # and the same possibility said twice is not a second possibility. The
+    # object id is the identity every candidate has; the QID is what the id
+    # is written from, and falls back to it when the entity has no QID so
+    # that two unidentified things cannot collide either.
+    assigns = assign(assigns, :concepts, Enum.uniq_by(assigns.concepts, & &1.object_id))
+
     ~H"""
     <div id="may-refer-to" class="mt-6">
       <p class="text-sm/7 text-mist-500">may also refer to</p>
       <ul class="mt-1 space-y-1 text-sm/7 text-mist-700 dark:text-mist-400">
-        <li :for={concept <- @concepts} id={"may-refer-to-#{concept.qid}"}>
+        <li :for={concept <- @concepts} id={"may-refer-to-#{concept.qid || concept.object_id}"}>
           <span class="text-mist-950 dark:text-white">{concept.label}</span>
           <span :if={concept.description} class="text-mist-500">— {concept.description}</span>
         </li>

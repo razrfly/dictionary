@@ -154,8 +154,8 @@ defmodule DevilsDictionary.Discovery.Conformance.MultiSourceConformanceTest do
     assert html =~ "Plebs stub"
 
     # And each has its own note; the shelf's byline is not a merged provider.
-    assert count(html, "#culture-about-#{Middle.slug()}") == 1
-    assert count(html, "#culture-about-#{Plebs.slug()}") == 1
+    assert count(html, "#culture-about-image-#{Middle.slug()}") == 1
+    assert count(html, "#culture-about-image-#{Plebs.slug()}") == 1
   end
 
   test "the required attribution line is present on every item, not on hover",
@@ -228,11 +228,11 @@ defmodule DevilsDictionary.Discovery.Conformance.MultiSourceConformanceTest do
     # The Plebs stub delivered eight and the rail folded two into the Middle
     # stub's copies; its note lists the six that are shown, and never the two
     # that are not.
-    plebs_note = LazyHTML.query(document, "#culture-about-#{Plebs.slug()} li")
+    plebs_note = LazyHTML.query(document, "#culture-about-image-#{Plebs.slug()} li")
     assert Enum.count(plebs_note) == 6
     refute LazyHTML.text(plebs_note) =~ "Plebs stub item 1:"
     refute LazyHTML.text(plebs_note) =~ "Plebs stub item 2:"
-    assert Enum.count(LazyHTML.query(document, "#culture-about-#{Middle.slug()} li")) == 8
+    assert Enum.count(LazyHTML.query(document, "#culture-about-image-#{Middle.slug()} li")) == 8
 
     # A source whose every item is another source's copy put nothing on the
     # rail: not credited in the byline, no note, and the shelf still stands
@@ -246,8 +246,8 @@ defmodule DevilsDictionary.Discovery.Conformance.MultiSourceConformanceTest do
     assert length(shelf_ids(html)) == 8
     assert count(html, "#culture-provider-#{Middle.slug()}") == 1
     assert count(html, "#culture-provider-#{Plebs.slug()}") == 0
-    assert count(html, "#culture-about-#{Middle.slug()}") == 1
-    assert count(html, "#culture-about-#{Plebs.slug()}") == 0
+    assert count(html, "#culture-about-image-#{Middle.slug()}") == 1
+    assert count(html, "#culture-about-image-#{Plebs.slug()}") == 0
   end
 
   test "each reason is described against the shelf's own evidence row", %{target: target} do
