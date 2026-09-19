@@ -104,11 +104,12 @@ defmodule DevilsDictionary.Discovery.Providers.OpenverseTest do
       assert Openverse.attribution(%{}, "CC0-1.0", nil) == "CC0-1.0"
     end
 
-    test "the title is the part that gives, and the creator and the licence never are" do
-      # A card's title may be 255 characters; a credit may not. The creator is
-      # not cut at any length, because a cut creator matches no needle in
-      # `Culture.credit_parts/2` and so carries no link — which is the one
-      # thing an Unsplash- or CC-style licence actually asks for.
+    test "the title is the part that gives first, the creator is bounded, the licence never is" do
+      # A card's title may be 255 characters; a credit may not. The title is
+      # clamped and then dropped; the creator is clamped at sixty (CodeRabbit
+      # on #129: an unbounded creator kept the line unbounded), and the same
+      # clamped name is what the `creator` field carries, so the card's link
+      # still finds its needle; the licence is never touched.
       long_title = String.duplicate("a", 200)
       creator = String.duplicate("b", 120)
 
@@ -117,8 +118,75 @@ defmodule DevilsDictionary.Discovery.Providers.OpenverseTest do
       assert String.ends_with?(clamped, ~S|…" by Someone, CC-BY-4.0|)
 
       dropped = Openverse.attribution(%{"title" => long_title}, "CC-BY-4.0", creator)
-      assert dropped == "by #{creator}, CC-BY-4.0"
-      assert String.contains?(dropped, creator)
+      assert dropped == "by #{String.duplicate("b", 59)}…, CC-BY-4.0"
+      assert String.length(dropped) < 100
+    end
+  end
+
+  describe "attribution/3 — the contract holds whatever the upstream fields carry" do
+    test "a creator with a URL in it loses the URL, and the line never says http" do
+      line =
+        Openverse.attribution(
+          %{"title" => "war"},
+          "CC-BY-2.0",
+          "Some Studio https://example.test/studio www.example.test/x"
+        )
+
+      assert line == ~S|"war" by Some Studio, CC-BY-2.0|
+      refute line =~ ~r/http|www\./i
+    end
+
+    test "a paragraph of a creator is clamped, so the line stays far under the ceiling" do
+      creator = String.duplicate("Photographer of long standing ", 12)
+
+      line =
+        Openverse.attribution(%{"title" => String.duplicate("war ", 40)}, "CC-BY-SA-4.0", creator)
+
+      assert String.length(line) < 100
+      assert line =~ "…, CC-BY-SA-4.0"
+      refute line =~ ~r/^"/
+    end
+
+    test "a title with a URL in it is credited without the URL" do
+      line = Openverse.attribution(%{"title" => "war see https://x.test/a"}, "CC0-1.0", "Someone")
+      assert line == ~S|"war see" by Someone, CC0-1.0|
+    end
+
+    test "the clamped creator is the creator field too, so the card's link still finds it" do
+      creator = String.duplicate("Very Long Name ", 8)
+
+      {op, mapping} =
+        Openverse.automatic_mapping(%{
+          object_id: 1,
+          lexeme_ids: [1],
+          term: "war",
+          language: "en",
+          relevance: "term"
+        })
+
+      row = %{
+        "id" => "0a8fdfa0-b192-45a8-a0a8-cb6e1be4e649",
+        "title" => "war",
+        "creator" => creator,
+        "creator_url" => "https://www.flickr.com/people/x",
+        "url" => "https://live.staticflickr.com/1/2_o.jpg",
+        "thumbnail" =>
+          "https://api.openverse.org/v1/images/0a8fdfa0-b192-45a8-a0a8-cb6e1be4e649/thumb/",
+        "foreign_landing_url" => "https://www.flickr.com/photos/x/2",
+        "license" => "by",
+        "license_version" => "2.0",
+        "source" => "flickr"
+      }
+
+      assert {:ok, %{items: [item]}} =
+               Openverse.retrieve(op, mapping, %{"first" => 12}, fn _op, _payload ->
+                 {:ok, %{"results" => [row], "result_count" => 1, "page_count" => 1}}
+               end)
+
+      name = item.preview_metadata["creator"]
+      assert String.length(name) <= 60
+      assert item.preview_metadata["attribution"] =~ name
+      assert String.length(item.preview_metadata["attribution"]) < 160
     end
   end
 

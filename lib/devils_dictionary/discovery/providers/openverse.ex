@@ -116,6 +116,16 @@ defmodule DevilsDictionary.Discovery.Providers.Openverse do
   @credit_limit 72
   @credit_title_limit 32
 
+  # The creator is the one run of the line that is never dropped, so it is the
+  # one that has to be bounded: an upstream `creator` is free text and can be
+  # a paragraph or carry a URL (CodeRabbit on #129). Sixty characters holds
+  # every real creator this project has seen; the clamped name is written to
+  # the `creator` field as well as into the line, so the card's link still
+  # finds its needle. With the title at most 34 characters quoted, the
+  # creator at most 60 and the licence's short form under 16, the line is
+  # under 120 by construction, and D2's 160 is a ceiling nothing here reaches.
+  @credit_creator_limit 60
+
   # `https://commons.wikimedia.org/w/index.php?curid=73850232`
   @commons_curid ~r{^https?://commons\.wikimedia\.org/w/index\.php\?curid=(\d+)$}
 
@@ -392,7 +402,7 @@ defmodule DevilsDictionary.Discovery.Providers.Openverse do
   # card shows beneath the thumbnail; `row["attribution"]`, the CC boilerplate
   # Openverse ships, is deliberately not forwarded — see `attribution/3`.
   defp preview(row, license, thumbnail, landing) do
-    creator = presence(row["creator"])
+    creator = credit_name(presence(row["creator"]))
 
     %{
       "title" => title(row),
@@ -441,9 +451,35 @@ defmodule DevilsDictionary.Discovery.Providers.Openverse do
   the condition itself.
   """
   def attribution(row, license, creator) do
+    creator = credit_name(creator)
     line = credit(credit_title(title(row)), creator, license)
 
     if String.length(line) <= @credit_limit, do: line, else: credit(nil, creator, license)
+  end
+
+  # A name as the credit prints it and the `creator` field carries it: no
+  # URL (the licence link is the only link a credit's prose may imply), one
+  # space between words, at most `@credit_creator_limit` characters. Applied
+  # once and used in both places, so `Culture.credit_parts/2` finds the
+  # printed name when it looks for the field.
+  defp credit_name(nil), do: nil
+
+  defp credit_name(creator) do
+    creator
+    |> String.replace(~r{https?://\S+|www\.\S+}iu, " ")
+    |> String.replace(~r/\s+/u, " ")
+    |> String.trim()
+    |> presence()
+    |> case do
+      nil -> nil
+      name when byte_size(name) > 0 -> clamp_run(name, @credit_creator_limit)
+    end
+  end
+
+  defp clamp_run(text, limit) do
+    if String.length(text) > limit,
+      do: text |> String.slice(0, limit - 1) |> String.trim_trailing() |> Kernel.<>("…"),
+      else: text
   end
 
   defp credit(title, creator, license) do
@@ -458,14 +494,17 @@ defmodule DevilsDictionary.Discovery.Providers.Openverse do
 
   defp credit_title(nil), do: nil
 
+  # The title is clamped harder than the creator and, like it, carries no
+  # URL: a Commons `ObjectName` or a Flickr title can hold one.
   defp credit_title(title) do
-    if String.length(title) > @credit_title_limit do
-      title
-      |> String.slice(0, @credit_title_limit - 1)
-      |> String.trim_trailing()
-      |> Kernel.<>("…")
-    else
-      title
+    title
+    |> String.replace(~r{https?://\S+|www\.\S+}iu, " ")
+    |> String.replace(~r/\s+/u, " ")
+    |> String.trim()
+    |> presence()
+    |> case do
+      nil -> nil
+      text -> clamp_run(text, @credit_title_limit)
     end
   end
 
