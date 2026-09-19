@@ -12,6 +12,33 @@ model behind it.
 
 ---
 
+## What this system promises, and how each promise is checked
+
+These are the goals the discovery layer is built to, stated as claims a
+session can verify rather than as aspirations. Each names the check that holds
+it. A phase that cannot point at the check for a claim it touches has not
+finished. Where a claim is not yet true everywhere, the last column says so.
+
+| # | Promise | How it is checked | Where it is not yet true |
+|---|---|---|---|
+| 1 | **Association is identity or attestation, never a text search's ranking.** A search generates candidates; an identifier the encyclopedia already asserts, or the word's use at a locator, decides. A search result reaches a shelf only where the row admits `:query`, and is labelled as one. | The `evidence` column of the content-type table; conformance asserts every reason a provider delivers against its row | Stated in full under [*The one rule*](#the-one-rule). Two rows admit a labelled search: `:image` (#116 M6, beside its identity matches) and `:gif` (a search by construction, outside the shared pipeline pending K10). No identity-bearing shelf does, and a future row that admits one says so in its `evidence` |
+| 2 | **One shelf per content type, never per source.** A reader sees one rail of images, with every contributing source credited once in its header, items taking turns by tier then slug, one item per identity and one per media URL. | The multi-source conformance check (two stubs on one type → one shelf of 14); the browser proof each phase records | Live before corpus is a fixed order, by decision (K2); tier is the only trust weighting |
+| 3 | **Every item says why it is here, in one sentence, from fields and nothing else.** | Conformance: every result carries a reason, it renders, it ends with a full stop, its class is admitted | The locator has two shapes (line, page); a dated locator is the next |
+| 4 | **Every item carries what its licence owes.** A shelf whose row requires attribution shows a credit beneath every thumbnail, always visible, never on hover. | The `attribution` column; conformance asserts the credit node on every item of a `:required` shelf | Commons carries `credit_line` and not yet the six fixed names (#116 Phase 2) |
+| 5 | **Adding a source touches no shared file.** A provider is its own module, fixture, conformance suite and, for a corpus, manifest; the generator writes every registration. | `conformance_coverage_test.exs`: every registered provider has a suite, every fixture is run, every manifest has a suite; each phase report's *shared files touched* list | Adding a *shelf* is one row in the table, shared by design; adding a corpus *kind* is a seeder clause |
+| 6 | **Nothing is spent without a ledger, and no bytes are held.** Every live request is a row in `discovery_request_attempts`; results are URLs and metadata; images are hotlinked from the provider's host. | The ledger; the transport's budget; D14; conformance's coverage gate (a provider declines before anything is spent) | — |
+| 7 | **An honest empty.** A word with nothing shows nothing on that shelf, rather than filler, a wrong meaning, or another word's results. | Each phase's proof includes a word expected to be empty (`nepotism`) | Relevance to one *meaning* of a polysemous word is unverified and says so (#101's) |
+| 8 | **Composition is read-time; persisted results are never rewritten.** Order, dedup and credit are computed when the page renders, from what providers persisted. | `Shelf` is pure; `display_items/1` reads identifiers back as a virtual field; schema impact of #116 Phase 1 was zero | — |
+| 9 | **The reader knows no provider by name.** What a card looks like comes from the content-type row; what a source is called comes from its source row; the component branches on neither. | Reading `Culture`; the multi-source check credits two providers it was never told about | GIPHY's shelf is its own component outside this rule, pending K10 |
+
+Not goals, and listed so nobody builds toward them by accident: relevance
+ranking across sources (#101's assessor, on top of this), curation and
+exemplars (#105, a layer over any shelf's items), perceptual-hash dedup (until a
+ledger shows two sources serving one file under two URLs), a per-provider grid
+or tabs, and any trust weighting beyond `tier`.
+
+---
+
 ## The one rule
 
 **Association is identity, never text.**
@@ -401,6 +428,36 @@ identity as the corpus rows (`olid`, `poetrydb_poem`), so a corpus's job on the
 Texts shelf is nil and its job on the entity page is identity and display
 facts. A text corpus that wants to reach a page needs its own retention
 decision, recorded in its manifest kind, not a quiet change to `:none`.
+
+#### Rows that do not exist yet, and what each would test
+
+None is scheduled. Each is listed so the row shape is checked against it now,
+and so that a session adding one starts from the gate rather than the API key.
+The row shape today is `heading`, `badge`, `aspect`, `icon`, `column`,
+`title_clamp`, `thumbnail_keys`, `attribution`, `evidence`; the compile-time
+check in `ContentTypes` refuses a row missing any of them. Nothing below needs a
+tenth key. `:video` needs a playable slot on the card, which is a card question
+for when it is scheduled.
+
+| Type | Heading | Card | Evidence | Candidate sources | Gate, and what it would test |
+|---|---|---|---|---|---|
+| `:music` | Music | square (cover art), title, artist, link out | identity where a sense's entity has a Wikidata song or work with `P2207` (Spotify track id) or a MusicBrainz id, and `P921` *main subject* names the page's QID; otherwise a labelled `:query` | Spotify (search, cover art, metadata — `SPOTIFY_CLIENT_ID` is held); MusicBrainz (metadata CC0) with the Cover Art Archive (images stay their owners' copyright — an item-level rights decision before any is displayed, not archive membership); Internet Archive audio (public domain) | **Spotify's terms make it single-source on its shelf.** Its Developer Policy forbids a product "integrated with streams or content from another service", requires the Spotify marks and a link back on every piece of metadata or cover art, and forbids offering metadata or cover art as a standalone product. Since 2024-11-27, apps registered after that date and development-mode apps without a pending extension request — which is what this project's app would be — have no Recommendations, Related Artists, Audio Features or Audio Analysis, and no 30-second preview URLs in multi-get responses (single-track responses are widely reported to return `null` too); apps that already held extended access were unaffected. So *related songs* is not a feature a new app gets, and a preview is not something the card can count on; what remains is search (a `:query`) and identity through Wikidata. Lyrics are licensed and never held, so attestation is closed. A Music row therefore admits `identity` and `query`, requires attribution, and — if Spotify is its source — takes no second source, the way `:film` is single-source by decision. MusicBrainz as the source instead gives a many-source shelf, but its cover art needs a per-item rights decision and it has no audio |
+| `:video` | Videos | 16:9, playable | identity (`P180` on Commons `video/*` files, which the `:image` gate already sees and drops; `P1651` YouTube id on a sense's entity) | Wikimedia Commons video; Internet Archive moving images | the first non-square, non-portrait aspect; playback on the card |
+| `:news` | News | text-first, date and masthead | attestation (the article uses the word) | the Guardian (#63, non-commercial); Chronicling America's bulk OCR (its live API is bot-walled) | attestation with a **date** locator, the third shape after line and page |
+| `:game` | Games | portrait cover | identity (IGDB id ↔ `P5794`) | IGDB (non-commercial) | the non-commercial posture on a per-item licence |
+| `:place` | Places | map tile | identity (`P625` coordinates on the page's entity) | OpenStreetMap tiles | probably the entity panel's job, not a shelf; listed to say so |
+| taxon images | joins `:image` | — | identity (taxon QID) | iNaturalist (per-item media licence, CC BY-NC by default, all rights reserved allowed), GBIF | not a new type: an `:image` source whose identity is a taxon QID, with the licence gate applied to each image's own licence, as Commons's already is |
+
+**Not shelves, and why they are listed anyway.** Exemplars (#105) are a claim
+*about* an item — a person, a work, a GIF nominated as an example of a meaning,
+with a reason and votes — so they are a layer over any shelf's items, not a
+content type. The evidence wall (#67) is its own surface. Usage examples
+(`sense_revisions.examples`) are definition-card content, not discovery.
+
+A **content type** is a shelf; a **work kind** (`work_details.work_kind`) is a
+registry identity; they are many-to-one — poems and books are both `:text` —
+and adding a shelf is one row here while adding a work kind is a registration
+in `Corpus.Manifest`.
 
 ### Order: archetype, then turns across sources, then position
 
