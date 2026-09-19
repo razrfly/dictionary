@@ -97,7 +97,14 @@ defmodule DevilsDictionary.Discovery.Providers.Openverse do
     %{
       slug: slug(),
       name: "Openverse",
-      tier: :middle,
+      # D1 of #116 Phase 3: a search-only source is a plebs-tier source, so
+      # that an identity-bearing item — Commons's `P180` depiction — leads the
+      # rail wherever one exists and search results follow. This was `:middle`
+      # in Phase 2, when Openverse was the only search on the shelf and the
+      # order it produced (Commons, Openverse, Commons, Openverse) was the
+      # same either way; with three searches beside one identity source it is
+      # not.
+      tier: :plebs,
       kind: :media_provider,
       access: :api,
       era_year: 2026,

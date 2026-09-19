@@ -6,7 +6,8 @@ defmodule DevilsDictionary.Discovery.Conformance.MultiSourceConformanceTest do
   with one shared identity and one shared media URL, must render **one** shelf
   of fourteen items, interleaved by tier and then slug, each provider credited
   once in the shelf header, the required attribution line present on every
-  item, and each reason described against the row's own `evidence`.
+  item and **linked** where the item named a URL for the names in it (D3 of
+  #116 Phase 3), and each reason described against the row's own `evidence`.
 
   Written against `DevilsDictionary.Discovery` and `DevilsDictionaryWeb.Culture`
   and nothing else, like the single-provider suite: both stubs go through
@@ -160,6 +161,7 @@ defmodule DevilsDictionary.Discovery.Conformance.MultiSourceConformanceTest do
   test "the required attribution line is present on every item, not on hover",
        %{target: target} do
     assert ContentTypes.attribution(:image) == :required
+    assert ContentTypes.attribution(:artwork) == :credited
 
     deliver!(target)
     html = render_component(&Culture.section/1, states: Discovery.states(target.object_id))
@@ -175,6 +177,23 @@ defmodule DevilsDictionary.Discovery.Conformance.MultiSourceConformanceTest do
       text = credits |> LazyHTML.text() |> String.trim()
       assert text =~ ~r/^Photographer \d+, CC BY 4\.0, via (Middle|Plebs) stub$/
 
+      # D3: the credit is linked, not decorated. The photographer's name goes
+      # to `creator_url` and the licence text to `license_url`, and the
+      # sentence the provider wrote is unchanged around them — the stub
+      # spells its licence `CC-BY-4.0` in the field and *CC BY 4.0* in the
+      # line, which is the mismatch a naive substring match would miss.
+      links =
+        LazyHTML.query(document, "##{id} [id^='culture-attribution-'] a")
+        |> Enum.map(fn link ->
+          {link |> LazyHTML.text() |> String.trim(),
+           link |> LazyHTML.attribute("href") |> List.first()}
+        end)
+
+      assert [{creator, creator_url}, {"CC BY 4.0", license_url}] = links
+      assert creator =~ ~r/^Photographer \d+$/
+      assert license_url == "https://creativecommons.org/licenses/by/4.0/"
+      assert creator_url =~ ~r{^https://(zz-middle|aa-plebs)-stub\.invalid/people/\d+$}
+
       # Always visible: nothing on the credit or its ancestors within the card
       # hides it until a pointer arrives.
       refute LazyHTML.query(
@@ -184,6 +203,17 @@ defmodule DevilsDictionary.Discovery.Conformance.MultiSourceConformanceTest do
              |> Enum.any?()
 
       refute LazyHTML.query(document, "##{id} [id^='culture-attribution-'][class*='hover']")
+             |> Enum.any?()
+
+      # And not clamped. A required credit is not shown by a two-line clamp
+      # on a 112 px column: measured on `/define/war` 2026-09-19, that cut
+      # all forty-two credits on the shelf, the licence's own name and D3's
+      # link on it included. `:credited` rows keep the clamp, where the line
+      # is a nicety rather than a condition.
+      refute LazyHTML.query(
+               document,
+               "##{id} [id^='culture-attribution-'][class*='line-clamp']"
+             )
              |> Enum.any?()
     end
   end

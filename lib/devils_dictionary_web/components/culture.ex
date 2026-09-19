@@ -248,6 +248,18 @@ defmodule DevilsDictionaryWeb.Culture do
       |> assign(:aspect, presentation.aspect)
       |> assign(:badge, presentation.badge)
       |> assign(:attribution, attribution)
+      |> assign(:credit, credit_parts(attribution, metadata))
+      # A credit a licence *requires* is not clamped. At the `:image` row's
+      # 112 px column a two-line clamp cut every one of the forty-two credits
+      # on `/define/war` — including, on all twelve Unsplash cards, the word
+      # *Unsplash* and the link D3 puts on it. "Beneath the thumbnail, always
+      # visible" (M4, promise 4) is not satisfied by a sentence whose second
+      # half is display:none. On a `:credited` row the line is a nicety
+      # rather than a condition, and it keeps the clamp.
+      |> assign(
+        :credit_clamp,
+        if(presentation.attribution == :required, do: nil, else: "line-clamp-2")
+      )
       # A required credit names the creator by construction, so on a shelf
       # that requires one the credit *is* the creator line; anywhere else the
       # two are different facts and both are shown.
@@ -313,15 +325,25 @@ defmodule DevilsDictionaryWeb.Culture do
         <p :if={@artist} class="line-clamp-2 text-sm text-mist-500 text-pretty">
           {@artist}
         </p>
-        <%!-- The credit, beneath the thumbnail and always visible (#116 M4). A
+        <%!-- The credit, beneath the thumbnail and always visible (#116 M4),
+             and linked where the item named a URL (#116 Phase 3, D3). A
              required credit hidden behind a hover is the sister project's
-             mistake; a CC licence's one condition is that this line be seen. --%>
+             mistake; a CC licence's one condition is that this line be seen.
+             `phx-no-format`, because the runs of a sentence are inline and
+             adjacent: a newline the formatter put between a link and the
+             text after it would render as a space before a full stop.
+             `break-words`, because an unclamped credit contains URLs —
+             Openverse composes *…To view a copy of this license, visit
+             https://creativecommons.org/licenses/by-sa/2.0/.* and that
+             unbreakable token ran straight out of the 112 px column and
+             over the next card. --%>
         <p
           :if={@attribution}
           id={"culture-attribution-#{@item.external_namespace}-#{@item.external_id}"}
-          class="line-clamp-2 text-sm text-mist-500 text-pretty"
+          class={["text-sm break-words text-mist-500 text-pretty", @credit_clamp]}
+          phx-no-format
         >
-          {@attribution}
+          <%= for part <- @credit do %><a :if={part.url} href={part.url} target="_blank" rel="noreferrer" class="underline underline-offset-4 transition-colors hover:text-mist-950 dark:hover:text-white">{part.text}</a><span :if={is_nil(part.url)}>{part.text}</span><% end %>
         </p>
         <a
           :if={@item.preview_metadata["source_url"]}
@@ -373,6 +395,99 @@ defmodule DevilsDictionaryWeb.Culture do
     </div>
     """
   end
+
+  @doc """
+  The credit line broken into the runs the card renders, links first (D3).
+
+  Unsplash's terms require the photographer's name and *Unsplash* to be
+  links; #116 Phase 3 made a linked credit the rule for every provider on a
+  shelf rather than one provider's special case. The line itself is still the
+  provider's, shown verbatim (M4) — this only finds the two things the item
+  named a URL for inside it, `creator` and `license`, and turns those runs
+  into links. An item that carries no URL renders the same sentence as plain
+  text, which is what Commons's public-domain files do.
+
+  The needle is matched case-insensitively with hyphens and spaces treated
+  alike, because a provider spells its licence one way in a field and another
+  way in prose: Openverse writes `CC-BY-SA-2.0` in `license` and *CC BY-SA
+  2.0* in the line it composed, and they are the same licence. Overlapping
+  runs are dropped in first-position order, so a creator whose name contains
+  the licence text cannot produce a link inside a link.
+
+  Returns a list of `%{text: binary, url: binary | nil}`, in order, whose
+  texts concatenate back to the line exactly.
+  """
+  def credit_parts(line, metadata)
+
+  def credit_parts(nil, _metadata), do: []
+
+  def credit_parts(line, metadata) when is_binary(line) and is_map(metadata) do
+    [
+      {presence(metadata["creator"]), presence(metadata["creator_url"])},
+      {presence(metadata["license"]), presence(metadata["license_url"])}
+    ]
+    |> Enum.flat_map(fn
+      {needle, url} when is_binary(needle) and is_binary(url) ->
+        case anchor(line, needle) do
+          nil -> []
+          {start, length} -> [%{start: start, length: length, url: url}]
+        end
+
+      _pair ->
+        []
+    end)
+    |> Enum.sort_by(& &1.start)
+    |> drop_overlaps()
+    |> runs(line)
+  end
+
+  def credit_parts(line, _metadata) when is_binary(line), do: [%{text: line, url: nil}]
+
+  # Where `needle` sits in `line`, in bytes, or nil. Hyphens and spaces in the
+  # needle match any run of either, which is what makes `CC-BY-SA-2.0` find
+  # *CC BY-SA 2.0*.
+  defp anchor(line, needle) do
+    pattern =
+      needle
+      |> String.split(~r/[-\s]+/u, trim: true)
+      |> Enum.map(&Regex.escape/1)
+      |> Enum.join("[-\\s]+")
+
+    with false <- pattern == "",
+         {:ok, regex} <- Regex.compile(pattern, "iu"),
+         [{start, length}] <- Regex.run(regex, line, return: :index) do
+      {start, length}
+    else
+      _ -> nil
+    end
+  end
+
+  defp drop_overlaps(anchors) do
+    anchors
+    |> Enum.reduce({[], 0}, fn anchor, {kept, cursor} ->
+      if anchor.start >= cursor,
+        do: {[anchor | kept], anchor.start + anchor.length},
+        else: {kept, cursor}
+    end)
+    |> elem(0)
+    |> Enum.reverse()
+  end
+
+  defp runs(anchors, line) do
+    {parts, cursor} =
+      Enum.reduce(anchors, {[], 0}, fn %{start: start, length: length, url: url},
+                                       {parts, cursor} ->
+        parts = prepend(parts, binary_part(line, cursor, start - cursor), nil)
+        {prepend(parts, binary_part(line, start, length), url), start + length}
+      end)
+
+    parts
+    |> prepend(binary_part(line, cursor, byte_size(line) - cursor), nil)
+    |> Enum.reverse()
+  end
+
+  defp prepend(parts, "", _url), do: parts
+  defp prepend(parts, text, url), do: [%{text: text, url: url} | parts]
 
   # What the card shows for the item's maker, by the row's `attribution`:
   # nothing on a `:none` row, and otherwise the ready-made `attribution` line

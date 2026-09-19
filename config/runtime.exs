@@ -53,6 +53,8 @@ allowed_provider_env =
     "GIPHY_API_KEY",
     "ARTSY_CLIENT_ID",
     "ARTSY_CLIENT_SECRET",
+    "UNSPLASH_ACCESS_KEY",
+    "PEXELS_API_KEY",
     "DISCOVERY_POSITIVE_REFRESH_SECONDS",
     "DISCOVERY_EMPTY_REFRESH_SECONDS"
   ] ++ discovery_provider_policy_env
@@ -124,6 +126,21 @@ if artsy_client_id && artsy_client_secret do
   config :devils_dictionary, :artsy,
     client_id: artsy_client_id,
     client_secret: artsy_client_secret
+end
+
+# Unsplash and Pexels are server-only keys (#116 Phase 3). Without one the
+# provider's `enabled?/0` is false and it never runs, which is the behaviour a
+# deployment without the key should have: no keyless calls, no half-configured
+# source in the registry. `UNSPLASH_ACCESS_KEY` is the name the code reads and
+# the name the environment sets — the sister project's `.env.example` and its
+# code disagreed on this, and that was worth not repeating.
+if unsplash_access_key =
+     System.get_env("UNSPLASH_ACCESS_KEY") || local_provider_env["UNSPLASH_ACCESS_KEY"] do
+  config :devils_dictionary, :unsplash, access_key: unsplash_access_key
+end
+
+if pexels_api_key = System.get_env("PEXELS_API_KEY") || local_provider_env["PEXELS_API_KEY"] do
+  config :devils_dictionary, :pexels, api_key: pexels_api_key
 end
 
 parse_policy_integer = fn name ->

@@ -24,7 +24,7 @@ finished. Where a claim is not yet true everywhere, the last column says so.
 | 1 | **Association is identity or attestation, never a text search's ranking.** A search generates candidates; an identifier the encyclopedia already asserts, or the word's use at a locator, decides. A search result reaches a shelf only where the row admits `:query`, and is labelled as one. | The `evidence` column of the content-type table; conformance asserts every reason a provider delivers against its row | Stated in full under [*The one rule*](#the-one-rule). Two rows admit a labelled search: `:image` (#116 M6, beside its identity matches) and `:gif` (a search by construction, outside the shared pipeline pending K10). No identity-bearing shelf does, and a future row that admits one says so in its `evidence` |
 | 2 | **One shelf per content type, never per source.** A reader sees one rail of images, with every contributing source credited once in its header, items taking turns by tier then slug, one item per identity and one per media URL. | The multi-source conformance check (two stubs on one type → one shelf of 14); the browser proof each phase records | Live before corpus is a fixed order, by decision (K2); tier is the only trust weighting |
 | 3 | **Every item says why it is here, in one sentence, from fields and nothing else.** | Conformance: every result carries a reason, it renders, it ends with a full stop, its class is admitted | The locator has two shapes (line, page); a dated locator is the next |
-| 4 | **Every item carries what its licence owes.** A shelf whose row requires attribution shows a credit beneath every thumbnail, always visible, never on hover. | The `attribution` column; conformance asserts the credit node on every item of a `:required` shelf | Commons carries `credit_line` and not yet the six fixed names (#116 Phase 2) |
+| 4 | **Every item carries what its licence owes.** A shelf whose row requires attribution shows a credit beneath every thumbnail, always visible, never on hover, **and linked** where the item names a URL for the creator or the licence. | The `attribution` column; conformance asserts the credit node on every item of a `:required` shelf, that it carries no line clamp, and that its links are the creator's and the licence's | — |
 | 5 | **Adding a source touches no shared file.** A provider is its own module, fixture, conformance suite and, for a corpus, manifest; the generator writes every registration. | `conformance_coverage_test.exs`: every registered provider has a suite, every fixture is run, every manifest has a suite; each phase report's *shared files touched* list | Adding a *shelf* is one row in the table, shared by design; adding a corpus *kind* is a seeder clause |
 | 6 | **Nothing is spent without a ledger, and no bytes are held.** Every live request is a row in `discovery_request_attempts`; results are URLs and metadata; images are hotlinked from the provider's host. | The ledger; the transport's budget; D14; conformance's coverage gate (a provider declines before anything is spent) | — |
 | 7 | **An honest empty.** A word with nothing shows nothing on that shelf, rather than filler, a wrong meaning, or another word's results. | Each phase's proof includes a word expected to be empty (`nepotism`) | Relevance to one *meaning* of a polysemous word is unverified and says so (#101's) |
@@ -412,7 +412,7 @@ declares the first.
 |---|---|---|---|---|
 | `:film` | CineGraph | — | none: single-source by decision, CineGraph aggregates on its side | identity |
 | `:artwork` | The Met | `met-highlights-v1`, `wikidata-famous-v1`, the Artsy pilot | AIC, Cleveland via corpora (#100) | identity |
-| `:image` | Wikimedia Commons, Openverse | — | Unsplash and Pexels (#116 Phase 3) | identity (Commons), or a labelled search (Openverse) |
+| `:image` | Wikimedia Commons, Openverse, Unsplash, Pexels | — | iNaturalist or GBIF, if a taxon QID earns a second identity path | identity (Commons), or a labelled search (the other three) |
 | `:text` | PoetryDB, Open Library | `poetrydb-v1`, `open-library-v1` — **identity only, by decision; neither reaches a page** | Chronicling America as a corpus, Gutenberg | attestation, live only |
 | `:gif` | GIPHY, browser-only, outside this chrome | — | Tenor, after K10 | a labelled search |
 | `:quote` | — | — | Wikiquote, Gutenberg extraction, after #65 | identity (`(author_id, body hash)`) |
@@ -514,6 +514,27 @@ page). Commons, which predates the rule, carries `license`, `license_url`,
 `artist` line doubles as the credit and the `:required` rule shows one line,
 not two. The renderer shows the line beneath the thumbnail, always visible,
 never on hover; the table's `attribution` column says which shelves show it.
+
+**And linked** (#116 Phase 3, D3). Unsplash's terms require the
+photographer's name and the word *Unsplash* to be links carrying
+`utm_source` and `utm_medium`; rather than make that one provider's special
+case, `Culture.credit_parts/2` finds the item's own `creator` and `license`
+inside the line the provider wrote and turns those two runs into links,
+leaving the sentence otherwise exactly as it arrived. An item that names no
+URL — a public-domain Commons file — renders the same sentence as plain
+text. The needle is matched with hyphens and spaces treated alike, because
+Openverse writes `CC-BY-SA-2.0` in the field and *CC BY-SA 2.0* in the prose;
+overlapping runs are dropped in first-position order, so no anchor opens
+inside another.
+
+A credit a licence *requires* is also **not clamped**. The `:image` row's
+card is 112 px wide and a two-line clamp cut all forty-two credits on
+`/define/war` — on every Unsplash card, the clamp took the word *Unsplash*
+and the link on it, which is the one thing the licence asks for. A
+`:required` credit is rendered at whatever height it needs, with
+`break-words` so a licence URL cannot run out of the column; a `:credited`
+credit keeps the clamp, because there the line is a nicety and not a
+condition.
 
 ### Hotlink only, no bytes
 
@@ -727,6 +748,9 @@ suite red.
 | Wikidata famous paintings | corpus (`wikidata-famous-v1`, 1,575) | `Culture.section` | #102 2b |
 | PoetryDB | discovery (GET, offset, attestation) **and** corpus (`poetrydb-v1`, 2,903 poems) | `Culture.section` | #109 Phase 2 and 1c |
 | Wikimedia Commons | discovery (GET, MediaWiki `continue` cursor, `P180` depicts-QID identity, per-file licence gate) | `Culture.section`, the `:image` shelf, attribution `:required` | #109 Phase 3a |
+| Openverse | discovery (GET, offset, **labelled `:query`** exact-phrase search, per-item licence gate, `commons_file` upstream identifier) | `Culture.section`, the `:image` shelf | #116 Phase 2 |
+| Unsplash | discovery (GET, offset, **labelled `:query`** search, `UNSPLASH_ACCESS_KEY`, linked credit with UTM, download trigger held and not fired) | `Culture.section`, the `:image` shelf | #116 Phase 3 |
+| Pexels | discovery (GET, offset, **labelled `:query`** search, `PEXELS_API_KEY`) | `Culture.section`, the `:image` shelf | #116 Phase 3 |
 | Artsy | registered, registry-only — its 43 artworks and their gene mappings reach a page through the catalog; the private client was retired in #109 Phase 3a | `Culture.section` | #86, K9 of #109 |
 | GIPHY | registered, browser-only, transient | its own `GiphyShelf` component, **not** `Culture.section` | parked pending caching approval, K10 |
 

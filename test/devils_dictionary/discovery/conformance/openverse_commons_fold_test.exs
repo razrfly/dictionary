@@ -12,11 +12,21 @@ defmodule DevilsDictionary.Discovery.Conformance.OpenverseCommonsFoldTest do
 
   What only two real fixtures can show:
 
-    * the **fold** of M3 on real response shapes. Openverse's
-      `source: "wikimedia"` row names its Commons file as
-      `…/w/index.php?curid=<pageid>`, the provider proposes that pageid in the
-      `commons_file` namespace, and the shelf folds the Openverse copy into
-      the Commons item. Neither provider names the other.
+    * the **fold** of M3 on real response shapes, in **both** of its two
+      forms. By identity: Openverse's `source: "wikimedia"` row names its
+      Commons file as `…/w/index.php?curid=<pageid>`, the provider proposes
+      that pageid in the `commons_file` namespace, and the shelf folds the
+      Openverse copy into the Commons item. By **media URL**: a second
+      `wikimedia` row whose landing page is the `/wiki/File:` form proposes
+      no shared identifier at all, and only the canonical full-size URL joins
+      it — which it could not do before D4 of #116 Phase 3, because
+      Commons wrote its 640 px thumbnail into `image_url` as well as into
+      `thumbnail_url` and a thumbnail is never compared. Neither provider
+      names the other in either case.
+    * **the linked credit** (D3): the renderer turns the `creator` and the
+      `license` inside each provider's own attribution line into links where
+      the item carries URLs for them, and leaves the line as plain text where
+      it does not — which is what a public-domain Commons file does.
     * **M4's six fixed names on both**, one carrying them from Openverse's own
       fields and one deriving them from Commons `extmetadata`.
     * **both evidence classes the `:image` row admits, from real providers**:
@@ -36,14 +46,17 @@ defmodule DevilsDictionary.Discovery.Conformance.OpenverseCommonsFoldTest do
   alias DevilsDictionary.Discovery
   alias DevilsDictionary.Discovery.Conformance.{CommonsFixture, OpenverseFixture}
   alias DevilsDictionary.Discovery.Providers.{Commons, Openverse}
-  alias DevilsDictionary.Discovery.{MatchReason, Run}
+  alias DevilsDictionary.Discovery.{MatchReason, Run, Shelf}
   alias DevilsDictionary.Repo
   alias DevilsDictionaryWeb.Culture
 
   @moduletag :conformance
 
   # Openverse first, so registry order cannot be where the shelf's order comes
-  # from: both sources are `:middle`, so `commons` leads `openverse` by slug.
+  # from. Since D1 of #116 Phase 3 the two no longer share a tier: Commons is
+  # `:middle` because it reaches a page by identity, Openverse is `:plebs`
+  # because it reaches one by text, and the identity source leads the rail on
+  # tier rather than on the accident of its slug.
   @providers [Openverse, Commons]
 
   setup do
@@ -108,11 +121,13 @@ defmodule DevilsDictionary.Discovery.Conformance.OpenverseCommonsFoldTest do
   } do
     delivered = deliver!(context, target)
 
-    # Four delivered across two sources, and one of the four is the same file
-    # twice: Openverse's `da6a88c7-…` aggregates Commons's pageid 1001.
+    # Five delivered across two sources, and two of the five are files the
+    # other source already has: Openverse's `da6a88c7-…` aggregates Commons's
+    # pageid 1001, and `7b0f2e31-…` republishes the file behind 1002.
     assert delivered.commons == ~w(1001 1002)
     assert OpenverseFixture.shared_openverse_id() in delivered.openverse
-    assert length(delivered.openverse) == 2
+    assert OpenverseFixture.media_fold_openverse_id() in delivered.openverse
+    assert length(delivered.openverse) == 3
 
     states = Discovery.states(target.object_id)
     assert map_size(states) == 2
@@ -132,9 +147,10 @@ defmodule DevilsDictionary.Discovery.Conformance.OpenverseCommonsFoldTest do
     assert count(html, "[id^='culture-shelf-']") == 1
     assert count(html, "#culture-shelf-image") == 1
 
-    # Both `:middle`, so `commons` leads `openverse`, and the turns are taken
-    # among what survived the fold. The Openverse copy of 1001 is gone; the
-    # Commons original is the one card that file gets.
+    # Commons is `:middle` and Openverse `:plebs` (D1), so the identity source
+    # leads and the turns are taken among what survived the fold. Both
+    # Openverse copies are gone; each Commons original is the one card its
+    # file gets.
     assert shelf_ids(html) == [
              "culture-result-commons_file-1001",
              "culture-result-openverse_media-c80387bb-2dd9-489e-a748-75a1be138f5a",
@@ -142,7 +158,104 @@ defmodule DevilsDictionary.Discovery.Conformance.OpenverseCommonsFoldTest do
            ]
 
     refute html =~ "culture-result-openverse_media-#{OpenverseFixture.shared_openverse_id()}"
+
+    assert states[Commons.slug()].tier == :middle
+    assert states[Openverse.slug()].tier == :plebs
   end
+
+  test "a Commons file republished under no shared identifier folds on its media URL", %{
+    context: context,
+    target: target
+  } do
+    deliver!(context, target)
+    states = Discovery.states(target.object_id)
+
+    commons = item!(states, Commons.slug(), OpenverseFixture.shared_commons_media_pageid())
+    openverse = item!(states, Openverse.slug(), OpenverseFixture.media_fold_openverse_id())
+
+    # Nothing identifies the two as one thing. Openverse proposed only its own
+    # UUID, because the landing page it gave is the `/wiki/File:` form and the
+    # `commons_file` pageid is not in it.
+    assert Enum.map(openverse.identifiers, & &1["namespace"]) == [Openverse.namespace()]
+
+    # Nothing but the media URL can join them: strip the media key from both
+    # and no key is left that they share.
+    without_media = fn item ->
+      item |> Shelf.keys() |> Enum.reject(&match?({:media, _}, &1)) |> MapSet.new()
+    end
+
+    assert MapSet.disjoint?(without_media.(commons), without_media.(openverse))
+
+    # D4: Commons's `image_url` is the file `imageinfo` returned, not the
+    # 640 px derivative it also returned, so the two copies share one
+    # canonical media URL although they are spelled differently.
+    assert commons.preview_metadata["image_url"] == "https://upload.commons.test/1002.jpg"
+    refute commons.preview_metadata["image_url"] == commons.preview_metadata["thumbnail_url"]
+
+    assert openverse.preview_metadata["image_url"] ==
+             "HTTPS://Upload.Commons.test/1002.jpg?download=1"
+
+    assert Shelf.canonical_media_url(commons.preview_metadata["image_url"]) ==
+             Shelf.canonical_media_url(openverse.preview_metadata["image_url"])
+
+    assert {:media, "upload.commons.test/1002.jpg"} in Shelf.keys(commons)
+
+    # And the rail shows one card for the file, the Commons one.
+    html = render_component(&Culture.section/1, states: states)
+    assert "culture-result-commons_file-1002" in shelf_ids(html)
+
+    refute "culture-result-openverse_media-#{OpenverseFixture.media_fold_openverse_id()}" in shelf_ids(
+             html
+           )
+  end
+
+  test "the credit line links the creator and the licence the item named (D3)", %{
+    context: context,
+    target: target
+  } do
+    deliver!(context, target)
+    states = Discovery.states(target.object_id)
+    html = render_component(&Culture.section/1, states: states)
+    document = LazyHTML.from_fragment(html)
+
+    # Openverse's own composed line spells its licence with spaces while its
+    # `license` field spells it with hyphens, and both names are linked.
+    openverse = item!(states, Openverse.slug(), "c80387bb-2dd9-489e-a748-75a1be138f5a")
+    credit = credit(document, openverse)
+
+    assert text(credit) == openverse.preview_metadata["attribution"]
+
+    links = credit |> LazyHTML.query("a") |> Enum.map(&{text(&1), href(&1)})
+
+    assert {"zbigphotography (1M+ views)", openverse.preview_metadata["creator_url"]} in links
+
+    assert {"CC BY-SA 2.0", openverse.preview_metadata["license_url"]} in links
+    assert openverse.preview_metadata["license"] == "CC-BY-SA-2.0"
+
+    # Commons's public-domain file names an author page and no licence URL, so
+    # the creator links and the licence stays plain text. The sentence is the
+    # same sentence either way.
+    commons = item!(states, Commons.slug(), "1001")
+    commons_credit = credit(document, commons)
+
+    assert text(commons_credit) == commons.preview_metadata["attribution"]
+    refute commons.preview_metadata["license_url"]
+
+    assert commons_credit |> LazyHTML.query("a") |> Enum.map(&{text(&1), href(&1)}) == [
+             {"Fixture", "https://commons.wikimedia.org/wiki/User:Fixture"}
+           ]
+  end
+
+  defp credit(document, item) do
+    LazyHTML.query(
+      document,
+      "#culture-attribution-#{item.external_namespace}-#{item.external_id}"
+    )
+  end
+
+  defp text(node), do: node |> LazyHTML.text() |> String.replace(~r/\s+/u, " ") |> String.trim()
+
+  defp href(node), do: node |> LazyHTML.attribute("href") |> List.first()
 
   test "both providers are credited once, and every card carries its credit without hover", %{
     context: context,
