@@ -10,7 +10,7 @@ defmodule DevilsDictionary.Discovery.Conformance.OpenverseFixture do
   `license_version` apart from it, `attribution` already composed, `thumbnail`
   a proxy URL on `api.openverse.org` and `url` the upstream file.
 
-  Three rows are here to be more than a row:
+  Four rows are here to be more than a row:
 
     * **`086e0224-…`** is `by-nc-nd`, a real result for *soldier*. The search
       narrows `license` to `cc0,pdm,by,by-sa`, so this row is one the API
@@ -29,6 +29,15 @@ defmodule DevilsDictionary.Discovery.Conformance.OpenverseFixture do
       Commons file's landing page as `…/w/index.php?curid=<pageid>` and that
       pageid is exactly the `commons_file` external id Commons registers.
       `openverse_commons_fold_test.exs` asserts the two copies become one item.
+
+    * **`7b0f2e31-…`** is the media-URL fold: a `wikimedia` item whose
+      landing page is the `/wiki/File:` form rather than `?curid=<pageid>`,
+      so the `commons_file` regex misses and **no identifier is shared**. Its
+      `url` is the Commons fixture's file 1002, spelled with an upper-cased
+      scheme and host and a query string, so the only thing that can join the
+      two copies is `Shelf.canonical_media_url/1` — which could not see a
+      Commons item at all until D4 of #116 Phase 3 made Commons's `image_url`
+      the file rather than its 640 px thumbnail.
 
     * **`0ea589cc-…` and `30f952b5-…`** are two real results on one page that
       share a creator and a title: two frames of one evening, uploaded by one
@@ -51,6 +60,12 @@ defmodule DevilsDictionary.Discovery.Conformance.OpenverseFixture do
 
   @doc "The Openverse id of the item that aggregates that Commons file."
   def shared_openverse_id, do: "da6a88c7-a13d-4194-abcc-33df99e352c6"
+
+  @doc "The Commons pageid whose *file* the media-URL fold row republishes."
+  def shared_commons_media_pageid, do: "1002"
+
+  @doc "The Openverse id that joins a Commons file by its URL and by nothing else."
+  def media_fold_openverse_id, do: "7b0f2e31-5d43-4a7e-9d21-2b8c4a6f10ee"
 
   # `config/test.exs` sets `result_limit: 3`, so a page of this pipeline is
   # three rows asked for and however many survive the licence gate.
@@ -82,10 +97,12 @@ defmodule DevilsDictionary.Discovery.Conformance.OpenverseFixture do
   end
 
   def stub(:results, _context) do
-    # Two rows against a `result_limit` of three: a short page, so pagination
-    # ends rather than promising a page with nothing behind it.
-    respond(Enum.take(rows(), 2))
-    %{pages: [Enum.take(@page1_ids, 2)]}
+    # Three rows against a `result_limit` of three, all three kept: the two
+    # `war` captures and the media-URL fold row. A full page whose
+    # `page_count` is 1, so pagination ends rather than promising a page with
+    # nothing behind it.
+    respond(Enum.take(rows(), 2) ++ [media_fold_row()])
+    %{pages: [Enum.take(@page1_ids, 2) ++ [media_fold_openverse_id()]]}
   end
 
   def stub(:paged, _context) do
@@ -182,6 +199,33 @@ defmodule DevilsDictionary.Discovery.Conformance.OpenverseFixture do
         "2.0"
       )
     ]
+  end
+
+  # A `wikimedia` item whose landing page Openverse gave in the `/wiki/File:`
+  # form rather than as `?curid=<pageid>`. The `commons_file` regex therefore
+  # misses, no identifier is shared, and the **canonical media URL** is the
+  # only thing that joins this to the Commons original — which it can only do
+  # since D4 of #116 Phase 3 made Commons's `image_url` the file rather than
+  # its 640 px thumbnail. Spelled with an upper-cased scheme and host and a
+  # query string, the way a CDN spells it, so that only a canonical
+  # comparison sees it.
+  defp media_fold_row do
+    title = "Bataille Waterloo 1815 reconstitution"
+
+    media_fold_openverse_id()
+    |> row(
+      title,
+      "Fixture",
+      "https://commons.wikimedia.org/wiki/User:Fixture",
+      "wikimedia",
+      "by-sa",
+      "4.0"
+    )
+    |> Map.merge(%{
+      "foreign_landing_url" =>
+        "https://commons.wikimedia.org/wiki/File:#{String.replace(title, " ", "_")}.jpg",
+      "url" => "HTTPS://Upload.Commons.test/#{shared_commons_media_pageid()}.jpg?download=1"
+    })
   end
 
   defp flickr(id, title, creator, account, photo, path, license, version) do

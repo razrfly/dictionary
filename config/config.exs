@@ -105,7 +105,9 @@ config :devils_dictionary, :discovery_providers, [
   DevilsDictionary.Discovery.Providers.Met,
   DevilsDictionary.Discovery.Providers.OpenLibrary,
   DevilsDictionary.Discovery.Providers.Openverse,
-  DevilsDictionary.Discovery.Providers.Poetrydb
+  DevilsDictionary.Discovery.Providers.Pexels,
+  DevilsDictionary.Discovery.Providers.Poetrydb,
+  DevilsDictionary.Discovery.Providers.Unsplash
 ]
 
 # Culture discovery is visit-driven and bounded. Provider modules own their
@@ -199,6 +201,19 @@ config :devils_dictionary, :open_library,
 
 config :devils_dictionary, :openverse,
   endpoint: "https://api.openverse.org/v1/images/",
+  enabled: true
+
+# Unsplash needs `UNSPLASH_ACCESS_KEY`, read in `runtime.exs` from the
+# environment and never from a file that is committed. Without it `enabled?/0`
+# is false and the provider never runs. Pacing is declared in the provider's
+# `capabilities/0`; there is no override here.
+config :devils_dictionary, :unsplash,
+  endpoint: "https://api.unsplash.com/search/photos",
+  enabled: true
+
+# Pexels needs `PEXELS_API_KEY`, on the same terms.
+config :devils_dictionary, :pexels,
+  endpoint: "https://api.pexels.com/v1/search",
   enabled: true
 
 # Import environment specific config. This must remain at the bottom

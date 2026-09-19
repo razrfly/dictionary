@@ -136,3 +136,23 @@ config :devils_dictionary, :openverse,
   enabled: true,
   request_interval_ms: 0,
   min_retry_interval_ms: 0
+
+# Scaffolded by `mix dd.provider.new unsplash`. Every request in the
+# suite goes through the `Req.Test` stub named after the provider module.
+# The key is a literal because `enabled?/0` requires one: a keyed provider
+# with no key is a disabled provider, and the suite needs it enabled.
+config :devils_dictionary, :unsplash,
+  endpoint: "https://api.unsplash.test/search/photos",
+  access_key: "unsplash-test-key",
+  enabled: true,
+  request_interval_ms: 0,
+  min_retry_interval_ms: 0
+
+# Scaffolded by `mix dd.provider.new pexels`. Every request in the
+# suite goes through the `Req.Test` stub named after the provider module.
+config :devils_dictionary, :pexels,
+  endpoint: "https://api.pexels.test/v1/search",
+  api_key: "pexels-test-key",
+  enabled: true,
+  request_interval_ms: 0,
+  min_retry_interval_ms: 0

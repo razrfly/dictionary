@@ -6,6 +6,11 @@ the source whose thumbnail ladder the row's shape was waiting on (#116 Phase 1
 audit, 2026-09-19). Unsplash and Pexels move to Phase 3; Wikimedia Commons was
 probed separately and is already a provider (`commons.md`).
 
+The Unsplash and Pexels slices ran inside Phase 3 on the same day and are in
+[`photos-probe-unsplash-pexels-2026-09-19.md`](photos-probe-unsplash-pexels-2026-09-19.md),
+which completes Phase 0. Read the two together for the cross-source overlap
+question (M3): §7 there measures all four sources at once.
+
 The six words are the project's usual four plus #100's honest-empty pair:
 `war`, `love`, `grief`, `soldier`, `allegory`, `nepotism`.
 

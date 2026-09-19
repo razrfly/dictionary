@@ -35,9 +35,14 @@ defmodule DevilsDictionary.Discovery.Providers.Commons do
       `video/webm`; the window is `filetype:bitmap` and every kept file's
       `mime` is `image/*`.
 
-  Image bytes are never fetched. The thumbnail URL travels with the file's
-  licence and author, which is the attribution a CC licence requires when the
-  thumbnail is shown.
+  Image bytes are never fetched (D14). Two URLs travel with the file's licence
+  and author, which is the attribution a CC licence requires when the
+  thumbnail is shown: `thumbnail_url` is the 640 px derivative the card paints
+  and `image_url` is the file itself, which since #116 Phase 3's D4 is the
+  `url` `imageinfo` returns rather than a second copy of the thumbnail. The
+  second is never painted — it is the join key of last resort, the thing
+  `Shelf.dedup/2` compares when an aggregator republishes this file and
+  proposes no shared identifier.
   """
 
   @behaviour DevilsDictionary.Discovery.Provider
@@ -102,8 +107,10 @@ defmodule DevilsDictionary.Discovery.Providers.Commons do
         "operation" => @operation,
         "match" => "P180 depicts statements on the hydrated file equal a QID a sense refers to",
         "licence_gate" => "extmetadata.License on the hydrated file",
-        "preview_storage" => "thumbnail URL, author and licence only",
-        "image_delivery" => "thumb.wikimedia.org reference; images are not rehosted"
+        "preview_storage" => "thumbnail and full-size URL, author and licence only",
+        "image_delivery" =>
+          "thumb.wikimedia.org reference for the card, upload.wikimedia.org as the " <>
+            "fold key; images are not rehosted"
       }
     }
   end
@@ -412,6 +419,14 @@ defmodule DevilsDictionary.Discovery.Providers.Commons do
         pageid: pageid,
         title: file_title(metadata, title),
         thumbnail_url: thumb,
+        # D4 of #116 Phase 3. `iiprop=url` returns both: `thumburl` is the
+        # 640 px derivative this project asked for and `url` is the file
+        # itself. Both keys used to hold the thumbnail, so a Commons item
+        # could never fold with anything by media URL — and the one source
+        # that republishes Commons files, Openverse, hands back exactly this
+        # `upload.wikimedia.org` URL. `image_url` is the join key of last
+        # resort, and the thumbnail is each provider's own derivative.
+        image_url: presence(info["url"]) || thumb,
         source_url:
           presence(info["descriptionurl"]) || "https://commons.wikimedia.org/?curid=#{pageid}",
         author: author(metadata, info["user"]),
@@ -608,7 +623,7 @@ defmodule DevilsDictionary.Discovery.Providers.Commons do
         "title" => candidate.title,
         "year" => year(candidate.date),
         "thumbnail_url" => candidate.thumbnail_url,
-        "image_url" => candidate.thumbnail_url,
+        "image_url" => candidate.image_url,
         "source_url" => candidate.source_url,
         # The card's creator line carries the attribution a CC licence asks for
         # when the thumbnail is shown: who made it, under what terms.
@@ -672,6 +687,11 @@ defmodule DevilsDictionary.Discovery.Providers.Commons do
       label: metadata["title"],
       year: integer_year(metadata["year"]),
       metadata: %{
+        # Deliberately the thumbnail, and not the `image_url` D4 changed on
+        # the shelf item: this is the registry entity's display image, shown
+        # on an entity page at the same size a card shows it, and putting a
+        # 4,000 px original behind it would be a page fetching megabytes to
+        # paint a 96 px frame.
         "image_url" => metadata["thumbnail_url"],
         "image_attribution" => metadata["credit_line"],
         "credit_line" => metadata["credit_line"],
