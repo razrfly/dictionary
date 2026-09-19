@@ -188,6 +188,38 @@ defmodule DevilsDictionary.Discovery.Conformance.MultiSourceConformanceTest do
     end
   end
 
+  test "the byline and the About note describe what is on the rail, not what was delivered",
+       %{target: target} do
+    deliver!(target)
+    states = Discovery.states(target.object_id)
+    html = render_component(&Culture.section/1, states: states)
+    document = LazyHTML.from_fragment(html)
+
+    # The Plebs stub delivered eight and the rail folded two into the Middle
+    # stub's copies; its note lists the six that are shown, and never the two
+    # that are not.
+    plebs_note = LazyHTML.query(document, "#culture-about-#{Plebs.slug()} li")
+    assert Enum.count(plebs_note) == 6
+    refute LazyHTML.text(plebs_note) =~ "Plebs stub item 1:"
+    refute LazyHTML.text(plebs_note) =~ "Plebs stub item 2:"
+    assert Enum.count(LazyHTML.query(document, "#culture-about-#{Middle.slug()} li")) == 8
+
+    # A source whose every item is another source's copy put nothing on the
+    # rail: not credited in the byline, no note, and the shelf still stands
+    # on the other source's items alone.
+    folded =
+      Map.update!(states, Plebs.slug(), fn state ->
+        %{state | items: states[Middle.slug()].items}
+      end)
+
+    html = render_component(&Culture.section/1, states: folded)
+    assert length(shelf_ids(html)) == 8
+    assert count(html, "#culture-provider-#{Middle.slug()}") == 1
+    assert count(html, "#culture-provider-#{Plebs.slug()}") == 0
+    assert count(html, "#culture-about-#{Middle.slug()}") == 1
+    assert count(html, "#culture-about-#{Plebs.slug()}") == 0
+  end
+
   test "each reason is described against the shelf's own evidence row", %{target: target} do
     deliver!(target)
     html = render_component(&Culture.section/1, states: Discovery.states(target.object_id))

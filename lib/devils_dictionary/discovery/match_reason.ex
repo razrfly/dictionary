@@ -156,8 +156,9 @@ defmodule DevilsDictionary.Discovery.MatchReason do
   defp attestation_locator(%{"locator" => locator}) when is_binary(locator) and locator != "",
     do: locator
 
-  defp attestation_locator(%{"number" => number}) when is_integer(number) or is_binary(number),
-    do: "line #{number}"
+  defp attestation_locator(%{"number" => number})
+       when is_integer(number) or (is_binary(number) and number != ""),
+       do: "line #{number}"
 
   defp attestation_locator(_line), do: nil
 

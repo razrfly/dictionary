@@ -174,6 +174,18 @@ defmodule DevilsDictionary.Discovery.MatchReasonTest do
 
       assert none.locator == nil
       assert MatchReason.describe(none) == "Uses “war”."
+
+      # An empty number is no number: it must not become the locator
+      # `"line "` (CodeRabbit on #122).
+      assert [blank] =
+               MatchReason.from_result(
+                 %{"query" => "war", "lines" => [%{"number" => "", "text" => "of war"}]},
+                 "war"
+               )
+
+      assert blank.locator == nil
+      assert blank.identifier == nil
+      assert MatchReason.describe(blank) == "Uses “war”."
     end
 
     test "a provider that named no reason is not given one" do

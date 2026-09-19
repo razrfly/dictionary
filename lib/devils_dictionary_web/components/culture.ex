@@ -76,6 +76,14 @@ defmodule DevilsDictionaryWeb.Culture do
           |> Enum.flat_map(fn state -> Enum.map(state.items, &%{state: state, item: &1}) end)
           |> Shelf.compose(&archetype_rank(&1.state), &source/1, &Shelf.keys(&1.item))
       }
+      |> then(fn shelf ->
+        # What each state actually put on the rail, after the fold: the byline
+        # credits and the About note describes these, not `state.items`. A
+        # state whose every item was a duplicate of a better-tiered source's
+        # is not a contributor, and a note listing a card the rail folded
+        # would be the page contradicting itself (CodeRabbit on #122).
+        Map.put(shelf, :shown, Enum.group_by(shelf.entries, & &1.state.provider, & &1.item))
+      end)
     end
   end
 
@@ -177,6 +185,7 @@ defmodule DevilsDictionaryWeb.Culture do
               <.compact_note
                 :for={state <- contributing(shelf)}
                 state={state}
+                items={shelf.shown[state.provider]}
                 type={shelf.type}
                 contributor={@contributor}
               />
@@ -210,10 +219,12 @@ defmodule DevilsDictionaryWeb.Culture do
     """
   end
 
-  # A shelf credits the providers that actually put something on it. A provider
-  # whose own request failed while another's succeeded is reported in its note,
-  # not in a byline for results it did not supply.
-  defp contributing(shelf), do: Enum.filter(shelf.states, &(&1.items != []))
+  # A shelf credits the providers that actually put something on it — on the
+  # rail, after the fold. A provider whose own request failed while another's
+  # succeeded is reported in its note, not in a byline for results it did not
+  # supply; one whose every item the shelf folded into another source's copy
+  # is in the same position.
+  defp contributing(shelf), do: Enum.filter(shelf.states, &Map.has_key?(shelf.shown, &1.provider))
 
   # Worth reporting beside a shelf that is not empty. A provider whose own
   # answer was *nothing* is not: "no matching artwork for this term" under six
@@ -392,6 +403,7 @@ defmodule DevilsDictionaryWeb.Culture do
   defp entry_path(_item, _return_path), do: nil
 
   attr :state, :map, required: true
+  attr :items, :list, required: true
   attr :type, :atom, required: true
   attr :contributor, :boolean, default: false
 
@@ -427,7 +439,7 @@ defmodule DevilsDictionaryWeb.Culture do
              admits one is called a search result; anywhere else a reason with
              nothing in it keeps the sentence that prompts someone to fix it. --%>
         <ul role="list" class="space-y-1">
-          <li :for={item <- @state.items}>
+          <li :for={item <- @items}>
             {item.preview_metadata["title"]}: {MatchReason.describe_all(
               reasons(item, @state.term),
               @admits
