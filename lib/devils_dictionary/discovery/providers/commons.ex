@@ -415,6 +415,8 @@ defmodule DevilsDictionary.Discovery.Providers.Commons do
         source_url:
           presence(info["descriptionurl"]) || "https://commons.wikimedia.org/?curid=#{pageid}",
         author: author(metadata, info["user"]),
+        author_url: author_url(metadata, info["user"]),
+        attribution: presence(text(metadata, "Attribution")),
         licence: licence,
         licence_url: presence(text(metadata, "LicenseUrl")),
         date: presence(text(metadata, "DateTimeOriginal"))
@@ -525,6 +527,34 @@ defmodule DevilsDictionary.Discovery.Providers.Commons do
     end
   end
 
+  # M4's `creator_url` (#116 Phase 2). `Artist` is HTML and the name inside it
+  # is almost always a link — a Commons user page, an `en.wikipedia.org` user
+  # page, an institution. The first `href` is that link; MediaWiki writes some
+  # of them protocol-relative (`//commons.wikimedia.org/…`), which is not a URL
+  # a card can put in an anchor, so it is given a scheme. When `Artist` names
+  # nobody the author fell back to the uploading account, and that account's
+  # own page is where the credit points.
+  @href ~r/<a\b[^>]*\bhref="([^"]+)"/
+
+  defp author_url(metadata, user) do
+    case Regex.run(@href, get_in(metadata, ["Artist", "value"]) || "") do
+      [_, href] -> absolute(href)
+      _ -> user_page(metadata, user)
+    end
+  end
+
+  defp user_page(metadata, user) do
+    if presence(text(metadata, "Artist")) == nil and presence(user) do
+      "https://commons.wikimedia.org/wiki/User:" <> URI.encode(String.replace(user, " ", "_"))
+    end
+  end
+
+  defp absolute("//" <> rest), do: "https://" <> rest
+  defp absolute("http://" <> _rest = url), do: url
+  defp absolute("https://" <> _rest = url), do: url
+  defp absolute("/" <> rest), do: "https://commons.wikimedia.org/" <> rest
+  defp absolute(_href), do: nil
+
   @doc "One `extmetadata` value as plain text: tags stripped, entities decoded, whitespace folded."
   def text(metadata, key) when is_map(metadata) do
     case get_in(metadata, [key, "value"]) do
@@ -584,7 +614,13 @@ defmodule DevilsDictionary.Discovery.Providers.Commons do
         "author" => candidate.author,
         "license" => candidate.licence,
         "license_url" => candidate.licence_url,
-        "credit_line" => "#{candidate.author}, #{candidate.licence}, via Wikimedia Commons",
+        # M4's six fixed names (#116 Phase 2). `credit_line` stays as it was —
+        # the renderer's fallback, and what `identity_record/1` registers — and
+        # `attribution` is the line shown when the file names one of its own.
+        "creator" => candidate.author,
+        "creator_url" => candidate.author_url,
+        "attribution" => attribution(candidate),
+        "credit_line" => credit_line(candidate),
         "content_type" => "image",
         "provider" => "Wikimedia Commons",
         "depicts" => Enum.map(depicts, &Map.take(&1, ["qid", "entity_label"]))
@@ -592,6 +628,21 @@ defmodule DevilsDictionary.Discovery.Providers.Commons do
       display_allowed: true
     }
   end
+
+  defp credit_line(candidate),
+    do: "#{candidate.author}, #{candidate.licence}, via Wikimedia Commons"
+
+  # M4's `attribution`: the ready-made line the renderer shows verbatim.
+  #
+  # `extmetadata.Attribution` is the one field that is that line — the text an
+  # uploader set when the file's terms require a particular wording — and it
+  # is absent on most files. `Credit` is **not** the fallback, although M4's
+  # list named it: measured on three files 2026-09-19, `Credit` is provenance
+  # prose ("Derived from Template:Libyan Civil War detailed map", "This tag
+  # does not indicate the copyright status of the attached work…"), sometimes
+  # a paragraph with a list in it, and never a credit. The composed line is
+  # the fallback instead, which is what the card already showed.
+  defp attribution(candidate), do: candidate.attribution || credit_line(candidate)
 
   # `DateTimeOriginal` is free text — "2006-10-16", "Taken on 6 June 1944",
   # "circa 1944-06-06", "1887". The first four-digit run is the only part that

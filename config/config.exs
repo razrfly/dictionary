@@ -104,6 +104,7 @@ config :devils_dictionary, :discovery_providers, [
   DevilsDictionary.Discovery.Providers.Giphy,
   DevilsDictionary.Discovery.Providers.Met,
   DevilsDictionary.Discovery.Providers.OpenLibrary,
+  DevilsDictionary.Discovery.Providers.Openverse,
   DevilsDictionary.Discovery.Providers.Poetrydb
 ]
 
@@ -194,6 +195,10 @@ config :devils_dictionary, :commons,
 
 config :devils_dictionary, :open_library,
   endpoint: "https://openlibrary.org",
+  enabled: true
+
+config :devils_dictionary, :openverse,
+  endpoint: "https://api.openverse.org/v1/images/",
   enabled: true
 
 # Import environment specific config. This must remain at the bottom

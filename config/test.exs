@@ -128,3 +128,9 @@ config :devils_dictionary, :open_library,
   enabled: true,
   request_interval_ms: 0,
   min_retry_interval_ms: 0
+
+# Scaffolded by `mix dd.provider.new openverse`. Every request in the
+# suite goes through the `Req.Test` stub named after the provider module.
+config :devils_dictionary, :openverse,
+  endpoint: "https://openverse.test/v1/images/",
+  enabled: true
