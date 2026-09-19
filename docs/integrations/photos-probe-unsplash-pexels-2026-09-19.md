@@ -187,14 +187,48 @@ it, which is where Phase 1 left it.
 
 ## 5. URL stability across an hour
 
-`query=war` again, 62 minutes after the first capture, both providers.
+`query=war` again at 09:44:43Z, **62 minutes** after the first capture, both
+providers, same parameters.
 
-| | first 20 ids returned again | `src`/`urls` byte-identical for the ids in common |
-|---|---|---|
-| Unsplash | STABILITY_UNSPLASH_IDS | STABILITY_UNSPLASH_URLS |
-| Pexels | STABILITY_PEXELS_IDS | STABILITY_PEXELS_URLS |
+| | first 20 ids returned again | URLs byte-identical for those ids | did the request reach the origin? |
+|---|---|---|---|
+| Unsplash | **20 / 20** | **20 / 20** | **no** |
+| Pexels | **20 / 20** | **20 / 20** | **yes** |
 
-STABILITY_NOTE
+**Pexels's row is a measurement. Unsplash's is not, and saying so is the
+point of the column on the right.**
+
+Unsplash's re-read came back with `x-cache: Miss from cloudfront, HIT`,
+`age: 3733` (exactly the 62 minutes), `x-ratelimit-remaining` **unmoved at
+4998**, and the *same* `x-request-id` as the first capture —
+`096d84a9-c7b0-…`. It is byte-for-byte the response from an hour earlier,
+served out of Fastly, and it says nothing about whether Unsplash's URLs hold.
+This is the same trap the Openverse slice recorded at its P9 (`cf-cache-status:
+HIT`, "the edge answered, so this measured nothing"), and it is worth a rule:
+**on any provider behind a CDN, read `x-ratelimit-remaining` or the request
+id before believing a stability result.** Unsplash's `cache-control` is
+`public, max-age=86400`, so a repeated identical query is cached for a day and
+an honest re-read needs either a different query or a day's wait; neither is
+worth 5,000-per-hour quota to learn.
+
+Pexels's re-read moved `x-ratelimit-remaining` from 24,971 to 24,959 and
+carries no cache header (`cache-control: max-age=0, private,
+must-revalidate`), so it genuinely reached the origin. The same twenty photos
+came back in the same order with byte-identical `src` maps, and none of the
+eight rungs carries a signature, token or expiry — they are
+`images.pexels.com/photos/<id>/pexels-photo-<id>.jpeg` plus sizing query
+parameters, a pure function of the id.
+
+**What the shelf actually depends on is weaker than either measurement, and
+it holds by construction.** `Shelf.canonical_media_url/1` compares host and
+path only, and both providers' paths are a pure function of the photo id
+(`photo-1580922110301-a666f6745565`,
+`photos/32230027/pexels-photo-32230027.jpeg`). Unsplash's query string
+carries an `ixid` token minted per search, so two genuinely separate searches
+would very likely hand back the *same file* under a *different* query — which
+is exactly the difference the canonical form is there to ignore. A signed or
+expiring URL would be the thing that broke D14's hotlinking, and neither
+provider uses one.
 
 ## 6. Rate limits and refusals
 

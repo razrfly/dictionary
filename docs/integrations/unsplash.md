@@ -101,10 +101,14 @@ Things nobody should have to measure twice.
   `401` carries neither header. **No `403 Rate Limit Exceeded` was drawn**, so
   `min_retry_interval_ms` (60,000 ms) is a floor rather than a measurement;
   the first real refusal should replace it.
-- **CloudFront fronts the API** with `cache-control: public, max-age=86400`,
-  so a repeated identical query may be answered at the edge and never move
-  the counter. Measure quota against `x-ratelimit-remaining`, not against the
-  number of requests sent.
+- **CloudFront and Fastly front the API** with `cache-control: public,
+  max-age=86400`, and a repeated identical query *is* answered at the edge:
+  the same `query=war` 62 minutes later came back with `x-cache: … HIT`,
+  `age: 3733`, the **same `x-request-id`** and `x-ratelimit-remaining`
+  unmoved at 4,998. So **URL stability is unmeasured for this provider** —
+  the second read was the first read. Measure quota, and freshness, against
+  `x-ratelimit-remaining` or the request id, never against the number of
+  requests sent.
 - **`asset_type` was `"photo"` on all 120 results** and `sponsorship` was
   `null` on all 120. Neither is gated on, and the first sponsored photo is
   worth a second look: a sponsor's credit is an additional requirement.

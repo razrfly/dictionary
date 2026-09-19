@@ -144,14 +144,51 @@ defmodule DevilsDictionaryWeb.CultureCreditTest do
         })
 
       # The licence's first occurrence is inside the creator's name, so it is
-      # dropped rather than nested — the credit loses a link it could have
-      # had further along the line, and keeps the one thing that matters,
-      # which is that the sentence is intact and no anchor opens inside
-      # another.
-      assert links(parts) == [{"CC BY 4.0 Studio", "https://example.test/studio"}]
+      # skipped rather than nested, and the next occurrence — the licence on
+      # its own, further along the line — is the one that gets the link.
+      assert links(parts) == [
+               {"CC BY 4.0 Studio", "https://example.test/studio"},
+               {"CC BY 4.0", "https://creativecommons.org/licenses/by/4.0/"}
+             ]
 
-      assert texts(parts) == ["CC BY 4.0 Studio", ", CC BY 4.0, via Somewhere"]
+      assert texts(parts) == ["CC BY 4.0 Studio", ", ", "CC BY 4.0", ", via Somewhere"]
       assert texts(parts) |> Enum.join() == "CC BY 4.0 Studio, CC BY 4.0, via Somewhere"
+    end
+
+    test "a licence that occurs only inside the creator's name is not linked at all" do
+      parts =
+        Culture.credit_parts("CC BY 4.0 Studio, via Somewhere", %{
+          "creator" => "CC BY 4.0 Studio",
+          "creator_url" => "https://example.test/studio",
+          "license" => "CC-BY-4.0",
+          "license_url" => "https://creativecommons.org/licenses/by/4.0/"
+        })
+
+      assert links(parts) == [{"CC BY 4.0 Studio", "https://example.test/studio"}]
+    end
+  end
+
+  describe "what a link may point at" do
+    test "only an absolute http(s) URL becomes an href" do
+      for bad <- [
+            "javascript:alert(1)",
+            "data:text/html,hi",
+            "//example.test/x",
+            "/relative",
+            "ftp://example.test/x",
+            "mailto:someone@example.test"
+          ] do
+        parts =
+          Culture.credit_parts("Photo by Someone on Unsplash", %{
+            "creator" => "Someone",
+            "creator_url" => bad,
+            "license" => "Unsplash",
+            "license_url" => bad
+          })
+
+        assert links(parts) == [], "#{bad} became a link"
+        assert texts(parts) |> Enum.join() == "Photo by Someone on Unsplash"
+      end
     end
   end
 end

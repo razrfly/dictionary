@@ -249,6 +249,11 @@ defmodule DevilsDictionaryWeb.Culture do
       |> assign(:badge, presentation.badge)
       |> assign(:attribution, attribution)
       |> assign(:credit, credit_parts(attribution, metadata))
+      # Every href on this card comes out of a provider response. Phoenix
+      # escapes the attribute but applies no scheme allowlist, so a
+      # `javascript:` URL in an upstream record would run in this origin on a
+      # click (CodeRabbit on #125). Only an absolute http(s) URL is a link.
+      |> assign(:source_url, external_href(metadata["source_url"]))
       # A credit a licence *requires* is not clamped. At the `:image` row's
       # 112 px column a two-line clamp cut every one of the forty-two credits
       # on `/define/war` — including, on all twelve Unsplash cards, the word
@@ -283,8 +288,8 @@ defmodule DevilsDictionaryWeb.Culture do
         <.culture_image item={@item} image={@image} type={@type} />
       </.link>
       <a
-        :if={is_nil(@entry_path) && @aspect}
-        href={@item.preview_metadata["source_url"]}
+        :if={is_nil(@entry_path) && @aspect && @source_url}
+        href={@source_url}
         target="_blank"
         rel="noreferrer"
         aria-label={"Open source for #{@item.preview_metadata["title"]}"}
@@ -307,7 +312,7 @@ defmodule DevilsDictionaryWeb.Culture do
           </.link>
           <a
             :if={is_nil(@entry_path)}
-            href={@item.preview_metadata["source_url"]}
+            href={@source_url}
             target="_blank"
             rel="noreferrer"
             class="rounded-sm group-hover:underline focus-visible:outline-2 focus-visible:outline-offset-2"
@@ -346,8 +351,8 @@ defmodule DevilsDictionaryWeb.Culture do
           <%= for part <- @credit do %><a :if={part.url} href={part.url} target="_blank" rel="noreferrer" class="underline underline-offset-4 transition-colors hover:text-mist-950 dark:hover:text-white">{part.text}</a><span :if={is_nil(part.url)}>{part.text}</span><% end %>
         </p>
         <a
-          :if={@item.preview_metadata["source_url"]}
-          href={@item.preview_metadata["source_url"]}
+          :if={@source_url}
+          href={@source_url}
           target="_blank"
           rel="noreferrer"
           id={"culture-source-#{@item.external_id}"}
@@ -423,30 +428,33 @@ defmodule DevilsDictionaryWeb.Culture do
 
   def credit_parts(line, metadata) when is_binary(line) and is_map(metadata) do
     [
-      {presence(metadata["creator"]), presence(metadata["creator_url"])},
-      {presence(metadata["license"]), presence(metadata["license_url"])}
+      {presence(metadata["creator"]), external_href(metadata["creator_url"])},
+      {presence(metadata["license"]), external_href(metadata["license_url"])}
     ]
-    |> Enum.flat_map(fn
-      {needle, url} when is_binary(needle) and is_binary(url) ->
-        case anchor(line, needle) do
-          nil -> []
-          {start, length} -> [%{start: start, length: length, url: url}]
+    |> Enum.reduce([], fn
+      {needle, url}, kept when is_binary(needle) and is_binary(url) ->
+        # The first occurrence that does not overlap a run already kept —
+        # the creator's, since it comes first — so a licence named inside the
+        # creator's name is still linked where it appears on its own later
+        # in the line (CodeRabbit on #125).
+        case Enum.find(occurrences(line, needle), &(not overlaps?(&1, kept))) do
+          nil -> kept
+          {start, length} -> [%{start: start, length: length, url: url} | kept]
         end
 
-      _pair ->
-        []
+      _pair, kept ->
+        kept
     end)
     |> Enum.sort_by(& &1.start)
-    |> drop_overlaps()
     |> runs(line)
   end
 
   def credit_parts(line, _metadata) when is_binary(line), do: [%{text: line, url: nil}]
 
-  # Where `needle` sits in `line`, in bytes, or nil. Hyphens and spaces in the
-  # needle match any run of either, which is what makes `CC-BY-SA-2.0` find
-  # *CC BY-SA 2.0*.
-  defp anchor(line, needle) do
+  # Every place `needle` sits in `line`, as `{start, length}` in bytes, in
+  # order. Hyphens and spaces in the needle match any run of either, which is
+  # what makes `CC-BY-SA-2.0` find *CC BY-SA 2.0*.
+  defp occurrences(line, needle) do
     pattern =
       needle
       |> String.split(~r/[-\s]+/u, trim: true)
@@ -454,24 +462,31 @@ defmodule DevilsDictionaryWeb.Culture do
       |> Enum.join("[-\\s]+")
 
     with false <- pattern == "",
-         {:ok, regex} <- Regex.compile(pattern, "iu"),
-         [{start, length}] <- Regex.run(regex, line, return: :index) do
-      {start, length}
+         {:ok, regex} <- Regex.compile(pattern, "iu") do
+      regex |> Regex.scan(line, return: :index) |> Enum.map(&hd/1)
     else
-      _ -> nil
+      _ -> []
     end
   end
 
-  defp drop_overlaps(anchors) do
-    anchors
-    |> Enum.reduce({[], 0}, fn anchor, {kept, cursor} ->
-      if anchor.start >= cursor,
-        do: {[anchor | kept], anchor.start + anchor.length},
-        else: {kept, cursor}
-    end)
-    |> elem(0)
-    |> Enum.reverse()
+  defp overlaps?({start, length}, kept) do
+    Enum.any?(kept, fn %{start: s, length: l} -> start < s + l and s < start + length end)
   end
+
+  # An absolute `http(s)` URL with a host, or nil: the one shape a card may
+  # put in an `href`. Provider data is never trusted with a scheme.
+  defp external_href(url) when is_binary(url) do
+    case URI.parse(String.trim(url)) do
+      %URI{scheme: scheme, host: host}
+      when scheme in ["http", "https"] and is_binary(host) and host != "" ->
+        String.trim(url)
+
+      _uri ->
+        nil
+    end
+  end
+
+  defp external_href(_url), do: nil
 
   defp runs(anchors, line) do
     {parts, cursor} =

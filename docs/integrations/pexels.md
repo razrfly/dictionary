@@ -99,7 +99,12 @@ The site's own requests are in `discovery_request_attempts` under source
   measurement.
 - **The response is not cacheable** (`cache-control: max-age=0, private,
   must-revalidate`), so unlike Unsplash and Openverse every request reaches
-  the origin and moves the counter. The 30-day positive cache is ours alone.
+  the origin and moves the counter. The 30-day positive cache is ours alone —
+  and it is why this is the one of the three search providers whose **URL
+  stability could actually be measured**: the same `query=war` 62 minutes
+  later moved `x-ratelimit-remaining` 24,971 → 24,959 and returned the same
+  twenty photos with byte-identical `src` maps. No signature, no token, no
+  expiry; every rung is a pure function of the photo id.
 
 ## Conformance
 
