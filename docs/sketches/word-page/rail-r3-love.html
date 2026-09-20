@@ -1,0 +1,1302 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light" data-theme-source="user">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>R3 · love · word-page sketch</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="./sketch.css" />
+    <script>
+      // The app's own theme bootstrap (root.html.heex), minus the toggle: a
+      // sketch is opened from the filesystem and has to honour ?theme=dark so
+      // a reviewer can see both themes without a server.
+      (() => {
+        const q = new URLSearchParams(location.search).get("theme");
+        const system = () => matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        document.documentElement.setAttribute("data-theme", q || system());
+      })();
+    </script>
+  </head>
+  <body class="font-sans text-mist-950 antialiased dark:text-white">
+    <nav id="account-navigation" aria-label="Account" class="relative z-20 border-b border-mist-950/5 bg-mist-100 dark:border-white/10 dark:bg-mist-950">
+      <div class="mx-auto flex h-10 max-w-7xl items-center justify-end gap-5 px-6 text-sm/6 text-mist-600 lg:px-10 dark:text-mist-400">
+        <a href="#" class="font-medium text-mist-950 hover:underline dark:text-white">Register</a>
+        <a href="#" class="font-medium text-mist-950 hover:underline dark:text-white">Log in</a>
+      </div>
+    </nav>
+    <header class="sticky top-0 z-10 bg-mist-100 dark:bg-mist-950">
+      <nav>
+        <div class="mx-auto flex h-(--scroll-padding-top) max-w-7xl items-center gap-4 px-6 lg:px-10">
+          <div class="flex flex-1 items-center gap-12">
+            <div class="flex items-center">
+              <a href="#" class="font-display text-2xl/8 text-mist-950 dark:text-white">wordhoard</a>
+            </div>
+          </div>
+          <div class="flex flex-1 items-center justify-end gap-4">
+            <div class="flex shrink-0 items-center gap-5">
+              <div class="relative flex flex-row items-center rounded-full bg-mist-950/10 dark:bg-white/10">
+                <div class="absolute left-0 h-full w-1/3 rounded-full bg-white transition-[left] [[data-theme=dark]_&amp;]:left-2/3 [[data-theme=light]_&amp;]:left-1/3 dark:bg-mist-700"></div>
+                <span class="flex w-1/3 p-2"><span class="size-4 opacity-75 hero-computer-desktop-micro"></span></span>
+                <span class="flex w-1/3 p-2"><span class="size-4 opacity-75 hero-sun-micro"></span></span>
+                <span class="flex w-1/3 p-2"><span class="size-4 opacity-75 hero-moon-micro"></span></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+    <div id="sketch-note" class="border-b border-amber-600/30 bg-amber-50/60 dark:bg-amber-950/20">
+      <div class="mx-auto w-full max-w-2xl px-6 py-2 text-sm/6 text-amber-800 md:max-w-3xl lg:max-w-7xl lg:px-10 dark:text-amber-300">
+        Sketch, not the app · Rail variation R3 — Tiers. The enclosure says what kind of thing it holds: authored entries are gilded, reference sources are plain rows, everything found sits in a well.
+      </div>
+    </div>
+    <main class="isolate overflow-clip"><div class="mx-auto w-full max-w-2xl px-6 pb-10 md:max-w-3xl lg:max-w-7xl lg:px-10"><div class="pt-8 lg:flex lg:gap-12">
+  <aside id="word-rail" class="lg:sticky lg:top-[calc(var(--scroll-padding-top)+--spacing(6))] lg:w-72 lg:shrink-0">
+    <h1 class="font-display text-5xl/none text-mist-950 sm:text-6xl/none dark:text-white">love</h1>
+<p id="pronunciations" class="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-lg/7 text-mist-500">
+  <span class="font-mono">[ˈlɐʊ̯]</span>
+  <span class="font-mono">[ˈlɐʋ]</span>
+  <span class="font-mono">/ˈləʋ/</span>
+  <span class="text-base/7 sm:text-sm/7"><a href="#pronunciation-variants" class="underline underline-offset-4 hover:text-mist-950 dark:hover:text-white">+9 variants</a></span>
+</p>
+<p id="parts-of-speech" class="mt-3 text-base/7 text-mist-700 sm:text-sm/7 dark:text-mist-400">noun<span aria-hidden="true"> · </span>noun<span aria-hidden="true"> · </span>verb<span aria-hidden="true"> · </span>name<span aria-hidden="true"> · </span>name</p>
+<details id="about-the-word" class="mt-4 border-t border-mist-950/10 dark:border-white/10 pt-3">
+  <summary class="w-fit cursor-pointer text-base/7 font-medium text-mist-700 sm:text-sm/7 dark:text-mist-400">About the word</summary>
+  <div class="pb-1">
+    <p id="forms" class="mt-2 text-base/7 text-mist-500 sm:text-sm/7">
+  <span class="text-mist-700 dark:text-mist-400">forms</span>
+  loue · loved · loves · Loves · loving · luv
+</p>
+    <details id="etymology-0" class="mt-2 max-w-2xl">
+  <summary class="cursor-pointer list-none text-base/7 text-mist-500 sm:text-sm/7 [&::-webkit-details-marker]:hidden">
+    <span class="text-mist-700 dark:text-mist-400">origin (noun, verb)</span> <span class="line-clamp-1">From Middle English love, luve, from Old English lufu, from Proto-West Germanic *lubu, from Proto-Germanic *lubō, from Proto-Indo-European *lewbʰ- (“love, care, desire”).</span>
+    <span class="text-mist-400 underline underline-offset-4">the rest of the origin · 1153 characters</span>
+  </summary>
+  <p class="mt-2 text-base/7 text-mist-500 sm:text-sm/7">The close of a letter sense is presumably a truncation of With love or the like. The verb is from Middle English loven, luvien, from Old English lufian (“to love”), from Proto-West Germanic *lubōn (“to love”), derived from the noun. Eclipsed non-native English amour (“love”), borrowed from Norman amour (“love”). Cognates Cognate with Scots luve (“love”), Saterland Frisian ljo, ljoo, ljoof (“dear, sweet”), Ljoote, Ljoowe (“love”), West Frisian leaf (“friendly, kind, cordial”), leafde (“love”), Dutch lief (“lovely, nice, sweet”), liefde (“love”), German lieb (“dear; lovable”), Liebe (“love”), German Low German Leevde, Lieve (“love”), Luxembourgish léif (“lovely, kind, nice, sweet”), Léift (“love”), Vilamovian łiwa (“love”), Yiddish ליב (lib, “nice; kind”), Icelandic ljúfur (“beloved, dear”), Norwegian Nynorsk, Swedish ljuv (“lovely, sweet”), Gothic 𐌻𐌹𐌿𐍆𐍃 (liufs, “beloved, dear”), Albanian lyp (“to beg”), Russian любовь (ljubovʹ, “love”), Lithuanian liaupsė (“praise”), Latin libido (“desire, lust”), Polish lubić (“to like”), Persian آلفتن (âloftan, “to enamor”), Sanskrit लोभ (lobha, “desire, greed”). — Wiktionary (English) via Kaikki <span class="text-mist-400">— Wiktionary (English) via Kaikki</span></p>
+</details><details id="etymology-1" class="mt-2 max-w-2xl">
+  <summary class="cursor-pointer list-none text-base/7 text-mist-500 sm:text-sm/7 [&::-webkit-details-marker]:hidden">
+    <span class="text-mist-700 dark:text-mist-400">origin (name)</span> <span class="line-clamp-1">Syllabic abbreviation of Logan and Veronica, as a deliberate homophone of love.</span>
+    <span class="text-mist-400 underline underline-offset-4">the rest of the origin · 33 characters</span>
+  </summary>
+  <p class="mt-2 text-base/7 text-mist-500 sm:text-sm/7">— Wiktionary (English) via Kaikki <span class="text-mist-400">— Wiktionary (English) via Kaikki</span></p>
+</details>
+    <details id="pronunciation-variants" class="mt-2">
+  <summary class="w-fit cursor-pointer text-base/7 text-mist-500 underline underline-offset-4 hover:text-mist-950 sm:text-sm/7 dark:hover:text-white">All 12 pronunciations recorded</summary>
+  <ul role="list" class="mt-2 space-y-1 text-base/7 text-mist-500 sm:text-sm/7">
+    <li class="flex flex-wrap items-baseline gap-x-3"><span class="font-mono text-mist-700 dark:text-mist-400">[ˈlɐʊ̯]</span></li>
+    <li class="flex flex-wrap items-baseline gap-x-3"><span class="font-mono text-mist-700 dark:text-mist-400">[ˈlɐʋ]</span></li>
+    <li class="flex flex-wrap items-baseline gap-x-3"><span class="font-mono text-mist-700 dark:text-mist-400">/ˈləʋ/</span></li>
+    <li class="flex flex-wrap items-baseline gap-x-3"><span class="font-mono text-mist-700 dark:text-mist-400">[ˈlä̝v] ~ [ˈlɐ̞v]</span><span class="text-mist-400">Australia, New-Zealand</span></li>
+    <li class="flex flex-wrap items-baseline gap-x-3"><span class="font-mono text-mist-700 dark:text-mist-400">[ˈlʊv]</span><span class="text-mist-400">Ireland, Northern-England</span></li>
+    <li class="flex flex-wrap items-baseline gap-x-3"><span class="font-mono text-mist-700 dark:text-mist-400">[ˈlʌv]</span><span class="text-mist-400">Canada, General-American, Received-Pronunciation</span></li>
+    <li class="flex flex-wrap items-baseline gap-x-3"><span class="font-mono text-mist-700 dark:text-mist-400">/ˈlɐv/</span><span class="text-mist-400">Australia, New-Zealand</span></li>
+    <li class="flex flex-wrap items-baseline gap-x-3"><span class="font-mono text-mist-700 dark:text-mist-400">/ˈlʊv/</span><span class="text-mist-400">Ireland, Northern-England</span></li>
+    <li class="flex flex-wrap items-baseline gap-x-3"><span class="font-mono text-mist-700 dark:text-mist-400">/ˈlʌv/</span><span class="text-mist-400">Canada, General-American, Received-Pronunciation</span></li>
+    <li class="flex flex-wrap items-baseline gap-x-3"><span class="font-mono text-mist-700 dark:text-mist-400">recording</span><span class="text-mist-400">General-American</span></li>
+    <li class="flex flex-wrap items-baseline gap-x-3"><span class="font-mono text-mist-700 dark:text-mist-400">recording</span><span class="text-mist-400">Received-Pronunciation</span></li>
+    <li class="flex flex-wrap items-baseline gap-x-3"><span class="font-mono text-mist-700 dark:text-mist-400">recording</span><span class="text-mist-400">Southern-England</span></li>
+  </ul>
+</details>
+    
+  </div>
+</details>
+<nav aria-label="Sources" class="mt-4 border-t border-mist-950/10 dark:border-white/10 pt-3">
+  <p id="sources" class="text-base/7 text-mist-500 sm:text-sm/7">Defined here by 5 sources</p>
+  <ul role="list" class="mt-2 space-y-1 text-base/7 sm:text-sm/7">
+    <li><a href="#card-johnson-noun" class="flex items-baseline gap-2 text-amber-700 dark:text-amber-400 hover:underline"><span aria-hidden="true">👑</span><span class="min-w-0">Samuel Johnson · noun</span></a></li>
+    <li><a href="#card-johnson-verb" class="flex items-baseline gap-2 text-amber-700 dark:text-amber-400 hover:underline"><span aria-hidden="true">👑</span><span class="min-w-0">Samuel Johnson · verb</span></a></li>
+    <li><a href="#card-bierce" class="flex items-baseline gap-2 text-amber-700 dark:text-amber-400 hover:underline"><span aria-hidden="true">👑</span><span class="min-w-0">Ambrose Bierce · noun</span></a></li>
+    <li><a href="#card-wordnet-noun" class="flex items-baseline gap-2 text-mist-500 hover:underline"><span aria-hidden="true">📚</span><span class="min-w-0">Open English WordNet 2025 · noun</span></a></li>
+    <li><a href="#card-wordnet-verb" class="flex items-baseline gap-2 text-mist-500 hover:underline"><span aria-hidden="true">📚</span><span class="min-w-0">Open English WordNet 2025 · verb</span></a></li>
+    <li><a href="#card-wiktionary-noun" class="flex items-baseline gap-2 text-mist-500 hover:underline"><span aria-hidden="true">📚</span><span class="min-w-0">Wiktionary (English) via Kaikki · noun</span></a></li>
+    <li><a href="#card-wiktionary-verb" class="flex items-baseline gap-2 text-mist-500 hover:underline"><span aria-hidden="true">📚</span><span class="min-w-0">Wiktionary (English) via Kaikki · verb</span></a></li>
+    <li><a href="#card-wikipedia" class="flex items-baseline gap-2 text-mist-500 hover:underline"><span aria-hidden="true">📚</span><span class="min-w-0">Wikipedia (English)</span></a></li>
+    <li><a href="#card-wiktionary-name" class="flex items-baseline gap-2 text-mist-500 hover:underline"><span aria-hidden="true">📚</span><span class="min-w-0">Wiktionary (English) via Kaikki · name</span></a></li>
+  </ul>
+</nav>
+    <div class="mt-4 border-t border-mist-950/10 pt-3 max-lg:hidden dark:border-white/10"><section id="related-verb" class="">
+  <h2 class="text-base/8 font-medium text-mist-950 dark:text-white">Related words <span class="font-normal text-mist-500">· verb</span></h2>
+  <div class="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+    <span class="w-20 shrink-0 text-base/7 text-mist-500 sm:text-sm/7">similar</span>
+    <a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">adore</a><a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">care for</a><a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">cherish</a><a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">cling to</a><a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">dote</a><a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">enjoy</a><a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">fancy</a><a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">go to bed with</a><a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">sleep with</a>
+    
+  </div><div class="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+    <span class="w-20 shrink-0 text-base/7 text-mist-500 sm:text-sm/7">opposite</span>
+    <a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">despise</a><a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">fear</a><a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">hate</a>
+    
+  </div><div class="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+    <span class="w-20 shrink-0 text-base/7 text-mist-500 sm:text-sm/7">broader</span>
+    <a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">affect</a><a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">desire</a><a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">like</a>
+    
+  </div><div class="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+    <span class="w-20 shrink-0 text-base/7 text-mist-500 sm:text-sm/7">narrower</span>
+    <a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">worship</a><a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">worship the ground someone walks on</a>
+    
+  </div><div class="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+    <span class="w-20 shrink-0 text-base/7 text-mist-500 sm:text-sm/7">family</span>
+    <a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">God love someone</a><a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">I have to love you and leave you</a><a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">I love you</a><a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">I'm in love with you</a><a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">Lord love a duck</a><a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">Lord love you</a><a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">Persian love</a><a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">Queen of Love</a><a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">all is fair in love and war</a><a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">all's fair in love and war</a><a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">all-loving</a><a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">antilove</a>
+    <details class="min-w-0 max-w-full"><summary class="cursor-pointer text-base/7 text-mist-500 sm:text-sm/7">+269</summary></details>
+  </div>
+</section>
+<section id="related-name" class="">
+  <h2 class="text-base/8 font-medium text-mist-950 dark:text-white">Related words <span class="font-normal text-mist-500">· name</span></h2>
+  <div class="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+    <span class="w-20 shrink-0 text-base/7 text-mist-500 sm:text-sm/7">family</span>
+    <a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">Love County</a>
+    
+  </div>
+</section></div>
+  </aside>
+  <div class="min-w-0 flex-1 max-lg:mt-8">
+    <nav id="section-nav" aria-label="Sections" class="-mx-6 border-b border-mist-950/10 bg-mist-100/95 px-6 backdrop-blur lg:-mx-10 lg:px-10 dark:border-white/10 dark:bg-mist-950/95">
+  <ul role="list" class="flex gap-5 overflow-x-auto py-2.5 text-base/7 whitespace-nowrap sm:text-sm/7">
+    <li class="text-mist-950 dark:text-white"><a href="#definitions" class="hover:text-mist-950 dark:hover:text-white">Definitions <span class="tabular-nums text-mist-400">9</span></a></li>
+    <li class="text-mist-500"><a href="#in-culture" class="hover:text-mist-950 dark:hover:text-white">Out in the world</a></li>
+    <li class="text-mist-500"><a href="#related-verb" class="hover:text-mist-950 dark:hover:text-white">Related</a></li>
+    <li class="text-mist-500"><a href="#thing" class="hover:text-mist-950 dark:hover:text-white">The thing</a></li>
+  </ul>
+</nav>
+    <aside id="disambiguation" class="mb-6 rounded-lg border border-mist-950/10 p-4 text-base/7 sm:text-sm/7 dark:border-white/10">
+  <p class="text-mist-500">“love” is the slug of more than one word. This page shows them together; each has an address of its own.</p>
+  <ul role="list" class="mt-2 space-y-1"><li><a href="#" class="font-medium text-mist-950 hover:underline dark:text-white">love · noun</a></li><li><a href="#" class="font-medium text-mist-950 hover:underline dark:text-white">Love · name</a></li><li><a href="#" class="font-medium text-mist-950 hover:underline dark:text-white">LoVe · name</a></li></ul>
+</aside>
+    <section id="definitions" class="mt-6"><div class="space-y-4">
+      <div class="rounded-2xl border-l-2 border-amber-600/50 bg-amber-50/60 py-5 pr-6 pl-6 dark:bg-amber-950/20"><details id="card-johnson-noun" class="group/row " open>
+  <summary class="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+    <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+      <h3 class="text-base/8 font-medium text-amber-700 dark:text-amber-400"><span aria-hidden="true" class="mr-1">👑</span>Samuel Johnson<span class="font-normal text-mist-500"> · 1755</span><span class="font-normal text-mist-500"> · noun</span></h3>
+      <span class="text-base/7 tabular-nums text-mist-500 sm:text-sm/7">4,727 characters <span class="underline underline-offset-4 group-open/row:hidden">open</span><span class="underline underline-offset-4 not-group-open/row:hidden">close</span></span>
+    </div>
+    <p class="mt-1 line-clamp-2 max-w-[68ch] text-base/7 text-mist-500 group-open/row:hidden sm:text-sm/7">1. The passion between the sexes.
+Hearken to the birds love-learned song,
+The dewie leaves among! Spenser's Epithalam.
+While idly I stood looking on,
+I found th' effect of love in </p>
+  </summary>
+  <div class="mt-2">
+    <div id="card-johnson-noun-entry-0" class="mt-4 max-w-[68ch]">
+  <div class="space-y-4 text-base/7 text-mist-700 sm:text-sm/7 dark:text-mist-400 [&_a]:font-semibold [&_a]:text-mist-950 [&_a]:underline [&_a]:underline-offset-4 dark:[&_a]:text-white [&_h2]:text-base/8 [&_h2]:font-medium [&_h2]:text-mist-950 [&_h2]:not-first:mt-8 dark:[&_h2]:text-white [&_li]:pl-2 [&_ol]:list-decimal [&_ol]:pl-6 [&_strong]:font-semibold [&_strong]:text-mist-950 dark:[&_strong]:text-white [&_ul]:list-[square] [&_ul]:pl-6 [&_ul]:marker:text-mist-400 dark:[&_ul]:marker:text-mist-600 [&_blockquote]:border-l-2 [&_blockquote]:border-mist-300 [&_blockquote]:pl-4 [&_blockquote]:italic dark:[&_blockquote]:border-mist-700"><p>1. The passion between the sexes.</p><blockquote><p>Hearken to the birds love-learned song,<br>
+The dewie leaves among! Spenser's Epithalam.</p></blockquote><blockquote><p>While idly I stood looking on,<br>
+I found th' effect of love in idleness. Shakespeare.</p></blockquote><blockquote><p>My tales of love were wont to weary you;<br>
+I know you joy not in a love discourse. Shakespeare.</p></blockquote><blockquote><p>What! have I 'scaped love letters in the holiday-time of<br>
+my beauty, and am I now a subject for them? Shakespeare.</p></blockquote></div>
+  <details class="group/entry mt-2">
+    <summary class="w-fit cursor-pointer list-none text-base/7 text-mist-500 hover:text-mist-950 sm:text-sm/7 dark:hover:text-white [&::-webkit-details-marker]:hidden">
+      <span class="underline underline-offset-4 group-open/entry:hidden">Read the rest of this entry · 4,217 characters</span>
+      <span class="underline underline-offset-4 not-group-open/entry:hidden">Fold this entry</span>
+    </summary>
+    <div class="mt-4 space-y-4 text-base/7 text-mist-700 sm:text-sm/7 dark:text-mist-400 [&_a]:font-semibold [&_a]:text-mist-950 [&_a]:underline [&_a]:underline-offset-4 dark:[&_a]:text-white [&_h2]:text-base/8 [&_h2]:font-medium [&_h2]:text-mist-950 [&_h2]:not-first:mt-8 dark:[&_h2]:text-white [&_li]:pl-2 [&_ol]:list-decimal [&_ol]:pl-6 [&_strong]:font-semibold [&_strong]:text-mist-950 dark:[&_strong]:text-white [&_ul]:list-[square] [&_ul]:pl-6 [&_ul]:marker:text-mist-400 dark:[&_ul]:marker:text-mist-600 [&_blockquote]:border-l-2 [&_blockquote]:border-mist-300 [&_blockquote]:pl-4 [&_blockquote]:italic dark:[&_blockquote]:border-mist-700"><blockquote><p>I look'd upon her with a soldier's eye,<br>
+That lik'd, but had a rougher task in hand<br>
+Than to drive liking to the name of love. Shakespeare.</p></blockquote><blockquote><p>What need a vermil-tinctur'd lip for that,<br>
+Love-darting eyes, or tresses like the morn. Milton.</p></blockquote><blockquote><p>Love quarrels oft in pleasing concord end,<br>
+Not wedlock treachery, endang'ring life. Milton's Agon.</p></blockquote><blockquote><p>A love potion works more by the strength of charm than<br>
+nature. Collier on Popularity.</p></blockquote><blockquote><p>You know y' are in my pow'r by making love. Dryden.</p></blockquote><blockquote><p>Let mutual joys our mutual trust combine,<br>
+And love, and love-born confidence be thine. Pope.</p></blockquote><blockquote><p>Cold is that breast which warm'd the world before,<br>
+And these love-darting eyes must roll no more. Pope.</p></blockquote><p>2. Kindness; good-will; friendship.</p><blockquote><p>Death grin on me, and I will think thou smil'st,<br>
+And kiss me as thy wife; misery's love,<br>
+O come to me! Shakespeare's King John.</p></blockquote><blockquote><p>What love, think'st thou, I sue so much to get?<br>
+My love till death, my humble thanks, my prayers;<br>
+That love which virtue begs, and virtue grants. Shakesp.</p></blockquote><blockquote><p>God brought Daniel into favour and tender love with the<br>
+prince. Dan. i. 9.</p></blockquote><blockquote><p>The one preach Christ of contention, but the other of<br>
+love. Phil. i. 17.</p></blockquote><blockquote><p>By this shall all men know that ye are my disciples, if ye<br>
+have love one to another. Rom. xiii. 35.</p></blockquote><blockquote><p>Unwearied have we spent the nights,<br>
+Till the Ledean stars, so fam'd for love,<br>
+Wonder'd at us from above. Cowley.</p></blockquote><p>3. Courtship.</p><blockquote><p>Demetrius<br>
+Made love to Nedar's daughter Helena,<br>
+And won her soul. Shakes. Midsummer Night's Dream.</p></blockquote><blockquote><p>If you will marry make your loves to me,<br>
+My lady is bespoke. Shakespeare's King Lear.</p></blockquote><blockquote><p>I to your assistance do make love,<br>
+Masking the business from the common eye. Shakespeare.</p></blockquote><blockquote><p>The enquiry of truth, which is the love-making or wooing<br>
+of it; the knowledge of truth, the preference of it; and the<br>
+belief of truth, the enjoying of it, is the sovereign good of<br>
+human nature. Bacon's Essays.</p></blockquote><p>4. Tenderness; parental care.</p><blockquote><p>No religion that ever, was so fully represents the goodness<br>
+of God, and his tender love to mankind, which is the most<br>
+powerful argument to the love of God. Tillotson's Sermons.</p></blockquote><p>5. Liking; inclination to: as, the love of one's country.</p><p>6. Object beloved.</p><blockquote><p>Open the temple gates unto my love. Spenser.</p></blockquote><blockquote><p>If that the world and love were young,<br>
+And truth in every shepherd's tongue;<br>
+These pretty pleasures might me move,<br>
+To live with thee, and be thy love. Shakespeare.</p></blockquote><blockquote><p>The banish'd never hopes his love to see. Dryden.</p></blockquote><blockquote><p>The lover and the love of human kind. Pope.</p></blockquote><p>7. Lewdness.</p><blockquote><p>He is not lolling on a lewd love bed,<br>
+But on his knees at meditation. Shakesp. Rich. III.</p></blockquote><p>8. Unreasonable liking.</p><blockquote><p>The love to sin makes a man sin against his own reason.<br>
+Taylor's holy living.</p></blockquote><blockquote><p>Men in love with their opinions may not only suppose<br>
+what is in question, but allege wrong matter of fact. Locke.</p></blockquote><p>9. Fondness; concord.</p><blockquote><p>Come love and health to all!<br>
+Then I'll sit down: give me some wine; fill full. Shak.</p></blockquote><blockquote><p>Shall I come unto you with a rod, or in love, and in the<br>
+spirit of meekness? 1 Cor. iv. 21.</p></blockquote><p>10. Principle of union.</p><blockquote><p>Love is the great instrument of nature, the bond and cement of society, the spirit and spring of the universe: love is<br>
+such an affection as cannot so properly be said to be in the<br>
+soul, as the soul to be in that: it is the whole man wrapt<br>
+up into one desire. South's Sermons.</p></blockquote><p>11. Picturesque representation of love.</p><blockquote><p>The lovely babe was born with ev'ry grace:<br>
+Such was his form as painters, when they show<br>
+Their utmost art, on naked loves bestow. Dryden's Ovid.</p></blockquote><p>12. A word of endearment.</p><blockquote><p>'Tis no dishonour, trust me, love, 'tis none;<br>
+I would die for thee. Dryden's Don Sebastian.</p></blockquote><p>13. Due reverence to God.</p><blockquote><p>I know that you have not the love of God in you. John.</p></blockquote><blockquote><p>Love is of two sorts, of friendship and of desire; the one<br>
+betwixt friends, the other betwixt lovers; the one a rational,<br>
+the other a sensitive love: so our love of God consists of two<br>
+parts, as esteeming of God, and desiring of him. Hammond.</p></blockquote><blockquote><p>The love of God makes a man chaste without the laborious arts of fasting, and exterior disciplines; he reaches at<br>
+glory without any other arms but those of love. Taylor.</p></blockquote><p>14.</p><blockquote><p>A kind of thin silk stuff. Ains.</p></blockquote><blockquote><p>This leaf held near the eye, and obverted to the light,<br>
+appeared so full of pores, with such a transparency as that of<br>
+a sieve, a piece of cypress, or lovehood. Boyle on Colours.</p></blockquote></div>
+  </details>
+</div>
+    
+    <p class="mt-3 text-base/7 sm:text-sm/7"><a href="https://leme.library.utoronto.ca/lexicons/1345/" class="text-mist-500 underline underline-offset-4 hover:text-mist-950 dark:hover:text-white">Read this at Samuel Johnson ↗</a></p>
+  </div>
+</details></div>
+      <div class="rounded-2xl border-l-2 border-amber-600/50 bg-amber-50/60 py-5 pr-6 pl-6 dark:bg-amber-950/20"><details id="card-johnson-verb" class="group/row " open>
+  <summary class="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+    <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+      <h3 class="text-base/8 font-medium text-amber-700 dark:text-amber-400"><span aria-hidden="true" class="mr-1">👑</span>Samuel Johnson<span class="font-normal text-mist-500"> · 1755</span><span class="font-normal text-mist-500"> · verb</span></h3>
+      <span class="text-base/7 tabular-nums text-mist-500 sm:text-sm/7">1,366 characters <span class="underline underline-offset-4 group-open/row:hidden">open</span><span class="underline underline-offset-4 not-group-open/row:hidden">close</span></span>
+    </div>
+    <p class="mt-1 line-clamp-2 max-w-[68ch] text-base/7 text-mist-500 group-open/row:hidden sm:text-sm/7">1. To regard with passionate affection, as that of one sex to the other.
+Good shepherd, tell this youth what 'tis to love.
+—It is to be made all of sighs and tears;
+It is to be mad</p>
+  </summary>
+  <div class="mt-2">
+    <div id="card-johnson-verb-entry-0" class="mt-4 max-w-[68ch]">
+  <div class="space-y-4 text-base/7 text-mist-700 sm:text-sm/7 dark:text-mist-400 [&_a]:font-semibold [&_a]:text-mist-950 [&_a]:underline [&_a]:underline-offset-4 dark:[&_a]:text-white [&_h2]:text-base/8 [&_h2]:font-medium [&_h2]:text-mist-950 [&_h2]:not-first:mt-8 dark:[&_h2]:text-white [&_li]:pl-2 [&_ol]:list-decimal [&_ol]:pl-6 [&_strong]:font-semibold [&_strong]:text-mist-950 dark:[&_strong]:text-white [&_ul]:list-[square] [&_ul]:pl-6 [&_ul]:marker:text-mist-400 dark:[&_ul]:marker:text-mist-600 [&_blockquote]:border-l-2 [&_blockquote]:border-mist-300 [&_blockquote]:pl-4 [&_blockquote]:italic dark:[&_blockquote]:border-mist-700"><p>1. To regard with passionate affection, as that of one sex to the other.</p><blockquote><p>Good shepherd, tell this youth what 'tis to love.<br>
+—It is to be made all of sighs and tears;<br>
+It is to be made all of saith and service;<br>
+It is to be all made of fantasy,<br>
+All made of passion, and all made of wishes;<br>
+All adoration, duty, and obedience;<br>
+All humbleness, all patience, all impatience,<br>
+All purity, all trial, all observance. Shakesp. As you like it.</p></blockquote></div>
+  <details class="group/entry mt-2">
+    <summary class="w-fit cursor-pointer list-none text-base/7 text-mist-500 hover:text-mist-950 sm:text-sm/7 dark:hover:text-white [&::-webkit-details-marker]:hidden">
+      <span class="underline underline-offset-4 group-open/entry:hidden">Read the rest of this entry · 910 characters</span>
+      <span class="underline underline-offset-4 not-group-open/entry:hidden">Fold this entry</span>
+    </summary>
+    <div class="mt-4 space-y-4 text-base/7 text-mist-700 sm:text-sm/7 dark:text-mist-400 [&_a]:font-semibold [&_a]:text-mist-950 [&_a]:underline [&_a]:underline-offset-4 dark:[&_a]:text-white [&_h2]:text-base/8 [&_h2]:font-medium [&_h2]:text-mist-950 [&_h2]:not-first:mt-8 dark:[&_h2]:text-white [&_li]:pl-2 [&_ol]:list-decimal [&_ol]:pl-6 [&_strong]:font-semibold [&_strong]:text-mist-950 dark:[&_strong]:text-white [&_ul]:list-[square] [&_ul]:pl-6 [&_ul]:marker:text-mist-400 dark:[&_ul]:marker:text-mist-600 [&_blockquote]:border-l-2 [&_blockquote]:border-mist-300 [&_blockquote]:pl-4 [&_blockquote]:italic dark:[&_blockquote]:border-mist-700"><blockquote><p>I could not love I'm sure<br>
+One who in love were wise. Cowley.</p></blockquote><blockquote><p>The jealous man wishes himself a kind of deity to the person he loves; he would be the only employment of her<br>
+thoughts. Addison's Spectator, N. 170.</p></blockquote><p>2. To regard with the affection of a friend.</p><blockquote><p>None but his brethren he, and sisters, knew,<br>
+Whom the kind youth prefer'd to me,<br>
+And much above myself I lov'd them too. Cowley.</p></blockquote><p>3. To regard with parental tenderness.</p><blockquote><p>He that loveth me shall be loved of my father, and I will<br>
+love him, and will manifest myself to him. John xiv. 21.</p></blockquote><p>4. To be pleased with.</p><blockquote><p>Fish used to salt water delight more in fresh: we see that<br>
+salmons and smelts love to get into rivers, though against the<br>
+stream. Bacon's Nat. Hist. No. 703.</p></blockquote><blockquote><p>Wit, eloquence, and poetry,<br>
+Arts which I lov'd. Cowley.</p></blockquote><blockquote><p>He lov'd my worthless rhimes. Cowley.</p></blockquote><p>5. To regard with reverent unwillingness to offend.</p><blockquote><p>Love the Lord thy God with all thine heart. Deut. vi. 5.</p></blockquote></div>
+  </details>
+</div>
+    
+    <p class="mt-3 text-base/7 sm:text-sm/7"><a href="https://leme.library.utoronto.ca/lexicons/1345/" class="text-mist-500 underline underline-offset-4 hover:text-mist-950 dark:hover:text-white">Read this at Samuel Johnson ↗</a></p>
+  </div>
+</details></div>
+      <div class="rounded-2xl border-l-2 border-amber-600/50 bg-amber-50/60 py-5 pr-6 pl-6 dark:bg-amber-950/20"><details id="card-bierce" class="group/row " open>
+  <summary class="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+    <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+      <h3 class="text-base/8 font-medium text-amber-700 dark:text-amber-400"><span aria-hidden="true" class="mr-1">👑</span>Ambrose Bierce<span class="font-normal text-mist-500"> · 1911</span><span class="font-normal text-mist-500"> · noun</span></h3>
+      <span class="text-base/7 tabular-nums text-mist-500 sm:text-sm/7">428 characters <span class="underline underline-offset-4 group-open/row:hidden">open</span><span class="underline underline-offset-4 not-group-open/row:hidden">close</span></span>
+    </div>
+    <p class="mt-1 line-clamp-2 max-w-[68ch] text-base/7 text-mist-500 group-open/row:hidden sm:text-sm/7">A temporary insanity curable by marriage or by removal of the patient from the influences under which he incurred the disorder. This disease, like caries and many other ailments, i</p>
+  </summary>
+  <div class="mt-2">
+    <div id="card-bierce-entry-0" class="mt-4 max-w-[68ch] space-y-4 text-base/7 text-mist-700 sm:text-sm/7 dark:text-mist-400 [&_a]:font-semibold [&_a]:text-mist-950 [&_a]:underline [&_a]:underline-offset-4 dark:[&_a]:text-white [&_h2]:text-base/8 [&_h2]:font-medium [&_h2]:text-mist-950 [&_h2]:not-first:mt-8 dark:[&_h2]:text-white [&_li]:pl-2 [&_ol]:list-decimal [&_ol]:pl-6 [&_strong]:font-semibold [&_strong]:text-mist-950 dark:[&_strong]:text-white [&_ul]:list-[square] [&_ul]:pl-6 [&_ul]:marker:text-mist-400 dark:[&_ul]:marker:text-mist-600 [&_blockquote]:border-l-2 [&_blockquote]:border-mist-300 [&_blockquote]:pl-4 [&_blockquote]:italic dark:[&_blockquote]:border-mist-700">
+  <p>A temporary insanity curable by marriage or by removal of the patient from the influences under which he incurred the disorder. This disease, like <em>caries</em> and many other ailments, is prevalent only among civilized races living under artificial conditions; barbarous nations breathing pure air and eating simple food enjoy immunity from its ravages. It is sometimes fatal, but more frequently to the physician than to the patient.</p>
+</div>
+    
+    <p class="mt-3 text-base/7 sm:text-sm/7"><a href="https://www.gutenberg.org/files/972/972-h/972-h.htm#link2H_4_0014" class="text-mist-500 underline underline-offset-4 hover:text-mist-950 dark:hover:text-white">Read this at Ambrose Bierce ↗</a></p>
+  </div>
+</details></div>
+    </div>
+    <div class="mt-8">
+      <h2 class="text-base/8 font-medium text-mist-500">Reference sources</h2>
+      <div class="mt-2 divide-y divide-mist-950/10 border-y border-mist-950/10 dark:divide-white/10 dark:border-white/10">
+        <details id="card-wordnet-noun" class="group/row py-4">
+  <summary class="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+    <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+      <h3 class="text-base/8 font-medium text-mist-700 dark:text-mist-400"><span aria-hidden="true" class="mr-1">📚</span>Open English WordNet 2025<span class="font-normal text-mist-500"> · 2025</span><span class="font-normal text-mist-500"> · noun</span></h3>
+      <span class="text-base/7 tabular-nums text-mist-500 sm:text-sm/7">6 senses <span class="underline underline-offset-4 group-open/row:hidden">open</span><span class="underline underline-offset-4 not-group-open/row:hidden">close</span></span>
+    </div>
+    <p class="mt-1 line-clamp-2 max-w-[68ch] text-base/7 text-mist-500 group-open/row:hidden sm:text-sm/7">any object of warm affection or devotion</p>
+  </summary>
+  <div class="mt-2">
+    
+    <div id="card-wordnet-noun-group-0" class="mt-4">
+  <ol role="list" class="space-y-1 text-base/7 text-mist-700 sm:text-sm/7 dark:text-mist-400"><li class="flex gap-3">
+      <span class="shrink-0 text-mist-400">●</span>
+      <div class="min-w-0">
+        <span>any object of warm affection or devotion</span>
+        
+      </div>
+    </li></ol>
+  <p class="mt-2 flex flex-wrap items-center gap-x-2 text-base/7 sm:text-sm/7"><span class="text-mist-500">broader</span><a href="#" class="text-mist-500 hover:underline">object</a><span aria-hidden="true" class="text-mist-400">›</span><a href="#" class="text-mist-500 hover:underline">content</a><span aria-hidden="true" class="text-mist-400">›</span><a href="#" class="text-mist-500 hover:underline">cognition</a><span aria-hidden="true" class="text-mist-400">›</span><a href="#" class="text-mist-500 hover:underline">psychological feature</a><span aria-hidden="true" class="text-mist-400">›</span><a href="#" class="text-mist-500 hover:underline">abstraction</a><span aria-hidden="true" class="text-mist-400">›</span><a href="#" class="text-mist-500 hover:underline">entity</a></p>
+</div>
+<div id="card-wordnet-noun-group-1" class="mt-4">
+  <ol role="list" class="space-y-1 text-base/7 text-mist-700 sm:text-sm/7 dark:text-mist-400"><li class="flex gap-3">
+      <span class="shrink-0 text-mist-400">●</span>
+      <div class="min-w-0">
+        <span>a deep feeling of sexual desire and attraction</span>
+        
+      </div>
+    </li></ol>
+  <p class="mt-2 flex flex-wrap items-center gap-x-2 text-base/7 sm:text-sm/7"><span class="text-mist-500">broader</span><a href="#" class="text-mist-500 hover:underline">sexual desire</a><span aria-hidden="true" class="text-mist-400">›</span><a href="#" class="text-mist-500 hover:underline">desire</a><span aria-hidden="true" class="text-mist-400">›</span><a href="#" class="text-mist-500 hover:underline">feeling</a><span aria-hidden="true" class="text-mist-400">›</span><a href="#" class="text-mist-500 hover:underline">state</a><span aria-hidden="true" class="text-mist-400">›</span><a href="#" class="text-mist-500 hover:underline">attribute</a><span aria-hidden="true" class="text-mist-400">›</span><a href="#" class="text-mist-500 hover:underline">abstraction</a><span aria-hidden="true" class="text-mist-400">›</span><a href="#" class="text-mist-500 hover:underline">entity</a></p>
+</div>
+<div id="card-wordnet-noun-group-2" class="mt-4">
+  <ol role="list" class="space-y-1 text-base/7 text-mist-700 sm:text-sm/7 dark:text-mist-400"><li class="flex gap-3">
+      <span class="shrink-0 text-mist-400">●</span>
+      <div class="min-w-0">
+        <span>a strong positive emotion of regard and affection</span>
+        <div class="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+    <span class="w-20 shrink-0 text-base/7 text-mist-500 sm:text-sm/7">narrower</span>
+    <a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">adoration</a>
+    <a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">agape</a>
+    <a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">amorousness</a>
+    <a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">ardor</a>
+    <a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">benevolence</a>
+    <a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">calf love</a>
+    <a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">caring</a>
+    <a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">devotedness</a>
+    <a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">filial love</a>
+    <a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">heartstrings</a>
+    <a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">loyalty</a>
+    
+  </div>
+      </div>
+    </li></ol>
+  <p class="mt-2 flex flex-wrap items-center gap-x-2 text-base/7 sm:text-sm/7"><span class="text-mist-500">broader</span><a href="#" class="text-mist-500 hover:underline">emotion</a><span aria-hidden="true" class="text-mist-400">›</span><a href="#" class="text-mist-500 hover:underline">feeling</a><span aria-hidden="true" class="text-mist-400">›</span><a href="#" class="text-mist-500 hover:underline">state</a><span aria-hidden="true" class="text-mist-400">›</span><a href="#" class="text-mist-500 hover:underline">attribute</a><span aria-hidden="true" class="text-mist-400">›</span><a href="#" class="text-mist-500 hover:underline">abstraction</a><span aria-hidden="true" class="text-mist-400">›</span><a href="#" class="text-mist-500 hover:underline">entity</a></p>
+</div><details class="mt-3"><summary class="w-fit cursor-pointer text-base/7 text-mist-500 underline underline-offset-4 hover:text-mist-950 sm:text-sm/7 dark:hover:text-white">3 more sense groups from this source · 3 senses</summary><div id="card-wordnet-noun-group-3" class="mt-4">
+  <ol role="list" class="space-y-1 text-base/7 text-mist-700 sm:text-sm/7 dark:text-mist-400"><li class="flex gap-3">
+      <span class="shrink-0 text-mist-400">●</span>
+      <div class="min-w-0">
+        <span>a score of zero in tennis or squash</span>
+        
+      </div>
+    </li></ol>
+  <p class="mt-2 flex flex-wrap items-center gap-x-2 text-base/7 sm:text-sm/7"><span class="text-mist-500">broader</span><a href="#" class="text-mist-500 hover:underline">score</a><span aria-hidden="true" class="text-mist-400">›</span><a href="#" class="text-mist-500 hover:underline">number</a><span aria-hidden="true" class="text-mist-400">›</span><a href="#" class="text-mist-500 hover:underline">definite quantity</a><span aria-hidden="true" class="text-mist-400">›</span><a href="#" class="text-mist-500 hover:underline">measure</a><span aria-hidden="true" class="text-mist-400">›</span><a href="#" class="text-mist-500 hover:underline">abstraction</a><span aria-hidden="true" class="text-mist-400">›</span><a href="#" class="text-mist-500 hover:underline">entity</a></p>
+</div>
+<div id="card-wordnet-noun-group-4" class="mt-4">
+  <ol role="list" class="space-y-1 text-base/7 text-mist-700 sm:text-sm/7 dark:text-mist-400"><li class="flex gap-3">
+      <span class="shrink-0 text-mist-400">●</span>
+      <div class="min-w-0">
+        <span>sexual activities (often including sexual intercourse) between two people</span>
+        <div class="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+    <span class="w-20 shrink-0 text-base/7 text-mist-500 sm:text-sm/7">related</span>
+    <a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">sex</a>
+    
+  </div>
+      </div>
+    </li></ol>
+  <p class="mt-2 flex flex-wrap items-center gap-x-2 text-base/7 sm:text-sm/7"><span class="text-mist-500">broader</span><a href="#" class="text-mist-500 hover:underline">sexual activity</a><span aria-hidden="true" class="text-mist-400">›</span><a href="#" class="text-mist-500 hover:underline">bodily process</a><span aria-hidden="true" class="text-mist-400">›</span><a href="#" class="text-mist-500 hover:underline">organic process</a><span aria-hidden="true" class="text-mist-400">›</span><a href="#" class="text-mist-500 hover:underline">process</a><span aria-hidden="true" class="text-mist-400">›</span><a href="#" class="text-mist-500 hover:underline">physical entity</a><span aria-hidden="true" class="text-mist-400">›</span><a href="#" class="text-mist-500 hover:underline">entity</a></p>
+</div>
+<div id="card-wordnet-noun-group-5" class="mt-4">
+  <ol role="list" class="space-y-1 text-base/7 text-mist-700 sm:text-sm/7 dark:text-mist-400"><li class="flex gap-3">
+      <span class="shrink-0 text-mist-400">●</span>
+      <div class="min-w-0">
+        <span>a beloved person; used as terms of endearment</span>
+        
+      </div>
+    </li></ol>
+  <p class="mt-2 flex flex-wrap items-center gap-x-2 text-base/7 sm:text-sm/7"><span class="text-mist-500">broader</span><a href="#" class="text-mist-500 hover:underline">lover</a><span aria-hidden="true" class="text-mist-400">›</span><a href="#" class="text-mist-500 hover:underline">actor</a><span aria-hidden="true" class="text-mist-400">›</span><a href="#" class="text-mist-500 hover:underline">causal agent</a><span aria-hidden="true" class="text-mist-400">›</span><a href="#" class="text-mist-500 hover:underline">physical entity</a><span aria-hidden="true" class="text-mist-400">›</span><a href="#" class="text-mist-500 hover:underline">entity</a></p>
+</div></details>
+    <p class="mt-3 text-base/7 sm:text-sm/7"><a href="https://en-word.net/id/oewn-07503480-n" class="text-mist-500 underline underline-offset-4 hover:text-mist-950 dark:hover:text-white">Read this at Open English WordNet 2025 ↗</a></p>
+  </div>
+</details>
+        <details id="card-wordnet-verb" class="group/row py-4">
+  <summary class="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+    <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+      <h3 class="text-base/8 font-medium text-mist-700 dark:text-mist-400"><span aria-hidden="true" class="mr-1">📚</span>Open English WordNet 2025<span class="font-normal text-mist-500"> · 2025</span><span class="font-normal text-mist-500"> · verb</span></h3>
+      <span class="text-base/7 tabular-nums text-mist-500 sm:text-sm/7">4 senses <span class="underline underline-offset-4 group-open/row:hidden">open</span><span class="underline underline-offset-4 not-group-open/row:hidden">close</span></span>
+    </div>
+    <p class="mt-1 line-clamp-2 max-w-[68ch] text-base/7 text-mist-500 group-open/row:hidden sm:text-sm/7">have a great affection or liking for</p>
+  </summary>
+  <div class="mt-2">
+    
+    <div id="card-wordnet-verb-group-0" class="mt-4">
+  <ol role="list" class="space-y-1 text-base/7 text-mist-700 sm:text-sm/7 dark:text-mist-400"><li class="flex gap-3">
+      <span class="shrink-0 text-mist-400">●</span>
+      <div class="min-w-0">
+        <span>have a great affection or liking for</span>
+        <div class="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+    <span class="w-20 shrink-0 text-base/7 text-mist-500 sm:text-sm/7">narrower</span>
+    <a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">adore</a>
+    <a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">care for</a>
+    <a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">dote</a>
+    <a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">fangirl</a>
+    <a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">love</a>
+    
+  </div>
+      </div>
+    </li></ol>
+  <p class="mt-2 flex flex-wrap items-center gap-x-2 text-base/7 sm:text-sm/7"><span class="text-mist-500">broader</span><a href="#" class="text-mist-500 hover:underline">feel</a><span aria-hidden="true" class="text-mist-400">›</span><a href="#" class="text-mist-500 hover:underline">perceive</a><span aria-hidden="true" class="text-mist-400">›</span><a href="#" class="text-mist-500 hover:underline">learn</a><span aria-hidden="true" class="text-mist-400">›</span><a href="#" class="text-mist-500 hover:underline">act</a></p>
+</div>
+<div id="card-wordnet-verb-group-1" class="mt-4">
+  <ol role="list" class="space-y-1 text-base/7 text-mist-700 sm:text-sm/7 dark:text-mist-400"><li class="flex gap-3">
+      <span class="shrink-0 text-mist-400">●</span>
+      <div class="min-w-0">
+        <span>be enamored or in love with</span>
+        <div class="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+    <span class="w-20 shrink-0 text-base/7 text-mist-500 sm:text-sm/7">narrower</span>
+    <a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">romance</a>
+    
+  </div>
+      </div>
+    </li></ol>
+  <p class="mt-2 flex flex-wrap items-center gap-x-2 text-base/7 sm:text-sm/7"><span class="text-mist-500">broader</span><a href="#" class="text-mist-500 hover:underline">love</a><span aria-hidden="true" class="text-mist-400">›</span><a href="#" class="text-mist-500 hover:underline">feel</a><span aria-hidden="true" class="text-mist-400">›</span><a href="#" class="text-mist-500 hover:underline">perceive</a><span aria-hidden="true" class="text-mist-400">›</span><a href="#" class="text-mist-500 hover:underline">learn</a><span aria-hidden="true" class="text-mist-400">›</span><a href="#" class="text-mist-500 hover:underline">act</a></p>
+</div>
+<div id="card-wordnet-verb-group-2" class="mt-4">
+  <ol role="list" class="space-y-1 text-base/7 text-mist-700 sm:text-sm/7 dark:text-mist-400"><li class="flex gap-3">
+      <span class="shrink-0 text-mist-400">●</span>
+      <div class="min-w-0">
+        <span>get pleasure from</span>
+        <div class="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+    <span class="w-20 shrink-0 text-base/7 text-mist-500 sm:text-sm/7">narrower</span>
+    <a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">bump</a>
+    <a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">get off</a>
+    
+  </div>
+      </div>
+    </li></ol>
+  <p class="mt-2 flex flex-wrap items-center gap-x-2 text-base/7 sm:text-sm/7"><span class="text-mist-500">broader</span><a href="#" class="text-mist-500 hover:underline">like</a><span aria-hidden="true" class="text-mist-400">›</span><a href="#" class="text-mist-500 hover:underline">feel</a><span aria-hidden="true" class="text-mist-400">›</span><a href="#" class="text-mist-500 hover:underline">perceive</a><span aria-hidden="true" class="text-mist-400">›</span><a href="#" class="text-mist-500 hover:underline">learn</a><span aria-hidden="true" class="text-mist-400">›</span><a href="#" class="text-mist-500 hover:underline">act</a></p>
+</div><details class="mt-3"><summary class="w-fit cursor-pointer text-base/7 text-mist-500 underline underline-offset-4 hover:text-mist-950 sm:text-sm/7 dark:hover:text-white">1 more sense group from this source · 1 senses</summary><div id="card-wordnet-verb-group-3" class="mt-4">
+  <ol role="list" class="space-y-1 text-base/7 text-mist-700 sm:text-sm/7 dark:text-mist-400"><li class="flex gap-3">
+      <span class="shrink-0 text-mist-400">●</span>
+      <div class="min-w-0">
+        <span>have sexual intercourse with</span>
+        <div class="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+    <span class="w-20 shrink-0 text-base/7 text-mist-500 sm:text-sm/7">narrower</span>
+    <a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">fornicate</a>
+    <a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">have</a>
+    <a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">pussyfuck</a>
+    
+  </div><div class="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+    <span class="w-20 shrink-0 text-base/7 text-mist-500 sm:text-sm/7">related</span>
+    <a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">dirty word</a>
+    <a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">make out</a>
+    
+  </div>
+      </div>
+    </li></ol>
+  <p class="mt-2 flex flex-wrap items-center gap-x-2 text-base/7 sm:text-sm/7"><span class="text-mist-500">broader</span><a href="#" class="text-mist-500 hover:underline">copulate</a><span aria-hidden="true" class="text-mist-400">›</span><a href="#" class="text-mist-500 hover:underline">join</a><span aria-hidden="true" class="text-mist-400">›</span><a href="#" class="text-mist-500 hover:underline">connect</a><span aria-hidden="true" class="text-mist-400">›</span><a href="#" class="text-mist-500 hover:underline">act</a></p>
+</div></details>
+    <p class="mt-3 text-base/7 sm:text-sm/7"><a href="https://en-word.net/id/oewn-01832678-v" class="text-mist-500 underline underline-offset-4 hover:text-mist-950 dark:hover:text-white">Read this at Open English WordNet 2025 ↗</a></p>
+  </div>
+</details>
+        <details id="card-wiktionary-noun" class="group/row py-4">
+  <summary class="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+    <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+      <h3 class="text-base/8 font-medium text-mist-700 dark:text-mist-400"><span aria-hidden="true" class="mr-1">📚</span>Wiktionary (English) via Kaikki<span class="font-normal text-mist-500"> · 2026</span><span class="font-normal text-mist-500"> · noun</span></h3>
+      <span class="text-base/7 tabular-nums text-mist-500 sm:text-sm/7">19 senses <span class="underline underline-offset-4 group-open/row:hidden">open</span><span class="underline underline-offset-4 not-group-open/row:hidden">close</span></span>
+    </div>
+    <p class="mt-1 line-clamp-2 max-w-[68ch] text-base/7 text-mist-500 group-open/row:hidden sm:text-sm/7">A deep caring for the existence of another. (uncountable)</p>
+  </summary>
+  <div class="mt-2">
+    
+    <div id="card-wiktionary-noun-group-0" class="mt-4">
+  <ol role="list" class="space-y-1 text-base/7 text-mist-700 sm:text-sm/7 dark:text-mist-400"><li class="flex gap-3">
+      <span class="shrink-0 text-mist-400">1</span>
+      <div class="min-w-0">
+        <span>A deep caring for the existence of another. (uncountable)</span>
+        
+      </div>
+    </li>
+<li class="flex gap-3">
+      <span class="shrink-0 text-mist-400">2</span>
+      <div class="min-w-0">
+        <span>Zero, no score. (uncountable)</span>
+        
+      </div>
+    </li>
+<li class="flex gap-3">
+      <span class="shrink-0 text-mist-400">3</span>
+      <div class="min-w-0">
+        <span>radiotelephony clear-code word for the letter L.</span>
+        <div class="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+    <span class="w-20 shrink-0 text-base/7 text-mist-500 sm:text-sm/7">similar</span>
+    <a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">Lima</a>
+    
+  </div>
+      </div>
+    </li></ol>
+  <details class="mt-1"><summary class="w-fit cursor-pointer text-base/7 text-mist-500 hover:text-mist-950 sm:text-sm/7 dark:hover:text-white">show 16 more</summary></details>
+</div>
+    <p class="mt-3 text-base/7 sm:text-sm/7"><a href="https://en.wiktionary.org/wiki/love#English" class="text-mist-500 underline underline-offset-4 hover:text-mist-950 dark:hover:text-white">Read this at Wiktionary (English) via Kaikki ↗</a></p>
+  </div>
+</details>
+        <details id="card-wiktionary-verb" class="group/row py-4">
+  <summary class="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+    <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+      <h3 class="text-base/8 font-medium text-mist-700 dark:text-mist-400"><span aria-hidden="true" class="mr-1">📚</span>Wiktionary (English) via Kaikki<span class="font-normal text-mist-500"> · 2026</span><span class="font-normal text-mist-500"> · verb</span></h3>
+      <span class="text-base/7 tabular-nums text-mist-500 sm:text-sm/7">8 senses <span class="underline underline-offset-4 group-open/row:hidden">open</span><span class="underline underline-offset-4 not-group-open/row:hidden">close</span></span>
+    </div>
+    <p class="mt-1 line-clamp-2 max-w-[68ch] text-base/7 text-mist-500 group-open/row:hidden sm:text-sm/7">To have a strong affection for (someone or something). (intransitive, sometimes, stative, transitive, usually)</p>
+  </summary>
+  <div class="mt-2">
+    
+    <div id="card-wiktionary-verb-group-0" class="mt-4">
+  <ol role="list" class="space-y-1 text-base/7 text-mist-700 sm:text-sm/7 dark:text-mist-400"><li class="flex gap-3">
+      <span class="shrink-0 text-mist-400">1</span>
+      <div class="min-w-0">
+        <span>To have a strong affection for (someone or something). (intransitive, sometimes, stative, transitive, usually)</span>
+        
+      </div>
+    </li>
+<li class="flex gap-3">
+      <span class="shrink-0 text-mist-400">2</span>
+      <div class="min-w-0">
+        <span>Alternative form of lofe (“to praise, sell”). (alt-of, alternative)</span>
+        <div class="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+    <span class="w-20 shrink-0 text-base/7 text-mist-500 sm:text-sm/7">variants</span>
+    <a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">lofe</a>
+    
+  </div>
+      </div>
+    </li>
+<li class="flex gap-3">
+      <span class="shrink-0 text-mist-400">3</span>
+      <div class="min-w-0">
+        <span>To need, thrive on. (transitive)</span>
+        
+      </div>
+    </li></ol>
+  <details class="mt-1"><summary class="w-fit cursor-pointer text-base/7 text-mist-500 hover:text-mist-950 sm:text-sm/7 dark:hover:text-white">show 5 more</summary></details>
+</div>
+    <p class="mt-3 text-base/7 sm:text-sm/7"><a href="https://en.wiktionary.org/wiki/love#English" class="text-mist-500 underline underline-offset-4 hover:text-mist-950 dark:hover:text-white">Read this at Wiktionary (English) via Kaikki ↗</a></p>
+  </div>
+</details>
+        <details id="card-wikipedia" class="group/row py-4">
+  <summary class="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+    <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+      <h3 class="text-base/8 font-medium text-mist-700 dark:text-mist-400"><span aria-hidden="true" class="mr-1">📚</span>Wikipedia (English)<span class="font-normal text-mist-500"> · 2026</span></h3>
+      <span class="text-base/7 tabular-nums text-mist-500 sm:text-sm/7">2,455 characters <span class="underline underline-offset-4 group-open/row:hidden">open</span><span class="underline underline-offset-4 not-group-open/row:hidden">close</span></span>
+    </div>
+    <p class="mt-1 line-clamp-2 max-w-[68ch] text-base/7 text-mist-500 group-open/row:hidden sm:text-sm/7">Love encompasses a range of strong and positive emotional and mental states, from the most sublime virtue or good habit, the deepest interpersonal affection, to the simplest pleasu</p>
+  </summary>
+  <div class="mt-2">
+    <div id="card-wikipedia-entry-0" class="mt-4 max-w-[68ch]">
+  <div class="space-y-4 text-base/7 text-mist-700 sm:text-sm/7 dark:text-mist-400 [&_a]:font-semibold [&_a]:text-mist-950 [&_a]:underline [&_a]:underline-offset-4 dark:[&_a]:text-white [&_h2]:text-base/8 [&_h2]:font-medium [&_h2]:text-mist-950 [&_h2]:not-first:mt-8 dark:[&_h2]:text-white [&_li]:pl-2 [&_ol]:list-decimal [&_ol]:pl-6 [&_strong]:font-semibold [&_strong]:text-mist-950 dark:[&_strong]:text-white [&_ul]:list-[square] [&_ul]:pl-6 [&_ul]:marker:text-mist-400 dark:[&_ul]:marker:text-mist-600 [&_blockquote]:border-l-2 [&_blockquote]:border-mist-300 [&_blockquote]:pl-4 [&_blockquote]:italic dark:[&_blockquote]:border-mist-700"><p>Love encompasses a range of strong and positive emotional and mental states, from the most sublime virtue or good habit, the deepest interpersonal affection, to the simplest pleasure. An example of this range of meanings is that the love of a mother differs from the love of a spouse, which differs from the love for food. Most commonly, love refers to a feeling of strong attraction and emotional attachment.<br>
+Love is considered to be both positive and negative, with its virtue representing human kindness, compassion, and affection—"the unselfish, loyal and benevolent concern for the good of another"—and its vice representing a human moral flaw akin to vanity, selfishness, amour-propre, and egotism, potentially leading people into a type of mania, obsessiveness, or codependency.</p></div>
+  <details class="group/entry mt-2">
+    <summary class="w-fit cursor-pointer list-none text-base/7 text-mist-500 hover:text-mist-950 sm:text-sm/7 dark:hover:text-white [&::-webkit-details-marker]:hidden">
+      <span class="underline underline-offset-4 group-open/entry:hidden">Read the rest of this entry · 1,669 characters</span>
+      <span class="underline underline-offset-4 not-group-open/entry:hidden">Fold this entry</span>
+    </summary>
+    <div class="mt-4 space-y-4 text-base/7 text-mist-700 sm:text-sm/7 dark:text-mist-400 [&_a]:font-semibold [&_a]:text-mist-950 [&_a]:underline [&_a]:underline-offset-4 dark:[&_a]:text-white [&_h2]:text-base/8 [&_h2]:font-medium [&_h2]:text-mist-950 [&_h2]:not-first:mt-8 dark:[&_h2]:text-white [&_li]:pl-2 [&_ol]:list-decimal [&_ol]:pl-6 [&_strong]:font-semibold [&_strong]:text-mist-950 dark:[&_strong]:text-white [&_ul]:list-[square] [&_ul]:pl-6 [&_ul]:marker:text-mist-400 dark:[&_ul]:marker:text-mist-600 [&_blockquote]:border-l-2 [&_blockquote]:border-mist-300 [&_blockquote]:pl-4 [&_blockquote]:italic dark:[&_blockquote]:border-mist-700"><p>It may also describe compassionate and affectionate actions towards other humans, oneself, or animals. In its various forms, love acts as a major facilitator of interpersonal relationships and, owing to its central psychological importance, is one of the most common themes in the creative arts. Love has been postulated to be a function that keeps human beings together against menaces and to facilitate the continuation of the species.<br>
+Ancient Greek philosophers identified six forms of love: familial love (storge), friendly love or platonic love (philia), romantic love (eros), self-love (philautia), guest love (xenia), and divine or unconditional love (agape). Modern authors have distinguished further varieties of love: unrequited love, empty love, companionate love, consummate love, infatuated love, amour de soi, and courtly love. Numerous cultures have also distinguished Ren, Yuanfen, Mamihlapinatapai, Cafuné, Kama, Bhakti, Mettā, Ishq, Chesed, Amore, Charity, Saudade (and other variants or symbioses of these states), as culturally unique words, definitions, or expressions of love in regard to specified "moments" currently lacking in the English language.<br>
+The color wheel theory of love defines three primary, three secondary, and nine tertiary love styles, describing them in terms of the traditional color wheel. The triangular theory of love suggests intimacy, passion, and commitment are core components of love. Love has additional religious or spiritual meaning. This diversity of uses and meanings, combined with the complexity of the feelings involved, makes love unusually difficult to consistently define, compared to other emotional states.</p></div>
+  </details>
+</div>
+    
+    <p class="mt-3 text-base/7 sm:text-sm/7"><a href="https://en.wikipedia.org/wiki/Love" class="text-mist-500 underline underline-offset-4 hover:text-mist-950 dark:hover:text-white">Read this at Wikipedia (English) ↗</a></p>
+  </div>
+</details>
+        <details id="card-wiktionary-name" class="group/row py-4">
+  <summary class="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+    <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+      <h3 class="text-base/8 font-medium text-mist-700 dark:text-mist-400"><span aria-hidden="true" class="mr-1">📚</span>Wiktionary (English) via Kaikki<span class="font-normal text-mist-500"> · 2026</span><span class="font-normal text-mist-500"> · name</span></h3>
+      <span class="text-base/7 tabular-nums text-mist-500 sm:text-sm/7">6 senses <span class="underline underline-offset-4 group-open/row:hidden">open</span><span class="underline underline-offset-4 not-group-open/row:hidden">close</span></span>
+    </div>
+    <p class="mt-1 line-clamp-2 max-w-[68ch] text-base/7 text-mist-500 group-open/row:hidden sm:text-sm/7">A surname. (countable, uncountable)</p>
+  </summary>
+  <div class="mt-2">
+    
+    <div id="card-wiktionary-name-group-0" class="mt-4">
+  <ol role="list" class="space-y-1 text-base/7 text-mist-700 sm:text-sm/7 dark:text-mist-400"><li class="flex gap-3">
+      <span class="shrink-0 text-mist-400">1</span>
+      <div class="min-w-0">
+        <span>A surname. (countable, uncountable)</span>
+        
+      </div>
+    </li>
+<li class="flex gap-3">
+      <span class="shrink-0 text-mist-400">2</span>
+      <div class="min-w-0">
+        <span>The ship of characters Logan Echolls and Veronica Mars from the television show Veronica Mars. (slang)</span>
+        
+      </div>
+    </li>
+<li class="flex gap-3">
+      <span class="shrink-0 text-mist-400">3</span>
+      <div class="min-w-0">
+        <span>A male given name. (countable, uncountable)</span>
+        
+      </div>
+    </li></ol>
+  <details class="mt-1"><summary class="w-fit cursor-pointer text-base/7 text-mist-500 hover:text-mist-950 sm:text-sm/7 dark:hover:text-white">show 3 more</summary></details>
+</div>
+    <p class="mt-3 text-base/7 sm:text-sm/7"><a href="https://en.wiktionary.org/wiki/Love#English" class="text-mist-500 underline underline-offset-4 hover:text-mist-950 dark:hover:text-white">Read this at Wiktionary (English) via Kaikki ↗</a></p>
+  </div>
+</details>
+      </div>
+    </div></section>
+    <div class="mt-8 rounded-2xl bg-mist-950/2.5 p-6 dark:bg-white/5 [&>section]:mt-0 [&>section]:border-0 [&>section]:py-0"><section id="in-culture" aria-label="Related discoveries" class="group mt-8 border-y border-mist-950/10 py-6 dark:border-white/10">
+  <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+    <h2 class="font-display text-[2rem]/10 tracking-tight text-mist-950 dark:text-white">Out in the world</h2>
+    <p class="text-base/7 text-mist-500 sm:text-sm/7">57 things · every match says why it is here</p>
+  </div>
+  <input type="radio" name="culture-tab" id="culture-tab-film" class="sr-only" checked />
+  <input type="radio" name="culture-tab" id="culture-tab-artwork" class="sr-only" />
+  <input type="radio" name="culture-tab" id="culture-tab-text" class="sr-only" />
+  <input type="radio" name="culture-tab" id="culture-tab-image" class="sr-only" />
+  <input type="radio" name="culture-tab" id="culture-tab-gif" class="sr-only" />
+  <div class="-mx-6 mt-4 flex gap-2 overflow-x-auto px-6 pb-1 whitespace-nowrap lg:-mx-10 lg:px-10">
+    <label for="culture-tab-film" class="cursor-pointer rounded-full bg-mist-950/5 px-3 py-1 text-base/7 text-mist-700 hover:bg-mist-950/10 sm:text-sm/7 dark:bg-white/10 dark:text-mist-400 dark:hover:bg-white/15 group-has-[#culture-tab-film:checked]:bg-mist-950 group-has-[#culture-tab-film:checked]:text-white dark:group-has-[#culture-tab-film:checked]:bg-mist-300 dark:group-has-[#culture-tab-film:checked]:text-mist-950">Films <span class="tabular-nums opacity-70">12</span></label>
+    <label for="culture-tab-artwork" class="cursor-pointer rounded-full bg-mist-950/5 px-3 py-1 text-base/7 text-mist-700 hover:bg-mist-950/10 sm:text-sm/7 dark:bg-white/10 dark:text-mist-400 dark:hover:bg-white/15 group-has-[#culture-tab-artwork:checked]:bg-mist-950 group-has-[#culture-tab-artwork:checked]:text-white dark:group-has-[#culture-tab-artwork:checked]:bg-mist-300 dark:group-has-[#culture-tab-artwork:checked]:text-mist-950">Artworks <span class="tabular-nums opacity-70">4</span></label>
+    <label for="culture-tab-text" class="cursor-pointer rounded-full bg-mist-950/5 px-3 py-1 text-base/7 text-mist-700 hover:bg-mist-950/10 sm:text-sm/7 dark:bg-white/10 dark:text-mist-400 dark:hover:bg-white/15 group-has-[#culture-tab-text:checked]:bg-mist-950 group-has-[#culture-tab-text:checked]:text-white dark:group-has-[#culture-tab-text:checked]:bg-mist-300 dark:group-has-[#culture-tab-text:checked]:text-mist-950">Texts <span class="tabular-nums opacity-70">21</span></label>
+    <label for="culture-tab-image" class="cursor-pointer rounded-full bg-mist-950/5 px-3 py-1 text-base/7 text-mist-700 hover:bg-mist-950/10 sm:text-sm/7 dark:bg-white/10 dark:text-mist-400 dark:hover:bg-white/15 group-has-[#culture-tab-image:checked]:bg-mist-950 group-has-[#culture-tab-image:checked]:text-white dark:group-has-[#culture-tab-image:checked]:bg-mist-300 dark:group-has-[#culture-tab-image:checked]:text-mist-950">Images <span class="tabular-nums opacity-70">12</span></label>
+    <label for="culture-tab-gif" class="cursor-pointer rounded-full bg-mist-950/5 px-3 py-1 text-base/7 text-mist-700 hover:bg-mist-950/10 sm:text-sm/7 dark:bg-white/10 dark:text-mist-400 dark:hover:bg-white/15 group-has-[#culture-tab-gif:checked]:bg-mist-950 group-has-[#culture-tab-gif:checked]:text-white dark:group-has-[#culture-tab-gif:checked]:bg-mist-300 dark:group-has-[#culture-tab-gif:checked]:text-mist-950">GIFs <span class="tabular-nums opacity-70">8</span></label>
+  </div>
+  <div class="hidden pt-4 group-has-[#culture-tab-film:checked]:block"><div id="culture-shelf-film" class="space-y-3">
+  <div class="flex flex-wrap items-baseline justify-between gap-2">
+    <h2 class="font-display text-xl text-balance text-mist-950 dark:text-white">Films</h2>
+    <p class="flex items-baseline gap-2 text-base text-mist-500 sm:text-sm">CineGraph</p>
+  </div>
+  <ul role="list" tabindex="0" aria-label="Films matches; scroll for more" class="flex gap-5 overflow-x-auto overscroll-x-contain pb-3 focus-visible:outline-2 focus-visible:outline-offset-2">
+    <li class="shrink-0 w-24 sm:w-28"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <a href="#" class="rounded-sm"><div class="w-full shrink-0 overflow-hidden rounded-sm bg-mist-950/5 transition-transform duration-200 group-hover:-translate-y-0.5 dark:bg-white/5 aspect-[2/3]"><img src="https://image.tmdb.org/t/p/w342/v599u01Gqm0tBIY3pfF3xOZHiCo.jpg" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" /></div></a>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-950 sm:text-sm dark:text-white"><a href="#" class="group-hover:underline">The traveller diaries</a></h3>
+    <p class="text-base tabular-nums text-mist-500 sm:text-sm">2027 · Film</p>
+    
+    
+    <a href="https://cinegraph.org/movies/the-traveller-diaries-2027" class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 hover:text-mist-950 hover:underline dark:hover:text-white">Source ↗</a>
+  </div>
+</div></li>
+    <li class="shrink-0 w-24 sm:w-28"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <a href="#" class="rounded-sm"><div class="w-full shrink-0 overflow-hidden rounded-sm bg-mist-950/5 transition-transform duration-200 group-hover:-translate-y-0.5 dark:bg-white/5 aspect-[2/3]"><img src="https://image.tmdb.org/t/p/w342/iy4O9s3GyUoZqudsfFLuVSXLbgT.jpg" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" /></div></a>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-950 sm:text-sm dark:text-white"><a href="#" class="group-hover:underline">Love and War</a></h3>
+    <p class="text-base tabular-nums text-mist-500 sm:text-sm">2027 · Film</p>
+    
+    
+    <a href="https://cinegraph.org/movies/love-and-war-2026" class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 hover:text-mist-950 hover:underline dark:hover:text-white">Source ↗</a>
+  </div>
+</div></li>
+    <li class="shrink-0 w-24 sm:w-28"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <a href="#" class="rounded-sm"><div class="w-full shrink-0 overflow-hidden rounded-sm bg-mist-950/5 transition-transform duration-200 group-hover:-translate-y-0.5 dark:bg-white/5 aspect-[2/3]"><img src="https://image.tmdb.org/t/p/w342/lvf6AU83BF5o0rORZPFHuIqbjZ7.jpg" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" /></div></a>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-950 sm:text-sm dark:text-white"><a href="#" class="group-hover:underline">Honeymoon</a></h3>
+    <p class="text-base tabular-nums text-mist-500 sm:text-sm">2027 · Film</p>
+    
+    
+    <a href="https://cinegraph.org/movies/honeymoon-2027" class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 hover:text-mist-950 hover:underline dark:hover:text-white">Source ↗</a>
+  </div>
+</div></li>
+    <li class="shrink-0 w-24 sm:w-28"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <a href="#" class="rounded-sm"><div class="w-full shrink-0 overflow-hidden rounded-sm bg-mist-950/5 transition-transform duration-200 group-hover:-translate-y-0.5 dark:bg-white/5 aspect-[2/3]"><img src="https://image.tmdb.org/t/p/w342/ogN5AkxBc3gDXVCIeZa8uBWlcoX.jpg" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" /></div></a>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-950 sm:text-sm dark:text-white"><a href="#" class="group-hover:underline">The Inviting</a></h3>
+    <p class="text-base tabular-nums text-mist-500 sm:text-sm">2026 · Film</p>
+    
+    
+    <a href="https://cinegraph.org/movies/the-inviting-2026" class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 hover:text-mist-950 hover:underline dark:hover:text-white">Source ↗</a>
+  </div>
+</div></li>
+    <li class="shrink-0 w-24 sm:w-28"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <a href="#" class="rounded-sm"><div class="w-full shrink-0 overflow-hidden rounded-sm bg-mist-950/5 transition-transform duration-200 group-hover:-translate-y-0.5 dark:bg-white/5 aspect-[2/3]"><img src="https://image.tmdb.org/t/p/w342/c2p8X51qztg3zPYFUBeBQVUTlSX.jpg" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" /></div></a>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-950 sm:text-sm dark:text-white"><a href="#" class="group-hover:underline">May We Never Meet Again</a></h3>
+    <p class="text-base tabular-nums text-mist-500 sm:text-sm">2026 · Film</p>
+    
+    
+    <a href="https://cinegraph.org/movies/may-we-never-meet-again-2026" class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 hover:text-mist-950 hover:underline dark:hover:text-white">Source ↗</a>
+  </div>
+</div></li>
+    <li class="shrink-0 w-24 sm:w-28"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <a href="#" class="rounded-sm"><div class="w-full shrink-0 overflow-hidden rounded-sm bg-mist-950/5 transition-transform duration-200 group-hover:-translate-y-0.5 dark:bg-white/5 aspect-[2/3]"><img src="https://image.tmdb.org/t/p/w342/51zRtlvnZQc2oMj4VHgwzsSQEzj.jpg" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" /></div></a>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-950 sm:text-sm dark:text-white"><a href="#" class="group-hover:underline">The Dream: Love &amp; War</a></h3>
+    <p class="text-base tabular-nums text-mist-500 sm:text-sm">2026 · Film</p>
+    
+    
+    <a href="https://cinegraph.org/movies/the-dream-love-war-2026-in" class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 hover:text-mist-950 hover:underline dark:hover:text-white">Source ↗</a>
+  </div>
+</div></li>
+    <li class="shrink-0 w-24 sm:w-28"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <a href="#" class="rounded-sm"><div class="w-full shrink-0 overflow-hidden rounded-sm bg-mist-950/5 transition-transform duration-200 group-hover:-translate-y-0.5 dark:bg-white/5 aspect-[2/3]"><img src="https://image.tmdb.org/t/p/w342/oD89xERaoZf2HUKzFerkLwAteCv.jpg" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" /></div></a>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-950 sm:text-sm dark:text-white"><a href="#" class="group-hover:underline">The Intermission</a></h3>
+    <p class="text-base tabular-nums text-mist-500 sm:text-sm">2026 · Film</p>
+    
+    
+    <a href="https://cinegraph.org/movies/the-intermission-2026" class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 hover:text-mist-950 hover:underline dark:hover:text-white">Source ↗</a>
+  </div>
+</div></li>
+    <li class="shrink-0 w-24 sm:w-28"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <a href="#" class="rounded-sm"><div class="w-full shrink-0 overflow-hidden rounded-sm bg-mist-950/5 transition-transform duration-200 group-hover:-translate-y-0.5 dark:bg-white/5 aspect-[2/3]"><img src="https://image.tmdb.org/t/p/w342/qZsROZuYSMT4nCTuuaskNrSa6Cw.jpg" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" /></div></a>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-950 sm:text-sm dark:text-white"><a href="#" class="group-hover:underline">Anchorless</a></h3>
+    <p class="text-base tabular-nums text-mist-500 sm:text-sm">2026 · Film</p>
+    
+    
+    <a href="https://cinegraph.org/movies/anchorless-2026" class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 hover:text-mist-950 hover:underline dark:hover:text-white">Source ↗</a>
+  </div>
+</div></li>
+    <li class="shrink-0 w-24 sm:w-28"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <a href="#" class="rounded-sm"><div class="w-full shrink-0 overflow-hidden rounded-sm bg-mist-950/5 transition-transform duration-200 group-hover:-translate-y-0.5 dark:bg-white/5 aspect-[2/3]"><img src="https://image.tmdb.org/t/p/w342/yffdTGcTIc3YfgyUqKlK6m4Iyq6.jpg" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" /></div></a>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-950 sm:text-sm dark:text-white"><a href="#" class="group-hover:underline">together apart.</a></h3>
+    <p class="text-base tabular-nums text-mist-500 sm:text-sm">2026 · Film</p>
+    
+    
+    <a href="https://cinegraph.org/movies/together-apart-2025-de" class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 hover:text-mist-950 hover:underline dark:hover:text-white">Source ↗</a>
+  </div>
+</div></li>
+    <li class="shrink-0 w-24 sm:w-28"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <a href="#" class="rounded-sm"><div class="w-full shrink-0 overflow-hidden rounded-sm bg-mist-950/5 transition-transform duration-200 group-hover:-translate-y-0.5 dark:bg-white/5 aspect-[2/3]"><img src="https://image.tmdb.org/t/p/w342/byxSlSW5KB0xkvTSBRkD4LZtxNL.jpg" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" /></div></a>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-950 sm:text-sm dark:text-white"><a href="#" class="group-hover:underline">Free at Heart</a></h3>
+    <p class="text-base tabular-nums text-mist-500 sm:text-sm">2026 · Film</p>
+    
+    
+    <a href="https://cinegraph.org/movies/free-2025" class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 hover:text-mist-950 hover:underline dark:hover:text-white">Source ↗</a>
+  </div>
+</div></li>
+    <li class="shrink-0 w-24 sm:w-28"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <a href="#" class="rounded-sm"><div class="w-full shrink-0 overflow-hidden rounded-sm bg-mist-950/5 transition-transform duration-200 group-hover:-translate-y-0.5 dark:bg-white/5 aspect-[2/3]"><img src="https://image.tmdb.org/t/p/w342/wKLuj5UUKcfdRcG4hpbutHvBGwl.jpg" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" /></div></a>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-950 sm:text-sm dark:text-white"><a href="#" class="group-hover:underline">November</a></h3>
+    <p class="text-base tabular-nums text-mist-500 sm:text-sm">2026 · Film</p>
+    
+    
+    <a href="https://cinegraph.org/movies/november-2026-ca" class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 hover:text-mist-950 hover:underline dark:hover:text-white">Source ↗</a>
+  </div>
+</div></li>
+    <li class="shrink-0 w-24 sm:w-28"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <a href="#" class="rounded-sm"><div class="w-full shrink-0 overflow-hidden rounded-sm bg-mist-950/5 transition-transform duration-200 group-hover:-translate-y-0.5 dark:bg-white/5 aspect-[2/3]"><img src="https://image.tmdb.org/t/p/w342/zUaTMxLOuW4wdaFYhRVJbO6W8Sy.jpg" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" /></div></a>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-950 sm:text-sm dark:text-white"><a href="#" class="group-hover:underline">The Love Hypothesis</a></h3>
+    <p class="text-base tabular-nums text-mist-500 sm:text-sm">2026 · Film</p>
+    
+    
+    <a href="https://cinegraph.org/movies/the-love-hypothesis-unknown" class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 hover:text-mist-950 hover:underline dark:hover:text-white">Source ↗</a>
+  </div>
+</div></li>
+  </ul>
+  <div class="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
+    <details class="min-w-0"><summary class="w-fit cursor-pointer text-base text-mist-500 hover:text-mist-700 sm:text-sm dark:text-mist-400">Matches for “love” · About these results</summary>
+      <div class="space-y-3 pt-2"><section class="space-y-2 text-base text-mist-600 sm:text-sm dark:text-mist-300">
+        <p class="font-medium text-mist-950 dark:text-white">CineGraph · keywords: TMDb</p>
+        <p class="text-pretty">Search matches from CineGraph. These are provider results, not curated examples or dictionary interpretations.</p>
+        <ul role="list" class="space-y-1"><li>The traveller diaries: Matched the keyword “love” for this term.</li><li>Love and War: Matched the keyword “love” for this term.</li><li>Honeymoon: Matched the keyword “love” for this term.</li><li>The Inviting: Matched the keyword “love” for this term.</li><li>May We Never Meet Again: Matched the keyword “love” for this term.</li><li>The Dream: Love &amp; War: Matched the keyword “love” for this term.</li></ul>
+      </section></div>
+    </details>
+    <button type="button" class="relative rounded-sm py-1 text-base text-mist-600 underline underline-offset-4 hover:text-mist-950 sm:text-sm dark:text-mist-300"><span class="pointer-fine:hidden absolute top-1/2 left-1/2 size-[max(100%,3rem)] -translate-1/2" aria-hidden="true"></span>Load more</button>
+  </div>
+</div></div>
+  <div class="hidden pt-4 group-has-[#culture-tab-artwork:checked]:block"><div id="culture-shelf-artwork" class="space-y-3">
+  <div class="flex flex-wrap items-baseline justify-between gap-2">
+    <h2 class="font-display text-xl text-balance text-mist-950 dark:text-white">Artworks</h2>
+    <p class="flex items-baseline gap-2 text-base text-mist-500 sm:text-sm">Saved catalog</p>
+  </div>
+  <ul role="list" tabindex="0" aria-label="Artworks matches; scroll for more" class="flex gap-5 overflow-x-auto overscroll-x-contain pb-3 focus-visible:outline-2 focus-visible:outline-offset-2">
+    <li class="shrink-0 w-24 sm:w-28"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <a href="#" class="rounded-sm"><div class="w-full shrink-0 overflow-hidden rounded-sm bg-mist-950/5 transition-transform duration-200 group-hover:-translate-y-0.5 dark:bg-white/5 aspect-square"><img src="https://upload.wikimedia.org/wikipedia/commons/thumb/7/73/David-Antiochus_et_Stratonice.jpg/500px-David-Antiochus_et_Stratonice.jpg" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" /></div></a>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-950 sm:text-sm dark:text-white"><a href="#" class="group-hover:underline">Erasistratus Discovering the Cause of Antiochus' Disease</a></h3>
+    <p class="text-base tabular-nums text-mist-500 sm:text-sm">1774 · Artwork</p>
+    <p class="line-clamp-2 text-sm text-mist-500 text-pretty">Jacques-Louis David</p>
+    <p class="text-xs break-words text-mist-500 text-pretty">David-Antiochus et Stratonice.jpg · Wikimedia Commons</p>
+    <a href="https://www.wikidata.org/wiki/Q3590926" class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 hover:text-mist-950 hover:underline dark:hover:text-white">Source ↗</a>
+  </div>
+</div></li>
+    <li class="shrink-0 w-24 sm:w-28"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <a href="#" class="rounded-sm"><div class="w-full shrink-0 overflow-hidden rounded-sm bg-mist-950/5 transition-transform duration-200 group-hover:-translate-y-0.5 dark:bg-white/5 aspect-square"><img src="https://upload.wikimedia.org/wikipedia/commons/thumb/a/ac/William-Adolphe_Bouguereau_-_The_abduction_of_Psyche,_1895.jpg/500px-William-Adolphe_Bouguereau_-_The_abduction_of_Psyche,_1895.jpg" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" /></div></a>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-950 sm:text-sm dark:text-white"><a href="#" class="group-hover:underline">The abduction of Psyche</a></h3>
+    <p class="text-base tabular-nums text-mist-500 sm:text-sm">1895 · Artwork</p>
+    <p class="line-clamp-2 text-sm text-mist-500 text-pretty">William-Adolphe Bouguereau</p>
+    <p class="text-xs break-words text-mist-500 text-pretty">William-Adolphe Bouguereau - The abduction of Psyche, 1895.jpg · Wikimedia Commons</p>
+    <a href="https://www.wikidata.org/wiki/Q4375073" class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 hover:text-mist-950 hover:underline dark:hover:text-white">Source ↗</a>
+  </div>
+</div></li>
+    <li class="shrink-0 w-24 sm:w-28"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <a href="#" class="rounded-sm"><div class="w-full shrink-0 overflow-hidden rounded-sm bg-mist-950/5 transition-transform duration-200 group-hover:-translate-y-0.5 dark:bg-white/5 aspect-square"><img src="https://upload.wikimedia.org/wikipedia/commons/thumb/8/85/Jean-Auguste-Dominique_Ingres_-_La_maladie_d'Antiochus,_ou_Antiochus_et_Stratonice_-_Google_Art_Project.jpg/500px-Jean-Auguste-Dominique_Ingres_-_La_maladie_d'Antiochus,_ou_Antiochus_et_Stratonice_-_Google_Art_Project.jpg" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" /></div></a>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-950 sm:text-sm dark:text-white"><a href="#" class="group-hover:underline">Antiochus and Stratonice</a></h3>
+    <p class="text-base tabular-nums text-mist-500 sm:text-sm">1840 · Artwork</p>
+    <p class="line-clamp-2 text-sm text-mist-500 text-pretty">Jean-Auguste-Dominique Ingres</p>
+    <p class="text-xs break-words text-mist-500 text-pretty">Jean-Auguste-Dominique Ingres - La maladie d'Antiochus, ou Antiochus et Stratonice - Google Art Project.jpg · Wikimedia Commons</p>
+    <a href="https://www.wikidata.org/wiki/Q783563" class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 hover:text-mist-950 hover:underline dark:hover:text-white">Source ↗</a>
+  </div>
+</div></li>
+    <li class="shrink-0 w-24 sm:w-28"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <a href="#" class="rounded-sm"><div class="w-full shrink-0 overflow-hidden rounded-sm bg-mist-950/5 transition-transform duration-200 group-hover:-translate-y-0.5 dark:bg-white/5 aspect-square"><img src="https://upload.wikimedia.org/wikipedia/commons/thumb/c/c5/Psych%C3%A9_et_l'Amour_-_Fran%C3%A7ois_G%C3%A9rard_-_Mus%C3%A9e_du_Louvre_Peintures_INV_4739_;_L_3778.jpg/500px-Psych%C3%A9_et_l'Amour_-_Fran%C3%A7ois_G%C3%A9rard_-_Mus%C3%A9e_du_Louvre_Peintures_INV_4739_;_L_3778.jpg" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" /></div></a>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-950 sm:text-sm dark:text-white"><a href="#" class="group-hover:underline">Cupid and Psyche</a></h3>
+    <p class="text-base tabular-nums text-mist-500 sm:text-sm">1798 · Artwork</p>
+    <p class="line-clamp-2 text-sm text-mist-500 text-pretty">François Gérard</p>
+    <p class="text-xs break-words text-mist-500 text-pretty">Psyché et l'Amour - François Gérard - Musée du Louvre Peintures INV 4739 ; L 3778.jpg · Wikimedia Commons</p>
+    <a href="https://www.wikidata.org/wiki/Q8777422" class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 hover:text-mist-950 hover:underline dark:hover:text-white">Source ↗</a>
+  </div>
+</div></li>
+  </ul>
+  <div class="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
+    <details class="min-w-0"><summary class="w-fit cursor-pointer text-base text-mist-500 hover:text-mist-700 sm:text-sm dark:text-mist-400">Matches for “love” · About these results</summary>
+      <div class="space-y-3 pt-2"><section class="space-y-2 text-base text-mist-600 sm:text-sm dark:text-mist-300">
+        <p class="font-medium text-mist-950 dark:text-white">Saved catalog · Wikidata</p>
+        <p class="text-pretty">Catalog matches from Wikidata, held locally rather than searched for on this visit. None is an accepted interpretation: a contributor connects an exact meaning and reviewers decide the claim. Browse saved artworks</p>
+        <ul role="list" class="space-y-1"><li>Erasistratus Discovering the Cause of Antiochus' Disease: Related depiction of “love” (Q316), matched to the word and not to this meaning. · not yet reviewed</li><li>The abduction of Psyche: Related depiction of “love” (Q316), matched to the word and not to this meaning. · not yet reviewed</li><li>Antiochus and Stratonice: Related depiction of “love” (Q316), matched to the word and not to this meaning. · not yet reviewed</li><li>Cupid and Psyche: Related depiction of “love” (Q316), matched to the word and not to this meaning. · not yet reviewed</li></ul>
+      </section></div>
+    </details>
+    
+  </div>
+</div></div>
+  <div class="hidden pt-4 group-has-[#culture-tab-text:checked]:block"><div id="culture-shelf-text" class="space-y-3">
+  <div class="flex flex-wrap items-baseline justify-between gap-2">
+    <h2 class="font-display text-xl text-balance text-mist-950 dark:text-white">Texts</h2>
+    <p class="flex items-baseline gap-2 text-base text-mist-500 sm:text-sm">Open Library · PoetryDB</p>
+  </div>
+  <ul role="list" tabindex="0" aria-label="Texts matches; scroll for more" class="flex gap-5 overflow-x-auto overscroll-x-contain pb-3 focus-visible:outline-2 focus-visible:outline-offset-2">
+    <li class="shrink-0 w-44 sm:w-52"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <blockquote class="border-l-2 border-mist-300 pl-3 font-display text-lg/6 text-balance text-mist-950 dark:border-mist-700 dark:text-white">“flame of love, be a flower of love, be a torch of love! Love with My Love by being”</blockquote>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-700 sm:text-sm dark:text-mist-400"><a href="#" class="group-hover:underline">March for love, heaven is on the move</a></h3>
+    <p class="line-clamp-2 text-sm text-mist-500 text-pretty">Peter Christopher Gruters</p>
+    <p class="text-base tabular-nums text-mist-500 sm:text-sm">1995 · Text</p>
+    <a href="https://openlibrary.org/works/OL15692584W" class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 hover:text-mist-950 hover:underline dark:hover:text-white">Source ↗</a>
+  </div>
+</div></li>
+    <li class="shrink-0 w-44 sm:w-52"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <blockquote class="border-l-2 border-mist-300 pl-3 font-display text-lg/6 text-balance text-mist-950 dark:border-mist-700 dark:text-white">“Where Love throbs out in blissful sleep”</blockquote>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-700 sm:text-sm dark:text-mist-400"><a href="#" class="group-hover:underline">I Have A Rendezvous With Death</a></h3>
+    <p class="line-clamp-2 text-sm text-mist-500 text-pretty">Alan Seeger</p>
+    <p class="text-base tabular-nums text-mist-500 sm:text-sm">Text · line 19</p>
+    <a href="https://poetrydb.org/author/Alan%20Seeger/title,author,linecount,lines" class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 hover:text-mist-950 hover:underline dark:hover:text-white">Source ↗</a>
+  </div>
+</div></li>
+    <li class="shrink-0 w-44 sm:w-52"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <blockquote class="border-l-2 border-mist-300 pl-3 font-display text-lg/6 text-balance text-mist-950 dark:border-mist-700 dark:text-white">“parent’s love, love is all around. Sibling love, a child’s love, these can all be found. A love of nature”</blockquote>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-700 sm:text-sm dark:text-mist-400"><a href="#" class="group-hover:underline">Poetry in the pews 2008</a></h3>
+    
+    <p class="text-base tabular-nums text-mist-500 sm:text-sm">2008 · Text</p>
+    <a href="https://openlibrary.org/works/OL28945318W" class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 hover:text-mist-950 hover:underline dark:hover:text-white">Source ↗</a>
+  </div>
+</div></li>
+    <li class="shrink-0 w-44 sm:w-52"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <blockquote class="border-l-2 border-mist-300 pl-3 font-display text-lg/6 text-balance text-mist-950 dark:border-mist-700 dark:text-white">“The vapors passed and there was nought but Love”</blockquote>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-700 sm:text-sm dark:text-mist-400"><a href="#" class="group-hover:underline">Fragments</a></h3>
+    <p class="line-clamp-2 text-sm text-mist-500 text-pretty">Alan Seeger</p>
+    <p class="text-base tabular-nums text-mist-500 sm:text-sm">Text · line 14</p>
+    <a href="https://poetrydb.org/author/Alan%20Seeger/title,author,linecount,lines" class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 hover:text-mist-950 hover:underline dark:hover:text-white">Source ↗</a>
+  </div>
+</div></li>
+    <li class="shrink-0 w-44 sm:w-52"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <blockquote class="border-l-2 border-mist-300 pl-3 font-display text-lg/6 text-balance text-mist-950 dark:border-mist-700 dark:text-white">“is still all love. Chapter 2 What Is Love? CHAPTER TWO What Is Love? LOVE IS THE OTHER”</blockquote>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-700 sm:text-sm dark:text-mist-400"><a href="#" class="group-hover:underline">Make Love Your Aim</a></h3>
+    <p class="line-clamp-2 text-sm text-mist-500 text-pretty">Eugenia Price</p>
+    <p class="text-base tabular-nums text-mist-500 sm:text-sm">1967 · Text</p>
+    <a href="https://openlibrary.org/works/OL81916W" class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 hover:text-mist-950 hover:underline dark:hover:text-white">Source ↗</a>
+  </div>
+</div></li>
+    <li class="shrink-0 w-44 sm:w-52"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <blockquote class="border-l-2 border-mist-300 pl-3 font-display text-lg/6 text-balance text-mist-950 dark:border-mist-700 dark:text-white">“To wake between Our Lady and our love.”</blockquote>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-700 sm:text-sm dark:text-mist-400"><a href="#" class="group-hover:underline">Paris</a></h3>
+    <p class="line-clamp-2 text-sm text-mist-500 text-pretty">Alan Seeger</p>
+    <p class="text-base tabular-nums text-mist-500 sm:text-sm">Text · line 28</p>
+    <a href="https://poetrydb.org/author/Alan%20Seeger/title,author,linecount,lines" class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 hover:text-mist-950 hover:underline dark:hover:text-white">Source ↗</a>
+  </div>
+</div></li>
+    <li class="shrink-0 w-44 sm:w-52"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <blockquote class="border-l-2 border-mist-300 pl-3 font-display text-lg/6 text-balance text-mist-950 dark:border-mist-700 dark:text-white">“God's light. Love the animals, love the plants, love everything. From Love to Loving”</blockquote>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-700 sm:text-sm dark:text-mist-400"><a href="#" class="group-hover:underline">Life is for loving</a></h3>
+    <p class="line-clamp-2 text-sm text-mist-500 text-pretty">Butterworth, Eric.</p>
+    <p class="text-base tabular-nums text-mist-500 sm:text-sm">1973 · Text</p>
+    <a href="https://openlibrary.org/works/OL15293959W" class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 hover:text-mist-950 hover:underline dark:hover:text-white">Source ↗</a>
+  </div>
+</div></li>
+    <li class="shrink-0 w-44 sm:w-52"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <blockquote class="border-l-2 border-mist-300 pl-3 font-display text-lg/6 text-balance text-mist-950 dark:border-mist-700 dark:text-white">“It was the faith that only love of thee”</blockquote>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-700 sm:text-sm dark:text-mist-400"><a href="#" class="group-hover:underline">Juvenilia, An Ode to Natural Beauty</a></h3>
+    <p class="line-clamp-2 text-sm text-mist-500 text-pretty">Alan Seeger</p>
+    <p class="text-base tabular-nums text-mist-500 sm:text-sm">Text · line 104</p>
+    <a href="https://poetrydb.org/author/Alan%20Seeger/title,author,linecount,lines" class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 hover:text-mist-950 hover:underline dark:hover:text-white">Source ↗</a>
+  </div>
+</div></li>
+    <li class="shrink-0 w-44 sm:w-52"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <blockquote class="border-l-2 border-mist-300 pl-3 font-display text-lg/6 text-balance text-mist-950 dark:border-mist-700 dark:text-white">“Out of Tune 7 Love: The Healer of Youthful Rebellion 77 Love the Law of Love Story from Life:”</blockquote>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-700 sm:text-sm dark:text-mist-400"><a href="#" class="group-hover:underline">Love is the healer</a></h3>
+    <p class="line-clamp-2 text-sm text-mist-500 text-pretty">Mann, Stella Terrill</p>
+    <p class="text-base tabular-nums text-mist-500 sm:text-sm">1974 · Text</p>
+    <a href="https://openlibrary.org/works/OL17055445W" class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 hover:text-mist-950 hover:underline dark:hover:text-white">Source ↗</a>
+  </div>
+</div></li>
+    <li class="shrink-0 w-44 sm:w-52"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <blockquote class="border-l-2 border-mist-300 pl-3 font-display text-lg/6 text-balance text-mist-950 dark:border-mist-700 dark:text-white">“Love, strong as death, the poet led”</blockquote>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-700 sm:text-sm dark:text-mist-400"><a href="#" class="group-hover:underline">Ode on St Cecilia's Day,</a></h3>
+    <p class="line-clamp-2 text-sm text-mist-500 text-pretty">Alexander Pope</p>
+    <p class="text-base tabular-nums text-mist-500 sm:text-sm">Text · line 54</p>
+    <a href="https://poetrydb.org/author/Alexander%20Pope/title,author,linecount,lines" class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 hover:text-mist-950 hover:underline dark:hover:text-white">Source ↗</a>
+  </div>
+</div></li>
+    <li class="shrink-0 w-44 sm:w-52"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <blockquote class="border-l-2 border-mist-300 pl-3 font-display text-lg/6 text-balance text-mist-950 dark:border-mist-700 dark:text-white">“love you Her D H m □ love you! Her a Him □ 1 love you! HerD H m D 1 love you! HerD Him D 1 love you”</blockquote>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-700 sm:text-sm dark:text-mist-400"><a href="#" class="group-hover:underline">The couple's book</a></h3>
+    <p class="line-clamp-2 text-sm text-mist-500 text-pretty">Benrik Ltd</p>
+    <p class="text-base tabular-nums text-mist-500 sm:text-sm">2004 · Text</p>
+    <a href="https://openlibrary.org/works/OL24257967W" class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 hover:text-mist-950 hover:underline dark:hover:text-white">Source ↗</a>
+  </div>
+</div></li>
+    <li class="shrink-0 w-44 sm:w-52"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <blockquote class="border-l-2 border-mist-300 pl-3 font-display text-lg/6 text-balance text-mist-950 dark:border-mist-700 dark:text-white">“Thy martial spirit, or thy social love!”</blockquote>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-700 sm:text-sm dark:text-mist-400"><a href="#" class="group-hover:underline">Epitaph. On General Henry Withers, in Westminster Abbey, 1729.</a></h3>
+    <p class="line-clamp-2 text-sm text-mist-500 text-pretty">Alexander Pope</p>
+    <p class="text-base tabular-nums text-mist-500 sm:text-sm">Text · line 8</p>
+    <a href="https://poetrydb.org/author/Alexander%20Pope/title,author,linecount,lines" class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 hover:text-mist-950 hover:underline dark:hover:text-white">Source ↗</a>
+  </div>
+</div></li>
+  </ul>
+  <div class="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
+    <details class="min-w-0"><summary class="w-fit cursor-pointer text-base text-mist-500 hover:text-mist-700 sm:text-sm dark:text-mist-400">Matches for “love” · About these results</summary>
+      <div class="space-y-3 pt-2"><section class="space-y-2 text-base text-mist-600 sm:text-sm dark:text-mist-300">
+        <p class="font-medium text-mist-950 dark:text-white">Open Library · attested books</p>
+        <p class="text-pretty">Search matches from Open Library. These are provider results, not curated examples or dictionary interpretations.</p>
+        <ul role="list" class="space-y-1"><li>March for love, heaven is on the move: Uses “love”.</li><li>Poetry in the pews 2008: Uses “love”.</li><li>Make Love Your Aim: Uses “love”.</li><li>Life is for loving: Uses “love”.</li><li>Love is the healer: Uses “love”.</li><li>The couple's book: Uses “love”.</li></ul>
+      </section><section class="space-y-2 text-base text-mist-600 sm:text-sm dark:text-mist-300">
+        <p class="font-medium text-mist-950 dark:text-white">PoetryDB · attested lines</p>
+        <p class="text-pretty">Search matches from PoetryDB. These are provider results, not curated examples or dictionary interpretations.</p>
+        <ul role="list" class="space-y-1"><li>I Have A Rendezvous With Death: Uses “love” at line 19.</li><li>Fragments: Uses “love” at line 14.</li><li>Paris: Uses “love” at line 28.</li><li>Juvenilia, An Ode to Natural Beauty: Uses “love” at line 104.</li><li>Ode on St Cecilia's Day,: Uses “love” at line 54.</li><li>Epitaph. On General Henry Withers, in Westminster Abbey, 1729.: Uses “love” at line 8.</li></ul>
+      </section></div>
+    </details>
+    <button type="button" class="relative rounded-sm py-1 text-base text-mist-600 underline underline-offset-4 hover:text-mist-950 sm:text-sm dark:text-mist-300"><span class="pointer-fine:hidden absolute top-1/2 left-1/2 size-[max(100%,3rem)] -translate-1/2" aria-hidden="true"></span>Load more</button>
+  </div>
+</div></div>
+  <div class="hidden pt-4 group-has-[#culture-tab-image:checked]:block"><div id="culture-shelf-image" class="space-y-3">
+  <div class="flex flex-wrap items-baseline justify-between gap-2">
+    <h2 class="font-display text-xl text-balance text-mist-950 dark:text-white">Images</h2>
+    <p class="flex items-baseline gap-2 text-base text-mist-500 sm:text-sm">Openverse · Pexels · Unsplash</p>
+  </div>
+  <ul role="list" tabindex="0" aria-label="Images matches; scroll for more" class="flex gap-5 overflow-x-auto overscroll-x-contain pb-3 focus-visible:outline-2 focus-visible:outline-offset-2">
+    <li class="shrink-0 w-24 sm:w-28"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <a href="#" class="rounded-sm"><div class="w-full shrink-0 overflow-hidden rounded-sm bg-mist-950/5 transition-transform duration-200 group-hover:-translate-y-0.5 dark:bg-white/5 aspect-square"><img src="https://api.openverse.org/v1/images/e767f58b-f21b-489c-9cad-df612f5e690c/thumb/" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" /></div></a>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-950 sm:text-sm dark:text-white"><a href="#" class="group-hover:underline">Love, love</a></h3>
+    <p class="text-base tabular-nums text-mist-500 sm:text-sm">Image</p>
+    
+    <p class="text-xs break-words text-mist-500 text-pretty">&quot;Love, love&quot; by zenera, CC-BY-SA-2.0</p>
+    <a href="https://www.flickr.com/photos/35237098471@N01/2410842924" class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 hover:text-mist-950 hover:underline dark:hover:text-white">Source ↗</a>
+  </div>
+</div></li>
+    <li class="shrink-0 w-24 sm:w-28"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <a href="#" class="rounded-sm"><div class="w-full shrink-0 overflow-hidden rounded-sm bg-mist-950/5 transition-transform duration-200 group-hover:-translate-y-0.5 dark:bg-white/5 aspect-square"><img src="https://images.pexels.com/photos/15583592/pexels-photo-15583592.png?auto=compress&amp;cs=tinysrgb&amp;h=350" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" /></div></a>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-950 sm:text-sm dark:text-white"><a href="#" class="group-hover:underline">A couple shares a tender moment surrounded by vibrant red roses, creating a romantic atmosphere.</a></h3>
+    <p class="text-base tabular-nums text-mist-500 sm:text-sm">Image</p>
+    
+    <p class="text-xs break-words text-mist-500 text-pretty">Photo by Photography Maghradze PH on Pexels</p>
+    <a href="https://www.pexels.com/photo/man-kissing-womans-forehead-under-red-rose-bush-15583592/" class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 hover:text-mist-950 hover:underline dark:hover:text-white">Source ↗</a>
+  </div>
+</div></li>
+    <li class="shrink-0 w-24 sm:w-28"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <a href="#" class="rounded-sm"><div class="w-full shrink-0 overflow-hidden rounded-sm bg-mist-950/5 transition-transform duration-200 group-hover:-translate-y-0.5 dark:bg-white/5 aspect-square"><img src="https://images.unsplash.com/reserve/Af0sF2OS5S5gatqrKzVP_Silhoutte.jpg?crop=entropy&amp;cs=tinysrgb&amp;fit=max&amp;fm=jpg&amp;ixid=M3w3MjU0ODR8MHwxfHNlYXJjaHwxfHxsb3ZlfGVufDF8fHx8MTc4OTkwOTIzNnww&amp;ixlib=rb-4.1.0&amp;q=80&amp;w=400" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" /></div></a>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-950 sm:text-sm dark:text-white"><a href="#" class="group-hover:underline">Love under setting sun</a></h3>
+    <p class="text-base tabular-nums text-mist-500 sm:text-sm">2014 · Image</p>
+    
+    <p class="text-xs break-words text-mist-500 text-pretty">Photo by Mayur Gala on Unsplash</p>
+    <a href="https://unsplash.com/photos/silhouette-of-persons-hands-forming-heart-2PODhmrvLik?utm_medium=referral&amp;utm_source=devils_dictionary" class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 hover:text-mist-950 hover:underline dark:hover:text-white">Source ↗</a>
+  </div>
+</div></li>
+    <li class="shrink-0 w-24 sm:w-28"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <a href="#" class="rounded-sm"><div class="w-full shrink-0 overflow-hidden rounded-sm bg-mist-950/5 transition-transform duration-200 group-hover:-translate-y-0.5 dark:bg-white/5 aspect-square"><img src="https://api.openverse.org/v1/images/2ea79983-6678-4b95-9e4a-b299d7a5ac2a/thumb/" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" /></div></a>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-950 sm:text-sm dark:text-white"><a href="#" class="group-hover:underline">Love</a></h3>
+    <p class="text-base tabular-nums text-mist-500 sm:text-sm">Image</p>
+    
+    <p class="text-xs break-words text-mist-500 text-pretty">&quot;Love&quot; by Giles Watson's poetry and prose, CC-BY-SA-2.0</p>
+    <a href="https://www.flickr.com/photos/29320962@N07/8545433105" class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 hover:text-mist-950 hover:underline dark:hover:text-white">Source ↗</a>
+  </div>
+</div></li>
+    <li class="shrink-0 w-24 sm:w-28"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <a href="#" class="rounded-sm"><div class="w-full shrink-0 overflow-hidden rounded-sm bg-mist-950/5 transition-transform duration-200 group-hover:-translate-y-0.5 dark:bg-white/5 aspect-square"><img src="https://images.pexels.com/photos/30410632/pexels-photo-30410632.jpeg?auto=compress&amp;cs=tinysrgb&amp;h=350" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" /></div></a>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-950 sm:text-sm dark:text-white"><a href="#" class="group-hover:underline">A red envelope with a love letter on pink background, ideal for Valentine's.</a></h3>
+    <p class="text-base tabular-nums text-mist-500 sm:text-sm">Image</p>
+    
+    <p class="text-xs break-words text-mist-500 text-pretty">Photo by Diana Light on Pexels</p>
+    <a href="https://www.pexels.com/photo/romantic-love-letter-with-red-envelope-and-hearts-30410632/" class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 hover:text-mist-950 hover:underline dark:hover:text-white">Source ↗</a>
+  </div>
+</div></li>
+    <li class="shrink-0 w-24 sm:w-28"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <a href="#" class="rounded-sm"><div class="w-full shrink-0 overflow-hidden rounded-sm bg-mist-950/5 transition-transform duration-200 group-hover:-translate-y-0.5 dark:bg-white/5 aspect-square"><img src="https://images.unsplash.com/photo-1518621736915-f3b1c41bfd00?crop=entropy&amp;cs=tinysrgb&amp;fit=max&amp;fm=jpg&amp;ixid=M3w3MjU0ODR8MHwxfHNlYXJjaHwyfHxsb3ZlfGVufDF8fHx8MTc4OTkwOTIzNnww&amp;ixlib=rb-4.1.0&amp;q=80&amp;w=400" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" /></div></a>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-950 sm:text-sm dark:text-white"><a href="#" class="group-hover:underline">Single red rose on pages</a></h3>
+    <p class="text-base tabular-nums text-mist-500 sm:text-sm">2018 · Image</p>
+    
+    <p class="text-xs break-words text-mist-500 text-pretty">Photo by Annie Spratt on Unsplash</p>
+    <a href="https://unsplash.com/photos/red-rose-on-book-sheets-fDghTk7Typw?utm_medium=referral&amp;utm_source=devils_dictionary" class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 hover:text-mist-950 hover:underline dark:hover:text-white">Source ↗</a>
+  </div>
+</div></li>
+    <li class="shrink-0 w-24 sm:w-28"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <a href="#" class="rounded-sm"><div class="w-full shrink-0 overflow-hidden rounded-sm bg-mist-950/5 transition-transform duration-200 group-hover:-translate-y-0.5 dark:bg-white/5 aspect-square"><img src="https://api.openverse.org/v1/images/82d9bb27-b810-42a3-9aab-18eae6267932/thumb/" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" /></div></a>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-950 sm:text-sm dark:text-white"><a href="#" class="group-hover:underline">love</a></h3>
+    <p class="text-base tabular-nums text-mist-500 sm:text-sm">Image</p>
+    
+    <p class="text-xs break-words text-mist-500 text-pretty">&quot;love&quot; by d26b73, CC-BY-2.0</p>
+    <a href="https://www.flickr.com/photos/96106108@N07/23144874320" class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 hover:text-mist-950 hover:underline dark:hover:text-white">Source ↗</a>
+  </div>
+</div></li>
+    <li class="shrink-0 w-24 sm:w-28"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <a href="#" class="rounded-sm"><div class="w-full shrink-0 overflow-hidden rounded-sm bg-mist-950/5 transition-transform duration-200 group-hover:-translate-y-0.5 dark:bg-white/5 aspect-square"><img src="https://images.pexels.com/photos/32439849/pexels-photo-32439849.jpeg?auto=compress&amp;cs=tinysrgb&amp;h=350" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" /></div></a>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-950 sm:text-sm dark:text-white"><a href="#" class="group-hover:underline">A loving couple shares an intimate moment outdoors at sunset.</a></h3>
+    <p class="text-base tabular-nums text-mist-500 sm:text-sm">Image</p>
+    
+    <p class="text-xs break-words text-mist-500 text-pretty">Photo by Vinicius Quaresma on Pexels</p>
+    <a href="https://www.pexels.com/photo/romantic-couple-embracing-outdoors-at-sunset-32439849/" class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 hover:text-mist-950 hover:underline dark:hover:text-white">Source ↗</a>
+  </div>
+</div></li>
+    <li class="shrink-0 w-24 sm:w-28"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <a href="#" class="rounded-sm"><div class="w-full shrink-0 overflow-hidden rounded-sm bg-mist-950/5 transition-transform duration-200 group-hover:-translate-y-0.5 dark:bg-white/5 aspect-square"><img src="https://images.unsplash.com/photo-1535615615570-3b839f4359be?crop=entropy&amp;cs=tinysrgb&amp;fit=max&amp;fm=jpg&amp;ixid=M3w3MjU0ODR8MHwxfHNlYXJjaHwzfHxsb3ZlfGVufDF8fHx8MTc4OTkwOTIzNnww&amp;ixlib=rb-4.1.0&amp;q=80&amp;w=400" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" /></div></a>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-950 sm:text-sm dark:text-white"><a href="#" class="group-hover:underline">close-up photography of heart shaped fairy lite on brown sand</a></h3>
+    <p class="text-base tabular-nums text-mist-500 sm:text-sm">2018 · Image</p>
+    
+    <p class="text-xs break-words text-mist-500 text-pretty">Photo by Fadi Xd on Unsplash</p>
+    <a href="https://unsplash.com/photos/close-up-photography-of-heart-shaped-fairy-lite-on-brown-sand-I4dR572y7l0?utm_medium=referral&amp;utm_source=devils_dictionary" class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 hover:text-mist-950 hover:underline dark:hover:text-white">Source ↗</a>
+  </div>
+</div></li>
+    <li class="shrink-0 w-24 sm:w-28"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <a href="#" class="rounded-sm"><div class="w-full shrink-0 overflow-hidden rounded-sm bg-mist-950/5 transition-transform duration-200 group-hover:-translate-y-0.5 dark:bg-white/5 aspect-square"><img src="https://api.openverse.org/v1/images/2a44ac80-9ea6-4765-a417-f45a0f21679b/thumb/" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" /></div></a>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-950 sm:text-sm dark:text-white"><a href="#" class="group-hover:underline">Love!</a></h3>
+    <p class="text-base tabular-nums text-mist-500 sm:text-sm">Image</p>
+    
+    <p class="text-xs break-words text-mist-500 text-pretty">&quot;Love!&quot; by gags9999, CC-BY-2.0</p>
+    <a href="https://www.flickr.com/photos/37398884@N03/16465093822" class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 hover:text-mist-950 hover:underline dark:hover:text-white">Source ↗</a>
+  </div>
+</div></li>
+    <li class="shrink-0 w-24 sm:w-28"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <a href="#" class="rounded-sm"><div class="w-full shrink-0 overflow-hidden rounded-sm bg-mist-950/5 transition-transform duration-200 group-hover:-translate-y-0.5 dark:bg-white/5 aspect-square"><img src="https://images.pexels.com/photos/7553194/pexels-photo-7553194.jpeg?auto=compress&amp;cs=tinysrgb&amp;h=350" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" /></div></a>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-950 sm:text-sm dark:text-white"><a href="#" class="group-hover:underline">A heart-shaped design of yellow petals arranged on a stone pavement.</a></h3>
+    <p class="text-base tabular-nums text-mist-500 sm:text-sm">Image</p>
+    
+    <p class="text-xs break-words text-mist-500 text-pretty">Photo by Ralitsa Racheva on Pexels</p>
+    <a href="https://www.pexels.com/photo/white-and-yellow-petals-on-the-ground-forming-a-heart-shape-7553194/" class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 hover:text-mist-950 hover:underline dark:hover:text-white">Source ↗</a>
+  </div>
+</div></li>
+    <li class="shrink-0 w-24 sm:w-28"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <a href="#" class="rounded-sm"><div class="w-full shrink-0 overflow-hidden rounded-sm bg-mist-950/5 transition-transform duration-200 group-hover:-translate-y-0.5 dark:bg-white/5 aspect-square"><img src="https://images.unsplash.com/photo-1474552226712-ac0f0961a954?crop=entropy&amp;cs=tinysrgb&amp;fit=max&amp;fm=jpg&amp;ixid=M3w3MjU0ODR8MHwxfHNlYXJjaHw0fHxsb3ZlfGVufDF8fHx8MTc4OTkwOTIzNnww&amp;ixlib=rb-4.1.0&amp;q=80&amp;w=400" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" /></div></a>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-950 sm:text-sm dark:text-white"><a href="#" class="group-hover:underline">Don’t let go</a></h3>
+    <p class="text-base tabular-nums text-mist-500 sm:text-sm">2016 · Image</p>
+    
+    <p class="text-xs break-words text-mist-500 text-pretty">Photo by Everton Vila on Unsplash</p>
+    <a href="https://unsplash.com/photos/woman-on-bike-reaching-for-mans-hand-behind-her-also-on-bike-AsahNlC0VhQ?utm_medium=referral&amp;utm_source=devils_dictionary" class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 hover:text-mist-950 hover:underline dark:hover:text-white">Source ↗</a>
+  </div>
+</div></li>
+  </ul>
+  <div class="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
+    <details class="min-w-0"><summary class="w-fit cursor-pointer text-base text-mist-500 hover:text-mist-700 sm:text-sm dark:text-mist-400">Matches for “love” · About these results</summary>
+      <div class="space-y-3 pt-2"><section class="space-y-2 text-base text-mist-600 sm:text-sm dark:text-mist-300">
+        <p class="font-medium text-mist-950 dark:text-white">Openverse · search: CC and public domain</p>
+        <p class="text-pretty">Search matches from Openverse. These are provider results, not curated examples or dictionary interpretations.</p>
+        <ul role="list" class="space-y-1"><li>Love, love: Search result for “love”, ranked by the provider and not matched on an identifier.</li><li>Love: Search result for “love”, ranked by the provider and not matched on an identifier.</li><li>love: Search result for “love”, ranked by the provider and not matched on an identifier.</li><li>Love!: Search result for “love”, ranked by the provider and not matched on an identifier.</li></ul>
+      </section><section class="space-y-2 text-base text-mist-600 sm:text-sm dark:text-mist-300">
+        <p class="font-medium text-mist-950 dark:text-white">Pexels · search: Pexels License</p>
+        <p class="text-pretty">Search matches from Pexels. These are provider results, not curated examples or dictionary interpretations.</p>
+        <ul role="list" class="space-y-1"><li>A couple shares a tender moment surrounded by vibrant red roses, creating a romantic atmosphere.: Search result for “love”, ranked by the provider and not matched on an identifier.</li><li>A red envelope with a love letter on pink background, ideal for Valentine's.: Search result for “love”, ranked by the provider and not matched on an identifier.</li><li>A loving couple shares an intimate moment outdoors at sunset.: Search result for “love”, ranked by the provider and not matched on an identifier.</li><li>A heart-shaped design of yellow petals arranged on a stone pavement.: Search result for “love”, ranked by the provider and not matched on an identifier.</li></ul>
+      </section><section class="space-y-2 text-base text-mist-600 sm:text-sm dark:text-mist-300">
+        <p class="font-medium text-mist-950 dark:text-white">Unsplash · search: Unsplash License</p>
+        <p class="text-pretty">Search matches from Unsplash. These are provider results, not curated examples or dictionary interpretations.</p>
+        <ul role="list" class="space-y-1"><li>Love under setting sun: Search result for “love”, ranked by the provider and not matched on an identifier.</li><li>Single red rose on pages: Search result for “love”, ranked by the provider and not matched on an identifier.</li><li>close-up photography of heart shaped fairy lite on brown sand: Search result for “love”, ranked by the provider and not matched on an identifier.</li><li>Don’t let go: Search result for “love”, ranked by the provider and not matched on an identifier.</li></ul>
+      </section></div>
+    </details>
+    <button type="button" class="relative rounded-sm py-1 text-base text-mist-600 underline underline-offset-4 hover:text-mist-950 sm:text-sm dark:text-mist-300"><span class="pointer-fine:hidden absolute top-1/2 left-1/2 size-[max(100%,3rem)] -translate-1/2" aria-hidden="true"></span>Load more</button>
+  </div>
+</div></div>
+  <div class="hidden pt-4 group-has-[#culture-tab-gif:checked]:block"><div id="culture-shelf-gif" class="space-y-3">
+  <div class="flex flex-wrap items-baseline justify-between gap-2">
+    <h2 class="font-display text-xl text-balance text-mist-950 dark:text-white">GIFs</h2>
+    <p class="flex items-baseline gap-2 text-base text-mist-500 sm:text-sm">GIPHY<img src="../../../priv/static/images/giphy-powered-by.png" alt="Powered by GIPHY" width="88" class="rounded bg-white" /></p>
+  </div>
+  <ul role="list" tabindex="0" aria-label="GIFs matches; scroll for more" class="flex gap-5 overflow-x-auto overscroll-x-contain pb-3 focus-visible:outline-2 focus-visible:outline-offset-2">
+    <li class="shrink-0 w-24 sm:w-28"><div class="group relative flex min-w-0 flex-col gap-2 rounded-sm">
+  <div class="w-full shrink-0 overflow-hidden rounded-sm bg-mist-950/5 aspect-square dark:bg-white/5">
+    <img src="https://media3.giphy.com/media/v1.Y2lkPTAyZWYyMzRkOWR1dXoya3dmcHhxam9yMG83Y2x2cXUxbmF1a3Z2d2QzYTVsMzVndyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/FDh2DGsNR4d4TFv890/200w_s.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" />
+  </div>
+  <button type="button" class="absolute top-1 left-1 inline-flex items-center gap-1 rounded-full bg-mist-950/75 py-1 pr-2 pl-1.5 text-sm/5 font-medium text-white backdrop-blur">
+    <span class="size-4 shrink-0 hero-play-micro"></span>Play
+  </button>
+  <p class="line-clamp-2 text-base text-mist-500 sm:text-sm">Happy In Love GIF</p>
+</div></li>
+    <li class="shrink-0 w-24 sm:w-28"><div class="group relative flex min-w-0 flex-col gap-2 rounded-sm">
+  <div class="w-full shrink-0 overflow-hidden rounded-sm bg-mist-950/5 aspect-square dark:bg-white/5">
+    <img src="https://media2.giphy.com/media/v1.Y2lkPTAyZWYyMzRkOWR1dXoya3dmcHhxam9yMG83Y2x2cXUxbmF1a3Z2d2QzYTVsMzVndyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/FRzg3omGn8C5ZYeafu/200w_s.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" />
+  </div>
+  <button type="button" class="absolute top-1 left-1 inline-flex items-center gap-1 rounded-full bg-mist-950/75 py-1 pr-2 pl-1.5 text-sm/5 font-medium text-white backdrop-blur">
+    <span class="size-4 shrink-0 hero-play-micro"></span>Play
+  </button>
+  <p class="line-clamp-2 text-base text-mist-500 sm:text-sm">I Love You GIF</p>
+</div></li>
+    <li class="shrink-0 w-24 sm:w-28"><div class="group relative flex min-w-0 flex-col gap-2 rounded-sm">
+  <div class="w-full shrink-0 overflow-hidden rounded-sm bg-mist-950/5 aspect-square dark:bg-white/5">
+    <img src="https://media3.giphy.com/media/v1.Y2lkPTAyZWYyMzRkOWR1dXoya3dmcHhxam9yMG83Y2x2cXUxbmF1a3Z2d2QzYTVsMzVndyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/s6fnVyWTfM2nUKuMVY/200w_s.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" />
+  </div>
+  <button type="button" class="absolute top-1 left-1 inline-flex items-center gap-1 rounded-full bg-mist-950/75 py-1 pr-2 pl-1.5 text-sm/5 font-medium text-white backdrop-blur">
+    <span class="size-4 shrink-0 hero-play-micro"></span>Play
+  </button>
+  <p class="line-clamp-2 text-base text-mist-500 sm:text-sm">Couple Love GIF by LindaDurbesson</p>
+</div></li>
+    <li class="shrink-0 w-24 sm:w-28"><div class="group relative flex min-w-0 flex-col gap-2 rounded-sm">
+  <div class="w-full shrink-0 overflow-hidden rounded-sm bg-mist-950/5 aspect-square dark:bg-white/5">
+    <img src="https://media4.giphy.com/media/v1.Y2lkPTAyZWYyMzRkOWR1dXoya3dmcHhxam9yMG83Y2x2cXUxbmF1a3Z2d2QzYTVsMzVndyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/xR5cPyPoL5HVXSphqA/200w_s.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" />
+  </div>
+  <button type="button" class="absolute top-1 left-1 inline-flex items-center gap-1 rounded-full bg-mist-950/75 py-1 pr-2 pl-1.5 text-sm/5 font-medium text-white backdrop-blur">
+    <span class="size-4 shrink-0 hero-play-micro"></span>Play
+  </button>
+  <p class="line-clamp-2 text-base text-mist-500 sm:text-sm">Kiss You Love GIF</p>
+</div></li>
+    <li class="shrink-0 w-24 sm:w-28"><div class="group relative flex min-w-0 flex-col gap-2 rounded-sm">
+  <div class="w-full shrink-0 overflow-hidden rounded-sm bg-mist-950/5 aspect-square dark:bg-white/5">
+    <img src="https://media2.giphy.com/media/v1.Y2lkPTAyZWYyMzRkOWR1dXoya3dmcHhxam9yMG83Y2x2cXUxbmF1a3Z2d2QzYTVsMzVndyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/NTpktSQ9w1uCOpFgsP/200w_s.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" />
+  </div>
+  <button type="button" class="absolute top-1 left-1 inline-flex items-center gap-1 rounded-full bg-mist-950/75 py-1 pr-2 pl-1.5 text-sm/5 font-medium text-white backdrop-blur">
+    <span class="size-4 shrink-0 hero-play-micro"></span>Play
+  </button>
+  <p class="line-clamp-2 text-base text-mist-500 sm:text-sm">I Love You Smile GIF by Chippy the Dog</p>
+</div></li>
+    <li class="shrink-0 w-24 sm:w-28"><div class="group relative flex min-w-0 flex-col gap-2 rounded-sm">
+  <div class="w-full shrink-0 overflow-hidden rounded-sm bg-mist-950/5 aspect-square dark:bg-white/5">
+    <img src="https://media4.giphy.com/media/v1.Y2lkPTAyZWYyMzRkOWR1dXoya3dmcHhxam9yMG83Y2x2cXUxbmF1a3Z2d2QzYTVsMzVndyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/xwzhsVQ2kWuo9rj7vD/200w_s.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" />
+  </div>
+  <button type="button" class="absolute top-1 left-1 inline-flex items-center gap-1 rounded-full bg-mist-950/75 py-1 pr-2 pl-1.5 text-sm/5 font-medium text-white backdrop-blur">
+    <span class="size-4 shrink-0 hero-play-micro"></span>Play
+  </button>
+  <p class="line-clamp-2 text-base text-mist-500 sm:text-sm">In Love Bunny GIF</p>
+</div></li>
+    <li class="shrink-0 w-24 sm:w-28"><div class="group relative flex min-w-0 flex-col gap-2 rounded-sm">
+  <div class="w-full shrink-0 overflow-hidden rounded-sm bg-mist-950/5 aspect-square dark:bg-white/5">
+    <img src="https://media1.giphy.com/media/v1.Y2lkPTAyZWYyMzRkOWR1dXoya3dmcHhxam9yMG83Y2x2cXUxbmF1a3Z2d2QzYTVsMzVndyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/y2tJSADGWSGx5v9KR7/200w_s.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" />
+  </div>
+  <button type="button" class="absolute top-1 left-1 inline-flex items-center gap-1 rounded-full bg-mist-950/75 py-1 pr-2 pl-1.5 text-sm/5 font-medium text-white backdrop-blur">
+    <span class="size-4 shrink-0 hero-play-micro"></span>Play
+  </button>
+  <p class="line-clamp-2 text-base text-mist-500 sm:text-sm">For You Love GIF</p>
+</div></li>
+    <li class="shrink-0 w-24 sm:w-28"><div class="group relative flex min-w-0 flex-col gap-2 rounded-sm">
+  <div class="w-full shrink-0 overflow-hidden rounded-sm bg-mist-950/5 aspect-square dark:bg-white/5">
+    <img src="https://media1.giphy.com/media/v1.Y2lkPTAyZWYyMzRkOWR1dXoya3dmcHhxam9yMG83Y2x2cXUxbmF1a3Z2d2QzYTVsMzVndyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/7W1rgKAxlDe3m/200w_s.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" />
+  </div>
+  <button type="button" class="absolute top-1 left-1 inline-flex items-center gap-1 rounded-full bg-mist-950/75 py-1 pr-2 pl-1.5 text-sm/5 font-medium text-white backdrop-blur">
+    <span class="size-4 shrink-0 hero-play-micro"></span>Play
+  </button>
+  <p class="line-clamp-2 text-base text-mist-500 sm:text-sm">In Love Hearts GIF</p>
+</div></li>
+  </ul>
+  <div class="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
+    <details class="min-w-0"><summary class="w-fit cursor-pointer text-base text-mist-500 hover:text-mist-700 sm:text-sm dark:text-mist-400">Matches for “love” · About these results</summary>
+      <div class="space-y-3 pt-2"><section class="space-y-2 text-base text-mist-600 sm:text-sm dark:text-mist-300">
+        <p class="font-medium text-mist-950 dark:text-white">GIPHY · G-rated search</p>
+        <p class="text-pretty">Search matches from GIPHY. These are provider results, not curated examples or dictionary interpretations. Nothing is stored: the search runs in your browser and the media stays on GIPHY's hosts.</p>
+        <ul role="list" class="space-y-1"></ul>
+      </section></div>
+    </details>
+    <button type="button" class="relative rounded-sm py-1 text-base text-mist-600 underline underline-offset-4 hover:text-mist-950 sm:text-sm dark:text-mist-300"><span class="pointer-fine:hidden absolute top-1/2 left-1/2 size-[max(100%,3rem)] -translate-1/2" aria-hidden="true"></span>Load more</button>
+  </div>
+</div></div>
+</section></div>
+    <div class="lg:hidden"><section id="related-verb" class="mt-8">
+  <h2 class="text-base/8 font-medium text-mist-950 dark:text-white">Related words <span class="font-normal text-mist-500">· verb</span></h2>
+  <div class="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+    <span class="w-20 shrink-0 text-base/7 text-mist-500 sm:text-sm/7">similar</span>
+    <a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">adore</a><a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">care for</a><a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">cherish</a><a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">cling to</a><a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">dote</a><a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">enjoy</a><a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">fancy</a><a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">go to bed with</a><a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">sleep with</a>
+    
+  </div><div class="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+    <span class="w-20 shrink-0 text-base/7 text-mist-500 sm:text-sm/7">opposite</span>
+    <a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">despise</a><a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">fear</a><a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">hate</a>
+    
+  </div><div class="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+    <span class="w-20 shrink-0 text-base/7 text-mist-500 sm:text-sm/7">broader</span>
+    <a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">affect</a><a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">desire</a><a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">like</a>
+    
+  </div><div class="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+    <span class="w-20 shrink-0 text-base/7 text-mist-500 sm:text-sm/7">narrower</span>
+    <a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">worship</a><a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">worship the ground someone walks on</a>
+    
+  </div><div class="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+    <span class="w-20 shrink-0 text-base/7 text-mist-500 sm:text-sm/7">family</span>
+    <a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">God love someone</a><a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">I have to love you and leave you</a><a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">I love you</a><a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">I'm in love with you</a><a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">Lord love a duck</a><a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">Lord love you</a><a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">Persian love</a><a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">Queen of Love</a><a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">all is fair in love and war</a><a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">all's fair in love and war</a><a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">all-loving</a><a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">antilove</a>
+    <details class="min-w-0 max-w-full"><summary class="cursor-pointer text-base/7 text-mist-500 sm:text-sm/7">+269</summary></details>
+  </div>
+</section>
+<section id="related-name" class="mt-8">
+  <h2 class="text-base/8 font-medium text-mist-950 dark:text-white">Related words <span class="font-normal text-mist-500">· name</span></h2>
+  <div class="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+    <span class="w-20 shrink-0 text-base/7 text-mist-500 sm:text-sm/7">family</span>
+    <a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">Love County</a>
+    
+  </div>
+</section></div>
+    <section id="thing" class="mt-6 rounded-2xl bg-mist-950/2.5 p-6 dark:bg-white/5"><div class="text-base/7 text-mist-700 sm:text-sm/7 dark:text-mist-400 [&_#concept-card]:mt-0 [&_#concept-card]:bg-transparent [&_#concept-card]:p-0">
+  <div class="text-sm/7 font-semibold text-mist-700 dark:text-mist-400 ">
+  the thing
+</div>
+  <div id="concept-card" class="mt-4 flex flex-col gap-4 rounded-xl bg-mist-950/2.5 p-4 sm:flex-row dark:bg-white/5">
+  <figure class="shrink-0 sm:w-48">
+    <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/8/89/Frank_Bernard_Dicksee_-_Romeo_and_Juliet,_1884.jpg/500px-Frank_Bernard_Dicksee_-_Romeo_and_Juliet,_1884.jpg" alt="love" loading="lazy" class="w-full rounded-lg object-cover">
+    <figcaption class="mt-1 text-xs/5 text-mist-500">
+      Frank Bernard Dicksee - Romeo and Juliet, 1884.jpg · Wikimedia Commons
+    </figcaption>
+  </figure>
+  <div class="min-w-0">
+    <h2 class="font-display text-2xl/8 text-mist-950 dark:text-white">
+      <a href="/entities/1867856/love" data-phx-link="redirect" data-phx-link-state="push" id="concept-card-entity" class="underline-offset-4 transition-colors hover:text-amber-700 hover:underline dark:hover:text-amber-300">
+        love
+      </a>
+    </h2>
+    <p class="mt-1 text-sm/7 text-mist-700 dark:text-mist-400">
+      strong, positive emotion based on affection
+    </p>
+    <p class="mt-3 flex flex-wrap items-center gap-x-4 text-sm/7">
+      <a href="https://en.wikipedia.org/wiki/Love" id="concept-card-wikipedia" target="_blank" rel="noopener" class="text-mist-500 hover:text-mist-950 hover:underline dark:hover:text-white">
+        Wikipedia <span aria-hidden="true">↗</span>
+      </a>
+      <a href="https://www.wikidata.org/wiki/Q316" id="concept-card-wikidata" target="_blank" rel="noopener" class="text-mist-500 hover:text-mist-950 hover:underline dark:hover:text-white">
+        Q316 <span aria-hidden="true">↗</span>
+      </a>
+      <a href="/define/love?provenance=thing" data-phx-link="patch" data-phx-link-state="push" id="thing-info" title="where this came from — the thing this word names — love" class="text-sm/7 text-mist-500 hover:text-mist-950 dark:hover:text-white">
+  <span aria-hidden="true">ⓘ</span>
+  <span class="sr-only">where this came from — the thing this word names — love</span>
+</a>
+    </p>
+  </div>
+</div>
+  <p id="thing-chain" class="mt-4 flex flex-wrap items-center gap-x-2 text-sm/7">
+  <span class="text-mist-500">a kind of</span>
+  <span class="flex items-center gap-x-2">
+    <span class="text-mist-400">affection</span>
+  </span><span class="flex items-center gap-x-2">
+    <span aria-hidden="true" class="text-mist-400">›</span>
+    <span class="text-mist-400">feeling</span>
+  </span>
+</p>
+  <div id="may-refer-to" class="mt-6">
+  <p class="text-sm/7 text-mist-500">may also refer to</p>
+  <ul class="mt-1 space-y-1 text-sm/7 text-mist-700 dark:text-mist-400">
+    <li id="may-refer-to-Q316">
+      <span class="text-mist-950 dark:text-white">love</span>
+      <span class="text-mist-500">— strong, positive emotion based on affection</span>
+    </li>
+  </ul>
+</div>
+</div></section>
+  </div>
+</div></div></main>
+    <footer class="pt-16">
+      <div class="bg-mist-950/2.5 py-16 text-mist-950 dark:bg-white/5 dark:text-white">
+        <div class="mx-auto flex w-full max-w-2xl flex-col gap-16 px-6 md:max-w-3xl lg:max-w-7xl lg:px-10">
+          <nav class="grid grid-cols-2 gap-6 text-sm/7 sm:grid-cols-3">
+            <div><h3>Browse</h3><ul role="list" class="mt-2 flex flex-col gap-2"><li class="text-mist-700 dark:text-mist-400"><a href="#">Artworks</a></li></ul></div>
+            <div><h3>Sources</h3><ul role="list" class="mt-2 flex flex-col gap-2"><li class="text-mist-700 dark:text-mist-400"><a href="#">Open English WordNet 2025</a></li><li class="text-mist-700 dark:text-mist-400"><a href="#">Wiktionary (English) via Kaikki</a></li><li class="text-mist-700 dark:text-mist-400"><a href="#">Wikidata</a></li><li class="text-mist-700 dark:text-mist-400"><a href="#">Wikipedia (English)</a></li><li class="text-mist-700 dark:text-mist-400"><a href="#">Ambrose Bierce, The Devil's Dictionary</a></li><li class="text-mist-700 dark:text-mist-400"><a href="#">Samuel Johnson, A Dictionary of the English Language</a></li></ul></div>
+          </nav>
+          <div class="text-sm/7 text-mist-600 dark:text-mist-500">
+            <p>An aggregator, not an author. Every definition belongs to the source that wrote it and links back to it. WordNet CC BY 4.0 · Wiktionary and Wikipedia CC BY-SA 4.0 · Wikidata CC0 · Bierce public domain.</p>
+          </div>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light" data-theme-source="user">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>GIFs shelf, three ways · word-page sketch</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="./sketch.css" />
+    <script>
+      // The app's own theme bootstrap (root.html.heex), minus the toggle: a
+      // sketch is opened from the filesystem and has to honour ?theme=dark so
+      // a reviewer can see both themes without a server.
+      (() => {
+        const q = new URLSearchParams(location.search).get("theme");
+        const system = () => matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        document.documentElement.setAttribute("data-theme", q || system());
+      })();
+    </script>
+  </head>
+  <body class="font-sans text-mist-950 antialiased dark:text-white">
+    <nav id="account-navigation" aria-label="Account" class="relative z-20 border-b border-mist-950/5 bg-mist-100 dark:border-white/10 dark:bg-mist-950">
+      <div class="mx-auto flex h-10 max-w-7xl items-center justify-end gap-5 px-6 text-sm/6 text-mist-600 lg:px-10 dark:text-mist-400">
+        <a href="#" class="font-medium text-mist-950 hover:underline dark:text-white">Register</a>
+        <a href="#" class="font-medium text-mist-950 hover:underline dark:text-white">Log in</a>
+      </div>
+    </nav>
+    <header class="sticky top-0 z-10 bg-mist-100 dark:bg-mist-950">
+      <nav>
+        <div class="mx-auto flex h-(--scroll-padding-top) max-w-7xl items-center gap-4 px-6 lg:px-10">
+          <div class="flex flex-1 items-center gap-12">
+            <div class="flex items-center">
+              <a href="#" class="font-display text-2xl/8 text-mist-950 dark:text-white">wordhoard</a>
+            </div>
+          </div>
+          <div class="flex flex-1 items-center justify-end gap-4">
+            <div class="flex shrink-0 items-center gap-5">
+              <div class="relative flex flex-row items-center rounded-full bg-mist-950/10 dark:bg-white/10">
+                <div class="absolute left-0 h-full w-1/3 rounded-full bg-white transition-[left] [[data-theme=dark]_&amp;]:left-2/3 [[data-theme=light]_&amp;]:left-1/3 dark:bg-mist-700"></div>
+                <span class="flex w-1/3 p-2"><span class="size-4 opacity-75 hero-computer-desktop-micro"></span></span>
+                <span class="flex w-1/3 p-2"><span class="size-4 opacity-75 hero-sun-micro"></span></span>
+                <span class="flex w-1/3 p-2"><span class="size-4 opacity-75 hero-moon-micro"></span></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+    <div id="sketch-note" class="border-b border-amber-600/30 bg-amber-50/60 dark:bg-amber-950/20">
+      <div class="mx-auto w-full max-w-2xl px-6 py-2 text-sm/6 text-amber-800 md:max-w-3xl lg:max-w-7xl lg:px-10 dark:text-amber-300">
+        Sketch, not the app · GIFs shelf — the three versions #111 asks the owner to choose between, on real GIPHY results for “love”.
+      </div>
+    </div>
+    <main class="isolate overflow-clip"><div class="mx-auto w-full max-w-2xl px-6 pb-10 md:max-w-3xl lg:max-w-7xl lg:px-10">
+<div class="py-6">
+  <h1 class="font-display text-5xl/none text-mist-950 sm:text-6xl/none dark:text-white">GIFs, three ways</h1>
+  <p class="mt-4 max-w-[68ch] text-base/7 text-mist-700 text-pretty sm:text-sm/7 dark:text-mist-400">
+    What may not change in any of them: the search runs in the browser, nothing is written to the database or to browser storage, the media is never rehosted, the search stays G-rated, and the <em>Powered by GIPHY</em> mark is visible. The hook's URL guards, three-page cap and ten-second timeout are untouched. All three sit inside the culture block with the shelf chrome the other four shelves already have.
+  </p>
+</div>
+
+<section id="gifs-a" class="border-t border-mist-950/10 py-10 dark:border-white/10">
+  <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+    <h2 class="font-display text-[2rem]/10 tracking-tight text-mist-950 dark:text-white">A · The shared chrome</h2>
+  </div>
+  <p class="mt-2 max-w-[68ch] text-base/7 text-mist-700 text-pretty sm:text-sm/7 dark:text-mist-400">Heading, byline, one About, one Load more, the shelf's own column width and type scale. <em>Play</em> becomes an overlay on the still instead of a text button under it. Nothing about motion changes: a frame animates when its control is pressed.</p>
+  <div class="mt-6 border-y border-mist-950/10 py-5 dark:border-white/10"><div class="flex flex-wrap items-baseline justify-between gap-2">
+  <h2 class="font-display text-xl text-mist-950 dark:text-white">GIFs</h2>
+  <p class="flex items-center gap-3 text-base text-mist-500 sm:text-sm">GIPHY<a href="https://giphy.com/" rel="noreferrer"><img src="../../../priv/static/images/giphy-powered-by.png" alt="Powered by GIPHY" width="100" class="rounded bg-white" /></a></p>
+</div>
+<ul role="list" tabindex="0" aria-label="GIF matches; scroll for more" class="mt-3 flex gap-5 overflow-x-auto overscroll-x-contain pb-3 focus-visible:outline-2 focus-visible:outline-offset-2">
+  <li class="w-24 shrink-0 sm:w-28">
+    <div class="group relative flex min-w-0 flex-col gap-2">
+      <div class="aspect-square w-full overflow-hidden rounded-sm bg-mist-950/5 dark:bg-white/5"><img src="https://media3.giphy.com/media/v1.Y2lkPTAyZWYyMzRkOWR1dXoya3dmcHhxam9yMG83Y2x2cXUxbmF1a3Z2d2QzYTVsMzVndyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/FDh2DGsNR4d4TFv890/200w_s.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" /></div>
+      <button type="button" aria-pressed="false" aria-label="Play Happy In Love GIF" class="absolute top-1 left-1 inline-flex items-center gap-1 rounded-full bg-mist-950/75 py-1 pr-2 pl-1.5 text-sm/5 font-medium text-white backdrop-blur"><span class="size-4 shrink-0 hero-play-micro"></span>Play</button>
+      <p class="line-clamp-2 text-base text-mist-500 sm:text-sm">Happy In Love GIF</p>
+    </div>
+  </li>
+  <li class="w-24 shrink-0 sm:w-28">
+    <div class="group relative flex min-w-0 flex-col gap-2">
+      <div class="aspect-square w-full overflow-hidden rounded-sm bg-mist-950/5 dark:bg-white/5"><img src="https://media2.giphy.com/media/v1.Y2lkPTAyZWYyMzRkOWR1dXoya3dmcHhxam9yMG83Y2x2cXUxbmF1a3Z2d2QzYTVsMzVndyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/FRzg3omGn8C5ZYeafu/200w_s.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" /></div>
+      <button type="button" aria-pressed="false" aria-label="Play I Love You GIF" class="absolute top-1 left-1 inline-flex items-center gap-1 rounded-full bg-mist-950/75 py-1 pr-2 pl-1.5 text-sm/5 font-medium text-white backdrop-blur"><span class="size-4 shrink-0 hero-play-micro"></span>Play</button>
+      <p class="line-clamp-2 text-base text-mist-500 sm:text-sm">I Love You GIF</p>
+    </div>
+  </li>
+  <li class="w-24 shrink-0 sm:w-28">
+    <div class="group relative flex min-w-0 flex-col gap-2">
+      <div class="aspect-square w-full overflow-hidden rounded-sm bg-mist-950/5 dark:bg-white/5"><img src="https://media3.giphy.com/media/v1.Y2lkPTAyZWYyMzRkOWR1dXoya3dmcHhxam9yMG83Y2x2cXUxbmF1a3Z2d2QzYTVsMzVndyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/s6fnVyWTfM2nUKuMVY/200w_s.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" /></div>
+      <button type="button" aria-pressed="false" aria-label="Play Couple Love GIF by LindaDurbesson" class="absolute top-1 left-1 inline-flex items-center gap-1 rounded-full bg-mist-950/75 py-1 pr-2 pl-1.5 text-sm/5 font-medium text-white backdrop-blur"><span class="size-4 shrink-0 hero-play-micro"></span>Play</button>
+      <p class="line-clamp-2 text-base text-mist-500 sm:text-sm">Couple Love GIF by LindaDurbesson</p>
+    </div>
+  </li>
+  <li class="w-24 shrink-0 sm:w-28">
+    <div class="group relative flex min-w-0 flex-col gap-2">
+      <div class="aspect-square w-full overflow-hidden rounded-sm bg-mist-950/5 dark:bg-white/5"><img src="https://media4.giphy.com/media/v1.Y2lkPTAyZWYyMzRkOWR1dXoya3dmcHhxam9yMG83Y2x2cXUxbmF1a3Z2d2QzYTVsMzVndyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/xR5cPyPoL5HVXSphqA/200w_s.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" /></div>
+      <button type="button" aria-pressed="false" aria-label="Play Kiss You Love GIF" class="absolute top-1 left-1 inline-flex items-center gap-1 rounded-full bg-mist-950/75 py-1 pr-2 pl-1.5 text-sm/5 font-medium text-white backdrop-blur"><span class="size-4 shrink-0 hero-play-micro"></span>Play</button>
+      <p class="line-clamp-2 text-base text-mist-500 sm:text-sm">Kiss You Love GIF</p>
+    </div>
+  </li>
+  <li class="w-24 shrink-0 sm:w-28">
+    <div class="group relative flex min-w-0 flex-col gap-2">
+      <div class="aspect-square w-full overflow-hidden rounded-sm bg-mist-950/5 dark:bg-white/5"><img src="https://media2.giphy.com/media/v1.Y2lkPTAyZWYyMzRkOWR1dXoya3dmcHhxam9yMG83Y2x2cXUxbmF1a3Z2d2QzYTVsMzVndyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/NTpktSQ9w1uCOpFgsP/200w_s.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" /></div>
+      <button type="button" aria-pressed="false" aria-label="Play I Love You Smile GIF by Chippy the Dog" class="absolute top-1 left-1 inline-flex items-center gap-1 rounded-full bg-mist-950/75 py-1 pr-2 pl-1.5 text-sm/5 font-medium text-white backdrop-blur"><span class="size-4 shrink-0 hero-play-micro"></span>Play</button>
+      <p class="line-clamp-2 text-base text-mist-500 sm:text-sm">I Love You Smile GIF by Chippy the Dog</p>
+    </div>
+  </li>
+  <li class="w-24 shrink-0 sm:w-28">
+    <div class="group relative flex min-w-0 flex-col gap-2">
+      <div class="aspect-square w-full overflow-hidden rounded-sm bg-mist-950/5 dark:bg-white/5"><img src="https://media4.giphy.com/media/v1.Y2lkPTAyZWYyMzRkOWR1dXoya3dmcHhxam9yMG83Y2x2cXUxbmF1a3Z2d2QzYTVsMzVndyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/xwzhsVQ2kWuo9rj7vD/200w_s.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" /></div>
+      <button type="button" aria-pressed="false" aria-label="Play In Love Bunny GIF" class="absolute top-1 left-1 inline-flex items-center gap-1 rounded-full bg-mist-950/75 py-1 pr-2 pl-1.5 text-sm/5 font-medium text-white backdrop-blur"><span class="size-4 shrink-0 hero-play-micro"></span>Play</button>
+      <p class="line-clamp-2 text-base text-mist-500 sm:text-sm">In Love Bunny GIF</p>
+    </div>
+  </li>
+  <li class="w-24 shrink-0 sm:w-28">
+    <div class="group relative flex min-w-0 flex-col gap-2">
+      <div class="aspect-square w-full overflow-hidden rounded-sm bg-mist-950/5 dark:bg-white/5"><img src="https://media1.giphy.com/media/v1.Y2lkPTAyZWYyMzRkOWR1dXoya3dmcHhxam9yMG83Y2x2cXUxbmF1a3Z2d2QzYTVsMzVndyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/y2tJSADGWSGx5v9KR7/200w_s.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" /></div>
+      <button type="button" aria-pressed="false" aria-label="Play For You Love GIF" class="absolute top-1 left-1 inline-flex items-center gap-1 rounded-full bg-mist-950/75 py-1 pr-2 pl-1.5 text-sm/5 font-medium text-white backdrop-blur"><span class="size-4 shrink-0 hero-play-micro"></span>Play</button>
+      <p class="line-clamp-2 text-base text-mist-500 sm:text-sm">For You Love GIF</p>
+    </div>
+  </li>
+  <li class="w-24 shrink-0 sm:w-28">
+    <div class="group relative flex min-w-0 flex-col gap-2">
+      <div class="aspect-square w-full overflow-hidden rounded-sm bg-mist-950/5 dark:bg-white/5"><img src="https://media1.giphy.com/media/v1.Y2lkPTAyZWYyMzRkOWR1dXoya3dmcHhxam9yMG83Y2x2cXUxbmF1a3Z2d2QzYTVsMzVndyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/7W1rgKAxlDe3m/200w_s.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" /></div>
+      <button type="button" aria-pressed="false" aria-label="Play In Love Hearts GIF" class="absolute top-1 left-1 inline-flex items-center gap-1 rounded-full bg-mist-950/75 py-1 pr-2 pl-1.5 text-sm/5 font-medium text-white backdrop-blur"><span class="size-4 shrink-0 hero-play-micro"></span>Play</button>
+      <p class="line-clamp-2 text-base text-mist-500 sm:text-sm">In Love Hearts GIF</p>
+    </div>
+  </li>
+</ul>
+<div class="mt-2 flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2"><details class="min-w-0"><summary class="w-fit cursor-pointer text-base text-mist-500 hover:text-mist-700 sm:text-sm dark:text-mist-400">Matches for “love” · About these results</summary>
+<div class="space-y-2 pt-2 text-base text-mist-600 sm:text-sm dark:text-mist-300">
+  <p class="font-medium text-mist-950 dark:text-white">GIPHY · G-rated search</p>
+  <p class="text-pretty">Search matches from GIPHY, ranked by GIPHY and not matched on an identifier. These are provider results, not curated examples or dictionary interpretations.</p>
+  <p class="text-pretty">The search runs in your browser and nothing is stored: no result reaches the database, the media stays on GIPHY's hosts, and the page holds no copy.</p>
+</div></details><button type="button" class="relative rounded-sm py-1 text-base text-mist-600 underline underline-offset-4 hover:text-mist-950 sm:text-sm dark:text-mist-300"><span class="pointer-fine:hidden absolute top-1/2 left-1/2 size-[max(100%,3rem)] -translate-1/2" aria-hidden="true"></span>Load more</button></div></div>
+  <p class="mt-3 max-w-[68ch] text-base/7 text-mist-500 text-pretty sm:text-sm/7">Costs nothing and buys consistency — a reader sees one kind of shelf five times. It does not fix the complaint that started this: a row of stills is a broken GIF shelf.</p>
+</section>
+
+<section id="gifs-b" class="border-t border-mist-950/10 py-10 dark:border-white/10">
+  <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+    <h2 class="font-display text-[2rem]/10 tracking-tight text-mist-950 dark:text-white">B · Motion on intent</h2>
+  </div>
+  <p class="mt-2 max-w-[68ch] text-base/7 text-mist-700 text-pretty sm:text-sm/7 dark:text-mist-400">Stills by default; a frame plays while it is hovered or focused, and on tap where there is no pointer. Frames use the GIF's own aspect at a fixed height rather than a square crop, because a square crop of a 4:3 reaction GIF cuts the face out of it.</p>
+  <div class="mt-6 border-y border-mist-950/10 py-5 dark:border-white/10"><div class="flex flex-wrap items-baseline justify-between gap-2">
+  <h2 class="font-display text-xl text-mist-950 dark:text-white">GIFs</h2>
+  <p class="flex items-center gap-3 text-base text-mist-500 sm:text-sm">GIPHY<a href="https://giphy.com/" rel="noreferrer"><img src="../../../priv/static/images/giphy-powered-by.png" alt="Powered by GIPHY" width="100" class="rounded bg-white" /></a></p>
+</div>
+<ul role="list" tabindex="0" aria-label="GIF matches; scroll for more" class="mt-3 flex items-start gap-5 overflow-x-auto overscroll-x-contain pb-3 focus-visible:outline-2 focus-visible:outline-offset-2">
+  <li class="shrink-0">
+    <div class="group flex min-w-0 max-w-40 flex-col items-start gap-2">
+      <button type="button" aria-pressed="false" aria-label="Play Happy In Love GIF" class="relative block h-28 overflow-hidden rounded-sm bg-mist-950/5 focus-visible:outline-2 focus-visible:outline-offset-2 dark:bg-white/5">
+        <img src="https://media3.giphy.com/media/v1.Y2lkPTAyZWYyMzRkOWR1dXoya3dmcHhxam9yMG83Y2x2cXUxbmF1a3Z2d2QzYTVsMzVndyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/FDh2DGsNR4d4TFv890/200w_s.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="h-28 w-auto motion-safe:group-hover:invisible motion-safe:group-focus-within:invisible" />
+        <img src="https://media3.giphy.com/media/v1.Y2lkPTAyZWYyMzRkOWR1dXoya3dmcHhxam9yMG83Y2x2cXUxbmF1a3Z2d2QzYTVsMzVndyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/FDh2DGsNR4d4TFv890/200w.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="invisible absolute inset-0 h-28 w-auto motion-safe:group-hover:visible motion-safe:group-focus-within:visible" />
+        <span class="absolute top-1 left-1 inline-flex items-center gap-1 rounded-full bg-mist-950/75 py-1 pr-2 pl-1.5 text-sm/5 font-medium text-white backdrop-blur group-hover:opacity-0 motion-reduce:group-hover:opacity-100"><span class="size-4 shrink-0 hero-play-micro"></span>Play</span>
+      </button>
+      <p class="line-clamp-1 max-w-32 text-base text-mist-500 sm:text-sm">Happy In Love GIF</p>
+    </div>
+  </li>
+  <li class="shrink-0">
+    <div class="group flex min-w-0 max-w-40 flex-col items-start gap-2">
+      <button type="button" aria-pressed="false" aria-label="Play I Love You GIF" class="relative block h-28 overflow-hidden rounded-sm bg-mist-950/5 focus-visible:outline-2 focus-visible:outline-offset-2 dark:bg-white/5">
+        <img src="https://media2.giphy.com/media/v1.Y2lkPTAyZWYyMzRkOWR1dXoya3dmcHhxam9yMG83Y2x2cXUxbmF1a3Z2d2QzYTVsMzVndyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/FRzg3omGn8C5ZYeafu/200w_s.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="h-28 w-auto motion-safe:group-hover:invisible motion-safe:group-focus-within:invisible" />
+        <img src="https://media2.giphy.com/media/v1.Y2lkPTAyZWYyMzRkOWR1dXoya3dmcHhxam9yMG83Y2x2cXUxbmF1a3Z2d2QzYTVsMzVndyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/FRzg3omGn8C5ZYeafu/200w.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="invisible absolute inset-0 h-28 w-auto motion-safe:group-hover:visible motion-safe:group-focus-within:visible" />
+        <span class="absolute top-1 left-1 inline-flex items-center gap-1 rounded-full bg-mist-950/75 py-1 pr-2 pl-1.5 text-sm/5 font-medium text-white backdrop-blur group-hover:opacity-0 motion-reduce:group-hover:opacity-100"><span class="size-4 shrink-0 hero-play-micro"></span>Play</span>
+      </button>
+      <p class="line-clamp-1 max-w-32 text-base text-mist-500 sm:text-sm">I Love You GIF</p>
+    </div>
+  </li>
+  <li class="shrink-0">
+    <div class="group flex min-w-0 max-w-40 flex-col items-start gap-2">
+      <button type="button" aria-pressed="false" aria-label="Play Couple Love GIF by LindaDurbesson" class="relative block h-28 overflow-hidden rounded-sm bg-mist-950/5 focus-visible:outline-2 focus-visible:outline-offset-2 dark:bg-white/5">
+        <img src="https://media3.giphy.com/media/v1.Y2lkPTAyZWYyMzRkOWR1dXoya3dmcHhxam9yMG83Y2x2cXUxbmF1a3Z2d2QzYTVsMzVndyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/s6fnVyWTfM2nUKuMVY/200w_s.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="h-28 w-auto motion-safe:group-hover:invisible motion-safe:group-focus-within:invisible" />
+        <img src="https://media3.giphy.com/media/v1.Y2lkPTAyZWYyMzRkOWR1dXoya3dmcHhxam9yMG83Y2x2cXUxbmF1a3Z2d2QzYTVsMzVndyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/s6fnVyWTfM2nUKuMVY/200w.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="invisible absolute inset-0 h-28 w-auto motion-safe:group-hover:visible motion-safe:group-focus-within:visible" />
+        <span class="absolute top-1 left-1 inline-flex items-center gap-1 rounded-full bg-mist-950/75 py-1 pr-2 pl-1.5 text-sm/5 font-medium text-white backdrop-blur group-hover:opacity-0 motion-reduce:group-hover:opacity-100"><span class="size-4 shrink-0 hero-play-micro"></span>Play</span>
+      </button>
+      <p class="line-clamp-1 max-w-32 text-base text-mist-500 sm:text-sm">Couple Love GIF by LindaDurbesson</p>
+    </div>
+  </li>
+  <li class="shrink-0">
+    <div class="group flex min-w-0 max-w-40 flex-col items-start gap-2">
+      <button type="button" aria-pressed="false" aria-label="Play Kiss You Love GIF" class="relative block h-28 overflow-hidden rounded-sm bg-mist-950/5 focus-visible:outline-2 focus-visible:outline-offset-2 dark:bg-white/5">
+        <img src="https://media4.giphy.com/media/v1.Y2lkPTAyZWYyMzRkOWR1dXoya3dmcHhxam9yMG83Y2x2cXUxbmF1a3Z2d2QzYTVsMzVndyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/xR5cPyPoL5HVXSphqA/200w_s.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="h-28 w-auto motion-safe:group-hover:invisible motion-safe:group-focus-within:invisible" />
+        <img src="https://media4.giphy.com/media/v1.Y2lkPTAyZWYyMzRkOWR1dXoya3dmcHhxam9yMG83Y2x2cXUxbmF1a3Z2d2QzYTVsMzVndyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/xR5cPyPoL5HVXSphqA/200w.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="invisible absolute inset-0 h-28 w-auto motion-safe:group-hover:visible motion-safe:group-focus-within:visible" />
+        <span class="absolute top-1 left-1 inline-flex items-center gap-1 rounded-full bg-mist-950/75 py-1 pr-2 pl-1.5 text-sm/5 font-medium text-white backdrop-blur group-hover:opacity-0 motion-reduce:group-hover:opacity-100"><span class="size-4 shrink-0 hero-play-micro"></span>Play</span>
+      </button>
+      <p class="line-clamp-1 max-w-32 text-base text-mist-500 sm:text-sm">Kiss You Love GIF</p>
+    </div>
+  </li>
+  <li class="shrink-0">
+    <div class="group flex min-w-0 max-w-40 flex-col items-start gap-2">
+      <button type="button" aria-pressed="false" aria-label="Play I Love You Smile GIF by Chippy the Dog" class="relative block h-28 overflow-hidden rounded-sm bg-mist-950/5 focus-visible:outline-2 focus-visible:outline-offset-2 dark:bg-white/5">
+        <img src="https://media2.giphy.com/media/v1.Y2lkPTAyZWYyMzRkOWR1dXoya3dmcHhxam9yMG83Y2x2cXUxbmF1a3Z2d2QzYTVsMzVndyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/NTpktSQ9w1uCOpFgsP/200w_s.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="h-28 w-auto motion-safe:group-hover:invisible motion-safe:group-focus-within:invisible" />
+        <img src="https://media2.giphy.com/media/v1.Y2lkPTAyZWYyMzRkOWR1dXoya3dmcHhxam9yMG83Y2x2cXUxbmF1a3Z2d2QzYTVsMzVndyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/NTpktSQ9w1uCOpFgsP/200w.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="invisible absolute inset-0 h-28 w-auto motion-safe:group-hover:visible motion-safe:group-focus-within:visible" />
+        <span class="absolute top-1 left-1 inline-flex items-center gap-1 rounded-full bg-mist-950/75 py-1 pr-2 pl-1.5 text-sm/5 font-medium text-white backdrop-blur group-hover:opacity-0 motion-reduce:group-hover:opacity-100"><span class="size-4 shrink-0 hero-play-micro"></span>Play</span>
+      </button>
+      <p class="line-clamp-1 max-w-32 text-base text-mist-500 sm:text-sm">I Love You Smile GIF by Chippy the Dog</p>
+    </div>
+  </li>
+  <li class="shrink-0">
+    <div class="group flex min-w-0 max-w-40 flex-col items-start gap-2">
+      <button type="button" aria-pressed="false" aria-label="Play In Love Bunny GIF" class="relative block h-28 overflow-hidden rounded-sm bg-mist-950/5 focus-visible:outline-2 focus-visible:outline-offset-2 dark:bg-white/5">
+        <img src="https://media4.giphy.com/media/v1.Y2lkPTAyZWYyMzRkOWR1dXoya3dmcHhxam9yMG83Y2x2cXUxbmF1a3Z2d2QzYTVsMzVndyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/xwzhsVQ2kWuo9rj7vD/200w_s.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="h-28 w-auto motion-safe:group-hover:invisible motion-safe:group-focus-within:invisible" />
+        <img src="https://media4.giphy.com/media/v1.Y2lkPTAyZWYyMzRkOWR1dXoya3dmcHhxam9yMG83Y2x2cXUxbmF1a3Z2d2QzYTVsMzVndyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/xwzhsVQ2kWuo9rj7vD/200w.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="invisible absolute inset-0 h-28 w-auto motion-safe:group-hover:visible motion-safe:group-focus-within:visible" />
+        <span class="absolute top-1 left-1 inline-flex items-center gap-1 rounded-full bg-mist-950/75 py-1 pr-2 pl-1.5 text-sm/5 font-medium text-white backdrop-blur group-hover:opacity-0 motion-reduce:group-hover:opacity-100"><span class="size-4 shrink-0 hero-play-micro"></span>Play</span>
+      </button>
+      <p class="line-clamp-1 max-w-32 text-base text-mist-500 sm:text-sm">In Love Bunny GIF</p>
+    </div>
+  </li>
+  <li class="shrink-0">
+    <div class="group flex min-w-0 max-w-40 flex-col items-start gap-2">
+      <button type="button" aria-pressed="false" aria-label="Play For You Love GIF" class="relative block h-28 overflow-hidden rounded-sm bg-mist-950/5 focus-visible:outline-2 focus-visible:outline-offset-2 dark:bg-white/5">
+        <img src="https://media1.giphy.com/media/v1.Y2lkPTAyZWYyMzRkOWR1dXoya3dmcHhxam9yMG83Y2x2cXUxbmF1a3Z2d2QzYTVsMzVndyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/y2tJSADGWSGx5v9KR7/200w_s.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="h-28 w-auto motion-safe:group-hover:invisible motion-safe:group-focus-within:invisible" />
+        <img src="https://media1.giphy.com/media/v1.Y2lkPTAyZWYyMzRkOWR1dXoya3dmcHhxam9yMG83Y2x2cXUxbmF1a3Z2d2QzYTVsMzVndyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/y2tJSADGWSGx5v9KR7/200w.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="invisible absolute inset-0 h-28 w-auto motion-safe:group-hover:visible motion-safe:group-focus-within:visible" />
+        <span class="absolute top-1 left-1 inline-flex items-center gap-1 rounded-full bg-mist-950/75 py-1 pr-2 pl-1.5 text-sm/5 font-medium text-white backdrop-blur group-hover:opacity-0 motion-reduce:group-hover:opacity-100"><span class="size-4 shrink-0 hero-play-micro"></span>Play</span>
+      </button>
+      <p class="line-clamp-1 max-w-32 text-base text-mist-500 sm:text-sm">For You Love GIF</p>
+    </div>
+  </li>
+  <li class="shrink-0">
+    <div class="group flex min-w-0 max-w-40 flex-col items-start gap-2">
+      <button type="button" aria-pressed="false" aria-label="Play In Love Hearts GIF" class="relative block h-28 overflow-hidden rounded-sm bg-mist-950/5 focus-visible:outline-2 focus-visible:outline-offset-2 dark:bg-white/5">
+        <img src="https://media1.giphy.com/media/v1.Y2lkPTAyZWYyMzRkOWR1dXoya3dmcHhxam9yMG83Y2x2cXUxbmF1a3Z2d2QzYTVsMzVndyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/7W1rgKAxlDe3m/200w_s.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="h-28 w-auto motion-safe:group-hover:invisible motion-safe:group-focus-within:invisible" />
+        <img src="https://media1.giphy.com/media/v1.Y2lkPTAyZWYyMzRkOWR1dXoya3dmcHhxam9yMG83Y2x2cXUxbmF1a3Z2d2QzYTVsMzVndyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/7W1rgKAxlDe3m/200w.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="invisible absolute inset-0 h-28 w-auto motion-safe:group-hover:visible motion-safe:group-focus-within:visible" />
+        <span class="absolute top-1 left-1 inline-flex items-center gap-1 rounded-full bg-mist-950/75 py-1 pr-2 pl-1.5 text-sm/5 font-medium text-white backdrop-blur group-hover:opacity-0 motion-reduce:group-hover:opacity-100"><span class="size-4 shrink-0 hero-play-micro"></span>Play</span>
+      </button>
+      <p class="line-clamp-1 max-w-32 text-base text-mist-500 sm:text-sm">In Love Hearts GIF</p>
+    </div>
+  </li>
+</ul>
+<p class="mt-1 text-base text-mist-500 sm:text-sm">Hover or focus a frame to play it. Under <span class="font-mono">prefers-reduced-motion</span> the still never swaps and the Play control stays.</p>
+<div class="mt-2 flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2"><details class="min-w-0"><summary class="w-fit cursor-pointer text-base text-mist-500 hover:text-mist-700 sm:text-sm dark:text-mist-400">Matches for “love” · About these results</summary>
+<div class="space-y-2 pt-2 text-base text-mist-600 sm:text-sm dark:text-mist-300">
+  <p class="font-medium text-mist-950 dark:text-white">GIPHY · G-rated search</p>
+  <p class="text-pretty">Search matches from GIPHY, ranked by GIPHY and not matched on an identifier. These are provider results, not curated examples or dictionary interpretations.</p>
+  <p class="text-pretty">The search runs in your browser and nothing is stored: no result reaches the database, the media stays on GIPHY's hosts, and the page holds no copy.</p>
+</div></details><button type="button" class="relative rounded-sm py-1 text-base text-mist-600 underline underline-offset-4 hover:text-mist-950 sm:text-sm dark:text-mist-300"><span class="pointer-fine:hidden absolute top-1/2 left-1/2 size-[max(100%,3rem)] -translate-1/2" aria-hidden="true"></span>Load more</button></div></div>
+  <p class="mt-3 max-w-[68ch] text-base/7 text-mist-500 text-pretty sm:text-sm/7">The shelf moves when a reader asks it to and is still when they do not, which is also what keeps it honest under <span class="font-mono">prefers-reduced-motion</span>: one media query and the swap never happens. Costs one extra request per frame the reader actually plays, not per frame rendered.</p>
+</section>
+
+<section id="gifs-c" class="border-t border-mist-950/10 py-10 dark:border-white/10">
+  <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+    <h2 class="font-display text-[2rem]/10 tracking-tight text-mist-950 dark:text-white">C · The compact strip</h2>
+  </div>
+  <p class="mt-2 max-w-[68ch] text-base/7 text-mist-700 text-pretty sm:text-sm/7 dark:text-mist-400">Smaller tiles, more of them, no visible titles — GIF titles are tag soup (<em>Snl Smiling GIF by Saturday Night Live</em>) and spend two lines saying nothing. Title and link stay reachable through the About disclosure and each tile's <span class="font-mono">aria-label</span>. One <em>Play all</em> for the strip.</p>
+  <div class="mt-6 border-y border-mist-950/10 py-5 dark:border-white/10"><div class="flex flex-wrap items-baseline justify-between gap-2">
+  <h2 class="font-display text-xl text-mist-950 dark:text-white">GIFs</h2>
+  <p class="flex items-center gap-3 text-base text-mist-500 sm:text-sm"><button type="button" class="rounded-full bg-mist-950/10 px-3 py-1 text-base/7 font-medium text-mist-950 sm:text-sm/7 dark:bg-white/10 dark:text-white">Play all</button><a href="https://giphy.com/" rel="noreferrer"><img src="../../../priv/static/images/giphy-powered-by.png" alt="Powered by GIPHY" width="100" class="rounded bg-white" /></a></p>
+</div>
+<ul role="list" tabindex="0" aria-label="GIF matches; scroll for more" class="mt-3 flex gap-2 overflow-x-auto overscroll-x-contain pb-2 focus-visible:outline-2 focus-visible:outline-offset-2">
+  <li class="w-16 shrink-0"><button type="button" aria-label="Play Happy In Love GIF" class="group relative block aspect-square w-full overflow-hidden rounded-sm bg-mist-950/5 focus-visible:outline-2 focus-visible:outline-offset-2 dark:bg-white/5"><img src="https://media3.giphy.com/media/v1.Y2lkPTAyZWYyMzRkOWR1dXoya3dmcHhxam9yMG83Y2x2cXUxbmF1a3Z2d2QzYTVsMzVndyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/FDh2DGsNR4d4TFv890/200w_s.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover motion-safe:group-hover:invisible motion-safe:group-focus-within:invisible" /><img src="https://media3.giphy.com/media/v1.Y2lkPTAyZWYyMzRkOWR1dXoya3dmcHhxam9yMG83Y2x2cXUxbmF1a3Z2d2QzYTVsMzVndyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/FDh2DGsNR4d4TFv890/200w.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="invisible absolute inset-0 size-full object-cover motion-safe:group-hover:visible motion-safe:group-focus-within:visible" /></button></li>
+  <li class="w-16 shrink-0"><button type="button" aria-label="Play I Love You GIF" class="group relative block aspect-square w-full overflow-hidden rounded-sm bg-mist-950/5 focus-visible:outline-2 focus-visible:outline-offset-2 dark:bg-white/5"><img src="https://media2.giphy.com/media/v1.Y2lkPTAyZWYyMzRkOWR1dXoya3dmcHhxam9yMG83Y2x2cXUxbmF1a3Z2d2QzYTVsMzVndyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/FRzg3omGn8C5ZYeafu/200w_s.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover motion-safe:group-hover:invisible motion-safe:group-focus-within:invisible" /><img src="https://media2.giphy.com/media/v1.Y2lkPTAyZWYyMzRkOWR1dXoya3dmcHhxam9yMG83Y2x2cXUxbmF1a3Z2d2QzYTVsMzVndyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/FRzg3omGn8C5ZYeafu/200w.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="invisible absolute inset-0 size-full object-cover motion-safe:group-hover:visible motion-safe:group-focus-within:visible" /></button></li>
+  <li class="w-16 shrink-0"><button type="button" aria-label="Play Couple Love GIF by LindaDurbesson" class="group relative block aspect-square w-full overflow-hidden rounded-sm bg-mist-950/5 focus-visible:outline-2 focus-visible:outline-offset-2 dark:bg-white/5"><img src="https://media3.giphy.com/media/v1.Y2lkPTAyZWYyMzRkOWR1dXoya3dmcHhxam9yMG83Y2x2cXUxbmF1a3Z2d2QzYTVsMzVndyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/s6fnVyWTfM2nUKuMVY/200w_s.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover motion-safe:group-hover:invisible motion-safe:group-focus-within:invisible" /><img src="https://media3.giphy.com/media/v1.Y2lkPTAyZWYyMzRkOWR1dXoya3dmcHhxam9yMG83Y2x2cXUxbmF1a3Z2d2QzYTVsMzVndyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/s6fnVyWTfM2nUKuMVY/200w.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="invisible absolute inset-0 size-full object-cover motion-safe:group-hover:visible motion-safe:group-focus-within:visible" /></button></li>
+  <li class="w-16 shrink-0"><button type="button" aria-label="Play Kiss You Love GIF" class="group relative block aspect-square w-full overflow-hidden rounded-sm bg-mist-950/5 focus-visible:outline-2 focus-visible:outline-offset-2 dark:bg-white/5"><img src="https://media4.giphy.com/media/v1.Y2lkPTAyZWYyMzRkOWR1dXoya3dmcHhxam9yMG83Y2x2cXUxbmF1a3Z2d2QzYTVsMzVndyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/xR5cPyPoL5HVXSphqA/200w_s.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover motion-safe:group-hover:invisible motion-safe:group-focus-within:invisible" /><img src="https://media4.giphy.com/media/v1.Y2lkPTAyZWYyMzRkOWR1dXoya3dmcHhxam9yMG83Y2x2cXUxbmF1a3Z2d2QzYTVsMzVndyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/xR5cPyPoL5HVXSphqA/200w.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="invisible absolute inset-0 size-full object-cover motion-safe:group-hover:visible motion-safe:group-focus-within:visible" /></button></li>
+  <li class="w-16 shrink-0"><button type="button" aria-label="Play I Love You Smile GIF by Chippy the Dog" class="group relative block aspect-square w-full overflow-hidden rounded-sm bg-mist-950/5 focus-visible:outline-2 focus-visible:outline-offset-2 dark:bg-white/5"><img src="https://media2.giphy.com/media/v1.Y2lkPTAyZWYyMzRkOWR1dXoya3dmcHhxam9yMG83Y2x2cXUxbmF1a3Z2d2QzYTVsMzVndyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/NTpktSQ9w1uCOpFgsP/200w_s.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover motion-safe:group-hover:invisible motion-safe:group-focus-within:invisible" /><img src="https://media2.giphy.com/media/v1.Y2lkPTAyZWYyMzRkOWR1dXoya3dmcHhxam9yMG83Y2x2cXUxbmF1a3Z2d2QzYTVsMzVndyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/NTpktSQ9w1uCOpFgsP/200w.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="invisible absolute inset-0 size-full object-cover motion-safe:group-hover:visible motion-safe:group-focus-within:visible" /></button></li>
+  <li class="w-16 shrink-0"><button type="button" aria-label="Play In Love Bunny GIF" class="group relative block aspect-square w-full overflow-hidden rounded-sm bg-mist-950/5 focus-visible:outline-2 focus-visible:outline-offset-2 dark:bg-white/5"><img src="https://media4.giphy.com/media/v1.Y2lkPTAyZWYyMzRkOWR1dXoya3dmcHhxam9yMG83Y2x2cXUxbmF1a3Z2d2QzYTVsMzVndyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/xwzhsVQ2kWuo9rj7vD/200w_s.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover motion-safe:group-hover:invisible motion-safe:group-focus-within:invisible" /><img src="https://media4.giphy.com/media/v1.Y2lkPTAyZWYyMzRkOWR1dXoya3dmcHhxam9yMG83Y2x2cXUxbmF1a3Z2d2QzYTVsMzVndyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/xwzhsVQ2kWuo9rj7vD/200w.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="invisible absolute inset-0 size-full object-cover motion-safe:group-hover:visible motion-safe:group-focus-within:visible" /></button></li>
+  <li class="w-16 shrink-0"><button type="button" aria-label="Play For You Love GIF" class="group relative block aspect-square w-full overflow-hidden rounded-sm bg-mist-950/5 focus-visible:outline-2 focus-visible:outline-offset-2 dark:bg-white/5"><img src="https://media1.giphy.com/media/v1.Y2lkPTAyZWYyMzRkOWR1dXoya3dmcHhxam9yMG83Y2x2cXUxbmF1a3Z2d2QzYTVsMzVndyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/y2tJSADGWSGx5v9KR7/200w_s.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover motion-safe:group-hover:invisible motion-safe:group-focus-within:invisible" /><img src="https://media1.giphy.com/media/v1.Y2lkPTAyZWYyMzRkOWR1dXoya3dmcHhxam9yMG83Y2x2cXUxbmF1a3Z2d2QzYTVsMzVndyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/y2tJSADGWSGx5v9KR7/200w.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="invisible absolute inset-0 size-full object-cover motion-safe:group-hover:visible motion-safe:group-focus-within:visible" /></button></li>
+  <li class="w-16 shrink-0"><button type="button" aria-label="Play In Love Hearts GIF" class="group relative block aspect-square w-full overflow-hidden rounded-sm bg-mist-950/5 focus-visible:outline-2 focus-visible:outline-offset-2 dark:bg-white/5"><img src="https://media1.giphy.com/media/v1.Y2lkPTAyZWYyMzRkOWR1dXoya3dmcHhxam9yMG83Y2x2cXUxbmF1a3Z2d2QzYTVsMzVndyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/7W1rgKAxlDe3m/200w_s.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover motion-safe:group-hover:invisible motion-safe:group-focus-within:invisible" /><img src="https://media1.giphy.com/media/v1.Y2lkPTAyZWYyMzRkOWR1dXoya3dmcHhxam9yMG83Y2x2cXUxbmF1a3Z2d2QzYTVsMzVndyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/7W1rgKAxlDe3m/200w.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="invisible absolute inset-0 size-full object-cover motion-safe:group-hover:visible motion-safe:group-focus-within:visible" /></button></li>
+  <li class="w-16 shrink-0"><button type="button" aria-label="Play Happy In Love GIF" class="group relative block aspect-square w-full overflow-hidden rounded-sm bg-mist-950/5 focus-visible:outline-2 focus-visible:outline-offset-2 dark:bg-white/5"><img src="https://media3.giphy.com/media/v1.Y2lkPTAyZWYyMzRkOWR1dXoya3dmcHhxam9yMG83Y2x2cXUxbmF1a3Z2d2QzYTVsMzVndyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/FDh2DGsNR4d4TFv890/200w_s.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover motion-safe:group-hover:invisible motion-safe:group-focus-within:invisible" /><img src="https://media3.giphy.com/media/v1.Y2lkPTAyZWYyMzRkOWR1dXoya3dmcHhxam9yMG83Y2x2cXUxbmF1a3Z2d2QzYTVsMzVndyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/FDh2DGsNR4d4TFv890/200w.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="invisible absolute inset-0 size-full object-cover motion-safe:group-hover:visible motion-safe:group-focus-within:visible" /></button></li>
+  <li class="w-16 shrink-0"><button type="button" aria-label="Play I Love You GIF" class="group relative block aspect-square w-full overflow-hidden rounded-sm bg-mist-950/5 focus-visible:outline-2 focus-visible:outline-offset-2 dark:bg-white/5"><img src="https://media2.giphy.com/media/v1.Y2lkPTAyZWYyMzRkOWR1dXoya3dmcHhxam9yMG83Y2x2cXUxbmF1a3Z2d2QzYTVsMzVndyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/FRzg3omGn8C5ZYeafu/200w_s.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover motion-safe:group-hover:invisible motion-safe:group-focus-within:invisible" /><img src="https://media2.giphy.com/media/v1.Y2lkPTAyZWYyMzRkOWR1dXoya3dmcHhxam9yMG83Y2x2cXUxbmF1a3Z2d2QzYTVsMzVndyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/FRzg3omGn8C5ZYeafu/200w.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="invisible absolute inset-0 size-full object-cover motion-safe:group-hover:visible motion-safe:group-focus-within:visible" /></button></li>
+  <li class="w-16 shrink-0"><button type="button" aria-label="Play Couple Love GIF by LindaDurbesson" class="group relative block aspect-square w-full overflow-hidden rounded-sm bg-mist-950/5 focus-visible:outline-2 focus-visible:outline-offset-2 dark:bg-white/5"><img src="https://media3.giphy.com/media/v1.Y2lkPTAyZWYyMzRkOWR1dXoya3dmcHhxam9yMG83Y2x2cXUxbmF1a3Z2d2QzYTVsMzVndyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/s6fnVyWTfM2nUKuMVY/200w_s.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover motion-safe:group-hover:invisible motion-safe:group-focus-within:invisible" /><img src="https://media3.giphy.com/media/v1.Y2lkPTAyZWYyMzRkOWR1dXoya3dmcHhxam9yMG83Y2x2cXUxbmF1a3Z2d2QzYTVsMzVndyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/s6fnVyWTfM2nUKuMVY/200w.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="invisible absolute inset-0 size-full object-cover motion-safe:group-hover:visible motion-safe:group-focus-within:visible" /></button></li>
+  <li class="w-16 shrink-0"><button type="button" aria-label="Play Kiss You Love GIF" class="group relative block aspect-square w-full overflow-hidden rounded-sm bg-mist-950/5 focus-visible:outline-2 focus-visible:outline-offset-2 dark:bg-white/5"><img src="https://media4.giphy.com/media/v1.Y2lkPTAyZWYyMzRkOWR1dXoya3dmcHhxam9yMG83Y2x2cXUxbmF1a3Z2d2QzYTVsMzVndyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/xR5cPyPoL5HVXSphqA/200w_s.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover motion-safe:group-hover:invisible motion-safe:group-focus-within:invisible" /><img src="https://media4.giphy.com/media/v1.Y2lkPTAyZWYyMzRkOWR1dXoya3dmcHhxam9yMG83Y2x2cXUxbmF1a3Z2d2QzYTVsMzVndyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/xR5cPyPoL5HVXSphqA/200w.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="invisible absolute inset-0 size-full object-cover motion-safe:group-hover:visible motion-safe:group-focus-within:visible" /></button></li>
+  <li class="w-16 shrink-0"><button type="button" aria-label="Play I Love You Smile GIF by Chippy the Dog" class="group relative block aspect-square w-full overflow-hidden rounded-sm bg-mist-950/5 focus-visible:outline-2 focus-visible:outline-offset-2 dark:bg-white/5"><img src="https://media2.giphy.com/media/v1.Y2lkPTAyZWYyMzRkOWR1dXoya3dmcHhxam9yMG83Y2x2cXUxbmF1a3Z2d2QzYTVsMzVndyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/NTpktSQ9w1uCOpFgsP/200w_s.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover motion-safe:group-hover:invisible motion-safe:group-focus-within:invisible" /><img src="https://media2.giphy.com/media/v1.Y2lkPTAyZWYyMzRkOWR1dXoya3dmcHhxam9yMG83Y2x2cXUxbmF1a3Z2d2QzYTVsMzVndyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/NTpktSQ9w1uCOpFgsP/200w.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="invisible absolute inset-0 size-full object-cover motion-safe:group-hover:visible motion-safe:group-focus-within:visible" /></button></li>
+  <li class="w-16 shrink-0"><button type="button" aria-label="Play In Love Bunny GIF" class="group relative block aspect-square w-full overflow-hidden rounded-sm bg-mist-950/5 focus-visible:outline-2 focus-visible:outline-offset-2 dark:bg-white/5"><img src="https://media4.giphy.com/media/v1.Y2lkPTAyZWYyMzRkOWR1dXoya3dmcHhxam9yMG83Y2x2cXUxbmF1a3Z2d2QzYTVsMzVndyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/xwzhsVQ2kWuo9rj7vD/200w_s.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover motion-safe:group-hover:invisible motion-safe:group-focus-within:invisible" /><img src="https://media4.giphy.com/media/v1.Y2lkPTAyZWYyMzRkOWR1dXoya3dmcHhxam9yMG83Y2x2cXUxbmF1a3Z2d2QzYTVsMzVndyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/xwzhsVQ2kWuo9rj7vD/200w.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="invisible absolute inset-0 size-full object-cover motion-safe:group-hover:visible motion-safe:group-focus-within:visible" /></button></li>
+  <li class="w-16 shrink-0"><button type="button" aria-label="Play For You Love GIF" class="group relative block aspect-square w-full overflow-hidden rounded-sm bg-mist-950/5 focus-visible:outline-2 focus-visible:outline-offset-2 dark:bg-white/5"><img src="https://media1.giphy.com/media/v1.Y2lkPTAyZWYyMzRkOWR1dXoya3dmcHhxam9yMG83Y2x2cXUxbmF1a3Z2d2QzYTVsMzVndyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/y2tJSADGWSGx5v9KR7/200w_s.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover motion-safe:group-hover:invisible motion-safe:group-focus-within:invisible" /><img src="https://media1.giphy.com/media/v1.Y2lkPTAyZWYyMzRkOWR1dXoya3dmcHhxam9yMG83Y2x2cXUxbmF1a3Z2d2QzYTVsMzVndyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/y2tJSADGWSGx5v9KR7/200w.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="invisible absolute inset-0 size-full object-cover motion-safe:group-hover:visible motion-safe:group-focus-within:visible" /></button></li>
+  <li class="w-16 shrink-0"><button type="button" aria-label="Play In Love Hearts GIF" class="group relative block aspect-square w-full overflow-hidden rounded-sm bg-mist-950/5 focus-visible:outline-2 focus-visible:outline-offset-2 dark:bg-white/5"><img src="https://media1.giphy.com/media/v1.Y2lkPTAyZWYyMzRkOWR1dXoya3dmcHhxam9yMG83Y2x2cXUxbmF1a3Z2d2QzYTVsMzVndyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/7W1rgKAxlDe3m/200w_s.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover motion-safe:group-hover:invisible motion-safe:group-focus-within:invisible" /><img src="https://media1.giphy.com/media/v1.Y2lkPTAyZWYyMzRkOWR1dXoya3dmcHhxam9yMG83Y2x2cXUxbmF1a3Z2d2QzYTVsMzVndyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/7W1rgKAxlDe3m/200w.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="invisible absolute inset-0 size-full object-cover motion-safe:group-hover:visible motion-safe:group-focus-within:visible" /></button></li>
+</ul>
+<div class="mt-2 flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2"><details class="min-w-0"><summary class="w-fit cursor-pointer text-base text-mist-500 hover:text-mist-700 sm:text-sm dark:text-mist-400">Matches for “love” · About these results</summary>
+<div class="space-y-2 pt-2 text-base text-mist-600 sm:text-sm dark:text-mist-300">
+  <p class="font-medium text-mist-950 dark:text-white">GIPHY · G-rated search</p>
+  <p class="text-pretty">Search matches from GIPHY, ranked by GIPHY and not matched on an identifier. These are provider results, not curated examples or dictionary interpretations.</p>
+  <p class="text-pretty">The search runs in your browser and nothing is stored: no result reaches the database, the media stays on GIPHY's hosts, and the page holds no copy.</p>
+</div></details><button type="button" class="relative rounded-sm py-1 text-base text-mist-600 underline underline-offset-4 hover:text-mist-950 sm:text-sm dark:text-mist-300"><span class="pointer-fine:hidden absolute top-1/2 left-1/2 size-[max(100%,3rem)] -translate-1/2" aria-hidden="true"></span>Load more</button></div></div>
+  <p class="mt-3 max-w-[68ch] text-base/7 text-mist-500 text-pretty sm:text-sm/7">The densest of the three: sixteen tiles in the height A spends on eight, and the shelf drops from 280 px to 116 px at 375. The cost is that the one thing a card usually carries — what it is — is only in the accessible name, and a reader with a pointer has to hover to learn anything.</p>
+</section>
+<section id="playback" class="border-t border-mist-950/10 py-10 dark:border-white/10">
+  <h2 class="font-display text-[2rem]/10 tracking-tight text-mist-950 dark:text-white">The playback question, resolved</h2>
+  <p class="mt-2 max-w-[68ch] text-base/7 text-mist-700 text-pretty sm:text-sm/7 dark:text-mist-400">
+    #111 L4 says a GIF <em>plays while in the viewport</em>; the three versions above say <em>plays on hover, focus or tap</em>. They are different pages and the choice has to be made rather than inherited.
+  </p>
+  <div class="mt-6 grid gap-8 lg:grid-cols-2">
+    <div class="rounded-xl bg-mist-950/2.5 p-5 dark:bg-white/5">
+      <h3 class="text-base/8 font-medium text-mist-950 dark:text-white">In-viewport playback</h3>
+      <p class="mt-2 text-base/7 text-mist-700 text-pretty sm:text-sm/7 dark:text-mist-400">An <span class="font-mono">IntersectionObserver</span> swaps still → animated as the shelf scrolls into view. The reader sees the shelf working without doing anything.</p>
+      <p class="mt-2 text-base/7 text-mist-500 text-pretty sm:text-sm/7">It also fetches every animated rendition on the shelf whether or not anyone wanted one — twelve requests to GIPHY's media hosts per page view, against a key that allows a hundred an hour for everyone — and puts twelve looping animations beside the reading matter. Reduced-motion readers get a shelf that never works at all rather than one they can operate.</p>
+    </div>
+    <div class="rounded-xl bg-mist-950/2.5 p-5 dark:bg-white/5">
+      <h3 class="text-base/8 font-medium text-mist-950 dark:text-white">Hover, focus or tap · recommended</h3>
+      <p class="mt-2 text-base/7 text-mist-700 text-pretty sm:text-sm/7 dark:text-mist-400">The animated rendition is fetched when the reader reaches for it, and one frame moves at a time. Keyboard focus is the same gesture, so the control is not a mouse affordance with a button bolted on.</p>
+      <p class="mt-2 text-base/7 text-mist-500 text-pretty sm:text-sm/7">Reduced motion is then a real state rather than an absence: the swap does not happen, the <em>Play</em> control stays, and a reader who wants the animation can still have it deliberately. This is what the version B frames above actually do — hover one.</p>
+    </div>
+  </div>
+</section>
+</div></main>
+    <footer class="pt-16">
+      <div class="bg-mist-950/2.5 py-16 text-mist-950 dark:bg-white/5 dark:text-white">
+        <div class="mx-auto flex w-full max-w-2xl flex-col gap-16 px-6 md:max-w-3xl lg:max-w-7xl lg:px-10">
+          <nav class="grid grid-cols-2 gap-6 text-sm/7 sm:grid-cols-3">
+            <div><h3>Browse</h3><ul role="list" class="mt-2 flex flex-col gap-2"><li class="text-mist-700 dark:text-mist-400"><a href="#">Artworks</a></li></ul></div>
+            <div><h3>Sources</h3><ul role="list" class="mt-2 flex flex-col gap-2"><li class="text-mist-700 dark:text-mist-400"><a href="#">Open English WordNet 2025</a></li><li class="text-mist-700 dark:text-mist-400"><a href="#">Wiktionary (English) via Kaikki</a></li><li class="text-mist-700 dark:text-mist-400"><a href="#">Wikidata</a></li><li class="text-mist-700 dark:text-mist-400"><a href="#">Wikipedia (English)</a></li><li class="text-mist-700 dark:text-mist-400"><a href="#">Ambrose Bierce, The Devil's Dictionary</a></li><li class="text-mist-700 dark:text-mist-400"><a href="#">Samuel Johnson, A Dictionary of the English Language</a></li></ul></div>
+          </nav>
+          <div class="text-sm/7 text-mist-600 dark:text-mist-500">
+            <p>An aggregator, not an author. Every definition belongs to the source that wrote it and links back to it. WordNet CC BY 4.0 · Wiktionary and Wikipedia CC BY-SA 4.0 · Wikidata CC0 · Bierce public domain.</p>
+          </div>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

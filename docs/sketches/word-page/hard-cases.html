@@ -1,0 +1,1415 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light" data-theme-source="user">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Hard cases · word-page sketch</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="./sketch.css" />
+    <script>
+      // The app's own theme bootstrap (root.html.heex), minus the toggle: a
+      // sketch is opened from the filesystem and has to honour ?theme=dark so
+      // a reviewer can see both themes without a server.
+      (() => {
+        const q = new URLSearchParams(location.search).get("theme");
+        const system = () => matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        document.documentElement.setAttribute("data-theme", q || system());
+      })();
+    </script>
+  </head>
+  <body class="font-sans text-mist-950 antialiased dark:text-white">
+    <nav id="account-navigation" aria-label="Account" class="relative z-20 border-b border-mist-950/5 bg-mist-100 dark:border-white/10 dark:bg-mist-950">
+      <div class="mx-auto flex h-10 max-w-7xl items-center justify-end gap-5 px-6 text-sm/6 text-mist-600 lg:px-10 dark:text-mist-400">
+        <a href="#" class="font-medium text-mist-950 hover:underline dark:text-white">Register</a>
+        <a href="#" class="font-medium text-mist-950 hover:underline dark:text-white">Log in</a>
+      </div>
+    </nav>
+    <header class="sticky top-0 z-10 bg-mist-100 dark:bg-mist-950">
+      <nav>
+        <div class="mx-auto flex h-(--scroll-padding-top) max-w-7xl items-center gap-4 px-6 lg:px-10">
+          <div class="flex flex-1 items-center gap-12">
+            <div class="flex items-center">
+              <a href="#" class="font-display text-2xl/8 text-mist-950 dark:text-white">wordhoard</a>
+            </div>
+          </div>
+          <div class="flex flex-1 items-center justify-end gap-4">
+            <div class="flex shrink-0 items-center gap-5">
+              <div class="relative flex flex-row items-center rounded-full bg-mist-950/10 dark:bg-white/10">
+                <div class="absolute left-0 h-full w-1/3 rounded-full bg-white transition-[left] [[data-theme=dark]_&amp;]:left-2/3 [[data-theme=light]_&amp;]:left-1/3 dark:bg-mist-700"></div>
+                <span class="flex w-1/3 p-2"><span class="size-4 opacity-75 hero-computer-desktop-micro"></span></span>
+                <span class="flex w-1/3 p-2"><span class="size-4 opacity-75 hero-sun-micro"></span></span>
+                <span class="flex w-1/3 p-2"><span class="size-4 opacity-75 hero-moon-micro"></span></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+    <div id="sketch-note" class="border-b border-amber-600/30 bg-amber-50/60 dark:bg-amber-950/20">
+      <div class="mx-auto w-full max-w-2xl px-6 py-2 text-sm/6 text-amber-800 md:max-w-3xl lg:max-w-7xl lg:px-10 dark:text-amber-300">
+        Sketch, not the app · Hard cases — the components love and nepotism do not exercise, shown with the real word each one comes from.
+      </div>
+    </div>
+    <main class="isolate overflow-clip"><div class="mx-auto w-full max-w-2xl px-6 pb-10 md:max-w-3xl lg:max-w-7xl lg:px-10">
+<div class="py-6">
+  <h1 class="font-display text-5xl/none text-mist-950 sm:text-6xl/none dark:text-white">Hard cases</h1>
+  <p class="mt-4 max-w-[68ch] text-base/7 text-mist-700 text-pretty sm:text-sm/7 dark:text-mist-400">
+    Neither <span class="font-mono">love</span> nor <span class="font-mono">nepotism</span> has many pronunciation variants, a long form list, several origins, or a card holding more than one entry. Rather than pretend those belong to either word, each one is shown here with the word it actually comes from. Every alternative applies the same rules to them.
+  </p>
+</div>
+
+<section id="case-1" class="border-t border-mist-950/10 py-10 dark:border-white/10">
+  <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+    <h2 class="font-display text-[2rem]/10 tracking-tight text-mist-950 dark:text-white">Many pronunciation variants</h2>
+    <p class="text-base/7 text-mist-500 sm:text-sm/7">Real content from <span class="font-medium text-mist-700 dark:text-mist-400">/define/love</span> — not from love or nepotism, and not invented.</p>
+  </div>
+  <p class="mt-2 max-w-[68ch] text-base/7 text-mist-700 text-pretty sm:text-sm/7 dark:text-mist-400"><span class="font-mono">WordPage</span> keeps three IPA spellings out of nine and drops the regional tags it built; the three recordings are never rendered. The cap exists — it is just invisible, which is the one thing a cap must not be.</p>
+  <div class="mt-6 grid gap-8 lg:grid-cols-2">
+    <div class="min-w-0">
+      <h3 class="text-base/8 font-medium text-mist-500">As the page renders it today</h3>
+      <div class="mt-2 rounded-xl bg-mist-950/2.5 p-5 dark:bg-white/5"><p class="flex flex-wrap gap-x-3 text-lg/7 text-mist-500"><span class="font-mono">[ˈlɐʊ̯]</span><span class="font-mono">[ˈlɐʋ]</span><span class="font-mono">/ˈləʋ/</span></p>
+<p class="mt-3 text-base/7 text-mist-500 sm:text-sm/7">Three spellings, no labels, no route to the other 6, and the 3 recordings never reach the page. The cap is real and silent.</p></div>
+    </div>
+    <div class="min-w-0">
+      <h3 class="text-base/8 font-medium text-mist-950 dark:text-white">Under the compact system</h3>
+      <div class="mt-2 rounded-xl bg-mist-950/2.5 p-5 dark:bg-white/5"><p class="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-lg/7 text-mist-500"><span class="font-mono">[ˈlɐʊ̯]</span><span class="font-mono">[ˈlɐʋ]</span><span class="font-mono">/ˈləʋ/</span><span class="text-base/7 sm:text-sm/7"><a href="#" class="underline underline-offset-4">+9 variants</a></span></p>
+<details class="mt-3" open><summary class="w-fit cursor-pointer text-base/7 text-mist-500 underline underline-offset-4 sm:text-sm/7">All 12 pronunciations recorded for this word</summary>
+<ul role="list" class="mt-2 space-y-1 text-base/7 text-mist-500 sm:text-sm/7"><li class="flex flex-wrap items-baseline gap-x-3"><span class="font-mono text-mist-700 dark:text-mist-400">[ˈlɐʊ̯]</span></li><li class="flex flex-wrap items-baseline gap-x-3"><span class="font-mono text-mist-700 dark:text-mist-400">[ˈlɐʋ]</span></li><li class="flex flex-wrap items-baseline gap-x-3"><span class="font-mono text-mist-700 dark:text-mist-400">/ˈləʋ/</span></li><li class="flex flex-wrap items-baseline gap-x-3"><span class="font-mono text-mist-700 dark:text-mist-400">[ˈlä̝v] ~ [ˈlɐ̞v]</span><span class="text-mist-400">Australia, New-Zealand</span></li><li class="flex flex-wrap items-baseline gap-x-3"><span class="font-mono text-mist-700 dark:text-mist-400">[ˈlʊv]</span><span class="text-mist-400">Ireland, Northern-England</span></li><li class="flex flex-wrap items-baseline gap-x-3"><span class="font-mono text-mist-700 dark:text-mist-400">[ˈlʌv]</span><span class="text-mist-400">Canada, General-American, Received-Pronunciation</span></li><li class="flex flex-wrap items-baseline gap-x-3"><span class="font-mono text-mist-700 dark:text-mist-400">/ˈlɐv/</span><span class="text-mist-400">Australia, New-Zealand</span></li><li class="flex flex-wrap items-baseline gap-x-3"><span class="font-mono text-mist-700 dark:text-mist-400">/ˈlʊv/</span><span class="text-mist-400">Ireland, Northern-England</span></li><li class="flex flex-wrap items-baseline gap-x-3"><span class="font-mono text-mist-700 dark:text-mist-400">/ˈlʌv/</span><span class="text-mist-400">Canada, General-American, Received-Pronunciation</span></li><li class="flex flex-wrap items-baseline gap-x-3"><span class="font-mono text-mist-700 dark:text-mist-400">recording</span><span class="text-mist-400">General-American</span><a href="https://upload.wikimedia.org/wikipedia/commons/transcoded/1/13/En-us-love.ogg/En-us-love.ogg.mp3" class="underline underline-offset-4">listen</a></li><li class="flex flex-wrap items-baseline gap-x-3"><span class="font-mono text-mist-700 dark:text-mist-400">recording</span><span class="text-mist-400">Received-Pronunciation</span><a href="https://upload.wikimedia.org/wikipedia/commons/transcoded/9/9c/En-uk-love.ogg/En-uk-love.ogg.mp3" class="underline underline-offset-4">listen</a></li><li class="flex flex-wrap items-baseline gap-x-3"><span class="font-mono text-mist-700 dark:text-mist-400">recording</span><span class="text-mist-400">Southern-England</span><a href="https://upload.wikimedia.org/wikipedia/commons/transcoded/3/35/LL-Q1860_%28eng%29-Vealhurl-love.wav/LL-Q1860_%28eng%29-Vealhurl-love.wav.mp3" class="underline underline-offset-4">listen</a></li></ul></details></div>
+    </div>
+  </div>
+</section>
+
+<section id="case-2" class="border-t border-mist-950/10 py-10 dark:border-white/10">
+  <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+    <h2 class="font-display text-[2rem]/10 tracking-tight text-mist-950 dark:text-white">A long form list</h2>
+    <p class="text-base/7 text-mist-500 sm:text-sm/7">Real content from <span class="font-medium text-mist-700 dark:text-mist-400">/define/little</span> — not from love or nepotism, and not invented.</p>
+  </div>
+  <p class="mt-2 max-w-[68ch] text-base/7 text-mist-700 text-pretty sm:text-sm/7 dark:text-mist-400">Forms are unbounded. <span class="font-mono">little</span> has 66 and <span class="font-mono">fuck</span> 40; the headword block is 1,469 px on a phone before a definition begins.</p>
+  <div class="mt-6 grid gap-8 lg:grid-cols-2">
+    <div class="min-w-0">
+      <h3 class="text-base/8 font-medium text-mist-500">As the page renders it today</h3>
+      <div class="mt-2 rounded-xl bg-mist-950/2.5 p-5 dark:bg-white/5"><p class="text-base/7 text-mist-500 sm:text-sm/7"><span class="text-mist-700 dark:text-mist-400">forms</span> laahtle · laatle · lahtle · laitil · laitle · laytell · least · leetle · less · lesser · letill · letle · lettel · lettell · lettle · leytel · li'l · li'l' · lickell · lickle · liddle · Lighthill · Lightle · Lightley · lil · lit'l · litel · litell · litil · litile · litill · litille · litle · Litle · littel · Littel · littell · Littell · littill · littler · littles · Littles · littlest · lityle · lityll · lutle · luttle · luttul · lytel · lytell · lytil · lytill · lytle · Lytle · lytlle · lyttel · lyttell · lyttil · lyttill · lyttle · Lyttle · lyttyll · lytyl · lytyle · lytyll · lytylle</p>
+<p class="mt-3 text-base/7 text-mist-500 sm:text-sm/7">66 forms, unbounded, in one paragraph. On a phone this is 15 lines before the first definition.</p></div>
+    </div>
+    <div class="min-w-0">
+      <h3 class="text-base/8 font-medium text-mist-950 dark:text-white">Under the compact system</h3>
+      <div class="mt-2 rounded-xl bg-mist-950/2.5 p-5 dark:bg-white/5"><p id="forms" class="mt-2 text-base/7 text-mist-500 sm:text-sm/7">
+  <span class="text-mist-700 dark:text-mist-400">forms</span>
+  laahtle · laatle · lahtle · laitil · laitle · laytell · least · leetle
+  <span class="text-mist-400">·</span>
+  <a href="#form-list" class="underline underline-offset-4 hover:text-mist-950 dark:hover:text-white">+58 more</a>
+</p>
+<details class="mt-2" open><summary class="w-fit cursor-pointer text-base/7 text-mist-500 underline underline-offset-4 sm:text-sm/7">All 66 forms</summary><p class="mt-2 text-base/7 text-mist-500 sm:text-sm/7">laahtle · laatle · lahtle · laitil · laitle · laytell · least · leetle · less · lesser · letill · letle · lettel · lettell · lettle · leytel · li'l · li'l' · lickell · lickle · liddle · Lighthill · Lightle · Lightley · lil · lit'l · litel · litell · litil · litile · litill · litille · litle · Litle · littel · Littel · littell · Littell · littill · littler · littles · Littles · littlest · lityle · lityll · lutle · luttle · luttul · lytel · lytell · lytil · lytill · lytle · Lytle · lytlle · lyttel · lyttell · lyttil · lyttill · lyttle · Lyttle · lyttyll · lytyl · lytyle · lytyll · lytylle</p></details></div>
+    </div>
+  </div>
+</section>
+
+<section id="case-3" class="border-t border-mist-950/10 py-10 dark:border-white/10">
+  <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+    <h2 class="font-display text-[2rem]/10 tracking-tight text-mist-950 dark:text-white">Several origins</h2>
+    <p class="text-base/7 text-mist-500 sm:text-sm/7">Real content from <span class="font-medium text-mist-700 dark:text-mist-400">/define/set</span> — not from love or nepotism, and not invented.</p>
+  </div>
+  <p class="mt-2 max-w-[68ch] text-base/7 text-mist-700 text-pretty sm:text-sm/7 dark:text-mist-400">Wiktionary files an etymology per part of speech and <span class="font-mono">set</span> has nine parts of speech. One of the five is a flattened etymology tree.</p>
+  <div class="mt-6 grid gap-8 lg:grid-cols-2">
+    <div class="min-w-0">
+      <h3 class="text-base/8 font-medium text-mist-500">As the page renders it today</h3>
+      <div class="mt-2 rounded-xl bg-mist-950/2.5 p-5 dark:bg-white/5"><p class="mt-2 first:mt-0 text-base/7 text-mist-500 sm:text-sm/7"><span class="text-mist-700 dark:text-mist-400">origin (noun)</span> From Middle English set, sette, from Old English set (“seat, place of residence, camp, settlement, entrenchment, stable, pen”), from Proto-West Germanic *set (“seat”), from Proto-Germanic *setą (“seat”). — Wiktionary (English) via Kaikki</p><p class="mt-2 first:mt-0 text-base/7 text-mist-500 sm:text-sm/7"><span class="text-mist-700 dark:text-mist-400">origin (verb)</span> Etymology tree Proto-Indo-European *sed- Proto-Indo-European *-yeti Proto-Indo-European *-éyeti Proto-Indo-European *sodéyeti Proto-Germanic *satjaną Proto-West Germanic *sattjan Old English settan Middle English setten English set From Middle English setten, from Old English settan, from Proto-West Germanic *sattjan, from Proto-Germanic *satjaną, from Proto-Indo-European *sodéyeti, causative of *sed- (“to sit”). Cognate with Dutch zetten, German setzen, Danish sætte, Norwegian Bokmål sette, Icelandic and Norwegian Nynorsk setja, Swedish sätta, Faroese seta. — Wiktionary (English) via Kaikki</p><p class="mt-2 first:mt-0 text-base/7 text-mist-500 sm:text-sm/7"><span class="text-mist-700 dark:text-mist-400">origin (adj)</span> Borrowed from Sanskrit सेट् (seṭ, “with i”). — Wiktionary (English) via Kaikki</p><p class="mt-2 first:mt-0 text-base/7 text-mist-500 sm:text-sm/7"><span class="text-mist-700 dark:text-mist-400">origin (adj)</span> From Middle English sett, from Old English ġesett, past participle of settan. — Wiktionary (English) via Kaikki</p><p class="mt-2 first:mt-0 text-base/7 text-mist-500 sm:text-sm/7"><span class="text-mist-700 dark:text-mist-400">origin (name)</span> Borrowed from Coptic ⲥⲏⲧ (sēt), from Egyptian s-t:X (stẖ). — Wiktionary (English) via Kaikki</p><p class="mt-3 text-base/7 text-mist-500 sm:text-sm/7">Five origins, 1,116 characters, one of them a flattened etymology tree.</p></div>
+    </div>
+    <div class="min-w-0">
+      <h3 class="text-base/8 font-medium text-mist-950 dark:text-white">Under the compact system</h3>
+      <div class="mt-2 rounded-xl bg-mist-950/2.5 p-5 dark:bg-white/5"><details id="hard-ety-0" class="mt-2 max-w-2xl">
+  <summary class="cursor-pointer list-none text-base/7 text-mist-500 sm:text-sm/7 [&::-webkit-details-marker]:hidden">
+    <span class="text-mist-700 dark:text-mist-400">origin (noun)</span> <span class="line-clamp-1">From Middle English set, sette, from Old English set (“seat, place of residence, camp, settlement, entrenchment, stable, pen”), from Proto-West Germanic *set (“seat”), from Proto-Germanic *setą (“seat”).</span>
+    <span class="text-mist-400 underline underline-offset-4">the rest of the origin · 33 characters</span>
+  </summary>
+  <p class="mt-2 text-base/7 text-mist-500 sm:text-sm/7">— Wiktionary (English) via Kaikki <span class="text-mist-400">— Wiktionary (English) via Kaikki</span></p>
+</details><details id="hard-ety-1" class="mt-2 max-w-2xl">
+  <summary class="cursor-pointer list-none text-base/7 text-mist-500 sm:text-sm/7 [&::-webkit-details-marker]:hidden">
+    <span class="text-mist-700 dark:text-mist-400">origin (verb)</span> <span class="line-clamp-1">Etymology tree Proto-Indo-European *sed- Proto-Indo-European *-yeti Proto-Indo-European *-éyeti Proto-Indo-European *sodéyeti Proto-Germanic *satjaną Proto-West Germanic *sattjan Old English settan Middle English setten English set From Middle English setten, from Old English settan, from Proto-West Germanic *sattjan, from Proto-Germanic *satjaną, from Proto-Indo-European *sodéyeti, causative of *sed- (“to sit”).</span>
+    <span class="text-mist-400 underline underline-offset-4">the rest of the origin · 181 characters</span>
+  </summary>
+  <p class="mt-2 text-base/7 text-mist-500 sm:text-sm/7">Cognate with Dutch zetten, German setzen, Danish sætte, Norwegian Bokmål sette, Icelandic and Norwegian Nynorsk setja, Swedish sätta, Faroese seta. — Wiktionary (English) via Kaikki <span class="text-mist-400">— Wiktionary (English) via Kaikki</span></p>
+</details><details id="hard-ety-2" class="mt-2 max-w-2xl">
+  <summary class="cursor-pointer list-none text-base/7 text-mist-500 sm:text-sm/7 [&::-webkit-details-marker]:hidden">
+    <span class="text-mist-700 dark:text-mist-400">origin (adj)</span> <span class="line-clamp-1">Borrowed from Sanskrit सेट् (seṭ, “with i”).</span>
+    <span class="text-mist-400 underline underline-offset-4">the rest of the origin · 33 characters</span>
+  </summary>
+  <p class="mt-2 text-base/7 text-mist-500 sm:text-sm/7">— Wiktionary (English) via Kaikki <span class="text-mist-400">— Wiktionary (English) via Kaikki</span></p>
+</details><details id="hard-ety-3" class="mt-2 max-w-2xl">
+  <summary class="cursor-pointer list-none text-base/7 text-mist-500 sm:text-sm/7 [&::-webkit-details-marker]:hidden">
+    <span class="text-mist-700 dark:text-mist-400">origin (adj)</span> <span class="line-clamp-1">From Middle English sett, from Old English ġesett, past participle of settan.</span>
+    <span class="text-mist-400 underline underline-offset-4">the rest of the origin · 33 characters</span>
+  </summary>
+  <p class="mt-2 text-base/7 text-mist-500 sm:text-sm/7">— Wiktionary (English) via Kaikki <span class="text-mist-400">— Wiktionary (English) via Kaikki</span></p>
+</details><details id="hard-ety-4" class="mt-2 max-w-2xl">
+  <summary class="cursor-pointer list-none text-base/7 text-mist-500 sm:text-sm/7 [&::-webkit-details-marker]:hidden">
+    <span class="text-mist-700 dark:text-mist-400">origin (name)</span> <span class="line-clamp-1">Borrowed from Coptic ⲥⲏⲧ (sēt), from Egyptian s-t:X (stẖ).</span>
+    <span class="text-mist-400 underline underline-offset-4">the rest of the origin · 33 characters</span>
+  </summary>
+  <p class="mt-2 text-base/7 text-mist-500 sm:text-sm/7">— Wiktionary (English) via Kaikki <span class="text-mist-400">— Wiktionary (English) via Kaikki</span></p>
+</details></div>
+    </div>
+  </div>
+</section>
+
+<section id="case-4" class="border-t border-mist-950/10 py-10 dark:border-white/10">
+  <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+    <h2 class="font-display text-[2rem]/10 tracking-tight text-mist-950 dark:text-white">A card with more than one entry</h2>
+    <p class="text-base/7 text-mist-500 sm:text-sm/7">Real content from <span class="font-medium text-mist-700 dark:text-mist-400">/define/set</span> — not from love or nepotism, and not invented.</p>
+  </div>
+  <p class="mt-2 max-w-[68ch] text-base/7 text-mist-700 text-pretty sm:text-sm/7 dark:text-mist-400">Johnson filed two verb entries for <span class="font-mono">set</span>. A per-entry preview would grant each one its own allowance, so the bound has to belong to the card.</p>
+  <div class="mt-6 grid gap-8 lg:grid-cols-2">
+    <div class="min-w-0">
+      <h3 class="text-base/8 font-medium text-mist-500">As the page renders it today</h3>
+      <div class="mt-2 rounded-xl bg-mist-950/2.5 p-5 dark:bg-white/5"><div class="max-h-96 overflow-hidden [mask-image:linear-gradient(to_bottom,black_70%,transparent)]"><section id="card-johnson-verb" class="rounded-xl py-6 pl-6 border-l-2 border-amber-600/50 bg-amber-50/40 dark:bg-amber-950/10">
+  <header class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+  <h2 class="text-base/8 font-medium text-amber-700 dark:text-amber-400">
+    <span aria-hidden="true" class="mr-1">👑</span>Samuel Johnson, A Dictionary of the English Language<span class="font-normal text-mist-500"> · 1755</span><span class="font-normal text-mist-500"> · verb</span>
+  </h2>
+  <span class="flex items-baseline gap-3">
+    <a href="https://leme.library.utoronto.ca/lexicons/1345/" class="text-base/7 text-mist-500 hover:text-mist-950 sm:text-sm/7 dark:hover:text-white" title="read this at Samuel Johnson, A Dictionary of the English Language"><span aria-hidden="true">↗</span><span class="sr-only">read this at Samuel Johnson, A Dictionary of the English Language</span></a>
+    <a href="#" class="text-base/7 text-mist-500 hover:text-mist-950 sm:text-sm/7 dark:hover:text-white" title="where this came from"><span aria-hidden="true">ⓘ</span><span class="sr-only">where this came from — Samuel Johnson, A Dictionary of the English Language</span></a>
+  </span>
+</header>
+  <div id="card-johnson-verb-entry-0" class="mt-4 max-w-[68ch] space-y-4 text-base/7 text-mist-700 sm:text-sm/7 dark:text-mist-400 [&_a]:font-semibold [&_a]:text-mist-950 [&_a]:underline [&_a]:underline-offset-4 dark:[&_a]:text-white [&_h2]:text-base/8 [&_h2]:font-medium [&_h2]:text-mist-950 [&_h2]:not-first:mt-8 dark:[&_h2]:text-white [&_li]:pl-2 [&_ol]:list-decimal [&_ol]:pl-6 [&_strong]:font-semibold [&_strong]:text-mist-950 dark:[&_strong]:text-white [&_ul]:list-[square] [&_ul]:pl-6 [&_ul]:marker:text-mist-400 dark:[&_ul]:marker:text-mist-600 [&_blockquote]:border-l-2 [&_blockquote]:border-mist-300 [&_blockquote]:pl-4 [&_blockquote]:italic dark:[&_blockquote]:border-mist-700">
+  <p>1. To fall below the horizon, as the sun at evening.</p>
+<blockquote><p>The sun was set. Gen. xxviii. 11.</p></blockquote>
+<blockquote><p>Whereas the setting of the pleiades and seven stars is designed the term of Autumn and the beginning of Winter, unto<br>
+some latitudes these stars do never set. Brown's Vulgar Err.</p></blockquote>
+<blockquote><p>That sun once set, a thousand meaner stars<br>
+Gave a dim light to violence and wars. Waller.</p></blockquote>
+<blockquote><p>Now the latter watch of wasting night,<br>
+And setting stars, to kindly rest invite. Dryden's æn.</p></blockquote>
+<blockquote><p>Not thicker billows beat the Libyan main,<br>
+When pale Orion sets in wintry rain,<br>
+Than stand these troops. Dryden's æn.</p></blockquote>
+<blockquote><p>My eyes no object met,<br>
+But distant skies that in the ocean set. Dryden's Ind. Emp.</p></blockquote>
+<blockquote><p>The Julian eagles here their wings display,<br>
+And there like setting stars the Decii lay. Garth's Ovid.</p></blockquote>
+<p>2. To be fixed hard.</p>
+<blockquote><p>A gathering and serring of the spirits together to resist,<br>
+maketh the teeth to set hard one against another. Bacon.</p></blockquote>
+<p>3. To be extinguished or darkened, as the sun at night.</p>
+<blockquote><p>Ahijah could not see; for his eyes were set, by reason of his<br>
+age. 1 Kings xiv. 4.</p></blockquote>
+<p>4. To fit musick to words.</p>
+<blockquote><p>That I might sing it, madam, to a tune,<br>
+Give me a note: your ladyship can set.<br>
+—As little by such toys as may be possible. Shakespeare.</p></blockquote>
+<p>5.</p>
+<blockquote><p>To become not fluid.<br>
+That fluid substance in a few minutes begins to set, as the<br>
+tradesmen speak; that is, to exchange its fluidity for firmness. Boyle.</p></blockquote>
+<p>6. To begin a journey.</p>
+<blockquote><p>So let him land,<br>
+And solemnly see him set on to London. Shakesp. H. V.</p></blockquote>
+<blockquote><p>On Wednesday next, Harry, thou shalt set forward;<br>
+On Thursday we ourselves will march. Shakespeare.</p></blockquote>
+<blockquote><p>The king is set from London, and the scene<br>
+Is now transported to Southampton. Shakes. Hen. V.</p></blockquote>
+<p>7. To go, or pass, or put one's self into any state or posture.</p>
+<blockquote><p>The faithless pirate soon will set to sea,<br>
+And bear the royal virgin far away. Dryden.</p></blockquote>
+<blockquote><p>When sets he forward?<br>
+—He is near at hand. Dryden's Ind Emp.</p></blockquote>
+<blockquote><p>He with forty of his gallies, in most warlike manner appointed, set forward with Solyman's ambassador towards Constantinople. Knolles's History of the Turks.</p></blockquote>
+<p>8. To catch birds with a dog that sets them, that is, lies down and points them out; and with a large net.</p>
+<blockquote><p>When I go a hawking or setting, I think myself beholden<br>
+to him that assures me, that in such a field there is a covey of<br>
+partridges. Boyle.</p></blockquote>
+<p>9. To plant, not sow.</p>
+<blockquote><p>In gard'ning ne'er this rule forget,<br>
+To sow dry, and set wet. Old Proverb.</p></blockquote>
+<p>10. It is commonly used in conversation for sit, which, though undoubtedly barbarous, is sometimes found in authors.</p>
+<blockquote><p>If they set down before's, 'fore they remove,<br>
+Bring up your army. Shakespeare.</p></blockquote>
+<p>11. To apply one's self.</p>
+<blockquote><p>If he sets industriously and sincerely to perform the commands of Christ, he can have no ground of doubting but it<br>
+shall prove successful to him. Hammond.</p></blockquote>
+<p>12. To SET about. To fall to; to begin.</p>
+<blockquote><p>We find it most hard to convince them, that it is necessary<br>
+now, at this very present, to set about it: we are thought a<br>
+little too hot and hasty, when we press wicked men to leave<br>
+their sins to-day, as long as they have so much time before<br>
+them to do it in. Calamy's Sermons.</p></blockquote>
+<blockquote><p>How preposterous is it, never to set about works of charity,<br>
+whilst we ourselves can see them performed? Atterbury.</p></blockquote>
+<p>13. To SET in. To fix in a particular state.</p>
+<blockquote><p>When the weather was set in to be very bad, I have taken<br>
+a whole day's journey to see a gallery furnished by great masters. Addison's Spectator.</p></blockquote>
+<blockquote><p>As November set in with keen frosts, so they continued<br>
+through the whole of that month, without any other alteration than freezing with more or less severity, as the winds<br>
+changed. Ellis's Voyage.</p></blockquote>
+<blockquote><p>A storm accordingly happened the following day; for a<br>
+southern monsoon began to set in. Gulliver's Travels.</p></blockquote>
+<p>14. To SET on or upon. To begin a march, journey, or enterprize.</p>
+<blockquote><p>Be't your charge<br>
+To see perform'd the tenor of our word:<br>
+Set on Shakespeare's Henry IV.</p></blockquote>
+<blockquote><p>He that would seriously set upon the search of truth, ought<br>
+to prepare his mind with a love of it. Locke.</p></blockquote>
+<blockquote><p>The understanding would presently obtain the knowledge<br>
+it is about, and then set upon some new inquiry. Locke.</p></blockquote>
+<p>15. To SET on. To make an attack.</p>
+<blockquote><p>Hence every leader to his charge;<br>
+For on their answer we will set on them. Shak. Hen. IV.</p></blockquote>
+<p>16. To SET out. To have beginning.</p>
+<blockquote><p>If any invisible casualty there be, it is questionable whether<br>
+its activity only set out at our nativity, and began not rather in<br>
+the womb. Brown's Vulg. Errours.</p></blockquote>
+<blockquote><p>The dazzling lustre to abate,<br>
+He set not out in all his pomp and state,<br>
+Clad in the mildest lightning. Addison.</p></blockquote>
+<p>17. To SET out. To begin a journey.</p>
+<blockquote><p>At their setting out they must have their commission from<br>
+the king. Bacon.</p></blockquote>
+<blockquote><p>I shall put you in mind where you promised to set out, or<br>
+begin your first stage. Hammond.</p></blockquote>
+<blockquote><p>Me thou think'st not slow,<br>
+Who since the morning-hour set out from heav'n,<br>
+Where God resides, and ere mid-day arriv'd<br>
+In Eden. Milton's Parad. Lost.</p></blockquote>
+<blockquote><p>My soul then mov'd the quicker pace;<br>
+Your's first set out, mine reach'd her in the race. Dryden.</p></blockquote>
+<blockquote><p>These doctrines, laid down for foundations of any science,<br>
+were called principles, as the beginnings from which we must<br>
+set out, and look no farther backwards. Locke.</p></blockquote>
+<blockquote><p>He that sets out upon weak legs will not only go farther, but<br>
+grow stronger too, than one who with firm limbs only sits<br>
+still. Locke.</p></blockquote>
+<blockquote><p>For these reasons I shall set out for London to-morrow. Add.</p></blockquote>
+<blockquote><p>Look no more on man in the first stage of his existence,<br>
+in his setting out for eternity. Addison.</p></blockquote>
+<blockquote><p>If we slacken our arms, and drop our oars, we shall be hurried back to the place from whence we first set out. Addison.</p></blockquote>
+<p>18. To SET out. To begin the world.</p>
+<blockquote><p>Eudoxus, at his first setting out, threw himself into court.<br>
+Addison's Spectator.</p></blockquote>
+<blockquote><p>Eugenio set out from the same university, and about the<br>
+same time with Corusodes. Swift.</p></blockquote>
+<p>19. To SET to. To apply himself to.</p>
+<blockquote><p>I may appeal to some, who have made this their business,<br>
+whether it go not against the hair with them to set to any thing<br>
+else. Government of the Tongue.</p></blockquote>
+<p>20. To SET up. To begin a trade openly.</p>
+<blockquote><p>We have stock enough to set up with, capable of infinite<br>
+advancement, and yet no less capable of total decay.<br>
+Decay of Piety.</p></blockquote>
+<blockquote><p>A man of a clear reputaion, though his bark be split, yet<br>
+he saves his cargo; has something left towards setting up again,<br>
+and so is in capacity of receiving benefit not only from his<br>
+own industry, but the friendship of others. Gov. of the Tongue.</p></blockquote>
+<blockquote><p>Those who have once made their court to those mistresses<br>
+without portions, the muses, are never like to set up for fortunes. Pope.</p></blockquote>
+<blockquote><p>This habit of writing and discoursing was acquired during<br>
+my apprenticeship in London, and a long residence there after<br>
+I had set up for myself. Swift.</p></blockquote>
+<p>21. To SET up. To begin a project of advantage.</p>
+<blockquote><p>Eumenes, one of Alexander's captains, setting up for himself after the death of his master, persuaded his principal officers to lend him great sums; after which they were forced to<br>
+follow him for their own security. Arbuthnot.</p></blockquote>
+<blockquote><p>A severe treatment might tempt them to set up for a republick. Addison on Italy.</p></blockquote>
+<p>22. To SET up. To profess publickly.</p>
+<blockquote><p>Scow'ring the watch grows out of fashion wit;<br>
+Now we set up for tilting in the pit. Dryden.</p></blockquote>
+<blockquote><p>Can Polyphemus, or Antiphates,<br>
+Who gorge themselves with man,<br>
+Set up to teach humanity, and give,<br>
+By their example, rules for us to live? Dryd. Juvenal.</p></blockquote>
+<blockquote><p>It is found by experience, that those men who set up for<br>
+morality, without regard to religion, are generally but virtuous in part. Swift.</p></blockquote>
+</div>
+  <details class="mt-3"><summary class="w-fit cursor-pointer text-base/7 text-mist-500 underline underline-offset-4 hover:text-mist-950 sm:text-sm/7 dark:hover:text-white">1 more entry from this source · 1 characters</summary><div id="card-johnson-verb-entry-hidden-0" class="mt-4 max-w-[68ch] space-y-4 text-base/7 text-mist-700 sm:text-sm/7 dark:text-mist-400 [&_a]:font-semibold [&_a]:text-mist-950 [&_a]:underline [&_a]:underline-offset-4 dark:[&_a]:text-white [&_h2]:text-base/8 [&_h2]:font-medium [&_h2]:text-mist-950 [&_h2]:not-first:mt-8 dark:[&_h2]:text-white [&_li]:pl-2 [&_ol]:list-decimal [&_ol]:pl-6 [&_strong]:font-semibold [&_strong]:text-mist-950 dark:[&_strong]:text-white [&_ul]:list-[square] [&_ul]:pl-6 [&_ul]:marker:text-mist-400 dark:[&_ul]:marker:text-mist-600 [&_blockquote]:border-l-2 [&_blockquote]:border-mist-300 [&_blockquote]:pl-4 [&_blockquote]:italic dark:[&_blockquote]:border-mist-700">
+  <p>1. To place; to put in any situation or place; to put.</p>
+<blockquote><p>E're I could<br>
+Give him that parting kiss which I had set<br>
+Betwixt two charming words, comes in my father. Shakes.</p></blockquote>
+<blockquote><p>But that my admirable dexterity of wit, counterfeiting the<br>
+action of an old woman, delivered me, the knave constable<br>
+had set me i' th' common stocks for a witch. Shakesp.</p></blockquote>
+<blockquote><p>They that are younger have me in derision, whose fathers<br>
+I would have disdained to have set with the dogs of my<br>
+flock. Job. xxx. 1.</p></blockquote>
+<blockquote><p>He that hath received his testimony, hath set to his seal,<br>
+that God is true. John iii. 33.</p></blockquote>
+<blockquote><p>They have set her a bed in the midst of the slain. Ezek. xxxii.</p></blockquote>
+<blockquote><p>God set them in the firmament, to give light upon the<br>
+earth. Gen. i. 17.</p></blockquote>
+<blockquote><p>In their setting of their threshold by my thresholds, they<br>
+have defiled my holy name. Ezek. xliii. 8.</p></blockquote>
+<blockquote><p>I have set thee for a tower among my people. Jer. vi. 27.</p></blockquote>
+<blockquote><p>By his aid aspiring<br>
+To set himself in glory above his peers. Milton.</p></blockquote>
+<blockquote><p>She sets the bar that causes all my pain;<br>
+One gift refused, makes all their bounty vain. Dryd.</p></blockquote>
+<blockquote><p>The lives of the revealers may be justly enough set over<br>
+against the revelation, to find whether they agree. Atterb.</p></blockquote>
+<p>2. To put into any condition, state, or posture.</p>
+<blockquote><p>They thought the very disturbance of things established an<br>
+hire sufficient to set them on work. Hooker.</p></blockquote>
+<blockquote><p>That man that sits within a monarch's heart,<br>
+Would he abuse the count'nance of the king,<br>
+Alack! what mischiefs might he set abroach? Shakesp.</p></blockquote>
+<blockquote><p>Our princely general,<br>
+Will give you audience; and wherein<br>
+It shall appear that your demands are just,<br>
+You shall enjoy them; ev'ry thing set off<br>
+That might so much as think you enemies. Shakesp.</p></blockquote>
+<blockquote><p>This present enterprize set off his head,<br>
+I do not think a braver gentleman<br>
+Is now alive. Shakesp. Hen. IV.</p></blockquote>
+<blockquote><p>Ye caused every man his servant, whom he had set at liberty, to return. Jer. xxxiv. 16.</p></blockquote>
+<blockquote><p>Every sabbath ye shall set it in order. Lev. xxiv. 8.</p></blockquote>
+<blockquote><p>I am come to set a man at variance against his father. Mat.</p></blockquote>
+<blockquote><p>Thou shalt pour out into all those vessels, and set aside that<br>
+which is full. 2 Kings iv. 4.</p></blockquote>
+<blockquote><p>The beauty of his ornament he set in majesty, but they<br>
+made images; therefore have I set it far from them. Ezek.</p></blockquote>
+<blockquote><p>The gates of thy land shall be set wide open. Nah. iii. 13.</p></blockquote>
+<blockquote><p>The fathers have eaten a sour grape, and the children's teeth<br>
+are set on edge. Jer. xxxi. 20.</p></blockquote>
+<blockquote><p>The tongue defileth the whole body, and setteth on fire the<br>
+course of nature, and is set on fire of hell. Ja. iii. 6.</p></blockquote>
+<blockquote><p>The shipping might be set on work by fishing, by transportations from port to port. Bacon.</p></blockquote>
+<blockquote><p>This wheel set on going, did pour a war upon the Venetians with such a tempest, as Padua and Trevigi were taken<br>
+from them. Bacon.</p></blockquote>
+<blockquote><p>That this may be done with the more advantage, some<br>
+hours must be set apart for this examination. Duppa.</p></blockquote>
+<blockquote><p>Finding the river fordable at the foot of the bridge, he set<br>
+over his horse. Hayward.</p></blockquote>
+<blockquote><p>Equal success had set these champions high,<br>
+And both resolv'd to conquer, or to die. Waller.</p></blockquote>
+<blockquote><p>Nothing renders a man so inconsiderable; for it sets him<br>
+above the meaner sort of company, and makes him intolerable to the better. Govern. of the Tongue.</p></blockquote>
+<blockquote><p>Some are reclaimed by punishment, and some are set right<br>
+by good nature. L'Estrange.</p></blockquote>
+<blockquote><p>The fire was form'd, she sets the kettle on. Dryd.</p></blockquote>
+<blockquote><p>Leda's present came,<br>
+To ruin Troy, and set the world on flame. Dryd.</p></blockquote>
+<blockquote><p>Set calf betimes to school, and let him be<br>
+Instructed there in rules of husbandry. Dryd.</p></blockquote>
+<blockquote><p>Over labour'd with so long a course,<br>
+'Tis time to set at ease the smoking horse. Dryd.</p></blockquote>
+<blockquote><p>The punish'd crime shall set my soul at ease,<br>
+And murm'ring manes of my friend appease. Dryd.</p></blockquote>
+<blockquote><p>Jove call'd in haste<br>
+The son of Maia with severe decree,<br>
+To kill the keeper, and to set her free. Dryd.</p></blockquote>
+<blockquote><p>If such a tradition were at any time endeavoured to be set<br>
+on foot, it is not easy to imagine how it should at first gain<br>
+entertainment. Tillotson.</p></blockquote>
+<blockquote><p>When the father looks sour on the child, every body else<br>
+should put on the same coldness, till forgiveness asked, and a<br>
+reformation of his fault has set him right again, and restored<br>
+him to his former credit. Locke on Educat.</p></blockquote>
+<blockquote><p>His practice must by no means cross his precepts, unless he<br>
+intend to set him wrong. Locke on Educat.</p></blockquote>
+<blockquote><p>If the fear of absolute and irresistible power set it on upon<br>
+the mind, the idea is likely to sink the deeper. Locke.</p></blockquote>
+<blockquote><p>When he has once chosen it, it raises desire that proportionably gives him uneasiness which determines his will, and sets<br>
+him at work in pursuit of his choice, on all occasions. Locke.</p></blockquote>
+<blockquote><p>This river,<br>
+When nature's self lay ready to expire,<br>
+Quench'd the dire flame that set the world on fire. Addis.</p></blockquote>
+<blockquote><p>The many hospitals every where erected, serve rather to encourage idleness in the people than to set them at work. Add.</p></blockquote>
+<blockquote><p>A couple of lovers agreed at parting, to set aside one half<br>
+hour in the day to think of each other. Addis.</p></blockquote>
+<blockquote><p>Your fortunes place you far above the necessity of learning, but nothing can set you above the ornament of it. Felton.</p></blockquote>
+<blockquote><p>Their first movement and impressed motions demand the<br>
+impulse of an almighty hand to set them agoing. Cheyne.</p></blockquote>
+<blockquote><p>Men of quality look upon it as one of their distinguishing<br>
+privileges, not to set other people at ease, with the loss of the<br>
+least of their own. Pope.</p></blockquote>
+<blockquote><p>That the wheels were but small, may be guessed from a custom they have of taking them off, and setting them on. Pope.</p></blockquote>
+<blockquote><p>Be frequent in setting such causes at work, whose effects<br>
+you desire to know. Watts.</p></blockquote>
+<p>3. To make motionless; to fix immoveably.</p>
+<blockquote><p>Struck with the sight, inanimate she seems,<br>
+Set are her eyes, and motionless her limbs. Garth.</p></blockquote>
+<p>4. To fix; to state by some rule.</p>
+<blockquote><p>Hereon the prompter falls to flat railing in the bitterest<br>
+terms; which the gentleman with a set gesture and countenance still soberly related, until the ordinary, driven at last<br>
+into a mad rage, was fain to give over. Carew.</p></blockquote>
+<blockquote><p>The town of Bern has handsome fountains planted, at set<br>
+distances, from one end of the streets to the other. Addison.</p></blockquote>
+<p>5. To regulate; to adjust.</p>
+<blockquote><p>In court they determine the king's good by his desires,<br>
+which is a kind of setting the sun by the dial. Suckling.</p></blockquote>
+<blockquote><p>God bears a different respect to places set apart and consecrated to his worship, to what he bears to places designed to<br>
+common uses. South.</p></blockquote>
+<blockquote><p>Our palates grow into a liking of the seasoning and cookery,<br>
+which by custom they are set to. Locke.</p></blockquote>
+<blockquote><p>He rules the church's blest dominions,<br>
+And sets men's faith by his opinions. Prior.</p></blockquote>
+<blockquote><p>Against experience he believes,<br>
+He argues against demonstration;<br>
+Plead's when his reason he deceives,<br>
+And sets his judgment by his passion. Prior.</p></blockquote>
+<p>6. To fit to musick; to adapt with notes.</p>
+<blockquote><p>Set thy own songs, and sing them to thy lute. Dryden.</p></blockquote>
+<blockquote><p>Grief he tames that fetters it in verse;<br>
+But when I have done so,<br>
+Some man, his art or voice to show,<br>
+Doth set and sing my pain;<br>
+And by delighting many, frees again<br>
+Grief, which verse did restrain. Donne.</p></blockquote>
+<blockquote><p>I had one day set the hundredth psalm, and was singing the<br>
+first line, in order to put the congregation into the tune. Spect.</p></blockquote>
+<p>7. To plant, not sow.</p>
+<blockquote><p>Whatsoever fruit useth to be set upon a root or a slip, if it<br>
+be sown, will degenerate. Bacon's Nat. History.</p></blockquote>
+<blockquote><p>I prostrate fell,<br>
+To shrubs and plants my vile devotion paid,<br>
+And set the bearded leek to which I pray'd. Prior.</p></blockquote>
+<p>8. To intersperse or mark with any thing.</p>
+<blockquote><p>As with stars, their bodies all<br>
+And wings were set with eyes. Milton.</p></blockquote>
+<blockquote><p>High on their heads, with jewels richly set,<br>
+Each lady wore a radiant coronet. Dryden.</p></blockquote>
+<blockquote><p>The body is smooth on that end, and on this 'tis set with<br>
+ridges round the point. Woodward.</p></blockquote>
+<p>9. To reduce from a fractured or dislocated state.</p>
+<blockquote><p>Can honour set to a leg? no: or an arm? no: honour hath<br>
+no skill in surgery then? no. Shakesp. Henry IV.</p></blockquote>
+<blockquote><p>Considering what an orderly life I had led, I only commanded that my arm and leg should be set, and my body<br>
+anointed with oil. G. Herbert.</p></blockquote>
+<blockquote><p>The fracture was of both the focils of the left leg: he had<br>
+been in great pain from the time of the setting. Wiseman.</p></blockquote>
+<blockquote><p>Credit is gained by course of time, and seldom recovers a<br>
+strain; but if broken, is never well set again. Temple.</p></blockquote>
+<p>10. To fix the affection; to determine the resolution.</p>
+<blockquote><p>Set your affection on things above, not on things on the<br>
+earth. Col. iii. 2.</p></blockquote>
+<blockquote><p>They should set their hope in God, and not forget his<br>
+works. Ps. lxxviii. 7.</p></blockquote>
+<blockquote><p>Because sentence against an evil work is not executed<br>
+speedily, the heart of men is fully set in them to do evil. Eccl.</p></blockquote>
+<blockquote><p>Set to work millions of spinning worms,<br>
+That in their green shops weave the smooth hair'd silk<br>
+To deck her sons. Milt.</p></blockquote>
+<blockquote><p>Set not thy heart<br>
+Thus overfond on that which is not thine. Milton.</p></blockquote>
+<blockquote><p>When we are well, our hearts are set,<br>
+Which way we care not, to be rich or great. Denham.</p></blockquote>
+<blockquote><p>Our hearts are so much set upon the value of the benefits<br>
+received, that we never think of the bestower. L'Estrange.</p></blockquote>
+<blockquote><p>These bubbles of the shallowest, emptiest sorrow,<br>
+Which children vent for toys, and women rain<br>
+For any trifle their fond hearts are set on. Dryd. and Lee.</p></blockquote>
+<blockquote><p>Should we set our hearts only upon these things, and be able<br>
+to taste no pleasure but what is sensual, we must be extremely<br>
+miserable when we come unto the other world, because we<br>
+should meet with nothing to entertain ourselves. Tillotson.</p></blockquote>
+<blockquote><p>No sooner is one action dispatched, which we are set upon,<br>
+but another uneasiness is ready to set us on work. Locke.</p></blockquote>
+<blockquote><p>Minds, altogether set on trade and profit, often contract a<br>
+certain narrowness of temper. Addison.</p></blockquote>
+<blockquote><p>Men take an ill-natured pleasure in disappointing us in what<br>
+our hearts are most set upon. Addison's Spectator.</p></blockquote>
+<blockquote><p>An Englishman, who has any degree of reflection, cannot<br>
+be better awakened to a sense of religion in general, than by<br>
+observing how the minds of all mankind are set upon this important point, and how every nation is attentive to the great<br>
+business of their being. Addison.</p></blockquote>
+<blockquote><p>I am much concerned when I see young gentlemen of fortune so wholly set upon pleasures, that they neglect all improvements in wisdom and knowledge. Addison.</p></blockquote>
+<p>11. To predetermine; to settle.</p>
+<blockquote><p>We may still doubt whether the Lord, in such indifferent<br>
+ceremonies as those whereof we dispute, did frame his people<br>
+of set purpose unto any utter dissimilitude with Egyptians, or<br>
+with any other nation. Hooker.</p></blockquote>
+<blockquote><p>He remembers only the name of Conon, and forgets the<br>
+other on set purpose, to shew his country swain was no great<br>
+scholar. Dryden.</p></blockquote>
+<p>12. To establish; to appoint; to fix.</p>
+<blockquote><p>Of all helps for due performance of this service, the greatest is that very set and standing order itself, which, framed<br>
+with common advice, hath for matter and form prescribed<br>
+whatsoever is herein publickly done. Hooker.</p></blockquote>
+<blockquote><p>It pleased the king to send me, and I set him a time. Neh. ii.</p></blockquote>
+<blockquote><p>Am I a sea, or a whale, that thou settest a watch over me?<br>
+Job vii. 12.</p></blockquote>
+<blockquote><p>He setteth an end to darkness, and searcheth out all perfection. Job xxviii. 3.</p></blockquote>
+<blockquote><p>In studies, whatsoever a man commandeth upon himself,<br>
+let him set hours for it; but whatsoever is agreeable to his nature, let him take no care for any set times: for his thoughts<br>
+will fly to it of themselves, so as the spaces of other business<br>
+or studies will suffice. Bacon.</p></blockquote>
+<blockquote><p>For using set and prescribed forms, there is no doubt but<br>
+that wholsome words, being known, are aptest to excite judicious and fervent affections. King Charles.</p></blockquote>
+<blockquote><p>His seed, when is not set, shall bruise my head. Milton.</p></blockquote>
+<blockquote><p>Though set form of prayer be an abomination,<br>
+Set forms of petitions find great approbation. Denham.</p></blockquote>
+<blockquote><p>Set places and set hours are but parts of that worship we<br>
+owe. South.</p></blockquote>
+<blockquote><p>That law cannot keep men from taking more use than you<br>
+set, the want of money being that alone which regulates its<br>
+price, will appear, if we consider how hard it is to set a price<br>
+upon unnecessary commodities; but how impossible it is to set<br>
+a rate upon victuals in a time of famine. Locke.</p></blockquote>
+<blockquote><p>Set him such a task, to be done in such a time. Locke.</p></blockquote>
+<blockquote><p>As in the subordinations of government the king is offended<br>
+by any insults to an inferior magistrate, so the sovereign ruler<br>
+of the universe is affronted by a breach of allegiance to those<br>
+whom he has set over us. Addison.</p></blockquote>
+<blockquote><p>Take set times of meditating on what is future. Atterbury.</p></blockquote>
+<blockquote><p>Should a man go about, with never so set study and design,<br>
+to describe such a natural form of the year as that which is at<br>
+present established, he could fearcely ever do it in so few<br>
+words that were so fit. Woodward.</p></blockquote>
+<p>13. To exhibit; to display; to propose. With before.</p>
+<blockquote><p>Through the variety of my reading, I set before me many<br>
+examples both of ancient and later times. Bacon.</p></blockquote>
+<blockquote><p>Reject not then what offer'd means: who knows<br>
+But God hath set before us, to return thee<br>
+Home to thy country and his sacred house? Milton.</p></blockquote>
+<blockquote><p>Long has my soul desir'd this time and place,<br>
+To set before your sight your glorious race. Dryden.</p></blockquote>
+<blockquote><p>All that can be done is to set the thing before men, and to<br>
+offer it to their choice. Tillotson.</p></blockquote>
+<blockquote><p>A spacious veil from his broad shoulders flew,<br>
+That set th' unhappy Phaeton to view:<br>
+The flaming chariot and the steeds it shew'd,<br>
+And the whole fable in the mantle glow'd. Addison.</p></blockquote>
+<blockquote><p>When his fortune sets before him all<br>
+The pomps and pleasures that his soul can wish,<br>
+His rigid virtue will accept of none. Addison's Cato.</p></blockquote>
+<blockquote><p>He supplies his not appearing in the present scene of action,<br>
+by setting his character before us, and continually forcing his<br>
+patience, prudence, and valour upon our observation. Broome.</p></blockquote>
+<p>14. To value; to estimate; to rate.</p>
+<blockquote><p>Be you contented<br>
+To have a son set your decrees at nought?<br>
+To pluck down justice from your awful bench,<br>
+To trip the course of law? Shakes. H. IV.</p></blockquote>
+<blockquote><p>The backwardness parents shew in divulging their faults,<br>
+will make them set a greater value on their credit themselves,<br>
+and teach them to be the more careful to preserve the good<br>
+opinion of others. Locke.</p></blockquote>
+<blockquote><p>If we act by several broken views, and will not only be virtuous, but wealthy, popular, and every thing that has a value<br>
+set upon it by the world, we shall live and die in misery. Addis.</p></blockquote>
+<blockquote><p>Have I not set at nought my noble birth,<br>
+A spotless fame, and an unblemish'd race,<br>
+The peace of innocence, and pride of virtue?<br>
+My prodigality has giv'n thee all. Rowe's Jane Shore.</p></blockquote>
+<blockquote><p>Though the same sun, with all diffusive rays,<br>
+Blush in the rose and in the diamond blaze,<br>
+We prize the stronger effort of his pow'r,<br>
+And always set the gem above the flow'r. Pope.</p></blockquote>
+<p>15. To stake at play.</p>
+<blockquote><p>What sad disorders play begets!<br>
+Desp'rate and mad, at length he sets<br>
+Those darts, whose points make gods adore. Prior.</p></blockquote>
+<p>16. To offer a wager at dice to another.</p>
+<blockquote><p>Who sets me else? I'll throw at all. Shakesp. R. II.</p></blockquote>
+<p>17. To fix in metal.</p>
+<blockquote><p>Think so vast a treasure as your son<br>
+Too great for any private man's possession;<br>
+And him too rich a jewel to be set<br>
+In vulgar metal, or vulgar use. Dryden.</p></blockquote>
+<blockquote><p>He may learn to cut, polish, and set precious stones. Locke.</p></blockquote>
+<p>18. To embarrass; to distress; to perplex.</p>
+<blockquote><p>Those who raise popular murmurs and discontents against<br>
+his majesty's government, that they find so very few and so<br>
+very improper occasions for them, shew how hard they are<br>
+set in this particular, represent the bill as a grievance. Addis.</p></blockquote>
+<p>19. To fix in an artificial manner, so as to produce a particular effect.</p>
+<blockquote><p>The proud have laid a snare for me, they have set gins. Ps.</p></blockquote>
+<p>20. To apply to something.</p>
+<blockquote><p>Unto thy brother thou shalt not lend upon usury, that the<br>
+Lord may bless thee in all that thou settest thine hand to. Deut.</p></blockquote>
+<blockquote><p>With whate'er gall thou set'st thyself to write,<br>
+Thy inoffensive satires never bite. Dryden.</p></blockquote>
+<p>21. To fix the eyes.</p>
+<blockquote><p>I will set mine eyes upon them for good, and bring them<br>
+again to this land. Jer. xxiv. 6.</p></blockquote>
+<blockquote><p>Joy salutes me when I set<br>
+My blest eyes on Amoret. Waller.</p></blockquote>
+<p>22. To offer for a price.</p>
+<blockquote><p>There is not a more wicked thing than a covetous man; for<br>
+such an one setteth his own soul to sale. Ecclus. x. 9.</p></blockquote>
+<p>23. To place in order; to frame.</p>
+<blockquote><p>After it was framed, and ready to be set together, he was,<br>
+with infinite labour and charge, carried by land with camels,<br>
+through that hot and sandy country, from Caire to Suetia.<br>
+Knolles's History of the Turks.</p></blockquote>
+<p>24. To station; to place.</p>
+<blockquote><p>Cœnus has betray'd<br>
+The bitter truths that our loose court upbraid:<br>
+Your friend was set upon you for a spy,<br>
+And on his witness you are doom'd to die. Dryden.</p></blockquote>
+<p>25. To oppose.</p>
+<blockquote><p>Will you set your wit to a fool's? Shakespeare.</p></blockquote>
+<p>26. To bring to a fine edge: as, to set a razor.</p>
+<p>27. To SET about. To apply to.</p>
+<blockquote><p>They should make them play-games, or endeavour it, and<br>
+set themselves about it. Locke.</p></blockquote>
+<p>28. To SET against. To place in a state of enmity or opposition.</p>
+<blockquote><p>The terrors of God do set themselves in array against me.<br>
+Job vi. 4.</p></blockquote>
+<blockquote><p>The king of Babylon set himself against Jerusalem. Ezek.</p></blockquote>
+<blockquote><p>The devil hath reason to set himself against it; for nothing is<br>
+more destructive to him than a soul armed with prayer. Duppa.</p></blockquote>
+<blockquote><p>There should be such a being as assists us against our worst<br>
+enemies, and comforts us under our sharpest sufferings, when<br>
+all other things set themselves against us. Tilotson.</p></blockquote>
+<p>29. To SET against. To oppose; to place in rhetorical opposition.</p>
+<blockquote><p>This perishing of the world in a deluge is set against, or<br>
+compared with, the perishing of the world in the conflagration. Burnet's Theory of the Earth.</p></blockquote>
+<p>30. To SET apart. To neglect for a season.</p>
+<blockquote><p>They highly commended his forwardness, and all other<br>
+matters for that time set apart. Knoles.</p></blockquote>
+<p>31. To SET aside. To omit for the present.</p>
+<blockquote><p>Set your knighthood and your soldiership aside, and give me<br>
+leave to tell you that you lie in your throat. Shakesp. H. IV.</p></blockquote>
+<blockquote><p>In 1585 followed the prosperous expedition of Drake and<br>
+Carlile into the West Indies; in the which I set aside the<br>
+taking of St. Jago and St. Domingo in Hispaniola, as surprizes<br>
+rather than encounters. Bacon.</p></blockquote>
+<blockquote><p>My highest interest is not to be deceived about these matters; therefore, setting aside all other considerations, I will endeavour to know the truth, and yield to that. Tillotson.</p></blockquote>
+<p>32. To SET aside. To reject.</p>
+<blockquote><p>I'll look into the pretensions of each, and shew upon what<br>
+ground 'tis that I embrace that of the deluge, and set aside all<br>
+the rest. Woodward's Nat. History.</p></blockquote>
+<blockquote><p>No longer now does my neglected mind<br>
+Its wonted stores and old ideas find:<br>
+Fix'd judgment there no longer does abide,<br>
+To taste the true, or set the false aside. Prior.</p></blockquote>
+<p>33. To SET aside. To abrogate; to annul.</p>
+<blockquote><p>Several innovations, made to the detriment of the English<br>
+merchant, are now intirely set aside. Addison.</p></blockquote>
+<blockquote><p>There may be<br>
+Reasons of so much pow'r and cogent force,<br>
+As may ev'n set aside this right of birth:<br>
+If sons have rights, yet fathers have 'em too. Rwe.</p></blockquote>
+<blockquote><p>He shows what absurdities follow upon such a supposition,<br>
+and the greater those absurdities are, the more strongly do they<br>
+evince the falsity of that supposition from whence they flow,<br>
+and consequently the truth of the doctrine set aside by that<br>
+supposition. Atterbury.</p></blockquote>
+<p>34. To SET by. To regard; to esteem.</p>
+<blockquote><p>David behaved himself more wisely than all, so that his<br>
+name was much set by. 1 Sa. xviii. 30.</p></blockquote>
+<p>35. To SET by. To reject or omit for the present.</p>
+<blockquote><p>You shall hardly edify me, that those nations might not, by<br>
+the law of nature, have been subdued by any nation that had<br>
+only policy and moral virtue; though the propagation of the<br>
+faith, whereof we shall speak in the proper place, were set by,<br>
+and not made part of the case. Bacon.</p></blockquote>
+<p>36. To SET down. To mention; to explain; to relate in writing.</p>
+<blockquote><p>They have set down, that a rose set by garlick is sweeter,<br>
+because the more fetid juice goeth into the garlick. Bacon.</p></blockquote>
+<blockquote><p>Some rules were to be set down for the government of the<br>
+army. Clarendon.</p></blockquote>
+<blockquote><p>I shall set down an account of a discourse I chanced to have<br>
+with one of these rural statesmen. Addison.</p></blockquote>
+<p>37. To SET down. To register or note in any book or paper; to put in writing.</p>
+<blockquote><p>Let those that play your clowns speak no more than is set<br>
+down for them. Shakesp. Hamlet.</p></blockquote>
+<blockquote><p>Every man, careful of virtuous conversation, studious of<br>
+scripture, and given unto any abstinence in diet, was set down<br>
+in his calendar of suspected Priscilianists. Hooker.</p></blockquote>
+<blockquote><p>Take<br>
+One half of my commission, and set down<br>
+As best thou art experienc'd, since thou know'st<br>
+Thy country's strength and weakness. Shak Coriolanus.</p></blockquote>
+<blockquote><p>The reasons that led me into the meaning which prevailed<br>
+on my mind, are set down. Locke.</p></blockquote>
+<blockquote><p>An eminent instance of this, to shew what use can do, I<br>
+shall set down. Locke.</p></blockquote>
+<blockquote><p>I cannot forbear setting down the beautiful description Claudian has made of a wild beast, newly brought from the woods,<br>
+and making its first appearance in a full amphitheatre. Addison.</p></blockquote>
+<p>38. To SET down. To fix on a resolve.</p>
+<blockquote><p>Finding him so resolutely set down, that he was neither by<br>
+fair nor foul means, but only by force, to be removed out of<br>
+his town, he inclosed the same round. Knolles.</p></blockquote>
+<p>39. To SET down. To fix; to establish.</p>
+<blockquote><p>This law we may name eternal, being that order which God<br>
+before all others hath set down with himself, for himself to do<br>
+all things by. Hooker.</p></blockquote>
+<p>40. To SET forth. To publish; to promulgate; to make appear.</p>
+<blockquote><p>My willing love,<br>
+The rather by these arguments of fear,<br>
+Set forth in your pursuit. Shakes. Twelfth Night.</p></blockquote>
+<blockquote><p>The poems, which have been so ill set forth under his name,<br>
+are as he first writ them. Waller.</p></blockquote>
+<p>41. To SET forth. To raise; to send out.</p>
+<blockquote><p>Our merchants, to their great charges, set forth fleets to<br>
+descry the seas. Abbot.</p></blockquote>
+<blockquote><p>The Venetian admiral had a fleet of sixty gallies, set forth<br>
+by the Venetians. Knolles's Hist. of the Turks.</p></blockquote>
+<blockquote><p>They agreed, all with one consent, at a prefixed day, to<br>
+send unto Vienna such warlike forces, as they had in any<br>
+time before set forth, for the defence of the Christian religion.<br>
+Knolles's History of the Turks.</p></blockquote>
+<blockquote><p>When poor Rutilus spends all his worth,<br>
+In hopes of setting one good dinner forth,<br>
+'Tis downright madness. Dryden's Juvenal.</p></blockquote>
+<p>42. To SET forth. To display; to explain.</p>
+<blockquote><p>As for words to set forth such lewdness, it is not hard for<br>
+them to give a goodly and painted shew thereunto, borrowed<br>
+even from the praises proper to virtue. Spenser.</p></blockquote>
+<blockquote><p>So little have these false colours dishonoured painting, that<br>
+they have only served to set forth her praise, and to make her<br>
+merit further known. Dryden's Dufresnoy.</p></blockquote>
+<p>43. To SET forth. To arrange; to place in order.</p>
+<blockquote><p>Up higher to the plain, where we'll set forth<br>
+In best appointment all our regiments. Shakesp. K. John.</p></blockquote>
+<p>44. To SET forth. To show; to exhibit.</p>
+<blockquote><p>To render our errours more monstrous, and what unto a<br>
+miracle sets forth the patience of God, he hath endeavoured to<br>
+make the world believe he was God himself. Browne.</p></blockquote>
+<blockquote><p>Whereas it is commonly set forth green or yellow, it is inclining to white. Brown's Vulg. Err.</p></blockquote>
+<blockquote><p>To set forth great things by small. Milton.</p></blockquote>
+<blockquote><p>The two humours of a chearful trust in providence, and a<br>
+suspicious diffidence of it, are very well set forth here for our<br>
+instruction. L'Estrange.</p></blockquote>
+<p>45. To SET forward. To advance; to promote.</p>
+<blockquote><p>They yield that reading may set forward, but not begin the<br>
+work of salvation. Hooker.</p></blockquote>
+<blockquote><p>Amongst them there are not those helps which others have,<br>
+to set them forward in the way of life. Hooker.</p></blockquote>
+<blockquote><p>In the external form of religion, such things as are apparently or can be sufficiently proved effectual, and generally fit<br>
+to set forward godliness, either as betokening the greatness of<br>
+God, or as beseeming the dignity of religion, or as concuring with celestial impressions in the minds of men, may be reverently thought of. Hooker.</p></blockquote>
+<blockquote><p>They mar my path, they set forward my calamity. Job.</p></blockquote>
+<blockquote><p>Dung or chalk, applied seasonably to the roots of trees, doth<br>
+set them forwards. Bacon's Nat. History.</p></blockquote>
+<p>46. To SET in. To put in a way to begin.</p>
+<blockquote><p>If you please to assist and set me in, I will recollect myself. Colier.</p></blockquote>
+<p>47. To SET off. To decorate; to recommend; to adorn; to embellish. It answers to the French relever.</p>
+<blockquote><p>Like bright metal on a sullen ground,<br>
+My reformation, glittering o'er my fault,<br>
+Shall shew more goodly, and attract more eyes,<br>
+Than that which hath no foil to set it off. Shak. H. IV.</p></blockquote>
+<blockquote><p>The prince put thee into my service for no other reason<br>
+than to set me off. Shakesp. Henry IV.</p></blockquote>
+<blockquote><p>Neglect not the examples of those that have carried themselves ill in the same place; not to set off thyself by taxing their<br>
+memory, but to direct thyself what to avoid. Bacon.</p></blockquote>
+<blockquote><p>May you be happy, and your sorrows past<br>
+Set off those joys I wish may ever last. Waller.</p></blockquote>
+<blockquote><p>The figures of the groupes must contrast each other by<br>
+their several positions: thus in a play some characters must be<br>
+raised to oppose others, and to set them off. Dryden.</p></blockquote>
+<blockquote><p>The men, whose hearts are aimed at, are the occasion that<br>
+one part of the face lies under a kind of disguise, while the<br>
+other is so much set off, and adorned by the owner. Addison.</p></blockquote>
+<blockquote><p>Their women are perfect mistresses in shewing themselves<br>
+to the best advantage: they are always gay and sprightly, and<br>
+set off the worst faces with the best airs. Addison.</p></blockquote>
+<blockquote><p>The general good sense and worthiness of his character,<br>
+makes his friends observe these little singularities as foils, that<br>
+rather set off than blemish his good qualities. Addison.</p></blockquote>
+<blockquote><p>The work will never take, if it is not set off with proper<br>
+scenes. Addison.</p></blockquote>
+<blockquote><p>Claudian sets off his description of the Eridanus with all the<br>
+poetical stories. Addison on Italy.</p></blockquote>
+<p>48. To SET on or upon. To animate; to instigate; to incite.</p>
+<blockquote><p>You had either never attempted this change, set on with<br>
+hope, or never discovered it, stopt with dispair. Sidney.</p></blockquote>
+<blockquote><p>He upbraids Iago, that he made him<br>
+Brave me upon the watch; whereon it came<br>
+That I was cast; and even now he spake<br>
+Iago set him on. Shakesp. Othello.</p></blockquote>
+<blockquote><p>Thou, traitor, hast set on thy wife to this. Shakespeare.</p></blockquote>
+<blockquote><p>Baruch setteth thee on against us, to deliver us unto the<br>
+Chaldeans. Jer. xliii. 3.</p></blockquote>
+<blockquote><p>He should be thought to be mad, or set on and employed by<br>
+his own or the malice of other men to abuse the duke. Claren.</p></blockquote>
+<blockquote><p>In opposition sits<br>
+Grim death, my son and foe, who sets them on. Milton.</p></blockquote>
+<blockquote><p>The vengeance of God, and the indignation of men, will<br>
+join forces against an insulting baseness, when backed with<br>
+greatness and set on by misinformation. South's Serm.</p></blockquote>
+<blockquote><p>The skill used in dressing up power, will serve only to<br>
+give a greater edge to man's natural ambition: what can this<br>
+do but set men on the more eagerly to scramble? Locke.</p></blockquote>
+<blockquote><p>A prince's court introduces a kind of luxury, that sets every<br>
+particular person upon making a higher figure than is consistent<br>
+with his revenue. Addison.</p></blockquote>
+<p>49. To SET on or upon. To attack; to assault.</p>
+<blockquote><p>There you missing me, I was taken up by pyrates, who<br>
+putting me under board prisoner, presently set upon another<br>
+ship, and maintaining a long fight, in the end put them all to<br>
+the sword. Sidney.</p></blockquote>
+<blockquote><p>Cassio hath here been set on in the dark:<br>
+He's almost slain, and Rodorigo dead. Shakes. Othello.</p></blockquote>
+<blockquote><p>So other foes may set upon our back. Shakesp. H. VI.</p></blockquote>
+<blockquote><p>Alphonsus, captain of another of the galleys, suffering his<br>
+men to straggle too far into the land, was set upon by a Turkish pyrate, and taken. Knolles.</p></blockquote>
+<blockquote><p>Of one hundred ships there came scarce thirty to work: howbeit with them, and such as came daily in, we set upon them,<br>
+and gave them the chace. Bacon's War with Spain.</p></blockquote>
+<blockquote><p>If I had been set upon by villains, I would have redeemed<br>
+that evil by this which I now suffer. Taylor.</p></blockquote>
+<blockquote><p>When once I am set upon, 'twill be too late to be whetting<br>
+when I should be fighting. L'Estrange.</p></blockquote>
+<blockquote><p>When some rival power invades a right,<br>
+Flies set on flies, and turtles turtles fight. Garth's Dispens.</p></blockquote>
+<p>50. To SET on. To employ as in a task.</p>
+<blockquote><p>Set on thy wife t' observe. Shakesp. Othello.</p></blockquote>
+<p>51. To SET on or upon. To fix the attention; to determine to any thing with settled and full resolution.</p>
+<blockquote><p>It becomes a true lover to have your heart more set upon her<br>
+good than your own, and to bear a tenderer respect to her<br>
+honour than your satisfaction. Sidney.</p></blockquote>
+<blockquote><p>Some I found wond'rous harsh,<br>
+Contemptuous, proud, set on revenge and spite. Milton.</p></blockquote>
+<p>52. To SET out. To assign; to allot.</p>
+<blockquote><p>The rest, unable to serve any longer, or willing to fall to<br>
+thrift, should be placed in part of the lands by them won, at<br>
+better rate than others, to whom the same shall be set out. Spens.</p></blockquote>
+<blockquote><p>The squaring of a man's thoughts to the lot that providence has set out for him is a blessing. L'Estrange.</p></blockquote>
+<p>53. To SET out. To publish.</p>
+<blockquote><p>I will use no other authority than that excellent proclamation set out by the king in the first year of his reign, and annexed before the book of Common Prayer. Bacon.</p></blockquote>
+<blockquote><p>If all should be set out to the world by an angry whig, the<br>
+consequence must be a confinement of our friend for some<br>
+months more to his garret. Swift.</p></blockquote>
+<p>54. To SET out. To mark by boundaries or distinctions of space.</p>
+<blockquote><p>Time and place, taken thus for determinate portions of<br>
+those infinite abysses of space and duration, set out, or supposed<br>
+to be distinguished from the rest by known boundaries, have<br>
+each a twofold acceptation. Locke.</p></blockquote>
+<p>55. To SET out. To adorn; to embellish.</p>
+<blockquote><p>An ugly woman, in a rich habit set out with jewels, nothing<br>
+can become. Dryden.</p></blockquote>
+<p>56. To SET out. To raise; to equip.</p>
+<blockquote><p>The Venetians pretend they could set out, in case of great<br>
+necessity, thirty men of war, a hundred gallies, and ten<br>
+galeasses. Addison on Italy.</p></blockquote>
+<p>57. To SET out. To show; to display; to recommend.</p>
+<blockquote><p>Barbarossa, in his discourses concerning the conquest of<br>
+Africk, set him out as a most fit instrument for subduing the<br>
+kingdom of Tunis. Knolles.</p></blockquote>
+<blockquote><p>I could set out that best side of Luther, which our author, in<br>
+the picture he has given us of him, has thrown into shade,<br>
+that he might place a supposed deformity more in view. Atterb.</p></blockquote>
+<p>58. To SET out. To show; to prove.</p>
+<blockquote><p>Those very reasons set out how heinous his sin was. Atterb.</p></blockquote>
+<p>59. To SET up. To erect; to establish newly.</p>
+<blockquote><p>There are many excellent institutions of charity lately set<br>
+up, and which deserve all manner of encouragement, particularly those which relate to the careful and pious education of<br>
+poor children. Atterbury's Sermons.</p></blockquote>
+<blockquote><p>Who could not win the mistress, woo'd the maid,<br>
+Set up themselves, and drove a sep'rate trade. Pope.</p></blockquote>
+<p>60. To SET up. To build; to erect.</p>
+<blockquote><p>Their ancient habitations they neglect,<br>
+And set up new: then, if the echo like not<br>
+In such a room, they pluck down those. Ben. Johnson's Catil.</p></blockquote>
+<blockquote><p>Jacob took the stone, that he had for his pillow, and set it<br>
+up for a pillar. Gen. xxviii. 18.</p></blockquote>
+<blockquote><p>Saul set him up a place, and is passed on, and gone down<br>
+to Gilgal. 1 Sa. xv. 12.</p></blockquote>
+<blockquote><p>Such delight hath God in men<br>
+Obedient to his will, that he vouchsafes<br>
+Among them to set up his tabernacle. Milton's Paradise Lost.</p></blockquote>
+<blockquote><p>Images were not set up or worshipped among the heathens,<br>
+because they supposed the gods to be like them. Stillingfleet.</p></blockquote>
+<blockquote><p>Statues were set up to all those who had made themselves<br>
+eminent for any noble action. Dryden.</p></blockquote>
+<blockquote><p>I shall shew you how to set up a forge, and what tools you<br>
+must use. Moxon's Mech. Exer.</p></blockquote>
+<blockquote><p>Patrons, who sneak from living worth to dead,<br>
+With-hold the pension, and set up the head. Pope.</p></blockquote>
+<p>61. To SET up. To raise; to exalt; to put in power.</p>
+<blockquote><p>He was skilful enough to have lived still, if knowledge<br>
+could be set up against mortality. Shakespeare.</p></blockquote>
+<blockquote><p>I'll translate the kingdom from the house of Saul, and set up<br>
+the throne of David over Israel. 2 Sa. iii. 10.</p></blockquote>
+<blockquote><p>Of those that lead these parties, if you could take off the<br>
+major number, the lesser would govern; nay, if you could<br>
+take off all, they would set up one, and follow him. Suckling.</p></blockquote>
+<blockquote><p>Homer took all occasions of setting up his own countrymen<br>
+the Grecians, and of undervaluing the Trojan chiefs. Dryd.</p></blockquote>
+<blockquote><p>Whatever practical rule is generally broken, it cannot be<br>
+supposed innate; it being impossible that men should, without<br>
+shame or fear, serenely break a rule which they could not but<br>
+evidently know that God had set up. Locke.</p></blockquote>
+<p>62. To SET up. To place in view.</p>
+<blockquote><p>He hath taken me by my neck, shaken me to pieces, and<br>
+set me up for his mark. Job xvi. 12.</p></blockquote>
+<blockquote><p>Scarecrows are set up to keep birds from corn and fruit. Bac.</p></blockquote>
+<blockquote><p>Thy father's merit sets thee up to view,<br>
+And shows thee in the fairest point of light,<br>
+To make thy virtues or thy faults conspicuous. Addison.</p></blockquote>
+<p>63. To SET up. To place in repose; to fix; to rest.</p>
+<blockquote><p>Whilst we set up our hopes here, we do not so seriously, as<br>
+we ought, consider that God has provided another and better<br>
+place for us. Wake.</p></blockquote>
+<p>64. To SET up. To raise by the voice.</p>
+<blockquote><p>My right eye itches, some good luck is near;<br>
+Perhaps my Amaryllis may appear;<br>
+I'll set up such a note as she shall hear. Dryden.</p></blockquote>
+<p>65. To SET up. To advance; to propose to reception.</p>
+<blockquote><p>The authors that set up this opinion were not themselves<br>
+satisfied with it. Burnet's Theory of the Earth.</p></blockquote>
+<p>66. To SET up. To raise to a sufficient fortune.</p>
+<blockquote><p>In a soldier's life there's honour to be got, and one lucky hit<br>
+sets up a man for ever. L'Estrange.</p></blockquote>
+</div></details>
+  <p class="mt-3 text-base/7 text-mist-500 sm:text-sm">By <a href="#" class="mr-2 underline underline-offset-4">Samuel Johnson</a></p>
+  
+</section></div>
+<p class="mt-3 text-base/7 text-mist-500 sm:text-sm/7">Two entries, 39,955 characters, uncapped — clipped here so this page stays readable. This one card is most of why <span class="font-mono">/define/set</span> is 44.6 desktop screens.</p></div>
+    </div>
+    <div class="min-w-0">
+      <h3 class="text-base/8 font-medium text-mist-950 dark:text-white">Under the compact system</h3>
+      <div class="mt-2 rounded-xl bg-mist-950/2.5 p-5 dark:bg-white/5"><section id="card-johnson-verb" class="rounded-xl py-6 pl-6 border-l-2 border-amber-600/50 bg-amber-50/40 dark:bg-amber-950/10">
+  <header class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+  <h2 class="text-base/8 font-medium text-amber-700 dark:text-amber-400">
+    <span aria-hidden="true" class="mr-1">👑</span>Samuel Johnson, A Dictionary of the English Language<span class="font-normal text-mist-500"> · 1755</span><span class="font-normal text-mist-500"> · verb</span>
+  </h2>
+  <span class="flex items-baseline gap-3">
+    <a href="https://leme.library.utoronto.ca/lexicons/1345/" class="text-base/7 text-mist-500 hover:text-mist-950 sm:text-sm/7 dark:hover:text-white" title="read this at Samuel Johnson, A Dictionary of the English Language"><span aria-hidden="true">↗</span><span class="sr-only">read this at Samuel Johnson, A Dictionary of the English Language</span></a>
+    <a href="#" class="text-base/7 text-mist-500 hover:text-mist-950 sm:text-sm/7 dark:hover:text-white" title="where this came from"><span aria-hidden="true">ⓘ</span><span class="sr-only">where this came from — Samuel Johnson, A Dictionary of the English Language</span></a>
+  </span>
+</header>
+  <div id="card-johnson-verb-entry-0" class="mt-4 max-w-[68ch]">
+  <div class="space-y-4 text-base/7 text-mist-700 sm:text-sm/7 dark:text-mist-400 [&_a]:font-semibold [&_a]:text-mist-950 [&_a]:underline [&_a]:underline-offset-4 dark:[&_a]:text-white [&_h2]:text-base/8 [&_h2]:font-medium [&_h2]:text-mist-950 [&_h2]:not-first:mt-8 dark:[&_h2]:text-white [&_li]:pl-2 [&_ol]:list-decimal [&_ol]:pl-6 [&_strong]:font-semibold [&_strong]:text-mist-950 dark:[&_strong]:text-white [&_ul]:list-[square] [&_ul]:pl-6 [&_ul]:marker:text-mist-400 dark:[&_ul]:marker:text-mist-600 [&_blockquote]:border-l-2 [&_blockquote]:border-mist-300 [&_blockquote]:pl-4 [&_blockquote]:italic dark:[&_blockquote]:border-mist-700"><p>1. To fall below the horizon, as the sun at evening.</p><blockquote><p>The sun was set. Gen. xxviii. 11.</p></blockquote><blockquote><p>Whereas the setting of the pleiades and seven stars is designed the term of Autumn and the beginning of Winter, unto<br>
+some latitudes these stars do never set. Brown's Vulgar Err.</p></blockquote><blockquote><p>That sun once set, a thousand meaner stars<br>
+Gave a dim light to violence and wars. Waller.</p></blockquote><blockquote><p>Now the latter watch of wasting night,<br>
+And setting stars, to kindly rest invite. Dryden's æn.</p></blockquote></div>
+  <details class="group/entry mt-2">
+    <summary class="w-fit cursor-pointer list-none text-base/7 text-mist-500 hover:text-mist-950 sm:text-sm/7 dark:hover:text-white [&::-webkit-details-marker]:hidden">
+      <span class="underline underline-offset-4 group-open/entry:hidden">Read the rest of this entry · 6,836 characters</span>
+      <span class="underline underline-offset-4 not-group-open/entry:hidden">Fold this entry</span>
+    </summary>
+    <div class="mt-4 space-y-4 text-base/7 text-mist-700 sm:text-sm/7 dark:text-mist-400 [&_a]:font-semibold [&_a]:text-mist-950 [&_a]:underline [&_a]:underline-offset-4 dark:[&_a]:text-white [&_h2]:text-base/8 [&_h2]:font-medium [&_h2]:text-mist-950 [&_h2]:not-first:mt-8 dark:[&_h2]:text-white [&_li]:pl-2 [&_ol]:list-decimal [&_ol]:pl-6 [&_strong]:font-semibold [&_strong]:text-mist-950 dark:[&_strong]:text-white [&_ul]:list-[square] [&_ul]:pl-6 [&_ul]:marker:text-mist-400 dark:[&_ul]:marker:text-mist-600 [&_blockquote]:border-l-2 [&_blockquote]:border-mist-300 [&_blockquote]:pl-4 [&_blockquote]:italic dark:[&_blockquote]:border-mist-700"><blockquote><p>Not thicker billows beat the Libyan main,<br>
+When pale Orion sets in wintry rain,<br>
+Than stand these troops. Dryden's æn.</p></blockquote><blockquote><p>My eyes no object met,<br>
+But distant skies that in the ocean set. Dryden's Ind. Emp.</p></blockquote><blockquote><p>The Julian eagles here their wings display,<br>
+And there like setting stars the Decii lay. Garth's Ovid.</p></blockquote><p>2. To be fixed hard.</p><blockquote><p>A gathering and serring of the spirits together to resist,<br>
+maketh the teeth to set hard one against another. Bacon.</p></blockquote><p>3. To be extinguished or darkened, as the sun at night.</p><blockquote><p>Ahijah could not see; for his eyes were set, by reason of his<br>
+age. 1 Kings xiv. 4.</p></blockquote><p>4. To fit musick to words.</p><blockquote><p>That I might sing it, madam, to a tune,<br>
+Give me a note: your ladyship can set.<br>
+—As little by such toys as may be possible. Shakespeare.</p></blockquote><p>5.</p><blockquote><p>To become not fluid.<br>
+That fluid substance in a few minutes begins to set, as the<br>
+tradesmen speak; that is, to exchange its fluidity for firmness. Boyle.</p></blockquote><p>6. To begin a journey.</p><blockquote><p>So let him land,<br>
+And solemnly see him set on to London. Shakesp. H. V.</p></blockquote><blockquote><p>On Wednesday next, Harry, thou shalt set forward;<br>
+On Thursday we ourselves will march. Shakespeare.</p></blockquote><blockquote><p>The king is set from London, and the scene<br>
+Is now transported to Southampton. Shakes. Hen. V.</p></blockquote><p>7. To go, or pass, or put one's self into any state or posture.</p><blockquote><p>The faithless pirate soon will set to sea,<br>
+And bear the royal virgin far away. Dryden.</p></blockquote><blockquote><p>When sets he forward?<br>
+—He is near at hand. Dryden's Ind Emp.</p></blockquote><blockquote><p>He with forty of his gallies, in most warlike manner appointed, set forward with Solyman's ambassador towards Constantinople. Knolles's History of the Turks.</p></blockquote><p>8. To catch birds with a dog that sets them, that is, lies down and points them out; and with a large net.</p><blockquote><p>When I go a hawking or setting, I think myself beholden<br>
+to him that assures me, that in such a field there is a covey of<br>
+partridges. Boyle.</p></blockquote><p>9. To plant, not sow.</p><blockquote><p>In gard'ning ne'er this rule forget,<br>
+To sow dry, and set wet. Old Proverb.</p></blockquote><p>10. It is commonly used in conversation for sit, which, though undoubtedly barbarous, is sometimes found in authors.</p><blockquote><p>If they set down before's, 'fore they remove,<br>
+Bring up your army. Shakespeare.</p></blockquote><p>11. To apply one's self.</p><blockquote><p>If he sets industriously and sincerely to perform the commands of Christ, he can have no ground of doubting but it<br>
+shall prove successful to him. Hammond.</p></blockquote><p>12. To SET about. To fall to; to begin.</p><blockquote><p>We find it most hard to convince them, that it is necessary<br>
+now, at this very present, to set about it: we are thought a<br>
+little too hot and hasty, when we press wicked men to leave<br>
+their sins to-day, as long as they have so much time before<br>
+them to do it in. Calamy's Sermons.</p></blockquote><blockquote><p>How preposterous is it, never to set about works of charity,<br>
+whilst we ourselves can see them performed? Atterbury.</p></blockquote><p>13. To SET in. To fix in a particular state.</p><blockquote><p>When the weather was set in to be very bad, I have taken<br>
+a whole day's journey to see a gallery furnished by great masters. Addison's Spectator.</p></blockquote><blockquote><p>As November set in with keen frosts, so they continued<br>
+through the whole of that month, without any other alteration than freezing with more or less severity, as the winds<br>
+changed. Ellis's Voyage.</p></blockquote><blockquote><p>A storm accordingly happened the following day; for a<br>
+southern monsoon began to set in. Gulliver's Travels.</p></blockquote><p>14. To SET on or upon. To begin a march, journey, or enterprize.</p><blockquote><p>Be't your charge<br>
+To see perform'd the tenor of our word:<br>
+Set on Shakespeare's Henry IV.</p></blockquote><blockquote><p>He that would seriously set upon the search of truth, ought<br>
+to prepare his mind with a love of it. Locke.</p></blockquote><blockquote><p>The understanding would presently obtain the knowledge<br>
+it is about, and then set upon some new inquiry. Locke.</p></blockquote><p>15. To SET on. To make an attack.</p><blockquote><p>Hence every leader to his charge;<br>
+For on their answer we will set on them. Shak. Hen. IV.</p></blockquote><p>16. To SET out. To have beginning.</p><blockquote><p>If any invisible casualty there be, it is questionable whether<br>
+its activity only set out at our nativity, and began not rather in<br>
+the womb. Brown's Vulg. Errours.</p></blockquote><blockquote><p>The dazzling lustre to abate,<br>
+He set not out in all his pomp and state,<br>
+Clad in the mildest lightning. Addison.</p></blockquote><p>17. To SET out. To begin a journey.</p><blockquote><p>At their setting out they must have their commission from<br>
+the king. Bacon.</p></blockquote><blockquote><p>I shall put you in mind where you promised to set out, or<br>
+begin your first stage. Hammond.</p></blockquote><blockquote><p>Me thou think'st not slow,<br>
+Who since the morning-hour set out from heav'n,<br>
+Where God resides, and ere mid-day arriv'd<br>
+In Eden. Milton's Parad. Lost.</p></blockquote><blockquote><p>My soul then mov'd the quicker pace;<br>
+Your's first set out, mine reach'd her in the race. Dryden.</p></blockquote><blockquote><p>These doctrines, laid down for foundations of any science,<br>
+were called principles, as the beginnings from which we must<br>
+set out, and look no farther backwards. Locke.</p></blockquote><blockquote><p>He that sets out upon weak legs will not only go farther, but<br>
+grow stronger too, than one who with firm limbs only sits<br>
+still. Locke.</p></blockquote><blockquote><p>For these reasons I shall set out for London to-morrow. Add.</p></blockquote><blockquote><p>Look no more on man in the first stage of his existence,<br>
+in his setting out for eternity. Addison.</p></blockquote><blockquote><p>If we slacken our arms, and drop our oars, we shall be hurried back to the place from whence we first set out. Addison.</p></blockquote><p>18. To SET out. To begin the world.</p><blockquote><p>Eudoxus, at his first setting out, threw himself into court.<br>
+Addison's Spectator.</p></blockquote><blockquote><p>Eugenio set out from the same university, and about the<br>
+same time with Corusodes. Swift.</p></blockquote><p>19. To SET to. To apply himself to.</p><blockquote><p>I may appeal to some, who have made this their business,<br>
+whether it go not against the hair with them to set to any thing<br>
+else. Government of the Tongue.</p></blockquote><p>20. To SET up. To begin a trade openly.</p><blockquote><p>We have stock enough to set up with, capable of infinite<br>
+advancement, and yet no less capable of total decay.<br>
+Decay of Piety.</p></blockquote><blockquote><p>A man of a clear reputaion, though his bark be split, yet<br>
+he saves his cargo; has something left towards setting up again,<br>
+and so is in capacity of receiving benefit not only from his<br>
+own industry, but the friendship of others. Gov. of the Tongue.</p></blockquote><blockquote><p>Those who have once made their court to those mistresses<br>
+without portions, the muses, are never like to set up for fortunes. Pope.</p></blockquote><blockquote><p>This habit of writing and discoursing was acquired during<br>
+my apprenticeship in London, and a long residence there after<br>
+I had set up for myself. Swift.</p></blockquote><p>21. To SET up. To begin a project of advantage.</p><blockquote><p>Eumenes, one of Alexander's captains, setting up for himself after the death of his master, persuaded his principal officers to lend him great sums; after which they were forced to<br>
+follow him for their own security. Arbuthnot.</p></blockquote><blockquote><p>A severe treatment might tempt them to set up for a republick. Addison on Italy.</p></blockquote><p>22. To SET up. To profess publickly.</p><blockquote><p>Scow'ring the watch grows out of fashion wit;<br>
+Now we set up for tilting in the pit. Dryden.</p></blockquote><blockquote><p>Can Polyphemus, or Antiphates,<br>
+Who gorge themselves with man,<br>
+Set up to teach humanity, and give,<br>
+By their example, rules for us to live? Dryd. Juvenal.</p></blockquote><blockquote><p>It is found by experience, that those men who set up for<br>
+morality, without regard to religion, are generally but virtuous in part. Swift.</p></blockquote></div>
+  </details>
+</div>
+  <details class="mt-3"><summary class="w-fit cursor-pointer text-base/7 text-mist-500 underline underline-offset-4 hover:text-mist-950 sm:text-sm/7 dark:hover:text-white">1 more entry from this source · 32,527 characters</summary><div id="card-johnson-verb-entry-hidden-0" class="mt-4 max-w-[68ch]">
+  <div class="space-y-4 text-base/7 text-mist-700 sm:text-sm/7 dark:text-mist-400 [&_a]:font-semibold [&_a]:text-mist-950 [&_a]:underline [&_a]:underline-offset-4 dark:[&_a]:text-white [&_h2]:text-base/8 [&_h2]:font-medium [&_h2]:text-mist-950 [&_h2]:not-first:mt-8 dark:[&_h2]:text-white [&_li]:pl-2 [&_ol]:list-decimal [&_ol]:pl-6 [&_strong]:font-semibold [&_strong]:text-mist-950 dark:[&_strong]:text-white [&_ul]:list-[square] [&_ul]:pl-6 [&_ul]:marker:text-mist-400 dark:[&_ul]:marker:text-mist-600 [&_blockquote]:border-l-2 [&_blockquote]:border-mist-300 [&_blockquote]:pl-4 [&_blockquote]:italic dark:[&_blockquote]:border-mist-700"><p>1. To place; to put in any situation or place; to put.</p><blockquote><p>E're I could<br>
+Give him that parting kiss which I had set<br>
+Betwixt two charming words, comes in my father. Shakes.</p></blockquote><blockquote><p>But that my admirable dexterity of wit, counterfeiting the<br>
+action of an old woman, delivered me, the knave constable<br>
+had set me i' th' common stocks for a witch. Shakesp.</p></blockquote><blockquote><p>They that are younger have me in derision, whose fathers<br>
+I would have disdained to have set with the dogs of my<br>
+flock. Job. xxx. 1.</p></blockquote></div>
+  <details class="group/entry mt-2">
+    <summary class="w-fit cursor-pointer list-none text-base/7 text-mist-500 hover:text-mist-950 sm:text-sm/7 dark:hover:text-white [&::-webkit-details-marker]:hidden">
+      <span class="underline underline-offset-4 group-open/entry:hidden">Read the rest of this entry · 31,463 characters</span>
+      <span class="underline underline-offset-4 not-group-open/entry:hidden">Fold this entry</span>
+    </summary>
+    <div class="mt-4 space-y-4 text-base/7 text-mist-700 sm:text-sm/7 dark:text-mist-400 [&_a]:font-semibold [&_a]:text-mist-950 [&_a]:underline [&_a]:underline-offset-4 dark:[&_a]:text-white [&_h2]:text-base/8 [&_h2]:font-medium [&_h2]:text-mist-950 [&_h2]:not-first:mt-8 dark:[&_h2]:text-white [&_li]:pl-2 [&_ol]:list-decimal [&_ol]:pl-6 [&_strong]:font-semibold [&_strong]:text-mist-950 dark:[&_strong]:text-white [&_ul]:list-[square] [&_ul]:pl-6 [&_ul]:marker:text-mist-400 dark:[&_ul]:marker:text-mist-600 [&_blockquote]:border-l-2 [&_blockquote]:border-mist-300 [&_blockquote]:pl-4 [&_blockquote]:italic dark:[&_blockquote]:border-mist-700"><blockquote><p>He that hath received his testimony, hath set to his seal,<br>
+that God is true. John iii. 33.</p></blockquote><blockquote><p>They have set her a bed in the midst of the slain. Ezek. xxxii.</p></blockquote><blockquote><p>God set them in the firmament, to give light upon the<br>
+earth. Gen. i. 17.</p></blockquote><blockquote><p>In their setting of their threshold by my thresholds, they<br>
+have defiled my holy name. Ezek. xliii. 8.</p></blockquote><blockquote><p>I have set thee for a tower among my people. Jer. vi. 27.</p></blockquote><blockquote><p>By his aid aspiring<br>
+To set himself in glory above his peers. Milton.</p></blockquote><blockquote><p>She sets the bar that causes all my pain;<br>
+One gift refused, makes all their bounty vain. Dryd.</p></blockquote><blockquote><p>The lives of the revealers may be justly enough set over<br>
+against the revelation, to find whether they agree. Atterb.</p></blockquote><p>2. To put into any condition, state, or posture.</p><blockquote><p>They thought the very disturbance of things established an<br>
+hire sufficient to set them on work. Hooker.</p></blockquote><blockquote><p>That man that sits within a monarch's heart,<br>
+Would he abuse the count'nance of the king,<br>
+Alack! what mischiefs might he set abroach? Shakesp.</p></blockquote><blockquote><p>Our princely general,<br>
+Will give you audience; and wherein<br>
+It shall appear that your demands are just,<br>
+You shall enjoy them; ev'ry thing set off<br>
+That might so much as think you enemies. Shakesp.</p></blockquote><blockquote><p>This present enterprize set off his head,<br>
+I do not think a braver gentleman<br>
+Is now alive. Shakesp. Hen. IV.</p></blockquote><blockquote><p>Ye caused every man his servant, whom he had set at liberty, to return. Jer. xxxiv. 16.</p></blockquote><blockquote><p>Every sabbath ye shall set it in order. Lev. xxiv. 8.</p></blockquote><blockquote><p>I am come to set a man at variance against his father. Mat.</p></blockquote><blockquote><p>Thou shalt pour out into all those vessels, and set aside that<br>
+which is full. 2 Kings iv. 4.</p></blockquote><blockquote><p>The beauty of his ornament he set in majesty, but they<br>
+made images; therefore have I set it far from them. Ezek.</p></blockquote><blockquote><p>The gates of thy land shall be set wide open. Nah. iii. 13.</p></blockquote><blockquote><p>The fathers have eaten a sour grape, and the children's teeth<br>
+are set on edge. Jer. xxxi. 20.</p></blockquote><blockquote><p>The tongue defileth the whole body, and setteth on fire the<br>
+course of nature, and is set on fire of hell. Ja. iii. 6.</p></blockquote><blockquote><p>The shipping might be set on work by fishing, by transportations from port to port. Bacon.</p></blockquote><blockquote><p>This wheel set on going, did pour a war upon the Venetians with such a tempest, as Padua and Trevigi were taken<br>
+from them. Bacon.</p></blockquote><blockquote><p>That this may be done with the more advantage, some<br>
+hours must be set apart for this examination. Duppa.</p></blockquote><blockquote><p>Finding the river fordable at the foot of the bridge, he set<br>
+over his horse. Hayward.</p></blockquote><blockquote><p>Equal success had set these champions high,<br>
+And both resolv'd to conquer, or to die. Waller.</p></blockquote><blockquote><p>Nothing renders a man so inconsiderable; for it sets him<br>
+above the meaner sort of company, and makes him intolerable to the better. Govern. of the Tongue.</p></blockquote><blockquote><p>Some are reclaimed by punishment, and some are set right<br>
+by good nature. L'Estrange.</p></blockquote><blockquote><p>The fire was form'd, she sets the kettle on. Dryd.</p></blockquote><blockquote><p>Leda's present came,<br>
+To ruin Troy, and set the world on flame. Dryd.</p></blockquote><blockquote><p>Set calf betimes to school, and let him be<br>
+Instructed there in rules of husbandry. Dryd.</p></blockquote><blockquote><p>Over labour'd with so long a course,<br>
+'Tis time to set at ease the smoking horse. Dryd.</p></blockquote><blockquote><p>The punish'd crime shall set my soul at ease,<br>
+And murm'ring manes of my friend appease. Dryd.</p></blockquote><blockquote><p>Jove call'd in haste<br>
+The son of Maia with severe decree,<br>
+To kill the keeper, and to set her free. Dryd.</p></blockquote><blockquote><p>If such a tradition were at any time endeavoured to be set<br>
+on foot, it is not easy to imagine how it should at first gain<br>
+entertainment. Tillotson.</p></blockquote><blockquote><p>When the father looks sour on the child, every body else<br>
+should put on the same coldness, till forgiveness asked, and a<br>
+reformation of his fault has set him right again, and restored<br>
+him to his former credit. Locke on Educat.</p></blockquote><blockquote><p>His practice must by no means cross his precepts, unless he<br>
+intend to set him wrong. Locke on Educat.</p></blockquote><blockquote><p>If the fear of absolute and irresistible power set it on upon<br>
+the mind, the idea is likely to sink the deeper. Locke.</p></blockquote><blockquote><p>When he has once chosen it, it raises desire that proportionably gives him uneasiness which determines his will, and sets<br>
+him at work in pursuit of his choice, on all occasions. Locke.</p></blockquote><blockquote><p>This river,<br>
+When nature's self lay ready to expire,<br>
+Quench'd the dire flame that set the world on fire. Addis.</p></blockquote><blockquote><p>The many hospitals every where erected, serve rather to encourage idleness in the people than to set them at work. Add.</p></blockquote><blockquote><p>A couple of lovers agreed at parting, to set aside one half<br>
+hour in the day to think of each other. Addis.</p></blockquote><blockquote><p>Your fortunes place you far above the necessity of learning, but nothing can set you above the ornament of it. Felton.</p></blockquote><blockquote><p>Their first movement and impressed motions demand the<br>
+impulse of an almighty hand to set them agoing. Cheyne.</p></blockquote><blockquote><p>Men of quality look upon it as one of their distinguishing<br>
+privileges, not to set other people at ease, with the loss of the<br>
+least of their own. Pope.</p></blockquote><blockquote><p>That the wheels were but small, may be guessed from a custom they have of taking them off, and setting them on. Pope.</p></blockquote><blockquote><p>Be frequent in setting such causes at work, whose effects<br>
+you desire to know. Watts.</p></blockquote><p>3. To make motionless; to fix immoveably.</p><blockquote><p>Struck with the sight, inanimate she seems,<br>
+Set are her eyes, and motionless her limbs. Garth.</p></blockquote><p>4. To fix; to state by some rule.</p><blockquote><p>Hereon the prompter falls to flat railing in the bitterest<br>
+terms; which the gentleman with a set gesture and countenance still soberly related, until the ordinary, driven at last<br>
+into a mad rage, was fain to give over. Carew.</p></blockquote><blockquote><p>The town of Bern has handsome fountains planted, at set<br>
+distances, from one end of the streets to the other. Addison.</p></blockquote><p>5. To regulate; to adjust.</p><blockquote><p>In court they determine the king's good by his desires,<br>
+which is a kind of setting the sun by the dial. Suckling.</p></blockquote><blockquote><p>God bears a different respect to places set apart and consecrated to his worship, to what he bears to places designed to<br>
+common uses. South.</p></blockquote><blockquote><p>Our palates grow into a liking of the seasoning and cookery,<br>
+which by custom they are set to. Locke.</p></blockquote><blockquote><p>He rules the church's blest dominions,<br>
+And sets men's faith by his opinions. Prior.</p></blockquote><blockquote><p>Against experience he believes,<br>
+He argues against demonstration;<br>
+Plead's when his reason he deceives,<br>
+And sets his judgment by his passion. Prior.</p></blockquote><p>6. To fit to musick; to adapt with notes.</p><blockquote><p>Set thy own songs, and sing them to thy lute. Dryden.</p></blockquote><blockquote><p>Grief he tames that fetters it in verse;<br>
+But when I have done so,<br>
+Some man, his art or voice to show,<br>
+Doth set and sing my pain;<br>
+And by delighting many, frees again<br>
+Grief, which verse did restrain. Donne.</p></blockquote><blockquote><p>I had one day set the hundredth psalm, and was singing the<br>
+first line, in order to put the congregation into the tune. Spect.</p></blockquote><p>7. To plant, not sow.</p><blockquote><p>Whatsoever fruit useth to be set upon a root or a slip, if it<br>
+be sown, will degenerate. Bacon's Nat. History.</p></blockquote><blockquote><p>I prostrate fell,<br>
+To shrubs and plants my vile devotion paid,<br>
+And set the bearded leek to which I pray'd. Prior.</p></blockquote><p>8. To intersperse or mark with any thing.</p><blockquote><p>As with stars, their bodies all<br>
+And wings were set with eyes. Milton.</p></blockquote><blockquote><p>High on their heads, with jewels richly set,<br>
+Each lady wore a radiant coronet. Dryden.</p></blockquote><blockquote><p>The body is smooth on that end, and on this 'tis set with<br>
+ridges round the point. Woodward.</p></blockquote><p>9. To reduce from a fractured or dislocated state.</p><blockquote><p>Can honour set to a leg? no: or an arm? no: honour hath<br>
+no skill in surgery then? no. Shakesp. Henry IV.</p></blockquote><blockquote><p>Considering what an orderly life I had led, I only commanded that my arm and leg should be set, and my body<br>
+anointed with oil. G. Herbert.</p></blockquote><blockquote><p>The fracture was of both the focils of the left leg: he had<br>
+been in great pain from the time of the setting. Wiseman.</p></blockquote><blockquote><p>Credit is gained by course of time, and seldom recovers a<br>
+strain; but if broken, is never well set again. Temple.</p></blockquote><p>10. To fix the affection; to determine the resolution.</p><blockquote><p>Set your affection on things above, not on things on the<br>
+earth. Col. iii. 2.</p></blockquote><blockquote><p>They should set their hope in God, and not forget his<br>
+works. Ps. lxxviii. 7.</p></blockquote><blockquote><p>Because sentence against an evil work is not executed<br>
+speedily, the heart of men is fully set in them to do evil. Eccl.</p></blockquote><blockquote><p>Set to work millions of spinning worms,<br>
+That in their green shops weave the smooth hair'd silk<br>
+To deck her sons. Milt.</p></blockquote><blockquote><p>Set not thy heart<br>
+Thus overfond on that which is not thine. Milton.</p></blockquote><blockquote><p>When we are well, our hearts are set,<br>
+Which way we care not, to be rich or great. Denham.</p></blockquote><blockquote><p>Our hearts are so much set upon the value of the benefits<br>
+received, that we never think of the bestower. L'Estrange.</p></blockquote><blockquote><p>These bubbles of the shallowest, emptiest sorrow,<br>
+Which children vent for toys, and women rain<br>
+For any trifle their fond hearts are set on. Dryd. and Lee.</p></blockquote><blockquote><p>Should we set our hearts only upon these things, and be able<br>
+to taste no pleasure but what is sensual, we must be extremely<br>
+miserable when we come unto the other world, because we<br>
+should meet with nothing to entertain ourselves. Tillotson.</p></blockquote><blockquote><p>No sooner is one action dispatched, which we are set upon,<br>
+but another uneasiness is ready to set us on work. Locke.</p></blockquote><blockquote><p>Minds, altogether set on trade and profit, often contract a<br>
+certain narrowness of temper. Addison.</p></blockquote><blockquote><p>Men take an ill-natured pleasure in disappointing us in what<br>
+our hearts are most set upon. Addison's Spectator.</p></blockquote><blockquote><p>An Englishman, who has any degree of reflection, cannot<br>
+be better awakened to a sense of religion in general, than by<br>
+observing how the minds of all mankind are set upon this important point, and how every nation is attentive to the great<br>
+business of their being. Addison.</p></blockquote><blockquote><p>I am much concerned when I see young gentlemen of fortune so wholly set upon pleasures, that they neglect all improvements in wisdom and knowledge. Addison.</p></blockquote><p>11. To predetermine; to settle.</p><blockquote><p>We may still doubt whether the Lord, in such indifferent<br>
+ceremonies as those whereof we dispute, did frame his people<br>
+of set purpose unto any utter dissimilitude with Egyptians, or<br>
+with any other nation. Hooker.</p></blockquote><blockquote><p>He remembers only the name of Conon, and forgets the<br>
+other on set purpose, to shew his country swain was no great<br>
+scholar. Dryden.</p></blockquote><p>12. To establish; to appoint; to fix.</p><blockquote><p>Of all helps for due performance of this service, the greatest is that very set and standing order itself, which, framed<br>
+with common advice, hath for matter and form prescribed<br>
+whatsoever is herein publickly done. Hooker.</p></blockquote><blockquote><p>It pleased the king to send me, and I set him a time. Neh. ii.</p></blockquote><blockquote><p>Am I a sea, or a whale, that thou settest a watch over me?<br>
+Job vii. 12.</p></blockquote><blockquote><p>He setteth an end to darkness, and searcheth out all perfection. Job xxviii. 3.</p></blockquote><blockquote><p>In studies, whatsoever a man commandeth upon himself,<br>
+let him set hours for it; but whatsoever is agreeable to his nature, let him take no care for any set times: for his thoughts<br>
+will fly to it of themselves, so as the spaces of other business<br>
+or studies will suffice. Bacon.</p></blockquote><blockquote><p>For using set and prescribed forms, there is no doubt but<br>
+that wholsome words, being known, are aptest to excite judicious and fervent affections. King Charles.</p></blockquote><blockquote><p>His seed, when is not set, shall bruise my head. Milton.</p></blockquote><blockquote><p>Though set form of prayer be an abomination,<br>
+Set forms of petitions find great approbation. Denham.</p></blockquote><blockquote><p>Set places and set hours are but parts of that worship we<br>
+owe. South.</p></blockquote><blockquote><p>That law cannot keep men from taking more use than you<br>
+set, the want of money being that alone which regulates its<br>
+price, will appear, if we consider how hard it is to set a price<br>
+upon unnecessary commodities; but how impossible it is to set<br>
+a rate upon victuals in a time of famine. Locke.</p></blockquote><blockquote><p>Set him such a task, to be done in such a time. Locke.</p></blockquote><blockquote><p>As in the subordinations of government the king is offended<br>
+by any insults to an inferior magistrate, so the sovereign ruler<br>
+of the universe is affronted by a breach of allegiance to those<br>
+whom he has set over us. Addison.</p></blockquote><blockquote><p>Take set times of meditating on what is future. Atterbury.</p></blockquote><blockquote><p>Should a man go about, with never so set study and design,<br>
+to describe such a natural form of the year as that which is at<br>
+present established, he could fearcely ever do it in so few<br>
+words that were so fit. Woodward.</p></blockquote><p>13. To exhibit; to display; to propose. With before.</p><blockquote><p>Through the variety of my reading, I set before me many<br>
+examples both of ancient and later times. Bacon.</p></blockquote><blockquote><p>Reject not then what offer'd means: who knows<br>
+But God hath set before us, to return thee<br>
+Home to thy country and his sacred house? Milton.</p></blockquote><blockquote><p>Long has my soul desir'd this time and place,<br>
+To set before your sight your glorious race. Dryden.</p></blockquote><blockquote><p>All that can be done is to set the thing before men, and to<br>
+offer it to their choice. Tillotson.</p></blockquote><blockquote><p>A spacious veil from his broad shoulders flew,<br>
+That set th' unhappy Phaeton to view:<br>
+The flaming chariot and the steeds it shew'd,<br>
+And the whole fable in the mantle glow'd. Addison.</p></blockquote><blockquote><p>When his fortune sets before him all<br>
+The pomps and pleasures that his soul can wish,<br>
+His rigid virtue will accept of none. Addison's Cato.</p></blockquote><blockquote><p>He supplies his not appearing in the present scene of action,<br>
+by setting his character before us, and continually forcing his<br>
+patience, prudence, and valour upon our observation. Broome.</p></blockquote><p>14. To value; to estimate; to rate.</p><blockquote><p>Be you contented<br>
+To have a son set your decrees at nought?<br>
+To pluck down justice from your awful bench,<br>
+To trip the course of law? Shakes. H. IV.</p></blockquote><blockquote><p>The backwardness parents shew in divulging their faults,<br>
+will make them set a greater value on their credit themselves,<br>
+and teach them to be the more careful to preserve the good<br>
+opinion of others. Locke.</p></blockquote><blockquote><p>If we act by several broken views, and will not only be virtuous, but wealthy, popular, and every thing that has a value<br>
+set upon it by the world, we shall live and die in misery. Addis.</p></blockquote><blockquote><p>Have I not set at nought my noble birth,<br>
+A spotless fame, and an unblemish'd race,<br>
+The peace of innocence, and pride of virtue?<br>
+My prodigality has giv'n thee all. Rowe's Jane Shore.</p></blockquote><blockquote><p>Though the same sun, with all diffusive rays,<br>
+Blush in the rose and in the diamond blaze,<br>
+We prize the stronger effort of his pow'r,<br>
+And always set the gem above the flow'r. Pope.</p></blockquote><p>15. To stake at play.</p><blockquote><p>What sad disorders play begets!<br>
+Desp'rate and mad, at length he sets<br>
+Those darts, whose points make gods adore. Prior.</p></blockquote><p>16. To offer a wager at dice to another.</p><blockquote><p>Who sets me else? I'll throw at all. Shakesp. R. II.</p></blockquote><p>17. To fix in metal.</p><blockquote><p>Think so vast a treasure as your son<br>
+Too great for any private man's possession;<br>
+And him too rich a jewel to be set<br>
+In vulgar metal, or vulgar use. Dryden.</p></blockquote><blockquote><p>He may learn to cut, polish, and set precious stones. Locke.</p></blockquote><p>18. To embarrass; to distress; to perplex.</p><blockquote><p>Those who raise popular murmurs and discontents against<br>
+his majesty's government, that they find so very few and so<br>
+very improper occasions for them, shew how hard they are<br>
+set in this particular, represent the bill as a grievance. Addis.</p></blockquote><p>19. To fix in an artificial manner, so as to produce a particular effect.</p><blockquote><p>The proud have laid a snare for me, they have set gins. Ps.</p></blockquote><p>20. To apply to something.</p><blockquote><p>Unto thy brother thou shalt not lend upon usury, that the<br>
+Lord may bless thee in all that thou settest thine hand to. Deut.</p></blockquote><blockquote><p>With whate'er gall thou set'st thyself to write,<br>
+Thy inoffensive satires never bite. Dryden.</p></blockquote><p>21. To fix the eyes.</p><blockquote><p>I will set mine eyes upon them for good, and bring them<br>
+again to this land. Jer. xxiv. 6.</p></blockquote><blockquote><p>Joy salutes me when I set<br>
+My blest eyes on Amoret. Waller.</p></blockquote><p>22. To offer for a price.</p><blockquote><p>There is not a more wicked thing than a covetous man; for<br>
+such an one setteth his own soul to sale. Ecclus. x. 9.</p></blockquote><p>23. To place in order; to frame.</p><blockquote><p>After it was framed, and ready to be set together, he was,<br>
+with infinite labour and charge, carried by land with camels,<br>
+through that hot and sandy country, from Caire to Suetia.<br>
+Knolles's History of the Turks.</p></blockquote><p>24. To station; to place.</p><blockquote><p>Cœnus has betray'd<br>
+The bitter truths that our loose court upbraid:<br>
+Your friend was set upon you for a spy,<br>
+And on his witness you are doom'd to die. Dryden.</p></blockquote><p>25. To oppose.</p><blockquote><p>Will you set your wit to a fool's? Shakespeare.</p></blockquote><p>26. To bring to a fine edge: as, to set a razor.</p><p>27. To SET about. To apply to.</p><blockquote><p>They should make them play-games, or endeavour it, and<br>
+set themselves about it. Locke.</p></blockquote><p>28. To SET against. To place in a state of enmity or opposition.</p><blockquote><p>The terrors of God do set themselves in array against me.<br>
+Job vi. 4.</p></blockquote><blockquote><p>The king of Babylon set himself against Jerusalem. Ezek.</p></blockquote><blockquote><p>The devil hath reason to set himself against it; for nothing is<br>
+more destructive to him than a soul armed with prayer. Duppa.</p></blockquote><blockquote><p>There should be such a being as assists us against our worst<br>
+enemies, and comforts us under our sharpest sufferings, when<br>
+all other things set themselves against us. Tilotson.</p></blockquote><p>29. To SET against. To oppose; to place in rhetorical opposition.</p><blockquote><p>This perishing of the world in a deluge is set against, or<br>
+compared with, the perishing of the world in the conflagration. Burnet's Theory of the Earth.</p></blockquote><p>30. To SET apart. To neglect for a season.</p><blockquote><p>They highly commended his forwardness, and all other<br>
+matters for that time set apart. Knoles.</p></blockquote><p>31. To SET aside. To omit for the present.</p><blockquote><p>Set your knighthood and your soldiership aside, and give me<br>
+leave to tell you that you lie in your throat. Shakesp. H. IV.</p></blockquote><blockquote><p>In 1585 followed the prosperous expedition of Drake and<br>
+Carlile into the West Indies; in the which I set aside the<br>
+taking of St. Jago and St. Domingo in Hispaniola, as surprizes<br>
+rather than encounters. Bacon.</p></blockquote><blockquote><p>My highest interest is not to be deceived about these matters; therefore, setting aside all other considerations, I will endeavour to know the truth, and yield to that. Tillotson.</p></blockquote><p>32. To SET aside. To reject.</p><blockquote><p>I'll look into the pretensions of each, and shew upon what<br>
+ground 'tis that I embrace that of the deluge, and set aside all<br>
+the rest. Woodward's Nat. History.</p></blockquote><blockquote><p>No longer now does my neglected mind<br>
+Its wonted stores and old ideas find:<br>
+Fix'd judgment there no longer does abide,<br>
+To taste the true, or set the false aside. Prior.</p></blockquote><p>33. To SET aside. To abrogate; to annul.</p><blockquote><p>Several innovations, made to the detriment of the English<br>
+merchant, are now intirely set aside. Addison.</p></blockquote><blockquote><p>There may be<br>
+Reasons of so much pow'r and cogent force,<br>
+As may ev'n set aside this right of birth:<br>
+If sons have rights, yet fathers have 'em too. Rwe.</p></blockquote><blockquote><p>He shows what absurdities follow upon such a supposition,<br>
+and the greater those absurdities are, the more strongly do they<br>
+evince the falsity of that supposition from whence they flow,<br>
+and consequently the truth of the doctrine set aside by that<br>
+supposition. Atterbury.</p></blockquote><p>34. To SET by. To regard; to esteem.</p><blockquote><p>David behaved himself more wisely than all, so that his<br>
+name was much set by. 1 Sa. xviii. 30.</p></blockquote><p>35. To SET by. To reject or omit for the present.</p><blockquote><p>You shall hardly edify me, that those nations might not, by<br>
+the law of nature, have been subdued by any nation that had<br>
+only policy and moral virtue; though the propagation of the<br>
+faith, whereof we shall speak in the proper place, were set by,<br>
+and not made part of the case. Bacon.</p></blockquote><p>36. To SET down. To mention; to explain; to relate in writing.</p><blockquote><p>They have set down, that a rose set by garlick is sweeter,<br>
+because the more fetid juice goeth into the garlick. Bacon.</p></blockquote><blockquote><p>Some rules were to be set down for the government of the<br>
+army. Clarendon.</p></blockquote><blockquote><p>I shall set down an account of a discourse I chanced to have<br>
+with one of these rural statesmen. Addison.</p></blockquote><p>37. To SET down. To register or note in any book or paper; to put in writing.</p><blockquote><p>Let those that play your clowns speak no more than is set<br>
+down for them. Shakesp. Hamlet.</p></blockquote><blockquote><p>Every man, careful of virtuous conversation, studious of<br>
+scripture, and given unto any abstinence in diet, was set down<br>
+in his calendar of suspected Priscilianists. Hooker.</p></blockquote><blockquote><p>Take<br>
+One half of my commission, and set down<br>
+As best thou art experienc'd, since thou know'st<br>
+Thy country's strength and weakness. Shak Coriolanus.</p></blockquote><blockquote><p>The reasons that led me into the meaning which prevailed<br>
+on my mind, are set down. Locke.</p></blockquote><blockquote><p>An eminent instance of this, to shew what use can do, I<br>
+shall set down. Locke.</p></blockquote><blockquote><p>I cannot forbear setting down the beautiful description Claudian has made of a wild beast, newly brought from the woods,<br>
+and making its first appearance in a full amphitheatre. Addison.</p></blockquote><p>38. To SET down. To fix on a resolve.</p><blockquote><p>Finding him so resolutely set down, that he was neither by<br>
+fair nor foul means, but only by force, to be removed out of<br>
+his town, he inclosed the same round. Knolles.</p></blockquote><p>39. To SET down. To fix; to establish.</p><blockquote><p>This law we may name eternal, being that order which God<br>
+before all others hath set down with himself, for himself to do<br>
+all things by. Hooker.</p></blockquote><p>40. To SET forth. To publish; to promulgate; to make appear.</p><blockquote><p>My willing love,<br>
+The rather by these arguments of fear,<br>
+Set forth in your pursuit. Shakes. Twelfth Night.</p></blockquote><blockquote><p>The poems, which have been so ill set forth under his name,<br>
+are as he first writ them. Waller.</p></blockquote><p>41. To SET forth. To raise; to send out.</p><blockquote><p>Our merchants, to their great charges, set forth fleets to<br>
+descry the seas. Abbot.</p></blockquote><blockquote><p>The Venetian admiral had a fleet of sixty gallies, set forth<br>
+by the Venetians. Knolles's Hist. of the Turks.</p></blockquote><blockquote><p>They agreed, all with one consent, at a prefixed day, to<br>
+send unto Vienna such warlike forces, as they had in any<br>
+time before set forth, for the defence of the Christian religion.<br>
+Knolles's History of the Turks.</p></blockquote><blockquote><p>When poor Rutilus spends all his worth,<br>
+In hopes of setting one good dinner forth,<br>
+'Tis downright madness. Dryden's Juvenal.</p></blockquote><p>42. To SET forth. To display; to explain.</p><blockquote><p>As for words to set forth such lewdness, it is not hard for<br>
+them to give a goodly and painted shew thereunto, borrowed<br>
+even from the praises proper to virtue. Spenser.</p></blockquote><blockquote><p>So little have these false colours dishonoured painting, that<br>
+they have only served to set forth her praise, and to make her<br>
+merit further known. Dryden's Dufresnoy.</p></blockquote><p>43. To SET forth. To arrange; to place in order.</p><blockquote><p>Up higher to the plain, where we'll set forth<br>
+In best appointment all our regiments. Shakesp. K. John.</p></blockquote><p>44. To SET forth. To show; to exhibit.</p><blockquote><p>To render our errours more monstrous, and what unto a<br>
+miracle sets forth the patience of God, he hath endeavoured to<br>
+make the world believe he was God himself. Browne.</p></blockquote><blockquote><p>Whereas it is commonly set forth green or yellow, it is inclining to white. Brown's Vulg. Err.</p></blockquote><blockquote><p>To set forth great things by small. Milton.</p></blockquote><blockquote><p>The two humours of a chearful trust in providence, and a<br>
+suspicious diffidence of it, are very well set forth here for our<br>
+instruction. L'Estrange.</p></blockquote><p>45. To SET forward. To advance; to promote.</p><blockquote><p>They yield that reading may set forward, but not begin the<br>
+work of salvation. Hooker.</p></blockquote><blockquote><p>Amongst them there are not those helps which others have,<br>
+to set them forward in the way of life. Hooker.</p></blockquote><blockquote><p>In the external form of religion, such things as are apparently or can be sufficiently proved effectual, and generally fit<br>
+to set forward godliness, either as betokening the greatness of<br>
+God, or as beseeming the dignity of religion, or as concuring with celestial impressions in the minds of men, may be reverently thought of. Hooker.</p></blockquote><blockquote><p>They mar my path, they set forward my calamity. Job.</p></blockquote><blockquote><p>Dung or chalk, applied seasonably to the roots of trees, doth<br>
+set them forwards. Bacon's Nat. History.</p></blockquote><p>46. To SET in. To put in a way to begin.</p><blockquote><p>If you please to assist and set me in, I will recollect myself. Colier.</p></blockquote><p>47. To SET off. To decorate; to recommend; to adorn; to embellish. It answers to the French relever.</p><blockquote><p>Like bright metal on a sullen ground,<br>
+My reformation, glittering o'er my fault,<br>
+Shall shew more goodly, and attract more eyes,<br>
+Than that which hath no foil to set it off. Shak. H. IV.</p></blockquote><blockquote><p>The prince put thee into my service for no other reason<br>
+than to set me off. Shakesp. Henry IV.</p></blockquote><blockquote><p>Neglect not the examples of those that have carried themselves ill in the same place; not to set off thyself by taxing their<br>
+memory, but to direct thyself what to avoid. Bacon.</p></blockquote><blockquote><p>May you be happy, and your sorrows past<br>
+Set off those joys I wish may ever last. Waller.</p></blockquote><blockquote><p>The figures of the groupes must contrast each other by<br>
+their several positions: thus in a play some characters must be<br>
+raised to oppose others, and to set them off. Dryden.</p></blockquote><blockquote><p>The men, whose hearts are aimed at, are the occasion that<br>
+one part of the face lies under a kind of disguise, while the<br>
+other is so much set off, and adorned by the owner. Addison.</p></blockquote><blockquote><p>Their women are perfect mistresses in shewing themselves<br>
+to the best advantage: they are always gay and sprightly, and<br>
+set off the worst faces with the best airs. Addison.</p></blockquote><blockquote><p>The general good sense and worthiness of his character,<br>
+makes his friends observe these little singularities as foils, that<br>
+rather set off than blemish his good qualities. Addison.</p></blockquote><blockquote><p>The work will never take, if it is not set off with proper<br>
+scenes. Addison.</p></blockquote><blockquote><p>Claudian sets off his description of the Eridanus with all the<br>
+poetical stories. Addison on Italy.</p></blockquote><p>48. To SET on or upon. To animate; to instigate; to incite.</p><blockquote><p>You had either never attempted this change, set on with<br>
+hope, or never discovered it, stopt with dispair. Sidney.</p></blockquote><blockquote><p>He upbraids Iago, that he made him<br>
+Brave me upon the watch; whereon it came<br>
+That I was cast; and even now he spake<br>
+Iago set him on. Shakesp. Othello.</p></blockquote><blockquote><p>Thou, traitor, hast set on thy wife to this. Shakespeare.</p></blockquote><blockquote><p>Baruch setteth thee on against us, to deliver us unto the<br>
+Chaldeans. Jer. xliii. 3.</p></blockquote><blockquote><p>He should be thought to be mad, or set on and employed by<br>
+his own or the malice of other men to abuse the duke. Claren.</p></blockquote><blockquote><p>In opposition sits<br>
+Grim death, my son and foe, who sets them on. Milton.</p></blockquote><blockquote><p>The vengeance of God, and the indignation of men, will<br>
+join forces against an insulting baseness, when backed with<br>
+greatness and set on by misinformation. South's Serm.</p></blockquote><blockquote><p>The skill used in dressing up power, will serve only to<br>
+give a greater edge to man's natural ambition: what can this<br>
+do but set men on the more eagerly to scramble? Locke.</p></blockquote><blockquote><p>A prince's court introduces a kind of luxury, that sets every<br>
+particular person upon making a higher figure than is consistent<br>
+with his revenue. Addison.</p></blockquote><p>49. To SET on or upon. To attack; to assault.</p><blockquote><p>There you missing me, I was taken up by pyrates, who<br>
+putting me under board prisoner, presently set upon another<br>
+ship, and maintaining a long fight, in the end put them all to<br>
+the sword. Sidney.</p></blockquote><blockquote><p>Cassio hath here been set on in the dark:<br>
+He's almost slain, and Rodorigo dead. Shakes. Othello.</p></blockquote><blockquote><p>So other foes may set upon our back. Shakesp. H. VI.</p></blockquote><blockquote><p>Alphonsus, captain of another of the galleys, suffering his<br>
+men to straggle too far into the land, was set upon by a Turkish pyrate, and taken. Knolles.</p></blockquote><blockquote><p>Of one hundred ships there came scarce thirty to work: howbeit with them, and such as came daily in, we set upon them,<br>
+and gave them the chace. Bacon's War with Spain.</p></blockquote><blockquote><p>If I had been set upon by villains, I would have redeemed<br>
+that evil by this which I now suffer. Taylor.</p></blockquote><blockquote><p>When once I am set upon, 'twill be too late to be whetting<br>
+when I should be fighting. L'Estrange.</p></blockquote><blockquote><p>When some rival power invades a right,<br>
+Flies set on flies, and turtles turtles fight. Garth's Dispens.</p></blockquote><p>50. To SET on. To employ as in a task.</p><blockquote><p>Set on thy wife t' observe. Shakesp. Othello.</p></blockquote><p>51. To SET on or upon. To fix the attention; to determine to any thing with settled and full resolution.</p><blockquote><p>It becomes a true lover to have your heart more set upon her<br>
+good than your own, and to bear a tenderer respect to her<br>
+honour than your satisfaction. Sidney.</p></blockquote><blockquote><p>Some I found wond'rous harsh,<br>
+Contemptuous, proud, set on revenge and spite. Milton.</p></blockquote><p>52. To SET out. To assign; to allot.</p><blockquote><p>The rest, unable to serve any longer, or willing to fall to<br>
+thrift, should be placed in part of the lands by them won, at<br>
+better rate than others, to whom the same shall be set out. Spens.</p></blockquote><blockquote><p>The squaring of a man's thoughts to the lot that providence has set out for him is a blessing. L'Estrange.</p></blockquote><p>53. To SET out. To publish.</p><blockquote><p>I will use no other authority than that excellent proclamation set out by the king in the first year of his reign, and annexed before the book of Common Prayer. Bacon.</p></blockquote><blockquote><p>If all should be set out to the world by an angry whig, the<br>
+consequence must be a confinement of our friend for some<br>
+months more to his garret. Swift.</p></blockquote><p>54. To SET out. To mark by boundaries or distinctions of space.</p><blockquote><p>Time and place, taken thus for determinate portions of<br>
+those infinite abysses of space and duration, set out, or supposed<br>
+to be distinguished from the rest by known boundaries, have<br>
+each a twofold acceptation. Locke.</p></blockquote><p>55. To SET out. To adorn; to embellish.</p><blockquote><p>An ugly woman, in a rich habit set out with jewels, nothing<br>
+can become. Dryden.</p></blockquote><p>56. To SET out. To raise; to equip.</p><blockquote><p>The Venetians pretend they could set out, in case of great<br>
+necessity, thirty men of war, a hundred gallies, and ten<br>
+galeasses. Addison on Italy.</p></blockquote><p>57. To SET out. To show; to display; to recommend.</p><blockquote><p>Barbarossa, in his discourses concerning the conquest of<br>
+Africk, set him out as a most fit instrument for subduing the<br>
+kingdom of Tunis. Knolles.</p></blockquote><blockquote><p>I could set out that best side of Luther, which our author, in<br>
+the picture he has given us of him, has thrown into shade,<br>
+that he might place a supposed deformity more in view. Atterb.</p></blockquote><p>58. To SET out. To show; to prove.</p><blockquote><p>Those very reasons set out how heinous his sin was. Atterb.</p></blockquote><p>59. To SET up. To erect; to establish newly.</p><blockquote><p>There are many excellent institutions of charity lately set<br>
+up, and which deserve all manner of encouragement, particularly those which relate to the careful and pious education of<br>
+poor children. Atterbury's Sermons.</p></blockquote><blockquote><p>Who could not win the mistress, woo'd the maid,<br>
+Set up themselves, and drove a sep'rate trade. Pope.</p></blockquote><p>60. To SET up. To build; to erect.</p><blockquote><p>Their ancient habitations they neglect,<br>
+And set up new: then, if the echo like not<br>
+In such a room, they pluck down those. Ben. Johnson's Catil.</p></blockquote><blockquote><p>Jacob took the stone, that he had for his pillow, and set it<br>
+up for a pillar. Gen. xxviii. 18.</p></blockquote><blockquote><p>Saul set him up a place, and is passed on, and gone down<br>
+to Gilgal. 1 Sa. xv. 12.</p></blockquote><blockquote><p>Such delight hath God in men<br>
+Obedient to his will, that he vouchsafes<br>
+Among them to set up his tabernacle. Milton's Paradise Lost.</p></blockquote><blockquote><p>Images were not set up or worshipped among the heathens,<br>
+because they supposed the gods to be like them. Stillingfleet.</p></blockquote><blockquote><p>Statues were set up to all those who had made themselves<br>
+eminent for any noble action. Dryden.</p></blockquote><blockquote><p>I shall shew you how to set up a forge, and what tools you<br>
+must use. Moxon's Mech. Exer.</p></blockquote><blockquote><p>Patrons, who sneak from living worth to dead,<br>
+With-hold the pension, and set up the head. Pope.</p></blockquote><p>61. To SET up. To raise; to exalt; to put in power.</p><blockquote><p>He was skilful enough to have lived still, if knowledge<br>
+could be set up against mortality. Shakespeare.</p></blockquote><blockquote><p>I'll translate the kingdom from the house of Saul, and set up<br>
+the throne of David over Israel. 2 Sa. iii. 10.</p></blockquote><blockquote><p>Of those that lead these parties, if you could take off the<br>
+major number, the lesser would govern; nay, if you could<br>
+take off all, they would set up one, and follow him. Suckling.</p></blockquote><blockquote><p>Homer took all occasions of setting up his own countrymen<br>
+the Grecians, and of undervaluing the Trojan chiefs. Dryd.</p></blockquote><blockquote><p>Whatever practical rule is generally broken, it cannot be<br>
+supposed innate; it being impossible that men should, without<br>
+shame or fear, serenely break a rule which they could not but<br>
+evidently know that God had set up. Locke.</p></blockquote><p>62. To SET up. To place in view.</p><blockquote><p>He hath taken me by my neck, shaken me to pieces, and<br>
+set me up for his mark. Job xvi. 12.</p></blockquote><blockquote><p>Scarecrows are set up to keep birds from corn and fruit. Bac.</p></blockquote><blockquote><p>Thy father's merit sets thee up to view,<br>
+And shows thee in the fairest point of light,<br>
+To make thy virtues or thy faults conspicuous. Addison.</p></blockquote><p>63. To SET up. To place in repose; to fix; to rest.</p><blockquote><p>Whilst we set up our hopes here, we do not so seriously, as<br>
+we ought, consider that God has provided another and better<br>
+place for us. Wake.</p></blockquote><p>64. To SET up. To raise by the voice.</p><blockquote><p>My right eye itches, some good luck is near;<br>
+Perhaps my Amaryllis may appear;<br>
+I'll set up such a note as she shall hear. Dryden.</p></blockquote><p>65. To SET up. To advance; to propose to reception.</p><blockquote><p>The authors that set up this opinion were not themselves<br>
+satisfied with it. Burnet's Theory of the Earth.</p></blockquote><p>66. To SET up. To raise to a sufficient fortune.</p><blockquote><p>In a soldier's life there's honour to be got, and one lucky hit<br>
+sets up a man for ever. L'Estrange.</p></blockquote></div>
+  </details>
+</div></details>
+  <p class="mt-3 text-base/7 text-mist-500 sm:text-sm">By <a href="#" class="mr-2 underline underline-offset-4">Samuel Johnson</a></p>
+  
+</section></div>
+    </div>
+  </div>
+</section>
+
+<section id="case-5" class="border-t border-mist-950/10 py-10 dark:border-white/10">
+  <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+    <h2 class="font-display text-[2rem]/10 tracking-tight text-mist-950 dark:text-white">A shelf with nothing on it</h2>
+    <p class="text-base/7 text-mist-500 sm:text-sm/7">Real content from <span class="font-medium text-mist-700 dark:text-mist-400">/define/logomachy</span> — not from love or nepotism, and not invented.</p>
+  </div>
+  <p class="mt-2 max-w-[68ch] text-base/7 text-mist-700 text-pretty sm:text-sm/7 dark:text-mist-400">A content type with no matches still renders a heading and a status line on every page that lacks it.</p>
+  <div class="mt-6 grid gap-8 lg:grid-cols-2">
+    <div class="min-w-0">
+      <h3 class="text-base/8 font-medium text-mist-500">As the page renders it today</h3>
+      <div class="mt-2 rounded-xl bg-mist-950/2.5 p-5 dark:bg-white/5"><h2 class="font-display text-xl text-mist-950 dark:text-white">In film</h2><p class="mt-1 text-base text-mist-500 sm:text-sm">No matching film for this term yet.</p>
+<p class="mt-3 text-base/7 text-mist-500 sm:text-sm/7">A heading and a sentence, 60 px of page, in the position a rail would hold. Measured on <span class="font-mono">/define/logomachy</span>.</p></div>
+    </div>
+    <div class="min-w-0">
+      <h3 class="text-base/8 font-medium text-mist-950 dark:text-white">Under the compact system</h3>
+      <div class="mt-2 rounded-xl bg-mist-950/2.5 p-5 dark:bg-white/5"><p class="text-base/7 text-mist-500 sm:text-sm/7">The shelf is absent, and the chip that would have named it is absent with it:</p>
+<div class="mt-2 flex flex-wrap gap-2"><span class="rounded-full bg-mist-950/5 px-3 py-1 text-base/7 text-mist-700 sm:text-sm/7 dark:bg-white/10 dark:text-mist-400">Texts 10</span><span class="rounded-full bg-mist-950/5 px-3 py-1 text-base/7 text-mist-700 sm:text-sm/7 dark:bg-white/10 dark:text-mist-400">Images 11</span><span class="rounded-full bg-mist-950/5 px-3 py-1 text-base/7 text-mist-700 sm:text-sm/7 dark:bg-white/10 dark:text-mist-400">GIFs 8</span></div>
+<p class="mt-3 text-base/7 text-mist-500 sm:text-sm/7">An honest empty is nothing, not a sentence about nothing. What a word genuinely lacks it does not advertise; the About disclosure still names every source that was asked.</p></div>
+    </div>
+  </div>
+</section>
+</div></main>
+    <footer class="pt-16">
+      <div class="bg-mist-950/2.5 py-16 text-mist-950 dark:bg-white/5 dark:text-white">
+        <div class="mx-auto flex w-full max-w-2xl flex-col gap-16 px-6 md:max-w-3xl lg:max-w-7xl lg:px-10">
+          <nav class="grid grid-cols-2 gap-6 text-sm/7 sm:grid-cols-3">
+            <div><h3>Browse</h3><ul role="list" class="mt-2 flex flex-col gap-2"><li class="text-mist-700 dark:text-mist-400"><a href="#">Artworks</a></li></ul></div>
+            <div><h3>Sources</h3><ul role="list" class="mt-2 flex flex-col gap-2"><li class="text-mist-700 dark:text-mist-400"><a href="#">Open English WordNet 2025</a></li><li class="text-mist-700 dark:text-mist-400"><a href="#">Wiktionary (English) via Kaikki</a></li><li class="text-mist-700 dark:text-mist-400"><a href="#">Wikidata</a></li><li class="text-mist-700 dark:text-mist-400"><a href="#">Wikipedia (English)</a></li><li class="text-mist-700 dark:text-mist-400"><a href="#">Ambrose Bierce, The Devil's Dictionary</a></li><li class="text-mist-700 dark:text-mist-400"><a href="#">Samuel Johnson, A Dictionary of the English Language</a></li></ul></div>
+          </nav>
+          <div class="text-sm/7 text-mist-600 dark:text-mist-500">
+            <p>An aggregator, not an author. Every definition belongs to the source that wrote it and links back to it. WordNet CC BY 4.0 · Wiktionary and Wikipedia CC BY-SA 4.0 · Wikidata CC0 · Bierce public domain.</p>
+          </div>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>
