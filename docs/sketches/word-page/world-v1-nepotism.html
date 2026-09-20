@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light" data-theme-source="user">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>V1 · nepotism · word-page sketch</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="./sketch.css" />
+    <script>
+      // The app's own theme bootstrap (root.html.heex), minus the toggle: a
+      // sketch is opened from the filesystem and has to honour ?theme=dark so
+      // a reviewer can see both themes without a server.
+      (() => {
+        const q = new URLSearchParams(location.search).get("theme");
+        const system = () => matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        document.documentElement.setAttribute("data-theme", q || system());
+      })();
+    </script>
+  </head>
+  <body class="font-sans text-mist-950 antialiased dark:text-white">
+    <nav id="account-navigation" aria-label="Account" class="relative z-20 border-b border-mist-950/5 bg-mist-100 dark:border-white/10 dark:bg-mist-950">
+      <div class="mx-auto flex h-10 max-w-7xl items-center justify-end gap-5 px-6 text-sm/6 text-mist-600 lg:px-10 dark:text-mist-400">
+        <a href="#" class="font-medium text-mist-950 hover:underline dark:text-white">Register</a>
+        <a href="#" class="font-medium text-mist-950 hover:underline dark:text-white">Log in</a>
+      </div>
+    </nav>
+    <header class="sticky top-0 z-10 bg-mist-100 dark:bg-mist-950">
+      <nav>
+        <div class="mx-auto flex h-(--scroll-padding-top) max-w-7xl items-center gap-4 px-6 lg:px-10">
+          <div class="flex flex-1 items-center gap-12">
+            <div class="flex items-center">
+              <a href="#" class="font-display text-2xl/8 text-mist-950 dark:text-white">wordhoard</a>
+            </div>
+          </div>
+          <div class="flex flex-1 items-center justify-end gap-4">
+            <div class="flex shrink-0 items-center gap-5">
+              <div class="relative flex flex-row items-center rounded-full bg-mist-950/10 dark:bg-white/10">
+                <div class="absolute left-0 h-full w-1/3 rounded-full bg-white transition-[left] [[data-theme=dark]_&amp;]:left-2/3 [[data-theme=light]_&amp;]:left-1/3 dark:bg-mist-700"></div>
+                <span class="flex w-1/3 p-2"><span class="size-4 opacity-75 hero-computer-desktop-micro"></span></span>
+                <span class="flex w-1/3 p-2"><span class="size-4 opacity-75 hero-sun-micro"></span></span>
+                <span class="flex w-1/3 p-2"><span class="size-4 opacity-75 hero-moon-micro"></span></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+    <div id="sketch-note" class="border-b border-amber-600/30 bg-amber-50/60 dark:bg-amber-950/20">
+      <div class="mx-auto w-full max-w-2xl px-6 py-2 text-sm/6 text-amber-800 md:max-w-3xl lg:max-w-7xl lg:px-10 dark:text-amber-300">
+        Sketch, not the app · Out in the world, V1 — Mosaic. Every kind on screen at once; hover a GIF.
+      </div>
+    </div>
+    <main class="isolate overflow-clip"><div class="mx-auto w-full max-w-2xl px-6 pb-10 md:max-w-3xl lg:max-w-7xl lg:px-10"><div class="pt-8"><h1 class="font-display text-5xl/none text-mist-950 sm:text-6xl/none dark:text-white">nepotism</h1><section id="in-culture" class="mt-8">
+  <div class="sticky top-(--scroll-padding-top) z-8 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 rounded-t-2xl bg-mist-100/95 px-5 py-3 backdrop-blur dark:bg-mist-950/95"><h2 class="font-display text-xl text-mist-950 dark:text-white">Out in the world</h2><p class="text-base/7 text-mist-500 sm:text-sm/7">35 things · every one says why it is here</p></div>
+  <div class="rounded-b-2xl bg-mist-950/2.5 px-5 pb-5 dark:bg-white/5"><div class="[&:has(input[name=v1-film]:not(:checked))_[data-kind=film]]:hidden [&:has(input[name=v1-text]:not(:checked))_[data-kind=text]]:hidden [&:has(input[name=v1-image]:not(:checked))_[data-kind=image]]:hidden [&:has(input[name=v1-gif]:not(:checked))_[data-kind=gif]]:hidden">
+  <div class="-mx-5 flex gap-2 overflow-x-auto px-5 py-3 whitespace-nowrap">
+  <label class="cursor-pointer rounded-full px-3 py-1 text-base/7 sm:text-sm/7 has-checked:bg-mist-950 has-checked:text-white bg-mist-950/5 text-mist-500 dark:bg-white/10 dark:has-checked:bg-mist-300 dark:has-checked:text-mist-950"><input type="checkbox" class="sr-only" name="v1-film" checked />Films <span class="tabular-nums opacity-70">5</span></label>
+  <label class="cursor-pointer rounded-full px-3 py-1 text-base/7 sm:text-sm/7 has-checked:bg-mist-950 has-checked:text-white bg-mist-950/5 text-mist-500 dark:bg-white/10 dark:has-checked:bg-mist-300 dark:has-checked:text-mist-950"><input type="checkbox" class="sr-only" name="v1-text" checked />Texts <span class="tabular-nums opacity-70">10</span></label>
+  <label class="cursor-pointer rounded-full px-3 py-1 text-base/7 sm:text-sm/7 has-checked:bg-mist-950 has-checked:text-white bg-mist-950/5 text-mist-500 dark:bg-white/10 dark:has-checked:bg-mist-300 dark:has-checked:text-mist-950"><input type="checkbox" class="sr-only" name="v1-image" checked />Images <span class="tabular-nums opacity-70">12</span></label>
+  <label class="cursor-pointer rounded-full px-3 py-1 text-base/7 sm:text-sm/7 has-checked:bg-mist-950 has-checked:text-white bg-mist-950/5 text-mist-500 dark:bg-white/10 dark:has-checked:bg-mist-300 dark:has-checked:text-mist-950"><input type="checkbox" class="sr-only" name="v1-gif" checked />GIFs <span class="tabular-nums opacity-70">8</span></label>
+</div>
+  <div class="grid grid-cols-3 gap-4 [grid-auto-flow:dense] sm:grid-cols-4 lg:grid-cols-6">
+    <div data-kind="film" class="min-w-0  row-span-2"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <a href="https://cinegraph.org/movies/nepotism-baby-2024" class="relative block w-full overflow-hidden rounded-sm bg-mist-950/5 aspect-[2/3] outline-1 -outline-offset-1 outline-mist-950/5 focus-visible:outline-2 dark:bg-white/5 dark:outline-white/10"><img src="https://image.tmdb.org/t/p/w342/98NWjzJC60QndcXtTwawJerN65x.jpg" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" /></a>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-950 sm:text-sm dark:text-white"><a href="https://cinegraph.org/movies/nepotism-baby-2024" class="group-hover:underline">Nepotism, Baby!</a></h3>
+    <p class="text-base/6 text-mist-500 sm:text-sm/6"><span class="font-medium text-mist-700 dark:text-mist-400">Film</span> · 2024 <span class="text-mist-400">· matched on TMDb</span></p>
+    
+  </div>
+</div></div>
+    <div data-kind="text" class="min-w-0 col-span-2 "><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <blockquote class="border-l-2 border-mist-300 pl-3 font-display text-lg/6 text-balance text-mist-950 dark:border-mist-700 dark:text-white">“CONTENTS INTRODUCTION: The New Nepotism— and the Old 1 PART I: NEPOTISM IN HISTORY 1. WE'RE ALL”</blockquote>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-700 sm:text-sm dark:text-mist-400"><a href="https://openlibrary.org/works/OL8052593W" class="group-hover:underline">In Praise of Nepotism</a></h3>
+    <p class="line-clamp-1 text-sm text-mist-500">Adam Bellow</p>
+    <p class="text-base/6 text-mist-500 sm:text-sm/6"><span class="font-medium text-mist-700 dark:text-mist-400">Text</span> · 2003 <span class="text-mist-400">· uses the word</span></p>
+  </div>
+</div></div>
+    <div data-kind="image" class="min-w-0  "><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <a href="https://www.flickr.com/photos/10345599@N03/52473591459" class="relative block w-full overflow-hidden rounded-sm bg-mist-950/5 aspect-square outline-1 -outline-offset-1 outline-mist-950/5 focus-visible:outline-2 dark:bg-white/5 dark:outline-white/10"><img src="https://api.openverse.org/v1/images/6a802698-6734-4708-bc48-243c3d339fe0/thumb/" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" /></a>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-950 sm:text-sm dark:text-white"><a href="https://www.flickr.com/photos/10345599@N03/52473591459" class="group-hover:underline">Nepotism</a></h3>
+    <p class="text-base/6 text-mist-500 sm:text-sm/6"><span class="font-medium text-mist-700 dark:text-mist-400">Image</span> <span class="text-mist-400">· search result</span></p>
+    <p class="line-clamp-2 text-xs break-words text-mist-500 text-pretty">&quot;Nepotism&quot; by Francisco Anzola is licensed under CC BY 2.0. To view a copy of this license, visit https://creativecommons.org/licenses/by/2.0/.</p>
+  </div>
+</div></div>
+    <div data-kind="gif" class="min-w-0  "><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <a href="#" class="relative block w-full overflow-hidden rounded-sm bg-mist-950/5 aspect-square outline-1 -outline-offset-1 outline-mist-950/5 focus-visible:outline-2 dark:bg-white/5 dark:outline-white/10"><img src="https://media4.giphy.com/media/v1.Y2lkPTAyZWYyMzRkNHExM2Mxcng5YmY5ZndnemQwZzJ3OHF3a3pueDU3bW9hbzB3YzYzbyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/Ws3mp0mawnFPjBPdy2/200w_s.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover motion-safe:group-hover:invisible motion-safe:group-focus-within:invisible" /><img src="https://media4.giphy.com/media/v1.Y2lkPTAyZWYyMzRkNHExM2Mxcng5YmY5ZndnemQwZzJ3OHF3a3pueDU3bW9hbzB3YzYzbyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/Ws3mp0mawnFPjBPdy2/200w.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="invisible absolute inset-0 size-full object-cover motion-safe:group-hover:visible motion-safe:group-focus-within:visible" />
+       <span class="absolute top-1 left-1 inline-flex items-center gap-1 rounded-full bg-mist-950/75 py-1 pr-2 pl-1.5 text-sm/5 font-medium text-white backdrop-blur motion-safe:group-hover:opacity-0"><span class="size-4 shrink-0 hero-play-micro"></span>Play</span></a>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-950 sm:text-sm dark:text-white"><a href="#" class="group-hover:underline">Snl Smiling GIF by Saturday Night Live</a></h3>
+    <p class="text-base/6 text-mist-500 sm:text-sm/6"><span class="font-medium text-mist-700 dark:text-mist-400">GIF</span> <span class="text-mist-400">· search result</span></p>
+    
+  </div>
+</div></div>
+    <div data-kind="film" class="min-w-0  row-span-2"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <a href="https://cinegraph.org/movies/infinity-pool-2023" class="relative block w-full overflow-hidden rounded-sm bg-mist-950/5 aspect-[2/3] outline-1 -outline-offset-1 outline-mist-950/5 focus-visible:outline-2 dark:bg-white/5 dark:outline-white/10"><img src="https://image.tmdb.org/t/p/w342/cQKyNm0Nz6KWiDBQF9w4aZAmOfC.jpg" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" /></a>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-950 sm:text-sm dark:text-white"><a href="https://cinegraph.org/movies/infinity-pool-2023" class="group-hover:underline">Infinity Pool</a></h3>
+    <p class="text-base/6 text-mist-500 sm:text-sm/6"><span class="font-medium text-mist-700 dark:text-mist-400">Film</span> · 2023 <span class="text-mist-400">· matched on TMDb</span></p>
+    
+  </div>
+</div></div>
+    <div data-kind="text" class="min-w-0 col-span-2 "><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <blockquote class="border-l-2 border-mist-300 pl-3 font-display text-lg/6 text-balance text-mist-950 dark:border-mist-700 dark:text-white">“search (“In Praise of Nepotism,” “Anti-Nepotism Reconsidered,” &quot;Nepotism: Boon or Bane”) suggest”</blockquote>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-700 sm:text-sm dark:text-mist-400"><a href="https://openlibrary.org/works/OL17405240W" class="group-hover:underline">Nepotism In Organizations</a></h3>
+    <p class="line-clamp-1 text-sm text-mist-500">Robert G. Jones</p>
+    <p class="text-base/6 text-mist-500 sm:text-sm/6"><span class="font-medium text-mist-700 dark:text-mist-400">Text</span> · 2011 <span class="text-mist-400">· uses the word</span></p>
+  </div>
+</div></div>
+    <div data-kind="image" class="min-w-0  "><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <a href="https://www.pexels.com/photo/illustration-of-business-colleagues-at-negation-6289049/" class="relative block w-full overflow-hidden rounded-sm bg-mist-950/5 aspect-square outline-1 -outline-offset-1 outline-mist-950/5 focus-visible:outline-2 dark:bg-white/5 dark:outline-white/10"><img src="https://images.pexels.com/photos/6289049/pexels-photo-6289049.jpeg?auto=compress&amp;cs=tinysrgb&amp;h=350" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" /></a>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-950 sm:text-sm dark:text-white"><a href="https://www.pexels.com/photo/illustration-of-business-colleagues-at-negation-6289049/" class="group-hover:underline">Illustration of entrepreneurs wearing formal clothes shaking hands while having meeting against purple background</a></h3>
+    <p class="text-base/6 text-mist-500 sm:text-sm/6"><span class="font-medium text-mist-700 dark:text-mist-400">Image</span> <span class="text-mist-400">· search result</span></p>
+    <p class="line-clamp-2 text-xs break-words text-mist-500 text-pretty">Photo by Monstera Production on Pexels</p>
+  </div>
+</div></div>
+    <div data-kind="gif" class="min-w-0  "><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <a href="#" class="relative block w-full overflow-hidden rounded-sm bg-mist-950/5 aspect-square outline-1 -outline-offset-1 outline-mist-950/5 focus-visible:outline-2 dark:bg-white/5 dark:outline-white/10"><img src="https://media3.giphy.com/media/v1.Y2lkPTAyZWYyMzRkNHExM2Mxcng5YmY5ZndnemQwZzJ3OHF3a3pueDU3bW9hbzB3YzYzbyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/cxBHzUn2ifrsYNfVZv/200w_s.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover motion-safe:group-hover:invisible motion-safe:group-focus-within:invisible" /><img src="https://media3.giphy.com/media/v1.Y2lkPTAyZWYyMzRkNHExM2Mxcng5YmY5ZndnemQwZzJ3OHF3a3pueDU3bW9hbzB3YzYzbyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/cxBHzUn2ifrsYNfVZv/200w.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="invisible absolute inset-0 size-full object-cover motion-safe:group-hover:visible motion-safe:group-focus-within:visible" />
+       <span class="absolute top-1 left-1 inline-flex items-center gap-1 rounded-full bg-mist-950/75 py-1 pr-2 pl-1.5 text-sm/5 font-medium text-white backdrop-blur motion-safe:group-hover:opacity-0"><span class="size-4 shrink-0 hero-play-micro"></span>Play</span></a>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-950 sm:text-sm dark:text-white"><a href="#" class="group-hover:underline">Jokowi GIF</a></h3>
+    <p class="text-base/6 text-mist-500 sm:text-sm/6"><span class="font-medium text-mist-700 dark:text-mist-400">GIF</span> <span class="text-mist-400">· search result</span></p>
+    
+  </div>
+</div></div>
+    <div data-kind="film" class="min-w-0  row-span-2"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <a href="https://cinegraph.org/movies/maps-to-the-stars-2014" class="relative block w-full overflow-hidden rounded-sm bg-mist-950/5 aspect-[2/3] outline-1 -outline-offset-1 outline-mist-950/5 focus-visible:outline-2 dark:bg-white/5 dark:outline-white/10"><img src="https://image.tmdb.org/t/p/w342/aoMNfiaMmT7o7wY8oXWCLErZtah.jpg" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" /></a>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-950 sm:text-sm dark:text-white"><a href="https://cinegraph.org/movies/maps-to-the-stars-2014" class="group-hover:underline">Maps to the Stars</a></h3>
+    <p class="text-base/6 text-mist-500 sm:text-sm/6"><span class="font-medium text-mist-700 dark:text-mist-400">Film</span> · 2014 <span class="text-mist-400">· matched on TMDb</span></p>
+    
+  </div>
+</div></div>
+    <div data-kind="text" class="min-w-0 col-span-2 "><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <blockquote class="border-l-2 border-mist-300 pl-3 font-display text-lg/6 text-balance text-mist-950 dark:border-mist-700 dark:text-white">““ethnic nepotism” 12 Politics of Ethnic Nepotism can be used to cover this kind of nepotism at the level”</blockquote>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-700 sm:text-sm dark:text-mist-400"><a href="https://openlibrary.org/works/OL3280955W" class="group-hover:underline">Politics of ethnic neopotism</a></h3>
+    <p class="line-clamp-1 text-sm text-mist-500">Tatu Vanhanen</p>
+    <p class="text-base/6 text-mist-500 sm:text-sm/6"><span class="font-medium text-mist-700 dark:text-mist-400">Text</span> · 1992 <span class="text-mist-400">· uses the word</span></p>
+  </div>
+</div></div>
+    <div data-kind="image" class="min-w-0  "><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <a href="https://unsplash.com/photos/a-purple-background-with-a-blue-and-green-object-on-top-of-it-7-OdMLZkpC8?utm_medium=referral&amp;utm_source=devils_dictionary" class="relative block w-full overflow-hidden rounded-sm bg-mist-950/5 aspect-square outline-1 -outline-offset-1 outline-mist-950/5 focus-visible:outline-2 dark:bg-white/5 dark:outline-white/10"><img src="https://images.unsplash.com/photo-1636302304088-e1bd81885a71?crop=entropy&amp;cs=tinysrgb&amp;fit=max&amp;fm=jpg&amp;ixid=M3w3MjU0ODR8MHwxfHNlYXJjaHwxfHxuZXBvdGlzbXxlbnwxfHx8fDE3ODk4MDg4Mjd8MA&amp;ixlib=rb-4.1.0&amp;q=80&amp;w=400" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" /></a>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-950 sm:text-sm dark:text-white"><a href="https://unsplash.com/photos/a-purple-background-with-a-blue-and-green-object-on-top-of-it-7-OdMLZkpC8?utm_medium=referral&amp;utm_source=devils_dictionary" class="group-hover:underline">a purple background with a blue and green object on top of it</a></h3>
+    <p class="text-base/6 text-mist-500 sm:text-sm/6"><span class="font-medium text-mist-700 dark:text-mist-400">Image</span> · 2021 <span class="text-mist-400">· search result</span></p>
+    <p class="line-clamp-2 text-xs break-words text-mist-500 text-pretty">Photo by Yash Bindra on Unsplash</p>
+  </div>
+</div></div>
+    <div data-kind="gif" class="min-w-0  "><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <a href="#" class="relative block w-full overflow-hidden rounded-sm bg-mist-950/5 aspect-square outline-1 -outline-offset-1 outline-mist-950/5 focus-visible:outline-2 dark:bg-white/5 dark:outline-white/10"><img src="https://media0.giphy.com/media/v1.Y2lkPTAyZWYyMzRkNHExM2Mxcng5YmY5ZndnemQwZzJ3OHF3a3pueDU3bW9hbzB3YzYzbyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/hIBUnNjNhlcxFwjKfo/200w_s.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover motion-safe:group-hover:invisible motion-safe:group-focus-within:invisible" /><img src="https://media0.giphy.com/media/v1.Y2lkPTAyZWYyMzRkNHExM2Mxcng5YmY5ZndnemQwZzJ3OHF3a3pueDU3bW9hbzB3YzYzbyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/hIBUnNjNhlcxFwjKfo/200w.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="invisible absolute inset-0 size-full object-cover motion-safe:group-hover:visible motion-safe:group-focus-within:visible" />
+       <span class="absolute top-1 left-1 inline-flex items-center gap-1 rounded-full bg-mist-950/75 py-1 pr-2 pl-1.5 text-sm/5 font-medium text-white backdrop-blur motion-safe:group-hover:opacity-0"><span class="size-4 shrink-0 hero-play-micro"></span>Play</span></a>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-950 sm:text-sm dark:text-white"><a href="#" class="group-hover:underline">Gasp Gasping GIF</a></h3>
+    <p class="text-base/6 text-mist-500 sm:text-sm/6"><span class="font-medium text-mist-700 dark:text-mist-400">GIF</span> <span class="text-mist-400">· search result</span></p>
+    
+  </div>
+</div></div>
+    <div data-kind="film" class="min-w-0  row-span-2"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <a href="https://cinegraph.org/movies/callback-unknown" class="relative block w-full overflow-hidden rounded-sm bg-mist-950/5 aspect-[2/3] outline-1 -outline-offset-1 outline-mist-950/5 focus-visible:outline-2 dark:bg-white/5 dark:outline-white/10"><div class="flex size-full items-center justify-center text-mist-400"><span class="size-5 hero-photo"></span></div></a>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-950 sm:text-sm dark:text-white"><a href="https://cinegraph.org/movies/callback-unknown" class="group-hover:underline">Callback</a></h3>
+    <p class="text-base/6 text-mist-500 sm:text-sm/6"><span class="font-medium text-mist-700 dark:text-mist-400">Film</span> <span class="text-mist-400">· matched on TMDb</span></p>
+    
+  </div>
+</div></div>
+    <div data-kind="text" class="min-w-0 col-span-2 "><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <blockquote class="border-l-2 border-mist-300 pl-3 font-display text-lg/6 text-balance text-mist-950 dark:border-mist-700 dark:text-white">“origins of nepotism lie in nature. The Nature of Animal and Human Nepotism To a biologist, nepotism simply”</blockquote>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-700 sm:text-sm dark:text-mist-400"><a href="https://openlibrary.org/works/OL16318374W" class="group-hover:underline">Games primates play</a></h3>
+    <p class="line-clamp-1 text-sm text-mist-500">Dario Maestripieri</p>
+    <p class="text-base/6 text-mist-500 sm:text-sm/6"><span class="font-medium text-mist-700 dark:text-mist-400">Text</span> · 2012 <span class="text-mist-400">· uses the word</span></p>
+  </div>
+</div></div>
+    <div data-kind="image" class="min-w-0  "><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <a href="https://www.flickr.com/photos/58530661@N04/9059590548" class="relative block w-full overflow-hidden rounded-sm bg-mist-950/5 aspect-square outline-1 -outline-offset-1 outline-mist-950/5 focus-visible:outline-2 dark:bg-white/5 dark:outline-white/10"><img src="https://api.openverse.org/v1/images/ac9e378c-e881-4341-834c-776eb841601c/thumb/" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" /></a>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-950 sm:text-sm dark:text-white"><a href="https://www.flickr.com/photos/58530661@N04/9059590548" class="group-hover:underline">#Bulgaria's newly elected, socialist dominated government faces 3rd day of protests against nepotism &amp; corruption.</a></h3>
+    <p class="text-base/6 text-mist-500 sm:text-sm/6"><span class="font-medium text-mist-700 dark:text-mist-400">Image</span> <span class="text-mist-400">· search result</span></p>
+    <p class="line-clamp-2 text-xs break-words text-mist-500 text-pretty">&quot;#Bulgaria's newly elected, socialist dominated government faces 3rd day of protests against nepotism &amp; corruption.&quot; by bulgarus is licensed under CC BY 2.0. To view a copy of this license, visit https://creativecommons.org/licenses/by/2.0/.</p>
+  </div>
+</div></div>
+    <div data-kind="gif" class="min-w-0  "><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <a href="#" class="relative block w-full overflow-hidden rounded-sm bg-mist-950/5 aspect-square outline-1 -outline-offset-1 outline-mist-950/5 focus-visible:outline-2 dark:bg-white/5 dark:outline-white/10"><img src="https://media1.giphy.com/media/v1.Y2lkPTAyZWYyMzRkNHExM2Mxcng5YmY5ZndnemQwZzJ3OHF3a3pueDU3bW9hbzB3YzYzbyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/xTiN0DvoDyWQey2B8I/200w_s.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover motion-safe:group-hover:invisible motion-safe:group-focus-within:invisible" /><img src="https://media1.giphy.com/media/v1.Y2lkPTAyZWYyMzRkNHExM2Mxcng5YmY5ZndnemQwZzJ3OHF3a3pueDU3bW9hbzB3YzYzbyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/xTiN0DvoDyWQey2B8I/200w.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="invisible absolute inset-0 size-full object-cover motion-safe:group-hover:visible motion-safe:group-focus-within:visible" />
+       <span class="absolute top-1 left-1 inline-flex items-center gap-1 rounded-full bg-mist-950/75 py-1 pr-2 pl-1.5 text-sm/5 font-medium text-white backdrop-blur motion-safe:group-hover:opacity-0"><span class="size-4 shrink-0 hero-play-micro"></span>Play</span></a>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-950 sm:text-sm dark:text-white"><a href="#" class="group-hover:underline">So Close Nbc 90Th Special GIF by NBC</a></h3>
+    <p class="text-base/6 text-mist-500 sm:text-sm/6"><span class="font-medium text-mist-700 dark:text-mist-400">GIF</span> <span class="text-mist-400">· search result</span></p>
+    
+  </div>
+</div></div>
+    <div data-kind="film" class="min-w-0  row-span-2"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <a href="https://cinegraph.org/movies/nepo-baby-unknown" class="relative block w-full overflow-hidden rounded-sm bg-mist-950/5 aspect-[2/3] outline-1 -outline-offset-1 outline-mist-950/5 focus-visible:outline-2 dark:bg-white/5 dark:outline-white/10"><img src="https://image.tmdb.org/t/p/w342/dHb2lxwqW09C47hNjZ3WCOoK6cr.jpg" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" /></a>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-950 sm:text-sm dark:text-white"><a href="https://cinegraph.org/movies/nepo-baby-unknown" class="group-hover:underline">Nepo Baby</a></h3>
+    <p class="text-base/6 text-mist-500 sm:text-sm/6"><span class="font-medium text-mist-700 dark:text-mist-400">Film</span> <span class="text-mist-400">· matched on TMDb</span></p>
+    
+  </div>
+</div></div>
+    <div data-kind="text" class="min-w-0 col-span-2 "><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <blockquote class="border-l-2 border-mist-300 pl-3 font-display text-lg/6 text-balance text-mist-950 dark:border-mist-700 dark:text-white">“The Ontogeny of Nepotism 105 Parental Behavior and the Social Learning Model of Nepotism 108 Models of”</blockquote>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-700 sm:text-sm dark:text-mist-400"><a href="https://openlibrary.org/works/OL1346721W" class="group-hover:underline">Darwinism and human affairs</a></h3>
+    <p class="line-clamp-1 text-sm text-mist-500">Richard D. Alexander</p>
+    <p class="text-base/6 text-mist-500 sm:text-sm/6"><span class="font-medium text-mist-700 dark:text-mist-400">Text</span> · 1979 <span class="text-mist-400">· uses the word</span></p>
+  </div>
+</div></div>
+    <div data-kind="image" class="min-w-0  "><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <a href="https://www.pexels.com/photo/entrepreneur-rejecting-offering-from-man-with-outstretched-hand-5849579/" class="relative block w-full overflow-hidden rounded-sm bg-mist-950/5 aspect-square outline-1 -outline-offset-1 outline-mist-950/5 focus-visible:outline-2 dark:bg-white/5 dark:outline-white/10"><img src="https://images.pexels.com/photos/5849579/pexels-photo-5849579.jpeg?auto=compress&amp;cs=tinysrgb&amp;h=350" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" /></a>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-950 sm:text-sm dark:text-white"><a href="https://www.pexels.com/photo/entrepreneur-rejecting-offering-from-man-with-outstretched-hand-5849579/" class="group-hover:underline">Cutout paper composition representing male showing rejection to outstretched helping hand during negotiations</a></h3>
+    <p class="text-base/6 text-mist-500 sm:text-sm/6"><span class="font-medium text-mist-700 dark:text-mist-400">Image</span> <span class="text-mist-400">· search result</span></p>
+    <p class="line-clamp-2 text-xs break-words text-mist-500 text-pretty">Photo by Monstera Production on Pexels</p>
+  </div>
+</div></div>
+    <div data-kind="gif" class="min-w-0  "><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <a href="#" class="relative block w-full overflow-hidden rounded-sm bg-mist-950/5 aspect-square outline-1 -outline-offset-1 outline-mist-950/5 focus-visible:outline-2 dark:bg-white/5 dark:outline-white/10"><img src="https://media3.giphy.com/media/v1.Y2lkPTAyZWYyMzRkNHExM2Mxcng5YmY5ZndnemQwZzJ3OHF3a3pueDU3bW9hbzB3YzYzbyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/dDFxLN7kLYVA4zc0qp/200w_s.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover motion-safe:group-hover:invisible motion-safe:group-focus-within:invisible" /><img src="https://media3.giphy.com/media/v1.Y2lkPTAyZWYyMzRkNHExM2Mxcng5YmY5ZndnemQwZzJ3OHF3a3pueDU3bW9hbzB3YzYzbyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/dDFxLN7kLYVA4zc0qp/200w.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="invisible absolute inset-0 size-full object-cover motion-safe:group-hover:visible motion-safe:group-focus-within:visible" />
+       <span class="absolute top-1 left-1 inline-flex items-center gap-1 rounded-full bg-mist-950/75 py-1 pr-2 pl-1.5 text-sm/5 font-medium text-white backdrop-blur motion-safe:group-hover:opacity-0"><span class="size-4 shrink-0 hero-play-micro"></span>Play</span></a>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-950 sm:text-sm dark:text-white"><a href="#" class="group-hover:underline">Episode 1 Nbc GIF by The Office</a></h3>
+    <p class="text-base/6 text-mist-500 sm:text-sm/6"><span class="font-medium text-mist-700 dark:text-mist-400">GIF</span> <span class="text-mist-400">· search result</span></p>
+    
+  </div>
+</div></div>
+    <div data-kind="text" class="min-w-0 col-span-2 "><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <blockquote class="border-l-2 border-mist-300 pl-3 font-display text-lg/6 text-balance text-mist-950 dark:border-mist-700 dark:text-white">“organization. Hence we shall talk chiefly of nepotism. Pe What is nepotism? The word itself is from the Italian”</blockquote>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-700 sm:text-sm dark:text-mist-400"><a href="https://openlibrary.org/works/OL43196537W" class="group-hover:underline">Executive Effectiveness in the Corporation (The Management Audit, Volume 10) - Originally Entitled Executive Evaluation</a></h3>
+    <p class="line-clamp-1 text-sm text-mist-500">various</p>
+    <p class="text-base/6 text-mist-500 sm:text-sm/6"><span class="font-medium text-mist-700 dark:text-mist-400">Text</span> · 1959 <span class="text-mist-400">· uses the word</span></p>
+  </div>
+</div></div>
+    <div data-kind="image" class="min-w-0  "><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <a href="https://unsplash.com/photos/text-8tRo5_ogsfA?utm_medium=referral&amp;utm_source=devils_dictionary" class="relative block w-full overflow-hidden rounded-sm bg-mist-950/5 aspect-square outline-1 -outline-offset-1 outline-mist-950/5 focus-visible:outline-2 dark:bg-white/5 dark:outline-white/10"><img src="https://images.unsplash.com/photo-1663813116840-cef0040331fe?crop=entropy&amp;cs=tinysrgb&amp;fit=max&amp;fm=jpg&amp;ixid=M3w3MjU0ODR8MHwxfHNlYXJjaHwyfHxuZXBvdGlzbXxlbnwxfHx8fDE3ODk4MDg4Mjd8MA&amp;ixlib=rb-4.1.0&amp;q=80&amp;w=400" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" /></a>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-950 sm:text-sm dark:text-white"><a href="https://unsplash.com/photos/text-8tRo5_ogsfA?utm_medium=referral&amp;utm_source=devils_dictionary" class="group-hover:underline">Notion icon in 3D. My 3D work may be seen in the section titled &quot;3D Render.&quot;</a></h3>
+    <p class="text-base/6 text-mist-500 sm:text-sm/6"><span class="font-medium text-mist-700 dark:text-mist-400">Image</span> · 2022 <span class="text-mist-400">· search result</span></p>
+    <p class="line-clamp-2 text-xs break-words text-mist-500 text-pretty">Photo by Rubaitul Azad on Unsplash</p>
+  </div>
+</div></div>
+    <div data-kind="gif" class="min-w-0  "><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <a href="#" class="relative block w-full overflow-hidden rounded-sm bg-mist-950/5 aspect-square outline-1 -outline-offset-1 outline-mist-950/5 focus-visible:outline-2 dark:bg-white/5 dark:outline-white/10"><img src="https://media2.giphy.com/media/v1.Y2lkPTAyZWYyMzRkNHExM2Mxcng5YmY5ZndnemQwZzJ3OHF3a3pueDU3bW9hbzB3YzYzbyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/KO9RKTeVIx1EFXH2Y2/200w_s.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover motion-safe:group-hover:invisible motion-safe:group-focus-within:invisible" /><img src="https://media2.giphy.com/media/v1.Y2lkPTAyZWYyMzRkNHExM2Mxcng5YmY5ZndnemQwZzJ3OHF3a3pueDU3bW9hbzB3YzYzbyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/KO9RKTeVIx1EFXH2Y2/200w.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="invisible absolute inset-0 size-full object-cover motion-safe:group-hover:visible motion-safe:group-focus-within:visible" />
+       <span class="absolute top-1 left-1 inline-flex items-center gap-1 rounded-full bg-mist-950/75 py-1 pr-2 pl-1.5 text-sm/5 font-medium text-white backdrop-blur motion-safe:group-hover:opacity-0"><span class="size-4 shrink-0 hero-play-micro"></span>Play</span></a>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-950 sm:text-sm dark:text-white"><a href="#" class="group-hover:underline">Super Hero Disney GIF by Marvel Studios</a></h3>
+    <p class="text-base/6 text-mist-500 sm:text-sm/6"><span class="font-medium text-mist-700 dark:text-mist-400">GIF</span> <span class="text-mist-400">· search result</span></p>
+    
+  </div>
+</div></div>
+    <div data-kind="text" class="min-w-0 col-span-2 "><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <blockquote class="border-l-2 border-mist-300 pl-3 font-display text-lg/6 text-balance text-mist-950 dark:border-mist-700 dark:text-white">“having to contend with nepotism in the organization. Our research suggests that nepotism is less of a concern”</blockquote>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-700 sm:text-sm dark:text-mist-400"><a href="https://openlibrary.org/works/OL4288850W" class="group-hover:underline">Dual-career couples in the public sector</a></h3>
+    <p class="line-clamp-1 text-sm text-mist-500">Willa M. Bruce</p>
+    <p class="text-base/6 text-mist-500 sm:text-sm/6"><span class="font-medium text-mist-700 dark:text-mist-400">Text</span> · 1991 <span class="text-mist-400">· uses the word</span></p>
+  </div>
+</div></div>
+    <a href="#" class="flex aspect-square items-center justify-center rounded-sm bg-mist-950/5 text-base font-medium tabular-nums text-mist-700 hover:bg-mist-950/10 sm:text-sm dark:bg-white/10 dark:text-mist-300">+11</a>
+  </div>
+  <details class="mt-4"><summary class="w-fit cursor-pointer text-base text-mist-500 sm:text-sm">Matches for “nepotism” · About these results</summary></details>
+</div></div>
+</section></div></div></main>
+    <footer class="pt-16">
+      <div class="bg-mist-950/2.5 py-16 text-mist-950 dark:bg-white/5 dark:text-white">
+        <div class="mx-auto flex w-full max-w-2xl flex-col gap-16 px-6 md:max-w-3xl lg:max-w-7xl lg:px-10">
+          <nav class="grid grid-cols-2 gap-6 text-sm/7 sm:grid-cols-3">
+            <div><h3>Browse</h3><ul role="list" class="mt-2 flex flex-col gap-2"><li class="text-mist-700 dark:text-mist-400"><a href="#">Artworks</a></li></ul></div>
+            <div><h3>Sources</h3><ul role="list" class="mt-2 flex flex-col gap-2"><li class="text-mist-700 dark:text-mist-400"><a href="#">Open English WordNet 2025</a></li><li class="text-mist-700 dark:text-mist-400"><a href="#">Wiktionary (English) via Kaikki</a></li><li class="text-mist-700 dark:text-mist-400"><a href="#">Wikidata</a></li><li class="text-mist-700 dark:text-mist-400"><a href="#">Wikipedia (English)</a></li><li class="text-mist-700 dark:text-mist-400"><a href="#">Ambrose Bierce, The Devil's Dictionary</a></li><li class="text-mist-700 dark:text-mist-400"><a href="#">Samuel Johnson, A Dictionary of the English Language</a></li></ul></div>
+          </nav>
+          <div class="text-sm/7 text-mist-600 dark:text-mist-500">
+            <p>An aggregator, not an author. Every definition belongs to the source that wrote it and links back to it. WordNet CC BY 4.0 · Wiktionary and Wikipedia CC BY-SA 4.0 · Wikidata CC0 · Bierce public domain.</p>
+          </div>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -72,10 +72,7 @@ defmodule DevilsDictionaryWeb.WordLive do
        # preselected; everyone else sees the candidate and no write path.
        contributor: Contributions.internal_contributor?(socket.assigns[:current_scope]),
        discovery_target: nil,
-       cultures: %{},
-       # The shelf the reader chose in the culture block, or nil for the
-       # page's own default. Server state, like every other control here.
-       culture_tab: nil
+       cultures: %{}
      )}
   end
 
@@ -148,7 +145,6 @@ defmodule DevilsDictionaryWeb.WordLive do
       |> assign(:card_sources, card_sources)
       |> assign(:suggestions, suggestions(page, slug))
       |> assign(:choices, choices(slug, socket.assigns.object_id))
-      |> assign(:culture_tab, nil)
 
     prepare_discovery(socket, page, demo)
   end
@@ -326,16 +322,7 @@ defmodule DevilsDictionaryWeb.WordLive do
   # the content-type table to build the shelf, and a second copy of that
   # reading here would be a second answer to the same question. A slug that
   # names no state on this page advances nothing.
-  # The reader picked a shelf. The value is user input arriving from the
-  # client, so it is matched against the shelves that exist rather than
-  # trusted; a name that is not one of them leaves the page where it was.
   @impl true
-  def handle_event("culture_tab", %{"type" => type}, socket) do
-    if type in Culture.tab_keys(),
-      do: {:noreply, assign(socket, :culture_tab, type)},
-      else: {:noreply, socket}
-  end
-
   def handle_event("discovery_more", %{"providers" => providers}, socket) do
     {:noreply,
      providers
@@ -548,7 +535,6 @@ defmodule DevilsDictionaryWeb.WordLive do
                 :if={@cultures != %{} or @giphy}
                 states={@cultures}
                 giphy={@giphy}
-                tab={@culture_tab}
                 return_path={word_path(@page)}
                 contributor={@contributor}
               />

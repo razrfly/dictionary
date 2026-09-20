@@ -47,7 +47,7 @@ defmodule DevilsDictionary.Discovery.ContentTypes do
       aspect: "aspect-[2/3]",
       icon: "hero-film",
       column: "w-24 sm:w-28",
-      title_clamp: "line-clamp-2",
+      title_clamp: "line-clamp-1",
       thumbnail_keys: ~w(poster_url still_url image_url media_url),
       # A poster reaches us through CineGraph, which credits TMDb on its side;
       # nothing per item is owed, and the shelf byline names the source.
@@ -61,7 +61,7 @@ defmodule DevilsDictionary.Discovery.ContentTypes do
       aspect: "aspect-square",
       icon: "hero-photo",
       column: "w-24 sm:w-28",
-      title_clamp: "line-clamp-2",
+      title_clamp: "line-clamp-1",
       thumbnail_keys: ~w(image_url thumbnail_url),
       # The Met is CC0, so nothing is required — but a credit line is what a
       # museum asks for and what the manifests record, so it is shown when
@@ -90,7 +90,7 @@ defmodule DevilsDictionary.Discovery.ContentTypes do
       aspect: "aspect-square",
       icon: "hero-camera",
       column: "w-24 sm:w-28",
-      title_clamp: "line-clamp-2",
+      title_clamp: "line-clamp-1",
       thumbnail_keys: ~w(thumbnail_url image_url),
       # Every file on this shelf is shown under its own licence, and a CC
       # licence's one condition is the credit. Required, and never on hover.
@@ -106,7 +106,7 @@ defmodule DevilsDictionary.Discovery.ContentTypes do
       aspect: "aspect-square",
       icon: "hero-photo",
       column: "w-24 sm:w-28",
-      title_clamp: "line-clamp-2",
+      title_clamp: "line-clamp-1",
       thumbnail_keys: ~w(media_url image_url),
       # GIPHY's terms want the *Powered by GIPHY* mark on the shelf, not a
       # line per item; the shelf is still its own component (K10).

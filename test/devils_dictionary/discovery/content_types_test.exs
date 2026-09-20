@@ -75,9 +75,12 @@ defmodule DevilsDictionary.Discovery.ContentTypesTest do
     assert ContentTypes.column(:text) != ContentTypes.column(:film)
     assert ContentTypes.title_clamp(:text) == "line-clamp-3"
 
+    # One line under a thumbnail since #131 Phase 2: every kind is on screen
+    # at once, and a rail of twelve reads by its pictures. The text card has
+    # no picture, so the title is the card and keeps its three.
     for type <- ContentTypes.known() -- [:text] do
       assert ContentTypes.fetch!(type).aspect
-      assert ContentTypes.title_clamp(type) == "line-clamp-2"
+      assert ContentTypes.title_clamp(type) == "line-clamp-1"
     end
   end
 end

@@ -77,3 +77,63 @@ test('rate limit pauses subsequent visits without further fetches', async () => 
     assert.equal(calls,1);assert.match(ctx.status.textContent,/paused/)
   } finally {globalThis.fetch=old}
 })
+
+// A frame, wired the way addItem wires it, against a stub DOM: enough of
+// document/li/img/button for the listeners, and a motion query we control.
+function frame(reduced = false) {
+  const nodes = []
+  const make = tag => {
+    const listeners = {}
+    const attrs = {}
+    const node = {tag, dataset: {}, className: '', textContent: '', children: nodes,
+      addEventListener(type, fn) { (listeners[type] ||= []).push(fn) },
+      fire(type) { for (const fn of listeners[type] || []) fn() },
+      setAttribute(k, v) { attrs[k] = v }, getAttribute(k) { return attrs[k] ?? null },
+      append(...kids) { nodes.push(...kids) }, prepend() {}, querySelector() { return null }}
+    return node
+  }
+  const old = globalThis.document
+  globalThis.document = {createElement: make}
+  const list = {items: [], append(li) { this.items.push(li) }, querySelectorAll(sel) {
+    const [li] = this.items
+    if (sel === '[aria-pressed="true"]') return li && li.play.getAttribute('aria-pressed') === 'true' ? [li.play] : []
+    if (sel === 'img[data-still]') return li ? [li.image] : []
+    return []
+  }}
+  const ctx = {list, motion: {matches: reduced}}
+  try { Hook.addItem.call(ctx, {id: 'g', title: 'g', still: 'S', animated: 'A', url: 'https://giphy.com/gifs/g'}) } finally { globalThis.document = old }
+  const li = list.items[0]
+  const [image, play] = nodes.filter(n => n.tag === 'img' || n.tag === 'button')
+  li.image = image; li.play = play
+  return {li, image, play, ctx, onMotion: () => {
+    for (const button of list.querySelectorAll('[aria-pressed="true"]')) button.fire('click')
+    if (ctx.motion.matches) for (const img of list.querySelectorAll('img[data-still]')) img.src = img.dataset.still
+  }}
+}
+test('hover and focus play a frame; leaving it stops it', () => {
+  const {li, image} = frame()
+  assert.equal(image.src, 'S')
+  li.fire('mouseenter'); assert.equal(image.src, 'A')
+  li.fire('mouseleave'); assert.equal(image.src, 'S')
+  li.fire('focusin'); assert.equal(image.src, 'A')
+  li.fire('focusout'); assert.equal(image.src, 'S')
+})
+test('a pressed frame keeps playing when the pointer leaves, and hover never unpresses it', () => {
+  const {li, image, play} = frame()
+  play.fire('click'); assert.equal(image.src, 'A'); assert.equal(play.getAttribute('aria-pressed'), 'true')
+  li.fire('mouseenter'); li.fire('mouseleave'); assert.equal(image.src, 'A')
+  assert.equal(play.getAttribute('aria-pressed'), 'true')
+  play.fire('click'); assert.equal(image.src, 'S')
+})
+test('under reduced motion hover never swaps the still, and Play still works', () => {
+  const {li, image, play} = frame(true)
+  li.fire('mouseenter'); assert.equal(image.src, 'S')
+  li.fire('focusin'); assert.equal(image.src, 'S')
+  play.fire('click'); assert.equal(image.src, 'A')
+  play.fire('click'); assert.equal(image.src, 'S')
+})
+test('reduced motion switching on mid-hover puts a hovered frame back to its still', () => {
+  const {li, image, ctx, onMotion} = frame(false)
+  li.fire('mouseenter'); assert.equal(image.src, 'A')
+  ctx.motion.matches = true; onMotion(); assert.equal(image.src, 'S')
+})
