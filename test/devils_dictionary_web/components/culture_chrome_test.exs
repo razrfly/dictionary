@@ -272,8 +272,14 @@ defmodule DevilsDictionaryWeb.CultureChromeTest do
     end
 
     # The spans of the one `tabular-nums` paragraph on the card, in order.
+    # Anchored on the badge paragraph's own class list rather than on
+    # `tabular-nums` alone: the chips above the rail count their shelves in
+    # tabular figures too (#131 Phase 2), and the first `tabular-nums` on the
+    # page is now one of them.
     defp badge_line(html) do
-      [_before, rest | _] = String.split(html, "tabular-nums")
+      [_before, rest | _] =
+        String.split(html, ~s(class="text-base tabular-nums text-mist-500 sm:text-sm"))
+
       [line | _] = String.split(rest, "</p>")
 
       ~r{<span[^>]*>[^<]*</span>}

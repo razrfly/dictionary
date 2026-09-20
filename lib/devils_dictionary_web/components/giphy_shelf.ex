@@ -13,10 +13,10 @@ defmodule DevilsDictionaryWeb.GiphyShelf do
       data-language={@config.language}
       data-api-key={@config.api_key}
       aria-label="GIF discoveries"
-      class="my-5 space-y-3 border-b border-mist-950/10 pb-5 dark:border-white/10"
+      class="space-y-3"
     >
       <div class="flex items-center justify-between gap-3">
-        <h2 class="font-display text-xl">GIFs</h2>
+        <h3 class="font-display text-xl text-mist-950 dark:text-white">GIFs</h3>
         <a href="https://giphy.com/" target="_blank" rel="noreferrer" aria-label="Powered by GIPHY">
           <img
             src="/images/giphy-powered-by.png"

@@ -74,6 +74,26 @@ defmodule DevilsDictionary.Lexicon.WordPage do
 
   @chip_cap 12
   @gloss_cap 3
+
+  # #131 Phase 1's measured limits. They live here rather than in a component
+  # because a cap is a decision about the content, and a component that decides
+  # will decide differently next time (#71 §8a.4).
+  #
+  # `@entry_whole` is the "keep short content whole" rule with a number on it:
+  # Bierce on *love* is 428 characters and Johnson on *nepotism* 292, and a
+  # fold that reaches either is a fold working against the page's reason to
+  # exist. Above it an entry previews `@entry_preview` characters — about four
+  # lines at 1280 against the 47rem prose column, eight at 375 — and discloses
+  # the remainder. The preview is the *opening of the original*, split at a
+  # block boundary: nothing is rewritten, reordered, dropped or shown twice.
+  @entry_whole 600
+  @entry_preview 360
+  # Forms are unbounded in the corpus — `little` has 66, `fuck` 40 — and so are
+  # sense groups: WordNet files *love* under six synsets, each bringing a
+  # relation row and a broader chain. Bounding the length of an item is not
+  # bounding how many of them a source may file.
+  @form_cap 8
+  @group_cap 3
   @chain_depth 8
   @trail_cap 12
 
@@ -142,6 +162,18 @@ defmodule DevilsDictionary.Lexicon.WordPage do
 
   @doc "How many glosses a sense card shows before “show N more”."
   def gloss_cap, do: @gloss_cap
+
+  @doc "Characters of entry text at or under which an entry is shown whole."
+  def entry_whole, do: @entry_whole
+
+  @doc "Characters a longer entry previews before its disclosure."
+  def entry_preview, do: @entry_preview
+
+  @doc "How many forms the headword shows before “+N more”."
+  def form_cap, do: @form_cap
+
+  @doc "How many sense groups a card shows before its own disclosure."
+  def group_cap, do: @group_cap
 
   @doc """
   Builds the page from a `Lexicon.lookup/2` result.
@@ -241,6 +273,7 @@ defmodule DevilsDictionary.Lexicon.WordPage do
         ),
       forms: forms(lexemes),
       pronunciations: pronunciations(lexemes),
+      pronunciations_all: pronunciations_all(lexemes),
       etymologies: etymologies(lexemes, sources),
       lexemes:
         lexemes
@@ -298,6 +331,25 @@ defmodule DevilsDictionary.Lexicon.WordPage do
     |> Enum.map(fn {ipa, tags} -> %{ipa: ipa, tags: tags || []} end)
   end
 
+  # Every spelling and recording the word carries, for the disclosure behind
+  # the three. `love` holds nine spellings and three recordings and the
+  # headword has always shown three of them without saying so; the tags were
+  # built here and rendered nowhere (#131 Phase 1 inventory, item 7). Empty
+  # when there is nothing the headword is not already showing, so a word with
+  # one accent grows no control.
+  defp pronunciations_all(lexemes) do
+    rows =
+      lexemes
+      |> Enum.flat_map(&(&1.pronunciations["items"] || []))
+      |> Enum.map(
+        &%{ipa: presence(&1["ipa"]), tags: &1["tags"] || [], audio: presence(&1["audio"])}
+      )
+      |> Enum.reject(&(is_nil(&1.ipa) and is_nil(&1.audio)))
+      |> Enum.uniq_by(&{&1.ipa, &1.audio})
+
+    if length(rows) <= 3, do: [], else: rows
+  end
+
   # Wiktionary files an etymology per part of speech, and for *oyster* it is the
   # same paragraph three times. One paragraph, with the parts of speech it
   # covers named beside it.
@@ -306,14 +358,212 @@ defmodule DevilsDictionary.Lexicon.WordPage do
     |> Enum.reject(&(is_nil(&1.etymology) or &1.etymology == ""))
     |> Enum.group_by(& &1.etymology)
     |> Enum.map(fn {text, group} ->
+      {first, rest} = first_sentence(text)
+
       %{
         text: text,
+        first: first,
+        rest: rest,
         source: source_name(sources, hd(group).etymology_source_id),
         parts: group |> Enum.map(& &1.part_of_speech) |> Enum.sort_by(&pos_rank/1)
       }
     end)
     |> Enum.sort_by(&pos_rank(hd(&1.parts)))
   end
+
+  # What a closed card says about itself: how much is behind it, and the
+  # source's own opening words. Both are facts about the content rather than
+  # about the layout, so they are decided here — and `opening` is a *deterministic
+  # excerpt of the original*, never a summary of it (#131: no rewritten text).
+  defp summarise(card) do
+    senses = Enum.reduce(card.groups, 0, fn group, n -> n + length(group.senses) end)
+
+    Map.merge(card, %{
+      senses: senses,
+      chars: Enum.reduce(card.entries, 0, &(&2 + &1.chars)),
+      opening: opening(card)
+    })
+  end
+
+  defp opening(%{groups: [%{senses: [sense | _]} | _]}), do: sense.gloss
+
+  defp opening(%{entries: [entry | _]}) do
+    entry.preview_html |> text_of() |> String.slice(0, 220)
+  end
+
+  defp opening(_card), do: nil
+
+  defp text_of(html) do
+    html
+    |> String.replace(~r{<[^>]+>}, " ")
+    |> String.replace(~r{\s+}, " ")
+    |> String.trim()
+  end
+
+  # An origin's first sentence, and whatever follows it. `dog`'s etymology is
+  # 1,615 characters and `set` files five of them; whole, they are a page
+  # between the reader and the first definition. Nothing is truncated — the
+  # remainder is behind a control that says how long it is.
+  defp first_sentence(text) do
+    case Regex.run(~r/\A(.+?\.)(?:\s+)(\S.*)\z/s, text) do
+      [_, first, rest] -> {first, rest}
+      _ -> {text, nil}
+    end
+  end
+
+  # ── folding an entry ──────────────────────────────────────────────────────
+
+  # Void elements never close, so a depth counter has to know them or it will
+  # count a `<br>` as an unterminated block and swallow the rest of the entry.
+  @void ~w(area base br col embed hr img input link meta param source track wbr)
+
+  @doc """
+  Splits rendered entry HTML into what a card shows closed and what its
+  disclosure holds.
+
+  `body_html` stays whole and is what the ⓘ drawer and the source page render,
+  so the fold adds a view rather than replacing one. `preview_html` is the
+  opening of the original up to the first block boundary at or past
+  `entry_preview/0` characters; `rest_html` is everything after it, verbatim.
+  An entry at or under `entry_whole/0` characters has no `rest_html` at all.
+  """
+  def fold(body_html) do
+    chars = text_length(body_html)
+
+    if chars <= @entry_whole do
+      %{
+        body_html: body_html,
+        preview_html: body_html,
+        rest_html: nil,
+        rest_chars: 0,
+        chars: chars
+      }
+    else
+      {head, rest} = split_html(body_html, @entry_preview)
+
+      %{
+        body_html: body_html,
+        preview_html: head,
+        rest_html: presence(rest),
+        rest_chars: text_length(rest),
+        chars: chars
+      }
+    end
+  end
+
+  defp split_html(html, budget) do
+    blocks = blocks(html)
+    {head, rest} = take_to_budget(blocks, budget)
+
+    # One block longer than the whole budget — Wikipedia files its summary as a
+    # single paragraph — splits at a sentence end instead, so a long paragraph
+    # is not an exemption from the fold.
+    case head do
+      [only] when rest != [] or true ->
+        if text_length(only) > budget * 2 do
+          case split_sentence(only, budget) do
+            {a, b} -> {a, b <> Enum.join(rest)}
+            nil -> {Enum.join(head), Enum.join(rest)}
+          end
+        else
+          {Enum.join(head), Enum.join(rest)}
+        end
+
+      _ ->
+        {Enum.join(head), Enum.join(rest)}
+    end
+  end
+
+  defp take_to_budget(blocks, budget) do
+    {taken, _chars} =
+      Enum.reduce_while(blocks, {[], 0}, fn block, {taken, chars} ->
+        chars = chars + text_length(block)
+        taken = [block | taken]
+        if chars >= budget, do: {:halt, {taken, chars}}, else: {:cont, {taken, chars}}
+      end)
+
+    taken = Enum.reverse(taken)
+    {taken, Enum.drop(blocks, length(taken))}
+  end
+
+  # The top-level block elements of rendered markdown, in order. Markdown
+  # output is flat — paragraphs, blockquotes, lists, headings — so a depth
+  # counter over the tags is enough, and it can never cut inside one.
+  defp blocks(html) do
+    {out, _depth, start} =
+      ~r{<(/?)([a-zA-Z0-9]+)([^>]*)>}
+      |> Regex.scan(html, return: :index)
+      |> Enum.reduce({[], 0, 0}, fn [{ms, ml}, {_cs, cl}, {ts, tl}, {as, al}],
+                                    {out, depth, start} ->
+        tag = html |> binary_part(ts, tl) |> String.downcase()
+        closing? = cl > 0
+        self_closing? = tag in @void or String.ends_with?(binary_part(html, as, al), "/")
+
+        cond do
+          self_closing? -> {out, depth, start}
+          not closing? and depth == 0 -> {out, 1, ms}
+          not closing? -> {out, depth + 1, start}
+          depth <= 1 -> {[binary_part(html, start, ms + ml - start) | out], 0, ms + ml}
+          true -> {out, depth - 1, start}
+        end
+      end)
+
+    trailing = binary_part(html, start, byte_size(html) - start)
+    out = if String.trim(trailing) == "", do: out, else: [trailing | out]
+
+    case Enum.reverse(out) do
+      [] -> [html]
+      blocks -> blocks
+    end
+  end
+
+  # Splits one block after the first sentence end at or past `budget`
+  # characters of its text. The scan only breaks at a full stop that sits
+  # outside a tag, so a tag is never cut in half.
+  defp split_sentence(block, budget) do
+    with [_, open, inner, close] <-
+           Regex.run(~r{\A(<[a-zA-Z0-9]+[^>]*>)(.*)(</[a-zA-Z0-9]+>)\s*\z}s, block),
+         {:ok, at} <- sentence_end(inner, budget) do
+      {open <> binary_part(inner, 0, at) <> close,
+       open <> String.trim(binary_part(inner, at, byte_size(inner) - at)) <> close}
+    else
+      _ -> nil
+    end
+  end
+
+  defp sentence_end(inner, budget) do
+    inner
+    |> String.to_charlist()
+    |> Enum.reduce_while({0, 0, false}, fn char, {index, text, in_tag?} ->
+      size = char |> List.wrap() |> to_string() |> byte_size()
+
+      cond do
+        char == ?< -> {:cont, {index + size, text, true}}
+        char == ?> -> {:cont, {index + size, text, false}}
+        in_tag? -> {:cont, {index + size, text, true}}
+        char == ?. and text + 1 >= budget -> {:halt, {:ok, index + size}}
+        true -> {:cont, {index + size, text + 1, false}}
+      end
+    end)
+    |> case do
+      {:ok, at} -> {:ok, at}
+      _ -> :none
+    end
+  end
+
+  defp text_length(html) when is_binary(html) do
+    html
+    |> String.replace(~r{<[^>]+>}, "")
+    |> String.replace(~r{&[a-zA-Z]+;|&#\d+;}, "x")
+    |> String.replace(~r{\s+}, " ")
+    |> String.trim()
+    |> String.length()
+  end
+
+  defp text_length(_html), do: 0
+
+  defp presence(""), do: nil
+  defp presence(value), do: value
 
   defp source_name(_sources, nil), do: nil
   defp source_name(sources, id), do: sources[id] && sources[id].name
@@ -526,15 +776,17 @@ defmodule DevilsDictionary.Lexicon.WordPage do
           kind: :entry,
           entries:
             Enum.map(rows, fn e ->
-              %{
+              e.body
+              |> Markdown.to_html(e.body_format)
+              |> fold()
+              |> Map.merge(%{
                 authors: e.authors,
                 headword: e.headword,
                 marker: e.pos,
-                body_html: Markdown.to_html(e.body, e.body_format),
                 year: e.year,
                 url: link_out(e, source, nil, concept),
                 record_id: e.record_id
-              }
+              })
             end),
           groups: [],
           thumbnail_url: Enum.find_value(rows, & &1.thumbnail_url),
@@ -564,6 +816,7 @@ defmodule DevilsDictionary.Lexicon.WordPage do
 
     (entry_cards ++ sense_cards)
     |> Enum.sort_by(&{@tier_rank[&1.tier], &1.year || 0, pos_rank(&1.pos), &1.source.slug})
+    |> Enum.map(&summarise/1)
     |> with_ids()
   end
 

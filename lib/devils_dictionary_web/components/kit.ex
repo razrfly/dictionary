@@ -452,6 +452,37 @@ defmodule DevilsDictionaryWeb.Kit do
     |> String.reverse()
   end
 
+  @doc """
+  A titled well whose title pins under the navbar for as long as the reader is
+  inside it (#131 Phase 2).
+
+  Sticky section headers are the best-evidenced aid for a long page — found
+  unprompted by four of six readers in Wikimedia's testing, kept by everyone
+  who found them, no drawbacks recorded — and a page that always says which
+  region you are in needs no jump bar. The head is a `<div>` rather than a
+  `<header>` because a `<section>` may already hold one.
+  """
+  attr :id, :string, required: true
+  attr :title, :string, required: true
+  attr :class, :string, default: nil
+  attr :rest, :global
+  slot :meta
+  slot :inner_block, required: true
+
+  def slab(assigns) do
+    ~H"""
+    <section id={@id} class={["mt-8", @class]} {@rest}>
+      <div class="sticky top-(--scroll-padding-top) z-9 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 rounded-t-2xl bg-mist-100/95 px-5 py-3 backdrop-blur dark:bg-mist-950/95">
+        <h2 class="font-display text-xl text-mist-950 dark:text-white">{@title}</h2>
+        <p :if={@meta != []} class="text-base/7 text-mist-500 sm:text-sm/7">{render_slot(@meta)}</p>
+      </div>
+      <div class="rounded-b-2xl bg-mist-950/2.5 px-5 pb-1 dark:bg-white/5">
+        {render_slot(@inner_block)}
+      </div>
+    </section>
+    """
+  end
+
   # ── tier ─────────────────────────────────────────────────────────────────
 
   @doc """
