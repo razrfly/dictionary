@@ -131,6 +131,36 @@ defmodule DevilsDictionary.Discovery.ContentTypes do
       # A text is never *about* the word; it uses it (K11). A text shelf that
       # admitted a bare search result would be the results page this is not.
       evidence: [:attestation]
+    },
+    # A headline is neither a *Text* nor an image. It has no line to cite — a
+    # text provider's locator is a line or a page, and a news article's is the
+    # masthead and the day it ran — and it has no poster frame, so it is a
+    # text-first card like `:text` with a date where the year goes (#135, from
+    # the research in #134).
+    #
+    # The masthead is the credit and Bing is not: the shelf byline names the
+    # aggregator, the card names *Wired*. That is `:credited` rather than
+    # `:none`, and it is the difference between a shelf that cites the press
+    # and one that launders it.
+    news: %{
+      heading: "News",
+      label: "news",
+      badge: "News",
+      # Text-first: no poster frame. `News:Image` is a Bing-hosted thumbnail
+      # with no licence statement, so this phase shows no image at all and
+      # `thumbnail_keys` is empty rather than hotlinking one.
+      aspect: nil,
+      icon: "hero-newspaper",
+      # The same width `:text` measured at 375 px, for the same reason: a
+      # headline has to carry the card on its own.
+      column: "w-44 sm:w-52",
+      title_clamp: "line-clamp-3",
+      thumbnail_keys: [],
+      attribution: :credited,
+      # An article *uses* the word, in its headline, on a day. Never *about*
+      # the word, and never the search's own ranking — Bing's feed proposes
+      # and the whole-word gate disposes.
+      evidence: [:attestation]
     }
   }
 
@@ -159,7 +189,7 @@ defmodule DevilsDictionary.Discovery.ContentTypes do
 
   # Shelf order (K2 of #109), not insertion order: a page shows films, then
   # artworks, then images, then texts, then GIFs.
-  @known [:film, :artwork, :image, :text, :gif]
+  @known [:film, :artwork, :image, :text, :news, :gif]
 
   @doc "Every content type the reader can present, in shelf order."
   def known, do: @known

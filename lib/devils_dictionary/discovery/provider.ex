@@ -105,6 +105,23 @@ defmodule DevilsDictionary.Discovery.Provider do
   @callback retryable_status?(non_neg_integer()) :: boolean()
 
   @doc """
+  Decodes a response body the shared transport could not, into a map or a list.
+
+  Not defining this — the default — means this provider answers JSON, which Req
+  decodes and `DevilsDictionary.Discovery.Transport` hands straight to
+  `retrieve/4`'s `request_fun`. A provider that also declares `body: :xml` in
+  `capabilities/0` is handed the **binary** 200 instead and returns `{:ok,
+  decoded}`, or `:error` for a body it cannot read, which the transport reports
+  as the same `"malformed_response"` a bad JSON envelope gets.
+
+  It exists so that the format a source speaks is the provider's knowledge and
+  not a branch per format in the shared transport. Bing's news feed is RSS 2.0
+  (#135) and is the only one so far; `parse/1` inside such a provider therefore
+  sees the decoded map and never the document twice.
+  """
+  @callback parse_body(binary()) :: {:ok, map() | list()} | :error
+
+  @doc """
   One short qualifier shown beside the provider name on a shelf, or `nil`.
 
   It exists so the reader can say "CineGraph · keywords: TMDb" without any
@@ -116,6 +133,7 @@ defmodule DevilsDictionary.Discovery.Provider do
 
   @optional_callbacks automatic_mapping: 1,
                       covers?: 1,
+                      parse_body: 1,
                       mapping_identity: 1,
                       request_options: 1,
                       validate_mapping: 2,

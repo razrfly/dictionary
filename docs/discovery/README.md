@@ -23,7 +23,7 @@ finished. Where a claim is not yet true everywhere, the last column says so.
 |---|---|---|---|
 | 1 | **Association is identity or attestation, never a text search's ranking.** A search generates candidates; an identifier the encyclopedia already asserts, or the word's use at a locator, decides. A search result reaches a shelf only where the row admits `:query`, and is labelled as one. | The `evidence` column of the content-type table; conformance asserts every reason a provider delivers against its row | Stated in full under [*The one rule*](#the-one-rule). Two rows admit a labelled search: `:image` (#116 M6, beside its identity matches) and `:gif` (a search by construction, outside the shared pipeline pending K10). No identity-bearing shelf does, and a future row that admits one says so in its `evidence` |
 | 2 | **One shelf per content type, never per source.** A reader sees one rail of images, with every contributing source credited once in its header, items taking turns by tier then slug, one item per identity and one per media URL. | The multi-source conformance check (two stubs on one type → one shelf of 14); the browser proof each phase records | Live before corpus is a fixed order, by decision (K2); tier is the only trust weighting |
-| 3 | **Every item says why it is here, in one sentence, from fields and nothing else.** | Conformance: every result carries a reason, it renders, it ends with a full stop, its class is admitted | The locator has two shapes (line, page); a dated locator is the next |
+| 3 | **Every item says why it is here, in one sentence, from fields and nothing else.** | Conformance: every result carries a reason, it renders, it ends with a full stop, its class is admitted | The locator has three shapes: a line (PoetryDB), a page (Open Library, which leaves it empty rather than call a page a line) and a **date** — `a headline, Wired, 15 September 2026`, Bing News, #135. It is a `"locator"` string in `match_details` and not a clause in `MatchReason`, which is why the third shape cost that module nothing. One wrinkle it did expose: the attestation sentence's preposition is fixed at *at*, so a dated locator reads *Uses “x” **at** a headline, …* |
 | 4 | **Every item carries what its licence owes.** A shelf whose row requires attribution shows a credit beneath every thumbnail, always visible, never on hover, **and linked** where the item names a URL for the creator or the licence. | The `attribution` column; conformance asserts the credit node on every item of a `:required` shelf, that it carries no line clamp, and that its links are the creator's and the licence's | — |
 | 5 | **Adding a source touches no shared file.** A provider is its own module, fixture, conformance suite and, for a corpus, manifest; the generator writes every registration. | `conformance_coverage_test.exs`: every registered provider has a suite, every fixture is run, every manifest has a suite; each phase report's *shared files touched* list | Adding a *shelf* is one row in the table, shared by design; adding a corpus *kind* is a seeder clause |
 | 6 | **Nothing is spent without a ledger, and no bytes are held.** Every live request is a row in `discovery_request_attempts`; results are URLs and metadata; images are hotlinked from the provider's host. | The ledger; the transport's budget; D14; conformance's coverage gate (a provider declines before anything is spent) | — |
@@ -276,6 +276,17 @@ envelope for the error before it reads it for results, and return
 `{:deferred, code, seconds, request_parameters}`; a transport that only watches
 status codes will retry straight back into the lag it was asked to wait out.
 
+Nor is JSON the only body. The transport accepts a `200` whose body Req decoded
+to a map or a list, and a provider that declares `body: :xml` in
+`capabilities/0` may also be handed a **binary** body, which the transport
+gives to that provider's own `parse_body/1` to decode into the map the rest of
+the pipeline expects; `:error` from it is the same `"malformed_response"` a bad
+JSON envelope gets, and an absent `body` key means JSON as before. Bing's news
+feed is RSS 2.0 and is the only such provider (#135). The format a source
+speaks is the provider's knowledge, so this is one capability read in one
+place rather than a branch per format in shared code — and `parse/1` inside
+such a provider therefore never sees the document twice.
+
 ### 7. Persistence — cache first, identity only if earned
 
 `persist_results/3` writes, for every item:
@@ -414,6 +425,7 @@ declares the first.
 | `:artwork` | The Met | `met-highlights-v1`, `wikidata-famous-v1`, the Artsy pilot | AIC, Cleveland via corpora (#100) | identity |
 | `:image` | Wikimedia Commons, Openverse, Unsplash, Pexels | — | iNaturalist or GBIF, if a taxon QID earns a second identity path | identity (Commons), or a labelled search (the other three) |
 | `:text` | PoetryDB, Open Library | `poetrydb-v1`, `open-library-v1` — **identity only, by decision; neither reaches a page** | Chronicling America as a corpus, Gutenberg | attestation, live only |
+| `:news` | Bing News | — | the Guardian, keyed (#63); Chronicling America's bulk OCR | attestation, **dated** |
 | `:gif` | GIPHY, browser-only, outside this chrome | — | Tenor, after K10 | a labelled search |
 | `:quote` | — | — | Wikiquote, Gutenberg extraction, after #65 | identity (`(author_id, body hash)`) |
 
@@ -443,7 +455,6 @@ for when it is scheduled.
 |---|---|---|---|---|---|
 | `:music` | Music | square (cover art), title, artist, link out | identity where a sense's entity has a Wikidata song or work with `P2207` (Spotify track id) or a MusicBrainz id, and `P921` *main subject* names the page's QID; otherwise a labelled `:query` | Spotify (search, cover art, metadata — `SPOTIFY_CLIENT_ID` is held); MusicBrainz (metadata CC0) with the Cover Art Archive (images stay their owners' copyright — an item-level rights decision before any is displayed, not archive membership); Internet Archive audio (public domain) | **Spotify's terms make it single-source on its shelf.** Its Developer Policy forbids a product "integrated with streams or content from another service", requires the Spotify marks and a link back on every piece of metadata or cover art, and forbids offering metadata or cover art as a standalone product. Since 2024-11-27, apps registered after that date and development-mode apps without a pending extension request — which is what this project's app would be — have no Recommendations, Related Artists, Audio Features or Audio Analysis, and no 30-second preview URLs in multi-get responses (single-track responses are widely reported to return `null` too); apps that already held extended access were unaffected. So *related songs* is not a feature a new app gets, and a preview is not something the card can count on; what remains is search (a `:query`) and identity through Wikidata. Lyrics are licensed and never held, so attestation is closed. A Music row therefore admits `identity` and `query`, requires attribution, and — if Spotify is its source — takes no second source, the way `:film` is single-source by decision. MusicBrainz as the source instead gives a many-source shelf, but its cover art needs a per-item rights decision and it has no audio |
 | `:video` | Videos | 16:9, playable | identity (`P180` on Commons `video/*` files, which the `:image` gate already sees and drops; `P1651` YouTube id on a sense's entity) | Wikimedia Commons video; Internet Archive moving images | the first non-square, non-portrait aspect; playback on the card |
-| `:news` | News | text-first, date and masthead | attestation (the article uses the word) | the Guardian (#63, non-commercial); Chronicling America's bulk OCR (its live API is bot-walled) | attestation with a **date** locator, the third shape after line and page |
 | `:game` | Games | portrait cover | identity (IGDB id ↔ `P5794`) | IGDB (non-commercial) | the non-commercial posture on a per-item licence |
 | `:place` | Places | map tile | identity (`P625` coordinates on the page's entity) | OpenStreetMap tiles | probably the entity panel's job, not a shelf; listed to say so |
 | taxon images | joins `:image` | — | identity (taxon QID) | iNaturalist (per-item media licence, CC BY-NC by default, all rights reserved allowed), GBIF | not a new type: an `:image` source whose identity is a taxon QID, with the licence gate applied to each image's own licence, as Commons's already is |
@@ -751,6 +762,7 @@ suite red.
 | Openverse | discovery (GET, offset, **labelled `:query`** exact-phrase search, per-item licence gate, `commons_file` upstream identifier) | `Culture.section`, the `:image` shelf | #116 Phase 2 |
 | Unsplash | discovery (GET, offset, **labelled `:query`** search, `UNSPLASH_ACCESS_KEY`, linked credit with UTM, download trigger held and not fired) | `Culture.section`, the `:image` shelf | #116 Phase 3 |
 | Pexels | discovery (GET, offset, **labelled `:query`** search, `PEXELS_API_KEY`) | `Culture.section`, the `:image` shelf | #116 Phase 3 |
+| Bing News | discovery (GET, offset, **attestation with a dated locator**, keyless RSS via `body: :xml`, 30-day freshness gate, publisher URL as identity in `news_article`) | `Culture.section`, the `:news` shelf, attribution `:credited` | #135 — and see `docs/integrations/bing-news.md` on the feed's own `<copyright>` |
 | Artsy | registered, registry-only — its 43 artworks and their gene mappings reach a page through the catalog; the private client was retired in #109 Phase 3a | `Culture.section` | #86, K9 of #109 |
 | GIPHY | registered, browser-only, transient | its own `GiphyShelf` component, **not** `Culture.section` | parked pending caching approval, K10 |
 

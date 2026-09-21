@@ -66,19 +66,31 @@ defmodule DevilsDictionary.Discovery.ContentTypesTest do
     assert ContentTypes.admits?(:image, %MatchReason{kind: :query})
   end
 
-  test "a text card is wider than a poster card and spends the extra line on its title" do
-    # `:text` is the only type with no image slot, which is exactly why it needs
-    # its own column: nothing else on the card sets a width. Measured on
-    # `/define/war` at 375 px, where the poster column showed two lines of a
-    # title that wanted seven (#109 Phase 3b).
-    assert ContentTypes.fetch!(:text).aspect == nil
-    assert ContentTypes.column(:text) != ContentTypes.column(:film)
-    assert ContentTypes.title_clamp(:text) == "line-clamp-3"
+  test "a text-first card is wider than a poster card and spends the extra line on its title" do
+    # A type with no image slot needs its own column, because nothing else on
+    # the card sets a width. Measured on `/define/war` at 375 px, where the
+    # poster column showed two lines of a title that wanted seven (#109 Phase
+    # 3b).
+    #
+    # This asserted `:text` was the *only* such type until #135 added `:news`,
+    # a headline with no poster frame and the same shape. The premise was the
+    # count and not the rule, so it is now the rule: the card class is
+    # `aspect == nil`, and both members of it get the wide column and the
+    # three lines.
+    text_first = Enum.filter(ContentTypes.known(), &(ContentTypes.fetch!(&1).aspect == nil))
+
+    assert :text in text_first
+    assert :news in text_first
+
+    for type <- text_first do
+      assert ContentTypes.column(type) != ContentTypes.column(:film)
+      assert ContentTypes.title_clamp(type) == "line-clamp-3"
+    end
 
     # One line under a thumbnail since #131 Phase 2: every kind is on screen
-    # at once, and a rail of twelve reads by its pictures. The text card has
-    # no picture, so the title is the card and keeps its three.
-    for type <- ContentTypes.known() -- [:text] do
+    # at once, and a rail of twelve reads by its pictures. A text-first card
+    # has no picture, so the title is the card and keeps its three.
+    for type <- ContentTypes.known() -- text_first do
       assert ContentTypes.fetch!(type).aspect
       assert ContentTypes.title_clamp(type) == "line-clamp-1"
     end

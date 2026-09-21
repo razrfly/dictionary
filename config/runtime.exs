@@ -32,11 +32,18 @@ config :devils_dictionary, DevilsDictionaryWeb.Endpoint,
 # The per-provider policy variables are derived from the same registry the
 # override loop below reads, so a provider added to the registry cannot have its
 # .env overrides silently discarded by an allowlist nobody remembered to edit.
+# A slug's environment-variable prefix. Hyphens become underscores because a
+# shell cannot export `OPEN-LIBRARY_DISCOVERY_POSITIVE_REFRESH_SECONDS` —
+# `bash` and `zsh` both refuse a name with a hyphen in it — so the
+# hyphenated form this used to build was an override no deployment could set.
+# `bing-news` reads `BING_NEWS_…` (#135), and `open-library` `OPEN_LIBRARY_…`.
+env_prefix = fn slug -> slug |> String.upcase() |> String.replace("-", "_") end
+
 discovery_provider_policy_env =
   :devils_dictionary
   |> Application.get_env(:discovery_providers, [])
   |> Enum.flat_map(fn provider ->
-    prefix = String.upcase(provider.slug())
+    prefix = env_prefix.(provider.slug())
 
     [
       "#{prefix}_DISCOVERY_POSITIVE_REFRESH_SECONDS",
@@ -114,6 +121,15 @@ if giphy_api_key = System.get_env("GIPHY_API_KEY") || local_provider_env["GIPHY_
   config :devils_dictionary, :giphy, api_key: giphy_api_key
 end
 
+# Bing News (#135) ships **disabled** in `config.exs` because the feed's own
+# `<copyright>` reserves anything beyond a personal RSS aggregator to
+# Microsoft's written permission (`docs/integrations/bing-news.md`). This is the
+# one switch that turns the News shelf's first provider on, and it has to say
+# so explicitly; a host that has never heard of it stays off.
+if System.get_env("BING_NEWS_ENABLED") in ~w(true 1 yes on) do
+  config :devils_dictionary, :bing_news, enabled: true
+end
+
 # Urban Dictionary's kill switch (#136), and the only one of the two that needs
 # a deploy — `active: false` on the source row is the other and needs none.
 # Default **true**: the variable has to say `false` to turn the card off, so a
@@ -183,7 +199,7 @@ source_policies =
   |> Application.get_env(:discovery_providers, [])
   |> Enum.map(& &1.slug())
   |> Enum.reduce(source_policies, fn slug, policies ->
-    prefix = String.upcase(slug)
+    prefix = env_prefix.(slug)
 
     overrides =
       [
