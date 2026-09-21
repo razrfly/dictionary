@@ -489,7 +489,12 @@ defmodule DevilsDictionaryWeb.WordLive do
                puts them back in the first column. Placement, not a second
                copy: two copies is two of every chip id, which LiveView
                refuses outright. --%>
-          <div class="lg:grid lg:grid-cols-[22.5rem_minmax(0,1fr)] lg:gap-x-12">
+          <%!-- `grid-rows-[auto_1fr]` is load-bearing. The column beside the rail
+               spans both rows, and a spanning item's height is shared *equally*
+               between `auto` rows — so without it row one stretched to half the
+               stream and the related words sat a screen below the rail. Row
+               one is the rail's height; the rest is row two's. --%>
+          <div class="lg:grid lg:grid-cols-[22.5rem_minmax(0,1fr)] lg:grid-rows-[auto_1fr] lg:gap-x-12">
             <Word.rail
               page={@page}
               sources={@card_sources}
