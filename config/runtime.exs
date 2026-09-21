@@ -65,6 +65,7 @@ allowed_provider_env =
     "ARTSY_CLIENT_SECRET",
     "UNSPLASH_ACCESS_KEY",
     "PEXELS_API_KEY",
+    "GUARDIAN_API_KEY",
     "DISCOVERY_POSITIVE_REFRESH_SECONDS",
     "DISCOVERY_EMPTY_REFRESH_SECONDS"
   ] ++ discovery_provider_policy_env
@@ -169,6 +170,18 @@ end
 
 if pexels_api_key = System.get_env("PEXELS_API_KEY") || local_provider_env["PEXELS_API_KEY"] do
   config :devils_dictionary, :pexels, api_key: pexels_api_key
+end
+
+# The Guardian (#142) is the same server-only shape, and the key is the whole
+# switch: without it `Guardian.enabled?/0` is false, the provider registers,
+# and the News shelf is Bing alone. The Open Platform terms make the key
+# personal to one registered website (clause 1(c)) and forbid sharing it
+# (clause 3(b)(iii)), so it is read here and passed to `request_options/1`
+# alone — never into an assign, a reader-visible URL, a log line, a ledger
+# row or a fixture.
+if guardian_api_key =
+     System.get_env("GUARDIAN_API_KEY") || local_provider_env["GUARDIAN_API_KEY"] do
+  config :devils_dictionary, :guardian, api_key: guardian_api_key
 end
 
 parse_policy_integer = fn name ->

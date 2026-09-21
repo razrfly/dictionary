@@ -11,7 +11,14 @@ defmodule DevilsDictionary.Discovery.Policy do
     :positive_refresh_seconds,
     :empty_refresh_seconds,
     :request_budget_limit,
-    :request_budget_window_seconds
+    :request_budget_window_seconds,
+    # How long this source's disposable cache may be held at all (#142). The
+    # shipped default is the shared seven days; a source whose licence names a
+    # shorter window overrides it here and `Discovery.cleanup/0` enforces it,
+    # including against runs that are currently on display — which the general
+    # sweep deliberately protects. The Guardian's Open Platform terms say 24
+    # hours, "whether or not published on Your Website".
+    :retention_seconds
   ]
 
   @doc "Returns the validated policy for a provider slug."
@@ -39,6 +46,27 @@ defmodule DevilsDictionary.Discovery.Policy do
 
       {key, value}
     end)
+  end
+
+  @doc """
+  The sources whose licence gives them a retention window of their own.
+
+  `[{slug, seconds}]`, from the `retention_seconds` overrides in
+  `:source_policies` — the sources `Discovery.cleanup/0` sweeps separately,
+  ahead of and more strictly than the shared window. A source that names none
+  is not in this list and is swept only by the shared rules.
+  """
+  def source_retentions do
+    :devils_dictionary
+    |> Application.fetch_env!(:discovery)
+    |> Keyword.get(:source_policies, %{})
+    |> Enum.flat_map(fn {slug, overrides} ->
+      case Keyword.get(overrides, :retention_seconds) do
+        seconds when is_integer(seconds) and seconds > 0 -> [{slug, seconds}]
+        _ -> []
+      end
+    end)
+    |> Enum.sort()
   end
 
   @doc "Selects the refresh interval for a successful provider response."

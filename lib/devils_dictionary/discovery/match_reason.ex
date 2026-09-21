@@ -295,7 +295,27 @@ defmodule DevilsDictionary.Discovery.MatchReason do
   defp tagged(term) when is_binary(term) and term != "", do: " tagged #{quoted(term)}"
   defp tagged(_term), do: ""
 
-  defp at(locator) when is_binary(locator) and locator != "", do: " at #{locator}"
+  # *at line 4* and *at page 12*, but *in a headline* and *in the text*.
+  #
+  # The preposition belongs to the renderer rather than to the locator a
+  # provider writes, and it was fixed at *at* until #142. That was right for
+  # the two locators the kit had — a line and a page are points, and you cite
+  # something *at* one — and wrong for the third shape Bing introduced (#135),
+  # which is a part of a work: *Uses “bestiality” at a headline, Wired, 15
+  # September 2026* is not English. #140 measured it in the browser and
+  # reported it rather than fixing it, because that issue put this module out
+  # of scope; #142 was editing the attestation tests anyway and took it.
+  #
+  # A determiner is the discriminator because it is what distinguishes the two
+  # classes in every locator the kit writes: a numbered point never has one
+  # (*line 4*, *page 12*) and a named part always does (*a headline*, *the
+  # text*). A provider wanting the other preposition writes the other shape.
+  defp at(locator) when is_binary(locator) and locator != "" do
+    if Regex.match?(~r/^(a|an|the)\s/iu, locator),
+      do: " in #{locator}",
+      else: " at #{locator}"
+  end
+
   defp at(_locator), do: ""
 
   defp quoted(value) when is_binary(value), do: "“#{value}”"
