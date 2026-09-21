@@ -125,7 +125,7 @@ defmodule DevilsDictionaryWeb.WordDemoTest do
       {:ok, live, _html} = live(ctx.conn, ~p"/define/oyster?demo=1")
 
       {:error, {:live_redirect, %{to: to}}} =
-        live |> element(~s(#related-noun-family-#{bed.slug})) |> render_click()
+        live |> element(~s(#related-family-#{bed.slug})) |> render_click()
 
       assert to == "/define/oyster-bed?demo=1&trail=oyster"
 

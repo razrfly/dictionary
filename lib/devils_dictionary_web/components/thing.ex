@@ -32,6 +32,7 @@ defmodule DevilsDictionaryWeb.Thing do
 
       <.disagreement :if={@thing.disagreement != []} concepts={@thing.disagreement} />
       <.concept_card :if={@thing.concept} concept={@thing.concept} thing={@thing} info={@info} />
+      <.article :if={@thing[:article]} article={@thing.article} info={@info} />
       <.thing_chain
         :if={@thing.chain != []}
         chain={@thing.chain}
@@ -134,6 +135,60 @@ defmodule DevilsDictionaryWeb.Thing do
           />
         </p>
       </div>
+    </div>
+    """
+  end
+
+  @doc """
+  The encyclopedia article about the thing, under the concept's own one-line
+  description (#133 R3).
+
+  Wikipedia used to render as a card in the Definitions slab, between
+  Wiktionary's verb and Wiktionary's name, labelled `2026 · 2,455 characters`
+  as if it were a ninth dictionary entry. It is an article about the *concept*
+  and reaches the page through the Wikidata thing — which is why `nepotism`,
+  which has no thing, never had one — so it belongs here, and the slab beside
+  it now counts only dictionaries.
+
+  Nothing new is drawn: the lead is the fold's preview, the rest is the same
+  `<details>` an entry uses, and the byline carries the ↗ and the ⓘ the card
+  carried. `2,455 characters` was the wrong measure for an article; the fold
+  says how much is behind it instead.
+  """
+  attr :article, :map, required: true
+  attr :info, :string, default: nil
+
+  def article(assigns) do
+    ~H"""
+    <div id="thing-article" class="mt-4 max-w-[47rem]">
+      <.document>{Phoenix.HTML.raw(@article.preview_html)}</.document>
+
+      <details :if={@article.rest_html} id="thing-article-rest" class="group/article mt-2">
+        <summary class="w-fit cursor-pointer list-none text-base/7 text-mist-500 hover:text-mist-950 sm:text-sm/7 dark:hover:text-white [&::-webkit-details-marker]:hidden">
+          <span class="underline underline-offset-4 group-open/article:hidden">
+            … {number(@article.rest_chars)} more
+          </span>
+          <span class="underline underline-offset-4 not-group-open/article:hidden">
+            Fold this article
+          </span>
+        </summary>
+        <.document class="mt-4">{Phoenix.HTML.raw(@article.rest_html)}</.document>
+      </details>
+
+      <p class="mt-3 flex flex-wrap items-baseline gap-x-4 gap-y-1 text-base/7 text-mist-500 sm:text-sm/7">
+        <span>{@article.source.name}</span>
+        <Word.link_out
+          id="thing-article-out"
+          href={@article.url}
+          label={@article.source.name}
+        />
+        <Word.info_link
+          :if={@info}
+          id="thing-article-info"
+          path={@info}
+          label={@article.source.name}
+        />
+      </p>
     </div>
     """
   end

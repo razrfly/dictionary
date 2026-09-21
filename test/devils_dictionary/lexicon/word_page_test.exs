@@ -153,10 +153,13 @@ defmodule DevilsDictionary.Lexicon.WordPageTest do
       assert chips(second.relations, :similar) == ["bloke"]
     end
 
-    test "an edge with no sense renders in the page-level block for its part of speech", ctx do
-      [related] = page("cat").related
+    test "an edge with no sense renders in the page-level block and nowhere else", ctx do
+      # #133 R4: one block per page, keyed by relation. The block no longer
+      # carries a part of speech, because the lexeme an edge hangs off is not a
+      # fact the reader has any use for — but what it holds is unchanged, and
+      # the sense-scoped `hypernym`s still do not leak into it.
+      related = page("cat").related
 
-      assert related.pos == "noun"
       assert chips(related.groups, :family) == ["kitty"]
       refute Map.has_key?(related.groups, :broader)
       _ = ctx
@@ -180,7 +183,7 @@ defmodule DevilsDictionary.Lexicon.WordPageTest do
         relation!(ctx, joy, type, word!(ctx, lemma, ~w(wiktionary)))
       end
 
-      [related] = page("joy").related
+      related = page("joy").related
 
       assert chips(related.groups, :similar) == ["delight"]
       assert chips(related.groups, :opposite) == ["grief"]
@@ -200,7 +203,7 @@ defmodule DevilsDictionary.Lexicon.WordPageTest do
       relation!(ctx, oyster, :see_also, clam, source: "johnson")
       relation!(ctx, oyster, :see_also, mussel, source: "wordnet")
 
-      [related] = page("oyster").related
+      related = page("oyster").related
       {{:says_see, source}, chips} = Enum.find(related.groups, &match?({{:says_see, _}, _}, &1))
 
       assert source.slug == "johnson"
@@ -212,7 +215,7 @@ defmodule DevilsDictionary.Lexicon.WordPageTest do
       oyster = word!(ctx, "oyster", ~w(wiktionary))
       relation!(ctx, oyster, :derived, nil, to_lemma: "oysterhood")
 
-      assert page("oyster").related == []
+      assert page("oyster").related == nil
     end
 
     test "chips are capped, enriched first, and carry their overflow", ctx do
@@ -226,7 +229,7 @@ defmodule DevilsDictionary.Lexicon.WordPageTest do
       bold = word!(ctx, "oyster bed", ~w(wiktionary))
       relation!(ctx, oyster, :derived, bold)
 
-      [related] = page("oyster").related
+      related = page("oyster").related
       family = related.groups[:family]
 
       assert length(family.shown) == WordPage.chip_cap()
@@ -311,6 +314,49 @@ defmodule DevilsDictionary.Lexicon.WordPageTest do
       assert thing.concept.description == "a small carnivore"
       assert thing.wikipedia_url =~ "wikipedia.org"
       assert thing.wikidata_url == "https://www.wikidata.org/wiki/Q146"
+      _ = ctx
+    end
+
+    # #133 R3. An entry that is `about` the concept rather than `defines` a
+    # lexeme is an encyclopedia article, and it used to be a `kind: :entry`
+    # card among the dictionaries — `love` read *5 sources · 9 entries* with
+    # Wikipedia between Wiktionary's verb and Wiktionary's name.
+    test "an entry about the concept lands on the thing, never among the cards", ctx do
+      # A word of its own rather than the describe's `cat`: an exact claim
+      # about *which* cards a page has cannot survive another test's committed
+      # rows, and `cat` is the busiest lemma in the suite (`@tag :unboxed`
+      # checks out with `sandbox: false`).
+      quoll = word!(ctx, "quoll", ~w(wordnet))
+      marsupial = concept!("Q1075694", "quoll", description: "a marsupial")
+      link!(quoll, marsupial, confidence: 0.95, method: :wiktionary_qid)
+      sense!(ctx, quoll, "wordnet", gloss: "a carnivorous marsupial")
+
+      entry!(ctx, marsupial, "wikipedia",
+        body: "Quolls are carnivorous marsupials. " <> String.duplicate("They hunt. ", 80),
+        url: "https://en.wikipedia.org/wiki/Quoll"
+      )
+
+      page = page("quoll")
+
+      refute Enum.any?(page.cards, &(&1.source.slug == "wikipedia"))
+      refute Enum.any?(page.source_groups, &(&1.slug == "wikipedia"))
+      # And with it gone, the slab and the rail count one dictionary.
+      assert Enum.map(page.cards, & &1.source.slug) == ["wordnet"]
+
+      article = page.thing.article
+
+      assert article.source.slug == "wikipedia"
+      assert article.url == "https://en.wikipedia.org/wiki/Quoll"
+      # Folded the same way an entry is, so the disclosure has a number.
+      assert article.preview_html =~ "Quolls are carnivorous marsupials."
+      assert article.rest_chars > 0
+      assert article.chars > article.rest_chars
+      assert article.body_html =~ "They hunt."
+      _ = ctx
+    end
+
+    test "a thing with no article says so rather than raising", ctx do
+      assert page("cat").thing.article == nil
       _ = ctx
     end
 
@@ -516,7 +562,7 @@ defmodule DevilsDictionary.Lexicon.WordPageTest do
       assert page.headword.lemma == "abrocome"
       assert page.headword.forms == ["abrocomes"]
       assert page.cards == []
-      assert page.related == []
+      assert page.related == nil
     end
 
     test "a word nobody has ever written down is a page, not a raise", _ctx do

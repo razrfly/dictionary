@@ -14,6 +14,7 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
   import Phoenix.LiveViewTest
 
   alias DevilsDictionary.{Claims, Fixtures, Registry}
+  alias DevilsDictionary.Lexicon.WordPage
 
   setup ctx do
     %{sources: sources, scopes: scopes} = Fixtures.seed_catalog!()
@@ -58,7 +59,7 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
       assert html =~ ~s(id="card-johnson")
       assert html =~ ~s(id="card-wiktionary")
       assert html =~ ~s(id="card-wordnet")
-      assert html =~ ~s(id="related-noun")
+      assert html =~ ~s(id="related")
 
       # Tier before year: both 👑 cards come before the institutions.
       assert index(html, "card-johnson") < index(html, "card-wiktionary")
@@ -423,12 +424,115 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
       assert html =~ "a Unix utility"
     end
 
+    # #133 R3. Wikipedia is an article about the *concept* and arrives through
+    # the Wikidata thing, which is why `nepotism` never had one. It used to
+    # render as a `kind: :entry` card in the Definitions slab, labelled
+    # `2026 · 2,455 characters`, between Wiktionary's verb and Wiktionary's
+    # name.
+    defp cat_article!(ctx) do
+      %{animal: animal} = fixtures = catwith_thing!(ctx)
+
+      entry!(ctx, animal, "wikipedia",
+        body:
+          "The cat is a small domesticated carnivorous mammal. " <>
+            String.duplicate("It purrs. ", 80),
+        url: "https://en.wikipedia.org/wiki/Cat",
+        record: record!(ctx, "wikipedia", external_id: "Cat")
+      )
+
+      fixtures
+    end
+
+    test "the encyclopedia article renders in the thing panel, not among the dictionaries", ctx do
+      cat_article!(ctx)
+
+      {:ok, live, html} = live(ctx.conn, ~p"/define/cat")
+
+      assert html =~ ~s(id="thing-article")
+      assert html =~ "The cat is a small domesticated carnivorous mammal."
+
+      # Not a dictionary: no card, and no row in the rail. The rail is asked
+      # for by element rather than by counting the whole page — the source
+      # *count* is a decision `WordPage` makes and `word_page_test.exs` pins,
+      # and a page-wide count assertion here rides on whatever else the suite
+      # has committed (`@tag :unboxed`).
+      refute html =~ ~s(id="card-wikipedia")
+
+      rail = live |> element("nav[aria-label='Sources']") |> render()
+
+      assert rail =~ ~s(id="rail-wordnet")
+      refute rail =~ "Wikipedia"
+      refute rail =~ ~s(id="rail-wikipedia")
+    end
+
+    test "the article's fold says how much is behind it, never a character count", ctx do
+      cat_article!(ctx)
+
+      {:ok, live, _html} = live(ctx.conn, ~p"/define/cat")
+
+      summary = live |> element("#thing-article-rest summary") |> render()
+
+      assert summary =~ ~r/… [\d,]+ more/
+      refute summary =~ "characters"
+    end
+
+    test "the article keeps the link out and the provenance the card carried", ctx do
+      cat_article!(ctx)
+
+      {:ok, live, html} = live(ctx.conn, ~p"/define/cat")
+
+      assert html =~ ~s(href="https://en.wikipedia.org/wiki/Cat")
+
+      html = live |> element("#thing-article-info") |> render_click()
+
+      assert html =~ ~s(id="provenance")
+      assert html =~ ~s(id="provenance-records")
+      # The thing's own drawer, and Wikipedia's record is one of the records
+      # in it — the provenance the card used to carry still reaches the reader.
+      assert html =~ ~s(id="provenance-record-0")
+      assert html =~ "Wikipedia"
+    end
+
+    test "the drawer shows the record the article came from, not a title guess", ctx do
+      # The title probe is a convention (`concept:Q…`, or the lemma it probed
+      # with), not a foreign key, and on `/define/dog` it answered with a
+      # *different* Wikipedia record from the one the panel's text came from.
+      %{animal: animal} = catwith_thing!(ctx)
+
+      # A record the title probe would find, and the one the article was
+      # actually written from.
+      record!(ctx, "wikipedia", external_id: "Cat")
+      mine = record!(ctx, "wikipedia", external_id: "Cat?oldid=2")
+
+      entry!(ctx, animal, "wikipedia",
+        body: "The cat is a small domesticated carnivorous mammal.",
+        record: mine
+      )
+
+      {:ok, live, _html} = live(ctx.conn, ~p"/define/cat")
+
+      html = live |> element("#thing-article-info") |> render_click()
+
+      assert html =~ "Cat?oldid=2"
+      refute html =~ ~s(>Cat</)
+    end
+
+    test "a word with a thing but no article has no article block", ctx do
+      catwith_thing!(ctx)
+
+      {:ok, _live, html} = live(ctx.conn, ~p"/define/cat")
+
+      assert html =~ ~s(id="thing")
+      refute html =~ ~s(id="thing-article")
+    end
+
     test "a word that names nothing has no panel", ctx do
       oyster!(ctx)
 
       {:ok, _live, html} = live(ctx.conn, ~p"/define/oyster")
 
       refute html =~ ~s(id="thing")
+      refute html =~ ~s(id="thing-article")
     end
 
     test "a bare row has no panel and does not crash reaching for one", ctx do
@@ -448,7 +552,7 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
       {:ok, live, _html} = live(ctx.conn, ~p"/define/oyster")
 
       assert live
-             |> element(~s(#related-noun-family-#{bed.slug}))
+             |> element(~s(#related-family-#{bed.slug}))
              |> render() =~ "trail=oyster"
     end
 
@@ -458,7 +562,7 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
       {:ok, live, _html} = live(ctx.conn, ~p"/define/oyster")
 
       {:error, {:live_redirect, %{to: to}}} =
-        live |> element(~s(#related-noun-family-#{bed.slug})) |> render_click()
+        live |> element(~s(#related-family-#{bed.slug})) |> render_click()
 
       assert to == "/define/oyster-bed?trail=oyster"
 
@@ -471,7 +575,8 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
     # of the ten was: *family*. The struct-level tests in `word_page_test.exs`
     # prove the mapping; these prove the rendered chip is a link with the right
     # id and the right href, which is a different claim and the one a reader
-    # depends on. The ids are the contract — `#related-<pos>-<group>-<slug>`.
+    # depends on. The ids are the contract — `#related-<group>-<slug>` since
+    # #133 R4 merged the per-lexeme blocks into one.
     test "every relation kind in §7's map renders a chip that can be clicked", ctx do
       oyster = word!(ctx, "oyster", ~w(bierce johnson wiktionary wordnet))
 
@@ -517,7 +622,7 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
 
       # All ten present, in §7's order — "every group in §7's map that the word
       # has, in that order".
-      positions = for {group, _type} <- groups, do: index(html, "related-noun-#{group}")
+      positions = for {group, _type} <- groups, do: index(html, "related-#{group}")
       assert positions == Enum.sort(positions)
 
       # A fresh mount per group: the click is a `live_redirect`, so the first
@@ -525,13 +630,13 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
       for {group, type} <- groups do
         target = targets[type]
 
-        assert html =~ ~s(id="related-noun-#{group}-#{target.slug}"),
+        assert html =~ ~s(id="related-#{group}-#{target.slug}"),
                "#{group} has no chip for #{target.lemma}"
 
         {:ok, live, _} = live(ctx.conn, ~p"/define/oyster")
 
         {:error, {:live_redirect, %{to: to}}} =
-          live |> element("#related-noun-#{group}-#{target.slug}") |> render_click()
+          live |> element("#related-#{group}-#{target.slug}") |> render_click()
 
         assert to == "/define/#{target.slug}?trail=oyster",
                "clicking the #{group} chip went to #{to}"
@@ -593,6 +698,163 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
       assert live |> element("#trail") |> render() =~ "bivalve"
       refute live |> element("#trail") |> render() =~ "alert(1)"
     end
+  end
+
+  describe "the related block (#133 R4)" do
+    # Two lexemes of the same spelling, each with its own lexeme-scoped edges.
+    # Before R4 this page carried a `Related words · noun` block and a
+    # `Related words · verb` block; `set` carried five, two of them calling
+    # themselves `#related-adj`.
+    defp two_lexemes!(ctx) do
+      noun = word!(ctx, "set", ~w(wiktionary))
+      verb = word!(ctx, "set", ~w(wiktionary), pos: "verb")
+      name = word!(ctx, "Set", ~w(wiktionary), pos: "name")
+
+      sense!(ctx, noun, "wiktionary", gloss: "A collection of things.")
+
+      relation!(ctx, noun, :synonym, word!(ctx, "collection", ~w(wiktionary)))
+      relation!(ctx, noun, :derived, word!(ctx, "subset", ~w(wiktionary)))
+      relation!(ctx, verb, :synonym, word!(ctx, "place", ~w(wiktionary), pos: "verb"))
+      relation!(ctx, verb, :derived, word!(ctx, "setting", ~w(wiktionary), pos: "verb"))
+      relation!(ctx, name, :derived, word!(ctx, "Setian", ~w(wiktionary)))
+      # The `LoVe` rule: a case-only variant of the headword is a spelling, not
+      # a word to walk to.
+      relation!(ctx, name, :derived, word!(ctx, "SET", ~w(wiktionary), pos: "name"))
+
+      %{noun: noun}
+    end
+
+    test "every lexeme's rows land in one block, one heading, one id per group", ctx do
+      two_lexemes!(ctx)
+
+      {:ok, _live, html} = live(ctx.conn, ~p"/define/set")
+
+      # One section, one heading, and no `· verb` beside it.
+      assert length(ids(html, ~r/^related$/)) == 1
+      assert length(String.split(html, "Related words")) == 2
+      assert length(ids(html, ~r/^related-similar$/)) == 1
+      assert length(ids(html, ~r/^related-family$/)) == 1
+
+      # Both lexemes' edges are in those two rows, not in two blocks.
+      assert html =~ ~s(id="related-similar-collection")
+      assert html =~ ~s(id="related-similar-place")
+      assert html =~ ~s(id="related-family-subset")
+      assert html =~ ~s(id="related-family-setting")
+    end
+
+    test "every id on a multi-lexeme page is unique", ctx do
+      two_lexemes!(ctx)
+
+      {:ok, _live, html} = live(ctx.conn, ~p"/define/set")
+
+      all = ids(html, ~r/./)
+      assert all -- Enum.uniq(all) == [], "duplicate ids: #{inspect(all -- Enum.uniq(all))}"
+    end
+
+    test "a name lexeme's rows fold into `names`, last, minus the case variants", ctx do
+      two_lexemes!(ctx)
+
+      {:ok, _live, html} = live(ctx.conn, ~p"/define/set")
+
+      assert html =~ ~s(id="related-names-setian")
+      # `SET` is `set` in another case — a spelling of the same identity.
+      refute html =~ ~s(id="related-names-set")
+      # And a name's derivations are never the verb's family.
+      refute html =~ ~s(id="related-family-setian")
+      assert index(html, "related-family") < index(html, "related-names")
+    end
+
+    test "a chip names its part of speech only where the group holds more than one", ctx do
+      two_lexemes!(ctx)
+
+      {:ok, live, _html} = live(ctx.conn, ~p"/define/set")
+
+      # `similar` holds a noun and a verb, so both chips say which.
+      assert live |> element("#related-similar-collection") |> render() =~ "(n)"
+      assert live |> element("#related-similar-place") |> render() =~ "(v)"
+      # `names` holds one noun, so it says nothing.
+      refute live |> element("#related-names-setian") |> render() =~ "(n)"
+    end
+
+    test "a group past the scroll cap opens into a box rather than a wall", ctx do
+      oyster = word!(ctx, "oyster", ~w(wiktionary))
+
+      for i <- 1..(WordPage.scroll_cap() + 1) do
+        relation!(ctx, oyster, :derived, word!(ctx, "derived#{i}", ~w(wiktionary)))
+      end
+
+      {:ok, live, _html} = live(ctx.conn, ~p"/define/oyster")
+      row = live |> element("#related-family") |> render()
+
+      assert row =~ "overflow-y-auto"
+      assert row =~ "max-h-64"
+      # Every one of the rest is still a link, so the box is tab-reachable.
+      assert row =~ ~s(id="related-family-derived49")
+    end
+
+    test "a thin block says where the sense-level chips are, and links to them", ctx do
+      oyster = word!(ctx, "oyster", ~w(wiktionary))
+      sense = sense!(ctx, oyster, "wiktionary", gloss: "A marine bivalve.")
+
+      relation!(ctx, oyster, :derived, word!(ctx, "oyster bed", ~w(wiktionary)))
+      relation!(ctx, oyster, :synonym, word!(ctx, "mollusk", ~w(wiktionary)), from_sense: sense)
+
+      {:ok, live, html} = live(ctx.conn, ~p"/define/oyster")
+
+      assert html =~ "Sense-by-sense relations are in each definition"
+
+      assert live |> element("#related-senses") |> render() =~ ~s(href="#card-wiktionary")
+    end
+
+    test "a word whose every relation is sense-scoped still gets the heading and the line", ctx do
+      # 8 of the first 4,000 enriched lexemes are this shape — `hedge-warbler`,
+      # `ill-humoured`, `move-the-goal-posts` — and before this they rendered
+      # no related block at all, which is the reading the sentence exists to
+      # prevent.
+      oyster = word!(ctx, "oyster", ~w(wiktionary))
+      sense = sense!(ctx, oyster, "wiktionary", gloss: "A marine bivalve.")
+
+      relation!(ctx, oyster, :synonym, word!(ctx, "mollusk", ~w(wiktionary)), from_sense: sense)
+
+      {:ok, live, html} = live(ctx.conn, ~p"/define/oyster")
+
+      assert html =~ ~s(id="related")
+      assert html =~ "Related words"
+      assert html =~ "Sense-by-sense relations are in each definition"
+      assert live |> element("#related-senses") |> render() =~ ~s(href="#card-wiktionary")
+
+      # A heading and a pointer, and no empty group rows under it.
+      refute html =~ ~s(id="related-similar")
+      refute html =~ ~s(id="related-family")
+    end
+
+    test "a word with no relations at all has no block and no line", ctx do
+      word!(ctx, "oyster", ~w(wiktionary))
+      sense!(ctx, word!(ctx, "abrocome", ~w(wiktionary)), "wiktionary", gloss: "A rat.")
+
+      {:ok, _live, html} = live(ctx.conn, ~p"/define/abrocome")
+
+      refute html =~ ~s(id="related")
+      refute html =~ "Sense-by-sense relations are in each definition"
+    end
+
+    test "a block with two groups or more says nothing of the kind", ctx do
+      oyster!(ctx)
+
+      {:ok, _live, html} = live(ctx.conn, ~p"/define/oyster")
+
+      refute html =~ "Sense-by-sense relations are in each definition"
+    end
+  end
+
+  # Every id the page rendered whose value matches `pattern`, duplicates kept —
+  # a duplicate id is what #133 R4 is fixing and what LiveView patches wrongly.
+  defp ids(html, pattern) do
+    html
+    |> Floki.parse_document!()
+    |> Floki.find("[id]")
+    |> Enum.map(&(&1 |> Floki.attribute("id") |> hd()))
+    |> Enum.filter(&Regex.match?(pattern, &1))
   end
 
   defp index(html, id), do: :binary.match(html, ~s(id="#{id}")) |> elem(0)

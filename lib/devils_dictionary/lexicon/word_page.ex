@@ -70,10 +70,20 @@ defmodule DevilsDictionary.Lexicon.WordPage do
   alias DevilsDictionary.Sources
   alias DevilsDictionary.Sources.SourceRecord
 
-  defstruct headword: nil, cards: [], source_groups: [], related: [], thing: nil, trail: []
+  defstruct headword: nil, cards: [], source_groups: [], related: nil, thing: nil, trail: []
 
   @chip_cap 12
+  # Above this, a group's “+N” is a scrolling list rather than a wall of chips.
+  # `family` is 281 chips on *love* and 261 on *set*, and a disclosure that
+  # opens to five screens of them is a disclosure that ends the page (#133 R4).
+  # 48 is four rows of twelve — the cap again, four times over — which is as
+  # much as opens without the rest of the rail leaving the viewport.
+  @scroll_cap 48
   @gloss_cap 3
+  # A `name` or a `suffix` lexeme is not the word: *Love County* is what the
+  # proper noun *Love* is derived from, not what *love* is related to. Their
+  # rows fold into one `names` group rather than into the word's own.
+  @other_lexemes ~w(name suffix)
 
   # #131 Phase 1's measured limits. They live here rather than in a component
   # because a cap is a decision about the content, and a component that decides
@@ -153,7 +163,10 @@ defmodule DevilsDictionary.Lexicon.WordPage do
     :family,
     :variants,
     :says_see,
-    :related
+    :related,
+    # Last, and not one of #71 §7's relation kinds: the other lexemes that
+    # share this spelling, folded here by `names/2` (#133 R4).
+    :names
   ]
 
   @group_labels %{
@@ -166,7 +179,8 @@ defmodule DevilsDictionary.Lexicon.WordPage do
     family: "family",
     variants: "variants",
     says_see: "says see",
-    related: "related"
+    related: "related",
+    names: "names"
   }
 
   @tier_rank %{aristocracy: 0, middle: 1, plebs: 2}
@@ -180,6 +194,9 @@ defmodule DevilsDictionary.Lexicon.WordPage do
 
   @doc "How many chips a group shows before its “+N”."
   def chip_cap, do: @chip_cap
+
+  @doc "The group size above which the “+N” opens a scrolling list."
+  def scroll_cap, do: @scroll_cap
 
   @doc "How many glosses a sense card shows before “show N more”."
   def gloss_cap, do: @gloss_cap
@@ -240,7 +257,11 @@ defmodule DevilsDictionary.Lexicon.WordPage do
     # twice.
     sense_ids = Enum.map(senses, & &1.id)
 
-    entries = entries(ids, sense_ids, concept)
+    # An entry reaches the page two ways: `defines` a lexeme or a sense, or is
+    # `about` the concept. The second is Wikipedia, and it is not a dictionary
+    # entry — it belongs with the thing, not among the sources that defined the
+    # word (#133 R3).
+    {about, entries} = Enum.split_with(entries(ids, sense_ids, concept), &(&1.concept_id != nil))
     relations = relations(ids, sense_ids)
     chains = chains(senses, sources)
 
@@ -253,8 +274,11 @@ defmodule DevilsDictionary.Lexicon.WordPage do
       headword: headword(lexemes, lookup, sources),
       cards: cards,
       source_groups: source_groups(cards),
-      related: related(pos_scoped, by_lexeme, sources),
-      thing: thing(entity, ids, sources),
+      related:
+        pos_scoped
+        |> related(by_lexeme, sources, hd(lexemes).lemma)
+        |> sense_link(cards),
+      thing: entity |> thing(ids, sources) |> put_article(about, sources, concept),
       trail: trail(opts[:trail])
     }
   end
@@ -855,8 +879,46 @@ defmodule DevilsDictionary.Lexicon.WordPage do
       kinds: none(),
       examples: none(),
       wikipedia_url: nil,
-      wikidata_url: nil
+      wikidata_url: nil,
+      article: nil
     }
+  end
+
+  # The encyclopedia article, folded the same way a dictionary entry is and
+  # hung off the thing rather than filed among the dictionaries (#133 R3).
+  #
+  # It was a `kind: :entry` card in the definitions slab labelled `2026 · 2,455
+  # characters`, sitting between Wiktionary's verb and Wiktionary's name and
+  # reading as a second copy of the same Wikimedia source. It is not a
+  # dictionary: it reaches the page through the Wikidata thing, which is why
+  # `nepotism`, which has no thing, never had one. With it gone the slab and
+  # the rail count only dictionaries — `love` reads *4 sources · 8 entries* —
+  # and `WordLive.count_label/2`, `card_sources` and the `stats` tile all
+  # follow from `page.cards` without a line of their own changing.
+  #
+  # There is no `thing: nil` with an article to lose: `entries/3` asks for
+  # `about` rows only when there is a concept, and a concept is an entity, and
+  # an entity is a thing. The clause is here because a nil thing is a shape,
+  # not an accident.
+  defp put_article(nil, _about, _sources, _concept), do: nil
+  defp put_article(thing, [], _sources, _concept), do: Map.put(thing, :article, nil)
+
+  defp put_article(thing, [row | _], sources, concept) do
+    source = sources[row.source_id]
+
+    article =
+      row.body
+      |> Markdown.to_html(row.body_format)
+      |> fold()
+      |> Map.merge(%{
+        source: source,
+        authors: row.authors,
+        year: row.year,
+        url: link_out(row, source, nil, concept),
+        record_id: row.record_id
+      })
+
+    Map.put(thing, :article, article)
   end
 
   defp none, do: %{shown: [], total: 0}
@@ -968,10 +1030,11 @@ defmodule DevilsDictionary.Lexicon.WordPage do
   # template is #71 §8a.4 — a component that groups is a component that will
   # group differently from the accordion beside it.
   #
-  # A card with no part of speech is not a dictionary entry at all: Wikipedia's
-  # content hangs off the concept, never off a lexeme, so `pos_of/2` returns
-  # nil. That is the honest label for the right-hand column, and it is what
-  # tells the reader an encyclopedia article is not a ninth sense.
+  # Every card here is a dictionary's now — the encyclopedia article left for
+  # the thing panel in #133 R3 — so the right-hand column is a part of speech
+  # for all of them. `"article"` stays as the label for a card without one
+  # because a source that files content against no lexeme is a shape the
+  # corpus still allows, and a blank column would say less than the truth.
   defp source_groups(cards) do
     cards
     |> Enum.chunk_by(& &1.source.slug)
@@ -1136,16 +1199,27 @@ defmodule DevilsDictionary.Lexicon.WordPage do
           title -> [title, String.downcase(title)]
         end
 
+    # Where the panel carries an article, *its* record is the Wikipedia
+    # provenance — the title probe below is a convention, not a foreign key,
+    # and on `/define/dog` it answers with a different record from the one the
+    # text in the panel came from. The probe stays for a thing with no article,
+    # which is most of them.
     records =
       [
         first_record("wikidata", [concept.qid]),
-        first_record("wikipedia", titles)
+        article_record(page.thing) || first_record("wikipedia", titles)
       ]
       |> Enum.reject(&is_nil/1)
       |> Enum.uniq_by(& &1.id)
 
     drawer("thing", concept.label || concept.qid, nil, Enum.map(records, & &1.id), index, page)
   end
+
+  defp article_record(%{article: %{record_id: id}}) when not is_nil(id) do
+    id |> List.wrap() |> Sources.records() |> List.first()
+  end
+
+  defp article_record(_thing), do: nil
 
   # A concept's Wikipedia record was written either by the concepts pass, keyed
   # `concept:Q…`, or by the title probe, keyed by the lemma it probed with —
@@ -1297,20 +1371,87 @@ defmodule DevilsDictionary.Lexicon.WordPage do
     )
   end
 
-  defp related(pos_scoped, by_lexeme, sources) do
-    pos_scoped
-    |> Enum.group_by(& &1.from_lexeme_id)
-    |> Enum.map(fn {lexeme_id, rows} ->
-      groups = group_chips(rows, sources)
+  # One block, grouped by relation rather than by lexeme (#133 R4).
+  #
+  # Grouping by `from_lexeme_id` was the data's key, not the reader's: *love*
+  # showed a `Related words · verb` block and a `Related words · name` block
+  # and no noun block at all — the noun's relations are sense-scoped and render
+  # inside the WordNet and Wiktionary cards — and *set* showed five blocks, two
+  # of which called themselves `#related-adj` because two adjective lexemes
+  # share the slug. Part of speech is a property of a chip, not the thing that
+  # splits the page.
+  #
+  # Every lexeme's rows are merged **before** `chips/1` caps them, so the cap
+  # is twelve of the word's *similar* chips rather than twelve per lexeme.
+  defp related(pos_scoped, by_lexeme, sources, lemma) do
+    {other, own} =
+      Enum.split_with(pos_scoped, &(pos_of(by_lexeme, &1.from_lexeme_id) in @other_lexemes))
 
+    groups = Map.merge(group_chips(own, sources), names(other, lemma))
+
+    if groups == %{} do
+      nil
+    else
       %{
-        pos: by_lexeme[lexeme_id] && by_lexeme[lexeme_id].part_of_speech,
         groups: groups,
-        counts: Map.new(groups, fn {group, chips} -> {group, total_of(chips)} end)
+        counts: Map.new(groups, fn {group, chips} -> {group, total_of(chips)} end),
+        # Filled by `build/2`, which is the only place that has seen the cards.
+        sense_link: nil
       }
+    end
+  end
+
+  # The `name` and `suffix` lexemes' rows, as one group rendered last. Their
+  # own relation kinds are dropped on the way in on purpose: *Set animal* is a
+  # thing the proper noun *Set* is derived from, and filing it under the verb
+  # *set*'s `family` would be the page claiming a relation nobody asserted.
+  # On `love` and `set` every such row is `derived` anyway.
+  #
+  # A chip that is a case-only variant of the headword goes: `LoVe` beside
+  # `love` is a Wiktionary spelling of the same identity, not a word to walk
+  # to. The same rule Phase 1 gave `WordLive.choices/2` (#133 R6).
+  defp names([], _lemma), do: %{}
+
+  defp names(rows, lemma) do
+    chips =
+      rows
+      |> Enum.reject(&case_variant?(&1.lemma, lemma))
+      |> chips()
+
+    if chips.total == 0, do: %{}, else: %{names: chips}
+  end
+
+  defp case_variant?(_lemma, nil), do: false
+
+  defp case_variant?(lemma, headword),
+    do: String.downcase(lemma) == String.downcase(headword)
+
+  # The line that answers "where did the noun go". A page whose block holds one
+  # group or none, while its cards carry sense-scoped chips, points at the first
+  # card that has any; anything richer than that does not need the sentence.
+  #
+  # *None* is the case the sentence was written for, and it is not rare: 8 of
+  # the first 4,000 enriched lexemes — `hedge-warbler`, `ill-humoured`,
+  # `move-the-goal-posts` — have every one of their relations hung off a sense
+  # and so had no block at all to hang the line on. They get a heading and the
+  # sentence, which is the whole point of it.
+  defp sense_link(nil, cards) do
+    case Enum.find_value(cards, &(has_chips?(&1) && &1.id)) do
+      nil -> nil
+      card_id -> %{groups: %{}, counts: %{}, sense_link: card_id}
+    end
+  end
+
+  defp sense_link(%{groups: groups} = related, cards) when map_size(groups) < 2 do
+    %{related | sense_link: Enum.find_value(cards, &(has_chips?(&1) && &1.id))}
+  end
+
+  defp sense_link(related, _cards), do: related
+
+  defp has_chips?(card) do
+    Enum.any?(card.groups, fn group ->
+      Enum.any?(group.senses, &(&1.relations != %{}))
     end)
-    |> Enum.reject(&(&1.groups == %{}))
-    |> Enum.sort_by(&pos_rank(&1.pos))
   end
 
   defp group_chips(rows, sources) do
@@ -1372,8 +1513,20 @@ defmodule DevilsDictionary.Lexicon.WordPage do
 
   # The cap travels with the chips so the template never has to know it: a group
   # renders what it is given and prints `total - length(shown)` as its “+N”.
+  #
+  # So do the two render decisions that depend on the *whole* group rather than
+  # on one chip (#71 §8a.4). `tags?` is whether the group holds more than one
+  # part of speech — merging the lexemes put `wish (v)` beside `emotion` under
+  # *broader*, and a tag on every chip of a noun-only group is noise. `scroll?`
+  # is whether the “+N” opens a scrolling list instead of a wall.
   defp cap(chips) do
-    %{shown: Enum.take(chips, @chip_cap), total: length(chips), rest: Enum.drop(chips, @chip_cap)}
+    %{
+      shown: Enum.take(chips, @chip_cap),
+      total: length(chips),
+      rest: Enum.drop(chips, @chip_cap),
+      tags?: chips |> Enum.map(& &1.pos) |> Enum.uniq() |> length() > 1,
+      scroll?: length(chips) > @scroll_cap
+    }
   end
 
   defp total_of(%{total: total}), do: total
