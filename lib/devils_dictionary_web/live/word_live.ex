@@ -433,8 +433,23 @@ defmodule DevilsDictionaryWeb.WordLive do
   defp title(%{headword: %{lemma: nil}}, slug), do: "#{slug} — no such word"
   defp title(%{headword: %{lemma: lemma}}, _slug), do: lemma
 
-  defp count_label(cards),
-    do: "#{length(cards)} #{if length(cards) == 1, do: "source", else: "sources"}"
+  # "5 sources · 9 entries": a source that filed a noun and a verb is one
+  # source, and the entries are counted as what they are.
+  defp count_label(sources, cards) do
+    s = length(sources)
+    e = length(cards)
+    base = "#{s} #{if s == 1, do: "source", else: "sources"}"
+    if e > s, do: "#{base} · #{e} entries", else: base
+  end
+
+  # A row continues the one above when they are the same source — the tiers
+  # sort a source's parts of speech together, so Johnson's verb follows his
+  # noun and needs no second name.
+  defp continues?(cards, i) when i > 0 do
+    Enum.at(cards, i - 1).source.slug == Enum.at(cards, i).source.slug
+  end
+
+  defp continues?(_cards, _i), do: false
 
   # Which source the page opens on.
   #
@@ -474,8 +489,6 @@ defmodule DevilsDictionaryWeb.WordLive do
         <%= if @page.headword.lexemes == [] do %>
           <.miss slug={@slug} suggestions={@suggestions} demo={@demo} />
         <% else %>
-          <.disambiguation :if={@choices != []} slug={@slug} choices={@choices} />
-
           <%!-- #131 Phase 2. What the page knows the size of goes in the rail;
                what a source decides the size of goes in the column beside it.
                The rail is not sticky: it carries facts rather than navigation,
@@ -498,6 +511,8 @@ defmodule DevilsDictionaryWeb.WordLive do
             <Word.rail
               page={@page}
               sources={@card_sources}
+              choices={@choices}
+              thing_info={@page.thing && Word.info_path(@slug, @page.trail, "thing", @demo)}
               class="lg:col-start-1 lg:row-start-1"
               demo={@demo}
             />
@@ -517,12 +532,13 @@ defmodule DevilsDictionaryWeb.WordLive do
                 title="Definitions"
                 class="mt-2"
               >
-                <:meta>{count_label(@page.cards)} · one open at a time</:meta>
+                <:meta>{count_label(@card_sources, @page.cards)} · one open at a time</:meta>
                 <div class="divide-y divide-mist-950/10 dark:divide-white/10">
                   <Word.source_row
                     :for={{card, i} <- Enum.with_index(@page.cards)}
                     card={card}
                     open={i == default_open(@page.cards)}
+                    continues={continues?(@page.cards, i)}
                     trail={trail_here(@page)}
                     info={Word.info_path(@slug, @page.trail, "card:" <> card.id, @demo)}
                     demo={@demo}
@@ -583,33 +599,6 @@ defmodule DevilsDictionaryWeb.WordLive do
       close={Word.info_path(@slug, @page.trail, nil, @demo)}
       record_path={&Word.info_path(@slug, @page.trail, "#{@provenance.ref}:#{&1}", @demo)}
     />
-    """
-  end
-
-  attr :slug, :string, required: true
-  attr :choices, :list, required: true
-
-  # A slug is a label, not an identity. When one names more than one distinct
-  # lemma the page says so and offers the canonical address of each, rather than
-  # picking the first and heading the page with the wrong word — which is what
-  # `/define/c` did to `C++`.
-  defp disambiguation(assigns) do
-    ~H"""
-    <aside
-      id="disambiguation"
-      class="mb-8 rounded-lg border border-mist-950/10 p-4 text-sm/7 dark:border-white/10"
-    >
-      <p class="text-mist-500">
-        “{@slug}” is the slug of more than one word. This page shows them together; each
-        has an address of its own.
-      </p>
-      <ul class="mt-2 space-y-1">
-        <li :for={lexeme <- @choices} id={"disambiguation-#{lexeme.object_id}"}>
-          <.a navigate={~p"/words/#{lexeme.object_id}/#{@slug}"}>{lexeme.lemma}</.a>
-          <span class="text-mist-500">· {lexeme.part_of_speech}</span>
-        </li>
-      </ul>
-    </aside>
     """
   end
 

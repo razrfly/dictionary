@@ -33,9 +33,18 @@ defmodule DevilsDictionaryWeb.Word do
   etymology is 1,615 characters.
   """
   attr :headword, :map, required: true
+
+  attr :choices, :list,
+    default: [],
+    doc: "the other words this slug names, each with an address of its own"
+
+  attr :thing, :map, default: nil
+  attr :thing_info, :string, default: nil
   attr :demo, :boolean, default: false
 
   def headword(assigns) do
+    assigns = assign(assigns, :other, Map.new(assigns.choices, &{&1.object_id, &1}))
+
     ~H"""
     <div id="headword">
       <h1 class="font-display text-5xl/none text-mist-950 sm:text-6xl/none dark:text-white">
@@ -58,10 +67,59 @@ defmodule DevilsDictionaryWeb.Word do
         </span>
       </p>
 
+      <%!-- A slug is a label, not an identity: `love`, `Love` and `LoVe` are
+           three words under one address (ADR decision 10). The page shows them
+           together, and this line is where it says so — each other word is
+           its own lemma, linked to its canonical address, in the place its
+           part of speech already held. What was a boxed paragraph above the
+           rail is a run of links in a line the page already had. --%>
       <p id="parts-of-speech" class="mt-3 text-base/7 text-mist-700 sm:text-sm/7 dark:text-mist-400">
         <span :for={{lexeme, i} <- Enum.with_index(@headword.lexemes)}>
           <span :if={i > 0} aria-hidden="true">·</span>
-          <span class={[not lexeme.enriched? && "text-mist-500"]}>{lexeme.pos}</span>
+          <%= if other = other_word(@other, lexeme, @headword.lemma) do %>
+            <.link
+              id={"disambiguation-#{other.object_id}"}
+              navigate={~p"/words/#{other.object_id}/#{other.slug}"}
+              class="font-medium text-mist-950 hover:underline dark:text-white"
+            >
+              {other.lemma}
+            </.link>
+            <span class="text-mist-500">{lexeme.pos}</span>
+          <% else %>
+            <span class={[not lexeme.enriched? && "text-mist-500"]}>{lexeme.pos}</span>
+          <% end %>
+        </span>
+        <span :if={@choices != []} id="disambiguation" class="sr-only">
+          “{@headword.slug}” is the slug of more than one word; each linked word has an address of its own.
+        </span>
+      </p>
+
+      <%!-- The one-line answer, where a reader looks for one. Wikidata's
+           description of the concept the word refers to — per concept, not
+           per source, and carrying a QID — was the last thing on the page.
+           A source's first gloss would be a choice of source; this is not. --%>
+      <p
+        :if={@thing && @thing.concept.description}
+        id="quick-definition"
+        class="mt-3 max-w-[40ch] text-base/7 text-mist-950 text-pretty sm:text-sm/7 dark:text-white"
+      >
+        {@thing.concept.description}
+        <span class="whitespace-nowrap text-mist-500">
+          <.link
+            :if={@thing.wikidata_url}
+            href={@thing.wikidata_url}
+            target="_blank"
+            rel="noopener"
+            class="hover:underline"
+          >
+            Wikidata <span aria-hidden="true">↗</span>
+          </.link>
+          <.info_link
+            :if={@thing_info}
+            id="quick-definition-info"
+            path={@thing_info}
+            label="Wikidata"
+          />
         </span>
       </p>
 
@@ -89,6 +147,15 @@ defmodule DevilsDictionaryWeb.Word do
       </p>
     </div>
     """
+  end
+
+  # The other word a lexeme is, when it is one: a choice whose lemma differs
+  # from the page's. The page's own lexemes stay plain parts of speech.
+  defp other_word(other, lexeme, lemma) do
+    case other[lexeme.id] do
+      %{lemma: ^lemma} -> nil
+      choice -> choice
+    end
   end
 
   @doc """
@@ -294,14 +361,22 @@ defmodule DevilsDictionaryWeb.Word do
   """
   attr :page, :map, required: true
   attr :sources, :list, default: []
+  attr :choices, :list, default: []
+  attr :thing_info, :string, default: nil
   attr :class, :string, default: nil
   attr :demo, :boolean, default: false
 
   def rail(assigns) do
     ~H"""
     <aside id="word-rail" class={@class}>
-      <.headword headword={@page.headword} demo={@demo} />
-      <.stats page={@page} />
+      <.headword
+        headword={@page.headword}
+        choices={@choices}
+        thing={@page.thing}
+        thing_info={@thing_info}
+        demo={@demo}
+      />
+      <.stats page={@page} sources={@sources} />
 
       <details
         :if={facts?(@page.headword)}
@@ -361,19 +436,24 @@ defmodule DevilsDictionaryWeb.Word do
   came back. The kit's `stat/1` shape, at the kit's own scale.
   """
   attr :page, :map, required: true
+  attr :sources, :list, default: []
 
   def stats(assigns) do
     assigns =
-      assign(assigns, :senses, Enum.reduce(assigns.page.cards, 0, &(&2 + &1.senses)))
+      assigns
+      |> assign(:senses, Enum.reduce(assigns.page.cards, 0, &(&2 + &1.senses)))
+      # A source that filed a noun and a verb is one source with two entries,
+      # and a page that says "9 sources" over five names is miscounting.
+      |> assign(:count, length(assigns.sources))
 
     ~H"""
     <div :if={@page.cards != []} id="word-stats" class="mt-5 grid grid-cols-2 gap-2">
       <div class="rounded-xl bg-mist-950/2.5 p-4 dark:bg-white/5">
         <div class="text-2xl/8 tracking-tight tabular-nums text-mist-950 dark:text-white">
-          {length(@page.cards)}
+          {@count}
         </div>
         <p class="mt-1 text-base/6 text-mist-700 sm:text-sm/6 dark:text-mist-400">
-          {if length(@page.cards) == 1, do: "source", else: "sources"}
+          {if @count == 1, do: "source", else: "sources"}
         </p>
       </div>
       <div class="rounded-xl bg-mist-950/2.5 p-4 dark:bg-white/5">
@@ -487,6 +567,12 @@ defmodule DevilsDictionaryWeb.Word do
   """
   attr :card, :map, required: true
   attr :open, :boolean, default: false
+
+  attr :continues, :boolean,
+    default: false,
+    doc:
+      "whether the row above is the same source — then only the part of speech and the size are new"
+
   attr :trail, :list, default: []
   attr :info, :string, default: nil
   attr :demo, :boolean, default: false
@@ -504,15 +590,27 @@ defmodule DevilsDictionaryWeb.Word do
         @sample? && "border-l-2 border-dashed border-amber-600/60 pl-4"
       ]}
     >
-      <summary class="flex cursor-pointer list-none items-start justify-between gap-4 py-4 [&::-webkit-details-marker]:hidden">
+      <summary class={[
+        "flex cursor-pointer list-none items-start justify-between gap-4 [&::-webkit-details-marker]:hidden",
+        @continues && "py-3 pl-6",
+        not @continues && "py-4"
+      ]}>
         <div class="min-w-0 flex-1">
-          <h2 class={["text-base/7 font-medium", tier_class(@card.tier)]}>
+          <%!-- Johnson filed a noun and a verb for *love* and three entries
+               for *set*. His name once, and the rows that follow it say only
+               what is new about them — a screen reader still hears whose. --%>
+          <h2 :if={not @continues} class={["text-base/7 font-medium", tier_class(@card.tier)]}>
             <span aria-hidden="true" class="mr-1">{tier_glyph(@card.tier)}</span>{author(@card.source)}
             <DevilsDictionaryWeb.Demo.sample_badge :if={@sample?} />
           </h2>
-          <p class="mt-0.5 text-base/6 tabular-nums text-mist-500 sm:text-sm/6">
-            <span :if={period(@card)}>{period(@card)} · </span>
-            <span :if={@card.year}>{@card.year} · </span>
+          <p class={[
+            "text-base/6 tabular-nums text-mist-500 sm:text-sm/6",
+            not @continues && "mt-0.5",
+            @continues && "font-medium text-mist-700 dark:text-mist-400"
+          ]}>
+            <span :if={@continues} class="sr-only">{author(@card.source)} · </span>
+            <span :if={not @continues and period(@card)}>{period(@card)} · </span>
+            <span :if={not @continues and @card.year}>{@card.year} · </span>
             <span :if={@card.pos}>{@card.pos} · </span>
             {size(@card)}
           </p>
