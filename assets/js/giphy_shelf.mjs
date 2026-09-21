@@ -47,7 +47,10 @@ export default {
     this.onMore = () => this.load()
     this.more.addEventListener('click', this.onMore)
     this.motion = matchMedia('(prefers-reduced-motion: reduce)')
-    this.onMotion = () => { for (const button of this.list.querySelectorAll('[aria-pressed="true"]')) button.click() }
+    this.onMotion = () => {
+      for (const button of this.list.querySelectorAll('[aria-pressed="true"]')) button.click()
+      if (this.motion.matches) for (const image of this.list.querySelectorAll('img[data-still]')) image.src = image.dataset.still
+    }
     this.motion.addEventListener('change', this.onMotion)
     this.load()
   },
@@ -99,6 +102,7 @@ export default {
     li.className = 'w-24 shrink-0 snap-start space-y-2 sm:w-28'
     const image = document.createElement('img')
     image.src = item.still
+    image.dataset.still = item.still
     image.alt = item.title
     image.width = 112
     image.height = 112
@@ -110,12 +114,38 @@ export default {
     play.textContent = 'Play'
     play.setAttribute('aria-label', `Play ${item.title}`)
     play.setAttribute('aria-pressed', 'false')
+    // Motion on intent (#131, the GIF review's version B). The still is what
+    // loads; the animated rendition plays while the pointer or the focus is
+    // on the frame and stops when it leaves, so one frame moves at a time and
+    // a rendition is fetched only for a GIF the reader reached for. Under
+    // prefers-reduced-motion the frame never swaps on hover — the reader who
+    // wants motion still has Play, which is deliberate and reversible. Play
+    // is the sticky state: a pressed frame keeps moving when the pointer
+    // leaves, and hover never unpresses it.
+    const pressed = () => play.getAttribute('aria-pressed') === 'true'
+    const show = playing => { image.src = playing ? item.animated : item.still }
     play.addEventListener('click', () => {
-      const playing = play.getAttribute('aria-pressed') !== 'true'
-      image.src = playing ? item.animated : item.still
+      const playing = !pressed()
+      show(playing)
       play.setAttribute('aria-pressed', String(playing))
       play.setAttribute('aria-label', `${playing ? 'Pause' : 'Play'} ${item.title}`)
       play.textContent = playing ? 'Pause' : 'Play'
+    })
+    // Pointer and focus are two ways of reaching for the same frame, so they
+    // are counted separately and the frame moves while *either* holds it: a
+    // reader who hovers a frame and then tabs into its Play button does not
+    // lose the animation when the mouse drifts away.
+    let hovering = false
+    let focused = false
+    const sync = () => { if (!pressed()) show((hovering || focused) && !this.motion.matches) }
+    li.addEventListener('mouseenter', () => { hovering = true; sync() })
+    li.addEventListener('mouseleave', () => { hovering = false; sync() })
+    li.addEventListener('focusin', () => { focused = true; sync() })
+    // Focus moving between the frame's own controls has not left the frame.
+    li.addEventListener('focusout', event => {
+      if (event?.relatedTarget && li.contains?.(event.relatedTarget)) return
+      focused = false
+      sync()
     })
     image.addEventListener('error', () => {
       image.hidden = true

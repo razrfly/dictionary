@@ -1,0 +1,16 @@
+/* Input for the sketch stylesheet.
+
+   The sketches are static HTML, so they cannot use the app's own built
+   stylesheet: Tailwind emits only the classes it finds in the sources it is
+   told to scan, and `assets/css/app.css` scans `lib/devils_dictionary_web`
+   and nothing else. A sketch that introduces one class the app does not
+   already use would render unstyled.
+
+   So this imports the app's real stylesheet — the same `@theme` tokens, the
+   same heroicons plugin, the same dark-mode variant — and adds this directory
+   as one more source. Everything the mockups render is the app's visual
+   language by construction; nothing here redefines a token.
+
+   Rebuild with docs/sketches/word-page/build.sh. */
+@import "../../../assets/css/app.css";
+@source "./";

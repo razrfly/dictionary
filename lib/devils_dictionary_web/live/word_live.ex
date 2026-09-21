@@ -433,6 +433,41 @@ defmodule DevilsDictionaryWeb.WordLive do
   defp title(%{headword: %{lemma: nil}}, slug), do: "#{slug} — no such word"
   defp title(%{headword: %{lemma: lemma}}, _slug), do: lemma
 
+  # "5 sources · 9 entries": a source that filed a noun and a verb is one
+  # source, and the entries are counted as what they are.
+  defp count_label(sources, cards) do
+    s = length(sources)
+    e = length(cards)
+    base = "#{s} #{if s == 1, do: "source", else: "sources"}"
+    if e > s, do: "#{base} · #{e} entries", else: base
+  end
+
+  # A row continues the one above when they are the same source — the tiers
+  # sort a source's parts of speech together, so Johnson's verb follows his
+  # noun and needs no second name.
+  defp continues?(cards, i) when i > 0 do
+    Enum.at(cards, i - 1).source.slug == Enum.at(cards, i).source.slug
+  end
+
+  defp continues?(_cards, _i), do: false
+
+  # Which source the page opens on.
+  #
+  # The first *reference* source, not the first card. A page that opens on its
+  # oldest source is a historically-ordered dictionary, and that is the
+  # worst-scoring pattern in the literature — McCreary 2008 scored one at 3.96
+  # against a sense-ordered dictionary's 7.04, and on one word its readers did
+  # worse than readers with no dictionary at all. Johnson and Bierce keep their
+  # place at the top of the list, where the tiers put them and where a reader
+  # can see them; what they do not get is the open row, because whatever is
+  # open is what gets read (#131, `docs/discovery/issue-131-how-others-do-it.md`).
+  #
+  # A page whose every source is authored — `logomachy` before WordNet reached
+  # it — opens on the first one it has rather than on nothing.
+  defp default_open(cards) do
+    Enum.find_index(cards, &(&1.tier != :aristocracy)) || 0
+  end
+
   defp word_path(%{headword: %{lemma: lemma, lexemes: [lexeme | _]}}),
     do: ~p"/words/#{lexeme.id}/#{DevilsDictionary.Registry.Lexeme.slug(lemma)}"
 
@@ -454,49 +489,105 @@ defmodule DevilsDictionaryWeb.WordLive do
         <%= if @page.headword.lexemes == [] do %>
           <.miss slug={@slug} suggestions={@suggestions} demo={@demo} />
         <% else %>
-          <.disambiguation :if={@choices != []} slug={@slug} choices={@choices} />
-
-          <Word.headword headword={@page.headword} demo={@demo} />
-
-          <Word.source_line sources={@card_sources} />
-
-          <div :if={@page.cards != []} class="mt-8 space-y-6">
-            <Word.source_card
-              :for={card <- @page.cards}
-              card={card}
-              trail={trail_here(@page)}
-              info={Word.info_path(@slug, @page.trail, "card:" <> card.id, @demo)}
+          <%!-- #131 Phase 2. What the page knows the size of goes in the rail;
+               what a source decides the size of goes in the column beside it.
+               The rail is not sticky: it carries facts rather than navigation,
+               and the field pins a rail only when the rail is navigation. --%>
+          <%!-- A grid, so the document order can be the reading order while the
+               rail still sits beside the definitions.
+               
+               The related words belong *under* the rail on a desktop and
+               *after* the definitions everywhere — they are the way out of the
+               word, not part of it. In the source they come last; the grid
+               puts them back in the first column. Placement, not a second
+               copy: two copies is two of every chip id, which LiveView
+               refuses outright. --%>
+          <%!-- `grid-rows-[auto_1fr]` is load-bearing. The column beside the rail
+               spans both rows, and a spanning item's height is shared *equally*
+               between `auto` rows — so without it row one stretched to half the
+               stream and the related words sat a screen below the rail. Row
+               one is the rail's height; the rest is row two's. --%>
+          <div class="lg:grid lg:grid-cols-[22.5rem_minmax(0,1fr)] lg:grid-rows-[auto_1fr] lg:gap-x-12">
+            <Word.rail
+              page={@page}
+              sources={@card_sources}
+              choices={@choices}
+              thing_info={@page.thing && Word.info_path(@slug, @page.trail, "thing", @demo)}
+              class="lg:col-start-1 lg:row-start-1"
               demo={@demo}
             />
+
+            <div class="min-w-0 max-lg:mt-8 lg:col-start-2 lg:row-span-2 lg:row-start-1">
+              <%!-- `phx-update="ignore"` because `open` is DOM state the reader
+                   owns: without it, a discovery result arriving would re-render
+                   these rows and snap the reader's open source shut. Nothing
+                   here changes after the first render *for this word in this
+                   mode*, which is exactly what the id says — so a different
+                   word, or the demo banner going up, replaces the element
+                   rather than patching it. The `object_id` is in the id because
+                   a slug is not an identity: `/define/c` and `/words/<C++>/c`
+                   are two words under one slug, and the id has to tell them
+                   apart or the ignored rows would outlive the word. `any` is
+                   what `/define/:slug` means — every word the slug reaches —
+                   and it is a segment rather than a gap so the id reads. --%>
+              <.slab
+                :if={@page.cards != []}
+                id={"definitions-#{@object_id || "any"}-#{@slug}-#{@demo}"}
+                phx-update="ignore"
+                title="Definitions"
+                class="mt-2"
+              >
+                <:meta>{count_label(@card_sources, @page.cards)} · one open at a time</:meta>
+                <div class="divide-y divide-mist-950/10 dark:divide-white/10">
+                  <Word.source_row
+                    :for={{card, i} <- Enum.with_index(@page.cards)}
+                    card={card}
+                    open={i == default_open(@page.cards)}
+                    continues={continues?(@page.cards, i)}
+                    trail={trail_here(@page)}
+                    info={Word.info_path(@slug, @page.trail, "card:" <> card.id, @demo)}
+                    demo={@demo}
+                  />
+                </div>
+              </.slab>
+
+              <Word.bare_row :if={@page.cards == []} lemma={@page.headword.lemma} />
+
+              <%!-- One block for everything found rather than written, the GIFs
+                   among it (#111 L6 — the one piece of #109 K10 that never
+                   landed). The GIF shelf keeps its own hook and transport;
+                   what it loses is the second chrome 400 px below the first. --%>
+              <Culture.section
+                :if={@cultures != %{} or @giphy}
+                states={@cultures}
+                giphy={@giphy}
+                return_path={word_path(@page)}
+                contributor={@contributor}
+              />
+
+              <Thing.thing_panel
+                :if={@page.thing}
+                thing={@page.thing}
+                trail={trail_here(@page)}
+                info={Word.info_path(@slug, @page.trail, "thing", @demo)}
+                demo={@demo}
+              />
+
+              <Demo.evidence_wall :if={@demo} evidence={@evidence} />
+            </div>
+
+            <div
+              :if={@page.related != []}
+              class="mt-8 lg:col-start-1 lg:row-start-2 lg:mt-5 lg:border-t lg:border-mist-950/10 lg:pt-4 dark:lg:border-white/10"
+            >
+              <Word.related_block
+                :for={related <- @page.related}
+                related={related}
+                trail={trail_here(@page)}
+                demo={@demo}
+              />
+            </div>
           </div>
-
-          <Word.bare_row :if={@page.cards == []} lemma={@page.headword.lemma} />
-
-          <Culture.section
-            :if={@cultures != %{}}
-            states={@cultures}
-            return_path={word_path(@page)}
-            contributor={@contributor}
-          />
-
-          <DevilsDictionaryWeb.GiphyShelf.section :if={@giphy} config={@giphy} />
-
-          <Word.related_block
-            :for={related <- @page.related}
-            related={related}
-            trail={trail_here(@page)}
-            demo={@demo}
-          />
-
-          <Thing.thing_panel
-            :if={@page.thing}
-            thing={@page.thing}
-            trail={trail_here(@page)}
-            info={Word.info_path(@slug, @page.trail, "thing", @demo)}
-            demo={@demo}
-          />
-
-          <Demo.evidence_wall :if={@demo} evidence={@evidence} />
         <% end %>
       </.container>
     </Layouts.app>
@@ -513,33 +604,6 @@ defmodule DevilsDictionaryWeb.WordLive do
       close={Word.info_path(@slug, @page.trail, nil, @demo)}
       record_path={&Word.info_path(@slug, @page.trail, "#{@provenance.ref}:#{&1}", @demo)}
     />
-    """
-  end
-
-  attr :slug, :string, required: true
-  attr :choices, :list, required: true
-
-  # A slug is a label, not an identity. When one names more than one distinct
-  # lemma the page says so and offers the canonical address of each, rather than
-  # picking the first and heading the page with the wrong word — which is what
-  # `/define/c` did to `C++`.
-  defp disambiguation(assigns) do
-    ~H"""
-    <aside
-      id="disambiguation"
-      class="mb-8 rounded-lg border border-mist-950/10 p-4 text-sm/7 dark:border-white/10"
-    >
-      <p class="text-mist-500">
-        “{@slug}” is the slug of more than one word. This page shows them together; each
-        has an address of its own.
-      </p>
-      <ul class="mt-2 space-y-1">
-        <li :for={lexeme <- @choices} id={"disambiguation-#{lexeme.object_id}"}>
-          <.a navigate={~p"/words/#{lexeme.object_id}/#{@slug}"}>{lexeme.lemma}</.a>
-          <span class="text-mist-500">· {lexeme.part_of_speech}</span>
-        </li>
-      </ul>
-    </aside>
     """
   end
 

@@ -1,13 +1,20 @@
 # Sketches
 
 Migrations and modules written to answer a question, proven, and then taken out
-of the path where they would run.
+of the path where they would run — and, since #131, design sketches of pages
+that do not exist yet.
+
+## Design
+
+| Directory | What it holds |
+|---|---|
+| [`word-page/`](word-page/) | #131 Phase 1 — three whole-page layouts for `/define/:slug` as static HTML against the app's own tokens, with the hard cases and the GIF-shelf versions beside them. Screenshots and the write-up are under [`../discovery/`](../discovery/) |
+
+## Retired migrations
 
 Nothing here is loaded, compiled or run. `.exs` outside `priv/repo/migrations/`
 is invisible to `mix ecto.migrate`, and `mix precommit` — which migrates the
 test database — cannot reach it either.
-
-## Retired
 
 | File | Question it answered | Why it is gone |
 |---|---|---|

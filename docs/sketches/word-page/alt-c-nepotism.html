@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light" data-theme-source="user">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>C · nepotism · word-page sketch</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="./sketch.css" />
+    <script>
+      // The app's own theme bootstrap (root.html.heex), minus the toggle: a
+      // sketch is opened from the filesystem and has to honour ?theme=dark so
+      // a reviewer can see both themes without a server.
+      (() => {
+        const q = new URLSearchParams(location.search).get("theme");
+        const system = () => matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        document.documentElement.setAttribute("data-theme", q || system());
+      })();
+    </script>
+  </head>
+  <body class="font-sans text-mist-950 antialiased dark:text-white">
+    <nav id="account-navigation" aria-label="Account" class="relative z-20 border-b border-mist-950/5 bg-mist-100 dark:border-white/10 dark:bg-mist-950">
+      <div class="mx-auto flex h-10 max-w-7xl items-center justify-end gap-5 px-6 text-sm/6 text-mist-600 lg:px-10 dark:text-mist-400">
+        <a href="#" class="font-medium text-mist-950 hover:underline dark:text-white">Register</a>
+        <a href="#" class="font-medium text-mist-950 hover:underline dark:text-white">Log in</a>
+      </div>
+    </nav>
+    <header class="sticky top-0 z-10 bg-mist-100 dark:bg-mist-950">
+      <nav>
+        <div class="mx-auto flex h-(--scroll-padding-top) max-w-7xl items-center gap-4 px-6 lg:px-10">
+          <div class="flex flex-1 items-center gap-12">
+            <div class="flex items-center">
+              <a href="#" class="font-display text-2xl/8 text-mist-950 dark:text-white">wordhoard</a>
+            </div>
+          </div>
+          <div class="flex flex-1 items-center justify-end gap-4">
+            <div class="flex shrink-0 items-center gap-5">
+              <div class="relative flex flex-row items-center rounded-full bg-mist-950/10 dark:bg-white/10">
+                <div class="absolute left-0 h-full w-1/3 rounded-full bg-white transition-[left] [[data-theme=dark]_&amp;]:left-2/3 [[data-theme=light]_&amp;]:left-1/3 dark:bg-mist-700"></div>
+                <span class="flex w-1/3 p-2"><span class="size-4 opacity-75 hero-computer-desktop-micro"></span></span>
+                <span class="flex w-1/3 p-2"><span class="size-4 opacity-75 hero-sun-micro"></span></span>
+                <span class="flex w-1/3 p-2"><span class="size-4 opacity-75 hero-moon-micro"></span></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+    <div id="sketch-note" class="border-b border-amber-600/30 bg-amber-50/60 dark:bg-amber-950/20">
+      <div class="mx-auto w-full max-w-2xl px-6 py-2 text-sm/6 text-amber-800 md:max-w-3xl lg:max-w-7xl lg:px-10 dark:text-amber-300">
+        Sketch, not the app · Alternative C — the word in a rail. Facts about the word in a column of their own; one row per source; the content stream carries the rest.
+      </div>
+    </div>
+    <main class="isolate overflow-clip"><div class="mx-auto w-full max-w-2xl px-6 pb-10 md:max-w-3xl lg:max-w-7xl lg:px-10"><div class="pt-8 lg:flex lg:gap-12">
+  <aside id="word-rail" class="lg:sticky lg:top-[calc(var(--scroll-padding-top)+--spacing(6))] lg:w-72 lg:shrink-0">
+  <h1 class="font-display text-5xl/none text-mist-950 sm:text-6xl/none dark:text-white">nepotism</h1>
+  <p id="pronunciations" class="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-lg/7 text-mist-500">
+  <span class="font-mono">/ˈnep.ə.tə.zəm/</span>
+  <span class="font-mono">/ˈnep.ə.tɪ.zəm/</span>
+  <span class="font-mono">/ˈnɛp.ə.tɪ.zəm/</span>
+  
+</p>
+  <p id="parts-of-speech" class="mt-3 text-base/7 text-mist-700 sm:text-sm/7 dark:text-mist-400">noun</p>
+  <details id="about-the-word" class="mt-4 border-t border-mist-950/10 pt-3 dark:border-white/10">
+    <summary class="w-fit cursor-pointer text-base/7 font-medium text-mist-700 sm:text-sm/7 dark:text-mist-400">About the word</summary>
+    <div class="pb-1">
+      <p id="forms" class="mt-2 text-base/7 text-mist-500 sm:text-sm/7">
+  <span class="text-mist-700 dark:text-mist-400">forms</span>
+  nepotisms
+</p>
+      <details id="etymology-0" class="mt-2 max-w-2xl">
+  <summary class="cursor-pointer list-none text-base/7 text-mist-500 sm:text-sm/7 [&::-webkit-details-marker]:hidden">
+    <span class="text-mist-700 dark:text-mist-400">origin (noun)</span> <span class="line-clamp-1">Borrowed from French népotisme, from Italian nepotismo, from Latin nepōs (“nephew”), a reference to the practice of popes appointing relatives (most often nephews) as cardinals (cardinal-nephew) during the Middle Ages and Renaissance.</span>
+    <span class="text-mist-400 underline underline-offset-4">the rest of the origin · 33 characters</span>
+  </summary>
+  <p class="mt-2 text-base/7 text-mist-500 sm:text-sm/7"><span class="text-mist-400">— Wiktionary (English) via Kaikki</span></p>
+</details>
+      
+      
+    </div>
+  </details>
+  <nav aria-label="Sources" class="mt-4 border-t border-mist-950/10 pt-3 dark:border-white/10">
+    <p id="sources" class="text-base/7 text-mist-500 sm:text-sm/7">Defined here by 4 sources</p>
+    <ul role="list" class="mt-2 space-y-1 text-base/7 sm:text-sm/7">
+      <li><a href="#card-johnson" class="flex items-baseline gap-2 text-amber-700 dark:text-amber-400 hover:underline"><span aria-hidden="true">👑</span><span class="min-w-0">Samuel Johnson · noun</span></a></li>
+      <li><a href="#card-bierce" class="flex items-baseline gap-2 text-amber-700 dark:text-amber-400 hover:underline"><span aria-hidden="true">👑</span><span class="min-w-0">Ambrose Bierce · noun</span></a></li>
+      <li><a href="#card-wordnet" class="flex items-baseline gap-2 text-mist-500 hover:underline"><span aria-hidden="true">📚</span><span class="min-w-0">Open English WordNet 2025 · noun</span></a></li>
+      <li><a href="#card-wiktionary" class="flex items-baseline gap-2 text-mist-500 hover:underline"><span aria-hidden="true">📚</span><span class="min-w-0">Wiktionary (English) via Kaikki · noun</span></a></li>
+    </ul>
+  </nav>
+  <div class="mt-4 border-t border-mist-950/10 pt-3 max-lg:hidden dark:border-white/10"><section id="related-noun-rail" class="">
+  <h2 class="text-base/8 font-medium text-mist-950 dark:text-white">Related words <span class="font-normal text-mist-500">· noun</span></h2>
+  <div class="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+    <span class="w-20 shrink-0 text-base/7 text-mist-500 sm:text-sm/7">similar</span>
+    <a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">cronyism</a>
+    
+  </div><div class="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+    <span class="w-20 shrink-0 text-base/7 text-mist-500 sm:text-sm/7">family</span>
+    <a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">antinepotism</a><a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">nepotism baby</a><a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">nepotism friend</a><a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">nepotistic</a><a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">nepotistical</a>
+    
+  </div>
+</section></div>
+</aside>
+  <div class="min-w-0 flex-1 max-lg:mt-8">
+    <nav id="section-nav" aria-label="Sections" class="-mx-6 border-b border-mist-950/10 bg-mist-100/95 px-6 backdrop-blur lg:-mx-10 lg:px-10 dark:border-white/10 dark:bg-mist-950/95">
+  <ul role="list" class="flex gap-5 overflow-x-auto py-2.5 text-base/7 whitespace-nowrap sm:text-sm/7">
+    <li class="text-mist-950 dark:text-white"><a href="#definitions" class="hover:text-mist-950 dark:hover:text-white">Definitions <span class="tabular-nums text-mist-400">4</span></a></li>
+    <li class="text-mist-500"><a href="#in-culture" class="hover:text-mist-950 dark:hover:text-white">Out in the world</a></li>
+    <li class="text-mist-500"><a href="#related-noun-rail" class="hover:text-mist-950 dark:hover:text-white max-lg:hidden">Related</a><a href="#related-noun" class="hover:text-mist-950 dark:hover:text-white lg:hidden">Related</a></li>
+  </ul>
+</nav>
+    
+    <section id="definitions" class="mt-6">
+      <div class="divide-y divide-mist-950/10 border-y border-mist-950/10 dark:divide-white/10 dark:border-white/10">
+        <details id="card-johnson" class="group/row py-4" open>
+  <summary class="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+    <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+      <h3 class="text-base/8 font-medium text-mist-700 dark:text-mist-400"><span aria-hidden="true" class="mr-1">👑</span>Samuel Johnson<span class="font-normal text-mist-500"> · 1755</span><span class="font-normal text-mist-500"> · noun</span></h3>
+      <span class="text-base/7 text-mist-500 tabular-nums sm:text-sm/7">292 characters <span class="underline underline-offset-4 group-open/row:hidden">open</span><span class="underline underline-offset-4 not-group-open/row:hidden">close</span></span>
+    </div>
+    <p class="mt-1 line-clamp-2 max-w-[68ch] text-base/7 text-mist-500 group-open/row:hidden sm:text-sm/7">Fondness for nephews.
+To this humour of nepotism Rome owes its present splendor;
+for it would have been impossible to have furnished out so
+many glorious palace</p>
+  </summary>
+  <div class="mt-2">
+    <div id="card-johnson-entry-0" class="mt-4 max-w-[68ch] space-y-4 text-base/7 text-mist-700 sm:text-sm/7 dark:text-mist-400 [&_a]:font-semibold [&_a]:text-mist-950 [&_a]:underline [&_a]:underline-offset-4 dark:[&_a]:text-white [&_h2]:text-base/8 [&_h2]:font-medium [&_h2]:text-mist-950 [&_h2]:not-first:mt-8 dark:[&_h2]:text-white [&_li]:pl-2 [&_ol]:list-decimal [&_ol]:pl-6 [&_strong]:font-semibold [&_strong]:text-mist-950 dark:[&_strong]:text-white [&_ul]:list-[square] [&_ul]:pl-6 [&_ul]:marker:text-mist-400 dark:[&_ul]:marker:text-mist-600 [&_blockquote]:border-l-2 [&_blockquote]:border-mist-300 [&_blockquote]:pl-4 [&_blockquote]:italic dark:[&_blockquote]:border-mist-700">
+  <p>Fondness for nephews.</p>
+<blockquote><p>To this humour of nepotism Rome owes its present splendor;<br>
+for it would have been impossible to have furnished out so<br>
+many glorious palaces with such a profusion of pictures and<br>
+statues, had not the riches of the people fallen into different<br>
+families. Addison on Italy.</p></blockquote>
+</div>
+    
+    <p class="mt-3 text-base/7 sm:text-sm/7"><a href="https://leme.library.utoronto.ca/lexicons/1345/" class="text-mist-500 underline underline-offset-4 hover:text-mist-950 dark:hover:text-white">Read this at Samuel Johnson ↗</a></p>
+  </div>
+</details>
+        <details id="card-bierce" class="group/row py-4" open>
+  <summary class="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+    <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+      <h3 class="text-base/8 font-medium text-mist-700 dark:text-mist-400"><span aria-hidden="true" class="mr-1">👑</span>Ambrose Bierce<span class="font-normal text-mist-500"> · 1911</span><span class="font-normal text-mist-500"> · noun</span></h3>
+      <span class="text-base/7 text-mist-500 tabular-nums sm:text-sm/7">64 characters <span class="underline underline-offset-4 group-open/row:hidden">open</span><span class="underline underline-offset-4 not-group-open/row:hidden">close</span></span>
+    </div>
+    <p class="mt-1 line-clamp-2 max-w-[68ch] text-base/7 text-mist-500 group-open/row:hidden sm:text-sm/7">Appointing your grandmother to office for the good of the party.</p>
+  </summary>
+  <div class="mt-2">
+    <div id="card-bierce-entry-0" class="mt-4 max-w-[68ch] space-y-4 text-base/7 text-mist-700 sm:text-sm/7 dark:text-mist-400 [&_a]:font-semibold [&_a]:text-mist-950 [&_a]:underline [&_a]:underline-offset-4 dark:[&_a]:text-white [&_h2]:text-base/8 [&_h2]:font-medium [&_h2]:text-mist-950 [&_h2]:not-first:mt-8 dark:[&_h2]:text-white [&_li]:pl-2 [&_ol]:list-decimal [&_ol]:pl-6 [&_strong]:font-semibold [&_strong]:text-mist-950 dark:[&_strong]:text-white [&_ul]:list-[square] [&_ul]:pl-6 [&_ul]:marker:text-mist-400 dark:[&_ul]:marker:text-mist-600 [&_blockquote]:border-l-2 [&_blockquote]:border-mist-300 [&_blockquote]:pl-4 [&_blockquote]:italic dark:[&_blockquote]:border-mist-700">
+  <p>Appointing your grandmother to office for the good of the party.</p>
+</div>
+    
+    <p class="mt-3 text-base/7 sm:text-sm/7"><a href="https://www.gutenberg.org/files/972/972-h/972-h.htm#link2H_4_0016" class="text-mist-500 underline underline-offset-4 hover:text-mist-950 dark:hover:text-white">Read this at Ambrose Bierce ↗</a></p>
+  </div>
+</details>
+        <details id="card-wordnet" class="group/row py-4">
+  <summary class="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+    <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+      <h3 class="text-base/8 font-medium text-mist-700 dark:text-mist-400"><span aria-hidden="true" class="mr-1">📚</span>Open English WordNet 2025<span class="font-normal text-mist-500"> · 2025</span><span class="font-normal text-mist-500"> · noun</span></h3>
+      <span class="text-base/7 text-mist-500 tabular-nums sm:text-sm/7">1 sense <span class="underline underline-offset-4 group-open/row:hidden">open</span><span class="underline underline-offset-4 not-group-open/row:hidden">close</span></span>
+    </div>
+    <p class="mt-1 line-clamp-2 max-w-[68ch] text-base/7 text-mist-500 group-open/row:hidden sm:text-sm/7">favoritism shown to relatives or close friends by those in power (as by giving them jobs)</p>
+  </summary>
+  <div class="mt-2">
+    
+    <div id="card-wordnet-group-0" class="mt-4">
+  <ol role="list" class="space-y-1 text-base/7 text-mist-700 sm:text-sm/7 dark:text-mist-400"><li class="flex gap-3">
+      <span class="shrink-0 text-mist-400">●</span>
+      <div class="min-w-0">
+        <span>favoritism shown to relatives or close friends by those in power (as by giving them jobs)</span>
+        
+      </div>
+    </li></ol>
+  <p class="mt-2 flex flex-wrap items-center gap-x-2 text-base/7 sm:text-sm/7"><span class="text-mist-500">broader</span><a href="#" class="text-mist-500 hover:underline">discrimination</a><span aria-hidden="true" class="text-mist-400">›</span><a href="#" class="text-mist-500 hover:underline">social control</a><span aria-hidden="true" class="text-mist-400">›</span><a href="#" class="text-mist-500 hover:underline">group action</a><span aria-hidden="true" class="text-mist-400">›</span><a href="#" class="text-mist-500 hover:underline">action</a><span aria-hidden="true" class="text-mist-400">›</span><a href="#" class="text-mist-500 hover:underline">act</a><span aria-hidden="true" class="text-mist-400">›</span><a href="#" class="text-mist-500 hover:underline">event</a><span aria-hidden="true" class="text-mist-400">›</span><a href="#" class="text-mist-500 hover:underline">abstraction</a><span aria-hidden="true" class="text-mist-400">›</span><a href="#" class="text-mist-500 hover:underline">entity</a></p>
+</div>
+    <p class="mt-3 text-base/7 sm:text-sm/7"><a href="https://en-word.net/id/oewn-01157387-n" class="text-mist-500 underline underline-offset-4 hover:text-mist-950 dark:hover:text-white">Read this at Open English WordNet 2025 ↗</a></p>
+  </div>
+</details>
+        <details id="card-wiktionary" class="group/row py-4">
+  <summary class="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+    <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+      <h3 class="text-base/8 font-medium text-mist-700 dark:text-mist-400"><span aria-hidden="true" class="mr-1">📚</span>Wiktionary (English) via Kaikki<span class="font-normal text-mist-500"> · 2026</span><span class="font-normal text-mist-500"> · noun</span></h3>
+      <span class="text-base/7 text-mist-500 tabular-nums sm:text-sm/7">1 sense <span class="underline underline-offset-4 group-open/row:hidden">open</span><span class="underline underline-offset-4 not-group-open/row:hidden">close</span></span>
+    </div>
+    <p class="mt-1 line-clamp-2 max-w-[68ch] text-base/7 text-mist-500 group-open/row:hidden sm:text-sm/7">The favoring of relatives (most strictly) or also personal friends (more broadly) because of their relationship rather than because of their abilities. (countable, uncountable)</p>
+  </summary>
+  <div class="mt-2">
+    
+    <div id="card-wiktionary-group-0" class="mt-4">
+  <ol role="list" class="space-y-1 text-base/7 text-mist-700 sm:text-sm/7 dark:text-mist-400"><li class="flex gap-3">
+      <span class="shrink-0 text-mist-400">1</span>
+      <div class="min-w-0">
+        <span>The favoring of relatives (most strictly) or also personal friends (more broadly) because of their relationship rather than because of their abilities. (countable, uncountable)</span>
+        <div class="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+    <span class="w-20 shrink-0 text-base/7 text-mist-500 sm:text-sm/7">opposite</span>
+    <a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">meritocracy</a>
+    
+  </div>
+      </div>
+    </li></ol>
+  
+</div>
+    <p class="mt-3 text-base/7 sm:text-sm/7"><a href="https://en.wiktionary.org/wiki/nepotism#English" class="text-mist-500 underline underline-offset-4 hover:text-mist-950 dark:hover:text-white">Read this at Wiktionary (English) via Kaikki ↗</a></p>
+  </div>
+</details>
+      </div>
+    </section>
+    <section id="in-culture" aria-label="Related discoveries" class="group mt-8 border-y border-mist-950/10 py-6 dark:border-white/10">
+  <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+    <h2 class="font-display text-[2rem]/10 tracking-tight text-mist-950 dark:text-white">Out in the world</h2>
+    <p class="text-base/7 text-mist-500 sm:text-sm/7">35 things · every match says why it is here</p>
+  </div>
+  <input type="radio" name="culture-tab" id="culture-tab-film" class="sr-only" checked />
+  <input type="radio" name="culture-tab" id="culture-tab-text" class="sr-only" />
+  <input type="radio" name="culture-tab" id="culture-tab-image" class="sr-only" />
+  <input type="radio" name="culture-tab" id="culture-tab-gif" class="sr-only" />
+  <div class="-mx-6 mt-4 flex gap-2 overflow-x-auto px-6 pb-1 whitespace-nowrap lg:-mx-10 lg:px-10">
+    <label for="culture-tab-film" class="cursor-pointer rounded-full bg-mist-950/5 px-3 py-1 text-base/7 text-mist-700 hover:bg-mist-950/10 sm:text-sm/7 dark:bg-white/10 dark:text-mist-400 dark:hover:bg-white/15 group-has-[#culture-tab-film:checked]:bg-mist-950 group-has-[#culture-tab-film:checked]:text-white dark:group-has-[#culture-tab-film:checked]:bg-mist-300 dark:group-has-[#culture-tab-film:checked]:text-mist-950">Films <span class="tabular-nums opacity-70">5</span></label>
+    <label for="culture-tab-text" class="cursor-pointer rounded-full bg-mist-950/5 px-3 py-1 text-base/7 text-mist-700 hover:bg-mist-950/10 sm:text-sm/7 dark:bg-white/10 dark:text-mist-400 dark:hover:bg-white/15 group-has-[#culture-tab-text:checked]:bg-mist-950 group-has-[#culture-tab-text:checked]:text-white dark:group-has-[#culture-tab-text:checked]:bg-mist-300 dark:group-has-[#culture-tab-text:checked]:text-mist-950">Texts <span class="tabular-nums opacity-70">10</span></label>
+    <label for="culture-tab-image" class="cursor-pointer rounded-full bg-mist-950/5 px-3 py-1 text-base/7 text-mist-700 hover:bg-mist-950/10 sm:text-sm/7 dark:bg-white/10 dark:text-mist-400 dark:hover:bg-white/15 group-has-[#culture-tab-image:checked]:bg-mist-950 group-has-[#culture-tab-image:checked]:text-white dark:group-has-[#culture-tab-image:checked]:bg-mist-300 dark:group-has-[#culture-tab-image:checked]:text-mist-950">Images <span class="tabular-nums opacity-70">12</span></label>
+    <label for="culture-tab-gif" class="cursor-pointer rounded-full bg-mist-950/5 px-3 py-1 text-base/7 text-mist-700 hover:bg-mist-950/10 sm:text-sm/7 dark:bg-white/10 dark:text-mist-400 dark:hover:bg-white/15 group-has-[#culture-tab-gif:checked]:bg-mist-950 group-has-[#culture-tab-gif:checked]:text-white dark:group-has-[#culture-tab-gif:checked]:bg-mist-300 dark:group-has-[#culture-tab-gif:checked]:text-mist-950">GIFs <span class="tabular-nums opacity-70">8</span></label>
+  </div>
+  <div class="hidden pt-4 group-has-[#culture-tab-film:checked]:block"><div id="culture-shelf-film" class="space-y-3">
+  <div class="flex flex-wrap items-baseline justify-between gap-2">
+    <h2 class="font-display text-xl text-balance text-mist-950 dark:text-white">Films</h2>
+    <p class="flex items-baseline gap-2 text-base text-mist-500 sm:text-sm">CineGraph</p>
+  </div>
+  <ul role="list" tabindex="0" aria-label="Films matches; scroll for more" class="flex gap-5 overflow-x-auto overscroll-x-contain pb-3 focus-visible:outline-2 focus-visible:outline-offset-2">
+    <li class="shrink-0 w-24 sm:w-28"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <a href="#" class="rounded-sm"><div class="w-full shrink-0 overflow-hidden rounded-sm bg-mist-950/5 transition-transform duration-200 group-hover:-translate-y-0.5 dark:bg-white/5 aspect-[2/3]"><img src="https://image.tmdb.org/t/p/w342/98NWjzJC60QndcXtTwawJerN65x.jpg" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" /></div></a>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-950 sm:text-sm dark:text-white"><a href="#" class="group-hover:underline">Nepotism, Baby!</a></h3>
+    <p class="text-base tabular-nums text-mist-500 sm:text-sm">2024 · Film</p>
+    
+    
+    <a href="https://cinegraph.org/movies/nepotism-baby-2024" class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 hover:text-mist-950 hover:underline dark:hover:text-white">Source ↗</a>
+  </div>
+</div></li>
+    <li class="shrink-0 w-24 sm:w-28"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <a href="#" class="rounded-sm"><div class="w-full shrink-0 overflow-hidden rounded-sm bg-mist-950/5 transition-transform duration-200 group-hover:-translate-y-0.5 dark:bg-white/5 aspect-[2/3]"><img src="https://image.tmdb.org/t/p/w342/cQKyNm0Nz6KWiDBQF9w4aZAmOfC.jpg" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" /></div></a>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-950 sm:text-sm dark:text-white"><a href="#" class="group-hover:underline">Infinity Pool</a></h3>
+    <p class="text-base tabular-nums text-mist-500 sm:text-sm">2023 · Film</p>
+    
+    
+    <a href="https://cinegraph.org/movies/infinity-pool-2023" class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 hover:text-mist-950 hover:underline dark:hover:text-white">Source ↗</a>
+  </div>
+</div></li>
+    <li class="shrink-0 w-24 sm:w-28"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <a href="#" class="rounded-sm"><div class="w-full shrink-0 overflow-hidden rounded-sm bg-mist-950/5 transition-transform duration-200 group-hover:-translate-y-0.5 dark:bg-white/5 aspect-[2/3]"><img src="https://image.tmdb.org/t/p/w342/aoMNfiaMmT7o7wY8oXWCLErZtah.jpg" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" /></div></a>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-950 sm:text-sm dark:text-white"><a href="#" class="group-hover:underline">Maps to the Stars</a></h3>
+    <p class="text-base tabular-nums text-mist-500 sm:text-sm">2014 · Film</p>
+    
+    
+    <a href="https://cinegraph.org/movies/maps-to-the-stars-2014" class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 hover:text-mist-950 hover:underline dark:hover:text-white">Source ↗</a>
+  </div>
+</div></li>
+    <li class="shrink-0 w-24 sm:w-28"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <a href="#" class="rounded-sm"><div class="w-full shrink-0 overflow-hidden rounded-sm bg-mist-950/5 transition-transform duration-200 group-hover:-translate-y-0.5 dark:bg-white/5 aspect-[2/3]"><div class="flex size-full items-center justify-center text-mist-400"><span class="size-5 hero-film"></span></div></div></a>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-950 sm:text-sm dark:text-white"><a href="#" class="group-hover:underline">Callback</a></h3>
+    <p class="text-base tabular-nums text-mist-500 sm:text-sm">Film</p>
+    
+    
+    <a href="https://cinegraph.org/movies/callback-unknown" class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 hover:text-mist-950 hover:underline dark:hover:text-white">Source ↗</a>
+  </div>
+</div></li>
+    <li class="shrink-0 w-24 sm:w-28"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <a href="#" class="rounded-sm"><div class="w-full shrink-0 overflow-hidden rounded-sm bg-mist-950/5 transition-transform duration-200 group-hover:-translate-y-0.5 dark:bg-white/5 aspect-[2/3]"><img src="https://image.tmdb.org/t/p/w342/dHb2lxwqW09C47hNjZ3WCOoK6cr.jpg" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" /></div></a>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-950 sm:text-sm dark:text-white"><a href="#" class="group-hover:underline">Nepo Baby</a></h3>
+    <p class="text-base tabular-nums text-mist-500 sm:text-sm">Film</p>
+    
+    
+    <a href="https://cinegraph.org/movies/nepo-baby-unknown" class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 hover:text-mist-950 hover:underline dark:hover:text-white">Source ↗</a>
+  </div>
+</div></li>
+  </ul>
+  <div class="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
+    <details class="min-w-0"><summary class="w-fit cursor-pointer text-base text-mist-500 hover:text-mist-700 sm:text-sm dark:text-mist-400">Matches for “nepotism” · About these results</summary>
+      <div class="space-y-3 pt-2"><section class="space-y-2 text-base text-mist-600 sm:text-sm dark:text-mist-300">
+        <p class="font-medium text-mist-950 dark:text-white">CineGraph · keywords: TMDb</p>
+        <p class="text-pretty">Search matches from CineGraph. These are provider results, not curated examples or dictionary interpretations.</p>
+        <ul role="list" class="space-y-1"><li>Nepotism, Baby!: Matched the keyword “nepotism” for this term.</li><li>Infinity Pool: Matched the keyword “nepotism” for this term.</li><li>Maps to the Stars: Matched the keyword “nepotism” for this term.</li><li>Callback: Matched the keyword “nepotism” for this term.</li><li>Nepo Baby: Matched the keyword “nepotism” for this term.</li></ul>
+      </section></div>
+    </details>
+    
+  </div>
+</div></div>
+  <div class="hidden pt-4 group-has-[#culture-tab-text:checked]:block"><div id="culture-shelf-text" class="space-y-3">
+  <div class="flex flex-wrap items-baseline justify-between gap-2">
+    <h2 class="font-display text-xl text-balance text-mist-950 dark:text-white">Texts</h2>
+    <p class="flex items-baseline gap-2 text-base text-mist-500 sm:text-sm">Open Library</p>
+  </div>
+  <ul role="list" tabindex="0" aria-label="Texts matches; scroll for more" class="flex gap-5 overflow-x-auto overscroll-x-contain pb-3 focus-visible:outline-2 focus-visible:outline-offset-2">
+    <li class="shrink-0 w-44 sm:w-52"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <blockquote class="border-l-2 border-mist-300 pl-3 font-display text-lg/6 text-balance text-mist-950 dark:border-mist-700 dark:text-white">“CONTENTS INTRODUCTION: The New Nepotism— and the Old 1 PART I: NEPOTISM IN HISTORY 1. WE'RE ALL”</blockquote>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-700 sm:text-sm dark:text-mist-400"><a href="#" class="group-hover:underline">In Praise of Nepotism</a></h3>
+    <p class="line-clamp-2 text-sm text-mist-500 text-pretty">Adam Bellow</p>
+    <p class="text-base tabular-nums text-mist-500 sm:text-sm">2003 · Text</p>
+    <a href="https://openlibrary.org/works/OL8052593W" class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 hover:text-mist-950 hover:underline dark:hover:text-white">Source ↗</a>
+  </div>
+</div></li>
+    <li class="shrink-0 w-44 sm:w-52"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <blockquote class="border-l-2 border-mist-300 pl-3 font-display text-lg/6 text-balance text-mist-950 dark:border-mist-700 dark:text-white">“search (“In Praise of Nepotism,” “Anti-Nepotism Reconsidered,” &quot;Nepotism: Boon or Bane”) suggest”</blockquote>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-700 sm:text-sm dark:text-mist-400"><a href="#" class="group-hover:underline">Nepotism In Organizations</a></h3>
+    <p class="line-clamp-2 text-sm text-mist-500 text-pretty">Robert G. Jones</p>
+    <p class="text-base tabular-nums text-mist-500 sm:text-sm">2011 · Text</p>
+    <a href="https://openlibrary.org/works/OL17405240W" class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 hover:text-mist-950 hover:underline dark:hover:text-white">Source ↗</a>
+  </div>
+</div></li>
+    <li class="shrink-0 w-44 sm:w-52"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <blockquote class="border-l-2 border-mist-300 pl-3 font-display text-lg/6 text-balance text-mist-950 dark:border-mist-700 dark:text-white">““ethnic nepotism” 12 Politics of Ethnic Nepotism can be used to cover this kind of nepotism at the level”</blockquote>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-700 sm:text-sm dark:text-mist-400"><a href="#" class="group-hover:underline">Politics of ethnic neopotism</a></h3>
+    <p class="line-clamp-2 text-sm text-mist-500 text-pretty">Tatu Vanhanen</p>
+    <p class="text-base tabular-nums text-mist-500 sm:text-sm">1992 · Text</p>
+    <a href="https://openlibrary.org/works/OL3280955W" class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 hover:text-mist-950 hover:underline dark:hover:text-white">Source ↗</a>
+  </div>
+</div></li>
+    <li class="shrink-0 w-44 sm:w-52"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <blockquote class="border-l-2 border-mist-300 pl-3 font-display text-lg/6 text-balance text-mist-950 dark:border-mist-700 dark:text-white">“origins of nepotism lie in nature. The Nature of Animal and Human Nepotism To a biologist, nepotism simply”</blockquote>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-700 sm:text-sm dark:text-mist-400"><a href="#" class="group-hover:underline">Games primates play</a></h3>
+    <p class="line-clamp-2 text-sm text-mist-500 text-pretty">Dario Maestripieri</p>
+    <p class="text-base tabular-nums text-mist-500 sm:text-sm">2012 · Text</p>
+    <a href="https://openlibrary.org/works/OL16318374W" class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 hover:text-mist-950 hover:underline dark:hover:text-white">Source ↗</a>
+  </div>
+</div></li>
+    <li class="shrink-0 w-44 sm:w-52"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <blockquote class="border-l-2 border-mist-300 pl-3 font-display text-lg/6 text-balance text-mist-950 dark:border-mist-700 dark:text-white">“The Ontogeny of Nepotism 105 Parental Behavior and the Social Learning Model of Nepotism 108 Models of”</blockquote>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-700 sm:text-sm dark:text-mist-400"><a href="#" class="group-hover:underline">Darwinism and human affairs</a></h3>
+    <p class="line-clamp-2 text-sm text-mist-500 text-pretty">Richard D. Alexander</p>
+    <p class="text-base tabular-nums text-mist-500 sm:text-sm">1979 · Text</p>
+    <a href="https://openlibrary.org/works/OL1346721W" class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 hover:text-mist-950 hover:underline dark:hover:text-white">Source ↗</a>
+  </div>
+</div></li>
+    <li class="shrink-0 w-44 sm:w-52"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <blockquote class="border-l-2 border-mist-300 pl-3 font-display text-lg/6 text-balance text-mist-950 dark:border-mist-700 dark:text-white">“organization. Hence we shall talk chiefly of nepotism. Pe What is nepotism? The word itself is from the Italian”</blockquote>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-700 sm:text-sm dark:text-mist-400"><a href="#" class="group-hover:underline">Executive Effectiveness in the Corporation (The Management Audit, Volume 10) - Originally Entitled Executive Evaluation</a></h3>
+    <p class="line-clamp-2 text-sm text-mist-500 text-pretty">various</p>
+    <p class="text-base tabular-nums text-mist-500 sm:text-sm">1959 · Text</p>
+    <a href="https://openlibrary.org/works/OL43196537W" class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 hover:text-mist-950 hover:underline dark:hover:text-white">Source ↗</a>
+  </div>
+</div></li>
+    <li class="shrink-0 w-44 sm:w-52"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <blockquote class="border-l-2 border-mist-300 pl-3 font-display text-lg/6 text-balance text-mist-950 dark:border-mist-700 dark:text-white">“having to contend with nepotism in the organization. Our research suggests that nepotism is less of a concern”</blockquote>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-700 sm:text-sm dark:text-mist-400"><a href="#" class="group-hover:underline">Dual-career couples in the public sector</a></h3>
+    <p class="line-clamp-2 text-sm text-mist-500 text-pretty">Willa M. Bruce</p>
+    <p class="text-base tabular-nums text-mist-500 sm:text-sm">1991 · Text</p>
+    <a href="https://openlibrary.org/works/OL4288850W" class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 hover:text-mist-950 hover:underline dark:hover:text-white">Source ↗</a>
+  </div>
+</div></li>
+    <li class="shrink-0 w-44 sm:w-52"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <blockquote class="border-l-2 border-mist-300 pl-3 font-display text-lg/6 text-balance text-mist-950 dark:border-mist-700 dark:text-white">“Another term, “nepotism,” will be important throughout this book. What is nepotism? Favoritism is not”</blockquote>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-700 sm:text-sm dark:text-mist-400"><a href="#" class="group-hover:underline">Against fairness</a></h3>
+    <p class="line-clamp-2 text-sm text-mist-500 text-pretty">Stephen T. Asma</p>
+    <p class="text-base tabular-nums text-mist-500 sm:text-sm">2012 · Text</p>
+    <a href="https://openlibrary.org/works/OL16592472W" class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 hover:text-mist-950 hover:underline dark:hover:text-white">Source ↗</a>
+  </div>
+</div></li>
+    <li class="shrink-0 w-44 sm:w-52"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <blockquote class="border-l-2 border-mist-300 pl-3 font-display text-lg/6 text-balance text-mist-950 dark:border-mist-700 dark:text-white">“Rights Code. C. NEPOTISM AND ANTI-NEPOTISM POLICIES The legal definition of “nepotism” is the bestowal”</blockquote>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-700 sm:text-sm dark:text-mist-400"><a href="#" class="group-hover:underline">Sex Discrimination</a></h3>
+    <p class="line-clamp-2 text-sm text-mist-500 text-pretty">Arjun Prakash Aggarwal</p>
+    <p class="text-base tabular-nums text-mist-500 sm:text-sm">1994 · Text</p>
+    <a href="https://openlibrary.org/works/OL9345152W" class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 hover:text-mist-950 hover:underline dark:hover:text-white">Source ↗</a>
+  </div>
+</div></li>
+    <li class="shrink-0 w-44 sm:w-52"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <blockquote class="border-l-2 border-mist-300 pl-3 font-display text-lg/6 text-balance text-mist-950 dark:border-mist-700 dark:text-white">“possibility or probability of nepotism ... but I can’t actually say that there was nepotism...”.' The report and”</blockquote>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-700 sm:text-sm dark:text-mist-400"><a href="#" class="group-hover:underline">Conduct handbook for municipal employees and officials</a></h3>
+    <p class="line-clamp-2 text-sm text-mist-500 text-pretty">M. Rick O'Connor</p>
+    <p class="text-base tabular-nums text-mist-500 sm:text-sm">2003 · Text</p>
+    <a href="https://openlibrary.org/works/OL28955189W" class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 hover:text-mist-950 hover:underline dark:hover:text-white">Source ↗</a>
+  </div>
+</div></li>
+  </ul>
+  <div class="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
+    <details class="min-w-0"><summary class="w-fit cursor-pointer text-base text-mist-500 hover:text-mist-700 sm:text-sm dark:text-mist-400">Matches for “nepotism” · About these results</summary>
+      <div class="space-y-3 pt-2"><section class="space-y-2 text-base text-mist-600 sm:text-sm dark:text-mist-300">
+        <p class="font-medium text-mist-950 dark:text-white">Open Library · attested books</p>
+        <p class="text-pretty">Search matches from Open Library. These are provider results, not curated examples or dictionary interpretations.</p>
+        <ul role="list" class="space-y-1"><li>In Praise of Nepotism: Uses “nepotism”.</li><li>Nepotism In Organizations: Uses “nepotism”.</li><li>Politics of ethnic neopotism: Uses “nepotism”.</li><li>Games primates play: Uses “nepotism”.</li><li>Darwinism and human affairs: Uses “nepotism”.</li><li>Executive Effectiveness in the Corporation (The Management Audit, Volume 10) - Originally Entitled Executive Evaluation: Uses “nepotism”.</li></ul>
+      </section></div>
+    </details>
+    <button type="button" class="relative rounded-sm py-1 text-base text-mist-600 underline underline-offset-4 hover:text-mist-950 sm:text-sm dark:text-mist-300"><span class="pointer-fine:hidden absolute top-1/2 left-1/2 size-[max(100%,3rem)] -translate-1/2" aria-hidden="true"></span>Load more</button>
+  </div>
+</div></div>
+  <div class="hidden pt-4 group-has-[#culture-tab-image:checked]:block"><div id="culture-shelf-image" class="space-y-3">
+  <div class="flex flex-wrap items-baseline justify-between gap-2">
+    <h2 class="font-display text-xl text-balance text-mist-950 dark:text-white">Images</h2>
+    <p class="flex items-baseline gap-2 text-base text-mist-500 sm:text-sm">Openverse · Pexels · Unsplash</p>
+  </div>
+  <ul role="list" tabindex="0" aria-label="Images matches; scroll for more" class="flex gap-5 overflow-x-auto overscroll-x-contain pb-3 focus-visible:outline-2 focus-visible:outline-offset-2">
+    <li class="shrink-0 w-24 sm:w-28"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <a href="#" class="rounded-sm"><div class="w-full shrink-0 overflow-hidden rounded-sm bg-mist-950/5 transition-transform duration-200 group-hover:-translate-y-0.5 dark:bg-white/5 aspect-square"><img src="https://api.openverse.org/v1/images/6a802698-6734-4708-bc48-243c3d339fe0/thumb/" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" /></div></a>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-950 sm:text-sm dark:text-white"><a href="#" class="group-hover:underline">Nepotism</a></h3>
+    <p class="text-base tabular-nums text-mist-500 sm:text-sm">Image</p>
+    
+    <p class="text-xs break-words text-mist-500 text-pretty">&quot;Nepotism&quot; by Francisco Anzola is licensed under CC BY 2.0. To view a copy of this license, visit https://creativecommons.org/licenses/by/2.0/.</p>
+    <a href="https://www.flickr.com/photos/10345599@N03/52473591459" class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 hover:text-mist-950 hover:underline dark:hover:text-white">Source ↗</a>
+  </div>
+</div></li>
+    <li class="shrink-0 w-24 sm:w-28"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <a href="#" class="rounded-sm"><div class="w-full shrink-0 overflow-hidden rounded-sm bg-mist-950/5 transition-transform duration-200 group-hover:-translate-y-0.5 dark:bg-white/5 aspect-square"><img src="https://images.pexels.com/photos/6289049/pexels-photo-6289049.jpeg?auto=compress&amp;cs=tinysrgb&amp;h=350" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" /></div></a>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-950 sm:text-sm dark:text-white"><a href="#" class="group-hover:underline">Illustration of entrepreneurs wearing formal clothes shaking hands while having meeting against purple background</a></h3>
+    <p class="text-base tabular-nums text-mist-500 sm:text-sm">Image</p>
+    
+    <p class="text-xs break-words text-mist-500 text-pretty">Photo by Monstera Production on Pexels</p>
+    <a href="https://www.pexels.com/photo/illustration-of-business-colleagues-at-negation-6289049/" class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 hover:text-mist-950 hover:underline dark:hover:text-white">Source ↗</a>
+  </div>
+</div></li>
+    <li class="shrink-0 w-24 sm:w-28"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <a href="#" class="rounded-sm"><div class="w-full shrink-0 overflow-hidden rounded-sm bg-mist-950/5 transition-transform duration-200 group-hover:-translate-y-0.5 dark:bg-white/5 aspect-square"><img src="https://images.unsplash.com/photo-1636302304088-e1bd81885a71?crop=entropy&amp;cs=tinysrgb&amp;fit=max&amp;fm=jpg&amp;ixid=M3w3MjU0ODR8MHwxfHNlYXJjaHwxfHxuZXBvdGlzbXxlbnwxfHx8fDE3ODk4MDg4Mjd8MA&amp;ixlib=rb-4.1.0&amp;q=80&amp;w=400" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" /></div></a>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-950 sm:text-sm dark:text-white"><a href="#" class="group-hover:underline">a purple background with a blue and green object on top of it</a></h3>
+    <p class="text-base tabular-nums text-mist-500 sm:text-sm">2021 · Image</p>
+    
+    <p class="text-xs break-words text-mist-500 text-pretty">Photo by Yash Bindra on Unsplash</p>
+    <a href="https://unsplash.com/photos/a-purple-background-with-a-blue-and-green-object-on-top-of-it-7-OdMLZkpC8?utm_medium=referral&amp;utm_source=devils_dictionary" class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 hover:text-mist-950 hover:underline dark:hover:text-white">Source ↗</a>
+  </div>
+</div></li>
+    <li class="shrink-0 w-24 sm:w-28"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <a href="#" class="rounded-sm"><div class="w-full shrink-0 overflow-hidden rounded-sm bg-mist-950/5 transition-transform duration-200 group-hover:-translate-y-0.5 dark:bg-white/5 aspect-square"><img src="https://api.openverse.org/v1/images/ac9e378c-e881-4341-834c-776eb841601c/thumb/" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" /></div></a>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-950 sm:text-sm dark:text-white"><a href="#" class="group-hover:underline">#Bulgaria's newly elected, socialist dominated government faces 3rd day of protests against nepotism &amp; corruption.</a></h3>
+    <p class="text-base tabular-nums text-mist-500 sm:text-sm">Image</p>
+    
+    <p class="text-xs break-words text-mist-500 text-pretty">&quot;#Bulgaria's newly elected, socialist dominated government faces 3rd day of protests against nepotism &amp; corruption.&quot; by bulgarus is licensed under CC BY 2.0. To view a copy of this license, visit https://creativecommons.org/licenses/by/2.0/.</p>
+    <a href="https://www.flickr.com/photos/58530661@N04/9059590548" class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 hover:text-mist-950 hover:underline dark:hover:text-white">Source ↗</a>
+  </div>
+</div></li>
+    <li class="shrink-0 w-24 sm:w-28"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <a href="#" class="rounded-sm"><div class="w-full shrink-0 overflow-hidden rounded-sm bg-mist-950/5 transition-transform duration-200 group-hover:-translate-y-0.5 dark:bg-white/5 aspect-square"><img src="https://images.pexels.com/photos/5849579/pexels-photo-5849579.jpeg?auto=compress&amp;cs=tinysrgb&amp;h=350" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" /></div></a>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-950 sm:text-sm dark:text-white"><a href="#" class="group-hover:underline">Cutout paper composition representing male showing rejection to outstretched helping hand during negotiations</a></h3>
+    <p class="text-base tabular-nums text-mist-500 sm:text-sm">Image</p>
+    
+    <p class="text-xs break-words text-mist-500 text-pretty">Photo by Monstera Production on Pexels</p>
+    <a href="https://www.pexels.com/photo/entrepreneur-rejecting-offering-from-man-with-outstretched-hand-5849579/" class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 hover:text-mist-950 hover:underline dark:hover:text-white">Source ↗</a>
+  </div>
+</div></li>
+    <li class="shrink-0 w-24 sm:w-28"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <a href="#" class="rounded-sm"><div class="w-full shrink-0 overflow-hidden rounded-sm bg-mist-950/5 transition-transform duration-200 group-hover:-translate-y-0.5 dark:bg-white/5 aspect-square"><img src="https://images.unsplash.com/photo-1663813116840-cef0040331fe?crop=entropy&amp;cs=tinysrgb&amp;fit=max&amp;fm=jpg&amp;ixid=M3w3MjU0ODR8MHwxfHNlYXJjaHwyfHxuZXBvdGlzbXxlbnwxfHx8fDE3ODk4MDg4Mjd8MA&amp;ixlib=rb-4.1.0&amp;q=80&amp;w=400" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" /></div></a>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-950 sm:text-sm dark:text-white"><a href="#" class="group-hover:underline">Notion icon in 3D. My 3D work may be seen in the section titled &quot;3D Render.&quot;</a></h3>
+    <p class="text-base tabular-nums text-mist-500 sm:text-sm">2022 · Image</p>
+    
+    <p class="text-xs break-words text-mist-500 text-pretty">Photo by Rubaitul Azad on Unsplash</p>
+    <a href="https://unsplash.com/photos/text-8tRo5_ogsfA?utm_medium=referral&amp;utm_source=devils_dictionary" class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 hover:text-mist-950 hover:underline dark:hover:text-white">Source ↗</a>
+  </div>
+</div></li>
+    <li class="shrink-0 w-24 sm:w-28"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <a href="#" class="rounded-sm"><div class="w-full shrink-0 overflow-hidden rounded-sm bg-mist-950/5 transition-transform duration-200 group-hover:-translate-y-0.5 dark:bg-white/5 aspect-square"><img src="https://api.openverse.org/v1/images/8c38ee35-9f37-4454-8ccf-e81dfcbfbdc8/thumb/" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" /></div></a>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-950 sm:text-sm dark:text-white"><a href="#" class="group-hover:underline">File:-49 Joyful Nepotism (big).png</a></h3>
+    <p class="text-base tabular-nums text-mist-500 sm:text-sm">Image</p>
+    
+    <p class="text-xs break-words text-mist-500 text-pretty">&quot;File:-49 Joyful Nepotism (big).png&quot; by Cdyera is licensed under CC BY-SA 4.0. To view a copy of this license, visit https://creativecommons.org/licenses/by-sa/4.0/.</p>
+    <a href="https://commons.wikimedia.org/w/index.php?curid=45902217" class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 hover:text-mist-950 hover:underline dark:hover:text-white">Source ↗</a>
+  </div>
+</div></li>
+    <li class="shrink-0 w-24 sm:w-28"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <a href="#" class="rounded-sm"><div class="w-full shrink-0 overflow-hidden rounded-sm bg-mist-950/5 transition-transform duration-200 group-hover:-translate-y-0.5 dark:bg-white/5 aspect-square"><img src="https://images.pexels.com/photos/6632526/pexels-photo-6632526.jpeg?auto=compress&amp;cs=tinysrgb&amp;h=350" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" /></div></a>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-950 sm:text-sm dark:text-white"><a href="#" class="group-hover:underline">A man in a suit holding a red notebook with hands pointing at him, symbolizing pressure.</a></h3>
+    <p class="text-base tabular-nums text-mist-500 sm:text-sm">Image</p>
+    
+    <p class="text-xs break-words text-mist-500 text-pretty">Photo by Antoni Shkraba on Pexels</p>
+    <a href="https://www.pexels.com/photo/photo-of-fingers-pointing-to-a-man-with-a-red-notebook-6632526/" class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 hover:text-mist-950 hover:underline dark:hover:text-white">Source ↗</a>
+  </div>
+</div></li>
+    <li class="shrink-0 w-24 sm:w-28"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <a href="#" class="rounded-sm"><div class="w-full shrink-0 overflow-hidden rounded-sm bg-mist-950/5 transition-transform duration-200 group-hover:-translate-y-0.5 dark:bg-white/5 aspect-square"><img src="https://images.unsplash.com/photo-1627933540891-1fb6a397c89b?crop=entropy&amp;cs=tinysrgb&amp;fit=max&amp;fm=jpg&amp;ixid=M3w3MjU0ODR8MHwxfHNlYXJjaHwzfHxuZXBvdGlzbXxlbnwxfHx8fDE3ODk4MDg4Mjd8MA&amp;ixlib=rb-4.1.0&amp;q=80&amp;w=400" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" /></div></a>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-950 sm:text-sm dark:text-white"><a href="#" class="group-hover:underline">man in black crew neck t-shirt beside woman in white crew neck t-shirt</a></h3>
+    <p class="text-base tabular-nums text-mist-500 sm:text-sm">2021 · Image</p>
+    
+    <p class="text-xs break-words text-mist-500 text-pretty">Photo by Efren Barahona on Unsplash</p>
+    <a href="https://unsplash.com/photos/man-in-black-crew-neck-t-shirt-beside-woman-in-white-crew-neck-t-shirt-LwKymbVpq0I?utm_medium=referral&amp;utm_source=devils_dictionary" class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 hover:text-mist-950 hover:underline dark:hover:text-white">Source ↗</a>
+  </div>
+</div></li>
+    <li class="shrink-0 w-24 sm:w-28"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <a href="#" class="rounded-sm"><div class="w-full shrink-0 overflow-hidden rounded-sm bg-mist-950/5 transition-transform duration-200 group-hover:-translate-y-0.5 dark:bg-white/5 aspect-square"><img src="https://api.openverse.org/v1/images/0376e048-b03b-4da5-badf-eec43061363a/thumb/" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" /></div></a>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-950 sm:text-sm dark:text-white"><a href="#" class="group-hover:underline">Benjamin Harrison, autocratic treasurer of Guy's hospital, backing the gross nepotism of Sir Astley Cooper. Coloured lithograph by R. Cruikshank[?], 1830[?].</a></h3>
+    <p class="text-base tabular-nums text-mist-500 sm:text-sm">Image</p>
+    
+    <p class="text-xs break-words text-mist-500 text-pretty">&quot;Benjamin Harrison, autocratic treasurer of Guy's hospital, backing the gross nepotism of Sir Astley Cooper. Coloured lithograph by R. Cruikshank[?], 1830[?].&quot; is licensed under CC BY 4.0. To view a copy of this license, visit https://creativecommons.org/licenses/by/4.0/.</p>
+    <a href="https://wellcomecollection.org/works/htk43ad3" class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 hover:text-mist-950 hover:underline dark:hover:text-white">Source ↗</a>
+  </div>
+</div></li>
+    <li class="shrink-0 w-24 sm:w-28"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <a href="#" class="rounded-sm"><div class="w-full shrink-0 overflow-hidden rounded-sm bg-mist-950/5 transition-transform duration-200 group-hover:-translate-y-0.5 dark:bg-white/5 aspect-square"><img src="https://images.pexels.com/photos/6632520/pexels-photo-6632520.jpeg?auto=compress&amp;cs=tinysrgb&amp;h=350" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" /></div></a>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-950 sm:text-sm dark:text-white"><a href="#" class="group-hover:underline">Businessman holding a red notebook surrounded by pointing hands. Concept of pressure and decision-making.</a></h3>
+    <p class="text-base tabular-nums text-mist-500 sm:text-sm">Image</p>
+    
+    <p class="text-xs break-words text-mist-500 text-pretty">Photo by Antoni Shkraba on Pexels</p>
+    <a href="https://www.pexels.com/photo/photo-of-a-fingers-pointing-to-a-man-in-a-suit-6632520/" class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 hover:text-mist-950 hover:underline dark:hover:text-white">Source ↗</a>
+  </div>
+</div></li>
+    <li class="shrink-0 w-24 sm:w-28"><div class="group flex min-w-0 flex-col gap-2 rounded-sm">
+  <a href="#" class="rounded-sm"><div class="w-full shrink-0 overflow-hidden rounded-sm bg-mist-950/5 transition-transform duration-200 group-hover:-translate-y-0.5 dark:bg-white/5 aspect-square"><img src="https://images.unsplash.com/photo-1595932546034-38c1727a6fdb?crop=entropy&amp;cs=tinysrgb&amp;fit=max&amp;fm=jpg&amp;ixid=M3w3MjU0ODR8MHwxfHNlYXJjaHw0fHxuZXBvdGlzbXxlbnwxfHx8fDE3ODk4MDg4Mjd8MA&amp;ixlib=rb-4.1.0&amp;q=80&amp;w=400" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" /></div></a>
+  <div class="min-w-0 space-y-1">
+    <h3 class="line-clamp-2 text-base font-medium text-balance text-mist-950 sm:text-sm dark:text-white"><a href="#" class="group-hover:underline">man in black jacket wearing black framed eyeglasses</a></h3>
+    <p class="text-base tabular-nums text-mist-500 sm:text-sm">2020 · Image</p>
+    
+    <p class="text-xs break-words text-mist-500 text-pretty">Photo by Hamid Tajik on Unsplash</p>
+    <a href="https://unsplash.com/photos/man-in-black-jacket-wearing-black-framed-eyeglasses-tkVjfvN8NcM?utm_medium=referral&amp;utm_source=devils_dictionary" class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 hover:text-mist-950 hover:underline dark:hover:text-white">Source ↗</a>
+  </div>
+</div></li>
+  </ul>
+  <div class="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
+    <details class="min-w-0"><summary class="w-fit cursor-pointer text-base text-mist-500 hover:text-mist-700 sm:text-sm dark:text-mist-400">Matches for “nepotism” · About these results</summary>
+      <div class="space-y-3 pt-2"><section class="space-y-2 text-base text-mist-600 sm:text-sm dark:text-mist-300">
+        <p class="font-medium text-mist-950 dark:text-white">Openverse · search: CC and public domain</p>
+        <p class="text-pretty">Search matches from Openverse. These are provider results, not curated examples or dictionary interpretations.</p>
+        <ul role="list" class="space-y-1"><li>Nepotism: Search result for “nepotism”, ranked by the provider and not matched on an identifier.</li><li>#Bulgaria's newly elected, socialist dominated government faces 3rd day of protests against nepotism &amp; corruption.: Search result for “nepotism”, ranked by the provider and not matched on an identifier.</li><li>File:-49 Joyful Nepotism (big).png: Search result for “nepotism”, ranked by the provider and not matched on an identifier.</li><li>Benjamin Harrison, autocratic treasurer of Guy's hospital, backing the gross nepotism of Sir Astley Cooper. Coloured lithograph by R. Cruikshank[?], 1830[?].: Search result for “nepotism”, ranked by the provider and not matched on an identifier.</li></ul>
+      </section><section class="space-y-2 text-base text-mist-600 sm:text-sm dark:text-mist-300">
+        <p class="font-medium text-mist-950 dark:text-white">Pexels · search: Pexels License</p>
+        <p class="text-pretty">Search matches from Pexels. These are provider results, not curated examples or dictionary interpretations.</p>
+        <ul role="list" class="space-y-1"><li>Illustration of entrepreneurs wearing formal clothes shaking hands while having meeting against purple background: Search result for “nepotism”, ranked by the provider and not matched on an identifier.</li><li>Cutout paper composition representing male showing rejection to outstretched helping hand during negotiations: Search result for “nepotism”, ranked by the provider and not matched on an identifier.</li><li>A man in a suit holding a red notebook with hands pointing at him, symbolizing pressure.: Search result for “nepotism”, ranked by the provider and not matched on an identifier.</li><li>Businessman holding a red notebook surrounded by pointing hands. Concept of pressure and decision-making.: Search result for “nepotism”, ranked by the provider and not matched on an identifier.</li></ul>
+      </section><section class="space-y-2 text-base text-mist-600 sm:text-sm dark:text-mist-300">
+        <p class="font-medium text-mist-950 dark:text-white">Unsplash · search: Unsplash License</p>
+        <p class="text-pretty">Search matches from Unsplash. These are provider results, not curated examples or dictionary interpretations.</p>
+        <ul role="list" class="space-y-1"><li>a purple background with a blue and green object on top of it: Search result for “nepotism”, ranked by the provider and not matched on an identifier.</li><li>Notion icon in 3D. My 3D work may be seen in the section titled &quot;3D Render.&quot;: Search result for “nepotism”, ranked by the provider and not matched on an identifier.</li><li>man in black crew neck t-shirt beside woman in white crew neck t-shirt: Search result for “nepotism”, ranked by the provider and not matched on an identifier.</li><li>man in black jacket wearing black framed eyeglasses: Search result for “nepotism”, ranked by the provider and not matched on an identifier.</li></ul>
+      </section></div>
+    </details>
+    <button type="button" class="relative rounded-sm py-1 text-base text-mist-600 underline underline-offset-4 hover:text-mist-950 sm:text-sm dark:text-mist-300"><span class="pointer-fine:hidden absolute top-1/2 left-1/2 size-[max(100%,3rem)] -translate-1/2" aria-hidden="true"></span>Load more</button>
+  </div>
+</div></div>
+  <div class="hidden pt-4 group-has-[#culture-tab-gif:checked]:block"><div id="culture-shelf-gif" class="space-y-3">
+  <div class="flex flex-wrap items-baseline justify-between gap-2">
+    <h2 class="font-display text-xl text-balance text-mist-950 dark:text-white">GIFs</h2>
+    <p class="flex items-baseline gap-2 text-base text-mist-500 sm:text-sm">GIPHY<img src="../../../priv/static/images/giphy-powered-by.png" alt="Powered by GIPHY" width="88" class="rounded bg-white" /></p>
+  </div>
+  <ul role="list" tabindex="0" aria-label="GIFs matches; scroll for more" class="flex gap-5 overflow-x-auto overscroll-x-contain pb-3 focus-visible:outline-2 focus-visible:outline-offset-2">
+    <li class="shrink-0 w-24 sm:w-28"><div class="group relative flex min-w-0 flex-col gap-2 rounded-sm">
+  <div class="w-full shrink-0 overflow-hidden rounded-sm bg-mist-950/5 aspect-square dark:bg-white/5">
+    <img src="https://media4.giphy.com/media/v1.Y2lkPTAyZWYyMzRkNHExM2Mxcng5YmY5ZndnemQwZzJ3OHF3a3pueDU3bW9hbzB3YzYzbyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/Ws3mp0mawnFPjBPdy2/200w_s.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" />
+  </div>
+  <button type="button" class="absolute top-1 left-1 inline-flex items-center gap-1 rounded-full bg-mist-950/75 py-1 pr-2 pl-1.5 text-sm/5 font-medium text-white backdrop-blur">
+    <span class="size-4 shrink-0 hero-play-micro"></span>Play
+  </button>
+  <p class="line-clamp-2 text-base text-mist-500 sm:text-sm">Snl Smiling GIF by Saturday Night Live</p>
+</div></li>
+    <li class="shrink-0 w-24 sm:w-28"><div class="group relative flex min-w-0 flex-col gap-2 rounded-sm">
+  <div class="w-full shrink-0 overflow-hidden rounded-sm bg-mist-950/5 aspect-square dark:bg-white/5">
+    <img src="https://media3.giphy.com/media/v1.Y2lkPTAyZWYyMzRkNHExM2Mxcng5YmY5ZndnemQwZzJ3OHF3a3pueDU3bW9hbzB3YzYzbyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/cxBHzUn2ifrsYNfVZv/200w_s.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" />
+  </div>
+  <button type="button" class="absolute top-1 left-1 inline-flex items-center gap-1 rounded-full bg-mist-950/75 py-1 pr-2 pl-1.5 text-sm/5 font-medium text-white backdrop-blur">
+    <span class="size-4 shrink-0 hero-play-micro"></span>Play
+  </button>
+  <p class="line-clamp-2 text-base text-mist-500 sm:text-sm">Jokowi GIF</p>
+</div></li>
+    <li class="shrink-0 w-24 sm:w-28"><div class="group relative flex min-w-0 flex-col gap-2 rounded-sm">
+  <div class="w-full shrink-0 overflow-hidden rounded-sm bg-mist-950/5 aspect-square dark:bg-white/5">
+    <img src="https://media0.giphy.com/media/v1.Y2lkPTAyZWYyMzRkNHExM2Mxcng5YmY5ZndnemQwZzJ3OHF3a3pueDU3bW9hbzB3YzYzbyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/hIBUnNjNhlcxFwjKfo/200w_s.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" />
+  </div>
+  <button type="button" class="absolute top-1 left-1 inline-flex items-center gap-1 rounded-full bg-mist-950/75 py-1 pr-2 pl-1.5 text-sm/5 font-medium text-white backdrop-blur">
+    <span class="size-4 shrink-0 hero-play-micro"></span>Play
+  </button>
+  <p class="line-clamp-2 text-base text-mist-500 sm:text-sm">Gasp Gasping GIF</p>
+</div></li>
+    <li class="shrink-0 w-24 sm:w-28"><div class="group relative flex min-w-0 flex-col gap-2 rounded-sm">
+  <div class="w-full shrink-0 overflow-hidden rounded-sm bg-mist-950/5 aspect-square dark:bg-white/5">
+    <img src="https://media1.giphy.com/media/v1.Y2lkPTAyZWYyMzRkNHExM2Mxcng5YmY5ZndnemQwZzJ3OHF3a3pueDU3bW9hbzB3YzYzbyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/xTiN0DvoDyWQey2B8I/200w_s.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" />
+  </div>
+  <button type="button" class="absolute top-1 left-1 inline-flex items-center gap-1 rounded-full bg-mist-950/75 py-1 pr-2 pl-1.5 text-sm/5 font-medium text-white backdrop-blur">
+    <span class="size-4 shrink-0 hero-play-micro"></span>Play
+  </button>
+  <p class="line-clamp-2 text-base text-mist-500 sm:text-sm">So Close Nbc 90Th Special GIF by NBC</p>
+</div></li>
+    <li class="shrink-0 w-24 sm:w-28"><div class="group relative flex min-w-0 flex-col gap-2 rounded-sm">
+  <div class="w-full shrink-0 overflow-hidden rounded-sm bg-mist-950/5 aspect-square dark:bg-white/5">
+    <img src="https://media3.giphy.com/media/v1.Y2lkPTAyZWYyMzRkNHExM2Mxcng5YmY5ZndnemQwZzJ3OHF3a3pueDU3bW9hbzB3YzYzbyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/dDFxLN7kLYVA4zc0qp/200w_s.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" />
+  </div>
+  <button type="button" class="absolute top-1 left-1 inline-flex items-center gap-1 rounded-full bg-mist-950/75 py-1 pr-2 pl-1.5 text-sm/5 font-medium text-white backdrop-blur">
+    <span class="size-4 shrink-0 hero-play-micro"></span>Play
+  </button>
+  <p class="line-clamp-2 text-base text-mist-500 sm:text-sm">Episode 1 Nbc GIF by The Office</p>
+</div></li>
+    <li class="shrink-0 w-24 sm:w-28"><div class="group relative flex min-w-0 flex-col gap-2 rounded-sm">
+  <div class="w-full shrink-0 overflow-hidden rounded-sm bg-mist-950/5 aspect-square dark:bg-white/5">
+    <img src="https://media2.giphy.com/media/v1.Y2lkPTAyZWYyMzRkNHExM2Mxcng5YmY5ZndnemQwZzJ3OHF3a3pueDU3bW9hbzB3YzYzbyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/KO9RKTeVIx1EFXH2Y2/200w_s.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" />
+  </div>
+  <button type="button" class="absolute top-1 left-1 inline-flex items-center gap-1 rounded-full bg-mist-950/75 py-1 pr-2 pl-1.5 text-sm/5 font-medium text-white backdrop-blur">
+    <span class="size-4 shrink-0 hero-play-micro"></span>Play
+  </button>
+  <p class="line-clamp-2 text-base text-mist-500 sm:text-sm">Super Hero Disney GIF by Marvel Studios</p>
+</div></li>
+    <li class="shrink-0 w-24 sm:w-28"><div class="group relative flex min-w-0 flex-col gap-2 rounded-sm">
+  <div class="w-full shrink-0 overflow-hidden rounded-sm bg-mist-950/5 aspect-square dark:bg-white/5">
+    <img src="https://media0.giphy.com/media/v1.Y2lkPTAyZWYyMzRkNHExM2Mxcng5YmY5ZndnemQwZzJ3OHF3a3pueDU3bW9hbzB3YzYzbyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/HjKG2nRz7NOv6ch12D/200w_s.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" />
+  </div>
+  <button type="button" class="absolute top-1 left-1 inline-flex items-center gap-1 rounded-full bg-mist-950/75 py-1 pr-2 pl-1.5 text-sm/5 font-medium text-white backdrop-blur">
+    <span class="size-4 shrink-0 hero-play-micro"></span>Play
+  </button>
+  <p class="line-clamp-2 text-base text-mist-500 sm:text-sm">Season 6 Nbc GIF by The Office</p>
+</div></li>
+    <li class="shrink-0 w-24 sm:w-28"><div class="group relative flex min-w-0 flex-col gap-2 rounded-sm">
+  <div class="w-full shrink-0 overflow-hidden rounded-sm bg-mist-950/5 aspect-square dark:bg-white/5">
+    <img src="https://media4.giphy.com/media/v1.Y2lkPTAyZWYyMzRkNHExM2Mxcng5YmY5ZndnemQwZzJ3OHF3a3pueDU3bW9hbzB3YzYzbyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/ZzM9FbiDPqHQ5Dzu91/200w_s.gif" alt="" loading="lazy" referrerpolicy="no-referrer" class="size-full object-cover" />
+  </div>
+  <button type="button" class="absolute top-1 left-1 inline-flex items-center gap-1 rounded-full bg-mist-950/75 py-1 pr-2 pl-1.5 text-sm/5 font-medium text-white backdrop-blur">
+    <span class="size-4 shrink-0 hero-play-micro"></span>Play
+  </button>
+  <p class="line-clamp-2 text-base text-mist-500 sm:text-sm">Dakota Johnson Snl GIF by Saturday Night Live</p>
+</div></li>
+  </ul>
+  <div class="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
+    <details class="min-w-0"><summary class="w-fit cursor-pointer text-base text-mist-500 hover:text-mist-700 sm:text-sm dark:text-mist-400">Matches for “nepotism” · About these results</summary>
+      <div class="space-y-3 pt-2"><section class="space-y-2 text-base text-mist-600 sm:text-sm dark:text-mist-300">
+        <p class="font-medium text-mist-950 dark:text-white">GIPHY · G-rated search</p>
+        <p class="text-pretty">Search matches from GIPHY. These are provider results, not curated examples or dictionary interpretations. Nothing is stored: the search runs in your browser and the media stays on GIPHY's hosts.</p>
+        <ul role="list" class="space-y-1"></ul>
+      </section></div>
+    </details>
+    <button type="button" class="relative rounded-sm py-1 text-base text-mist-600 underline underline-offset-4 hover:text-mist-950 sm:text-sm dark:text-mist-300"><span class="pointer-fine:hidden absolute top-1/2 left-1/2 size-[max(100%,3rem)] -translate-1/2" aria-hidden="true"></span>Load more</button>
+  </div>
+</div></div>
+</section>
+    <div class="lg:hidden"><section id="related-noun" class="mt-8">
+  <h2 class="text-base/8 font-medium text-mist-950 dark:text-white">Related words <span class="font-normal text-mist-500">· noun</span></h2>
+  <div class="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+    <span class="w-20 shrink-0 text-base/7 text-mist-500 sm:text-sm/7">similar</span>
+    <a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">cronyism</a>
+    
+  </div><div class="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+    <span class="w-20 shrink-0 text-base/7 text-mist-500 sm:text-sm/7">family</span>
+    <a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">antinepotism</a><a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">nepotism baby</a><a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">nepotism friend</a><a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">nepotistic</a><a href="#" class="rounded-full bg-mist-950/5 px-3 py-0.5 text-base/6 font-medium text-mist-950 hover:bg-mist-950/10 sm:text-sm/6 dark:bg-white/10 dark:text-white">nepotistical</a>
+    
+  </div>
+</section></div>
+    
+  </div>
+</div></div></main>
+    <footer class="pt-16">
+      <div class="bg-mist-950/2.5 py-16 text-mist-950 dark:bg-white/5 dark:text-white">
+        <div class="mx-auto flex w-full max-w-2xl flex-col gap-16 px-6 md:max-w-3xl lg:max-w-7xl lg:px-10">
+          <nav class="grid grid-cols-2 gap-6 text-sm/7 sm:grid-cols-3">
+            <div><h3>Browse</h3><ul role="list" class="mt-2 flex flex-col gap-2"><li class="text-mist-700 dark:text-mist-400"><a href="#">Artworks</a></li></ul></div>
+            <div><h3>Sources</h3><ul role="list" class="mt-2 flex flex-col gap-2"><li class="text-mist-700 dark:text-mist-400"><a href="#">Open English WordNet 2025</a></li><li class="text-mist-700 dark:text-mist-400"><a href="#">Wiktionary (English) via Kaikki</a></li><li class="text-mist-700 dark:text-mist-400"><a href="#">Wikidata</a></li><li class="text-mist-700 dark:text-mist-400"><a href="#">Wikipedia (English)</a></li><li class="text-mist-700 dark:text-mist-400"><a href="#">Ambrose Bierce, The Devil's Dictionary</a></li><li class="text-mist-700 dark:text-mist-400"><a href="#">Samuel Johnson, A Dictionary of the English Language</a></li></ul></div>
+          </nav>
+          <div class="text-sm/7 text-mist-600 dark:text-mist-500">
+            <p>An aggregator, not an author. Every definition belongs to the source that wrote it and links back to it. WordNet CC BY 4.0 · Wiktionary and Wikipedia CC BY-SA 4.0 · Wikidata CC0 · Bierce public domain.</p>
+          </div>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

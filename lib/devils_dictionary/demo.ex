@@ -32,6 +32,7 @@ defmodule DevilsDictionary.Demo do
   data is worse than no demo.
   """
 
+  alias DevilsDictionary.Lexicon.WordPage
   alias DevilsDictionary.Markdown
 
   @tier_rank %{aristocracy: 0, middle: 1, plebs: 2}
@@ -132,20 +133,48 @@ defmodule DevilsDictionary.Demo do
       url: fill(source["url"], lemma),
       sample?: true
     }
+    |> summarise()
   end
+
+  # A sample card is the same shape as a real one or it is not a sample of
+  # anything — the mode exists to show what a layer *would* look like, and a
+  # card missing the counts a real card carries would show a layout the app
+  # cannot produce. `WordPage` decides what those counts are; this only asks.
+  defp summarise(card) do
+    Map.merge(card, %{
+      senses: Enum.reduce(card.groups, 0, fn group, n -> n + length(group.senses) end),
+      chars: Enum.reduce(card.entries, 0, &(&2 + &1.chars)),
+      opening: opening(card)
+    })
+  end
+
+  defp opening(%{groups: [%{senses: [sense | _]} | _]}), do: sense.gloss
+
+  defp opening(%{entries: [entry | _]}) do
+    entry.preview_html
+    |> String.replace(~r{<[^>]+>}, " ")
+    |> String.replace(~r{\s+}, " ")
+    |> String.trim()
+    |> String.slice(0, 220)
+  end
+
+  defp opening(_card), do: nil
 
   defp entries(nil, _source, _lemma), do: []
 
   defp entries(entry, source, lemma) do
     [
-      %{
+      entry["body"]
+      |> fill(lemma)
+      |> Markdown.to_html(:markdown)
+      |> WordPage.fold()
+      |> Map.merge(%{
         headword: fill(entry["headword"], lemma),
         marker: fill(entry["marker"], lemma),
-        body_html: entry["body"] |> fill(lemma) |> Markdown.to_html(:markdown),
         year: source["year"],
         url: fill(source["url"], lemma),
         record_id: nil
-      }
+      })
     ]
   end
 

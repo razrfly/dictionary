@@ -31,6 +31,10 @@ defmodule DevilsDictionaryWeb.Culture do
   attr :states, :map, required: true
   attr :return_path, :string, default: nil
 
+  attr :giphy, :map,
+    default: nil,
+    doc: "the browser-side GIF shelf's config, or nil when there is no key or no target"
+
   attr :contributor, :boolean,
     default: false,
     doc: "whether the reader may carry a corpus candidate into the review composer"
@@ -45,8 +49,9 @@ defmodule DevilsDictionaryWeb.Culture do
 
     ~H"""
     <.compact_section
-      :if={@shelves != []}
+      :if={@shelves != [] or @giphy}
       shelves={@shelves}
+      giphy={@giphy}
       provider_count={@provider_count}
       return_path={@return_path}
       contributor={@contributor}
@@ -87,9 +92,13 @@ defmodule DevilsDictionaryWeb.Culture do
       # not demoted — there is nothing to demote, and a shelf still loading
       # would otherwise jump down the page and back.
       searched? = entries != [] and not Enum.any?(entries, &attested?/1)
+      # What the cap leaves out is a number the page knows, so it is shown
+      # (IMDb's shape: the size in the heading, the remainder in a last tile)
+      # rather than left for the reader to discover by pressing *Load more*.
+      overflow = if searched?, do: max(length(entries) - page_cap(group), 0), else: 0
       entries = if searched?, do: Enum.take(entries, page_cap(group)), else: entries
 
-      %{type: type, states: group, entries: entries, searched?: searched?}
+      %{type: type, states: group, entries: entries, searched?: searched?, overflow: overflow}
       |> then(fn shelf ->
         # What each state actually put on the rail, after the fold: the byline
         # credits and the About note describes these, not `state.items`. A
@@ -144,114 +153,143 @@ defmodule DevilsDictionaryWeb.Culture do
   end
 
   attr :shelves, :list, required: true
+  attr :giphy, :map, default: nil
   attr :provider_count, :integer, required: true
   attr :return_path, :string, default: nil
   attr :contributor, :boolean, default: false
 
+  # Every kind on screen at once, one chrome for the lot (#131 Phase 2, V3).
+  #
+  # A row per kind: the kind named once in a narrow column on the left — its
+  # count and who put it there — and its rail beside. Nothing is behind a
+  # chip. What used to repeat per shelf repeats no more: one *About* for the
+  # block at its foot, with a section per kind inside it; and each shelf's
+  # *Load more* is its rail's last tile, where the reader's eye already is.
+  # The GIFs are one more row, the hook and its transport untouched.
+  #
+  # The cards themselves are unchanged. A credit on a `:required` row is a
+  # licence condition — beneath the thumbnail, always visible, never clamped
+  # (#116 M4) — so the Images row is taller than the sketch that dropped
+  # them, and that is the price of the licence rather than a flaw.
   defp compact_section(assigns) do
-    assigns = assign(assigns, :shelf_count, length(assigns.shelves))
+    assigns =
+      assigns
+      |> assign(:shelf_count, length(assigns.shelves))
+      |> assign(:total, assigns.shelves |> Enum.map(&length(&1.entries)) |> Enum.sum())
+      |> assign(:about, Enum.filter(assigns.shelves, &(contributing(&1) != [])))
 
     ~H"""
-    <section
-      id="in-culture"
-      aria-label="Related discoveries"
-      class="mt-6 border-y border-mist-950/10 py-5 dark:border-white/10"
-    >
-      <div :for={shelf <- @shelves} id={"culture-shelf-#{shelf.type}"} class="space-y-3">
-        <%= if shelf.entries != [] do %>
-          <div class="flex flex-wrap items-baseline justify-between gap-2">
-            <h2
+    <.slab id="in-culture" aria-label="Related discoveries" title="Out in the world">
+      <:meta>
+        <span :if={@total > 0}>{@total} things · </span>every match says why it is here
+      </:meta>
+
+      <div class="divide-y divide-mist-950/10 dark:divide-white/10">
+        <div :for={shelf <- @shelves} id={"culture-shelf-#{shelf.type}"} class="flex gap-4 py-4">
+          <div class="w-20 shrink-0 pt-1">
+            <h3
               id={"culture-filter-#{shelf.type}"}
-              class="font-display text-xl text-balance text-mist-950 dark:text-white"
+              class="text-base/6 font-medium text-mist-950 sm:text-sm/6 dark:text-white"
             >
-              {shelf_heading(shelf.type)}
-            </h2>
-            <%!-- D4 of #126: the byline is names. Each provider's own
-                 qualifier — *depicts: Wikidata*, *search: CC and public
-                 domain* — is a sentence about how that source matched, which
-                 is what the About section is for; four of them in the header
-                 wrapped to four lines above the rail at 375 px, measured on
-                 `/define/war` 2026-09-19. --%>
-            <p class="text-base text-mist-500 sm:text-sm">
+              {if shelf.entries == [],
+                do: "In #{shelf_label(shelf.type)}",
+                else: shelf_heading(shelf.type)}
+            </h3>
+            <p :if={shelf.entries != []} class="text-sm/6 tabular-nums text-mist-500">
+              {length(shelf.entries)}
+            </p>
+            <%!-- D4 of #126: the byline is names. Each provider's qualifier is
+                 a sentence about how it matched, which is the About's. --%>
+            <p :if={shelf.entries != []} class="mt-1 text-xs text-mist-400">
               <span :for={{state, index} <- Enum.with_index(contributing(shelf))}>
                 <span :if={index > 0} aria-hidden="true">·</span>
                 <span id={"culture-provider-#{state.provider}"}>{state.provider_name}</span>
               </span>
             </p>
           </div>
-          <%!-- No scroll snapping on this rail, deliberately. A shelf's corpus
-               items paint on the first, synchronous render and its live results
-               are prepended when they arrive; CSS scroll snap re-snaps a
-               container to its previously snapped box after a layout change, so
-               the rail opened 1,584 px in — past every result the page had just
-               gone and fetched. Measured on `/define/soldier`. --%>
-          <ul
-            role="list"
-            tabindex="0"
-            aria-label={"#{shelf_heading(shelf.type)} matches; scroll for more"}
-            id={shelf_id("culture-results", shelf, @shelf_count)}
-            class="flex gap-5 overflow-x-auto overscroll-x-contain pb-3 focus-visible:outline-2 focus-visible:outline-offset-2"
-          >
-            <li
-              :for={entry <- shelf.entries}
-              id={"culture-result-#{entry.item.external_namespace}-#{entry.item.external_id}"}
-              class={["shrink-0", ContentTypes.column(shelf.type)]}
+
+          <div class="min-w-0 flex-1 space-y-2">
+            <%!-- No scroll snapping on this rail, deliberately. A shelf's corpus
+                 items paint on the first, synchronous render and its live results
+                 are prepended when they arrive; CSS scroll snap re-snaps a
+                 container to its previously snapped box after a layout change, so
+                 the rail opened 1,584 px in — past every result the page had just
+                 gone and fetched. Measured on `/define/soldier`. --%>
+            <ul
+              :if={shelf.entries != []}
+              role="list"
+              tabindex="0"
+              aria-label={"#{shelf_heading(shelf.type)} matches; scroll for more"}
+              id={shelf_id("culture-results", shelf, @shelf_count)}
+              class="flex gap-4 overflow-x-auto overscroll-x-contain pb-2 focus-visible:outline-2 focus-visible:outline-offset-2"
             >
-              <.culture_thumbnail
-                item={entry.item}
-                type={shelf.type}
-                return_path={@return_path}
-              />
-            </li>
-          </ul>
-          <%!-- A shelf can be one provider's answer and another's silence. The
-               items are not a reason to stop saying that the other is still
-               looking, or has failed — but they are a reason to name the
-               provider rather than the content type, which is not empty. --%>
-          <p
-            :for={state <- pending(shelf)}
-            id={status_id(status_base(state.status), state, @provider_count)}
-            role="status"
-            class="text-base text-mist-500 sm:text-sm"
-          >
-            <%= case state.status do %>
-              <% :failed -> %>
-                {state.provider_name} is temporarily unavailable.
-              <% status when status in [:deferred, :expired, :withdrawn] -> %>
-                {state.provider_name} will retry when available.
-              <% _ -> %>
-                Still looking at {state.provider_name}…
-            <% end %>
-          </p>
-          <div class="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
-            <.compact_note shelf={shelf} contributor={@contributor} />
-            <.compact_more shelf={shelf} />
+              <li
+                :for={entry <- shelf.entries}
+                id={"culture-result-#{entry.item.external_namespace}-#{entry.item.external_id}"}
+                class={["shrink-0", ContentTypes.column(shelf.type)]}
+              >
+                <.culture_thumbnail
+                  item={entry.item}
+                  type={shelf.type}
+                  return_path={@return_path}
+                />
+              </li>
+              <li :if={advancing(shelf) != ""} class={["shrink-0", ContentTypes.column(shelf.type)]}>
+                <.compact_more shelf={shelf} />
+              </li>
+            </ul>
+            <%!-- A shelf can be one provider's answer and another's silence. The
+                 items are not a reason to stop saying that the other is still
+                 looking, or has failed — but they are a reason to name the
+                 provider rather than the content type, which is not empty. --%>
+            <p
+              :for={state <- if(shelf.entries == [], do: shelf.states, else: pending(shelf))}
+              id={status_id(status_base(state.status), state, @provider_count)}
+              role="status"
+              class="text-base text-mist-500 sm:text-sm"
+            >
+              <%= case {shelf.entries, state.status} do %>
+                <% {[], :empty} -> %>
+                  No matching {shelf_label(shelf.type)} for this term yet.
+                <% {[], :failed} -> %>
+                  {shelf_heading(shelf.type)} discovery is temporarily unavailable.
+                <% {[], status} when status in [:deferred, :expired, :withdrawn] -> %>
+                  {shelf_heading(shelf.type)} discovery will retry when available.
+                <% {[], _} -> %>
+                  Looking for matching {shelf_label(shelf.type)}…
+                <% {_, :failed} -> %>
+                  {state.provider_name} is temporarily unavailable.
+                <% {_, status} when status in [:deferred, :expired, :withdrawn] -> %>
+                  {state.provider_name} will retry when available.
+                <% _ -> %>
+                  Still looking at {state.provider_name}…
+              <% end %>
+            </p>
           </div>
-        <% else %>
-          <h2 class="font-display text-xl text-mist-950 dark:text-white">
-            In {shelf_label(shelf.type)}
-          </h2>
-          <p
-            :for={state <- shelf.states}
-            id={status_id(status_base(state.status), state, @provider_count)}
-            role="status"
-            class="text-base text-mist-500 sm:text-sm"
-          >
-            <%= case state.status do %>
-              <% :empty -> %>
-                No matching {shelf_label(shelf.type)} for this term yet.
-              <% :failed -> %>
-                {shelf_heading(shelf.type)} discovery is temporarily unavailable.
-              <% status when status in [:deferred, :expired, :withdrawn] -> %>
-                {shelf_heading(shelf.type)} discovery will retry when available.
-              <% _ -> %>
-                Looking for matching {shelf_label(shelf.type)}…
-            <% end %>
-          </p>
-        <% end %>
+        </div>
+
+        <DevilsDictionaryWeb.GiphyShelf.section :if={@giphy} config={@giphy} />
       </div>
-    </section>
+
+      <%!-- One About for the block (D3 of #126, taken one step further): a
+           section per kind, and inside each the section per source the shelf
+           always had, in the rail's own order. --%>
+      <details :if={@about != []} id="culture-about" class="min-w-0 pt-3 pb-4">
+        <summary class="w-fit cursor-pointer text-base text-mist-500 hover:text-mist-700 focus-visible:outline-2 focus-visible:outline-offset-2 sm:text-sm dark:text-mist-400 dark:hover:text-mist-200">
+          Matches for “{@about |> hd() |> contributing() |> Enum.find_value(& &1[:term])}” · About these results
+        </summary>
+        <div class="space-y-5 pt-3">
+          <.compact_note :for={shelf <- @about} shelf={shelf} contributor={@contributor} />
+        </div>
+      </details>
+    </.slab>
     """
+  end
+
+  # The providers a shelf's *Load more* advances, as the event's value. Every
+  # source with a cursor, not only the ones on the rail (D3 of #126).
+  defp advancing(shelf) do
+    shelf.states |> Enum.filter(& &1[:next_cursor]) |> Enum.map_join(",", & &1.provider)
   end
 
   # A shelf credits the providers that actually put something on it — on the
@@ -625,81 +663,72 @@ defmodule DevilsDictionaryWeb.Culture do
   attr :shelf, :map, required: true
   attr :contributor, :boolean, default: false
 
-  # D3 of #126: one About per shelf. Four contributing sources meant four
-  # disclosures and four *Load more* controls under one rail of images; the
-  # shelf is one thing, so its note is one thing, with a section per source
-  # inside it in the rail's own order.
+  # One kind's part of the block's About: the kind as a heading, then a
+  # section per source in the rail's own order (D3 of #126).
   defp compact_note(assigns) do
     contributors = contributing(assigns.shelf)
 
     assigns =
       assigns
       |> assign(:contributors, contributors)
-      |> assign(:term, contributors |> Enum.find_value(& &1[:term]))
       |> assign(:admits, ContentTypes.evidence(assigns.shelf.type))
 
     ~H"""
-    <details :if={@contributors != []} id={"culture-about-#{@shelf.type}"} class="min-w-0">
-      <%!-- `dark:hover:text-mist-200`: the light-mode hover darkens toward the
-           ink, and without a dark counterpart hovering in dark mode moved the
-           summary *towards* its background. The same shape as the credit
-           links' `dark:hover:text-white` two components down. --%>
-      <summary class="w-fit cursor-pointer text-base text-mist-500 hover:text-mist-700 focus-visible:outline-2 focus-visible:outline-offset-2 sm:text-sm dark:text-mist-400 dark:hover:text-mist-200">
-        Matches for “{@term}” · About these results
-      </summary>
-      <div class="space-y-3 pt-2">
-        <section
-          :for={state <- @contributors}
-          id={"culture-about-#{@shelf.type}-#{state.provider}"}
-          class="space-y-2 text-base text-mist-600 sm:text-sm dark:text-mist-300"
-        >
-          <%!-- The source's name and its own qualifier, which D4 moved off the
-               byline and onto the section that explains what the qualifier
-               means. --%>
-          <p class="font-medium text-mist-950 dark:text-white">
-            {state.provider_name}{provider_detail(state)}
-          </p>
-          <p :if={Map.get(state, :archetype) == :corpus} class="text-pretty">
-            Catalog matches from {Map.get(state, :corpora, state.provider_name)}, held locally
-            rather than searched for on this visit. None is an accepted interpretation: a
-            contributor connects an exact meaning and reviewers decide the claim.
-            <.link navigate={~p"/artworks"} class="underline underline-offset-4">
-              Browse saved artworks
+    <section :if={@contributors != []} id={"culture-about-#{@shelf.type}"} class="space-y-3">
+      <h4 class="text-base font-medium text-mist-950 sm:text-sm dark:text-white">
+        {shelf_heading(@shelf.type)}
+      </h4>
+      <section
+        :for={state <- @contributors}
+        id={"culture-about-#{@shelf.type}-#{state.provider}"}
+        class="space-y-2 text-base text-mist-600 sm:text-sm dark:text-mist-300"
+      >
+        <%!-- The source's name and its own qualifier, which D4 moved off the
+             byline and onto the section that explains what the qualifier
+             means. --%>
+        <p class="font-medium text-mist-950 dark:text-white">
+          {state.provider_name}{provider_detail(state)}
+        </p>
+        <p :if={Map.get(state, :archetype) == :corpus} class="text-pretty">
+          Catalog matches from {Map.get(state, :corpora, state.provider_name)}, held locally
+          rather than searched for on this visit. None is an accepted interpretation: a
+          contributor connects an exact meaning and reviewers decide the claim.
+          <.link navigate={~p"/artworks"} class="underline underline-offset-4">
+            Browse saved artworks
+          </.link>
+        </p>
+        <p :if={Map.get(state, :archetype) != :corpus} class="text-pretty">
+          Search matches from {state.provider_name}. These are provider results, not curated examples or dictionary interpretations.
+        </p>
+        <%!-- Not "keyword relevance": one shelf now carries keyword matches,
+             tag identities and depicted QIDs, and the caveat is about the page
+             resolving to several meanings, not about how a match was made.
+             Sense-level relevance is #101's. --%>
+        <p :if={state.relevance == "term_unverified"} class="text-pretty">
+          Relevance to this particular meaning is unverified.
+        </p>
+        <%!-- Each reason as one sentence, read against the shelf's own
+             `evidence` row (#116 M6): a search result on the one shelf that
+             admits one is called a search result; anywhere else a reason with
+             nothing in it keeps the sentence that prompts someone to fix it. --%>
+        <ul role="list" class="space-y-1">
+          <li :for={item <- @shelf.shown[state.provider] || []}>
+            {item.preview_metadata["title"]}: {MatchReason.describe_all(
+              reasons(item, state.term),
+              @admits
+            )}{review_note(item)}
+            <.link
+              :if={@contributor && connect_path(item)}
+              navigate={connect_path(item)}
+              id={"culture-connect-#{item.external_id}"}
+              class="underline underline-offset-4"
+            >
+              Connect to a meaning
             </.link>
-          </p>
-          <p :if={Map.get(state, :archetype) != :corpus} class="text-pretty">
-            Search matches from {state.provider_name}. These are provider results, not curated examples or dictionary interpretations.
-          </p>
-          <%!-- Not "keyword relevance": one shelf now carries keyword matches,
-               tag identities and depicted QIDs, and the caveat is about the page
-               resolving to several meanings, not about how a match was made.
-               Sense-level relevance is #101's. --%>
-          <p :if={state.relevance == "term_unverified"} class="text-pretty">
-            Relevance to this particular meaning is unverified.
-          </p>
-          <%!-- Each reason as one sentence, read against the shelf's own
-               `evidence` row (#116 M6): a search result on the one shelf that
-               admits one is called a search result; anywhere else a reason with
-               nothing in it keeps the sentence that prompts someone to fix it. --%>
-          <ul role="list" class="space-y-1">
-            <li :for={item <- @shelf.shown[state.provider] || []}>
-              {item.preview_metadata["title"]}: {MatchReason.describe_all(
-                reasons(item, state.term),
-                @admits
-              )}{review_note(item)}
-              <.link
-                :if={@contributor && connect_path(item)}
-                navigate={connect_path(item)}
-                id={"culture-connect-#{item.external_id}"}
-                class="underline underline-offset-4"
-              >
-                Connect to a meaning
-              </.link>
-            </li>
-          </ul>
-        </section>
-      </div>
-    </details>
+          </li>
+        </ul>
+      </section>
+    </section>
     """
   end
 
@@ -739,22 +768,17 @@ defmodule DevilsDictionaryWeb.Culture do
   attr :shelf, :map, required: true
 
   # D3 of #126: one *Load more* per shelf, advancing every source on it that
-  # has another page. Per-source controls made the counts drift — one click on
-  # Pexels put 24 of its photographs on a rail where the other three held 12
-  # each, measured on `/define/war` 2026-09-19 — and the interleave's turns
-  # only read as turns while the sources are level.
-  #
-  # Every source with a cursor, not only the ones currently on the rail: a
-  # source whose whole page folded into a better-tiered copy contributes
-  # nothing to the byline, and leaving it behind here would keep it off the
-  # shelf for good.
+  # has another page — per-source controls made the counts drift. Now the
+  # rail's last tile: `+N` when the page cap dropped a number the page knows
+  # (IMDb's shape), *More* when the providers hold an unknown number more.
   defp compact_more(assigns) do
-    advancing = Enum.filter(assigns.shelf.states, & &1[:next_cursor])
-
     assigns =
       assigns
-      |> assign(:providers, Enum.map_join(advancing, ",", & &1.provider))
-      |> assign(:loading, Enum.any?(advancing, &(&1[:loading_more] == true)))
+      |> assign(:providers, advancing(assigns.shelf))
+      |> assign(
+        :loading,
+        Enum.any?(assigns.shelf.states, &(&1[:next_cursor] && &1[:loading_more] == true))
+      )
 
     ~H"""
     <button
@@ -764,13 +788,19 @@ defmodule DevilsDictionaryWeb.Culture do
       phx-click="discovery_more"
       phx-value-providers={@providers}
       disabled={@loading}
-      class="relative rounded-sm py-1 text-base text-mist-600 underline underline-offset-4 hover:text-mist-950 focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50 sm:text-sm dark:text-mist-300 dark:hover:text-white"
-    ><%!-- The shelf's one control, so it is worth being able to hit. At 375 it
-           is 32 px tall, under the 48 px a thumb needs; the span is the touch
-           target and is not there for a mouse. --%><span
-      class="pointer-fine:hidden absolute top-1/2 left-1/2 size-[max(100%,3rem)] -translate-1/2"
-      aria-hidden="true"
-    ></span>{if @loading, do: "Loading…", else: "Load more"}</button>
+      class={[
+        "flex w-full cursor-pointer items-center justify-center rounded-sm bg-mist-950/5 text-base font-medium tabular-nums text-mist-700",
+        "hover:bg-mist-950/10 focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50 sm:text-sm",
+        "dark:bg-white/10 dark:text-mist-300 dark:hover:bg-white/15",
+        ContentTypes.get(@shelf.type).aspect || "py-6"
+      ]}
+    >
+      {cond do
+        @loading -> "Loading…"
+        @shelf.overflow > 0 -> "+#{@shelf.overflow}"
+        true -> "More"
+      end}
+    </button>
     """
   end
 

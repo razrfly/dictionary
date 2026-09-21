@@ -23,55 +23,119 @@ defmodule DevilsDictionaryWeb.Word do
 
   alias DevilsDictionary.Lexicon.WordPage
 
-  @doc "The word itself: every part of speech the index holds, forms, sound, origin."
+  @doc """
+  The word itself: the lemma, how it sounds, and every part of speech the
+  index holds.
+
+  Forms and origins left this block for the rail's disclosure in #131 Phase 2.
+  They are facts about the word rather than definitions of it, and whole they
+  put the first definition below the fold — `little` has 66 forms and `dog`'s
+  etymology is 1,615 characters.
+  """
   attr :headword, :map, required: true
+
+  attr :choices, :list,
+    default: [],
+    doc: "the other words this slug names, each with an address of its own"
+
+  attr :thing, :map, default: nil
+  attr :thing_info, :string, default: nil
   attr :demo, :boolean, default: false
 
   def headword(assigns) do
+    assigns = assign(assigns, :other, Map.new(assigns.choices, &{&1.object_id, &1}))
+
     ~H"""
-    <div id="headword" class="border-b border-mist-950/10 pb-8 dark:border-white/10">
-      <div class="flex flex-wrap items-baseline gap-x-4 gap-y-2">
-        <h1 class="font-display text-5xl/none text-mist-950 sm:text-6xl/none dark:text-white">
-          {@headword.lemma}
-        </h1>
-        <p :if={@headword.pronunciations != []} id="pronunciations" class="text-lg/7 text-mist-500">
-          <span :for={p <- @headword.pronunciations} class="mr-3 font-mono">{p.ipa}</span>
-        </p>
-      </div>
-
-      <p id="parts-of-speech" class="mt-3 text-sm/7 text-mist-700 dark:text-mist-400">
-        <span :for={{lexeme, i} <- Enum.with_index(@headword.lexemes)}>
-          <span :if={i > 0} aria-hidden="true">·</span>
-          <span class={[not lexeme.enriched? && "text-mist-500"]}>{lexeme.pos}</span>
-        </span>
-      </p>
-
-      <p :if={@headword.forms != []} id="forms" class="mt-2 text-sm/7 text-mist-500">
-        <span class="text-mist-700 dark:text-mist-400">forms</span>
-        {Enum.join(@headword.forms, " · ")}
-      </p>
+    <div id="headword">
+      <h1 class="font-display text-5xl/none text-mist-950 sm:text-6xl/none dark:text-white">
+        {@headword.lemma}
+      </h1>
 
       <p
-        :for={{etymology, i} <- Enum.with_index(@headword.etymologies)}
-        id={"etymology-#{i}"}
-        class="mt-2 max-w-2xl text-sm/7 text-mist-500"
+        :if={@headword.pronunciations != []}
+        id="pronunciations"
+        class="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1 text-lg/7 text-mist-500"
       >
-        <span class="text-mist-700 dark:text-mist-400">
-          origin ({Enum.join(etymology.parts, ", ")})
+        <span :for={p <- @headword.pronunciations} class="font-mono">{p.ipa}</span>
+        <span :if={@headword.pronunciations_all != []} class="text-base/7 sm:text-sm/7">
+          <a
+            href="#pronunciation-variants"
+            class="underline underline-offset-4 hover:text-mist-950 dark:hover:text-white"
+          >
+            +{length(@headword.pronunciations_all) - length(@headword.pronunciations)} variants
+          </a>
         </span>
-        {etymology.text}
-        <span :if={etymology.source} class="text-mist-400">— {etymology.source}</span>
+      </p>
+
+      <%!-- A slug is a label, not an identity: `love`, `Love` and `LoVe` are
+           three words under one address (ADR decision 10). The page shows them
+           together, and this line is where it says so — each other word is
+           its own lemma, linked to its canonical address, in the place its
+           part of speech already held. What was a boxed paragraph above the
+           rail is a run of links in a line the page already had. --%>
+      <p id="parts-of-speech" class="mt-3 text-base/7 text-mist-700 sm:text-sm/7 dark:text-mist-400">
+        <span :for={{lexeme, i} <- Enum.with_index(@headword.lexemes)}>
+          <span :if={i > 0} aria-hidden="true">·</span>
+          <%= if other = other_word(@other, lexeme, @headword.lemma) do %>
+            <.link
+              id={"disambiguation-#{other.object_id}"}
+              navigate={~p"/words/#{other.object_id}/#{other.slug}"}
+              class="font-medium text-mist-950 hover:underline dark:text-white"
+            >
+              {other.lemma}
+            </.link>
+            <span class="text-mist-500">{lexeme.pos}</span>
+          <% else %>
+            <span class={[not lexeme.enriched? && "text-mist-500"]}>{lexeme.pos}</span>
+          <% end %>
+        </span>
+        <span :if={@choices != []} id="disambiguation" class="sr-only">
+          “{@headword.slug}” is the slug of more than one word; each linked word has an address of its own.
+        </span>
+      </p>
+
+      <%!-- The one-line answer, where a reader looks for one. Wikidata's
+           description of the concept the word refers to — per concept, not
+           per source, and carrying a QID — was the last thing on the page.
+           A source's first gloss would be a choice of source; this is not. --%>
+      <p
+        :if={@thing && @thing.concept.description}
+        id="quick-definition"
+        class="mt-3 max-w-[40ch] text-base/7 text-mist-950 text-pretty sm:text-sm/7 dark:text-white"
+      >
+        {@thing.concept.description}
+        <span class="whitespace-nowrap text-mist-500">
+          <.link
+            :if={@thing.wikidata_url}
+            href={@thing.wikidata_url}
+            target="_blank"
+            rel="noopener"
+            class="hover:underline"
+          >
+            Wikidata <span aria-hidden="true">↗</span>
+          </.link>
+          <.info_link
+            :if={@thing_info}
+            id="quick-definition-info"
+            path={@thing_info}
+            label="Wikidata"
+          />
+        </span>
       </p>
 
       <p
         :if={@headword.via in [:canonical, :form]}
         id="redirected-from"
-        class="mt-4 text-sm/7 text-mist-500"
+        class="mt-3 text-base/7 text-mist-500 sm:text-sm/7"
       >
         redirected from “{@headword.matched}”
       </p>
 
-      <p :if={@headword.also != []} id="also-a-form-of" class="mt-2 text-sm/7 text-mist-500">
+      <p
+        :if={@headword.also != []}
+        id="also-a-form-of"
+        class="mt-2 text-base/7 text-mist-500 sm:text-sm/7"
+      >
         also listed as a form of
         <.link
           :for={other <- @headword.also}
@@ -83,6 +147,15 @@ defmodule DevilsDictionaryWeb.Word do
       </p>
     </div>
     """
+  end
+
+  # The other word a lexeme is, when it is one: a choice whose lemma differs
+  # from the page's. The page's own lexemes stay plain parts of speech.
+  defp other_word(other, lexeme, lemma) do
+    case other[lexeme.id] do
+      %{lemma: ^lemma} -> nil
+      choice -> choice
+    end
   end
 
   @doc """
@@ -103,7 +176,11 @@ defmodule DevilsDictionaryWeb.Word do
 
   def source_line(assigns) do
     ~H"""
-    <p :if={@sources != []} id="sources" class="mt-3 text-sm/7 text-mist-500">
+    <p
+      :if={@sources != []}
+      id="sources"
+      class="text-base/7 font-medium text-mist-700 sm:text-sm/7 dark:text-mist-400"
+    >
       <span :if={length(@sources) > 1}>Defined here by {count(@sources, "source")}</span>
       <span :if={match?([_one], @sources)} id="one-source">
         One source so far · {Enum.join(@sources, " · ")}
@@ -265,6 +342,422 @@ defmodule DevilsDictionaryWeb.Word do
         demo={@demo}
       />
     </section>
+    """
+  end
+
+  @doc """
+  The word itself, as a column: what the page knows the size of before it
+  renders anything.
+
+  #131's sorting rule. A headword, its sound, its parts of speech, its forms,
+  its origin and the index of its sources are all bounded — one line at nine
+  parts of speech, eight forms and a count, one sentence and a disclosure —
+  and they are the same shape on every page in the index. What a *source*
+  decides the size of goes in the column beside this one.
+
+  Not sticky, deliberately. The field pins a rail only when the rail is
+  navigation; this one carries facts, and every measured site that does the
+  same lets it scroll (#131 Phase 1, `docs/discovery/issue-131-how-others-do-it.md`).
+  """
+  attr :page, :map, required: true
+  attr :sources, :list, default: []
+  attr :choices, :list, default: []
+  attr :thing_info, :string, default: nil
+  attr :class, :string, default: nil
+  attr :demo, :boolean, default: false
+
+  def rail(assigns) do
+    ~H"""
+    <aside id="word-rail" class={@class}>
+      <.headword
+        headword={@page.headword}
+        choices={@choices}
+        thing={@page.thing}
+        thing_info={@thing_info}
+        demo={@demo}
+      />
+      <.stats page={@page} sources={@sources} />
+
+      <details
+        :if={facts?(@page.headword)}
+        id="about-the-word"
+        class="mt-5 border-t border-mist-950/10 pt-4 dark:border-white/10"
+      >
+        <summary class="w-fit cursor-pointer text-base/7 font-medium text-mist-700 sm:text-sm/7 dark:text-mist-400">
+          Sound, forms and origin
+        </summary>
+        <div class="pb-1">
+          <.forms forms={@page.headword.forms} />
+          <.origin
+            :for={{etymology, i} <- Enum.with_index(@page.headword.etymologies)}
+            etymology={etymology}
+            index={i}
+          />
+          <.pronunciation_list headword={@page.headword} />
+        </div>
+      </details>
+
+      <nav
+        :if={@page.cards != []}
+        aria-label="Sources"
+        class="mt-5 border-t border-mist-950/10 pt-4 dark:border-white/10"
+      >
+        <.source_line sources={@sources} />
+        <ul role="list" class="mt-2 space-y-1 text-base/7 sm:text-sm/7">
+          <li :for={card <- @page.cards}>
+            <a
+              href={"#" <> card.id}
+              class={[
+                "flex items-baseline justify-between gap-2 hover:underline",
+                card.tier == :aristocracy && "text-amber-700 dark:text-amber-400",
+                card.tier != :aristocracy && "text-mist-600 dark:text-mist-400"
+              ]}
+            >
+              <span class="min-w-0 truncate">
+                <span aria-hidden="true" class="mr-1">{tier_glyph(card.tier)}</span>{author(
+                  card.source
+                )}
+              </span>
+              <span :if={card.pos} class="shrink-0 text-mist-400">{card.pos}</span>
+            </a>
+          </li>
+        </ul>
+      </nav>
+    </aside>
+    """
+  end
+
+  defp facts?(headword),
+    do: headword.forms != [] or headword.etymologies != [] or headword.pronunciations != []
+
+  @doc """
+  The three things this page can count before it renders: how many sources have
+  spoken, how many senses they filed between them, and how much of the world
+  came back. The kit's `stat/1` shape, at the kit's own scale.
+  """
+  attr :page, :map, required: true
+  attr :sources, :list, default: []
+
+  def stats(assigns) do
+    assigns =
+      assigns
+      |> assign(:senses, Enum.reduce(assigns.page.cards, 0, &(&2 + &1.senses)))
+      # A source that filed a noun and a verb is one source with two entries,
+      # and a page that says "9 sources" over five names is miscounting.
+      |> assign(:count, length(assigns.sources))
+
+    ~H"""
+    <div :if={@page.cards != []} id="word-stats" class="mt-5 grid grid-cols-2 gap-2">
+      <div class="rounded-xl bg-mist-950/2.5 p-4 dark:bg-white/5">
+        <div class="text-2xl/8 tracking-tight tabular-nums text-mist-950 dark:text-white">
+          {@count}
+        </div>
+        <p class="mt-1 text-base/6 text-mist-700 sm:text-sm/6 dark:text-mist-400">
+          {if @count == 1, do: "source", else: "sources"}
+        </p>
+      </div>
+      <div class="rounded-xl bg-mist-950/2.5 p-4 dark:bg-white/5">
+        <div class="text-2xl/8 tracking-tight tabular-nums text-mist-950 dark:text-white">
+          {@senses}
+        </div>
+        <p class="mt-1 text-base/6 text-mist-700 sm:text-sm/6 dark:text-mist-400">
+          {if @senses == 1, do: "sense", else: "senses"}
+        </p>
+      </div>
+    </div>
+    """
+  end
+
+  @doc "The forms the headword shows inline, and the disclosure holding the rest."
+  attr :forms, :list, default: []
+
+  def forms(assigns) do
+    assigns =
+      assigns
+      |> assign(:shown, Enum.take(assigns.forms, WordPage.form_cap()))
+      |> assign(:rest, Enum.drop(assigns.forms, WordPage.form_cap()))
+
+    ~H"""
+    <p :if={@forms != []} id="forms" class="mt-2 text-base/7 text-mist-500 sm:text-sm/7">
+      <span class="text-mist-700 dark:text-mist-400">forms</span>
+      {Enum.join(@shown, " · ")}
+    </p>
+    <details :if={@rest != []} id="form-list" class="mt-1">
+      <summary class="w-fit cursor-pointer text-base/7 text-mist-500 underline underline-offset-4 hover:text-mist-950 sm:text-sm/7 dark:hover:text-white">
+        All {length(@forms)} forms
+      </summary>
+      <p class="mt-2 text-base/7 text-mist-500 sm:text-sm/7">{Enum.join(@forms, " · ")}</p>
+    </details>
+    """
+  end
+
+  @doc """
+  One origin: its first sentence, and a disclosure that says how much more
+  there is. `dog`'s is 1,615 characters and `set` has five of them, so an
+  origin that renders whole is a paragraph between the reader and the first
+  definition.
+  """
+  attr :etymology, :map, required: true
+  attr :index, :integer, required: true
+
+  def origin(assigns) do
+    ~H"""
+    <p
+      :if={@etymology.rest == nil}
+      id={"etymology-#{@index}"}
+      class="mt-2 max-w-2xl text-base/7 text-mist-500 sm:text-sm/7"
+    >
+      <span class="text-mist-700 dark:text-mist-400">origin ({Enum.join(@etymology.parts, ", ")})</span>
+      {@etymology.text}
+      <span :if={@etymology.source} class="text-mist-400">— {@etymology.source}</span>
+    </p>
+    <details :if={@etymology.rest} id={"etymology-#{@index}"} class="mt-2 max-w-2xl">
+      <summary class="cursor-pointer list-none text-base/7 text-mist-500 sm:text-sm/7 [&::-webkit-details-marker]:hidden">
+        <span class="text-mist-700 dark:text-mist-400">origin ({Enum.join(@etymology.parts, ", ")})</span>
+        {@etymology.first}
+        <span class="text-mist-400 underline underline-offset-4">
+          {String.length(@etymology.rest)} characters more
+        </span>
+      </summary>
+      <p class="mt-2 text-base/7 text-mist-500 sm:text-sm/7">
+        {@etymology.rest}
+        <span :if={@etymology.source} class="text-mist-400">— {@etymology.source}</span>
+      </p>
+    </details>
+    """
+  end
+
+  @doc """
+  Every pronunciation the word carries, with the regional tags the page has
+  always built and never rendered. `love` holds nine spellings and three
+  recordings; the headword shows three. A cap that says nothing is worse than
+  no cap — the reader cannot tell a word with one accent from a page showing
+  one.
+  """
+  attr :headword, :map, required: true
+
+  def pronunciation_list(assigns) do
+    ~H"""
+    <%!-- `#pronunciation-variants` is on the list, not on the `<details>` that
+         holds it. A fragment opens the closed disclosures *above* its target,
+         never the target itself, and this list sits two deep — inside
+         `#about-the-word`. Named here, the headword's "+n variants" link opens
+         both on the way down; named on the `<details>`, it would open the
+         outer one and land on a summary still closed. --%>
+    <details :if={@headword.pronunciations_all != []} id="pronunciations-all" class="mt-2">
+      <summary class="w-fit cursor-pointer text-base/7 text-mist-500 underline underline-offset-4 hover:text-mist-950 sm:text-sm/7 dark:hover:text-white">
+        All {length(@headword.pronunciations_all)} pronunciations recorded
+      </summary>
+      <ul
+        id="pronunciation-variants"
+        role="list"
+        class="mt-2 space-y-1 text-base/7 text-mist-500 sm:text-sm/7"
+      >
+        <li :for={p <- @headword.pronunciations_all} class="flex flex-wrap items-baseline gap-x-3">
+          <span class="font-mono text-mist-700 dark:text-mist-400">{p.ipa || "recording"}</span>
+          <span :if={p.tags != []} class="text-mist-400">{Enum.join(p.tags, ", ")}</span>
+        </li>
+      </ul>
+    </details>
+    """
+  end
+
+  @doc """
+  One source, as a row that opens.
+
+  `name="sources"` makes these an **exclusive accordion** — the HTML
+  attribute, no JavaScript — so opening one closes the last. Johnson files two
+  entries for `set` totalling 39,955 characters, and before this each of them
+  could be open at once.
+
+  What the row says closed is what it takes to choose it: who wrote it, when,
+  how much there is, and the source's own opening words. Never *Show more*: a
+  scanning reader takes in about two words, and nine identical labels carry no
+  scent at all.
+  """
+  attr :card, :map, required: true
+  attr :open, :boolean, default: false
+
+  attr :continues, :boolean,
+    default: false,
+    doc:
+      "whether the row above is the same source — then only the part of speech and the size are new"
+
+  attr :trail, :list, default: []
+  attr :info, :string, default: nil
+  attr :demo, :boolean, default: false
+
+  def source_row(assigns) do
+    assigns = assign(assigns, :sample?, Map.get(assigns.card, :sample?, false))
+
+    ~H"""
+    <details
+      id={@card.id}
+      name="sources"
+      open={@open}
+      class={[
+        "group/row",
+        @sample? && "border-l-2 border-dashed border-amber-600/60 pl-4"
+      ]}
+    >
+      <summary class={[
+        "flex cursor-pointer list-none items-start justify-between gap-4 [&::-webkit-details-marker]:hidden",
+        @continues && "py-3 pl-6",
+        not @continues && "py-4"
+      ]}>
+        <div class="min-w-0 flex-1">
+          <%!-- Johnson filed a noun and a verb for *love* and three entries
+               for *set*. His name once, and the rows that follow it say only
+               what is new about them — a screen reader still hears whose. --%>
+          <h2 :if={not @continues} class={["text-base/7 font-medium", tier_class(@card.tier)]}>
+            <span aria-hidden="true" class="mr-1">{tier_glyph(@card.tier)}</span>{author(@card.source)}
+            <DevilsDictionaryWeb.Demo.sample_badge :if={@sample?} />
+          </h2>
+          <p class={[
+            "text-base/6 tabular-nums text-mist-500 sm:text-sm/6",
+            not @continues && "mt-0.5",
+            @continues && "font-medium text-mist-700 dark:text-mist-400"
+          ]}>
+            <span :if={@continues} class="sr-only">{author(@card.source)} · </span>
+            <span :if={not @continues and period(@card)}>{period(@card)} · </span>
+            <span :if={not @continues and @card.year}>{@card.year} · </span>
+            <span :if={@card.pos}>{@card.pos} · </span>
+            {size(@card)}
+          </p>
+          <p
+            :if={@card.opening}
+            class="mt-1 line-clamp-1 max-w-[47rem] text-base/7 text-mist-500 group-open/row:hidden sm:text-sm/7"
+          >
+            {@card.opening}
+          </p>
+        </div>
+        <span class="relative size-4 h-lh shrink-0 text-mist-400" aria-hidden="true">
+          <span class="absolute top-1/2 left-0 h-px w-4 -translate-y-1/2 bg-current"></span>
+          <span class="absolute top-1/2 left-0 h-px w-4 -translate-y-1/2 rotate-90 bg-current group-open/row:hidden"></span>
+        </span>
+      </summary>
+
+      <div class="pb-5">
+        <div :if={@card.thumbnail_url} class="mb-4">
+          <img
+            src={@card.thumbnail_url}
+            alt=""
+            loading="lazy"
+            class="max-h-48 w-auto rounded-lg outline-1 -outline-offset-1 outline-mist-950/10 dark:outline-white/10"
+          />
+        </div>
+
+        <.entry
+          :for={{entry, i} <- Enum.with_index(@card.entries)}
+          id={"#{@card.id}-entry-#{i}"}
+          card_id={@card.id}
+          entry={entry}
+        />
+
+        <.sense_group
+          :for={{group, i} <- Enum.with_index(Enum.take(@card.groups, WordPage.group_cap()))}
+          card_id={@card.id}
+          group={group}
+          index={i}
+          trail={@trail}
+          demo={@demo}
+        />
+
+        <details
+          :if={length(@card.groups) > WordPage.group_cap()}
+          id={"#{@card.id}-more-groups"}
+          class="mt-3"
+        >
+          <summary class="w-fit cursor-pointer text-base/7 text-mist-500 underline underline-offset-4 hover:text-mist-950 sm:text-sm/7 dark:hover:text-white">
+            {length(@card.groups) - WordPage.group_cap()} more from this source · {rest_senses(@card)} senses
+          </summary>
+          <.sense_group
+            :for={{group, i} <- Enum.with_index(Enum.drop(@card.groups, WordPage.group_cap()))}
+            card_id={@card.id}
+            group={group}
+            index={i + WordPage.group_cap()}
+            trail={@trail}
+            demo={@demo}
+          />
+        </details>
+
+        <p class="mt-4 flex flex-wrap items-baseline gap-x-4 gap-y-1 text-base/7 sm:text-sm/7">
+          <.link
+            :if={@card.url}
+            id={"#{@card.id}-out"}
+            href={@card.url}
+            target="_blank"
+            rel="noopener"
+            class="text-mist-500 underline underline-offset-4 hover:text-mist-950 dark:hover:text-white"
+          >
+            Read this at {author(@card.source)} <span aria-hidden="true">↗</span>
+          </.link>
+          <.info_link :if={@info} id={"#{@card.id}-info"} path={@info} label={@card.source.name} />
+        </p>
+      </div>
+    </details>
+    """
+  end
+
+  defp rest_senses(card) do
+    card.groups |> Enum.drop(WordPage.group_cap()) |> Enum.reduce(0, &(&2 + length(&1.senses)))
+  end
+
+  # How much is behind the row. A count, never "more".
+  defp size(%{senses: n}) when n > 0, do: "#{n} #{if n == 1, do: "sense", else: "senses"}"
+  defp size(%{chars: n}) when n > 0, do: "#{number(n)} characters"
+  defp size(_card), do: ""
+
+  # A period, for a source old enough that its date is a warning as much as a
+  # fact. Le Robert heads its 1690 Furetière *17e siècle*; the reader learns
+  # what kind of text is coming before reading a word of it, which is the
+  # cheapest guard against reading an archaic sense as the current one.
+  defp period(%{year: year, tier: :aristocracy}) when is_integer(year) and year < 2000 do
+    century = div(year - 1, 100) + 1
+
+    suffix =
+      case {rem(century, 10), rem(century, 100)} do
+        {1, n} when n != 11 -> "st"
+        {2, n} when n != 12 -> "nd"
+        {3, n} when n != 13 -> "rd"
+        _ -> "th"
+      end
+
+    "#{century}#{suffix} century"
+  end
+
+  defp period(_card), do: nil
+
+  @doc "One prose entry: its opening, and the disclosure holding the rest of the original."
+  attr :id, :string, required: true
+  attr :card_id, :string, required: true
+  attr :entry, :map, required: true
+
+  def entry(assigns) do
+    ~H"""
+    <div id={@id} class="mt-4 max-w-[47rem] first:mt-0">
+      <.document>{Phoenix.HTML.raw(@entry.preview_html)}</.document>
+      <details :if={@entry.rest_html} id={"#{@id}-rest"} class="group/entry mt-2">
+        <summary class="w-fit cursor-pointer list-none text-base/7 text-mist-500 hover:text-mist-950 sm:text-sm/7 dark:hover:text-white [&::-webkit-details-marker]:hidden">
+          <span class="underline underline-offset-4 group-open/entry:hidden">
+            Read the rest of this entry · {number(@entry.rest_chars)} characters
+          </span>
+          <span class="underline underline-offset-4 not-group-open/entry:hidden">Fold this entry</span>
+        </summary>
+        <.document class="mt-4">{Phoenix.HTML.raw(@entry.rest_html)}</.document>
+      </details>
+      <p :if={Map.get(@entry, :authors, []) != []} class="mt-3 text-base/7 text-mist-500 sm:text-sm">
+        By
+        <.link
+          :for={author <- Map.get(@entry, :authors, [])}
+          id={"#{@card_id}-author-#{author.id}"}
+          navigate={"/entities/#{author.id}/#{DevilsDictionary.Claims.Connection.slugify(author.label)}"}
+          class="mr-2 underline underline-offset-4 hover:text-amber-700"
+        >
+          {author.label}
+        </.link>
+      </p>
+    </div>
     """
   end
 
