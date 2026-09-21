@@ -700,7 +700,6 @@ defmodule DevilsDictionaryWeb.Word do
         <.entry
           :for={{entry, i} <- Enum.with_index(@card.entries)}
           id={"#{@card.id}-entry-#{i}"}
-          card_id={@card.id}
           entry={entry}
         />
 
@@ -780,7 +779,6 @@ defmodule DevilsDictionaryWeb.Word do
 
   @doc "One prose entry: its opening, and the disclosure holding the rest of the original."
   attr :id, :string, required: true
-  attr :card_id, :string, required: true
   attr :entry, :map, required: true
 
   def entry(assigns) do
@@ -796,11 +794,15 @@ defmodule DevilsDictionaryWeb.Word do
         </summary>
         <.document class="mt-4">{Phoenix.HTML.raw(@entry.rest_html)}</.document>
       </details>
+      <%!-- The id is the *entry*'s, not the card's. Johnson filed two verb
+           entries for `set` and the same man wrote both, so keying the byline
+           on the card put `#card-johnson-verb-author-4` on the page twice —
+           the last duplicate id on `/define/set` (#133 R4's acceptance). --%>
       <p :if={Map.get(@entry, :authors, []) != []} class="mt-3 text-base/7 text-mist-500 sm:text-sm">
         By
         <.link
           :for={author <- Map.get(@entry, :authors, [])}
-          id={"#{@card_id}-author-#{author.id}"}
+          id={"#{@id}-author-#{author.id}"}
           navigate={"/entities/#{author.id}/#{DevilsDictionary.Claims.Connection.slugify(author.label)}"}
           class="mr-2 underline underline-offset-4 hover:text-amber-700"
         >
@@ -943,12 +945,13 @@ defmodule DevilsDictionaryWeb.Word do
   def relation_group(assigns) do
     ~H"""
     <div id={@id} class="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1">
-      <span class="w-20 shrink-0 text-sm/7 text-mist-500">{label_for(@group)}</span>
+      <span class="w-20 shrink-0 text-base/7 text-mist-500 sm:text-sm/7">{label_for(@group)}</span>
       <.chip
         :for={chip <- @chips.shown}
         id={"#{@id}-#{chip.slug}"}
         group={@group}
         chip={chip}
+        tag={@chips.tags?}
         trail={@trail}
         demo={@demo}
       />
@@ -956,15 +959,24 @@ defmodule DevilsDictionaryWeb.Word do
       its widest child by default, so a long lemma like *murrumbidgee oyster*
       pushed the expander past the viewport instead of wrapping inside it. --%>
       <details :if={@chips.rest != []} class="min-w-0 max-w-full">
-        <summary class="cursor-pointer text-sm/7 text-mist-500 hover:text-mist-950 dark:hover:text-white">
+        <summary class="cursor-pointer text-base/7 text-mist-500 hover:text-mist-950 sm:text-sm/7 dark:hover:text-white">
           +{length(@chips.rest)}
         </summary>
-        <span class="mt-1 flex flex-wrap gap-1 pt-1">
+        <%!-- `family` is 281 chips on *love*. Opened whole it is five screens
+             of them and the reader has lost the page; `scroll?` — decided in
+             `WordPage.cap/1`, never here — puts the rest in a box of its own
+             instead. Every chip in it is still a link, so tabbing reaches
+             them and the browser scrolls each into view as it goes. --%>
+        <span class={[
+          "mt-1 flex flex-wrap gap-1 pt-1",
+          @chips.scroll? && "max-h-64 overflow-y-auto overscroll-contain"
+        ]}>
           <.chip
             :for={chip <- @chips.rest}
             id={"#{@id}-#{chip.slug}"}
             group={@group}
             chip={chip}
+            tag={@chips.tags?}
             trail={@trail}
             demo={@demo}
           />
@@ -986,6 +998,12 @@ defmodule DevilsDictionaryWeb.Word do
   attr :id, :string, required: true
   attr :group, :any, required: true
   attr :chip, :map, required: true
+
+  attr :tag, :boolean,
+    default: false,
+    doc:
+      "whether the group holds more than one part of speech — then each chip names its own (#133 R4)"
+
   attr :trail, :list, default: []
   attr :demo, :boolean, default: false
 
@@ -996,17 +1014,29 @@ defmodule DevilsDictionaryWeb.Word do
       navigate={hop(@chip.slug, @trail, @demo)}
       title={"#{label_for(@group)} · #{@chip.pos}"}
       class={[
-        "rounded-full px-3 py-0.5 text-sm/6",
+        "rounded-full px-3 py-0.5 text-base/6 sm:text-sm/6",
         @chip.enriched? &&
           "bg-mist-950/5 font-medium text-mist-950 hover:bg-mist-950/10 dark:bg-white/10 dark:text-white dark:hover:bg-white/15",
         not @chip.enriched? &&
           "bg-mist-950/2.5 text-mist-500 hover:bg-mist-950/5 dark:bg-white/5 dark:hover:bg-white/10"
       ]}
     >
-      {@chip.lemma}
+      {@chip.lemma}<span :if={@tag and @chip.pos} class="ml-1 font-normal text-mist-400">({pos_tag(
+        @chip.pos
+      )})</span>
     </.link>
     """
   end
+
+  # `wish (v)`, not `wish (verb)`: the tag sits inside a chip and rides beside
+  # every lemma in a mixed group, so it is an abbreviation where the corpus has
+  # a conventional one and the corpus's own word where it does not — `intj`,
+  # `phrase`, `prep phrase`. Nothing is invented and nothing is truncated.
+  defp pos_tag("noun"), do: "n"
+  defp pos_tag("verb"), do: "v"
+  defp pos_tag("adjective"), do: "adj"
+  defp pos_tag("adverb"), do: "adv"
+  defp pos_tag(pos), do: String.replace(pos, "_", " ")
 
   @doc "The words walked to get here, kept in the URL so the walk can be pasted."
   attr :trail, :list, required: true
@@ -1060,8 +1090,13 @@ defmodule DevilsDictionaryWeb.Word do
   end
 
   @doc """
-  The relation groups of one part of speech, in #71 §7's order. These are the
-  edges the source hung off the word rather than off a sense.
+  Every relation the sources hung off the word rather than off a sense, as one
+  block grouped by relation in #71 §7's order.
+
+  One block, not one per lexeme (#133 R4). The part of speech a chip *has* is
+  printed on the chip when its group holds more than one; the part of speech a
+  chip *came from* is not a fact about the reader's word, which is why there is
+  no `· verb` beside this heading any more.
   """
   attr :related, :map, required: true
   attr :trail, :list, default: []
@@ -1069,14 +1104,25 @@ defmodule DevilsDictionaryWeb.Word do
 
   def related_block(assigns) do
     ~H"""
-    <section id={"related-#{@related.pos || "x"}"} class="mt-8">
-      <h2 class="text-base/8 font-medium text-mist-950 dark:text-white">
-        Related words
-        <span :if={@related.pos} class="font-normal text-mist-500">· {@related.pos}</span>
-      </h2>
+    <section id="related" class="mt-8">
+      <h2 class="text-base/8 font-medium text-mist-950 dark:text-white">Related words</h2>
+      <%!-- On `love` the noun has no page-level relations at all: WordNet's
+           hypernyms and Wiktionary's per-sense synonyms are a *sense's* claim
+           and render inside the card that made it. A thin block without this
+           line reads as the word having nothing, so the line says where the
+           rest is and links to the first card holding any. --%>
+      <p :if={@related.sense_link} class="mt-1 text-base/7 text-mist-500 sm:text-sm/7">
+        <.link
+          id="related-senses"
+          href={"##{@related.sense_link}"}
+          class="underline underline-offset-4 hover:text-mist-950 dark:hover:text-white"
+        >
+          Sense-by-sense relations are in each definition
+        </.link>
+      </p>
       <.relation_group
         :for={{group, chips} <- ordered(@related.groups)}
-        id={"related-#{@related.pos || "x"}-#{group_slug(group)}"}
+        id={"related-#{group_slug(group)}"}
         group={group}
         chips={chips}
         trail={@trail}

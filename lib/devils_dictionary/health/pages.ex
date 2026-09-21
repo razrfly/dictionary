@@ -207,10 +207,13 @@ defmodule DevilsDictionary.Health.Pages do
           |> Enum.map(&Enum.map(&1.chain, fn step -> step.lemma end))
           |> Enum.filter(&("animal" in &1))
 
+        # One block per page since #133 R4, so there is nothing to flatten:
+        # every lexeme's *broader* rows are already merged into one group.
         wiktionary =
-          page.related
-          |> Enum.flat_map(&Map.get(&1.groups, :broader, %{shown: []}).shown)
-          |> Enum.map(& &1.lemma)
+          case page.related do
+            nil -> []
+            related -> Enum.map(Map.get(related.groups, :broader, %{shown: []}).shown, & &1.lemma)
+          end
 
         %{
           input: word,

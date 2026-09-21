@@ -602,12 +602,11 @@ defmodule DevilsDictionaryWeb.WordLive do
             </div>
 
             <div
-              :if={@page.related != []}
+              :if={@page.related}
               class="mt-8 lg:col-start-1 lg:row-start-2 lg:mt-5 lg:border-t lg:border-mist-950/10 lg:pt-4 dark:lg:border-white/10"
             >
               <Word.related_block
-                :for={related <- @page.related}
-                related={related}
+                related={@page.related}
                 trail={trail_here(@page)}
                 demo={@demo}
               />

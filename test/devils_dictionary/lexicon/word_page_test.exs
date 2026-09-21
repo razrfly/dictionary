@@ -153,10 +153,13 @@ defmodule DevilsDictionary.Lexicon.WordPageTest do
       assert chips(second.relations, :similar) == ["bloke"]
     end
 
-    test "an edge with no sense renders in the page-level block for its part of speech", ctx do
-      [related] = page("cat").related
+    test "an edge with no sense renders in the page-level block and nowhere else", ctx do
+      # #133 R4: one block per page, keyed by relation. The block no longer
+      # carries a part of speech, because the lexeme an edge hangs off is not a
+      # fact the reader has any use for — but what it holds is unchanged, and
+      # the sense-scoped `hypernym`s still do not leak into it.
+      related = page("cat").related
 
-      assert related.pos == "noun"
       assert chips(related.groups, :family) == ["kitty"]
       refute Map.has_key?(related.groups, :broader)
       _ = ctx
@@ -180,7 +183,7 @@ defmodule DevilsDictionary.Lexicon.WordPageTest do
         relation!(ctx, joy, type, word!(ctx, lemma, ~w(wiktionary)))
       end
 
-      [related] = page("joy").related
+      related = page("joy").related
 
       assert chips(related.groups, :similar) == ["delight"]
       assert chips(related.groups, :opposite) == ["grief"]
@@ -200,7 +203,7 @@ defmodule DevilsDictionary.Lexicon.WordPageTest do
       relation!(ctx, oyster, :see_also, clam, source: "johnson")
       relation!(ctx, oyster, :see_also, mussel, source: "wordnet")
 
-      [related] = page("oyster").related
+      related = page("oyster").related
       {{:says_see, source}, chips} = Enum.find(related.groups, &match?({{:says_see, _}, _}, &1))
 
       assert source.slug == "johnson"
@@ -212,7 +215,7 @@ defmodule DevilsDictionary.Lexicon.WordPageTest do
       oyster = word!(ctx, "oyster", ~w(wiktionary))
       relation!(ctx, oyster, :derived, nil, to_lemma: "oysterhood")
 
-      assert page("oyster").related == []
+      assert page("oyster").related == nil
     end
 
     test "chips are capped, enriched first, and carry their overflow", ctx do
@@ -226,7 +229,7 @@ defmodule DevilsDictionary.Lexicon.WordPageTest do
       bold = word!(ctx, "oyster bed", ~w(wiktionary))
       relation!(ctx, oyster, :derived, bold)
 
-      [related] = page("oyster").related
+      related = page("oyster").related
       family = related.groups[:family]
 
       assert length(family.shown) == WordPage.chip_cap()
@@ -516,7 +519,7 @@ defmodule DevilsDictionary.Lexicon.WordPageTest do
       assert page.headword.lemma == "abrocome"
       assert page.headword.forms == ["abrocomes"]
       assert page.cards == []
-      assert page.related == []
+      assert page.related == nil
     end
 
     test "a word nobody has ever written down is a page, not a raise", _ctx do

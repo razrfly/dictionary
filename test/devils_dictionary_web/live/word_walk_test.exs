@@ -116,7 +116,7 @@ defmodule DevilsDictionaryWeb.WordWalkTest do
     {:ok, _live, html} = live(ctx.conn, to)
 
     assert html =~ ~s(id="trail-cat")
-    assert html =~ ~s(id="related-noun-family-tabby")
+    assert html =~ ~s(id="related-family-tabby")
   end
 
   test "a page reached by a pasted URL reproduces the same walk", ctx do
