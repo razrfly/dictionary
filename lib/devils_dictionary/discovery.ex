@@ -1443,6 +1443,11 @@ defmodule DevilsDictionary.Discovery do
       # ("keywords: TMDb"). The reader renders whatever is here and knows no
       # provider by name.
       provider_detail: shelf_detail(provider),
+      # A mark this source's licence makes a condition of using it (#142). Read
+      # the same way and for the same reason as the qualifier above: the reader
+      # renders whatever is here, and a source with no obligation declares
+      # none and its shelf gains nothing.
+      attribution_mark: attribution_mark(provider),
       content_types: content_types,
       pagination: provider.capabilities().pagination
     }
@@ -1451,6 +1456,11 @@ defmodule DevilsDictionary.Discovery do
   defp shelf_detail(provider) do
     if Code.ensure_loaded?(provider) and function_exported?(provider, :shelf_detail, 0),
       do: provider.shelf_detail()
+  end
+
+  defp attribution_mark(provider) do
+    if Code.ensure_loaded?(provider) and function_exported?(provider, :attribution_mark, 0),
+      do: provider.attribution_mark()
   end
 
   defp in_flight(mapping_id, request_key) do

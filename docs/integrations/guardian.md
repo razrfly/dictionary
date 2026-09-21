@@ -14,7 +14,7 @@ sentence a reader can check.
 Read in full on 2026-09-21 at
 <https://www.theguardian.com/open-platform/terms-and-conditions> (last varied
 25 January 2024). #142 anticipated two clauses and there are five that bear on
-this code. Three are satisfied; **two are not**, and they are the first thing
+this code. Four are satisfied; **one is not**, and it is the first thing
 anyone reading this needs to know.
 
 ### Clause 5 — retention. Satisfied, and it cost a shared change
@@ -38,7 +38,7 @@ Every card carries `fields.byline` in the creator line and `webUrl` in
 `source_url`, which is the *Source ↗* link. Measured in the browser proof: ten
 `theguardian.com` links on `/define/bestiality` and no link to anything else.
 
-### Clause 6(b)(vi) — the "Powered by The Guardian" mark. **NOT satisfied**
+### Clause 6(b)(vi) — the "Powered by The Guardian" mark. Satisfied
 
 > Include a "Powered by The Guardian" logo (or such other Guardian logo as we
 > may require from time to time) on the same webpage as any republished OP
@@ -47,27 +47,48 @@ Every card carries `fields.byline` in the creator line and `webUrl` in
 > http://www.theguardian.com/open-platform/logos, and comply with any special
 > terms set out by us.
 
-This is a "You will", not a nicety, and it is not in this branch. #142 puts
-*"A 'Powered by Guardian' shelf mark beyond what the terms require"* out of
-scope and also says *"satisfy whatever attribution the current terms actually
-require"* — and the terms require one, so the two sentences point opposite
-ways. It is left undone rather than guessed at because every way of doing it
-edits a shared file that #142's own list forbids, and because which mark goes
-where is the owner's decision and not a provider's:
+And the logos page itself adds two conditions the terms do not spell out:
 
-* **`preview_metadata["attribution"]`** already renders *The Guardian* beneath
-  each card's byline, which satisfies a *credit* but is text and not the
-  logo the clause names.
-* **The shelf byline** says *Bing News · The Guardian*, again text.
-* **A real logo** needs `DevilsDictionaryWeb.Culture` to learn that a source
-  can carry a mark. There is precedent one component over: the GIPHY shelf
-  renders a *POWERED BY GIPHY* badge, visible in
-  `issue-142-bestiality-1280-2026-09-21.jpg` — but that is `GiphyShelf`, its
-  own component outside the shared chrome (K10 of #109), so it is a precedent
-  for the idea and not a mechanism this provider can reuse.
+> Please use the "powered by" logos below which are provided as PNG files. …
+> Please ensure that the image links back to theguardian.com, and that it is
+> placed adjacent to our content. You are not permitted to use Guardian
+> branding in any format or for any purpose other than as set out here and in
+> the Terms of Use.
 
-**This is the #140 situation again**: the provider is built and green, and
-whether it ships on a public host is a decision this file cannot make.
+All four obligations are met, and each one literally rather than by
+interpretation:
+
+| Obligation | How |
+|---|---|
+| **A reproduction of their file** | `poweredbyguardianBLACK.png` and `poweredbyguardianWHITE.png`, downloaded from `static.guim.co.uk` and committed byte-for-byte to `priv/static/images/guardian-powered-by{,-dark}.png`. Not redrawn, not retraced as SVG, not recoloured — and the light/dark pair is the pair *they* publish rather than one file under a CSS filter. A test reads the PNG `IHDR` chunk and fails if either file is not 140×45 |
+| **Links back to theguardian.com** | the mark is an `<a href="https://www.theguardian.com/">` |
+| **Adjacent to the content** | the shelf's own byline column, immediately left of the rail of Guardian cards — not a page footer. Asserted in the browser: the mark's bounding box is within 400 px of the rail's top and ends before the rail begins |
+| **Branding used only as set out** | the mark appears on the News shelf and nowhere else, and only when the Guardian actually contributed an item to that shelf |
+
+**How it is built, and why it is not a Guardian-shaped branch in `Culture`.**
+Promise 9 of the discovery README is that *the reader knows no provider by
+name*, and a shelf that said `if provider == "guardian"` would break it. So
+the mark is declared by the provider and rendered by the shelf, through the
+same optional-callback path `shelf_detail/0` already uses:
+
+    Guardian.attribution_mark/0      # the file, the alt text, the href, the width
+      → Discovery.provider_metadata  # read via function_exported?, onto the state
+        → Culture.attribution_mark   # draws whatever the state carried
+
+`Culture` never learns the word *Guardian*; a source that declares no mark
+gets none, and a fictional source declaring one is drawn identically — which
+is what the test asserts, rather than grepping the component for a string.
+The mark is **never clamped and never behind a pointer**, for the reason a
+`:required` credit is not (#116 Phase 3): a condition of the licence that only
+some readers see is not met.
+
+**The bytes are committed rather than hotlinked**, which is the opposite of
+D14's rule for item images and deliberately so. D14 keeps provider *content*
+out of this repository; a brand mark a licence obliges us to display is not
+content. Hotlinking it would put every reader's address in the Guardian's logs
+in order to render our own compliance, and would break the obligation silently
+the day their CDN path moved. `priv/static/images/giphy-powered-by.png`
+already makes the same choice.
 
 ### Clause 6(g) — AI, text and data mining, automated tools. **Unresolved**
 
@@ -312,6 +333,7 @@ headless Chrome's `--window-size` sets the window and not the layout viewport.
 | `/define/logomachy` | 375 | **375** | 0 | `issue-142-logomachy-375-2026-09-21.jpg` |
 | `/define/war` | 1280 | 1280 | 14 | `issue-142-war-1280-2026-09-21.jpg` |
 | `/define/war` | 375 | **375** | 14 | `issue-142-war-375-2026-09-21.jpg` |
+| `/define/bestiality`, **dark** | 1280 | 1280 | 17 | `issue-142-mark-dark-1280-2026-09-21.jpg` |
 
 No horizontal page scroll at 375 on any of the three.
 
@@ -366,6 +388,25 @@ Inserted by `ensure_source/1` on the first run. No hand correction was needed
 because this database had no `guardian` row to be stale — but
 **`devils_dictionary_v2` has none either and will get whatever `source_attrs/0`
 says on its first run there.**
+
+**The mark.** *Powered by theguardian* sits in the News shelf's byline column,
+directly beneath *Bing News · The Guardian* and immediately left of the rail —
+which is the "adjacent to our content" the logos page asks for. Measured in
+the page rather than looked at:
+
+| Check | Light | Dark |
+|---|---|---|
+| mark present, `href="https://www.theguardian.com/"` | yes | yes |
+| `aria-label` | *Powered by The Guardian* | same |
+| variants in the markup | both | both |
+| variant actually **visible** | `guardian-powered-by.png` only | `guardian-powered-by-dark.png` only |
+| rendered size, and the file loaded | 80×26, `naturalWidth > 0` | 80×26, `naturalWidth > 0` |
+| overflows its 80 px column | no | no |
+| marks anywhere else on the page | none — `culture-mark-guardian` is the only one | same |
+
+Bing declares no mark and gains none, which is the check that the mechanism is
+an obligation and not decoration. At 375 px the mark is legible and
+`scrollWidth` is still 375.
 
 ### The one thing the browser could not prove
 

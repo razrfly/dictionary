@@ -206,6 +206,19 @@ defmodule DevilsDictionaryWeb.Culture do
                 <span id={"culture-provider-#{state.provider}"}>{state.provider_name}</span>
               </span>
             </p>
+            <%!-- A mark a contributing source's licence makes a condition, not
+                 a logo a source would like shown (#142). The Guardian's clause
+                 6(b)(vi) is the first, and its logos page asks for two things
+                 this position gives it: a link back to theguardian.com, and
+                 placement "adjacent to our content" — which is the rail
+                 immediately to the right of this column. `Culture` still knows
+                 no provider by name: what is drawn is whatever the state
+                 carried, and a source with no obligation carries nothing. --%>
+            <.attribution_mark
+              :for={state <- marked(shelf)}
+              mark={state.attribution_mark}
+              provider={state.provider}
+            />
           </div>
 
           <div class="min-w-0 flex-1 space-y-2">
@@ -306,6 +319,52 @@ defmodule DevilsDictionaryWeb.Culture do
     shelf.states
     |> Enum.filter(&Map.has_key?(shelf.shown, &1.provider))
     |> Enum.sort_by(&{Shelf.tier_rank(Map.get(&1, :tier)), &1.provider})
+  end
+
+  # The contributing sources that owe the shelf a mark. A source that put
+  # nothing on the rail owes nothing — the obligation is to credit content
+  # that is shown, and a mark under an empty turn would be branding rather
+  # than compliance.
+  defp marked(shelf) do
+    shelf
+    |> contributing()
+    |> Enum.filter(&is_map(Map.get(&1, :attribution_mark)))
+  end
+
+  attr :mark, :map, required: true
+  attr :provider, :string, required: true
+
+  # A required mark is never clamped, hidden behind a pointer or collapsed into
+  # a tooltip, for the same reason a `:required` credit is not (#116 Phase 3):
+  # a condition of the licence that only some readers see is not met. Both
+  # variants ship in the markup and CSS picks one, so the mark is correct in
+  # either theme without JavaScript and without a filter over the wrong file.
+  defp attribution_mark(assigns) do
+    ~H"""
+    <a
+      id={"culture-mark-#{@provider}"}
+      href={@mark.href}
+      target="_blank"
+      rel="noreferrer"
+      aria-label={@mark.alt}
+      class="mt-2 block"
+    >
+      <img
+        src={@mark.src}
+        alt={@mark.alt}
+        width={@mark.width}
+        class={["max-w-full", Map.get(@mark, :dark_src) && "dark:hidden"]}
+      />
+      <img
+        :if={Map.get(@mark, :dark_src)}
+        src={@mark.dark_src}
+        alt=""
+        aria-hidden="true"
+        width={@mark.width}
+        class="hidden max-w-full dark:block"
+      />
+    </a>
+    """
   end
 
   # Worth reporting beside a shelf that is not empty. A provider whose own

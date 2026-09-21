@@ -235,6 +235,50 @@ defmodule DevilsDictionary.Discovery.Providers.Guardian do
   @impl true
   def shelf_detail, do: "dated reporting"
 
+  @doc """
+  The "Powered by The Guardian" mark, which clause 6(b)(vi) makes a condition.
+
+  > Include a "Powered by The Guardian" logo (or such other Guardian logo as
+  > we may require from time to time) on the same webpage as any republished
+  > OP Content, or any tool or function that is based on OP Content. Such logo
+  > must be a reproduction of the "Powered By" file found at
+  > http://www.theguardian.com/open-platform/logos
+
+  Three things about it are the Guardian's decision and not this project's, so
+  they are followed literally rather than designed:
+
+    * **The file is theirs.** `poweredbyguardianBLACK.png` and
+      `poweredbyguardianWHITE.png`, 140×45, committed under `priv/static/images`
+      exactly as downloaded. The clause says *a reproduction of* that file, so
+      it is not redrawn, retraced as SVG or recoloured — and the two variants
+      are the two the Guardian publishes for light and dark backgrounds, not a
+      CSS filter over one of them.
+    * **It links back to theguardian.com**, which the logos page requires
+      alongside the terms: *"Please ensure that the image links back to
+      theguardian.com, and that it is placed adjacent to our content."*
+    * **It sits adjacent to the content** — in the shelf's own byline column,
+      immediately beside the rail of Guardian cards, rather than in a page
+      footer.
+
+  The bytes are committed rather than hotlinked from `static.guim.co.uk`. That
+  is the opposite of D14's rule for *item* images, and deliberately: D14 keeps
+  provider **content** out of this repository, and a brand mark a licence
+  obliges us to display is not content — hotlinking it would put every
+  reader's address in the Guardian's logs to render our own compliance, and
+  would break the obligation the day their CDN path moved. It is the same
+  choice GIPHY's `priv/static/images/giphy-powered-by.png` already makes.
+  """
+  @impl true
+  def attribution_mark do
+    %{
+      src: "/images/guardian-powered-by.png",
+      dark_src: "/images/guardian-powered-by-dark.png",
+      alt: "Powered by The Guardian",
+      href: "https://www.theguardian.com/",
+      width: 80
+    }
+  end
+
   # No `covers?/1`: any word can be searched for, and a word with no coverage
   # is an honest empty the pipeline caches as a negative. No
   # `mapping_identity/1`: the recipe is the word, so there is no frozen

@@ -20,6 +20,7 @@ defmodule DevilsDictionary.Discovery.Providers.GuardianTest do
 
   import Ecto.Query
   import DevilsDictionary.WordFixtures
+  import Phoenix.LiveViewTest
 
   alias DevilsDictionary.Discovery
   alias DevilsDictionary.Discovery.{MatchReason, RequestAttempt, Result, Run, Transport}
@@ -27,6 +28,7 @@ defmodule DevilsDictionary.Discovery.Providers.GuardianTest do
   alias DevilsDictionary.Discovery.Providers.{BingNews, Guardian}
   alias DevilsDictionary.Sources
   alias DevilsDictionary.Sources.SourceRecord
+  alias DevilsDictionaryWeb.Culture
 
   @kash_patel_url GuardianFixture.kash_patel_url()
 
@@ -569,6 +571,111 @@ defmodule DevilsDictionary.Discovery.Providers.GuardianTest do
   end
 
   # ---------------------------------------------------------------------------
+  # The mark clause 6(b)(vi) makes a condition
+  # ---------------------------------------------------------------------------
+
+  describe "the \"Powered by The Guardian\" mark" do
+    test "the provider declares it, and declares the Guardian's own file" do
+      mark = Guardian.attribution_mark()
+
+      # Clause 6(b)(vi): "a reproduction of the 'Powered By' file found at
+      # http://www.theguardian.com/open-platform/logos". Not redrawn, not
+      # retraced, not recoloured — the file, committed.
+      assert mark.src == "/images/guardian-powered-by.png"
+      assert mark.dark_src == "/images/guardian-powered-by-dark.png"
+      assert mark.alt == "Powered by The Guardian"
+      # And the logos page: "Please ensure that the image links back to
+      # theguardian.com".
+      assert mark.href == "https://www.theguardian.com/"
+      assert mark.width == 80
+    end
+
+    test "both files are committed, are PNGs, and are the ones published" do
+      for path <- ["guardian-powered-by.png", "guardian-powered-by-dark.png"] do
+        file = Path.join("priv/static/images", path)
+        assert File.exists?(file), "#{path} is not committed"
+
+        # 140x45 RGBA, the dimensions the Guardian publishes. Read out of the
+        # IHDR chunk rather than trusted, so a file swapped for a redrawn one
+        # of another size fails here.
+        assert <<0x89, "PNG\r\n", 0x1A, "\n", _len::32, "IHDR", width::32, height::32,
+                 _rest::binary>> = File.read!(file)
+
+        assert {width, height} == {140, 45}
+      end
+    end
+
+    test "the shelf renders it, linked and in both themes" do
+      html = render_shelf(with_mark: true)
+
+      assert html =~ ~s(id="culture-mark-guardian")
+      assert html =~ ~s(href="https://www.theguardian.com/")
+      assert html =~ ~s(aria-label="Powered by The Guardian")
+
+      # Both variants ship and CSS picks one, so the mark is legible in either
+      # theme without JavaScript and without a filter over the wrong file.
+      assert html =~ ~s(src="/images/guardian-powered-by.png")
+      assert html =~ ~s(src="/images/guardian-powered-by-dark.png")
+      assert html =~ "dark:hidden"
+      assert html =~ "dark:block"
+
+      # Never clamped and never behind a pointer: a condition of the licence
+      # that only some readers see is not met. Asserted on the mark's own
+      # markup, because the cards beside it clamp their titles and credits
+      # legitimately.
+      mark = mark_markup(html)
+      refute mark =~ "line-clamp"
+      refute mark =~ "group-hover"
+      refute mark =~ "sr-only"
+
+      # Exactly one of the two variants is visible in each theme: the light
+      # file carries `dark:hidden` and the dark file `hidden … dark:block`.
+      # (The dark one being hidden in light mode is the mechanism, not a
+      # violation — what would be one is neither of them showing.)
+      assert mark =~ ~s(class="max-w-full dark:hidden")
+      assert mark =~ ~s(class="hidden max-w-full dark:block")
+    end
+
+    test "a source that declares no mark gains none" do
+      html = render_shelf(with_mark: false)
+
+      refute html =~ "culture-mark-"
+      refute html =~ "guardian-powered-by"
+    end
+
+    test "Culture knows no provider by name — it draws whatever the state carried" do
+      # Promise 9, asserted rather than grepped for: a source this component
+      # has never heard of, carrying a mark of its own, is drawn exactly the
+      # same way. If `Culture` had learned the word "guardian" anywhere, this
+      # would render nothing.
+      html =
+        render_shelf(
+          with_mark: true,
+          provider: "gazette",
+          provider_name: "The Gazette",
+          mark: %{
+            src: "/images/gazette.png",
+            dark_src: nil,
+            alt: "Powered by The Gazette",
+            href: "https://gazette.test/",
+            width: 64
+          }
+        )
+
+      assert html =~ ~s(id="culture-mark-gazette")
+      assert html =~ ~s(href="https://gazette.test/")
+      assert html =~ ~s(src="/images/gazette.png")
+      assert html =~ ~s(width="64")
+
+      # And a mark with no dark variant ships one image, unconditionally: the
+      # `dark:hidden` that hides the light one is only correct when there is a
+      # dark one to show instead.
+      refute html =~ "dark:hidden"
+      refute html =~ "dark:block"
+    end
+  end
+
+  # ---------------------------------------------------------------------------
   # Retention — the one design decision, proved
   # ---------------------------------------------------------------------------
 
@@ -734,6 +841,68 @@ defmodule DevilsDictionary.Discovery.Providers.GuardianTest do
         metadata: %{"process" => "guardian_retention_test"}
       })
     )
+  end
+
+  # Just the mark's own anchor, so an assertion about it is not an assertion
+  # about the cards beside it.
+  defp mark_markup(html) do
+    case Regex.run(~r/<a[^>]*id="culture-mark-[^"]*".*?<\/a>/s, html) do
+      [markup] -> markup
+      _ -> flunk("no attribution mark in the rendered shelf")
+    end
+  end
+
+  # One News shelf with one item, as `Discovery.state/2` shapes it.
+  defp render_shelf(options) do
+    with_mark = Keyword.fetch!(options, :with_mark)
+    provider = Keyword.get(options, :provider, "guardian")
+    provider_name = Keyword.get(options, :provider_name, "The Guardian")
+    mark = Keyword.get(options, :mark, Guardian.attribution_mark())
+
+    state =
+      %{
+        status: :ready,
+        items: [
+          %{
+            external_namespace: "guardian_article",
+            external_id: GuardianFixture.kash_patel_id(),
+            preview_metadata: %{
+              "title" => "Kash Patel defends FBI hiring policy",
+              "author" => "Ariana Baio",
+              "artist" => "Ariana Baio",
+              "attribution" => "The Guardian",
+              "published_at" => "2026-09-15T17:20:47Z",
+              "year" => "2026",
+              "source_url" => @kash_patel_url,
+              "content_type" => "news"
+            },
+            match_details: %{
+              "kind" => "attestation",
+              "query" => "bestiality",
+              "lines" => [
+                %{
+                  "locator" => "the text, The Guardian, 15 September 2026",
+                  "text" => "A sentence."
+                }
+              ]
+            }
+          }
+        ],
+        provider: provider,
+        provider_name: provider_name,
+        provider_detail: "dated reporting",
+        content_types: [:news],
+        mapping_id: 1,
+        tier: :plebs,
+        term: "bestiality",
+        relevance: "term",
+        page: 0
+      }
+      |> then(fn state ->
+        if with_mark, do: Map.put(state, :attribution_mark, mark), else: state
+      end)
+
+    render_component(&Culture.section/1, states: %{provider => state})
   end
 
   defp revisions(record_id) do
