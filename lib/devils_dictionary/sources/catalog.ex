@@ -13,6 +13,11 @@ defmodule DevilsDictionary.Sources.Catalog do
   Adding an absorbed source is a row here plus a module under `Absorb.Sources`
   (scorecard E1: zero migrations). Provider-owned source rows are appended by
   `Discovery.Providers` without making them absorb adapters.
+
+  A third kind exists and is deliberately **not** in `sources/0`:
+  `DevilsDictionary.Sources.OnDemand`, the definition sources the reader's own
+  browser fetches and nothing stores (#136). `seed!/0` writes their rows; A1
+  never grades them, because there is no absorb to finish.
   """
 
   import Ecto.Query
@@ -310,10 +315,24 @@ defmodule DevilsDictionary.Sources.Catalog do
     predicates = DevilsDictionary.Claims.Catalog.seed!()
 
     sources = Map.new(sources(), fn attrs -> {attrs.slug, upsert!(Source, :slug, attrs)} end)
+
+    # The on-demand definition sources (#136) get their rows here and stay out
+    # of `sources/0`: A1 grades everything in that list for a finished absorb,
+    # and a source the server never fetches has none. Their own upsert, because
+    # `upsert!/3` refreshes config on every seed and `active: false` on one of
+    # these is a kill switch a re-seed must not undo.
+    on_demand = DevilsDictionary.Sources.OnDemand.seed!()
+
     scopes = Map.new(scopes(), fn attrs -> {attrs.slug, upsert!(Scope, :slug, attrs)} end)
     people = Map.new(people(), fn person -> {person.slug, seed_person!(person)} end)
 
-    %{sources: sources, scopes: scopes, people: people, predicates: predicates}
+    %{
+      sources: sources,
+      on_demand: on_demand,
+      scopes: scopes,
+      people: people,
+      predicates: predicates
+    }
   end
 
   # A person, the work they wrote, the edition we imported, and the two
