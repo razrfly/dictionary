@@ -131,6 +131,41 @@ defmodule DevilsDictionary.Discovery.Provider do
   """
   @callback shelf_detail() :: String.t() | nil
 
+  @doc """
+  A mark this source's licence *requires* the shelf to carry, or `nil`.
+
+  Not a logo a source would like shown — one its terms make a condition of
+  using it at all. The Guardian's Open Platform terms, clause 6(b)(vi), are
+  the first: a "Powered by The Guardian" logo on the same page as any
+  republished content, reproduced from the file the Guardian publishes, linked
+  back to theguardian.com and placed adjacent to the content.
+
+  It is the same shape of answer as `shelf_detail/0` and for the same reason:
+  the reader renders whatever is here and knows no provider by name. A source
+  with nothing to declare does not export it and no shelf gains a mark.
+
+  The map is:
+
+    * `:src` — the image, a path under `priv/static`
+    * `:dark_src` — the variant for dark mode, or `nil` to use `:src` for both
+    * `:alt` — the text, which is also what a screen reader is owed
+    * `:href` — where the mark links, which the licence usually dictates
+    * `:width` — the intrinsic width in CSS pixels the mark is drawn at
+
+  A required *credit* is a different obligation and is already served by the
+  content type's `attribution` column and `preview_metadata["attribution"]`:
+  that is per item, this is per shelf.
+  """
+  @callback attribution_mark() ::
+              %{
+                required(:src) => String.t(),
+                required(:alt) => String.t(),
+                required(:href) => String.t(),
+                required(:width) => pos_integer(),
+                optional(:dark_src) => String.t() | nil
+              }
+              | nil
+
   @optional_callbacks automatic_mapping: 1,
                       covers?: 1,
                       parse_body: 1,
@@ -139,5 +174,6 @@ defmodule DevilsDictionary.Discovery.Provider do
                       validate_mapping: 2,
                       retrieve: 4,
                       shelf_detail: 0,
+                      attribution_mark: 0,
                       retryable_status?: 1
 end

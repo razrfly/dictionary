@@ -259,14 +259,17 @@ defmodule DevilsDictionary.Discovery.Providers.BingNewsTest do
       assert reason.kind == :attestation
       assert MatchReason.evidence(reason) == :attestation
 
-      # The sentence the reader gets. It reads *at a headline* and not *in a
-      # headline*, which is the one place the code and #135's brief disagree:
-      # `MatchReason`'s attestation clause composes `"Uses " <> term <> " at "
-      # <> locator`, the preposition is hardcoded there, and #135 put
-      # `match_reason.ex` out of scope. Asserted as it renders rather than as
-      # the brief wrote it, and reported in the PR.
+      # The sentence the reader gets, and the one #135 asked for. It read *at
+      # a headline* until #142: `MatchReason`'s attestation clause composes
+      # `"Uses " <> term <> at(locator)` and `at/1` was hardcoded to *at*,
+      # which is right for a numbered point (*line 4*) and wrong for a named
+      # part of a work. #140 measured it in the browser and reported it
+      # rather than fixing it, because #135 put `match_reason.ex` out of
+      # scope; #142 was editing the attestation tests anyway and took the
+      # one-line fix, so this provider's shelf reads correctly now without
+      # this provider changing at all.
       assert MatchReason.describe(reason) ==
-               "Uses “bestiality” at a headline, Wired, 15 September 2026."
+               "Uses “bestiality” in a headline, Wired, 15 September 2026."
     end
   end
 

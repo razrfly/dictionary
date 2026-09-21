@@ -352,6 +352,7 @@ defmodule DevilsDictionary.Discovery do
     keep = config[:retained_attempts_per_position]
 
     recovered = recover_abandoned(config[:cleanup_batch_size])
+    expired = expire_by_source_retention(config[:cleanup_batch_size])
 
     %{rows: [[count]]} =
       Repo.query!(
@@ -395,7 +396,90 @@ defmodule DevilsDictionary.Discovery do
         [cutoff, keep, config[:cleanup_batch_size]]
       )
 
-    %{deleted: count, recovered: recovered}
+    %{deleted: count, recovered: recovered, expired: expired}
+  end
+
+  @doc """
+  Deletes the cache of every source whose licence caps how long it may be held.
+
+  The shared sweep above answers *how much* disposable cache to keep, and it
+  protects the runs currently on display: the page's own answer is never the
+  thing collected. A **retention** window is a different question and it does
+  not admit that exception. The Guardian's Open Platform terms (#142, clause
+  5) say OP Content may not be kept longer than 24 hours "whether or not
+  published on Your Website", so a displayed row is exactly what has to go —
+  the next visit re-requests it, which is the other half of the same clause.
+
+  So a source naming `retention_seconds` in its `source_policies` is swept
+  here, first, on its own window and without the display exemption. Two steps,
+  in this order because `discovery_results.source_record_id` is `ON DELETE
+  RESTRICT`:
+
+    1. its terminal runs past the window — `discovery_results` and
+       `discovery_request_attempts` cascade from them;
+    2. the source records those results were the last readers of, whose
+       revisions hold the provider's own payload and cascade in turn.
+
+  Step 2 is what makes this a retention sweep rather than a cache sweep. The
+  run carries the shelf's copy of an item and the source record carries the
+  provider's, and deleting only the first would leave the headline, the byline
+  and the attested sentence in `source_record_revisions.payload` for as long
+  as the row lived.
+  """
+  def expire_by_source_retention(batch_size) do
+    Enum.reduce(Policy.source_retentions(), %{}, fn {slug, seconds}, expired ->
+      cutoff = DateTime.add(DateTime.utc_now(), -seconds, :second)
+
+      %{rows: [[runs]]} =
+        Repo.query!(
+          """
+          WITH deleted AS (
+            DELETE FROM discovery_runs
+             WHERE id IN (
+               SELECT runs.id
+                 FROM discovery_runs AS runs
+                 JOIN discovery_mappings AS mappings ON mappings.id = runs.mapping_id
+                 JOIN sources ON sources.id = mappings.source_id
+                WHERE sources.slug = $1
+                  AND runs.status IN ('succeeded', 'failed')
+                  AND COALESCE(runs.completed_at, runs.inserted_at) < $2
+                LIMIT $3
+             )
+            RETURNING id
+          )
+          SELECT count(*) FROM deleted
+          """,
+          [slug, cutoff, batch_size]
+        )
+
+      %{rows: [[records]]} =
+        Repo.query!(
+          """
+          WITH deleted AS (
+            DELETE FROM source_records
+             WHERE id IN (
+               SELECT records.id
+                 FROM source_records AS records
+                 JOIN sources ON sources.id = records.source_id
+                WHERE sources.slug = $1
+                  AND records.fetched_at < $2
+                  AND NOT EXISTS (
+                    SELECT 1 FROM discovery_results AS results
+                     WHERE results.source_record_id = records.id
+                  )
+                LIMIT $3
+             )
+            RETURNING id
+          )
+          SELECT count(*) FROM deleted
+          """,
+          [slug, cutoff, batch_size]
+        )
+
+      if runs == 0 and records == 0,
+        do: expired,
+        else: Map.put(expired, slug, %{runs: runs, source_records: records})
+    end)
   end
 
   @doc "Durably withdraws a provider item without touching linked objects or claims."
@@ -1359,6 +1443,11 @@ defmodule DevilsDictionary.Discovery do
       # ("keywords: TMDb"). The reader renders whatever is here and knows no
       # provider by name.
       provider_detail: shelf_detail(provider),
+      # A mark this source's licence makes a condition of using it (#142). Read
+      # the same way and for the same reason as the qualifier above: the reader
+      # renders whatever is here, and a source with no obligation declares
+      # none and its shelf gains nothing.
+      attribution_mark: attribution_mark(provider),
       content_types: content_types,
       pagination: provider.capabilities().pagination
     }
@@ -1367,6 +1456,11 @@ defmodule DevilsDictionary.Discovery do
   defp shelf_detail(provider) do
     if Code.ensure_loaded?(provider) and function_exported?(provider, :shelf_detail, 0),
       do: provider.shelf_detail()
+  end
+
+  defp attribution_mark(provider) do
+    if Code.ensure_loaded?(provider) and function_exported?(provider, :attribution_mark, 0),
+      do: provider.attribution_mark()
   end
 
   defp in_flight(mapping_id, request_key) do

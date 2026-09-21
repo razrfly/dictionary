@@ -117,7 +117,7 @@ defmodule DevilsDictionary.Discovery.Transport do
   def default_retryable_status?(status), do: status == 429 or status >= 500
 
   defp retry_or_fail(provider, run_id, stage, payload, config, response) do
-    case retry_after_seconds(response) do
+    case retry_after_seconds(response, DateTime.utc_now(), retry_after_headers(provider)) do
       seconds when is_integer(seconds) and seconds > 0 ->
         retry_at = DateTime.add(DateTime.utc_now(), seconds, :second)
         {:ok, _source} = Budget.defer_provider(run_id, retry_at, "retry_after")
@@ -206,11 +206,48 @@ defmodule DevilsDictionary.Discovery.Transport do
     end
   end
 
-  @doc "Parses delta-seconds and IMF-fixdate Retry-After values without shortening them."
-  def retry_after_seconds(response, now \\ DateTime.utc_now()) do
-    with [value | _] <- Req.Response.get_header(response, "retry-after") do
-      parse_retry_after(String.trim(value), now)
+  @doc """
+  The header names this provider's API states a backoff in, in order.
+
+  `Retry-After` unless the provider says otherwise, which is every provider
+  but one. The Guardian's Content API (#142) answers with `ratelimit-reset`
+  — seconds, the same units — and sends no `Retry-After` at all, so a
+  transport that only ever read one header name would ignore a throttle that
+  was plainly stated and retry straight back into it.
+
+  It is a capability read in one place, like `body: :xml` (#135), rather than
+  a branch per dialect in shared code: which header an API states its backoff
+  in is the provider's knowledge.
+  """
+  def retry_after_headers(provider) do
+    if Code.ensure_loaded?(provider) and function_exported?(provider, :capabilities, 0) do
+      case Map.get(provider.capabilities(), :retry_after_headers) do
+        [_ | _] = names -> Enum.filter(names, &is_binary/1)
+        _ -> ["retry-after"]
+      end
+    else
+      ["retry-after"]
     end
+  end
+
+  @doc """
+  Parses delta-seconds and IMF-fixdate backoff values without shortening them.
+
+  `header_names` is the provider's, from `retry_after_headers/1`; the first
+  name that is present and parses wins, so a provider naming two dialects
+  gets the one its API actually sent.
+  """
+  def retry_after_seconds(response, now \\ DateTime.utc_now(), header_names \\ ["retry-after"]) do
+    Enum.find_value(header_names, fn name ->
+      # `get_header/2` answers `[]` for a header that is not there, and `[]` is
+      # truthy — so the absent case is matched explicitly rather than left to
+      # fall out of a `with`, which is how the first draft of this returned
+      # `[]` where every caller expected `nil`.
+      case Req.Response.get_header(response, name) do
+        [value | _] -> parse_retry_after(String.trim(value), now)
+        [] -> nil
+      end
+    end)
   end
 
   defp parse_retry_after(value, now) do

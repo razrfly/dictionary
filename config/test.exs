@@ -52,9 +52,20 @@ config :devils_dictionary, :discovery,
   empty_refresh_seconds: 1_800,
   request_budget_limit: 30,
   request_budget_window_seconds: 60,
+  # This map *replaces* `config.exs`'s rather than merging with it, so a
+  # source whose policy the suite asserts has to be named here too.
   source_policies: %{
     "giphy" => [request_budget_limit: 100, request_budget_window_seconds: 3_600],
-    "met" => [request_budget_limit: 1_000, request_budget_window_seconds: 3_600]
+    "met" => [request_budget_limit: 1_000, request_budget_window_seconds: 3_600],
+    # The Guardian's shipped policy (#142), repeated because the retention
+    # decision is proved by a test and a policy the suite cannot see is a
+    # decision the suite cannot check.
+    "guardian" => [
+      request_budget_limit: 400,
+      request_budget_window_seconds: 86_400,
+      positive_refresh_seconds: 86_400,
+      retention_seconds: 82_800
+    ]
   },
   refresh_cooldown_seconds: 60,
   failure_backoff_seconds: 60,
@@ -166,6 +177,22 @@ config :devils_dictionary, :pexels,
 config :devils_dictionary, :bing_news,
   endpoint: "https://bing-news.test/news/search",
   enabled: true,
+  now: ~U[2026-09-21 12:00:00Z],
+  request_interval_ms: 0,
+  min_retry_interval_ms: 0
+
+# The Guardian (#142). The key is a literal here and not a secret: the suite
+# never reaches the network, every request goes through the `Req.Test` stub
+# named after the provider module, and `enabled?/0` needs *some* key to be
+# true at all. The clock is pinned to the day the fixture was captured —
+# `Guardian.now/0` reads it — because the fixture holds real September 2026
+# publication dates and a freshness gate read against the wall clock would
+# pass this week and fail next.
+config :devils_dictionary, :guardian,
+  endpoint: "https://guardian.test/search",
+  enabled: true,
+  api_key: "test-key-not-a-secret",
+  max_age_days: 30,
   now: ~U[2026-09-21 12:00:00Z],
   request_interval_ms: 0,
   min_retry_interval_ms: 0

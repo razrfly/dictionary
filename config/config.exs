@@ -103,6 +103,7 @@ config :devils_dictionary, :discovery_providers, [
   DevilsDictionary.Discovery.Providers.CineGraph,
   DevilsDictionary.Discovery.Providers.Commons,
   DevilsDictionary.Discovery.Providers.Giphy,
+  DevilsDictionary.Discovery.Providers.Guardian,
   DevilsDictionary.Discovery.Providers.Met,
   DevilsDictionary.Discovery.Providers.OpenLibrary,
   DevilsDictionary.Discovery.Providers.Openverse,
@@ -135,7 +136,24 @@ config :devils_dictionary, :discovery,
     # "current" costs (#135). The empty refresh is already 24 h and stays
     # there. `BING_NEWS_DISCOVERY_POSITIVE_REFRESH_SECONDS` overrides this at
     # runtime, as it does every provider's.
-    "bing-news" => [positive_refresh_seconds: 24 * 60 * 60]
+    "bing-news" => [positive_refresh_seconds: 24 * 60 * 60],
+    # The Guardian (#142). Clause 5 of the Open Platform terms: OP Content
+    # must be re-requested or deleted at least every 24 hours, and may not be
+    # kept longer than that "whether or not published on Your Website". So the
+    # refresh is a day (the *replace* half, for a page somebody opens) and
+    # `retention_seconds` is the *delete* half, for one nobody does — the only
+    # source that names one, and the reason `Policy` admits the key at all.
+    # It is an hour under the day, not the day: the sweep runs every fifteen
+    # minutes, so a window of exactly 86_400 lets a record live up to 24h15m,
+    # and the clause says twenty-four. The budget is 400 of the key's 500, so
+    # the app's own ledger refuses before the API does and tomorrow's probe
+    # still has room.
+    "guardian" => [
+      request_budget_limit: 400,
+      request_budget_window_seconds: 86_400,
+      positive_refresh_seconds: 86_400,
+      retention_seconds: 82_800
+    ]
   },
   refresh_cooldown_seconds: 60,
   failure_backoff_seconds: 5 * 60,
@@ -256,6 +274,16 @@ config :devils_dictionary, :bing_news,
   endpoint: "https://www.bing.com/news/search",
   enabled: true,
   market: "en-US",
+  max_age_days: 30
+
+# The Guardian's Content API (#142), the News shelf's second source and its
+# first with published terms. Keyed: `GUARDIAN_API_KEY` is read in
+# `runtime.exs` and `enabled?/0` is false without it, so a host with no key
+# registers the provider and makes no call. `max_age_days` is Bing's, shared
+# deliberately — one shelf, one idea of what "current" means.
+config :devils_dictionary, :guardian,
+  endpoint: "https://content.guardianapis.com/search",
+  enabled: true,
   max_age_days: 30
 
 # Import environment specific config. This must remain at the bottom
