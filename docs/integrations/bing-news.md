@@ -39,7 +39,7 @@ than one source.
 |---|---|
 | Slug | `bing-news` |
 | Archetype | discovery |
-| Shipped state | **Disabled** (`enabled: false` in `config.exs`). `BING_NEWS_ENABLED=true` turns it on, and only the owner, having read the section above, should set it. Asked for by the CodeRabbit review of the PR |
+| Shipped state | **Enabled.** #140 merged it disabled on the strength of the section above; on 2026-09-21 the owner chose to run it and accept that risk. `BING_NEWS_ENABLED=false` (shell or `.env`) turns it off without a deploy |
 | Licence | Undocumented public RSS feed; metadata only. The feed's own `<copyright>` restricts the results — see above |
 | Key required | **No.** Nothing to register |
 | User-Agent | The **project's own** string is accepted. Tested first, as #135 asked: `200` and the same seven items a Chrome UA got. No browser impersonation |

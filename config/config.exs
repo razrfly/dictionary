@@ -244,16 +244,17 @@ config :devils_dictionary, :pexels,
 # this a News shelf rather than a search shelf; the feed will happily answer a
 # word with 2023.
 #
-# **Off by default.** The feed's own `<copyright>` element restricts its results
-# to "rendering Bing results within an RSS aggregator for your personal,
-# non-commercial use" and reserves any other use to Microsoft's express written
-# permission (quoted in full in `docs/integrations/bing-news.md`). A public word
-# page is neither, so the integration ships disabled and the owner turns it on
-# with `BING_NEWS_ENABLED=true` (read in `runtime.exs`) once that question is
-# settled. CodeRabbit's review of #140 asked for this default; the PR raised it.
+# **On, by the owner's decision (2026-09-21).** The feed's own `<copyright>`
+# element restricts its results to "rendering Bing results within an RSS
+# aggregator for your personal, non-commercial use" and reserves any other use
+# to Microsoft's express written permission (quoted in full in
+# `docs/integrations/bing-news.md`). #140 merged with `enabled: false` for that
+# reason; the owner then chose to run it and accept that risk, so the default
+# is `true` and `BING_NEWS_ENABLED=false` (read in `runtime.exs`) turns it off
+# again without a deploy.
 config :devils_dictionary, :bing_news,
   endpoint: "https://www.bing.com/news/search",
-  enabled: false,
+  enabled: true,
   market: "en-US",
   max_age_days: 30
 
