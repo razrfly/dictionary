@@ -56,6 +56,19 @@ export function slugify(text) {
   return slug || source.toLowerCase()
 }
 
+// Whether an entry's `word` is this page's term. Case, accents and the choice
+// of space or hyphen are not a different word (`Mother-In-Law` is
+// `mother-in-law`); punctuation is (`C` is not `C++`), which is why this is
+// not the slug rule — both slug to `c` (CodeRabbit on the #136 PR).
+export function sameWord(a, b) {
+  const fold = value => String(value ?? '')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[\s_-]+/g, ' ')
+    .trim()
+  return fold(a) === fold(b) && fold(a) !== ''
+}
+
 export function defineURL(term, endpoint) {
   if (!term || [...term].length > 64) throw new Error('term')
   const url = new URL(endpoint)
@@ -89,7 +102,7 @@ function permalink(value, host) {
 export function parseDefinition(body, term) {
   if (!body || !Array.isArray(body.list) || body.list.length > 10) throw new Error('envelope')
   const mine = body.list.filter(entry =>
-    entry && typeof entry.word === 'string' && slugify(entry.word) === slugify(term))
+    entry && typeof entry.word === 'string' && sameWord(entry.word, term))
   if (mine.length === 0) return null
   const entry = mine[0]
   const written = Date.parse(entry.written_on)

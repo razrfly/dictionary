@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {readFileSync} from 'node:fs'
 import Hook, {
-  defineURL, slugify, parseDefinition, parseLinks, formatDate, retryDelay
+  defineURL, slugify, sameWord, parseDefinition, parseLinks, formatDate, retryDelay
 } from './urban_dictionary.mjs'
 
 // The one response captured from the live site (2026-09-21, `term=cromulent`,
@@ -69,6 +69,16 @@ test('case and punctuation differences are still this word', () => {
     written_on: '2020-01-02T00:00:00.000Z',
     permalink: 'https://www.urbandictionary.com/define.php?term=x&defid=1'}]}
   assert.equal(parseDefinition(list, 'mother-in-law').defid, 1)
+})
+
+test('punctuation is part of the word: an entry for C is not the term C++', () => {
+  const c = {defid: 2, word: 'C', definition: 'a language', example: '', author: 'a',
+    written_on: '2020-01-02T00:00:00.000Z',
+    permalink: 'https://www.urbandictionary.com/define.php?term=C&defid=2'}
+  assert.equal(parseDefinition({list: [c]}, 'C++'), null)
+  assert.equal(parseDefinition({list: [{...c, word: 'c++'}]}, 'C++').defid, 2)
+  assert.ok(sameWord('Mother In Law', 'mother-in-law'))
+  assert.ok(!sameWord('', ''))
 })
 
 test('a malformed envelope or entry throws rather than rendering', () => {

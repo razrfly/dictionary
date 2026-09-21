@@ -30,7 +30,6 @@ defmodule DevilsDictionary.Sources.OnDemand do
   """
 
   alias DevilsDictionary.Repo
-  alias DevilsDictionary.Sources
   alias DevilsDictionary.Sources.Source
 
   @sources [DevilsDictionary.Sources.UrbanDictionary]
@@ -47,22 +46,36 @@ defmodule DevilsDictionary.Sources.OnDemand do
   """
   def source_catalog, do: Enum.map(@sources, & &1.source_attrs())
 
-  @doc """
-  Writes the rows, idempotently, with the providers' upsert.
+  # What a re-seed refreshes on an existing row: everything the module states
+  # about itself. Not `slug` (the key) and not `active` — that is the owner's
+  # kill switch, and a re-seed that turned it back on would be a deploy
+  # silently reversing a decision.
+  @managed ~w(name tier kind access era_year license license_url homepage url_template attribution config updated_at)a
 
-  `on_conflict: :nothing` on the slug: an existing row keeps whatever the owner
-  set on it, which is the point — `active: false` is a kill switch a re-seed
-  must not undo.
+  @doc """
+  Writes the rows, idempotently.
+
+  A new row is inserted; an existing row has its managed fields replaced from
+  `source_attrs/0` — so a `permission_requested_on` that changes in config
+  reaches the database on the next seed — while `active` is left exactly as the
+  owner set it. The providers' `on_conflict: :nothing` would have kept the
+  first-ever row forever, and the doc's promise that one config line updates
+  the posture would have been false (CodeRabbit on the #136 PR).
   """
   def seed! do
     Map.new(all(), fn module ->
       attrs = module.source_attrs()
 
-      %Source{}
-      |> Source.changeset(attrs)
-      |> Repo.insert(on_conflict: :nothing, conflict_target: [:slug])
+      source =
+        %Source{}
+        |> Source.changeset(attrs)
+        |> Repo.insert!(
+          on_conflict: {:replace, @managed},
+          conflict_target: [:slug],
+          returning: true
+        )
 
-      {attrs.slug, Sources.get_source_by_slug(attrs.slug)}
+      {attrs.slug, source}
     end)
   end
 end

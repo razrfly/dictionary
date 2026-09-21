@@ -150,6 +150,34 @@ defmodule DevilsDictionaryWeb.UrbanDictionaryCardTest do
       refute Sources.get_source_by_slug!("urban-dictionary").active
     end
 
+    test "a re-seed refreshes the managed fields, so a config change reaches the row", ctx do
+      rizz!(ctx)
+      before = Application.get_env(:devils_dictionary, :urban_dictionary, [])
+
+      "urban-dictionary"
+      |> Sources.get_source_by_slug!()
+      |> Ecto.Changeset.change(active: false)
+      |> Repo.update!()
+
+      try do
+        Application.put_env(
+          :devils_dictionary,
+          :urban_dictionary,
+          Keyword.put(before, :permission_requested_on, "2026-09-22")
+        )
+
+        %{"urban-dictionary" => seeded} = DevilsDictionary.Sources.OnDemand.seed!()
+        source = Sources.get_source_by_slug!("urban-dictionary")
+
+        assert seeded.config["permission_requested_on"] == "2026-09-22"
+        assert source.config["permission_requested_on"] == "2026-09-22"
+        # The kill switch survives the same re-seed that carried the date.
+        refute source.active
+      after
+        Application.put_env(:devils_dictionary, :urban_dictionary, before)
+      end
+    end
+
     test "browser_config/1 is nil with no target: a miss page has no card", _ctx do
       assert UrbanDictionary.browser_config(nil) == nil
     end
