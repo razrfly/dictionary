@@ -58,6 +58,9 @@ allowed_provider_env =
     "CINEGRAPH_API_KEY",
     "CINEGRAPH_GRAPHQL_URL",
     "GIPHY_API_KEY",
+    # Not a secret, but `.env` is where the owner's switches live in dev and
+    # the reader only admits names on this list.
+    "BING_NEWS_ENABLED",
     "ARTSY_CLIENT_ID",
     "ARTSY_CLIENT_SECRET",
     "UNSPLASH_ACCESS_KEY",
@@ -121,13 +124,12 @@ if giphy_api_key = System.get_env("GIPHY_API_KEY") || local_provider_env["GIPHY_
   config :devils_dictionary, :giphy, api_key: giphy_api_key
 end
 
-# Bing News (#135) ships **disabled** in `config.exs` because the feed's own
-# `<copyright>` reserves anything beyond a personal RSS aggregator to
-# Microsoft's written permission (`docs/integrations/bing-news.md`). This is the
-# one switch that turns the News shelf's first provider on, and it has to say
-# so explicitly; a host that has never heard of it stays off.
-if System.get_env("BING_NEWS_ENABLED") in ~w(true 1 yes on) do
-  config :devils_dictionary, :bing_news, enabled: true
+# Bing News (#135) is **on** by the owner's decision, made knowing the feed's
+# `<copyright>` (`docs/integrations/bing-news.md`). This is the switch that
+# turns the News shelf's first provider off again without a deploy; it reads
+# the shell environment and the local `.env`, like the provider keys do.
+if (System.get_env("BING_NEWS_ENABLED") || local_provider_env["BING_NEWS_ENABLED"]) in ~w(false 0 no off) do
+  config :devils_dictionary, :bing_news, enabled: false
 end
 
 # Urban Dictionary's kill switch (#136), and the only one of the two that needs
