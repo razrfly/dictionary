@@ -322,14 +322,21 @@ defmodule DevilsDictionary.Lexicon.WordPageTest do
     # card among the dictionaries — `love` read *5 sources · 9 entries* with
     # Wikipedia between Wiktionary's verb and Wiktionary's name.
     test "an entry about the concept lands on the thing, never among the cards", ctx do
-      entry!(ctx, ctx.animal, "wikipedia",
-        body: "The cat is a small domesticated mammal. " <> String.duplicate("It purrs. ", 80),
-        url: "https://en.wikipedia.org/wiki/Cat"
+      # A word of its own rather than the describe's `cat`: an exact claim
+      # about *which* cards a page has cannot survive another test's committed
+      # rows, and `cat` is the busiest lemma in the suite (`@tag :unboxed`
+      # checks out with `sandbox: false`).
+      quoll = word!(ctx, "quoll", ~w(wordnet))
+      marsupial = concept!("Q1075694", "quoll", description: "a marsupial")
+      link!(quoll, marsupial, confidence: 0.95, method: :wiktionary_qid)
+      sense!(ctx, quoll, "wordnet", gloss: "a carnivorous marsupial")
+
+      entry!(ctx, marsupial, "wikipedia",
+        body: "Quolls are carnivorous marsupials. " <> String.duplicate("They hunt. ", 80),
+        url: "https://en.wikipedia.org/wiki/Quoll"
       )
 
-      sense!(ctx, ctx.cat, "wordnet", gloss: "a feline mammal")
-
-      page = page("cat")
+      page = page("quoll")
 
       refute Enum.any?(page.cards, &(&1.source.slug == "wikipedia"))
       refute Enum.any?(page.source_groups, &(&1.slug == "wikipedia"))
@@ -339,12 +346,13 @@ defmodule DevilsDictionary.Lexicon.WordPageTest do
       article = page.thing.article
 
       assert article.source.slug == "wikipedia"
-      assert article.url == "https://en.wikipedia.org/wiki/Cat"
+      assert article.url == "https://en.wikipedia.org/wiki/Quoll"
       # Folded the same way an entry is, so the disclosure has a number.
-      assert article.preview_html =~ "The cat is a small domesticated mammal."
+      assert article.preview_html =~ "Quolls are carnivorous marsupials."
       assert article.rest_chars > 0
       assert article.chars > article.rest_chars
-      assert article.body_html =~ "It purrs."
+      assert article.body_html =~ "They hunt."
+      _ = ctx
     end
 
     test "a thing with no article says so rather than raising", ctx do

@@ -446,19 +446,23 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
     test "the encyclopedia article renders in the thing panel, not among the dictionaries", ctx do
       cat_article!(ctx)
 
-      {:ok, _live, html} = live(ctx.conn, ~p"/define/cat")
+      {:ok, live, html} = live(ctx.conn, ~p"/define/cat")
 
       assert html =~ ~s(id="thing-article")
       assert html =~ "The cat is a small domesticated carnivorous mammal."
 
-      # Not a dictionary: no card, no rail row, and nothing counting it. The
-      # slab, the rail and the stats tile all read off `page.cards`, so one
-      # dictionary is what all three say.
+      # Not a dictionary: no card, and no row in the rail. The rail is asked
+      # for by element rather than by counting the whole page — the source
+      # *count* is a decision `WordPage` makes and `word_page_test.exs` pins,
+      # and a page-wide count assertion here rides on whatever else the suite
+      # has committed (`@tag :unboxed`).
       refute html =~ ~s(id="card-wikipedia")
-      refute html =~ ~s(id="rail-wikipedia")
-      assert html =~ ~s(id="rail-wordnet")
-      assert html =~ "One source so far"
-      refute html =~ "2 sources"
+
+      rail = live |> element("nav[aria-label='Sources']") |> render()
+
+      assert rail =~ ~s(id="rail-wordnet")
+      refute rail =~ "Wikipedia"
+      refute rail =~ ~s(id="rail-wikipedia")
     end
 
     test "the article's fold says how much is behind it, never a character count", ctx do
@@ -487,6 +491,30 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
       # in it — the provenance the card used to carry still reaches the reader.
       assert html =~ ~s(id="provenance-record-0")
       assert html =~ "Wikipedia"
+    end
+
+    test "the drawer shows the record the article came from, not a title guess", ctx do
+      # The title probe is a convention (`concept:Q…`, or the lemma it probed
+      # with), not a foreign key, and on `/define/dog` it answered with a
+      # *different* Wikipedia record from the one the panel's text came from.
+      %{animal: animal} = catwith_thing!(ctx)
+
+      # A record the title probe would find, and the one the article was
+      # actually written from.
+      record!(ctx, "wikipedia", external_id: "Cat")
+      mine = record!(ctx, "wikipedia", external_id: "Cat?oldid=2")
+
+      entry!(ctx, animal, "wikipedia",
+        body: "The cat is a small domesticated carnivorous mammal.",
+        record: mine
+      )
+
+      {:ok, live, _html} = live(ctx.conn, ~p"/define/cat")
+
+      html = live |> element("#thing-article-info") |> render_click()
+
+      assert html =~ "Cat?oldid=2"
+      refute html =~ ~s(>Cat</)
     end
 
     test "a word with a thing but no article has no article block", ctx do
@@ -776,6 +804,38 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
       assert html =~ "Sense-by-sense relations are in each definition"
 
       assert live |> element("#related-senses") |> render() =~ ~s(href="#card-wiktionary")
+    end
+
+    test "a word whose every relation is sense-scoped still gets the heading and the line", ctx do
+      # 8 of the first 4,000 enriched lexemes are this shape — `hedge-warbler`,
+      # `ill-humoured`, `move-the-goal-posts` — and before this they rendered
+      # no related block at all, which is the reading the sentence exists to
+      # prevent.
+      oyster = word!(ctx, "oyster", ~w(wiktionary))
+      sense = sense!(ctx, oyster, "wiktionary", gloss: "A marine bivalve.")
+
+      relation!(ctx, oyster, :synonym, word!(ctx, "mollusk", ~w(wiktionary)), from_sense: sense)
+
+      {:ok, live, html} = live(ctx.conn, ~p"/define/oyster")
+
+      assert html =~ ~s(id="related")
+      assert html =~ "Related words"
+      assert html =~ "Sense-by-sense relations are in each definition"
+      assert live |> element("#related-senses") |> render() =~ ~s(href="#card-wiktionary")
+
+      # A heading and a pointer, and no empty group rows under it.
+      refute html =~ ~s(id="related-similar")
+      refute html =~ ~s(id="related-family")
+    end
+
+    test "a word with no relations at all has no block and no line", ctx do
+      word!(ctx, "oyster", ~w(wiktionary))
+      sense!(ctx, word!(ctx, "abrocome", ~w(wiktionary)), "wiktionary", gloss: "A rat.")
+
+      {:ok, _live, html} = live(ctx.conn, ~p"/define/abrocome")
+
+      refute html =~ ~s(id="related")
+      refute html =~ "Sense-by-sense relations are in each definition"
     end
 
     test "a block with two groups or more says nothing of the kind", ctx do

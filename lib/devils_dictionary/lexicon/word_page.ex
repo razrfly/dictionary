@@ -1199,16 +1199,27 @@ defmodule DevilsDictionary.Lexicon.WordPage do
           title -> [title, String.downcase(title)]
         end
 
+    # Where the panel carries an article, *its* record is the Wikipedia
+    # provenance — the title probe below is a convention, not a foreign key,
+    # and on `/define/dog` it answers with a different record from the one the
+    # text in the panel came from. The probe stays for a thing with no article,
+    # which is most of them.
     records =
       [
         first_record("wikidata", [concept.qid]),
-        first_record("wikipedia", titles)
+        article_record(page.thing) || first_record("wikipedia", titles)
       ]
       |> Enum.reject(&is_nil/1)
       |> Enum.uniq_by(& &1.id)
 
     drawer("thing", concept.label || concept.qid, nil, Enum.map(records, & &1.id), index, page)
   end
+
+  defp article_record(%{article: %{record_id: id}}) when not is_nil(id) do
+    id |> List.wrap() |> Sources.records() |> List.first()
+  end
+
+  defp article_record(_thing), do: nil
 
   # A concept's Wikipedia record was written either by the concepts pass, keyed
   # `concept:Q…`, or by the title probe, keyed by the lemma it probed with —
@@ -1418,7 +1429,18 @@ defmodule DevilsDictionary.Lexicon.WordPage do
   # The line that answers "where did the noun go". A page whose block holds one
   # group or none, while its cards carry sense-scoped chips, points at the first
   # card that has any; anything richer than that does not need the sentence.
-  defp sense_link(nil, _cards), do: nil
+  #
+  # *None* is the case the sentence was written for, and it is not rare: 8 of
+  # the first 4,000 enriched lexemes — `hedge-warbler`, `ill-humoured`,
+  # `move-the-goal-posts` — have every one of their relations hung off a sense
+  # and so had no block at all to hang the line on. They get a heading and the
+  # sentence, which is the whole point of it.
+  defp sense_link(nil, cards) do
+    case Enum.find_value(cards, &(has_chips?(&1) && &1.id)) do
+      nil -> nil
+      card_id -> %{groups: %{}, counts: %{}, sense_link: card_id}
+    end
+  end
 
   defp sense_link(%{groups: groups} = related, cards) when map_size(groups) < 2 do
     %{related | sense_link: Enum.find_value(cards, &(has_chips?(&1) && &1.id))}
