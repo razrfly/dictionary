@@ -37,7 +37,6 @@ defmodule DevilsDictionaryWeb.WordDemoTest do
       assert html =~ ~s(id="demo-banner")
       assert html =~ ~s(id="card-sample-webster1913")
       assert html =~ ~s(id="card-sample-eb1911")
-      assert html =~ ~s(id="card-sample-urbandictionary")
       assert html =~ ~s(id="demo-evidence")
       assert html =~ ~s(id="demo-tile-0")
     end
@@ -50,11 +49,26 @@ defmodule DevilsDictionaryWeb.WordDemoTest do
       assert html =~ "SAMPLE DATA is on"
       assert html =~ "invented for layout"
 
-      for id <- ~w(card-sample-webster1913 card-sample-eb1911 card-sample-urbandictionary) do
+      for id <- ~w(card-sample-webster1913 card-sample-eb1911) do
         card = live |> element("##{id}") |> render()
         assert card =~ "Sample — not real data"
         assert card =~ "border-dashed"
       end
+    end
+
+    test "the 📱 sample is gone, and the real card does not take its place", ctx do
+      oyster!(ctx)
+
+      {:ok, _live, html} = live(ctx.conn, ~p"/define/oyster?demo=1")
+
+      # #136 retired the fake. The real Urban Dictionary card does not appear
+      # here either, and not because it is suppressed: `?demo=1` has no
+      # discovery target at all, so `browser_config/1` is `nil` and there is no
+      # shell. A mode that invents data is the wrong place to make a live
+      # request on the reader's behalf.
+      refute html =~ "card-sample-urbandictionary"
+      refute html =~ ~s(phx-hook="UrbanDictionary")
+      refute html =~ "api.urbandictionary.com"
     end
 
     test "the real cards are all still there, in their own order", ctx do

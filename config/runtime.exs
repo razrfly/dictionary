@@ -130,6 +130,16 @@ if System.get_env("BING_NEWS_ENABLED") in ~w(true 1 yes on) do
   config :devils_dictionary, :bing_news, enabled: true
 end
 
+# Urban Dictionary's kill switch (#136), and the only one of the two that needs
+# a deploy — `active: false` on the source row is the other and needs none.
+# Default **true**: the variable has to say `false` to turn the card off, so a
+# host that has never heard of it behaves the way config.exs says. There is no
+# key: the endpoint is keyless, the request is the reader's browser's, and
+# nothing secret is ever put in the assign.
+if System.get_env("URBAN_DICTIONARY_ENABLED") in ~w(false 0 no off) do
+  config :devils_dictionary, :urban_dictionary, enabled: false
+end
+
 # Artsy credentials remain server-only. They are read from the ignored local
 # development file or exported environment and are never placed in LiveView
 # assigns, URLs, logs, manifests, or source records.

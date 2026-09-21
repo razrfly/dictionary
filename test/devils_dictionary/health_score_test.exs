@@ -155,7 +155,15 @@ defmodule DevilsDictionary.HealthScoreTest do
 
       # An empty scope agrees trivially — every source, nothing attested — and
       # that is the point: the row measures agreement, not size.
-      sources = length(DevilsDictionary.Sources.Catalog.sources())
+      #
+      # U5 reads `Sources.list_sources/0`, which is every row: the catalog's
+      # and the on-demand definition sources of #136 alike. The latter agree
+      # for the strongest possible reason — they have no records at all, and
+      # never will — so counting them here is counting what the row counts.
+      sources =
+        length(DevilsDictionary.Sources.Catalog.sources()) +
+          length(DevilsDictionary.Sources.OnDemand.source_catalog())
+
       assert u5.actual =~ "#{sources} / #{sources} sources agree with dd.health"
       assert u5.status == :pass
     end

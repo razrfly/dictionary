@@ -45,7 +45,7 @@ defmodule DevilsDictionaryWeb.WordLive do
   alias DevilsDictionary.Claims.Contributions
   alias DevilsDictionary.Lexicon
   alias DevilsDictionary.Lexicon.WordPage
-  alias DevilsDictionaryWeb.{Culture, Demo, Provenance, Thing, Word}
+  alias DevilsDictionaryWeb.{CrowdCard, Culture, Demo, Provenance, Thing, Word}
 
   @trail_cap 12
   @suggestions 5
@@ -215,6 +215,7 @@ defmodule DevilsDictionaryWeb.WordLive do
     |> assign(:discovery_target, target)
     |> assign(:cultures, Map.merge(cultures, catalog_shelf(page, target)))
     |> assign(:giphy, DevilsDictionary.Discovery.Providers.Giphy.browser_config(target))
+    |> assign(:urban_dictionary, DevilsDictionary.Sources.UrbanDictionary.browser_config(target))
   end
 
   # The committed catalog as one more state on the shared shelf (K2 of #109).
@@ -577,6 +578,17 @@ defmodule DevilsDictionaryWeb.WordLive do
               </.slab>
 
               <Word.bare_row :if={@page.cards == []} lemma={@page.headword.lemma} />
+
+              <%!-- The 📱 Crowd card (#136): after the real cards and before the
+                   culture shelves, which is exactly where the demo's sample sat
+                   from U3 until this replaced it. `nil` unless the environment
+                   switch and the source row both say yes, and then the hook
+                   removes the element on an empty answer or any failure — so
+                   the states are *card* and *absent*, never an empty card. The
+                   source line above counts server-known cards and does not know
+                   about this one, on purpose: it is a claim about what has been
+                   absorbed, and nothing here is. --%>
+              <CrowdCard.urban_dictionary :if={@urban_dictionary} config={@urban_dictionary} />
 
               <%!-- One block for everything found rather than written, the GIFs
                    among it (#111 L6 — the one piece of #109 K10 that never

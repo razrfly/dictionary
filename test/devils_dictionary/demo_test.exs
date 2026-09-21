@@ -13,12 +13,15 @@ defmodule DevilsDictionary.DemoTest do
   alias DevilsDictionary.Demo
   alias DevilsDictionary.Lexicon.WordPage
   alias DevilsDictionary.Sources.Catalog
+  alias DevilsDictionary.Sources.OnDemand
 
   describe "the samples" do
     test "every word in the index gets a set, interpolated with its own lemma" do
       %{cards: cards, evidence: evidence} = Demo.samples("staurogram")
 
-      assert length(cards) == 3
+      # Two since #136 retired the 📱 one: Webster 1913 and EB1911, the two
+      # layers still nobody has written a module for.
+      assert length(cards) == 2
       assert evidence != []
 
       bodies = Enum.map_join(cards, " ", &rendered/1)
@@ -39,14 +42,25 @@ defmodule DevilsDictionary.DemoTest do
     end
 
     test "no sample source is a real one — Johnson especially, who is real since S5" do
-      real = Catalog.sources() |> Enum.map(& &1.slug) |> MapSet.new()
+      # Both registries, because #136 put real rows in a second one. A source
+      # the catalog does not list is still a source, and a sample wearing its
+      # name is still the lie this test exists to catch.
+      real =
+        (Catalog.sources() ++ OnDemand.source_catalog())
+        |> Enum.map(& &1.slug)
+        |> MapSet.new()
+
       sampled = MapSet.new(Demo.source_slugs())
 
       assert MapSet.disjoint?(real, sampled),
              "a sample impersonates #{inspect(MapSet.intersection(real, sampled))}"
 
       refute "johnson" in Demo.source_slugs()
-      assert Enum.sort(Demo.source_slugs()) == ~w(eb1911 urbandictionary webster1913)
+      assert "urban-dictionary" in real, "the on-demand registry is in the disjointness check"
+
+      # The 📱 sample retired in #136: the tier it stood in for is real now.
+      assert Enum.sort(Demo.source_slugs()) == ~w(eb1911 webster1913)
+      refute Enum.any?(Demo.source_slugs(), &(&1 =~ "urban"))
     end
 
     test "a sample card renders through the real card contract" do
@@ -93,7 +107,21 @@ defmodule DevilsDictionary.DemoTest do
       assert Enum.find_index(ids, &(&1 == "card-sample-eb1911")) >
                Enum.find_index(ids, &(&1 == "card-johnson"))
 
-      assert List.last(ids) == "card-sample-urbandictionary"
+      # Both samples are 👑 since #136 retired the 📱 one, so the foot of the
+      # page belongs to the real 📚 cards again and every sample sits among the
+      # dead, where its tier puts it.
+      assert List.last(ids) == "card-wiktionary"
+
+      # Every sample is ahead of every real 📚 card, which is what "among the
+      # dead" means once there is no 📱 sample to sit at the bottom.
+      last_sample =
+        ids
+        |> Enum.with_index()
+        |> Enum.filter(&String.starts_with?(elem(&1, 0), "card-sample"))
+        |> List.last()
+        |> elem(1)
+
+      assert last_sample < Enum.find_index(ids, &(&1 == "card-wikipedia"))
     end
 
     test "a miss gets no samples: there is no layout to check on a page with no word" do

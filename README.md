@@ -72,7 +72,7 @@ flowchart BT
   subgraph sources [Sources — who says it]
     A["👑 Aristocracy of the dead<br/>Bierce 1911 · Johnson 1755"]
     I["📚 Institutions<br/>WordNet · Wiktionary · Wikipedia · Wikidata"]
-    C["📱 The crowd (planned)<br/>users · curator bots · Urban Dictionary · the Guardian"]
+    C["📱 The crowd<br/>Urban Dictionary (on demand, in your browser)<br/>users · curator bots · the Guardian (planned)"]
   end
   subgraph lexicon [The lexicon — words]
     W["lexemes<br/>one row per lemma + part of speech<br/>forms and spellings fold in"]
@@ -171,7 +171,8 @@ Everything below is designed for in the MVP-0 schema and adds tables rather than
 - [x] Johnson 1755 (LEME TEI-XML, CC BY 4.0) — landed in S5 as the extensibility proof
 - [ ] Webster 1913 (GCIDE) · EB1911 (Britannica11 corpus)
 - [ ] Wikidata lexemes dump (the P5137 word→thing bridge)
-- [ ] Merriam-Webster (1k/day, non-commercial) · Urban Dictionary (on demand, attributed, never stored in bulk) · Datamuse
+- [x] Urban Dictionary — one definition per page, fetched by the reader's browser, attributed, linked, never stored (#136; permission asked for, and `active: false` retires it the day they answer no)
+- [ ] Merriam-Webster (1k/day, non-commercial) · Datamuse
 - [ ] Voltaire's *Philosophical Dictionary* · Diderot (link only) · the Guardian Gen Z terms (#63)
 - [ ] More scopes: politics, food, internet slang. A scope is a `priv/scopes/<slug>.json` file and two task runs — `mix dd.scope.new`, then `mix dd.scope.build` (emotions, S5, proved it).
 
@@ -304,7 +305,7 @@ Everything below is designed for in the MVP-0 schema and adds tables rather than
 | Wikidata | CC0 | attribution anyway |
 | Bierce, Johnson (LEME transcription CC BY 4.0), Webster 1913 (GCIDE, GPL package), Voltaire | public domain text | credit the transcription |
 | Merriam-Webster, Datamuse | non-commercial API terms | attribution; never bulk |
-| Urban Dictionary | unlicensed | on demand, attributed, linked, never stored in bulk or exported |
+| Urban Dictionary | Terms of Service; [API access by permission](https://urbandictionary.help/tos/) | one definition per page, **fetched by the reader's browser**, attributed by author and date, linked to its permalink; never stored, never exported ([#136](docs/integrations/urban-dictionary.md)) |
 
 ---
 
