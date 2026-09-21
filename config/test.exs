@@ -64,7 +64,7 @@ config :devils_dictionary, :discovery,
       request_budget_limit: 400,
       request_budget_window_seconds: 86_400,
       positive_refresh_seconds: 86_400,
-      retention_seconds: 86_400
+      retention_seconds: 82_800
     ]
   },
   refresh_cooldown_seconds: 60,

@@ -61,10 +61,12 @@ defmodule DevilsDictionary.Discovery.Policy do
     |> Application.fetch_env!(:discovery)
     |> Keyword.get(:source_policies, %{})
     |> Enum.flat_map(fn {slug, overrides} ->
-      case Keyword.get(overrides, :retention_seconds) do
-        seconds when is_integer(seconds) and seconds > 0 -> [{slug, seconds}]
-        _ -> []
-      end
+      # Through `for!/1`, so a window that is not a positive integer raises
+      # here — at the sweep, loudly — rather than being dropped from the list
+      # and leaving the source swept only by the shared seven days.
+      if Keyword.has_key?(overrides, :retention_seconds),
+        do: [{slug, for!(slug).retention_seconds}],
+        else: []
     end)
     |> Enum.sort()
   end

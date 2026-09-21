@@ -434,7 +434,12 @@ defmodule DevilsDictionary.Discovery.Providers.Guardian do
   # One row becomes an item only when all three gates pass. Any of them failing
   # is a dropped candidate and never a failed run.
   defp attest(term, row, now) when is_map(row) do
-    with {:ok, published_at} <- published_at(row["webPublicationDate"]),
+    # An item without an `id` is dropped here rather than refused by the
+    # result changeset downstream, where one bad row fails the run and every
+    # good item with it. The API always sends one; this is the guard for the
+    # day it does not.
+    with article_id when is_binary(article_id) <- presence(row["id"]),
+         {:ok, published_at} <- published_at(row["webPublicationDate"]),
          true <- fresh?(published_at, now),
          {:ok, url} <- article_url(row["webUrl"]),
          {locator_part, text} <- matched_text(term, row) do
@@ -525,10 +530,15 @@ defmodule DevilsDictionary.Discovery.Providers.Guardian do
     rest_start = start + length
     rest = binary_part(text, rest_start, byte_size(text) - rest_start)
 
+    # The fallback is a grapheme count turned back into bytes, never a byte
+    # count: `rest_start + 200` lands inside a multi-byte character one time
+    # in a few, and the invalid binary it makes survives `clamp/1` (which
+    # counts graphemes and sees fewer than 200) to fail JSON encoding at
+    # insert, losing the whole run.
     to =
       case Regex.run(~r/[.!?]["'\x{201d}\x{2019}]?(?=\s|$)/u, rest, return: :index) do
         [{s, l} | _] -> rest_start + s + l
-        _ -> min(byte_size(text), rest_start + @max_sentence_length)
+        _ -> rest_start + byte_size(String.slice(rest, 0, @max_sentence_length))
       end
 
     binary_part(text, from, to - from)

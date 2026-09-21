@@ -235,6 +235,21 @@ defmodule DevilsDictionary.Discovery.Providers.GuardianTest do
     test "a body without the word has no sentence" do
       assert Guardian.sentence("Nothing here at all.", pattern("bestiality")) == nil
     end
+
+    test "the window after a hit is cut between characters, never inside one" do
+      # No sentence end after the word, and every character after it is two
+      # bytes: a window counted in bytes lands inside one of them (the 200th
+      # byte after the hit is the first byte of an `é`) and the result is not
+      # a string at all — `clamp/1` counts graphemes and leaves it alone, and
+      # the JSON encoder at insert is what finally refuses it, taking the run
+      # with it.
+      text = "bestiality " <> String.duplicate("é ", 120)
+
+      sentence = Guardian.sentence(text, pattern("bestiality"))
+
+      assert String.valid?(sentence)
+      assert String.starts_with?(sentence, "bestiality")
+    end
   end
 
   # ---------------------------------------------------------------------------
@@ -432,6 +447,61 @@ defmodule DevilsDictionary.Discovery.Providers.GuardianTest do
 
   describe "the pipeline, end to end" do
     setup :isolate_provider
+
+    test "a result without an id is dropped, and the rest of the page survives", context do
+      # The API always sends one. The day it does not, the item must fall out
+      # here rather than reach the result changeset, where one nil
+      # `external_id` fails the run and every good item with it.
+      target = target(context, "bestiality")
+      published_at = DateTime.utc_now() |> DateTime.add(-3600, :second) |> DateTime.to_iso8601()
+
+      row = fn id, url ->
+        %{
+          "id" => id,
+          "type" => "article",
+          "sectionId" => "us-news",
+          "sectionName" => "US news",
+          "webPublicationDate" => published_at,
+          "webTitle" => "A headline",
+          "webUrl" => url,
+          "fields" => %{
+            "headline" => "A headline",
+            "byline" => "A Reporter",
+            "bodyText" => "The word bestiality is used in this sentence. And another."
+          }
+        }
+      end
+
+      results = [
+        row.(nil, "https://www.theguardian.com/us-news/2026/sep/15/no-id") |> Map.delete("id"),
+        row.(
+          "us-news/2026/sep/15/has-id",
+          "https://www.theguardian.com/us-news/2026/sep/15/has-id"
+        )
+      ]
+
+      Req.Test.stub(Guardian, fn conn ->
+        Req.Test.json(conn, %{
+          "response" => %{
+            "status" => "ok",
+            "total" => 2,
+            "startIndex" => 1,
+            "pageSize" => 12,
+            "currentPage" => 1,
+            "pages" => 1,
+            "results" => results
+          }
+        })
+      end)
+
+      assert {:queued, run} = Discovery.request(target, "guardian")
+      assert :ok = Discovery.execute_run(run.id)
+
+      assert Repo.get!(Run, run.id).status == :succeeded
+
+      state = Discovery.state(target.object_id, "guardian")
+      assert Enum.map(state.items, & &1.external_id) == ["us-news/2026/sep/15/has-id"]
+    end
 
     test "every item carries both identities, its byline and its credit", context do
       target = target(context, "bestiality")
@@ -683,7 +753,11 @@ defmodule DevilsDictionary.Discovery.Providers.GuardianTest do
     setup :isolate_provider
 
     test "the policy says a day, and it is the only source that says anything" do
-      assert Discovery.Policy.for!("guardian").retention_seconds == 86_400
+      # An hour under the day: the sweep runs every fifteen minutes, so a
+      # window of exactly 86_400 would let a record live 24h15m, and clause 5
+      # says twenty-four.
+      assert Discovery.Policy.for!("guardian").retention_seconds == 82_800
+      assert Discovery.Policy.for!("guardian").retention_seconds + 15 * 60 <= 86_400
       assert Discovery.Policy.for!("guardian").positive_refresh_seconds == 86_400
       assert Discovery.Policy.for!("guardian").request_budget_limit == 400
       assert Discovery.Policy.for!("guardian").request_budget_window_seconds == 86_400
@@ -695,7 +769,7 @@ defmodule DevilsDictionary.Discovery.Providers.GuardianTest do
                  :retention_seconds
                )
 
-      assert Discovery.Policy.source_retentions() == [{"guardian", 86_400}]
+      assert Discovery.Policy.source_retentions() == [{"guardian", 82_800}]
     end
 
     test "a 25-hour-old Guardian run is deleted by cleanup/0 and Bing's is not", context do
@@ -744,8 +818,10 @@ defmodule DevilsDictionary.Discovery.Providers.GuardianTest do
     end
 
     test "a Guardian run inside the window is left alone", context do
+      # Twenty-two hours: the window is twenty-three, an hour under the day
+      # so that a sweep every fifteen minutes still deletes inside it.
       guardian =
-        aged_run(word!(context, "bestiality", ~w(wordnet)), Guardian, "guardian", hours: 23)
+        aged_run(word!(context, "bestiality", ~w(wordnet)), Guardian, "guardian", hours: 22)
 
       assert %{expired: expired} = Discovery.cleanup()
 
