@@ -782,6 +782,15 @@ defmodule DevilsDictionary.Discovery do
           )
         end
 
+      # Bound once and not twice: a `cond` clause cannot bind, and the version
+      # before #144 Phase 0 ran the same query in its test and again in its
+      # body — two round trips and, between them, a window in which a cleanup
+      # tick could delete the run the clause had just decided to return.
+      cached_run =
+        if !refresh? and persistence == :persistent do
+          cached_run(mapping.id, request, now, provider.adapter_version())
+        end
+
       cond do
         provider_eligible(provider, source) != :ok ->
           {:deferred, :provider_disabled}
@@ -795,9 +804,8 @@ defmodule DevilsDictionary.Discovery do
         cooldown_run ->
           {:cached, cooldown_run}
 
-        !refresh? and persistence == :persistent and
-            cached_run(mapping.id, request, now, provider.adapter_version()) ->
-          {:cached, cached_run(mapping.id, request, now, provider.adapter_version())}
+        cached_run ->
+          {:cached, cached_run}
 
         in_flight = in_flight(mapping.id, request.request_key) ->
           {:queued, in_flight}
@@ -956,10 +964,20 @@ defmodule DevilsDictionary.Discovery do
   end
 
   defp pending_or_failure_state(mapping, provider) do
+    # Filtered on the adapter version, as `latest_display_root/2` is. Without
+    # it, an adapter bump left the page reading the *old* version's succeeded
+    # run — which `latest_display_root/2` had just refused — and reporting
+    # `:expired` for a provider that had never run at this version at all. The
+    # honest answer there is `:idle`, which is what this returns once the old
+    # run is out of scope (#144 Phase 0).
+    adapter_version = provider.adapter_version()
+
     latest =
       Repo.one(
         from r in Run,
-          where: r.mapping_id == ^mapping.id and r.page == 0,
+          where:
+            r.mapping_id == ^mapping.id and r.page == 0 and
+              r.adapter_version == ^adapter_version,
           order_by: [desc: r.inserted_at, desc: r.id],
           limit: 1
       )
@@ -1174,7 +1192,12 @@ defmodule DevilsDictionary.Discovery do
   end
 
   defp identity_proposal(provider, item) do
-    if function_exported?(provider, :identity_record, 1) do
+    # `Code.ensure_loaded?/1` first, like every other optional-callback probe in
+    # this module: under lazy loading `function_exported?/3` alone answers false
+    # for a module that has simply not been loaded yet, and a provider with a
+    # durable identity contract would silently degrade to
+    # `insufficient_evidence` for the life of that node (#144 Phase 0).
+    if Code.ensure_loaded?(provider) and function_exported?(provider, :identity_record, 1) do
       case provider.identity_record(item) do
         {:ok, entry} ->
           {:ok, entry}

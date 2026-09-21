@@ -70,6 +70,27 @@ defmodule DevilsDictionary.Discovery.Conformance do
   """
   def tier(provider), do: provider.source_attrs()[:tier]
 
+  @doc """
+  The operation this provider's own recipe names, for a throwaway target.
+
+  Through an opaque module for the same reason as `declares_pipeline?/1`, and
+  for one more: a registry-only provider does not export `automatic_mapping/1`
+  at all, and the compiler cannot see that the suite only asks a pipeline
+  provider for it.
+  """
+  def automatic_operation(provider) do
+    {operation, _parameters} =
+      provider.automatic_mapping(%{
+        object_id: 1,
+        lexeme_ids: [1],
+        term: "war",
+        language: "en",
+        relevance: "term"
+      })
+
+    operation
+  end
+
   @doc "True when this provider can actually be driven through the pipeline."
   def pipeline?(provider) do
     declares_pipeline?(provider) and Providers.retrievable?(provider)
@@ -205,6 +226,22 @@ defmodule DevilsDictionary.Discovery.Conformance do
           assert is_nil(detail) or (is_binary(detail) and String.length(detail) <= 40)
         end
 
+        test "the operation it builds is one it declared" do
+          # `operations` was decoration: documented as a required capability
+          # key and read by no shared code (#144 Phase 0). It is the operation
+          # `automatic_mapping/1` names, which goes into the mapping row and
+          # comes back to `validate_mapping/2` and `retrieve/4` — so a provider
+          # whose recipe names an operation its capability map does not is
+          # describing itself wrongly, and now says so here.
+          if DevilsDictionary.Discovery.Conformance.pipeline?(@provider) do
+            operation = DevilsDictionary.Discovery.Conformance.automatic_operation(@provider)
+
+            assert operation in @provider.capabilities().operations,
+                   "#{@slug} builds the operation #{inspect(operation)} and declares " <>
+                     inspect(@provider.capabilities().operations)
+          end
+        end
+
         test "a module the pipeline is told it can drive exports everything it drives" do
           # `retrieve/4` alone is not the gate: `Discovery` builds the automatic
           # mapping and `Transport` builds the request, both before a run runs.
@@ -295,6 +332,65 @@ defmodule DevilsDictionary.Discovery.Conformance do
             assert Repo.aggregate(RequestAttempt, :count) == spent
             state = Discovery.state(target.object_id, @slug)
             assert Enum.map(state.items, & &1.external_id) == ids
+          end
+        end
+
+        describe "#{@slug} — throttling" do
+          test "a 429 with Retry-After defers once, backs the provider off, then succeeds",
+               context do
+            target = @fixture.covered_target(context)
+
+            %{pages: [ids | _]} =
+              DevilsDictionary.Discovery.Conformance.Fixture.stub(@fixture, :throttled, context)
+
+            assert {:queued, run} = Discovery.request(target, @slug)
+
+            # One deferral. A throttle is backpressure and never a failure: the
+            # run snoozes for the header's seconds and stays pending, so the
+            # page keeps whatever it was showing and the work is not lost.
+            assert {:snooze, seconds} = Discovery.execute_run(run.id)
+            assert is_integer(seconds) and seconds > 0
+
+            deferred = Repo.get!(Run, run.id)
+            assert deferred.status == :pending
+            assert deferred.error_code == "provider_retry_after"
+
+            # One provider-wide backoff, written where every node and every
+            # visit reads it before spending anything — not held in the process
+            # that happened to be refused.
+            source = Repo.get_by!(DevilsDictionary.Sources.Source, slug: @slug)
+            assert %DateTime{} = source.discovery_retry_after
+            assert DateTime.compare(source.discovery_retry_after, DateTime.utc_now()) == :gt
+            assert source.discovery_retry_reason == "retry_after"
+
+            # The ledger records what was spent, and a refused request was
+            # spent: it left the node and counted against the source's budget.
+            throttled_attempts = Repo.aggregate(RequestAttempt, :count)
+            assert throttled_attempts >= 1
+
+            # Nothing was published, so a second visit cannot read a result
+            # that does not exist.
+            assert Repo.aggregate(Result, :count) == 0
+            assert Discovery.state(target.object_id, @slug).status in [:loading, :deferred]
+
+            # Waiting out `Retry-After`, in the only form a test can: the
+            # backoff the transport wrote is the thing that expires.
+            source
+            |> Ecto.Changeset.change(discovery_retry_after: nil, discovery_retry_reason: nil)
+            |> Repo.update!()
+
+            Repo.update_all(from(r in Run, where: r.id == ^run.id), set: [retry_at: nil])
+
+            # One success, on the same run, from the same admission.
+            assert :ok = Discovery.execute_run(run.id)
+            assert Repo.get!(Run, run.id).status == :succeeded
+
+            state = Discovery.state(target.object_id, @slug)
+            assert state.status == :ready
+            assert Enum.map(state.items, & &1.external_id) == ids
+
+            assert Repo.aggregate(RequestAttempt, :count) > throttled_attempts
+            assert Repo.aggregate(Run, :count) == 1
           end
         end
 
@@ -584,6 +680,50 @@ defmodule DevilsDictionary.Discovery.Conformance do
                          "onto the #{type} shelf, whose row admits " <>
                          inspect(ContentTypes.evidence(type))
               end
+            end
+          end
+
+          test "every result declares its evidence, and delivers what it declared", context do
+            # #144 Phase 0. Before the declaration, `MatchReason.from_result/2`
+            # dispatched on the presence of one of four keys, so a provider
+            # with a reason shape none of them matched became a `:query` with
+            # nothing to say — silently, on any shelf, with no check to notice.
+            # A result now says what it is and is held to it.
+            target = @fixture.covered_target(context)
+            @fixture.stub(:results, context)
+
+            assert {:queued, run} = Discovery.request(target, @slug)
+            assert :ok = Discovery.execute_run(run.id)
+
+            state = Discovery.state(target.object_id, @slug)
+
+            type =
+              Enum.find(@provider.capabilities().content_types, &(&1 in ContentTypes.known()))
+
+            for item <- state.items do
+              details = item.match_details
+
+              assert MatchReason.known_kind?(details["kind"]),
+                     "#{@slug} declares match_details[\"kind\"] as " <>
+                       "#{inspect(details["kind"])}; MatchReason builds " <>
+                       inspect(MatchReason.kinds())
+
+              declared = MatchReason.declared_evidence(details)
+
+              assert declared in [:identity, :attestation, :query],
+                     "#{@slug} wrote no match_details[\"evidence\"] on #{item.external_id}"
+
+              # The declaration is not decoration: it has to be the class of
+              # the reason the builder actually produced from the same map.
+              for reason <- MatchReason.from_result(details, state.term) do
+                assert MatchReason.evidence(reason) == declared,
+                       "#{@slug} declared #{inspect(declared)} on #{item.external_id} and " <>
+                         "delivered a #{inspect(MatchReason.evidence(reason))} reason"
+              end
+
+              assert ContentTypes.admits?(type, declared),
+                     "#{@slug} declared #{inspect(declared)} onto the #{type} shelf, " <>
+                       "whose row admits #{inspect(ContentTypes.evidence(type))}"
             end
           end
         end

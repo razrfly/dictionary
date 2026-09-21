@@ -153,6 +153,7 @@ defmodule DevilsDictionary.FakeOffsetDiscoveryProvider do
           # row without one attests without a locator, as a real snippet may.
           match_details: %{
             "kind" => "attestation",
+            "evidence" => "attestation",
             "query" => mapping["term"],
             "lines" => [
               %{

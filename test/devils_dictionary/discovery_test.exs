@@ -1156,6 +1156,50 @@ defmodule DevilsDictionary.DiscoveryTest do
     assert Discovery.state(word.object_id, "cinegraph").mapping_id == run.mapping_id
   end
 
+  test "a run from a superseded adapter version leaves the page idle, not expired", ctx do
+    # #144 Phase 0. `latest_display_root/2` filters on the adapter version and
+    # `pending_or_failure_state/2` did not, so after a bump the page read the
+    # *old* version's succeeded run — the one the root query had just refused —
+    # and reported `:expired`: a provider that had never run at this version
+    # described as having run and gone stale. The honest answer is `:idle`, and
+    # the next visit admits the run that makes it true.
+    word = word!(ctx, "superseded-adapter", ~w(wordnet))
+
+    # The mapping is the current one; only the run belongs to the old adapter.
+    # Built rather than mutated, because a completed run is immutable in the
+    # database and an adapter bump does not rewrite history — it leaves it.
+    assert {:queued, pending} = Discovery.request(target(word), "cinegraph")
+    mapping_id = pending.mapping_id
+    Repo.delete!(pending)
+
+    now = DateTime.utc_now()
+
+    %Run{}
+    |> Run.create_changeset(%{
+      mapping_id: mapping_id,
+      adapter_version: "cinegraph.superseded",
+      request_parameters: %{"after" => nil, "first" => 12},
+      request_key: "superseded-root",
+      position_key: "superseded-root",
+      page_context: Ecto.UUID.generate(),
+      page: 0,
+      status: :pending
+    })
+    |> Repo.insert!()
+    |> Run.lifecycle_changeset(%{
+      status: :succeeded,
+      started_at: now,
+      completed_at: now,
+      refresh_after: DateTime.add(now, 3_600, :second),
+      expires_at: now,
+      completion_reason: :no_results,
+      result_count: 0
+    })
+    |> Repo.update!()
+
+    assert Discovery.state(word.object_id, "cinegraph").status == :idle
+  end
+
   test "a 403 stays a terminal authentication verdict for a provider that says nothing", ctx do
     word = word!(ctx, "forbidden", ~w(wordnet))
     calls = start_supervised!({Agent, fn -> 0 end})

@@ -94,13 +94,27 @@ defmodule DevilsDictionary.Discovery.Budget do
           {:ok, max(DateTime.diff(scheduled_at, now, :millisecond), 0)}
       end
     end)
-    |> case do
-      {:ok, {:ok, wait_ms}} -> {:ok, wait_ms}
-      {:error, {:budget_exhausted, seconds}} -> {:deferred, seconds}
-      {:error, {:provider_backoff, seconds}} -> {:deferred, seconds}
-      {:error, :attempts_exhausted} -> {:error, :attempts_exhausted}
-    end
+    |> outcome()
   end
+
+  @doc """
+  What one transaction result means to the caller: a slot, a wait, or a refusal.
+
+  Named and public because it has to be **total**, and because that is the one
+  thing a test can hold it to. The three rollbacks above are the three this
+  function writes today; before #144 Phase 0 the `case` listed exactly those
+  and nothing else, so any other transaction failure — a serialization error
+  under concurrency, a rollback a later clause adds and forgets to map, the
+  adapter's own `{:error, :rollback}` — left this function as a
+  `CaseClauseError` raised through `Discovery.Transport` and out of a run that
+  had no way to recover from it. A failed claim spent nothing; the honest
+  answer is a refusal the run can fail on and retry.
+  """
+  def outcome({:ok, {:ok, wait_ms}}), do: {:ok, wait_ms}
+  def outcome({:error, {:budget_exhausted, seconds}}), do: {:deferred, seconds}
+  def outcome({:error, {:provider_backoff, seconds}}), do: {:deferred, seconds}
+  def outcome({:error, :attempts_exhausted}), do: {:error, :attempts_exhausted}
+  def outcome({:error, _other}), do: {:error, :claim_failed}
 
   @doc "Persists provider-wide not-before time so visits and workers cannot bypass it."
   def defer_provider(run_id, retry_after, reason) do

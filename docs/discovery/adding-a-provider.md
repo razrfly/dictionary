@@ -200,8 +200,20 @@ they move together:
 2. `parse/1` — the real response shape
 3. `item/2` — the real external id, the real `preview_metadata`, and the real
    `match_details`, which is the identifier the match was made on:
-   `"tags"` for QID identities, `"keywords"` for keyword ids, `"lines"` for a
-   text attestation
+   `"tags"` for QID identities, `"depicts"` for a live depiction, `"keywords"`
+   for keyword ids, `"lines"` for a text attestation — **declared** by two
+   further keys the shared reason builder reads (#144 Phase 0):
+
+   | key | values | what it does |
+   |---|---|---|
+   | `"kind"` | one of `MatchReason.kinds/0` | names the builder that reads your reason shape |
+   | `"evidence"` | `"identity"`, `"attestation"`, `"query"` | the class, checked against your content type's row |
+
+   Conformance asserts both, and asserts that the class you declared is the
+   class the builder actually produced from your map. A reason shape none of
+   the kinds reads is not a silent `:query` any more; it is a red suite, and
+   the fix is a kind and a clause in `MatchReason` — named, shared and
+   reviewed, which is the only kind of shared edit this checklist wants.
 4. the fixture's `respond/1` — the same shape, from a real captured response
 
 The fixture is not a second implementation of the provider. `stub/2` returns the
@@ -220,9 +232,14 @@ A fixture may also supply `covered_target/1` evidence (the Met's writes a
 mix test test/devils_dictionary/discovery/conformance/demo_conformance_test.exs
 ```
 
-Nineteen cases for a pipeline provider: the contract, admission, budget, positive
-and negative cache, pagination, cleanup, identity, and the render through
-`Culture.section`. Then the whole set plus the architecture test:
+Twenty-three cases for a pipeline provider: the contract, admission, budget,
+throttling, positive and negative cache, pagination, cleanup, identity, and the
+render through `Culture.section`. Your fixture supplies three scenarios —
+`:results`, `:empty`, `:paged`. The fourth, `:throttled`, is the kit's and costs
+you nothing: it puts one `429` with a `Retry-After` in front of your `:results`
+stub and asserts one deferral, one provider-wide backoff on your source row, the
+refused request in the ledger, and then one success on the same run. Then the
+whole set plus the architecture test:
 
 ```bash
 mix test test/devils_dictionary/discovery/conformance test/devils_dictionary/artworks/corpus/conformance test/devils_dictionary/discovery/conformance_coverage_test.exs
@@ -242,6 +259,26 @@ defmodule DevilsDictionary.Artworks.Corpus.Conformance.MyCorpusTest do
     manifest: "priv/artworks/manifests/my-corpus-v1.json"
 end
 ```
+
+### The registry is checked at boot
+
+`DevilsDictionary.Discovery.Providers.validate!/0` runs from
+`Application.start/2`, before the supervisor, so a bad declaration is a node
+that refuses to start rather than a `KeyError` on the first page that reaches
+you (#144 Phase 0). It checks, per registered module: the five registration
+callbacks; a `source_attrs/0` the catalog can seed (slug, name, attribution,
+tier); a `capabilities/0` with the six documented keys at the documented types,
+at least one operation and one content type, every content type one
+`ContentTypes` can present; pacing keys that are non-negative integers **where
+declared** (absent is legal and means unpaced); and, for a module claiming
+`background: true, transport: :server`, every callback in
+`Providers.pipeline_callbacks/0` — which includes `validate_mapping/2`, because
+the pipeline calls it on every render as well as mid-run. It also checks that
+every `:source_policies` key names a registered slug, so a renamed provider
+cannot leave a dead override behind.
+
+If your provider does not boot, read the message: it collects every complaint
+rather than stopping at the first.
 
 ### Registering a provider should turn no test red
 
@@ -465,13 +502,17 @@ Nothing in shared code changes; if you find yourself editing `Culture`,
    `external_href/1`, #116 Phase 3) — anything else, a relative path or a
    `javascript:` scheme an upstream record carried, is silently not a link,
    so write absolute URLs or none.
-5. **Read the row's `evidence`.** Your reasons must be of a class the row
-   admits, and conformance asserts each one. An identity-bearing source writes
-   `"tags"` or `"depicts"`; a text source writes `"lines"` (with a `"locator"`
-   when the source has a better one than a line number); a stock-photo search
-   on the `:image` shelf writes nothing and is described as the search result
-   it is — the only shelf where that is allowed. A search result on any other
-   shelf is a red suite, not a product decision to make in a provider.
+5. **Read the row's `evidence`, and declare yours.** Your reasons must be of a
+   class the row admits, and conformance asserts each one. An identity-bearing
+   source writes `"tags"` or `"depicts"`; a text source writes `"lines"` (with
+   a `"locator"` when the source has a better one than a line number); a
+   stock-photo search on the `:image` shelf writes no reason shape at all and
+   is described as the search result it is — the only shelf where that is
+   allowed. Whichever it is, say so in `match_details["kind"]` and
+   `match_details["evidence"]`, because the row is checked against your
+   declaration and not against a guess at your map's shape. A search result on
+   any other shelf is a red suite, not a product decision to make in a
+   provider.
 6. **Conformance, then the browser.** Your own suite (§5), the whole set, and
    the multi-source check, which runs on two stubs and does not need you.
    Then open a page where the shelf already has another source and check the

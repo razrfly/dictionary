@@ -487,6 +487,7 @@ defmodule DevilsDictionary.Discovery.Providers.Met do
       position: 0,
       match_details: %{
         "kind" => "tag",
+        "evidence" => "identity",
         "query" => term,
         "tags" => tags
       },

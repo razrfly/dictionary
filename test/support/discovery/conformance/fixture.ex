@@ -16,14 +16,22 @@ defmodule DevilsDictionary.Discovery.Conformance.Fixture do
   alias DevilsDictionary.Discovery
 
   @typedoc """
-  The three shapes every provider's API can answer in.
+  The four shapes every provider's API can answer in.
 
     * `:results` — one page that matches, and no page after it
     * `:empty` — a well-formed answer with nothing in it, which is a negative
       cache and never a failure
     * `:paged` — a first page that hands back a cursor, and a second page
+    * `:throttled` — a `429` carrying `Retry-After` on the **first** request and
+      the `:results` answer on the one after it
+
+  A fixture supplies the first three. `:throttled` is the kit's, installed by
+  `stub/3` on top of whatever the fixture's own `:results` returns: a 429 and a
+  `Retry-After` header are HTTP and not a provider's dialect, and nine
+  providers implement the `{:deferred, …}` path this exercises without one line
+  of the suite ever having driven it (#144 Phase 0).
   """
-  @type scenario :: :results | :empty | :paged
+  @type scenario :: :results | :empty | :paged | :throttled
 
   @doc "The provider module this fixture drives."
   @callback provider() :: module()
@@ -49,6 +57,9 @@ defmodule DevilsDictionary.Discovery.Conformance.Fixture do
 
   Returns `%{pages: [[external_id]]}` — what the installed responses will
   produce, in order, one list per page. The suite asserts against it.
+
+  Called for `:results`, `:empty` and `:paged`. `:throttled` is built from
+  `:results` by `stub/3` and never reaches a fixture.
   """
   @callback stub(scenario(), context :: map()) :: %{pages: [[String.t()]]}
 
@@ -61,6 +72,40 @@ defmodule DevilsDictionary.Discovery.Conformance.Fixture do
   @callback setup(context :: map()) :: map()
 
   @optional_callbacks setup: 1, uncovered_target: 1
+
+  @doc """
+  Installs one scenario's responses, the shared ones included.
+
+  The suite calls this rather than `fixture.stub/2` so `:throttled` can be the
+  kit's and not eleven copies of the same 429. `Req.Test.expect/3`'s
+  expectations are consumed **before** the stub, so one expectation in front of
+  the fixture's own `:results` stub is exactly "429 first, 200 after".
+  """
+  def stub(fixture, :throttled, context) do
+    pages = fixture.stub(:results, context)
+    throttle_once(fixture.provider())
+    pages
+  end
+
+  def stub(fixture, scenario, context), do: fixture.stub(scenario, context)
+
+  @doc """
+  Answers the next request to `provider` with `429` and a `Retry-After`.
+
+  One request only. What the transport does with it is the thing under test:
+  read the header, persist the provider-wide backoff on the source row, and
+  hand the run back as `{:deferred, "provider_retry_after", seconds}` without
+  retrying into the throttle that produced it.
+  """
+  def throttle_once(provider, retry_after_seconds \\ 60) do
+    Req.Test.expect(provider, fn conn ->
+      conn
+      |> Plug.Conn.put_resp_header("retry-after", Integer.to_string(retry_after_seconds))
+      |> Plug.Conn.send_resp(429, "")
+    end)
+
+    :ok
+  end
 
   defmacro __using__(_opts) do
     quote do
