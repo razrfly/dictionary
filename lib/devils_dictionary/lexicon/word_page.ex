@@ -94,6 +94,27 @@ defmodule DevilsDictionary.Lexicon.WordPage do
   # bounding how many of them a source may file.
   @form_cap 8
   @group_cap 3
+  # Two origins is what `love` has and what a rail can carry open; `set` files
+  # five, and five paragraphs of descent above the source list is the rail
+  # becoming the page.
+  @origin_cap 2
+  # The same shape as `@entry_whole` / `@entry_preview` above, for the same
+  # reason and at the rail's scale. An origin at or under `@origin_whole` is
+  # shown whole — Wiktionary's `name` origin for *love* is 88 characters and a
+  # fold that reaches it is a fold working against the thing #133 R5 is trying
+  # to put on screen. A longer one is cut to `@origin_budget` and discloses the
+  # remainder. R5 expected `nepotism` to fall on the whole side; it does not,
+  # because its origin is 274 characters, not the short one the issue assumed.
+  #
+  # The two numbers are measured, not chosen. The rail is 22.5rem and its type
+  # renders at 7.64px a character, so a line holds about 47 of them and R5's
+  # "no more than two visual lines" is ~94 — less the `origin (noun, verb)`
+  # label and the `… 1,170 more` that follows, which is where 64 comes from.
+  # R5 says "a budget of ~150" and draws a wireframe whose head is 84
+  # characters; both cannot hold at 47 characters a line, and the two-line
+  # measurement is the one with a number on it.
+  @origin_whole 150
+  @origin_budget 64
   @chain_depth 8
   @trail_cap 12
 
@@ -174,6 +195,9 @@ defmodule DevilsDictionary.Lexicon.WordPage do
 
   @doc "How many sense groups a card shows before its own disclosure."
   def group_cap, do: @group_cap
+
+  @doc "How many origins the rail shows open before folding the rest into one line."
+  def origin_cap, do: @origin_cap
 
   @doc """
   Builds the page from a `Lexicon.lookup/2` result.
@@ -380,7 +404,7 @@ defmodule DevilsDictionary.Lexicon.WordPage do
     |> Enum.reject(&(is_nil(&1.etymology) or &1.etymology == ""))
     |> Enum.group_by(& &1.etymology)
     |> Enum.map(fn {text, group} ->
-      {first, rest} = first_sentence(text)
+      {first, rest} = clause_cut(text)
 
       %{
         text: text,
@@ -422,14 +446,84 @@ defmodule DevilsDictionary.Lexicon.WordPage do
     |> String.trim()
   end
 
-  # An origin's first sentence, and whatever follows it. `dog`'s etymology is
-  # 1,615 characters and `set` files five of them; whole, they are a page
-  # between the reader and the first definition. Nothing is truncated — the
-  # remainder is behind a control that says how long it is.
-  defp first_sentence(text) do
-    case Regex.run(~r/\A(.+?\.)(?:\s+)(\S.*)\z/s, text) do
-      [_, first, rest] -> {first, rest}
-      _ -> {text, nil}
+  # Where one clause of a descent ends and the next begins. Wiktionary's
+  # etymologies are chains — *from X, from Y, from Z* — and the joins are the
+  # only punctuation in them, so they are the only places a cut reads as a
+  # pause rather than as damage.
+  @clause_break ~r/(?<=,)\s+(?=[Ff]rom\b)|(?<=;)\s+|(?<=\.)\s+(?=\p{Lu})/u
+
+  @doc """
+  An origin's opening clauses, and whatever follows them.
+
+  A **sentence** cut is no cut at all here: Wiktionary writes a whole descent
+  as one sentence — *love*'s is 1,200 characters of *from … from … from*
+  without a full stop — so `first_sentence/1` returned the paragraph it was
+  asked to shorten, four lines of it, which is #133 R5's complaint.
+
+  An origin at or under `@origin_whole` characters is returned whole. A longer
+  one is cut by clause: the last `, from`, `;` or sentence end at or before
+  `budget` characters. Nothing is rewritten and nothing is lost — the head ends
+  on its own punctuation, the remainder is the rest of the original verbatim,
+  and joining the two back together reproduces it.
+
+  A clause longer than the budget on its own — an origin with no joins in it at
+  all — falls back to the last word boundary, because a rail line that cannot
+  be cut is a rail line that decides how tall the rail is.
+  """
+  def clause_cut(text, budget \\ @origin_budget)
+
+  def clause_cut(text, budget) when is_binary(text) do
+    if String.length(text) <= @origin_whole do
+      {text, nil}
+    else
+      {head, rest} = split_clauses(Regex.split(@clause_break, text), budget)
+
+      case Enum.join(rest, " ") do
+        "" -> {head, nil}
+        rest -> {head, rest}
+      end
+    end
+  end
+
+  defp split_clauses(parts, budget) do
+    {taken, rest} = Enum.split(parts, fitting(parts, budget))
+    head = Enum.join(taken, " ")
+
+    if String.length(head) <= budget do
+      {head, rest}
+    else
+      {word_head, word_rest} = word_cut(head, budget)
+      {word_head, Enum.reject([word_rest | rest], &(&1 == ""))}
+    end
+  end
+
+  # How many clauses fit. The first is always taken — a head of nothing is not
+  # a cut — and the rest while the running length, separators included, stays
+  # inside the budget.
+  defp fitting(parts, budget) do
+    parts
+    |> Enum.reduce_while({0, 0}, fn part, {count, len} ->
+      len = if count == 0, do: String.length(part), else: len + 1 + String.length(part)
+
+      cond do
+        count == 0 -> {:cont, {1, len}}
+        len <= budget -> {:cont, {count + 1, len}}
+        true -> {:halt, {count, len}}
+      end
+    end)
+    |> elem(0)
+  end
+
+  defp word_cut(text, budget) do
+    case text |> String.slice(0, budget) |> String.split(" ") do
+      [_one] ->
+        {String.slice(text, 0, budget),
+         text |> String.slice(budget..-1//1) |> String.trim_leading()}
+
+      words ->
+        head = words |> Enum.drop(-1) |> Enum.join(" ")
+
+        {head, text |> String.slice(String.length(head)..-1//1) |> String.trim_leading()}
     end
   end
 

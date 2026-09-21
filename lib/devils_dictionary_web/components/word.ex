@@ -51,21 +51,21 @@ defmodule DevilsDictionaryWeb.Word do
         {@headword.lemma}
       </h1>
 
-      <p
+      <%!-- One entrance to the pronunciations, not two (#133 R5). The headword
+           showed three spellings and a `+9 variants` link, and the rail showed
+           an "All 12 pronunciations recorded" disclosure holding the same list:
+           the link was the label of a control four hundred pixels away. Now the
+           label *is* the control, and it sits under the IPA it counts. A `div`
+           rather than a `p` because a `details` inside a paragraph is markup a
+           browser will silently take apart. --%>
+      <div
         :if={@headword.pronunciations != []}
         id="pronunciations"
         class="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1 text-lg/7 text-mist-500"
       >
         <span :for={p <- @headword.pronunciations} class="font-mono">{p.ipa}</span>
-        <span :if={@headword.pronunciations_all != []} class="text-base/7 sm:text-sm/7">
-          <a
-            href="#pronunciation-variants"
-            class="underline underline-offset-4 hover:text-mist-950 dark:hover:text-white"
-          >
-            +{length(@headword.pronunciations_all) - length(@headword.pronunciations)} variants
-          </a>
-        </span>
-      </p>
+        <.pronunciation_list headword={@headword} />
+      </div>
 
       <%!-- A slug is a label, not an identity: `love`, `Love` and `LoVe` are
            three words under one address (ADR decision 10). The page shows them
@@ -378,24 +378,43 @@ defmodule DevilsDictionaryWeb.Word do
       />
       <.stats page={@page} sources={@sources} />
 
-      <details
+      <%!-- On screen, not behind a summary (#133 R5). The Wikimedia A/B #131
+           read says ~60% of readers never expand a collapsed section, and the
+           origin is the most interesting thing the rail holds. What keeps it
+           from pushing the source list down is the clause cut `build/2` applies
+           to each one, and a cap of two open: `set` files five origins. --%>
+      <div
         :if={facts?(@page.headword)}
-        id="about-the-word"
+        id="word-facts"
         class="mt-5 border-t border-mist-950/10 pt-4 dark:border-white/10"
       >
-        <summary class="w-fit cursor-pointer text-base/7 font-medium text-mist-700 sm:text-sm/7 dark:text-mist-400">
-          Sound, forms and origin
-        </summary>
-        <div class="pb-1">
-          <.forms forms={@page.headword.forms} />
+        <.forms forms={@page.headword.forms} />
+        <.origin
+          :for={
+            {etymology, i} <-
+              Enum.with_index(Enum.take(@page.headword.etymologies, WordPage.origin_cap()))
+          }
+          etymology={etymology}
+          index={i}
+        />
+        <details
+          :if={length(@page.headword.etymologies) > WordPage.origin_cap()}
+          id="more-origins"
+          class="mt-2"
+        >
+          <summary class="w-fit cursor-pointer text-base/7 text-mist-500 underline underline-offset-4 hover:text-mist-950 sm:text-sm/7 dark:hover:text-white">
+            {length(@page.headword.etymologies) - WordPage.origin_cap()} more origins
+          </summary>
           <.origin
-            :for={{etymology, i} <- Enum.with_index(@page.headword.etymologies)}
+            :for={
+              {etymology, i} <-
+                Enum.with_index(Enum.drop(@page.headword.etymologies, WordPage.origin_cap()))
+            }
             etymology={etymology}
-            index={i}
+            index={i + WordPage.origin_cap()}
           />
-          <.pronunciation_list headword={@page.headword} />
-        </div>
-      </details>
+        </details>
+      </div>
 
       <nav
         :if={@page.cards != []}
@@ -411,12 +430,16 @@ defmodule DevilsDictionaryWeb.Word do
           <li
             :for={group <- @page.source_groups}
             id={"rail-#{group.slug}"}
-            class="flex items-baseline justify-between gap-2"
+            class="flex flex-wrap items-baseline justify-between gap-x-2"
           >
+            <%!-- No `min-w-0`: `truncate` makes the name unshrinkable, so a row
+                 that cannot hold both wraps its parts of speech onto a second
+                 line instead of cutting the name to "Wiktionary (Engli…". Five
+                 parts of speech and a 31-character source name is `set`. --%>
             <a
               href={"#" <> group.card_id}
               class={[
-                "min-w-0 truncate hover:underline",
+                "truncate hover:underline",
                 group.tier == :aristocracy && "text-amber-700 dark:text-amber-400",
                 group.tier != :aristocracy && "text-mist-600 dark:text-mist-400"
               ]}
@@ -449,8 +472,10 @@ defmodule DevilsDictionaryWeb.Word do
     """
   end
 
+  # Pronunciations left this block for the headword, so a word with an accent
+  # and nothing else no longer grows an empty one.
   defp facts?(headword),
-    do: headword.forms != [] or headword.etymologies != [] or headword.pronunciations != []
+    do: headword.forms != [] or headword.etymologies != []
 
   @doc """
   The three things this page can count before it renders: how many sources have
@@ -500,16 +525,25 @@ defmodule DevilsDictionaryWeb.Word do
       |> assign(:rest, Enum.drop(assigns.forms, WordPage.form_cap()))
 
     ~H"""
-    <p :if={@forms != []} id="forms" class="mt-2 text-base/7 text-mist-500 sm:text-sm/7">
+    <%!-- One line. The `+N` was a second line reading "All 12 forms", which
+         spent a whole line of the rail restating the count on the line above
+         it (#133 R5). `open:basis-full` gives the remainder its own line when
+         it arrives rather than squeezing it into the flex track it opened
+         from — `little` has 66 forms. --%>
+    <div :if={@forms != []} id="forms" class="mt-2 text-base/7 text-mist-500 sm:text-sm/7">
       <span class="text-mist-700 dark:text-mist-400">forms</span>
       {Enum.join(@shown, " · ")}
-    </p>
-    <details :if={@rest != []} id="form-list" class="mt-1">
-      <summary class="w-fit cursor-pointer text-base/7 text-mist-500 underline underline-offset-4 hover:text-mist-950 sm:text-sm/7 dark:hover:text-white">
-        All {length(@forms)} forms
-      </summary>
-      <p class="mt-2 text-base/7 text-mist-500 sm:text-sm/7">{Enum.join(@forms, " · ")}</p>
-    </details>
+      <%!-- An inline `details`, so the `+N` sits at the end of the run of forms
+           and the rest continues it rather than opening a block underneath.
+           A flex row cannot do this: the forms would be one unbreakable item
+           and `set`'s eight of them wrapped the whole run below its label. --%>
+      <details :if={@rest != []} id="form-list" class="inline">
+        <summary class="inline cursor-pointer list-none underline underline-offset-4 hover:text-mist-950 dark:hover:text-white [&::-webkit-details-marker]:hidden">
+          +{length(@rest)}
+        </summary>
+        {" · " <> Enum.join(@rest, " · ")}
+      </details>
+    </div>
     """
   end
 
@@ -537,8 +571,8 @@ defmodule DevilsDictionaryWeb.Word do
       <summary class="cursor-pointer list-none text-base/7 text-mist-500 sm:text-sm/7 [&::-webkit-details-marker]:hidden">
         <span class="text-mist-700 dark:text-mist-400">origin ({Enum.join(@etymology.parts, ", ")})</span>
         {@etymology.first}
-        <span class="text-mist-400 underline underline-offset-4">
-          {String.length(@etymology.rest)} characters more
+        <span class="whitespace-nowrap text-mist-400 underline underline-offset-4">
+          … {number(String.length(@etymology.rest))} more
         </span>
       </summary>
       <p class="mt-2 text-base/7 text-mist-500 sm:text-sm/7">
@@ -560,9 +594,13 @@ defmodule DevilsDictionaryWeb.Word do
 
   def pronunciation_list(assigns) do
     ~H"""
-    <details :if={@headword.pronunciations_all != []} id="pronunciation-variants" class="mt-2">
-      <summary class="w-fit cursor-pointer text-base/7 text-mist-500 underline underline-offset-4 hover:text-mist-950 sm:text-sm/7 dark:hover:text-white">
-        All {length(@headword.pronunciations_all)} pronunciations recorded
+    <details
+      :if={@headword.pronunciations_all != []}
+      id="pronunciation-variants"
+      class="min-w-0 max-w-full text-base/7 sm:text-sm/7 open:basis-full"
+    >
+      <summary class="w-fit cursor-pointer list-none underline underline-offset-4 hover:text-mist-950 dark:hover:text-white [&::-webkit-details-marker]:hidden">
+        +{length(@headword.pronunciations_all) - length(@headword.pronunciations)} variants
       </summary>
       <ul role="list" class="mt-2 space-y-1 text-base/7 text-mist-500 sm:text-sm/7">
         <li :for={p <- @headword.pronunciations_all} class="flex flex-wrap items-baseline gap-x-3">
