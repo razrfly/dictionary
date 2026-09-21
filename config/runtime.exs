@@ -121,6 +121,15 @@ if giphy_api_key = System.get_env("GIPHY_API_KEY") || local_provider_env["GIPHY_
   config :devils_dictionary, :giphy, api_key: giphy_api_key
 end
 
+# Bing News (#135) ships **disabled** in `config.exs` because the feed's own
+# `<copyright>` reserves anything beyond a personal RSS aggregator to
+# Microsoft's written permission (`docs/integrations/bing-news.md`). This is the
+# one switch that turns the News shelf's first provider on, and it has to say
+# so explicitly; a host that has never heard of it stays off.
+if System.get_env("BING_NEWS_ENABLED") in ~w(true 1 yes on) do
+  config :devils_dictionary, :bing_news, enabled: true
+end
+
 # Artsy credentials remain server-only. They are read from the ignored local
 # development file or exported environment and are never placed in LiveView
 # assigns, URLs, logs, manifests, or source records.

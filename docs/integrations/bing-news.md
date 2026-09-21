@@ -7,7 +7,7 @@ https://www.bing.com/news/search?q=<term>&format=rss` answers RSS 2.0 with a
 
 ## Read this first: the feed publishes its own terms
 
-#135 records *Terms: none published for the feed*. That is not what the feed
+Issue #135 records *Terms: none published for the feed*. That is not what the feed
 says. Every response carries a `<copyright>` element, and on 2026-09-21 it
 read, in full:
 
@@ -39,6 +39,7 @@ than one source.
 |---|---|
 | Slug | `bing-news` |
 | Archetype | discovery |
+| Shipped state | **Disabled** (`enabled: false` in `config.exs`). `BING_NEWS_ENABLED=true` turns it on, and only the owner, having read the section above, should set it. Asked for by the CodeRabbit review of the PR |
 | Licence | Undocumented public RSS feed; metadata only. The feed's own `<copyright>` restricts the results — see above |
 | Key required | **No.** Nothing to register |
 | User-Agent | The **project's own** string is accepted. Tested first, as #135 asked: `200` and the same seven items a Chrome UA got. No browser impersonation |
@@ -185,7 +186,7 @@ and once as the credit beneath it:
     HuffPost on MSN
     HuffPost on MSN
 
-#135 asked for this decision to be made in the browser. The masthead now
+Issue #135 asked for this decision to be made in the browser. The masthead now
 goes to the creator keys (`author`, `artist`) only, which is the `text-sm`
 unclamped line, and nothing is written to `"attribution"`, so the
 `:credited` row renders no credit line for this source. The row stays
@@ -262,7 +263,7 @@ spent none.
 **The source row.** Inserted by `ensure_source/1` on the first run and
 checked on the database the server was on:
 
-```
+```text
    slug    | tier  |   name    |  attribution
 -----------+-------+-----------+---------------
  bing-news | plebs | Bing News | via Bing News

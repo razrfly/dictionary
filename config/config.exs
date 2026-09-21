@@ -230,9 +230,17 @@ config :devils_dictionary, :pexels,
 # Polish games-site pages about *War Thunder*. `max_age_days` is what makes
 # this a News shelf rather than a search shelf; the feed will happily answer a
 # word with 2023.
+#
+# **Off by default.** The feed's own `<copyright>` element restricts its results
+# to "rendering Bing results within an RSS aggregator for your personal,
+# non-commercial use" and reserves any other use to Microsoft's express written
+# permission (quoted in full in `docs/integrations/bing-news.md`). A public word
+# page is neither, so the integration ships disabled and the owner turns it on
+# with `BING_NEWS_ENABLED=true` (read in `runtime.exs`) once that question is
+# settled. CodeRabbit's review of #140 asked for this default; the PR raised it.
 config :devils_dictionary, :bing_news,
   endpoint: "https://www.bing.com/news/search",
-  enabled: true,
+  enabled: false,
   market: "en-US",
   max_age_days: 30
 
