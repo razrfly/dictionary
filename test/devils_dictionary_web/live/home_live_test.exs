@@ -17,8 +17,8 @@ defmodule DevilsDictionaryWeb.HomeLiveTest do
   alias DevilsDictionary.Registry
 
   setup ctx do
-    %{sources: sources, scopes: scopes} = Fixtures.seed_catalog!()
-    Map.merge(ctx, %{sources: sources, animals: scopes["animals"]})
+    %{sources: sources, on_demand: on_demand, scopes: scopes} = Fixtures.seed_catalog!()
+    Map.merge(ctx, %{sources: sources, on_demand: on_demand, animals: scopes["animals"]})
   end
 
   describe "the page" do
@@ -61,7 +61,12 @@ defmodule DevilsDictionaryWeb.HomeLiveTest do
       # `Providers.source_catalog/0`), so a constant here meant this test also
       # asserted how many providers ship. Read from what the fixture seeded
       # instead: the claim is that the line counts sources, not scopes.
-      sources = map_size(ctx.sources)
+      #
+      # Both registries since #136: an on-demand definition source is a row in
+      # `sources` like any other, so the line counts it, and a test that read
+      # only the catalog's half would be asserting which registry a source is
+      # in rather than that the line counts sources.
+      sources = map_size(ctx.sources) + map_size(ctx.on_demand)
 
       assert stats =~
                "3 words indexed · 2 with at least one definition · #{sources} sources so far"

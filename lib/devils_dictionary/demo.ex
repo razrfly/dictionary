@@ -3,13 +3,18 @@ defmodule DevilsDictionary.Demo do
   Fake-data mode (#71 §2.8, §5 W6, U3): `?demo=1`, dev and test only.
 
   Most of what this project plans to be is not absorbed yet. Webster 1913 and
-  EB1911 are 👑 sources nobody has written a module for; Urban Dictionary is
-  the 📱 tier, which has no rows at all; and the culture layer — community
-  examples, the evidence wall of #67 — is three tables in `docs/sketches/` that
-  were rolled back on purpose. A layout argument about them cannot be had
-  against an empty page, so this module invents one card per missing layer and
-  hands it to the **real** components. What is being checked is the real
-  layout; only the content is fiction.
+  EB1911 are 👑 sources nobody has written a module for, and the culture layer —
+  community examples, the evidence wall of #67 — is three tables in
+  `docs/sketches/` that were rolled back on purpose. A layout argument about
+  them cannot be had against an empty page, so this module invents one card per
+  missing layer and hands it to the **real** components. What is being checked
+  is the real layout; only the content is fiction.
+
+  Urban Dictionary was a third sample, the 📱 one, from U3 until #136. That tier
+  is real now — one definition, fetched by the reader's browser and stored
+  nowhere — so the sample retired rather than stand in front of the thing it
+  was standing in for. A mode that invents a layer the app has would be showing
+  a layout the app cannot produce, which is the one thing it exists not to do.
 
   Three rules hold it in place:
 
@@ -19,8 +24,9 @@ defmodule DevilsDictionary.Demo do
       `WordLive.load/3`, downstream of everything the scorecard sees.
     * **Never a real source.** The sample slugs are disjoint from the six
       absorbed sources — Johnson especially, who was a sample in the wireframe
-      and has been real since S5. A test asserts the disjointness rather than
-      trusting the JSON.
+      and has been real since S5 — *and* from the on-demand sources of #136,
+      which are real rows the catalog does not list. A test asserts the
+      disjointness against both registries rather than trusting the JSON.
     * **Off by default, and absent in production.** `enabled?/0` reads
       `:demo_mode`, which `config/dev.exs` and `config/test.exs` set and
       `config/prod.exs` and `config/runtime.exs` never mention — the same gate

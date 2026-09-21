@@ -1,5 +1,5 @@
 {
-  "note": "Fake data for #71 §2.8's demo mode. Every body ends in (invented for layout). None of these sources is absorbed; none of these slugs is a real one. Johnson is not here — he has been real since S5.",
+  "note": "Fake data for #71 §2.8's demo mode. Every body ends in (invented for layout). None of these sources is absorbed; none of these slugs is a real one. Johnson is not here — he has been real since S5. Urban Dictionary is not here either: it was the \ud83d\udcf1 sample from U3 until #136 made that tier real, fetched by the reader's browser and never stored. A mode that invents a layer the app now has would be showing a layout the app cannot produce.",
   "sources": [
     {
       "slug": "webster1913",
@@ -18,15 +18,6 @@
       "license": "public domain",
       "license_url": null,
       "url": "https://en.wikisource.org/wiki/1911_Encyclop%C3%A6dia_Britannica/{{Word}}"
-    },
-    {
-      "slug": "urbandictionary",
-      "name": "Urban Dictionary",
-      "tier": "plebs",
-      "year": null,
-      "license": "not redistributable — linked, never stored",
-      "license_url": "https://www.urbandictionary.com/tos.php",
-      "url": "https://www.urbandictionary.com/define.php?term={{word}}"
     }
   ],
   "words": {
@@ -47,14 +38,6 @@
           "entry": {
             "headword": "{{WORD}}",
             "body": "{{WORD}}, a subject on which the eleventh edition would spend four hundred words of confident Edwardian prose before conceding, in its last sentence, that the matter is disputed.\n\n> The article's own citation would sit here, set smaller, and would name a German monograph nobody has opened since 1904.\n\n*(invented for layout)*"
-          }
-        },
-        {
-          "source": "urbandictionary",
-          "entry": {
-            "headword": "{{word}}",
-            "marker": "▲ 1,243",
-            "body": "when something is so {{word}} that saying it once doesn't cover it. deployed in the group chat, never out loud.\n\n> “not the {{word}} behaviour again”\n\n*(invented for layout)*"
           }
         }
       ],
@@ -83,14 +66,6 @@
           "entry": {
             "headword": "OYSTER",
             "body": "OYSTER, the common name of the lamellibranch molluscs of the family *Ostreidae*, of which the eleventh edition treats at length, with a plate, and with a digression on the beds of Whitstable that runs to a column and a half.\n\n> The oyster is, of all shell-fish, that which has been longest cultivated by man; the Romans, as Pliny relates, esteemed those of Brundisium above all others.\n\n*(invented for layout)*"
-          }
-        },
-        {
-          "source": "urbandictionary",
-          "entry": {
-            "headword": "oyster",
-            "marker": "▲ 2,907",
-            "body": "the sea's way of testing your commitment. you don't like them, you like *having eaten* them.\n\n> “he ordered a dozen oysters to seem like a man with a boat”\n\n*(invented for layout)*"
           }
         }
       ],
@@ -121,14 +96,6 @@
             "headword": "CAT",
             "body": "CAT (*Felis domestica*), on which the eleventh edition is unusually warm, allowing the animal three columns and conceding, against its own habit, that the creature is agreeable company.\n\n> Of the domestication of the cat in Egypt there can be no doubt; the mummied remains found at Beni-Hasan are numbered in tens of thousands.\n\n*(invented for layout)*"
           }
-        },
-        {
-          "source": "urbandictionary",
-          "entry": {
-            "headword": "cat",
-            "marker": "▲ 8,412",
-            "body": "a small landlord you are legally required to feed.\n\n> “my cat has never once acknowledged the rent”\n\n*(invented for layout)*"
-          }
         }
       ],
       "evidence": [
@@ -156,14 +123,6 @@
           "entry": {
             "headword": "JOY",
             "body": "JOY, treated by the eleventh edition not under its own head but within the article on the *Emotions*, where it is defined against grief and then largely abandoned in favour of a discussion of the vasomotor system.\n\n> The physiologists are agreed that the expression of joy is the more difficult to counterfeit, the eye being less obedient than the mouth.\n\n*(invented for layout)*"
-          }
-        },
-        {
-          "source": "urbandictionary",
-          "entry": {
-            "headword": "joy",
-            "marker": "▲ 1,504",
-            "body": "the feeling you get about a thing before you find out what it costs.\n\n> “pure joy, briefly, and then the invoice”\n\n*(invented for layout)*"
           }
         }
       ],

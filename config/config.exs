@@ -160,6 +160,19 @@ config :devils_dictionary, :giphy,
   rating: "g",
   enabled: true
 
+# Urban Dictionary (#136): an on-demand *definition* source, not a discovery
+# provider. Keyless and CORS-open, so `endpoint` is the only setting the hook
+# needs and `enabled` is one of the two kill switches — `runtime.exs` reads
+# URBAN_DICTIONARY_ENABLED into it, and `active` on the source row is the
+# other. `permission_requested_on` is the date the owner's email asking Urban
+# Dictionary for API permission went; it is `"pending"` until it has, and it is
+# written onto the source row's config so the posture is readable in the
+# database rather than only in docs/integrations/urban-dictionary.md.
+config :devils_dictionary, :urban_dictionary,
+  endpoint: "https://api.urbandictionary.com/v0/define",
+  enabled: true,
+  permission_requested_on: "pending"
+
 # Artsy is registry-only: its 43 pilot works are catalog rows and no request is
 # ever made. The private client, its coordinator and the availability check
 # were retired in #109 Phase 3a; `enabled` is read by the registry gate alone.
