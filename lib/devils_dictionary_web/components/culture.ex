@@ -638,18 +638,39 @@ defmodule DevilsDictionaryWeb.Culture do
 
   defp presence(_value), do: nil
 
-  # The year a card prints, or nothing. A manifest records it as a string and a
-  # provider may hand back a number; neither an empty string nor an absent key
-  # is a year, and D5 says an absent year is printed as nothing at all.
-  defp year(metadata) when is_map(metadata) do
+  # The date a card prints, or nothing. A manifest records a year as a string
+  # and a provider may hand back a number; neither an empty string nor an
+  # absent key is a year, and D5 says an absent year is printed as nothing at
+  # all.
+  #
+  # An item that knows the *day* prints the day (#135): a 1925 painting is a
+  # year and a news article is *15 Sep 2026*, and a News card whose date line
+  # said only `2026` would be the shelf failing to say the one thing that makes
+  # it news. It is read from `published_at` — an ISO 8601 string — and it is one
+  # function rather than a branch per content type, so any text-first type that
+  # learns a publication date gets it. `year` stays the fallback, so nothing
+  # that does not carry `published_at` changes.
+  defp year(metadata) when is_map(metadata),
+    do: published_on(metadata) || published_year(metadata)
+
+  defp year(_metadata), do: nil
+
+  defp published_on(metadata) do
+    with value when is_binary(value) <- metadata["published_at"],
+         {:ok, datetime, _offset} <- DateTime.from_iso8601(value) do
+      Calendar.strftime(datetime, "%-d %b %Y")
+    else
+      _ -> nil
+    end
+  end
+
+  defp published_year(metadata) do
     case metadata["year"] do
       value when is_binary(value) -> presence(value)
       value when is_integer(value) -> Integer.to_string(value)
       _value -> nil
     end
   end
-
-  defp year(_metadata), do: nil
 
   defp entry_path(%{object_id: object_id, preview_metadata: metadata}, return_path)
        when is_integer(object_id) do

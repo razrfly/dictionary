@@ -29,7 +29,18 @@ defmodule DevilsDictionary.Tasks.DdProviderNewTest do
 
   describe "refusals" do
     test "an unknown content type is refused with the list of valid ones", %{} do
-      assert_raise Mix.Error, ~r/film, artwork, image, text, gif/, fn ->
+      # The list comes from the content-type table rather than being retyped
+      # here: this asserted the five types literally and went red when #135
+      # added `:news`, which is the test counting rather than checking. What is
+      # worth checking is that the refusal names the table's own types, in the
+      # table's own shelf order.
+      valid =
+        DevilsDictionary.Discovery.ContentTypes.known()
+        |> Enum.map_join(", ", &Atom.to_string/1)
+        |> Regex.escape()
+        |> Regex.compile!()
+
+      assert_raise Mix.Error, valid, fn ->
         run(~w(thing --archetype discovery --content-type sculpture --transport get
                --pagination offset))
       end

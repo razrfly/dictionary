@@ -35,6 +35,22 @@ defmodule DevilsDictionary.Discovery.Transport do
           {:ok, %Req.Response{status: 200, body: body}} when is_map(body) or is_list(body) ->
             {:ok, body}
 
+          # A provider that declares `body: :xml` answers with a document Req
+          # does not decode, and its own `parse_body/1` is the only thing that
+          # knows the dialect. It returns the map the rest of the pipeline
+          # expects, so `retrieve/4`'s `request_fun` never sees XML and no
+          # provider parses its body twice. An unparseable document is the same
+          # `"malformed_response"` a bad JSON envelope gets.
+          {:ok, %Req.Response{status: 200, body: body}} when is_binary(body) ->
+            if body_format(provider) == :xml do
+              case provider.parse_body(body) do
+                {:ok, parsed} when is_map(parsed) or is_list(parsed) -> {:ok, parsed}
+                _other -> {:error, "malformed_response"}
+              end
+            else
+              {:error, "malformed_response"}
+            end
+
           {:ok, %Req.Response{} = response} ->
             classify(provider, run_id, stage, payload, config, response)
 
@@ -156,6 +172,28 @@ defmodule DevilsDictionary.Discovery.Transport do
   API with a published budget.
   """
   def request_interval_ms(provider), do: interval(provider, :request_interval_ms)
+
+  @doc """
+  The wire format this provider's body arrives in: `:json` unless it says `:xml`.
+
+  Read from `capabilities/0`'s optional `body` key. Absent means JSON, which is
+  every provider but one: Req decodes a JSON body to a map or a list and the
+  transport hands that straight on. Bing's news feed is RSS (#135), so the
+  transport accepts a **binary** 200 for a provider that declared `:xml` and
+  gives it to that provider's `parse_body/1` — the one place the dialect is
+  known — rather than growing a branch per format of its own.
+  """
+  def body_format(provider) do
+    if Code.ensure_loaded?(provider) and function_exported?(provider, :capabilities, 0) and
+         function_exported?(provider, :parse_body, 1) do
+      case Map.get(provider.capabilities(), :body) do
+        :xml -> :xml
+        _other -> :json
+      end
+    else
+      :json
+    end
+  end
 
   defp interval(provider, key) do
     if Code.ensure_loaded?(provider) and function_exported?(provider, :capabilities, 0) do

@@ -99,6 +99,7 @@ config :devils_dictionary,
 # page all read it, and none of them names a provider itself.
 config :devils_dictionary, :discovery_providers, [
   DevilsDictionary.Discovery.Providers.Artsy,
+  DevilsDictionary.Discovery.Providers.BingNews,
   DevilsDictionary.Discovery.Providers.CineGraph,
   DevilsDictionary.Discovery.Providers.Commons,
   DevilsDictionary.Discovery.Providers.Giphy,
@@ -128,7 +129,13 @@ config :devils_dictionary, :discovery,
     "giphy" => [request_budget_limit: 100, request_budget_window_seconds: 60 * 60],
     # One Met page is a search plus up to `Met.scan_window/0` hydrations, and the
     # probe put the sustainable rate near 1 req/s rather than the documented 80.
-    "met" => [request_budget_limit: 1_000, request_budget_window_seconds: 3_600]
+    "met" => [request_budget_limit: 1_000, request_budget_window_seconds: 3_600],
+    # A News shelf cached for the shipped 30 days would be frozen at whatever
+    # was in the news the day a reader first opened the page. A day is what
+    # "current" costs (#135). The empty refresh is already 24 h and stays
+    # there. `BING_NEWS_DISCOVERY_POSITIVE_REFRESH_SECONDS` overrides this at
+    # runtime, as it does every provider's.
+    "bing-news" => [positive_refresh_seconds: 24 * 60 * 60]
   },
   refresh_cooldown_seconds: 60,
   failure_backoff_seconds: 5 * 60,
@@ -215,6 +222,19 @@ config :devils_dictionary, :unsplash,
 config :devils_dictionary, :pexels,
   endpoint: "https://api.pexels.com/v1/search",
   enabled: true
+
+# Bing's news RSS feed is keyless and undocumented (#135, from #134's live
+# shootout). `mkt` is a request parameter and not a preference: the feed infers
+# a market from the caller's address, and the probe's inferred Poland — the
+# channel came back titled *BingWiadomości* and `/define/war` answered with
+# Polish games-site pages about *War Thunder*. `max_age_days` is what makes
+# this a News shelf rather than a search shelf; the feed will happily answer a
+# word with 2023.
+config :devils_dictionary, :bing_news,
+  endpoint: "https://www.bing.com/news/search",
+  enabled: true,
+  market: "en-US",
+  max_age_days: 30
 
 # Import environment specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.

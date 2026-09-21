@@ -32,11 +32,18 @@ config :devils_dictionary, DevilsDictionaryWeb.Endpoint,
 # The per-provider policy variables are derived from the same registry the
 # override loop below reads, so a provider added to the registry cannot have its
 # .env overrides silently discarded by an allowlist nobody remembered to edit.
+# A slug's environment-variable prefix. Hyphens become underscores because a
+# shell cannot export `OPEN-LIBRARY_DISCOVERY_POSITIVE_REFRESH_SECONDS` —
+# `bash` and `zsh` both refuse a name with a hyphen in it — so the
+# hyphenated form this used to build was an override no deployment could set.
+# `bing-news` reads `BING_NEWS_…` (#135), and `open-library` `OPEN_LIBRARY_…`.
+env_prefix = fn slug -> slug |> String.upcase() |> String.replace("-", "_") end
+
 discovery_provider_policy_env =
   :devils_dictionary
   |> Application.get_env(:discovery_providers, [])
   |> Enum.flat_map(fn provider ->
-    prefix = String.upcase(provider.slug())
+    prefix = env_prefix.(provider.slug())
 
     [
       "#{prefix}_DISCOVERY_POSITIVE_REFRESH_SECONDS",
@@ -173,7 +180,7 @@ source_policies =
   |> Application.get_env(:discovery_providers, [])
   |> Enum.map(& &1.slug())
   |> Enum.reduce(source_policies, fn slug, policies ->
-    prefix = String.upcase(slug)
+    prefix = env_prefix.(slug)
 
     overrides =
       [

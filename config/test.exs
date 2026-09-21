@@ -156,3 +156,16 @@ config :devils_dictionary, :pexels,
   enabled: true,
   request_interval_ms: 0,
   min_retry_interval_ms: 0
+
+# Every request in the suite goes through the `Req.Test` stub named after the
+# provider module. `now` is the clock the freshness gate reads: the conformance
+# fixture is a real capture whose items ran between 15 and 20 September 2026,
+# and a gate read against the wall clock would pass that week and fail the
+# next. Pinned to the day of the capture, so the 30-day window is a property of
+# the fixture and not of the date the suite happens to run.
+config :devils_dictionary, :bing_news,
+  endpoint: "https://bing-news.test/news/search",
+  enabled: true,
+  now: ~U[2026-09-21 12:00:00Z],
+  request_interval_ms: 0,
+  min_retry_interval_ms: 0
