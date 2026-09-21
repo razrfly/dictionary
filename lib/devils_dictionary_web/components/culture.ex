@@ -251,6 +251,23 @@ defmodule DevilsDictionaryWeb.Culture do
                 <.compact_more shelf={shelf} />
               </li>
             </ul>
+            <%!-- How old this shelf is, and when it goes again (#144 Phase 2).
+                 A sentence, so it belongs here with the other sentences rather
+                 than in the 80 px column of names and counts on the left; and
+                 one line for the shelf rather than one per source, because the
+                 reader's question is about the rail, not about who filled
+                 which part of it. `refresh_due` was computed for every shelf
+                 state since #109 and read by one test. --%>
+            <p
+              :if={freshness(shelf) != []}
+              id={"culture-freshness-#{shelf.type}"}
+              class="text-base text-mist-500 sm:text-sm"
+            >
+              <span :for={{clause, index} <- Enum.with_index(freshness(shelf))}>
+                <span :if={index > 0} aria-hidden="true">·</span>
+                {clause}
+              </span>
+            </p>
             <%!-- A shelf can be one provider's answer and another's silence. The
                  items are not a reason to stop saying that the other is still
                  looking, or has failed — but they are a reason to name the
@@ -315,6 +332,100 @@ defmodule DevilsDictionaryWeb.Culture do
   # across. The catalog state names no tier of its own — its items each carry
   # their corpus's — and an unnamed tier sorts after every named one, which
   # is where a corpus belongs anyway.
+  # The shelf's age, as clauses a `·` joins.
+  #
+  # The **live** half reads the contributing states' display roots: the oldest
+  # `fetched_at` on the rail, because a shelf is as old as the stalest thing on
+  # it, and then what happens next — a run past its `refresh_after` is
+  # re-queued by the render that is drawing this, so it says *refreshing now*
+  # rather than promising a date that has passed.
+  #
+  # The **corpus** half says *held since* instead. A corpus never refreshes, by
+  # design (K2 of #109): it is a committed, checksummed selection, and its
+  # `generated_at` is a fact about the file.
+  #
+  # A shelf with neither — one still loading, or one whose only state is a
+  # browser provider — says nothing, which is why this returns a list.
+  defp freshness(shelf) do
+    states = contributing(shelf)
+
+    live =
+      states
+      |> Enum.filter(
+        &(Map.get(&1, :archetype) != :corpus and is_struct(&1[:fetched_at], DateTime))
+      )
+
+    held =
+      states
+      |> Enum.map(&Map.get(&1, :held_since))
+      |> Enum.reject(&is_nil/1)
+      |> Enum.min(fn -> nil end)
+
+    fetched =
+      case live do
+        [] -> []
+        _ -> ["Fetched #{ago(Enum.min_by(live, & &1.fetched_at).fetched_at)}"]
+      end
+
+    refresh =
+      cond do
+        live == [] -> []
+        Enum.any?(live, &Map.get(&1, :refresh_due)) -> ["refreshing on this visit"]
+        true -> ["refreshes on your next visit after #{on(next_refresh(live))}"]
+      end
+
+    catalog =
+      case held do
+        nil ->
+          []
+
+        since ->
+          [if(live == [], do: "Held since #{on(since)}", else: "catalog held since #{on(since)}")]
+      end
+
+    case fetched ++ refresh ++ catalog do
+      [] -> []
+      clauses -> List.update_at(clauses, -1, &(&1 <> "."))
+    end
+  end
+
+  defp next_refresh(states) do
+    states
+    |> Enum.map(& &1[:refresh_after])
+    |> Enum.reject(&is_nil/1)
+    |> Enum.min(fn -> nil end)
+  end
+
+  # Whole units and never a decimal: *3 days ago* is what a reader wants from a
+  # shelf, and *2.7 days ago* is a number pretending to be one.
+  defp ago(%DateTime{} = then) do
+    seconds = max(DateTime.diff(DateTime.utc_now(), then, :second), 0)
+
+    cond do
+      seconds < 60 -> "just now"
+      seconds < 3_600 -> plural(div(seconds, 60), "minute")
+      seconds < 86_400 -> plural(div(seconds, 3_600), "hour")
+      seconds < 30 * 86_400 -> plural(div(seconds, 86_400), "day")
+      true -> "on #{on(then)}"
+    end
+  end
+
+  defp plural(1, unit), do: "1 #{unit} ago"
+  defp plural(count, unit), do: "#{count} #{unit}s ago"
+
+  # `%-d %b %Y`, the same form a card's date line takes, so two dates on one
+  # page are one format.
+  defp on(%DateTime{} = datetime), do: Calendar.strftime(datetime, "%-d %b %Y")
+
+  defp on(value) when is_binary(value) do
+    case DateTime.from_iso8601(value) do
+      {:ok, datetime, _offset} -> on(datetime)
+      _error -> value
+    end
+  end
+
+  defp on(_value), do: ""
+
   defp contributing(shelf) do
     shelf.states
     |> Enum.filter(&Map.has_key?(shelf.shown, &1.provider))

@@ -186,6 +186,52 @@ defmodule DevilsDictionary.Artworks.Corpus.Manifest do
     manifest
   end
 
+  @manifest_glob "priv/artworks/manifests/*.json"
+
+  # Read once, at compile time, and recompiled when a manifest changes. A
+  # corpus is a committed, checksummed selection — `generated_at` is a fact
+  # about the file and not about the database — so the shelf's *held since*
+  # comes from the file rather than from a row somebody could have touched.
+  for path <- Path.wildcard(@manifest_glob), do: @external_resource(path)
+
+  @generated_at (for path <- Path.wildcard(@manifest_glob),
+                     {:ok, body} = File.read(path),
+                     {:ok, manifest} = Jason.decode(body),
+                     is_binary(manifest["source"]),
+                     is_binary(manifest["generated_at"]),
+                     reduce: %{} do
+                   dates ->
+                     Map.update(
+                       dates,
+                       manifest["source"],
+                       manifest["generated_at"],
+                       &max(&1, manifest["generated_at"])
+                     )
+                 end)
+
+  @doc """
+  When each committed corpus was generated, by source slug.
+
+  ISO 8601 strings, as the manifests write them, and the **latest** where a
+  source has several. Read by the shelf header: a corpus never refreshes by
+  design, so the honest thing to say about its age is when it was made (#144
+  Phase 2).
+  """
+  def generated_at, do: @generated_at
+
+  @doc """
+  The oldest `generated_at` among these source slugs, or `nil`.
+
+  The oldest, because a shelf's age is the age of the stalest thing on it —
+  the same reading the live half takes of its several sources.
+  """
+  def held_since(source_slugs) when is_list(source_slugs) do
+    source_slugs
+    |> Enum.map(&Map.get(@generated_at, &1))
+    |> Enum.reject(&is_nil/1)
+    |> Enum.min(fn -> nil end)
+  end
+
   @doc "Whether a JSON file at `path` is a corpus manifest rather than an Artsy pilot manifest."
   def corpus_manifest?(path) do
     case File.read(path) do

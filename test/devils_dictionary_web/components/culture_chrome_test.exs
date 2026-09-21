@@ -95,6 +95,88 @@ defmodule DevilsDictionaryWeb.CultureChromeTest do
     {slug, state(slug, name, :image, Enum.map(1..count, &image_item(slug, &1)), extra)}
   end
 
+  describe "the shelf says how old it is (#144 Phase 2)" do
+    defp hours_ago(hours), do: DateTime.add(DateTime.utc_now(), -hours * 3600, :second)
+
+    defp fetched(slug, name, type, items, hours, refresh_hours) do
+      {slug,
+       state(slug, name, type, items, %{
+         fetched_at: hours_ago(hours),
+         refresh_after: hours_ago(refresh_hours),
+         refresh_due: refresh_hours > 0
+       })}
+    end
+
+    test "a live shelf names when it was fetched and when it goes again" do
+      html =
+        render([fetched("texts", "PoetryDB", :text, [text_item(1)], 72, -24 * 21)])
+
+      assert html =~ ~s(id="culture-freshness-text")
+      assert html =~ "Fetched 3 days ago"
+      assert html =~ "refreshes on your next visit after"
+    end
+
+    test "a shelf past its refresh clock says the visit drawing it is the one" do
+      # `Discovery.request/3` is called by the same connected render that is
+      # drawing this, so a shelf past `refresh_after` is already being asked
+      # again — promising a date that has gone would be the page lying about
+      # its own machinery.
+      html = render([fetched("texts", "PoetryDB", :text, [text_item(1)], 40 * 24, 1)])
+
+      assert html =~ "refreshing on this visit"
+      refute html =~ "refreshes on your next visit"
+    end
+
+    test "a shelf is as old as the stalest source on it" do
+      html =
+        render([
+          fetched("aa_search", "AA stock", :image, [image_item("aa_search", 1)], 1, -24),
+          fetched("bb_search", "BB stock", :image, [image_item("bb_search", 1)], 72, -24 * 7)
+        ])
+
+      assert html =~ "Fetched 3 days ago"
+      refute html =~ "Fetched 1 hour ago"
+    end
+
+    test "a corpus says held since, because it never refreshes by design" do
+      html =
+        render([
+          {"catalog",
+           state("catalog", "Saved catalog", :artwork, [depicting_item("catalog", 1)], %{
+             archetype: :corpus,
+             held_since: "2026-09-17T19:58:39Z"
+           })}
+        ])
+
+      assert html =~ ~s(id="culture-freshness-artwork")
+      assert html =~ "Held since 17 Sep 2026."
+      refute html =~ "Fetched"
+      refute html =~ "refresh"
+    end
+
+    test "a shelf with both says both, live first" do
+      html =
+        render([
+          fetched("commons", "Commons", :artwork, [depicting_item("commons", 1)], 2, -24),
+          {"catalog",
+           state("catalog", "Saved catalog", :artwork, [depicting_item("catalog", 9)], %{
+             archetype: :corpus,
+             held_since: "2026-09-17T19:58:39Z"
+           })}
+        ])
+
+      assert html =~ "Fetched 2 hours ago"
+      assert html =~ "catalog held since 17 Sep 2026."
+    end
+
+    test "a shelf that has fetched nothing says nothing about its age" do
+      html = render([{"texts", state("texts", "PoetryDB", :text, [text_item(1)])}])
+
+      assert html =~ ~s(id="culture-shelf-text")
+      refute html =~ ~s(id="culture-freshness-text")
+    end
+  end
+
   describe "D1 — a search-only shelf is demoted, not hidden" do
     setup do
       html =
