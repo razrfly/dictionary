@@ -74,7 +74,7 @@ defmodule DevilsDictionaryWeb.Word do
            part of speech already held. What was a boxed paragraph above the
            rail is a run of links in a line the page already had. --%>
       <p id="parts-of-speech" class="mt-3 text-base/7 text-mist-700 sm:text-sm/7 dark:text-mist-400">
-        <span :for={{lexeme, i} <- Enum.with_index(@headword.lexemes)}>
+        <span :for={{lexeme, i} <- Enum.with_index(@headword.parts)}>
           <span :if={i > 0} aria-hidden="true">·</span>
           <%= if other = other_word(@other, lexeme, @headword.lemma) do %>
             <.link
@@ -403,23 +403,45 @@ defmodule DevilsDictionaryWeb.Word do
         class="mt-5 border-t border-mist-950/10 pt-4 dark:border-white/10"
       >
         <.source_line sources={@sources} />
+        <%!-- One row per source, never one per entry (#133 R2). `build/2` did
+             the grouping; this list walks `source_groups` and links the name to
+             the source's first card and each part of speech to its own. Nine
+             entries on *love* stay one click away under five names. --%>
         <ul role="list" class="mt-2 space-y-1 text-base/7 sm:text-sm/7">
-          <li :for={card <- @page.cards}>
+          <li
+            :for={group <- @page.source_groups}
+            id={"rail-#{group.slug}"}
+            class="flex items-baseline justify-between gap-2"
+          >
             <a
-              href={"#" <> card.id}
+              href={"#" <> group.card_id}
               class={[
-                "flex items-baseline justify-between gap-2 hover:underline",
-                card.tier == :aristocracy && "text-amber-700 dark:text-amber-400",
-                card.tier != :aristocracy && "text-mist-600 dark:text-mist-400"
+                "min-w-0 truncate hover:underline",
+                group.tier == :aristocracy && "text-amber-700 dark:text-amber-400",
+                group.tier != :aristocracy && "text-mist-600 dark:text-mist-400"
               ]}
             >
-              <span class="min-w-0 truncate">
-                <span aria-hidden="true" class="mr-1">{tier_glyph(card.tier)}</span>{author(
-                  card.source
-                )}
-              </span>
-              <span :if={card.pos} class="shrink-0 text-mist-400">{card.pos}</span>
+              <span aria-hidden="true" class="mr-1">{tier_glyph(group.tier)}</span>{author(
+                group.source
+              )}
             </a>
+            <%!-- The parts of speech are separate links, so the reader reaches
+                 Johnson's verb without first reaching his noun. Each carries
+                 the source in its accessible name: "verb" alone tells a screen
+                 reader whose verb it is not. --%>
+            <span class="shrink-0 text-mist-400">
+              <span :for={{part, i} <- Enum.with_index(group.parts)}>
+                <span :if={i > 0} aria-hidden="true">·</span>
+                <a
+                  id={"rail-#{part.card_id}"}
+                  href={"#" <> part.card_id}
+                  aria-label={"#{author(group.source)} · #{part.label}"}
+                  class="hover:text-mist-950 hover:underline dark:hover:text-white"
+                >
+                  {part.label}
+                </a>
+              </span>
+            </span>
           </li>
         </ul>
       </nav>

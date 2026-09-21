@@ -383,12 +383,37 @@ defmodule DevilsDictionaryWeb.WordLive do
   defp choices(slug, _object_id) do
     case Lexicon.list_by_slug(slug) do
       lexemes when length(lexemes) > 1 ->
-        if lexemes |> Enum.map(& &1.lemma) |> Enum.uniq() |> length() > 1,
-          do: Enum.uniq_by(lexemes, & &1.lemma),
-          else: []
+        case distinct_words(lexemes, slug) do
+          [_one] -> []
+          words -> words
+        end
 
       _ ->
         []
+    end
+  end
+
+  # One row per *word*, and `LoVe` is not a word beside `Love` (#133 R6). A
+  # case-only variant is a Wiktionary spelling of the same identity, and
+  # offering it as a choice asks the reader to pick between two of the same
+  # thing — the noise #133 §5 measured on `love`.
+  #
+  # Which of a case-group survives is decided, not incidental: the enriched row
+  # first, because it is the one with a page worth reaching, then the spelling
+  # closest to the address the reader typed — `love`, then `Love`, then
+  # whatever else — then the lemma itself so the answer never depends on the
+  # query's collation.
+  defp distinct_words(lexemes, slug) do
+    lexemes
+    |> Enum.sort_by(&{is_nil(&1.enriched_at), case_rank(&1.lemma, slug), &1.lemma})
+    |> Enum.uniq_by(&String.downcase(&1.lemma))
+  end
+
+  defp case_rank(lemma, slug) do
+    cond do
+      lemma == slug -> 0
+      lemma == String.capitalize(slug) -> 1
+      true -> 2
     end
   end
 

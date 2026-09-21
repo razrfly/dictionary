@@ -70,7 +70,7 @@ defmodule DevilsDictionary.Lexicon.WordPage do
   alias DevilsDictionary.Sources
   alias DevilsDictionary.Sources.SourceRecord
 
-  defstruct headword: nil, cards: [], related: [], thing: nil, trail: []
+  defstruct headword: nil, cards: [], source_groups: [], related: [], thing: nil, trail: []
 
   @chip_cap 12
   @gloss_cap 3
@@ -223,9 +223,12 @@ defmodule DevilsDictionary.Lexicon.WordPage do
     by_lexeme = Map.new(lexemes, &{&1.object_id, &1})
     {sense_scoped, pos_scoped} = Enum.split_with(relations, &(&1.from_sense_id != nil))
 
+    cards = cards(senses, entries, sense_scoped, chains, sources, concept, by_lexeme)
+
     %__MODULE__{
       headword: headword(lexemes, lookup, sources),
-      cards: cards(senses, entries, sense_scoped, chains, sources, concept, by_lexeme),
+      cards: cards,
+      source_groups: source_groups(cards),
       related: related(pos_scoped, by_lexeme, sources),
       thing: thing(entity, ids, sources),
       trail: trail(opts[:trail])
@@ -275,6 +278,7 @@ defmodule DevilsDictionary.Lexicon.WordPage do
       pronunciations: pronunciations(lexemes),
       pronunciations_all: pronunciations_all(lexemes),
       etymologies: etymologies(lexemes, sources),
+      parts: parts(lexemes),
       lexemes:
         lexemes
         |> Enum.sort_by(&pos_rank(&1.part_of_speech))
@@ -290,6 +294,24 @@ defmodule DevilsDictionary.Lexicon.WordPage do
           }
         end)
     }
+  end
+
+  # The parts-of-speech line, and only that line. `lexemes` stays whole — the
+  # discovery target counts it and the provenance drawer walks it — but the line
+  # a reader looks at wants one entry per *word*, and R6's case rule is what
+  # decides which rows are the same word: `love`, `Love` and `LoVe` are one
+  # noun, one verb and one name, not five labels of which two say `name`.
+  #
+  # The same fold as `WordLive.choices/2`, so the line and the links it carries
+  # can never disagree about how many words the slug names. `C++`, `C+` and `c`
+  # differ by more than case and all three keep their place.
+  defp parts(lexemes) do
+    lexemes
+    |> Enum.sort_by(&pos_rank(&1.part_of_speech))
+    |> Enum.uniq_by(&{String.downcase(&1.lemma), &1.part_of_speech})
+    |> Enum.map(
+      &%{id: &1.object_id, pos: &1.part_of_speech, enriched?: not is_nil(&1.enriched_at)}
+    )
   end
 
   # Forms are the union across every part of speech — the reader wants the
@@ -815,7 +837,7 @@ defmodule DevilsDictionary.Lexicon.WordPage do
       end)
 
     (entry_cards ++ sense_cards)
-    |> Enum.sort_by(&{@tier_rank[&1.tier], &1.year || 0, pos_rank(&1.pos), &1.source.slug})
+    |> Enum.sort_by(&{@tier_rank[&1.tier], &1.year || 0, &1.source.slug, pos_rank(&1.pos)})
     |> Enum.map(&summarise/1)
     |> with_ids()
   end
@@ -838,6 +860,35 @@ defmodule DevilsDictionary.Lexicon.WordPage do
         end
 
       Map.put(card, :id, id)
+    end)
+  end
+
+  # One row per source, for the rail — the rail's whole job is "who has spoken",
+  # and before this it answered with one row per *entry*, nine under a heading
+  # that said five (#133 R2).
+  #
+  # `chunk_by/2` rather than `group_by/2` because the cards are already in the
+  # order the page renders them, and R1's sort key puts every entry a source
+  # filed next to its siblings: tier and year come from the source itself, so a
+  # source cannot reappear in a later chunk. Grouping here rather than in the
+  # template is #71 §8a.4 — a component that groups is a component that will
+  # group differently from the accordion beside it.
+  #
+  # A card with no part of speech is not a dictionary entry at all: Wikipedia's
+  # content hangs off the concept, never off a lexeme, so `pos_of/2` returns
+  # nil. That is the honest label for the right-hand column, and it is what
+  # tells the reader an encyclopedia article is not a ninth sense.
+  defp source_groups(cards) do
+    cards
+    |> Enum.chunk_by(& &1.source.slug)
+    |> Enum.map(fn [first | _] = group ->
+      %{
+        slug: first.source.slug,
+        source: first.source,
+        tier: first.tier,
+        card_id: first.id,
+        parts: Enum.map(group, &%{label: &1.pos || "article", card_id: &1.id})
+      }
     end)
   end
 
