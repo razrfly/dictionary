@@ -247,7 +247,7 @@ research read alongside them:
 three things in this document — the mobile recommendation is withdrawn, the
 prose column should be wider rather than narrower, and the tier ordering is
 the highest-stakes open question rather than a settled default. Read it before
-acting on the recommendation below.
+acting on the recommendation above.
 
 ## Selected: C, and five ways to enclose it
 

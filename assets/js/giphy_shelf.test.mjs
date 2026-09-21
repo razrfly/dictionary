@@ -87,7 +87,8 @@ function frame(reduced = false) {
     const attrs = {}
     const node = {tag, dataset: {}, className: '', textContent: '', children: nodes,
       addEventListener(type, fn) { (listeners[type] ||= []).push(fn) },
-      fire(type) { for (const fn of listeners[type] || []) fn() },
+      fire(type, event) { for (const fn of listeners[type] || []) fn(event) },
+      contains(node) { return nodes.includes(node) },
       setAttribute(k, v) { attrs[k] = v }, getAttribute(k) { return attrs[k] ?? null },
       append(...kids) { nodes.push(...kids) }, prepend() {}, querySelector() { return null }}
     return node
@@ -117,6 +118,21 @@ test('hover and focus play a frame; leaving it stops it', () => {
   li.fire('mouseleave'); assert.equal(image.src, 'S')
   li.fire('focusin'); assert.equal(image.src, 'A')
   li.fire('focusout'); assert.equal(image.src, 'S')
+})
+test('pointer and focus are separate intents: the frame plays while either holds it', () => {
+  const {li, image} = frame()
+  li.fire('mouseenter'); li.fire('focusin'); assert.equal(image.src, 'A')
+  li.fire('mouseleave'); assert.equal(image.src, 'A', 'focus still holds the frame')
+  li.fire('focusout'); assert.equal(image.src, 'S')
+  li.fire('focusin'); li.fire('mouseenter'); assert.equal(image.src, 'A')
+  li.fire('focusout'); assert.equal(image.src, 'A', 'the pointer still holds the frame')
+  li.fire('mouseleave'); assert.equal(image.src, 'S')
+})
+test('focus moving between the frame\'s own controls does not stop it', () => {
+  const {li, image, play} = frame()
+  li.fire('focusin'); assert.equal(image.src, 'A')
+  li.fire('focusout', {relatedTarget: play}); assert.equal(image.src, 'A')
+  li.fire('focusout', {relatedTarget: null}); assert.equal(image.src, 'S')
 })
 test('a pressed frame keeps playing when the pointer leaves, and hover never unpresses it', () => {
   const {li, image, play} = frame()
