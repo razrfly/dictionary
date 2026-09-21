@@ -360,10 +360,12 @@ type is an entry here and nothing else — not a new branch in `Culture` or
 | `:artwork` | Artworks | Artwork | `aspect-square` | `image_url`, `thumbnail_url` | `:credited` | identity |
 | `:image` | Images | Image | `aspect-square` | `thumbnail_url`, `image_url` | `:required` | identity, query |
 | `:text` | Texts | Text | **none** | — | `:none` | attestation |
+| `:news` | News | News | **none** | — | `:credited` | attestation |
+| `:music` | Music | Track | `aspect-square` | `image_url`, `thumbnail_url` | `:required` | identity, query |
 | `:gif` | GIFs | — | `aspect-square` | `media_url`, `image_url` | `:none` | query |
 
-Shelf order is film · artwork · image · text · gif, and it is the order of
-`ContentTypes.known/0` rather than insertion order. `:image` arrived with
+Shelf order is film · artwork · image · text · news · music · gif, and it is
+the order of `ContentTypes.known/0` rather than insertion order. `:image` arrived with
 Wikimedia Commons (#109 Phase 3a): a photograph of a soldier is a visual work
 but it is not an artwork, and a shelf headed *Artworks* over a US Army
 photograph was the page misnaming what it shows. The row was the whole of the
@@ -426,6 +428,7 @@ declares the first.
 | `:image` | Wikimedia Commons, Openverse, Unsplash, Pexels | — | iNaturalist or GBIF, if a taxon QID earns a second identity path | identity (Commons), or a labelled search (the other three) |
 | `:text` | PoetryDB, Open Library | `poetrydb-v1`, `open-library-v1` — **identity only, by decision; neither reaches a page** | Chronicling America as a corpus, Gutenberg | attestation, live only |
 | `:news` | Bing News, The Guardian | — | Chronicling America's bulk OCR; GDELT (#134) | attestation, **dated** |
+| `:music` | Spotify | — | MusicBrainz (#116), identity via `P921`/`P2207` | a labelled search, gated on the track title |
 | `:gif` | GIPHY, browser-only, outside this chrome | — | Tenor, after K10 | a labelled search |
 | `:quote` | — | — | Wikiquote, Gutenberg extraction, after #65 | identity (`(author_id, body hash)`) |
 
@@ -453,11 +456,35 @@ for when it is scheduled.
 
 | Type | Heading | Card | Evidence | Candidate sources | Gate, and what it would test |
 |---|---|---|---|---|---|
-| `:music` | Music | square (cover art), title, artist, link out | identity where a sense's entity has a Wikidata song or work with `P2207` (Spotify track id) or a MusicBrainz id, and `P921` *main subject* names the page's QID; otherwise a labelled `:query` | Spotify (search, cover art, metadata — `SPOTIFY_CLIENT_ID` is held); MusicBrainz (metadata CC0) with the Cover Art Archive (images stay their owners' copyright — an item-level rights decision before any is displayed, not archive membership); Internet Archive audio (public domain) | **Spotify's terms make it single-source on its shelf.** Its Developer Policy forbids a product "integrated with streams or content from another service", requires the Spotify marks and a link back on every piece of metadata or cover art, and forbids offering metadata or cover art as a standalone product. Since 2024-11-27, apps registered after that date and development-mode apps without a pending extension request — which is what this project's app would be — have no Recommendations, Related Artists, Audio Features or Audio Analysis, and no 30-second preview URLs in multi-get responses (single-track responses are widely reported to return `null` too); apps that already held extended access were unaffected. So *related songs* is not a feature a new app gets, and a preview is not something the card can count on; what remains is search (a `:query`) and identity through Wikidata. Lyrics are licensed and never held, so attestation is closed. A Music row therefore admits `identity` and `query`, requires attribution, and — if Spotify is its source — takes no second source, the way `:film` is single-source by decision. MusicBrainz as the source instead gives a many-source shelf, but its cover art needs a per-item rights decision and it has no audio |
 | `:video` | Videos | 16:9, playable | identity (`P180` on Commons `video/*` files, which the `:image` gate already sees and drops; `P1651` YouTube id on a sense's entity) | Wikimedia Commons video; Internet Archive moving images | the first non-square, non-portrait aspect; playback on the card |
 | `:game` | Games | portrait cover | identity (IGDB id ↔ `P5794`) | IGDB (non-commercial) | the non-commercial posture on a per-item licence |
 | `:place` | Places | map tile | identity (`P625` coordinates on the page's entity) | OpenStreetMap tiles | probably the entity panel's job, not a shelf; listed to say so |
 | taxon images | joins `:image` | — | identity (taxon QID) | iNaturalist (per-item media licence, CC BY-NC by default, all rights reserved allowed), GBIF | not a new type: an `:image` source whose identity is a taxon QID, with the licence gate applied to each image's own licence, as Commons's already is |
+
+**`:music` used to be listed here, and the reading that kept it here was
+wrong.** The row shipped in #143 with Spotify as its first source, and the two
+claims this table made against it do not survive being read against Spotify's
+own pages (2026-09-21):
+
+- *"Development mode is capped at 5 users."* The cap counts **authenticated**
+  Spotify users — *Up to 5 authenticated Spotify users can use an app that is
+  in development mode* — and a Client Credentials search has no signed-in user.
+  It never binds.
+- *"Spotify's terms make it single-source on its shelf."* The sentence about a
+  product integrated with content from another service sits in the Developer
+  Policy's **streaming** restrictions, between *don't play content from a
+  single source to several simultaneous listeners* and *don't synchronize sound
+  recordings with visual media*. It governs playback. A track card beside a
+  painting is not playback, and the row takes a second source: MusicBrainz is
+  next (#116), folded onto Spotify's copy by a shared ISRC.
+
+What this table got right is the rest: previews and recommendations are gone
+for an app registered after 2024-11-27 (measured — `preview_url` was `null` on
+253 of 253 tracks), lyrics are licensed and attestation is closed, and the row
+therefore admits `identity` and `query` and requires attribution. The
+obligations that do bind are the Spotify mark on every card and a link back to
+the track, and both are fields the provider writes. See
+[`docs/integrations/spotify.md`](../integrations/spotify.md).
 
 **Not shelves, and why they are listed anyway.** Exemplars (#105) are a claim
 *about* an item — a person, a work, a GIF nominated as an example of a meaning,
@@ -768,6 +795,7 @@ suite red.
 | Pexels | discovery (GET, offset, **labelled `:query`** search, `PEXELS_API_KEY`) | `Culture.section`, the `:image` shelf | #116 Phase 3 |
 | Bing News | discovery (GET, offset, **attestation with a dated locator**, keyless RSS via `body: :xml`, 30-day freshness gate, publisher URL as identity in `news_article`) | `Culture.section`, the `:news` shelf, attribution `:credited` | #135 — and see `docs/integrations/bing-news.md` on the feed's own `<copyright>` |
 | The Guardian | discovery (GET, offset, **attestation verified in the article's own `bodyText`**, keyed (`GUARDIAN_API_KEY`), quoted phrase, `type=article`, two identities — its own `guardian_article` and Bing's `news_article`, computed by calling Bing's own functions) | `Culture.section`, the `:news` shelf, the first item on it to carry a credit distinct from its creator, and the first source anywhere to carry a **required shelf mark** (`attribution_mark/0` → *Powered by The Guardian*, clause 6(b)(vi)) | #142 — and see `docs/integrations/guardian.md` on clause 6(g), which is **unresolved** |
+| Spotify | discovery (GET, offset, **labelled `:query`** catalogue search gated on the track title, Client Credentials token as its own `stage: "token"` ledger row, `SPOTIFY_CLIENT_ID`/`SPOTIFY_CLIENT_SECRET`, `spotify_track` + `isrc` identifiers) | `Culture.section`, the `:music` shelf, attribution `:required` with the Spotify mark on every card | #143 — and see `docs/integrations/spotify.md` on the Developer Terms' caching clause and the owner's decision to run a development-mode app |
 | Artsy | registered, registry-only — its 43 artworks and their gene mappings reach a page through the catalog; the private client was retired in #109 Phase 3a | `Culture.section` | #86, K9 of #109 |
 | GIPHY | registered, browser-only, transient | its own `GiphyShelf` component, **not** `Culture.section` | parked pending caching approval, K10 |
 

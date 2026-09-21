@@ -93,7 +93,7 @@ the generator's flags, and changing one afterwards means regenerating.
 | Decision | Values | How to choose |
 |---|---|---|
 | **archetype** | `discovery`, `corpus`, `both` | Live answers to a page → discovery. A fixed, checksummed selection seeded once → corpus. Both is legitimate; the Met is both. |
-| **content type** | `film`, `artwork`, `image`, `text`, `gif` | Which shelf it lands on. It must already be in `DevilsDictionary.Discovery.ContentTypes`; adding a sixth is an entry in that table and nothing else. If the shelf already has a source, read [*Adding a source to an existing shelf*](#adding-a-source-to-an-existing-shelf) — the row's `attribution` and `evidence` columns are obligations on your items. |
+| **content type** | `film`, `artwork`, `image`, `text`, `news`, `music`, `gif` | Which shelf it lands on. It must already be in `DevilsDictionary.Discovery.ContentTypes`; adding an eighth is an entry in that table and nothing else. If the shelf already has a source, read [*Adding a source to an existing shelf*](#adding-a-source-to-an-existing-shelf) — the row's `attribution` and `evidence` columns are obligations on your items. |
 | **transport** | `get`, `graphql` | What the API is. |
 | **pagination** | `offset`, `cursor` | Whether the next page is an offset you compute or a token the source hands back. |
 

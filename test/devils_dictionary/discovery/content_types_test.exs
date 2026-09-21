@@ -33,7 +33,7 @@ defmodule DevilsDictionary.Discovery.ContentTypesTest do
     end
   end
 
-  test "the image shelf requires attribution and is the only one that admits a search" do
+  test "the image shelf requires attribution, and a search reaches only the rows that name it" do
     # Every file on it is shown under its own licence, whose one condition is
     # the credit; and a stock-photo search is text, honest about being one
     # (M6). The heading is *Images*, settled in Phase 1 of #116: Commons's
@@ -42,7 +42,18 @@ defmodule DevilsDictionary.Discovery.ContentTypesTest do
     assert ContentTypes.attribution(:image) == :required
     assert ContentTypes.evidence(:image) == [:identity, :query]
 
-    for type <- ContentTypes.known() -- [:image, :gif] do
+    # This asserted `:image` was the *only* row that admits a search until
+    # #143 added `:music`, whose first source is a catalogue search gated on
+    # the track title. So the premise was a roll-call and not a rule, and it
+    # is now written as the roll-call it is: the README's rule 1 says a search
+    # result reaches a shelf **only where the row says so in its `evidence`**,
+    # and this is the list of rows that say so. Adding a row to it is a
+    # product decision, and changing this line is how that decision gets made
+    # on purpose rather than by editing a table.
+    searchable = Enum.filter(ContentTypes.known(), &ContentTypes.admits?(&1, :query))
+    assert searchable == [:image, :music, :gif]
+
+    for type <- ContentTypes.known() -- searchable do
       refute ContentTypes.admits?(type, :query),
              "#{type} admits a bare search result"
     end
@@ -90,9 +101,25 @@ defmodule DevilsDictionary.Discovery.ContentTypesTest do
     # One line under a thumbnail since #131 Phase 2: every kind is on screen
     # at once, and a rail of twelve reads by its pictures. A text-first card
     # has no picture, so the title is the card and keeps its three.
+    #
+    # `:music` is the one picture card that takes a second line, and it is an
+    # obligation rather than a preference (#143). Spotify's Branding
+    # Guidelines state the character counts a layout must accommodate — *Track
+    # name: 23 characters* — and require that the metadata *always be
+    # legible*. Measured over the 84 titles the whole-word gate kept across
+    # six searches on 2026-09-21: median 11 characters, **32% over 16** (about
+    # what one line of this column holds), **18% over Spotify's own 23**, and
+    # a longest of 55 (*War Pigs / Luke's Wall - 2012 - Remaster*). One line
+    # would truncate a third of the shelf. The row pays for it with a wider
+    # column too, and two lines is the ceiling: a third would be the text-first
+    # card, which this is not.
     for type <- ContentTypes.known() -- text_first do
       assert ContentTypes.fetch!(type).aspect
-      assert ContentTypes.title_clamp(type) == "line-clamp-1"
+
+      expected = if type == :music, do: "line-clamp-2", else: "line-clamp-1"
+
+      assert ContentTypes.title_clamp(type) == expected,
+             "#{type} is a picture card; only :music takes a second line, and it says why"
     end
   end
 end

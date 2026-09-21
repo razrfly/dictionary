@@ -109,6 +109,7 @@ config :devils_dictionary, :discovery_providers, [
   DevilsDictionary.Discovery.Providers.Openverse,
   DevilsDictionary.Discovery.Providers.Pexels,
   DevilsDictionary.Discovery.Providers.Poetrydb,
+  DevilsDictionary.Discovery.Providers.Spotify,
   DevilsDictionary.Discovery.Providers.Unsplash
 ]
 
@@ -153,6 +154,18 @@ config :devils_dictionary, :discovery,
       request_budget_window_seconds: 86_400,
       positive_refresh_seconds: 86_400,
       retention_seconds: 82_800
+    ],
+    # The Developer Terms say *Do not store Spotify Content indefinitely* and
+    # ask for reasonable efforts to show the most up-to-date data and to delete
+    # older data — a duty with no number in it, quoted in full in
+    # `docs/integrations/spotify.md`. A day is what that costs here, against
+    # the shipped thirty. The budget is the one the issue sized: 500 requests
+    # an hour is well above what a reader-driven site behind a 24 h cache can
+    # reach, and it refuses before the API does.
+    "spotify" => [
+      request_budget_limit: 500,
+      request_budget_window_seconds: 3_600,
+      positive_refresh_seconds: 24 * 60 * 60
     ]
   },
   refresh_cooldown_seconds: 60,
@@ -285,6 +298,28 @@ config :devils_dictionary, :guardian,
   endpoint: "https://content.guardianapis.com/search",
   enabled: true,
   max_age_days: 30
+
+# Spotify's catalogue search (#143), the first source on the Music shelf. Two
+# endpoints rather than one: `token_endpoint` mints the Client Credentials
+# bearer that `endpoint` is called with, and both go through the shared
+# transport so both are paced, budgeted and in the ledger.
+#
+# `SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET` are read in `runtime.exs` and
+# are server-only; without both, `enabled?/0` is false and the provider is
+# registered and never runs. **On, by the owner's decision (2026-09-21):**
+# Spotify describes development mode as for apps under construction and
+# extended quota mode has been organisations-only since 2025-05-15, which makes
+# running this behind a public page a terms question of the same kind as Bing's
+# `<copyright>`. `SPOTIFY_ENABLED=false` turns it off again without a deploy.
+#
+# `market` is a decision and not a requirement — the API answered `200` with no
+# market at all — but it chooses the catalogue, and `US` kept three times as
+# many tracks for *war* as `GB` did. See `docs/integrations/spotify.md`.
+config :devils_dictionary, :spotify,
+  endpoint: "https://api.spotify.com/v1/search",
+  token_endpoint: "https://accounts.spotify.com/api/token",
+  market: "US",
+  enabled: true
 
 # Import environment specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.

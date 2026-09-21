@@ -185,7 +185,7 @@ Everything below is designed for in the MVP-0 schema and adds tables rather than
 
 **Media**
 - [ ] Evidence wall (#67): paste a link, unfurl it, attach it to a word
-- [~] Media providers as sources — **landed**: films via CineGraph (#88), an Artsy artwork catalog (#86), GIPHY browser-only (#92); **next, in [#102](https://github.com/razrfly/dictionary/issues/102)'s order**: the Met (#99), one text provider (#100), then YouTube, TikTok, Instagram, X, Unsplash, Spotify/Genius, news
+- [~] Media providers as sources — **landed**: films via CineGraph (#88), an Artsy artwork catalog (#86), GIPHY browser-only (#92); **next, in [#102](https://github.com/razrfly/dictionary/issues/102)'s order**: the Met (#99), one text provider (#100), then YouTube, TikTok, Instagram, X, Unsplash, Spotify/Genius, news. Unsplash and Pexels landed in #116 Phase 3, Bing News in #135, and **Spotify in #143** — the seventh content type, a Music shelf whose cards carry the Spotify mark and a link back
 - [ ] Images on every word and thing (Wikipedia thumbnails, Wikidata P18, Commons)
 
 **Product**
@@ -306,6 +306,7 @@ Everything below is designed for in the MVP-0 schema and adds tables rather than
 | Bierce, Johnson (LEME transcription CC BY 4.0), Webster 1913 (GCIDE, GPL package), Voltaire | public domain text | credit the transcription |
 | Merriam-Webster, Datamuse | non-commercial API terms | attribution; never bulk |
 | Urban Dictionary | Terms of Service; [API access by permission](https://urbandictionary.help/tos/) | one definition per page, **fetched by the reader's browser**, attributed by author and date, linked to its permalink; never stored, never exported ([#136](docs/integrations/urban-dictionary.md)) |
+| Spotify | [Developer Terms](https://developer.spotify.com/terms) v10 and the Developer Policy | the Music shelf: track metadata and hotlinked cover art only — never audio, never bytes — each card carrying the Spotify mark and a link back to the track, refreshed daily and swept after seven days because the Terms say *do not store Spotify Content indefinitely* ([#143](docs/integrations/spotify.md)) |
 
 ---
 

@@ -196,3 +196,17 @@ config :devils_dictionary, :guardian,
   now: ~U[2026-09-21 12:00:00Z],
   request_interval_ms: 0,
   min_retry_interval_ms: 0
+
+# Both Spotify endpoints on one `.test` host, so the fixture's stub answers
+# the token request and the search from the same plug and the pair is captured
+# together (#143). The credentials are the literals the suite needs
+# `enabled?/0` to be true for; nothing is minted and nothing leaves the node.
+config :devils_dictionary, :spotify,
+  endpoint: "https://spotify.test/v1/search",
+  token_endpoint: "https://spotify.test/api/token",
+  client_id: "test-client-id",
+  client_secret: "test-client-secret",
+  market: "US",
+  enabled: true,
+  request_interval_ms: 0,
+  min_retry_interval_ms: 0

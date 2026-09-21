@@ -16,6 +16,12 @@ defmodule DevilsDictionary.Application do
       # Health figures that are seconds of queries (the scorecard) are cached
       # here so a page can show them without recomputing them on every mount.
       {Cachex, name: :health},
+      # The Spotify Client Credentials token, cached for its hour (#143). It
+      # holds a token and nothing else — no credential — and the refresh is
+      # made by whichever run found the cache cold, through the shared
+      # transport, so it is a ledger row and a budgeted request like any
+      # other.
+      DevilsDictionary.Discovery.Providers.Spotify.Token,
       # Start to serve requests, typically the last entry
       DevilsDictionaryWeb.Endpoint
     ]

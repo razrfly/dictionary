@@ -417,6 +417,11 @@ defmodule DevilsDictionaryWeb.Culture do
           else: metadata["artist"]
         )
       )
+      # The one mark a card can be asked to carry, named by the item rather
+      # than by its content type (#143). A provider whose terms require its
+      # brand beside the credit writes `brand_mark`; this component holds the
+      # marks it knows and shows nothing for a name it does not.
+      |> assign(:brand_mark, brand_mark(metadata["brand_mark"]))
 
     ~H"""
     <div class="group flex min-w-0 flex-col gap-2 rounded-sm">
@@ -524,6 +529,39 @@ defmodule DevilsDictionaryWeb.Culture do
         >
           <%= for part <- @credit do %><a :if={part.url} href={part.url} target="_blank" rel="noreferrer" class="underline underline-offset-4 transition-colors hover:text-mist-950 dark:hover:text-white">{part.text}</a><span :if={is_nil(part.url)}>{part.text}</span><% end %>
         </p>
+        <%!-- The mark, under the credit and inside its own exclusion zone
+             (#143). Spotify's Branding Guidelines ask partner integrations
+             for the **full** logo — icon and wordmark — at no less than 70 px
+             wide, isolated by half the icon's height on every side, which at
+             that width is 10 px. Those two numbers are the whole of this
+             block, and they are why the mark is under the credit rather than
+             literally beside it: 70 + 20 leaves 54 px of a 144 px column for
+             an artist's name, and *YoungBoy Never Broke Again* does not fit
+             in 54 px. It is the card's credit block either way — the credit
+             names who made the track, the mark names who supplied it.
+
+             Two files rather than one with a filter: the guidelines allow
+             the green logo only on black or white, and this card's dark
+             surface is neither, so the black logo takes the light theme and
+             the white one the dark. `-mx-2.5` pulls the exclusion zone back
+             out to the card's edge so the logo itself lines up with the text
+             above it. --%>
+        <div :if={@brand_mark} class="-mx-2.5 p-2.5">
+          <img
+            src={@brand_mark.light}
+            alt={@brand_mark.alt}
+            width="70"
+            height="20"
+            class="w-[70px] dark:hidden"
+          />
+          <img
+            src={@brand_mark.dark}
+            alt={@brand_mark.alt}
+            width="70"
+            height="20"
+            class="w-[70px] not-dark:hidden"
+          />
+        </div>
         <a
           :if={@source_url}
           href={@source_url}
@@ -532,7 +570,7 @@ defmodule DevilsDictionaryWeb.Culture do
           id={"culture-source-#{@item.external_id}"}
           class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 transition-colors hover:text-mist-950 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 dark:hover:text-white"
         >
-          Source ↗
+          {(@brand_mark && @brand_mark.link) || "Source"} ↗
         </a>
       </div>
     </div>
@@ -677,6 +715,30 @@ defmodule DevilsDictionaryWeb.Culture do
 
   defp prepend(parts, "", _url), do: parts
   defp prepend(parts, text, url), do: [%{text: text, url: url} | parts]
+
+  @doc """
+  The assets and link text for a brand a provider's terms require, or nil.
+
+  A provider that owes a mark writes `preview_metadata["brand_mark"]`; this
+  is the only place the files and the wording live, so a name this component
+  does not know renders as no mark rather than as a broken image.
+
+  `link` is the text of the link back, because for Spotify the two are one
+  obligation and the wording is not free: the Branding Guidelines permit
+  *OPEN SPOTIFY*, *PLAY ON SPOTIFY* or *LISTEN ON SPOTIFY* for a platform
+  where the app exists, and nothing else. #143's brief asked for *Open on
+  Spotify*, which is not one of the three.
+  """
+  def brand_mark("spotify") do
+    %{
+      light: "/images/spotify-full-logo-black.svg",
+      dark: "/images/spotify-full-logo-white.svg",
+      alt: "Spotify",
+      link: "Listen on Spotify"
+    }
+  end
+
+  def brand_mark(_name), do: nil
 
   # What the card shows for the item's maker, by the row's `attribution`:
   # nothing on a `:none` row, and otherwise the ready-made `attribution` line
