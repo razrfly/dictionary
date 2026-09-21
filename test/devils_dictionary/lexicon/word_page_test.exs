@@ -317,6 +317,41 @@ defmodule DevilsDictionary.Lexicon.WordPageTest do
       _ = ctx
     end
 
+    # #133 R3. An entry that is `about` the concept rather than `defines` a
+    # lexeme is an encyclopedia article, and it used to be a `kind: :entry`
+    # card among the dictionaries — `love` read *5 sources · 9 entries* with
+    # Wikipedia between Wiktionary's verb and Wiktionary's name.
+    test "an entry about the concept lands on the thing, never among the cards", ctx do
+      entry!(ctx, ctx.animal, "wikipedia",
+        body: "The cat is a small domesticated mammal. " <> String.duplicate("It purrs. ", 80),
+        url: "https://en.wikipedia.org/wiki/Cat"
+      )
+
+      sense!(ctx, ctx.cat, "wordnet", gloss: "a feline mammal")
+
+      page = page("cat")
+
+      refute Enum.any?(page.cards, &(&1.source.slug == "wikipedia"))
+      refute Enum.any?(page.source_groups, &(&1.slug == "wikipedia"))
+      # And with it gone, the slab and the rail count one dictionary.
+      assert Enum.map(page.cards, & &1.source.slug) == ["wordnet"]
+
+      article = page.thing.article
+
+      assert article.source.slug == "wikipedia"
+      assert article.url == "https://en.wikipedia.org/wiki/Cat"
+      # Folded the same way an entry is, so the disclosure has a number.
+      assert article.preview_html =~ "The cat is a small domesticated mammal."
+      assert article.rest_chars > 0
+      assert article.chars > article.rest_chars
+      assert article.body_html =~ "It purrs."
+    end
+
+    test "a thing with no article says so rather than raising", ctx do
+      assert page("cat").thing.article == nil
+      _ = ctx
+    end
+
     test "the chain climbs, one parent per step, and carries the word where there is one", ctx do
       felid = word!(ctx, "felid", ~w(wordnet))
       link!(felid, ctx.felidae)

@@ -257,7 +257,11 @@ defmodule DevilsDictionary.Lexicon.WordPage do
     # twice.
     sense_ids = Enum.map(senses, & &1.id)
 
-    entries = entries(ids, sense_ids, concept)
+    # An entry reaches the page two ways: `defines` a lexeme or a sense, or is
+    # `about` the concept. The second is Wikipedia, and it is not a dictionary
+    # entry — it belongs with the thing, not among the sources that defined the
+    # word (#133 R3).
+    {about, entries} = Enum.split_with(entries(ids, sense_ids, concept), &(&1.concept_id != nil))
     relations = relations(ids, sense_ids)
     chains = chains(senses, sources)
 
@@ -274,7 +278,7 @@ defmodule DevilsDictionary.Lexicon.WordPage do
         pos_scoped
         |> related(by_lexeme, sources, hd(lexemes).lemma)
         |> sense_link(cards),
-      thing: thing(entity, ids, sources),
+      thing: entity |> thing(ids, sources) |> put_article(about, sources, concept),
       trail: trail(opts[:trail])
     }
   end
@@ -875,8 +879,46 @@ defmodule DevilsDictionary.Lexicon.WordPage do
       kinds: none(),
       examples: none(),
       wikipedia_url: nil,
-      wikidata_url: nil
+      wikidata_url: nil,
+      article: nil
     }
+  end
+
+  # The encyclopedia article, folded the same way a dictionary entry is and
+  # hung off the thing rather than filed among the dictionaries (#133 R3).
+  #
+  # It was a `kind: :entry` card in the definitions slab labelled `2026 · 2,455
+  # characters`, sitting between Wiktionary's verb and Wiktionary's name and
+  # reading as a second copy of the same Wikimedia source. It is not a
+  # dictionary: it reaches the page through the Wikidata thing, which is why
+  # `nepotism`, which has no thing, never had one. With it gone the slab and
+  # the rail count only dictionaries — `love` reads *4 sources · 8 entries* —
+  # and `WordLive.count_label/2`, `card_sources` and the `stats` tile all
+  # follow from `page.cards` without a line of their own changing.
+  #
+  # There is no `thing: nil` with an article to lose: `entries/3` asks for
+  # `about` rows only when there is a concept, and a concept is an entity, and
+  # an entity is a thing. The clause is here because a nil thing is a shape,
+  # not an accident.
+  defp put_article(nil, _about, _sources, _concept), do: nil
+  defp put_article(thing, [], _sources, _concept), do: Map.put(thing, :article, nil)
+
+  defp put_article(thing, [row | _], sources, concept) do
+    source = sources[row.source_id]
+
+    article =
+      row.body
+      |> Markdown.to_html(row.body_format)
+      |> fold()
+      |> Map.merge(%{
+        source: source,
+        authors: row.authors,
+        year: row.year,
+        url: link_out(row, source, nil, concept),
+        record_id: row.record_id
+      })
+
+    Map.put(thing, :article, article)
   end
 
   defp none, do: %{shown: [], total: 0}
@@ -988,10 +1030,11 @@ defmodule DevilsDictionary.Lexicon.WordPage do
   # template is #71 §8a.4 — a component that groups is a component that will
   # group differently from the accordion beside it.
   #
-  # A card with no part of speech is not a dictionary entry at all: Wikipedia's
-  # content hangs off the concept, never off a lexeme, so `pos_of/2` returns
-  # nil. That is the honest label for the right-hand column, and it is what
-  # tells the reader an encyclopedia article is not a ninth sense.
+  # Every card here is a dictionary's now — the encyclopedia article left for
+  # the thing panel in #133 R3 — so the right-hand column is a part of speech
+  # for all of them. `"article"` stays as the label for a card without one
+  # because a source that files content against no lexeme is a shape the
+  # corpus still allows, and a blank column would say less than the truth.
   defp source_groups(cards) do
     cards
     |> Enum.chunk_by(& &1.source.slug)

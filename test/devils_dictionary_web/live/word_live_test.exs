@@ -424,12 +424,87 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
       assert html =~ "a Unix utility"
     end
 
+    # #133 R3. Wikipedia is an article about the *concept* and arrives through
+    # the Wikidata thing, which is why `nepotism` never had one. It used to
+    # render as a `kind: :entry` card in the Definitions slab, labelled
+    # `2026 · 2,455 characters`, between Wiktionary's verb and Wiktionary's
+    # name.
+    defp cat_article!(ctx) do
+      %{animal: animal} = fixtures = catwith_thing!(ctx)
+
+      entry!(ctx, animal, "wikipedia",
+        body:
+          "The cat is a small domesticated carnivorous mammal. " <>
+            String.duplicate("It purrs. ", 80),
+        url: "https://en.wikipedia.org/wiki/Cat",
+        record: record!(ctx, "wikipedia", external_id: "Cat")
+      )
+
+      fixtures
+    end
+
+    test "the encyclopedia article renders in the thing panel, not among the dictionaries", ctx do
+      cat_article!(ctx)
+
+      {:ok, _live, html} = live(ctx.conn, ~p"/define/cat")
+
+      assert html =~ ~s(id="thing-article")
+      assert html =~ "The cat is a small domesticated carnivorous mammal."
+
+      # Not a dictionary: no card, no rail row, and nothing counting it. The
+      # slab, the rail and the stats tile all read off `page.cards`, so one
+      # dictionary is what all three say.
+      refute html =~ ~s(id="card-wikipedia")
+      refute html =~ ~s(id="rail-wikipedia")
+      assert html =~ ~s(id="rail-wordnet")
+      assert html =~ "One source so far"
+      refute html =~ "2 sources"
+    end
+
+    test "the article's fold says how much is behind it, never a character count", ctx do
+      cat_article!(ctx)
+
+      {:ok, live, _html} = live(ctx.conn, ~p"/define/cat")
+
+      summary = live |> element("#thing-article-rest summary") |> render()
+
+      assert summary =~ ~r/… [\d,]+ more/
+      refute summary =~ "characters"
+    end
+
+    test "the article keeps the link out and the provenance the card carried", ctx do
+      cat_article!(ctx)
+
+      {:ok, live, html} = live(ctx.conn, ~p"/define/cat")
+
+      assert html =~ ~s(href="https://en.wikipedia.org/wiki/Cat")
+
+      html = live |> element("#thing-article-info") |> render_click()
+
+      assert html =~ ~s(id="provenance")
+      assert html =~ ~s(id="provenance-records")
+      # The thing's own drawer, and Wikipedia's record is one of the records
+      # in it — the provenance the card used to carry still reaches the reader.
+      assert html =~ ~s(id="provenance-record-0")
+      assert html =~ "Wikipedia"
+    end
+
+    test "a word with a thing but no article has no article block", ctx do
+      catwith_thing!(ctx)
+
+      {:ok, _live, html} = live(ctx.conn, ~p"/define/cat")
+
+      assert html =~ ~s(id="thing")
+      refute html =~ ~s(id="thing-article")
+    end
+
     test "a word that names nothing has no panel", ctx do
       oyster!(ctx)
 
       {:ok, _live, html} = live(ctx.conn, ~p"/define/oyster")
 
       refute html =~ ~s(id="thing")
+      refute html =~ ~s(id="thing-article")
     end
 
     test "a bare row has no panel and does not crash reaching for one", ctx do
