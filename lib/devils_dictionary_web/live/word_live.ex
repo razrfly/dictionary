@@ -524,10 +524,15 @@ defmodule DevilsDictionaryWeb.WordLive do
                    here changes after the first render *for this word in this
                    mode*, which is exactly what the id says — so a different
                    word, or the demo banner going up, replaces the element
-                   rather than patching it. --%>
+                   rather than patching it. The `object_id` is in the id because
+                   a slug is not an identity: `/define/c` and `/words/<C++>/c`
+                   are two words under one slug, and the id has to tell them
+                   apart or the ignored rows would outlive the word. `any` is
+                   what `/define/:slug` means — every word the slug reaches —
+                   and it is a segment rather than a gap so the id reads. --%>
               <.slab
                 :if={@page.cards != []}
-                id={"definitions-#{@slug}-#{@demo}"}
+                id={"definitions-#{@object_id || "any"}-#{@slug}-#{@demo}"}
                 phx-update="ignore"
                 title="Definitions"
                 class="mt-2"

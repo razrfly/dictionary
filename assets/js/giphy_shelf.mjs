@@ -131,12 +131,22 @@ export default {
       play.setAttribute('aria-label', `${playing ? 'Pause' : 'Play'} ${item.title}`)
       play.textContent = playing ? 'Pause' : 'Play'
     })
-    const enter = () => { if (!this.motion.matches && !pressed()) show(true) }
-    const leave = () => { if (!pressed()) show(false) }
-    li.addEventListener('mouseenter', enter)
-    li.addEventListener('mouseleave', leave)
-    li.addEventListener('focusin', enter)
-    li.addEventListener('focusout', leave)
+    // Pointer and focus are two ways of reaching for the same frame, so they
+    // are counted separately and the frame moves while *either* holds it: a
+    // reader who hovers a frame and then tabs into its Play button does not
+    // lose the animation when the mouse drifts away.
+    let hovering = false
+    let focused = false
+    const sync = () => { if (!pressed()) show((hovering || focused) && !this.motion.matches) }
+    li.addEventListener('mouseenter', () => { hovering = true; sync() })
+    li.addEventListener('mouseleave', () => { hovering = false; sync() })
+    li.addEventListener('focusin', () => { focused = true; sync() })
+    // Focus moving between the frame's own controls has not left the frame.
+    li.addEventListener('focusout', event => {
+      if (event?.relatedTarget && li.contains?.(event.relatedTarget)) return
+      focused = false
+      sync()
+    })
     image.addEventListener('error', () => {
       image.hidden = true
       play.hidden = true

@@ -538,11 +538,21 @@ defmodule DevilsDictionaryWeb.Word do
 
   def pronunciation_list(assigns) do
     ~H"""
-    <details :if={@headword.pronunciations_all != []} id="pronunciation-variants" class="mt-2">
+    <%!-- `#pronunciation-variants` is on the list, not on the `<details>` that
+         holds it. A fragment opens the closed disclosures *above* its target,
+         never the target itself, and this list sits two deep — inside
+         `#about-the-word`. Named here, the headword's "+n variants" link opens
+         both on the way down; named on the `<details>`, it would open the
+         outer one and land on a summary still closed. --%>
+    <details :if={@headword.pronunciations_all != []} id="pronunciations-all" class="mt-2">
       <summary class="w-fit cursor-pointer text-base/7 text-mist-500 underline underline-offset-4 hover:text-mist-950 sm:text-sm/7 dark:hover:text-white">
         All {length(@headword.pronunciations_all)} pronunciations recorded
       </summary>
-      <ul role="list" class="mt-2 space-y-1 text-base/7 text-mist-500 sm:text-sm/7">
+      <ul
+        id="pronunciation-variants"
+        role="list"
+        class="mt-2 space-y-1 text-base/7 text-mist-500 sm:text-sm/7"
+      >
         <li :for={p <- @headword.pronunciations_all} class="flex flex-wrap items-baseline gap-x-3">
           <span class="font-mono text-mist-700 dark:text-mist-400">{p.ipa || "recording"}</span>
           <span :if={p.tags != []} class="text-mist-400">{Enum.join(p.tags, ", ")}</span>
