@@ -6,6 +6,8 @@ defmodule DevilsDictionary.Discovery.Providers.CineGraph do
 
   alias DevilsDictionary.SourceIdentity.Entry
 
+  import DevilsDictionary.Discovery.Provider.Helpers, only: [headers: 0]
+
   @adapter_version "cinegraph.graphql.v2"
   @operation "keyword_discovery"
 
@@ -117,10 +119,8 @@ defmodule DevilsDictionary.Discovery.Providers.CineGraph do
     [
       url: config[:endpoint],
       json: payload,
-      headers: [
-        {"authorization", "Bearer #{config[:api_key]}"},
-        {"user-agent", Application.fetch_env!(:devils_dictionary, :user_agent)}
-      ]
+      # The key is CineGraph's; the user-agent line is the kit's.
+      headers: [{"authorization", "Bearer #{config[:api_key]}"} | headers()]
     ]
   end
 
@@ -391,6 +391,12 @@ defmodule DevilsDictionary.Discovery.Providers.CineGraph do
 
   defp next_cursor(_page_info), do: nil
 
+  # Not the kit's `year/1` or `iso_year/1`, deliberately (#144 Phase 1): this
+  # takes the first four characters of whatever TMDb put in `releaseDate` and
+  # keeps them, where the kit's parsers would answer `nil` for a date they
+  # could not read. Narrowing it here would change what this provider returns
+  # for a word, which a refactor may not do — it is a candidate for a phase
+  # that is allowed to.
   defp year(<<year::binary-size(4), _rest::binary>>), do: year
   defp year(_), do: nil
 
@@ -426,5 +432,8 @@ defmodule DevilsDictionary.Discovery.Providers.CineGraph do
 
   defp normalize(value), do: value |> String.trim() |> String.downcase()
   defp present?(value), do: is_binary(value) and String.trim(value) != ""
+  # This provider's own stanza. `fetch_env!` and not the kit's `config/1`:
+  # CineGraph has no compiled-in defaults to fall back to, so a missing
+  # stanza is a misconfiguration and not an empty list.
   defp config, do: Application.fetch_env!(:devils_dictionary, :cinegraph)
 end

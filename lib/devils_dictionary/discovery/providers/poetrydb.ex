@@ -56,7 +56,9 @@ defmodule DevilsDictionary.Discovery.Providers.Poetrydb do
   *toward*, *wary*. A shelf built on that count would say *Uses “war” at line
   4* over a line reading "her warm hand". So the search generates candidates
   and nothing else, and an item is kept only when the hydrated lines contain
-  the term at a word boundary. That is the same shape as the Met's tag gate,
+  the term at a word boundary (`Provider.Helpers.whole_word?/2`, the one gate
+  Open Library and Bing News ask of their own text). That is the same shape as
+  the Met's tag gate,
   asked of text: the query is never the evidence.
   """
 
@@ -64,6 +66,18 @@ defmodule DevilsDictionary.Discovery.Providers.Poetrydb do
   @behaviour DevilsDictionary.SourceIdentity.Adapter
 
   alias DevilsDictionary.SourceIdentity.Entry
+
+  import DevilsDictionary.Discovery.Provider.Helpers,
+    only: [
+      clamp_label: 1,
+      headers: 0,
+      interval: 3,
+      limit: 2,
+      offset: 1,
+      presence: 1,
+      whole_word?: 2,
+      word_pattern: 1
+    ]
 
   @adapter_version "poetrydb.attestation.v1"
   @operation "poetrydb_attestation"
@@ -131,21 +145,14 @@ defmodule DevilsDictionary.Discovery.Providers.Poetrydb do
       pagination: :offset,
       operations: [@operation],
       content_types: [:text],
-      min_retry_interval_ms: interval(:min_retry_interval_ms, @min_retry_interval_ms),
-      request_interval_ms: interval(:request_interval_ms, @request_interval_ms)
+      min_retry_interval_ms: interval(config(), :min_retry_interval_ms, @min_retry_interval_ms),
+      request_interval_ms: interval(config(), :request_interval_ms, @request_interval_ms)
     }
   end
 
   # Both paces are overridable for the same reason the Met's is: an interval is
   # a live-rate courtesy, and a suite that paid it would spend a second per
   # stubbed request to be polite to a server it never calls.
-  defp interval(key, default) do
-    case config()[key] do
-      ms when is_integer(ms) and ms >= 0 -> ms
-      _ -> default
-    end
-  end
-
   @impl true
   def enabled? do
     config()[:enabled] != false and is_binary(config()[:endpoint])
@@ -222,15 +229,11 @@ defmodule DevilsDictionary.Discovery.Providers.Poetrydb do
   # something else.
   defp segment(value), do: URI.encode(to_string(value), &URI.char_unreserved?/1)
 
-  defp headers do
-    [{"user-agent", Application.fetch_env!(:devils_dictionary, :user_agent)}]
-  end
-
   @impl true
   def retrieve(@operation, mapping, request, request_fun) do
     with :ok <- validate_mapping(@operation, mapping) do
       term = mapping["term"]
-      limit = limit(request)
+      limit = limit(request["first"], @default_limit)
       offset = offset(request["after"])
 
       case request_fun.("candidates", %{"endpoint" => "candidates", "term" => term}) do
@@ -258,13 +261,6 @@ defmodule DevilsDictionary.Discovery.Providers.Poetrydb do
   end
 
   def retrieve(_operation, _mapping, _request, _request_fun), do: {:error, "invalid_mapping"}
-
-  defp limit(request) do
-    case request["first"] do
-      first when is_integer(first) and first > 0 -> first
-      _ -> @default_limit
-    end
-  end
 
   # A word no poem uses answers `200` with `{"status": 404, "reason": "Not
   # found"}` in the body — PoetryDB's dialect for an empty result, not an error
@@ -445,19 +441,11 @@ defmodule DevilsDictionary.Discovery.Providers.Poetrydb do
     lines
     |> Enum.with_index(1)
     |> Enum.find_value(fn {line, number} ->
-      is_binary(line) and Regex.match?(pattern, line) and {number, String.trim(line)}
+      is_binary(line) and whole_word?(line, pattern) and {number, String.trim(line)}
     end)
   end
 
   def first_attestation(_term, _lines), do: nil
-
-  # Word boundary in the Unicode sense rather than `\b`, which treats an
-  # apostrophe as a boundary and would find *war* inside *war's* but also
-  # inside a hyphenated form the poet did not write.
-  defp word_pattern(term) do
-    escaped = Regex.escape(String.trim(term))
-    Regex.compile!("(?<![\\p{L}\\p{N}])#{escaped}(?![\\p{L}\\p{N}])", "iu")
-  end
 
   defp item(term, %{title: title, author: author} = candidate, poem, lines, number, text) do
     external_id = poem_id(author, title, lines)
@@ -480,7 +468,7 @@ defmodule DevilsDictionary.Discovery.Providers.Poetrydb do
         "lines" => [%{"number" => number, "text" => text}]
       },
       preview_metadata: %{
-        "title" => label(title),
+        "title" => clamp_label(title),
         "artist" => author,
         "author" => author,
         "line_count" => length(lines),
@@ -539,11 +527,6 @@ defmodule DevilsDictionary.Discovery.Providers.Poetrydb do
     "https://poetrydb.org/lines,author/#{segment(term)};#{segment(author)}/#{@poem_fields}"
   end
 
-  # `entities.preferred_label` is varchar(255) and Postgres counts characters.
-  # The longest title measured is 127, so this clamp has never fired — it is
-  # here because the column is the constraint and the corpus can grow.
-  defp label(title), do: String.slice(title, 0, 255)
-
   @impl DevilsDictionary.SourceIdentity.Adapter
   def identity_record(%{external_namespace: "poetrydb_poem", external_id: poem_id} = item) do
     metadata = item.preview_metadata
@@ -570,27 +553,8 @@ defmodule DevilsDictionary.Discovery.Providers.Poetrydb do
 
   def identity_record(_item), do: {:error, :unsupported_poetrydb_identity}
 
-  defp offset(nil), do: 0
-
-  defp offset(value) when is_binary(value) do
-    case Integer.parse(value) do
-      {offset, ""} when offset >= 0 -> offset
-      _ -> 0
-    end
-  end
-
-  defp offset(_value), do: 0
-
   defp present?(value), do: is_binary(value) and String.trim(value) != ""
 
-  defp presence(value) when is_binary(value) do
-    case String.trim(value) do
-      "" -> nil
-      trimmed -> trimmed
-    end
-  end
-
-  defp presence(_value), do: nil
-
-  defp config, do: Application.get_env(:devils_dictionary, :poetrydb, [])
+  # This provider's own stanza; the read is the kit's.
+  defp config, do: DevilsDictionary.Discovery.Provider.Helpers.config(:poetrydb)
 end

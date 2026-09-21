@@ -104,6 +104,20 @@ defmodule DevilsDictionary.Discovery.Providers.Unsplash do
   # The one host `track_download/2` may ever be pointed at.
   @download_prefix "https://api.unsplash.com/photos/"
 
+  import DevilsDictionary.Discovery.Provider.Helpers,
+    only: [
+      headers: 0,
+      interval: 3,
+      iso_year: 1,
+      limit: 3,
+      media_url: 1,
+      offset: 1,
+      page: 5,
+      presence: 1,
+      sparse: 1,
+      clamp_label: 1
+    ]
+
   @doc "The identity namespace one Unsplash photo is registered under: its id."
   def namespace, do: "unsplash_photo"
 
@@ -153,16 +167,9 @@ defmodule DevilsDictionary.Discovery.Providers.Unsplash do
       pagination: :offset,
       operations: [@operation],
       content_types: [:image],
-      min_retry_interval_ms: interval(:min_retry_interval_ms, @min_retry_interval_ms),
-      request_interval_ms: interval(:request_interval_ms, @request_interval_ms)
+      min_retry_interval_ms: interval(config(), :min_retry_interval_ms, @min_retry_interval_ms),
+      request_interval_ms: interval(config(), :request_interval_ms, @request_interval_ms)
     }
-  end
-
-  defp interval(key, default) do
-    case config()[key] do
-      ms when is_integer(ms) and ms >= 0 -> ms
-      _ -> default
-    end
   end
 
   @impl true
@@ -216,22 +223,22 @@ defmodule DevilsDictionary.Discovery.Providers.Unsplash do
         # offers, because a dictionary page is not an opt-in context.
         "content_filter" => "high"
       },
-      headers: headers()
+      headers: auth_headers()
     ]
   end
 
-  defp headers do
+  # The key and the version are Unsplash's; the user-agent line is the kit's.
+  defp auth_headers do
     [
       {"authorization", "Client-ID #{config()[:access_key]}"},
-      {"accept-version", "v1"},
-      {"user-agent", Application.fetch_env!(:devils_dictionary, :user_agent)}
+      {"accept-version", "v1"} | headers()
     ]
   end
 
   @impl true
   def retrieve(@operation, mapping, request, request_fun) do
     with :ok <- validate_mapping(@operation, mapping) do
-      limit = limit(request["first"])
+      limit = limit(request["first"], @default_limit, @max_limit)
       offset = offset(request["after"])
 
       payload = %{
@@ -263,42 +270,8 @@ defmodule DevilsDictionary.Discovery.Providers.Unsplash do
 
   def retrieve(_operation, _mapping, _request, _request_fun), do: {:error, "invalid_mapping"}
 
-  defp limit(first) when is_integer(first) and first > 0, do: min(first, @max_limit)
-  defp limit(_first), do: @default_limit
-
-  defp offset(nil), do: 0
-  defp offset(""), do: 0
-
-  defp offset(value) when is_binary(value) do
-    case Integer.parse(value) do
-      {offset, ""} when offset >= 0 -> offset
-      _ -> 0
-    end
-  end
-
-  defp offset(_value), do: 0
-
   defp page(mapping, request, rows, offset, limit, body) do
-    items =
-      rows
-      |> Enum.map(&item(mapping, &1))
-      |> Enum.reject(&is_nil/1)
-      |> Enum.uniq_by(& &1.external_id)
-      |> Enum.uniq_by(&upload/1)
-      |> Enum.with_index(&Map.put(&1, :position, &2))
-
-    request =
-      request
-      |> Map.put("offset", Integer.to_string(offset))
-      |> Map.put("scanned", length(rows))
-      |> Map.put("kept", length(items))
-
-    %{
-      request_parameters: request,
-      items: items,
-      next_cursor: next_cursor(rows, offset, limit, body),
-      completion_reason: if(items == [], do: :no_results, else: :results)
-    }
+    page(request, rows, offset, next_cursor(rows, offset, limit, body), &item(mapping, &1))
   end
 
   # One card per upload, where an upload is one photographer's one title.
@@ -306,16 +279,6 @@ defmodule DevilsDictionary.Discovery.Providers.Unsplash do
   # identical description, which `Shelf.dedup/2` cannot fold because they are
   # not the same file. An item missing either field keeps its own id and folds
   # with nobody.
-  defp upload(item) do
-    case {item.preview_metadata["creator"], item.preview_metadata["title"]} do
-      {creator, title} when is_binary(creator) and is_binary(title) ->
-        {String.downcase(creator), String.downcase(title)}
-
-      _ ->
-        item.external_id
-    end
-  end
-
   # A short page is the last page, and so is `total_pages`, which Unsplash
   # answers against a `total` it does not cap: *love* reports 10,000 results
   # over 500 pages. Asking for the page past the last one answers an empty
@@ -337,8 +300,10 @@ defmodule DevilsDictionary.Discovery.Providers.Unsplash do
     urls = row["urls"] || %{}
 
     with title when is_binary(title) <- title(row),
-         thumbnail when is_binary(thumbnail) <- media(urls["small"]) || media(urls["regular"]),
-         full when is_binary(full) <- media(urls["full"]) || media(urls["raw"]) || thumbnail do
+         thumbnail when is_binary(thumbnail) <-
+           media_url(urls["small"]) || media_url(urls["regular"]),
+         full when is_binary(full) <-
+           media_url(urls["full"]) || media_url(urls["raw"]) || thumbnail do
       %{
         external_namespace: namespace(),
         external_id: id,
@@ -371,7 +336,7 @@ defmodule DevilsDictionary.Discovery.Providers.Unsplash do
 
     %{
       "title" => title,
-      "year" => year(row["created_at"]),
+      "year" => iso_year(row["created_at"]),
       "thumbnail_url" => thumbnail,
       # The full-size file, not the 400 px rung: `Shelf.canonical_media_url/1`
       # compares this and never the derivative.
@@ -390,8 +355,7 @@ defmodule DevilsDictionary.Discovery.Providers.Unsplash do
       "content_type" => "image",
       "provider" => "Unsplash"
     }
-    |> Enum.reject(fn {_key, value} -> is_nil(value) end)
-    |> Map.new()
+    |> sparse()
   end
 
   # The line the API Guidelines ask for, word for word. The renderer links the
@@ -421,16 +385,7 @@ defmodule DevilsDictionary.Discovery.Providers.Unsplash do
   defp clamp(nil), do: nil
 
   defp clamp(title),
-    do: title |> String.replace(~r/\s+/u, " ") |> String.trim() |> String.slice(0, 255)
-
-  defp year(value) when is_binary(value) do
-    case Regex.run(~r/\A(\d{4})-/, value) do
-      [_, year] -> year
-      _ -> nil
-    end
-  end
-
-  defp year(_value), do: nil
+    do: title |> String.replace(~r/\s+/u, " ") |> String.trim() |> clamp_label()
 
   defp download_location(row) do
     case presence(get_in(row, ["links", "download_location"])) do
@@ -497,27 +452,6 @@ defmodule DevilsDictionary.Discovery.Providers.Unsplash do
   # An absolute `http(s)` URL or nothing. A relative or malformed one is not a
   # picture we can hotlink, and a scheme we did not ask for is not one we
   # follow.
-  defp media(value) when is_binary(value) do
-    case URI.parse(String.trim(value)) do
-      %URI{scheme: scheme, host: host}
-      when scheme in ["http", "https"] and is_binary(host) and host != "" ->
-        String.trim(value)
-
-      _uri ->
-        nil
-    end
-  end
-
-  defp media(_value), do: nil
-
-  defp presence(value) when is_binary(value) do
-    case String.trim(value) do
-      "" -> nil
-      trimmed -> trimmed
-    end
-  end
-
-  defp presence(_value), do: nil
-
-  defp config, do: Application.get_env(:devils_dictionary, :unsplash, [])
+  # This provider's own stanza; the read is the kit's.
+  defp config, do: DevilsDictionary.Discovery.Provider.Helpers.config(:unsplash)
 end
