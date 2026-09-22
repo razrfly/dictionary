@@ -22,6 +22,7 @@ defmodule DevilsDictionaryWeb.Word do
   use DevilsDictionaryWeb, :html
 
   alias DevilsDictionary.Lexicon.WordPage
+  alias DevilsDictionaryWeb.SourceBadge
 
   @doc """
   The word itself: the lemma, how it sounds, and every part of speech the
@@ -296,8 +297,8 @@ defmodule DevilsDictionaryWeb.Word do
       ]}
     >
       <header class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <h2 class={["text-base/8 font-medium", tier_class(@card.tier)]}>
-          <span aria-hidden="true" class="mr-1">{tier_glyph(@card.tier)}</span>
+        <h2 class={["flex items-center gap-2 text-base/8 font-medium", tier_class(@card.tier)]}>
+          <SourceBadge.badge source={@card.source} decorative />
           {@card.source.name}
           <span :if={@card.year} class="font-normal text-mist-500">· {@card.year}</span>
           <span :if={@card.pos} class="font-normal text-mist-500">· {@card.pos}</span>
@@ -444,7 +445,7 @@ defmodule DevilsDictionaryWeb.Word do
                 group.tier != :aristocracy && "text-mist-600 dark:text-mist-400"
               ]}
             >
-              <span aria-hidden="true" class="mr-1">{tier_glyph(group.tier)}</span>{author(
+              <SourceBadge.badge source={group.source} decorative class="mr-1.5 align-[-0.3em]" />{author(
                 group.source
               )}
             </a>
@@ -659,8 +660,15 @@ defmodule DevilsDictionaryWeb.Word do
           <%!-- Johnson filed a noun and a verb for *love* and three entries
                for *set*. His name once, and the rows that follow it say only
                what is new about them — a screen reader still hears whose. --%>
-          <h2 :if={not @continues} class={["text-base/7 font-medium", tier_class(@card.tier)]}>
-            <span aria-hidden="true" class="mr-1">{tier_glyph(@card.tier)}</span>{author(@card.source)}
+          <%!-- The badge where the tier glyph was (#152): one identity per
+               source, drawn the same way in every header on the page. The
+               tier is still here — in the colour, as it always was. --%>
+          <h2
+            :if={not @continues}
+            class={["flex items-center gap-2 text-base/7 font-medium", tier_class(@card.tier)]}
+          >
+            <SourceBadge.badge source={@card.source} decorative />
+            <span>{author(@card.source)}</span>
             <DevilsDictionaryWeb.Demo.sample_badge :if={@sample?} />
           </h2>
           <p class={[

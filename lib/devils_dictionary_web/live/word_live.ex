@@ -46,7 +46,7 @@ defmodule DevilsDictionaryWeb.WordLive do
   alias DevilsDictionary.Claims.Contributions
   alias DevilsDictionary.Lexicon
   alias DevilsDictionary.Lexicon.WordPage
-  alias DevilsDictionaryWeb.{CrowdCard, Culture, Demo, Provenance, Thing, Word}
+  alias DevilsDictionaryWeb.{CrowdCard, Culture, Demo, Provenance, SourceBadge, Thing, Word}
 
   @trail_cap 12
   @suggestions 5
@@ -220,6 +220,117 @@ defmodule DevilsDictionaryWeb.WordLive do
     # A second one is a registration and nothing here.
     |> assign(:browsers, Enum.map(Providers.browser_providers(target), &elem(&1, 1)))
     |> assign(:urban_dictionary, DevilsDictionary.Sources.UrbanDictionary.browser_config(target))
+    |> assign_page_sources()
+  end
+
+  # Every source that put something on this page, for the rail's stack (#152):
+  # the definition sources, the thing's encyclopedia rows, the Crowd card, each
+  # shelf's contributors — a catalog state opened into the corpora on it — and
+  # the browser shelves. Tier then slug, one badge per slug, each with the
+  # anchor of the block it stands for. Recomputed whenever the states that
+  # feed it are assigned, which is what makes the stack grow as results land.
+  defp assign_page_sources(socket) do
+    %{page: page, cultures: cultures, browsers: browsers, urban_dictionary: crowd} =
+      socket.assigns
+
+    assign(socket, :page_sources, page_sources(page, cultures, browsers, crowd))
+  end
+
+  defp page_sources(page, cultures, browsers, crowd) do
+    definitions =
+      for group <- page.source_groups,
+          do: badge_entry(group.source, "#" <> group.card_id)
+
+    thing =
+      case page.thing do
+        %{} = thing ->
+          [
+            thing.article && thing.article.source &&
+              badge_entry(thing.article.source, "#thing-article"),
+            thing[:wikidata_source] && badge_entry(thing.wikidata_source, "#concept-card")
+          ]
+
+        _none ->
+          []
+      end
+
+    crowd =
+      case crowd do
+        %{source: source, term: term} ->
+          [badge_entry(source, "#urban-dictionary-" <> Base.url_encode64(term, padding: false))]
+
+        _none ->
+          []
+      end
+
+    shelves =
+      cultures
+      |> Map.values()
+      |> Enum.filter(&(&1.items != []))
+      |> Enum.flat_map(&shelf_sources/1)
+
+    browser =
+      for config <- browsers do
+        badge_entry(
+          %{slug: config.provider, name: config.provider_name, tier: Map.get(config, :tier)},
+          "#culture-filter-#{config.content_type}-#{config.provider}"
+        )
+      end
+
+    (definitions ++ thing ++ crowd ++ shelves ++ browser)
+    |> Enum.reject(&is_nil/1)
+    |> SourceBadge.compose()
+  end
+
+  # A live state is one source; the catalog state is however many corpora put
+  # an item on it, each named by its own item, so the Met and Wikidata are two
+  # badges rather than one called *Saved catalog*.
+  defp shelf_sources(%{archetype: :corpus, items: items} = state) do
+    anchor = shelf_anchor(state)
+
+    items
+    |> Enum.map(
+      &%{
+        slug: Map.get(&1, :source_slug),
+        name: &1.preview_metadata["provider"],
+        tier: Map.get(&1, :source_tier)
+      }
+    )
+    |> Enum.reject(&is_nil(&1.slug))
+    |> Enum.uniq_by(& &1.slug)
+    |> Enum.map(&badge_entry(&1, anchor))
+  end
+
+  defp shelf_sources(state) do
+    [
+      badge_entry(
+        %{
+          slug: state.provider,
+          name: state.provider_name,
+          tier: Map.get(state, :tier),
+          logo: Map.get(state, :logo)
+        },
+        shelf_anchor(state)
+      )
+    ]
+  end
+
+  # The shelf a state renders on is its content type's row (`Culture` keys
+  # shelves the same way), and the row's id is stable however the shelves sort.
+  defp shelf_anchor(state) do
+    types = Map.get(state, :content_types) || []
+    type = Enum.find(types, :film, &(&1 in ContentTypes.known()))
+    "#culture-shelf-#{type}"
+  end
+
+  defp badge_entry(source, anchor) do
+    %{
+      slug: Map.get(source, :slug),
+      name: Map.get(source, :name) || Map.get(source, :slug),
+      tier: Map.get(source, :tier),
+      logo: Map.get(source, :logo),
+      anchor: anchor
+    }
   end
 
   # The committed catalog as one more state on the shared shelf (K2 of #109).
@@ -318,10 +429,12 @@ defmodule DevilsDictionaryWeb.WordLive do
 
         state = Map.merge(state, %{term: target.term, relevance: target.relevance})
 
-        {:noreply, update(socket, :cultures, &Map.put(&1, provider_slug, state))}
+        {:noreply,
+         socket |> update(:cultures, &Map.put(&1, provider_slug, state)) |> assign_page_sources()}
 
       is_nil(current.mapping_id) ->
-        {:noreply, update(socket, :cultures, &Map.delete(&1, provider_slug))}
+        {:noreply,
+         socket |> update(:cultures, &Map.delete(&1, provider_slug)) |> assign_page_sources()}
 
       true ->
         {:noreply, socket}
@@ -376,7 +489,7 @@ defmodule DevilsDictionaryWeb.WordLive do
             |> Map.merge(%{term: target.term, relevance: target.relevance, loading_more: false})
         end
 
-      update(socket, :cultures, &Map.put(&1, provider_slug, state))
+      socket |> update(:cultures, &Map.put(&1, provider_slug, state)) |> assign_page_sources()
     else
       socket
     end
@@ -628,13 +741,28 @@ defmodule DevilsDictionaryWeb.WordLive do
             </div>
 
             <div
-              :if={@page.related}
+              :if={@page.related || @page_sources != []}
               class="mt-8 lg:col-start-1 lg:row-start-2 lg:mt-5 lg:border-t lg:border-mist-950/10 lg:pt-4 dark:lg:border-white/10"
             >
               <Word.related_block
+                :if={@page.related}
                 related={@page.related}
                 trail={trail_here(@page)}
                 demo={@demo}
+              />
+              <%!-- The one place that lists every source on the page (#152
+                   rule 3), under the related words because both are the way
+                   out of the word. It is composed from assigns the page
+                   already holds and grows as a shelf's live results arrive;
+                   a source whose shelf is still loading is not on the page
+                   yet, and is not in the stack yet. --%>
+              <SourceBadge.stack
+                id="page-sources"
+                sources={@page_sources}
+                class={[
+                  "mt-8",
+                  @page.related && "border-t border-mist-950/10 pt-4 dark:border-white/10"
+                ]}
               />
             </div>
           </div>

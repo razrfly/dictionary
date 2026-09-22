@@ -27,6 +27,7 @@ defmodule DevilsDictionaryWeb.Culture do
   alias DevilsDictionary.Discovery.ContentTypes
   alias DevilsDictionary.Discovery.MatchReason
   alias DevilsDictionary.Discovery.Shelf
+  alias DevilsDictionaryWeb.SourceBadge
 
   attr :states, :map, required: true
   attr :return_path, :string, default: nil
@@ -201,13 +202,13 @@ defmodule DevilsDictionaryWeb.Culture do
               {length(shelf.entries)}
             </p>
             <%!-- D4 of #126: the byline is names. Each provider's qualifier is
-                 a sentence about how it matched, which is the About's. --%>
-            <p :if={shelf.entries != []} class="mt-1 text-xs text-mist-400">
-              <span :for={{state, index} <- Enum.with_index(contributing(shelf))}>
-                <span :if={index > 0} aria-hidden="true">·</span>
-                <span id={"culture-provider-#{state.provider}"}>{state.provider_name}</span>
-              </span>
-            </p>
+                 a sentence about how it matched, which is the About's. Since
+                 #152 the names come with the badge every other header on the
+                 page carries: one source is badge and name, as a definition
+                 row is; several are a row of badges with the names on hover
+                 and read out, because three names never fit an 80 px column
+                 anyway and *Openverse · Pexels · Unsplash* was three lines. --%>
+            <.byline :if={shelf.entries != []} states={contributing(shelf)} />
             <%!-- A mark a contributing source's licence makes a condition, not
                  a logo a source would like shown (#142). The Guardian's clause
                  6(b)(vi) is the first, and its logos page asks for two things
@@ -243,6 +244,7 @@ defmodule DevilsDictionaryWeb.Culture do
                   item={entry.item}
                   type={shelf.type}
                   mark={card_mark(entry.state)}
+                  source_name={entry.item.preview_metadata["provider"] || entry.state.provider_name}
                   return_path={@return_path}
                 />
               </li>
@@ -382,8 +384,9 @@ defmodule DevilsDictionaryWeb.Culture do
         >
           {@row.heading}
         </h3>
-        <p id={"culture-provider-#{@browser.provider}"} class="mt-1 text-xs text-mist-400">
-          {@browser.provider_name}
+        <p class="mt-1 flex items-center gap-1.5 text-xs text-mist-500">
+          <SourceBadge.badge source={badge_source(@browser)} decorative />
+          <span id={"culture-provider-#{@browser.provider}"}>{@browser.provider_name}</span>
         </p>
         <.attribution_mark
           :if={match?(%{placement: :shelf}, @mark)}
@@ -608,6 +611,48 @@ defmodule DevilsDictionaryWeb.Culture do
   defp pending(shelf),
     do: Enum.filter(shelf.states, &(&1.items == [] and &1.status != :empty))
 
+  attr :states, :list, required: true
+
+  # Who put something on this shelf, identified the way every source on the
+  # page is (#152). The ids and the names are what they were — a test finds
+  # `#culture-provider-cinegraph` and reads *CineGraph* in it either way —
+  # and what changed is that the name is beside a badge, or behind one.
+  defp byline(assigns) do
+    ~H"""
+    <p :if={match?([_one], @states)} class="mt-1 flex items-center gap-1.5 text-xs text-mist-500">
+      <SourceBadge.badge :for={state <- @states} source={badge_source(state)} decorative />
+      <span :for={state <- @states} id={"culture-provider-#{state.provider}"}>
+        {state.provider_name}
+      </span>
+    </p>
+    <ul :if={length(@states) > 1} role="list" class="mt-1 flex items-center pl-0.5 -space-x-1">
+      <li
+        :for={state <- @states}
+        id={"culture-provider-#{state.provider}"}
+        title={state.provider_name}
+      >
+        <SourceBadge.badge
+          source={badge_source(state)}
+          decorative
+          class="ring-2 ring-mist-50 dark:ring-mist-950"
+        />
+        <span class="sr-only">{state.provider_name}</span>
+      </li>
+    </ul>
+    """
+  end
+
+  # A shelf state as the badge reads it: the provider slug, the row's name
+  # and tier, and the logo the row will carry once one is cleared.
+  defp badge_source(state) do
+    %{
+      slug: state.provider,
+      name: state.provider_name,
+      tier: Map.get(state, :tier),
+      logo: Map.get(state, :logo)
+    }
+  end
+
   attr :item, :map, required: true
   attr :type, :atom, required: true
   attr :return_path, :string, default: nil
@@ -615,6 +660,10 @@ defmodule DevilsDictionaryWeb.Culture do
   attr :mark, :map,
     default: nil,
     doc: "the supplying source's `:card` mark, already read by `mark/1`, or nil"
+
+  attr :source_name, :string,
+    default: nil,
+    doc: "who supplied the item, for the link-out's accessible name"
 
   defp culture_thumbnail(assigns) do
     presentation = ContentTypes.get(assigns.type)
@@ -764,7 +813,9 @@ defmodule DevilsDictionaryWeb.Culture do
           <%= for part <- @credit do %><a :if={part.url} href={part.url} target="_blank" rel="noreferrer" class="underline underline-offset-4 transition-colors hover:text-mist-950 dark:hover:text-white">{part.text}</a><span :if={is_nil(part.url)}>{part.text}</span><% end %>
         </p>
         <%!-- A `:card` mark, under the credit and inside an exclusion zone
-             (#143). The width is the provider's — Spotify's Branding
+             (#143). No source asks for one since #152 moved Spotify's to the
+             shelf; the placement is still the licence's to choose, so the
+             block stays and draws nothing. The width is the provider's — Spotify's Branding
              Guidelines ask partner integrations for the **full** logo, icon
              and wordmark, at no less than 70 px — and the 10 px of isolation
              around it is the clearance this card gives any mark, which is
@@ -788,15 +839,27 @@ defmodule DevilsDictionaryWeb.Culture do
         >
           <.mark_images mark={@mark} />
         </div>
+        <%!-- The way out, and not the word *Source* (#152): that label stood
+             on 68 cards of `love`, three of every four beside a title that
+             already linked where it did. The link stays — U6 says a card
+             without one is a bug, and a licence can dictate its wording,
+             which is the `link_text` branch — but what it says is who it
+             opens at, to a screen reader and on hover, and on the card it
+             is the arrow alone. --%>
         <a
           :if={@source_url}
           href={@source_url}
           target="_blank"
           rel="noreferrer"
           id={"culture-source-#{@item.external_id}"}
+          title={"Open at #{@source_name || "the source"}"}
           class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 transition-colors hover:text-mist-950 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 dark:hover:text-white"
         >
-          {(@mark && @mark.link_text) || "Source"} ↗
+          <span :if={@mark && @mark.link_text}>{@mark.link_text} ↗</span>
+          <span :if={!(@mark && @mark.link_text)} aria-hidden="true">↗</span>
+          <span :if={!(@mark && @mark.link_text)} class="sr-only">
+            Open at {@source_name || "the source"}
+          </span>
         </a>
       </div>
     </div>

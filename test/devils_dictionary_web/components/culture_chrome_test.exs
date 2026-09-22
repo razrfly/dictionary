@@ -463,7 +463,7 @@ defmodule DevilsDictionaryWeb.CultureChromeTest do
           searches("aa_search", "AA stock", 2, %{provider_detail: "search: a licence"})
         ])
 
-      assert html =~ ~s(id="culture-provider-aa_search">AA stock</span>)
+      assert html =~ ~r/id="culture-provider-aa_search">\s*AA stock\s*<\/span>/
       assert html =~ "AA stock · search: a licence"
     end
   end

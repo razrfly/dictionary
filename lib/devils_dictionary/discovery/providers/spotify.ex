@@ -72,10 +72,14 @@ defmodule DevilsDictionary.Discovery.Providers.Spotify do
 
     * *If you display any Spotify Content you must clearly attribute the
       content as being supplied and made available by Spotify, by using the
-      Spotify Marks.* → `attribution_mark/0`, with `placement: :card`; the
-      `:music` row is `attribution: :required` and the card renders the mark
-      beside the credit, at the Branding Guidelines' minimum size and
-      exclusion zone.
+      Spotify Marks.* → `attribution_mark/0`, with `placement: :shelf`: the
+      Music shelf is one surface showing Spotify content, and the mark in
+      its byline column — immediately beside the rail, at the Branding
+      Guidelines' minimum size — attributes the lot. It was `:card` from
+      #143 until #152, which drew the wordmark twelve times on `love`; one
+      mark per surface is the reading, and the strict per-card one, if the
+      owner takes it, is the Spotify *icon* beside each card's link and not
+      the wordmark again.
     * *Metadata, cover art and Audio Preview Clips must be accompanied by a
       link back to the applicable album, content or playlist on the Spotify
       Service.* → `source_url` is `external_urls.spotify` and the card's link
@@ -132,16 +136,15 @@ defmodule DevilsDictionary.Discovery.Providers.Spotify do
     light: "/images/spotify-full-logo-black.svg",
     dark: "/images/spotify-full-logo-white.svg",
     alt: "Spotify",
-    # No `href` of its own: the Policy's link back is to *the applicable
-    # album, content or playlist*, which is the card's own `source_url`. A
-    # second link to spotify.com beside it would be a link the terms did not
-    # ask for, pointing somewhere less useful than the one they did.
-    href: nil,
+    # A shelf mark links by licence, and this one links to the service: the
+    # Policy's link back *to the applicable album, content or playlist* is
+    # still every card's own `source_url`, worded *Listen on Spotify*.
+    href: "https://open.spotify.com/",
     link_text: "Listen on Spotify",
     width: 70,
-    # "Beside the content": the Policy attributes *the content you display*,
-    # so the mark is on every card and not once under the shelf's name.
-    placement: :card
+    # Once, beside the rail (#152). The card block that drew a `:card` mark
+    # is still there and has none to draw.
+    placement: :shelf
   }
 
   # How many rows one request asks Spotify for, before the gate. Fifty is the

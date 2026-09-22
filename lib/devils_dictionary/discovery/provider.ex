@@ -175,9 +175,11 @@ defmodule DevilsDictionary.Discovery.Provider do
         6(b)(vi) asks for "adjacent to our content" and GIPHY's terms for the
         mark "on any surface" showing theirs; both are met by the shelf's
         byline column, beside the source's name.
-      * `:card` — beside the content itself. Spotify's Developer Policy asks
-        for the Spotify Marks *with* the content, so the mark is drawn on
-        every card under its credit.
+      * `:card` — beside the content itself, under every card's credit. No
+        source asks for it today: Spotify's was read that way in #143 and
+        drew twelve wordmarks on one rail, and #152 moved it to the shelf.
+        The value stays because the placement is the licence's answer, and
+        a licence may yet give this one.
 
   The placement is the *licence's* answer and the component draws it; nothing
   in the reader knows which provider asked for which, which is promise 9 of

@@ -858,7 +858,10 @@ defmodule DevilsDictionary.Lexicon.WordPage do
       kinds: bucket(buckets, :kind),
       examples: bucket(buckets, :example),
       wikipedia_url: concept_url(sources, "wikipedia", concept),
-      wikidata_url: concept_url(sources, "wikidata", concept)
+      wikidata_url: concept_url(sources, "wikidata", concept),
+      # The row behind the concept card's link, so the rail's stack can
+      # count the encyclopedia among the page's sources (#152).
+      wikidata_source: source_by_slug(sources, "wikidata")
     }
     |> Map.merge(candidates)
   end
@@ -880,6 +883,7 @@ defmodule DevilsDictionary.Lexicon.WordPage do
       examples: none(),
       wikipedia_url: nil,
       wikidata_url: nil,
+      wikidata_source: nil,
       article: nil
     }
   end
@@ -928,6 +932,13 @@ defmodule DevilsDictionary.Lexicon.WordPage do
   # concept with no title has no article — 20,527 of them were introduced by a
   # sitelink someone else's page mentioned — and gets no link rather than a URL
   # ending in a slash.
+  defp source_by_slug(sources, slug) do
+    case Enum.find(sources, fn {_id, s} -> s.slug == slug end) do
+      {_id, source} -> source
+      nil -> nil
+    end
+  end
+
   defp concept_url(sources, slug, concept) do
     with {_id, source} <- Enum.find(sources, fn {_id, s} -> s.slug == slug end) || :none,
          title when is_binary(title) <- concept.wikipedia_title || concept.label do
