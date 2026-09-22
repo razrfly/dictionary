@@ -18,6 +18,7 @@ defmodule DevilsDictionaryWeb.CultureChromeTest do
 
   import Phoenix.LiveViewTest, only: [render_component: 2]
 
+  alias DevilsDictionary.Discovery.ContentTypes
   alias DevilsDictionaryWeb.Culture
 
   defp image_item(slug, index) do
@@ -93,6 +94,93 @@ defmodule DevilsDictionaryWeb.CultureChromeTest do
 
   defp searches(slug, name, count, extra \\ %{}) do
     {slug, state(slug, name, :image, Enum.map(1..count, &image_item(slug, &1)), extra)}
+  end
+
+  describe "a browser provider draws through its content-type row (#144 Phase 3)" do
+    defp browser(extra \\ %{}) do
+      Map.merge(
+        %{
+          provider: "giphy",
+          provider_name: "GIPHY",
+          content_type: :gif,
+          hook: "GiphyShelf",
+          term: "war",
+          language: "en",
+          api_key: "test-key",
+          note: "Search matches, not reviewed interpretations."
+        },
+        extra
+      )
+    end
+
+    defp render_browser(browsers),
+      do: render_component(&Culture.section/1, states: %{}, browsers: browsers)
+
+    test "the hook's DOM contract is intact, which is what its JavaScript reads" do
+      # `giphy_shelf.mjs` queries exactly these. The component that held them
+      # was deleted in Phase 3 and the markup moved into `Culture`; the hook
+      # and its own tests were not touched, so this is the seam that has to
+      # keep holding.
+      html = render_browser([browser()])
+
+      assert html =~ ~s(phx-hook="GiphyShelf")
+      assert html =~ ~s(phx-update="ignore")
+      assert html =~ ~s(data-query="war")
+      assert html =~ ~s(data-language="en")
+      assert html =~ ~s(data-api-key="test-key")
+      assert html =~ "data-status"
+      assert html =~ "data-results"
+      assert html =~ "data-more"
+    end
+
+    test "the heading comes from the content-type row, not from the provider" do
+      html = render_browser([browser()])
+
+      assert html =~ ContentTypes.fetch!(:gif).heading
+      assert html =~ ~s(id="culture-filter-gif")
+      assert html =~ ~s(id="culture-browser-giphy-)
+    end
+
+    test "a licence that requires a mark gets one, and one that does not is named in text" do
+      # The badge is a licence obligation travelling in the provider's own
+      # config, so the renderer honours it without knowing whose it is.
+      marked =
+        render_browser([
+          browser(%{
+            badge: %{
+              src: "/images/giphy-powered-by.png",
+              alt: "Powered by GIPHY",
+              href: "https://giphy.com/"
+            }
+          })
+        ])
+
+      assert marked =~ "Powered by GIPHY"
+      assert marked =~ "/images/giphy-powered-by.png"
+
+      plain = render_browser([browser()])
+      refute plain =~ "giphy-powered-by.png"
+      assert plain =~ ~s(id="culture-provider-giphy")
+      assert plain =~ "GIPHY"
+    end
+
+    test "two browser providers are two shelves, and neither is named in the component" do
+      html =
+        render_browser([
+          browser(),
+          browser(%{provider: "tenor", provider_name: "Tenor", hook: "TenorShelf", api_key: nil})
+        ])
+
+      assert html =~ ~s(phx-hook="GiphyShelf")
+      assert html =~ ~s(phx-hook="TenorShelf")
+      assert html =~ ~s(id="culture-browser-tenor-)
+    end
+
+    test "the block appears for a browser provider even with no server shelf at all" do
+      html = render_browser([browser()])
+
+      assert html =~ ~s(id="in-culture")
+    end
   end
 
   describe "the shelf says how old it is (#144 Phase 2)" do
