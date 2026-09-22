@@ -417,6 +417,13 @@ defmodule DevilsDictionaryWeb.Culture do
           else: metadata["artist"]
         )
       )
+      # The one mark a card can be asked to carry, carried by the item rather
+      # than by its content type (#143). A provider whose terms require its
+      # brand beside the credit writes the mark itself — files, alt text and
+      # the link's wording — and this component draws what it was handed. It
+      # knows no provider by name (promise 9): a mark it cannot read is no
+      # mark, never a broken image.
+      |> assign(:brand_mark, brand_mark(metadata["brand_mark"]))
 
     ~H"""
     <div class="group flex min-w-0 flex-col gap-2 rounded-sm">
@@ -524,6 +531,39 @@ defmodule DevilsDictionaryWeb.Culture do
         >
           <%= for part <- @credit do %><a :if={part.url} href={part.url} target="_blank" rel="noreferrer" class="underline underline-offset-4 transition-colors hover:text-mist-950 dark:hover:text-white">{part.text}</a><span :if={is_nil(part.url)}>{part.text}</span><% end %>
         </p>
+        <%!-- The mark, under the credit and inside its own exclusion zone
+             (#143). Spotify's Branding Guidelines ask partner integrations
+             for the **full** logo — icon and wordmark — at no less than 70 px
+             wide, isolated by half the icon's height on every side, which at
+             that width is 10 px. Those two numbers are the whole of this
+             block, and they are why the mark is under the credit rather than
+             literally beside it: 70 + 20 leaves 54 px of a 144 px column for
+             an artist's name, and *YoungBoy Never Broke Again* does not fit
+             in 54 px. It is the card's credit block either way — the credit
+             names who made the track, the mark names who supplied it.
+
+             Two files rather than one with a filter: the guidelines allow
+             the green logo only on black or white, and this card's dark
+             surface is neither, so the black logo takes the light theme and
+             the white one the dark. `-mx-2.5` pulls the exclusion zone back
+             out to the card's edge so the logo itself lines up with the text
+             above it. --%>
+        <div :if={@brand_mark} class="-mx-2.5 p-2.5">
+          <img
+            src={@brand_mark.light}
+            alt={@brand_mark.alt}
+            width="70"
+            height="20"
+            class="w-[70px] dark:hidden"
+          />
+          <img
+            src={@brand_mark.dark}
+            alt={@brand_mark.alt}
+            width="70"
+            height="20"
+            class="w-[70px] not-dark:hidden"
+          />
+        </div>
         <a
           :if={@source_url}
           href={@source_url}
@@ -532,7 +572,7 @@ defmodule DevilsDictionaryWeb.Culture do
           id={"culture-source-#{@item.external_id}"}
           class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 transition-colors hover:text-mist-950 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 dark:hover:text-white"
         >
-          Source ↗
+          {(@brand_mark && @brand_mark.link) || "Source"} ↗
         </a>
       </div>
     </div>
@@ -677,6 +717,34 @@ defmodule DevilsDictionaryWeb.Culture do
 
   defp prepend(parts, "", _url), do: parts
   defp prepend(parts, text, url), do: [%{text: text, url: url} | parts]
+
+  @doc """
+  The mark a provider's terms require on the card, read off the item, or nil.
+
+  A provider that owes one writes `preview_metadata["brand_mark"]` as a map:
+  `"light"` and `"dark"` are the two files, as paths under `priv/static`
+  (never a URL — the mark is an asset this app ships, not a provider's
+  hotlink); `"alt"` is what a screen reader is owed; `"link"` is the wording
+  of the link back, because for a brand like Spotify's the two are one
+  obligation and the wording is not free. The provider owns all four; this
+  component owns none of them and matches on no provider's name, which is
+  what promise 9 asks. Anything else — a bare name, a missing key, a file
+  that is not a local path — is no mark.
+  """
+  def brand_mark(%{"light" => light, "dark" => dark, "alt" => alt, "link" => link})
+      when is_binary(light) and is_binary(dark) and is_binary(alt) and is_binary(link) do
+    if local_asset?(light) and local_asset?(dark) and alt != "" and link != "",
+      do: %{light: light, dark: dark, alt: alt, link: link},
+      else: nil
+  end
+
+  def brand_mark(_other), do: nil
+
+  # One leading slash and not two: `//cdn.example/mark.svg` is a URL the
+  # browser resolves against the page's scheme, which is exactly the hotlink
+  # the rule above refuses.
+  defp local_asset?(path),
+    do: String.starts_with?(path, "/") and not String.starts_with?(path, "//")
 
   # What the card shows for the item's maker, by the row's `attribution`:
   # nothing on a `:none` row, and otherwise the ready-made `attribution` line

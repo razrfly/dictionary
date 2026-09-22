@@ -66,6 +66,11 @@ allowed_provider_env =
     "UNSPLASH_ACCESS_KEY",
     "PEXELS_API_KEY",
     "GUARDIAN_API_KEY",
+    "SPOTIFY_CLIENT_ID",
+    "SPOTIFY_CLIENT_SECRET",
+    # Not a secret, like `BING_NEWS_ENABLED`: the owner's switch for a shelf
+    # whose terms question was decided rather than settled (#143).
+    "SPOTIFY_ENABLED",
     "DISCOVERY_POSITIVE_REFRESH_SECONDS",
     "DISCOVERY_EMPTY_REFRESH_SECONDS"
   ] ++ discovery_provider_policy_env
@@ -182,6 +187,33 @@ end
 if guardian_api_key =
      System.get_env("GUARDIAN_API_KEY") || local_provider_env["GUARDIAN_API_KEY"] do
   config :devils_dictionary, :guardian, api_key: guardian_api_key
+end
+
+# Spotify (#143) needs both halves of one credential: the id and the secret
+# are exchanged for a bearer token at `token_endpoint`, so either one alone is
+# no more use than neither. Without both, `enabled?/0` is false, the provider
+# stays registered and the Music shelf never renders — which is what a host
+# without the credentials should do.
+#
+# Server-only, both of them. Neither reaches a LiveView assign, a URL, a log
+# line or a `discovery_request_attempts` row; the token process holds the
+# minted token and never the secret that minted it.
+spotify_client_id = System.get_env("SPOTIFY_CLIENT_ID") || local_provider_env["SPOTIFY_CLIENT_ID"]
+
+spotify_client_secret =
+  System.get_env("SPOTIFY_CLIENT_SECRET") || local_provider_env["SPOTIFY_CLIENT_SECRET"]
+
+if spotify_client_id && spotify_client_secret do
+  config :devils_dictionary, :spotify,
+    client_id: spotify_client_id,
+    client_secret: spotify_client_secret
+end
+
+# The kill switch the owner's decision comes with: the Music shelf is on by
+# default and `SPOTIFY_ENABLED=false` turns it off without a deploy, as
+# `BING_NEWS_ENABLED` does for the News shelf.
+if (System.get_env("SPOTIFY_ENABLED") || local_provider_env["SPOTIFY_ENABLED"]) in ~w(false 0 no off) do
+  config :devils_dictionary, :spotify, enabled: false
 end
 
 parse_policy_integer = fn name ->

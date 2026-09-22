@@ -16,6 +16,48 @@ defmodule DevilsDictionaryWeb.CultureCreditTest do
   defp texts(parts), do: Enum.map(parts, & &1.text)
   defp links(parts), do: parts |> Enum.reject(&is_nil(&1.url)) |> Enum.map(&{&1.text, &1.url})
 
+  describe "the mark is the provider's to declare, and the component matches no name" do
+    # Promise 9: the component branches on neither the content type nor the
+    # source. A provider whose terms require a mark on the card writes the
+    # whole mark; a bare name — the shape that would need a clause per
+    # provider here — draws nothing.
+    test "a whole mark renders, and a provider's name does not" do
+      mark = %{
+        "light" => "/images/a-mark-black.svg",
+        "dark" => "/images/a-mark-white.svg",
+        "alt" => "A Service",
+        "link" => "Listen on A Service"
+      }
+
+      assert Culture.brand_mark(mark) == %{
+               light: "/images/a-mark-black.svg",
+               dark: "/images/a-mark-white.svg",
+               alt: "A Service",
+               link: "Listen on A Service"
+             }
+
+      assert Culture.brand_mark("spotify") == nil
+      assert Culture.brand_mark(nil) == nil
+      assert Culture.brand_mark(Map.delete(mark, "link")) == nil
+    end
+
+    test "a mark is an asset this app ships, never a provider's hotlink" do
+      mark = %{
+        "light" => "/images/a-mark-black.svg",
+        "dark" => "/images/a-mark-white.svg",
+        "alt" => "A Service",
+        "link" => "Open A Service"
+      }
+
+      # A full URL, and the protocol-relative one a leading-slash check alone
+      # would let through.
+      for remote <- ["https://cdn.example.test/mark.svg", "//cdn.example.test/mark.svg"] do
+        assert Culture.brand_mark(%{mark | "light" => remote}) == nil
+        assert Culture.brand_mark(%{mark | "dark" => remote}) == nil
+      end
+    end
+  end
+
   describe "the line is never altered" do
     test "the runs always concatenate back to the line exactly" do
       lines = [

@@ -161,6 +161,34 @@ defmodule DevilsDictionary.Discovery.ContentTypes do
       # the word, and never the search's own ranking — Bing's feed proposes
       # and the whole-word gate disposes.
       evidence: [:attestation]
+    },
+    # A track is a picture and a title at once: the cover art is square and it
+    # is the whole of the card's visual, so the row is `:image`-shaped rather
+    # than `:text`-shaped — but the title is a song's name and wants two lines
+    # where a photograph's generated sentence wanted one, and the artist has
+    # to fit under it. Wider than the image rail for that reason (#143).
+    music: %{
+      heading: "Music",
+      label: "music",
+      badge: "Track",
+      aspect: "aspect-square",
+      icon: "hero-musical-note",
+      column: "w-36 sm:w-40",
+      title_clamp: "line-clamp-2",
+      thumbnail_keys: ~w(image_url thumbnail_url),
+      # Spotify's Developer Policy: *if you display any Spotify Content you
+      # must clearly attribute the content as being supplied and made
+      # available by Spotify, by using the Spotify Marks*, and metadata and
+      # cover art *must be accompanied by a link back*. Both are obligations
+      # on every item, so the row is `:required` and the card carries the mark
+      # beside the credit — the one thing no other row has asked for.
+      attribution: :required,
+      # A search of a catalogue is a `:query` match and the card says so, in
+      # the same sentence the `:image` row uses. `:identity` is admitted for
+      # the follow-up the row is built for: a Wikidata song whose `P921` is
+      # the page's QID and which carries `P2207`, which is a claim about the
+      # word and not a ranking.
+      evidence: [:identity, :query]
     }
   }
 
@@ -188,8 +216,8 @@ defmodule DevilsDictionary.Discovery.ContentTypes do
   end
 
   # Shelf order (K2 of #109), not insertion order: a page shows films, then
-  # artworks, then images, then texts, then GIFs.
-  @known [:film, :artwork, :image, :text, :news, :gif]
+  # artworks, then images, then texts, then news, then music, then GIFs.
+  @known [:film, :artwork, :image, :text, :news, :music, :gif]
 
   @doc "Every content type the reader can present, in shelf order."
   def known, do: @known

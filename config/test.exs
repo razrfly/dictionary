@@ -65,6 +65,14 @@ config :devils_dictionary, :discovery,
       request_budget_window_seconds: 86_400,
       positive_refresh_seconds: 86_400,
       retention_seconds: 82_800
+    ],
+    # Spotify's (#143), repeated for the same reason: the window is a term of
+    # the licence and the suite asserts it.
+    "spotify" => [
+      request_budget_limit: 500,
+      request_budget_window_seconds: 3_600,
+      positive_refresh_seconds: 24 * 60 * 60,
+      retention_seconds: 7 * 24 * 60 * 60
     ]
   },
   refresh_cooldown_seconds: 60,
@@ -194,5 +202,19 @@ config :devils_dictionary, :guardian,
   api_key: "test-key-not-a-secret",
   max_age_days: 30,
   now: ~U[2026-09-21 12:00:00Z],
+  request_interval_ms: 0,
+  min_retry_interval_ms: 0
+
+# Both Spotify endpoints on one `.test` host, so the fixture's stub answers
+# the token request and the search from the same plug and the pair is captured
+# together (#143). The credentials are the literals the suite needs
+# `enabled?/0` to be true for; nothing is minted and nothing leaves the node.
+config :devils_dictionary, :spotify,
+  endpoint: "https://spotify.test/v1/search",
+  token_endpoint: "https://spotify.test/api/token",
+  client_id: "test-client-id",
+  client_secret: "test-client-secret",
+  market: "US",
+  enabled: true,
   request_interval_ms: 0,
   min_retry_interval_ms: 0
