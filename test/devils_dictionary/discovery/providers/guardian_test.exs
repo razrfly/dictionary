@@ -454,7 +454,14 @@ defmodule DevilsDictionary.Discovery.Providers.GuardianTest do
       # here rather than reach the result changeset, where one nil
       # `external_id` fails the run and every good item with it.
       target = target(context, "bestiality")
-      published_at = DateTime.utc_now() |> DateTime.add(-3600, :second) |> DateTime.to_iso8601()
+
+      # `Guardian.now/0` and not the wall clock: the suite pins the provider's
+      # clock to September 2026 so the fixture's real dates stay fresh, and an
+      # article stamped an hour before *today* is more than a day in this
+      # provider's future once the wall clock passes the pin — which the
+      # freshness gate drops, taking the test's subject with it.
+      published_at =
+        Guardian.now() |> DateTime.add(-3600, :second) |> DateTime.to_iso8601()
 
       row = fn id, url ->
         %{
