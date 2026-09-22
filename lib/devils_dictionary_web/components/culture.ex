@@ -402,6 +402,19 @@ defmodule DevilsDictionaryWeb.Culture do
           class="flex gap-4 overflow-x-auto overscroll-x-contain pb-2 focus-visible:outline-2 focus-visible:outline-offset-2"
         >
         </ul>
+        <%!-- The freshness a browser shelf can honestly claim (#144 Phase 4).
+             A server shelf reads *fetched* and *refreshes* off its display
+             root; this one has no root to read, because the request is the
+             reader's own and nothing it returns is stored. That is not a
+             reason to say nothing — "every shelf says when it was fetched or
+             since when it is held" is the issue's own acceptance line, and
+             *now, and not kept* is this shelf's true answer to it. --%>
+        <p
+          id={"culture-freshness-#{@browser.content_type}-#{@browser.provider}"}
+          class="text-base text-mist-500 sm:text-sm"
+        >
+          Fetched by your browser on this visit; nothing is stored here.
+        </p>
         <p class="flex flex-wrap items-baseline justify-between gap-x-6 text-base text-mist-500 sm:text-sm">
           <span>{@browser.note}</span>
           <button
