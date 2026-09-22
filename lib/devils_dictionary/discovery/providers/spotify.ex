@@ -91,7 +91,27 @@ defmodule DevilsDictionary.Discovery.Providers.Spotify do
 
   @behaviour DevilsDictionary.Discovery.Provider
 
+  alias DevilsDictionary.Discovery.Provider.Helpers
   alias DevilsDictionary.Discovery.Providers.Spotify.Token
+
+  # #144 Phase 1's kit, taken in the followups: this provider merged after the
+  # phase that extracted these and arrived carrying eight of them anyway —
+  # seven as private functions and one (`sparse/1`) written inline.
+  # `media_url/1` was called `absolute/1` here and is the same function to the
+  # line; `offset/1` had a spare `""` clause `Integer.parse/1` already
+  # answers; the rest were byte-identical. The one that stays private is
+  # `year/1` — see it.
+  import DevilsDictionary.Discovery.Provider.Helpers,
+    only: [
+      headers: 0,
+      interval: 3,
+      limit: 2,
+      media_url: 1,
+      offset: 1,
+      presence: 1,
+      present?: 1,
+      sparse: 1
+    ]
 
   @adapter_version "spotify.search.v1"
   @operation "track_search"
@@ -201,19 +221,9 @@ defmodule DevilsDictionary.Discovery.Providers.Spotify do
       pagination: :offset,
       operations: [@operation],
       content_types: [:music],
-      min_retry_interval_ms: interval(:min_retry_interval_ms, @min_retry_interval_ms),
-      request_interval_ms: interval(:request_interval_ms, @request_interval_ms)
+      min_retry_interval_ms: interval(config(), :min_retry_interval_ms, @min_retry_interval_ms),
+      request_interval_ms: interval(config(), :request_interval_ms, @request_interval_ms)
     }
-  end
-
-  # Overridable for the same reason every other provider's pace is: an
-  # interval is a live-rate courtesy, and a suite that paid it would spend a
-  # quarter-second per stubbed request being polite to a server it never calls.
-  defp interval(key, default) do
-    case config()[key] do
-      ms when is_integer(ms) and ms >= 0 -> ms
-      _ -> default
-    end
   end
 
   @impl true
@@ -294,10 +304,7 @@ defmodule DevilsDictionary.Discovery.Providers.Spotify do
       method: :post,
       url: config[:token_endpoint],
       form: [grant_type: "client_credentials"],
-      headers: [
-        {"authorization", "Basic #{basic}"},
-        {"user-agent", user_agent()}
-      ]
+      headers: [{"authorization", "Basic #{basic}"} | headers()]
     ]
   end
 
@@ -320,14 +327,9 @@ defmodule DevilsDictionary.Discovery.Providers.Spotify do
         "limit" => limit,
         "offset" => offset
       },
-      headers: [
-        {"authorization", "Bearer #{Token.peek()}"},
-        {"user-agent", user_agent()}
-      ]
+      headers: [{"authorization", "Bearer #{Token.peek()}"} | headers()]
     ]
   end
-
-  defp user_agent, do: Application.fetch_env!(:devils_dictionary, :user_agent)
 
   @doc "The catalogue this provider searches. `US` unless configured otherwise."
   def market do
@@ -349,7 +351,7 @@ defmodule DevilsDictionary.Discovery.Providers.Spotify do
   @impl true
   def retrieve(@operation, mapping, request, request_fun) do
     with :ok <- validate_mapping(@operation, mapping) do
-      limit = limit(request["first"])
+      limit = limit(request["first"], @default_limit)
       offset = offset(request["after"])
 
       case Token.bearer(request_fun) do
@@ -401,21 +403,6 @@ defmodule DevilsDictionary.Discovery.Providers.Spotify do
     end
   end
 
-  defp limit(first) when is_integer(first) and first > 0, do: first
-  defp limit(_first), do: @default_limit
-
-  defp offset(nil), do: 0
-  defp offset(""), do: 0
-
-  defp offset(value) when is_binary(value) do
-    case Integer.parse(value) do
-      {offset, ""} when offset >= 0 -> offset
-      _ -> 0
-    end
-  end
-
-  defp offset(_value), do: 0
-
   # The gate runs over the whole scan window and the page is cut from what
   # survives it, so the cursor counts cards a reader could see rather than
   # rows Spotify happened to rank.
@@ -452,7 +439,7 @@ defmodule DevilsDictionary.Discovery.Providers.Spotify do
 
     with true <- whole_word?(term, name),
          source_url when is_binary(source_url) <-
-           absolute(get_in(row, ["external_urls", "spotify"])) do
+           media_url(get_in(row, ["external_urls", "spotify"])) do
       [
         %{
           external_namespace: @namespace,
@@ -532,7 +519,7 @@ defmodule DevilsDictionary.Discovery.Providers.Spotify do
       # Kendrick's page sends Zacari's readers to the wrong artist. The full
       # credit is `attribution`, below, and stays unlinked past the first name.
       "creator" => presence(artist["name"]),
-      "creator_url" => absolute(get_in(artist, ["external_urls", "spotify"])),
+      "creator_url" => media_url(get_in(artist, ["external_urls", "spotify"])),
       # The credit line the `:required` row shows beneath the cover. The
       # artist, not the word *Spotify*: the mark beside it is what attributes
       # the content to Spotify, and printing the same name twice is the defect
@@ -549,8 +536,7 @@ defmodule DevilsDictionary.Discovery.Providers.Spotify do
       "content_type" => "music",
       "provider" => "Spotify"
     }
-    |> Enum.reject(fn {_key, value} -> is_nil(value) end)
-    |> Map.new()
+    |> sparse()
   end
 
   @doc """
@@ -580,7 +566,7 @@ defmodule DevilsDictionary.Discovery.Providers.Spotify do
     images =
       album["images"]
       |> List.wrap()
-      |> Enum.filter(&(is_map(&1) and is_binary(absolute(&1["url"]))))
+      |> Enum.filter(&(is_map(&1) and is_binary(media_url(&1["url"]))))
 
     at_least = Enum.filter(images, &(is_integer(&1["width"]) and &1["width"] >= want))
 
@@ -590,12 +576,23 @@ defmodule DevilsDictionary.Discovery.Providers.Spotify do
         candidates -> Enum.min_by(candidates, & &1["width"])
       end
 
-    chosen && absolute(chosen["url"])
+    chosen && media_url(chosen["url"])
   end
 
   # `release_date` is `YYYY`, `YYYY-MM` or `YYYY-MM-DD` by
   # `release_date_precision`; the year is the only part a card prints and it
   # is the first four digits of all three.
+  #
+  # Private where six of this module's helpers became the kit's (#144
+  # followups), because neither of the kit's two year parsers is this one.
+  # `Helpers.iso_year/1` requires the `-` separator, so it reads nothing from
+  # a `YYYY`-precision release — a third of this shelf's cards would lose
+  # their year. `Helpers.year/1` finds a year *anywhere* in free text, which
+  # is right for a museum's prose date field and wrong for a structured one:
+  # it would read 1984 out of a mastering note rather than say there was no
+  # date. Anchored to the front of a field whose precision the API declares
+  # is the rule this provider has, and widening either helper to cover it
+  # would change what two other providers return.
   defp year(value) when is_binary(value) do
     case Regex.run(~r/\A(\d{4})/, value) do
       [_, year] -> year
@@ -605,36 +602,5 @@ defmodule DevilsDictionary.Discovery.Providers.Spotify do
 
   defp year(_value), do: nil
 
-  # An absolute `http(s)` URL with a host, or nothing. Every one of these
-  # reaches an `href` or an `img` out of a provider response, and
-  # `DevilsDictionaryWeb.Culture.external_href/1` holds the same standard on
-  # the other side (#116 Phase 3).
-  defp absolute(value) when is_binary(value) do
-    trimmed = String.trim(value)
-
-    case URI.parse(trimmed) do
-      %URI{scheme: scheme, host: host}
-      when scheme in ["http", "https"] and is_binary(host) and host != "" ->
-        trimmed
-
-      _uri ->
-        nil
-    end
-  end
-
-  defp absolute(_value), do: nil
-
-  defp presence(value) when is_binary(value) do
-    case String.trim(value) do
-      "" -> nil
-      trimmed -> trimmed
-    end
-  end
-
-  defp presence(_value), do: nil
-
-  defp present?(value) when is_binary(value), do: String.trim(value) != ""
-  defp present?(_value), do: false
-
-  defp config, do: Application.get_env(:devils_dictionary, :spotify, [])
+  defp config, do: Helpers.config(:spotify)
 end
