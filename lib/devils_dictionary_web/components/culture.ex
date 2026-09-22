@@ -547,16 +547,18 @@ defmodule DevilsDictionaryWeb.Culture do
     |> Enum.filter(&match?(%{placement: :shelf}, &1.mark))
   end
 
-  # The mark the cards of one state carry, or nothing. The state's, not the
-  # item's: what a source's licence requires is a fact about the source, and
-  # a shelf holding two sources' items gives each card the mark of the source
-  # that supplied it.
-  defp card_mark(state) do
-    case mark(Map.get(state, :attribution_mark)) do
-      %{placement: :card} = mark -> mark
-      _other -> nil
-    end
-  end
+  # The mark of the source that supplied one state's cards, or nothing. The
+  # state's, not the item's: what a source's licence requires is a fact about
+  # the source, and a shelf holding two sources' items gives each card the
+  # mark of the source that supplied it.
+  #
+  # Whatever its placement. A `:card` mark draws its image on the card; a
+  # `:shelf` mark draws it once in the byline column — but the *wording* of
+  # the link back is a separate obligation the mark also carries, and it is
+  # per item wherever the image goes. Spotify's mark moved to the shelf in
+  # #152 and every card's link-out silently became *Open at Spotify*, which is
+  # not one of the three phrases its Branding Guidelines permit.
+  defp card_mark(state), do: mark(Map.get(state, :attribution_mark))
 
   attr :mark, :map, required: true
   attr :provider, :string, required: true
@@ -833,7 +835,7 @@ defmodule DevilsDictionaryWeb.Culture do
              and this card's dark surface is neither, so the black logo takes
              the light theme and the white one the dark. --%>
         <div
-          :if={@mark}
+          :if={@mark && @mark.placement == :card}
           id={"culture-mark-#{@item.external_namespace}-#{@item.external_id}"}
           class="-mx-2.5 p-2.5"
         >
@@ -852,7 +854,7 @@ defmodule DevilsDictionaryWeb.Culture do
           target="_blank"
           rel="noreferrer"
           id={"culture-source-#{@item.external_id}"}
-          title={"Open at #{@source_name || "the source"}"}
+          title={(@mark && @mark.link_text) || "Open at #{@source_name || "the source"}"}
           class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 transition-colors hover:text-mist-950 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 dark:hover:text-white"
         >
           <span :if={@mark && @mark.link_text}>{@mark.link_text} ↗</span>
