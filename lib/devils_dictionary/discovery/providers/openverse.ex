@@ -129,6 +129,20 @@ defmodule DevilsDictionary.Discovery.Providers.Openverse do
   # `https://commons.wikimedia.org/w/index.php?curid=73850232`
   @commons_curid ~r{^https?://commons\.wikimedia\.org/w/index\.php\?curid=(\d+)$}
 
+  import DevilsDictionary.Discovery.Provider.Helpers,
+    only: [
+      clamp_label: 1,
+      drop_hidden: 1,
+      headers: 0,
+      interval: 3,
+      limit: 3,
+      media_url: 1,
+      offset: 1,
+      page: 5,
+      presence: 1,
+      sparse: 1
+    ]
+
   @doc "The identity namespace one Openverse media item is registered under: its UUID."
   def namespace, do: "openverse_media"
 
@@ -180,16 +194,9 @@ defmodule DevilsDictionary.Discovery.Providers.Openverse do
       pagination: :offset,
       operations: [@operation],
       content_types: [:image],
-      min_retry_interval_ms: interval(:min_retry_interval_ms, @min_retry_interval_ms),
-      request_interval_ms: interval(:request_interval_ms, @request_interval_ms)
+      min_retry_interval_ms: interval(config(), :min_retry_interval_ms, @min_retry_interval_ms),
+      request_interval_ms: interval(config(), :request_interval_ms, @request_interval_ms)
     }
-  end
-
-  defp interval(key, default) do
-    case config()[key] do
-      ms when is_integer(ms) and ms >= 0 -> ms
-      _ -> default
-    end
   end
 
   @impl true
@@ -253,14 +260,10 @@ defmodule DevilsDictionary.Discovery.Providers.Openverse do
   defp filter_dead("1"), do: "true"
   defp filter_dead(_page), do: "false"
 
-  defp headers do
-    [{"user-agent", Application.fetch_env!(:devils_dictionary, :user_agent)}]
-  end
-
   @impl true
   def retrieve(@operation, mapping, request, request_fun) do
     with :ok <- validate_mapping(@operation, mapping) do
-      limit = limit(request["first"])
+      limit = limit(request["first"], @default_limit, @max_limit)
       offset = offset(request["after"])
 
       payload = %{
@@ -292,42 +295,8 @@ defmodule DevilsDictionary.Discovery.Providers.Openverse do
 
   def retrieve(_operation, _mapping, _request, _request_fun), do: {:error, "invalid_mapping"}
 
-  defp limit(first) when is_integer(first) and first > 0, do: min(first, @max_limit)
-  defp limit(_first), do: @default_limit
-
-  defp offset(nil), do: 0
-  defp offset(""), do: 0
-
-  defp offset(value) when is_binary(value) do
-    case Integer.parse(value) do
-      {offset, ""} when offset >= 0 -> offset
-      _ -> 0
-    end
-  end
-
-  defp offset(_value), do: 0
-
   defp page(mapping, request, rows, offset, limit, body) do
-    items =
-      rows
-      |> Enum.map(&item(mapping, &1))
-      |> Enum.reject(&is_nil/1)
-      |> Enum.uniq_by(& &1.external_id)
-      |> Enum.uniq_by(&upload/1)
-      |> Enum.with_index(&Map.put(&1, :position, &2))
-
-    request =
-      request
-      |> Map.put("offset", Integer.to_string(offset))
-      |> Map.put("scanned", length(rows))
-      |> Map.put("kept", length(items))
-
-    %{
-      request_parameters: request,
-      items: items,
-      next_cursor: next_cursor(rows, offset, limit, body),
-      completion_reason: if(items == [], do: :no_results, else: :results)
-    }
+    page(request, rows, offset, next_cursor(rows, offset, limit, body), &item(mapping, &1))
   end
 
   # One card per upload, where an upload is one creator's one title.
@@ -342,16 +311,6 @@ defmodule DevilsDictionary.Discovery.Providers.Openverse do
   # match on two fields the provider already carries, inside this provider's
   # own page, before the shelf ever sees them. An item missing either field
   # keeps its own id and folds with nobody.
-  defp upload(item) do
-    case {item.preview_metadata["creator"], item.preview_metadata["title"]} do
-      {creator, title} when is_binary(creator) and is_binary(title) ->
-        {String.downcase(creator), String.downcase(title)}
-
-      _ ->
-        item.external_id
-    end
-  end
-
   # A short page is the last page, and so is the anonymous walk's own ceiling:
   # Openverse answers `page_count` against a `result_count` it caps at 240 for
   # a keyless client, and asking for the page past it is a 400.
@@ -372,8 +331,9 @@ defmodule DevilsDictionary.Discovery.Providers.Openverse do
   # parameter that asked for it.
   defp item(mapping, %{"id" => id} = row) when is_binary(id) and id != "" do
     with {:ok, license} <- license(row),
-         thumbnail when is_binary(thumbnail) <- media(row["thumbnail"]) || media(row["url"]),
-         landing when is_binary(landing) <- media(row["foreign_landing_url"]) do
+         thumbnail when is_binary(thumbnail) <-
+           media_url(row["thumbnail"]) || media_url(row["url"]),
+         landing when is_binary(landing) <- media_url(row["foreign_landing_url"]) do
       %{
         external_namespace: namespace(),
         external_id: id,
@@ -410,7 +370,7 @@ defmodule DevilsDictionary.Discovery.Providers.Openverse do
       "thumbnail_url" => thumbnail,
       # The upstream file, not the thumbnail: `Shelf.canonical_media_url/1`
       # compares this and never the derivative.
-      "image_url" => media(row["url"]) || thumbnail,
+      "image_url" => media_url(row["url"]) || thumbnail,
       "source_url" => landing,
       "license" => license,
       "license_url" => presence(row["license_url"]),
@@ -422,8 +382,7 @@ defmodule DevilsDictionary.Discovery.Providers.Openverse do
       "provider" => "Openverse",
       "upstream_source" => presence(row["source"])
     }
-    |> Enum.reject(fn {_key, value} -> is_nil(value) end)
-    |> Map.new()
+    |> sparse()
   end
 
   @doc """
@@ -527,8 +486,6 @@ defmodule DevilsDictionary.Discovery.Providers.Openverse do
     row |> Map.get("title") |> presence() |> strip() |> clamp()
   end
 
-  @hidden ~r/<(\w+)\b[^>]*style=["'][^"']*display:\s*none[^"']*["'][^>]*>(?:(?!<\1\b).)*?<\/\1>/s
-
   defp strip(nil), do: nil
 
   defp strip(title) do
@@ -545,15 +502,8 @@ defmodule DevilsDictionary.Discovery.Providers.Openverse do
     end
   end
 
-  defp drop_hidden(html) do
-    case Regex.replace(@hidden, html, " ") do
-      ^html -> html
-      stripped -> drop_hidden(stripped)
-    end
-  end
-
   defp clamp(nil), do: nil
-  defp clamp(title), do: title |> String.trim() |> String.slice(0, 255)
+  defp clamp(title), do: title |> String.trim() |> clamp_label()
 
   # The provider's own identity, and the upstream one when the upstream is a
   # source this encyclopedia already holds. The Commons pageid is the exact
@@ -628,27 +578,6 @@ defmodule DevilsDictionary.Discovery.Providers.Openverse do
   # An absolute `http(s)` URL or nothing. A relative or malformed one is not a
   # picture we can hotlink, and a scheme we did not ask for is not one we
   # follow.
-  defp media(value) when is_binary(value) do
-    case URI.parse(String.trim(value)) do
-      %URI{scheme: scheme, host: host}
-      when scheme in ["http", "https"] and is_binary(host) and host != "" ->
-        String.trim(value)
-
-      _uri ->
-        nil
-    end
-  end
-
-  defp media(_value), do: nil
-
-  defp presence(value) when is_binary(value) do
-    case String.trim(value) do
-      "" -> nil
-      trimmed -> trimmed
-    end
-  end
-
-  defp presence(_value), do: nil
-
-  defp config, do: Application.get_env(:devils_dictionary, :openverse, [])
+  # This provider's own stanza; the read is the kit's.
+  defp config, do: DevilsDictionary.Discovery.Provider.Helpers.config(:openverse)
 end

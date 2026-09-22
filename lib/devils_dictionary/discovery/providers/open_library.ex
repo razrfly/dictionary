@@ -39,8 +39,9 @@ defmodule DevilsDictionary.Discovery.Providers.OpenLibrary do
 
   Open Library marks the matched token in the snippet with `{{{…}}}`. That
   marker is the *source's* claim and it is not the evidence: the gate is our
-  own word-boundary test over the snippet with the markers stripped, which is
-  the same gate PoetryDB applies to a poem's lines and the same rule the Met
+  own word-boundary test over the snippet with the markers stripped —
+  `DevilsDictionary.Discovery.Provider.Helpers.whole_word?/2`, the one gate
+  PoetryDB and Bing News ask of their own text and the same rule the Met
   applies to a tag. Measured on 2026-09-18, the markers for `war` and for
   `love` were exact tokens in all forty documents and the gate rejected none of
   them — it is here because the marker is the source's word and the OCR
@@ -81,6 +82,18 @@ defmodule DevilsDictionary.Discovery.Providers.OpenLibrary do
   @behaviour DevilsDictionary.SourceIdentity.Adapter
 
   alias DevilsDictionary.SourceIdentity.Entry
+
+  import DevilsDictionary.Discovery.Provider.Helpers,
+    only: [
+      clamp_label: 1,
+      headers: 0,
+      interval: 3,
+      limit: 2,
+      offset: 1,
+      presence: 1,
+      whole_word?: 2,
+      word_pattern: 1
+    ]
 
   @adapter_version "open_library.attestation.v1"
   @operation "open_library_attestation"
@@ -162,21 +175,14 @@ defmodule DevilsDictionary.Discovery.Providers.OpenLibrary do
       pagination: :offset,
       operations: [@operation],
       content_types: [:text],
-      min_retry_interval_ms: interval(:min_retry_interval_ms, @min_retry_interval_ms),
-      request_interval_ms: interval(:request_interval_ms, @request_interval_ms)
+      min_retry_interval_ms: interval(config(), :min_retry_interval_ms, @min_retry_interval_ms),
+      request_interval_ms: interval(config(), :request_interval_ms, @request_interval_ms)
     }
   end
 
   # Overridable for the same reason the Met's and PoetryDB's are: an interval
   # is a live-rate courtesy, and a suite that paid it would spend a second per
   # stubbed request to be polite to a server it never calls.
-  defp interval(key, default) do
-    case config()[key] do
-      ms when is_integer(ms) and ms >= 0 -> ms
-      _ -> default
-    end
-  end
-
   @impl true
   def enabled? do
     config()[:enabled] != false and is_binary(config()[:endpoint])
@@ -241,17 +247,11 @@ defmodule DevilsDictionary.Discovery.Providers.OpenLibrary do
 
   defp base, do: config()[:endpoint] |> to_string() |> String.trim_trailing("/")
 
-  defp headers do
-    # Open Library asks that a script identify itself with a way to reach its
-    # author. The shared line already carries one.
-    [{"user-agent", Application.fetch_env!(:devils_dictionary, :user_agent)}]
-  end
-
   @impl true
   def retrieve(@operation, mapping, request, request_fun) do
     with :ok <- validate_mapping(@operation, mapping) do
       term = mapping["term"]
-      limit = limit(request)
+      limit = limit(request["first"], @default_limit)
       offset = offset(request["after"])
       page = div(offset, @page_size) + 1
       within = rem(offset, @page_size)
@@ -282,13 +282,6 @@ defmodule DevilsDictionary.Discovery.Providers.OpenLibrary do
   end
 
   def retrieve(_operation, _mapping, _request, _request_fun), do: {:error, "invalid_mapping"}
-
-  defp limit(request) do
-    case request["first"] do
-      first when is_integer(first) and first > 0 -> first
-      _ -> @default_limit
-    end
-  end
 
   @doc """
   The candidate documents of one `search/inside.json` page.
@@ -414,7 +407,7 @@ defmodule DevilsDictionary.Discovery.Providers.OpenLibrary do
   def first_attestation(pattern, snippets) when is_list(snippets) do
     Enum.find_value(snippets, fn snippet ->
       plain = strip_markers(snippet)
-      Regex.match?(pattern, plain) and plain
+      whole_word?(plain, pattern) and plain
     end)
   end
 
@@ -427,19 +420,6 @@ defmodule DevilsDictionary.Discovery.Providers.OpenLibrary do
     |> String.replace("}}}", "")
     |> String.replace(~r/\s+/u, " ")
     |> String.trim()
-  end
-
-  @doc """
-  The word-boundary pattern one term is attested by.
-
-  Unicode boundaries rather than `\\b`, which treats an apostrophe as a
-  boundary and would find *war* inside *war's* but also inside a hyphenated
-  form nobody wrote. This is the same rule
-  `DevilsDictionary.Discovery.Providers.Poetrydb` applies to a poem's lines.
-  """
-  def word_pattern(term) do
-    escaped = Regex.escape(String.trim(term))
-    Regex.compile!("(?<![\\p{L}\\p{N}])#{escaped}(?![\\p{L}\\p{N}])", "iu")
   end
 
   defp empty(request, next_offset, scanned, next_cursor) do
@@ -567,7 +547,10 @@ defmodule DevilsDictionary.Discovery.Providers.OpenLibrary do
       },
       preview_metadata:
         %{
-          "title" => label(title),
+          # Clamped to `entities.preferred_label`'s width, which scanned-book
+          # titles reach: the first result for *war* is 96 characters and
+          # subtitles run much longer.
+          "title" => clamp_label(title),
           "year" => year,
           "artist" => author,
           "author" => author,
@@ -595,11 +578,6 @@ defmodule DevilsDictionary.Discovery.Providers.OpenLibrary do
     do: "https://covers.openlibrary.org/b/id/#{cover_id}-M.jpg"
 
   def cover_url(_cover_id), do: nil
-
-  # `entities.preferred_label` is varchar(255) and Postgres counts characters.
-  # Scanned-book titles reach it: the first result for *war* is 96 characters
-  # and subtitles run much longer.
-  defp label(title), do: String.slice(to_string(title), 0, 255)
 
   @impl DevilsDictionary.SourceIdentity.Adapter
   def identity_record(%{external_namespace: @identity_namespace, external_id: olid} = item) do
@@ -634,17 +612,6 @@ defmodule DevilsDictionary.Discovery.Providers.OpenLibrary do
   defp put_present(map, _key, ""), do: map
   defp put_present(map, key, value), do: Map.put(map, key, value)
 
-  defp offset(nil), do: 0
-
-  defp offset(value) when is_binary(value) do
-    case Integer.parse(value) do
-      {offset, ""} when offset >= 0 -> offset
-      _ -> 0
-    end
-  end
-
-  defp offset(_value), do: 0
-
   defp first([value | _rest]), do: value
   defp first(value) when is_list(value), do: nil
   defp first(value), do: value
@@ -660,14 +627,6 @@ defmodule DevilsDictionary.Discovery.Providers.OpenLibrary do
 
   defp year(_value), do: nil
 
-  defp presence(value) when is_binary(value) do
-    case String.trim(value) do
-      "" -> nil
-      trimmed -> trimmed
-    end
-  end
-
-  defp presence(_value), do: nil
-
-  defp config, do: Application.get_env(:devils_dictionary, :open_library, [])
+  # This provider's own stanza; the read is the kit's.
+  defp config, do: DevilsDictionary.Discovery.Provider.Helpers.config(:open_library)
 end

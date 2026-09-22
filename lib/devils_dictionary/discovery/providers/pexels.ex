@@ -75,6 +75,19 @@ defmodule DevilsDictionary.Discovery.Providers.Pexels do
   @license "Pexels"
   @license_url "https://www.pexels.com/license/"
 
+  import DevilsDictionary.Discovery.Provider.Helpers,
+    only: [
+      clamp_label: 1,
+      headers: 0,
+      interval: 3,
+      limit: 3,
+      media_url: 1,
+      offset: 1,
+      page: 5,
+      presence: 1,
+      sparse: 1
+    ]
+
   @doc "The identity namespace one Pexels photo is registered under: its numeric id."
   def namespace, do: "pexels_photo"
 
@@ -119,16 +132,9 @@ defmodule DevilsDictionary.Discovery.Providers.Pexels do
       pagination: :offset,
       operations: [@operation],
       content_types: [:image],
-      min_retry_interval_ms: interval(:min_retry_interval_ms, @min_retry_interval_ms),
-      request_interval_ms: interval(:request_interval_ms, @request_interval_ms)
+      min_retry_interval_ms: interval(config(), :min_retry_interval_ms, @min_retry_interval_ms),
+      request_interval_ms: interval(config(), :request_interval_ms, @request_interval_ms)
     }
-  end
-
-  defp interval(key, default) do
-    case config()[key] do
-      ms when is_integer(ms) and ms >= 0 -> ms
-      _ -> default
-    end
   end
 
   @impl true
@@ -178,21 +184,19 @@ defmodule DevilsDictionary.Discovery.Providers.Pexels do
         "page" => page,
         "per_page" => page_size
       },
-      headers: headers()
+      headers: auth_headers()
     ]
   end
 
-  defp headers do
-    [
-      {"authorization", config()[:api_key]},
-      {"user-agent", Application.fetch_env!(:devils_dictionary, :user_agent)}
-    ]
+  # The key is Pexels'; the user-agent line is the kit's.
+  defp auth_headers do
+    [{"authorization", config()[:api_key]} | headers()]
   end
 
   @impl true
   def retrieve(@operation, mapping, request, request_fun) do
     with :ok <- validate_mapping(@operation, mapping) do
-      limit = limit(request["first"])
+      limit = limit(request["first"], @default_limit, @max_limit)
       offset = offset(request["after"])
 
       payload = %{
@@ -224,42 +228,8 @@ defmodule DevilsDictionary.Discovery.Providers.Pexels do
 
   def retrieve(_operation, _mapping, _request, _request_fun), do: {:error, "invalid_mapping"}
 
-  defp limit(first) when is_integer(first) and first > 0, do: min(first, @max_limit)
-  defp limit(_first), do: @default_limit
-
-  defp offset(nil), do: 0
-  defp offset(""), do: 0
-
-  defp offset(value) when is_binary(value) do
-    case Integer.parse(value) do
-      {offset, ""} when offset >= 0 -> offset
-      _ -> 0
-    end
-  end
-
-  defp offset(_value), do: 0
-
   defp page(mapping, request, rows, offset, limit, body) do
-    items =
-      rows
-      |> Enum.map(&item(mapping, &1))
-      |> Enum.reject(&is_nil/1)
-      |> Enum.uniq_by(& &1.external_id)
-      |> Enum.uniq_by(&upload/1)
-      |> Enum.with_index(&Map.put(&1, :position, &2))
-
-    request =
-      request
-      |> Map.put("offset", Integer.to_string(offset))
-      |> Map.put("scanned", length(rows))
-      |> Map.put("kept", length(items))
-
-    %{
-      request_parameters: request,
-      items: items,
-      next_cursor: next_cursor(rows, offset, limit, body),
-      completion_reason: if(items == [], do: :no_results, else: :results)
-    }
+    page(request, rows, offset, next_cursor(rows, offset, limit, body), &item(mapping, &1))
   end
 
   # One card per upload, the same rule Openverse and Unsplash keep. Measured
@@ -267,16 +237,6 @@ defmodule DevilsDictionary.Discovery.Providers.Pexels do
   # photo, so one photographer's eight frames carry eight different sentences.
   # It stays because the rule belongs to the shelf's promise and not to the
   # provider that happens to need it.
-  defp upload(item) do
-    case {item.preview_metadata["creator"], item.preview_metadata["title"]} do
-      {creator, title} when is_binary(creator) and is_binary(title) ->
-        {String.downcase(creator), String.downcase(title)}
-
-      _ ->
-        item.external_id
-    end
-  end
-
   # The walk ends on an empty page, or where `total_results` says it does.
   #
   # Not on a *short* page, which is the rule every other provider here keeps:
@@ -302,8 +262,10 @@ defmodule DevilsDictionary.Discovery.Providers.Pexels do
     src = row["src"] || %{}
 
     with title when is_binary(title) <- title(row),
-         thumbnail when is_binary(thumbnail) <- media(src["medium"]) || media(src["small"]),
-         full when is_binary(full) <- media(src["original"]) || media(src["large2x"]) || thumbnail do
+         thumbnail when is_binary(thumbnail) <-
+           media_url(src["medium"]) || media_url(src["small"]),
+         full when is_binary(full) <-
+           media_url(src["original"]) || media_url(src["large2x"]) || thumbnail do
       %{
         external_namespace: namespace(),
         external_id: to_string(id),
@@ -351,8 +313,7 @@ defmodule DevilsDictionary.Discovery.Providers.Pexels do
       "content_type" => "image",
       "provider" => "Pexels"
     }
-    |> Enum.reject(fn {_key, value} -> is_nil(value) end)
-    |> Map.new()
+    |> sparse()
   end
 
   # The line Pexels asks for. The renderer links the photographer's name to
@@ -373,32 +334,11 @@ defmodule DevilsDictionary.Discovery.Providers.Pexels do
   defp clamp(nil), do: nil
 
   defp clamp(title),
-    do: title |> String.replace(~r/\s+/u, " ") |> String.trim() |> String.slice(0, 255)
+    do: title |> String.replace(~r/\s+/u, " ") |> String.trim() |> clamp_label()
 
   # An absolute `http(s)` URL or nothing. A relative or malformed one is not a
   # picture we can hotlink, and a scheme we did not ask for is not one we
   # follow.
-  defp media(value) when is_binary(value) do
-    case URI.parse(String.trim(value)) do
-      %URI{scheme: scheme, host: host}
-      when scheme in ["http", "https"] and is_binary(host) and host != "" ->
-        String.trim(value)
-
-      _uri ->
-        nil
-    end
-  end
-
-  defp media(_value), do: nil
-
-  defp presence(value) when is_binary(value) do
-    case String.trim(value) do
-      "" -> nil
-      trimmed -> trimmed
-    end
-  end
-
-  defp presence(_value), do: nil
-
-  defp config, do: Application.get_env(:devils_dictionary, :pexels, [])
+  # This provider's own stanza; the read is the kit's.
+  defp config, do: DevilsDictionary.Discovery.Provider.Helpers.config(:pexels)
 end

@@ -180,6 +180,29 @@ mix compile
 
 ---
 
+## 3a. The kit, before you write a helper
+
+Before you write `presence/1`, a user-agent line, an offset reader or — above
+all — a word-boundary pattern, look in
+`DevilsDictionary.Discovery.Provider.Helpers`. It has them, the generator
+already imported the ones your flags imply, and the README's
+[*The kit a provider imports*](README.md#the-kit-a-provider-imports) lists the
+rest.
+
+The one that is not negotiable is the **attestation gate**. If your provider's
+evidence is that a work uses the word, the question is
+`Helpers.whole_word?(text, term)` and never a `String.contains?/2`, a `~r/\b/`
+of your own, or the source's own claim that it matched. That rule existed as
+three byte-identical private copies until #144 Phase 1, two of them pointing at
+the third as their authority, and `test/devils_dictionary/discovery/provider/helpers_test.exs`
+now asserts the three providers agree line for line because they ask one
+function.
+
+If you find yourself writing something the kit nearly has, say so in the PR
+rather than copying: a fourth copy is how the first three happened.
+
+---
+
 ## 4. The stub, and then the real one
 
 The scaffold parses a **scaffolded envelope**, not the real API's:
@@ -192,9 +215,16 @@ The scaffold parses a **scaffolded envelope**, not the real API's:
 %{"data" => %{"search" => %{"nodes" => [...], "pageInfo" => %{"endCursor" => _, "hasNextPage" => _}}}}
 ```
 
-It passes conformance as generated, which proves the wiring and nothing about the
-source. Making it true is three edits in the provider and one in the fixture, and
-they move together:
+It passes conformance as generated — which proves the wiring and nothing about
+the source. (It had **not** passed since #116 M6 landed the evidence check: the
+scaffold wrote a `:query` reason onto whatever shelf you asked for, and five of
+the six rows refuse one. The generator now writes a reason of a class its row
+admits, gates an attestation shelf through the kit's `whole_word?/2`, and
+carries the credit an `attribution: :required` row demands. Fixed in #144
+Phase 1; this paragraph was stale for three phases.)
+
+Making it true of the real source is three edits in the provider and one in the
+fixture, and they move together:
 
 1. `request_options/1` — the real URL, parameters and headers
 2. `parse/1` — the real response shape

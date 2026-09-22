@@ -54,6 +54,17 @@ defmodule DevilsDictionary.Discovery.Providers.Commons do
   @adapter_version "commons.depicts.v1"
   @operation "depicts_qid_discovery"
 
+  import DevilsDictionary.Discovery.Provider.Helpers,
+    only: [
+      clamp_label: 1,
+      drop_hidden: 1,
+      headers: 0,
+      interval: 3,
+      limit: 3,
+      presence: 1,
+      year: 1
+    ]
+
   @doc "The identity namespace one Commons file is registered under: its page id."
   def namespace, do: "commons_file"
 
@@ -124,16 +135,9 @@ defmodule DevilsDictionary.Discovery.Providers.Commons do
       pagination: :cursor,
       operations: [@operation],
       content_types: [:image],
-      min_retry_interval_ms: interval(:min_retry_interval_ms, @min_retry_interval_ms),
-      request_interval_ms: interval(:request_interval_ms, @request_interval_ms)
+      min_retry_interval_ms: interval(config(), :min_retry_interval_ms, @min_retry_interval_ms),
+      request_interval_ms: interval(config(), :request_interval_ms, @request_interval_ms)
     }
-  end
-
-  defp interval(key, default) do
-    case config()[key] do
-      ms when is_integer(ms) and ms >= 0 -> ms
-      _ -> default
-    end
   end
 
   @impl true
@@ -204,10 +208,6 @@ defmodule DevilsDictionary.Discovery.Providers.Commons do
   defp base_params,
     do: %{"format" => "json", "formatversion" => "2", "maxlag" => Integer.to_string(@maxlag)}
 
-  defp headers do
-    [{"user-agent", Application.fetch_env!(:devils_dictionary, :user_agent)}]
-  end
-
   @impl true
   def retrieve(@operation, mapping, request, request_fun) do
     with :ok <- validate_mapping(@operation, mapping) do
@@ -227,7 +227,7 @@ defmodule DevilsDictionary.Discovery.Providers.Commons do
   end
 
   defp search(entities, request, request_fun) do
-    limit = request["first"] |> limit()
+    limit = limit(request["first"], @default_limit, @max_limit)
 
     with {:ok, continuation} <- cursor(request["after"]) do
       params =
@@ -276,9 +276,6 @@ defmodule DevilsDictionary.Discovery.Providers.Commons do
       :error -> {:error, "malformed_cursor"}
     end
   end
-
-  defp limit(first) when is_integer(first) and first > 0, do: min(first, @max_limit)
-  defp limit(_first), do: @default_limit
 
   # One CirrusSearch clause for every QID: `haswbstatement:P180=Q1|P180=Q2`.
   # Measured as a union — 26,220 hits for dog OR Canidae against 26,131 and 115.
@@ -514,7 +511,7 @@ defmodule DevilsDictionary.Discovery.Providers.Commons do
         true -> name
       end
 
-    String.slice(chosen, 0, 255)
+    clamp_label(chosen)
   end
 
   defp english(raw) when is_binary(raw) do
@@ -596,15 +593,6 @@ defmodule DevilsDictionary.Discovery.Providers.Commons do
     |> String.trim()
   end
 
-  @hidden ~r/<(\w+)\b[^>]*style="[^"]*display:\s*none[^"]*"[^>]*>(?:(?!<\1\b).)*?<\/\1>/s
-
-  defp drop_hidden(html) do
-    case Regex.replace(@hidden, html, " ") do
-      ^html -> html
-      stripped -> drop_hidden(stripped)
-    end
-  end
-
   defp item(candidate, depicts) do
     external_id = Integer.to_string(candidate.pageid)
 
@@ -665,15 +653,6 @@ defmodule DevilsDictionary.Discovery.Providers.Commons do
   # `DateTimeOriginal` is free text — "2006-10-16", "Taken on 6 June 1944",
   # "circa 1944-06-06", "1887". The first four-digit run is the only part that
   # is a year, and there may not be one.
-  defp year(value) when is_binary(value) do
-    case Regex.run(~r/\b(1\d{3}|20\d{2})\b/, value) do
-      [_, year] -> year
-      _ -> nil
-    end
-  end
-
-  defp year(_value), do: nil
-
   @impl DevilsDictionary.SourceIdentity.Adapter
   def identity_record(%{external_namespace: "commons_file", external_id: pageid} = item) do
     metadata = item.preview_metadata
@@ -718,14 +697,6 @@ defmodule DevilsDictionary.Discovery.Providers.Commons do
 
   defp integer_year(_year), do: nil
 
-  defp presence(value) when is_binary(value) do
-    case String.trim(value) do
-      "" -> nil
-      trimmed -> trimmed
-    end
-  end
-
-  defp presence(_value), do: nil
-
-  defp config, do: Application.get_env(:devils_dictionary, :commons, [])
+  # This provider's own stanza; the read is the kit's.
+  defp config, do: DevilsDictionary.Discovery.Provider.Helpers.config(:commons)
 end

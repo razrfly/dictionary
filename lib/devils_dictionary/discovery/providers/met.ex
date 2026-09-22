@@ -34,6 +34,9 @@ defmodule DevilsDictionary.Discovery.Providers.Met do
   alias DevilsDictionary.Discovery.Providers.Met.BroaderWalk
   alias DevilsDictionary.SourceIdentity.Entry
 
+  import DevilsDictionary.Discovery.Provider.Helpers,
+    only: [clamp_label: 1, headers: 0, interval: 3, presence: 1]
+
   @adapter_version "met.openaccess.v1"
   @operation "tag_qid_discovery"
 
@@ -105,15 +108,8 @@ defmodule DevilsDictionary.Discovery.Providers.Met do
       # `Process.sleep/1` this provider hides inside its own hydration loop.
       # 3 s is the measured sustainable rate: 44% of 2,600 requests were refused
       # at 1 req/s and none at 3 s/request.
-      request_interval_ms: request_interval_ms()
+      request_interval_ms: interval(config(), :request_interval_ms, @request_interval_ms)
     }
-  end
-
-  defp request_interval_ms do
-    case config()[:request_interval_ms] do
-      ms when is_integer(ms) and ms >= 0 -> ms
-      _ -> @request_interval_ms
-    end
   end
 
   @impl true
@@ -212,10 +208,6 @@ defmodule DevilsDictionary.Discovery.Providers.Met do
 
   def request_options(%{"endpoint" => "object", "object_id" => object_id}) do
     [method: :get, url: "#{@base}#{@object_path}/#{object_id}", headers: headers()]
-  end
-
-  defp headers do
-    [{"user-agent", Application.fetch_env!(:devils_dictionary, :user_agent)}]
   end
 
   @impl true
@@ -524,14 +516,14 @@ defmodule DevilsDictionary.Discovery.Providers.Met do
       end
   end
 
-  # `entities.preferred_label` is varchar(255) and Postgres counts characters,
-  # so this is the column's own width. 16 of the 1,644 highlight titles in
-  # `met-highlights-v1` exceed it (the longest is 498), and a 300-character
-  # clamp reached the database as a 22001 and killed the run.
+  # Clamped to `entities.preferred_label`'s width, which this source reaches:
+  # 16 of the 1,644 highlight titles in `met-highlights-v1` exceed it (the
+  # longest is 498), and a 300-character clamp reached the database as a 22001
+  # and killed the run.
   defp title(object) do
     case presence(object["title"]) do
       nil -> "Untitled"
-      title -> String.slice(title, 0, 255)
+      title -> clamp_label(title)
     end
   end
 
@@ -587,14 +579,6 @@ defmodule DevilsDictionary.Discovery.Providers.Met do
     end
   end
 
-  defp presence(value) when is_binary(value) do
-    case String.trim(value) do
-      "" -> nil
-      trimmed -> trimmed
-    end
-  end
-
-  defp presence(_value), do: nil
-
-  defp config, do: Application.get_env(:devils_dictionary, :met, [])
+  # This provider's own stanza; the read is the kit's.
+  defp config, do: DevilsDictionary.Discovery.Provider.Helpers.config(:met)
 end

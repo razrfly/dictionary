@@ -25,7 +25,7 @@ finished. Where a claim is not yet true everywhere, the last column says so.
 | 2 | **One shelf per content type, never per source.** A reader sees one rail of images, with every contributing source credited once in its header, items taking turns by tier then slug, one item per identity and one per media URL. | The multi-source conformance check (two stubs on one type → one shelf of 14); the browser proof each phase records | Live before corpus is a fixed order, by decision (K2); tier is the only trust weighting. **Two shelves now hold more than one real source**: `:image` since #116 Phase 2, and `:news` since #142 — `/define/bestiality` is one rail of 17 bylined *Bing News · The Guardian*, taking turns by slug because both are `:plebs`, and the second is the first pair to share an identity namespace (`news_article`) across providers that never call into each other |
 | 3 | **Every item says why it is here, in one sentence, from fields and nothing else.** | Conformance: every result carries a reason, it renders, it ends with a full stop, its class is admitted | The locator has three shapes: a line (PoetryDB), a page (Open Library, which leaves it empty rather than call a page a line) and a **date** — `a headline, Wired, 15 September 2026`, Bing News, #135. It is a `"locator"` string in `match_details` and not a clause in `MatchReason`, which is why the third shape cost that module nothing. The dated shape exposed one wrinkle and #142 closed it: the preposition was fixed at *at*, which is right for a numbered **point** (*at line 4*) and wrong for a named **part** (*at a headline*). `MatchReason`'s `at/1` now reads a leading determiner and renders *in* for a part, so Bing's reads *in a headline* and the Guardian's *in the text* without either provider changing |
 | 4 | **Every item carries what its licence owes — and so does every shelf.** A shelf whose row requires attribution shows a credit beneath every thumbnail, always visible, never on hover, **and linked** where the item names a URL for the creator or the licence. A *source* whose licence makes a mark a condition of use declares one, and the shelf draws it beside its byline, unclamped and never behind a pointer. | The `attribution` column; conformance asserts the credit node on every item of a `:required` shelf, that it carries no line clamp, and that its links are the creator's and the licence's. The mark is the provider's optional `attribution_mark/0`, read onto the state like `shelf_detail/0` | A per-item credit is the content type's obligation and a per-shelf mark is the source's; the Guardian (#142) is the first source to owe the second, under clause 6(b)(vi) of the Open Platform terms |
-| 5 | **Adding a source touches no shared file.** A provider is its own module, fixture, conformance suite and, for a corpus, manifest; the generator writes every registration. | `conformance_coverage_test.exs`: every registered provider has a suite, every fixture is run, every manifest has a suite; each phase report's *shared files touched* list | Adding a *shelf* is one row in the table, shared by design; adding a corpus *kind* is a seeder clause |
+| 5 | **Adding a source touches no shared file.** A provider is its own module, fixture, conformance suite and, for a corpus, manifest; the generator writes every registration, and the small things every provider needs are imported from `Provider.Helpers` rather than copied into it (#144 Phase 1). | `conformance_coverage_test.exs`: every registered provider has a suite, every fixture is run, every manifest has a suite; each phase report's *shared files touched* list; `grep -c 'defp word_pattern' lib/devils_dictionary/discovery/providers/*.ex` is 0 | Adding a *shelf* is one row in the table, shared by design; adding a corpus *kind* is a seeder clause |
 | 6 | **Nothing is spent without a ledger, and no bytes are held.** Every live request is a row in `discovery_request_attempts`; results are URLs and metadata; images are hotlinked from the provider's host. | The ledger; the transport's budget; D14; conformance's coverage gate (a provider declines before anything is spent) | — |
 | 7 | **An honest empty.** A word with nothing shows nothing on that shelf, rather than filler, a wrong meaning, or another word's results. | Each phase's proof includes a word expected to be empty (`nepotism`, then `logomachy`) | **Not true of `:image` any more, by decision (#116 D2).** A keyword provider declines nothing (M6), and Pexels has no empty at all: measured 2026-09-19, `/define/logomachy` — where Commons, Openverse and Unsplash all return nothing — carries eleven Pexels photographs, so **no word is without an Images shelf**. What the shelf keeps is the *label*: every such item's reason reads *Search result for “…”, ranked by the provider and not matched on an identifier.* The lever, if the owner wants the empty back, is D2's one clause: hide a shelf whose every state is `:query`-only. Relevance to one *meaning* of a polysemous word is unverified and says so (#101's) |
 | 8 | **Composition is read-time; persisted results are never rewritten.** Order, dedup and credit are computed when the page renders, from what providers persisted. | `Shelf` is pure; `display_items/1` reads identifiers back as a virtual field; schema impact of #116 Phase 1 was zero | — |
@@ -598,6 +598,70 @@ result and the identity stub's naming its QID. The single-provider suite
 asserts the two table columns for every registered provider: a `:required`
 shelf renders every item's credit, and every reason is of a class the row
 admits.
+
+---
+
+## The kit a provider imports
+
+`DevilsDictionary.Discovery.Provider.Helpers` is the dozen small things every
+provider needs, written once (#144 Phase 1). Nine providers, three generations
+deep, had arrived at them independently: eight copies of `presence/1`, nine of
+the shared user-agent line, seven of the config-overridable pacing read, and
+**three byte-identical copies of the whole-word attestation gate**, two of whose
+moduledocs named PoetryDB's copy as the authority for the copy they held. A
+shared rule implemented eleven times is eleven rules that happen to agree today.
+
+| Helper | What it is |
+|---|---|
+| `presence/1`, `present?/1` | a trimmed string or `nil`; an API's "no value here" is absent, `null`, `""` or three spaces depending on the day |
+| `headers/0` | the shared user-agent. A keyed provider prepends its own header to it |
+| `config/1` | a provider's own stanza, as a keyword list |
+| `interval/3` | one pacing key from that stanza, or the provider's measured default |
+| `offset/1` | a cursor read back as a non-negative offset |
+| `limit/2`, `limit/3` | the asked-for page size, the default, and the API's ceiling |
+| `media_url/1` | an absolute `http(s)` URL with a host, or `nil` — everything the renderer will put in an `href` |
+| `clamp_label/1`, `label_limit/0` | `entities.preferred_label`'s `varchar(255)`, in one place instead of seven |
+| `sparse/1` | a map with its `nil` values dropped |
+| `year/1`, `iso_year/1` | a year in free text; the year of an ISO date |
+| `drop_hidden/1` | HTML with its `display: none` elements removed, repeatedly |
+| **`word_pattern/1`, `whole_word?/2`** | **the** attestation gate |
+| `page/5`, `upload/1` | one offset-paged page, as the three image providers build it |
+
+`Helpers.News` holds what a news provider needs and no news provider should
+own: `normalize/1` and `article_id/1`, the URL normalisation two feeds on the
+`news_article` namespace must agree on for `Shelf.dedup/2` to fold the same
+story reported twice. They were Bing's, public and called by nobody, and #142's
+plan was for the Guardian to call them — a provider depending on a sibling for
+a rule that belongs to the shelf.
+
+A provider takes what it uses:
+
+```elixir
+import DevilsDictionary.Discovery.Provider.Helpers,
+  only: [headers: 0, limit: 2, offset: 1, presence: 1, whole_word?: 2]
+```
+
+An `import` and not callbacks injected by `use`: injection would make every
+helper a public function of every provider (`defoverridable` needs `def`), an
+injected function has no definition a reader can find, and `only:` makes the
+compiler warn when a provider stops using one.
+
+**Two of the copies had already drifted**, which is the argument in one line.
+`drop_hidden/1` existed twice with different quote classes, so the same hidden
+`<span style='display:none'>` was stripped by one provider and shown by the
+other; the superset is in the kit. And all three copies of the attestation gate
+carried the same explanation — that `\b` "treats an apostrophe as a boundary"
+— which, measured, is not a difference: `war's` and `war-torn` match under both
+rules. The one case they disagree on is the **underscore**, which `\w`
+includes and `\p{L}\p{N}` does not. The pattern is unchanged; only the
+explanation was wrong, in all three places.
+
+What is deliberately *not* in the kit, because providers do similar things
+rather than the same thing: `next_cursor/4` (three different end-of-results
+rules over identical page builders), CineGraph's and Open Library's year
+readers (one takes four characters off a date, the other coerces an integer
+field and returns an integer), and whatever a provider does to a title
+*before* `clamp_label/1`.
 
 ---
 

@@ -138,8 +138,13 @@ defmodule Mix.Tasks.Dd.Provider.New do
     }
 
     if archetype in ~w(discovery both) do
+      content_type = content_type!(opts)
+
       Map.merge(base, %{
-        content_type: content_type!(opts),
+        content_type: content_type,
+        reason: reason_kind(content_type),
+        attribution:
+          DevilsDictionary.Discovery.ContentTypes.attribution(content_type_atom(content_type)),
         transport: choice!(opts, :transport, @transports),
         pagination: choice!(opts, :pagination, @paginations)
       })
@@ -147,6 +152,24 @@ defmodule Mix.Tasks.Dd.Provider.New do
       base
     end
   end
+
+  # Which reason shape the scaffold writes, from the shelf it was asked for.
+  #
+  # The content-type table says which classes of evidence a row admits, and a
+  # scaffold that ignores it generates a **red** conformance suite: before
+  # #144 Phase 1, `--content-type text` produced a provider whose every result
+  # carried a `:query` reason onto a shelf admitting only `:attestation`, and
+  # `adding-a-provider.md`'s claim that the scaffold passes as generated had
+  # been stale since #116 M6 landed the check.
+  #
+  # Each of these is still a scaffold: the *evidence* is the thing step 4 of
+  # the checklist makes real. What the generator can do is start you on the
+  # shape your shelf will accept rather than one it will refuse.
+  defp content_type_atom(content_type), do: String.to_existing_atom(content_type)
+
+  defp reason_kind(content_type) when content_type in ~w(text news), do: "attestation"
+  defp reason_kind(content_type) when content_type in ~w(image gif), do: "query"
+  defp reason_kind(_content_type), do: "keyword"
 
   # Hyphen-separated segments, and no empty ones: a trailing or doubled hyphen
   # would make the slug → module name mapping lossy. `Macro.camelize/1` folds
@@ -531,6 +554,15 @@ defmodule Mix.Tasks.Dd.Provider.New do
 
       @behaviour DevilsDictionary.Discovery.Provider
 
+      # The kit (#144 Phase 1). Take what you use and nothing else — the
+      # compiler warns about the rest, which is what keeps this list honest.
+      # `whole_word?/2` and `word_pattern/1` are in there too, and they are
+      # *the* attestation gate: a text provider asks the kit whether the word
+      # is used, and never writes its own boundary rule.
+      import DevilsDictionary.Discovery.Provider.Helpers,
+        only: [<%= if @reason == "attestation" do %>whole_word?: 2, <% end %><%= if @attribution == :required do %>media_url: 1, <% end %><%= if @pagination == "offset" do %>offset: 1, <% end %>headers: 0,
+               limit: 2, presence: 1, sparse: 1]
+
       @adapter_version "<%= @underscored %>.v1"
       @operation "<%= @operation %>"
 
@@ -637,14 +669,10 @@ defmodule Mix.Tasks.Dd.Provider.New do
         ]
       end
     <% end %>
-      defp headers do
-        [{"user-agent", Application.fetch_env!(:devils_dictionary, :user_agent)}]
-      end
-
       @impl true
       def retrieve(@operation, mapping, request, request_fun) do
         with :ok <- validate_mapping(@operation, mapping) do
-          limit = request["first"] || 10
+          limit = limit(request["first"], 10)
     <%= if @pagination == "offset" do %>      offset = offset(request["after"])
 
           payload = %{
@@ -703,16 +731,6 @@ defmodule Mix.Tasks.Dd.Provider.New do
         }
       end
 
-      defp offset(nil), do: 0
-
-      defp offset(value) when is_binary(value) do
-        case Integer.parse(value) do
-          {offset, ""} when offset >= 0 -> offset
-          _ -> 0
-        end
-      end
-
-      defp offset(_value), do: 0
     <% else %>
       defp page(mapping, request, rows, cursor) do
         items = items(mapping, rows)
@@ -742,37 +760,121 @@ defmodule Mix.Tasks.Dd.Provider.New do
       # the reason the shared builder produced and against your content type's
       # row, so changing the shape here means changing both keys with it.
       #
-      # The scaffold names no reason, which renders as *the provider returned
-      # this result for “war”*; that is honest and it is not good enough to
-      # ship anywhere but the `:image` shelf, whose row admits a labelled
-      # search and says so.
+      # The shape is chosen from the shelf you asked for: the `:<%= @content_type %>`
+      # row admits <%= @reason %>-class evidence, so that is what this writes.
+      # It is still a scaffold — what makes it *true* is step 4 of the
+      # checklist, and the comment on `match_details/2` below says what to
+      # replace.
       defp item(mapping, %{"id" => id} = row) when not is_nil(id) do
+        with true <- attested?(mapping, row) do
         %{
           external_namespace: "<%= @namespace %>",
           external_id: to_string(id),
           position: 0,
-          match_details: %{
-            "kind" => "query",
-            "evidence" => "query",
-            "query" => mapping["term"]
-          },
+          match_details: match_details(mapping, row),
+          # `sparse/1` and not a map literal: a key whose value is `nil` is a
+          # key that exists, and the renderer reads an absent field and a
+          # present-but-empty one as two different facts.
           preview_metadata:
-            %{
-              "title" => row["title"],
+            sparse(%{
+              "title" => presence(row["title"]),
               "year" => row["year"],
               "source_url" => row["url"],
               "content_type" => "<%= @content_type %>",
-              "provider" => "<%= @name %>"
-            }
-            |> Enum.reject(fn {_key, value} -> is_nil(value) end)
-            |> Map.new(),
+              "provider" => "<%= @name %>"<%= if @attribution == :required do %>,
+              # The `:<%= @content_type %>` row's `attribution` is `:required`, so **every**
+              # item carries a credit and the card shows it beneath the
+              # thumbnail, always. Conformance fails the first item without
+              # one, and fails a credit that is a paragraph or carries a URL —
+              # the licence link goes on the licence name, not in the prose
+              # (D2 of #126).
+              "thumbnail_url" => media_url(row["thumbnail_url"]),
+              "image_url" => media_url(row["image_url"]) || media_url(row["thumbnail_url"]),
+              "creator" => presence(row["creator"]),
+              "creator_url" => media_url(row["creator_url"]),
+              "license" => presence(row["license"]),
+              "license_url" => media_url(row["license_url"]),
+              "attribution" => credit(row)<% end %>
+            }),
           display_allowed: true
         }
+        else
+          _ -> nil
+        end
       end
 
       defp item(_mapping, _row), do: nil
+    <%= if @attribution == :required do %>
+      # One sentence, no URL, under 160 characters. The renderer links the
+      # creator's name and the licence name using `creator_url` and
+      # `license_url`, so this is the line and never the markup.
+      defp credit(row) do
+        case {presence(row["creator"]), presence(row["license"])} do
+          {nil, nil} -> nil
+          {nil, license} -> license
+          {creator, nil} -> creator
+          {creator, license} -> "#{creator} · #{license}"
+        end
+      end
+    <% end %>    <%= if @reason == "attestation" do %>
+      # The reason, declared (#144 Phase 0) and shaped to the `:<%= @content_type %>`
+      # shelf, which admits attestation and nothing else: this work **uses**
+      # the word, at a locator. `"text"` is what a reader sees quoted and
+      # `"locator"` is where — a line number, a page, a date. Replace both with
+      # the real ones, and gate on them: `item/2` above returns `nil` for a row
+      # whose text does not use the term, through the kit's `whole_word?/2`,
+      # which is *the* attestation gate and never a `String.contains?/2`.
+      defp match_details(mapping, row) do
+        %{
+          "kind" => "attestation",
+          "evidence" => "attestation",
+          "query" => mapping["term"],
+          "lines" => [%{"number" => nil, "locator" => nil, "text" => row["title"]}]
+        }
+      end
 
-      defp config, do: Application.get_env(:devils_dictionary, :<%= @underscored %>, [])
+      # The gate, and not a formality. `whole_word?/2` is the kit's and it is
+      # *the* attestation gate — never `String.contains?/2`, which finds *war*
+      # in *warehouse*, and never the source's own claim that it matched.
+      defp attested?(mapping, row) do
+        whole_word?(to_string(row["title"]), mapping["term"])
+      end
+    <% end %><%= if @reason == "keyword" do %>
+      # The reason, declared (#144 Phase 0) and shaped to the `:<%= @content_type %>`
+      # shelf, which admits **identity only**: a result is kept because an
+      # identifier matched an identifier. `"tmdbId"` is the placeholder for
+      # yours — a keyword id, an accession number, whatever the source
+      # publishes — and a reason with no identifier in it renders as *matched
+      # the keyword "war"*, which is the prompt to go and find one.
+      defp match_details(mapping, row) do
+        %{
+          "kind" => "keyword",
+          "evidence" => "identity",
+          "query" => mapping["term"],
+          "keywords" => [%{"name" => mapping["term"], "tmdbId" => row["keyword_id"]}]
+        }
+      end
+
+      # An identity shelf keeps a result because an identifier matched, so the
+      # place to decline is where you compare them. Nothing to gate on the
+      # scaffolded envelope.
+      defp attested?(_mapping, _row), do: true
+    <% end %><%= if @reason == "query" do %>
+      # The reason, declared (#144 Phase 0). The `:<%= @content_type %>` shelf is one of
+      # the two whose row admits a labelled search, so a result that matched no
+      # identifier says so and is rendered as *search result for "war", ranked
+      # by the provider and not matched on an identifier*. On any other shelf
+      # this is a red suite, which is the point.
+      defp match_details(mapping, _row) do
+        %{"kind" => "query", "evidence" => "query", "query" => mapping["term"]}
+      end
+
+      # A labelled search declines nothing: the shelf says what it is.
+      defp attested?(_mapping, _row), do: true
+    <% end %>
+      # This provider's own stanza; the read is the kit's.
+      defp config,
+        do: DevilsDictionary.Discovery.Provider.Helpers.config(:<%= @underscored %>)
     end
     '''
   end
@@ -830,9 +932,19 @@ defmodule Mix.Tasks.Dd.Provider.New do
         Enum.map(1..count//1, fn id ->
           %{
             "id" => id,
-            "title" => "<%= @name %> result #{id}",
+            # The title **uses the covered target's term**. On an attestation
+            # shelf the provider gates on exactly that, so a row that did not
+            # would be filtered out and the ids below would be a lie; on the
+            # other shelves it costs nothing and reads the same.
+            "title" => "<%= @name %> result #{id}: a war story",
             "year" => "1751",
-            "url" => "https://<%= @slug %>.test/items/#{id}"
+            "url" => "https://<%= @slug %>.test/items/#{id}"<%= if @attribution == :required do %>,
+            "thumbnail_url" => "https://<%= @slug %>.test/thumb/#{id}.jpg",
+            "image_url" => "https://<%= @slug %>.test/full/#{id}.jpg",
+            "creator" => "A. Photographer",
+            "creator_url" => "https://<%= @slug %>.test/people/#{id}",
+            "license" => "CC BY 4.0",
+            "license_url" => "https://creativecommons.org/licenses/by/4.0/"<% end %>
           }
         end)
       end

@@ -35,10 +35,11 @@ defmodule DevilsDictionary.Discovery.Providers.BingNews do
       `now/0`, and everything older is dropped at retrieval. A word whose only
       coverage is old is an honest empty, cached as a negative.
     * **Aboutness.** The word has to actually be in the text. The gate is a
-      whole-word match of the term in `title`, else in `description`, at a
-      Unicode boundary rather than `\\b` — the same gate
-      `DevilsDictionary.Discovery.Providers.Poetrydb.first_attestation/2`
-      applies to a poem's lines, asked of a headline.
+      whole-word match of the term in `title`, else in `description`,
+      through `DevilsDictionary.Discovery.Provider.Helpers.whole_word?/2` —
+      the one gate, asked of a headline rather than of a poem's line. It was a
+      private copy here until #144 Phase 1, with a comment naming PoetryDB's
+      copy as its authority.
 
   ## `mkt=en-US`, which is not cosmetic
 
@@ -91,6 +92,20 @@ defmodule DevilsDictionary.Discovery.Providers.BingNews do
 
   @behaviour DevilsDictionary.Discovery.Provider
 
+  import DevilsDictionary.Discovery.Provider.Helpers,
+    only: [
+      headers: 0,
+      interval: 3,
+      limit: 2,
+      offset: 1,
+      presence: 1,
+      present?: 1,
+      whole_word?: 2,
+      word_pattern: 1
+    ]
+
+  alias DevilsDictionary.Discovery.Provider.Helpers.News
+
   @adapter_version "bing_news.attestation.v1"
   @operation "bing_news_attestation"
 
@@ -122,14 +137,6 @@ defmodule DevilsDictionary.Discovery.Providers.BingNews do
   # Stripped before hashing, so the same article linked twice is one item. The
   # `utm_` family is matched by prefix; these are the named ones the probe saw
   # or that newsrooms are known to append.
-  @tracking_parameters ~w(
-    fbclid gclid gbraid wbraid msclkid dclid yclid
-    mc_cid mc_eid igshid twclid ttclid
-    ocid cmp icid ito smid srnd taid partner
-    guccounter guce_referrer guce_referrer_sig
-    ref referrer source amp __twitter_impression
-  )
-
   @months {"January", "February", "March", "April", "May", "June", "July", "August", "September",
            "October", "November", "December"}
 
@@ -191,21 +198,14 @@ defmodule DevilsDictionary.Discovery.Providers.BingNews do
       # RSS 2.0, not JSON. `Discovery.Transport` reads this and hands the
       # binary body to `parse_body/1` below.
       body: :xml,
-      min_retry_interval_ms: interval(:min_retry_interval_ms, @min_retry_interval_ms),
-      request_interval_ms: interval(:request_interval_ms, @request_interval_ms)
+      min_retry_interval_ms: interval(config(), :min_retry_interval_ms, @min_retry_interval_ms),
+      request_interval_ms: interval(config(), :request_interval_ms, @request_interval_ms)
     }
   end
 
   # Both paces are overridable for the same reason the Met's and PoetryDB's
   # are: an interval is a live-rate courtesy, and a suite that paid it would
   # spend a second per stubbed request being polite to a server it never calls.
-  defp interval(key, default) do
-    case config()[key] do
-      ms when is_integer(ms) and ms >= 0 -> ms
-      _ -> default
-    end
-  end
-
   @impl true
   def enabled? do
     config()[:enabled] != false and is_binary(config()[:endpoint])
@@ -266,10 +266,6 @@ defmodule DevilsDictionary.Discovery.Providers.BingNews do
   # The project's own line. Measured first, as the brief asked: Bing answered
   # it with `200` and the same seven items a Chrome UA got, so no browser
   # impersonation is needed here.
-  defp headers do
-    [{"user-agent", Application.fetch_env!(:devils_dictionary, :user_agent)}]
-  end
-
   @doc """
   Decodes one RSS 2.0 document into `%{"items" => [item map]}`.
 
@@ -321,7 +317,7 @@ defmodule DevilsDictionary.Discovery.Providers.BingNews do
   def retrieve(@operation, mapping, request, request_fun) do
     with :ok <- validate_mapping(@operation, mapping) do
       term = mapping["term"]
-      limit = limit(request)
+      limit = limit(request["first"], @default_limit)
       offset = offset(request["after"])
 
       case request_fun.(@operation, %{"term" => term}) do
@@ -346,24 +342,6 @@ defmodule DevilsDictionary.Discovery.Providers.BingNews do
 
   defp parse(%{"items" => rows}) when is_list(rows), do: {:ok, rows}
   defp parse(_body), do: :error
-
-  defp limit(request) do
-    case request["first"] do
-      first when is_integer(first) and first > 0 -> first
-      _ -> @default_limit
-    end
-  end
-
-  defp offset(nil), do: 0
-
-  defp offset(value) when is_binary(value) do
-    case Integer.parse(value) do
-      {offset, ""} when offset >= 0 -> offset
-      _ -> 0
-    end
-  end
-
-  defp offset(_value), do: 0
 
   # The gate runs over the whole answer and the window is cut from what
   # survives it, so the cursor counts items a reader could see rather than
@@ -422,24 +400,15 @@ defmodule DevilsDictionary.Discovery.Providers.BingNews do
     pattern = word_pattern(term)
 
     cond do
-      present?(row["title"]) and Regex.match?(pattern, row["title"]) ->
+      present?(row["title"]) and whole_word?(row["title"], pattern) ->
         {"a headline", row["title"]}
 
-      present?(row["description"]) and Regex.match?(pattern, row["description"]) ->
+      present?(row["description"]) and whole_word?(row["description"], pattern) ->
         {"a summary", row["description"]}
 
       true ->
         nil
     end
-  end
-
-  # Word boundary in the Unicode sense rather than `\b`, which treats an
-  # apostrophe as a boundary and would find *war* inside *war's* but also
-  # inside a hyphenated form the newsroom did not write. The same pattern
-  # PoetryDB uses, for the same reason.
-  defp word_pattern(term) do
-    escaped = Regex.escape(String.trim(term))
-    Regex.compile!("(?<![\\p{L}\\p{N}])#{escaped}(?![\\p{L}\\p{N}])", "iu")
   end
 
   @doc """
@@ -529,7 +498,7 @@ defmodule DevilsDictionary.Discovery.Providers.BingNews do
 
   defp item(term, row, url, published_at, locator_part, text) do
     masthead = presence(row["news:source"])
-    external_id = article_id(url)
+    external_id = News.article_id(url)
     date = DateTime.to_date(published_at)
 
     %{
@@ -631,7 +600,7 @@ defmodule DevilsDictionary.Discovery.Providers.BingNews do
          %URI{scheme: scheme, host: host} = parsed when is_binary(host) and host != "" <-
            URI.parse(url),
          true <- scheme in ["http", "https"] do
-      {:ok, normalize(parsed)}
+      {:ok, News.normalize(parsed)}
     else
       _ -> :error
     end
@@ -639,66 +608,6 @@ defmodule DevilsDictionary.Discovery.Providers.BingNews do
 
   def publisher_url(_link), do: :error
 
-  @doc """
-  One publisher URL, normalised so that the same article twice is one item.
-
-  Scheme and host lowercased, the fragment dropped, tracking parameters
-  stripped and what is left sorted. Sorting is part of it because two feeds —
-  Bing today and the Guardian later, on the same `news_article` namespace —
-  can name the same article with the same parameters in a different order, and
-  an identity that depended on their order would not merge.
-  """
-  def normalize(%URI{} = uri) do
-    %URI{
-      uri
-      | scheme: uri.scheme && String.downcase(uri.scheme),
-        host: uri.host && String.downcase(uri.host),
-        fragment: nil,
-        query: normalize_query(uri.query),
-        # A userinfo in a news URL is not a thing, and carrying one into an
-        # `href` would be.
-        userinfo: nil
-    }
-    |> URI.to_string()
-  end
-
-  defp normalize_query(nil), do: nil
-
-  defp normalize_query(query) do
-    query
-    |> URI.decode_query()
-    |> Enum.reject(fn {key, _value} ->
-      downcased = String.downcase(key)
-      downcased in @tracking_parameters or String.starts_with?(downcased, "utm_")
-    end)
-    |> Enum.sort()
-    |> case do
-      [] -> nil
-      pairs -> URI.encode_query(pairs)
-    end
-  end
-
-  @doc """
-  The stable identity of one article: the digest of its normalised URL.
-
-  The URL is the only identity the feed publishes — there is no article id in
-  the envelope — and it is the one a keyed Guardian provider can also compute
-  for the same article, which is what lets `Shelf.dedup/2` fold the two.
-  """
-  def article_id(url) when is_binary(url) do
-    :crypto.hash(:sha256, url) |> Base.encode16(case: :lower) |> binary_part(0, 32)
-  end
-
-  defp present?(value), do: is_binary(value) and String.trim(value) != ""
-
-  defp presence(value) when is_binary(value) do
-    case String.trim(value) do
-      "" -> nil
-      trimmed -> trimmed
-    end
-  end
-
-  defp presence(_value), do: nil
-
-  defp config, do: Application.get_env(:devils_dictionary, :bing_news, [])
+  # This provider's own stanza; the read is the kit's.
+  defp config, do: DevilsDictionary.Discovery.Provider.Helpers.config(:bing_news)
 end

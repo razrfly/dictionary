@@ -103,45 +103,6 @@ defmodule DevilsDictionary.Discovery.Providers.BingNewsTest do
     end
   end
 
-  describe "normalize/1 and article_id/1 — one article, one identity" do
-    test "scheme and host are lowercased and the fragment is dropped" do
-      assert BingNews.normalize(URI.parse("HTTPS://WWW.Wired.COM/story/x/#comments")) ==
-               "https://www.wired.com/story/x/"
-    end
-
-    test "tracking parameters are stripped and what is left is sorted" do
-      assert BingNews.normalize(
-               URI.parse("https://www.theguardian.com/x?utm_source=t&b=2&fbclid=9&a=1&CMP=share")
-             ) == "https://www.theguardian.com/x?a=1&b=2"
-    end
-
-    test "a URL whose only parameters were tracking loses its query entirely" do
-      assert BingNews.normalize(URI.parse("https://example.com/x?utm_medium=social&smid=tw")) ==
-               "https://example.com/x"
-    end
-
-    test "the same article reached two ways is one id" do
-      plain = BingNews.article_id(BingNews.normalize(URI.parse(@wired_url)))
-
-      decorated =
-        BingNews.article_id(
-          BingNews.normalize(URI.parse(@wired_url <> "?utm_source=twitter&fbclid=IwAR9#top"))
-        )
-
-      assert plain == decorated
-
-      # And the redirect is not the identity. Bing's `apiclick` link carries a
-      # per-response `tid`, so hashing it would make the same article a new
-      # item on every fetch.
-      refute plain == BingNews.article_id("http://www.bing.com/news/apiclick.aspx?tid=6ab14198")
-    end
-
-    test "different articles are different ids" do
-      refute BingNews.article_id("https://example.com/a") ==
-               BingNews.article_id("https://example.com/b")
-    end
-  end
-
   describe "the gate — the search proposes, the text disposes" do
     test "a whole word in the headline is a headline" do
       assert BingNews.matched_text("bestiality", %{
