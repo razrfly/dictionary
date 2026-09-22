@@ -10,6 +10,16 @@ defmodule DevilsDictionary.Discovery.Provider do
   source catalog while legal or transport prerequisites are unresolved. Callers
   must select providers by their declared capabilities before invoking a
   transport-specific callback.
+
+  "Optional" here means *optional to a registry-only module*, and nothing
+  weaker. `retrieve/4`, `automatic_mapping/1`, `request_options/1` and
+  `validate_mapping/2` are the four the pipeline drives, and
+  `DevilsDictionary.Discovery.Providers.retrievable?/1` requires **all four or
+  none**: a module that claims `background: true, transport: :server` and
+  exports three of them is refused at the gate, and at boot
+  (`Providers.validate!/0`). `validate_mapping/2` is in that set since #144
+  Phase 0 — it was documented as optional while `Discovery` called it
+  unconditionally, on every render as well as mid-run.
   """
 
   @type request_fun ::

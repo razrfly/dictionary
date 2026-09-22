@@ -147,10 +147,14 @@ defmodule DevilsDictionary.Discovery.ProvidersTest do
   end
 
   test "the gate asks for exactly the callbacks the pipeline drives" do
+    # `validate_mapping/2` joined the four in #144 Phase 0: the pipeline calls
+    # it unconditionally, on every render as well as mid-run, so documenting it
+    # as optional was the thing that was wrong.
     assert Providers.pipeline_callbacks() == [
              retrieve: 4,
              automatic_mapping: 1,
-             request_options: 1
+             request_options: 1,
+             validate_mapping: 2
            ]
 
     Code.ensure_loaded!(CineGraph)

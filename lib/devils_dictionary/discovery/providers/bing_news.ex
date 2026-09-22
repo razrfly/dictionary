@@ -545,6 +545,7 @@ defmodule DevilsDictionary.Discovery.Providers.BingNews do
       position: 0,
       match_details: %{
         "kind" => "attestation",
+        "evidence" => "attestation",
         "query" => term,
         "lines" => [
           %{

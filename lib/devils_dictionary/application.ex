@@ -7,6 +7,14 @@ defmodule DevilsDictionary.Application do
 
   @impl true
   def start(_type, _args) do
+    # Before anything is supervised. A provider's `capabilities/0` is read with
+    # bare `Map.fetch!/2` deep inside the pipeline, so a bad declaration used to
+    # surface as a `KeyError` on the first page that reached it. The registry is
+    # checked here for the same reason `Discovery.ContentTypes` checks its rows
+    # at compile time — an invalid registry is a boot failure, not a runtime
+    # surprise (#144 Phase 0).
+    :ok = DevilsDictionary.Discovery.Providers.validate!()
+
     children = [
       DevilsDictionaryWeb.Telemetry,
       DevilsDictionary.Repo,

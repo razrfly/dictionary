@@ -383,6 +383,7 @@ defmodule DevilsDictionary.Discovery.Providers.Openverse do
         # `:image` row is the only one whose `evidence` admits this class.
         match_details: %{
           "kind" => "query",
+          "evidence" => "query",
           "query" => mapping["term"],
           "fields_matched" => fields_matched(row),
           "source" => row["source"]

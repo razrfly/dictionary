@@ -349,6 +349,7 @@ defmodule DevilsDictionary.Discovery.Providers.Unsplash do
         # No identifier was matched, and saying so is the whole of M6.
         match_details: %{
           "kind" => "query",
+          "evidence" => "query",
           "query" => mapping["term"],
           "source" => "unsplash"
         },

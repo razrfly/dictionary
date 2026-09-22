@@ -617,6 +617,7 @@ defmodule DevilsDictionary.Discovery.Providers.Commons do
       position: 0,
       match_details: %{
         "kind" => "depiction",
+        "evidence" => "identity",
         "depicts" => depicts
       },
       preview_metadata: %{

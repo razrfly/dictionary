@@ -310,6 +310,7 @@ defmodule DevilsDictionary.Discovery.Providers.CineGraph do
          position: position,
          match_details: %{
            "kind" => "keyword",
+           "evidence" => "identity",
            "query" => mapping["term"],
            "keywords" => keywords,
            "genres" => genres

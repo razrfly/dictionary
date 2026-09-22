@@ -73,6 +73,12 @@ defmodule DevilsDictionary.Discovery.Transport do
 
       {:error, :attempts_exhausted} ->
         {:error, failure_code || "retry_budget_exhausted"}
+
+      # A claim that failed for any other reason — `Budget.claim/3`'s own
+      # catch-all (#144 Phase 0) — spent nothing and is a failed run, not a
+      # `CaseClauseError` raised through the pipeline.
+      {:error, _other} ->
+        {:error, "request_budget_unavailable"}
     end
   end
 

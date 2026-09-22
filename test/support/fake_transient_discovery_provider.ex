@@ -63,7 +63,7 @@ defmodule DevilsDictionary.FakeTransientDiscoveryProvider do
             external_namespace: "fixture_art",
             external_id: "one",
             position: 0,
-            match_details: %{"kind" => "search", "query" => mapping["term"]},
+            match_details: %{"kind" => "query", "evidence" => "query", "query" => mapping["term"]},
             preview_metadata: %{
               "title" => "Transient work",
               "content_type" => "art",

@@ -735,16 +735,27 @@ defmodule Mix.Tasks.Dd.Provider.New do
 
       # One normalized item. `match_details` is the factual reason this result is
       # on this page, read back by `DevilsDictionary.Discovery.MatchReason` —
-      # `"tags"` for identity matches, `"keywords"` for keyword ids, `"lines"`
-      # for a text attestation. The scaffold names no reason, which renders as
-      # *the provider returned this result for “war”*; that is honest and it is
-      # not good enough to ship.
+      # `"tags"` for identity matches, `"depicts"` for a live depiction,
+      # `"keywords"` for keyword ids, `"lines"` for a text attestation — and
+      # `"kind"` plus `"evidence"` **declare** which of those you wrote and
+      # which class it belongs to. Conformance checks the declaration against
+      # the reason the shared builder produced and against your content type's
+      # row, so changing the shape here means changing both keys with it.
+      #
+      # The scaffold names no reason, which renders as *the provider returned
+      # this result for “war”*; that is honest and it is not good enough to
+      # ship anywhere but the `:image` shelf, whose row admits a labelled
+      # search and says so.
       defp item(mapping, %{"id" => id} = row) when not is_nil(id) do
         %{
           external_namespace: "<%= @namespace %>",
           external_id: to_string(id),
           position: 0,
-          match_details: %{"kind" => "query", "query" => mapping["term"]},
+          match_details: %{
+            "kind" => "query",
+            "evidence" => "query",
+            "query" => mapping["term"]
+          },
           preview_metadata:
             %{
               "title" => row["title"],

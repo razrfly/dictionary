@@ -241,6 +241,7 @@ defmodule DevilsDictionary.Discovery.MultiSourceStub do
         defp match_details(_term) do
           %{
             "kind" => "depiction",
+            "evidence" => "identity",
             "depicts" => [
               %{
                 "qid" => "Q4991371",
@@ -254,7 +255,8 @@ defmodule DevilsDictionary.Discovery.MultiSourceStub do
       else
         # Openverse-shaped (M6): a keyword search that is honest about being
         # one, which is the only reason the `:image` row admits besides identity.
-        defp match_details(term), do: %{"kind" => "query", "query" => term}
+        defp match_details(term),
+          do: %{"kind" => "query", "evidence" => "query", "query" => term}
       end
     end
   end

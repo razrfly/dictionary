@@ -559,6 +559,7 @@ defmodule DevilsDictionary.Discovery.Providers.OpenLibrary do
       # cite and the shared renderer would print whatever went here as one.
       match_details: %{
         "kind" => "attestation",
+        "evidence" => "attestation",
         "query" => term,
         "lines" => [%{"number" => nil, "text" => snippet}],
         "olid" => work.olid,

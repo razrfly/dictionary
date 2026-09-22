@@ -32,6 +32,27 @@ defmodule DevilsDictionary.Discovery.MatchReason do
   so whether a shelf may show a reason at all is data the conformance suite
   asserts and the renderer reads (#116).
 
+  ## The declaration (#144 Phase 0)
+
+  A result says what it is rather than being guessed at. Every provider writes
+  two keys into `match_details`:
+
+    * `"kind"` — which builder reads this result's reason shape, one of
+      `kinds/0`. It is the extension point: a twelfth provider with a new shape
+      adds a kind and a clause here, and until it does its suite is red.
+    * `"evidence"` — the class the reason belongs to, `"identity"`,
+      `"attestation"` or `"query"`, read back by `declared_evidence/1`.
+      Conformance asserts it is present, that it equals `evidence/1` of the
+      reason the builder actually produced, and that the content type's row
+      admits it.
+
+  Before this, `from_result/2` dispatched on the *presence* of `"tags"`,
+  `"depicts"`, `"keywords"` or `"lines"`. Those four keys are still read — a
+  result persisted before the declaration existed has no `"kind"` — but they
+  are the **legacy** path and nothing new should arrive on it: a shape none of
+  them matched became a `:query` with nothing to say, on a shelf that may not
+  admit one, with no check anywhere to notice.
+
   `reached` is an eighth field #109's K3 does not list, and the shelf cannot be
   built without it: the Met's two-step broader walk says *Related to “War”
   through the tag “World War I” (Q361)*, in which `Q361` is the tag's QID and
@@ -61,13 +82,78 @@ defmodule DevilsDictionary.Discovery.MatchReason do
   saying so is better than inventing one.
   """
   def from_result(details, term) when is_map(details) do
-    case tags(details) ++ depictions(details) ++ keywords(details) ++ attestations(details) do
-      [] -> [%__MODULE__{kind: :query, relation: :exact, term: term}]
-      reasons -> reasons
+    case declared(details) do
+      nil -> fallback(legacy(details), term)
+      reasons -> fallback(reasons, term)
     end
   end
 
   def from_result(_details, term), do: [%__MODULE__{kind: :query, relation: :exact, term: term}]
+
+  defp fallback([], term), do: [%__MODULE__{kind: :query, relation: :exact, term: term}]
+  defp fallback(reasons, _term), do: reasons
+
+  # The declaration: `"kind"` names the builder, and the builder is the whole
+  # of the extension point. A twelfth provider with a reason shape none of
+  # these reads adds its kind to `@builders` and its clause below — one
+  # declared edit in shared code, where before it silently became a `:query`
+  # and failed conformance on any identity shelf with nothing to point at.
+  defp declared(%{"kind" => kind} = details) when is_binary(kind) do
+    case kind do
+      "tag" -> tags(details)
+      "depiction" -> depictions(details)
+      "keyword" -> keywords(details)
+      "attestation" -> attestations(details)
+      "query" -> []
+      _unknown -> nil
+    end
+  end
+
+  defp declared(_details), do: nil
+
+  # The legacy path, kept for rows persisted before the declaration existed
+  # (#144 Phase 0) and for a provider that has not declared one yet: the shape
+  # of `match_details` decides, by the presence of one of four magic keys.
+  # Nothing new should rely on it — a kind that reaches here is a `:query` with
+  # no reason to give, which is exactly the silence the declaration ends.
+  defp legacy(details) do
+    tags(details) ++ depictions(details) ++ keywords(details) ++ attestations(details)
+  end
+
+  @builders ~w(tag depiction keyword attestation query)
+
+  @doc """
+  Every `match_details["kind"]` the reason builder knows how to read.
+
+  A provider declares one of these; conformance asserts the declaration against
+  this list, so a new reason shape is a red suite and a named edit here rather
+  than a result that quietly describes itself as a search.
+  """
+  def kinds, do: @builders
+
+  @doc "True when a provider's declared kind names a builder this module has."
+  def known_kind?(kind) when is_binary(kind), do: kind in @builders
+  def known_kind?(_kind), do: false
+
+  @doc """
+  The evidence class a result *declares*, from `match_details["evidence"]`.
+
+  The declaration and not an inference: a result says which of the content-type
+  table's three classes it belongs to, and `evidence/1` computed from the built
+  reason is what conformance compares it against. `nil` means the result was
+  persisted before the declaration existed, or by a provider that does not make
+  one; the legacy path in `from_result/2` still describes it.
+  """
+  def declared_evidence(details) when is_map(details) do
+    case details["evidence"] do
+      "identity" -> :identity
+      "attestation" -> :attestation
+      "query" -> :query
+      _other -> nil
+    end
+  end
+
+  def declared_evidence(_details), do: nil
 
   defp tags(details) do
     details

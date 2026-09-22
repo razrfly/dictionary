@@ -11,6 +11,90 @@ defmodule DevilsDictionary.Discovery.MatchReasonTest do
 
   alias DevilsDictionary.Discovery.MatchReason
 
+  describe "the evidence declaration (#144 Phase 0)" do
+    test "the declared kind, and not the shape, chooses the builder" do
+      # The same map under two declarations. Before the declaration existed,
+      # `from_result/2` scanned for `"tags"`, `"depicts"`, `"keywords"` and
+      # `"lines"` in that fixed order, so a result carrying two of them got
+      # whichever the scan reached first and a result carrying none became a
+      # `:query` with nothing to say.
+      details = %{
+        "query" => "war",
+        "tags" => [%{"term" => "Soldiers", "qid" => "Q4991371", "relation" => "exact"}],
+        "lines" => [%{"number" => 4, "text" => "the dogs of war"}]
+      }
+
+      assert [%{kind: :tag}] =
+               MatchReason.from_result(
+                 Map.merge(details, %{"kind" => "tag", "evidence" => "identity"}),
+                 "war"
+               )
+
+      assert [%{kind: :attestation}] =
+               MatchReason.from_result(
+                 Map.merge(details, %{"kind" => "attestation", "evidence" => "attestation"}),
+                 "war"
+               )
+    end
+
+    test "a declared query names no identifier and says so" do
+      assert [reason] =
+               MatchReason.from_result(
+                 %{"kind" => "query", "evidence" => "query", "query" => "war"},
+                 "war"
+               )
+
+      assert reason.kind == :query
+      assert MatchReason.evidence(reason) == :query
+
+      assert MatchReason.describe(reason, [:query]) ==
+               "Search result for “war”, ranked by the provider and not matched on an identifier."
+    end
+
+    test "declared_evidence/1 reads only the three classes the table is written in" do
+      assert MatchReason.declared_evidence(%{"evidence" => "identity"}) == :identity
+      assert MatchReason.declared_evidence(%{"evidence" => "attestation"}) == :attestation
+      assert MatchReason.declared_evidence(%{"evidence" => "query"}) == :query
+
+      # A provider that has not declared one, and a row persisted before the
+      # declaration existed, are the same thing here: no declaration, and the
+      # legacy path still describes the result.
+      assert MatchReason.declared_evidence(%{"kind" => "tag"}) == nil
+      assert MatchReason.declared_evidence(%{"evidence" => "vibes"}) == nil
+      assert MatchReason.declared_evidence(nil) == nil
+    end
+
+    test "known_kind?/1 is the extension point, and an unknown kind is not one" do
+      for kind <- MatchReason.kinds(), do: assert(MatchReason.known_kind?(kind))
+
+      refute MatchReason.known_kind?("search")
+      refute MatchReason.known_kind?(nil)
+    end
+
+    test "a kind no builder knows falls back to the legacy read rather than raising" do
+      # The renderer never raises on a persisted row. The check that a kind is
+      # one of `kinds/0` belongs to conformance, where it is a red suite before
+      # the provider ships, not to the page of a reader who cannot fix it.
+      assert [%{kind: :attestation}] =
+               MatchReason.from_result(
+                 %{
+                   "kind" => "not-a-kind",
+                   "query" => "war",
+                   "lines" => [%{"number" => 4, "text" => "the dogs of war"}]
+                 },
+                 "war"
+               )
+    end
+
+    test "a row with no declaration at all still reads, by the legacy path" do
+      assert [%{kind: :keyword, identifier: "1956"}] =
+               MatchReason.from_result(
+                 %{"query" => "war", "keywords" => [%{"name" => "war", "tmdbId" => 1956}]},
+                 "war"
+               )
+    end
+  end
+
   describe "from_result/2 — what a provider wrote, read back" do
     test "a Met tag whose QID is the sense's own names the tag and the QID" do
       assert [reason] =

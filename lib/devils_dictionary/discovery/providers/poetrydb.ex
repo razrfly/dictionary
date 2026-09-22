@@ -475,6 +475,7 @@ defmodule DevilsDictionary.Discovery.Providers.Poetrydb do
       position: 0,
       match_details: %{
         "kind" => "attestation",
+        "evidence" => "attestation",
         "query" => term,
         "lines" => [%{"number" => number, "text" => text}]
       },
@@ -504,7 +505,7 @@ defmodule DevilsDictionary.Discovery.Providers.Poetrydb do
   """
   def poem_id(author, title, lines) do
     [String.trim(to_string(author)), String.trim(to_string(title)), Enum.join(lines, "\n")]
-    |> Enum.join("\n ")
+    |> Enum.join("\n\0")
     |> then(&:crypto.hash(:sha256, &1))
     |> Base.encode16(case: :lower)
     |> binary_part(0, 32)

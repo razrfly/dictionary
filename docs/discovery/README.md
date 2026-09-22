@@ -634,19 +634,40 @@ both without one of them meaning two different things.
 what separates a reason from an impression: *tagged “Soldiers”* is what a reader
 thinks and *tagged “Soldiers” (Q4991371)* is a fact anyone can go and check.
 
-`from_result/2` reads a live provider's `match_details` — `"tags"`, `"depicts"`,
-`"keywords"`, `"lines"` — and falls back to a `:query` reason when the provider
-named none. A line map may name its own `"locator"` (*page 12*, *stanza 2*);
-the `"number"` form (*line 4*) is the fallback, and a line with neither attests
-without a locator. The preposition in front of it is the renderer's and not
-the provider's: `at/1` says *in* where the locator opens with a determiner and
-*at* where it does not, which is what separates a named part of a work (*in a
+**A result declares what it is** (#144 Phase 0). Every provider writes two keys
+into `match_details`:
+
+| key | values | what it does |
+|---|---|---|
+| `"kind"` | one of `MatchReason.kinds/0` — `tag`, `depiction`, `keyword`, `attestation`, `query` | names the builder that reads this result's reason shape |
+| `"evidence"` | `"identity"`, `"attestation"`, `"query"` | the class, read back by `declared_evidence/1` and compared against the content-type row |
+
+Conformance asserts, per result, that the kind is one the kit builds, that the
+declared class is present, that it **equals** `evidence/1` of the reason the
+builder actually produced from the same map, and that the shelf's row admits it.
+That is the extension point a twelfth provider needs: a new reason shape is a
+kind and a clause in `MatchReason`, and until they exist its suite is red.
+
+Before the declaration, `from_result/2` dispatched on the *presence* of
+`"tags"`, `"depicts"`, `"keywords"` or `"lines"`, in that fixed order. Those
+four keys are still read — a result persisted before Phase 0 has no `"kind"` —
+but they are the **legacy** path and nothing new should arrive on it: a shape
+none of them matched became a `:query` with nothing to say, on a shelf that may
+not admit one, with no check anywhere to notice. (The transient test fixture
+declared `"kind" => "search"` and had been describing itself as a bare search
+for exactly that reason.)
+
+A line map may name its own `"locator"` (*page 12*, *stanza 2*); the `"number"`
+form (*line 4*) is the fallback, and a line with neither attests without a
+locator. The preposition in front of it is the renderer's and not the
+provider's: `at/1` says *in* where the locator opens with a determiner and *at*
+where it does not, which is what separates a named part of a work (*in a
 headline*, *in the text*) from a numbered point in one (*at line 4*, *at page
-12*). #142 took that one-line fix; #140 had measured it and left it. `evidence/1` folds the kinds into the three classes the
-content-type table admits, and `describe/2` takes the admitted classes so a
-search result is called one only where the row allows it.
-`from_candidate/1` reads a corpus candidate. Both end as the same struct and the
-same sentence.
+12*). #142 took that one-line fix; #140 had measured it and left it.
+`evidence/1` folds the kinds into the three classes the content-type table
+admits, and `describe/2` takes the admitted classes so a search result is
+called one only where the row allows it. `from_candidate/1` reads a corpus
+candidate. Both end as the same struct and the same sentence.
 
 ---
 
@@ -771,6 +792,34 @@ verification, refusal of a row edited without its checksum, an idempotent seed t
 identical counts, every label inside `entities.preferred_label`'s
 `varchar(255)`, and a depicted-QID round trip onto a page whose meaning refers to
 it.
+
+A fixture supplies three scenarios — `:results`, `:empty`, `:paged`. The fourth,
+`:throttled`, is the kit's: `Conformance.Fixture.stub/3` puts one `429` carrying
+`Retry-After` in front of whatever that fixture's `:results` installed, and the
+suite asserts the shape nine providers implement and nothing had ever driven —
+**one deferral** (the run stays pending, the page keeps what it was showing),
+**one provider-wide backoff** written to the source row where every node reads
+it before spending anything, the refused request recorded in the ledger because
+it left the node, and then **one success** on the same run from the same
+admission (#144 Phase 0).
+
+**The registry is checked at boot.**
+`DevilsDictionary.Discovery.Providers.validate!/0` runs from
+`Application.start/2`, before the supervisor, and refuses to start on a bad
+declaration: a `capabilities/0` missing one of its six documented keys, a
+content type `ContentTypes` cannot present, a pacing key that is not
+non-negative milliseconds, a `source_attrs/0` row the catalog cannot seed, a
+module claiming the background pipeline without exporting
+`Providers.pipeline_callbacks/0`, or a `:source_policies` key naming a slug no
+provider has. It is the same rule `ContentTypes` applies to its own rows at
+compile time, one layer out: a capability map is read with bare `Map.fetch!/2`
+deep inside `admit/5`, so before this a missing key was a `KeyError` on the
+first page that happened to reach that provider.
+
+`validate_mapping/2` is in `pipeline_callbacks/0` since Phase 0. The contract
+documented it as optional while the pipeline called it unconditionally — on
+every render as well as mid-run — so the documentation was the thing that was
+wrong.
 
 `test/devils_dictionary/discovery/conformance_coverage_test.exs` is the
 architecture test: every module in `:discovery_providers` has a fixture, every
