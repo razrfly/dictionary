@@ -440,6 +440,7 @@ defmodule DevilsDictionary.Discovery.Providers.Spotify do
           # word; the ranking that proposed it is Spotify's own.
           match_details: %{
             "kind" => "query",
+            "evidence" => "query",
             "query" => term,
             "source" => "spotify"
           },

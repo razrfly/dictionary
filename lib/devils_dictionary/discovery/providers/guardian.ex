@@ -662,6 +662,7 @@ defmodule DevilsDictionary.Discovery.Providers.Guardian do
       position: 0,
       match_details: %{
         "kind" => "attestation",
+        "evidence" => "attestation",
         "query" => term,
         "lines" => [
           %{
