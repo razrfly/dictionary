@@ -216,11 +216,7 @@ defmodule DevilsDictionaryWeb.Culture do
                  immediately to the right of this column. `Culture` still knows
                  no provider by name: what is drawn is whatever the state
                  carried, and a source with no obligation carries nothing. --%>
-            <.attribution_mark
-              :for={state <- marked(shelf)}
-              mark={state.attribution_mark}
-              provider={state.provider}
-            />
+            <.attribution_mark :for={marked <- marked(shelf)} {marked} />
           </div>
 
           <div class="min-w-0 flex-1 space-y-2">
@@ -246,6 +242,7 @@ defmodule DevilsDictionaryWeb.Culture do
                 <.culture_thumbnail
                   item={entry.item}
                   type={shelf.type}
+                  mark={card_mark(entry.state)}
                   return_path={@return_path}
                 />
               </li>
@@ -345,8 +342,9 @@ defmodule DevilsDictionaryWeb.Culture do
   # markup — the one exception to promise 9 of the README, *the reader knows
   # no provider by name*. Everything provider-specific now arrives in the
   # config the provider's own `browser_config/1` returned: the hook that makes
-  # the requests, the note that says what its results are, and the badge a
-  # licence requires. What the shelf *looks* like comes from
+  # the requests, the note that says what its results are, and the mark a
+  # licence requires — the same map, read by the same `mark/1`, drawn by the
+  # same component as a server shelf's (#144 followups). What the shelf *looks* like comes from
   # `ContentTypes.fetch!/1`, as it does for a server provider.
   #
   # `phx-update="ignore"` because everything inside is the hook's: the items
@@ -362,7 +360,7 @@ defmodule DevilsDictionaryWeb.Culture do
     assigns =
       assigns
       |> assign(:row, ContentTypes.fetch!(assigns.browser.content_type))
-      |> assign(:badge, Map.get(assigns.browser, :badge))
+      |> assign(:mark, mark(Map.get(assigns.browser, :attribution_mark)))
 
     ~H"""
     <section
@@ -384,23 +382,14 @@ defmodule DevilsDictionaryWeb.Culture do
         >
           {@row.heading}
         </h3>
-        <a
-          :if={@badge}
-          href={@badge.href}
-          target="_blank"
-          rel="noreferrer"
-          aria-label={@badge.alt}
-          class="mt-1 block"
-        >
-          <img src={@badge.src} alt={@badge.alt} width="80" class="rounded bg-white" />
-        </a>
-        <p
-          :if={is_nil(@badge)}
-          id={"culture-provider-#{@browser.provider}"}
-          class="mt-1 text-xs text-mist-400"
-        >
+        <p id={"culture-provider-#{@browser.provider}"} class="mt-1 text-xs text-mist-400">
           {@browser.provider_name}
         </p>
+        <.attribution_mark
+          :if={match?(%{placement: :shelf}, @mark)}
+          mark={@mark}
+          provider={@browser.provider}
+        />
       </div>
       <div class="min-w-0 flex-1 space-y-2">
         <p data-status role="status" class="text-base text-mist-500 sm:text-sm">
@@ -531,10 +520,26 @@ defmodule DevilsDictionaryWeb.Culture do
   # nothing on the rail owes nothing — the obligation is to credit content
   # that is shown, and a mark under an empty turn would be branding rather
   # than compliance.
+  #
+  # `:shelf` and not every mark: a licence that asks for its mark beside the
+  # content gets it on each card instead (`card_mark/1`), and one obligation
+  # met twice is a logo the terms did not ask for.
   defp marked(shelf) do
     shelf
     |> contributing()
-    |> Enum.filter(&is_map(Map.get(&1, :attribution_mark)))
+    |> Enum.map(&%{provider: &1.provider, mark: mark(Map.get(&1, :attribution_mark))})
+    |> Enum.filter(&match?(%{placement: :shelf}, &1.mark))
+  end
+
+  # The mark the cards of one state carry, or nothing. The state's, not the
+  # item's: what a source's licence requires is a fact about the source, and
+  # a shelf holding two sources' items gives each card the mark of the source
+  # that supplied it.
+  defp card_mark(state) do
+    case mark(Map.get(state, :attribution_mark)) do
+      %{placement: :card} = mark -> mark
+      _other -> nil
+    end
   end
 
   attr :mark, :map, required: true
@@ -555,21 +560,32 @@ defmodule DevilsDictionaryWeb.Culture do
       aria-label={@mark.alt}
       class="mt-2 block"
     >
-      <img
-        src={@mark.src}
-        alt={@mark.alt}
-        width={@mark.width}
-        class={["max-w-full", Map.get(@mark, :dark_src) && "dark:hidden"]}
-      />
-      <img
-        :if={Map.get(@mark, :dark_src)}
-        src={@mark.dark_src}
-        alt=""
-        aria-hidden="true"
-        width={@mark.width}
-        class="hidden max-w-full dark:block"
-      />
+      <.mark_images mark={@mark} />
     </a>
+    """
+  end
+
+  attr :mark, :map, required: true
+
+  # Both variants ship in the markup and CSS picks one, wherever the mark is
+  # drawn: the shelf's byline column and the card's credit block are two
+  # placements of one mark and not two marks.
+  defp mark_images(assigns) do
+    ~H"""
+    <img
+      src={@mark.light}
+      alt={@mark.alt}
+      width={@mark.width}
+      class={["max-w-full", @mark.dark && "dark:hidden"]}
+    />
+    <img
+      :if={@mark.dark}
+      src={@mark.dark}
+      alt=""
+      aria-hidden="true"
+      width={@mark.width}
+      class="hidden max-w-full dark:block"
+    />
     """
   end
 
@@ -582,6 +598,10 @@ defmodule DevilsDictionaryWeb.Culture do
   attr :item, :map, required: true
   attr :type, :atom, required: true
   attr :return_path, :string, default: nil
+
+  attr :mark, :map,
+    default: nil,
+    doc: "the supplying source's `:card` mark, already read by `mark/1`, or nil"
 
   defp culture_thumbnail(assigns) do
     presentation = ContentTypes.get(assigns.type)
@@ -623,13 +643,6 @@ defmodule DevilsDictionaryWeb.Culture do
           else: metadata["artist"]
         )
       )
-      # The one mark a card can be asked to carry, carried by the item rather
-      # than by its content type (#143). A provider whose terms require its
-      # brand beside the credit writes the mark itself — files, alt text and
-      # the link's wording — and this component draws what it was handed. It
-      # knows no provider by name (promise 9): a mark it cannot read is no
-      # mark, never a broken image.
-      |> assign(:brand_mark, brand_mark(metadata["brand_mark"]))
 
     ~H"""
     <div class="group flex min-w-0 flex-col gap-2 rounded-sm">
@@ -737,38 +750,30 @@ defmodule DevilsDictionaryWeb.Culture do
         >
           <%= for part <- @credit do %><a :if={part.url} href={part.url} target="_blank" rel="noreferrer" class="underline underline-offset-4 transition-colors hover:text-mist-950 dark:hover:text-white">{part.text}</a><span :if={is_nil(part.url)}>{part.text}</span><% end %>
         </p>
-        <%!-- The mark, under the credit and inside its own exclusion zone
-             (#143). Spotify's Branding Guidelines ask partner integrations
-             for the **full** logo — icon and wordmark — at no less than 70 px
-             wide, isolated by half the icon's height on every side, which at
-             that width is 10 px. Those two numbers are the whole of this
-             block, and they are why the mark is under the credit rather than
-             literally beside it: 70 + 20 leaves 54 px of a 144 px column for
-             an artist's name, and *YoungBoy Never Broke Again* does not fit
-             in 54 px. It is the card's credit block either way — the credit
-             names who made the track, the mark names who supplied it.
-
-             Two files rather than one with a filter: the guidelines allow
-             the green logo only on black or white, and this card's dark
-             surface is neither, so the black logo takes the light theme and
-             the white one the dark. `-mx-2.5` pulls the exclusion zone back
+        <%!-- A `:card` mark, under the credit and inside an exclusion zone
+             (#143). The width is the provider's — Spotify's Branding
+             Guidelines ask partner integrations for the **full** logo, icon
+             and wordmark, at no less than 70 px — and the 10 px of isolation
+             around it is the clearance this card gives any mark, which is
+             half the icon's height at that minimum. It is why the mark is
+             under the credit rather than literally beside it: 70 + 20 leaves
+             54 px of a 144 px column for an artist's name, and *YoungBoy
+             Never Broke Again* does not fit in 54 px. It is the card's credit
+             block either way — the credit names who made the track, the mark
+             names who supplied it. `-mx-2.5` pulls the exclusion zone back
              out to the card's edge so the logo itself lines up with the text
-             above it. --%>
-        <div :if={@brand_mark} class="-mx-2.5 p-2.5">
-          <img
-            src={@brand_mark.light}
-            alt={@brand_mark.alt}
-            width="70"
-            height="20"
-            class="w-[70px] dark:hidden"
-          />
-          <img
-            src={@brand_mark.dark}
-            alt={@brand_mark.alt}
-            width="70"
-            height="20"
-            class="w-[70px] not-dark:hidden"
-          />
+             above it.
+
+             Two files rather than one with a filter, here as on the shelf:
+             Spotify's guidelines allow the green logo only on black or white
+             and this card's dark surface is neither, so the black logo takes
+             the light theme and the white one the dark. --%>
+        <div
+          :if={@mark}
+          id={"culture-mark-#{@item.external_namespace}-#{@item.external_id}"}
+          class="-mx-2.5 p-2.5"
+        >
+          <.mark_images mark={@mark} />
         </div>
         <a
           :if={@source_url}
@@ -778,7 +783,7 @@ defmodule DevilsDictionaryWeb.Culture do
           id={"culture-source-#{@item.external_id}"}
           class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 transition-colors hover:text-mist-950 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 dark:hover:text-white"
         >
-          {(@brand_mark && @brand_mark.link) || "Source"} ↗
+          {(@mark && @mark.link_text) || "Source"} ↗
         </a>
       </div>
     </div>
@@ -925,26 +930,65 @@ defmodule DevilsDictionaryWeb.Culture do
   defp prepend(parts, text, url), do: [%{text: text, url: url} | parts]
 
   @doc """
-  The mark a provider's terms require on the card, read off the item, or nil.
+  The mark a source's licence requires, read off whatever declared it, or nil.
 
-  A provider that owes one writes `preview_metadata["brand_mark"]` as a map:
-  `"light"` and `"dark"` are the two files, as paths under `priv/static`
-  (never a URL — the mark is an asset this app ships, not a provider's
-  hotlink); `"alt"` is what a screen reader is owed; `"link"` is the wording
-  of the link back, because for a brand like Spotify's the two are one
-  obligation and the wording is not free. The provider owns all four; this
-  component owns none of them and matches on no provider's name, which is
-  what promise 9 asks. Anything else — a bare name, a missing key, a file
-  that is not a local path — is no mark.
+  One shape for one obligation (#144): a server provider's
+  `Provider.attribution_mark/0`, a browser provider's `:attribution_mark` key
+  in `browser_config/1`, and the state a card is drawn from all carry this
+  same map, and it is read here in one place. The keys are the provider's —
+  `:light` and `:dark` are the two files, `:alt` what a screen reader is
+  owed, `:href` where the mark links, `:link_text` the wording a licence
+  dictates for the link back, `:width` the size it is drawn at, and
+  `:placement` whether the licence asks for it on the shelf or on the card.
+
+  Anything this cannot read whole is no mark, never a broken image: a bare
+  name, a missing key, a placement nobody draws, or a file that is not a
+  local path. The last is the rule with teeth — a mark is an asset this app
+  ships and not a provider's hotlink, so `/images/x.svg` passes and
+  `https://cdn.example/x.svg` does not.
+
+  This component matches on no provider's name anywhere in it, which is what
+  promise 9 asks; what it branches on is the licence's own answer.
   """
-  def brand_mark(%{"light" => light, "dark" => dark, "alt" => alt, "link" => link})
-      when is_binary(light) and is_binary(dark) and is_binary(alt) and is_binary(link) do
-    if local_asset?(light) and local_asset?(dark) and alt != "" and link != "",
-      do: %{light: light, dark: dark, alt: alt, link: link},
-      else: nil
+  def mark(%{light: light, alt: alt, width: width, placement: placement} = mark)
+      when is_binary(light) and is_binary(alt) and is_integer(width) and width > 0 and
+             placement in [:shelf, :card] do
+    dark = Map.get(mark, :dark)
+    href = external_href(Map.get(mark, :href))
+    link_text = presence(Map.get(mark, :link_text))
+
+    cond do
+      not local_asset?(light) ->
+        nil
+
+      not is_nil(dark) and not (is_binary(dark) and local_asset?(dark)) ->
+        nil
+
+      presence(alt) == nil ->
+        nil
+
+      # A shelf mark is a link by licence — the Guardian's logos page asks for
+      # one and GIPHY's terms ask for one — so a shelf mark with no href it
+      # could link is not the mark the licence described. A card mark may have
+      # none: the card already links back through the item's own `source_url`,
+      # and two links to the same place is a second obligation nobody wrote.
+      placement == :shelf and is_nil(href) ->
+        nil
+
+      true ->
+        %{
+          light: light,
+          dark: dark,
+          alt: alt,
+          href: href,
+          width: width,
+          link_text: link_text,
+          placement: placement
+        }
+    end
   end
 
-  def brand_mark(_other), do: nil
+  def mark(_other), do: nil
 
   # One leading slash and not two: `//cdn.example/mark.svg` is a URL the
   # browser resolves against the page's scheme, which is exactly the hotlink

@@ -19,6 +19,7 @@ defmodule DevilsDictionary.Discovery.Providers.SpotifyTest do
   alias DevilsDictionary.Discovery.MatchReason
   alias DevilsDictionary.Discovery.Providers.Spotify
   alias DevilsDictionary.Discovery.Providers.Spotify.Token
+  alias DevilsDictionaryWeb.Culture
 
   @operation "track_search"
   @mapping %{"term" => "war", "resolution_strategy" => "track_search_v1"}
@@ -161,18 +162,49 @@ defmodule DevilsDictionary.Discovery.Providers.SpotifyTest do
       assert metadata["creator"] == "Chief Keef"
       assert metadata["creator_url"] == "https://open.spotify.com/artist/15iVAtD3s3FsQR4w1v6M0P"
 
-      # The mark is the provider's to declare, whole: the renderer matches on
-      # no provider's name (promise 9), so a bare `"spotify"` here would draw
-      # nothing.
-      assert metadata["brand_mark"] == %{
-               "light" => "/images/spotify-full-logo-black.svg",
-               "dark" => "/images/spotify-full-logo-white.svg",
-               "alt" => "Spotify",
-               "link" => "Listen on Spotify"
-             }
+      # The mark is not on the item any more (#144 followups): one obligation
+      # written once on the provider, rather than on every row it ever
+      # returns.
+      refute Map.has_key?(metadata, "brand_mark")
 
       assert metadata["source_url"] == "https://open.spotify.com/track/m"
       assert metadata["content_type"] == "music"
+    end
+
+    test "the mark is the provider's to declare, whole, and says where it goes" do
+      # The renderer matches on no provider's name (promise 9), so a bare
+      # `"spotify"` anywhere in this would draw nothing. The Branding
+      # Guidelines' own numbers are here and nowhere else: the full logo,
+      # black on light and white on dark, at the 70 px minimum, and one of
+      # the three link wordings they permit.
+      assert Spotify.attribution_mark() == %{
+               light: "/images/spotify-full-logo-black.svg",
+               dark: "/images/spotify-full-logo-white.svg",
+               alt: "Spotify",
+               href: nil,
+               link_text: "Listen on Spotify",
+               width: 70,
+               placement: :card
+             }
+
+      # #143's brief asked for *Open on Spotify*, which is not one of the
+      # three the guidelines permit.
+      assert Spotify.attribution_mark().link_text in [
+               "Open Spotify",
+               "Play on Spotify",
+               "Listen on Spotify"
+             ]
+
+      # Both files are committed, and both are the SVGs Spotify publishes.
+      for path <- ["spotify-full-logo-black.svg", "spotify-full-logo-white.svg"] do
+        file = Path.join("priv/static/images", path)
+        assert File.exists?(file), "#{path} is not committed"
+        assert File.read!(file) =~ "<svg"
+      end
+
+      # And the reader reads it: a card mark, drawn under the credit with the
+      # wording the licence dictates, on a shelf that knows no provider name.
+      assert Culture.mark(Spotify.attribution_mark()) == Spotify.attribution_mark()
     end
 
     test "the reason is a labelled search result on a row that admits one" do

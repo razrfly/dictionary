@@ -106,6 +106,25 @@ defmodule DevilsDictionary.Discovery.Providers.Guardian do
   alias DevilsDictionary.Discovery.Providers.BingNews
   alias DevilsDictionary.Discovery.Provider.Helpers
 
+  # #144 Phase 1's kit, taken in the followups: this provider merged after the
+  # phase that extracted these and arrived carrying eight of them anyway —
+  # five as private functions (`interval/2`, `limit/1`, `offset/1`,
+  # `presence/1`, `word_pattern/1`), three written inline (the user-agent
+  # header, the `nil`-dropping preview map, and `media_url/1`'s rule inside
+  # `article_url/1`). Byte-identical but for `offset/1`'s spare `nil` clause,
+  # which `offset(_value)` already answered.
+  import DevilsDictionary.Discovery.Provider.Helpers,
+    only: [
+      headers: 0,
+      interval: 3,
+      limit: 2,
+      media_url: 1,
+      offset: 1,
+      presence: 1,
+      sparse: 1,
+      word_pattern: 1
+    ]
+
   @adapter_version "guardian.attestation.v1"
   @operation "guardian_attestation"
 
@@ -210,19 +229,9 @@ defmodule DevilsDictionary.Discovery.Providers.Guardian do
       operations: [@operation],
       content_types: [:news],
       retry_after_headers: @retry_after_headers,
-      min_retry_interval_ms: interval(:min_retry_interval_ms, @min_retry_interval_ms),
-      request_interval_ms: interval(:request_interval_ms, @request_interval_ms)
+      min_retry_interval_ms: interval(config(), :min_retry_interval_ms, @min_retry_interval_ms),
+      request_interval_ms: interval(config(), :request_interval_ms, @request_interval_ms)
     }
-  end
-
-  # Both paces are overridable for the reason Bing's and the Met's are: a
-  # suite that paid a live rate would spend a minute being polite to a server
-  # it never calls.
-  defp interval(key, default) do
-    case config()[key] do
-      ms when is_integer(ms) and ms >= 0 -> ms
-      _ -> default
-    end
   end
 
   @impl true
@@ -272,11 +281,14 @@ defmodule DevilsDictionary.Discovery.Providers.Guardian do
   @impl true
   def attribution_mark do
     %{
-      src: "/images/guardian-powered-by.png",
-      dark_src: "/images/guardian-powered-by-dark.png",
+      light: "/images/guardian-powered-by.png",
+      dark: "/images/guardian-powered-by-dark.png",
       alt: "Powered by The Guardian",
       href: "https://www.theguardian.com/",
-      width: 80
+      width: 80,
+      # "Adjacent to our content", which the shelf's byline column is: the
+      # rail of articles is immediately to its right.
+      placement: :shelf
     }
   end
 
@@ -325,7 +337,7 @@ defmodule DevilsDictionary.Discovery.Providers.Guardian do
         # never in a ledger row, never in `preview_metadata`.
         "api-key" => config()[:api_key]
       },
-      headers: [{"user-agent", Application.fetch_env!(:devils_dictionary, :user_agent)}]
+      headers: headers()
     ]
   end
 
@@ -343,7 +355,7 @@ defmodule DevilsDictionary.Discovery.Providers.Guardian do
   @impl true
   def retrieve(@operation, mapping, request, request_fun) do
     with :ok <- validate_mapping(@operation, mapping) do
-      limit = limit(request["first"])
+      limit = limit(request["first"], @default_limit)
       offset = offset(request["after"])
 
       payload = %{
@@ -375,20 +387,6 @@ defmodule DevilsDictionary.Discovery.Providers.Guardian do
   end
 
   def retrieve(_operation, _mapping, _request, _request_fun), do: {:error, "invalid_mapping"}
-
-  defp limit(first) when is_integer(first) and first > 0, do: first
-  defp limit(_first), do: @default_limit
-
-  defp offset(nil), do: 0
-
-  defp offset(value) when is_binary(value) do
-    case Integer.parse(value) do
-      {offset, ""} when offset >= 0 -> offset
-      _ -> 0
-    end
-  end
-
-  defp offset(_value), do: 0
 
   # The API pages for us, so — unlike Bing, whose whole answer arrives at once
   # — the offset is a real offset and each page is one request. The gate then
@@ -482,15 +480,6 @@ defmodule DevilsDictionary.Discovery.Providers.Guardian do
   end
 
   def matched_text(_term, _row), do: nil
-
-  # Word boundary in the Unicode sense rather than `\b`, which treats an
-  # apostrophe as a boundary. The same pattern PoetryDB and Bing use, for the
-  # same reason: it is what stops *bestiality* matching inside
-  # *#Bestialitygate* and *war* inside *warden*.
-  defp word_pattern(term) do
-    escaped = Regex.escape(String.trim(term))
-    Regex.compile!("(?<![\\p{L}\\p{N}])#{escaped}(?![\\p{L}\\p{N}])", "iu")
-  end
 
   @doc """
   The sentence around the first use of the word, trimmed to ~200 characters.
@@ -617,12 +606,12 @@ defmodule DevilsDictionary.Discovery.Providers.Guardian do
   same `news_article` id — for the same article.
   """
   def article_url(url) when is_binary(url) do
-    with %URI{scheme: scheme, host: host} = parsed when is_binary(host) and host != "" <-
-           URI.parse(String.trim(url)),
-         true <- scheme in ["http", "https"] do
-      {:ok, Helpers.News.normalize(parsed)}
-    else
-      _ -> :error
+    # `media_url/1` is the kit's absolute-http(s)-with-a-host rule, which this
+    # had written out again (#144 followups); what is this provider's is what
+    # happens after it, which is Bing's normalisation.
+    case media_url(url) do
+      nil -> :error
+      absolute -> {:ok, absolute |> URI.parse() |> Helpers.News.normalize()}
     end
   end
 
@@ -697,8 +686,7 @@ defmodule DevilsDictionary.Discovery.Providers.Guardian do
           "content_type" => "news",
           "provider" => "The Guardian"
         }
-        |> Enum.reject(fn {_key, value} -> is_nil(value) end)
-        |> Map.new(),
+        |> sparse(),
       display_allowed: true
     }
   end
@@ -721,14 +709,5 @@ defmodule DevilsDictionary.Discovery.Providers.Guardian do
     end
   end
 
-  defp presence(value) when is_binary(value) do
-    case String.trim(value) do
-      "" -> nil
-      trimmed -> trimmed
-    end
-  end
-
-  defp presence(_value), do: nil
-
-  defp config, do: Application.get_env(:devils_dictionary, :guardian, [])
+  defp config, do: Helpers.config(:guardian)
 end

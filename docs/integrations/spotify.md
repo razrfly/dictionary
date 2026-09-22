@@ -214,6 +214,12 @@ Spotify's Design & Branding Guidelines, read 2026-09-21:
 - *Don't place your brand or logo on top of album artwork.* → the mark is in
   the card's credit block, never over the cover.
 
+Since the #144 followups the mark is `Spotify.attribution_mark/0` — the same
+callback the Guardian's shelf mark uses, with `placement: :card` and the link
+wording under `:link_text`. It was `preview_metadata["brand_mark"]` on every
+item until then: one obligation, rewritten on every row the provider ever
+returned, where the Guardian wrote the same obligation once.
+
 The assets are Spotify's own, from
 `https://developer.spotify.com/images/guidelines/design/2024-spotify-full-logo.zip`,
 unmodified, checked in as `priv/static/images/spotify-full-logo-black.svg` and

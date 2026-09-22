@@ -18,42 +18,79 @@ defmodule DevilsDictionaryWeb.CultureCreditTest do
 
   describe "the mark is the provider's to declare, and the component matches no name" do
     # Promise 9: the component branches on neither the content type nor the
-    # source. A provider whose terms require a mark on the card writes the
-    # whole mark; a bare name — the shape that would need a clause per
-    # provider here — draws nothing.
-    test "a whole mark renders, and a provider's name does not" do
-      mark = %{
-        "light" => "/images/a-mark-black.svg",
-        "dark" => "/images/a-mark-white.svg",
-        "alt" => "A Service",
-        "link" => "Listen on A Service"
-      }
+    # source. A provider whose licence requires a mark writes the whole mark;
+    # a bare name — the shape that would need a clause per provider here —
+    # draws nothing.
+    defp a_mark(overrides \\ %{}) do
+      Map.merge(
+        %{
+          light: "/images/a-mark-black.svg",
+          dark: "/images/a-mark-white.svg",
+          alt: "A Service",
+          href: "https://a.service.test/",
+          width: 70,
+          placement: :shelf
+        },
+        overrides
+      )
+    end
 
-      assert Culture.brand_mark(mark) == %{
+    test "one shape carries both placements, and the licence's own answer comes back" do
+      assert Culture.mark(a_mark()) == %{
                light: "/images/a-mark-black.svg",
                dark: "/images/a-mark-white.svg",
                alt: "A Service",
-               link: "Listen on A Service"
+               href: "https://a.service.test/",
+               width: 70,
+               link_text: nil,
+               placement: :shelf
              }
 
-      assert Culture.brand_mark("spotify") == nil
-      assert Culture.brand_mark(nil) == nil
-      assert Culture.brand_mark(Map.delete(mark, "link")) == nil
+      # The same map, on the card, with the wording a licence dictates for the
+      # link back and no href of its own — the card links through the item.
+      assert Culture.mark(
+               a_mark(%{placement: :card, href: nil, link_text: "Listen on A Service"})
+             ) ==
+               %{
+                 light: "/images/a-mark-black.svg",
+                 dark: "/images/a-mark-white.svg",
+                 alt: "A Service",
+                 href: nil,
+                 width: 70,
+                 link_text: "Listen on A Service",
+                 placement: :card
+               }
+
+      # And a mark with no dark variant is a mark: one file, both themes.
+      assert Culture.mark(a_mark(%{dark: nil})).dark == nil
+    end
+
+    test "anything it cannot read whole is no mark, never a broken image" do
+      assert Culture.mark("spotify") == nil
+      assert Culture.mark(nil) == nil
+
+      for key <- [:light, :alt, :width, :placement] do
+        assert Culture.mark(Map.delete(a_mark(), key)) == nil
+      end
+
+      assert Culture.mark(a_mark(%{alt: "   "})) == nil
+      assert Culture.mark(a_mark(%{width: 0})) == nil
+      assert Culture.mark(a_mark(%{placement: :byline})) == nil
+
+      # A shelf mark is a link by licence: the Guardian's logos page and
+      # GIPHY's terms both dictate where it points, so one with nowhere to
+      # point is not the mark they described. A card mark may have none.
+      assert Culture.mark(a_mark(%{href: nil})) == nil
+      assert Culture.mark(a_mark(%{href: "javascript:alert(1)"})) == nil
+      assert Culture.mark(a_mark(%{placement: :card, href: nil})).href == nil
     end
 
     test "a mark is an asset this app ships, never a provider's hotlink" do
-      mark = %{
-        "light" => "/images/a-mark-black.svg",
-        "dark" => "/images/a-mark-white.svg",
-        "alt" => "A Service",
-        "link" => "Open A Service"
-      }
-
       # A full URL, and the protocol-relative one a leading-slash check alone
       # would let through.
       for remote <- ["https://cdn.example.test/mark.svg", "//cdn.example.test/mark.svg"] do
-        assert Culture.brand_mark(%{mark | "light" => remote}) == nil
-        assert Culture.brand_mark(%{mark | "dark" => remote}) == nil
+        assert Culture.mark(a_mark(%{light: remote})) == nil
+        assert Culture.mark(a_mark(%{dark: remote})) == nil
       end
     end
   end
