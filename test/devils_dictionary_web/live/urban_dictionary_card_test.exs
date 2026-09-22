@@ -44,7 +44,7 @@ defmodule DevilsDictionaryWeb.UrbanDictionaryCardTest do
     test "renders with the hook and everything the browser needs", ctx do
       rizz!(ctx)
 
-      {:ok, view, html} = live(ctx.conn, ~p"/define/rizz")
+      {:ok, view, _html} = live(ctx.conn, ~p"/define/rizz")
 
       assert has_element?(view, ~s([phx-hook="UrbanDictionary"][data-term="rizz"]))
 
@@ -59,8 +59,16 @@ defmodule DevilsDictionaryWeb.UrbanDictionaryCardTest do
       # what the hook wrote is DOM state the server does not model.
       assert has_element?(view, ~s([phx-hook="UrbanDictionary"][phx-update="ignore"]))
 
-      # The real 📱 header, not the demo's dashed sample chrome.
-      assert html =~ "📱"
+      # The real header — the source's badge and name, as every other card
+      # draws them since #152 — not the demo's dashed sample chrome.
+      assert has_element?(view, ~s([phx-hook="UrbanDictionary"] h2), "Urban Dictionary")
+
+      assert has_element?(
+               view,
+               ~s([phx-hook="UrbanDictionary"] h2 span[aria-hidden="true"]),
+               "UD"
+             )
+
       refute render(element(view, ~s([phx-hook="UrbanDictionary"]))) =~ "border-dashed"
     end
 
@@ -81,7 +89,9 @@ defmodule DevilsDictionaryWeb.UrbanDictionaryCardTest do
       {:ok, _view, html} = live(ctx.conn, ~p"/define/rizz")
 
       config = UrbanDictionary.browser_config(%{term: "rizz", language: "en", object_id: 1})
-      assert Map.keys(config) |> Enum.sort() == [:endpoint, :permalink_host, :term]
+      # `source` is the row's slug, name and tier — the card's header and the
+      # rail's stack read it (#152) — and nothing a key would be.
+      assert Map.keys(config) |> Enum.sort() == [:endpoint, :permalink_host, :source, :term]
       refute html =~ "api_key"
       refute html =~ "api-key"
     end

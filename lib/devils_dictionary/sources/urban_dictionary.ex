@@ -107,7 +107,10 @@ defmodule DevilsDictionary.Sources.UrbanDictionary do
       %{
         term: target.term,
         endpoint: endpoint(),
-        permalink_host: "www.urbandictionary.com"
+        permalink_host: "www.urbandictionary.com",
+        # Who the card is, from the row and not from the component (#152):
+        # the header's badge and name, and the rail's stack, read these.
+        source: %{slug: source.slug, name: source.name, tier: source.tier}
       }
     end
   end

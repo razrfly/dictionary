@@ -70,6 +70,9 @@ defmodule DevilsDictionary.Discovery.Providers.Giphy do
       %{
         provider: slug(),
         provider_name: source_attrs().name,
+        # From the row, as a server state's is: the badge's ring and the
+        # stack's order read it (#152).
+        tier: source.tier,
         content_type: :gif,
         hook: "GiphyShelf",
         term: target.term,

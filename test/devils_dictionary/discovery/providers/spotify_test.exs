@@ -181,10 +181,12 @@ defmodule DevilsDictionary.Discovery.Providers.SpotifyTest do
                light: "/images/spotify-full-logo-black.svg",
                dark: "/images/spotify-full-logo-white.svg",
                alt: "Spotify",
-               href: nil,
+               href: "https://open.spotify.com/",
                link_text: "Listen on Spotify",
                width: 70,
-               placement: :card
+               # Once per surface since #152; it was `:card`, and twelve
+               # wordmarks on one shelf, from #143 until then.
+               placement: :shelf
              }
 
       # #143's brief asked for *Open on Spotify*, which is not one of the

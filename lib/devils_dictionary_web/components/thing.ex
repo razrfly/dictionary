@@ -175,8 +175,11 @@ defmodule DevilsDictionaryWeb.Thing do
         <.document class="mt-4">{Phoenix.HTML.raw(@article.rest_html)}</.document>
       </details>
 
-      <p class="mt-3 flex flex-wrap items-baseline gap-x-4 gap-y-1 text-base/7 text-mist-500 sm:text-sm/7">
-        <span>{@article.source.name}</span>
+      <p class="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-base/7 text-mist-500 sm:text-sm/7">
+        <span class="flex items-center gap-2">
+          <DevilsDictionaryWeb.SourceBadge.badge source={@article.source} decorative />
+          {@article.source.name}
+        </span>
         <Word.link_out
           id="thing-article-out"
           href={@article.url}

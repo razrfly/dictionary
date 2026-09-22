@@ -160,6 +160,48 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
     end
   end
 
+  describe "the sources stack (#152)" do
+    test "lists every definition source once, linked to its card, under the related words", ctx do
+      oyster!(ctx)
+
+      {:ok, live, _html} = live(ctx.conn, ~p"/define/oyster")
+
+      # Tier then slug: the two 👑 authors, then the institutions.
+      assert has_element?(live, "#page-sources-bierce[href='#card-bierce']")
+      assert has_element?(live, "#page-sources-johnson[href='#card-johnson']")
+      assert has_element?(live, "#page-sources-wiktionary[href='#card-wiktionary']")
+      assert has_element?(live, "#page-sources-wordnet[href='#card-wordnet']")
+
+      # The test config turns Urban Dictionary on, so its Crowd card is on
+      # this page and in the stack — a 📱 source, after the institutions,
+      # linked to the card whose id carries the term.
+      term = Base.url_encode64("oyster", padding: false)
+
+      assert has_element?(
+               live,
+               "#page-sources-urban-dictionary[href='#urban-dictionary-#{term}']"
+             )
+
+      assert has_element?(live, "#page-sources-count", "5 sources on this page")
+
+      slugs =
+        live
+        |> render()
+        |> Floki.parse_document!()
+        |> Floki.find("#page-sources a")
+        |> Enum.map(&Floki.attribute(&1, "id"))
+        |> List.flatten()
+
+      assert slugs ==
+               ~w(page-sources-bierce page-sources-johnson page-sources-wiktionary page-sources-wordnet page-sources-urban-dictionary)
+
+      # The header of every card carries the same badge once, and the tier
+      # glyph that stood there is gone from the headers.
+      assert has_element?(live, "#card-johnson h2 span[aria-hidden]", "SJ")
+      refute render(element(live, "#card-johnson h2")) =~ "👑"
+    end
+  end
+
   describe "the sparse states (U2)" do
     test "a word the index does not hold offers the nearest words it does", ctx do
       word!(ctx, "oyster", ~w(wiktionary))

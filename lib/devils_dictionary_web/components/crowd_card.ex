@@ -3,7 +3,7 @@ defmodule DevilsDictionaryWeb.CrowdCard do
   The 📱 *Crowd* card whose body the reader's own browser fills (#136).
 
   A real `Word.source_card` and this one are the same card as far as the page
-  is concerned — same glyph, same tier class, same solid left border — and the
+  is concerned — same badge, same tier class, same solid left border — and the
   difference is only where the words come from. Not `Demo.sample_badge`'s
   dashed border: this is not a sample. There is nothing invented here; there is
   simply nothing here *yet*, for the length of one `fetch`.
@@ -37,8 +37,12 @@ defmodule DevilsDictionaryWeb.CrowdCard do
       class="mt-6 rounded-xl border-l-2 border-mist-950/10 py-6 pl-6 dark:border-white/10"
     >
       <header class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <h2 class={["text-base/8 font-medium", tier_class(:plebs)]}>
-          <span aria-hidden="true" class="mr-1">{tier_glyph(:plebs)}</span> Urban Dictionary
+        <h2 class={[
+          "flex items-center gap-2 text-base/8 font-medium",
+          tier_class(@config.source.tier)
+        ]}>
+          <DevilsDictionaryWeb.SourceBadge.badge source={@config.source} decorative />
+          {@config.source.name}
         </h2>
         <span class="flex items-baseline gap-3">
           <DevilsDictionaryWeb.Word.link_out
