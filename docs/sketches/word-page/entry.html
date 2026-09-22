@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light" data-theme-source="user">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>wordhoard · entry · contact sheet</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="./sketch.css" />
+    <script>
+      (() => {
+        const q = new URLSearchParams(location.search).get("theme");
+        const system = () => matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        document.documentElement.setAttribute("data-theme", q || system());
+      })();
+    </script>
+  </head>
+  <body class="font-sans text-mist-950 antialiased dark:text-white">
+    <nav id="account-navigation" aria-label="Account" class="relative z-20 border-b border-mist-950/5 bg-mist-100 dark:border-white/10 dark:bg-mist-950">
+      <div class="mx-auto flex h-10 max-w-7xl items-center justify-end gap-5 px-6 text-sm/6 text-mist-600 lg:px-10 dark:text-mist-400">
+        <a href="#" class="font-medium text-mist-950 hover:underline dark:text-white">Register</a>
+        <a href="#" class="font-medium text-mist-950 hover:underline dark:text-white">Log in</a>
+      </div>
+    </nav>
+    <header class="sticky top-0 z-10 bg-mist-100 dark:bg-mist-950">
+      <nav>
+        <div class="mx-auto flex h-(--scroll-padding-top) max-w-7xl items-center gap-4 px-6 lg:px-10">
+          <div class="flex flex-1 items-center gap-12"><a href="./entry.html" class="font-display text-2xl/8 text-mist-950 dark:text-white">wordhoard</a></div>
+          <div class="flex flex-1 items-center justify-end gap-4">
+            <div class="relative flex flex-row items-center rounded-full bg-mist-950/10 dark:bg-white/10">
+              <div class="absolute left-0 h-full w-1/3 rounded-full bg-white transition-[left] [[data-theme=dark]_&]:left-2/3 [[data-theme=light]_&]:left-1/3 dark:bg-mist-700"></div>
+              <span class="flex w-1/3 p-2"><span class="size-4 opacity-75 hero-computer-desktop-micro"></span></span>
+              <span class="flex w-1/3 p-2"><span class="size-4 opacity-75 hero-sun-micro"></span></span>
+              <span class="flex w-1/3 p-2"><span class="size-4 opacity-75 hero-moon-micro"></span></span>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+    <div id="sketch-note" class="border-b border-amber-600/30 bg-amber-50/60 dark:bg-amber-950/20">
+      <div class="mx-auto w-full max-w-2xl px-6 py-2 text-sm/6 text-amber-800 md:max-w-3xl lg:max-w-7xl lg:px-10 dark:text-amber-300">
+        Sketch, not the app · #156 · the contact sheet for #156 Phase 0 · <a href="./entry.html" class="underline underline-offset-4">all variants</a> · <a href="?theme=dark" class="underline underline-offset-4">dark</a> · <a href="?theme=light" class="underline underline-offset-4">light</a>
+      </div>
+    </div>
+    <main class="isolate overflow-clip"><div class="mx-auto w-full max-w-2xl px-6 pb-10 md:max-w-3xl lg:max-w-7xl lg:px-10">
+<div class="pt-8">
+  <h1 class="font-display text-5xl text-mist-950 sm:text-6xl dark:text-white">The entry</h1>
+  <p class="mt-4 max-w-[60ch] text-lg/8 text-mist-700 text-pretty sm:text-base/7 dark:text-mist-300">Four ways to put one voice and a few well-chosen things above the Definitions on <em>love</em>, built on what the page fetched on 22 September 2026, plus what each design does on three words that test it. The cards and the shelves beneath are unchanged in every one. Add <code>?theme=dark</code> to any page.</p>
+
+  <h2 class="mt-12 font-display text-2xl text-mist-950 dark:text-white">Four variants, one word</h2>
+  <ul role="list" class="mt-4 grid grid-cols-1 gap-x-10 gap-y-8 sm:grid-cols-2">
+    <li><a href="./entry-v1-epigraph-love.html" class="text-lg/7 font-medium text-mist-950 underline underline-offset-4 sm:text-base/7 dark:text-white">V1 · The epigraph</a><p class="mt-1 text-base/7 text-mist-600 text-pretty sm:text-sm/7 dark:text-mist-400">Bierce quoted large, then three square tiles: a painting, a line of verse, a GIF. One tile per kind and one per tier. The smallest change to the page and the recommended one in #156.</p></li>
+    <li><a href="./entry-v2-plaque-love.html" class="text-lg/7 font-medium text-mist-950 underline underline-offset-4 sm:text-base/7 dark:text-white">V2 · The plaque</a><p class="mt-1 text-base/7 text-mist-600 text-pretty sm:text-sm/7 dark:text-mist-400">Bierce in the rail directly under the word, ruled in amber like a museum label, and a two-by-two wall in the column: painting, poem, track, headline. The quotation sits beside what it defines; the column is all pictures and lines.</p></li>
+    <li><a href="./entry-v3-mosaic-love.html" class="text-lg/7 font-medium text-mist-950 underline underline-offset-4 sm:text-base/7 dark:text-white">V3 · The mosaic</a><p class="mt-1 text-base/7 text-mist-600 text-pretty sm:text-sm/7 dark:text-mist-400">One big picture with its caption on it, the voice in an amber frame, the GIF tilted like a sticker, a track beside it, and the poem line and the day’s headline ruled beneath. The tiers are visible as three treatments. The most magazine of the four.</p></li>
+    <li><a href="./entry-v4-broadsheet-love.html" class="text-lg/7 font-medium text-mist-950 underline underline-offset-4 sm:text-base/7 dark:text-white">V4 · The broadsheet</a><p class="mt-1 text-base/7 text-mist-600 text-pretty sm:text-sm/7 dark:text-mist-400">Bierce as a drop-cap lead paragraph, whole; the painting as Plate I with a museum caption; a three-column ruled strip for verse, press and air; and the crowd at the bottom in its own register, a GIF and an Urban Dictionary line in a chat bubble. The most encyclopedia of the four, and the tallest.</p></li>
+  </ul>
+
+  <h2 class="mt-12 font-display text-2xl text-mist-950 dark:text-white">Different every so often</h2>
+  <ul role="list" class="mt-4 grid grid-cols-1 gap-x-10 gap-y-8 sm:grid-cols-2">
+    <li><a href="./entry-rotation-love.html" class="text-lg/7 font-medium text-mist-950 underline underline-offset-4 sm:text-base/7 dark:text-white">V1 on three consecutive days</a><p class="mt-1 text-base/7 text-mist-600 text-pretty sm:text-sm/7 dark:text-mist-400">The same word and the same rules, seeded by the date: Gérard, Seeger and a GIF; then a film poster, Swinburne and a Guardian headline; then Bouguereau, Pope and another GIF. Every day keeps all three tiers. The lead never moves.</p></li>
+  </ul>
+
+  <h2 class="mt-12 font-display text-2xl text-mist-950 dark:text-white">The honest cases</h2>
+  <ul role="list" class="mt-4 grid grid-cols-1 gap-x-10 gap-y-8 sm:grid-cols-3">
+    <li><a href="./entry-words-nepotism.html" class="text-lg/7 font-medium text-mist-950 underline underline-offset-4 sm:text-base/7 dark:text-white">nepotism</a><p class="mt-1 text-base/7 text-mist-600 text-pretty sm:text-sm/7 dark:text-mist-400">Bierce in 77 characters, whole. One tile, a book that uses the word. No stock photograph, so the picture slot collapses rather than lying.</p></li>
+    <li><a href="./entry-words-rizz.html" class="text-lg/7 font-medium text-mist-950 underline underline-offset-4 sm:text-base/7 dark:text-white">rizz</a><p class="mt-1 text-base/7 text-mist-600 text-pretty sm:text-sm/7 dark:text-mist-400">Neither dead man met the word, so the crowd leads. The tiles are drawn in their loading state: the band fills as the shelves answer and never rearranges afterwards.</p></li>
+    <li><a href="./entry-words-topographagnosia.html" class="text-lg/7 font-medium text-mist-950 underline underline-offset-4 sm:text-base/7 dark:text-white">topographagnosia</a><p class="mt-1 text-base/7 text-mist-600 text-pretty sm:text-sm/7 dark:text-mist-400">Nothing anywhere, so no band. The page opens on the Definitions exactly as it does today.</p></li>
+  </ul>
+
+  <h2 class="mt-12 font-display text-2xl text-mist-950 dark:text-white">What every variant keeps</h2>
+  <ul role="list" class="mt-4 max-w-[60ch] list-disc space-y-2 pl-5 text-base/7 text-mist-700 sm:text-sm/7 dark:text-mist-300">
+    <li>Every tile says why it is here in one sentence and links <em>down</em> to its shelf, never out.</li>
+    <li>A source whose mark is a condition of use shows it once, in the band’s byline, only when its item is on the band.</li>
+    <li>The Definitions slab is untouched: the same rows, the same WordNet row open, the same ids.</li>
+    <li>Nothing is rewritten. Bierce is quoted; a poem is quoted at its matched line; a headline is a headline.</li>
+    <li>The rail is the rail. Only V2 puts anything in it, and only the quotation.</li>
+  </ul>
+</div>
+    </div></main>
+  </body>
+</html>

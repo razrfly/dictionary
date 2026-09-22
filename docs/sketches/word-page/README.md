@@ -22,6 +22,11 @@ are read by a browser and by the screenshots under
 | `rail-r{1..5}-love-open.html` | the same five with the disclosures opened |
 | `hard-cases.html` | the components neither word exercises, each with the real word it comes from |
 | `gifs.html` | #111's three GIF-shelf versions, and the playback question answered |
+| `entry.html` | **#156 Phase 0 — the contact sheet for the entry band**: four variants on `love`, a rotation page, three honest cases |
+| `entry-v{1,2,3,4}-*-love.html` | the epigraph, the plaque, the mosaic, the broadsheet — one voice and a few well-chosen things above the Definitions, the cards untouched |
+| `entry-rotation-love.html` | V1 on three consecutive days: same word, same rules, a different pick, every tier kept |
+| `entry-words-{nepotism,rizz,topographagnosia}.html` | a lead-only band, the inverted band in its loading state, and no band at all |
+| `entry-build.py` | regenerates every `entry-*.html` and `entry.html`: `python3 docs/sketches/word-page/entry-build.py docs/sketches/word-page`, then rebuild the stylesheet |
 | `tailwind.css` | the stylesheet input |
 | `sketch.css` | the built stylesheet — generated, committed so the sketches open from disk |
 | `build.sh` | rebuilds `sketch.css` |
@@ -44,10 +49,20 @@ reviewer opens a file and sees the thing.
 ./docs/sketches/word-page/build.sh
 ```
 
+From a worktree without its own `_build`, point the main checkout's binary at
+this input instead: `NODE_PATH=<main>/deps:<main>/_build/dev
+<main>/_build/tailwind-* --input=docs/sketches/word-page/tailwind.css
+--output=docs/sketches/word-page/sketch.css --minify`, with `deps` symlinked
+to the main checkout's so the heroicons plugin resolves.
+
 ## What the content is
 
 Real, and captured once so the three alternatives are compared on identical
-material. Headwords, entries, senses, relations and every shelf item were read
+material. The `entry-*` pages (#156, 2026-09-22) were captured the same way
+from `discovery_results` on `devils_dictionary_v2`, the Bierce source, the
+Commons files the app links, and one live Urban Dictionary call; a GIF whose
+title could not be read back is labelled *A GIF for “love”* rather than given
+one. Headwords, entries, senses, relations and every shelf item were read
 off the live pages at `localhost:4007` against `devils_dictionary_v2`; the
 attested lines on the quote-first text cards come from
 `discovery_results.match_details`, which already holds them. Thumbnails and
