@@ -456,6 +456,44 @@ defmodule DevilsDictionaryWeb.CultureChromeTest do
     end
   end
 
+  describe "the wording of the link back travels with the mark, wherever the image goes" do
+    # A mark carries two obligations: an image, whose `:placement` says where
+    # it is drawn, and the wording of the link back, which is per item
+    # whatever the placement. #152 moved Spotify's image to the shelf and
+    # every card's link-out silently became *Open at Spotify* — not one of
+    # the three phrases its guidelines permit.
+    defp marked_search(placement) do
+      searches("aa_search", "AA stock", 2, %{
+        attribution_mark: %{
+          light: "/images/a-mark.png",
+          dark: nil,
+          alt: "A Service",
+          href: "https://a.test/",
+          width: 80,
+          link_text: "Listen on A Service",
+          placement: placement
+        }
+      })
+    end
+
+    test "a shelf-placed mark still words every card's link back, and draws no card image" do
+      html = render([marked_search(:shelf)])
+
+      assert html =~ ~s(id="culture-mark-aa_search")
+      refute html =~ ~s(id="culture-mark-aa_search-)
+      assert Regex.scan(~r/Listen on A Service ↗/, html) |> length() == 2
+      refute html =~ "Open at AA stock"
+    end
+
+    test "a card-placed mark draws the image on each card and words the link the same way" do
+      html = render([marked_search(:card)])
+
+      refute html =~ ~s(id="culture-mark-aa_search")
+      assert Regex.scan(~r/id="culture-mark-aa_search-/, html) |> length() == 2
+      assert Regex.scan(~r/Listen on A Service ↗/, html) |> length() == 2
+    end
+  end
+
   describe "D4 — the byline is names" do
     test "the header carries the name and the qualifier moves into the About" do
       html =
