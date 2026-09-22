@@ -43,7 +43,7 @@ What is done instead, and why it is a fair reading of the duty:
 | limited to *metadata and cover art* | exactly that, and nothing else: no audio, no bytes. Cover art is hotlinked from `i.scdn.co` at 300 px and 64 px |
 | *reasonable efforts … most up to date* | `positive_refresh_seconds: 86_400` — a day, against the shipped thirty |
 | *delete older data* | the shipped `retention_seconds: 7 days` in `config :devils_dictionary, :discovery` sweeps results and attempts |
-| *do not store indefinitely* | nothing here is indefinite: a result older than the refresh is refetched, and one older than the retention is deleted |
+| *do not store indefinitely* | a result older than the refresh is refetched on the next visit to its word, and the sweep deletes every run older than the retention **except each word's current one**, which lives until a visit refreshes it — so a word nobody returns to keeps its last twelve tracks' metadata. Bounding that is #144 Phase 2 (retention as a rule), not this shelf |
 
 ## Posture
 

@@ -417,10 +417,12 @@ defmodule DevilsDictionaryWeb.Culture do
           else: metadata["artist"]
         )
       )
-      # The one mark a card can be asked to carry, named by the item rather
+      # The one mark a card can be asked to carry, carried by the item rather
       # than by its content type (#143). A provider whose terms require its
-      # brand beside the credit writes `brand_mark`; this component holds the
-      # marks it knows and shows nothing for a name it does not.
+      # brand beside the credit writes the mark itself — files, alt text and
+      # the link's wording — and this component draws what it was handed. It
+      # knows no provider by name (promise 9): a mark it cannot read is no
+      # mark, never a broken image.
       |> assign(:brand_mark, brand_mark(metadata["brand_mark"]))
 
     ~H"""
@@ -717,28 +719,27 @@ defmodule DevilsDictionaryWeb.Culture do
   defp prepend(parts, text, url), do: [%{text: text, url: url} | parts]
 
   @doc """
-  The assets and link text for a brand a provider's terms require, or nil.
+  The mark a provider's terms require on the card, read off the item, or nil.
 
-  A provider that owes a mark writes `preview_metadata["brand_mark"]`; this
-  is the only place the files and the wording live, so a name this component
-  does not know renders as no mark rather than as a broken image.
-
-  `link` is the text of the link back, because for Spotify the two are one
-  obligation and the wording is not free: the Branding Guidelines permit
-  *OPEN SPOTIFY*, *PLAY ON SPOTIFY* or *LISTEN ON SPOTIFY* for a platform
-  where the app exists, and nothing else. #143's brief asked for *Open on
-  Spotify*, which is not one of the three.
+  A provider that owes one writes `preview_metadata["brand_mark"]` as a map:
+  `"light"` and `"dark"` are the two files, as paths under `priv/static`
+  (never a URL — the mark is an asset this app ships, not a provider's
+  hotlink); `"alt"` is what a screen reader is owed; `"link"` is the wording
+  of the link back, because for a brand like Spotify's the two are one
+  obligation and the wording is not free. The provider owns all four; this
+  component owns none of them and matches on no provider's name, which is
+  what promise 9 asks. Anything else — a bare name, a missing key, a file
+  that is not a local path — is no mark.
   """
-  def brand_mark("spotify") do
-    %{
-      light: "/images/spotify-full-logo-black.svg",
-      dark: "/images/spotify-full-logo-white.svg",
-      alt: "Spotify",
-      link: "Listen on Spotify"
-    }
+  def brand_mark(%{"light" => light, "dark" => dark, "alt" => alt, "link" => link})
+      when is_binary(light) and is_binary(dark) and is_binary(alt) and is_binary(link) do
+    if String.starts_with?(light, "/") and String.starts_with?(dark, "/") and
+         alt != "" and link != "",
+       do: %{light: light, dark: dark, alt: alt, link: link},
+       else: nil
   end
 
-  def brand_mark(_name), do: nil
+  def brand_mark(_other), do: nil
 
   # What the card shows for the item's maker, by the row's `attribution`:
   # nothing on a `:none` row, and otherwise the ready-made `attribution` line

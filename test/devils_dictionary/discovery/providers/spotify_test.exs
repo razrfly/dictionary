@@ -160,7 +160,17 @@ defmodule DevilsDictionary.Discovery.Providers.SpotifyTest do
       assert metadata["attribution"] == "Chief Keef"
       assert metadata["creator"] == "Chief Keef"
       assert metadata["creator_url"] == "https://open.spotify.com/artist/15iVAtD3s3FsQR4w1v6M0P"
-      assert metadata["brand_mark"] == "spotify"
+
+      # The mark is the provider's to declare, whole: the renderer matches on
+      # no provider's name (promise 9), so a bare `"spotify"` here would draw
+      # nothing.
+      assert metadata["brand_mark"] == %{
+               "light" => "/images/spotify-full-logo-black.svg",
+               "dark" => "/images/spotify-full-logo-white.svg",
+               "alt" => "Spotify",
+               "link" => "Listen on Spotify"
+             }
+
       assert metadata["source_url"] == "https://open.spotify.com/track/m"
       assert metadata["content_type"] == "music"
     end
@@ -259,10 +269,29 @@ defmodule DevilsDictionary.Discovery.Providers.SpotifyTest do
       :ok = Token.invalidate()
       assert Token.peek() == nil
     end
+
+    test "invalidating a stale token leaves a newer one alone" do
+      # Two runs `401` on the same token. The first refreshes; the second's
+      # invalidation names the token *it* used, and must not clear what the
+      # first just stored — or the first's retry goes out with no bearer.
+      :ok = Token.put("stale", 3600)
+      :ok = Token.invalidate("stale")
+      assert Token.peek() == nil
+
+      :ok = Token.put("fresh", 3600)
+      :ok = Token.invalidate("stale")
+      assert Token.peek() == "fresh"
+
+      :ok = Token.invalidate("fresh")
+      assert Token.peek() == nil
+    end
   end
 
   describe "the credential" do
     test "the token request carries it and the search never does" do
+      original = Application.get_env(:devils_dictionary, :spotify, [])
+      on_exit(fn -> Application.put_env(:devils_dictionary, :spotify, original) end)
+
       Application.put_env(
         :devils_dictionary,
         :spotify,

@@ -112,15 +112,23 @@ defmodule DevilsDictionary.Discovery.Providers.Spotify.Token do
   end
 
   @doc """
-  Forgets the cached token.
+  Forgets the cached token — or, given the token a caller found bad, forgets
+  it only if it is still the one cached.
 
   Called when a search answers `401` — the one thing that says the token this
   process believes in is not one Spotify believes in — and by the conformance
   fixture, so each case starts from a cold cache and the token request it
   makes is visible in that case's own ledger.
+
+  The compare matters under `:provider_concurrency` 2: two runs that both
+  `401` on the same stale token would otherwise take turns — the first
+  refreshes, the second clears the fresh token the first just stored, and
+  the first's retry goes out with no bearer at all. A run passes the token
+  it used; a stale one is cleared, a newer one is left for the retry.
   """
-  @spec invalidate(atom()) :: :ok
-  def invalidate(name \\ __MODULE__), do: GenServer.call(name, :invalidate)
+  @spec invalidate(String.t() | nil, atom()) :: :ok
+  def invalidate(stale \\ nil, name \\ __MODULE__) when is_nil(stale) or is_binary(stale),
+    do: GenServer.call(name, {:invalidate, stale})
 
   @doc "Stores a token and the second it expires at, computed from `expires_in`."
   @spec put(String.t(), integer(), atom()) :: :ok
@@ -159,8 +167,14 @@ defmodule DevilsDictionary.Discovery.Providers.Spotify.Token do
   def handle_call(:peek, _from, %{token: token, expires_at: expires_at} = state),
     do: {:reply, {token, expires_at}, state}
 
-  def handle_call(:invalidate, _from, _state),
+  def handle_call({:invalidate, nil}, _from, _state),
     do: {:reply, :ok, %{token: nil, expires_at: nil}}
+
+  def handle_call({:invalidate, stale}, _from, %{token: token} = state) do
+    if token == stale,
+      do: {:reply, :ok, %{token: nil, expires_at: nil}},
+      else: {:reply, :ok, state}
+  end
 
   def handle_call({:put, token, expires_at}, _from, _state),
     do: {:reply, :ok, %{token: token, expires_at: expires_at}}

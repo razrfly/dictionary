@@ -72,7 +72,7 @@ defmodule DevilsDictionary.Discovery.Providers.Spotify do
 
     * *If you display any Spotify Content you must clearly attribute the
       content as being supplied and made available by Spotify, by using the
-      Spotify Marks.* → `"brand_mark" => "spotify"` on every item; the `:music`
+      Spotify Marks.* → the mark itself under `"brand_mark"` on every item; the `:music`
       row is `attribution: :required` and the card renders the mark beside the
       credit, at the Branding Guidelines' minimum size and exclusion zone.
     * *Metadata, cover art and Audio Preview Clips must be accompanied by a
@@ -100,6 +100,19 @@ defmodule DevilsDictionary.Discovery.Providers.Spotify do
 
   # The catalogue searched. A decision, not a requirement — see the moduledoc.
   @default_market "US"
+
+  # The Spotify Marks the Branding Guidelines require beside the content: the
+  # full logo, black on the light theme and white on the dark (the green one
+  # is allowed only on black or white, and the card's dark surface is
+  # neither), and one of the three link wordings the guidelines permit —
+  # *OPEN SPOTIFY*, *PLAY ON SPOTIFY* or *LISTEN ON SPOTIFY*. #143's brief
+  # asked for *Open on Spotify*, which is not one of them.
+  @brand_mark %{
+    "light" => "/images/spotify-full-logo-black.svg",
+    "dark" => "/images/spotify-full-logo-white.svg",
+    "alt" => "Spotify",
+    "link" => "Listen on Spotify"
+  }
 
   # How many rows one request asks Spotify for, before the gate. Fifty is the
   # API's maximum `limit` and the measurement in the moduledoc.
@@ -317,7 +330,7 @@ defmodule DevilsDictionary.Discovery.Providers.Spotify do
       offset = offset(request["after"])
 
       case Token.bearer(request_fun) do
-        {:ok, _token} -> search(mapping, request, offset, limit, request_fun, true)
+        {:ok, token} -> search(mapping, request, offset, limit, request_fun, token)
         {:error, code} -> {:error, code}
         {:deferred, code, seconds} -> {:deferred, code, seconds, request}
       end
@@ -328,7 +341,10 @@ defmodule DevilsDictionary.Discovery.Providers.Spotify do
 
   def retrieve(_operation, _mapping, _request, _request_fun), do: {:error, "invalid_mapping"}
 
-  defp search(mapping, request, offset, limit, request_fun, retry?) do
+  # `stale` is the token this run went out with, or nil once it has already
+  # retried: a `401` invalidates *that* token and no other, so two runs
+  # failing on the same stale token cannot clear each other's refresh.
+  defp search(mapping, request, offset, limit, request_fun, stale) do
     payload = %{
       "term" => mapping["term"],
       "offset" => "0",
@@ -345,11 +361,11 @@ defmodule DevilsDictionary.Discovery.Providers.Spotify do
       # `Transport` reads a `401` as `"authentication_failed"`, which for this
       # provider is the token and nothing else: the id and the secret were
       # good enough to mint it a moment ago.
-      {:error, "authentication_failed"} when retry? ->
-        :ok = Token.invalidate()
+      {:error, "authentication_failed"} when is_binary(stale) ->
+        :ok = Token.invalidate(stale)
 
         case Token.bearer(request_fun) do
-          {:ok, _token} -> search(mapping, request, offset, limit, request_fun, false)
+          {:ok, _token} -> search(mapping, request, offset, limit, request_fun, nil)
           {:error, code} -> {:error, code}
           {:deferred, code, seconds} -> {:deferred, code, seconds, request}
         end
@@ -486,7 +502,12 @@ defmodule DevilsDictionary.Discovery.Providers.Spotify do
       "title" => name,
       "artist" => artist_name,
       "author" => artist_name,
-      "creator" => artist_name,
+      # `creator` is the one artist `creator_url` reaches — the first credited
+      # — because the card links every occurrence of `creator` in the credit
+      # line to that URL, and *Kendrick Lamar, Zacari* as one link to
+      # Kendrick's page sends Zacari's readers to the wrong artist. The full
+      # credit is `attribution`, below, and stays unlinked past the first name.
+      "creator" => presence(artist["name"]),
       "creator_url" => absolute(get_in(artist, ["external_urls", "spotify"])),
       # The credit line the `:required` row shows beneath the cover. The
       # artist, not the word *Spotify*: the mark beside it is what attributes
@@ -501,10 +522,10 @@ defmodule DevilsDictionary.Discovery.Providers.Spotify do
       # Carried, not gated. Whether the page's mature flag reads it is #134's
       # open question 3 and not this shelf's to answer.
       "explicit" => row["explicit"] == true,
-      # What the card renders the Spotify mark from. A name, not markup: the
-      # renderer holds the one mark it knows and shows nothing for anything
-      # else.
-      "brand_mark" => "spotify",
+      # What the card renders the Spotify mark from: the files, the alt text
+      # and the wording of the link back, all of them this provider's to
+      # declare so that the renderer matches on no provider's name (promise 9).
+      "brand_mark" => @brand_mark,
       "content_type" => "music",
       "provider" => "Spotify"
     }
