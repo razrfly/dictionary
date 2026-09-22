@@ -6,7 +6,6 @@ defmodule DevilsDictionaryWeb.SourceBadgeTest do
 
   use ExUnit.Case, async: true
 
-  import Phoenix.Component
   import Phoenix.LiveViewTest
 
   alias DevilsDictionaryWeb.SourceBadge
