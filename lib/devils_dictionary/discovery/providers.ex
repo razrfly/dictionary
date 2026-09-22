@@ -63,10 +63,14 @@ defmodule DevilsDictionary.Discovery.Providers do
   """
   def browser_providers(target) do
     Enum.flat_map(all(), fn provider ->
-      with true <- Code.ensure_loaded?(provider),
-           true <- function_exported?(provider, :browser_config, 1),
-           true <- provider.capabilities().transport == :browser,
-           config when is_map(config) <- provider.browser_config(target) do
+      # The config's content type must be one the provider declared — and
+      # `validate!/0` has already checked that every declared one is a row
+      # `ContentTypes` can present — so the shelf's `fetch!/1` cannot raise on
+      # a type the provider made up at runtime.
+      with true <- browser?(provider),
+           %{content_types: declared} <- provider.capabilities(),
+           config when is_map(config) <- provider.browser_config(target),
+           true <- Map.get(config, :content_type) in declared do
         [{provider, config}]
       else
         _other -> []
@@ -74,9 +78,18 @@ defmodule DevilsDictionary.Discovery.Providers do
     end)
   end
 
-  @doc "True when this provider declares the browser transport."
+  @doc """
+  True when this provider declares the browser transport **and** exports the
+  `browser_config/1` that makes the declaration usable.
+
+  Both, because `browser_providers/1` requires both: a module that declared
+  the transport without the callback passed this gate, passed the coverage
+  check, and then had no shelf at runtime — the silent third state the check
+  exists to refuse.
+  """
   def browser?(provider) do
     Code.ensure_loaded?(provider) and function_exported?(provider, :capabilities, 0) and
+      function_exported?(provider, :browser_config, 1) and
       provider.capabilities().transport == :browser
   end
 
@@ -285,6 +298,14 @@ defmodule DevilsDictionary.Discovery.Providers do
       else: [
         "#{provider.slug()}: declares the background pipeline but does not export " <>
           inspect(@pipeline_callbacks)
+      ]
+  end
+
+  defp pipeline(provider, %{transport: :browser}) do
+    if Code.ensure_loaded?(provider) and function_exported?(provider, :browser_config, 1),
+      do: [],
+      else: [
+        "#{provider.slug()}: declares the browser transport but does not export browser_config/1"
       ]
   end
 

@@ -351,7 +351,13 @@ defmodule DevilsDictionaryWeb.Culture do
   #
   # `phx-update="ignore"` because everything inside is the hook's: the items
   # are never persisted and never reach an assign (K10), so LiveView must not
-  # patch over them on the next render.
+  # patch over them on the next render. The row's card width and title clamp
+  # ride along as `data-column` and `data-title-clamp`, because the hook
+  # builds the cards and would otherwise have to guess them.
+  #
+  # The heading id carries the provider as well as the type: two browser
+  # providers on one content type are two shelves, and two `<h3>`s with one
+  # id is the duplicate LiveView refuses.
   defp browser_shelf(assigns) do
     assigns =
       assigns
@@ -366,12 +372,14 @@ defmodule DevilsDictionaryWeb.Culture do
       data-query={@browser.term}
       data-language={@browser.language}
       data-api-key={Map.get(@browser, :api_key)}
+      data-column={@row.column}
+      data-title-clamp={@row.title_clamp}
       aria-label={"#{@row.heading} discoveries"}
       class="flex gap-4 py-4"
     >
       <div class="w-20 shrink-0 pt-1">
         <h3
-          id={"culture-filter-#{@browser.content_type}"}
+          id={"culture-filter-#{@browser.content_type}-#{@browser.provider}"}
           class="text-base/6 font-medium text-mist-950 sm:text-sm/6 dark:text-white"
         >
           {@row.heading}

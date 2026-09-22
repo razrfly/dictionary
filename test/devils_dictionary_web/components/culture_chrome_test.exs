@@ -131,13 +131,21 @@ defmodule DevilsDictionaryWeb.CultureChromeTest do
       assert html =~ "data-status"
       assert html =~ "data-results"
       assert html =~ "data-more"
+
+      # And the row's presentation, which the hook reads to build its cards:
+      # the `:gif` row clamps a title to one line, and the hook must not
+      # carry its own number.
+      assert html =~ ~s(data-title-clamp="#{ContentTypes.title_clamp(:gif)}")
+      assert html =~ ~s(data-column="#{ContentTypes.column(:gif)}")
     end
 
     test "the heading comes from the content-type row, not from the provider" do
       html = render_browser([browser()])
 
       assert html =~ ContentTypes.fetch!(:gif).heading
-      assert html =~ ~s(id="culture-filter-gif")
+      # The provider is in the id: two browser providers on one content type
+      # are two headings, and two ids alike is what LiveView refuses.
+      assert html =~ ~s(id="culture-filter-gif-giphy")
       assert html =~ ~s(id="culture-browser-giphy-)
     end
 

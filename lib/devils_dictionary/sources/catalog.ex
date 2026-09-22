@@ -486,8 +486,13 @@ defmodule DevilsDictionary.Sources.Catalog do
     :ok
   end
 
+  # Everything but the natural key is refreshed on conflict — except `active`,
+  # which is the owner's switch: `Discovery.set_provider_active/2` turns a
+  # source off at runtime, and a reseed that turned it back on would undo that
+  # without anyone deciding to. A new row still takes the `active` its attrs
+  # carry, which is how a source is born on or, for a retired one, off.
   defp upsert!(schema, natural_key, attrs) do
-    replace = attrs |> Map.keys() |> Enum.reject(&(&1 == natural_key))
+    replace = attrs |> Map.keys() |> Enum.reject(&(&1 == natural_key or &1 == :active))
 
     schema
     |> struct()

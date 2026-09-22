@@ -80,7 +80,7 @@ test('rate limit pauses subsequent visits without further fetches', async () => 
 
 // A frame, wired the way addItem wires it, against a stub DOM: enough of
 // document/li/img/button for the listeners, and a motion query we control.
-function frame(reduced = false) {
+function frame(reduced = false, el = undefined) {
   const nodes = []
   const make = tag => {
     const listeners = {}
@@ -101,12 +101,13 @@ function frame(reduced = false) {
     if (sel === 'img[data-still]') return li ? [li.image] : []
     return []
   }}
-  const ctx = {list, motion: {matches: reduced}}
+  const ctx = {list, motion: {matches: reduced}, el}
   try { Hook.addItem.call(ctx, {id: 'g', title: 'g', still: 'S', animated: 'A', url: 'https://giphy.com/gifs/g'}) } finally { globalThis.document = old }
   const li = list.items[0]
   const [image, play] = nodes.filter(n => n.tag === 'img' || n.tag === 'button')
-  li.image = image; li.play = play
-  return {li, image, play, ctx, onMotion: () => {
+  const link = nodes.find(n => n.tag === 'a')
+  li.image = image; li.play = play; li.link = link
+  return {li, image, play, link, ctx, onMotion: () => {
     for (const button of list.querySelectorAll('[aria-pressed="true"]')) button.fire('click')
     if (ctx.motion.matches) for (const img of list.querySelectorAll('img[data-still]')) img.src = img.dataset.still
   }}
@@ -152,4 +153,20 @@ test('reduced motion switching on mid-hover puts a hovered frame back to its sti
   const {li, image, ctx, onMotion} = frame(false)
   li.fire('mouseenter'); assert.equal(image.src, 'A')
   ctx.motion.matches = true; onMotion(); assert.equal(image.src, 'S')
+})
+
+
+// The card's width and title clamp are the content-type row's, read off the
+// shelf element (#144 Phase 3); a shelf mounted without them gets the `:gif`
+// row's values rather than a number of the hook's own.
+test('a card takes its column and title clamp from the shelf element', () => {
+  const {li, link} = frame(false, {dataset: {column: 'w-36 sm:w-40', titleClamp: 'line-clamp-3'}})
+  assert.match(li.className, /^w-36 sm:w-40 /)
+  assert.match(link.className, /^line-clamp-3 /)
+})
+
+test('a shelf with no presentation on it falls back to the GIF row', () => {
+  const {li, link} = frame()
+  assert.match(li.className, /^w-24 sm:w-28 /)
+  assert.match(link.className, /^line-clamp-1 /)
 })
