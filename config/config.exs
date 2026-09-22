@@ -98,7 +98,6 @@ config :devils_dictionary,
 # catalog, `mix dd.discovery`, the freshness overrides in runtime.exs and the
 # page all read it, and none of them names a provider itself.
 config :devils_dictionary, :discovery_providers, [
-  DevilsDictionary.Discovery.Providers.Artsy,
   DevilsDictionary.Discovery.Providers.BingNews,
   DevilsDictionary.Discovery.Providers.CineGraph,
   DevilsDictionary.Discovery.Providers.Commons,
@@ -219,9 +218,13 @@ config :devils_dictionary, :urban_dictionary,
   enabled: true,
   permission_requested_on: "pending"
 
-# Artsy is registry-only: its 43 pilot works are catalog rows and no request is
-# ever made. The private client, its coordinator and the availability check
-# were retired in #109 Phase 3a; `enabled` is read by the registry gate alone.
+# Artsy is a corpus (#144 Phase 3). Its 43 pilot works are catalog rows, its
+# source row is seeded by `Sources.Catalog` and no request is ever made — the
+# private client, its coordinator and the availability check were retired in
+# #109 Phase 3a, and the module that stayed behind could never run. `enabled`
+# is kept because `ARTSY_CLIENT_ID`/`ARTSY_CLIENT_SECRET` are still read from
+# `.env` by whoever revisits the decision; nothing in the running system reads
+# it any more.
 config :devils_dictionary, :artsy, enabled: true
 
 # Oban (#69 §5). `absorb: 1` because a dump absorb is a single long stream.

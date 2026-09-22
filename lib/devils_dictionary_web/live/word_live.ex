@@ -215,7 +215,10 @@ defmodule DevilsDictionaryWeb.WordLive do
     socket
     |> assign(:discovery_target, target)
     |> assign(:cultures, Map.merge(cultures, catalog_shelf(page, target)))
-    |> assign(:giphy, DevilsDictionary.Discovery.Providers.Giphy.browser_config(target))
+    # Every browser-transport provider the registry holds, in registry order,
+    # asked for its own config — rather than one named module (#144 Phase 3).
+    # A second one is a registration and nothing here.
+    |> assign(:browsers, Enum.map(Providers.browser_providers(target), &elem(&1, 1)))
     |> assign(:urban_dictionary, DevilsDictionary.Sources.UrbanDictionary.browser_config(target))
   end
 
@@ -606,9 +609,9 @@ defmodule DevilsDictionaryWeb.WordLive do
                    landed). The GIF shelf keeps its own hook and transport;
                    what it loses is the second chrome 400 px below the first. --%>
               <Culture.section
-                :if={@cultures != %{} or @giphy}
+                :if={@cultures != %{} or @browsers != []}
                 states={@cultures}
-                giphy={@giphy}
+                browsers={@browsers}
                 return_path={word_path(@page)}
                 contributor={@contributor}
               />

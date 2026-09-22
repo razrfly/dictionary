@@ -35,7 +35,7 @@ defmodule DevilsDictionary.Discovery.Providers.Met do
   alias DevilsDictionary.SourceIdentity.Entry
 
   import DevilsDictionary.Discovery.Provider.Helpers,
-    only: [clamp_label: 1, headers: 0, interval: 3, presence: 1]
+    only: [clamp_label: 1, headers: 0, interval: 3, media_url: 1, presence: 1, sparse: 1]
 
   @adapter_version "met.openaccess.v1"
   @operation "tag_qid_discovery"
@@ -58,6 +58,10 @@ defmodule DevilsDictionary.Discovery.Providers.Met do
   # does not override it. Measured, not documented: the Met's published 80
   # req/s refused 44% of 2,600 requests at 1 req/s and none at 3 s/request.
   @request_interval_ms 3_000
+  @min_retry_interval_ms 1_500
+
+  @doc "The identity namespace one Met object is registered under: its object id."
+  def namespace, do: "met_object"
 
   @impl true
   def slug, do: "met"
@@ -81,6 +85,7 @@ defmodule DevilsDictionary.Discovery.Providers.Met do
       license_url: "https://www.metmuseum.org/information/terms-and-conditions",
       homepage: "https://www.metmuseum.org/",
       url_template: "https://www.metmuseum.org/art/collection/search/{external_id}",
+      active: true,
       attribution: "The Metropolitan Museum of Art Open Access",
       config: %{
         "operation" => @operation,
@@ -102,8 +107,11 @@ defmodule DevilsDictionary.Discovery.Providers.Met do
       operations: [@operation],
       content_types: [:artwork],
       # The probe measured 21 of 100 hydrations refused at ~6.7 req/s. 1.5 s is
-      # the interval that recovered 17 of those 21 on one retry.
-      min_retry_interval_ms: 1_500,
+      # the interval that recovered 17 of those 21 on one retry — and it is now
+      # the *default* rather than a literal (#144 Phase 3), overridable like
+      # `request_interval_ms` beside it, which is the pair every other
+      # provider has had since the third generation.
+      min_retry_interval_ms: interval(config(), :min_retry_interval_ms, @min_retry_interval_ms),
       # K5 of #109: pacing is a capability the shared transport honours, not a
       # `Process.sleep/1` this provider hides inside its own hydration loop.
       # 3 s is the measured sustainable rate: 44% of 2,600 requests were refused
@@ -473,7 +481,7 @@ defmodule DevilsDictionary.Discovery.Providers.Met do
     external_id = Integer.to_string(object["objectID"])
 
     %{
-      external_namespace: "met_object",
+      external_namespace: namespace(),
       external_id: external_id,
       identifiers: identifiers(external_id, object),
       position: 0,
@@ -483,20 +491,45 @@ defmodule DevilsDictionary.Discovery.Providers.Met do
         "query" => term,
         "tags" => tags
       },
-      preview_metadata: %{
-        "title" => title(object),
-        "year" => presence(object["objectDate"]),
-        "image_url" => object["primaryImageSmall"],
-        "thumbnail_url" => object["primaryImageSmall"],
-        "source_url" => presence(object["objectURL"]),
-        "credit_line" => presence(object["creditLine"]),
-        "artist" => presence(object["artistDisplayName"]),
-        "content_type" => "artwork",
-        "provider" => "The Met",
-        "matched_tags" => Enum.map(tags, &Map.take(&1, ["term", "qid"]))
-      },
+      # Sparse, and carrying what the `:artwork` row's `attribution: :credited`
+      # asks for (#144 Phase 3). The renderer reads `attribution` first and
+      # `credit_line` second, and the Met's credit line is the thing a museum
+      # asks to be shown — so it is written to both: `credit_line` is what the
+      # corpus manifests already record and what a reader of the persisted map
+      # expects, and `attribution` is the name the shared renderer looks for.
+      #
+      # `creator_url` where the object carries one. The Met publishes the
+      # artist's own authority records — Wikidata first, ULAN as the fallback —
+      # and an object with neither gets no link rather than a guess, which is
+      # exactly what `sparse/1` is for.
+      preview_metadata:
+        sparse(%{
+          "title" => title(object),
+          "year" => presence(object["objectDate"]),
+          "image_url" => presence(object["primaryImageSmall"]),
+          "thumbnail_url" => presence(object["primaryImageSmall"]),
+          "source_url" => presence(object["objectURL"]),
+          "credit_line" => presence(object["creditLine"]),
+          "attribution" => presence(object["creditLine"]),
+          "artist" => presence(object["artistDisplayName"]),
+          "creator" => presence(object["artistDisplayName"]),
+          "creator_url" => artist_url(object),
+          "content_type" => "artwork",
+          "provider" => "The Met",
+          "matched_tags" => Enum.map(tags, &Map.take(&1, ["term", "qid"]))
+        }),
       display_allowed: true
     }
+  end
+
+  # The artist's own authority record, as the Met publishes it. Wikidata
+  # first because it is the identifier the rest of this encyclopedia is built
+  # on; ULAN as the fallback because the Met carries it for artists Wikidata
+  # has not reached. `media_url/1` and not the raw field: this reaches an
+  # `href` in the renderer, which allows an absolute `http(s)` URL and nothing
+  # else.
+  defp artist_url(object) do
+    media_url(object["artistWikidata_URL"]) || media_url(object["artistULAN_URL"])
   end
 
   defp identifiers(external_id, object) do

@@ -31,9 +31,11 @@ defmodule DevilsDictionaryWeb.Culture do
   attr :states, :map, required: true
   attr :return_path, :string, default: nil
 
-  attr :giphy, :map,
-    default: nil,
-    doc: "the browser-side GIF shelf's config, or nil when there is no key or no target"
+  attr :browsers, :list,
+    default: [],
+    doc:
+      "one `browser_config/1` map per browser-transport provider that covers this target, " <>
+        "in registry order"
 
   attr :contributor, :boolean,
     default: false,
@@ -49,9 +51,9 @@ defmodule DevilsDictionaryWeb.Culture do
 
     ~H"""
     <.compact_section
-      :if={@shelves != [] or @giphy}
+      :if={@shelves != [] or @browsers != []}
       shelves={@shelves}
-      giphy={@giphy}
+      browsers={@browsers}
       provider_count={@provider_count}
       return_path={@return_path}
       contributor={@contributor}
@@ -153,7 +155,7 @@ defmodule DevilsDictionaryWeb.Culture do
   end
 
   attr :shelves, :list, required: true
-  attr :giphy, :map, default: nil
+  attr :browsers, :list, default: []
   attr :provider_count, :integer, required: true
   attr :return_path, :string, default: nil
   attr :contributor, :boolean, default: false
@@ -298,7 +300,7 @@ defmodule DevilsDictionaryWeb.Culture do
           </div>
         </div>
 
-        <DevilsDictionaryWeb.GiphyShelf.section :if={@giphy} config={@giphy} />
+        <.browser_shelf :for={browser <- @browsers} browser={browser} />
       </div>
 
       <%!-- One About for the block (D3 of #126, taken one step further): a
@@ -332,6 +334,99 @@ defmodule DevilsDictionaryWeb.Culture do
   # across. The catalog state names no tier of its own — its items each carry
   # their corpus's — and an unnamed tier sorts after every named one, which
   # is where a corpus belongs anyway.
+  attr :browser, :map, required: true
+
+  @doc false
+  # One shelf a browser-transport provider fills, through its content-type row
+  # like any other (#144 Phase 3).
+  #
+  # Before this, `DevilsDictionaryWeb.GiphyShelf` was its own component with
+  # its own heading, its own card width and GIPHY's mark written into the
+  # markup — the one exception to promise 9 of the README, *the reader knows
+  # no provider by name*. Everything provider-specific now arrives in the
+  # config the provider's own `browser_config/1` returned: the hook that makes
+  # the requests, the note that says what its results are, and the badge a
+  # licence requires. What the shelf *looks* like comes from
+  # `ContentTypes.fetch!/1`, as it does for a server provider.
+  #
+  # `phx-update="ignore"` because everything inside is the hook's: the items
+  # are never persisted and never reach an assign (K10), so LiveView must not
+  # patch over them on the next render. The row's card width and title clamp
+  # ride along as `data-column` and `data-title-clamp`, because the hook
+  # builds the cards and would otherwise have to guess them.
+  #
+  # The heading id carries the provider as well as the type: two browser
+  # providers on one content type are two shelves, and two `<h3>`s with one
+  # id is the duplicate LiveView refuses.
+  defp browser_shelf(assigns) do
+    assigns =
+      assigns
+      |> assign(:row, ContentTypes.fetch!(assigns.browser.content_type))
+      |> assign(:badge, Map.get(assigns.browser, :badge))
+
+    ~H"""
+    <section
+      id={"culture-browser-#{@browser.provider}-#{Base.url_encode64(@browser.term, padding: false)}"}
+      phx-hook={@browser.hook}
+      phx-update="ignore"
+      data-query={@browser.term}
+      data-language={@browser.language}
+      data-api-key={Map.get(@browser, :api_key)}
+      data-column={@row.column}
+      data-title-clamp={@row.title_clamp}
+      aria-label={"#{@row.heading} discoveries"}
+      class="flex gap-4 py-4"
+    >
+      <div class="w-20 shrink-0 pt-1">
+        <h3
+          id={"culture-filter-#{@browser.content_type}-#{@browser.provider}"}
+          class="text-base/6 font-medium text-mist-950 sm:text-sm/6 dark:text-white"
+        >
+          {@row.heading}
+        </h3>
+        <a
+          :if={@badge}
+          href={@badge.href}
+          target="_blank"
+          rel="noreferrer"
+          aria-label={@badge.alt}
+          class="mt-1 block"
+        >
+          <img src={@badge.src} alt={@badge.alt} width="80" class="rounded bg-white" />
+        </a>
+        <p
+          :if={is_nil(@badge)}
+          id={"culture-provider-#{@browser.provider}"}
+          class="mt-1 text-xs text-mist-400"
+        >
+          {@browser.provider_name}
+        </p>
+      </div>
+      <div class="min-w-0 flex-1 space-y-2">
+        <p data-status role="status" class="text-base text-mist-500 sm:text-sm">
+          Looking for {@row.label}…
+        </p>
+        <ul
+          data-results
+          tabindex="0"
+          aria-label={"#{@row.heading} matches; scroll for more"}
+          class="flex gap-4 overflow-x-auto overscroll-x-contain pb-2 focus-visible:outline-2 focus-visible:outline-offset-2"
+        >
+        </ul>
+        <p class="flex flex-wrap items-baseline justify-between gap-x-6 text-base text-mist-500 sm:text-sm">
+          <span>{@browser.note}</span>
+          <button
+            data-more
+            type="button"
+            hidden
+            class="text-mist-600 underline underline-offset-4 hover:text-mist-950 dark:text-mist-300 dark:hover:text-white"
+          >Load more</button>
+        </p>
+      </div>
+    </section>
+    """
+  end
+
   # The shelf's age, as clauses a `·` joins.
   #
   # The **live** half reads the contributing states' display roots: the oldest

@@ -29,7 +29,7 @@ finished. Where a claim is not yet true everywhere, the last column says so.
 | 6 | **Nothing is spent without a ledger, and no bytes are held — and nothing is held longer than its source allows.** Every live request is a row in `discovery_request_attempts`, bounded per position; results are URLs and metadata; images are hotlinked. A held result past its source's `retention_seconds` is withdrawn and deleted, **including the `source_records` it owned** (#144 Phase 2). | The ledger; the transport's budget; D14; conformance's coverage gate; `retention_test.exs`, which takes a result and its payload under a short policy and keeps both under the default | A source record the encyclopedia is standing on — a registry identity's provenance — survives its result, by design. A source with a retention obligation is therefore a source with no `identity_record/1`, which is what the two news providers are |
 | 7 | **An honest empty.** A word with nothing shows nothing on that shelf, rather than filler, a wrong meaning, or another word's results. | Each phase's proof includes a word expected to be empty (`nepotism`, then `logomachy`) | **Not true of `:image` any more, by decision (#116 D2).** A keyword provider declines nothing (M6), and Pexels has no empty at all: measured 2026-09-19, `/define/logomachy` — where Commons, Openverse and Unsplash all return nothing — carries eleven Pexels photographs, so **no word is without an Images shelf**. What the shelf keeps is the *label*: every such item's reason reads *Search result for “…”, ranked by the provider and not matched on an identifier.* The lever, if the owner wants the empty back, is D2's one clause: hide a shelf whose every state is `:query`-only. Relevance to one *meaning* of a polysemous word is unverified and says so (#101's) |
 | 8 | **Composition is read-time; persisted results are never rewritten.** Order, dedup and credit are computed when the page renders, from what providers persisted. | `Shelf` is pure; `display_items/1` reads identifiers back as a virtual field; schema impact of #116 Phase 1 was zero | — |
-| 9 | **The reader knows no provider by name.** What a card looks like comes from the content-type row; what a source is called comes from its source row; the component branches on neither. | Reading `Culture`; the multi-source check credits two providers it was never told about | GIPHY's shelf is its own component outside this rule, pending K10 |
+| 9 | **The reader knows no provider by name.** What a card looks like comes from the content-type row; what a source is called comes from its source row; the component branches on neither — **including a browser-transport provider**, since #144 Phase 3. | Reading `Culture`; the multi-source check credits two providers it was never told about; `conformance_coverage_test.exs` asserts every registered provider is `retrievable?` or `transport: :browser`, with no third state | — |
 
 Not goals, and listed so nobody builds toward them by accident: relevance
 ranking across sources (#101's assessor, on top of this), curation and
@@ -337,14 +337,26 @@ there and the credit its shelf requires. Nothing in `Culture` knows which
 providers exist; how several sources become one rail is
 [*Many sources, one shelf*](#many-sources-one-shelf) below.
 
-GIPHY is the one exception, and it is a transport exception rather than a
-licence to add chrome: its requests are made by the reader's own browser, so it
-has no pipeline state to render and it still draws through
-`DevilsDictionaryWeb.GiphyShelf.section/1` beneath the shared section. K10 of
-`#109` says the kit renders its shelf through K2's chrome; the shipped code does
-not, because a browser-transport provider has no `Discovery.state/2` items for
-`Culture.section` to draw. Folding it in means giving it a server transport
-first, which is parked until written caching approval exists.
+A **browser-transport** provider draws through the same chrome (#144 Phase 3).
+Its requests are made by the reader's own browser, so it has no
+`Discovery.state/2` items for `Culture.section` to compose — but the *shelf* is
+still a content-type row, and `Culture.browser_shelf/1` reads its heading, its
+card width and its title clamp from `ContentTypes` exactly as a server
+provider's does. Everything provider-specific arrives in the map that
+provider's own `browser_config/1` returned: the `phx-hook` whose JavaScript
+makes the requests, the note that says what its results are, and a `badge` for
+a licence that requires a mark shown, as GIPHY's terms do.
+
+`WordLive` asks `Providers.browser_providers/1` rather than naming a module,
+so a second browser provider is a registration and nothing in shared code.
+Before this, `WordLive` called `Giphy.browser_config/1` by name and `Culture`
+rendered a `GiphyShelf` component by name — three shared edits for the second
+one, and the one exception promise 9 carried.
+
+K10 of #109 is unchanged and still open: **nothing is stored**. A browser
+provider has no run, no ledger row and no persisted result, because its terms
+forbid persisting what it returns. What Phase 3 changed is the chrome, not the
+transport.
 
 ---
 
@@ -429,7 +441,7 @@ declares the first.
 | `:text` | PoetryDB, Open Library | `poetrydb-v1`, `open-library-v1` — **identity only, by decision; neither reaches a page** | Chronicling America as a corpus, Gutenberg | attestation, live only |
 | `:news` | Bing News, The Guardian | — | Chronicling America's bulk OCR; GDELT (#134) | attestation, **dated** |
 | `:music` | Spotify | — | MusicBrainz (#116), identity via `P921`/`P2207` | a labelled search, gated on the track title |
-| `:gif` | GIPHY, browser-only, outside this chrome | — | Tenor, after K10 | a labelled search |
+| `:gif` | GIPHY, browser-only — **inside** this chrome since #144 Phase 3, through `Culture.browser_shelf/1` | — | Tenor, after K10 | a labelled search |
 | `:quote` | — | — | Wikiquote, Gutenberg extraction, after #65 | identity (`(author_id, body hash)`) |
 
 The `:text` decision is #109's second residual, settled here: the two text
@@ -910,10 +922,14 @@ Two profiles, chosen from the provider's own capabilities:
 - **full** — `background: true`, `transport: :server`, and the pipeline callbacks
   exported. Admission, budget, positive and negative cache, pagination, cleanup,
   identity and the reader.
-- **registry-only** — anything else. Artsy declares `background: false` and GIPHY
-  declares `transport: :browser`; neither exports `retrieve/4`, so there is no
-  run to drive. The suite checks the contract half and asserts that the pipeline
-  gate refuses to schedule them.
+- **registry-only** — anything else. GIPHY declares `transport: :browser` and
+  exports no `retrieve/4`, so there is no run to drive. The suite checks the
+  contract half and asserts that the pipeline gate refuses to schedule it.
+
+Those are the only two. `conformance_coverage_test.exs` asserts that every
+registered provider is `retrievable?/1` **or** `transport: :browser` — a module
+that is neither is a source row wearing a provider's clothes, which is what
+Artsy was for three phases and is no longer (#144 Phase 3).
 
 `DevilsDictionary.Artworks.Corpus.Conformance` is the corpus half: checksum
 verification, refusal of a row edited without its checksum, an idempotent seed to
@@ -973,8 +989,8 @@ suite red.
 | Bing News | discovery (GET, offset, **attestation with a dated locator**, keyless RSS via `body: :xml`, 30-day freshness gate, publisher URL as identity in `news_article`) | `Culture.section`, the `:news` shelf, attribution `:credited` | #135 — and see `docs/integrations/bing-news.md` on the feed's own `<copyright>` |
 | The Guardian | discovery (GET, offset, **attestation verified in the article's own `bodyText`**, keyed (`GUARDIAN_API_KEY`), quoted phrase, `type=article`, two identities — its own `guardian_article` and Bing's `news_article`, computed by calling Bing's own functions) | `Culture.section`, the `:news` shelf, the first item on it to carry a credit distinct from its creator, and the first source anywhere to carry a **required shelf mark** (`attribution_mark/0` → *Powered by The Guardian*, clause 6(b)(vi)) | #142 — and see `docs/integrations/guardian.md` on clause 6(g), which is **unresolved** |
 | Spotify | discovery (GET, offset, **labelled `:query`** catalogue search gated on the track title, Client Credentials token as its own `stage: "token"` ledger row, `SPOTIFY_CLIENT_ID`/`SPOTIFY_CLIENT_SECRET`, `spotify_track` + `isrc` identifiers) | `Culture.section`, the `:music` shelf, attribution `:required` with the Spotify mark on every card | #143 — and see `docs/integrations/spotify.md` on the Developer Terms' caching clause and the owner's decision to run a development-mode app |
-| Artsy | registered, registry-only — its 43 artworks and their gene mappings reach a page through the catalog; the private client was retired in #109 Phase 3a | `Culture.section` | #86, K9 of #109 |
-| GIPHY | registered, browser-only, transient | its own `GiphyShelf` component, **not** `Culture.section` | parked pending caching approval, K10 |
+| Artsy | **corpus** — its 43 artworks and their gene mappings reach a page through the catalog, as `:gene` identity; the private client was retired in #109 Phase 3a and the module left the provider registry in #144 Phase 3. Its source row is seeded by `Sources.Catalog.sources/0` and `mix dd.artsy.withdraw` still takes the lot back out | `Culture.section` | #86, K9 of #109, #144 §4 |
+| GIPHY | registered, browser-only, transient | `Culture.section` — through its content-type row like any other shelf, since #144 Phase 3 | parked pending caching approval, K10 |
 
 `priv/artworks/manifests/` also holds four Artsy **import** manifests
 (`DevilsDictionary.Artworks.Manifest`, `schema_version` 2, `candidates` keyed on

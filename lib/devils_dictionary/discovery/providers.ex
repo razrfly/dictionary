@@ -49,6 +49,50 @@ defmodule DevilsDictionary.Discovery.Providers do
     end)
   end
 
+  @doc """
+  Providers the **reader's browser** drives, for a target it has.
+
+  The mirror of `server_providers/1`: a declaration of `transport: :browser` is
+  a claim and `browser_config/1` returning a map is the proof — the provider is
+  enabled, its key is present and its source row is active, all of which only
+  it can answer. Returns `{provider, config}` pairs in registry order, and a
+  provider that declines a target is simply absent (#144 Phase 3).
+
+  Every registered provider is one of these two or neither-and-inert;
+  `conformance_coverage_test.exs` asserts there is no third state.
+  """
+  def browser_providers(target) do
+    Enum.flat_map(all(), fn provider ->
+      # The config's content type must be one the provider declared — and
+      # `validate!/0` has already checked that every declared one is a row
+      # `ContentTypes` can present — so the shelf's `fetch!/1` cannot raise on
+      # a type the provider made up at runtime.
+      with true <- browser?(provider),
+           %{content_types: declared} <- provider.capabilities(),
+           config when is_map(config) <- provider.browser_config(target),
+           true <- Map.get(config, :content_type) in declared do
+        [{provider, config}]
+      else
+        _other -> []
+      end
+    end)
+  end
+
+  @doc """
+  True when this provider declares the browser transport **and** exports the
+  `browser_config/1` that makes the declaration usable.
+
+  Both, because `browser_providers/1` requires both: a module that declared
+  the transport without the callback passed this gate, passed the coverage
+  check, and then had no shelf at runtime — the silent third state the check
+  exists to refuse.
+  """
+  def browser?(provider) do
+    Code.ensure_loaded?(provider) and function_exported?(provider, :capabilities, 0) and
+      function_exported?(provider, :browser_config, 1) and
+      provider.capabilities().transport == :browser
+  end
+
   @pipeline_callbacks [
     retrieve: 4,
     automatic_mapping: 1,
@@ -254,6 +298,14 @@ defmodule DevilsDictionary.Discovery.Providers do
       else: [
         "#{provider.slug()}: declares the background pipeline but does not export " <>
           inspect(@pipeline_callbacks)
+      ]
+  end
+
+  defp pipeline(provider, %{transport: :browser}) do
+    if Code.ensure_loaded?(provider) and function_exported?(provider, :browser_config, 1),
+      do: [],
+      else: [
+        "#{provider.slug()}: declares the browser transport but does not export browser_config/1"
       ]
   end
 

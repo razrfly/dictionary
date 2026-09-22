@@ -98,8 +98,13 @@ export default {
     }
   },
   addItem(item) {
+    // The card's width and its title clamp are the content-type row's, handed
+    // over as data attributes by the shelf (#144 Phase 3); the fallbacks are
+    // the `:gif` row's values, for a shelf mounted without them.
+    const column = this.el?.dataset?.column || 'w-24 sm:w-28'
+    const clamp = this.el?.dataset?.titleClamp || 'line-clamp-1'
     const li = document.createElement('li')
-    li.className = 'w-24 shrink-0 snap-start space-y-2 sm:w-28'
+    li.className = `${column} shrink-0 snap-start space-y-2`
     const image = document.createElement('img')
     image.src = item.still
     image.dataset.still = item.still
@@ -160,7 +165,7 @@ export default {
     link.target = '_blank'
     link.rel = 'noreferrer noopener'
     link.textContent = item.title
-    link.className = 'line-clamp-2 text-sm hover:underline'
+    link.className = `${clamp} text-sm hover:underline`
     li.append(image, play, link)
     this.list.append(li)
   },

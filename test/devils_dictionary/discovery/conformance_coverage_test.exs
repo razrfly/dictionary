@@ -37,6 +37,44 @@ defmodule DevilsDictionary.Discovery.ConformanceCoverageTest do
       end
     end
 
+    test "every registered provider can either run or render — there is no third state" do
+      # #144 Phase 3. A module in `:discovery_providers` is either driven by
+      # the shared pipeline (`retrievable?/1`: it exports all four callbacks
+      # and declares `background: true, transport: :server`) or it fills a
+      # shelf from the reader's browser (`transport: :browser` with a
+      # `browser_config/1`). Anything else is a source row wearing a
+      # provider's clothes — which is what Artsy was for three phases: no
+      # `retrieve/4`, `background: false`, a `validate_mapping/2` for a
+      # parameter shape nothing built, and a fixture that returned empty
+      # pages. It is a corpus now, and its row is seeded by
+      # `Sources.Catalog` (#144 §4).
+      for provider <- Providers.all() do
+        assert Providers.retrievable?(provider) or Providers.browser?(provider),
+               """
+               #{inspect(provider)} is registered and can neither be run nor rendered.
+
+               A provider is driven by the pipeline — all of
+               #{inspect(Providers.pipeline_callbacks())}, with
+               `background: true, transport: :server` — or it declares
+               `transport: :browser` and a `browser_config/1`. A module that
+               is neither is a source row, and a source row belongs in
+               `DevilsDictionary.Sources.Catalog.sources/0`.
+               """
+      end
+    end
+
+    test "a browser provider's config names a content type the reader can present" do
+      # It is the row that gives a browser shelf its heading, its card width
+      # and its title clamp, exactly as for a server provider, so a type the
+      # table cannot present is a shelf that renders as a `KeyError`.
+      for provider <- Providers.all(), Providers.browser?(provider) do
+        for type <- provider.capabilities().content_types do
+          assert type in DevilsDictionary.Discovery.ContentTypes.known(),
+                 "#{provider.slug()} declares #{inspect(type)}, which ContentTypes cannot present"
+        end
+      end
+    end
+
     test "every fixture is actually run by a suite" do
       # Parsed, not grepped: a comment naming the fixture would satisfy a
       # substring search, and this test's whole job is to be unfoolable.

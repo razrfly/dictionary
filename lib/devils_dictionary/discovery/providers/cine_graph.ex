@@ -6,7 +6,7 @@ defmodule DevilsDictionary.Discovery.Providers.CineGraph do
 
   alias DevilsDictionary.SourceIdentity.Entry
 
-  import DevilsDictionary.Discovery.Provider.Helpers, only: [headers: 0]
+  import DevilsDictionary.Discovery.Provider.Helpers, only: [headers: 0, interval: 3, sparse: 1]
 
   @adapter_version "cinegraph.graphql.v2"
   @operation "keyword_discovery"
@@ -16,6 +16,9 @@ defmodule DevilsDictionary.Discovery.Providers.CineGraph do
     searchMovieKeywords(query: $query, limit: 10) { tmdbId name movieCount }
   }
   """
+
+  @doc "The identity namespace one CineGraph film is registered under: its TMDb id."
+  def namespace, do: "tmdb_movie"
 
   @impl true
   def slug, do: "cinegraph"
@@ -37,6 +40,7 @@ defmodule DevilsDictionary.Discovery.Providers.CineGraph do
       homepage: "https://cinegraph.org/",
       url_template: "https://cinegraph.org/",
       attribution: "Film metadata and keywords: TMDb; discovery served by CineGraph",
+      active: true,
       config: %{
         "operation" => @operation,
         "keyword_source" => "TMDb",
@@ -54,7 +58,15 @@ defmodule DevilsDictionary.Discovery.Providers.CineGraph do
       persistence: :persistent,
       pagination: :cursor,
       operations: [@operation],
-      content_types: [:film]
+      content_types: [:film],
+      # Declared and overridable rather than absent (#144 Phase 3). Zero is
+      # what this provider has always run at — it is keyed, with a published
+      # budget, and no probe has measured a throttle — so the behaviour is
+      # unchanged. What changes is that an operator who finds one can pace it
+      # with `CINEGRAPH_*` rather than a deploy, and the transport reads the
+      # rate off `capabilities/0` like every other provider's.
+      min_retry_interval_ms: interval(config(), :min_retry_interval_ms, 0),
+      request_interval_ms: interval(config(), :request_interval_ms, 0)
     }
   end
 
@@ -315,16 +327,21 @@ defmodule DevilsDictionary.Discovery.Providers.CineGraph do
            "keywords" => keywords,
            "genres" => genres
          },
-         preview_metadata: %{
-           "title" => title,
-           "year" => year(movie["releaseDate"]),
-           "release_date" => movie["releaseDate"],
-           "source_url" => source_url(movie["cinegraphUrl"]),
-           "poster_url" => poster_url(movie["posterPath"]),
-           "content_type" => "film",
-           "provider" => "CineGraph",
-           "keyword_source" => "TMDb"
-         },
+         # Sparse, like every third-generation provider's (#144 Phase 3): a
+         # key whose value is `nil` is a key that exists, and an absent field
+         # and a present-but-empty one are two different facts to anything
+         # that pattern-matches on the map.
+         preview_metadata:
+           sparse(%{
+             "title" => title,
+             "year" => year(movie["releaseDate"]),
+             "release_date" => movie["releaseDate"],
+             "source_url" => source_url(movie["cinegraphUrl"]),
+             "poster_url" => poster_url(movie["posterPath"]),
+             "content_type" => "film",
+             "provider" => "CineGraph",
+             "keyword_source" => "TMDb"
+           }),
          display_allowed: true
        }}
     end

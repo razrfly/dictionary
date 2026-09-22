@@ -193,7 +193,55 @@ defmodule DevilsDictionary.Sources.Catalog do
           "related_url" => "https://johnsonsdictionaryonline.com/"
         }
       }
-    ] ++ DevilsDictionary.Discovery.Providers.source_catalog()
+    ] ++ [artsy()] ++ DevilsDictionary.Discovery.Providers.source_catalog()
+  end
+
+  # Artsy is a **corpus**, not a provider (#144 Phase 3, and §4 of #144).
+  #
+  # Its 43 pilot works reach pages through `Artworks` as `:gene` identity, its
+  # gene mappings are installed by `Artworks.install_meaning_mappings!/0`, and
+  # `mix dd.artsy.withdraw` can take the lot back out. None of that needs a
+  # provider, and the module it had was one that could never run: no
+  # `retrieve/4`, `background: false`, a `validate_mapping/2` for a parameter
+  # shape nothing built, and a 34-line fixture returning empty pages.
+  #
+  # The row lives **here** rather than in `:discovery_providers`, and that is
+  # the correction #144 §4 needed: it said the source row "already arrives
+  # through `Sources.Catalog`", and it did not — `sources/0` is the six MVP-0
+  # entries plus `Providers.source_catalog()`, so un-registering the provider
+  # without moving this map would have dropped the row on the next seed and
+  # raised in `Artworks.install_meaning_mappings!/0`, which does
+  # `Map.fetch!(sources, "artsy")`. Measured before the move.
+  #
+  # `active: false`: the API is being retired (announced 2026-09-11) and its
+  # terms require removal of all API content on termination, so nothing should
+  # start fetching from it again by accident. The seeded rows are unaffected —
+  # `Artworks` reads them through `source.active`, so this is also the switch
+  # that takes the Artsy shelf off every page, and it is deliberately left
+  # **on** by the row that already exists in the database. `upsert!/3` refreshes
+  # `config` and not `active`, so an existing row keeps whatever the owner set.
+  defp artsy do
+    %{
+      slug: "artsy",
+      name: "Artsy",
+      tier: :middle,
+      kind: :media_provider,
+      access: :api,
+      era_year: 2026,
+      license: "Artsy Public API Terms; removable cache, no permanent archive grant",
+      license_url: "https://developers.artsy.net/v2/terms",
+      homepage: "https://www.artsy.net/",
+      url_template: "https://www.artsy.net/artwork/{external_id}",
+      attribution: "Artwork discovery and source metadata: Artsy",
+      config: %{
+        "mode" => "committed pilot corpus; no request is ever made",
+        "retention" => "disposable cache unless independently supported",
+        "image_storage" => "references only; no downloads",
+        "gene_traversal" => "disabled_pending_control_verification",
+        "retirement_notice" => true,
+        "left_the_provider_registry" => "2026-09-22, #144 Phase 3"
+      }
+    }
   end
 
   @doc """
@@ -438,8 +486,13 @@ defmodule DevilsDictionary.Sources.Catalog do
     :ok
   end
 
+  # Everything but the natural key is refreshed on conflict — except `active`,
+  # which is the owner's switch: `Discovery.set_provider_active/2` turns a
+  # source off at runtime, and a reseed that turned it back on would undo that
+  # without anyone deciding to. A new row still takes the `active` its attrs
+  # carry, which is how a source is born on or, for a retired one, off.
   defp upsert!(schema, natural_key, attrs) do
-    replace = attrs |> Map.keys() |> Enum.reject(&(&1 == natural_key))
+    replace = attrs |> Map.keys() |> Enum.reject(&(&1 == natural_key or &1 == :active))
 
     schema
     |> struct()

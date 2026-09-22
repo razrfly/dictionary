@@ -4,12 +4,16 @@ defmodule DevilsDictionary.Discovery.Providers.Giphy do
   @behaviour DevilsDictionary.Discovery.Provider
 
   @operation "gif_search"
+  @adapter_version "giphy.browser.v2"
+
+  @doc "The identity namespace one GIPHY result would be registered under: its id."
+  def namespace, do: "giphy_gif"
 
   @impl true
   def slug, do: "giphy"
 
   @impl true
-  def adapter_version, do: "giphy.browser.v2"
+  def adapter_version, do: @adapter_version
 
   @impl true
   def source_attrs do
@@ -26,6 +30,7 @@ defmodule DevilsDictionary.Discovery.Providers.Giphy do
       homepage: "https://giphy.com/",
       url_template: "https://giphy.com/gifs/{id}",
       attribution: "Powered by GIPHY",
+      active: true,
       config: %{
         "operation" => @operation,
         "shared_cache" => "not used by direct browser discovery",
@@ -49,18 +54,47 @@ defmodule DevilsDictionary.Discovery.Providers.Giphy do
 
   @impl true
   def enabled? do
-    config = Application.get_env(:devils_dictionary, :giphy, [])
+    config = config()
 
     config[:enabled] != false and is_binary(config[:api_key]) and
       String.trim(config[:api_key]) != ""
   end
 
+  @impl true
   def browser_config(target) do
     source = DevilsDictionary.Sources.get_source_by_slug(slug())
 
     if target && enabled?() && source && source.active do
-      config = Application.get_env(:devils_dictionary, :giphy, [])
-      %{term: target.term, language: target.language, api_key: config[:api_key]}
+      config = config()
+
+      %{
+        provider: slug(),
+        provider_name: source_attrs().name,
+        content_type: :gif,
+        hook: "GiphyShelf",
+        term: target.term,
+        language: target.language,
+        api_key: config[:api_key],
+        note:
+          "Search matches, not reviewed interpretations. " <>
+            "Hover, focus or press Play to animate.",
+        # A licence obligation and not decoration: the GIPHY API Terms require
+        # the mark on any surface showing their results. It travels with the
+        # config so the shared renderer can honour it without knowing whose it
+        # is (#144 Phase 3).
+        badge: %{
+          src: "/images/giphy-powered-by.png",
+          alt: "Powered by GIPHY",
+          href: "https://giphy.com/"
+        }
+      }
     end
   end
+
+  # No pacing keys, deliberately, where CineGraph and the Met gained them in
+  # the same phase: `Discovery.Transport` issues none of this provider's
+  # requests — they leave the reader's browser — so a `request_interval_ms`
+  # here would be a rate declared to something that will never read it. The
+  # hook keeps its own client-side accounting (K10).
+  defp config, do: DevilsDictionary.Discovery.Provider.Helpers.config(:giphy)
 end

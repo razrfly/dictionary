@@ -176,7 +176,40 @@ defmodule DevilsDictionary.Discovery.Provider do
               }
               | nil
 
+  @doc """
+  What a browser-transport provider's shelf needs to run itself, or `nil`.
+
+  A provider whose `capabilities/0` says `transport: :browser` is never driven
+  by the shared pipeline: its requests leave the **reader's** browser, nothing
+  is persisted, and the ledger gains nothing it could (K10). What the server
+  does is decide whether the shelf appears at all — the provider is enabled,
+  its key is present, its source row is active, and there is a target — and
+  hand the page the parameters.
+
+  Returning a map puts one browser shelf on the page. The keys the shared
+  renderer reads:
+
+    * `content_type` — which row of `DevilsDictionary.Discovery.ContentTypes`
+      the shelf is, and therefore its heading, its card width and its title
+      clamp, exactly as for a server provider
+    * `hook` — the `phx-hook` name whose JavaScript makes the requests
+    * `term`, `language` — the target, as `data-query` and `data-language`
+    * `api_key` — optional, as `data-api-key`; absent for a keyless one
+    * `note` — the sentence under the rail, which is the provider's to write
+      because what its results *are* is the provider's knowledge
+    * `badge` — optional `%{src:, alt:, href:}` for a licence that requires a
+      mark shown, as GIPHY's terms do
+
+  It became a callback in #144 Phase 3. Before that `WordLive` called
+  `Giphy.browser_config/1` by name and `Culture` rendered `GiphyShelf` by
+  name, so a second browser provider was three edits in shared files — and
+  promise 9 of the README, *the reader knows no provider by name*, carried an
+  exception for the one provider that had one.
+  """
+  @callback browser_config(target :: map()) :: map() | nil
+
   @optional_callbacks automatic_mapping: 1,
+                      browser_config: 1,
                       covers?: 1,
                       parse_body: 1,
                       mapping_identity: 1,
