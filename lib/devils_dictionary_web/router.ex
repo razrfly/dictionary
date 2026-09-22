@@ -74,6 +74,7 @@ defmodule DevilsDictionaryWeb.Router do
     live "/scopes/:slug", ScopeLive, :show
     live "/health", HealthLive, :show
     live "/imports", Admin.ImportsLive, :index
+    live "/discovery", DiscoveryLive, :index
   end
 
   # The retired paths, redirected rather than deleted. Declared after the public

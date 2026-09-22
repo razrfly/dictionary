@@ -26,7 +26,7 @@ finished. Where a claim is not yet true everywhere, the last column says so.
 | 3 | **Every item says why it is here, in one sentence, from fields and nothing else.** | Conformance: every result carries a reason, it renders, it ends with a full stop, its class is admitted | The locator has three shapes: a line (PoetryDB), a page (Open Library, which leaves it empty rather than call a page a line) and a **date** — `a headline, Wired, 15 September 2026`, Bing News, #135. It is a `"locator"` string in `match_details` and not a clause in `MatchReason`, which is why the third shape cost that module nothing. The dated shape exposed one wrinkle and #142 closed it: the preposition was fixed at *at*, which is right for a numbered **point** (*at line 4*) and wrong for a named **part** (*at a headline*). `MatchReason`'s `at/1` now reads a leading determiner and renders *in* for a part, so Bing's reads *in a headline* and the Guardian's *in the text* without either provider changing |
 | 4 | **Every item carries what its licence owes — and so does every source.** A shelf whose row requires attribution shows a credit beneath every thumbnail, always visible, never on hover, **and linked** where the item names a URL for the creator or the licence. A *source* whose licence makes a mark a condition of use declares one — **one shape, one mechanism, and the licence says where it goes**: `placement: :shelf` draws it in the shelf's byline column and `placement: :card` under every card's credit, unclamped and never behind a pointer either way. | The `attribution` column; conformance asserts the credit node on every item of a `:required` shelf, that it carries no line clamp, and that its links are the creator's and the licence's. The mark is the provider's optional `attribution_mark/0` — read onto the state like `shelf_detail/0` for a server provider, returned under `:attribution_mark` in `browser_config/1` for a browser one — and read in one place, `Culture.mark/1`, which draws a mark it cannot read whole as no mark at all | A per-item credit is the content type's obligation and a mark is the source's; three sources owe one and owed it three different ways until the #144 followups — the Guardian on the shelf (clause 6(b)(vi)), GIPHY on the browser shelf, Spotify on each card until #152 moved it to the shelf too, one mark per surface rather than twelve wordmarks on one rail. One obligation is one mechanism, and where it goes is data; no source asks for `:card` today |
 | 5 | **Adding a source touches no shared file.** A provider is its own module, fixture, conformance suite and, for a corpus, manifest; the generator writes every registration, and the small things every provider needs are imported from `Provider.Helpers` rather than copied into it (#144 Phase 1). | `conformance_coverage_test.exs`: every registered provider has a suite, every fixture is run, every manifest has a suite; each phase report's *shared files touched* list; `grep -c 'defp word_pattern' lib/devils_dictionary/discovery/providers/*.ex` is 0 | Adding a *shelf* is one row in the table, shared by design; adding a corpus *kind* is a seeder clause |
-| 6 | **Nothing is spent without a ledger, and no bytes are held — and nothing is held longer than its source allows.** Every live request is a row in `discovery_request_attempts`, bounded per position; results are URLs and metadata; images are hotlinked. A held result past its source's `retention_seconds` is withdrawn and deleted, **including the `source_records` it owned** (#144 Phase 2). | The ledger; the transport's budget; D14; conformance's coverage gate; `retention_test.exs`, which takes a result and its payload under a short policy and keeps both under the default | A source record the encyclopedia is standing on — a registry identity's provenance — survives its result, by design. A source with a retention obligation is therefore a source with no `identity_record/1`, which is what the two news providers are |
+| 6 | **Nothing is spent without a ledger, and no bytes are held — and nothing is held longer than its source allows.** Every live request is a row in `discovery_request_attempts`, bounded per position; results are URLs and metadata; images are hotlinked. A held result past its source's `retention_seconds` is withdrawn and deleted, **including the `source_records` it owned** (#144 Phase 2). | The ledger; the transport's budget; D14; conformance's coverage gate; `retention_test.exs`, which takes a result and its payload under a short policy and keeps both under the default; and, per provider and at a glance, `mix dd.discovery.status` and `/ops/discovery` — spend, what is held, what is stale and what retention takes next (#144 Phase 4) | A source record the encyclopedia is standing on — a registry identity's provenance — survives its result, by design. A source with a retention obligation is therefore a source with no `identity_record/1`, which is what the two news providers are |
 | 7 | **An honest empty.** A word with nothing shows nothing on that shelf, rather than filler, a wrong meaning, or another word's results. | Each phase's proof includes a word expected to be empty (`nepotism`, then `logomachy`) | **Not true of `:image` any more, by decision (#116 D2).** A keyword provider declines nothing (M6), and Pexels has no empty at all: measured 2026-09-19, `/define/logomachy` — where Commons, Openverse and Unsplash all return nothing — carries eleven Pexels photographs, so **no word is without an Images shelf**. What the shelf keeps is the *label*: every such item's reason reads *Search result for “…”, ranked by the provider and not matched on an identifier.* The lever, if the owner wants the empty back, is D2's one clause: hide a shelf whose every state is `:query`-only. Relevance to one *meaning* of a polysemous word is unverified and says so (#101's) |
 | 8 | **Composition is read-time; persisted results are never rewritten.** Order, dedup and credit are computed when the page renders, from what providers persisted. | `Shelf` is pure; `display_items/1` reads identifiers back as a virtual field; schema impact of #116 Phase 1 was zero | — |
 | 9 | **The reader knows no provider by name.** What a card looks like comes from the content-type row; what a source is called comes from its source row; the component branches on neither — **including a browser-transport provider**, since #144 Phase 3. | Reading `Culture`; the multi-source check credits two providers it was never told about; `conformance_coverage_test.exs` asserts every registered provider is `retrievable?` or `transport: :browser`, with no third state | — |
@@ -677,6 +677,54 @@ body will answer the same one in five.
 A job that calls it for the words a trending signal names is #134's, and needs
 nothing here beyond that seam existing.
 
+### The operator's view
+
+Two questions, one implementation each, three renderings (#144 Phase 4).
+`DevilsDictionary.Discovery.Status` answers both from the registry and the
+ledger, and `mix dd.discovery.check`, `mix dd.discovery.status` and
+`/ops/discovery` print what it returns — the arrangement `Health.records/1` has
+had with `mix dd.health` and `/ops/imports` since #69 §6, and for the same
+reason: a page and a task that compute the same number twice are two numbers.
+
+**Is it configured?** `Status.preflight/0`, and `mix dd.discovery.check`. Per
+registered provider: whether the pipeline can drive it or the reader's browser
+can, its own `enabled?/0`, its `:enabled` switch, whether its endpoints are
+`http(s)` endpoints with no userinfo, query or fragment, whether `Policy.for!/1`
+can read its policy, and which of the environment names `allowed_provider_env`
+admits under its prefix arrived. Until this phase the task checked *CineGraph*,
+by name, and had done since the second provider registered.
+
+A misconfiguration fails the preflight; **a missing credential does not**. A
+keyless checkout is a deployment this system is designed to have — the provider
+registers, `enabled?/0` is false, the shelf is not there — so the task reports
+it and exits 0.
+
+**What has it done?** `Status.rows/0`, and `mix dd.discovery.status`. Per
+provider from the ledger: runs and failures, last success, results held now,
+display roots and how many are past `refresh_after`, runs past retention that
+the next `cleanup/0` will withdraw (`Discovery.retention_due/1`, bounded),
+requests claimed in this source's current budget window against its limit, and
+any provider-wide `Retry-After` still in force. A browser provider stores
+nothing and its row says so.
+
+**No credential value is read to print or render any of this.** The presence map
+is built in `config/runtime.exs` — the one scope holding both the exported
+environment and the development `.env` — and what leaves that scope is one
+boolean per admitted name. `dd_discovery_check_test.exs` configures a
+distinctive value for every keyed provider and greps the task's whole output for
+each one.
+
+**How a credential is attributed to a provider**: by the environment prefix
+`runtime.exs` already derives the per-provider policy variables with — upper
+case, hyphens as underscores, so `bing-news` reads `BING_NEWS_…`. A name no
+registered provider claims is printed as *unclaimed* rather than dropped, which
+is what `ARTSY_CLIENT_ID` and `ARTSY_CLIENT_SECRET` are since Artsy left the
+registry (#144 §4). A provider's **configuration stanza** is found by the same
+rule the twelve already follow: the slug, hyphens as underscores, under
+`:devils_dictionary`. A provider whose stanza is elsewhere shows *no
+configuration* rather than a failure — `enabled?/0` is the authority on whether
+that matters.
+
 ---
 
 ## The kit a provider imports
@@ -894,15 +942,19 @@ Useful tasks:
 ```bash
 mix dd.discovery --definition-source bierce --providers cinegraph --limit 20 --dry-run
 mix dd.discovery.check
+mix dd.discovery.status
 mix dd.artworks.seed --manifest priv/artworks/manifests/met-highlights-v1.json --dry-run
 ```
 
-The first two need provider credentials from the ignored `.env`, which a fresh
-worktree does not have: `dd.discovery.check` exits with *CINEGRAPH_API_KEY is
-missing or blank*, and `dd.discovery --dry-run` still selects its targets and
-then reports *0 eligible providers*. Both are the tasks working correctly. The
-Met needs no key, so it is the provider a keyless checkout can actually drive.
-`dd.artworks.seed --dry-run` needs nothing but the committed manifest.
+A fresh worktree has no `.env`, and all four still run. `dd.discovery.check`
+prints a row per registered provider with its credentials *missing* and exits 0
+— a keyless host is a host, and the summary line says how many providers are
+ready on it. `dd.discovery.status` prints a row per provider whatever the
+environment holds; on a fresh database they are rows of zeroes, which is the
+honest report of one. `dd.discovery --dry-run` selects its targets and then
+reports the providers it may drive; with no keys that is the keyless ones, of
+which the Met is the usual answer. `dd.artworks.seed --dry-run` needs nothing
+but the committed manifest.
 
 ---
 

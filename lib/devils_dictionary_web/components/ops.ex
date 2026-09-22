@@ -1,6 +1,8 @@
 defmodule DevilsDictionaryWeb.Ops do
   @moduledoc """
-  The bits of chrome the two operational consoles share (#77 §1, §2).
+  The bits of chrome the population-scoped operational consoles share (#77 §1,
+  §2). `/ops/discovery` is not one of them: a discovery provider answers for
+  the whole registry and for no population, so it has nothing to choose.
 
   `/ops/health` and `/ops/imports` both grade or describe *one* population, and
   neither may pick one on the reader's behalf. Before #77 they defaulted to

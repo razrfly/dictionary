@@ -307,6 +307,17 @@ defmodule DevilsDictionaryWeb.CultureChromeTest do
       assert html =~ ~s(id="culture-shelf-text")
       refute html =~ ~s(id="culture-freshness-text")
     end
+
+    test "a browser shelf says the one thing it can: now, and not kept (#144 Phase 4)" do
+      # It has no display root to read a date off, because the request is the
+      # reader's own and nothing it returns is stored — and that is still an
+      # answer to *when was this fetched*, which is what the issue's fourth
+      # acceptance line asks every shelf on a page for.
+      html = render_component(&Culture.section/1, states: %{}, browsers: [browser()])
+
+      assert html =~ ~s(id="culture-freshness-gif-giphy")
+      assert html =~ "Fetched by your browser on this visit; nothing is stored here."
+    end
   end
 
   describe "D1 — a search-only shelf is demoted, not hidden" do
