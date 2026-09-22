@@ -320,8 +320,15 @@ defmodule DevilsDictionary.DiscoveryTest do
     assert {:queued, run} = Discovery.request(target(word), "cinegraph")
     assert :ok = Discovery.execute_run(run.id)
 
-    assert [%Result{preview_metadata: %{"poster_url" => nil}}] =
+    # The key is **absent**, not present-and-nil: CineGraph writes a sparse
+    # preview map since #144 Phase 3, like every third-generation provider.
+    # An absent field and a present-but-empty one are two different facts to
+    # anything that pattern-matches, and there is no poster here.
+    assert [%Result{preview_metadata: metadata}] =
              Discovery.state(word.object_id, "cinegraph").items
+
+    refute Map.has_key?(metadata, "poster_url")
+    assert metadata["title"] == "Posterless by configuration"
   end
 
   test "timeouts retry within the request budget and malformed responses fail safely", ctx do

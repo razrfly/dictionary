@@ -10,7 +10,7 @@ defmodule DevilsDictionary.Discovery.ProvidersTest do
   use ExUnit.Case, async: false
 
   alias DevilsDictionary.Discovery.Providers
-  alias DevilsDictionary.Discovery.Providers.{Artsy, CineGraph, Commons, Giphy, Met, Poetrydb}
+  alias DevilsDictionary.Discovery.Providers.{CineGraph, Commons, Giphy, Met, Poetrydb}
   alias DevilsDictionary.FakeOffsetDiscoveryProvider
   alias DevilsDictionary.FakePartialDiscoveryProvider
   alias DevilsDictionary.FakeUnretrievableDiscoveryProvider
@@ -31,7 +31,7 @@ defmodule DevilsDictionary.Discovery.ProvidersTest do
     # change to either claim. Asserting the whole list made "how many providers
     # ship" this file's business, which turned it red for Phase 2 and again for
     # the Phase 1c scaffold.
-    for provider <- [Artsy, CineGraph, Giphy, Met, Poetrydb] do
+    for provider <- [CineGraph, Giphy, Met, Poetrydb] do
       assert provider in ctx.configured
     end
 
@@ -43,8 +43,10 @@ defmodule DevilsDictionary.Discovery.ProvidersTest do
     # The whole point of Phase 1, cashed in: the Met is GET, offset-paged and
     # `:artwork`, CineGraph is GraphQL POST, cursor-paged and `:film`, PoetryDB
     # is GET, offset-paged and `:text`, and all three are driven by the same
-    # run/budget/cache/lease machine. Artsy and GIPHY stay registered for their
-    # source rows and are not scheduled.
+    # run/budget/cache/lease machine. GIPHY stays registered for its browser
+    # shelf and its source row, and is not scheduled. Artsy left the registry
+    # in #144 Phase 3: it is a corpus, and its source row is seeded by
+    # `Sources.Catalog` directly.
     #
     # Stated per provider rather than as three lists in registry order, so that
     # the claim survives a fourth pipeline provider joining. A list said both
@@ -209,10 +211,11 @@ defmodule DevilsDictionary.Discovery.ProvidersTest do
              "#{inspect(provider)} claims the pipeline without exporting retrieve/4"
     end
 
-    # Artsy and GIPHY are registered so their source rows exist; neither is a
-    # pipeline provider, and adding the Met does not change that either way.
-    assert Providers.get("artsy") == Artsy
+    # GIPHY is registered for its browser shelf and its source row, and is not
+    # a pipeline provider. Artsy is not registered at all since #144 Phase 3 —
+    # it is a corpus, and a module that could never run is not a provider.
     assert Providers.get("giphy") == Giphy
+    refute Providers.get("artsy")
 
     scheduled = Enum.map(Providers.server_providers(), & &1.slug())
 
@@ -220,7 +223,6 @@ defmodule DevilsDictionary.Discovery.ProvidersTest do
 
     # The claim is that these two are *not* scheduled, which is what registering
     # without the pipeline claim means. Who else is scheduled is not this test's.
-    refute "artsy" in scheduled
     refute "giphy" in scheduled
   end
 end

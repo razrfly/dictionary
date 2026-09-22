@@ -49,6 +49,37 @@ defmodule DevilsDictionary.Discovery.Providers do
     end)
   end
 
+  @doc """
+  Providers the **reader's browser** drives, for a target it has.
+
+  The mirror of `server_providers/1`: a declaration of `transport: :browser` is
+  a claim and `browser_config/1` returning a map is the proof — the provider is
+  enabled, its key is present and its source row is active, all of which only
+  it can answer. Returns `{provider, config}` pairs in registry order, and a
+  provider that declines a target is simply absent (#144 Phase 3).
+
+  Every registered provider is one of these two or neither-and-inert;
+  `conformance_coverage_test.exs` asserts there is no third state.
+  """
+  def browser_providers(target) do
+    Enum.flat_map(all(), fn provider ->
+      with true <- Code.ensure_loaded?(provider),
+           true <- function_exported?(provider, :browser_config, 1),
+           true <- provider.capabilities().transport == :browser,
+           config when is_map(config) <- provider.browser_config(target) do
+        [{provider, config}]
+      else
+        _other -> []
+      end
+    end)
+  end
+
+  @doc "True when this provider declares the browser transport."
+  def browser?(provider) do
+    Code.ensure_loaded?(provider) and function_exported?(provider, :capabilities, 0) and
+      provider.capabilities().transport == :browser
+  end
+
   @pipeline_callbacks [
     retrieve: 4,
     automatic_mapping: 1,
