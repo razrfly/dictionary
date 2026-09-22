@@ -30,20 +30,21 @@ decides retention. Spotify Developer Terms, **Version 10, effective 15 May
 
 **There is no number in it.** The clause caps retention with a duty rather than
 a duration — *strictly necessary*, *most up to date*, *delete older data*, *not
-indefinitely* — so the branch the issue named for a numeric cap
-(`retention_seconds` in `source_policies`, #142's mechanism) does not apply,
-and would not be available anyway: `DevilsDictionary.Discovery.Policy`'s
-`@keys` admits four overrides and `retention_seconds` is not one of them, so a
-per-source retention is a change to shared code that this issue does not make.
+indefinitely*. The number is therefore this shelf's to choose, and it chooses
+seven days through the mechanism #142 added for the Guardian: a
+`retention_seconds` in `source_policies`, which `Discovery.cleanup/0` sweeps
+**without** the shared sweep's exemption for each word's current run. That
+exemption is what would otherwise make the storage indefinite — a word nobody
+returned to would keep its last twelve tracks' metadata for good.
 
-What is done instead, and why it is a fair reading of the duty:
+What is done, and why it is a fair reading of the duty:
 
 | The clause says | What this shelf does |
 |---|---|
 | limited to *metadata and cover art* | exactly that, and nothing else: no audio, no bytes. Cover art is hotlinked from `i.scdn.co` at 300 px and 64 px |
 | *reasonable efforts … most up to date* | `positive_refresh_seconds: 86_400` — a day, against the shipped thirty |
-| *delete older data* | the shipped `retention_seconds: 7 days` in `config :devils_dictionary, :discovery` sweeps results and attempts |
-| *do not store indefinitely* | a result older than the refresh is refetched on the next visit to its word, and the sweep deletes every run older than the retention **except each word's current one**, which lives until a visit refreshes it — so a word nobody returns to keeps its last twelve tracks' metadata. Bounding that is #144 Phase 2 (retention as a rule), not this shelf |
+| *delete older data* | `retention_seconds: 7 * 24 * 60 * 60` in this source's own policy: every Spotify run older than seven days is deleted with its results and attempts, current or not, and the `source_records` nothing references any more go with it |
+| *do not store indefinitely* | a result older than the refresh is refetched on the next visit to its word; one older than the retention is deleted whether or not anyone visits. A page opened after the sweep shows nothing on this shelf until its own run comes back, which is the honest state of a cache that has expired |
 
 ## Posture
 

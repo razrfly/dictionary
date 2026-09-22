@@ -733,13 +733,18 @@ defmodule DevilsDictionaryWeb.Culture do
   """
   def brand_mark(%{"light" => light, "dark" => dark, "alt" => alt, "link" => link})
       when is_binary(light) and is_binary(dark) and is_binary(alt) and is_binary(link) do
-    if String.starts_with?(light, "/") and String.starts_with?(dark, "/") and
-         alt != "" and link != "",
-       do: %{light: light, dark: dark, alt: alt, link: link},
-       else: nil
+    if local_asset?(light) and local_asset?(dark) and alt != "" and link != "",
+      do: %{light: light, dark: dark, alt: alt, link: link},
+      else: nil
   end
 
   def brand_mark(_other), do: nil
+
+  # One leading slash and not two: `//cdn.example/mark.svg` is a URL the
+  # browser resolves against the page's scheme, which is exactly the hotlink
+  # the rule above refuses.
+  defp local_asset?(path),
+    do: String.starts_with?(path, "/") and not String.starts_with?(path, "//")
 
   # What the card shows for the item's maker, by the row's `attribution`:
   # nothing on a `:none` row, and otherwise the ready-made `attribution` line

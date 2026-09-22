@@ -769,7 +769,12 @@ defmodule DevilsDictionary.Discovery.Providers.GuardianTest do
                  :retention_seconds
                )
 
-      assert Discovery.Policy.source_retentions() == [{"guardian", 82_800}]
+      # Spotify (#143) names a window of its own — seven days, the terms'
+      # *delete older data* — so the list is the two of them, in slug order.
+      assert Discovery.Policy.source_retentions() == [
+               {"guardian", 82_800},
+               {"spotify", 7 * 24 * 60 * 60}
+             ]
     end
 
     test "a 25-hour-old Guardian run is deleted by cleanup/0 and Bing's is not", context do

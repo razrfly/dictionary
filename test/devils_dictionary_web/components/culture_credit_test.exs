@@ -43,13 +43,18 @@ defmodule DevilsDictionaryWeb.CultureCreditTest do
 
     test "a mark is an asset this app ships, never a provider's hotlink" do
       mark = %{
-        "light" => "https://cdn.example.test/mark.svg",
+        "light" => "/images/a-mark-black.svg",
         "dark" => "/images/a-mark-white.svg",
         "alt" => "A Service",
         "link" => "Open A Service"
       }
 
-      assert Culture.brand_mark(mark) == nil
+      # A full URL, and the protocol-relative one a leading-slash check alone
+      # would let through.
+      for remote <- ["https://cdn.example.test/mark.svg", "//cdn.example.test/mark.svg"] do
+        assert Culture.brand_mark(%{mark | "light" => remote}) == nil
+        assert Culture.brand_mark(%{mark | "dark" => remote}) == nil
+      end
     end
   end
 

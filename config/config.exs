@@ -162,10 +162,18 @@ config :devils_dictionary, :discovery,
     # the shipped thirty. The budget is the one the issue sized: 500 requests
     # an hour is well above what a reader-driven site behind a 24 h cache can
     # reach, and it refuses before the API does.
+    #
+    # `retention_seconds` is the *delete older data* half. The shared sweep
+    # spares each word's current run, so a word nobody returns to would keep
+    # its last twelve tracks' metadata for good — which is the indefinite
+    # storage the terms forbid. A source window is swept without that
+    # exemption (the Guardian's rule, #142), so seven days is a real ceiling:
+    # a page opened after it shows nothing until its own run comes back.
     "spotify" => [
       request_budget_limit: 500,
       request_budget_window_seconds: 3_600,
-      positive_refresh_seconds: 24 * 60 * 60
+      positive_refresh_seconds: 24 * 60 * 60,
+      retention_seconds: 7 * 24 * 60 * 60
     ]
   },
   refresh_cooldown_seconds: 60,
