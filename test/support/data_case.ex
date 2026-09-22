@@ -102,7 +102,14 @@ defmodule DevilsDictionary.DataCase do
   killed under load never leaves a lock behind.
   """
   def claim_database! do
-    Ecto.Adapters.SQL.Sandbox.checkout(DevilsDictionary.Repo, sandbox: false)
+    # `:infinity`, because the sandbox's ownership timeout is 120 s by default
+    # and closes the owned connection when it expires — which would drop the
+    # advisory lock a run under load is still relying on (CodeRabbit on #160).
+    Ecto.Adapters.SQL.Sandbox.checkout(DevilsDictionary.Repo,
+      sandbox: false,
+      ownership_timeout: :infinity
+    )
+
     database = DevilsDictionary.Repo.config()[:database]
 
     %{rows: [[locked?]]} =
