@@ -18,7 +18,7 @@ defmodule DevilsDictionary.Discovery.Providers.Guardian do
       Guardian's own durable identifier, and what a later Wikidata crosswalk
       would join on.
     * `news_article` — the sha256 of the **normalised `webUrl`**, computed by
-      calling `BingNews.normalize/1` and `BingNews.article_id/1` rather than
+      calling `Helpers.News.normalize/1` and `Helpers.News.article_id/1` rather than
       restating them. Bing's moduledoc names this provider as the reason those
       two functions are public and the reason its query parameters are sorted
       before hashing.
@@ -104,6 +104,7 @@ defmodule DevilsDictionary.Discovery.Providers.Guardian do
   @behaviour DevilsDictionary.Discovery.Provider
 
   alias DevilsDictionary.Discovery.Providers.BingNews
+  alias DevilsDictionary.Discovery.Provider.Helpers
 
   @adapter_version "guardian.attestation.v1"
   @operation "guardian_attestation"
@@ -611,7 +612,7 @@ defmodule DevilsDictionary.Discovery.Providers.Guardian do
   @doc """
   The article's own URL, or `:error` when it is not one a card could link.
 
-  Absolute `http(s)` with a host, normalised through `BingNews.normalize/1`
+  Absolute `http(s)` with a host, normalised through `Helpers.News.normalize/1`
   so that this provider and Bing produce the same string — and therefore the
   same `news_article` id — for the same article.
   """
@@ -619,7 +620,7 @@ defmodule DevilsDictionary.Discovery.Providers.Guardian do
     with %URI{scheme: scheme, host: host} = parsed when is_binary(host) and host != "" <-
            URI.parse(String.trim(url)),
          true <- scheme in ["http", "https"] do
-      {:ok, BingNews.normalize(parsed)}
+      {:ok, Helpers.News.normalize(parsed)}
     else
       _ -> :error
     end
@@ -630,11 +631,12 @@ defmodule DevilsDictionary.Discovery.Providers.Guardian do
   @doc """
   The shared cross-source identity of one article: Bing's, computed on ours.
 
-  `BingNews.article_id/1` of `BingNews.normalize/1` of the parsed `webUrl`.
+  `Helpers.News.article_id/1` of `Helpers.News.normalize/1` of the parsed `webUrl`
+  — the same two functions Bing calls, so the ids agree byte for byte.
   Called rather than copied — this is the byte-for-byte agreement that makes
   the Kash Patel piece one card instead of two.
   """
-  def news_article_id(url) when is_binary(url), do: BingNews.article_id(url)
+  def news_article_id(url) when is_binary(url), do: Helpers.News.article_id(url)
 
   defp item(term, row, url, published_at, locator_part, text) do
     fields = row["fields"] || %{}

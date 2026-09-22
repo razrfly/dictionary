@@ -46,7 +46,7 @@ defmodule DevilsDictionary.Discovery.Conformance.GuardianFixture do
     * **The Kash Patel piece** is the one that matters beyond this suite. It
       is the article Bing's feed also carries, and
       `guardian_test.exs` asserts that the `news_article` id written for it
-      here equals `BingNews.article_id(BingNews.normalize(...))` of the same
+      here equals `Helpers.News.article_id(Helpers.News.normalize(...))` of the same
       URL — which is what makes it one card on `/define/bestiality` and not
       two.
 

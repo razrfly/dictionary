@@ -25,6 +25,7 @@ defmodule DevilsDictionary.Discovery.Providers.GuardianTest do
   alias DevilsDictionary.Discovery
   alias DevilsDictionary.Discovery.{MatchReason, RequestAttempt, Result, Run, Transport}
   alias DevilsDictionary.Discovery.Conformance.GuardianFixture
+  alias DevilsDictionary.Discovery.Provider.Helpers
   alias DevilsDictionary.Discovery.Providers.{BingNews, Guardian}
   alias DevilsDictionary.Sources
   alias DevilsDictionary.Sources.SourceRecord
@@ -275,14 +276,14 @@ defmodule DevilsDictionary.Discovery.Providers.GuardianTest do
 
     test "the shared id is byte for byte what Bing computes for the same article" do
       # The assertion the whole `news_article` namespace exists for. Written
-      # as the issue writes it — `BingNews.article_id(BingNews.normalize(
+      # as the issue writes it — `Helpers.News.article_id(Helpers.News.normalize(
       # URI.parse(webUrl)))` — and compared against what the provider puts on
       # its item, so a provider that stopped calling into Bing and started
       # copying it would fail here.
       {:ok, url} = Guardian.article_url(@kash_patel_url)
 
       assert Guardian.news_article_id(url) ==
-               BingNews.article_id(BingNews.normalize(URI.parse(@kash_patel_url)))
+               Helpers.News.article_id(Helpers.News.normalize(URI.parse(@kash_patel_url)))
     end
 
     test "the same article spelled two ways is one shared id" do
@@ -527,7 +528,7 @@ defmodule DevilsDictionary.Discovery.Providers.GuardianTest do
       shared = Enum.find(kash.identifiers, &(&1["namespace"] == "news_article"))
 
       assert shared["external_id"] ==
-               BingNews.article_id(BingNews.normalize(URI.parse(@kash_patel_url)))
+               Helpers.News.article_id(Helpers.News.normalize(URI.parse(@kash_patel_url)))
 
       metadata = kash.preview_metadata
       assert metadata["source_url"] == @kash_patel_url
