@@ -659,13 +659,20 @@ defmodule DevilsDictionary.Discovery.Providers.GuardianTest do
       # Clause 6(b)(vi): "a reproduction of the 'Powered By' file found at
       # http://www.theguardian.com/open-platform/logos". Not redrawn, not
       # retraced, not recoloured — the file, committed.
-      assert mark.src == "/images/guardian-powered-by.png"
-      assert mark.dark_src == "/images/guardian-powered-by-dark.png"
+      assert mark.light == "/images/guardian-powered-by.png"
+      assert mark.dark == "/images/guardian-powered-by-dark.png"
       assert mark.alt == "Powered by The Guardian"
       # And the logos page: "Please ensure that the image links back to
       # theguardian.com".
       assert mark.href == "https://www.theguardian.com/"
       assert mark.width == 80
+
+      # Clause 6(b)(vi) again: "adjacent to our content". Where a mark goes is
+      # the licence's answer and travels as data, so the reader can draw this
+      # one beside the rail and Spotify's on each card without knowing either
+      # source by name (#144 followups).
+      assert mark.placement == :shelf
+      assert Culture.mark(mark) == Map.put(mark, :link_text, nil)
     end
 
     test "both files are committed, are PNGs, and are the ones published" do
@@ -732,11 +739,12 @@ defmodule DevilsDictionary.Discovery.Providers.GuardianTest do
           provider: "gazette",
           provider_name: "The Gazette",
           mark: %{
-            src: "/images/gazette.png",
-            dark_src: nil,
+            light: "/images/gazette.png",
+            dark: nil,
             alt: "Powered by The Gazette",
             href: "https://gazette.test/",
-            width: 64
+            width: 64,
+            placement: :shelf
           }
         )
 
@@ -750,6 +758,41 @@ defmodule DevilsDictionary.Discovery.Providers.GuardianTest do
       # dark one to show instead.
       refute html =~ "dark:hidden"
       refute html =~ "dark:block"
+    end
+
+    test "and the other placement the same way: a card mark on a source it has never heard of" do
+      # The second half of promise 9 since the followups to #144. One shape,
+      # two placements, and the component asks the mark where it goes rather
+      # than asking which provider sent it — so a fictional source's `:card`
+      # mark lands on the card, under the credit, with the wording its licence
+      # dictates for the link back.
+      html =
+        render_shelf(
+          with_mark: true,
+          provider: "gazette",
+          provider_name: "The Gazette",
+          mark: %{
+            light: "/images/gazette-black.svg",
+            dark: "/images/gazette-white.svg",
+            alt: "The Gazette",
+            href: nil,
+            link_text: "Read on The Gazette",
+            width: 70,
+            placement: :card
+          }
+        )
+
+      # On the card, keyed by the item it attributes...
+      assert html =~ ~s(id="culture-mark-guardian_article-#{GuardianFixture.kash_patel_id()}")
+      assert html =~ ~s(src="/images/gazette-black.svg")
+      assert html =~ ~s(src="/images/gazette-white.svg")
+      assert html =~ ~s(width="70")
+      # ...and the link back reads what the licence permits, not "Source".
+      assert html =~ "Read on The Gazette ↗"
+      refute html =~ "Source ↗"
+
+      # ...and nowhere near the byline, which is the other licence's answer.
+      refute html =~ ~s(id="culture-mark-gazette")
     end
   end
 

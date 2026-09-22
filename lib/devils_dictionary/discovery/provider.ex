@@ -142,37 +142,61 @@ defmodule DevilsDictionary.Discovery.Provider do
   @callback shelf_detail() :: String.t() | nil
 
   @doc """
-  A mark this source's licence *requires* the shelf to carry, or `nil`.
+  A mark this source's licence *requires* the page to carry, or `nil`.
 
   Not a logo a source would like shown — one its terms make a condition of
-  using it at all. The Guardian's Open Platform terms, clause 6(b)(vi), are
-  the first: a "Powered by The Guardian" logo on the same page as any
-  republished content, reproduced from the file the Guardian publishes, linked
-  back to theguardian.com and placed adjacent to the content.
-
-  It is the same shape of answer as `shelf_detail/0` and for the same reason:
-  the reader renders whatever is here and knows no provider by name. A source
-  with nothing to declare does not export it and no shelf gains a mark.
+  using it at all. Three sources owe one and the three grew three mechanisms
+  to carry it: the Guardian a callback, Spotify a key on every item's
+  `preview_metadata`, GIPHY a key inside `browser_config/1`. One obligation
+  written three ways is three things to keep right, so since #144 this is the
+  one: a server provider exports it, a browser provider returns the same map
+  under `:attribution_mark` in its `browser_config/1`, and the reader draws
+  whatever it was handed.
 
   The map is:
 
-    * `:src` — the image, a path under `priv/static`
-    * `:dark_src` — the variant for dark mode, or `nil` to use `:src` for both
+    * `:light` — the image for the light theme, a path under `priv/static`.
+      A local asset and never a URL: the mark is a file this app ships, and a
+      hotlink is a source's server deciding what our page shows.
+    * `:dark` — the variant for dark mode, or `nil` to use `:light` for both
     * `:alt` — the text, which is also what a screen reader is owed
-    * `:href` — where the mark links, which the licence usually dictates
+    * `:href` — where the mark links. Required for a `:shelf` mark, since
+      every licence that asks for one also dictates where it points. `nil` is
+      allowed on a `:card` mark, whose link back is the item's own
+      `source_url` — one link, not two.
+    * `:link_text` — the wording of that link back where the licence dictates
+      it, or `nil` for the default. Spotify's Branding Guidelines permit
+      *OPEN SPOTIFY*, *PLAY ON SPOTIFY* and *LISTEN ON SPOTIFY* and nothing
+      else, which is why the wording is the provider's and not the reader's.
     * `:width` — the intrinsic width in CSS pixels the mark is drawn at
+    * `:placement` — where the licence says the mark goes, as data:
+
+      * `:shelf` — on the surface showing the results. The Guardian's clause
+        6(b)(vi) asks for "adjacent to our content" and GIPHY's terms for the
+        mark "on any surface" showing theirs; both are met by the shelf's
+        byline column, beside the source's name.
+      * `:card` — beside the content itself. Spotify's Developer Policy asks
+        for the Spotify Marks *with* the content, so the mark is drawn on
+        every card under its credit.
+
+  The placement is the *licence's* answer and the component draws it; nothing
+  in the reader knows which provider asked for which, which is promise 9 of
+  `docs/discovery/README.md`.
 
   A required *credit* is a different obligation and is already served by the
   content type's `attribution` column and `preview_metadata["attribution"]`:
-  that is per item, this is per shelf.
+  that is per item and names the maker, this names the source that supplied
+  it.
   """
   @callback attribution_mark() ::
               %{
-                required(:src) => String.t(),
+                required(:light) => String.t(),
                 required(:alt) => String.t(),
-                required(:href) => String.t(),
                 required(:width) => pos_integer(),
-                optional(:dark_src) => String.t() | nil
+                required(:placement) => :shelf | :card,
+                required(:href) => String.t() | nil,
+                optional(:dark) => String.t() | nil,
+                optional(:link_text) => String.t() | nil
               }
               | nil
 
@@ -197,8 +221,10 @@ defmodule DevilsDictionary.Discovery.Provider do
     * `api_key` — optional, as `data-api-key`; absent for a keyless one
     * `note` — the sentence under the rail, which is the provider's to write
       because what its results *are* is the provider's knowledge
-    * `badge` — optional `%{src:, alt:, href:}` for a licence that requires a
-      mark shown, as GIPHY's terms do
+    * `attribution_mark` — optional, and exactly the map `attribution_mark/0`
+      returns, for a licence that requires a mark shown as GIPHY's terms do.
+      A browser shelf is a shelf: it reads the same shape a server shelf
+      reads from the callback, and gets the same mark drawn the same way.
 
   It became a callback in #144 Phase 3. Before that `WordLive` called
   `Giphy.browser_config/1` by name and `Culture` rendered `GiphyShelf` by

@@ -149,27 +149,63 @@ defmodule DevilsDictionaryWeb.CultureChromeTest do
       assert html =~ ~s(id="culture-browser-giphy-)
     end
 
-    test "a licence that requires a mark gets one, and one that does not is named in text" do
-      # The badge is a licence obligation travelling in the provider's own
-      # config, so the renderer honours it without knowing whose it is.
+    test "a licence that requires a mark gets one, in the shape every mark has" do
+      # A licence obligation travelling in the provider's own config, in the
+      # one shape (#144 followups): the same map a server provider returns
+      # from `attribution_mark/0`, read by the same `Culture.mark/1` and drawn
+      # by the same component into the same byline column. The renderer
+      # honours it without knowing whose it is.
       marked =
         render_browser([
           browser(%{
-            badge: %{
-              src: "/images/giphy-powered-by.png",
+            attribution_mark: %{
+              light: "/images/giphy-powered-by.png",
+              dark: nil,
               alt: "Powered by GIPHY",
-              href: "https://giphy.com/"
+              href: "https://giphy.com/",
+              width: 80,
+              placement: :shelf
             }
           })
         ])
 
-      assert marked =~ "Powered by GIPHY"
-      assert marked =~ "/images/giphy-powered-by.png"
+      assert marked =~ ~s(id="culture-mark-giphy")
+      assert marked =~ ~s(aria-label="Powered by GIPHY")
+      assert marked =~ ~s(href="https://giphy.com/")
+      assert marked =~ ~s(src="/images/giphy-powered-by.png")
+      assert marked =~ ~s(width="80")
+
+      # A shelf's byline names the source whether or not a licence adds a
+      # mark to it, which is what the server shelf does.
+      assert marked =~ ~s(id="culture-provider-giphy")
 
       plain = render_browser([browser()])
       refute plain =~ "giphy-powered-by.png"
+      refute plain =~ "culture-mark-"
       assert plain =~ ~s(id="culture-provider-giphy")
       assert plain =~ "GIPHY"
+    end
+
+    test "a mark the shelf cannot read whole is no mark, and never a broken image" do
+      # `Culture.mark/1`'s rule, reached through the browser shelf: a hotlink
+      # is not an asset this app ships, and a shelf mark with nowhere to link
+      # is not the mark a licence described.
+      for broken <- [
+            %{
+              light: "//cdn.example.test/mark.png",
+              alt: "A",
+              href: "https://a.test/",
+              width: 80,
+              placement: :shelf
+            },
+            %{light: "/images/mark.png", alt: "A", href: nil, width: 80, placement: :shelf},
+            %{light: "/images/mark.png", alt: "A", href: "https://a.test/", width: 80}
+          ] do
+        html = render_browser([browser(%{attribution_mark: broken})])
+
+        refute html =~ "culture-mark-"
+        refute html =~ "<img"
+      end
     end
 
     test "two browser providers are two shelves, and neither is named in the component" do

@@ -272,11 +272,14 @@ defmodule DevilsDictionary.Discovery.Providers.Guardian do
   @impl true
   def attribution_mark do
     %{
-      src: "/images/guardian-powered-by.png",
-      dark_src: "/images/guardian-powered-by-dark.png",
+      light: "/images/guardian-powered-by.png",
+      dark: "/images/guardian-powered-by-dark.png",
       alt: "Powered by The Guardian",
       href: "https://www.theguardian.com/",
-      width: 80
+      width: 80,
+      # "Adjacent to our content", which the shelf's byline column is: the
+      # rail of articles is immediately to its right.
+      placement: :shelf
     }
   end
 

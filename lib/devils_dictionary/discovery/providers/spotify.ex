@@ -72,9 +72,10 @@ defmodule DevilsDictionary.Discovery.Providers.Spotify do
 
     * *If you display any Spotify Content you must clearly attribute the
       content as being supplied and made available by Spotify, by using the
-      Spotify Marks.* → the mark itself under `"brand_mark"` on every item; the `:music`
-      row is `attribution: :required` and the card renders the mark beside the
-      credit, at the Branding Guidelines' minimum size and exclusion zone.
+      Spotify Marks.* → `attribution_mark/0`, with `placement: :card`; the
+      `:music` row is `attribution: :required` and the card renders the mark
+      beside the credit, at the Branding Guidelines' minimum size and
+      exclusion zone.
     * *Metadata, cover art and Audio Preview Clips must be accompanied by a
       link back to the applicable album, content or playlist on the Spotify
       Service.* → `source_url` is `external_urls.spotify` and the card's link
@@ -107,11 +108,20 @@ defmodule DevilsDictionary.Discovery.Providers.Spotify do
   # neither), and one of the three link wordings the guidelines permit —
   # *OPEN SPOTIFY*, *PLAY ON SPOTIFY* or *LISTEN ON SPOTIFY*. #143's brief
   # asked for *Open on Spotify*, which is not one of them.
-  @brand_mark %{
-    "light" => "/images/spotify-full-logo-black.svg",
-    "dark" => "/images/spotify-full-logo-white.svg",
-    "alt" => "Spotify",
-    "link" => "Listen on Spotify"
+  @attribution_mark %{
+    light: "/images/spotify-full-logo-black.svg",
+    dark: "/images/spotify-full-logo-white.svg",
+    alt: "Spotify",
+    # No `href` of its own: the Policy's link back is to *the applicable
+    # album, content or playlist*, which is the card's own `source_url`. A
+    # second link to spotify.com beside it would be a link the terms did not
+    # ask for, pointing somewhere less useful than the one they did.
+    href: nil,
+    link_text: "Listen on Spotify",
+    width: 70,
+    # "Beside the content": the Policy attributes *the content you display*,
+    # so the mark is on every card and not once under the shelf's name.
+    placement: :card
   }
 
   # How many rows one request asks Spotify for, before the gate. Fifty is the
@@ -208,6 +218,19 @@ defmodule DevilsDictionary.Discovery.Providers.Spotify do
 
   @impl true
   def shelf_detail, do: "catalogue search"
+
+  @doc """
+  The Spotify Marks the Branding Guidelines require, beside the content.
+
+  It was `preview_metadata["brand_mark"]` on every item until the #144
+  followups: one obligation, written on a thousand rows a day, where the
+  Guardian wrote the same obligation once on a callback. It is the callback
+  now, and `:placement` is what carries the difference the two licences
+  actually have — Spotify's mark goes on the card, the Guardian's on the
+  shelf.
+  """
+  @impl true
+  def attribution_mark, do: @attribution_mark
 
   @doc """
   True when both credentials are configured and the switch is not off.
@@ -523,10 +546,6 @@ defmodule DevilsDictionary.Discovery.Providers.Spotify do
       # Carried, not gated. Whether the page's mature flag reads it is #134's
       # open question 3 and not this shelf's to answer.
       "explicit" => row["explicit"] == true,
-      # What the card renders the Spotify mark from: the files, the alt text
-      # and the wording of the link back, all of them this provider's to
-      # declare so that the renderer matches on no provider's name (promise 9).
-      "brand_mark" => @brand_mark,
       "content_type" => "music",
       "provider" => "Spotify"
     }

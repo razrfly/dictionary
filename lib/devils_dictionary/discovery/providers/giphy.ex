@@ -81,14 +81,28 @@ defmodule DevilsDictionary.Discovery.Providers.Giphy do
         # A licence obligation and not decoration: the GIPHY API Terms require
         # the mark on any surface showing their results. It travels with the
         # config so the shared renderer can honour it without knowing whose it
-        # is (#144 Phase 3).
-        badge: %{
-          src: "/images/giphy-powered-by.png",
-          alt: "Powered by GIPHY",
-          href: "https://giphy.com/"
-        }
+        # is (#144 Phase 3), in the one shape every mark takes — the same map
+        # a server provider returns from `attribution_mark/0`, read by the
+        # same `Culture.mark/1` and drawn by the same component.
+        attribution_mark: attribution_mark()
       }
     end
+  end
+
+  @impl true
+  def attribution_mark do
+    %{
+      light: "/images/giphy-powered-by.png",
+      dark: nil,
+      alt: "Powered by GIPHY",
+      href: "https://giphy.com/",
+      # The file GIPHY publishes is 200 px wide; the byline column is 80, so
+      # that is what it is drawn at, as the shelf drew it before this.
+      width: 80,
+      # The terms ask for the mark on any surface showing GIPHY results, and
+      # a browser shelf is one surface however many cards its hook draws.
+      placement: :shelf
+    }
   end
 
   # No pacing keys, deliberately, where CineGraph and the Met gained them in

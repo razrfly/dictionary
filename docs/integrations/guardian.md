@@ -71,9 +71,17 @@ name*, and a shelf that said `if provider == "guardian"` would break it. So
 the mark is declared by the provider and rendered by the shelf, through the
 same optional-callback path `shelf_detail/0` already uses:
 
-    Guardian.attribution_mark/0      # the file, the alt text, the href, the width
+    Guardian.attribution_mark/0      # the files, the alt text, the href, the
+                                     # width — and `placement: :shelf`
       → Discovery.provider_metadata  # read via function_exported?, onto the state
-        → Culture.attribution_mark   # draws whatever the state carried
+        → Culture.mark/1             # reads whatever the state carried, whole
+          → Culture.attribution_mark # draws it where the licence said
+
+Since the #144 followups that is the *only* path a mark takes. Spotify's was a
+key on every item's `preview_metadata` and GIPHY's a key inside
+`browser_config/1`; both are this callback now, and the difference between the
+three licences is one field — `:placement`, which the Guardian answers `:shelf`
+and Spotify `:card`.
 
 `Culture` never learns the word *Guardian*; a source that declares no mark
 gets none, and a fictional source declaring one is drawn identically — which
