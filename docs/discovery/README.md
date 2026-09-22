@@ -26,7 +26,7 @@ finished. Where a claim is not yet true everywhere, the last column says so.
 | 3 | **Every item says why it is here, in one sentence, from fields and nothing else.** | Conformance: every result carries a reason, it renders, it ends with a full stop, its class is admitted | The locator has three shapes: a line (PoetryDB), a page (Open Library, which leaves it empty rather than call a page a line) and a **date** — `a headline, Wired, 15 September 2026`, Bing News, #135. It is a `"locator"` string in `match_details` and not a clause in `MatchReason`, which is why the third shape cost that module nothing. The dated shape exposed one wrinkle and #142 closed it: the preposition was fixed at *at*, which is right for a numbered **point** (*at line 4*) and wrong for a named **part** (*at a headline*). `MatchReason`'s `at/1` now reads a leading determiner and renders *in* for a part, so Bing's reads *in a headline* and the Guardian's *in the text* without either provider changing |
 | 4 | **Every item carries what its licence owes — and so does every shelf.** A shelf whose row requires attribution shows a credit beneath every thumbnail, always visible, never on hover, **and linked** where the item names a URL for the creator or the licence. A *source* whose licence makes a mark a condition of use declares one, and the shelf draws it beside its byline, unclamped and never behind a pointer. | The `attribution` column; conformance asserts the credit node on every item of a `:required` shelf, that it carries no line clamp, and that its links are the creator's and the licence's. The mark is the provider's optional `attribution_mark/0`, read onto the state like `shelf_detail/0` | A per-item credit is the content type's obligation and a per-shelf mark is the source's; the Guardian (#142) is the first source to owe the second, under clause 6(b)(vi) of the Open Platform terms |
 | 5 | **Adding a source touches no shared file.** A provider is its own module, fixture, conformance suite and, for a corpus, manifest; the generator writes every registration, and the small things every provider needs are imported from `Provider.Helpers` rather than copied into it (#144 Phase 1). | `conformance_coverage_test.exs`: every registered provider has a suite, every fixture is run, every manifest has a suite; each phase report's *shared files touched* list; `grep -c 'defp word_pattern' lib/devils_dictionary/discovery/providers/*.ex` is 0 | Adding a *shelf* is one row in the table, shared by design; adding a corpus *kind* is a seeder clause |
-| 6 | **Nothing is spent without a ledger, and no bytes are held.** Every live request is a row in `discovery_request_attempts`; results are URLs and metadata; images are hotlinked from the provider's host. | The ledger; the transport's budget; D14; conformance's coverage gate (a provider declines before anything is spent) | — |
+| 6 | **Nothing is spent without a ledger, and no bytes are held — and nothing is held longer than its source allows.** Every live request is a row in `discovery_request_attempts`, bounded per position; results are URLs and metadata; images are hotlinked. A held result past its source's `retention_seconds` is withdrawn and deleted, **including the `source_records` it owned** (#144 Phase 2). | The ledger; the transport's budget; D14; conformance's coverage gate; `retention_test.exs`, which takes a result and its payload under a short policy and keeps both under the default | A source record the encyclopedia is standing on — a registry identity's provenance — survives its result, by design. A source with a retention obligation is therefore a source with no `identity_record/1`, which is what the two news providers are |
 | 7 | **An honest empty.** A word with nothing shows nothing on that shelf, rather than filler, a wrong meaning, or another word's results. | Each phase's proof includes a word expected to be empty (`nepotism`, then `logomachy`) | **Not true of `:image` any more, by decision (#116 D2).** A keyword provider declines nothing (M6), and Pexels has no empty at all: measured 2026-09-19, `/define/logomachy` — where Commons, Openverse and Unsplash all return nothing — carries eleven Pexels photographs, so **no word is without an Images shelf**. What the shelf keeps is the *label*: every such item's reason reads *Search result for “…”, ranked by the provider and not matched on an identifier.* The lever, if the owner wants the empty back, is D2's one clause: hide a shelf whose every state is `:query`-only. Relevance to one *meaning* of a polysemous word is unverified and says so (#101's) |
 | 8 | **Composition is read-time; persisted results are never rewritten.** Order, dedup and credit are computed when the page renders, from what providers persisted. | `Shelf` is pure; `display_items/1` reads identifiers back as a virtual field; schema impact of #116 Phase 1 was zero | — |
 | 9 | **The reader knows no provider by name.** What a card looks like comes from the content-type row; what a source is called comes from its source row; the component branches on neither. | Reading `Culture`; the multi-source check credits two providers it was never told about | GIPHY's shelf is its own component outside this rule, pending K10 |
@@ -598,6 +598,70 @@ result and the identity stub's naming its QID. The single-provider suite
 asserts the two table columns for every registered provider: a `:required`
 shelf renders every item's credit, and every reason is of a class the row
 admits.
+
+---
+
+## Freshness and retention
+
+Two clocks, and they are not the same clock. **Refresh** is how long a cached
+answer may be *reused*; **retention** is how long it may be *held*. Until #144
+Phase 2 there was only the first, which is why the kit refreshed well and
+forgot nothing.
+
+### What refreshes, when
+
+| Question | Answer |
+|---|---|
+| Per provider? | Yes. `positive_refresh_seconds` (default 30 days) and `empty_refresh_seconds` (24 h) per slug, through `source_policies` and `<SLUG>_DISCOVERY_*_SECONDS`. Bing News overrides the positive clock to 24 h (#135) |
+| Automatically? | **On visit.** A run past `refresh_after` is re-queued by the next connected render, and the reader keeps seeing the old items until the new run publishes. Stale-while-revalidate, by construction. Nothing refreshes a page nobody visits; the only cron is cleanup, every 15 minutes |
+| Is the reader told? | **Yes, since Phase 2.** The shelf header says *Fetched 3 days ago · refreshes on your next visit after 21 Oct.*, or *refreshing on this visit* when the render drawing it is the one going again. A corpus says *Held since 17 Sep 2026* — it never refreshes by design, so its `generated_at` is the honest thing to say |
+
+### What is held, and for how long
+
+`retention_seconds` is a `Policy` key like the others: per source, overridable
+by `<SLUG>_DISCOVERY_RETENTION_SECONDS`, default seven days. Every run carries
+its own deadline in `expires_at` — `completed_at + retention`, written at
+publication and never updated, because a completed run is immutable in the
+database. (Before Phase 2 that column was written as `now` and read by nothing,
+so every run in the ledger was "expired" at the moment it completed.)
+
+`Discovery.cleanup/0` is four things in order:
+
+1. **Recovery** — a run whose execution lease expired is handed back as pending.
+2. **Retention** — a run past its deadline is **withdrawn** (`display_allowed =
+   false`, the branch that existed and nothing could reach), its results are
+   deleted, and their `source_records` go with them. This applies to the page's
+   **current display root**, which the old sweep exempted: a displayed run used
+   to live until it was superseded. The run row stays — it is the ledger of
+   what was spent, and deleting it would take the accounting with the content.
+3. **The bounded sweep** — the pre-existing rule, and now purging results and
+   records first for the same reason.
+4. **The ledger** — `discovery_request_attempts` pruned to
+   `retained_attempts_per_position` per position, including for protected
+   roots, which is the only path that ever reaches them.
+
+A page whose root retention took shows the honest empty and **asks again** on
+the next visit: `fresh_run/3` filters `display_allowed`, so a withdrawn root
+inside its refresh window is not a cache hit.
+
+**What retention does not take.** A `source_record` is deleted only when
+nothing else is standing on it: no other discovery result, and nothing
+referencing it or any of its revisions — an `external_identifiers` row, a
+`sense_revision`, a corpus row's provenance. Deleting such a record would
+cascade its revisions and silently null the provenance of something durable.
+Retention takes the search cache; it does not take the encyclopedia. The
+consequence is worth stating plainly: a source whose results resolve to durable
+identities cannot promise a short hold, and the two providers that *do* have a
+retention obligation (news) are exactly the two with no `identity_record/1`.
+
+`failure_backoff_seconds` joined `Policy` in the same phase, for the same
+reason: a shared five minutes is wrong in both directions — GDELT's one 429
+closes its gate for a minute (#134), and a source that answered a malformed
+body will answer the same one in five.
+
+**The seam for a cron.** `Discovery.request/3` already accepts `refresh: true`.
+A job that calls it for the words a trending signal names is #134's, and needs
+nothing here beyond that seam existing.
 
 ---
 

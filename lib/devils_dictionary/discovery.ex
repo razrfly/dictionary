@@ -345,16 +345,48 @@ defmodule DevilsDictionary.Discovery do
     end)
   end
 
-  @doc "Recovers abandoned attempts and deletes one bounded batch of disposable cache rows."
+  @doc """
+  One cleanup tick: recovery, retention, the bounded sweep, and the ledger.
+
+  Four things, in this order, because each depends on the one before it:
+
+  1. **Recovery.** A run whose execution lease expired is handed back as
+     `pending` so the next worker can finish it.
+  2. **Retention** (#144 Phase 2). A held result past its source's
+     `retention_seconds` is *gone*, including when its run is the page's
+     current display root: the run is **withdrawn** (`display_allowed = false`,
+     the branch that existed and nothing could reach), its results are deleted,
+     and the `source_records` those results owned are deleted when nothing else
+     references them. The run row itself stays — it is the ledger of what was
+     spent, and deleting it would take the accounting with the content.
+  3. **The bounded sweep.** The pre-existing rule: delete run rows past the
+     global cutoff, or beyond `retained_attempts_per_position` for their
+     position, never touching a run a page is displaying. Its results are
+     purged first, for the same reason retention purges them — a deleted run
+     used to cascade to its results and leave the provider's **payload** in
+     `source_records` behind it.
+  4. **The ledger.** `discovery_request_attempts` is pruned to
+     `retained_attempts_per_position` per position, for protected roots too,
+     which is the only path that ever reaches them: attempts were deleted only
+     with their run, and a protected run is never deleted.
+
+  Retention runs **before** the sweep so that a run the sweep is about to
+  delete has already had its source records considered, and a run the sweep
+  protects has still had its content taken.
+  """
   def cleanup do
     config = config()
     cutoff = DateTime.add(DateTime.utc_now(), -config[:retention_seconds], :second)
     keep = config[:retained_attempts_per_position]
 
     recovered = recover_abandoned(config[:cleanup_batch_size])
-    expired = expire_by_source_retention(config[:cleanup_batch_size])
+    retention = enforce_retention(config[:cleanup_batch_size])
 
-    %{rows: [[count]]} =
+    # The runs the bounded sweep is about to delete, named first so their
+    # results and source records go with them. Deleting a run cascades to its
+    # results and **not** to `source_records`, which is how the provider's own
+    # payload was left behind under a row nothing referenced (#144 Phase 2).
+    %{rows: sweepable} =
       Repo.query!(
         """
         WITH current_roots AS (
@@ -380,106 +412,212 @@ defmodule DevilsDictionary.Discovery do
                  ) AS rank
             FROM discovery_runs
            WHERE status IN ('succeeded', 'failed')
-        ), deleted AS (
-          DELETE FROM discovery_runs
-           WHERE id IN (
-             SELECT ranked.id
-               FROM ranked
-               LEFT JOIN protected ON protected.id = ranked.id
-              WHERE protected.id IS NULL AND (ranked.completed_at < $1 OR ranked.rank > $2)
-              LIMIT $3
-           )
-          RETURNING id
         )
-        SELECT count(*) FROM deleted
+        SELECT ranked.id
+          FROM ranked
+          LEFT JOIN protected ON protected.id = ranked.id
+         WHERE protected.id IS NULL AND (ranked.completed_at < $1 OR ranked.rank > $2)
+         LIMIT $3
         """,
         [cutoff, keep, config[:cleanup_batch_size]]
       )
 
-    %{deleted: count, recovered: recovered, expired: expired}
+    sweepable_ids = Enum.map(sweepable, &hd/1)
+    {_swept_results, swept_records} = purge_results(sweepable_ids)
+
+    {count, _} =
+      if sweepable_ids == [],
+        do: {0, nil},
+        else: Repo.delete_all(from(r in Run, where: r.id in ^sweepable_ids))
+
+    pruned_attempts = prune_attempts(keep, config[:cleanup_batch_size])
+
+    Map.merge(retention, %{
+      deleted: count,
+      recovered: recovered,
+      pruned_attempts: pruned_attempts,
+      swept_source_records: swept_records
+    })
   end
 
   @doc """
-  Deletes the cache of every source whose licence caps how long it may be held.
+  The run rows a retention sweep would act on right now, newest first.
 
-  The shared sweep above answers *how much* disposable cache to keep, and it
-  protects the runs currently on display: the page's own answer is never the
-  thing collected. A **retention** window is a different question and it does
-  not admit that exception. The Guardian's Open Platform terms (#142, clause
-  5) say OP Content may not be kept longer than 24 hours "whether or not
-  published on Your Website", so a displayed row is exactly what has to go —
-  the next visit re-requests it, which is the other half of the same clause.
-
-  So a source naming `retention_seconds` in its `source_policies` is swept
-  here, first, on its own window and without the display exemption. Two steps,
-  in this order because `discovery_results.source_record_id` is `ON DELETE
-  RESTRICT`:
-
-    1. its terminal runs past the window — `discovery_results` and
-       `discovery_request_attempts` cascade from them;
-    2. the source records those results were the last readers of, whose
-       revisions hold the provider's own payload and cascade in turn.
-
-  Step 2 is what makes this a retention sweep rather than a cache sweep. The
-  run carries the shelf's copy of an item and the source record carries the
-  provider's, and deleting only the first would leave the headline, the byline
-  and the attested sentence in `source_record_revisions.payload` for as long
-  as the row lived.
+  Public because `mix dd.discovery.status` and the admin page answer "retention
+  due" with it, and because a session auditing a source's terms should be able
+  to ask the question without running the sweep.
   """
-  def expire_by_source_retention(batch_size) do
-    Enum.reduce(Policy.source_retentions(), %{}, fn {slug, seconds}, expired ->
-      cutoff = DateTime.add(DateTime.utc_now(), -seconds, :second)
+  def retention_due(limit \\ 500) do
+    retention_due_query(DateTime.utc_now(), limit)
+  end
 
-      %{rows: [[runs]]} =
-        Repo.query!(
-          """
-          WITH deleted AS (
-            DELETE FROM discovery_runs
-             WHERE id IN (
-               SELECT runs.id
-                 FROM discovery_runs AS runs
-                 JOIN discovery_mappings AS mappings ON mappings.id = runs.mapping_id
-                 JOIN sources ON sources.id = mappings.source_id
-                WHERE sources.slug = $1
-                  AND runs.status IN ('succeeded', 'failed')
-                  AND COALESCE(runs.completed_at, runs.inserted_at) < $2
-                LIMIT $3
-             )
-            RETURNING id
+  # A run is past retention when its own `expires_at` says so. `expires_at` was
+  # written as `now` by every run before #144 Phase 2 and is immutable on a
+  # completed run, so those rows fall back to `completed_at +` the source's
+  # current policy — otherwise the first tick after this ships would withdraw
+  # every shelf in the database at once.
+  #
+  # Oldest first, and only runs that still have something to take: a run
+  # already withdrawn and purged is done with, and re-reading it every fifteen
+  # minutes forever would make the batch size meaningless.
+  defp retention_due_query(now, limit) do
+    held = from(result in Result, distinct: true, select: result.run_id)
+
+    from(run in Run,
+      join: mapping in Mapping,
+      on: mapping.id == run.mapping_id,
+      join: source in Source,
+      on: source.id == mapping.source_id,
+      where: run.status == :succeeded and not is_nil(run.completed_at),
+      where: run.display_allowed or run.id in subquery(held),
+      order_by: [asc: run.completed_at, asc: run.id],
+      limit: ^limit,
+      select: %{
+        id: run.id,
+        slug: source.slug,
+        completed_at: run.completed_at,
+        expires_at: run.expires_at,
+        display_allowed: run.display_allowed
+      }
+    )
+    |> Repo.all()
+    |> Enum.filter(&expired?(&1, now))
+  end
+
+  defp expired?(%{slug: slug, completed_at: completed_at, expires_at: expires_at}, now) do
+    deadline =
+      if expires_at && DateTime.compare(expires_at, completed_at) == :gt,
+        do: expires_at,
+        else: DateTime.add(completed_at, Policy.retention_seconds(slug), :second)
+
+    DateTime.compare(deadline, now) != :gt
+  end
+
+  # Withdraw, purge, and say what it cost. Bounded by the same batch size the
+  # rest of the tick uses, so a database that has been holding nothing for a
+  # month catches up over several ticks rather than in one long transaction.
+  defp enforce_retention(batch_size) do
+    now = DateTime.utc_now()
+
+    due = retention_due_query(now, batch_size)
+    run_ids = Enum.map(due, & &1.id)
+
+    {results, records} = purge_results(run_ids)
+
+    withdrawn =
+      due
+      |> Enum.filter(& &1.display_allowed)
+      |> Enum.map(& &1.id)
+
+    {withdrawn_count, _} =
+      if withdrawn == [],
+        do: {0, nil},
+        else:
+          Repo.update_all(from(r in Run, where: r.id in ^withdrawn),
+            set: [display_allowed: false, updated_at: now]
           )
-          SELECT count(*) FROM deleted
-          """,
-          [slug, cutoff, batch_size]
-        )
 
-      %{rows: [[records]]} =
-        Repo.query!(
-          """
-          WITH deleted AS (
-            DELETE FROM source_records
-             WHERE id IN (
-               SELECT records.id
-                 FROM source_records AS records
-                 JOIN sources ON sources.id = records.source_id
-                WHERE sources.slug = $1
-                  AND records.fetched_at < $2
-                  AND NOT EXISTS (
-                    SELECT 1 FROM discovery_results AS results
-                     WHERE results.source_record_id = records.id
-                  )
-                LIMIT $3
-             )
-            RETURNING id
+    %{
+      withdrawn: withdrawn_count,
+      expired_results: results,
+      expired_source_records: records
+    }
+  end
+
+  @doc """
+  Deletes these runs' results, and the source records they owned alone.
+
+  The second half is the one that was missing (#144 Phase 2): a
+  `discovery_results` row is the normalized item and the **payload** lives in
+  `source_records`, whose foreign key is `ON DELETE RESTRICT` — so deleting a
+  run cascaded to its results and left the provider's own response behind,
+  under a row nothing pointed at any more.
+
+  A source record is deleted only when nothing else in the encyclopedia is
+  standing on it: no other discovery result, and nothing referencing it or any
+  of its revisions. A record that a registry entity was built from — an
+  `external_identifiers` row, a `sense_revision`, a corpus row's provenance —
+  **survives**, because deleting it would cascade its revisions and silently
+  null the provenance of something durable. Retention takes the search cache;
+  it does not take the encyclopedia.
+  """
+  def purge_results([]), do: {0, 0}
+
+  def purge_results(run_ids) when is_list(run_ids) do
+    record_ids =
+      Repo.all(
+        from result in Result,
+          where: result.run_id in ^run_ids and not is_nil(result.source_record_id),
+          distinct: true,
+          select: result.source_record_id
+      )
+
+    {results, _} = Repo.delete_all(from(r in Result, where: r.run_id in ^run_ids))
+
+    records =
+      if record_ids == [] do
+        0
+      else
+        %{num_rows: deleted} =
+          Repo.query!(
+            """
+            DELETE FROM source_records AS sr
+             WHERE sr.id = ANY($1)
+               AND NOT EXISTS (SELECT 1 FROM discovery_results d WHERE d.source_record_id = sr.id)
+               AND NOT EXISTS (SELECT 1 FROM pending_relations p WHERE p.source_record_id = sr.id)
+               AND NOT EXISTS (SELECT 1 FROM reconciliation_cases c WHERE c.source_record_id = sr.id)
+               AND NOT EXISTS (SELECT 1 FROM source_assertion_outputs a WHERE a.source_record_id = sr.id)
+               AND NOT EXISTS (SELECT 1 FROM source_materialized_outputs m WHERE m.source_record_id = sr.id)
+               AND NOT EXISTS (
+                 SELECT 1 FROM source_record_revisions rev
+                  WHERE rev.source_record_id = sr.id
+                    AND (
+                      EXISTS (SELECT 1 FROM assertion_evidence x WHERE x.source_record_revision_id = rev.id) OR
+                      EXISTS (SELECT 1 FROM content_revisions x WHERE x.source_record_revision_id = rev.id) OR
+                      EXISTS (SELECT 1 FROM external_identifiers x WHERE x.source_record_revision_id = rev.id) OR
+                      EXISTS (SELECT 1 FROM lexeme_forms x WHERE x.source_record_revision_id = rev.id) OR
+                      EXISTS (SELECT 1 FROM object_names x WHERE x.source_record_revision_id = rev.id) OR
+                      EXISTS (SELECT 1 FROM sense_revisions x WHERE x.source_record_revision_id = rev.id)
+                    )
+                 )
+            """,
+            [record_ids]
           )
-          SELECT count(*) FROM deleted
-          """,
-          [slug, cutoff, batch_size]
-        )
 
-      if runs == 0 and records == 0,
-        do: expired,
-        else: Map.put(expired, slug, %{runs: runs, source_records: records})
-    end)
+        deleted
+      end
+
+    {results, records}
+  end
+
+  # The ledger's only path to a bound. `discovery_request_attempts.run_id` is
+  # `ON DELETE CASCADE`, so an attempt row was deleted only when its run was —
+  # and a protected root is never deleted, so its attempts grew without limit
+  # (402 rows and climbing, measured 2026-09-21). Keeping the most recent
+  # `retained_attempts_per_position` per position keeps what a session reads
+  # when it asks what a page cost, and drops the rest.
+  defp prune_attempts(keep, batch_size) do
+    %{num_rows: pruned} =
+      Repo.query!(
+        """
+        WITH ranked AS (
+          SELECT attempts.id,
+                 row_number() OVER (
+                   PARTITION BY runs.mapping_id, runs.position_key
+                   ORDER BY attempts.attempted_at DESC, attempts.id DESC
+                 ) AS rank
+            FROM discovery_request_attempts AS attempts
+            JOIN discovery_runs AS runs ON runs.id = attempts.run_id
+        )
+        DELETE FROM discovery_request_attempts
+         WHERE id IN (
+           SELECT id FROM ranked WHERE rank > $1 LIMIT $2
+         )
+        """,
+        [keep, batch_size]
+      )
+
+    pruned
   end
 
   @doc "Durably withdraws a provider item without touching linked objects or claims."
@@ -952,6 +1090,13 @@ defmodule DevilsDictionary.Discovery do
           page_context: root.page_context,
           page: last.page,
           next_cursor: if(last.page + 1 < config()[:max_pages_per_context], do: last.next_cursor),
+          # What the shelf header says about its own age (#144 Phase 2). The
+          # root's `completed_at` is when this shelf was fetched and
+          # `refresh_after` is when the next visit will go again;
+          # `refresh_due` is the same comparison the reader used to compute
+          # nothing with — it was read by one test and by no page.
+          fetched_at: root.completed_at,
+          refresh_after: root.refresh_after,
           refresh_due: DateTime.compare(root.refresh_after, now) != :gt,
           relevance: mapping.parameters["relevance"],
           term: mapping.parameters["term"]
@@ -993,8 +1138,16 @@ defmodule DevilsDictionary.Discovery do
         %Run{status: :failed} ->
           :failed
 
+        # Retention is the one thing that withdraws a *run* (#144 Phase 2),
+        # and it deletes that run's results before it does, so there is
+        # nothing left to describe as withheld. `:expired` is the honest
+        # reading — the kit no longer holds this and the next visit will ask
+        # again — and it is what the reader already renders as *will retry
+        # when available*. A withdrawn **result** is a different thing and
+        # still says `:withdrawn`, through `state_for_mapping/2`'s
+        # `empty_reason`.
         %Run{status: :succeeded, display_allowed: false} ->
-          :withdrawn
+          :expired
 
         %Run{status: :succeeded} ->
           :expired
@@ -1080,9 +1233,16 @@ defmodule DevilsDictionary.Discovery do
           completed_at: now,
           refresh_after:
             DateTime.add(now, Policy.refresh_seconds(provider.slug(), length(items)), :second),
-          # Kept non-null for the rollout-compatible schema. It is deliberately
-          # not a display deadline: identity and policy, never age, govern use.
-          expires_at: now,
+          # The hold deadline, and real since #144 Phase 2: `completed_at +` the
+          # source's `retention_seconds`. It was written as `now` and read by
+          # nothing, so every run in the ledger was "expired" at the moment it
+          # completed. `cleanup/0` reads it, which is what makes a source's
+          # terms about retention a rule the kit can keep rather than a
+          # sentence in a document. Written here and never updated, because a
+          # completed run is immutable in the database — a policy change
+          # applies to what runs after it, and the sweep falls back to the
+          # policy for anything written before this existed.
+          expires_at: DateTime.add(now, Policy.retention_seconds(provider.slug()), :second),
           retry_at: nil,
           next_cursor: response.next_cursor,
           error_code: nil,
@@ -1113,7 +1273,11 @@ defmodule DevilsDictionary.Discovery do
       |> Run.lifecycle_changeset(%{
         status: :failed,
         completed_at: now,
-        retry_at: DateTime.add(now, config()[:failure_backoff_seconds], :second),
+        # Per source since #144 Phase 2. A shared five minutes is wrong in both
+        # directions: one 429 from GDELT closes its gate for a minute (#134),
+        # and a source that answered a malformed body will answer the same one
+        # in five.
+        retry_at: DateTime.add(now, Policy.failure_backoff_seconds(failed_slug(run)), :second),
         error_code: safe_code(code),
         completion_reason: nil,
         execution_lease_expires_at: nil
@@ -1122,6 +1286,14 @@ defmodule DevilsDictionary.Discovery do
 
     {:notify, completed, [], :ok}
   end
+
+  # The slug of a run whose mapping may or may not be preloaded. A failure path
+  # is the one place that cannot assume it: `complete_failure/2` is reached from
+  # `finish_owned_run/2` with whatever the caller had.
+  defp failed_slug(%Run{mapping: %Mapping{source: %Source{slug: slug}}}), do: slug
+
+  defp failed_slug(%Run{mapping_id: mapping_id}),
+    do: source_slug(Repo.get!(Mapping, mapping_id).source_id)
 
   defp defer_run(run, code, seconds, params) do
     deferred =
@@ -1404,11 +1576,17 @@ defmodule DevilsDictionary.Discovery do
     )
   end
 
+  # `display_allowed` matters here since #144 Phase 2: retention withdraws a
+  # root whose content it took, and a withdrawn root that is still inside its
+  # refresh window would otherwise answer `{:cached, run}` for up to thirty
+  # days — a page showing the honest empty and never asking again. A run the
+  # kit is no longer allowed to display is not a cache hit.
   defp fresh_run(mapping_id, now, adapter_version) do
     Repo.one(
       from r in Run,
         where:
           r.mapping_id == ^mapping_id and r.page == 0 and r.status == :succeeded and
+            r.display_allowed and
             r.refresh_after > ^now and r.adapter_version == ^adapter_version,
         order_by: [desc: r.started_at, desc: r.id],
         limit: 1

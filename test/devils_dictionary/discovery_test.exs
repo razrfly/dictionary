@@ -656,16 +656,15 @@ defmodule DevilsDictionary.DiscoveryTest do
     assert %{status: :empty, empty_reason: :withdrawn} =
              Discovery.state(refreshable.object_id, "cinegraph")
 
+    # `expires_at` is a real deadline since #144 Phase 2 — `completed_at +` the
+    # source's retention — where it used to be written as `now` and read by
+    # nothing. A run that has just completed is not expired.
     expired = word!(ctx, "expired", ~w(wordnet))
     configure_discovery(positive_refresh_seconds: 0)
     stub_success("expired", 9, [movie(9, "Still displayable")])
     assert {:queued, run} = Discovery.request(target(expired), "cinegraph")
     assert :ok = Discovery.execute_run(run.id)
-    assert DateTime.compare(Repo.get!(Run, run.id).expires_at, DateTime.utc_now()) == :lt
-    assert Discovery.state(expired.object_id, "cinegraph").status == :ready
-    configure_discovery(retention_seconds: 0)
-    _summary = Discovery.cleanup()
-    assert Repo.get(Run, run.id)
+    assert DateTime.compare(Repo.get!(Run, run.id).expires_at, DateTime.utc_now()) == :gt
     assert Discovery.state(expired.object_id, "cinegraph").status == :ready
   end
 

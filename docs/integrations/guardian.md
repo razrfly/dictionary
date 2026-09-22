@@ -185,8 +185,11 @@ one of, and the second is the one that matters:
    display — *the page's answer is never the thing that gets collected*, which
    is right for a cache-size policy and **wrong for a retention rule**. Clause
    5 says "whether or not published on Your Website", so a displayed row is
-   precisely what has to go. `Discovery.expire_by_source_retention/1` runs
-   first, on the source's own window, without the display exemption.
+   precisely what has to go. Since #144 Phase 2 the retention step of
+   `Discovery.cleanup/0` runs first, on each source's own window, without
+   the display exemption: the run is **withdrawn** (`display_allowed` off —
+   the row stays as the ledger of what was spent), its results are deleted,
+   and its source records go with them (step 2).
 2. **The source records.** Deleting a run cascades to its
    `discovery_results` and its `discovery_request_attempts` — and **not** to
    its `source_records`, which hold the provider's own payload (the headline,

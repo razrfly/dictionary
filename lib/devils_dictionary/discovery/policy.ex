@@ -10,15 +10,32 @@ defmodule DevilsDictionary.Discovery.Policy do
   @keys [
     :positive_refresh_seconds,
     :empty_refresh_seconds,
+    # How long this source's disposable cache may be held at all. The shipped
+    # default is the shared seven days; a source whose licence names a shorter
+    # window overrides it and `Discovery.cleanup/0` enforces it, including
+    # against runs that are currently on display — which the bounded sweep
+    # deliberately protects. The Guardian's Open Platform terms say 24 hours,
+    # "whether or not published on Your Website" (#142); Spotify's say *do not
+    # store indefinitely* (#143).
+    :retention_seconds,
+    :failure_backoff_seconds,
     :request_budget_limit,
-    :request_budget_window_seconds,
-    # How long this source's disposable cache may be held at all (#142). The
-    # shipped default is the shared seven days; a source whose licence names a
-    # shorter window overrides it here and `Discovery.cleanup/0` enforces it,
-    # including against runs that are currently on display — which the general
-    # sweep deliberately protects. The Guardian's Open Platform terms say 24
-    # hours, "whether or not published on Your Website".
-    :retention_seconds
+    :request_budget_window_seconds
+  ]
+
+  # Refresh is how long a cached answer may be *reused*; retention is how long
+  # it may be *held*. They were the same number until #144 Phase 2, which is
+  # why the kit could refresh well and forget nothing: a source's terms may say
+  # "not retained longer than 24 hours" (the Guardian, #142) or "removed on
+  # termination" (Artsy), and neither is a statement about caching.
+  # A duration of zero is a duration: "refresh on every visit", "hold nothing",
+  # "retry at once". A budget of zero is a provider that can never run, which
+  # is what `enabled?/0` and the source row are for.
+  @durations [
+    :positive_refresh_seconds,
+    :empty_refresh_seconds,
+    :retention_seconds,
+    :failure_backoff_seconds
   ]
 
   @doc "Returns the validated policy for a provider slug."
@@ -35,7 +52,7 @@ defmodule DevilsDictionary.Discovery.Policy do
       value = Keyword.fetch!(policy, key)
 
       valid? =
-        if key in [:positive_refresh_seconds, :empty_refresh_seconds],
+        if key in @durations,
           do: is_integer(value) and value >= 0,
           else: is_integer(value) and value > 0
 
@@ -48,28 +65,26 @@ defmodule DevilsDictionary.Discovery.Policy do
     end)
   end
 
-  @doc """
-  The sources whose licence gives them a retention window of their own.
+  @doc "Every policy key, in the order `for!/1` returns them."
+  def keys, do: @keys
 
-  `[{slug, seconds}]`, from the `retention_seconds` overrides in
-  `:source_policies` — the sources `Discovery.cleanup/0` sweeps separately,
-  ahead of and more strictly than the shared window. A source that names none
-  is not in this list and is swept only by the shared rules.
+  @doc """
+  How long this source's results may be **held**, in seconds.
+
+  Read by `Discovery.cleanup/0` and written onto every run as `expires_at`, so
+  a held result carries its own deadline rather than depending on a sweep
+  reading the policy that was in force when the sweep ran.
   """
-  def source_retentions do
-    :devils_dictionary
-    |> Application.fetch_env!(:discovery)
-    |> Keyword.get(:source_policies, %{})
-    |> Enum.flat_map(fn {slug, overrides} ->
-      # Through `for!/1`, so a window that is not a positive integer raises
-      # here — at the sweep, loudly — rather than being dropped from the list
-      # and leaving the source swept only by the shared seven days.
-      if Keyword.has_key?(overrides, :retention_seconds),
-        do: [{slug, for!(slug).retention_seconds}],
-        else: []
-    end)
-    |> Enum.sort()
-  end
+  def retention_seconds(source_slug), do: for!(source_slug).retention_seconds
+
+  @doc """
+  How long a failed run waits before it may be attempted again, in seconds.
+
+  Per source since #144 Phase 2. A shared five minutes is wrong in both
+  directions: GDELT's one 429 closes its gate for a minute (#134) and a source
+  that answered a malformed body will answer the same one in five.
+  """
+  def failure_backoff_seconds(source_slug), do: for!(source_slug).failure_backoff_seconds
 
   @doc "Selects the refresh interval for a successful provider response."
   def refresh_seconds(source_slug, result_count) when is_integer(result_count) do

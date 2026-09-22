@@ -42,6 +42,7 @@ defmodule DevilsDictionaryWeb.WordLive do
   alias DevilsDictionary.Discovery.ContentTypes
   alias DevilsDictionary.Discovery.Providers
   alias DevilsDictionary.Artworks
+  alias DevilsDictionary.Artworks.Corpus
   alias DevilsDictionary.Claims.Contributions
   alias DevilsDictionary.Lexicon
   alias DevilsDictionary.Lexicon.WordPage
@@ -246,6 +247,16 @@ defmodule DevilsDictionaryWeb.WordLive do
             provider_name: "Saved catalog",
             provider_detail: catalog_providers(items),
             corpora: catalog_providers(items),
+            # A corpus never refreshes, by design, so the honest thing to say
+            # about its age is when it was made: the `generated_at` of the
+            # committed manifests these items came from, oldest first (#144
+            # Phase 2).
+            held_since:
+              items
+              |> Enum.map(& &1[:source_slug])
+              |> Enum.reject(&is_nil/1)
+              |> Enum.uniq()
+              |> Corpus.Manifest.held_since(),
             content_types: [:artwork],
             mapping_id: nil,
             term: page.headword.lemma,

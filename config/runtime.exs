@@ -39,16 +39,28 @@ config :devils_dictionary, DevilsDictionaryWeb.Endpoint,
 # `bing-news` reads `BING_NEWS_…` (#135), and `open-library` `OPEN_LIBRARY_…`.
 env_prefix = fn slug -> slug |> String.upcase() |> String.replace("-", "_") end
 
+# The policy keys an operator may override, as `{key, environment suffix}`.
+# One list, read three times below — the allowlist, the global defaults and the
+# per-source overrides — so a key added to `Discovery.Policy` is one line here
+# and cannot end up settable in one place and silently ignored in another.
+# #144 Phase 2 added retention and the failure backoff, which is what made one
+# list worth having.
+discovery_policy_env = [
+  {:positive_refresh_seconds, "DISCOVERY_POSITIVE_REFRESH_SECONDS"},
+  {:empty_refresh_seconds, "DISCOVERY_EMPTY_REFRESH_SECONDS"},
+  {:retention_seconds, "DISCOVERY_RETENTION_SECONDS"},
+  {:failure_backoff_seconds, "DISCOVERY_FAILURE_BACKOFF_SECONDS"}
+]
+
+discovery_policy_env_suffixes = Enum.map(discovery_policy_env, &elem(&1, 1))
+
 discovery_provider_policy_env =
   :devils_dictionary
   |> Application.get_env(:discovery_providers, [])
   |> Enum.flat_map(fn provider ->
     prefix = env_prefix.(provider.slug())
 
-    [
-      "#{prefix}_DISCOVERY_POSITIVE_REFRESH_SECONDS",
-      "#{prefix}_DISCOVERY_EMPTY_REFRESH_SECONDS"
-    ]
+    Enum.map(discovery_policy_env_suffixes, &"#{prefix}_#{&1}")
   end)
 
 # Credentials stay an explicit list: each one is a deliberate decision about a
@@ -70,10 +82,8 @@ allowed_provider_env =
     "SPOTIFY_CLIENT_SECRET",
     # Not a secret, like `BING_NEWS_ENABLED`: the owner's switch for a shelf
     # whose terms question was decided rather than settled (#143).
-    "SPOTIFY_ENABLED",
-    "DISCOVERY_POSITIVE_REFRESH_SECONDS",
-    "DISCOVERY_EMPTY_REFRESH_SECONDS"
-  ] ++ discovery_provider_policy_env
+    "SPOTIFY_ENABLED"
+  ] ++ discovery_policy_env_suffixes ++ discovery_provider_policy_env
 
 local_provider_env =
   if config_env() == :dev do
@@ -232,10 +242,8 @@ end
 discovery_config = Application.fetch_env!(:devils_dictionary, :discovery)
 
 discovery_config =
-  [
-    positive_refresh_seconds: parse_policy_integer.("DISCOVERY_POSITIVE_REFRESH_SECONDS"),
-    empty_refresh_seconds: parse_policy_integer.("DISCOVERY_EMPTY_REFRESH_SECONDS")
-  ]
+  discovery_policy_env
+  |> Enum.map(fn {key, suffix} -> {key, parse_policy_integer.(suffix)} end)
   |> Enum.reject(fn {_key, value} -> is_nil(value) end)
   |> then(&Keyword.merge(discovery_config, &1))
 
@@ -249,11 +257,8 @@ source_policies =
     prefix = env_prefix.(slug)
 
     overrides =
-      [
-        positive_refresh_seconds:
-          parse_policy_integer.("#{prefix}_DISCOVERY_POSITIVE_REFRESH_SECONDS"),
-        empty_refresh_seconds: parse_policy_integer.("#{prefix}_DISCOVERY_EMPTY_REFRESH_SECONDS")
-      ]
+      discovery_policy_env
+      |> Enum.map(fn {key, suffix} -> {key, parse_policy_integer.("#{prefix}_#{suffix}")} end)
       |> Enum.reject(fn {_key, value} -> is_nil(value) end)
 
     if overrides == [],
