@@ -14,7 +14,14 @@ config :devils_dictionary, DevilsDictionary.Repo,
   hostname: "localhost",
   database: "devils_dictionary_test#{System.get_env("MIX_TEST_PARTITION")}",
   pool: Ecto.Adapters.SQL.Sandbox,
-  pool_size: System.schedulers_online() * 2
+  pool_size: System.schedulers_online() * 2,
+  # DBConnection cancels a statement that runs past `timeout`, and Postgres
+  # reports the cancel as `57014 query_canceled: canceling statement due to
+  # user request`. The default is 15 s, which a seed or a truncate exceeds
+  # when several suites share the machine (load average 29 was measured while
+  # the suite failed this way). Nothing in the suite is faster for being
+  # cancelled; it is simply slow that day.
+  timeout: 60_000
 
 # We don't run a server during test. If one is required,
 # you can enable the server option below.
