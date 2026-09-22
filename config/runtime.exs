@@ -65,7 +65,13 @@ discovery_provider_policy_env =
 
 # Credentials stay an explicit list: each one is a deliberate decision about a
 # secret, and no naming rule should be able to widen it.
-allowed_provider_env =
+#
+# Named on its own since #144 Phase 4, because it is also the list
+# `mix dd.discovery.check` reports against: a provider's credentials are the
+# admitted names that start with its own environment prefix, which is how a
+# preflight can say *`GUARDIAN_API_KEY` missing* without a task, a module or a
+# document naming the Guardian.
+provider_credential_env =
   [
     "CINEGRAPH_API_KEY",
     "CINEGRAPH_GRAPHQL_URL",
@@ -83,7 +89,10 @@ allowed_provider_env =
     # Not a secret, like `BING_NEWS_ENABLED`: the owner's switch for a shelf
     # whose terms question was decided rather than settled (#143).
     "SPOTIFY_ENABLED"
-  ] ++ discovery_policy_env_suffixes ++ discovery_provider_policy_env
+  ]
+
+allowed_provider_env =
+  provider_credential_env ++ discovery_policy_env_suffixes ++ discovery_provider_policy_env
 
 local_provider_env =
   if config_env() == :dev do
@@ -125,6 +134,19 @@ local_provider_env =
   else
     %{}
   end
+
+# Whether each admitted credential arrived, and **nothing else about it**
+# (#144 Phase 4). This is the one place in the system where both sources of a
+# value are in scope — the exported environment and the development `.env` —
+# so it is the only place that can answer *present* or *missing* honestly; a
+# task asking `System.get_env/1` would report every `.env` key missing in dev.
+# What leaves this scope is a boolean per name. No value is copied, compared,
+# hashed or logged, and nothing downstream can recover one from a `true`.
+config :devils_dictionary,
+       :provider_credentials,
+       Map.new(provider_credential_env, fn name ->
+         {name, (System.get_env(name) || local_provider_env[name] || "") |> String.trim() != ""}
+       end)
 
 if cinegraph_api_key =
      System.get_env("CINEGRAPH_API_KEY") || local_provider_env["CINEGRAPH_API_KEY"] do

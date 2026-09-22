@@ -310,6 +310,26 @@ cannot leave a dead override behind.
 If your provider does not boot, read the message: it collects every complaint
 rather than stopping at the first.
 
+### And then it appears in the operator's view, without an edit
+
+`mix dd.discovery.check`, `mix dd.discovery.status` and `/ops/discovery` are
+the registry and the ledger, rendered (#144 Phase 4). Your provider gets a row
+in all three the moment it is registered, and none of them is a file you edit.
+Two conventions make that true, and they are the ones the twelve already
+follow:
+
+  * your **configuration stanza** is your slug with hyphens as underscores —
+    `config :devils_dictionary, :your_slug` — which is where the preflight
+    reads your endpoints and your `:enabled` switch from. A stanza somewhere
+    else shows as *no configuration*, and your `enabled?/0` still decides
+    whether that matters.
+  * your **credential names** start with your slug's environment prefix, upper
+    case and hyphens as underscores (`bing-news` → `BING_NEWS_API_KEY`), and go
+    on `allowed_provider_env` in `config/runtime.exs`. That list is what the
+    preflight reports *present* or *missing* against. No value is ever read to
+    print it: `runtime.exs` publishes one boolean per name and nothing
+    downstream sees more.
+
 ### Registering a provider should turn no test red
 
 `:discovery_providers` is read by the source catalog, the home page's stats line
@@ -572,4 +592,5 @@ Nothing in shared code changes; if you find yourself editing `Culture`,
 | Conformance | `test/support/discovery/conformance.ex`, `test/support/artworks/corpus_conformance.ex` |
 | The architecture test | `test/devils_dictionary/discovery/conformance_coverage_test.exs` |
 | The generator | `lib/mix/tasks/dd.provider.new.ex` |
+| The operator's view | `lib/devils_dictionary/discovery/status.ex`, `mix dd.discovery.check`, `mix dd.discovery.status`, `/ops/discovery` |
 | Worked examples | `lib/devils_dictionary/discovery/providers/cine_graph.ex`, `met.ex`, `test/support/fake_offset_discovery_provider.ex` |

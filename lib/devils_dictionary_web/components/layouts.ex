@@ -63,6 +63,7 @@ defmodule DevilsDictionaryWeb.Layouts do
         <.footer_category :if={dev_routes?()} title="Operations">
           <.footer_link navigate={~p"/ops/health"}>Health</.footer_link>
           <.footer_link navigate={~p"/ops/imports"}>Imports</.footer_link>
+          <.footer_link navigate={~p"/ops/discovery"}>Discovery</.footer_link>
         </.footer_category>
       </:links>
       <:fineprint>
@@ -83,7 +84,7 @@ defmodule DevilsDictionaryWeb.Layouts do
   # there is no cache process in the tree and this does not deserve the first.
   defp sources, do: DevilsDictionary.Sources.list_sources()
 
-  # The two consoles are reachable from the chrome in development and in test,
+  # The consoles are reachable from the chrome in development and in test,
   # and by URL everywhere. Not `/ops/scopes/:slug` — that route needs a slug,
   # and choosing one for the footer is how Animals got into the navbar in the
   # first place. It is reached from the population chooser on either console.
