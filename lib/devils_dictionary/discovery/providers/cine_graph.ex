@@ -38,6 +38,7 @@ defmodule DevilsDictionary.Discovery.Providers.CineGraph do
       license: "TMDb API terms; metadata served by CineGraph",
       license_url: "https://developer.themoviedb.org/docs/faq",
       homepage: "https://cinegraph.org/",
+      logo: "/images/sources/cinegraph.svg",
       url_template: "https://cinegraph.org/",
       attribution: "Film metadata and keywords: TMDb; discovery served by CineGraph",
       active: true,

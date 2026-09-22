@@ -32,6 +32,10 @@ defmodule DevilsDictionary.Sources.Source do
     field :license, :string
     field :license_url, :string
     field :homepage, :string
+    # The source's mark for the badge (#152): a path under `priv/static`, or nil
+    # for a monogram. Never a URL — a hotlink is a provider deciding what our
+    # page shows.
+    field :logo, :string
     field :url_template, :string
     field :attribution, :string
     field :active, :boolean, default: true
@@ -57,6 +61,7 @@ defmodule DevilsDictionary.Sources.Source do
       :license,
       :license_url,
       :homepage,
+      :logo,
       :url_template,
       :attribution,
       :active,

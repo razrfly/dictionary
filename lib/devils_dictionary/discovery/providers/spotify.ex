@@ -200,6 +200,7 @@ defmodule DevilsDictionary.Discovery.Providers.Spotify do
           "displayed with the Spotify mark and a link back",
       license_url: "https://developer.spotify.com/policy",
       homepage: "https://open.spotify.com/",
+      logo: "/images/sources/spotify.svg",
       url_template: "https://open.spotify.com/track/{external_id}",
       attribution: "Spotify",
       active: true,

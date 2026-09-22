@@ -154,6 +154,7 @@ defmodule DevilsDictionary.Discovery.Providers.OpenLibrary do
           "and only a snippet, a cover URL and a link are stored",
       license_url: "https://openlibrary.org/developers/licensing",
       homepage: "https://openlibrary.org/",
+      logo: "/images/sources/open-library.png",
       url_template: "https://openlibrary.org/works/{external_id}",
       attribution: "Open Library · Internet Archive",
       active: true,

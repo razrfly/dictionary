@@ -196,8 +196,11 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
                ~w(page-sources-bierce page-sources-johnson page-sources-wiktionary page-sources-wordnet page-sources-urban-dictionary)
 
       # The header of every card carries the same badge once, and the tier
-      # glyph that stood there is gone from the headers.
-      assert has_element?(live, "#card-johnson h2 span[aria-hidden]", "SJ")
+      # glyph that stood there is gone from the headers. The catalog seeds a
+      # mark for every MVP source (#152 Phase 4), so the badge is the row's
+      # file and the monogram is what a source with none would draw.
+      assert has_element?(live, "#card-johnson h2 img[src='/images/sources/johnson.png']")
+      assert has_element?(live, "#page-sources-johnson img[src='/images/sources/johnson.png']")
       refute render(element(live, "#card-johnson h2")) =~ "👑"
     end
   end

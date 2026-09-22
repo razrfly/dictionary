@@ -144,6 +144,7 @@ defmodule DevilsDictionary.Discovery.Providers.Unsplash do
       license: "Unsplash License; free to use, credit required",
       license_url: @license_page,
       homepage: "https://unsplash.com/",
+      logo: "/images/sources/unsplash.png",
       url_template: "https://unsplash.com/photos/{external_id}",
       attribution: "Photos from Unsplash; each carries its photographer's name and a link",
       active: true,

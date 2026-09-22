@@ -70,6 +70,7 @@ defmodule DevilsDictionary.Sources.UrbanDictionary do
       license: "Urban Dictionary Terms of Service; API access by permission",
       license_url: "https://urbandictionary.help/tos/",
       homepage: "https://www.urbandictionary.com/",
+      logo: "/images/sources/urban-dictionary.png",
       url_template: "https://www.urbandictionary.com/define.php?term={term}",
       attribution: "Urban Dictionary",
       active: true,
@@ -110,7 +111,7 @@ defmodule DevilsDictionary.Sources.UrbanDictionary do
         permalink_host: "www.urbandictionary.com",
         # Who the card is, from the row and not from the component (#152):
         # the header's badge and name, and the rail's stack, read these.
-        source: %{slug: source.slug, name: source.name, tier: source.tier}
+        source: %{slug: source.slug, name: source.name, tier: source.tier, logo: source.logo}
       }
     end
   end

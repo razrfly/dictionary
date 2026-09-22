@@ -45,6 +45,7 @@ defmodule DevilsDictionary.Sources.Catalog do
         license: "CC BY 4.0",
         license_url: "https://creativecommons.org/licenses/by/4.0/",
         homepage: "https://en-word.net/",
+        logo: "/images/sources/wordnet.png",
         url_template: "https://en-word.net/id/{external_id}",
         attribution: "Open English WordNet 2025 (CC BY 4.0)",
         config: %{
@@ -71,6 +72,7 @@ defmodule DevilsDictionary.Sources.Catalog do
         license: "CC BY-SA 4.0",
         license_url: "https://creativecommons.org/licenses/by-sa/4.0/",
         homepage: "https://en.wiktionary.org/",
+        logo: "/images/sources/wiktionary.png",
         url_template: "https://en.wiktionary.org/wiki/{lemma}#English",
         attribution: "Wiktionary contributors (CC BY-SA 4.0), extracted by kaikki.org",
         config: %{
@@ -96,6 +98,7 @@ defmodule DevilsDictionary.Sources.Catalog do
         license: "CC0 1.0",
         license_url: "https://creativecommons.org/publicdomain/zero/1.0/",
         homepage: "https://www.wikidata.org/",
+        logo: "/images/sources/wikidata.png",
         url_template: "https://www.wikidata.org/wiki/{external_id}",
         attribution: "Wikidata (CC0)",
         config: %{
@@ -120,6 +123,7 @@ defmodule DevilsDictionary.Sources.Catalog do
         license: "CC BY-SA 4.0",
         license_url: "https://creativecommons.org/licenses/by-sa/4.0/",
         homepage: "https://en.wikipedia.org/",
+        logo: "/images/sources/wikipedia.png",
         url_template: "https://en.wikipedia.org/wiki/{title}",
         attribution: "Wikipedia contributors (CC BY-SA 4.0)",
         config: %{
@@ -143,6 +147,7 @@ defmodule DevilsDictionary.Sources.Catalog do
         license: "Public domain",
         license_url: "https://www.gutenberg.org/policy/permission.html",
         homepage: "https://www.gutenberg.org/ebooks/972",
+        logo: "/images/sources/bierce.png",
         # Gutenberg gives the text no per-entry anchors — only one `id` per
         # letter chapter — so each record carries its own anchored url and this
         # template is the whole-document fallback A9 asks every source for.
@@ -169,6 +174,7 @@ defmodule DevilsDictionary.Sources.Catalog do
         license: "CC BY 4.0 (LEME transcription); the 1755 text is public domain",
         license_url: "https://creativecommons.org/licenses/by/4.0/",
         homepage: "https://leme.library.utoronto.ca/lexicons/1345/",
+        logo: "/images/sources/johnson.png",
         # LEME gives the lexicon one page and no per-entry anchors, so this is
         # the whole-document fallback A9 asks every source for — the same
         # bargain the Bierce row strikes with Gutenberg's letter chapters.
@@ -231,6 +237,7 @@ defmodule DevilsDictionary.Sources.Catalog do
       license: "Artsy Public API Terms; removable cache, no permanent archive grant",
       license_url: "https://developers.artsy.net/v2/terms",
       homepage: "https://www.artsy.net/",
+      logo: "/images/sources/artsy.png",
       url_template: "https://www.artsy.net/artwork/{external_id}",
       attribution: "Artwork discovery and source metadata: Artsy",
       config: %{

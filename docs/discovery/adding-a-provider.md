@@ -297,7 +297,8 @@ end
 that refuses to start rather than a `KeyError` on the first page that reaches
 you (#144 Phase 0). It checks, per registered module: the five registration
 callbacks; a `source_attrs/0` the catalog can seed (slug, name, attribution,
-tier); a `capabilities/0` with the six documented keys at the documented types,
+tier, and a `logo` under `priv/static/images/sources/` for the badge — or none,
+and the badge is a monogram; see `docs/discovery/source-marks.md`); a `capabilities/0` with the six documented keys at the documented types,
 at least one operation and one content type, every content type one
 `ContentTypes` can present; pacing keys that are non-negative integers **where
 declared** (absent is legal and means unpaced); and, for a module claiming

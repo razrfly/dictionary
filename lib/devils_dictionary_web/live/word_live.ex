@@ -277,8 +277,14 @@ defmodule DevilsDictionaryWeb.WordLive do
         )
       end
 
+    # One read of the rows for the marks: a shelf state carries its own, but a
+    # catalog corpus is named by its items and a browser config by what it
+    # chose to send, and the row is where the logo lives (#152 Phase 4).
+    logos = Map.new(DevilsDictionary.Sources.list_sources(), &{&1.slug, &1.logo})
+
     (definitions ++ thing ++ crowd ++ shelves ++ browser)
     |> Enum.reject(&is_nil/1)
+    |> Enum.map(&%{&1 | logo: &1.logo || logos[&1.slug]})
     |> SourceBadge.compose()
   end
 
