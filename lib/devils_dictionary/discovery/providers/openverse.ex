@@ -171,6 +171,7 @@ defmodule DevilsDictionary.Discovery.Providers.Openverse do
       license: "Per item; only CC0, CC BY, CC BY-SA and public-domain items are shown",
       license_url: "https://openverse.org/search-help",
       homepage: "https://openverse.org/",
+      logo: "/images/sources/openverse.svg",
       url_template: "https://openverse.org/image/{external_id}",
       attribution: "Openverse; each item carries its own creator, licence and attribution line",
       active: true,

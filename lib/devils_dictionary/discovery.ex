@@ -1640,6 +1640,9 @@ defmodule DevilsDictionary.Discovery do
       # from the source row, which is where tier lives; the provider's own
       # declaration is what seeded it.
       tier: if(source, do: source.tier, else: attrs[:tier]),
+      # The mark the badge draws beside the name (#152), from the row like the
+      # tier, with the declaration as the fallback a fresh database reads.
+      logo: if(source, do: source.logo, else: attrs[:logo]),
       # The one-line qualifier a provider wants beside its name on the shelf
       # ("keywords: TMDb"). The reader renders whatever is here and knows no
       # provider by name.

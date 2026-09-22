@@ -84,6 +84,7 @@ defmodule DevilsDictionary.Discovery.Providers.Met do
       license: "CC0 metadata; images only where the object is public domain",
       license_url: "https://www.metmuseum.org/information/terms-and-conditions",
       homepage: "https://www.metmuseum.org/",
+      logo: "/images/sources/met.png",
       url_template: "https://www.metmuseum.org/art/collection/search/{external_id}",
       active: true,
       attribution: "The Metropolitan Museum of Art Open Access",

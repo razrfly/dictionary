@@ -171,6 +171,7 @@ defmodule DevilsDictionary.Discovery.Providers.BingNews do
           "restricts these results to rendering Bing results within an RSS aggregator " <>
           "for personal, non-commercial use — see docs/integrations/bing-news.md",
       homepage: "https://www.bing.com/news",
+      logo: "/images/sources/bing-news.svg",
       # A news item has no id to put in a template, and its page is the
       # publisher's rather than Bing's. The card links to `source_url`.
       url_template: nil,

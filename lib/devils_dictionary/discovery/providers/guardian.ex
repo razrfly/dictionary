@@ -202,6 +202,7 @@ defmodule DevilsDictionary.Discovery.Providers.Guardian do
           "docs/integrations/guardian.md",
       license_url: "https://www.theguardian.com/open-platform/terms-and-conditions",
       homepage: "https://www.theguardian.com/open-platform",
+      logo: "/images/sources/guardian.png",
       url_template: "https://www.theguardian.com/{id}",
       attribution: "The Guardian",
       active: true,

@@ -28,6 +28,7 @@ defmodule DevilsDictionary.Discovery.Providers.Giphy do
       license_url:
         "https://support.giphy.com/hc/en-us/articles/360028134111-GIPHY-API-Terms-of-Service",
       homepage: "https://giphy.com/",
+      logo: "/images/sources/giphy.png",
       url_template: "https://giphy.com/gifs/{id}",
       attribution: "Powered by GIPHY",
       active: true,
@@ -73,6 +74,7 @@ defmodule DevilsDictionary.Discovery.Providers.Giphy do
         # From the row, as a server state's is: the badge's ring and the
         # stack's order read it (#152).
         tier: source.tier,
+        logo: source.logo,
         content_type: :gif,
         hook: "GiphyShelf",
         term: target.term,

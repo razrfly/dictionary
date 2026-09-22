@@ -110,6 +110,7 @@ defmodule DevilsDictionary.Discovery.Providers.Pexels do
       license: "Pexels License; free to use, credit requested",
       license_url: @license_url,
       homepage: "https://www.pexels.com/",
+      logo: "/images/sources/pexels.png",
       url_template: "https://www.pexels.com/photo/{external_id}/",
       attribution: "Photos from Pexels; each carries its photographer's name and a link",
       active: true,

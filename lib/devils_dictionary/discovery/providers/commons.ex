@@ -111,6 +111,7 @@ defmodule DevilsDictionary.Discovery.Providers.Commons do
       license: "Per file; only CC0, CC BY, CC BY-SA and public-domain files are shown",
       license_url: "https://commons.wikimedia.org/wiki/Commons:Licensing",
       homepage: "https://commons.wikimedia.org/",
+      logo: "/images/sources/commons.png",
       url_template: "https://commons.wikimedia.org/?curid={external_id}",
       attribution: "Wikimedia Commons contributors; each file carries its own author and licence",
       active: true,

@@ -65,8 +65,7 @@ defmodule DevilsDictionaryWeb.UrbanDictionaryCardTest do
 
       assert has_element?(
                view,
-               ~s([phx-hook="UrbanDictionary"] h2 span[aria-hidden="true"]),
-               "UD"
+               ~s([phx-hook="UrbanDictionary"] h2 img[src="/images/sources/urban-dictionary.png"])
              )
 
       refute render(element(view, ~s([phx-hook="UrbanDictionary"]))) =~ "border-dashed"
