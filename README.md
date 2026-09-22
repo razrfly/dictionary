@@ -376,6 +376,8 @@ mix dd.materialize --dry-run               # parity: raw vs derived, no network 
 mix dd.materialize --all                   # rebuild every derived row offline (M2)
 mix dd.health --scope animals              # coverage, resolution, links, parity
 mix dd.score --scope animals               # the MVP-0 scorecard, PASS/FAIL with actuals
+mix dd.discovery.check                     # every provider's configuration; never prints a key
+mix dd.discovery.status                    # every provider's ledger: spend, held, stale, due
 mix compile                                # ALWAYS to completion before the next line
 mix phx.server                             # http://localhost:4007 (4000–4005 belong to sibling projects)
 ```
