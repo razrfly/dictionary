@@ -10,17 +10,17 @@ defmodule DevilsDictionary.Discovery.Policy do
   @keys [
     :positive_refresh_seconds,
     :empty_refresh_seconds,
+    # How long this source's disposable cache may be held at all. The shipped
+    # default is the shared seven days; a source whose licence names a shorter
+    # window overrides it and `Discovery.cleanup/0` enforces it, including
+    # against runs that are currently on display — which the bounded sweep
+    # deliberately protects. The Guardian's Open Platform terms say 24 hours,
+    # "whether or not published on Your Website" (#142); Spotify's say *do not
+    # store indefinitely* (#143).
     :retention_seconds,
     :failure_backoff_seconds,
     :request_budget_limit,
-    :request_budget_window_seconds,
-    # How long this source's disposable cache may be held at all (#142). The
-    # shipped default is the shared seven days; a source whose licence names a
-    # shorter window overrides it here and `Discovery.cleanup/0` enforces it,
-    # including against runs that are currently on display — which the general
-    # sweep deliberately protects. The Guardian's Open Platform terms say 24
-    # hours, "whether or not published on Your Website".
-    :retention_seconds
+    :request_budget_window_seconds
   ]
 
   # Refresh is how long a cached answer may be *reused*; retention is how long

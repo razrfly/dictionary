@@ -142,9 +142,9 @@ config :devils_dictionary, :discovery,
     # must be re-requested or deleted at least every 24 hours, and may not be
     # kept longer than that "whether or not published on Your Website". So the
     # refresh is a day (the *replace* half, for a page somebody opens) and
-    # `retention_seconds` is the *delete* half, for one nobody does — the only
-    # source that names one, and the reason `Policy` admits the key at all.
-    # It is an hour under the day, not the day: the sweep runs every fifteen
+    # `retention_seconds` is the *delete* half, for one nobody does — the
+    # first source to name one. It is an hour under the day, not the day: the
+    # sweep runs every fifteen
     # minutes, so a window of exactly 86_400 lets a record live up to 24h15m,
     # and the clause says twenty-four. The budget is 400 of the key's 500, so
     # the app's own ledger refuses before the API does and tomorrow's probe

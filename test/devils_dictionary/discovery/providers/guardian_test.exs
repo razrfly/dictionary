@@ -771,38 +771,40 @@ defmodule DevilsDictionary.Discovery.Providers.GuardianTest do
                )
 
       # Spotify (#143) names a window of its own — seven days, the terms'
-      # *delete older data* — so the list is the two of them, in slug order.
-      assert Discovery.Policy.source_retentions() == [
-               {"guardian", 82_800},
-               {"spotify", 7 * 24 * 60 * 60}
-             ]
+      # *delete older data*. Since #144 Phase 2 the window is a policy key
+      # like any other, read per source by the sweep.
+      assert Discovery.Policy.retention_seconds("guardian") == 82_800
+      assert Discovery.Policy.retention_seconds("spotify") == 7 * 24 * 60 * 60
     end
 
-    test "a 25-hour-old Guardian run is deleted by cleanup/0 and Bing's is not", context do
+    test "a 25-hour-old Guardian run is withdrawn by cleanup/0 and Bing's, inside its window, is not",
+         context do
+      # Each source against its own window (#144 Phase 2): the Guardian's is
+      # twenty-three hours, and the shared one the suite configures is two,
+      # so Bing's run is aged one hour to sit inside it. Under the shipped
+      # seven days it would sit inside at twenty-five too.
       word = word!(context, "bestiality", ~w(wordnet))
       guardian = aged_run(word, Guardian, "guardian", hours: 25)
-      bing = aged_run(word, BingNews, "bing-news", hours: 25)
+      bing = aged_run(word, BingNews, "bing-news", hours: 1)
 
-      assert Repo.get(Run, guardian.run.id)
-      assert Repo.get(Run, bing.run.id)
+      assert Repo.get(Run, guardian.run.id).display_allowed
+      assert Repo.get(Run, bing.run.id).display_allowed
 
-      assert %{expired: expired} = Discovery.cleanup()
+      assert %{withdrawn: 1, expired_results: 1} = Discovery.cleanup()
 
-      # The Guardian's is gone — including its results, which cascade, and
-      # including the fact that it was the run currently on display. The
-      # general sweep protects a displayed run; a retention window does not
-      # admit that exception, because clause 5 says "whether or not published
-      # on Your Website".
-      refute Repo.get(Run, guardian.run.id)
+      # The Guardian's content is gone — its result, and with it the fact
+      # that it was the run currently on display. The bounded sweep protects
+      # a displayed run; a retention window does not admit that exception,
+      # because clause 5 says "whether or not published on Your Website". The
+      # run row is withdrawn rather than deleted: it is the ledger of what
+      # was spent, and the bounded sweep may still collect it afterwards.
       refute Repo.get(Result, guardian.result.id)
-      assert expired["guardian"].runs == 1
+      refute match?(%Run{display_allowed: true}, Repo.get(Run, guardian.run.id))
 
-      # And Bing's day-old run, on the same shelf, in the same database, at the
-      # same age, is untouched: its licence names no retention window, so it
-      # keeps the shared seven days.
-      assert Repo.get(Run, bing.run.id)
+      # And Bing's run, on the same shelf, in the same database, is untouched:
+      # its licence names no window, so it keeps the shared one.
+      assert Repo.get(Run, bing.run.id).display_allowed
       assert Repo.get(Result, bing.result.id)
-      refute Map.has_key?(expired, "bing-news")
     end
 
     test "the provider's own payload goes too, not just the shelf's copy", context do
@@ -816,11 +818,10 @@ defmodule DevilsDictionary.Discovery.Providers.GuardianTest do
       record = Repo.get!(SourceRecord, guardian.result.source_record_id)
       assert Repo.aggregate(revisions(record.id), :count) == 1
 
-      assert %{expired: expired} = Discovery.cleanup()
+      assert %{expired_source_records: 1} = Discovery.cleanup()
 
       refute Repo.get(SourceRecord, record.id)
       assert Repo.aggregate(revisions(record.id), :count) == 0
-      assert expired["guardian"].source_records == 1
     end
 
     test "a Guardian run inside the window is left alone", context do
@@ -829,11 +830,10 @@ defmodule DevilsDictionary.Discovery.Providers.GuardianTest do
       guardian =
         aged_run(word!(context, "bestiality", ~w(wordnet)), Guardian, "guardian", hours: 22)
 
-      assert %{expired: expired} = Discovery.cleanup()
+      assert %{withdrawn: 0, expired_results: 0} = Discovery.cleanup()
 
-      assert Repo.get(Run, guardian.run.id)
+      assert Repo.get(Run, guardian.run.id).display_allowed
       assert Repo.get(Result, guardian.result.id)
-      refute Map.has_key?(expired, "guardian")
     end
   end
 
@@ -1027,8 +1027,10 @@ defmodule DevilsDictionary.Discovery.Providers.GuardianTest do
         started_at: then,
         completed_at: then,
         # `discovery_runs_terminal_shape` requires both on a succeeded run.
+        # `expires_at` is what the sweep reads since #144 Phase 2 — the
+        # source's own window from `completed_at`, as `publish` writes it.
         refresh_after: DateTime.add(then, 86_400, :second),
-        expires_at: DateTime.add(then, 7 * 86_400, :second),
+        expires_at: DateTime.add(then, Discovery.Policy.retention_seconds(slug), :second),
         completion_reason: :results,
         result_count: 1,
         display_allowed: true
