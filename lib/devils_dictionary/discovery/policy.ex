@@ -65,6 +65,20 @@ defmodule DevilsDictionary.Discovery.Policy do
     end)
   end
 
+  # Budgets that belong to a source which is not a discovery provider but is
+  # spent from inside a provider's run. Wikidata is the one: creator identity
+  # fetches the QIDs a result credits and the registry lacks (#164 C1).
+  @shared_budgets ~w(wikidata)
+
+  @doc """
+  Source slugs that carry a `source_policies` row without being providers.
+
+  `Providers.validate!/0` refuses a policy naming an unregistered slug, so a
+  renamed provider cannot leave a dead override behind. These are the
+  exceptions it admits, each named here rather than let through by a pattern.
+  """
+  def shared_budgets, do: @shared_budgets
+
   @doc "Every policy key, in the order `for!/1` returns them."
   def keys, do: @keys
 

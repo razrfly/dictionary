@@ -312,7 +312,7 @@ defmodule DevilsDictionary.Discovery.Providers do
   defp pipeline(_provider, _capabilities), do: []
 
   defp validate_source_policies(providers) do
-    slugs = Enum.map(providers, & &1.slug())
+    slugs = Enum.map(providers, & &1.slug()) ++ DevilsDictionary.Discovery.Policy.shared_budgets()
 
     :devils_dictionary
     |> Application.get_env(:discovery, [])

@@ -24,6 +24,7 @@ defmodule DevilsDictionaryWeb.EntityLive do
   alias DevilsDictionary.Artworks
   alias DevilsDictionary.Encyclopedia.EntityPage
   alias DevilsDictionary.Markdown
+  alias DevilsDictionaryWeb.SourceBadge
 
   @impl true
   def mount(_params, _session, socket),
@@ -463,6 +464,64 @@ defmodule DevilsDictionaryWeb.EntityLive do
             />
           </.panel>
 
+          <%!-- #164 C5: the lines a person is credited with, beside the works
+               and definitions and paged on their own. One row per line; the
+               badges are every source whose current, public claim says so.
+               The line links to its evidence page, never to an entry — a
+               quotation is content, not something the encyclopedia is about. --%>
+          <.panel
+            :if={@page.quotations != []}
+            id="entity-quotations"
+            label="quotations"
+            count={@page.pagination.quotations.count}
+          >
+            <.line_list id="quotation" lines={@page.quotations} />
+            <.pager
+              :if={@page.pagination.quotations.next}
+              id="quotations-next"
+              path={
+                next_path(
+                  @id,
+                  @entity_slug,
+                  @cursors,
+                  :quotations,
+                  @page.pagination.quotations.next,
+                  @back_path
+                )
+              }
+              label="More quotations"
+            />
+          </.panel>
+
+          <%!-- #164 C4: never inside the credits above. A register's finding
+               that a line circulates under this name and is not theirs. --%>
+          <.panel
+            :if={@page.misattributed != []}
+            id="entity-misattributed"
+            label="misattributed"
+            count={@page.pagination.misattributed.count}
+          >
+            <p class="text-pretty text-base/7 text-mist-500 sm:text-sm/6">
+              Often credited to {@page.entity.label}; the sources below say these are not theirs.
+            </p>
+            <.line_list id="misattributed" lines={@page.misattributed} />
+            <.pager
+              :if={@page.pagination.misattributed.next}
+              id="misattributed-next"
+              path={
+                next_path(
+                  @id,
+                  @entity_slug,
+                  @cursors,
+                  :misattributed,
+                  @page.pagination.misattributed.next,
+                  @back_path
+                )
+              }
+              label="More misattributed lines"
+            />
+          </.panel>
+
           <.panel
             :if={@page.editions != []}
             id="entity-editions"
@@ -635,6 +694,43 @@ defmodule DevilsDictionaryWeb.EntityLive do
     """
   end
 
+  attr :id, :string, required: true, doc: "the DOM id prefix for each row"
+  attr :lines, :list, required: true
+
+  # A line is its words first — the reason the row exists — then who holds it
+  # and the way to its cited revision. The badges carry the names beside them
+  # in the header's manner (#152): a badge is never the only place a name is.
+  defp line_list(assigns) do
+    ~H"""
+    <ul role="list" class="divide-y divide-mist-950/5 dark:divide-white/10">
+      <li :for={line <- @lines} id={"#{@id}-#{line.object_id}"} class="flex flex-col gap-1.5 py-3">
+        <p
+          :if={line.summary}
+          class="line-clamp-3 text-pretty text-base/7 text-mist-950 sm:text-sm/6 dark:text-white"
+        >
+          “{line.summary}”
+        </p>
+        <p :if={is_nil(line.summary)} class="text-base/7 text-mist-500 sm:text-sm/6">
+          {line.headword || "Text withheld by its licence"}
+        </p>
+        <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-base/7 text-mist-500 sm:text-sm/6">
+          <span :if={line.year} class="tabular-nums">{line.year}</span>
+          <span :for={source <- line.sources} class="inline-flex items-center gap-1.5">
+            <SourceBadge.badge source={source} decorative />
+            {source.name}
+          </span>
+          <.a
+            id={"#{@id}-evidence-#{line.object_id}"}
+            navigate={~p"/evidence/content/#{line.revision_id}"}
+          >
+            Evidence
+          </.a>
+        </div>
+      </li>
+    </ul>
+    """
+  end
+
   attr :id, :string, required: true
   attr :path, :string, required: true
   attr :label, :string, required: true
@@ -650,7 +746,7 @@ defmodule DevilsDictionaryWeb.EntityLive do
     """
   end
 
-  @cursor_keys ~w(biography works definitions editions contents connections_in connections_out meaning_connections discovery_appearances)a
+  @cursor_keys ~w(biography works definitions quotations misattributed editions contents connections_in connections_out meaning_connections discovery_appearances)a
 
   defp cursor_params(params) do
     Map.new(@cursor_keys, fn key ->

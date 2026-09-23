@@ -146,6 +146,88 @@ defmodule DevilsDictionary.Discovery.Status do
   end
 
   @doc """
+  What creator identity has done (#164): per provider, how many creator
+  entries the held results carry in each state, plus the shared `wikidata`
+  budget minting spends and the open `unresolved_creator` cases.
+
+  The states are the hint `preview_metadata["creators"]` records at
+  publication — `matched`, `minted`, `overridden`, `deferred`, `unresolved` —
+  so this is a count of what runs *said*, which is what an operator asks
+  ("is Open Library crosswalking anything?"). Whether a card links is decided
+  from the assertions at render; the two can differ after a curator acts, and
+  `overridden` is where that shows up.
+  """
+  def creator_identity(opts \\ []) do
+    now = Keyword.get(opts, :now, DateTime.utc_now())
+
+    %{rows: rows} =
+      Repo.query!("""
+      SELECT source.slug, creator->>'state', count(*)
+        FROM discovery_results AS result
+        JOIN discovery_runs AS run ON run.id = result.run_id
+        JOIN discovery_mappings AS mapping ON mapping.id = run.mapping_id
+        JOIN sources AS source ON source.id = mapping.source_id
+        CROSS JOIN LATERAL jsonb_array_elements(
+          CASE jsonb_typeof(result.preview_metadata->'creators')
+            WHEN 'array' THEN result.preview_metadata->'creators'
+            ELSE '[]'::jsonb
+          END
+        ) AS creator
+       GROUP BY source.slug, creator->>'state'
+      """)
+
+    by_provider =
+      Enum.reduce(rows, %{}, fn [slug, state, count], acc ->
+        Map.update(acc, slug, %{state => count}, &Map.put(&1, state, count))
+      end)
+
+    source = Repo.get_by(Source, slug: "wikidata")
+
+    used =
+      if source do
+        cutoff = DateTime.add(now, -window("wikidata"), :second)
+
+        Repo.aggregate(
+          from(attempt in RequestAttempt,
+            where: attempt.source_id == ^source.id and attempt.attempted_at > ^cutoff
+          ),
+          :count
+        )
+      else
+        0
+      end
+
+    open_cases =
+      Repo.aggregate(
+        from(kase in DevilsDictionary.Sources.ReconciliationCase,
+          where:
+            kase.kind == ^DevilsDictionary.SourceIdentity.Creators.case_kind() and
+              kase.status == :open
+        ),
+        :count
+      )
+
+    minted =
+      Repo.aggregate(
+        from(entity in DevilsDictionary.Registry.Entity,
+          where: fragment("jsonb_exists(?, 'minted_by')", entity.metadata)
+        ),
+        :count
+      )
+
+    %{
+      states: ~w(matched minted overridden deferred unresolved),
+      providers:
+        by_provider
+        |> Enum.sort_by(&elem(&1, 0))
+        |> Enum.map(fn {slug, counts} -> %{slug: slug, counts: counts} end),
+      budget: budget("wikidata", used),
+      open_cases: open_cases,
+      minted: minted
+    }
+  end
+
+  @doc """
   Environment names `allowed_provider_env` admits that no registered provider
   claims, with whether each one is set.
 

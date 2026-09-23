@@ -86,6 +86,18 @@ defmodule DevilsDictionary.Discovery.Conformance.PoetrydbFixture do
     }
   end
 
+  # #164 C6: Alan Seeger has `author_qid` Q1849302 in `poetrydb-v1.json`;
+  # "George Gordon, Lord Byron" matches no Wikidata label or alias and the
+  # manifest names no QID for him, so his poem keeps a text line. Both come
+  # from the manifest as committed — the fixture does not invent either fact.
+  @impl true
+  def creator_case(_context) do
+    [_gordon, seeger_ode, _paris, _pope, _swinburne, byron] = candidates(6)
+    respond([seeger_ode, byron], poems())
+
+    %{credited: @seeger_ode, qid: "Q1849302", text_only: @byron_prayer}
+  end
+
   # The candidate list, in the order PoetryDB returned it — the poet who does
   # not attest the word first, exactly as the live answer had it.
   defp candidates(count) do

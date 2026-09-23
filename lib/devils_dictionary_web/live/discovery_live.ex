@@ -37,6 +37,7 @@ defmodule DevilsDictionaryWeb.DiscoveryLive do
     assign(socket,
       rows: Status.rows(now: now),
       preflight: Status.preflight(),
+      creators: Status.creator_identity(now: now),
       unclaimed: Status.unclaimed_credentials(),
       loaded_at: now
     )
@@ -118,6 +119,47 @@ defmodule DevilsDictionaryWeb.DiscoveryLive do
           it is a page that has not been opened since it went stale. A provider with
           runs and nothing held is one whose retention has already run; a browser
           provider stores nothing here by design.
+        </p>
+      </.section>
+
+      <%!-- #164: who the shelves credited, and what minting cost. The counts
+           are the hint each run recorded; the card decides its link from the
+           assertions at render. --%>
+      <.section
+        id="discovery-creators"
+        eyebrow="Creator identity"
+        headline="Who the results credit"
+        subheadline="A creator is matched or minted by the identifier the provider read, never by name. Deferred waits for the next refresh; unresolved has either no QID or an open case below."
+      >
+        <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
+          <.stat value={number(@creators.minted)}>
+            people and organizations minted from Wikidata on first credit
+          </.stat>
+          <.stat value={"#{@creators.budget.used}/#{@creators.budget.limit || "?"}"}>
+            Wikidata requests in the last {duration(@creators.budget.window_seconds)}, the shared budget minting draws on
+          </.stat>
+          <.stat value={number(@creators.open_cases)}>
+            open unresolved_creator cases, one per source and QID
+          </.stat>
+        </div>
+
+        <.table
+          :if={@creators.providers != []}
+          id="discovery-creator-states"
+          rows={@creators.providers}
+          row_id={&"creators-#{&1.slug}"}
+        >
+          <:col :let={r} label="provider"><span class="font-medium">{r.slug}</span></:col>
+          <:col :let={r} :for={state <- @creators.states} label={state}>
+            <span class="tabular-nums">{number(Map.get(r.counts, state, 0))}</span>
+          </:col>
+        </.table>
+        <p
+          :if={@creators.providers == []}
+          id="discovery-creator-states-empty"
+          class="mt-4 text-sm/7 text-mist-500"
+        >
+          No held result credits a creator yet.
         </p>
       </.section>
 

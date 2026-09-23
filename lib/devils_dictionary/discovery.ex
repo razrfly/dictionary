@@ -17,7 +17,7 @@ defmodule DevilsDictionary.Discovery do
   alias DevilsDictionary.Discovery.{Mapping, Policy, Providers, Result, Run}
   alias DevilsDictionary.Discovery.RunWorker
   alias DevilsDictionary.Lexicon
-  alias DevilsDictionary.Registry.{Lexeme, Object, Sense}
+  alias DevilsDictionary.Registry.{ContentRevision, Lexeme, Object, Sense}
   alias DevilsDictionary.Repo
   alias DevilsDictionary.SourceIdentity
   alias DevilsDictionary.SourceIdentity.Resolution
@@ -270,9 +270,18 @@ defmodule DevilsDictionary.Discovery do
             request_fun
           )
 
+        # #164 C1: whatever creator identity needs from the network is fetched
+        # here, before `finish_owned_run/2` opens the publication transaction,
+        # so no lock is held across a Wikidata request.
+        prepared =
+          case response do
+            {:ok, result} -> prepare_creators(run, provider, result)
+            _ -> %{}
+          end
+
         finish_owned_run(run, fn ->
           case response do
-            {:ok, result} -> complete_success(run, provider, result)
+            {:ok, result} -> complete_success(run, provider, result, prepared)
             {:error, code} -> complete_failure(run, code)
             {:deferred, code, seconds, params} -> defer_run(run, code, seconds, params)
           end
@@ -603,7 +612,7 @@ defmodule DevilsDictionary.Discovery do
         WITH ranked AS (
           SELECT attempts.id,
                  row_number() OVER (
-                   PARTITION BY runs.mapping_id, runs.position_key
+                   PARTITION BY runs.mapping_id, runs.position_key, attempts.source_id
                    ORDER BY attempts.attempted_at DESC, attempts.id DESC
                  ) AS rank
             FROM discovery_request_attempts AS attempts
@@ -1179,21 +1188,42 @@ defmodule DevilsDictionary.Discovery do
       # payload, which lives on its current revision (`Sources.raw/1`). They
       # come back onto the result as a virtual field so a shelf can dedup two
       # providers' copies of one thing on a shared namespace (#116 M3).
-      Repo.all(
-        from result in Result,
-          left_join: record in assoc(result, :source_record),
-          left_join: revision in SourceRecordRevision,
-          on:
-            revision.source_record_id == record.id and
-              revision.revision_key == record.content_hash,
-          where:
-            result.run_id in ^run_ids and result.display_allowed and
-              (is_nil(result.source_record_id) or record.display_allowed),
-          order_by: [asc: result.run_id, asc: result.position],
-          select: {result, revision.payload["identifiers"]}
-      )
-      |> Enum.map(fn {result, identifiers} ->
-        %{result | identifiers: Enum.filter(List.wrap(identifiers), &is_map/1)}
+      results =
+        Repo.all(
+          from result in Result,
+            left_join: record in assoc(result, :source_record),
+            left_join: revision in SourceRecordRevision,
+            on:
+              revision.source_record_id == record.id and
+                revision.revision_key == record.content_hash,
+            left_join: object in Object,
+            on: object.id == result.object_id,
+            left_join: content in ContentRevision,
+            on: content.content_id == result.object_id and content.is_current,
+            where:
+              result.run_id in ^run_ids and result.display_allowed and
+                (is_nil(result.source_record_id) or record.display_allowed),
+            order_by: [asc: result.run_id, asc: result.position],
+            select: {result, revision.payload["identifiers"], object.kind, content.id}
+        )
+
+      # One read for the whole shelf (#164 C5): the creators the registry
+      # credits now, never the hint the run wrote.
+      credited =
+        results
+        |> Enum.map(fn {result, _, _, _} -> result.object_id end)
+        |> Enum.reject(&is_nil/1)
+        |> SourceIdentity.Creators.credited()
+
+      results
+      |> Enum.map(fn {result, identifiers, kind, content_revision_id} ->
+        %{
+          result
+          | identifiers: Enum.filter(List.wrap(identifiers), &is_map/1),
+            object_kind: kind,
+            content_revision_id: content_revision_id,
+            creator_links: Map.get(credited, result.object_id, [])
+        }
       end)
       |> Enum.sort_by(&{pages[&1.run_id], &1.position, &1.id})
       |> Enum.uniq_by(fn result ->
@@ -1202,7 +1232,7 @@ defmodule DevilsDictionary.Discovery do
     end
   end
 
-  defp complete_success(run, provider, response) do
+  defp complete_success(run, provider, response, prepared) do
     run = Repo.get!(Run, run.id) |> Repo.preload(mapping: :source)
 
     with true <- run.mapping.enabled,
@@ -1210,21 +1240,21 @@ defmodule DevilsDictionary.Discovery do
          {:ok, ^provider, _source} <- eligible_provider_for_mapping(run.mapping),
          true <- run.adapter_version == provider.adapter_version(),
          :ok <- mapping_evidence_current(run.mapping, provider) do
-      publish_success(run, provider, response)
+      publish_success(run, provider, response, prepared)
     else
       {:error, :mapping_evidence_changed} -> complete_failure(run, "mapping_evidence_changed")
       _ -> complete_failure(run, "publication_ineligible")
     end
   end
 
-  defp publish_success(run, provider, response) do
+  defp publish_success(run, provider, response, prepared) do
     now = DateTime.utc_now()
     persistent? = provider.capabilities().persistence == :persistent
     items = Enum.uniq_by(response.items, &{&1.external_namespace, &1.external_id})
 
     result =
       Repo.transaction(fn ->
-        if persistent?, do: persist_results(run, provider, items)
+        if persistent?, do: persist_results(run, provider, items, prepared)
 
         run
         |> Run.lifecycle_changeset(%{
@@ -1311,7 +1341,27 @@ defmodule DevilsDictionary.Discovery do
     {:notify, deferred, [], {:snooze, seconds}}
   end
 
-  defp persist_results(run, provider, items) do
+  # The half of creator identity that may touch the network (#164 C1): every
+  # relationship target the run's durable proposals name, looked up in one
+  # query, with only the missing QIDs fetched against the `wikidata` budget.
+  # A transient provider persists nothing and so credits nobody.
+  defp prepare_creators(run, provider, response) do
+    if provider.capabilities().persistence == :persistent do
+      response.items
+      |> Enum.uniq_by(&{&1.external_namespace, &1.external_id})
+      |> Enum.flat_map(fn item ->
+        case identity_proposal(provider, item) do
+          {:ok, %{eligibility: :eligible, retention: :durable} = entry} -> [entry]
+          _ -> []
+        end
+      end)
+      |> SourceIdentity.Creators.prepare(run_id: run.id)
+    else
+      %{}
+    end
+  end
+
+  defp persist_results(run, provider, items, prepared) do
     source = run.mapping.source
 
     proposed = Enum.map(items, &{&1, identity_proposal(provider, &1)})
@@ -1321,7 +1371,7 @@ defmodule DevilsDictionary.Discovery do
       {_item, {:ok, entry}} -> [entry]
       _ -> []
     end)
-    |> SourceIdentity.lock_entries()
+    |> SourceIdentity.lock_entries(prepared)
 
     Enum.each(proposed, fn {item, proposal} ->
       {:ok, record} =
@@ -1331,7 +1381,11 @@ defmodule DevilsDictionary.Discovery do
           raw: source_payload(item)
         })
 
-      resolution = resolve_identity(proposal, source, record)
+      resolution =
+        resolve_identity(proposal, source, record,
+          prepared: prepared,
+          adapter_version: provider.adapter_version()
+        )
 
       attrs =
         item
@@ -1339,9 +1393,32 @@ defmodule DevilsDictionary.Discovery do
         |> Map.put(:object_id, resolution.object_id)
         |> Map.put(:source_record_id, record.id)
         |> Map.put(:resolution_state, resolution.state)
+        |> Map.update!(:preview_metadata, &put_creators(&1, resolution.relationships))
 
       %Result{} |> Result.changeset(attrs) |> Repo.insert!()
     end)
+  end
+
+  # `preview_metadata["creators"]` is a **hint** (#164 C5): the labels the
+  # card may print and the counts the operator reads. Whether the creator line
+  # is a link is decided at render from the assertions as they are then, so a
+  # withdrawn credit unlinks without anything here being rewritten.
+  defp put_creators(metadata, []), do: metadata
+
+  defp put_creators(metadata, relationships) do
+    Map.put(
+      metadata,
+      "creators",
+      Enum.map(relationships, fn relationship ->
+        %{
+          "role" => relationship.role,
+          "qid" => relationship.qid,
+          "object_id" => relationship.object_id,
+          "state" => to_string(relationship.state),
+          "label" => relationship.label
+        }
+      end)
+    )
   end
 
   defp source_payload(item) do
@@ -1386,17 +1463,17 @@ defmodule DevilsDictionary.Discovery do
     end
   end
 
-  defp resolve_identity({:ok, entry}, source, record) do
+  defp resolve_identity({:ok, entry}, source, record, opts) do
     entry
     |> Map.merge(%{
       source_id: source.id,
       source_record_id: record.id,
       source_record_revision_id: record.current_revision.id
     })
-    |> SourceIdentity.resolve()
+    |> SourceIdentity.resolve(opts)
   end
 
-  defp resolve_identity({:resolution, resolution}, _source, _record), do: resolution
+  defp resolve_identity({:resolution, resolution}, _source, _record, _opts), do: resolution
 
   defp start_run(run_id) do
     Repo.transaction(fn ->

@@ -93,6 +93,58 @@ defmodule DevilsDictionary.Discovery.Conformance.MetFixture do
     %{pages: [~w(1001), ~w(1003)]}
   end
 
+  # #164 C6. The Met publishes the artist's own authority record on the
+  # object: `artistWikidata_URL` for 1001 (a QID the kit mints from), and only
+  # `artistULAN_URL` for 1002 — ULAN is not a namespace the registry holds, so
+  # that artist keeps a text line and is credited to nobody.
+  @impl true
+  def creator_case(_context) do
+    respond(
+      %{@exact_term => [1001, 1002]},
+      %{
+        1001 =>
+          object(1001, "A Cavalry Charge", "Q198")
+          |> Map.merge(%{
+            "artistDisplayName" => "Pablo Picasso",
+            "artistWikidata_URL" => "https://www.wikidata.org/wiki/Q5593",
+            "artistULAN_URL" => "http://vocab.getty.edu/page/ulan/500009666"
+          }),
+        1002 =>
+          object(1002, "The Siege", "Q198")
+          |> Map.merge(%{
+            "artistDisplayName" => "Utagawa Kuniyoshi",
+            "artistWikidata_URL" => "",
+            "artistULAN_URL" => "http://vocab.getty.edu/page/ulan/500060498"
+          })
+      }
+    )
+
+    # The Met's own stub answers the tag walk; this one also knows Picasso.
+    Req.Test.stub(Clients, fn conn ->
+      conn = fetch_query_params(conn)
+
+      entities =
+        (conn.params["ids"] || "")
+        |> String.split("|", trim: true)
+        |> Map.new(fn
+          "Q5593" ->
+            {"Q5593",
+             DevilsDictionary.Discovery.Conformance.human("Q5593", "Pablo Picasso",
+               born: ~D[1881-10-25],
+               died: ~D[1973-04-08],
+               description: "Spanish painter and sculptor (1881–1973)"
+             )}
+
+          qid ->
+            {qid, %{"id" => qid, "claims" => %{"P279" => []}}}
+        end)
+
+      Req.Test.json(conn, %{"entities" => entities})
+    end)
+
+    %{credited: "1001", qid: "Q5593", text_only: "1002"}
+  end
+
   # One stub for both endpoints: `/v1.1/search` is recognised by its `q`
   # parameter, `/v1/objects/{id}` by its path.
   defp respond(searches, objects) do

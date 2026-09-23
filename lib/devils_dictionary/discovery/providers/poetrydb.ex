@@ -80,6 +80,22 @@ defmodule DevilsDictionary.Discovery.Providers.Poetrydb do
     ]
 
   @adapter_version "poetrydb.attestation.v1"
+
+  # PoetryDB's `author` string → the QID the corpus manifest reviewed for it.
+  # Read at compile time: 129 poets, one map, and a manifest change recompiles
+  # this module rather than being picked up by a running node half-way.
+  @manifest Path.join([__DIR__, "../../../../priv/artworks/manifests/poetrydb-v1.json"])
+            |> Path.expand()
+  @external_resource @manifest
+  @author_qids @manifest
+               |> File.read!()
+               |> Jason.decode!()
+               |> Map.fetch!("rows")
+               |> Enum.flat_map(fn
+                 %{"author" => author, "author_qid" => "Q" <> _ = qid} -> [{author, qid}]
+                 _ -> []
+               end)
+               |> Map.new()
   @operation "poetrydb_attestation"
 
   @candidate_fields "title,author,linecount"
@@ -546,12 +562,50 @@ defmodule DevilsDictionary.Discovery.Providers.Poetrydb do
         "source_url" => metadata["source_url"],
         "catalog_source" => "poetrydb"
       },
+      relationships: author_relationships(metadata["author"]),
       eligibility: :eligible,
       retention: :durable
     })
   end
 
   def identity_record(_item), do: {:error, :unsupported_poetrydb_identity}
+
+  @doc """
+  The poet's Wikidata QID from the reviewed corpus manifest, or nil.
+
+  `poetrydb-v1.json` records `author_qid` per poet by a rule stated in its
+  `selection` block and reviewed when the manifest was committed (#109): exact
+  label or alias, a human, a writer by occupation, and a clear margin over the
+  runner-up. That is a fact the repository holds, keyed by PoetryDB's own
+  `author` string exactly as PoetryDB spells it — so reading it here is a
+  lookup in a reviewed table, not a name search at runtime (#164 C6). A poet
+  the rule could not name (Byron, Tennyson, thirteen in all) has no entry and
+  keeps a text line.
+  """
+  def author_qid(author) when is_binary(author), do: Map.get(@author_qids, author)
+  def author_qid(_author), do: nil
+
+  defp author_relationships(author) do
+    case author_qid(author) do
+      nil ->
+        []
+
+      qid ->
+        [
+          %{
+            role: "authored_by",
+            target_identifiers: [
+              %{
+                namespace: "wikidata",
+                external_id: qid,
+                metadata: %{"field" => "poetrydb-v1.author_qid"}
+              }
+            ],
+            certainty: :verified
+          }
+        ]
+    end
+  end
 
   defp present?(value), do: is_binary(value) and String.trim(value) != ""
 
