@@ -79,6 +79,23 @@ defmodule DevilsDictionary.Discovery.Policy do
   """
   def shared_budgets, do: @shared_budgets
 
+  @doc """
+  The longest `request_budget_window_seconds` any source could be asked about:
+  the global default or the largest per-source override. The attempts ledger
+  may prune nothing younger than this, or a budget would count fewer requests
+  than were made (CodeRabbit on #166, applied in #167).
+  """
+  def longest_budget_window_seconds do
+    config = Application.fetch_env!(:devils_dictionary, :discovery)
+
+    config
+    |> Keyword.get(:source_policies, %{})
+    |> Map.values()
+    |> Enum.map(&Keyword.get(&1, :request_budget_window_seconds, 0))
+    |> Enum.max(fn -> 0 end)
+    |> max(Keyword.fetch!(config, :request_budget_window_seconds))
+  end
+
   @doc "Every policy key, in the order `for!/1` returns them."
   def keys, do: @keys
 

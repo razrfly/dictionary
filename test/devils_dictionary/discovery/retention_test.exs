@@ -327,6 +327,16 @@ defmodule DevilsDictionary.Discovery.RetentionTest do
       spent = Repo.aggregate(RequestAttempt, :count)
       assert spent > 1, "one run, #{spent} request(s): this case needs a multi-request page"
 
+      # Nothing younger than the longest budget window is pruned, whatever its
+      # rank: `Budget` counts these rows to hold a source to its limit, and a
+      # row pruned inside the window is a request the budget forgets.
+      assert %{pruned_attempts: 0, deleted: 0} = Discovery.cleanup()
+      assert Repo.aggregate(RequestAttempt, :count) == spent
+
+      window = DevilsDictionary.Discovery.Policy.longest_budget_window_seconds()
+      then = DateTime.add(DateTime.utc_now(), -(window + 1), :second)
+      Repo.query!("UPDATE discovery_request_attempts SET attempted_at = $1", [then])
+
       assert %{pruned_attempts: pruned, deleted: 0} = Discovery.cleanup()
       assert pruned == spent - 1
       assert Repo.aggregate(RequestAttempt, :count) == 1

@@ -614,12 +614,22 @@ defmodule DevilsDictionary.Discovery do
   # (402 rows and climbing, measured 2026-09-21). Keeping the most recent
   # `retained_attempts_per_position` per position keeps what a session reads
   # when it asks what a page cost, and drops the rest.
+  #
+  # Never an attempt still inside a budget window, whatever its rank: `Budget`
+  # counts attempts younger than the source's window to decide whether a
+  # request may be made, and a pruned row would let a source overspend its
+  # limit by exactly the rows pruned. The cutoff is the longest window any
+  # source is configured with (CodeRabbit on #166, applied in #167).
   defp prune_attempts(keep, batch_size) do
+    cutoff =
+      DateTime.add(DateTime.utc_now(), -Policy.longest_budget_window_seconds(), :second)
+
     %{num_rows: pruned} =
       Repo.query!(
         """
         WITH ranked AS (
           SELECT attempts.id,
+                 attempts.attempted_at,
                  row_number() OVER (
                    PARTITION BY runs.mapping_id, runs.position_key, attempts.source_id
                    ORDER BY attempts.attempted_at DESC, attempts.id DESC
@@ -629,10 +639,10 @@ defmodule DevilsDictionary.Discovery do
         )
         DELETE FROM discovery_request_attempts
          WHERE id IN (
-           SELECT id FROM ranked WHERE rank > $1 LIMIT $2
+           SELECT id FROM ranked WHERE rank > $1 AND attempted_at < $3 LIMIT $2
          )
         """,
-        [keep, batch_size]
+        [keep, batch_size, cutoff]
       )
 
     pruned
