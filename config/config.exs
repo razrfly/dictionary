@@ -350,6 +350,7 @@ config :devils_dictionary, :spotify,
 # pace and #158's probe drew no 429 from any Wikimedia host at it.
 config :devils_dictionary, :wikiquote,
   endpoint: "https://en.wikiquote.org/api/rest_v1/page/html/",
+  api_endpoint: "https://en.wikiquote.org/w/api.php",
   wikidata_endpoint: "https://www.wikidata.org/w/api.php",
   request_interval_ms: 200,
   enabled: true

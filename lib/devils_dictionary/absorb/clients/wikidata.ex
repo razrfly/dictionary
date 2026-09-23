@@ -87,26 +87,8 @@ defmodule DevilsDictionary.Absorb.Clients.Wikidata do
   end
 
   @doc """
-  Parameters for resolving up to #{@batch} page titles on one wiki to the items
-  whose sitelink they are: the page `Ambrose Bierce` on `enwikiquote` is
-  Q191050. A title is the wiki's own identifier for a page, so this is a
-  crosswalk, not a search — a title no item links to is simply absent.
-  """
-  def title_params(titles, site) when is_list(titles) and length(titles) <= @batch do
-    [
-      action: "wbgetentities",
-      format: "json",
-      sites: site,
-      titles: Enum.join(titles, "|"),
-      props: "sitelinks",
-      sitefilter: site
-    ]
-  end
-
-  @doc """
   `%{qid => title}` for every item in a `wbgetentities` answer that carries a
-  sitelink on `site`. Missing items (`"missing"`, the `-1` keys a title lookup
-  returns) are left out.
+  sitelink on `site`. Missing items (`"missing"`) are left out.
   """
   def sitelink_titles(%{"entities" => entities}, site) when is_map(entities) do
     for {qid, entity} <- entities,

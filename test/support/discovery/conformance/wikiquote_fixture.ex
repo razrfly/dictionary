@@ -111,8 +111,8 @@ defmodule DevilsDictionary.Discovery.Conformance.WikiquoteFixture do
 
   @doc """
   Installs the stub. `sitelinks` maps a concept QID to its Wikiquote page
-  title; `authors` maps a page title to the QID whose `enwikiquote` sitelink it
-  is. Anything not named has no sitelink.
+  title; `authors` maps a page title to its Wikidata item (or to `{:redirect,
+  title}`). Anything not named has no item.
   """
   def respond(sitelinks, authors \\ %{}) do
     Req.Test.stub(Wikiquote, fn conn -> answer(conn, sitelinks, authors) end)
@@ -133,19 +133,31 @@ defmodule DevilsDictionary.Discovery.Conformance.WikiquoteFixture do
 
         Req.Test.json(conn, %{"entities" => entities})
 
-      {"wikidata.test", %{"titles" => titles}} ->
-        entities =
-          titles
-          |> String.split("|", trim: true)
-          |> Enum.with_index()
-          |> Map.new(fn {title, i} ->
+      # Wikiquote's own `prop=pageprops&ppprop=wikibase_item`, formatversion 2.
+      # `authors` maps a title to its item's QID, or to `{:redirect, title}`
+      # when the page is an alias of another.
+      {"wikiquote.test", %{"action" => "query", "titles" => titles}} ->
+        asked = String.split(titles, "|", trim: true)
+
+        redirects =
+          for title <- asked,
+              {:redirect, to} <- [Map.get(authors, title)],
+              do: %{"from" => title, "to" => to}
+
+        pages =
+          ((asked -- Enum.map(redirects, & &1["from"])) ++ Enum.map(redirects, & &1["to"]))
+          |> Enum.uniq()
+          |> Enum.map(fn title ->
             case Map.get(authors, title) do
-              nil -> {"-#{i + 1}", %{"site" => "enwikiquote", "title" => title, "missing" => ""}}
-              qid -> {qid, entity(qid, title)}
+              qid when is_binary(qid) ->
+                %{"title" => title, "pageprops" => %{"wikibase_item" => qid}}
+
+              _ ->
+                %{"title" => title, "missing" => true}
             end
           end)
 
-        Req.Test.json(conn, %{"entities" => entities})
+        Req.Test.json(conn, %{"query" => %{"redirects" => redirects, "pages" => pages}})
 
       {"wikiquote.test", _params} ->
         conn.request_path |> page_slug() |> then(&WikiquoteFixtures.respond(conn, &1))

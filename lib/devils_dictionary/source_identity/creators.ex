@@ -867,15 +867,25 @@ defmodule DevilsDictionary.SourceIdentity.Creators do
             {:overridden, current}
 
           current.lifecycle_state == :withdrawn ->
-            revise!(assertion.id, object_id, confidence, metadata, lifecycle_state: :active)
+            revise!(assertion.id, object_id, confidence, metadata,
+              lifecycle_state: :active,
+              rationale: relationship[:rationale]
+            )
+
             :reinstated
 
           current.object_object_id == object_id and current.confidence == confidence and
-            same_credit?(current.metadata, metadata) and current.method == @method ->
+            same_credit?(current.metadata, metadata) and current.method == @method and
+              current.rationale == relationship[:rationale] ->
             :unchanged
 
+          # A register whose sentence changed is a changed claim: the
+          # rationale is what `misattributed_to` rests on (CodeRabbit on #169).
           true ->
-            revise!(assertion.id, object_id, confidence, metadata, [])
+            revise!(assertion.id, object_id, confidence, metadata,
+              rationale: relationship[:rationale]
+            )
+
             :revised
         end
     end

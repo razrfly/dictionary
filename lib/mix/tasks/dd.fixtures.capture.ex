@@ -43,9 +43,9 @@ defmodule Mix.Tasks.Dd.Fixtures.Capture do
 
   Each page is **sanitised** to what the parser reads: the Parsoid bookkeeping
   attributes, images, tables, styles and the `<head>` are stripped. The task
-  parses the raw page and the sanitised one and **refuses to write** if the
-  quotation or register counts differ, so a fixture can never be smaller by
-  being different. `--raw-dir DIR` also keeps the untouched response there
+  parses the raw page and the sanitised one and **refuses to write** unless
+  the two parses are equal — every item, citation, link, section and the
+  revision — so a fixture can never be smaller by being different. `--raw-dir DIR` also keeps the untouched response there
   (never committed).
   """
 
@@ -55,6 +55,7 @@ defmodule Mix.Tasks.Dd.Fixtures.Capture do
 
   alias DevilsDictionary.Absorb.Clients
   alias DevilsDictionary.Absorb.GzipLines
+  alias DevilsDictionary.Discovery.Providers.Wikiquote.Parser
   alias DevilsDictionary.Registry.Lexeme
   alias DevilsDictionary.Repo
   alias DevilsDictionary.Sources
@@ -251,16 +252,16 @@ defmodule Mix.Tasks.Dd.Fixtures.Capture do
     {body, counts} =
       if response.status == 200 do
         sanitised = sanitise_wikiquote(raw)
-        before = wikiquote_counts(raw)
-        after_ = wikiquote_counts(sanitised)
 
-        if before != after_ do
-          Mix.raise(
-            "sanitising #{title} changed what the parser reads: #{inspect(before)} → #{inspect(after_)}"
-          )
+        # The whole parse, not only its counts (CodeRabbit on #169): a
+        # sanitiser that kept every item but changed a citation, a link or
+        # the revision would otherwise pass. Nothing is excluded — what is
+        # stripped is exactly what the parser never reads.
+        if Parser.parse(raw) != Parser.parse(sanitised) do
+          Mix.raise("sanitising #{title} changed what the parser reads")
         end
 
-        {sanitised, after_}
+        {sanitised, wikiquote_counts(sanitised)}
       else
         {raw, nil}
       end
@@ -282,7 +283,7 @@ defmodule Mix.Tasks.Dd.Fixtures.Capture do
       "body_file" => body_file(slug, body, Req.Response.get_header(response, "content-type"))
     }
 
-    if File.exists?(path) and not opts[:force] do
+    if File.exists?(path) and !opts[:force] do
       Mix.shell().info("  = #{path} (exists; --force to replace)")
       []
     else
@@ -323,7 +324,7 @@ defmodule Mix.Tasks.Dd.Fixtures.Capture do
   end
 
   defp wikiquote_counts(html) do
-    page = DevilsDictionary.Discovery.Providers.Wikiquote.Parser.parse(html)
+    page = Parser.parse(html)
     %{"quotations" => length(page.quotations), "register" => length(page.register)}
   end
 
@@ -477,7 +478,7 @@ defmodule Mix.Tasks.Dd.Fixtures.Capture do
   defp write(source, lemma, records, opts) do
     path = Path.join([@dir, source, "#{lemma}.json"])
 
-    if File.exists?(path) and not opts[:force] do
+    if File.exists?(path) and !opts[:force] do
       Mix.shell().info("  = #{path} (exists; --force to replace)")
       []
     else

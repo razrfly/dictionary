@@ -200,6 +200,57 @@ defmodule DevilsDictionary.Discovery.Providers.WikiquoteTest do
     end
   end
 
+  describe "credits by the linked page's item (CodeRabbit on #169)" do
+    test "a citation linking an author's alias page is credited through the redirect", ctx do
+      target = target(ctx, "nepotism", "Q900701")
+      # Nepotism's citation links `Ambrose Bierce`; here that title is an alias
+      # page redirecting to `Bierce`, whose item is Q191050.
+      WikiquoteFixture.respond(%{"Q900701" => "Nepotism"}, %{
+        "Ambrose Bierce" => {:redirect, "Bierce"},
+        "Bierce" => "Q191050"
+      })
+
+      {:ok, _run, results} = run!(target) |> ok()
+      bierce = Enum.find(results, &(&1.preview_metadata["title"] =~ "NEPOTISM"))
+      bierce_id = Registry.by_external_id("wikidata", "Q191050")
+
+      assert bierce.preview_metadata["author_qid"] == "Q191050"
+
+      assert [%{object_object_id: ^bierce_id}] =
+               Claims.outgoing(bierce.object_id, predicate: "authored_by")
+    end
+
+    test "a linked page with no item is reported, not silently dropped", ctx do
+      target = target(ctx, "nepotism", "Q900701")
+      WikiquoteFixture.respond(%{"Q900701" => "Nepotism"}, %{})
+
+      {:ok, _run, results} = run!(target) |> ok()
+      bierce = Enum.find(results, &(&1.preview_metadata["title"] =~ "NEPOTISM"))
+
+      assert bierce.preview_metadata["author_unresolved"] == "Ambrose Bierce"
+      refute bierce.preview_metadata["author_qid"]
+      assert Claims.outgoing(bierce.object_id, predicate: "authored_by") == []
+    end
+
+    test "a throttled author lookup defers the run with the request, per the contract", ctx do
+      target = target(ctx, "nepotism", "Q900701")
+
+      Req.Test.stub(Wikiquote, fn conn ->
+        conn = Plug.Conn.fetch_query_params(conn)
+
+        if conn.request_path == "/w/api.php",
+          do: DevilsDictionary.WikiquoteFixtures.respond(conn, "throttled"),
+          else: WikiquoteFixture.answer(conn, %{"Q900701" => "Nepotism"}, %{})
+      end)
+
+      {result, run, results} = run!(target)
+      assert {:snooze, 60} = result
+      assert run.status == :pending
+      assert run.error_code == "provider_retry_after"
+      assert results == []
+    end
+  end
+
   describe "the register" do
     setup ctx do
       # Author pages are not targets in this build (#158 open question 5), but
@@ -335,6 +386,68 @@ defmodule DevilsDictionary.Discovery.Providers.WikiquoteTest do
 
       assert kept.preview_metadata["provenance_note"] ==
                "Actually from a later paraphrase (1901)."
+    end
+  end
+
+  describe "a register that changes its mind (CodeRabbit on #169)" do
+    test "a new register sentence is a revision; the same one again writes nothing", ctx do
+      target = target(ctx, "doubtful", "Q900716", :person)
+
+      page = fn note ->
+        ~s(<html about="x/revision/1"><head><title>Doubtful</title></head><body>) <>
+          "<section><h2>Misattributed</h2><ul><li>A line often put in this person's mouth.<ul><li>#{note}</li></ul></li></ul></section>" <>
+          "</body></html>"
+      end
+
+      serve = fn note ->
+        Req.Test.stub(Wikiquote, fn conn ->
+          conn = Plug.Conn.fetch_query_params(conn)
+
+          if conn.host == "wikiquote.test" and conn.request_path =~ "/page/html/",
+            do:
+              conn
+              |> Plug.Conn.put_resp_content_type("text/html")
+              |> Plug.Conn.send_resp(200, page.(note)),
+            else: WikiquoteFixture.answer(conn, %{"Q900716" => "Doubtful"}, %{})
+        end)
+      end
+
+      refresh = fn ->
+        discovery = Application.fetch_env!(:devils_dictionary, :discovery)
+
+        Application.put_env(
+          :devils_dictionary,
+          :discovery,
+          Keyword.put(discovery, :refresh_cooldown_seconds, 0)
+        )
+
+        mapping =
+          Repo.one!(
+            from m in Discovery.Mapping,
+              where: m.target_object_id == ^target.object_id,
+              limit: 1
+          )
+
+        {:queued, run} = Discovery.request_mapping(mapping, refresh: true)
+        :ok = Discovery.execute_run(run.id)
+        Application.put_env(:devils_dictionary, :discovery, discovery)
+      end
+
+      serve.("First found in a 1901 anthology.")
+      {:ok, _run, [row]} = run!(target) |> ok()
+      [first] = Claims.outgoing(row.object_id, predicate: "misattributed_to")
+      assert first.rationale == "First found in a 1901 anthology."
+
+      serve.("First found in a 1901 anthology.")
+      refresh.()
+      assert Claims.history(first.assertion_id) |> length() == 1
+
+      serve.("First found in an 1899 newspaper.")
+      refresh.()
+      history = Claims.history(first.assertion_id)
+      assert length(history) == 2
+      assert List.last(history).rationale == "First found in an 1899 newspaper."
+      assert List.last(history).is_current
     end
   end
 

@@ -22,8 +22,9 @@ defmodule DevilsDictionary.Discovery.Providers.Wikiquote do
     2. `page` — `GET /api/rest_v1/page/html/<title>`: Parsoid HTML, capped at
        2 MB (*Love* is 1.45 MB), one redirect followed (*Bank* → *Banking*), a
        `404` an honest empty (*Situationship*)
-    3. `authors` — the page titles the kept lines' citations link to, resolved
-       to QIDs by their `enwikiquote` sitelinks, 50 at a time
+    3. `authors` — the pages the kept lines' citations link to, read from
+       Wikiquote's own page properties (`wikibase_item`, the other end of the
+       sitelink), redirects followed, 50 at a time
 
   Paced 200 ms apart, the Wikidata client's own pace, by the transport.
   Pagination is an **offset into the page's kept lines**: one theme page is one
@@ -208,11 +209,25 @@ defmodule DevilsDictionary.Discovery.Providers.Wikiquote do
     ]
   end
 
+  # The pages the citations link to, and each one's Wikidata item, from
+  # Wikiquote's own page properties: `wikibase_item` is the other end of the
+  # sitelink. `redirects=1` follows a link to a redirect (an author's alias
+  # page) to the page the item is on, and the answer says which title became
+  # which — so a credit survives the link being to an alias (CodeRabbit on
+  # #169). A page read, never `list=search` and never `action=parse`.
   def request_options(%{"endpoint" => "authors", "titles" => titles}) do
     [
       method: :get,
-      url: wikidata_url(),
-      params: WikidataClient.title_params(titles, @site),
+      url: api_url(),
+      params: [
+        action: "query",
+        format: "json",
+        formatversion: "2",
+        titles: Enum.join(titles, "|"),
+        redirects: "1",
+        prop: "pageprops",
+        ppprop: "wikibase_item"
+      ],
       headers: headers()
     ]
   end
@@ -235,6 +250,7 @@ defmodule DevilsDictionary.Discovery.Providers.Wikiquote do
   end
 
   defp wikidata_url, do: config()[:wikidata_endpoint] || WikidataClient.api_url()
+  defp api_url, do: config()[:api_endpoint] || "https://en.wikiquote.org/w/api.php"
 
   defp page_path(title),
     do: title |> String.replace(" ", "_") |> URI.encode(&URI.char_unreserved?/1)
@@ -342,31 +358,40 @@ defmodule DevilsDictionary.Discovery.Providers.Wikiquote do
       |> Enum.uniq()
       |> Enum.take(WikidataClient.batch_size())
 
-    with {:ok, qids} <- author_qids(titles, request_fun) do
-      qids = if author_page?, do: Map.put(qids, title, target.qid), else: qids
-      fingerprints = register_index(register)
+    case author_qids(titles, request_fun) do
+      {:ok, qids} ->
+        qids = if author_page?, do: Map.put(qids, title, target.qid), else: qids
 
-      context = %{
-        mapping: mapping,
-        target: target,
-        title: title,
-        revision_id: page.revision_id,
-        author_page?: author_page?,
-        qids: qids,
-        register: fingerprints
-      }
+        context = %{
+          mapping: mapping,
+          target: target,
+          title: title,
+          revision_id: page.revision_id,
+          author_page?: author_page?,
+          qids: qids,
+          register: register_index(register)
+        }
 
-      items =
-        Enum.map(slice, &kept_item(&1, context)) ++
-          Enum.map(register_rows, &register_item(&1, context))
+        items =
+          Enum.map(slice, &kept_item(&1, context)) ++
+            Enum.map(register_rows, &register_item(&1, context))
 
-      {:ok,
-       %{
-         request_parameters: Map.put(request, "offset", Integer.to_string(offset)),
-         items: items |> Enum.with_index() |> Enum.map(fn {item, i} -> %{item | position: i} end),
-         next_cursor: if(offset + limit < length(kept), do: Integer.to_string(offset + limit)),
-         completion_reason: if(items == [], do: :no_results, else: :results)
-       }}
+        {:ok,
+         %{
+           request_parameters: Map.put(request, "offset", Integer.to_string(offset)),
+           items:
+             items |> Enum.with_index() |> Enum.map(fn {item, i} -> %{item | position: i} end),
+           next_cursor: if(offset + limit < length(kept), do: Integer.to_string(offset + limit)),
+           completion_reason: if(items == [], do: :no_results, else: :results)
+         }}
+
+      # The provider contract: a deferral carries the request back, so the
+      # run is retried from where it stood (CodeRabbit on #169).
+      {:deferred, code, seconds} ->
+        {:deferred, code, seconds, request}
+
+      {:error, code} ->
+        {:error, code}
     end
   end
 
@@ -395,14 +420,43 @@ defmodule DevilsDictionary.Discovery.Providers.Wikiquote do
 
   defp author_qids(titles, request_fun) do
     case request_fun.("authors", %{"endpoint" => "authors", "titles" => titles}) do
-      {:ok, body} ->
-        {:ok,
-         body
-         |> WikidataClient.sitelink_titles(@site)
-         |> Map.new(fn {qid, title} -> {title, qid} end)}
+      {:ok, body} -> {:ok, page_items(body, titles)}
+      other -> other
+    end
+  end
 
-      other ->
-        other
+  @doc """
+  `%{requested title => QID}` from a `prop=pageprops&ppprop=wikibase_item`
+  answer, following its `normalized` and `redirects` lists back to the title
+  each citation actually linked. A title whose page has no item, or does not
+  exist, is absent — and reported on the item as unresolved, never dropped
+  in silence.
+  """
+  def page_items(%{"query" => query}, titles) when is_list(titles) do
+    hops =
+      Map.new(
+        List.wrap(query["normalized"]) ++ List.wrap(query["redirects"]),
+        &{&1["from"], &1["to"]}
+      )
+
+    items =
+      for %{"title" => title, "pageprops" => %{"wikibase_item" => qid}} <-
+            List.wrap(query["pages"]),
+          into: %{},
+          do: {title, qid}
+
+    for title <- titles, qid = Map.get(items, follow(hops, title, 3)), into: %{}, do: {title, qid}
+  end
+
+  def page_items(_body, _titles), do: %{}
+
+  # Normalisation, then a redirect: two hops at most, three to be safe.
+  defp follow(_hops, title, 0), do: title
+
+  defp follow(hops, title, n) do
+    case Map.get(hops, title) do
+      nil -> title
+      next -> follow(hops, next, n - 1)
     end
   end
 
@@ -429,6 +483,7 @@ defmodule DevilsDictionary.Discovery.Providers.Wikiquote do
       "provenance_note" => note,
       "author_title" => author_title,
       "author_qid" => author_qid,
+      "author_unresolved" => if(author_title && is_nil(author_qid), do: author_title),
       "certainty" => certainty && Atom.to_string(certainty)
     })
   end
@@ -450,7 +505,8 @@ defmodule DevilsDictionary.Discovery.Providers.Wikiquote do
       "register" => Atom.to_string(row.register),
       "register_note" => row.citation,
       "misattributed_to_title" => target_title,
-      "misattributed_to_qid" => target_qid
+      "misattributed_to_qid" => target_qid,
+      "misattributed_to_unresolved" => if(target_title && is_nil(target_qid), do: target_title)
     })
   end
 
