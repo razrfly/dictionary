@@ -335,12 +335,15 @@ defmodule DevilsDictionary.SourceIdentity do
   # compared against every revision, so a second source's variant is recorded
   # once and not again on each of its refreshes.
   #
-  # "Same" means the same fingerprint (#158 build 3, ADR 0003): a full stop,
+  # For a quotation, "same" means the same fingerprint (#158 build 3, ADR 0003): a full stop,
   # a curly quote or a capital is transcription, not a second text, and a
   # different wording is still recorded. The revisions are few per item, so
   # they are read and normalised here rather than fingerprinted in SQL.
   defp add_alternate_text(object_id, %Entry{content: content} = entry) do
-    fingerprint = Fingerprint.fingerprint(content.body)
+    # The exception is for quotations (ADR 0003). Any other content kind — a
+    # definition, an article — is compared byte for byte, as before.
+    fingerprint =
+      if entry.content_kind == :quotation, do: Fingerprint.fingerprint(content.body)
 
     known? =
       from(revision in ContentRevision,

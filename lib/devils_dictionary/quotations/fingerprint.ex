@@ -22,7 +22,8 @@ defmodule DevilsDictionary.Quotations.Fingerprint do
     3. curly quotes and primes straightened, and every dash (en, em, figure,
        horizontal bar, minus) straightened to a hyphen
     4. `...` written as `…`, and a leading or trailing ellipsis dropped — an
-       ellipsis *inside* a line marks an elision and stays
+       ellipsis *inside* a line marks an elision and stays, as a word of its
+       own however it was spaced
     5. apostrophes removed (`don't` and `dont` are one transcription), every
        other punctuation mark a word break
     6. whitespace collapsed to single spaces and trimmed
@@ -96,6 +97,11 @@ defmodule DevilsDictionary.Quotations.Fingerprint do
       iex> normalise("I came … I conquered")
       "i came … i conquered"
 
+  An interior ellipsis is one word break however it is spaced or typed:
+
+      iex> normalise("I came...I conquered") == normalise("I came … I conquered")
+      true
+
   Apostrophes go, every other mark is a word break:
 
       iex> normalise("Don’t tread on me!")
@@ -126,6 +132,7 @@ defmodule DevilsDictionary.Quotations.Fingerprint do
     |> String.replace(@dashes, "-")
     |> String.replace("...", "…")
     |> drop_edge_ellipses()
+    |> String.replace("…", " … ")
     |> String.replace("'", "")
     |> String.replace(~r/(?![…%&#])\p{P}/u, " ")
     |> String.replace(~r/\s+/u, " ")

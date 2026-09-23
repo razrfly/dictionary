@@ -40,8 +40,9 @@ A quotation's normalised words, hashed, are published as an identifier.
   second assertion on the same subject — the agreement build 5 counts. No
   migration: the namespace is a value.
 - **Alternate text** (`SourceIdentity.add_alternate_text/2`, #164 C2) compares
-  fingerprints, not bytes: a full stop or a curly quote is not a second text,
-  a different wording still is.
+  fingerprints, not bytes, **for quotations only**: a full stop or a curly
+  quote is not a second text, a different wording still is. Every other
+  content kind — a definition, an article — is still compared byte for byte.
 - **Implementation**: `DevilsDictionary.Quotations.Fingerprint` —
   `normalise/1`, `fingerprint/1`, `identifier/1`, with a doctest per rule and
   one pinned fingerprint.
@@ -55,8 +56,9 @@ Differences of typography and transcription only:
 3. Curly quotes and primes straightened; every dash (en, em, figure,
    horizontal bar, minus) straightened to a hyphen.
 4. `...` written as `…`; a leading or trailing ellipsis dropped. An ellipsis
-   **inside** a line marks an elision and is kept: "I came … I conquered" is
-   not "I came I conquered".
+   **inside** a line marks an elision and is kept as a word of its own, however
+   it is spaced: "I came…I conquered" is "I came … I conquered", and neither
+   is "I came I conquered".
 5. Apostrophes removed (`don't` and `dont` are one transcription); every other
    punctuation mark becomes a word break — except `%`, `&` and `#`, which read
    as words.

@@ -295,5 +295,44 @@ defmodule DevilsDictionary.QuotationFingerprintFoldTest do
            )
   end
 
+  test "only a quotation's text is compared by fingerprint; other content is byte for byte",
+       ctx do
+    source = DevilsDictionary.Sources.get_source_by_slug!("wikidata")
+
+    entry = fn kind, body ->
+      {:ok, entry} =
+        DevilsDictionary.SourceIdentity.Entry.new(%{
+          source_slug: "quote-fixture",
+          source_id: source.id,
+          object_kind: :content,
+          content_kind: kind,
+          stable_identifier: %{namespace: "quote_fixture", external_id: "#{kind}-1"},
+          label: "x",
+          content: %{body: body}
+        })
+
+      entry
+    end
+
+    bodies = fn object_id ->
+      Repo.all(
+        from r in ContentRevision,
+          where: r.content_id == ^object_id,
+          order_by: r.revision_number,
+          select: r.body
+      )
+    end
+
+    for kind <- [:quotation, :article] do
+      %{object_id: id} = DevilsDictionary.SourceIdentity.resolve(entry.(kind, "A line."))
+      DevilsDictionary.SourceIdentity.resolve(entry.(kind, "a line"))
+
+      expected = if kind == :quotation, do: ["A line."], else: ["A line.", "a line"]
+      assert bodies.(id) == expected, "#{kind}"
+    end
+
+    _ = ctx
+  end
+
   defp source_id, do: DevilsDictionary.Sources.get_source_by_slug!("quote-fixture").id
 end
