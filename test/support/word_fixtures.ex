@@ -423,8 +423,15 @@ defmodule DevilsDictionary.WordFixtures do
     sense
   end
 
+  # The first source the catalog seeded — WordNet — and always that one. A bare
+  # `limit: 1` returns whichever row comes first in the heap, which is the
+  # first seeded only on a table nobody else is writing to. Under the async
+  # suite, rows from concurrent sandboxes and the holes their rollbacks leave
+  # reorder it: 9 of 68 calls in one full run came back `bierce`, `poetrydb`
+  # or `wikipedia`, and the naming sense became a card of its own
+  # (`["wordnet", "poetrydb"]` on `/define/quoll`).
   defp any_source_id do
-    Repo.one!(from s in DevilsDictionary.Sources.Source, limit: 1, select: s.id)
+    Repo.one!(from s in DevilsDictionary.Sources.Source, order_by: s.id, limit: 1, select: s.id)
   end
 
   @doc """
