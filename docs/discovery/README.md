@@ -64,6 +64,12 @@ word, at this locator. It is shown as *uses “war” at line 4* and never as *a
 war*. The identity that a text does carry is its author's, through a QID
 crosswalk in its manifest where one exists.
 
+**The one exception is written down:** a quotation's normalised words, hashed,
+are its identifier (`quotation_fingerprint`, ADR 0003,
+`docs/adr/0003-quotation-fingerprint.md`). A line someone said has no id but
+its wording, so the wording is published as one — compared for equality like a
+QID, never searched on. Nothing else gets this treatment without its own ADR.
+
 Nothing in the pipeline enforces this. It is enforced by review, by the shape of
 `DevilsDictionary.Discovery.MatchReason`, and by the fact that a reason with no
 identifier in it renders as *the provider returned this result for “war”*, which
@@ -351,6 +357,20 @@ non-current revision beside the first. A content object is never presented as
 an entry: its card links to `/evidence/content/<revision>`, and a person's
 page lists it under *quotations*.
 
+**A quote provider's contract (#158 build 3, ADR 0003):** every quotation
+carries `DevilsDictionary.Quotations.Fingerprint.identifier(text)` in its
+`identifiers`, beside the provider's own id, on the item *and* on the entry —
+the item so the shelf folds at read time, the entry so the registry folds at
+resolution. The provider's own id stays the stable identifier. Nothing else is
+needed: the verified-unique index on `external_identifiers` makes the second
+provider's copy of a line match the first's `content_items` row (no new item,
+and no new revision when the text differs only in case, punctuation, curly
+quotes or an edge ellipsis), its `authored_by` is a second assertion on the
+same subject, the person's page shows one row with both badges, and
+`Shelf.fold/3` says which sources a kept card absorbed. A different wording is
+a different fingerprint and a different line. `FakeQuoteDiscoveryProvider` and
+`FakeQuoteMirrorDiscoveryProvider` are the reference shape.
+
 **A discovery appearance is never a claim** about the word it was found for.
 No `illustrates` assertion is written, ever. A keyword-matched film is not curated evidence that the film is
 about the word; it is a provider result, shown as one. The path from a result to
@@ -595,6 +615,11 @@ makes two items one thing:
 - the **canonical** full-size media URL (`image_url`, then `media_url`): host
   and path, lower-cased host, no scheme, port, query or trailing slash. Never
   the thumbnail, which is each provider's own derivative.
+
+A quotation's `quotation_fingerprint` (ADR 0003) is one of those identifiers,
+so the same line from two sources is one card with no rule of its own.
+`Shelf.fold/3` is `dedup/2` that also returns, per kept item, every source
+folded into it — what a card needs to name two sources.
 
 The composition sorts by archetype, tier and slug **before** dedup, so the
 better-tiered source's copy of a duplicate is the one that survives, and takes

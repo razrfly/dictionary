@@ -123,6 +123,41 @@ defmodule DevilsDictionary.Discovery.Shelf do
   end
 
   @doc """
+  `dedup/2`, keeping count of who else held each kept item.
+
+  Returns `[{item, sources}]` in `dedup/2`'s order and with its survivors:
+  `sources` is `source_fun` of the kept item followed by that of every item
+  folded into it, each once, in arrival order. It is how one card can name two
+  sources — the same line from two quotation providers, folded on its
+  `quotation_fingerprint` (#158 build 3, ADR 0003). Drawing those names is the
+  card's business; this only says what they are.
+  """
+  def fold(items, source_fun, keys_fun \\ &keys/1)
+      when is_function(source_fun, 1) and is_function(keys_fun, 1) do
+    {kept, _owner} =
+      Enum.reduce(items, {[], %{}}, fn item, {kept, owner} ->
+        keys = keys_fun.(item)
+        source = source_fun.(item)
+
+        case Enum.find_value(keys, &Map.get(owner, &1)) do
+          nil ->
+            index = length(kept)
+            {kept ++ [{item, [source]}], Map.new(keys, &{&1, index}) |> Map.merge(owner)}
+
+          index ->
+            kept =
+              List.update_at(kept, index, fn {first, sources} ->
+                {first, Enum.uniq(sources ++ [source])}
+              end)
+
+            {kept, Map.new(keys, &{&1, index}) |> Map.merge(owner)}
+        end
+      end)
+
+    kept
+  end
+
+  @doc """
   The keys under which a shelf item is the same thing as another.
 
   Read from a live `DevilsDictionary.Discovery.Result`, a transient provider

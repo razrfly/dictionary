@@ -28,6 +28,7 @@ defmodule DevilsDictionary.SourceIdentity do
 
   import Ecto.Query
 
+  alias DevilsDictionary.Quotations.Fingerprint
   alias DevilsDictionary.Registry
 
   alias DevilsDictionary.Registry.{
@@ -332,14 +333,25 @@ defmodule DevilsDictionary.SourceIdentity do
   # current one and does **not** replace it: the first source's wording stays
   # current until a person or build 5's verifier decides otherwise. "Same" is
   # compared against every revision, so a second source's variant is recorded
-  # once and not again on each of its refreshes. Until build 3 the comparison
-  # is exact; the fingerprint's normalisation replaces it there.
+  # once and not again on each of its refreshes.
+  #
+  # "Same" means the same fingerprint (#158 build 3, ADR 0003): a full stop,
+  # a curly quote or a capital is transcription, not a second text, and a
+  # different wording is still recorded. The revisions are few per item, so
+  # they are read and normalised here rather than fingerprinted in SQL.
   defp add_alternate_text(object_id, %Entry{content: content} = entry) do
+    fingerprint = Fingerprint.fingerprint(content.body)
+
     known? =
-      Repo.exists?(
-        from revision in ContentRevision,
-          where: revision.content_id == ^object_id and revision.body == ^content.body
+      from(revision in ContentRevision,
+        where: revision.content_id == ^object_id,
+        select: revision.body
       )
+      |> Repo.all()
+      |> Enum.any?(fn body ->
+        body == content.body or
+          (is_binary(fingerprint) and Fingerprint.fingerprint(body) == fingerprint)
+      end)
 
     unless known? do
       Repo.query!("SELECT 1 FROM content_items WHERE object_id = $1 FOR UPDATE", [object_id])
