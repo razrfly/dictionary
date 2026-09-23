@@ -115,6 +115,32 @@ defmodule DevilsDictionaryWeb.SourceBadgeTest do
       assert html =~ ~r/role="tooltip"[^>]*>\s*<span[^>]*>👑<\/span>\s*Samuel Johnson\s*</
     end
 
+    test "folds everything past the cap behind a +N that opens in place (#162)" do
+      sources =
+        for n <- 1..15 do
+          %{slug: "s#{n}", name: "Source #{n}", tier: :plebs, logo: nil, anchor: "#card-s#{n}"}
+        end
+
+      html = render_component(&SourceBadge.stack/1, id: "page-sources", sources: sources)
+
+      # Twelve on the row, the rest behind the fold; every one still a link.
+      for n <- 1..15, do: assert(html =~ ~s(id="page-sources-s#{n}"))
+      assert html =~ ~s(id="page-sources-more")
+      assert html =~ ~r/>\s*\+3\s*</
+      # Hover says who is folded, and the count is the whole page's.
+      assert html =~ ~s(title="Source 13, Source 14, Source 15")
+      assert html =~ "15 sources on this page"
+
+      # Twelve or fewer: no fold at all.
+      twelve =
+        render_component(&SourceBadge.stack/1,
+          id: "page-sources",
+          sources: Enum.take(sources, 12)
+        )
+
+      refute twelve =~ "page-sources-more"
+    end
+
     test "draws nothing for a page with no sources" do
       assert render_component(&SourceBadge.stack/1, id: "page-sources", sources: []) == ""
     end

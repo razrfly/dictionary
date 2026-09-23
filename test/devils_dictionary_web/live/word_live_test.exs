@@ -250,7 +250,7 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
 
       assert html =~ ~s(id="sources")
       assert html =~ ~s(id="one-source")
-      assert html =~ "One source so far"
+      assert html =~ "One dictionary so far"
       assert html =~ "Open English WordNet"
       refute html =~ "Animals"
     end
@@ -263,7 +263,7 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
       {:ok, _live, html} = live(ctx.conn, ~p"/define/cat")
 
       assert html =~ ~s(id="sources")
-      assert html =~ "Defined here by 2 sources"
+      assert html =~ "Defined here by 2 dictionaries"
       refute html =~ ~s(id="one-source")
     end
 

@@ -67,7 +67,7 @@ defmodule DevilsDictionaryWeb.AnimalsAbsentTest do
       assert html =~ "A soft automaton."
       assert html =~ "a feline"
       assert html =~ ~s(id="sources")
-      assert html =~ "Defined here by 2 sources"
+      assert html =~ "Defined here by 2 dictionaries"
     end
 
     test "and by its canonical address too", ctx do
