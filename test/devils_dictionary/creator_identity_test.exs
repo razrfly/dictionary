@@ -831,4 +831,74 @@ defmodule DevilsDictionary.CreatorIdentityTest do
     # under the lock, and the other found that person when it got the lock.
     assert states == ["matched", "minted"]
   end
+
+  # ── #164 audit residuals ─────────────────────────────────────────────────
+
+  test "a provider adapter-version bump alone writes no new revision", ctx do
+    %{results: %{"voltaire-candide-garden" => result}} =
+      run!(ctx, "garden", rows(~w(voltaire-candide-garden)))
+
+    [revision] = authored_by(result.object_id)
+    assert revision.metadata["adapter_version"] == Quotes.adapter_version()
+    revisions_before = Repo.aggregate(AssertionRevision, :count)
+
+    record = Repo.get!(Sources.SourceRecord, result.source_record_id)
+
+    revision =
+      Repo.one!(
+        from r in DevilsDictionary.Corpus.SourceRecordRevision,
+          where: r.source_record_id == ^record.id and r.revision_key == ^record.content_hash
+      )
+
+    source = Repo.get_by!(Source, slug: @slug)
+    [row] = rows(~w(voltaire-candide-garden))
+
+    {:ok, entry} = Quotes.identity_record(%{external_namespace: "quote_fixture", row: row})
+
+    resolution =
+      entry
+      |> Map.merge(%{
+        source_id: source.id,
+        source_record_id: record.id,
+        source_record_revision_id: revision.id
+      })
+      |> SourceIdentity.resolve(prepared: %{}, adapter_version: "quote.fixture.v2")
+
+    assert resolution.state == :matched
+    assert [%{state: :matched, write: :unchanged}] = resolution.relationships
+    assert Repo.aggregate(AssertionRevision, :count) == revisions_before
+
+    assert [%{metadata: %{"adapter_version" => "quote.fixture.v1"}}] =
+             authored_by(result.object_id)
+  end
+
+  test "a creator QID held as an untyped concept stays text and opens a case", ctx do
+    {:ok, concept} =
+      Registry.create_entity(%{entity_kind: :concept, preferred_label: "Voltaire, as a topic"})
+
+    {:ok, _} = Registry.add_external_id(concept.object_id, "wikidata", "Q9068", %{})
+
+    %{results: %{"voltaire-candide-garden" => result}} =
+      run!(ctx, "garden", rows(~w(voltaire-candide-garden)))
+
+    assert entity_requests(ctx.requests) == 0, "a held QID is never fetched"
+    assert authored_by(result.object_id) == []
+
+    assert [%{"state" => "unresolved", "qid" => "Q9068", "object_id" => nil}] =
+             result.preview_metadata["creators"]
+
+    assert [case] =
+             Repo.all(
+               from c in ReconciliationCase,
+                 where: c.kind == "unresolved_creator" and c.status == :open
+             )
+
+    assert case.payload["qid"] == "Q9068"
+    assert case.payload["reason"] == "endpoint_not_allowed"
+    assert person("Q9068") == concept.object_id, "nothing was minted beside the concept"
+
+    # A second run finds the open case and does not open another.
+    rerun!(ctx, "garden", rows(~w(voltaire-candide-garden)))
+    assert Repo.aggregate(ReconciliationCase, :count) == 1
+  end
 end

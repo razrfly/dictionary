@@ -536,6 +536,7 @@ defmodule DevilsDictionary.SourceIdentity.Creators do
           _key, _own, found -> found
         end)
         |> Map.put(:predicate, predicate)
+        |> case_for_refused_endpoint()
     end
   end
 
@@ -675,6 +676,11 @@ defmodule DevilsDictionary.SourceIdentity.Creators do
     end
   end
 
+  # A held target the predicate's endpoint rules refuse — typically a creator
+  # QID the registry holds as an untyped `concept` (#165) — is reported and,
+  # when its QID is known, opens the same `unresolved_creator` case a missing
+  # item does, so the operator can count it (#164 audit residual 5). The card
+  # line stays text either way.
   defp check_endpoint(%{endpoint: target} = located, predicate, subject) do
     if endpoint_allowed?(predicate.id, subject, target),
       do: located,
@@ -687,6 +693,17 @@ defmodule DevilsDictionary.SourceIdentity.Creators do
   end
 
   defp check_endpoint(located, _predicate, _subject), do: located
+
+  # The QID is known only after the target's own description is merged in
+  # (a held target is located by its identifiers, not by a prepared QID), so
+  # the case is decided here, last.
+  defp case_for_refused_endpoint(
+         %{state: :unresolved, reason: :endpoint_not_allowed, qid: qid} = m
+       )
+       when is_binary(qid),
+       do: Map.put(m, :open_case, true)
+
+  defp case_for_refused_endpoint(m), do: m
 
   defp endpoint_allowed?(predicate_id, subject, target) do
     none = PredicateEndpointRule.none()
@@ -850,7 +867,7 @@ defmodule DevilsDictionary.SourceIdentity.Creators do
             :reinstated
 
           current.object_object_id == object_id and current.confidence == confidence and
-            current.metadata == metadata and current.method == @method ->
+            same_credit?(current.metadata, metadata) and current.method == @method ->
             :unchanged
 
           true ->
@@ -876,6 +893,15 @@ defmodule DevilsDictionary.SourceIdentity.Creators do
           Map.new(extra)
         )
       )
+  end
+
+  # The provider's adapter version is recorded on a credit but does not make
+  # it a different credit: bumping the version on a refresh that names the same
+  # person the same way writes nothing, rather than a revision per held result
+  # (#164 audit residual 2). The version on the revision is then the one that
+  # first wrote or last changed it, which is what a history should say.
+  defp same_credit?(current, proposed) do
+    Map.delete(current || %{}, "adapter_version") == Map.delete(proposed, "adapter_version")
   end
 
   defp assertion_metadata(entry, relationship, adapter_version) do

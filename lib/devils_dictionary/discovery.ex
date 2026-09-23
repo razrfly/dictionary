@@ -273,10 +273,19 @@ defmodule DevilsDictionary.Discovery do
         # #164 C1: whatever creator identity needs from the network is fetched
         # here, before `finish_owned_run/2` opens the publication transaction,
         # so no lock is held across a Wikidata request.
+        # The same eligibility `complete_success/4` re-checks after the request
+        # is checked first, so a mapping disabled or re-versioned while the
+        # provider was answering does not spend Wikidata budget on a run that
+        # will not publish (#164 audit residual 3).
         prepared =
           case response do
-            {:ok, result} -> prepare_creators(run, provider, result)
-            _ -> %{}
+            {:ok, result} ->
+              if publishable?(run, provider),
+                do: prepare_creators(run, provider, result),
+                else: %{}
+
+            _ ->
+              %{}
           end
 
         finish_owned_run(run, fn ->
@@ -1229,6 +1238,22 @@ defmodule DevilsDictionary.Discovery do
       |> Enum.uniq_by(fn result ->
         result.object_id || {result.external_namespace, result.external_id}
       end)
+    end
+  end
+
+  # `complete_success/4`'s gate, read fresh, without the outcome: what decides
+  # whether a run's proposals will be published at all.
+  defp publishable?(run, provider) do
+    run = Repo.get!(Run, run.id) |> Repo.preload(mapping: :source)
+
+    with true <- run.mapping.enabled,
+         :ok <- validate_target(run.mapping.target_object_id),
+         {:ok, ^provider, _source} <- eligible_provider_for_mapping(run.mapping),
+         true <- run.adapter_version == provider.adapter_version(),
+         :ok <- mapping_evidence_current(run.mapping, provider) do
+      true
+    else
+      _ -> false
     end
   end
 
