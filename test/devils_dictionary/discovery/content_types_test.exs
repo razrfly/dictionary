@@ -93,9 +93,14 @@ defmodule DevilsDictionary.Discovery.ContentTypesTest do
     assert :text in text_first
     assert :news in text_first
 
+    # `:quote` (#158 build 4) is text-first too and takes five: its "title"
+    # is the quotation itself, the whole of what the card is for, and a
+    # median theme-page line (103–186 characters, #158 Finding 1) runs past
+    # three lines of this column.
     for type <- text_first do
       assert ContentTypes.column(type) != ContentTypes.column(:film)
-      assert ContentTypes.title_clamp(type) == "line-clamp-3"
+      expected = if type == :quote, do: "line-clamp-5", else: "line-clamp-3"
+      assert ContentTypes.title_clamp(type) == expected
     end
 
     # One line under a thumbnail since #131 Phase 2: every kind is on screen

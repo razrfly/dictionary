@@ -167,6 +167,29 @@ defmodule DevilsDictionary.Discovery.ContentTypes do
     # than `:text`-shaped — but the title is a song's name and wants two lines
     # where a photograph's generated sentence wanted one, and the artist has
     # to fit under it. Wider than the image rail for that reason (#143).
+    # #158 build 4, added here because build 1 (which opens the Quotes shelf
+    # with Wiktionary's absorbed lines) had not started. Text-first and wider
+    # than a text card: the quotation *is* the card, so it gets the room a
+    # title gets elsewhere, clamped at five lines. `:credited` — the CC BY-SA
+    # credit and the author line are the card's own, never a required
+    # overlay. Identity (the sense's QID → the theme page's sitelink) or
+    # attestation (a source's own citation of the word) and never a search.
+    quote: %{
+      heading: "Quotes",
+      label: "quotes",
+      badge: "Quote",
+      aspect: nil,
+      icon: "hero-chat-bubble-bottom-center-text",
+      # 176 px on a phone, because that is what fits: the rail beside the
+      # 80 px heading column is 191 px at 375, measured on /define/war, and a
+      # 224 px card clipped the *first* quotation — a cut-off next card is the
+      # rail's scroll cue, a cut-off first one is a bug.
+      column: "w-44 sm:w-64",
+      title_clamp: "line-clamp-5",
+      thumbnail_keys: [],
+      attribution: :credited,
+      evidence: [:identity, :attestation]
+    },
     music: %{
       heading: "Music",
       label: "music",
@@ -217,7 +240,7 @@ defmodule DevilsDictionary.Discovery.ContentTypes do
 
   # Shelf order (K2 of #109), not insertion order: a page shows films, then
   # artworks, then images, then texts, then news, then music, then GIFs.
-  @known [:film, :artwork, :image, :text, :news, :music, :gif]
+  @known [:film, :artwork, :image, :text, :quote, :news, :music, :gif]
 
   @doc "Every content type the reader can present, in shelf order."
   def known, do: @known

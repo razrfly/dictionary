@@ -104,6 +104,7 @@ defmodule DevilsDictionary.Discovery.MatchReason do
       "depiction" -> depictions(details)
       "keyword" -> keywords(details)
       "attestation" -> attestations(details)
+      "sitelink" -> sitelinks(details)
       "query" -> []
       _unknown -> nil
     end
@@ -120,7 +121,7 @@ defmodule DevilsDictionary.Discovery.MatchReason do
     tags(details) ++ depictions(details) ++ keywords(details) ++ attestations(details)
   end
 
-  @builders ~w(tag depiction keyword attestation query)
+  @builders ~w(tag depiction keyword attestation sitelink query)
 
   @doc """
   Every `match_details["kind"]` the reason builder knows how to read.
@@ -210,6 +211,32 @@ defmodule DevilsDictionary.Discovery.MatchReason do
         relation: :exact,
         scope: :lexeme,
         locator: keyword["tmdbId"] && "keyword #{keyword["tmdbId"]}"
+      }
+    end)
+  end
+
+  # A page of another wiki that a QID a sense refers to links to by its own
+  # sitelink (#158 build 4): Wikiquote's *Grief* is `enwikiquote` on the
+  # concept Q.... The sitelink is Wikidata's statement, not a title match, so it
+  # is identity evidence at the meaning's scope — the same standing as a Met
+  # tag QID, one wiki further.
+  defp sitelinks(details) do
+    details
+    |> Map.get("sitelinks", [])
+    |> List.wrap()
+    |> Enum.filter(&(is_map(&1) and is_binary(&1["qid"]) and is_binary(&1["title"])))
+    |> Enum.uniq_by(& &1["qid"])
+    |> Enum.map(fn link ->
+      %__MODULE__{
+        kind: :sitelink,
+        identifier: link["qid"],
+        term: link["title"],
+        relation: :exact,
+        scope: :sense,
+        # The wiki's display name travels in the reason, so this module still
+        # names no provider (promise 9).
+        reached: link["wiki"],
+        locator: "sitelink #{link["site"]}"
       }
     end)
   end
@@ -315,6 +342,11 @@ defmodule DevilsDictionary.Discovery.MatchReason do
   def describe(%__MODULE__{kind: :tag} = reason),
     do: "Reached through the tag #{quoted(reason.term)}#{parenthesis(reason.identifier)}."
 
+  def describe(%__MODULE__{kind: :sitelink} = reason),
+    do:
+      "From #{wiki(reason.reached)}page #{quoted(reason.term)}, the page of the concept this " <>
+        scoped(reason) <> " refers to#{parenthesis(reason.identifier)}."
+
   def describe(%__MODULE__{kind: :keyword} = reason),
     do:
       "Matched the keyword #{quoted(reason.term)}#{parenthesis(reason.identifier)} for this term."
@@ -374,6 +406,9 @@ defmodule DevilsDictionary.Discovery.MatchReason do
   defp relation_word(:broader), do: "Broader-context"
   defp relation_word(:related), do: "Related"
   defp relation_word(_relation), do: "Direct"
+
+  defp wiki(name) when is_binary(name) and name != "", do: "#{name}'s "
+  defp wiki(_name), do: "the "
 
   defp scoped(%__MODULE__{scope: :lexeme}), do: "word"
   defp scoped(%__MODULE__{}), do: "meaning"

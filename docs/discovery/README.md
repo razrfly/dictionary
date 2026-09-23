@@ -369,7 +369,24 @@ quotes or an edge ellipsis), its `authored_by` is a second assertion on the
 same subject, the person's page shows one row with both badges, and
 `Shelf.fold/3` says which sources a kept card absorbed. A different wording is
 a different fingerprint and a different line. `FakeQuoteDiscoveryProvider` and
-`FakeQuoteMirrorDiscoveryProvider` are the reference shape.
+`FakeQuoteMirrorDiscoveryProvider` are the reference shape, and
+`Providers.Wikiquote` is the first real one (#158 build 4).
+
+**The register (#158 build 4).** A quote source that files some lines as
+misattributed, disputed or unsourced — Wikiquote's own sections — returns
+those rows as items with `preview_metadata["register"]` set. They are
+persisted as provenance and **never put on the rail**: `Culture` takes them off
+before the shelf is composed and shows them as a disclosure line under it. A
+register row never carries `authored_by`; when it names the person a line is
+misattributed to by identifier, it carries `misattributed_to` with `register:
+true` and the register's sentence as its `rationale`, and writing it attaches
+`contradicts` evidence to every current `authored_by` from that line to that
+person, whoever wrote it. A kept line whose fingerprint matches a register row
+is badged `disputed` or `apocryphal`; every other kept line is `plausible`
+until build 5 verifies something. The Quotes shelf is **banded by the line's
+own year** (👑 before 1931 · 📚 to 1999 · 📱 since 2000), read from
+`preview_metadata["era"]`, and each card names every source that holds its
+line (`Shelf.fold/3`).
 
 **A discovery appearance is never a claim** about the word it was found for.
 No `illustrates` assertion is written, ever. A keyword-matched film is not curated evidence that the film is
@@ -513,7 +530,7 @@ declares the first.
 | `:news` | Bing News, The Guardian | — | Chronicling America's bulk OCR; GDELT (#134) | attestation, **dated** |
 | `:music` | Spotify | — | MusicBrainz (#116), identity via `P921`/`P2207` | a labelled search, gated on the track title |
 | `:gif` | GIPHY, browser-only — **inside** this chrome since #144 Phase 3, through `Culture.browser_shelf/1` | — | Tenor, after K10 | a labelled search |
-| `:quote` | — | — | Wikiquote, Gutenberg extraction, after #65 | identity (`(author_id, body hash)`) |
+| `:quote` | Wikiquote (#158 build 4) | — | Wiktionary's absorbed quotations (build 1), the public-domain Wikiquote corpus (build 6) | identity: the sense's QID → the theme page's `enwikiquote` sitelink; one line from two sources folds on its `quotation_fingerprint` (ADR 0003) |
 
 The `:text` decision is #109's second residual, settled here: the two text
 corpora are seeded `evidence: :none` and stay that way. Serving attestation

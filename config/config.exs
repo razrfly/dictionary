@@ -109,7 +109,8 @@ config :devils_dictionary, :discovery_providers, [
   DevilsDictionary.Discovery.Providers.Pexels,
   DevilsDictionary.Discovery.Providers.Poetrydb,
   DevilsDictionary.Discovery.Providers.Spotify,
-  DevilsDictionary.Discovery.Providers.Unsplash
+  DevilsDictionary.Discovery.Providers.Unsplash,
+  DevilsDictionary.Discovery.Providers.Wikiquote
 ]
 
 # Culture discovery is visit-driven and bounded. Provider modules own their
@@ -135,6 +136,10 @@ config :devils_dictionary, :discovery,
     # second and a burst drew a 429 in #100; 600 an hour is a ceiling a
     # reader-driven site reaches only if every page credits someone new.
     "wikidata" => [request_budget_limit: 600, request_budget_window_seconds: 60 * 60],
+    # At most three requests a page (sitelink, page, authors). 600 an hour
+    # is two hundred word pages, well above a reader-driven site's rate, and
+    # refuses before Wikimedia would.
+    "wikiquote" => [request_budget_limit: 600, request_budget_window_seconds: 60 * 60],
     # One Met page is a search plus up to `Met.scan_window/0` hydrations, and the
     # probe put the sustainable rate near 1 req/s rather than the documented 80.
     "met" => [request_budget_limit: 1_000, request_budget_window_seconds: 3_600],
@@ -337,6 +342,16 @@ config :devils_dictionary, :spotify,
   endpoint: "https://api.spotify.com/v1/search",
   token_endpoint: "https://accounts.spotify.com/api/token",
   market: "US",
+  enabled: true
+
+# Wikiquote (#158 build 4). Keyless. The page endpoint is Parsoid HTML, never
+# `action=parse` wikitext and never `list=search`; the Wikidata sitelink
+# lookups go to the same API the Wikidata client uses. 200 ms is that client's
+# pace and #158's probe drew no 429 from any Wikimedia host at it.
+config :devils_dictionary, :wikiquote,
+  endpoint: "https://en.wikiquote.org/api/rest_v1/page/html/",
+  wikidata_endpoint: "https://www.wikidata.org/w/api.php",
+  request_interval_ms: 200,
   enabled: true
 
 # Import environment specific config. This must remain at the bottom

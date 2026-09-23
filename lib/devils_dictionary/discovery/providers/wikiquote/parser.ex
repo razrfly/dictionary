@@ -44,7 +44,7 @@ defmodule DevilsDictionary.Discovery.Providers.Wikiquote.Parser do
 
       %{title, revision_id, quotations: [quotation], register: [quotation]}
 
-  where a quotation is `%{text, citation, citation_links, section,
+  where a quotation is `%{text, citation, citation_links, attributed_links, section,
   subsection, position, work, year, register, about_subject}`. `position` is
   the item's 1-based place within its section (h2 and h3 together), which with
   the title and section is the provider's stable id for it.
@@ -131,6 +131,7 @@ defmodule DevilsDictionary.Discovery.Providers.Wikiquote.Parser do
       text: text({"li", [], own}),
       citation: blank_to_nil(citation),
       citation_links: citation_links,
+      attributed_links: attributed_links(own ++ citations),
       section: ctx.h2,
       subsection: ctx.h3,
       position: nil,
@@ -188,6 +189,56 @@ defmodule DevilsDictionary.Discovery.Providers.Wikiquote.Parser do
       end
     end)
   end
+
+  # The pages a register row says a line is *attributed to*: a main-namespace
+  # link whose preceding words, in the row's own sentence, end with
+  # "attributed to" — `Sometimes attributed to [[Bismarck]]`,
+  # `misattributed to [[Voltaire]] by …`. This reads which *link* the
+  # register's sentence points at; the identity is still the link's page, and
+  # the page's QID is still Wikidata's sitelink. A row that names the person
+  # without linking them yields nothing.
+  @attributed ~r/attributed\s+to(\s+the)?\s*\z/iu
+
+  defp attributed_links(nodes) do
+    {links, _tail} =
+      nodes
+      |> events([])
+      |> Enum.reduce({[], ""}, fn
+        {:text, text}, {links, tail} ->
+          {links, String.slice(tail <> text, -60, 60)}
+
+        {:link, title}, {links, tail} ->
+          links = if Regex.match?(@attributed, tail), do: [title | links], else: links
+          {links, tail <> title}
+      end)
+
+    links |> Enum.reverse() |> Enum.uniq()
+  end
+
+  # The node list flattened to the text and the main-namespace page links in
+  # it, in document order, with references and nested lists' own nesting kept.
+  defp events(nodes, acc) when is_list(nodes), do: Enum.reduce(nodes, acc, &events/2)
+
+  defp events({"a", _attrs, children} = node, acc) do
+    case wiki_links(node) do
+      [title] ->
+        acc ++ [{:link, title}]
+
+      [] ->
+        events(children, acc)
+    end
+  end
+
+  defp events({tag, attrs, children}, acc) do
+    cond do
+      tag in ["style", "script"] -> acc
+      tag == "sup" and has_class?(attrs, "reference") -> acc
+      true -> events(children, acc)
+    end
+  end
+
+  defp events(text, acc) when is_binary(text), do: acc ++ [{:text, text}]
+  defp events(_other, acc), do: acc
 
   # The work a citation names is the first italic run in it — Wikiquote's own
   # convention for titles (`<i>The Devil's Dictionary</i>`).

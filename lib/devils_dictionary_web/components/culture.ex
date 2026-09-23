@@ -76,10 +76,25 @@ defmodule DevilsDictionaryWeb.Culture do
     for type <- ContentTypes.known(),
         group = Enum.filter(states, &(content_type(&1) == type)),
         group != [] do
-      entries =
+      # A register row (#158 build 4: a line the source itself files as
+      # misattributed, disputed or unsourced) is provenance, never a card. It
+      # leaves the rail here, before anything is composed, and the shelf
+      # shows it as a disclosure line under the rail instead.
+      {register, candidates} =
         group
         |> Enum.flat_map(fn state -> Enum.map(state.items, &%{state: state, item: &1}) end)
+        |> Enum.split_with(&register?(&1.item))
+
+      # Who else held each kept item: the same line from two sources is one
+      # card that names both (#158 build 3's fold, read here for the first
+      # time). Computed over the order `compose/4` sorts by, so the survivor
+      # it names first is the survivor the rail shows.
+      also = folded_sources(candidates)
+
+      entries =
+        candidates
         |> Shelf.compose(&archetype_rank(&1.state), &source/1, &Shelf.keys(&1.item))
+        |> Enum.map(&Map.put(&1, :also, Map.get(also, entry_key(&1), [])))
 
       # D1 of #126. A shelf nothing identified and nothing attested is a
       # search's ranking and says so on every card; it still shows — M6's
@@ -101,7 +116,15 @@ defmodule DevilsDictionaryWeb.Culture do
       overflow = if searched?, do: max(length(entries) - page_cap(group), 0), else: 0
       entries = if searched?, do: Enum.take(entries, page_cap(group)), else: entries
 
-      %{type: type, states: group, entries: entries, searched?: searched?, overflow: overflow}
+      %{
+        type: type,
+        states: group,
+        entries: entries,
+        bands: bands(type, entries),
+        register: register,
+        searched?: searched?,
+        overflow: overflow
+      }
       |> then(fn shelf ->
         # What each state actually put on the rail, after the fold: the byline
         # credits and the About note describes these, not `state.items`. A
@@ -116,6 +139,45 @@ defmodule DevilsDictionaryWeb.Culture do
     # content-type table's order survives inside each of the two groups.
     |> Enum.sort_by(& &1.searched?)
   end
+
+  defp register?(item), do: is_binary((Map.get(item, :preview_metadata) || %{})["register"])
+
+  defp entry_key(%{state: state, item: item}),
+    do: {state.provider, item.external_namespace, item.external_id}
+
+  defp folded_sources(candidates) do
+    candidates
+    |> Enum.sort_by(&{archetype_rank(&1.state), source(&1)})
+    |> Shelf.fold(& &1.state, &Shelf.keys(&1.item))
+    |> Map.new(fn {entry, states} ->
+      {entry_key(entry),
+       states
+       |> Enum.uniq_by(& &1.provider)
+       |> Enum.reject(&(&1.provider == entry.state.provider))
+       |> Enum.map(&badge_source/1)}
+    end)
+  end
+
+  # The Quotes shelf is banded by the line's own year, not by the source's
+  # tier (#158 open question 4): a 1713 Addison line and a 2023 director's
+  # quip are not equals, whoever supplied them. Every other shelf is one band
+  # with no label, which renders exactly as the rail always did.
+  @eras [
+    {"aristocracy", "👑 Public domain"},
+    {"middle", "📚 To 1999"},
+    {"plebs", "📱 Since 2000"},
+    {nil, "Undated"}
+  ]
+
+  defp bands(:quote, entries) do
+    by_era = Enum.group_by(entries, &(&1.item.preview_metadata["era"] || nil))
+
+    for {era, label} <- @eras, band = Map.get(by_era, era, []), band != [] do
+      %{era: era || "undated", label: label, entries: band}
+    end
+  end
+
+  defp bands(_type, entries), do: [%{era: nil, label: nil, entries: entries}]
 
   # One page of a shelf that only searched: twelve items across its sources
   # in turn, and one more page for every page its sources have loaded, so
@@ -227,31 +289,89 @@ defmodule DevilsDictionaryWeb.Culture do
                  container to its previously snapped box after a layout change, so
                  the rail opened 1,584 px in — past every result the page had just
                  gone and fetched. Measured on `/define/soldier`. --%>
-            <ul
-              :if={shelf.entries != []}
-              role="list"
-              tabindex="0"
-              aria-label={"#{shelf_heading(shelf.type)} matches; scroll for more"}
-              id={shelf_id("culture-results", shelf, @shelf_count)}
-              class="flex gap-4 overflow-x-auto overscroll-x-contain pb-2 focus-visible:outline-2 focus-visible:outline-offset-2"
-            >
-              <li
-                :for={entry <- shelf.entries}
-                id={"culture-result-#{entry.item.external_namespace}-#{entry.item.external_id}"}
-                class={["shrink-0", ContentTypes.column(shelf.type)]}
+            <div :for={{band, index} <- Enum.with_index(shelf.bands)} :if={shelf.entries != []}>
+              <p
+                :if={band.label}
+                id={"culture-band-#{shelf.type}-#{band.era}"}
+                class="pb-1 text-sm/6 text-mist-500"
               >
-                <.culture_thumbnail
-                  item={entry.item}
-                  type={shelf.type}
-                  mark={card_mark(entry.state)}
-                  source_name={entry.item.preview_metadata["provider"] || entry.state.provider_name}
-                  return_path={@return_path}
-                />
-              </li>
-              <li :if={advancing(shelf) != ""} class={["shrink-0", ContentTypes.column(shelf.type)]}>
-                <.compact_more shelf={shelf} />
-              </li>
-            </ul>
+                {band.label}
+              </p>
+              <ul
+                role="list"
+                tabindex="0"
+                aria-label={
+                  if(band.label,
+                    do: "#{shelf_heading(shelf.type)}, #{band.label}; scroll for more",
+                    else: "#{shelf_heading(shelf.type)} matches; scroll for more"
+                  )
+                }
+                id={
+                  if(index == 0,
+                    do: shelf_id("culture-results", shelf, @shelf_count),
+                    else: shelf_id("culture-results", shelf, @shelf_count) <> "-#{band.era}"
+                  )
+                }
+                class="flex gap-4 overflow-x-auto overscroll-x-contain pb-2 focus-visible:outline-2 focus-visible:outline-offset-2"
+              >
+                <li
+                  :for={entry <- band.entries}
+                  id={"culture-result-#{entry.item.external_namespace}-#{entry.item.external_id}"}
+                  class={["shrink-0", ContentTypes.column(shelf.type)]}
+                >
+                  <.quote_card
+                    :if={shelf.type == :quote}
+                    item={entry.item}
+                    also={entry.also}
+                    source={badge_source(entry.state)}
+                    return_path={@return_path}
+                  />
+                  <.culture_thumbnail
+                    :if={shelf.type != :quote}
+                    item={entry.item}
+                    type={shelf.type}
+                    mark={card_mark(entry.state)}
+                    source_name={entry.item.preview_metadata["provider"] || entry.state.provider_name}
+                    return_path={@return_path}
+                  />
+                </li>
+                <li
+                  :if={index == length(shelf.bands) - 1 and advancing(shelf) != ""}
+                  class={["shrink-0", ContentTypes.column(shelf.type)]}
+                >
+                  <.compact_more shelf={shelf} />
+                </li>
+              </ul>
+            </div>
+            <%!-- The register (#158 build 4): lines a source itself files as
+                 misattributed, disputed or unsourced. Never cards — a card
+                 reads as credit — but not hidden either: what a source says
+                 is *not* someone's is worth a reader's click. The sentences
+                 are the source's own, verbatim. --%>
+            <details :if={shelf.register != []} id={"culture-register-#{shelf.type}"} class="min-w-0">
+              <summary class="w-fit cursor-pointer text-base text-mist-500 hover:text-mist-700 focus-visible:outline-2 focus-visible:outline-offset-2 sm:text-sm dark:text-mist-400 dark:hover:text-mist-200">
+                {length(shelf.register)} {if length(shelf.register) == 1, do: "line", else: "lines"} filed as misattributed or disputed
+              </summary>
+              <ul role="list" class="space-y-2 pt-2">
+                <li
+                  :for={entry <- shelf.register}
+                  id={"culture-register-row-#{entry.item.external_id}"}
+                  class="max-w-prose text-base/6 text-mist-700 sm:text-sm/6 dark:text-mist-300"
+                >
+                  <p class="text-pretty">“{entry.item.preview_metadata["title"]}”</p>
+                  <p class="text-pretty text-mist-500">
+                    {register_kind(entry.item.preview_metadata["register"])}{if entry.item.preview_metadata[
+                                                                                  "register_note"
+                                                                                ],
+                                                                                do:
+                                                                                  " — " <>
+                                                                                    entry.item.preview_metadata[
+                                                                                      "register_note"
+                                                                                    ]} ({entry.state.provider_name})
+                  </p>
+                </li>
+              </ul>
+            </details>
             <%!-- How old this shelf is, and when it goes again (#144 Phase 2).
                  A sentence, so it belongs here with the other sentences rather
                  than in the 80 px column of names and counts on the left; and
@@ -654,6 +774,133 @@ defmodule DevilsDictionaryWeb.Culture do
       logo: Map.get(state, :logo)
     }
   end
+
+  # The quotation-first card (#158 build 4; build 1's Wiktionary lines reuse
+  # it). The words are the card — no image slot, the most room on the rail —
+  # then who said it and where, then who holds it: one badge per source that
+  # carries this line, which after build 3's fold can be more than one. The
+  # provenance badge is separate from the source badges and says how far the
+  # line is trusted (*Plausible* until build 5 verifies anything); a register
+  # hit says *Disputed* or *Apocryphal* with the register's sentence as its
+  # note. The author is a link only where an `authored_by` stands now
+  # (#164), and the title links out to the source, never to an entry.
+  attr :item, :map, required: true
+  attr :source, :map, required: true, doc: "the supplying source, as `badge_source/1` shapes it"
+  attr :also, :list, default: [], doc: "every other source that holds this line"
+  attr :return_path, :string, default: nil
+
+  defp quote_card(assigns) do
+    metadata = assigns.item.preview_metadata
+
+    assigns =
+      assigns
+      |> assign(:text, metadata["title"])
+      |> assign(:creators, creator_links(assigns.item, assigns.return_path))
+      |> assign(:author, metadata["artist"])
+      # With no identified author, the source's own citation says who and
+      # where, verbatim — a name is shown as the source wrote it, and is
+      # never a link (#164).
+      |> assign(
+        :citation,
+        if(is_nil(metadata["artist"]) and creator_links(assigns.item, nil) == [],
+          do: metadata["citation"]
+        )
+      )
+      |> assign(:work, metadata["work"])
+      |> assign(:year, year(metadata))
+      |> assign(:provenance, metadata["provenance"])
+      |> assign(:note, metadata["provenance_note"])
+      |> assign(:attribution, attribution_line(:credited, metadata))
+      |> assign(:source_url, external_href(metadata["source_url"]))
+      |> assign(:evidence_path, evidence_path(assigns.item))
+      |> assign(:sources, [assigns.source | assigns.also])
+
+    ~H"""
+    <figure class="flex min-w-0 flex-col gap-2">
+      <blockquote class={[
+        "text-base/6 text-pretty text-mist-950 sm:text-sm/6 dark:text-white",
+        ContentTypes.title_clamp(:quote)
+      ]}>
+        <a
+          :if={@source_url}
+          href={@source_url}
+          target="_blank"
+          rel="noreferrer"
+          id={"culture-entry-title-#{@item.external_id}"}
+          class="rounded-sm hover:underline focus-visible:outline-2 focus-visible:outline-offset-2"
+        >“{@text}”</a>
+        <span :if={is_nil(@source_url)}>“{@text}”</span>
+      </blockquote>
+      <figcaption :if={@citation} class="line-clamp-3 text-sm/5 text-pretty text-mist-500">
+        {@citation}
+      </figcaption>
+      <figcaption :if={is_nil(@citation)} class="text-sm/5 text-pretty text-mist-500">
+        <span
+          :if={@creators != []}
+          id={"culture-creator-#{@item.external_namespace}-#{@item.external_id}"}
+          phx-no-format
+        ><%= for {creator, index} <- Enum.with_index(@creators) do %><span :if={index > 0}>, </span><.link navigate={creator.path} class="rounded-sm underline decoration-mist-950/20 underline-offset-4 hover:text-mist-950 hover:decoration-current focus-visible:outline-2 focus-visible:outline-offset-2 dark:decoration-white/25 dark:hover:text-white">{creator.label}</.link><% end %></span><span :if={
+          @creators == [] && @author
+        }>{@author}</span><span
+          :if={(@creators != [] || @author) && (@work || @year)}
+          aria-hidden="true"
+        > · </span><cite :if={@work} class="not-italic">{@work}</cite><span :if={@work && @year}>, </span><span
+          :if={@year}
+          class="tabular-nums"
+        >{@year}</span>
+      </figcaption>
+      <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <span
+          :for={source <- @sources}
+          id={"culture-quote-source-#{@item.external_id}-#{source.slug}"}
+          class="inline-flex items-center gap-1 text-xs text-mist-500"
+          title={source.name}
+        >
+          <SourceBadge.badge source={source} decorative />
+          <span class="sr-only">{source.name}</span>
+        </span>
+        <span
+          :if={@provenance}
+          id={"culture-provenance-#{@item.external_id}"}
+          title={@note}
+          class={[
+            "inline-flex rounded-full px-2 py-0.5 text-xs",
+            @provenance == "plausible" &&
+              "bg-mist-950/5 text-mist-700 dark:bg-white/10 dark:text-mist-300",
+            @provenance == "disputed" &&
+              "bg-amber-100 text-amber-900 dark:bg-amber-400/20 dark:text-amber-100",
+            @provenance == "apocryphal" &&
+              "bg-rose-100 text-rose-900 dark:bg-rose-400/20 dark:text-rose-100"
+          ]}
+        >
+          {provenance_label(@provenance)}
+        </span>
+      </div>
+      <p :if={@note} class="line-clamp-2 text-xs text-pretty text-mist-500">{@note}</p>
+      <p class="flex flex-wrap gap-x-2 text-xs text-mist-500">
+        <span :if={@attribution}>{@attribution}</span>
+        <.link
+          :if={@evidence_path}
+          navigate={@evidence_path}
+          id={"culture-evidence-#{@item.external_id}"}
+          class="rounded-sm underline-offset-4 hover:text-mist-950 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 dark:hover:text-white"
+        >
+          Evidence
+        </.link>
+      </p>
+    </figure>
+    """
+  end
+
+  defp provenance_label("plausible"), do: "Plausible"
+  defp provenance_label("disputed"), do: "Disputed"
+  defp provenance_label("apocryphal"), do: "Apocryphal"
+  defp provenance_label(other), do: other
+
+  defp register_kind("misattributed"), do: "Misattributed"
+  defp register_kind("disputed"), do: "Disputed"
+  defp register_kind("unsourced"), do: "Unsourced"
+  defp register_kind(other), do: other
 
   attr :item, :map, required: true
   attr :type, :atom, required: true

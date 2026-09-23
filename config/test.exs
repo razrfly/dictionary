@@ -64,6 +64,7 @@ config :devils_dictionary, :discovery,
   source_policies: %{
     "giphy" => [request_budget_limit: 100, request_budget_window_seconds: 3_600],
     "wikidata" => [request_budget_limit: 600, request_budget_window_seconds: 3_600],
+    "wikiquote" => [request_budget_limit: 600, request_budget_window_seconds: 3_600],
     "met" => [request_budget_limit: 1_000, request_budget_window_seconds: 3_600],
     # The Guardian's shipped policy (#142), repeated because the retention
     # decision is proved by a test and a policy the suite cannot see is a
@@ -226,3 +227,11 @@ config :devils_dictionary, :spotify,
   enabled: true,
   request_interval_ms: 0,
   min_retry_interval_ms: 0
+
+# Scaffolded by `mix dd.provider.new wikiquote`. Every request in the
+# suite goes through the `Req.Test` stub named after the provider module.
+config :devils_dictionary, :wikiquote,
+  endpoint: "https://wikiquote.test/api/rest_v1/page/html/",
+  wikidata_endpoint: "https://wikidata.test/w/api.php",
+  request_interval_ms: 0,
+  enabled: true

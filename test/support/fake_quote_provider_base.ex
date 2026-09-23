@@ -73,7 +73,7 @@ defmodule DevilsDictionary.FakeQuoteProviderBase do
           persistence: :persistent,
           pagination: :none,
           operations: ["search"],
-          content_types: [:text]
+          content_types: unquote(opts[:content_types] || [:text])
         }
       end
 
@@ -124,7 +124,7 @@ defmodule DevilsDictionary.FakeQuoteProviderBase do
             "work" => row["work"],
             "year" => row["year"],
             "source_url" => row["source_url"],
-            "content_type" => "text",
+            "content_type" => unquote(to_string(hd(opts[:content_types] || [:text]))),
             "provider" => @name
           },
           display_allowed: true,

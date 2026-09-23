@@ -659,7 +659,15 @@ defmodule DevilsDictionary.Discovery.Conformance do
               target = @fixture.covered_target(context)
 
               %{credited: credited_id, qid: qid, text_only: text_id} =
-                @fixture.creator_case(context)
+                creator_case = @fixture.creator_case(context)
+
+              # A fixture says how sure its provider is: the Met's constituent
+              # is the museum's own statement (`:verified`); a Wikiquote theme
+              # page's citation link is a candidate (#158 build 4).
+              expected_confidence =
+                DevilsDictionary.SourceIdentity.Creators.confidence(
+                  Map.get(creator_case, :certainty, :verified)
+                )
 
               assert {:queued, run} = Discovery.request(target, @slug)
               assert :ok = Discovery.execute_run(run.id)
@@ -680,7 +688,7 @@ defmodule DevilsDictionary.Discovery.Conformance do
                        )
 
               assert revision.method == "provider_relationship"
-              assert revision.confidence == 1.0
+              assert revision.confidence == expected_confidence
               assert revision.metadata["provider"] == @slug
 
               assert [%{"qid" => ^qid, "state" => state, "object_id" => ^person_id}] =

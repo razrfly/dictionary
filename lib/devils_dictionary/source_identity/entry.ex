@@ -21,7 +21,9 @@ defmodule DevilsDictionary.SourceIdentity.Entry do
   target out of a misattribution register. A register target is never
   `authored_by` (#164 C4) and `new/1` refuses the combination rather than
   trusting every provider to remember it. The order is the provider's own and is
-  kept: a coauthor's origin key is its position (#164 C3).
+  kept: a coauthor's origin key is its position (#164 C3). A register
+  relationship may carry a `rationale` — the register's own sentence,
+  verbatim — which lands on the assertion (#158 build 4).
 
   ## Content (#164 C2)
 
@@ -258,16 +260,24 @@ defmodule DevilsDictionary.SourceIdentity.Entry do
     target_identifiers = relationship[:target_identifiers] || relationship["target_identifiers"]
     certainty = relationship[:certainty] || relationship["certainty"]
     register = Map.get(relationship, :register, Map.get(relationship, "register", false))
+    rationale = relationship[:rationale] || relationship["rationale"]
     role = if is_atom(role) and not is_nil(role), do: Atom.to_string(role), else: role
 
     with true <- present?(role) || {:error, :invalid_relationship},
          {:ok, certainty} <- certainty(certainty),
          true <- is_boolean(register) || {:error, :invalid_relationship},
+         true <- (is_nil(rationale) or is_binary(rationale)) || {:error, :invalid_relationship},
          true <-
            not (register and role == "authored_by") ||
              {:error, :register_target_cannot_be_authored_by},
          {:ok, targets} <- relationship_targets(target_object_id, target_identifiers) do
-      {:ok, Map.merge(targets, %{role: role, certainty: certainty, register: register})}
+      {:ok,
+       Map.merge(targets, %{
+         role: role,
+         certainty: certainty,
+         register: register,
+         rationale: rationale
+       })}
     end
   end
 

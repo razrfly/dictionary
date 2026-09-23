@@ -132,6 +132,17 @@ defmodule DevilsDictionary.Discovery.Provider do
   @callback parse_body(binary()) :: {:ok, map() | list()} | :error
 
   @doc """
+  Whether a non-200 status means the thing asked for does not exist.
+
+  Not defining this — the default — makes every non-200 a failure or a retry,
+  which is right for an API whose 404 means a wrong URL. Wikiquote's page
+  endpoint answers a title that has no page with a real `404` (#158 build 4:
+  *Situationship*), and that is an honest empty. The transport then hands
+  `retrieve/4`'s `request_fun` `{:ok, %{"absent" => status}}`.
+  """
+  @callback absent_status?(non_neg_integer()) :: boolean()
+
+  @doc """
   One short qualifier shown beside the provider name on a shelf, or `nil`.
 
   It exists so the reader can say "CineGraph · keywords: TMDb" without any
@@ -240,6 +251,7 @@ defmodule DevilsDictionary.Discovery.Provider do
                       browser_config: 1,
                       covers?: 1,
                       parse_body: 1,
+                      absent_status?: 1,
                       mapping_identity: 1,
                       request_options: 1,
                       validate_mapping: 2,
