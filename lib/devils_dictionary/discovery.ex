@@ -273,10 +273,19 @@ defmodule DevilsDictionary.Discovery do
         # #164 C1: whatever creator identity needs from the network is fetched
         # here, before `finish_owned_run/2` opens the publication transaction,
         # so no lock is held across a Wikidata request.
+        # The same eligibility `complete_success/4` re-checks after the request
+        # is checked first, so a mapping disabled or re-versioned while the
+        # provider was answering does not spend Wikidata budget on a run that
+        # will not publish (#164 audit residual 3).
         prepared =
           case response do
-            {:ok, result} -> prepare_creators(run, provider, result)
-            _ -> %{}
+            {:ok, result} ->
+              if publishable?(run, provider),
+                do: prepare_creators(run, provider, result),
+                else: %{}
+
+            _ ->
+              %{}
           end
 
         finish_owned_run(run, fn ->
@@ -605,12 +614,22 @@ defmodule DevilsDictionary.Discovery do
   # (402 rows and climbing, measured 2026-09-21). Keeping the most recent
   # `retained_attempts_per_position` per position keeps what a session reads
   # when it asks what a page cost, and drops the rest.
+  #
+  # Never an attempt still inside a budget window, whatever its rank: `Budget`
+  # counts attempts younger than the source's window to decide whether a
+  # request may be made, and a pruned row would let a source overspend its
+  # limit by exactly the rows pruned. The cutoff is the longest window any
+  # source is configured with (CodeRabbit on #166, applied in #167).
   defp prune_attempts(keep, batch_size) do
+    cutoff =
+      DateTime.add(DateTime.utc_now(), -Policy.longest_budget_window_seconds(), :second)
+
     %{num_rows: pruned} =
       Repo.query!(
         """
         WITH ranked AS (
           SELECT attempts.id,
+                 attempts.attempted_at,
                  row_number() OVER (
                    PARTITION BY runs.mapping_id, runs.position_key, attempts.source_id
                    ORDER BY attempts.attempted_at DESC, attempts.id DESC
@@ -620,10 +639,10 @@ defmodule DevilsDictionary.Discovery do
         )
         DELETE FROM discovery_request_attempts
          WHERE id IN (
-           SELECT id FROM ranked WHERE rank > $1 LIMIT $2
+           SELECT id FROM ranked WHERE rank > $1 AND attempted_at < $3 LIMIT $2
          )
         """,
-        [keep, batch_size]
+        [keep, batch_size, cutoff]
       )
 
     pruned
@@ -1229,6 +1248,22 @@ defmodule DevilsDictionary.Discovery do
       |> Enum.uniq_by(fn result ->
         result.object_id || {result.external_namespace, result.external_id}
       end)
+    end
+  end
+
+  # `complete_success/4`'s gate, read fresh, without the outcome: what decides
+  # whether a run's proposals will be published at all.
+  defp publishable?(run, provider) do
+    run = Repo.get!(Run, run.id) |> Repo.preload(mapping: :source)
+
+    with true <- run.mapping.enabled,
+         :ok <- validate_target(run.mapping.target_object_id),
+         {:ok, ^provider, _source} <- eligible_provider_for_mapping(run.mapping),
+         true <- run.adapter_version == provider.adapter_version(),
+         :ok <- mapping_evidence_current(run.mapping, provider) do
+      true
+    else
+      _ -> false
     end
   end
 
