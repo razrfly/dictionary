@@ -246,12 +246,10 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
       quark = word!(ctx, "quark", ~w(wordnet), scope: nil)
       sense!(ctx, quark, "wordnet", group_key: "oewn-quark-n", gloss: "an elementary particle")
 
-      {:ok, _live, html} = live(ctx.conn, ~p"/define/quark")
+      {:ok, live, html} = live(ctx.conn, ~p"/define/quark")
 
-      assert html =~ ~s(id="sources")
-      assert html =~ ~s(id="one-source")
-      assert html =~ "One source so far"
-      assert html =~ "Open English WordNet"
+      assert has_element?(live, "#one-source", "One dictionary so far")
+      assert has_element?(live, "#one-source", "Open English WordNet")
       refute html =~ "Animals"
     end
 
@@ -260,11 +258,10 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
       sense!(ctx, cat, "wordnet", group_key: "oewn-cat-n", gloss: "a feline")
       entry!(ctx, cat, "bierce", headword: "CAT", pos: "n", body: "A soft automaton.", year: 1911)
 
-      {:ok, _live, html} = live(ctx.conn, ~p"/define/cat")
+      {:ok, live, _html} = live(ctx.conn, ~p"/define/cat")
 
-      assert html =~ ~s(id="sources")
-      assert html =~ "Defined here by 2 sources"
-      refute html =~ ~s(id="one-source")
+      assert has_element?(live, "#sources", "Defined here by 2 dictionaries")
+      refute has_element?(live, "#one-source")
     end
 
     test "a bare row has no source line to print and does not invent one", ctx do

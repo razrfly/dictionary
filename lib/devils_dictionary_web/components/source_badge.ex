@@ -105,8 +105,19 @@ defmodule DevilsDictionaryWeb.SourceBadge do
   attr :sources, :list, required: true
   attr :class, :any, default: nil
 
+  attr :cap, :integer,
+    default: 12,
+    doc: "how many badges the row shows before the rest fold behind a +N"
+
   def stack(assigns) do
-    assigns = assign(assigns, :count, length(assigns.sources))
+    {shown, rest} = Enum.split(assigns.sources, assigns.cap)
+
+    assigns =
+      assigns
+      |> assign(:count, length(assigns.sources))
+      |> assign(:shown, shown)
+      |> assign(:rest, rest)
+      |> assign(:shown_count, length(shown))
 
     ~H"""
     <section :if={@sources != []} id={@id} class={@class} aria-labelledby={"#{@id}-heading"}>
@@ -114,11 +125,15 @@ defmodule DevilsDictionaryWeb.SourceBadge do
         Sources
       </h2>
       <%!-- A ring in the page's own colour is what makes the overlap read as
-           a stack rather than a smear; `-space-x-1.5` is the overlap. The
-           row wraps rather than capping: the widest page measured holds
-           fifteen, and sixteen fit the rail at 22.5 rem. --%>
+           a stack rather than a smear; `-space-x-1.5` is the overlap. Twelve
+           on the row and the rest behind a +N (#162): `oyster` holds
+           seventeen, which wraps in the 22.5 rem rail and would wrap at
+           fifteen on a phone. The +N is a `<details>` summary, so it opens
+           without JavaScript and in the dead render, and its title lists
+           who is folded for a pointer that only hovers. Tier then slug is
+           the order already, so the fold takes the tail of the 📱 sources. --%>
       <ul role="list" class="mt-2 flex flex-wrap items-center gap-y-2 pl-1 -space-x-1.5">
-        <li :for={{source, index} <- Enum.with_index(@sources)} class="group/badge relative">
+        <li :for={{source, index} <- Enum.with_index(@shown)} class="group/badge relative">
           <a
             id={"#{@id}-#{source.slug}"}
             href={source.anchor}
@@ -137,14 +152,51 @@ defmodule DevilsDictionaryWeb.SourceBadge do
             role="tooltip"
             class={[
               "pointer-events-none absolute bottom-full z-20 mb-2 rounded-md bg-mist-950 px-2 py-1 text-xs whitespace-nowrap text-white opacity-0 group-focus-within/badge:opacity-100 group-hover/badge:opacity-100 dark:bg-white dark:text-mist-950",
-              index < div(@count + 1, 2) && "left-0",
-              index >= div(@count + 1, 2) && "right-0"
+              index < div(@shown_count + 1, 2) && "left-0",
+              index >= div(@shown_count + 1, 2) && "right-0"
             ]}
           >
             <span :if={source.tier} aria-hidden="true" class="mr-1">{tier_glyph(source.tier)}</span>{short_name(
               source.name
             )}
           </span>
+        </li>
+        <li :if={@rest != []} class="relative">
+          <details id={"#{@id}-more"} class="group/more">
+            <%!-- Anchored to its right edge and opening upward. The +N is the
+                 last badge on the row, so a panel that grows leftward stays
+                 inside the rail on a phone where one that grew rightward
+                 would leave the viewport; and it opens upward because the
+                 stack is the last thing in the rail and the kit's main is
+                 overflow-clip — a panel that opened downward was cut off at
+                 the footer on a phone. --%>
+            <summary
+              id={"#{@id}-more-summary"}
+              title={Enum.map_join(@rest, ", ", &short_name(&1.name))}
+              class="block cursor-pointer list-none rounded-full ring-2 ring-mist-50 transition-transform hover:z-10 hover:scale-110 focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-offset-2 dark:ring-mist-950 [&::-webkit-details-marker]:hidden"
+            >
+              <span class="inline-flex size-7 items-center justify-center rounded-full bg-mist-950/5 text-[0.6875rem]/7 font-medium tabular-nums text-mist-700 outline-1 -outline-offset-1 outline-mist-950/10 select-none group-open/more:bg-mist-950/10 dark:bg-white/10 dark:text-mist-200 dark:outline-white/10">
+                +{length(@rest)}
+              </span>
+              <span class="sr-only">{length(@rest)} more sources</span>
+            </summary>
+            <ul
+              role="list"
+              class="absolute right-0 bottom-full z-20 mb-2 w-56 rounded-lg bg-mist-50 p-1.5 shadow-lg outline-1 -outline-offset-1 outline-mist-950/10 dark:bg-mist-900 dark:shadow-none dark:outline-white/10"
+            >
+              <li :for={source <- @rest}>
+                <a
+                  id={"#{@id}-#{source.slug}"}
+                  href={source.anchor}
+                  title={source.name}
+                  class="flex items-center gap-2 rounded-md px-2 py-1 text-base/7 text-mist-950 hover:bg-mist-950/5 sm:text-sm/7 dark:text-white dark:hover:bg-white/10"
+                >
+                  <.badge source={source} decorative />
+                  <span class="truncate">{short_name(source.name)}</span>
+                </a>
+              </li>
+            </ul>
+          </details>
         </li>
       </ul>
       <p id={"#{@id}-count"} class="mt-2 text-base/7 tabular-nums text-mist-500 sm:text-sm/7">

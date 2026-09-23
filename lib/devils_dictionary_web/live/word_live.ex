@@ -594,10 +594,12 @@ defmodule DevilsDictionaryWeb.WordLive do
 
   # "5 sources · 9 entries": a source that filed a noun and a verb is one
   # source, and the entries are counted as what they are.
+  # *4 dictionaries · 8 entries*. The word is `Word.dictionaries/1`'s, for the
+  # reason given there: *sources* is the stack's word and the stack's number.
   defp count_label(sources, cards) do
     s = length(sources)
     e = length(cards)
-    base = "#{s} #{if s == 1, do: "source", else: "sources"}"
+    base = Word.dictionaries(sources)
     if e > s, do: "#{base} · #{e} entries", else: base
   end
 

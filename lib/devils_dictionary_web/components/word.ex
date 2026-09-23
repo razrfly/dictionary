@@ -182,16 +182,23 @@ defmodule DevilsDictionaryWeb.Word do
       id="sources"
       class="text-base/7 font-medium text-mist-700 sm:text-sm/7 dark:text-mist-400"
     >
-      <span :if={length(@sources) > 1}>Defined here by {count(@sources, "source")}</span>
+      <span :if={length(@sources) > 1}>Defined here by {dictionaries(@sources)}</span>
       <span :if={match?([_one], @sources)} id="one-source">
-        One source so far · {Enum.join(@sources, " · ")}
+        One dictionary so far · {Enum.join(@sources, " · ")}
       </span>
     </p>
     """
   end
 
-  defp count([_one], noun), do: "1 #{noun}"
-  defp count(list, noun), do: "#{length(list)} #{noun}s"
+  @doc """
+  *4 dictionaries*, or *1 dictionary*. Not *sources*: since #152 the rail's
+  stack counts every source on the page — the thing's encyclopedia rows, the
+  Crowd card, each shelf's contributors — and *17 sources* beside *4 sources*
+  was two numbers wearing one word (#162). What this counts is what #133 R3
+  left in the slab when the article moved out: the dictionaries.
+  """
+  def dictionaries([_one]), do: "1 dictionary"
+  def dictionaries(list), do: "#{length(list)} dictionaries"
 
   @doc """
   A word the index knows and no source has been asked about yet (#71 §2.7).
@@ -479,9 +486,10 @@ defmodule DevilsDictionaryWeb.Word do
     do: headword.forms != [] or headword.etymologies != []
 
   @doc """
-  The three things this page can count before it renders: how many sources have
-  spoken, how many senses they filed between them, and how much of the world
-  came back. The kit's `stat/1` shape, at the kit's own scale.
+  The things this page can count before it renders: how many dictionaries have
+  spoken and how many senses they filed between them. *Dictionaries*, not
+  *sources* — the stack under the related words counts sources, and it counts
+  every one on the page (#162). The kit's `stat/1` shape, at the kit's own scale.
   """
   attr :page, :map, required: true
   attr :sources, :list, default: []
@@ -501,7 +509,7 @@ defmodule DevilsDictionaryWeb.Word do
           {@count}
         </div>
         <p class="mt-1 text-base/6 text-mist-700 sm:text-sm/6 dark:text-mist-400">
-          {if @count == 1, do: "source", else: "sources"}
+          {if @count == 1, do: "dictionary", else: "dictionaries"}
         </p>
       </div>
       <div class="rounded-xl bg-mist-950/2.5 p-4 dark:bg-white/5">

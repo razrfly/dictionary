@@ -62,12 +62,11 @@ defmodule DevilsDictionaryWeb.AnimalsAbsentTest do
     end
 
     test "an animal word keeps its page, its sources and its provenance", ctx do
-      {:ok, _live, html} = live(ctx.conn, ~p"/define/cat")
+      {:ok, live, html} = live(ctx.conn, ~p"/define/cat")
 
       assert html =~ "A soft automaton."
       assert html =~ "a feline"
-      assert html =~ ~s(id="sources")
-      assert html =~ "Defined here by 2 sources"
+      assert has_element?(live, "#sources", "Defined here by 2 dictionaries")
     end
 
     test "and by its canonical address too", ctx do
