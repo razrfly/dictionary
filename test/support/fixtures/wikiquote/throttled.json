@@ -1,0 +1,14 @@
+{
+  "title": "Grief",
+  "url": "https://en.wikiquote.org/api/rest_v1/page/html/Grief",
+  "captured_at": null,
+  "synthetic": "Not captured: provoking a 429 from a volunteer-run API to have one on file is not something a fixture is worth. The shape is Wikimedia's documented one: status 429 with Retry-After in seconds.",
+  "status": 429,
+  "headers": {
+    "retry-after": "60",
+    "content-type": "application/json"
+  },
+  "raw_bytes": null,
+  "counts": null,
+  "body_file": "throttled.body.json"
+}

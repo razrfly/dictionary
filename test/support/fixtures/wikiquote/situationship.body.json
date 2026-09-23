@@ -1,0 +1,1 @@
+{"type":"MediaWikiError/Not_Found","title":"rest-nonexistent-title","method":"get","detail":"The specified page (Situationship) does not exist","uri":"/w/rest.php/v1/page/Situationship/html","errorKey":"rest-nonexistent-title","messageTranslations":{"en":"The specified page (Situationship) does not exist"},"httpCode":404,"httpReason":"Not Found"}

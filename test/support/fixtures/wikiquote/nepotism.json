@@ -1,0 +1,17 @@
+{
+  "captured_at": "2026-09-23T17:53:46.623442Z",
+  "counts": {
+    "quotations": 3,
+    "register": 0
+  },
+  "headers": {
+    "content-revision-id": "3272777",
+    "content-type": "text/html; charset=utf-8; profile=\"https://www.mediawiki.org/wiki/Specs/HTML/2.8.0\"",
+    "etag": "W/\"3272777/6c84b553-b50e-11f1-ac2b-0daefd0b89f7/view/html\""
+  },
+  "raw_bytes": 21220,
+  "status": 200,
+  "title": "Nepotism",
+  "url": "https://en.wikiquote.org/api/rest_v1/page/html/Nepotism",
+  "body_file": "nepotism.html"
+}
