@@ -676,6 +676,16 @@ defmodule DevilsDictionaryWeb.Culture do
       assigns
       |> assign(:image, ContentTypes.thumbnail_url(assigns.type, metadata))
       |> assign(:entry_path, entry_path(assigns.item, assigns.return_path))
+      |> assign(:evidence_path, evidence_path(assigns.item))
+      # A required credit already names the creator (below), so the line is
+      # not repeated there, linked or not.
+      |> assign(
+        :creators,
+        if(presentation.attribution == :required and attribution,
+          do: [],
+          else: creator_links(assigns.item, assigns.return_path)
+        )
+      )
       |> assign(:aspect, presentation.aspect)
       |> assign(:badge, presentation.badge)
       |> assign(:year, year(metadata))
@@ -766,7 +776,26 @@ defmodule DevilsDictionaryWeb.Culture do
         <%!-- Whoever made it, when the provider or the catalog named them. It
              is a metadata key and not a content type's business: a film's
              director and an artwork's painter arrive under the same one. --%>
-        <p :if={@artist} class="line-clamp-2 text-sm text-mist-500 text-pretty">
+        <%!-- #164: a link is the visible form of an assertion, never a guess
+             from a name. `@creators` is who the registry credits *now*, read
+             in one batch for the whole shelf; the provider's display string
+             is what shows when nobody is credited, and it is never a link.
+             The faint underline is always there, not only on hover: a
+             linked name and a plain one must look different on a phone,
+             where there is no hover to find out. --%>
+        <p
+          :if={@creators != []}
+          id={"culture-creator-#{@item.external_namespace}-#{@item.external_id}"}
+          class="line-clamp-2 text-sm text-mist-500 text-pretty"
+        >
+          <%= for {creator, index} <- Enum.with_index(@creators) do %>
+            <span :if={index > 0}>, </span><.link
+              navigate={creator.path}
+              class="rounded-sm underline decoration-mist-950/20 underline-offset-4 hover:text-mist-950 hover:decoration-current focus-visible:outline-2 focus-visible:outline-offset-2 dark:decoration-white/25 dark:hover:text-white"
+            >{creator.label}</.link>
+          <% end %>
+        </p>
+        <p :if={@creators == [] && @artist} class="line-clamp-2 text-sm text-mist-500 text-pretty">
           {@artist}
         </p>
         <%!-- The credit, beneath the thumbnail and always visible (#116 M4),
@@ -848,6 +877,17 @@ defmodule DevilsDictionaryWeb.Culture do
              which is the `link_text` branch — but what it says is who it
              opens at, to a screen reader and on hover, and on the card it
              is the arrow alone. --%>
+        <%!-- A resolved quotation or passage is content with a cited revision,
+             not an entry (#164 C5): its way in is the evidence page, and the
+             title above keeps pointing at the provider. --%>
+        <.link
+          :if={@evidence_path}
+          navigate={@evidence_path}
+          id={"culture-evidence-#{@item.external_id}"}
+          class="mr-2 inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 hover:text-mist-950 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 dark:hover:text-white"
+        >
+          Evidence
+        </.link>
         <a
           :if={@source_url}
           href={@source_url}
@@ -1127,6 +1167,12 @@ defmodule DevilsDictionaryWeb.Culture do
     end
   end
 
+  # An entry is an entity. A content object — a quotation, a passage — is
+  # never presented as one (#164 C5): it has no entry path, and
+  # `evidence_path/1` is its way in. An item that does not say what kind its
+  # object is (a catalog artwork) is an entity, which is all a corpus holds.
+  defp entry_path(%{object_kind: kind}, _return_path) when kind not in [nil, :entity], do: nil
+
   defp entry_path(%{object_id: object_id, preview_metadata: metadata}, return_path)
        when is_integer(object_id) do
     slug = DevilsDictionary.Claims.Connection.slugify(metadata["title"])
@@ -1135,6 +1181,23 @@ defmodule DevilsDictionaryWeb.Culture do
   end
 
   defp entry_path(_item, _return_path), do: nil
+
+  defp evidence_path(%{object_kind: :content, content_revision_id: id}) when is_integer(id),
+    do: ~p"/evidence/content/#{id}"
+
+  defp evidence_path(_item), do: nil
+
+  defp creator_links(item, return_path) do
+    query = if return_path, do: %{from: return_path}, else: %{}
+
+    item
+    |> Map.get(:creator_links, [])
+    |> List.wrap()
+    |> Enum.map(fn %{object_id: id, label: label} ->
+      slug = DevilsDictionary.Claims.Connection.slugify(label)
+      %{label: label, path: ~p"/entities/#{id}/#{slug}?#{query}"}
+    end)
+  end
 
   attr :shelf, :map, required: true
   attr :contributor, :boolean, default: false

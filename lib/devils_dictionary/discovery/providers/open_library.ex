@@ -496,7 +496,11 @@ defmodule DevilsDictionary.Discovery.Providers.OpenLibrary do
             title: presence(doc["title"]),
             year: year(doc["first_publish_year"]),
             cover_id: doc["cover_i"],
-            authors: doc["author_name"] |> List.wrap() |> Enum.filter(&is_binary/1)
+            authors: doc["author_name"] |> List.wrap() |> Enum.filter(&is_binary/1),
+            # Requested since the provider was written and dropped here until
+            # #164: the work's author keys, in the work's own order, which is
+            # the order `author_name` is in.
+            author_keys: doc["author_key"] |> List.wrap() |> Enum.filter(&author_key?/1)
           }
 
           doc["ia"]
@@ -523,6 +527,11 @@ defmodule DevilsDictionary.Discovery.Providers.OpenLibrary do
     title = work.title || doc.title || work.olid
     year = work.year || doc.year
     author = List.first(work.authors) || doc.creator
+
+    # Keys only when the name came from the work: an Internet Archive
+    # `creator` string has no author key, and a key beside someone else's name
+    # would link a line to the wrong person.
+    author_keys = if work.authors != [], do: work.author_keys, else: []
 
     %{
       external_namespace: @identity_namespace,
@@ -559,6 +568,7 @@ defmodule DevilsDictionary.Discovery.Providers.OpenLibrary do
           "source_url" => "https://openlibrary.org/works/#{work.olid}",
           "read_url" => "https://archive.org/details/#{doc.ia_id}",
           "cover_url" => cover_url(work.cover_id),
+          "author_keys" => if(author_keys != [], do: author_keys),
           "content_type" => "text",
           "provider" => "Open Library"
         }
@@ -602,12 +612,38 @@ defmodule DevilsDictionary.Discovery.Providers.OpenLibrary do
         |> put_present("author_display_name", metadata["author"])
         |> put_present("cover_url", metadata["cover_url"])
         |> put_present("read_url", metadata["read_url"]),
+      relationships: author_relationships(metadata["author_keys"]),
       eligibility: :eligible,
       retention: :durable
     })
   end
 
   def identity_record(_item), do: {:error, :unsupported_open_library_identity}
+
+  # One relationship per author key, in the work's order (#164 C6): a
+  # coauthor costs a row. The key is Open Library's own identifier for the
+  # person; the kit crosswalks it to a QID by Wikidata `P648` in the prepare
+  # phase and caches it on the person under `olid`. A key Wikidata has no item
+  # for leaves the line as text.
+  defp author_relationships(keys) when is_list(keys) do
+    for key <- keys, author_key?(key) do
+      %{
+        role: "authored_by",
+        target_identifiers: [
+          %{
+            namespace: @identity_namespace,
+            external_id: key,
+            metadata: %{"field" => "author_key"}
+          }
+        ],
+        certainty: :verified
+      }
+    end
+  end
+
+  defp author_relationships(_keys), do: []
+
+  defp author_key?(key), do: is_binary(key) and Regex.match?(~r/\AOL[1-9]\d*A\z/, key)
 
   defp put_present(map, _key, nil), do: map
   defp put_present(map, _key, ""), do: map

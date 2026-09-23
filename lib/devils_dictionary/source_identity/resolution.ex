@@ -8,5 +8,12 @@ defmodule DevilsDictionary.SourceIdentity.Resolution do
             object_id: nil,
             conflict_id: nil,
             reason: nil,
-            identifiers: []
+            identifiers: [],
+            # One outcome per relationship on the entry, in the provider's
+            # order (#164): `%{role, target, qid, state, object_id, label,
+            # reason}`, `state` one of `:matched`, `:minted`, `:overridden`,
+            # `:deferred`, `:unresolved`. Empty when the subject did not
+            # resolve, because nothing is credited to an identity that is not
+            # there.
+            relationships: []
 end

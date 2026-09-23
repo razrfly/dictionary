@@ -277,7 +277,26 @@ defmodule DevilsDictionary.Claims do
   `next_cursor/1`), and `:visibility` — `:public` by default, `:internal` for a
   review queue or a health check. See `visible/2`.
   """
-  def outgoing(subject_id, opts \\ []) do
+  def outgoing(subject_id, opts \\ [])
+
+  # Many subjects in one read, for a reader that renders many things at once —
+  # a shelf's creator lines (#164 C5). The same filters and visibility; the
+  # limit is the caller's to size, because a page of claims across a dozen
+  # subjects is not a page of one subject's.
+  def outgoing(subject_ids, opts) when is_list(subject_ids) do
+    case subject_ids |> Registry.canonical_ids() |> Map.values() |> Enum.uniq() do
+      [] ->
+        []
+
+      ids ->
+        AssertionRevision
+        |> where([r], r.subject_object_id in ^ids and r.is_current)
+        |> common_filters(opts)
+        |> page(opts)
+    end
+  end
+
+  def outgoing(subject_id, opts) do
     subject_id |> outgoing_query(opts) |> page(opts)
   end
 

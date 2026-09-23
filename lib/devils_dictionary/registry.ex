@@ -84,6 +84,71 @@ defmodule DevilsDictionary.Registry do
     end)
   end
 
+  @doc """
+  Mints the person or organization a Wikidata QID names, credited by a
+  provider for something it holds (#164 C7).
+
+  Takes the attrs `SourceIdentity.Creators.prepare/2` read from the item — `qid`,
+  `kind` (from `P31`), `label`, `description`, the dates — plus the
+  `source_record_revision_id` of the Wikidata record they came from and the
+  `minted_by` provider slug. The kind comes from Wikidata and never from the
+  provider: a human is `create_person/1`, with a `person_details` row even when
+  both dates are unknown so a minted page reads like a seeded one; an
+  organization is `create_entity/1`. Anything else is
+  `{:permanent, :not_a_creator_kind}` and nothing is written.
+
+  The QID is added as a **verified** identifier. That unique index is the whole
+  guarantee two providers crediting Q9068 get one Voltaire; the caller holds
+  the advisory lock that makes the check-then-mint safe.
+  """
+  def mint_creator(%{qid: qid, kind: kind} = attrs) when kind in [:person, :organization] do
+    metadata =
+      %{
+        "minted_by" => attrs[:minted_by],
+        "minted_at" => DateTime.to_iso8601(DateTime.utc_now()),
+        "wikidata_instance_of" => attrs[:instance_of],
+        "birth_year" => attrs[:birth_year],
+        "death_year" => attrs[:death_year]
+      }
+      |> Enum.reject(fn {_key, value} -> value in [nil, []] end)
+      |> Map.new()
+
+    entity_attrs = %{
+      preferred_label: attrs.label,
+      description: attrs[:description],
+      metadata: metadata
+    }
+
+    Repo.transaction(fn ->
+      {:ok, entity} =
+        case kind do
+          :person ->
+            create_person(
+              Map.merge(entity_attrs, %{
+                birth_date: attrs[:birth_date],
+                death_date: attrs[:death_date]
+              })
+            )
+
+          :organization ->
+            create_entity(Map.put(entity_attrs, :entity_kind, :organization))
+        end
+
+      {:ok, _identifier} =
+        add_external_id(entity.object_id, "wikidata", qid, %{
+          source_record_revision_id: attrs[:source_record_revision_id],
+          metadata: %{
+            "asserted_by" => attrs[:minted_by],
+            "identity_evidence" => "minted_from_wikidata"
+          }
+        })
+
+      entity
+    end)
+  end
+
+  def mint_creator(%{qid: _qid}), do: {:permanent, :not_a_creator_kind}
+
   @doc "Creates a work: an entity plus its `work_details` row."
   def create_work(attrs) do
     {details, entity_attrs} =

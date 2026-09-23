@@ -63,6 +63,7 @@ config :devils_dictionary, :discovery,
   # source whose policy the suite asserts has to be named here too.
   source_policies: %{
     "giphy" => [request_budget_limit: 100, request_budget_window_seconds: 3_600],
+    "wikidata" => [request_budget_limit: 600, request_budget_window_seconds: 3_600],
     "met" => [request_budget_limit: 1_000, request_budget_window_seconds: 3_600],
     # The Guardian's shipped policy (#142), repeated because the retention
     # decision is proved by a test and a policy the suite cannot see is a

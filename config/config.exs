@@ -128,6 +128,13 @@ config :devils_dictionary, :discovery,
   request_budget_window_seconds: 60,
   source_policies: %{
     "giphy" => [request_budget_limit: 100, request_budget_window_seconds: 60 * 60],
+    # Not a provider: the budget creator identity spends when a result credits
+    # a QID the registry does not hold yet (#164 C1). One entity fetch or one
+    # `P648` crosswalk search is one request, paced 200 ms apart by
+    # `Budget.claim_shared/4`. Wikidata's own guidance is a few requests a
+    # second and a burst drew a 429 in #100; 600 an hour is a ceiling a
+    # reader-driven site reaches only if every page credits someone new.
+    "wikidata" => [request_budget_limit: 600, request_budget_window_seconds: 60 * 60],
     # One Met page is a search plus up to `Met.scan_window/0` hydrations, and the
     # probe put the sustainable rate near 1 req/s rather than the documented 80.
     "met" => [request_budget_limit: 1_000, request_budget_window_seconds: 3_600],

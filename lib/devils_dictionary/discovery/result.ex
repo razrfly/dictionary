@@ -26,6 +26,16 @@ defmodule DevilsDictionary.Discovery.Result do
     # without any provider's persisted results being rewritten.
     field :identifiers, {:array, :map}, virtual: true, default: []
 
+    # Read at display time, never stored (#164 C5). `creator_links` is who the
+    # registry says made this now — one current, publicly visible
+    # `authored_by` per entry, `%{object_id, label}` — so a withdrawn credit
+    # unlinks on the next render with nothing to invalidate. `object_kind` and
+    # `content_revision_id` let the card send a content object to its evidence
+    # page rather than present it as an entry.
+    field :creator_links, {:array, :map}, virtual: true, default: []
+    field :object_kind, Ecto.Enum, values: [:lexeme, :sense, :entity, :content], virtual: true
+    field :content_revision_id, :id, virtual: true
+
     field :resolution_state, Ecto.Enum,
       values: [:matched, :newly_created, :insufficient_evidence, :conflicting_identifiers],
       default: :insufficient_evidence

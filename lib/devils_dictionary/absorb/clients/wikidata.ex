@@ -65,6 +65,39 @@ defmodule DevilsDictionary.Absorb.Clients.Wikidata do
     end
   end
 
+  @doc """
+  The items carrying one exact statement value, by CirrusSearch's
+  `haswbstatement`. Returns `{:ok, [qid]}`, in the search's own order.
+
+  This is a lookup by identifier, not a search by name: `P648=OL26320A` either
+  is on an item or is not. Open Library's author keys reach a person this way
+  (#164 C6). Several answers mean Wikidata itself is ambiguous and the caller
+  decides nothing from them.
+  """
+  def items_with_statement(property, value, opts \\ [])
+      when is_binary(property) and is_binary(value) do
+    params = [
+      action: "query",
+      format: "json",
+      list: "search",
+      srsearch: "haswbstatement:#{property}=#{value}",
+      srnamespace: "0",
+      srlimit: "5",
+      srprop: ""
+    ]
+
+    with {:ok, body} <- HTTP.get_json(@api, params, opts) do
+      {:ok,
+       body
+       |> get_in(["query", "search"])
+       |> List.wrap()
+       |> Enum.flat_map(fn
+         %{"title" => "Q" <> _ = qid} -> [qid]
+         _ -> []
+       end)}
+    end
+  end
+
   # ── claim readers ────────────────────────────────────────────────────────
   #
   # A claim is four levels deep and half of them are optional (a `novalue` snak

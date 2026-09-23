@@ -1,0 +1,75 @@
+{
+  "$comment": [
+    "The #158 test case, as the rows a quotation provider would hand the kit (#164).",
+    "Texts, works and years are the ones #158 traced on 2026-09-22; the author QIDs are",
+    "the Wikidata sitelinks of the Wikiquote pages they came from (Voltaire Q9068,",
+    "Ambrose Bierce Q191050). Build 4a replaces this with captured Parsoid pages; until",
+    "then it is the smallest honest stand-in: every row names its author by QID and",
+    "nothing in it is a name the kit may match on.",
+    "`register` rows are the Misattributed section of the Voltaire page: the line is",
+    "credited to the person the register says actually wrote it (a candidate), and",
+    "Voltaire is the misattribution target, never an authored_by."
+  ],
+  "quotations": [
+    {
+      "id": "voltaire-candide-garden",
+      "page": "Voltaire",
+      "text": "We must cultivate our garden.",
+      "work": "Candide",
+      "year": 1759,
+      "author_qid": "Q9068",
+      "source_url": "https://en.wikiquote.org/wiki/Voltaire#Candide_(1759)",
+      "author_display": "Voltaire"
+    },
+    {
+      "id": "voltaire-dangerous-right",
+      "page": "Voltaire",
+      "text": "It is dangerous to be right in matters on which the established authorities are wrong.",
+      "work": "The Age of Louis XIV",
+      "year": 1751,
+      "author_qid": "Q9068",
+      "source_url": "https://en.wikiquote.org/wiki/Voltaire",
+      "author_display": "Voltaire"
+    },
+    {
+      "id": "nepotism-bierce",
+      "page": "Nepotism",
+      "text": "Nepotism, n. Appointing your grandmother to office for the good of the party.",
+      "work": "The Devil's Dictionary",
+      "year": 1911,
+      "author_qid": "Q191050",
+      "source_url": "https://en.wikiquote.org/wiki/Nepotism",
+      "author_display": "Ambrose Bierce"
+    },
+    {
+      "id": "nepotism-report-on-business",
+      "page": "Nepotism",
+      "text": "brand nepotism",
+      "work": "Report on Business Magazine",
+      "year": 1989,
+      "author_qid": null,
+      "source_url": "https://en.wikiquote.org/wiki/Nepotism",
+      "author_display": "Report on Business Magazine"
+    },
+    {
+      "id": "voltaire-misattributed-defend",
+      "page": "Voltaire",
+      "section": "Misattributed",
+      "text": "I disapprove of what you say, but I will defend to the death your right to say it.",
+      "work": "The Friends of Voltaire",
+      "year": 1906,
+      "author_qid": null,
+      "misattributed_to_qid": "Q9068",
+      "source_url": "https://en.wikiquote.org/wiki/Voltaire#Misattributed",
+      "author_display": "Evelyn Beatrice Hall"
+    }
+  ],
+  "wikidata": {
+    "Q9068": {
+      "label": "Voltaire",
+      "description": "French Enlightenment writer, historian and philosopher",
+      "born": "1694-11-21",
+      "died": "1778-05-30"
+    }
+  }
+}

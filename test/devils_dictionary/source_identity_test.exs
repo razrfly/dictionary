@@ -218,6 +218,8 @@ defmodule DevilsDictionary.SourceIdentityTest do
                  entity_kind: nil,
                  eligibility: :insufficient_evidence,
                  eligibility_reason: "wording_has_no_stable_identity",
+                 # #164 C2: a content proposal carries its text, eligible or not.
+                 content: %{body: "A fixture line."},
                  retention: :durable,
                  relationships: [
                    %{
@@ -241,6 +243,7 @@ defmodule DevilsDictionary.SourceIdentityTest do
                  entity_kind: nil,
                  eligibility: :insufficient_evidence,
                  eligibility_reason: "uncertain_attribution",
+                 content: %{body: "A fixture line."},
                  retention: :durable,
                  relationships: [
                    %{

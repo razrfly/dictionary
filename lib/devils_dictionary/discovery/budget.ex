@@ -98,6 +98,69 @@ defmodule DevilsDictionary.Discovery.Budget do
   end
 
   @doc """
+  Claims one request against a **shared** budget: a source that is not the
+  run's provider, spent on that run's behalf.
+
+  #164 C1: minting a creator fetches Wikidata inside a discovery run, and the
+  per-process 200 ms sleep in `Absorb.Clients.HTTP` is pacing for one process,
+  not a budget. So the fetch is drawn against the `wikidata` source's own row
+  in `source_policies`, counted in `discovery_request_attempts` under that
+  source's id and the run that caused it — which is what makes it appear in the
+  operator's view beside the provider that asked, and what lets two runs on
+  two nodes share one window. The run's own `transport_attempts` and
+  `request_count` are the provider's and are not touched.
+
+  Same answers as `claim/3`: `{:ok, wait_ms}`, `{:deferred, seconds}` or
+  `{:error, reason}`.
+  """
+  def claim_shared(source_slug, run_id, stage, opts \\ [])
+      when is_binary(source_slug) and is_binary(stage) do
+    now = DateTime.utc_now()
+    interval_ms = Keyword.get(opts, :request_interval_ms, 0)
+
+    Repo.transaction(fn ->
+      source =
+        Repo.get_by(Source, slug: source_slug) || Repo.rollback(:shared_source_missing)
+
+      _ = Repo.query!("SELECT pg_advisory_xact_lock($1)", [source.id])
+      policy = Policy.for!(source.slug)
+      cutoff = DateTime.add(now, -policy.request_budget_window_seconds, :second)
+
+      used =
+        Repo.aggregate(
+          from(attempt in RequestAttempt,
+            where: attempt.source_id == ^source.id and attempt.attempted_at > ^cutoff
+          ),
+          :count
+        )
+
+      if used >= policy.request_budget_limit do
+        seconds =
+          source.id
+          |> oldest_attempt_at(cutoff)
+          |> DateTime.add(policy.request_budget_window_seconds, :second)
+          |> seconds_until(now)
+
+        Repo.rollback({:budget_exhausted, seconds})
+      end
+
+      scheduled_at = next_slot(source.id, now, interval_ms)
+
+      %RequestAttempt{}
+      |> RequestAttempt.changeset(%{
+        run_id: run_id,
+        source_id: source.id,
+        stage: stage,
+        attempted_at: scheduled_at
+      })
+      |> Repo.insert!()
+
+      {:ok, max(DateTime.diff(scheduled_at, now, :millisecond), 0)}
+    end)
+    |> outcome()
+  end
+
+  @doc """
   What one transaction result means to the caller: a slot, a wait, or a refusal.
 
   Named and public because it has to be **total**, and because that is the one

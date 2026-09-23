@@ -91,6 +91,73 @@ defmodule DevilsDictionary.Discovery.Conformance do
     operation
   end
 
+  @doc """
+  A Wikidata that answers every entity request with a human whose label is
+  the QID, and every `haswbstatement` search with nothing.
+
+  The default for the conformance suite, installed before a fixture's own
+  stubs so any of them can replace it.
+  """
+  def stub_wikidata_humans do
+    Req.Test.stub(DevilsDictionary.Absorb.Clients, fn conn ->
+      conn = Plug.Conn.fetch_query_params(conn)
+
+      case conn.params["action"] do
+        "query" ->
+          Req.Test.json(conn, %{"query" => %{"search" => []}})
+
+        _ ->
+          entities =
+            (conn.params["ids"] || "")
+            |> String.split("|", trim: true)
+            |> Map.new(&{&1, human(&1, &1)})
+
+          Req.Test.json(conn, %{"entities" => entities})
+      end
+    end)
+  end
+
+  @doc "A Wikidata entity for a human, in the shape `wbgetentities` returns."
+  def human(qid, label, opts \\ []) do
+    claims =
+      %{
+        "P31" => [
+          %{
+            "mainsnak" => %{"datavalue" => %{"value" => %{"id" => "Q5"}}},
+            "rank" => "normal",
+            "type" => "statement"
+          }
+        ]
+      }
+      |> put_time("P569", opts[:born])
+      |> put_time("P570", opts[:died])
+
+    %{
+      "id" => qid,
+      "labels" => %{"en" => %{"language" => "en", "value" => label}},
+      "descriptions" =>
+        if(opts[:description],
+          do: %{"en" => %{"language" => "en", "value" => opts[:description]}},
+          else: %{}
+        ),
+      "claims" => claims
+    }
+  end
+
+  defp put_time(claims, _property, nil), do: claims
+
+  defp put_time(claims, property, %Date{} = date) do
+    time = "+" <> Date.to_iso8601(date) <> "T00:00:00Z"
+
+    Map.put(claims, property, [
+      %{
+        "mainsnak" => %{"datavalue" => %{"value" => %{"time" => time, "precision" => 11}}},
+        "rank" => "normal",
+        "type" => "statement"
+      }
+    ])
+  end
+
   @doc "True when this provider can actually be driven through the pipeline."
   def pipeline?(provider) do
     declares_pipeline?(provider) and Providers.retrievable?(provider)
@@ -125,6 +192,13 @@ defmodule DevilsDictionary.Discovery.Conformance do
 
       setup do
         catalog = DevilsDictionary.Fixtures.seed_catalog!()
+
+        # Creator identity (#164) fetches any QID a result credits that the
+        # registry lacks. Every fixture gets a Wikidata that answers "a human"
+        # for whatever it is asked, so a provider whose results credit
+        # somebody is not an unstubbed request; a fixture that cares what the
+        # answer is (`creator_case/1`, the Met's own stub) installs its own.
+        DevilsDictionary.Discovery.Conformance.stub_wikidata_humans()
 
         providers = Application.fetch_env!(:devils_dictionary, :discovery_providers)
         req_options = Application.fetch_env!(:devils_dictionary, :discovery_req_options)
@@ -562,13 +636,85 @@ defmodule DevilsDictionary.Discovery.Conformance do
               Repo.all(from r in Result, where: r.run_id == ^run.id, select: r.object_id)
               |> Enum.reject(&is_nil/1)
 
+            # Since #164 a result may credit its creator (`authored_by`); what
+            # it must never do is claim to illustrate the word it was found for.
             if object_ids != [] do
               assert Repo.aggregate(
                        from(revision in DevilsDictionary.Claims.AssertionRevision,
-                         where: revision.subject_object_id in ^object_ids
+                         join: predicate in assoc(revision, :predicate),
+                         where:
+                           revision.subject_object_id in ^object_ids and
+                             predicate.key == "illustrates"
                        ),
                        :count
                      ) == 0
+            end
+          end
+        end
+
+        if function_exported?(@fixture, :creator_case, 1) do
+          describe "#{@slug} — creator identity (#164)" do
+            test "a creator it identifies is credited and linked; one it cannot stays text",
+                 context do
+              target = @fixture.covered_target(context)
+
+              %{credited: credited_id, qid: qid, text_only: text_id} =
+                @fixture.creator_case(context)
+
+              assert {:queued, run} = Discovery.request(target, @slug)
+              assert :ok = Discovery.execute_run(run.id)
+
+              results =
+                Repo.all(from r in Result, where: r.run_id == ^run.id)
+                |> Map.new(&{&1.external_id, &1})
+
+              credited = Map.fetch!(results, credited_id)
+              text_only = Map.fetch!(results, text_id)
+
+              person_id = DevilsDictionary.Registry.by_external_id("wikidata", qid)
+              assert is_integer(person_id), "#{qid} was neither matched nor minted"
+
+              assert [%{object_object_id: ^person_id} = revision] =
+                       DevilsDictionary.Claims.outgoing(credited.object_id,
+                         predicate: "authored_by"
+                       )
+
+              assert revision.method == "provider_relationship"
+              assert revision.confidence == 1.0
+              assert revision.metadata["provider"] == @slug
+
+              assert [%{"qid" => ^qid, "state" => state, "object_id" => ^person_id}] =
+                       credited.preview_metadata["creators"]
+
+              assert state in ["matched", "minted"]
+
+              # No identifier, no credit: the text line is all there is.
+              assert DevilsDictionary.Claims.outgoing(text_only.object_id,
+                       predicate: "authored_by"
+                     ) == []
+
+              refute Enum.any?(
+                       text_only.preview_metadata["creators"] || [],
+                       &(&1["state"] in ["matched", "minted"])
+                     )
+
+              state = Discovery.state(target.object_id, @slug)
+              html = render_component(&Culture.section/1, states: %{@slug => state})
+              doc = LazyHTML.from_fragment(html)
+
+              link =
+                LazyHTML.query(
+                  doc,
+                  "#culture-creator-#{credited.external_namespace}-#{credited_id} a"
+                )
+
+              assert LazyHTML.attribute(link, "href") |> hd() =~ "/entities/#{person_id}/"
+
+              assert LazyHTML.query(
+                       doc,
+                       "#culture-creator-#{text_only.external_namespace}-#{text_id}"
+                     )
+                     |> Enum.count() == 0
             end
           end
         end

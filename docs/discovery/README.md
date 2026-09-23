@@ -302,8 +302,57 @@ registry identity through `SourceIdentity.resolve/1`. A provider without that
 callback gets `resolution_state: :insufficient_evidence` and no `object_id`, and
 its results are pure cache. That is a legitimate place to stop.
 
-**A discovery appearance is never a claim.** No `illustrates` assertion is
-written, ever. A keyword-matched film is not curated evidence that the film is
+#### Creators: the one claim a result does write (#164)
+
+An entry may carry `relationships` — whoever made the thing, by an
+**identifier the provider read**: the Met's `artistWikidata_URL`, PoetryDB's
+reviewed `author_qid` in `poetrydb-v1.json`, Open Library's `author_key`. Never
+a name; nothing in the kit matches a label. A result with no creator
+identifier keeps its text line and writes nothing.
+
+The kit does the rest in two phases, on either side of the publication
+transaction:
+
+1. **Prepare, outside it** (`SourceIdentity.Creators.prepare/2`, called from
+   `execute_owned_run/1`): every target across the run is looked up in
+   `external_identifiers` in one query; Open Library keys are crosswalked to a
+   QID by Wikidata `P648`; only the QIDs still missing are fetched, each
+   request drawn against the **`wikidata` row in `source_policies`** through
+   `Budget.claim_shared/4`. A 429, a timeout or an empty budget is
+   `{:transient, _}`; a missing item, a redirect or a `P31` that is neither a
+   human nor an organization is `{:permanent, _}`.
+2. **Write, inside it**: `lock_entries/2` locks the subjects *and* every
+   creator key, rechecks by QID under the lock, mints only what is still
+   absent (`Registry.mint_creator/1`: person or organization by `P31`, a
+   `person_details` row, a verified QID, a `wikidata` source record and its
+   entity output), and writes one `authored_by` per relationship with
+   `method: "provider_relationship"`. The network is never touched here.
+
+`origin_key` is `"<role>:<subject stable id>"`, plus `":2"`, `":3"` for
+coauthors in the provider's order — so a re-run writes nothing, a changed
+creator is a revision, a dropped one is withdrawn with the reason
+`provider_removed_creator` and reinstated if it comes back. A revision a
+curator, a reviewer or a verifier wrote is never touched by a refresh; the
+result reports it `overridden`. A transient failure defers the credit to the
+next refresh; a permanent one opens one `unresolved_creator` case per
+`(source, QID)`. A misattribution register row is `misattributed_to`, never
+`authored_by` (`Entry.new/1` refuses the combination).
+
+`preview_metadata["creators"]` records what happened, for the operator's view
+(`/ops/discovery`, *Creator identity*). It is a **hint**: the card's creator
+line is a link only where `Creators.credited/1` — one batched read of current,
+public `authored_by` claims per shelf — says so at render, so a withdrawn
+credit unlinks on the next render with nothing to invalidate.
+
+Content resolves too. An entry of `object_kind: :content` carries a `content`
+map (`body`, `canonical_url`, `year`, `rights_metadata`…) and becomes a
+`content_items` row; a second source's different text is kept as a
+non-current revision beside the first. A content object is never presented as
+an entry: its card links to `/evidence/content/<revision>`, and a person's
+page lists it under *quotations*.
+
+**A discovery appearance is never a claim** about the word it was found for.
+No `illustrates` assertion is written, ever. A keyword-matched film is not curated evidence that the film is
 about the word; it is a provider result, shown as one. The path from a result to
 a claim runs through a contributor at `/connect` and a reviewer, and it is
 deliberately not automatic. Durable identity (an object in the registry) and

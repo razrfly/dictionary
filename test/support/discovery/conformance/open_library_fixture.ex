@@ -107,6 +107,52 @@ defmodule DevilsDictionary.Discovery.Conformance.OpenLibraryFixture do
     %{pages: [@page1_ids, @page2_ids]}
   end
 
+  # #164 C6. The crosswalk carries `author_key` for the two works the short
+  # page yields, and the kit resolves each by Wikidata `P648` in the prepare
+  # phase. The keys and the QID are **synthetic** — `OL900001A`, `OL900002A`,
+  # `Q900001` — because what is under test is the path, not a claim about
+  # these authors: the first key has exactly one Wikidata item, the second has
+  # none, so Gray's book is credited and Danella's keeps its text line.
+  @impl true
+  def creator_case(_context) do
+    keys = %{"/works/OL2621838W" => "OL900001A", "/works/OL5342545W" => "OL900002A"}
+
+    works =
+      Enum.map(works(), fn row ->
+        case Map.fetch(keys, row["key"]) do
+          {:ok, key} -> Map.put(row, "author_key", [key])
+          :error -> row
+        end
+      end)
+
+    respond(page(Enum.take(page1(), @short_take)), works)
+
+    Req.Test.stub(DevilsDictionary.Absorb.Clients, fn conn ->
+      conn = Plug.Conn.fetch_query_params(conn)
+
+      case conn.params do
+        %{"action" => "query", "srsearch" => "haswbstatement:P648=OL900001A"} ->
+          Req.Test.json(conn, %{"query" => %{"search" => [%{"title" => "Q900001"}]}})
+
+        %{"action" => "query"} ->
+          Req.Test.json(conn, %{"query" => %{"search" => []}})
+
+        %{"ids" => ids} ->
+          entities =
+            ids
+            |> String.split("|", trim: true)
+            |> Map.new(
+              &{&1, DevilsDictionary.Discovery.Conformance.human(&1, "Chris Hables Gray")}
+            )
+
+          Req.Test.json(conn, %{"entities" => entities})
+      end
+    end)
+
+    [credited, text_only] = @short_ids
+    %{credited: credited, qid: "Q900001", text_only: text_only}
+  end
+
   # Two routes on one stub, told apart the way the real API tells them apart —
   # by the path. `/search/inside.json` is the attestation search;
   # `/search.json` with an `ia:` group is the crosswalk to the work OLID.

@@ -71,7 +71,23 @@ defmodule DevilsDictionary.Discovery.Conformance.Fixture do
   """
   @callback setup(context :: map()) :: map()
 
-  @optional_callbacks setup: 1, uncovered_target: 1
+  @doc """
+  Installs the stubs for #164's creator case and says what to expect.
+
+  One result whose creator the provider identifies (a QID it read, or an
+  identifier the kit crosswalks to one) and one it cannot, from the same run.
+  Returns `%{credited: external_id, qid: qid, text_only: external_id}`: the
+  suite asserts the first is credited to the person holding `qid` and linked
+  on the card, and the second writes nothing and stays text. Optional: a
+  provider whose results name no creator has no case to supply.
+  """
+  @callback creator_case(context :: map()) :: %{
+              credited: String.t(),
+              qid: String.t(),
+              text_only: String.t()
+            }
+
+  @optional_callbacks setup: 1, uncovered_target: 1, creator_case: 1
 
   @doc """
   Installs one scenario's responses, the shared ones included.

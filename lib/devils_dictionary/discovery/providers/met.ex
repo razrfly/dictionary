@@ -582,12 +582,40 @@ defmodule DevilsDictionary.Discovery.Providers.Met do
         "object_date" => metadata["year"],
         "content_type" => "artwork"
       },
+      relationships: artist_relationships(metadata["creator_url"]),
       eligibility: :eligible,
       retention: :durable
     })
   end
 
   def identity_record(_item), do: {:error, :unsupported_met_identity}
+
+  # The artist, credited by the identifier the Met itself publishes on the
+  # object (#164 C6). `creator_url` is `artistWikidata_URL` when the object has
+  # one and `artistULAN_URL` otherwise; only the first yields a QID, so a
+  # ULAN-only artist keeps a text line and is credited to nobody — ULAN is not
+  # a namespace this registry holds, and the name is never looked up.
+  defp artist_relationships(url) do
+    case qid_from_url(url) do
+      nil ->
+        []
+
+      qid ->
+        [
+          %{
+            role: "authored_by",
+            target_identifiers: [
+              %{
+                namespace: "wikidata",
+                external_id: qid,
+                metadata: %{"field" => "artistWikidata_URL"}
+              }
+            ],
+            certainty: :verified
+          }
+        ]
+    end
+  end
 
   # `objectDate` is free text — "ca. 1780", "1863–65", "19th century". The first
   # four-digit run is the only part that is a year, and there may not be one.

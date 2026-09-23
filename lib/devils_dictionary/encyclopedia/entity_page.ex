@@ -21,8 +21,16 @@ defmodule DevilsDictionary.Encyclopedia.EntityPage do
 
     * **biography** — `about` content pointing at this entity
     * **works** — `authored_by` from a work entity
-    * **definitions** — `authored_by` from definition content, with the word it
-      `defines` and the edition it was `published_in`
+    * **definitions** — `authored_by` from definition content (any content
+      but a quotation or a passage), with the word it `defines` and the
+      edition it was `published_in`
+    * **quotations** — `authored_by` from quotation and passage content
+      (#164 C5), one row per line with a badge for every source that credits
+      it, so the same line from two sources is one row with two badges
+    * **misattributed** — `misattributed_to` (#164 C4): lines a register says
+      circulate under this name and are not theirs. Its own population, never
+      inside *Authored*, because evidence someone did not say a thing is not
+      weak evidence that they did
     * **editions** — `edition_of` pointing at this work
     * **contents** — what an edition's definitions define
   Each role is paged independently. In particular, `authored_by` is queried
@@ -55,6 +63,8 @@ defmodule DevilsDictionary.Encyclopedia.EntityPage do
             biography: [],
             works: [],
             definitions: [],
+            quotations: [],
+            misattributed: [],
             editions: [],
             contents: [],
             meaning_connections: [],
@@ -64,7 +74,10 @@ defmodule DevilsDictionary.Encyclopedia.EntityPage do
             pagination: %{}
 
   @section_cap 24
-  @presented_predicates ~w(about authored_by edition_of published_in)
+  @presented_predicates ~w(about authored_by edition_of misattributed_to published_in)
+  # Content that is a line someone said or wrote, rather than a definition or
+  # an article: the quotations population (#164 C5).
+  @line_kinds ~w(quotation passage)
   @summary_limit 120
 
   @doc """
@@ -116,7 +129,17 @@ defmodule DevilsDictionary.Encyclopedia.EntityPage do
       incoming_page(id, "authored_by", "entity", opts[:works_after])
 
     {definitions, definitions_page} =
-      incoming_page(id, "authored_by", "content", opts[:definitions_after])
+      incoming_page(id, "authored_by", "content", opts[:definitions_after],
+        exclude_subject_subkinds: @line_kinds
+      )
+
+    {quotations, quotations_page} =
+      incoming_page(id, "authored_by", "content", opts[:quotations_after],
+        subject_subkinds: @line_kinds
+      )
+
+    {misattributed, misattributed_page} =
+      incoming_page(id, "misattributed_to", "content", opts[:misattributed_after])
 
     {editions, editions_page} =
       incoming_page(id, "edition_of", "entity", opts[:editions_after])
@@ -147,6 +170,8 @@ defmodule DevilsDictionary.Encyclopedia.EntityPage do
       biography: content_views(Enum.map(biography, & &1.subject_object_id)),
       works: entity_views(Enum.map(works, & &1.subject_object_id)),
       definitions: definition_views(Enum.map(definitions, & &1.subject_object_id)),
+      quotations: line_views(quotations, id, "authored_by"),
+      misattributed: line_views(misattributed, id, "misattributed_to"),
       editions: entity_views(Enum.map(editions, & &1.subject_object_id)),
       contents: definition_views(Enum.map(contents, & &1.subject_object_id)),
       meaning_connections: meaning_connections,
@@ -157,6 +182,8 @@ defmodule DevilsDictionary.Encyclopedia.EntityPage do
         biography: biography_page,
         works: works_page,
         definitions: definitions_page,
+        quotations: quotations_page,
+        misattributed: misattributed_page,
         editions: editions_page,
         contents: contents_page,
         meaning_connections: meaning_connections_page,
@@ -354,12 +381,16 @@ defmodule DevilsDictionary.Encyclopedia.EntityPage do
     )
   end
 
-  defp incoming_page(object_id, predicate, subject_kind, after_cursor) do
-    semantic_claim_page(:incoming, object_id,
-      predicate: predicate,
-      subject_kind: subject_kind,
-      after: after_cursor,
-      limit: @section_cap + 1
+  defp incoming_page(object_id, predicate, subject_kind, after_cursor, filters \\ []) do
+    semantic_claim_page(
+      :incoming,
+      object_id,
+      [
+        predicate: predicate,
+        subject_kind: subject_kind,
+        after: after_cursor,
+        limit: @section_cap + 1
+      ] ++ filters
     )
   end
 
@@ -394,6 +425,7 @@ defmodule DevilsDictionary.Encyclopedia.EntityPage do
       |> semantic_predicate(opts[:predicate])
       |> semantic_exclusions(opts[:exclude_predicates])
       |> semantic_subject_kind(opts[:subject_kind])
+      |> semantic_subject_subkinds(opts[:subject_subkinds], opts[:exclude_subject_subkinds])
       |> Claims.visible(:public)
       |> group_by([revision], [
         revision.subject_object_id,
@@ -459,6 +491,54 @@ defmodule DevilsDictionary.Encyclopedia.EntityPage do
   defp semantic_subject_kind(query, kind),
     do: where(query, [revision], revision.subject_kind == ^kind)
 
+  defp semantic_subject_subkinds(query, nil, nil), do: query
+
+  defp semantic_subject_subkinds(query, nil, excluded),
+    do: where(query, [revision], revision.subject_subkind not in ^excluded)
+
+  defp semantic_subject_subkinds(query, included, _excluded),
+    do: where(query, [revision], revision.subject_subkind in ^included)
+
+  # One row per line, and on it every source that says so (#164 C5). The page
+  # already groups a subject's claims into one row; this reads, in one query,
+  # which sources hold a current, active, public claim of this predicate from
+  # each line to this person — two providers crediting one line is one row
+  # with two badges. Until build 3's fingerprint, the same words from two
+  # providers are two subjects and so two rows; that is stated on #164 C2.
+  defp line_views([], _object_id, _predicate), do: []
+
+  defp line_views(rows, object_id, predicate) do
+    subject_ids = Enum.map(rows, & &1.subject_object_id)
+    family = Registry.canonical_family(object_id)
+
+    sources =
+      AssertionRevision
+      |> join(:inner, [r], p in Claims.Predicate, on: p.id == r.predicate_id)
+      |> join(:inner, [r], a in Claims.Assertion, on: a.id == r.assertion_id)
+      |> join(:inner, [r, _p, a], source in Source, on: source.id == a.source_id)
+      |> where(
+        [r, p],
+        r.subject_object_id in ^subject_ids and r.object_object_id in ^family and
+          r.is_current and r.lifecycle_state == :active and p.key == ^predicate
+      )
+      |> Claims.visible(:public)
+      |> distinct(true)
+      |> select([r, _p, _a, source], {
+        r.subject_object_id,
+        %{slug: source.slug, name: source.name, tier: source.tier, logo: source.logo}
+      })
+      |> Repo.all()
+      |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
+
+    subject_ids
+    |> content_views()
+    |> Enum.map(fn content ->
+      content
+      |> Map.put(:summary, excerpt(content.body))
+      |> Map.put(:sources, sources |> Map.get(content.object_id, []) |> Enum.sort_by(& &1.slug))
+    end)
+  end
+
   # A person's subtype row, a work's, an edition's — whichever this entity has.
   # One query, and nil for a kind that has no detail table.
   defp details(%Entity{entity_kind: :person, object_id: id}),
@@ -517,6 +597,7 @@ defmodule DevilsDictionary.Encyclopedia.EntityPage do
           where: c.object_id in ^canonical_ids and r.lifecycle_state == :active,
           select: %{
             object_id: c.object_id,
+            revision_id: r.id,
             kind: c.content_kind,
             source_id: c.source_id,
             headword: r.headword,

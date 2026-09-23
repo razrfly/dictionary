@@ -35,7 +35,19 @@
         ["entity/work", "entity/person"],
         ["entity/work", "entity/organization"],
         ["content/definition", "entity/organization"],
-        ["content/article", "entity/organization"]
+        ["content/article", "entity/organization"],
+        ["content/quotation", "entity/organization"],
+        ["content/passage", "entity/organization"]
+      ]
+    },
+    {
+      "key": "misattributed_to",
+      "forward_label": "often misattributed to",
+      "reverse_label": "Misattributed",
+      "description": "A register's finding that a line circulates under this person's name and is not theirs. Never weak authorship: evidence someone did not say a thing is not weaker evidence that they did (#164 C4).",
+      "endpoints": [
+        ["content/quotation", "entity/person"],
+        ["content/passage", "entity/person"]
       ]
     },
     {
