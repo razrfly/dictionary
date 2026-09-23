@@ -87,7 +87,7 @@ def tile_poem(line="Where Love throbs out in blissful sleep,", poem="I Have a Re
 def tile_gif(src=GIF1, name="A GIF for “love”"):
     return f'''<li class="flex min-w-0 gap-4 sm:flex-col sm:gap-2">
   <a href="#in-culture" class="group/gif block w-28 shrink-0 sm:w-auto">
-    {frame(img(src) + '<span class="absolute inset-x-0 bottom-0 flex items-end p-2"><span class="rounded-md bg-mist-950/70 px-2 py-0.5 text-base/6 font-medium text-white sm:text-sm/6">Play</span></span>', extra="relative")}
+    {frame(img(src) + '<span class="absolute inset-x-0 bottom-0 flex items-end p-2"><span class="rounded-md bg-mist-950/70 px-2 py-0.5 text-base/6 font-medium text-white sm:text-sm/6">GIF</span></span>', extra="relative")}
   </a>
   <div class="min-w-0">{title(name)}{meta("GIF")}{reason("Search result for “love”, not a reviewed interpretation.")}{shelf_link("GIFs", "plebs", "#in-culture")}</div>
 </li>'''
@@ -105,7 +105,7 @@ def tile_headline(head="‘My Husband Is in Love With His Valet’: Takeaways Fr
     <p class="text-lg/7 font-medium text-mist-950 text-pretty sm:text-base/6 dark:text-white">{quoted}</p>
     <p class="text-base/6 text-mist-500 sm:text-sm/6">{masthead} · {date}</p>
   </div>
-  <div class="min-w-0">{title("News")}{meta(f"via {via}")}{reason("Uses “love” in a headline, on a day.")}{shelf_link("News", "plebs", "#in-culture")}</div>
+  <div class="min-w-0">{title("News")}{meta(f"via {via}")}{reason("Uses “love” in the text, on a day." if line else "Uses “love” in a headline, on a day.")}{shelf_link("News", "plebs", "#in-culture")}</div>
 </li>'''
 
 def tile_thing():
@@ -268,47 +268,72 @@ LOVE_RAIL = dict(
     origin="From Middle English <em>love</em>, from Old English <em>lufu</em>, from Proto-West Germanic <em>*lubu</em>, from Proto-Germanic <em>*lubō</em>, ultimately from Proto-Indo-European <em>*lewbʰ-</em>, to care, desire, love.",
     sources=[("johnson-noun", "aristocracy", "SJ", "Samuel Johnson", "noun · verb"),
              ("bierce", "aristocracy", "AB", "Ambrose Bierce", "noun"),
-             ("wordnet-noun", "middle", "WN", "Open English WordNet 2025", "noun · verb"),
+             ("wordnet", "middle", "WN", "Open English WordNet 2025", "noun · verb"),
              ("wiktionary-noun", "middle", "Wk", "Wiktionary (English)", "noun · verb · name"),
              ("wikipedia", "middle", "W", "Wikipedia (English)", "article")])
 
-def definitions(open_row="wordnet", rows=None):
-    rows = rows or [
-        ("johnson-noun", "aristocracy", "SJ", "Samuel Johnson", "18th century · 1755 · noun · 4,727 characters", "1. The passion between the sexes. Hearken to the birds love-learned song, The dewie leaves among! Spenser's Epithalam."),
-        ("bierce", "aristocracy", "AB", "Ambrose Bierce", "20th century · 1911 · noun · 484 characters", BIERCE_LOVE),
-        ("wordnet", "middle", "WN", "Open English WordNet 2025", "2025 · noun · 6 senses", "any object of warm affection or devotion"),
-        ("wiktionary-noun", "middle", "Wk", "Wiktionary (English) via Kaikki", "2026 · noun · 19 senses", "A deep caring for the existence of another."),
-    ]
+LOVE_WORDNET = [
+    ("any object of warm affection or devotion", "broader", "object · content · cognition · psychological feature"),
+    ("a deep feeling of sexual desire and attraction", "broader", "sexual desire · desire · feeling · state"),
+    ("a strong positive emotion of regard and affection", "narrower", "adoration · agape · amorousness · ardor · benevolence · devotedness · loyalty"),
+]
+LOVE_ROWS = [
+    ("johnson-noun", "aristocracy", "SJ", "Samuel Johnson", "18th century · 1755 · noun · 4,727 characters",
+     "1. The passion between the sexes. Hearken to the birds love-learned song, The dewie leaves among! Spenser's Epithalam.", None),
+    ("bierce", "aristocracy", "AB", "Ambrose Bierce", "20th century · 1911 · noun · 484 characters", BIERCE_LOVE + BIERCE_LOVE_REST, None),
+    ("wordnet", "middle", "WN", "Open English WordNet 2025", "2025 · noun · 6 senses", "any object of warm affection or devotion", LOVE_WORDNET),
+    ("wiktionary-noun", "middle", "Wk", "Wiktionary (English) via Kaikki", "2026 · noun · 19 senses", "A deep caring for the existence of another.", None),
+    ("wikipedia", "middle", "W", "Wikipedia (English)", "2026 · article",
+     "Love encompasses a range of strong and positive emotional and mental states, from the most sublime virtue or good habit, the deepest interpersonal affection, to the simplest pleasure.", None),
+]
+
+def crowd_card(text, author, year):
+    """The 📱 Crowd card as the page renders it after the definitions (#136).
+    Captured once for the sketch; the app fetches it in the reader's browser
+    and stores nothing."""
+    return f'''<section id="crowd" class="mt-6 rounded-2xl bg-mist-950/2.5 px-5 py-4 dark:bg-white/5">
+  <h3 class="text-base/7 font-medium {TIER_TEXT["plebs"]}">{badge("UD", "plebs", extra="mr-1.5 align-[-0.3em]")}{glyph("plebs")}Urban Dictionary</h3>
+  <p class="mt-0.5 text-base/6 text-mist-500 sm:text-sm/6">{author} · {year} · captured for this sketch; the app fetches it in your browser and stores nothing</p>
+  <p class="mt-2 max-w-[68ch] text-base/7 text-mist-700 sm:text-sm/7 dark:text-mist-400">{text}</p>
+</section>'''
+
+def definitions(open_row="wordnet", rows=None, n_sources=5, n_entries=9, world="78 things · every match says why it is here", crowd=None):
+    rows = rows or LOVE_ROWS
     out = []
-    for slug, tier, ini, name, m, opening in rows:
+    for slug, tier, ini, name, m, opening, senses in rows:
         is_open = slug == open_row
-        body = ""
-        if is_open and slug == "wordnet":
-            body = '''<div class="pb-5 text-base/7 sm:text-sm/7"><ul role="list" class="mt-2 space-y-3">
-  <li><p class="text-mist-950 dark:text-white">any object of warm affection or devotion</p><p class="mt-1 text-mist-500"><span class="text-mist-400">broader</span> object · content · cognition · psychological feature</p></li>
-  <li><p class="text-mist-950 dark:text-white">a deep feeling of sexual desire and attraction</p><p class="mt-1 text-mist-500"><span class="text-mist-400">broader</span> sexual desire · desire · feeling · state</p></li>
-  <li><p class="text-mist-950 dark:text-white">a strong positive emotion of regard and affection</p><p class="mt-1 text-mist-500"><span class="text-mist-400">narrower</span> adoration · agape · amorousness · ardor · benevolence · devotedness · loyalty</p></li>
-</ul><p class="mt-3 text-mist-500 underline underline-offset-4">3 more from this source · 3 senses</p></div>'''
-        elif is_open:
-            body = f'<div class="pb-5 text-base/7 text-mist-700 sm:text-sm/7 dark:text-mist-400"><p class="max-w-[68ch]">{opening}{BIERCE_LOVE_REST if slug == "bierce" else ""}</p></div>'
+        # Every row has a body, open or not: a closed row is one the reader
+        # can open, and a row that opens onto nothing is a broken sketch.
+        if senses:
+            items = "".join(
+                f'<li><p class="text-mist-950 dark:text-white">{gloss}</p><p class="mt-1 text-mist-500"><span class="text-mist-400">{rel}</span> {chips}</p></li>'
+                for gloss, rel, chips in senses)
+            body = f'<div class="pb-5 text-base/7 sm:text-sm/7"><ul role="list" class="mt-2 space-y-3">{items}</ul></div>'
+        else:
+            body = f'<div class="pb-5 text-base/7 text-mist-700 sm:text-sm/7 dark:text-mist-400"><p class="max-w-[68ch]">{opening}</p></div>'
+        preview = opening if len(opening) < 240 else opening[:220].rsplit(" ", 1)[0] + "…"
         out.append(f'''<details id="card-{slug}" name="sources" class="group/row" {"open" if is_open else ""}>
   <summary class="flex cursor-pointer list-none items-start justify-between gap-4 py-4 [&::-webkit-details-marker]:hidden">
     <div class="min-w-0 flex-1">
       <h3 class="text-base/7 font-medium {TIER_TEXT[tier]}">{badge(ini, tier, extra="mr-1.5 align-[-0.3em]")}{name}</h3>
       <p class="mt-0.5 text-base/6 tabular-nums text-mist-500 sm:text-sm/6">{m}</p>
-      <p class="mt-1 line-clamp-1 max-w-[47rem] text-base/7 text-mist-500 group-open/row:hidden sm:text-sm/7">{opening}</p>
+      <p class="mt-1 line-clamp-1 max-w-[47rem] text-base/7 text-mist-500 group-open/row:hidden sm:text-sm/7">{preview}</p>
     </div>
     <span class="relative size-4 h-lh shrink-0 text-mist-400"><span class="absolute top-1/2 left-0 h-px w-4 -translate-y-1/2 bg-current"></span><span class="absolute top-1/2 left-0 h-px w-4 -translate-y-1/2 rotate-90 bg-current group-open/row:hidden"></span></span>
   </summary>{body}</details>''')
+    src_word = "source" if n_sources == 1 else "sources"
+    ent_word = "entry" if n_entries == 1 else "entries"
+    crowd_html = crowd_card(*crowd) if crowd else ""
     return f'''<section id="definitions">
   <div class="sticky top-(--scroll-padding-top) z-8 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 rounded-t-2xl bg-mist-100/95 px-5 py-3 backdrop-blur dark:bg-mist-950/95">
     <h2 class="font-display text-xl text-mist-950 dark:text-white">Definitions</h2>
-    <p class="text-base/7 text-mist-500 sm:text-sm/7">5 sources · 9 entries · one open at a time</p>
+    <p class="text-base/7 text-mist-500 sm:text-sm/7">{n_sources} {src_word} · {n_entries} {ent_word} · one open at a time</p>
   </div>
   <div class="rounded-b-2xl bg-mist-950/2.5 px-5 pb-1 dark:bg-white/5"><div class="divide-y divide-mist-950/10 dark:divide-white/10">{"".join(out)}</div></div>
 </section>
+{crowd_html}
 <section id="in-culture" class="mt-8 rounded-2xl border border-dashed border-mist-950/15 p-5 text-base/7 text-mist-500 sm:text-sm/7 dark:border-white/15">
-  <p><span class="font-display text-xl text-mist-950 dark:text-white">Out in the world</span> · 78 things · every match says why it is here</p>
+  <p><span class="font-display text-xl text-mist-950 dark:text-white">Out in the world</span> · {world}</p>
   <p class="mt-1">Unchanged below this line: Films · Artworks · Texts · Images · GIFs · Music · News, then <span id="thing">the thing</span>, exactly as the page renders them today. Every tile above links down into these shelves.</p>
 </section>'''
 
@@ -332,7 +357,7 @@ def band_v1(lead, tiles, note, *mark_names, label=None):
 
 V1_LEAD = lead_quote(BIERCE_LOVE, "Ambrose Bierce", "The Devil’s Dictionary", "1911")
 page("entry-v1-epigraph-love.html", "love", "entry · V1 epigraph", "V1 — the epigraph and three tiles: one voice quoted, then a picture, a line and the crowd, one tile per tier",
-     band_v1(V1_LEAD, [tile_artwork(), tile_poem(), tile_gif()], "Today’s entry · three sources, three tiers · a different pick tomorrow", "giphy"), definitions())
+     band_v1(V1_LEAD, [tile_artwork(), tile_poem(), tile_gif()], "Today’s entry · three sources, three tiers · a different pick tomorrow", "giphy"), definitions(crowd=(URBAN_LOVE, "Mean Little", "2021")))
 
 # ---------------------------------------------------------------- V2 plaque in the rail, a wall in the column
 PLAQUE = f'''<figure id="entry-lead" class="mt-5 border-y border-amber-700/30 py-4 dark:border-amber-400/30">
@@ -354,7 +379,7 @@ def band_v2():
   {byline("Picked by tier and by kind, not by ranking · the shelves below hold the rest", "spotify")}
 </section>'''
 
-page("entry-v2-plaque-love.html", "love", "entry · V2 plaque", "V2 — the plaque: Bierce in the rail beside the word, a two-by-two wall in the column", band_v2(), definitions(), plaque=PLAQUE)
+page("entry-v2-plaque-love.html", "love", "entry · V2 plaque", "V2 — the plaque: Bierce in the rail beside the word, a two-by-two wall in the column", band_v2(), definitions(crowd=(URBAN_LOVE, "Mean Little", "2021")), plaque=PLAQUE)
 
 # ---------------------------------------------------------------- V3 mosaic
 def band_v3():
@@ -365,7 +390,7 @@ def band_v3():
       <div class="aspect-[4/5] bg-mist-950/5 sm:aspect-auto sm:h-full dark:bg-white/5">{img(GERARD)}</div>
       <figcaption class="absolute inset-x-0 bottom-0 bg-linear-to-t from-mist-950/80 to-mist-950/0 px-4 pt-12 pb-3 text-white">
         <p class="text-lg/7 font-medium sm:text-base/6">Cupid and Psyche</p>
-        <p class="text-base/6 text-white/80 sm:text-sm/6">1798 · François Gérard · {GLYPH["middle"]} Artworks · matched on an identifier</p>
+        <p class="text-base/6 text-white/80 sm:text-sm/6">1798 · François Gérard · <a href="#in-culture" class="underline underline-offset-4">{GLYPH["middle"]} Artworks <span aria-hidden="true">↓</span></a> · matched on an identifier</p>
       </figcaption>
     </figure>
     <!-- the voice: the aristocracy in its frame -->
@@ -380,7 +405,7 @@ def band_v3():
     <!-- the crowd and the catalogue, small -->
     <div class="grid grid-cols-2 gap-3 sm:col-span-5 sm:gap-4">
       <a href="#in-culture" class="group/gif -rotate-1 rounded-[min(1vw,12px)] border border-dashed border-mist-950/20 p-2 dark:border-white/20">
-        {frame(img(GIF1) + '<span class="absolute inset-x-0 bottom-0 flex items-end p-2"><span class="rounded-md bg-mist-950/70 px-2 py-0.5 text-base/6 font-medium text-white sm:text-sm/6">Play</span></span>', extra="relative")}
+        {frame(img(GIF1) + '<span class="absolute inset-x-0 bottom-0 flex items-end p-2"><span class="rounded-md bg-mist-950/70 px-2 py-0.5 text-base/6 font-medium text-white sm:text-sm/6">GIF</span></span>', extra="relative")}
         <p class="mt-2 text-base/6 font-medium text-mist-950 sm:text-sm/6 dark:text-white">A GIF for “love”</p>
         <p class="text-base/6 text-mist-500 sm:text-sm/6">{GLYPH["plebs"]} GIFs · a search result</p>
       </a>
@@ -405,7 +430,7 @@ def band_v3():
   {byline("Six things from six sources across three tiers · the page rearranges tomorrow, never while you read", "giphy", "spotify")}
 </section>'''
 
-page("entry-v3-mosaic-love.html", "love", "entry · V3 mosaic", "V3 — the mosaic: one big picture, the voice in its frame, the crowd tilted, the line and the day ruled beneath", band_v3(), definitions())
+page("entry-v3-mosaic-love.html", "love", "entry · V3 mosaic", "V3 — the mosaic: one big picture, the voice in its frame, the crowd tilted, the line and the day ruled beneath", band_v3(), definitions(crowd=(URBAN_LOVE, "Mean Little", "2021")))
 
 # ---------------------------------------------------------------- V4 broadsheet
 def band_v4():
@@ -457,19 +482,19 @@ def band_v4():
     <p class="text-base/6 text-mist-400 sm:text-sm/6">{GLYPH["plebs"]} From the crowd</p>
     <div class="mt-3 flex flex-col gap-4 sm:flex-row sm:items-start sm:gap-6">
       <a href="#in-culture" class="w-32 shrink-0 -rotate-1">
-        {frame(img(GIF1) + '<span class="absolute inset-x-0 bottom-0 flex items-end p-2"><span class="rounded-md bg-mist-950/70 px-2 py-0.5 text-base/6 font-medium text-white sm:text-sm/6">Play</span></span>', extra="relative")}
+        {frame(img(GIF1) + '<span class="absolute inset-x-0 bottom-0 flex items-end p-2"><span class="rounded-md bg-mist-950/70 px-2 py-0.5 text-base/6 font-medium text-white sm:text-sm/6">GIF</span></span>', extra="relative")}
         <p class="mt-1 text-base/6 text-mist-500 sm:text-sm/6">A GIF for “love” · GIPHY</p>
       </a>
       <div class="min-w-0 max-w-[40rem] rounded-2xl rounded-tl-sm bg-mist-950/5 px-4 py-3 dark:bg-white/10">
         <p class="text-base/7 text-mist-950 sm:text-sm/7 dark:text-white">{URBAN_LOVE}</p>
-        <p class="mt-1 text-base/6 text-mist-500 sm:text-sm/6">Urban Dictionary · Mean Little · 2021 · fetched by your browser, stored nowhere · <a href="#" class="underline underline-offset-4">the Crowd card <span aria-hidden="true">↓</span></a></p>
+        <p class="mt-1 text-base/6 text-mist-500 sm:text-sm/6">Urban Dictionary · Mean Little · 2021 · captured for this sketch; the app fetches it in your browser and stores nothing · <a href="#crowd" class="underline underline-offset-4">the Crowd card <span aria-hidden="true">↓</span></a></p>
       </div>
     </div>
   </div>
   {byline("The dead, the institutions, the crowd: each in its own type", "giphy", "spotify")}
 </section>'''
 
-page("entry-v4-broadsheet-love.html", "love", "entry · V4 broadsheet", "V4 — the broadsheet: a drop-cap lead and a plate, a ruled strip for the day, the crowd in its own register", band_v4(), definitions())
+page("entry-v4-broadsheet-love.html", "love", "entry · V4 broadsheet", "V4 — the broadsheet: a drop-cap lead and a plate, a ruled strip for the day, the crowd in its own register", band_v4(), definitions(crowd=(URBAN_LOVE, "Mean Little", "2021")))
 
 # ---------------------------------------------------------------- rotation: V1 across three days
 def day(label, tiles, note, *m):
@@ -484,7 +509,7 @@ rot = f'''<div class="space-y-14">
   <p class="mt-2 text-pretty">The lead never rotates: Bierce wrote one entry and it is the entry. The tiles rotate <em>within a kind</em> among candidates that tie on evidence and tier — six catalogue paintings, ten attested poem lines, twelve GIFs, seventeen headlines — seeded by the word and the date, so a page is the same all day and different tomorrow. The tier rule runs first, so every day still shows the dead, the institutions and the crowd. Tuesday’s crowd slot went to a headline because the Guardian’s attestation outranks a GIF’s search; that is decision 7 in #156, shown both ways here.</p>
 </div>
 </div>'''
-page("entry-rotation-love.html", "love", "entry · rotation", "V1 on three consecutive days: the same word, the same rules, a different pick", rot, definitions())
+page("entry-rotation-love.html", "love", "entry · rotation", "V1 on three consecutive days: the same word, the same rules, a different pick", rot, definitions(crowd=(URBAN_LOVE, "Mean Little", "2021")))
 
 # ---------------------------------------------------------------- the words: nepotism, rizz, topographagnosia
 NEP_RAIL = dict(
@@ -521,28 +546,32 @@ def tile_book():
   <div class="min-w-0">{title("Against Fairness")}{meta("2012 · Book")}{reason("Uses “nepotism” on a page of the book.")}{shelf_link("Texts", "middle", "#in-culture")}</div>
 </li>'''
 
-def small_defs(rows, open_row):
-    return definitions(open_row=open_row, rows=rows)
-
 # nepotism: lead only + one tile
 nep_body = band_v1(lead_quote(BIERCE_NEPOTISM, "Ambrose Bierce", "The Devil’s Dictionary", "1911"),
                    [tile_book()], "One tile: nothing on this page is a picture the rule admits, and no shelf holds a 📱 item with evidence · the band says nothing about the two empty slots")
-nep_defs = small_defs([("johnson", "aristocracy", "SJ", "Samuel Johnson", "18th century · 1755 · noun · 96 characters", "Fondness for nephews."),
-                ("bierce", "aristocracy", "AB", "Ambrose Bierce", "20th century · 1911 · noun · 77 characters", BIERCE_NEPOTISM),
-                ("wordnet", "middle", "WN", "Open English WordNet 2025", "2025 · noun · 1 sense", "favoritism shown to relatives or close friends by those in power"),
-                ("wiktionary", "middle", "Wk", "Wiktionary (English) via Kaikki", "2026 · noun · 2 senses", "The favoring of relatives or personal friends because of their relationship rather than because of their abilities.")], "wordnet")
+nep_defs = definitions("wordnet", [
+    ("johnson", "aristocracy", "SJ", "Samuel Johnson", "18th century · 1755 · noun · 96 characters", "Fondness for nephews.", None),
+    ("bierce", "aristocracy", "AB", "Ambrose Bierce", "20th century · 1911 · noun · 77 characters", BIERCE_NEPOTISM, None),
+    ("wordnet", "middle", "WN", "Open English WordNet 2025", "2025 · noun · 1 sense", "favoritism shown to relatives or close friends by those in power",
+     [("favoritism shown to relatives or close friends by those in power", "broader", "favoritism · partiality")]),
+    ("wiktionary", "middle", "Wk", "Wiktionary (English) via Kaikki", "2026 · noun · 2 senses", "The favoring of relatives or personal friends because of their relationship rather than because of their abilities.", None)],
+    n_sources=4, n_entries=4, world="3 things · a book shelf and eleven stock photographs the band does not admit")
 page("entry-words-nepotism.html", "nepotism", "entry · nepotism", "The honest cases — nepotism: Bierce whole in 77 characters, one tile, two slots collapsed", nep_body, nep_defs, rail_kwargs=NEP_RAIL, related=False)
 
 # rizz: the inverted band. Urban Dictionary leads, tiles are still arriving.
-rizz_lead = lead_quote(URBAN_RIZZ, "Urban Dictionary", "bro got no rizz · fetched by your browser, stored nowhere", "2022", tier="plebs", card="#crowd", size="text-2xl/9 sm:text-3xl/10")
+rizz_lead = lead_quote(URBAN_RIZZ, "Urban Dictionary", "bro got no rizz · captured for this sketch; the app fetches it in your browser", "2022", tier="plebs", card="#crowd", size="text-2xl/9 sm:text-3xl/10")
 rizz_body = band_v1(rizz_lead, [tile_empty("The picture, when a shelf answers"), tile_empty("The line"), tile_empty("The sound")],
                     "The inverted band: neither dead man met this word, so the crowd leads · the slots fill as the shelves report, and once they have settled nothing moves")
-rizz_defs = small_defs([("wiktionary", "middle", "Wk", "Wiktionary (English) via Kaikki", "2026 · noun · 2 senses", "(slang) One's ability to seduce or charm a potential romantic partner.")], "wiktionary")
+rizz_defs = definitions("wiktionary", [
+    ("wiktionary", "middle", "Wk", "Wiktionary (English) via Kaikki", "2026 · noun · 2 senses", "(slang) One's ability to seduce or charm a potential romantic partner.", None)],
+    n_sources=1, n_entries=1, world="whatever the shelves answer · not captured for this sketch", crowd=(URBAN_RIZZ, "bro got no rizz", "2022"))
 page("entry-words-rizz.html", "rizz", "entry · rizz", "The honest cases — rizz: the crowd leads, the tiles are the loading state, drawn as the reader sees it before the shelves answer", rizz_body, rizz_defs, rail_kwargs=RIZZ_RAIL, related=False)
 
 # topographagnosia: no band at all
 topo_body = '''<p class="rounded-2xl border border-dashed border-mist-950/15 p-5 text-base/7 text-mist-500 sm:text-sm/7 dark:border-white/15">No band. No aristocrat wrote this entry, Urban Dictionary has nothing, and every shelf is empty (#143 measured it). The page opens on the Definitions, as it does today. This box is the sketch pointing at the absence; the app draws nothing here.</p>'''
-topo_defs = small_defs([("wiktionary", "middle", "Wk", "Wiktionary (English) via Kaikki", "2026 · noun · 1 sense", "The inability to orient oneself in one's surroundings.")], "wiktionary")
+topo_defs = definitions("wiktionary", [
+    ("wiktionary", "middle", "Wk", "Wiktionary (English) via Kaikki", "2026 · noun · 1 sense", "The inability to orient oneself in one's surroundings.", None)],
+    n_sources=1, n_entries=1, world="nothing · every shelf is empty")
 page("entry-words-topographagnosia.html", "topographagnosia", "entry · topographagnosia", "The honest cases — topographagnosia: nothing to show, so nothing is shown", topo_body, topo_defs, rail_kwargs=TOPO_RAIL, related=False)
 
 # ---------------------------------------------------------------- contact sheet
