@@ -122,6 +122,18 @@ makes its note say *held locally* rather than *searched for on this visit*. It
 was not asked for on this visit, and a shelf that opened with the catalog would
 bury the answer the page actually went and got.
 
+**Except on the Quotes shelf** (#174 decision 2). That rule was written for
+artworks, where the catalog and the live search compete for one undivided
+rail. The Quotes shelf is banded by era, and the quotations corpus is by
+construction all 👑: every line is *Verified* against a text its author wrote
+before 1931. Opening that band with it is the point of the corpus, and it
+buries nothing. The lines a visit went and got fill the other bands, and a live
+line in the 👑 band that is the same words folds into the corpus card, which
+then names both sources. So `Culture.archetype_rank/1` ranks a corpus state
+first on `:quote` and last everywhere else. Every quotation corpus card says
+*held locally* in its own footer as well as in the About note, because on
+this shelf the corpus card is the first thing a reader sees.
+
 ---
 
 ## The pipeline, stage by stage
@@ -557,7 +569,7 @@ declares the first.
 | `:news` | Bing News, The Guardian | — | Chronicling America's bulk OCR; GDELT (#134) | attestation, **dated** |
 | `:music` | Spotify | — | MusicBrainz (#116), identity via `P921`/`P2207` | a labelled search, gated on the track title |
 | `:gif` | GIPHY, browser-only — **inside** this chrome since #144 Phase 3, through `Culture.browser_shelf/1` | — | Tenor, after K10 | a labelled search |
-| `:quote` | Wikiquote (#158 build 4) | `wikiquote-pd-v1` (#174), held locally | Wiktionary as a *shelf* source only if a decision asks for it — its absorbed quotations already render **under the sense** on the word page (build 1, `Word.quotations/1`, the same `Quotation.card/1` as this shelf), not on this rail | identity: the sense's QID → the theme page's `enwikiquote` sitelink; one line from two sources folds on its `quotation_fingerprint` (ADR 0003) |
+| `:quote` | Wikiquote (#158 build 4) | `wikiquote-pd-v1` (#174), held locally, **opening the 👑 band** | Wiktionary as a *shelf* source only if a decision asks for it — its absorbed quotations already render **under the sense** on the word page (build 1, `Word.quotations/1`, the same `Quotation.card/1` as this shelf), not on this rail | identity: the sense's QID → the theme page's `enwikiquote` sitelink; one line from two sources folds on its `quotation_fingerprint` (ADR 0003) |
 
 The `:text` decision is #109's second residual, settled here: the two text
 corpora are seeded `evidence: :none` and stay that way. Serving attestation
@@ -627,7 +639,9 @@ in `Corpus.Manifest`.
 ### Order: archetype, then turns across sources, then position
 
 `DevilsDictionaryWeb.Culture.shelves/1` hands every state's items on one shelf
-to `DevilsDictionary.Discovery.Shelf.compose/4`. Live before corpus stays (K2).
+to `DevilsDictionary.Discovery.Shelf.compose/4`. Live before corpus stays (K2),
+on every shelf but Quotes, where the corpus opens the 👑 band (see *A corpus*,
+#174).
 Within each archetype the shelf takes item 1 from every contributing source,
 then item 2, and so on; sources are ordered by **tier** (aristocracy → middle →
 plebs, from the source row, carried on the state as `tier`) and then by slug;

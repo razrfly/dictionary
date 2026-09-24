@@ -241,6 +241,108 @@ defmodule DevilsDictionary.Quotations.Corpus do
   # ── reading ───────────────────────────────────────────────────────────────
 
   @doc """
+  The corpus's lines for a page, as items on the Quotes shelf (#174 design 3).
+
+  Matched by identity, and only at sense level (decision 1): a line is on a
+  page when a concept one of the page's senses refers to is a concept whose
+  theme page the line was found on. The reason each item carries says so
+  (a `sitelink` reason naming that page), which is what makes the rail an
+  identity shelf and not a search.
+
+  Each item has what a live result has at display time: its content item, the
+  current revision the evidence link opens, the badge on the item, and who the
+  registry credits now (`Creators.credited/1`). The row supplies the rest: the
+  work and its year, the Gutenberg locator, and the page revision it was read
+  at. `era` is `"aristocracy"` for every line, because the build admits only
+  works dated before 1931.
+  """
+  def shelf_items(lexeme_ids) when is_list(lexeme_ids) do
+    rows =
+      lexeme_ids
+      |> page_qids()
+      |> rows_for_concepts()
+      |> Enum.filter(&is_integer(&1["object_id"]))
+
+    object_ids = Enum.map(rows, & &1["object_id"])
+    held = held(object_ids)
+    credited = Creators.credited(object_ids)
+    source = Sources.get_source_by_slug(@slug)
+
+    Enum.map(rows, fn row ->
+      object_id = row["object_id"]
+      {revision_id, provenance} = Map.get(held, object_id, {nil, nil})
+
+      %{
+        source_slug: @slug,
+        source_tier: source && source.tier,
+        external_namespace: "quotation_fingerprint",
+        external_id: row["fingerprint"],
+        identifiers: [%{namespace: "quotation_fingerprint", external_id: row["fingerprint"]}],
+        object_id: object_id,
+        object_kind: :content,
+        content_revision_id: revision_id,
+        provenance: provenance,
+        creator_links: Map.get(credited, object_id, []),
+        match_details: %{
+          "kind" => "sitelink",
+          "evidence" => "identity",
+          "sitelinks" =>
+            for qid <- row["concept_qids"] || [] do
+              %{
+                "qid" => qid,
+                "title" => row["page"],
+                "site" => "enwikiquote",
+                "wiki" => "Wikiquote"
+              }
+            end
+        },
+        preview_metadata: %{
+          "title" => row["text"],
+          "artist" => row["author_label"],
+          "work" => row["work_label"],
+          "year" => row["work_year"],
+          "era" => "aristocracy",
+          "citation" => row["citation"],
+          "locator" => row["gutenberg"]["locator"],
+          "revision_id" => row["revision_id"],
+          "page" => row["page"],
+          "source_url" => row["source_url"],
+          "attribution" => "Wikiquote, #{@license}",
+          "license" => @license,
+          "license_url" => @license_url,
+          "content_type" => "quote",
+          "provider" => "Wikiquote, public domain"
+        }
+      }
+    end)
+  end
+
+  # Every verified QID the page's senses refer to — not the eight a live
+  # recipe freezes, because this is a lookup and not a request.
+  defp page_qids([]), do: []
+
+  defp page_qids(lexeme_ids) do
+    lexeme_ids
+    |> DevilsDictionary.Discovery.PageEvidence.query()
+    |> select([identifier: ei], ei.external_id)
+    |> distinct(true)
+    |> Repo.all()
+  end
+
+  defp held([]), do: %{}
+
+  defp held(object_ids) do
+    Repo.all(
+      from item in ContentItem,
+        left_join: revision in DevilsDictionary.Registry.ContentRevision,
+        on: revision.content_id == item.object_id and revision.is_current,
+        where: item.object_id in ^object_ids,
+        select: {item.object_id, {revision.id, item.metadata["provenance"]}}
+    )
+    |> Map.new()
+  end
+
+  @doc """
   The seeded rows whose concepts are among `qids`, as the manifest wrote them,
   with each row's `object_id` (the content item its fingerprint resolves to).
   Read from the corpus's own source records, so a page asks the registry for
