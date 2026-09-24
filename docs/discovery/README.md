@@ -530,7 +530,7 @@ declares the first.
 | `:news` | Bing News, The Guardian | — | Chronicling America's bulk OCR; GDELT (#134) | attestation, **dated** |
 | `:music` | Spotify | — | MusicBrainz (#116), identity via `P921`/`P2207` | a labelled search, gated on the track title |
 | `:gif` | GIPHY, browser-only — **inside** this chrome since #144 Phase 3, through `Culture.browser_shelf/1` | — | Tenor, after K10 | a labelled search |
-| `:quote` | Wikiquote (#158 build 4) | — | Wiktionary's absorbed quotations (build 1), the public-domain Wikiquote corpus (build 6) | identity: the sense's QID → the theme page's `enwikiquote` sitelink; one line from two sources folds on its `quotation_fingerprint` (ADR 0003) |
+| `:quote` | Wikiquote (#158 build 4) | — | the public-domain Wikiquote corpus (build 6); Wiktionary as a *shelf* source only if a decision asks for it — its absorbed quotations already render **under the sense** on the word page (build 1, `Word.quotations/1`, the same `Quotation.card/1` as this shelf), not on this rail | identity: the sense's QID → the theme page's `enwikiquote` sitelink; one line from two sources folds on its `quotation_fingerprint` (ADR 0003) |
 
 The `:text` decision is #109's second residual, settled here: the two text
 corpora are seeded `evidence: :none` and stay that way. Serving attestation

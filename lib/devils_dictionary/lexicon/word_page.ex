@@ -55,6 +55,7 @@ defmodule DevilsDictionary.Lexicon.WordPage do
   alias DevilsDictionary.Corpus.SourceRecordRevision
   alias DevilsDictionary.Encyclopedia
   alias DevilsDictionary.Markdown
+  alias DevilsDictionary.Quotations.Fingerprint
 
   alias DevilsDictionary.Registry.{
     ContentItem,
@@ -104,6 +105,13 @@ defmodule DevilsDictionary.Lexicon.WordPage do
   # bounding how many of them a source may file.
   @form_cap 8
   @group_cap 3
+  # How many of a sense's quotations show before the rest fold behind a
+  # disclosure (#158 build 1). Wiktionary files ten under *war*'s first sense
+  # and each is a paragraph with a citation, so the cap is what keeps a row
+  # of 25 senses from becoming a page of 24 quotations. Two, because the
+  # wireframe measured two at 375 px as the most that leave the next sense
+  # in view, and because the second is what shows the reader there are more.
+  @quotation_cap 2
   # Two origins is what `love` has and what a rail can carry open; `set` files
   # five, and five paragraphs of descent above the source list is the rail
   # becoming the page.
@@ -215,6 +223,9 @@ defmodule DevilsDictionary.Lexicon.WordPage do
 
   @doc "How many origins the rail shows open before folding the rest into one line."
   def origin_cap, do: @origin_cap
+
+  @doc "How many of a sense's quotations show before “N more quotations for this sense”."
+  def quotation_cap, do: @quotation_cap
 
   @doc """
   Builds the page from a `Lexicon.lookup/2` result.
@@ -736,6 +747,11 @@ defmodule DevilsDictionary.Lexicon.WordPage do
           gloss: rev.gloss,
           url: rev.url,
           tags: rev.tags,
+          # The sense's examples as the absorb kept them — for Wiktionary,
+          # Kaikki's `text`, `ref` and `type` per example (#158 build 1).
+          # Read here, not from the source record's payload: the absorb
+          # copies them onto the revision, so the read is one table shorter.
+          examples: rev.examples,
           position: rev.position,
           external_id: s.external_key,
           record_id: rec.id,
@@ -1087,6 +1103,7 @@ defmodule DevilsDictionary.Lexicon.WordPage do
               tags: s.tags,
               url: link_out(s, source, lemma, nil),
               record_id: s.record_id,
+              quotations: quotations(s.examples),
               relations:
                 relations_by_sense
                 |> Map.get(s.id, [])
@@ -1100,6 +1117,68 @@ defmodule DevilsDictionary.Lexicon.WordPage do
           end)
       }
     end)
+  end
+
+  # The quotations a sense's source filed under it, ready to render (#158
+  # build 1): the ones that are quotations, folded, capped, and each carrying
+  # the provenance it has earned.
+  #
+  # Kaikki's `type` takes three values in the database (read 2026-09-24,
+  # current Wiktionary revisions): `"quotation"` (616,220; 615,886 with a
+  # `ref`), `"example"` (96,139; an invented usage sentence, 6 with a `ref`)
+  # and absent (45,433; 17,341 with a `ref`). A quotation is the first kind
+  # with a citation — the issue's rule — and `quotation?/1` is the one place
+  # that says so, so widening it to the untyped-but-cited lines is a decision
+  # taken once. The column's database default is `{}`, so anything but a
+  # list is no examples at all.
+  #
+  # Folded at display time by the fingerprint (ADR 0003): two examples whose
+  # wording differs only in typography are one quotation shown once, and the
+  # first as filed is the one shown. Nothing is written — the fingerprint is
+  # carried on the map for the renderer's ids and for build 5, never stored
+  # from here.
+  #
+  # `provenance` is *plausible* for every line: one cited claim, unverified,
+  # which is exactly what an absorbed example is until build 5's verifier has
+  # checked it against a primary text. Derived here and stored nowhere.
+  defp quotations(examples) when is_list(examples) do
+    lines =
+      examples
+      |> Enum.filter(&quotation?/1)
+      |> Enum.map(fn example ->
+        %{
+          text: String.trim(example["text"]),
+          ref: example["ref"],
+          citation: citation(example["ref"]),
+          fingerprint: Fingerprint.fingerprint(example["text"]),
+          provenance: "plausible"
+        }
+      end)
+      |> Enum.reject(&is_nil(&1.fingerprint))
+      |> Enum.uniq_by(& &1.fingerprint)
+
+    {shown, rest} = Enum.split(lines, @quotation_cap)
+    %{shown: shown, rest: rest, total: length(lines)}
+  end
+
+  defp quotations(_examples), do: %{shown: [], rest: [], total: 0}
+
+  defp quotation?(%{"type" => "quotation", "text" => text, "ref" => ref})
+       when is_binary(text) and is_binary(ref),
+       do: String.trim(text) != "" and String.trim(ref) != ""
+
+  defp quotation?(_example), do: false
+
+  # The citation as the page prints it. Kaikki's `ref` ends in the colon that
+  # separates a citation from its passage on the wiki page — `…page 52:` —
+  # and beneath a quotation of its own that colon introduces nothing. One
+  # trailing colon is dropped; the words are otherwise the source's, and the
+  # `ref` itself is kept beside it untouched.
+  defp citation(ref) do
+    ref
+    |> String.trim()
+    |> String.replace_suffix(":", "")
+    |> String.trim()
   end
 
   # Wikipedia's entry hangs off a concept and has no part of speech at all; the
