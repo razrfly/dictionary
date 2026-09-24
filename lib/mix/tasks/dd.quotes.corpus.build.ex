@@ -22,7 +22,9 @@ defmodule Mix.Tasks.Dd.Quotes.Corpus.Build do
       overwrite.
 
   `--reselect` makes a fresh selection from the registry and the current
-  pages, and holds the result to the same rule. **Without a manifest** at the
+  pages, and holds the result to the same rule. It reads live: the cache is
+  off unless `--cache` turns it on, because a cached answer is yesterday's
+  page. **Without a manifest** at the
   output path, a fresh selection is built and written.
 
   The task reads the registry and writes nothing to the database. Only the
@@ -71,7 +73,15 @@ defmodule Mix.Tasks.Dd.Quotes.Corpus.Build do
         else: "Making a fresh selection from the registry"
     )
 
-    cache_dir = if Keyword.get(opts, :cache, true), do: opts[:cache_dir] || @default_cache
+    # A re-run from the selection may replay the cache: its requests are pinned,
+    # so a cached answer is the same bytes. `--reselect` asks for today's pages
+    # and today's Wikidata, which a cache would silently replace with
+    # yesterday's — so it reads live unless `--cache` says otherwise (CodeRabbit
+    # on #176).
+    reselect? = Keyword.get(opts, :reselect, false)
+
+    cache_dir =
+      if Keyword.get(opts, :cache, not reselect?), do: opts[:cache_dir] || @default_cache
 
     case Build.run(
            selection: selection,

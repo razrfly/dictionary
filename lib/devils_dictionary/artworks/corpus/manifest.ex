@@ -154,11 +154,16 @@ defmodule DevilsDictionary.Artworks.Corpus.Manifest do
   def work_kind(kind), do: Map.fetch!(@kinds, kind).work_kind
 
   @doc """
-  What a row of this kind can match a page on — `:depiction` or `:none`.
+  What a row of this kind can match a page on — `:depiction`, `:concept` or
+  `:none`.
 
   See `@kinds`. It is a declaration and `Corpus.Conformance` holds it to it:
   a kind that declares `:depiction` must have rows carrying QIDs, and one that
   declares `:none` must have none, so neither can drift into the other quietly.
+  `:concept` is the quotations corpus's (#174): its rows carry the
+  `concept_qids` of the theme pages they were filed under. It lives under
+  `priv/quotes/manifests/`, outside the artworks suite's directory, and has a
+  conformance case of its own on the Quotes shelf.
   """
   def evidence(kind), do: Map.fetch!(@kinds, kind).evidence
 
