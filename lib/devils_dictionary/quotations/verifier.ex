@@ -179,19 +179,27 @@ defmodule DevilsDictionary.Quotations.Verifier do
     )
   end
 
+  # Under the run's row lock, so a review deciding meanwhile either is seen by
+  # `reviewed_since?/1` or waits in `due_now/1` and moves this clock after.
   defp finish(run, status, seconds, summary, error \\ nil) do
-    now = DateTime.utc_now()
+    {:ok, finished} =
+      Repo.transaction(fn ->
+        run = Repo.one!(from r in VerificationRun, where: r.id == ^run.id, lock: "FOR UPDATE")
+        now = DateTime.utc_now()
+        seconds = if status == :succeeded and reviewed_since?(run), do: 0, else: seconds
 
-    run
-    |> Repo.reload!()
-    |> VerificationRun.changeset(%{
-      status: status,
-      completed_at: now,
-      refresh_after: DateTime.add(now, seconds, :second),
-      summary: summary,
-      error_code: error
-    })
-    |> Repo.update!()
+        run
+        |> VerificationRun.changeset(%{
+          status: status,
+          completed_at: now,
+          refresh_after: DateTime.add(now, seconds, :second),
+          summary: summary,
+          error_code: error
+        })
+        |> Repo.update!()
+      end)
+
+    finished
   end
 
   defp summary(verdicts) do
@@ -215,12 +223,7 @@ defmodule DevilsDictionary.Quotations.Verifier do
           select: r.subject_object_id
       )
 
-    claims =
-      Repo.all(
-        from [r, p, a, s] in current_claims(),
-          where: r.subject_object_id in ^content_ids,
-          select: %{revision: r, predicate: p.key, source: s.slug}
-      )
+    claims = claims_on(content_ids)
 
     bodies =
       Repo.all(
@@ -234,19 +237,11 @@ defmodule DevilsDictionary.Quotations.Verifier do
     claims
     |> Enum.group_by(& &1.revision.subject_object_id)
     |> Enum.flat_map(fn {content_id, claims} ->
-      {own, others} = Enum.split_with(claims, &(&1.revision.object_object_id == person_id))
-
       case Map.get(bodies, content_id) do
         %{body: body} = content when is_binary(body) ->
           [
-            %{
-              content_id: content_id,
-              body: body,
-              year: content.year,
-              credits: Enum.filter(own, &(&1.predicate == "authored_by")),
-              misattributions: Enum.filter(own, &(&1.predicate == "misattributed_to")),
-              others: others
-            }
+            %{content_id: content_id, body: body, year: content.year}
+            |> with_claims(claims, person_id)
           ]
 
         _ ->
@@ -254,6 +249,51 @@ defmodule DevilsDictionary.Quotations.Verifier do
       end
     end)
   end
+
+  defp claims_on(content_ids) do
+    Repo.all(
+      from [r, p, a, s] in current_claims(),
+        where: r.subject_object_id in ^content_ids,
+        select: %{revision: r, predicate: p.key, source: s.slug}
+    )
+  end
+
+  defp with_claims(line, claims, person_id) do
+    {own, others} = Enum.split_with(claims, &(&1.revision.object_object_id == person_id))
+
+    Map.merge(line, %{
+      credits: Enum.filter(own, &(&1.predicate == "authored_by")),
+      misattributions: Enum.filter(own, &(&1.predicate == "misattributed_to")),
+      others: others
+    })
+  end
+
+  # The line's claims as they are now, read under the locks a review takes,
+  # in a review's order: every claim's assertion first (the order
+  # `Contributions.review/6` and `Claims.revise/2` lock in), then the item
+  # (`reviewed/1`). The pass fetched its pages outside any transaction, and a
+  # review that committed meanwhile is seen here; one that commits later
+  # waits, and rebadges from what this pass wrote (CodeRabbit on #182).
+  defp relock(line, person_id) do
+    Repo.all(
+      from a in Assertion,
+        where:
+          a.id in subquery(
+            from r in AssertionRevision,
+              where: r.subject_object_id == ^line.content_id and r.is_current,
+              select: r.assertion_id
+          ),
+        order_by: a.id,
+        lock: "FOR UPDATE",
+        select: a.id
+    )
+
+    lock_item!(line.content_id)
+    with_claims(line, claims_on([line.content_id]), person_id)
+  end
+
+  defp lock_item!(content_id),
+    do: Repo.one!(from i in ContentItem, where: i.object_id == ^content_id, lock: "FOR UPDATE")
 
   # A finding is a claim a reader could see (#180 C1): current, active, and
   # through `Claims.visible(:public)` — the filter the card and the person
@@ -274,11 +314,22 @@ defmodule DevilsDictionary.Quotations.Verifier do
   end
 
   defp record_line(line, person_id, page, misquotations, texts) do
+    line = relock(line, person_id)
+
     # What this person's own page and texts say: reached by their identifier,
-    # so it may count for or against a credit to them.
+    # so it may count for or against a credit to them — and for nothing on a
+    # line a review took from them while the pages were fetched.
     checks =
-      Checks.match_page(page, line.body, "wikiquote") ++
-        if(line.credits != [], do: Checks.match_texts(texts, line.body), else: [])
+      cond do
+        line.credits == [] and line.misattributions == [] ->
+          []
+
+        line.credits == [] ->
+          Checks.match_page(page, line.body, "wikiquote")
+
+        true ->
+          Checks.match_page(page, line.body, "wikiquote") ++ Checks.match_texts(texts, line.body)
+      end
 
     # *Misquotations* names no one by identifier: it only ever agrees with a
     # misattribution already held, and never counts against a credit.
@@ -354,7 +405,7 @@ defmodule DevilsDictionary.Quotations.Verifier do
   end
 
   defp rebadge(content_id) do
-    item = Repo.get!(ContentItem, content_id)
+    item = lock_item!(content_id)
 
     if is_map((item.metadata || %{})["provenance"]) do
       claims =
@@ -377,14 +428,33 @@ defmodule DevilsDictionary.Quotations.Verifier do
   end
 
   # The latest pass's clock, moved to now: `due/1` picks the person up on the
-  # next cron tick instead of at the end of their refresh window.
+  # next cron tick instead of at the end of their refresh window. A pass still
+  # running has no clock yet; it is included so that, when `finish/5` holds
+  # its row, this waits and then moves the clock `finish/5` wrote.
   defp due_now(person_id) do
     now = DateTime.utc_now()
 
     from(run in VerificationRun,
-      where: run.subject_object_id == ^person_id and run.refresh_after > ^now
+      where:
+        run.subject_object_id == ^person_id and
+          (run.refresh_after > ^now or (run.status == :running and is_nil(run.refresh_after)))
     )
     |> Repo.update_all(set: [refresh_after: now])
+  end
+
+  # A review of one of this person's claims while the pass ran: its findings
+  # may predate the decision, so the next pass is due now.
+  defp reviewed_since?(%VerificationRun{subject_object_id: person_id, started_at: started_at}) do
+    Repo.exists?(
+      from review in AssertionReview,
+        join: r in AssertionRevision,
+        on: r.id == review.assertion_revision_id,
+        join: p in Predicate,
+        on: p.id == r.predicate_id and p.key in @predicates,
+        where:
+          r.object_object_id == ^person_id and r.subject_kind == "content" and
+            r.subject_subkind == "quotation" and review.inserted_at >= ^started_at
+    )
   end
 
   defp claim_findings(claims, line) do

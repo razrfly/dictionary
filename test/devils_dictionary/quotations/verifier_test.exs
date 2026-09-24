@@ -481,4 +481,29 @@ defmodule DevilsDictionary.Quotations.VerifierTest do
     Verifier.verify_author(ctx.voltaire)
     assert badge("We must cultivate our garden") == nil
   end
+
+  test "a review that lands while a pass fetches wins over the pass's stale reading", ctx do
+    garden = item("We must cultivate our garden")
+    [credit] = Claims.outgoing(garden.object_id, predicate: "authored_by")
+
+    # The rejection commits after the pass read its lines and before it
+    # writes: while it fetches Candide.
+    stub_checkers(ctx.requests, %{
+      "gutenberg.test" => fn conn ->
+        if Claims.review_state(credit.id) == :needs_review,
+          do: {:ok, _} = Claims.review(credit.id, :rejected)
+
+        answer(conn)
+      end
+    })
+
+    run = Verifier.verify_author(ctx.voltaire)
+
+    assert run.status == :succeeded
+    refute badge("We must cultivate our garden") == "verified"
+    assert Claims.current_revision(credit.assertion_id).id == credit.id, "no verifier revision"
+
+    # Its findings may predate the decision, so the pass leaves the person due.
+    assert ctx.voltaire in Verifier.due(10)
+  end
 end
