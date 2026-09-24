@@ -372,7 +372,8 @@ defmodule DevilsDictionary.Quotations.VerifierTest do
     {:ok, _} = Claims.assert(disapprove.object_id, "authored_by", hall, %{confidence: 0.9})
 
     runs = Verifier.run_due(10)
-    assert hall in Enum.map(runs, & &1.subject_object_id)
+    # Her pass ran to the end: a failed one would leave no evidence to refute.
+    assert %{status: :succeeded} = Enum.find(runs, &(&1.subject_object_id == hall))
 
     [credit] = Claims.outgoing(disapprove.object_id, predicate: "authored_by")
     assert credit.object_object_id == hall
