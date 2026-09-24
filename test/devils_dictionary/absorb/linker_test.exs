@@ -6,7 +6,8 @@ defmodule DevilsDictionary.Absorb.LinkerTest do
   """
   use DevilsDictionary.DataCase, async: true
 
-  alias DevilsDictionary.Absorb.Linker
+  alias DevilsDictionary.Absorb.{Linker, Materializer}
+  alias DevilsDictionary.Absorb.Sources.Wordnet
   alias DevilsDictionary.Claims.AssertionRevision
   alias DevilsDictionary.Fixtures
   alias DevilsDictionary.Lexicon.ScopeMember
@@ -136,6 +137,14 @@ defmodule DevilsDictionary.Absorb.LinkerTest do
   end
 
   defp qid_of(object_id), do: DevilsDictionary.Encyclopedia.qid(object_id)
+
+  defp owners(assertion_id) do
+    Repo.all(
+      from o in "source_assertion_outputs",
+        where: o.assertion_id == ^assertion_id,
+        select: o.source_record_id
+    )
+  end
 
   # An encyclopedia's prose about a thing: a content item and an `about` claim.
   defp article!(ctx, entity, body) do
@@ -272,30 +281,16 @@ defmodule DevilsDictionary.Absorb.LinkerTest do
       assert work_link.object_object_id == work.object_id
       assert work_link.predicate.key == "refers_to"
 
-      output =
-        Repo.one!(
-          from o in "source_assertion_outputs",
-            where: o.assertion_id == ^link.assertion_id,
-            select: %{
-              source_record_id: o.source_record_id,
-              last_seen_run_id: o.last_seen_run_id
-            }
-        )
-
-      assert output.source_record_id == link.metadata["source_record_id"]
-      assert output.last_seen_run_id == person_run.id
+      # The record is evidence, not an owner: a link in `source_assertion_outputs`
+      # is one `Materializer.reconcile/2` withdraws on the record's next import.
+      assert owners(link.assertion_id) == []
 
       before = length(Claims.history(work_link.assertion_id))
       rerun = Sources.start_run("link_selected")
       Linker.run_selected(%{lexeme_ids: [title.object_id]}, run_id: rerun.id)
 
       assert length(Claims.history(work_link.assertion_id)) == before
-
-      assert Repo.one!(
-               from o in "source_assertion_outputs",
-                 where: o.assertion_id == ^work_link.assertion_id,
-                 select: o.last_seen_run_id
-             ) == rerun.id
+      assert owners(work_link.assertion_id) == []
     end
 
     test "missing and oversized populations cannot become global crawls" do
@@ -546,6 +541,56 @@ defmodule DevilsDictionary.Absorb.LinkerTest do
 
       assert %{rungs: %{title_match: 0}} = Linker.run(ctx.animals)
       assert links(outside, :title_match) == []
+    end
+
+    # What #183's WordNet re-materialization did to the dev database on
+    # 2026-09-24: every `wordnet_wikidata` and `wordnet_ili` link — 24,196 of
+    # them — withdrawn as "no longer emitted by its source", because the rungs
+    # had registered each link as an output of the synset's record and a
+    # materialize run never emits a ladder link. The synset still carries its
+    # QID; the ladder's reading of it still holds.
+    test "a source re-materialization leaves the ladder's links standing", ctx do
+      n = System.unique_integer([:positive])
+      qid = "Q9#{n}"
+      ili = "i9#{n}"
+      entity = concept!(qid, wordnet_ili: ili)
+
+      raw = %{
+        "id" => "oewn-9#{n}-n",
+        "members" => ["relinked-#{n}"],
+        "partOfSpeech" => "n",
+        "definition" => ["a thing the ladder links twice"],
+        "wikidata" => qid,
+        "ili" => ili,
+        "_edges" => []
+      }
+
+      record = WordFixtures.record!(ctx, "wordnet", raw: raw, external_id: raw["id"])
+
+      materialize = fn ->
+        run = Sources.start_run("materialize", source_id: ctx.sources["wordnet"].id)
+        {:ok, _} = Materializer.run(record, Wordnet, run_id: run.id)
+        Materializer.reconcile(run.id, [record.id])
+      end
+
+      materialize.()
+
+      assert %{rungs: %{wordnet_wikidata: 1, wordnet_ili: 1}} =
+               Linker.run_selected(%{source_record_ids: [record.id]},
+                 run_id: Sources.start_run("link_selected").id
+               )
+
+      materialize.()
+
+      lexeme = Repo.get_by!(DevilsDictionary.Registry.Lexeme, lemma: "relinked-#{n}")
+
+      for method <- [:wordnet_wikidata, :wordnet_ili] do
+        link = link!(lexeme, method)
+        assert link.object_object_id == entity.object_id
+        assert link.lifecycle_state == :active, "#{method} was #{link.lifecycle_state}"
+        # Provenance survives as evidence on the claim, not as ownership.
+        assert link.metadata["source_record_id"] == record.id
+      end
     end
   end
 end

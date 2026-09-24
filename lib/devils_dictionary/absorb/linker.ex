@@ -58,8 +58,15 @@ defmodule DevilsDictionary.Absorb.Linker do
   The reads are: each rung is one set-based statement over a million rows, which
   is the only sane way to do this. The **write** goes through
   `Materializer.write_assertions/3`, so the ladder and the importer share one
-  revision policy, one idempotency key and one ownership rule. Two spellings of
-  "write a claim" is how the two halves of a corpus come to disagree.
+  revision policy and one idempotency key. Two spellings of "write a claim" is
+  how the two halves of a corpus come to disagree.
+
+  What they do **not** share is ownership. A link is the ladder's reading of a
+  record, not something the record emits, so the rungs keep the record they
+  read in the claim's `metadata["source_record_id"]` and never register the
+  link in `source_assertion_outputs`. Registered there, every link became an
+  output that `Materializer.reconcile/2` withdraws when a materialize run does
+  not re-emit it — and a materialize run never emits a ladder link.
   """
 
   import Ecto.Query
@@ -183,8 +190,7 @@ defmodule DevilsDictionary.Absorb.Linker do
              jsonb_build_object(
                'evidence', 'sense_metadata_wikidata',
                'wikidata_qid', q.qid,
-               'source_record_id', source_rev.source_record_id),
-             source_rev.source_record_id
+               'source_record_id', source_rev.source_record_id)
         FROM senses s
         JOIN sources so ON so.id = s.source_id AND so.slug = 'wiktionary'
         JOIN sense_revisions rev ON rev.sense_id = s.object_id AND rev.is_current
@@ -218,8 +224,7 @@ defmodule DevilsDictionary.Absorb.Linker do
              jsonb_build_object(
                'evidence', 'sense_metadata_wikidata',
                'wikidata_qid', q.qid,
-               'source_record_id', source_rev.source_record_id),
-             source_rev.source_record_id
+               'source_record_id', source_rev.source_record_id)
         FROM senses s
         JOIN sources so ON so.id = s.source_id AND so.slug = 'wordnet'
         JOIN sense_revisions rev ON rev.sense_id = s.object_id AND rev.is_current
@@ -249,8 +254,7 @@ defmodule DevilsDictionary.Absorb.Linker do
              jsonb_build_object(
                'evidence', 'sense_metadata_ili',
                'ili', rev.metadata->>'ili',
-               'source_record_id', source_rev.source_record_id),
-             source_rev.source_record_id
+               'source_record_id', source_rev.source_record_id)
         FROM senses s
         JOIN sources so ON so.id = s.source_id AND so.slug = 'wordnet'
         JOIN sense_revisions rev ON rev.sense_id = s.object_id AND rev.is_current
@@ -651,7 +655,7 @@ defmodule DevilsDictionary.Absorb.Linker do
   # Every rung ends the same way: read set-based, write through the shared path.
   #
   # The `SELECT` yields `(subject_id, entity_id, source_id, method, confidence,
-  # metadata[, source_record_id])`. Deduplication happens here rather than in SQL because a rung can
+  # metadata)`. Deduplication happens here rather than in SQL because a rung can
   # propose the same claim twice — a Wiktionary sense listing one QID twice, two
   # candidate titles redirecting to one article — and `write_assertions/3` keys
   # on `origin_key`, which is what makes the second proposal the same claim.
@@ -660,7 +664,7 @@ defmodule DevilsDictionary.Absorb.Linker do
 
     claims =
       Enum.map(rows, fn row ->
-        [subject, object, source, method, confidence, metadata | provenance] = row
+        [subject, object, source, method, confidence, metadata] = row
 
         %{
           subject: subject,
@@ -673,8 +677,14 @@ defmodule DevilsDictionary.Absorb.Linker do
           # as `Decimal`. `assertion_revisions.confidence` is a float8, so it is
           # cast here rather than by decorating every literal in five rungs.
           confidence: to_float(confidence),
-          metadata: metadata || %{},
-          source_record_id: List.first(provenance)
+          # No `source_record_id`, deliberately. The record a rung read is
+          # evidence, and it is kept in `metadata`; passing it here would make
+          # the link an *output* of that record in `source_assertion_outputs`,
+          # and `Materializer.reconcile/2` withdraws every output a materialize
+          # run did not re-emit — which is every ladder link, since the
+          # materializer never emits one. #183's WordNet re-materialization
+          # withdrew 24,196 of them that way on 2026-09-24.
+          metadata: metadata || %{}
         }
       end)
       |> Enum.uniq_by(& &1.origin_key)

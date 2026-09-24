@@ -1158,7 +1158,13 @@ defmodule DevilsDictionary.Absorb.Materializer do
 
   One helper for every claim written anywhere in the absorb — `Absorb.Linker`
   calls it too, so the ladder's rungs and the materializer share one revision
-  policy, one idempotency key and one ownership rule rather than three.
+  policy and one idempotency key rather than two.
+
+  Ownership follows `source_record_id`: a claim that names one is registered as
+  that record's output in `source_assertion_outputs`, and `reconcile/2` will
+  withdraw it when a run over that record stops emitting it. So only a record's
+  own output may name it — the ladder, which reads records but is not emitted
+  by them, passes none.
 
   Each claim is a map of `subject`, `predicate` (a key), `object`, `source_id`,
   `origin_key`, and optionally `source_record_id`, `method`, `confidence` and
