@@ -1311,7 +1311,7 @@ defmodule DevilsDictionary.Absorb.Materializer do
           origin_key: relation_key(r),
           method: "source",
           confidence: r[:weight],
-          metadata: r[:metadata] || %{}
+          metadata: relation_metadata(r)
         }
       end)
       |> Enum.reject(&is_nil(&1.subject))
@@ -1498,8 +1498,23 @@ defmodule DevilsDictionary.Absorb.Materializer do
   # skipped, never raised on, and the second pass closes it.
   defp pending_metadata(r) do
     case r[:to_sense] do
-      nil -> r[:metadata] || %{}
-      key -> Map.put(r[:metadata] || %{}, "to_sense", key)
+      nil -> relation_metadata(r)
+      key -> Map.put(relation_metadata(r), "to_sense", key)
+    end
+  end
+
+  # The source's own label for an edge, kept on the claim (#181). A source
+  # names the edge in `subtype` — WordNet's `domain_region`, Wiktionary's
+  # `troponyms`, a meronym's `part` — and the `other` predicate's description
+  # promises that the label "is kept in the assertion's metadata so nothing is
+  # lost". Until #181 it was dropped here, and 155,262 current `other` rows
+  # could not say what they were: *Korean War → war* (an instance) and *Korean
+  # War → Korea* (a region) were the same row. A pending row carries it too,
+  # because the resolver writes its claim from the pending row's metadata.
+  defp relation_metadata(r) do
+    case r[:subtype] do
+      label when is_binary(label) and label != "" -> Map.put(r[:metadata] || %{}, "label", label)
+      _none -> r[:metadata] || %{}
     end
   end
 

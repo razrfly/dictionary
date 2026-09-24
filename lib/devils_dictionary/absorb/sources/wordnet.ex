@@ -23,12 +23,18 @@ defmodule DevilsDictionary.Absorb.Sources.Wordnet do
 
     * **`definition` is an array**, not a string.
 
-  `similar` (23,176), `instance_hypernym` (8,599), `domain_topic`, `exemplifies`,
-  `attribute`, `entails`, `causes` and `domain_region` have no slot in the
-  `lexical_relations` type enum, so they land as `:other` with the source's own
-  label in `subtype` — which is what #69 §4 asks for. `:synonym` rows are never
-  written: in WordNet synonymy is co-membership of a synset, which the word page
-  reads off `senses.group_key`.
+  `instance_hypernym` (8,599 synset pairs) is `:instance_of` (#181): the same
+  relation as Wikidata's P31, a named individual filed under a class, written
+  instance → class. It used to land as `:other` like the rest, which is why
+  *war* named none of its wars.
+
+  `similar` (23,176), `domain_topic`, `exemplifies`, `attribute`, `entails`,
+  `causes` and `domain_region` have no slot in the `lexical_relations` type
+  enum, so they land as `:other` with the source's own label in `subtype` —
+  which is what #69 §4 asks for, and which the materializer keeps as
+  `metadata["label"]`. `:synonym` rows are never written: in WordNet synonymy
+  is co-membership of a synset, which the word page reads off
+  `senses.group_key`.
 
   22,036 synsets carry a `wikidata` QID. #69's linking ladder does not list that
   rung, but it is free and high-signal, so it is kept in `senses.metadata` for
@@ -198,7 +204,18 @@ defmodule DevilsDictionary.Absorb.Sources.Wordnet do
   defp map_type("holo_substance"), do: {:holonym, "substance"}
   defp map_type("holo_member"), do: {:holonym, "member"}
   defp map_type("also"), do: {:see_also, nil}
+  # The source's own key stays in `subtype`, so the label survives into the
+  # assertion's metadata beside the mapped predicate.
+  defp map_type("instance_hypernym"), do: {:instance_of, "instance_hypernym"}
   defp map_type(other), do: {:other, other}
+
+  # An edge as `materialize/1` reads it. `raw` written before #181 filed
+  # `instance_hypernym` as `other`, and re-materializing is meant to work from
+  # `raw` alone with the dump deleted (M2) — so an `other` edge is mapped again
+  # from the key it kept. A mapping added later reaches every stored record
+  # without a re-absorb, and an edge that is still unmapped maps to itself.
+  defp edge_type(%{"type" => "other", "subtype" => key}) when is_binary(key), do: map_type(key)
+  defp edge_type(edge), do: {String.to_existing_atom(edge["type"]), edge["subtype"]}
 
   # `raw` carries everything materialize/1 needs, so re-materializing works with
   # the dump deleted and the network off.
@@ -271,6 +288,7 @@ defmodule DevilsDictionary.Absorb.Sources.Wordnet do
 
     relations =
       for edge <- raw["_edges"] || [],
+          {type, subtype} = edge_type(edge),
           member <- members,
           target <- edge["to_members"] || [] do
         %{
@@ -286,8 +304,8 @@ defmodule DevilsDictionary.Absorb.Sources.Wordnet do
           # (#69 §4: WordNet relations are "resolved at absorb") without a
           # second set-based statement over a table that no longer exists.
           to_sense: sense_id(edge["to"], target),
-          type: String.to_existing_atom(edge["type"]),
-          subtype: edge["subtype"]
+          type: type,
+          subtype: subtype
         }
       end
 

@@ -264,6 +264,12 @@
       "lemma": "oyster",
       "records": 4,
       "source": "wordnet"
+    },
+    {
+      "bytes": 941,
+      "lemma": "Hitler",
+      "records": 1,
+      "source": "wordnet"
     }
   ],
   "sources": {

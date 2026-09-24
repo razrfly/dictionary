@@ -98,6 +98,49 @@ defmodule DevilsDictionary.Absorb.Sources.WordnetTest do
     refute Enum.any?(others, &(&1.subtype in ["hypernym", "hyponym"]))
   end
 
+  describe "instance edges (#181)" do
+    # The fixture is `raw` as the absorb stored it before #181, when the edge was
+    # filed as `other` with the key in `subtype`. Re-materializing from stored
+    # `raw` is the path the fix has to reach (M2), so this is the case that
+    # matters; the second test is `raw` as the absorb writes it now.
+    test "instance_hypernym is instance_of, from each member to each class member" do
+      %{relations: relations} = merge(materialize("Hitler"))
+      instances = Enum.filter(relations, &(&1.type == :instance_of))
+
+      assert length(instances) == length(relations)
+      assert Enum.all?(instances, &(&1.subtype == "instance_hypernym"))
+
+      # Direction is instance → class, as P31: the named individual is the subject.
+      assert {"en", "Adolf Hitler", "noun"} in Enum.map(instances, & &1.from_lexeme)
+      assert "oewn-10031556-n#dictator" in Enum.map(instances, & &1.to_sense)
+
+      # Three members of Hitler's synset, two members of each of two classes.
+      assert length(instances) == 3 * 2 + 3 * 2
+    end
+
+    test "raw written after #181 materializes to the same relations" do
+      [raw] = Fixtures.raw("wordnet", "Hitler")
+
+      rewritten =
+        Map.update!(raw, "_edges", fn edges ->
+          Enum.map(edges, &Map.put(&1, "type", "instance_of"))
+        end)
+
+      {:ok, old} = Wordnet.materialize(Fixtures.source_record(raw, source_id: 7, id: 99))
+      {:ok, new} = Wordnet.materialize(Fixtures.source_record(rewritten, source_id: 7, id: 99))
+
+      assert old.relations == new.relations
+    end
+
+    test "an edge with no mapping stays other with its label" do
+      %{relations: relations} = merge(materialize("dog"))
+
+      assert relations
+             |> Enum.filter(&(&1.subtype == "exemplifies"))
+             |> Enum.all?(&(&1.type == :other))
+    end
+  end
+
   test "synonymy is never a relation row — it is co-membership of a synset" do
     %{relations: relations} = merge(materialize("cat"))
 

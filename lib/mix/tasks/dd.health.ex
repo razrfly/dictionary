@@ -170,6 +170,12 @@ defmodule Mix.Tasks.Dd.Health do
 
     unresolved = Health.resolution("wiktionary").top_unresolved
     if unresolved != [], do: say("  most-referenced unresolved: " <> sample(unresolved))
+
+    # The residual #181's label fix has not reached: an `other` row a source
+    # wrote before its last re-materialization, which cannot say what it is.
+    for o <- Health.unlabeled_other() do
+      row("  #{o.source} other unlabeled", ratio(o.unlabeled, o.total), 14)
+    end
   end
 
   defp sample(rows) do
