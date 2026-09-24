@@ -18,7 +18,8 @@ defmodule DevilsDictionaryWeb.Quotation do
 
     * a **source badge** per source that holds the line — after build 3's
       fold that can be more than one, and each is the row's own mark;
-    * a **provenance badge** — *Plausible*, *Disputed* or *Apocryphal* — that
+    * a **provenance badge** — *Verified* (build 5), *Plausible*, *Disputed* or
+      *Apocryphal* — that
       says how far the line is trusted, tinted by the answer and never by
       who supplied it. Absent when the caller has no answer at all.
   """
@@ -46,7 +47,12 @@ defmodule DevilsDictionaryWeb.Quotation do
 
   attr :provenance, :string,
     default: nil,
-    doc: "`plausible`, `disputed` or `apocryphal`; nothing when the caller has no answer"
+    doc:
+      "`verified`, `plausible`, `disputed` or `apocryphal`; nothing when the caller has no answer"
+
+  attr :agreements, :integer,
+    default: nil,
+    doc: "how many independent sources the verifier found agreeing, for the badge's title"
 
   attr :note, :string, default: nil, doc: "a sentence beneath the badges, the register's verbatim"
 
@@ -100,9 +106,11 @@ defmodule DevilsDictionaryWeb.Quotation do
         <span
           :if={@provenance}
           id={"#{@id}-provenance"}
-          title={@note}
+          title={@note || agreements_title(@agreements)}
           class={[
             "inline-flex rounded-full px-2 py-0.5 text-xs",
+            @provenance == "verified" &&
+              "bg-emerald-100 text-emerald-900 dark:bg-emerald-400/20 dark:text-emerald-100",
             @provenance == "plausible" &&
               "bg-mist-950/5 text-mist-700 dark:bg-white/10 dark:text-mist-300",
             @provenance == "disputed" &&
@@ -124,7 +132,13 @@ defmodule DevilsDictionaryWeb.Quotation do
     """
   end
 
+  # One source is a citation, not an agreement.
+  defp agreements_title(n) when is_integer(n) and n > 1, do: "#{n} independent sources agree"
+  defp agreements_title(1), do: "1 source cites this line"
+  defp agreements_title(_none), do: nil
+
   @doc "The badge's word for a provenance value."
+  def label("verified"), do: "Verified"
   def label("plausible"), do: "Plausible"
   def label("disputed"), do: "Disputed"
   def label("apocryphal"), do: "Apocryphal"

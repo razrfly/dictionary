@@ -1,0 +1,36 @@
+{
+  "head" : {
+    "vars" : [ "work", "workLabel", "pg" ]
+  },
+  "results" : {
+    "bindings" : [ {
+      "work" : {
+        "type" : "uri",
+        "value" : "http://www.wikidata.org/entity/Q2127756"
+      },
+      "pg" : {
+        "type" : "literal",
+        "value" : "21279"
+      },
+      "workLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "2 B R 0 2 B"
+      }
+    }, {
+      "work" : {
+        "type" : "uri",
+        "value" : "http://www.wikidata.org/entity/Q7820293"
+      },
+      "pg" : {
+        "type" : "literal",
+        "value" : "30240"
+      },
+      "workLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Tomorrow and Tomorrow and Tomorrow"
+      }
+    } ]
+  }
+}

@@ -35,6 +35,10 @@ defmodule DevilsDictionary.Discovery.Result do
     field :creator_links, {:array, :map}, virtual: true, default: []
     field :object_kind, Ecto.Enum, values: [:lexeme, :sense, :entity, :content], virtual: true
     field :content_revision_id, :id, virtual: true
+    # The quotation verifier's verdict on a content object (#158 build 5),
+    # read from `content_items.metadata["provenance"]` at display time: the
+    # badge the card shows over the provider's own first guess.
+    field :provenance, :map, virtual: true
 
     field :resolution_state, Ecto.Enum,
       values: [:matched, :newly_created, :insufficient_evidence, :conflicting_identifiers],

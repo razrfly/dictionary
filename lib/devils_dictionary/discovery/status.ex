@@ -228,6 +228,79 @@ defmodule DevilsDictionary.Discovery.Status do
   end
 
   @doc """
+  What the quotation verifier has done (#158 build 5): one row per checker —
+  its budget now, whether it is live and, if not, why — plus the passes by
+  outcome and the badges the held quotations carry.
+
+  The checkers that share a host with a provider (Wikiquote's author pages,
+  Wikidata's sitelinks and works) are counted on that host's budget, which is
+  the point of one ledger; the rows here are the checkers' own.
+  """
+  def verification(opts \\ []) do
+    now = Keyword.get(opts, :now, DateTime.utc_now())
+    sources = sources()
+
+    checkers =
+      for attrs <- DevilsDictionary.Quotations.Checkers.source_catalog() do
+        source = Map.get(sources, attrs.slug)
+        used = if source, do: used(source.id, attrs.slug, now), else: 0
+
+        %{
+          slug: attrs.slug,
+          name: attrs.name,
+          active: (source && source.active) || false,
+          inactive_because: attrs.config["inactive_because"],
+          budget: budget(attrs.slug, used)
+        }
+      end
+
+    runs =
+      from(run in DevilsDictionary.Quotations.VerificationRun,
+        group_by: run.status,
+        select: {run.status, count(run.id)}
+      )
+      |> Repo.all()
+      |> Map.new(fn {status, count} -> {Atom.to_string(status), count} end)
+
+    %{rows: rows} =
+      Repo.query!("""
+      SELECT metadata->'provenance'->>'badge', count(*)
+        FROM content_items
+       WHERE content_kind = 'quotation' AND metadata ? 'provenance'
+       GROUP BY 1
+      """)
+
+    %{
+      checkers: checkers,
+      shared:
+        for(
+          slug <- ~w(wikiquote wikidata),
+          do: {slug, budget(slug, used_by_slug(sources, slug, now))}
+        ),
+      runs: runs,
+      badges: Map.new(rows, fn [badge, count] -> {badge || "none", count} end)
+    }
+  end
+
+  defp used_by_slug(sources, slug, now) do
+    case Map.get(sources, slug) do
+      nil -> 0
+      source -> used(source.id, slug, now)
+    end
+  end
+
+  defp used(source_id, slug, now) do
+    cutoff = DateTime.add(now, -window(slug), :second)
+
+    Repo.aggregate(
+      from(attempt in RequestAttempt,
+        where: attempt.source_id == ^source_id and attempt.attempted_at > ^cutoff
+      ),
+      :count
+    )
+  end
+
+  @doc """
   Environment names `allowed_provider_env` admits that no registered provider
   claims, with whether each one is set.
 

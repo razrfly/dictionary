@@ -38,6 +38,7 @@ defmodule DevilsDictionaryWeb.DiscoveryLive do
       rows: Status.rows(now: now),
       preflight: Status.preflight(),
       creators: Status.creator_identity(now: now),
+      verification: Status.verification(now: now),
       unclaimed: Status.unclaimed_credentials(),
       loaded_at: now
     )
@@ -160,6 +161,67 @@ defmodule DevilsDictionaryWeb.DiscoveryLive do
           class="mt-4 text-sm/7 text-mist-500"
         >
           No held result credits a creator yet.
+        </p>
+      </.section>
+
+      <%!-- #158 build 5: the quotation verifier. One budget row per checker,
+           and for the ones that are off, why — a measured exclusion and a
+           permission not yet given are different mornings. --%>
+      <.section
+        id="discovery-verification"
+        eyebrow="Quotation verifier"
+        headline="What checks the quotes"
+        subheadline="Each checker reaches its evidence by an identifier: the credited person's own Wikiquote page by their sitelink, and the texts Wikidata says they wrote. A badge is Verified only when two independent sources agree and one is a primary text."
+      >
+        <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
+          <.stat value={number(Map.get(@verification.runs, "succeeded", 0))}>
+            passes completed, each per person and re-run when its clock runs out
+          </.stat>
+          <.stat value={
+            number(
+              Map.get(@verification.runs, "deferred", 0) + Map.get(@verification.runs, "failed", 0)
+            )
+          }>
+            passes deferred or failed, waiting for their retry time
+          </.stat>
+          <.stat value={
+            Enum.map_join(
+              ~w(verified plausible disputed apocryphal),
+              " · ",
+              &"#{Map.get(@verification.badges, &1, 0)} #{&1}"
+            )
+          }>
+            badges on held quotations
+          </.stat>
+        </div>
+
+        <.table
+          id="discovery-verification-checkers"
+          rows={@verification.checkers}
+          row_id={&"checker-#{&1.slug}"}
+        >
+          <:col :let={c} label="checker"><span class="font-medium">{c.slug}</span></:col>
+          <:col :let={c} label="state">
+            <.badge tone={if(c.active, do: :ready, else: :quiet)}>
+              {if c.active, do: "live", else: "off"}
+            </.badge>
+          </:col>
+          <:col :let={c} label="budget">
+            <span title={"per #{duration(c.budget.window_seconds)}"}>
+              {c.budget.used}/{c.budget.limit || "?"}
+            </span>
+          </:col>
+          <:col :let={c} label="why off">
+            <span :if={c.inactive_because} class="text-mist-500">{c.inactive_because}</span>
+            <span :if={is_nil(c.inactive_because)} class="text-mist-400">—</span>
+          </:col>
+        </.table>
+
+        <p class="mt-4 max-w-2xl text-sm/7 text-pretty text-mist-700 dark:text-mist-400">
+          Wikiquote's author pages and Wikidata's sitelinks and works lists are
+          spent on those hosts' own budgets: {Enum.map_join(@verification.shared, " · ", fn {slug, b} ->
+            "#{slug} #{b.used}/#{b.limit || "?"}"
+          end)}.
         </p>
       </.section>
 

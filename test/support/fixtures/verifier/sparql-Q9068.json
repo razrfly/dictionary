@@ -1,0 +1,64 @@
+{
+  "head" : {
+    "vars" : [ "work", "workLabel", "pg" ]
+  },
+  "results" : {
+    "bindings" : [ {
+      "work" : {
+        "type" : "uri",
+        "value" : "http://www.wikidata.org/entity/Q140057"
+      },
+      "pg" : {
+        "type" : "literal",
+        "value" : "18972"
+      },
+      "workLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Zadig or Destiny"
+      }
+    }, {
+      "work" : {
+        "type" : "uri",
+        "value" : "http://www.wikidata.org/entity/Q215894"
+      },
+      "pg" : {
+        "type" : "literal",
+        "value" : "19942"
+      },
+      "workLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Candide"
+      }
+    }, {
+      "work" : {
+        "type" : "uri",
+        "value" : "http://www.wikidata.org/entity/Q1985932"
+      },
+      "pg" : {
+        "type" : "literal",
+        "value" : "4651"
+      },
+      "workLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "The Huron; or, Pupil of Nature"
+      }
+    }, {
+      "work" : {
+        "type" : "uri",
+        "value" : "http://www.wikidata.org/entity/Q113150681"
+      },
+      "pg" : {
+        "type" : "literal",
+        "value" : "30123"
+      },
+      "workLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Micromegas"
+      }
+    } ]
+  }
+}

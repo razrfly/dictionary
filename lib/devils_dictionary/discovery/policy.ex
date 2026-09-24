@@ -68,7 +68,9 @@ defmodule DevilsDictionary.Discovery.Policy do
   # Budgets that belong to a source which is not a discovery provider but is
   # spent from inside a provider's run. Wikidata is the one: creator identity
   # fetches the QIDs a result credits and the registry lacks (#164 C1).
-  @shared_budgets ~w(wikidata)
+  # Since #158 build 5, the quotation verifier's checkers too: they are spent
+  # from verification runs, never from a provider's.
+  @shared_budgets ~w(wikidata gutenberg wikisource internet-archive quote-investigator google-books)
 
   @doc """
   Source slugs that carry a `source_policies` row without being providers.

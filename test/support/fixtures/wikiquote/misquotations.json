@@ -1,0 +1,17 @@
+{
+  "body_file": "misquotations.html.gz",
+  "captured_at": "2026-09-24T00:56:28.343980Z",
+  "counts": {
+    "quotations": 57,
+    "register": 93
+  },
+  "headers": {
+    "content-revision-id": "3935023",
+    "content-type": "text/html; charset=utf-8; profile=\"https://www.mediawiki.org/wiki/Specs/HTML/2.8.0\"",
+    "etag": "W/\"3935023/e102316b-b4fb-11f1-902b-7932b6a8a1a1/view/html\""
+  },
+  "raw_bytes": 347700,
+  "status": 200,
+  "title": "Misquotations",
+  "url": "https://en.wikiquote.org/api/rest_v1/page/html/Misquotations"
+}

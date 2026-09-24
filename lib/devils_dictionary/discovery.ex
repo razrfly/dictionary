@@ -17,7 +17,7 @@ defmodule DevilsDictionary.Discovery do
   alias DevilsDictionary.Discovery.{Mapping, Policy, Providers, Result, Run}
   alias DevilsDictionary.Discovery.RunWorker
   alias DevilsDictionary.Lexicon
-  alias DevilsDictionary.Registry.{ContentRevision, Lexeme, Object, Sense}
+  alias DevilsDictionary.Registry.{ContentItem, ContentRevision, Lexeme, Object, Sense}
   alias DevilsDictionary.Repo
   alias DevilsDictionary.SourceIdentity
   alias DevilsDictionary.SourceIdentity.Resolution
@@ -1219,28 +1219,33 @@ defmodule DevilsDictionary.Discovery do
             on: object.id == result.object_id,
             left_join: content in ContentRevision,
             on: content.content_id == result.object_id and content.is_current,
+            left_join: item in ContentItem,
+            on: item.object_id == result.object_id,
             where:
               result.run_id in ^run_ids and result.display_allowed and
                 (is_nil(result.source_record_id) or record.display_allowed),
             order_by: [asc: result.run_id, asc: result.position],
-            select: {result, revision.payload["identifiers"], object.kind, content.id}
+            select:
+              {result, revision.payload["identifiers"], object.kind, content.id,
+               item.metadata["provenance"]}
         )
 
       # One read for the whole shelf (#164 C5): the creators the registry
       # credits now, never the hint the run wrote.
       credited =
         results
-        |> Enum.map(fn {result, _, _, _} -> result.object_id end)
+        |> Enum.map(fn {result, _, _, _, _} -> result.object_id end)
         |> Enum.reject(&is_nil/1)
         |> SourceIdentity.Creators.credited()
 
       results
-      |> Enum.map(fn {result, identifiers, kind, content_revision_id} ->
+      |> Enum.map(fn {result, identifiers, kind, content_revision_id, provenance} ->
         %{
           result
           | identifiers: Enum.filter(List.wrap(identifiers), &is_map/1),
             object_kind: kind,
             content_revision_id: content_revision_id,
+            provenance: if(is_map(provenance), do: provenance),
             creator_links: Map.get(credited, result.object_id, [])
         }
       end)
