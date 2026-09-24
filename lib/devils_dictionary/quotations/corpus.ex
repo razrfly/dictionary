@@ -243,9 +243,13 @@ defmodule DevilsDictionary.Quotations.Corpus do
   # A concept the line's page is filed under, as the reason names it: the
   # page's own item, or — for a concept the build reached the page from by
   # the concept hop (#172 build A, `concept_qids_via`) — the page's item with
-  # the path, the way the live provider records one.
+  # the path, the way the live provider records one. The page is the one
+  # that concept was found on (`concept_pages`), because a line found on two
+  # pages folds to one row with one `"page"` (CodeRabbit on #184); a row
+  # built before the hop has only that one.
   defp sitelink(row, qid) do
-    link = %{"qid" => qid, "title" => row["page"], "site" => "enwikiquote", "wiki" => "Wikiquote"}
+    title = get_in(row, ["concept_pages", qid]) || row["page"]
+    link = %{"qid" => qid, "title" => title, "site" => "enwikiquote", "wiki" => "Wikiquote"}
 
     case get_in(row, ["concept_qids_via", qid]) do
       [_ | _] = via ->

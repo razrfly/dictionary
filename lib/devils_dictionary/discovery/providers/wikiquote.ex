@@ -31,7 +31,7 @@ defmodule DevilsDictionary.Discovery.Providers.Wikiquote do
 
     1. `sitelinks` — `wbgetentities` for the page's QIDs, `sitefilter=enwikiquote`
        and their claims (the Wikidata client's parameters, this provider's
-       budget), which is also the hop's first step; then `hop`, at most two
+       budget), which is also the hop's first step; then `hop:1` and `hop:2`, at most two
        more, one per step, only when none of those QIDs has a page
        (`ConceptHop`)
     2. `page` — `GET /api/rest_v1/page/html/<title>`: Parsoid HTML, capped at
@@ -421,8 +421,9 @@ defmodule DevilsDictionary.Discovery.Providers.Wikiquote do
   defp hop(entities, nodes, rule, request_fun) do
     origins = for entity <- entities, ConceptHop.origin?(entity["kind"]), do: entity["qid"]
 
-    fetch = fn qids ->
-      case request_fun.("hop", sitelinks_payload(qids, rule)) do
+    # One stage per step, so each has its own retries (CodeRabbit on #184).
+    fetch = fn qids, step ->
+      case request_fun.("hop:#{step}", sitelinks_payload(qids, rule)) do
         {:ok, body} ->
           {:ok, WikidataClient.hop_nodes(body, @site, ConceptHop.claim_properties())}
 

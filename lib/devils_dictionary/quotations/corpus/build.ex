@@ -16,8 +16,11 @@ defmodule DevilsDictionary.Quotations.Corpus.Build do
       work). The page records which concepts reached it and how
       (`"via_from"`), and each line filed there carries them in
       `concept_qids` with the path in `concept_qids_via`. A selection made
-      before the hop has no `"hop"` key and re-runs as it was built; one made
-      with it is a new manifest version (`wikiquote-pd-v2`).
+      before the hop has no `"hop"` key and re-runs as it was built. One made
+      with it is a different set, which `mix dd.quotes.corpus.build` refuses
+      to write over the committed `wikiquote-pd-v1`: it goes out as a new
+      version, and that version (with its own source row) is a follow-up on
+      #172, not something this module decides.
     * **Author pages.** Every person the registry holds with a QID, and their
       own page. The page is read only when the person has a Gutenberg work
       dated before 1931, because nobody else can verify a line
@@ -367,7 +370,7 @@ defmodule DevilsDictionary.Quotations.Corpus.Build do
 
   defp hops(ctx, origins, nodes) do
     ctx.progress.("hop: #{length(origins)} concepts with no page of their own")
-    ConceptHop.reach(origins, nodes, &nodes(ctx, &1, "wikidata:hop"))
+    ConceptHop.reach(origins, nodes, fn qids, _step -> nodes(ctx, qids, "wikidata:hop") end)
   end
 
   # Each page a hop reached, new or already selected, with the concepts that
@@ -1114,10 +1117,17 @@ defmodule DevilsDictionary.Quotations.Corpus.Build do
     |> Enum.uniq()
   end
 
-  # A selection made with the hop records every line's paths, even none; one
-  # made before it does not, so it re-runs to the same rows and checksum.
-  defp with_via(row, %{"via_from" => from}),
-    do: Map.put(row, "concept_qids_via", Map.new(from, &{&1["qid"], &1["via"]}))
+  # A selection made with the hop records every line's paths, even none, and
+  # the page each concept was found on; one made before it does not, so it
+  # re-runs to the same rows and checksum. The page per concept matters once
+  # `fold/1` merges a line found on two pages: the folded row keeps one
+  # `"page"`, and a reason naming that page for the other page's concept
+  # would be false (CodeRabbit on #184).
+  defp with_via(row, %{"via_from" => from} = page) do
+    row
+    |> Map.put("concept_qids_via", Map.new(from, &{&1["qid"], &1["via"]}))
+    |> Map.put("concept_pages", Map.new(concept_qids(page), &{&1, row["page"]}))
+  end
 
   defp with_via(row, _page), do: row
 
@@ -1139,12 +1149,10 @@ defmodule DevilsDictionary.Quotations.Corpus.Build do
       concepts = group |> Enum.flat_map(& &1["concept_qids"]) |> Enum.uniq() |> Enum.sort()
 
       via =
-        if Enum.any?(group, &Map.has_key?(&1, "concept_qids_via")),
-          do: %{
-            "concept_qids_via" =>
-              Enum.reduce(group, %{}, &Map.merge(&2, &1["concept_qids_via"] || %{}))
-          },
-          else: %{}
+        for key <- ~w(concept_qids_via concept_pages),
+            Enum.any?(group, &Map.has_key?(&1, key)),
+            into: %{},
+            do: {key, Enum.reduce(group, %{}, &Map.merge(&2, &1[key] || %{}))}
 
       also =
         group

@@ -131,7 +131,7 @@ corpus build.
 | From | an item the registry holds as a `concept` or an `event`, and never one whose own `P31` is a person or a work |
 | Never onto or through | an item whose `P31` is human, fictional human, character, or one of 14 creative-work classes (`@refused`, labels confirmed live in H1) |
 | `P31` | only from an instance (no `P279` of its own), only onto a class (has a `P279`), and only as the last step — the two guards H3 and H4 added after H2 |
-| Cost | the sitelinks request carries `props=sitelinks|claims` (filtered client-side by `WikidataClient.hop_nodes/3`), so a direct sitelink costs nothing extra; each step one more `wbgetentities`. *coward* costs 5 requests on the Wikiquote budget (sitelinks, hop, page, authors, humans) |
+| Cost | the sitelinks request carries `props=sitelinks\|claims` (filtered client-side by `WikidataClient.hop_nodes/3`), so a direct sitelink costs nothing extra; each step one more `wbgetentities`, on its own stage (`hop:1`, `hop:2`) so each step has its own retries. *coward* costs 5 requests on the Wikiquote budget (sitelinks, hop:1, page, authors, humans) |
 | Record | the recipe freezes the rule (`parameters["hop"]`) and `mapping_identity/1` digests it; each result's `match_details["sitelinks"][…]` carries `"from"`, `"via"` and `"reached"`; the corpus row carries `concept_qids_via` |
 | Reason | *From Wikiquote's page “Cowardice”, the concept a sense of “coward” has as its characteristic (Q1401607).* |
 
@@ -143,7 +143,7 @@ User-Agent, at least 300 ms after the one before.
 | # | requests | what was asked | what came back | running total |
 |---|---|---|---|---|
 | H1 | 1 | `wbgetentities props=labels` for the 17 refused classes | all 17 labels as intended (human … comic) | **1** |
-| H2 | 4 | the hop alone on the 13 probe words (#158's twelve + *coward*), senses from the dev registry: `sitelinks|claims` for the 3 words with a sense link, one hop step | table below | **5** |
+| H2 | 4 | the hop alone on the 13 probe words (#158's twelve + *coward*), senses from the dev registry: `sitelinks\|claims` for the 3 words with a sense link, one hop step | table below | **5** |
 | H3 | 7 | the hop on a fixed sample of 50 of the registry's 2,165 hop origins (lowest `md5(qid)`), before the `P31` guards | direct 12 · hop 21 · neither 17 — with *luthier* → *profession* → **Wage**, *witch doctor* → *occupation* → **Labor**, *aunt* → **Brotherhood** | **12** |
 | H4 | 5 | the same sample with `P31` read only off an instance | direct 12 · hop 18 · neither 20; *witch doctor* → **Labor** still (it has no `P279`) | **17** |
 | H5 | 5 | the same sample with `P31` also a last step only (as built) | direct 12 · **hop 17** · neither 21 | **22** |

@@ -145,8 +145,11 @@ defmodule DevilsDictionary.Discovery.ConceptHop do
   hoppable kind by the caller — to the nearest items with a page.
 
   `nodes` holds at least the origins' nodes (the caller's sitelinks answer).
-  `fetch.(qids)` answers `{:ok, nodes}` for more of them, or anything else,
-  which the walk returns unchanged: a deferral stays a deferral.
+  `fetch.(qids, step)` answers `{:ok, nodes}` for more of them, or anything
+  else, which the walk returns unchanged: a deferral stays a deferral. `step`
+  is 1 or 2, so a caller can account each step's request on its own (a
+  budget that counts retries per stage would otherwise let the first step's
+  retries starve the second's — CodeRabbit on #184).
 
   Options:
 
@@ -178,6 +181,7 @@ defmodule DevilsDictionary.Discovery.ConceptHop do
       steps: rule["max_steps"],
       first?: first?,
       max_per_step: max_per_step,
+      step: 1,
       hits: %{}
     })
   end
@@ -195,7 +199,7 @@ defmodule DevilsDictionary.Discovery.ConceptHop do
       |> Enum.reject(&Map.has_key?(nodes, &1))
       |> cap(state.max_per_step)
 
-    with {:ok, nodes} <- fetch_nodes(wanted, nodes, fetch) do
+    with {:ok, nodes} <- fetch_nodes(wanted, nodes, &fetch.(&1, state.step)) do
       admitted =
         Enum.filter(candidates, fn {_origin, path, qid} ->
           admissible?(Map.get(nodes, qid), List.last(path)["property"])
@@ -222,7 +226,12 @@ defmodule DevilsDictionary.Discovery.ConceptHop do
             Map.has_key?(hits, origin) or List.last(path)["property"] == "P31"
           end)
 
-        walk(next, nodes, fetch, %{state | hits: hits, steps: state.steps - 1})
+        walk(next, nodes, fetch, %{
+          state
+          | hits: hits,
+            steps: state.steps - 1,
+            step: state.step + 1
+        })
       end
     end
   end

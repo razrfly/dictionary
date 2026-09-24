@@ -171,55 +171,7 @@ defmodule DevilsDictionary.Quotations.Corpus.BuildTest do
   end
 
   describe "the concept hop (#172 build A)" do
-    # coward's item has no page; it has as its characteristic cowardice,
-    # whose page is Cowardice. A second concept's characteristic is, by a bad
-    # edit, Voltaire: a person, whose page the hop must not take.
-    @hop_items %{
-      "Q104605901" => %{"title" => nil, "claims" => %{"P1552" => ["Q1401607"]}},
-      "Q1401607" => %{"title" => "Cowardice", "claims" => %{}},
-      "Q900802" => %{"title" => nil, "claims" => %{"P1552" => ["Q9068"]}}
-    }
-
-    # Cowardice, as a theme page with one line on it: a line of Candide the
-    # plain build verifies, cited to Voltaire by a link, the way a theme page
-    # credits (the first page its citation links).
-    defp cowardice(text) do
-      escaped = text |> Phoenix.HTML.html_escape() |> Phoenix.HTML.safe_to_string()
-
-      ~s(<html about="//en.wikiquote.org/wiki/Special:Redirect/revision/3927892">) <>
-        ~s(<head><title>Cowardice</title></head><body><section><h2>Quotes</h2><ul><li>) <>
-        escaped <>
-        ~s(<ul><li><a rel="mw:WikiLink" href="./Voltaire">Voltaire</a>, ) <>
-        ~s[<i>Candide</i> (1759)</li></ul></li></ul></section></body></html>]
-    end
-
-    defp hop_stub(text) do
-      stub = Fixtures.stub(self(), @candide, @hop_items)
-      page = cowardice(text)
-
-      fn request ->
-        case URI.parse(request[:url]) do
-          %{host: "wikiquote.test", path: "/page/html/Cowardice" <> _} ->
-            send(self(), {:request, request[:url]})
-            {:ok, 200, page, %{}}
-
-          %{host: "wikiquote.test", path: "/w/api.php"} ->
-            send(self(), {:request, request[:url]})
-
-            {:ok, 200,
-             %{
-               "query" => %{
-                 "pages" => [
-                   %{"title" => "Voltaire", "pageprops" => %{"wikibase_item" => "Q9068"}}
-                 ]
-               }
-             }, %{}}
-
-          _ ->
-            stub.(request)
-        end
-      end
-    end
+    defp hop_stub(text), do: Fixtures.hop_stub(self(), text)
 
     test "a line on a page the hop reached is filed under the concept that reached it" do
       {:ok, [line | _], _selection, _ledger} = build([])
@@ -261,6 +213,10 @@ defmodule DevilsDictionary.Quotations.Corpus.BuildTest do
                "Q104605901" => [%{"property" => "P1552", "qid" => "Q1401607"}]
              }
 
+      # And the page each concept was found on: the folded row keeps one
+      # "page", which is not Voltaire's concept's page.
+      assert row["concept_pages"] == %{"Q104605901" => "Cowardice", "Q9068" => "Voltaire"}
+
       # Every row of a selection made with the hop says what reached it.
       assert Enum.all?(rows, &is_map(&1["concept_qids_via"]))
     end
@@ -276,7 +232,11 @@ defmodule DevilsDictionary.Quotations.Corpus.BuildTest do
       {:ok, again, _selection, _ledger} =
         Build.run(endpoints: @endpoints, selection: v1, get: stub(self()))
 
-      refute Enum.any?(again, &Map.has_key?(&1, "concept_qids_via"))
+      refute Enum.any?(
+               again,
+               &(Map.has_key?(&1, "concept_qids_via") or Map.has_key?(&1, "concept_pages"))
+             )
+
       assert Enum.map(again, & &1["fingerprint"]) == Enum.map(rows, & &1["fingerprint"])
     end
   end

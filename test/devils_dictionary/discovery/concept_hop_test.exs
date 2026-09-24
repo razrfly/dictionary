@@ -16,7 +16,7 @@ defmodule DevilsDictionary.Discovery.ConceptHopTest do
   defp fetch(graph) do
     test = self()
 
-    fn qids ->
+    fn qids, _step ->
       send(test, {:fetched, qids})
       {:ok, Map.take(graph, qids)}
     end
@@ -185,11 +185,26 @@ defmodule DevilsDictionary.Discovery.ConceptHopTest do
       assert [["Q2", "Q3"] | _] = fetched()
     end
 
+    test "each step's fetch is told which step it is, for its own retries" do
+      origins = %{"Q1" => item(nil, %{"P279" => ["Q2"]})}
+      graph = %{"Q2" => item(nil, %{"P279" => ["Q3"]}), "Q3" => item("War")}
+      test = self()
+
+      fetch = fn qids, step ->
+        send(test, {:step, step})
+        {:ok, Map.take(graph, qids)}
+      end
+
+      assert {:ok, %{"Q1" => _}} = ConceptHop.reach(["Q1"], origins, fetch)
+      assert_received {:step, 1}
+      assert_received {:step, 2}
+    end
+
     test "a fetch that defers is returned as it is" do
       origins = %{"Q1" => item(nil, %{"P279" => ["Q2"]})}
       deferred = {:deferred, "provider_retry_after", 60}
 
-      assert ^deferred = ConceptHop.reach(["Q1"], origins, fn _qids -> deferred end)
+      assert ^deferred = ConceptHop.reach(["Q1"], origins, fn _qids, _step -> deferred end)
     end
   end
 
