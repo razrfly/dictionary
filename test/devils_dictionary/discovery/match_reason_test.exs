@@ -339,9 +339,13 @@ defmodule DevilsDictionary.Discovery.MatchReasonTest do
       reason = MatchReason.from_candidate(depiction(:lexeme, "related"))
 
       assert reason.scope == :lexeme
+      # The word-level tier's, since #172: its class and its sentence.
+      assert reason.level == :word
+      assert MatchReason.evidence(reason) == :word_identity
 
       assert MatchReason.describe(reason) ==
-               "Related depiction of “War” (Q198), matched to the word and not to this meaning."
+               "Related depiction of “War” (Q198) tagged “war”. " <>
+                 "For this word, not a particular sense."
     end
 
     test "an Artsy gene assignment names the gene" do
@@ -448,6 +452,89 @@ defmodule DevilsDictionary.Discovery.MatchReasonTest do
       assert MatchReason.describe(reason) ==
                "From Wikiquote's page “Cowardice”, the page of the concept this meaning refers " <>
                  "to (Q1401607)."
+    end
+  end
+
+  describe "a word-level identity (#172 build B)" do
+    defp word_level(details, term \\ "grief"),
+      do: Map.merge(details, %{"level" => "word", "evidence" => "word_identity", "query" => term})
+
+    defp grief_page do
+      %{
+        "kind" => "sitelink",
+        "sitelinks" => [
+          %{
+            "qid" => "Q1026040",
+            "title" => "Grief",
+            "site" => "enwikiquote",
+            "wiki" => "Wikiquote"
+          }
+        ]
+      }
+    end
+
+    test "a direct sitelink names the word, then says it is the word's" do
+      [reason] = MatchReason.from_result(word_level(grief_page()), "grief")
+
+      assert %MatchReason{level: :word, word: "grief"} = reason
+      assert MatchReason.evidence(reason) == :word_identity
+      assert MatchReason.declared_evidence(word_level(grief_page())) == :word_identity
+
+      assert MatchReason.describe(reason) ==
+               "From Wikiquote's page “Grief”, the concept the word “grief” names (Q1026040). " <>
+                 "For the word “grief”, not a particular sense."
+    end
+
+    test "a hop from the word's concept reads the same way, said of the word" do
+      [reason] = MatchReason.from_result(word_level(hop(["P279"]), "jennet"), "jennet")
+
+      assert MatchReason.describe(reason) ==
+               "From Wikiquote's page “Cowardice”, the concept the word “jennet” is a kind of " <>
+                 "(Q1401607). For the word “jennet”, not a particular sense."
+    end
+
+    test "a tag and a depiction are the word's too" do
+      tag =
+        word_level(%{
+          "kind" => "tag",
+          "tags" => [%{"term" => "War", "qid" => "Q198", "relation" => "exact"}]
+        })
+        |> MatchReason.from_result("war")
+        |> hd()
+
+      assert MatchReason.describe(tag) ==
+               "Tagged “War” (Q198), the concept this word refers to. " <>
+                 "For the word “grief”, not a particular sense."
+
+      depiction =
+        word_level(%{
+          "kind" => "depiction",
+          "depicts" => [%{"qid" => "Q198", "relation" => "exact", "entity_label" => "war"}]
+        })
+        |> MatchReason.from_result("war")
+        |> hd()
+
+      assert MatchReason.describe(depiction) ==
+               "Direct depiction of “war” (Q198). For the word “grief”, not a particular sense."
+    end
+
+    test "it is never a search result, on any shelf" do
+      [reason] = MatchReason.from_result(word_level(grief_page()), "grief")
+
+      for admits <- [[:identity, :word_identity, :query], [:identity, :word_identity]] do
+        refute MatchReason.describe(reason, admits) =~ "Search result"
+      end
+    end
+
+    test "a sense-level result carries none of it" do
+      [reason] =
+        grief_page()
+        |> Map.merge(%{"level" => "sense", "evidence" => "identity"})
+        |> MatchReason.from_result("grief")
+
+      assert reason.level == nil
+      assert MatchReason.evidence(reason) == :identity
+      refute MatchReason.describe(reason) =~ "not a particular sense"
     end
   end
 end

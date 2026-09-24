@@ -65,6 +65,15 @@ defmodule DevilsDictionary.Discovery.MatchReason do
   names — *the concept a sense of “coward” has as its characteristic*. Each
   property's phrase is `ConceptHop.wording/1`'s, so there is one per property
   and it lives beside the list it belongs to.
+
+  `level` is the word-level tier's (#172 build B). A result whose recipe was
+  read from a corroborated `lexeme_entity_candidate` rather than a sense's
+  `refers_to` says so in `match_details["level"]`, and every identity reason
+  on it is `level: :word`: still an identifier, but one the ladder reached for
+  the word, so its class is `:word_identity` and not `:identity`, and its
+  sentence ends with the one #172 decided — *For the word “grief”, not a
+  particular sense.* (`word_level_note/1`). It is not *Search result for…*:
+  that phrase is a `:query`'s, and this is not one.
   """
 
   alias DevilsDictionary.Discovery.ConceptHop
@@ -79,6 +88,7 @@ defmodule DevilsDictionary.Discovery.MatchReason do
     :note,
     :reached,
     :word,
+    :level,
     via: []
   ]
 
@@ -92,6 +102,7 @@ defmodule DevilsDictionary.Discovery.MatchReason do
           note: String.t() | nil,
           reached: String.t() | nil,
           word: String.t() | nil,
+          level: :sense | :word | nil,
           via: [String.t()]
         }
 
@@ -105,15 +116,35 @@ defmodule DevilsDictionary.Discovery.MatchReason do
   """
   def from_result(details, term) when is_map(details) do
     case declared(details) do
-      nil -> fallback(legacy(details), term)
-      reasons -> fallback(reasons, term)
+      nil -> legacy(details)
+      reasons -> reasons
     end
+    |> leveled(details)
+    |> fallback(term)
   end
 
   def from_result(_details, term), do: [%__MODULE__{kind: :query, relation: :exact, term: term}]
 
   defp fallback([], term), do: [%__MODULE__{kind: :query, relation: :exact, term: term}]
   defp fallback(reasons, _term), do: reasons
+
+  # A word-level recipe's results (#172 build B): every identity on them was
+  # reached for the word, and names it. A text's attestation is about the
+  # word already, and a search names no identity to qualify.
+  defp leveled(reasons, %{"level" => "word"} = details) do
+    Enum.map(reasons, fn
+      %__MODULE__{kind: kind} = reason when kind in [:attestation, :query] ->
+        reason
+
+      reason ->
+        %{reason | level: :word, word: word_of(details["query"])}
+    end)
+  end
+
+  defp leveled(reasons, _details), do: reasons
+
+  defp word_of(term) when is_binary(term) and term != "", do: term
+  defp word_of(_term), do: nil
 
   # The declaration: `"kind"` names the builder, and the builder is the whole
   # of the extension point. A twelfth provider with a reason shape none of
@@ -172,6 +203,7 @@ defmodule DevilsDictionary.Discovery.MatchReason do
       "identity" -> :identity
       "attestation" -> :attestation
       "query" -> :query
+      "word_identity" -> :word_identity
       _other -> nil
     end
   end
@@ -322,6 +354,9 @@ defmodule DevilsDictionary.Discovery.MatchReason do
       term: reason[:term] || reason[:gene_name],
       relation: relation(candidate.match_type),
       scope: reason[:scope] || :sense,
+      # A catalog match through the word's candidate is the word-level tier's
+      # (#172), and says so like a live one.
+      level: if(reason[:scope] == :lexeme, do: :word),
       reached: reason[:entity_label],
       locator: reason[:locator],
       note: reason[:note]
@@ -345,13 +380,25 @@ defmodule DevilsDictionary.Discovery.MatchReason do
   @doc """
   Which class of evidence a reason is, for the content-type table's
   `evidence` column (#116): `:identity` for a tag, depiction, gene or
-  keyword — an identifier the encyclopedia already asserts; `:attestation`
-  for a text that uses the word; `:query` for a provider that named no
-  reason at all, or a stock-photo search that is honest about being one.
+  keyword — an identifier the encyclopedia already asserts; `:word_identity`
+  for the same reached from a word-level candidate rather than a sense
+  (#172); `:attestation` for a text that uses the word; `:query` for a
+  provider that named no reason at all, or a stock-photo search that is
+  honest about being one.
   """
   def evidence(%__MODULE__{kind: :attestation}), do: :attestation
   def evidence(%__MODULE__{kind: :query}), do: :query
+  def evidence(%__MODULE__{level: :word}), do: :word_identity
   def evidence(%__MODULE__{}), do: :identity
+
+  @doc """
+  The sentence a word-level identity carries, on its reason and once on its
+  shelf (#172, decided there so no provider invents one).
+  """
+  def word_level_note(word) when is_binary(word) and word != "",
+    do: "For the word #{quoted(word)}, not a particular sense."
+
+  def word_level_note(_word), do: "For this word, not a particular sense."
 
   @doc """
   One sentence, composed from the fields and nothing else.
@@ -360,7 +407,13 @@ defmodule DevilsDictionary.Discovery.MatchReason do
   identifier is what separates a reason from a claim: *tagged “Soldiers”* is a
   reader's impression and *tagged “Soldiers” (Q4991371)* is a fact anyone can go
   and check.
+
+  A word-level reason is the same sentence, said of the word rather than a
+  meaning, and then `word_level_note/1`.
   """
+  def describe(%__MODULE__{level: :word} = reason),
+    do: word_level(reason) <> " " <> word_level_note(reason.word)
+
   def describe(%__MODULE__{kind: :tag, relation: :exact} = reason),
     do:
       "Tagged #{quoted(reason.term)}#{parenthesis(reason.identifier)}, the concept this " <>
@@ -438,6 +491,25 @@ defmodule DevilsDictionary.Discovery.MatchReason do
 
   def describe_all(reasons, admits) when is_list(reasons) and is_list(admits),
     do: reasons |> Enum.map(&describe(&1, admits)) |> Enum.join(" ")
+
+  # The sense-level sentence, turned to the word where it names a meaning.
+  defp word_level(%__MODULE__{kind: :sitelink, via: []} = reason),
+    do:
+      "From #{wiki(reason.reached)}page #{quoted(reason.term)}, the concept the word " <>
+        "#{word(reason.word)} names#{parenthesis(reason.identifier)}."
+
+  defp word_level(%__MODULE__{kind: :sitelink, via: via} = reason),
+    do:
+      "From #{wiki(reason.reached)}page #{quoted(reason.term)}, the concept the word " <>
+        "#{word(reason.word)} #{hop(via)}#{parenthesis(reason.identifier)}."
+
+  # A tag reads *the concept this word refers to*; a depiction is the
+  # sense-level sentence, not the older `:lexeme` one, whose *matched to the
+  # word and not to this meaning* the note already says.
+  defp word_level(%__MODULE__{kind: :depiction} = reason),
+    do: describe(%{reason | level: nil, scope: :sense})
+
+  defp word_level(%__MODULE__{} = reason), do: describe(%{reason | level: nil, scope: :lexeme})
 
   defp relation_word(:broader), do: "Broader-context"
   defp relation_word(:related), do: "Related"

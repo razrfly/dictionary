@@ -479,6 +479,180 @@ defmodule DevilsDictionary.Absorb.LinkerTest do
     end
   end
 
+  describe "promotion (#172 build B)" do
+    alias DevilsDictionary.Discovery.PageEvidence
+
+    # A title match the gloss pass will corroborate, with the article whose
+    # words the senses' glosses are scored against.
+    defp corroborated_cat!(ctx, glosses) do
+      cat = lexeme!(ctx, "cat", metadata: %{"wikipedia_title" => "Cat"})
+      concept = concept!("Q146", wikipedia_title: "Cat")
+
+      senses =
+        for {source, gloss} <- glosses, do: sense!(ctx, cat, source, gloss: gloss)
+
+      article!(ctx, concept, "The cat is a small domesticated carnivorous mammal kept as a pet.")
+      {cat, concept, senses}
+    end
+
+    defp promoted(lexeme), do: links(lexeme, Linker.promoted_method())
+
+    test "a gloss corroboration becomes the sense's refers_to, carrying its evidence", ctx do
+      {cat, concept, [sense]} =
+        corroborated_cat!(ctx, [{"wiktionary", "A domesticated carnivorous mammal."}])
+
+      assert %{corroboration: %{gloss: 1, promoted: 1}} = Linker.run(ctx.animals)
+
+      assert [link] = promoted(cat)
+      assert link.predicate.key == "refers_to"
+      assert link.subject_object_id == sense.object_id
+      assert link.object_object_id == concept.object_id
+      assert link.method == "corroborated_gloss"
+      assert link.confidence == 0.85
+      assert link.metadata["corroboration"] == "gloss_overlap"
+      assert link.metadata["promoted_from"] == "lexeme_entity_candidate"
+      assert link.metadata["shared_words"] == 3
+
+      # The candidate stays: it is still what the ladder found for the word.
+      candidate = link!(cat, :title_match)
+      assert link.metadata["candidate_assertion_id"] == candidate.assertion_id
+      assert candidate.lifecycle_state == :active
+
+      # And no source record owns it, so no source's reconcile withdraws it.
+      assert Repo.aggregate(
+               from(o in "source_assertion_outputs",
+                 where: o.assertion_id == ^link.assertion_id
+               ),
+               :count
+             ) == 0
+    end
+
+    test "the page leaves the word-level tier, and its recipe changes", ctx do
+      {cat, concept, _senses} =
+        corroborated_cat!(ctx, [{"wiktionary", "A domesticated carnivorous mammal."}])
+
+      # The state the dev database is in before a promotion run: the gloss
+      # pass wrote its corroboration, and nothing wrote the sense's claim.
+      {:ok, _} =
+        Claims.assert(cat.object_id, "lexeme_entity_candidate", concept.object_id, %{
+          method: "title_match",
+          confidence: 0.85,
+          metadata: %{"corroboration" => "gloss_overlap"}
+        })
+
+      word = PageEvidence.entities([cat.object_id])
+      assert [%{"qid" => "Q146", "level" => "word"}] = word
+
+      Linker.corroborate(ctx.animals)
+
+      sense = PageEvidence.entities([cat.object_id])
+      assert [%{"qid" => "Q146", "level" => "sense"}] = sense
+      refute PageEvidence.digest(sense) == PageEvidence.digest(word)
+    end
+
+    test "the sense with the most shared words is the one promoted", ctx do
+      {cat, _concept, [_pet, mammal]} =
+        corroborated_cat!(ctx, [
+          {"wordnet", "a domesticated pet kept by people"},
+          {"wiktionary", "A small domesticated carnivorous mammal."}
+        ])
+
+      Linker.run(ctx.animals)
+
+      assert [link] = promoted(cat)
+      assert link.subject_object_id == mammal.object_id
+    end
+
+    test "a tie is not a particular sense, and nothing is promoted", ctx do
+      {cat, _concept, _senses} =
+        corroborated_cat!(ctx, [
+          {"wordnet", "a domesticated carnivorous mammal"},
+          {"wiktionary", "A domesticated carnivorous mammal."}
+        ])
+
+      assert %{corroboration: %{gloss: 1, promoted: 0}} = Linker.run(ctx.animals)
+      assert promoted(cat) == []
+      assert [%{"level" => "word"}] = PageEvidence.entities([cat.object_id])
+    end
+
+    test "a sense a source already maps to something else keeps that alone", ctx do
+      {cat, _concept, [sense]} =
+        corroborated_cat!(ctx, [{"wiktionary", "A domesticated carnivorous mammal."}])
+
+      other = concept!("Q999146", label: "house cat")
+      {:ok, _} = Claims.assert(sense.object_id, "refers_to", other.object_id, %{confidence: 0.95})
+
+      Linker.run(ctx.animals)
+
+      assert promoted(cat) == []
+    end
+
+    test "a person, a taxon name and an uncorroborated match are never promoted", ctx do
+      # A person held as a corroborated candidate (the ladder's own rungs no
+      # longer write one, but an entity's kind can change after they did).
+      ada = lexeme!(ctx, "ada", metadata: %{"wikipedia_title" => "Ada"})
+      sense!(ctx, ada, "wiktionary", gloss: "A mathematician who wrote the first program.")
+      lovelace = person!("Q7259", "Ada Lovelace")
+      article!(ctx, lovelace, "A mathematician who wrote the first program for a machine.")
+
+      {:ok, _} =
+        Claims.assert(ada.object_id, "lexeme_entity_candidate", lovelace.object_id, %{
+          method: "title_match",
+          confidence: 0.85,
+          metadata: %{"corroboration" => "gloss_overlap"}
+        })
+
+      # A taxon name agrees with the word, not a sense.
+      cat = lexeme!(ctx, "cat", metadata: %{"wikipedia_title" => "Cat"})
+      sense!(ctx, cat, "wiktionary", gloss: "A small furry animal.")
+
+      felis =
+        concept!("Q20980826",
+          kind: :taxon,
+          taxon: %{"scientific_name" => "Felis catus", "common_names" => ["cat"]}
+        )
+
+      concept!("Q146", wikipedia_title: "Cat", taxon_item: felis)
+
+      Linker.corroborate(ctx.animals)
+      Linker.run(ctx.animals)
+
+      assert link!(cat, :title_match).metadata["corroboration"] == "taxon_name"
+      assert promoted(cat) == []
+      assert promoted(ada) == []
+    end
+
+    test "re-running promotes nothing twice and writes no revision", ctx do
+      {cat, _concept, _senses} =
+        corroborated_cat!(ctx, [{"wiktionary", "A domesticated carnivorous mammal."}])
+
+      Linker.run(ctx.animals)
+      before = Repo.aggregate(AssertionRevision, :count)
+
+      assert %{corroboration: %{promoted: 0}} = Linker.run(ctx.animals)
+      assert Repo.aggregate(AssertionRevision, :count) == before
+      assert [_one] = promoted(cat)
+    end
+
+    test "counts both ways: promoted to a sense, and still at the word", ctx do
+      corroborated_cat!(ctx, [{"wiktionary", "A domesticated carnivorous mammal."}])
+
+      dog = lexeme!(ctx, "dog", metadata: %{"wikipedia_title" => "Dog"})
+      dog_concept = concept!("Q144", wikipedia_title: "Dog")
+      sense!(ctx, dog, "wordnet", gloss: "a domesticated carnivorous mammal")
+      sense!(ctx, dog, "wiktionary", gloss: "A domesticated carnivorous mammal.")
+      article!(ctx, dog_concept, "The dog is a domesticated carnivorous mammal.")
+
+      Linker.run(ctx.animals)
+
+      # The cat's one sense is promoted; the dog's two tie and it stays word-level.
+      assert Linker.promotion_counts(ctx.animals) == %{
+               promoted_lexemes: 1,
+               word_level_lexemes: 1
+             }
+    end
+  end
+
   describe "disambiguation" do
     test "candidates become 0.40 candidate links, promoted to 0.60 on a gloss match", ctx do
       seal = lexeme!(ctx, "seal", metadata: %{"wikipedia_disambiguation" => true})

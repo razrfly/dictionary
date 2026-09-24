@@ -9,7 +9,9 @@ defmodule Mix.Tasks.Dd.Link do
 
   Prints the confidence histogram by method, **L1 twice** — the strict ladder
   and the corroborated figure — plus L2 conflicts, L3 taxonomy reach and L4
-  disambiguation. The two L1 numbers are the point: #69 §5's rungs put
+  disambiguation, and promotion both ways (#172 C5): the lexemes a promoted
+  gloss corroboration gave a sense-backed link, and the ones still read at the
+  word level. The two L1 numbers are the point: #69 §5's rungs put
   `title_match` at 0.70, below L1's 0.8 bar, and only about a fifth of an
   Animals scope carries a QID, so the gap between them is the finding.
 
@@ -61,8 +63,10 @@ defmodule Mix.Tasks.Dd.Link do
       conflicts = Health.conflicts(scope.slug)
       taxonomy = Health.taxonomy(scope.slug)
       disambiguation = Health.disambiguation(scope.slug)
+      promotion = Linker.promotion_counts(scope)
 
       report(written, links, conflicts, taxonomy, disambiguation, elapsed)
+      promotion_section(written.corroboration, promotion)
 
       Sources.finish_run(run_row, %{
         "elapsed_ms" => elapsed,
@@ -73,7 +77,9 @@ defmodule Mix.Tasks.Dd.Link do
         "l1_strict_pct" => links.strict_pct,
         "l2_conflicts" => conflicts.count,
         "l3_pct" => taxonomy[:pct],
-        "l4_hits" => disambiguation.hits
+        "l4_hits" => disambiguation.hits,
+        "promoted_lexemes" => promotion.promoted_lexemes,
+        "word_level_lexemes" => promotion.word_level_lexemes
       })
     rescue
       error ->
@@ -125,6 +131,18 @@ defmodule Mix.Tasks.Dd.Link do
     row("no nominal lexeme", fmt(disambiguation.non_nominal))
     row("candidate links", fmt(disambiguation.candidates))
     row("promoted to 0.6", fmt(disambiguation.promoted))
+  end
+
+  # Both ways, as L1 is: what promotion moved to a sense, and what is still
+  # read for the word alone because no sense of it refers to anything.
+  defp promotion_section(corroboration, promotion) do
+    say("\npromotion (gloss corroboration → a sense's refers_to)")
+
+    if Map.has_key?(corroboration, :promoted),
+      do: row("written this run", fmt(corroboration.promoted), 36)
+
+    row("lexemes with a promoted sense link", fmt(promotion.promoted_lexemes), 36)
+    row("lexemes still at the word level", fmt(promotion.word_level_lexemes), 36)
   end
 
   # A scope with no `wikidata_root` has no root to reach (#70 S5c).

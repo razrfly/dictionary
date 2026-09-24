@@ -45,6 +45,20 @@ defmodule DevilsDictionary.Discovery.Conformance.MetFixture do
     target(word)
   end
 
+  # The same two QIDs, reached for the word: a title match the ladder
+  # corroborated, and no sense that refers to anything (#172 build B).
+  @impl true
+  def word_level_target(context) do
+    word = word!(context, "war", ~w(wordnet))
+    sense!(context, word, "wordnet")
+
+    for {qid, label, confidence} <- [{"Q198", @exact_term, 0.9}, {"Q361", @broader_term, 0.85}] do
+      link!(word, concept!(qid, label), method: :title_match, confidence: confidence)
+    end
+
+    target(word)
+  end
+
   @impl true
   def uncovered_target(context) do
     # No `refers_to` anywhere on this page, so there is no QID to search for and

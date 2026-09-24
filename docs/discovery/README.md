@@ -60,6 +60,23 @@ encyclopedia already asserts**:
 | The committed corpora | a `P180` depiction or a Met tag QID | the same `refers_to` | equal QID |
 | Artsy (retired client) | a gene id | a gene recipe on a sense | equal gene, read from the committed pilot only |
 
+**The encyclopedia's column has two tiers** (#172 build B,
+`Discovery.PageEvidence`). *A QID a sense `refers_to`* is tier 1, and
+everything above reads it first. Only when a page's senses refer to nothing
+does it read tier 2: a QID the ladder (`Absorb.Linker`) wrote for the **word**
+as a `lexeme_entity_candidate` and corroborated with a second, independent
+signal — a gloss agreeing with the article, a taxon name, or a QID rung — at
+confidence ≥ 0.85. Never both in one recipe, so a shelf is one tier or the
+other. Tier 2 is still an identifier reached by a stated ladder rung, written
+offline, and no provider searches Wikidata or Wikiquote by the lemma at read
+time; but it is not a claim about a meaning, so every result from it carries
+`"level" => "word"` and the `:word_identity` evidence class, and says *For the
+word “grief”, not a particular sense* (see *The match reason*). The Met,
+Commons, Wikiquote, the Quotes corpus and the artwork catalog all read it; the
+hop applies to either tier. Tier 2 shrinks as `Linker.corroborate/1` promotes
+a gloss match to the one sense it agrees with best (`refers_to`, method
+`corroborated_gloss`), and a promoted word is a tier-1 page with a new recipe.
+
 A **text** provider is the exception that proves it: a text has no identity claim
 to make about a word, so its evidence is **attestation** — this work *uses* this
 word, at this locator. It is shown as *uses “war” at line 4* and never as *about
@@ -194,6 +211,15 @@ word page asks it too, on the first disconnected render, before any run exists.
 It must be answerable as an **existence** question. The Met's and Commons's is
 `PageEvidence.any?/1`, a `Repo.exists?` — it must not pay for the ordering, the
 dedup and the labels that only a mapping about to be built has any use for.
+Since #172 build B it asks both tiers (at most two `exists?`), so a page whose
+only evidence is a corroborated word-level candidate is covered.
+
+A missing shelf reads as *nothing exists*, which is not always true. A
+provider may say why it declined in one sentence, `uncovered_note/0` (#172
+build C); the page shows it in the block's *About* under the content type's
+heading when nothing else filled that type — Wikiquote's is *No concept this
+word's senses refer to has a Wikiquote page.* It costs no request and writes
+no row.
 
 ### 3. The mapping — a versioned recipe
 
@@ -521,9 +547,10 @@ type is an entry here and nothing else — not a new branch in `Culture` or
 | type | heading | badge | image slot | thumbnail keys, in order | attribution | evidence admitted |
 |---|---|---|---|---|---|---|
 | `:film` | Films | Film | `aspect-[2/3]` | `poster_url`, `still_url`, `image_url`, `media_url` | `:none` | identity |
-| `:artwork` | Artworks | Artwork | `aspect-square` | `image_url`, `thumbnail_url` | `:credited` | identity |
-| `:image` | Images | Image | `aspect-square` | `thumbnail_url`, `image_url` | `:required` | identity, query |
+| `:artwork` | Artworks | Artwork | `aspect-square` | `image_url`, `thumbnail_url` | `:credited` | identity, word identity |
+| `:image` | Images | Image | `aspect-square` | `thumbnail_url`, `image_url` | `:required` | identity, word identity, query |
 | `:text` | Texts | Text | **none** | — | `:none` | attestation |
+| `:quote` | Quotes | Quote | **none** | — | `:credited` | identity, word identity, attestation |
 | `:news` | News | News | **none** | — | `:credited` | attestation |
 | `:music` | Music | Track | `aspect-square` | `image_url`, `thumbnail_url` | `:required` | identity, query |
 | `:gif` | GIFs | — | `aspect-square` | `media_url`, `image_url` | `:none` | query |
@@ -556,13 +583,19 @@ raises at compile time if one does not:
   every item on a `:required` shelf.
 - **`evidence`** is the classes of match reason a row admits, from
   `MatchReason.evidence/1`: `:identity` (a tag, depiction, gene or keyword —
-  an identifier the encyclopedia already asserts), `:attestation` (the work
-  uses the word, at a locator) or `:query` (a text search's own ranking).
+  an identifier the encyclopedia already asserts), `:word_identity` (the same,
+  reached from the word's corroborated candidate because no sense refers to
+  anything — #172; only the three rows gated on a sense's concept admit it),
+  `:attestation` (the work uses the word, at a locator) or `:query` (a text
+  search's own ranking).
   The conformance suite asserts every result a provider delivers against its
   shelf's row, and the renderer reads it to describe an admitted `:query`
   reason as *Search result for “war”, ranked by the provider and not matched
   on an identifier* — and, on any shelf that does not admit one, to leave the
-  prompt-shaped sentence alone.
+  prompt-shaped sentence alone. A `:word_identity` shelf says *For the word
+  “grief”, not a particular sense* once above its rail and at the end of each
+  reason, and conformance fails a word-level result that does not
+  (`Conformance.assert_labelled!/3`), as it fails an unlabelled `:query`.
 
 ---
 
@@ -969,6 +1002,7 @@ word of its own.
   term:       "War",           # the text that carried the identifier
   relation:   :exact | :broader | :related | :attests,
   scope:      :sense | :lexeme,
+  level:      :word | nil,     # #172: reached from the word's candidate
   locator:    "tag Q198",      # carried into /connect
   note:       nil,
   reached:    "War"            # what a non-exact relation arrived at
@@ -991,7 +1025,8 @@ into `match_details`:
 | key | values | what it does |
 |---|---|---|
 | `"kind"` | one of `MatchReason.kinds/0` — `tag`, `depiction`, `keyword`, `attestation`, `query` | names the builder that reads this result's reason shape |
-| `"evidence"` | `"identity"`, `"attestation"`, `"query"` | the class, read back by `declared_evidence/1` and compared against the content-type row |
+| `"evidence"` | `"identity"`, `"word_identity"`, `"attestation"`, `"query"` | the class, read back by `declared_evidence/1` and compared against the content-type row |
+| `"level"` | `"sense"`, `"word"` | which tier of `PageEvidence` the recipe was read from (#172); written by `PageEvidence.labelled/2`, never by an item builder. `"word"` makes every identity reason `level: :word`, of class `:word_identity`, ending *For the word “…”, not a particular sense* — which is not *Search result for…*, the `:query` sentence |
 
 Conformance asserts, per result, that the kind is one the kit builds, that the
 declared class is present, that it **equals** `evidence/1` of the reason the

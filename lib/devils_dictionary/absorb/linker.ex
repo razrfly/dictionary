@@ -35,6 +35,30 @@ defmodule DevilsDictionary.Absorb.Linker do
   `mix dd.link` prints L1 **both ways**, strict ladder and corroborated, so the
   honest number and the useful one are both on the record.
 
+  ## Promotion (#172 build B)
+
+  A gloss corroboration is a claim about a *meaning* the ladder was not
+  recording: the article agrees with some sense's gloss. `corroborate/1`'s
+  last pass works out which one — the sense whose gloss shares the most
+  content words with the article, by the same rule — and, when exactly one
+  sense has that most, writes the sense-backed claim the candidate implied:
+  `refers_to` from that sense, method `corroborated_gloss`, the candidate's
+  confidence, its `metadata["corroboration"]` carried with the shared-word
+  count and the candidate's assertion id. The candidate stays; it is still
+  what the ladder found for the word.
+
+  Not promoted: a tie (one meaning in two dictionaries, usually), a person
+  (a name-only match is not evidence a word denotes someone), a sense that
+  already refers to something else, and every `taxon_name` or
+  `qid_agreement` corroboration, neither of which is about a sense. The
+  promoted claim carries no source record, so no source's reconcile can
+  withdraw it as output it stopped emitting.
+
+  Offline and re-runnable: a second run proposes the same claims, and the
+  write path defers to a stored revision that already carries a
+  `corroboration` at the same confidence. No discovery provider writes
+  `refers_to`; this is where it comes from (#172 C5).
+
   ## Two policy changes #74 requires
 
   **A sense-backed link and a spelling-level guess are different claims.** Rungs
@@ -86,6 +110,9 @@ defmodule DevilsDictionary.Absorb.Linker do
   @corroborated_agreement 0.90
   @corroborated_gloss 0.85
   @disambiguation_gloss 0.60
+
+  # The method a promoted gloss corroboration is written under (#172).
+  @promoted "corroborated_gloss"
 
   # Two shared words of four letters or more. Short words carry no signal
   # ("the", "and", "of"), and one shared word is a coincidence at this scale.
@@ -383,9 +410,13 @@ defmodule DevilsDictionary.Absorb.Linker do
       taxon: corroborate_taxon(scope, run_id),
       gloss: corroborate_gloss(scope, run_id),
       agreement: corroborate_agreement(scope, run_id),
-      disambiguation_gloss: promote_candidates(scope, run_id)
+      disambiguation_gloss: promote_candidates(scope, run_id),
+      promoted: promote_gloss(scope, run_id)
     }
   end
+
+  @doc "The method a candidate promoted to a sense's `refers_to` is written under."
+  def promoted_method, do: @promoted
 
   # The lemma is the taxon's scientific name or one of its English common names
   # — either on the entity itself, or on the taxon item it bridges to.
@@ -529,6 +560,110 @@ defmodule DevilsDictionary.Absorb.Linker do
       scope,
       run_id
     )
+  end
+
+  # #172 build B: a gloss corroboration, promoted to the one sense it agrees
+  # with best. `corroborate_gloss/2` asks only whether *some* sense agrees, so
+  # the per-sense score is computed again here with the same rule — the most
+  # shared content words against any of the entity's `about` texts — and a
+  # sense is chosen only when it alone has the most. Runs after the gloss pass,
+  # so a title match corroborated on this run is promoted on this run too.
+  defp promote_gloss(scope, run_id) do
+    write(
+      """
+      WITH candidate AS (
+        SELECT r.assertion_id, l.object_id AS lexeme_id, e.object_id AS entity_id,
+               r.confidence, r.metadata
+          FROM assertion_revisions r
+          JOIN predicates p ON p.id = r.predicate_id AND p.key = '#{@word_level}'
+          JOIN lexemes l ON l.object_id = r.subject_object_id
+          JOIN entities e ON e.object_id = r.object_object_id
+         #{scope_join(scope, "l.object_id")}
+         WHERE r.is_current AND r.lifecycle_state = 'active'
+           AND r.method = 'title_match'
+           AND r.confidence >= #{@corroborated_gloss}
+           AND r.metadata->>'corroboration' = 'gloss_overlap'
+           AND e.entity_kind <> 'person'
+      ),
+      scored AS (
+        SELECT c.*, s.object_id AS sense_id,
+               (SELECT max(#{shared_words("srev.gloss", "coalesce(cr.body, '') || ' ' || coalesce(e.description, '')")})
+                  FROM assertion_revisions ar
+                  JOIN predicates ap ON ap.id = ar.predicate_id AND ap.key = 'about'
+                  JOIN content_revisions cr
+                    ON cr.content_id = ar.subject_object_id AND cr.is_current
+                  JOIN entities e ON e.object_id = c.entity_id
+                 WHERE ar.object_object_id = c.entity_id AND ar.is_current) AS shared
+          FROM candidate c
+          JOIN senses s ON s.lexeme_id = c.lexeme_id
+          JOIN sense_revisions srev ON srev.sense_id = s.object_id AND srev.is_current
+         WHERE srev.gloss IS NOT NULL
+      ),
+      ranked AS (
+        SELECT scored.*,
+               rank() OVER (PARTITION BY assertion_id ORDER BY shared DESC) AS place,
+               count(*) OVER (PARTITION BY assertion_id, shared) AS sharing
+          FROM scored
+         WHERE shared >= #{@min_shared_words}
+      )
+      SELECT x.sense_id, x.entity_id, #{source_id("wikipedia")},
+             '#{@promoted}', x.confidence,
+             x.metadata || jsonb_build_object(
+               'promoted_from', '#{@word_level}',
+               'candidate_assertion_id', x.assertion_id,
+               'shared_words', x.shared)
+        FROM ranked x
+       WHERE x.place = 1 AND x.sharing = 1
+         -- A sense a source already maps to another thing keeps that mapping
+         -- alone: a spelling's agreement does not add a second referent.
+         AND NOT EXISTS (
+           SELECT 1 FROM assertion_revisions o
+             JOIN predicates op ON op.id = o.predicate_id AND op.key = '#{@sense_backed}'
+            WHERE o.subject_object_id = x.sense_id
+              AND o.is_current AND o.lifecycle_state = 'active'
+              AND o.object_object_id <> x.entity_id)
+      """,
+      @sense_backed,
+      scope,
+      run_id
+    )
+  end
+
+  @doc """
+  Promotion counted both ways for a scope (#172 C5): lexemes whose senses now
+  refer to a thing because a gloss corroboration was promoted, and lexemes
+  still carrying a corroborated candidate (≥ #{@corroborated_gloss}) with no
+  sense-backed link at all — the ones a page reads at the word level.
+  """
+  def promotion_counts(%Scope{id: scope_id}) do
+    %{rows: [[promoted, word_level]]} =
+      Repo.query!(
+        """
+        SELECT
+          (SELECT count(DISTINCT s.lexeme_id)
+             FROM assertion_revisions r
+             JOIN predicates p ON p.id = r.predicate_id AND p.key = '#{@sense_backed}'
+             JOIN senses s ON s.object_id = r.subject_object_id
+             JOIN scope_lexeme_members sl ON sl.lexeme_id = s.lexeme_id AND sl.scope_id = $1
+            WHERE r.is_current AND r.lifecycle_state = 'active' AND r.method = '#{@promoted}'),
+          (SELECT count(DISTINCT r.subject_object_id)
+             FROM assertion_revisions r
+             JOIN predicates p ON p.id = r.predicate_id AND p.key = '#{@word_level}'
+             JOIN scope_lexeme_members sl ON sl.lexeme_id = r.subject_object_id AND sl.scope_id = $1
+            WHERE r.is_current AND r.lifecycle_state = 'active'
+              AND r.confidence >= #{@corroborated_gloss}
+              AND NOT EXISTS (
+                SELECT 1 FROM senses s
+                  JOIN assertion_revisions o ON o.subject_object_id = s.object_id
+                   AND o.is_current AND o.lifecycle_state = 'active'
+                  JOIN predicates op ON op.id = o.predicate_id AND op.key = '#{@sense_backed}'
+                 WHERE s.lexeme_id = r.subject_object_id))
+        """,
+        [scope_id],
+        timeout: :infinity
+      )
+
+    %{promoted_lexemes: promoted, word_level_lexemes: word_level}
   end
 
   # ── SQL helpers ──────────────────────────────────────────────────────────

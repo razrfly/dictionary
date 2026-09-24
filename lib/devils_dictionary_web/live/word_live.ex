@@ -83,7 +83,8 @@ defmodule DevilsDictionaryWeb.WordLive do
        # preselected; everyone else sees the candidate and no write path.
        contributor: Contributions.internal_contributor?(socket.assigns[:current_scope]),
        discovery_target: nil,
-       cultures: %{}
+       cultures: %{},
+       culture_notes: []
      )}
   end
 
@@ -222,14 +223,15 @@ defmodule DevilsDictionaryWeb.WordLive do
           |> Map.new()
       end
 
-    socket
-    |> assign(:discovery_target, target)
-    |> assign(
-      :cultures,
+    cultures =
       cultures
       |> Map.merge(catalog_shelf(page, target))
       |> Map.merge(quote_corpus_shelf(page, target))
-    )
+
+    socket
+    |> assign(:discovery_target, target)
+    |> assign(:cultures, cultures)
+    |> assign(:culture_notes, uncovered_notes(target, culture_providers, cultures))
     # Every browser-transport provider the registry holds, in registry order,
     # asked for its own config — rather than one named module (#144 Phase 3).
     # A second one is a registration and nothing here.
@@ -407,6 +409,24 @@ defmodule DevilsDictionaryWeb.WordLive do
           }
         }
     end
+  end
+
+  # #172 build C: a provider that declined this page says why, when it has a
+  # sentence for it and nothing else filled its content type. Asked of the
+  # registry and `covers?/1` only — no request, no row.
+  defp uncovered_notes(nil, _covering, _cultures), do: []
+
+  defp uncovered_notes(_target, covering, cultures) do
+    filled = cultures |> Map.values() |> Enum.flat_map(&(&1[:content_types] || []))
+
+    for provider <- Providers.server_providers(),
+        provider not in covering,
+        Code.ensure_loaded?(provider) and function_exported?(provider, :uncovered_note, 0),
+        note = provider.uncovered_note(),
+        is_binary(note),
+        type = Enum.find(provider.capabilities().content_types, &(&1 in ContentTypes.known())),
+        type not in filled,
+        do: %{type: type, text: note}
   end
 
   # The public-domain Wikiquote corpus as one more state on the Quotes shelf
@@ -811,8 +831,9 @@ defmodule DevilsDictionaryWeb.WordLive do
                    landed). The GIF shelf keeps its own hook and transport;
                    what it loses is the second chrome 400 px below the first. --%>
               <Culture.section
-                :if={@cultures != %{} or @browsers != []}
+                :if={@cultures != %{} or @browsers != [] or @culture_notes != []}
                 states={@cultures}
+                notes={@culture_notes}
                 browsers={@browsers}
                 return_path={word_path(@page)}
                 contributor={@contributor}

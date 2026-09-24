@@ -55,7 +55,8 @@ defmodule DevilsDictionary.Discovery.Providers.MetTest do
                  "qid" => "Q4991371",
                  "label" => "soldier",
                  "object_id" => entity.object_id,
-                 "confidence" => 0.9
+                 "confidence" => 0.9,
+                 "level" => "sense"
                }
              ]
 
@@ -924,7 +925,8 @@ defmodule DevilsDictionary.Discovery.Providers.MetTest do
         ),
       "label" => label,
       "object_id" => entity.object_id,
-      "confidence" => confidence
+      "confidence" => confidence,
+      "level" => "sense"
     }
   end
 
