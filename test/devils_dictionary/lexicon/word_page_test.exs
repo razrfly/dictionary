@@ -389,23 +389,42 @@ defmodule DevilsDictionary.Lexicon.WordPageTest do
              ]
     end
 
-    test "kinds and examples are only the children that have a word", ctx do
+    test "kinds are only the children that have a word", ctx do
       kitten = concept!("Q147", "kitten")
       wordless = concept!("Q2", "American Bobtail")
-      tiddles = concept!("Q3", "Tiddles")
 
       concept_relation!(ctx, kitten, :subclass_of, ctx.animal)
       concept_relation!(ctx, wordless, :subclass_of, ctx.animal)
-      concept_relation!(ctx, tiddles, :instance_of, ctx.animal)
 
       link!(word!(ctx, "kitten", ~w(wordnet)), kitten)
-      link!(word!(ctx, "tiddles", ~w(wordnet)), tiddles)
 
       thing = page("cat").thing
 
       assert Enum.map(thing.kinds.shown, & &1.lemma) == ["kitten"]
       assert thing.kinds.total == 1
-      assert Enum.map(thing.examples.shown, & &1.lemma) == ["tiddles"]
+    end
+
+    # #181: the panel's *examples* row was the thing's worded instances. They
+    # are the word's examples now, with the unworded ones the panel hid, and
+    # the panel no longer carries them — one place, not two.
+    test "the thing's instances are the word's examples, worded or not", ctx do
+      tiddles = concept!("Q3", "Tiddles")
+      larry = concept!("Q4", "Larry")
+
+      concept_relation!(ctx, tiddles, :instance_of, ctx.animal)
+      concept_relation!(ctx, larry, :instance_of, ctx.animal)
+      link!(word!(ctx, "tiddles", ~w(wordnet)), tiddles)
+
+      page = page("cat")
+
+      refute Map.has_key?(page.thing, :examples)
+
+      assert [
+               %{subject: %{kind: :entity, label: "Larry", slug: nil}},
+               %{subject: %{kind: :lexeme, label: "tiddles", slug: "tiddles"}}
+             ] = page.examples.items
+
+      assert Enum.all?(page.examples.items, &(hd(&1.sources).slug == "wikidata"))
     end
 
     test "kinds are capped, and the count beside them is the whole number", ctx do

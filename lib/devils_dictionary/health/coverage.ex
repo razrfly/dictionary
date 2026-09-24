@@ -282,14 +282,23 @@ defmodule DevilsDictionary.Health.Coverage do
     %{
       senses: Repo.aggregate(from(x in Sense, where: x.source_id == ^id), :count),
       entries: Repo.aggregate(from(c in ContentItem, where: c.source_id == ^id), :count),
+      # `instance_of` is the one predicate on both sides (#181): WordNet's
+      # instance edges are between meanings and count as a word's relations,
+      # Wikidata's P31 is between things. The endpoint kind says which.
       relations:
         Repo.aggregate(
-          from([r, _a, p] in by_source, where: p.key in ^lexical_predicates()),
+          from([r, _a, p] in by_source,
+            where:
+              p.key in ^lexical_predicates() or
+                (p.key in ^hierarchy_predicates() and r.subject_kind != "entity")
+          ),
           :count
         ),
       concept_relations:
         Repo.aggregate(
-          from([r, _a, p] in by_source, where: p.key in ^hierarchy_predicates()),
+          from([r, _a, p] in by_source,
+            where: p.key in ^hierarchy_predicates() and r.subject_kind == "entity"
+          ),
           :count
         ),
       concept_links:
@@ -511,7 +520,11 @@ defmodule DevilsDictionary.Health.Coverage do
         from(r in AssertionRevision,
           join: a in assoc(r, :assertion),
           join: p in assoc(r, :predicate),
-          where: a.source_id == ^source.id and r.is_current and p.key in ^@lexical_predicates
+          where: a.source_id == ^source.id and r.is_current,
+          # Its instance edges are `instance_of` between senses since #181.
+          where:
+            p.key in ^@lexical_predicates or
+              (p.key in ^@hierarchy_predicates and r.subject_kind != "entity")
         ),
         :count
       )
@@ -526,6 +539,32 @@ defmodule DevilsDictionary.Health.Coverage do
     total = resolved + pending
 
     %{total: total, resolved: resolved, pending: pending, pct: pct(resolved, total)}
+  end
+
+  @doc """
+  **C7 of #181** — current `other` rows that cannot say what they are.
+
+  The `other` predicate promises that a source's own edge label "is kept in
+  the assertion's metadata so nothing is lost". Before #181 the materializer
+  dropped it, so every such row was unlabeled; a re-materialization writes the
+  label, and what is left here is the residual a re-run has not reached yet.
+  Per source, because the fix lands one absorb at a time.
+  """
+  def unlabeled_other do
+    Repo.all(
+      from r in AssertionRevision,
+        join: a in assoc(r, :assertion),
+        join: p in assoc(r, :predicate),
+        join: s in assoc(a, :source),
+        where: p.key == "other" and r.is_current and r.lifecycle_state == :active,
+        group_by: s.slug,
+        order_by: s.slug,
+        select:
+          {s.slug, count(r.id), filter(count(r.id), not fragment("? \\? 'label'", r.metadata))}
+    )
+    |> Enum.map(fn {slug, total, unlabeled} ->
+      %{source: slug, total: total, unlabeled: unlabeled}
+    end)
   end
 
   @doc """

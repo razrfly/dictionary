@@ -232,6 +232,9 @@ defmodule DevilsDictionary.Health do
   @doc "**R1** — WordNet edges resolved at absorb."
   defdelegate wordnet_edges(), to: Coverage
 
+  @doc "**C7 of #181** — current `other` rows without their source's label."
+  defdelegate unlabeled_other(), to: Coverage
+
   @doc "**X3** — forms and spelling variants land on the right word."
   defdelegate variants(), to: Coverage
 
@@ -324,12 +327,14 @@ defmodule DevilsDictionary.Health do
            WHERE r.is_current
              AND p.key IN ('refers_to', 'lexeme_entity_candidate',
                            'parent_taxon', 'subclass_of', 'instance_of', 'taxon_item')
+             AND r.object_kind = 'entity'
           UNION
           SELECT r.subject_object_id
             FROM assertion_revisions r
             JOIN predicates p ON p.id = r.predicate_id
            WHERE r.is_current
              AND p.key IN ('parent_taxon', 'subclass_of', 'instance_of', 'taxon_item')
+             AND r.subject_kind = 'entity'
         )
         SELECT count(*),
                count(*) FILTER (WHERE e.object_id IS NULL)

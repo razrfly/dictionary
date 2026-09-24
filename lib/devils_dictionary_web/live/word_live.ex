@@ -46,7 +46,17 @@ defmodule DevilsDictionaryWeb.WordLive do
   alias DevilsDictionary.Claims.Contributions
   alias DevilsDictionary.Lexicon
   alias DevilsDictionary.Lexicon.WordPage
-  alias DevilsDictionaryWeb.{CrowdCard, Culture, Demo, Provenance, SourceBadge, Thing, Word}
+
+  alias DevilsDictionaryWeb.{
+    CrowdCard,
+    Culture,
+    Demo,
+    Examples,
+    Provenance,
+    SourceBadge,
+    Thing,
+    Word
+  }
 
   @trail_cap 12
   @suggestions 5
@@ -259,6 +269,14 @@ defmodule DevilsDictionaryWeb.WordLive do
           []
       end
 
+    # Every source that named a thing under this word's meanings, anchored at
+    # the section that says so.
+    examples =
+      case page.examples do
+        %{sources: sources} -> Enum.map(sources, &badge_entry(&1, "#examples"))
+        _none -> []
+      end
+
     crowd =
       case crowd do
         %{source: source, term: term} ->
@@ -287,7 +305,7 @@ defmodule DevilsDictionaryWeb.WordLive do
     # chose to send, and the row is where the logo lives (#152 Phase 4).
     logos = Map.new(DevilsDictionary.Sources.list_sources(), &{&1.slug, &1.logo})
 
-    (definitions ++ thing ++ crowd ++ shelves ++ browser)
+    (definitions ++ examples ++ thing ++ crowd ++ shelves ++ browser)
     |> Enum.reject(&is_nil/1)
     |> Enum.map(&%{&1 | logo: &1.logo || logos[&1.slug]})
     |> SourceBadge.compose()
@@ -763,6 +781,19 @@ defmodule DevilsDictionaryWeb.WordLive do
               </.slab>
 
               <Word.bare_row :if={@page.cards == []} lemma={@page.headword.lemma} />
+
+              <%!-- The named things the sources file under this word's
+                   meanings (#181): asserted, so after the definitions and
+                   before anything searched for. Absent when nothing names
+                   any — a section, not a shelf, so there is no empty state
+                   to hold open while something loads. --%>
+              <Examples.section
+                :if={@page.examples}
+                examples={@page.examples}
+                lemma={@page.headword.lemma}
+                trail={trail_here(@page)}
+                demo={@demo}
+              />
 
               <%!-- The 📱 Crowd card (#136): after the real cards and before the
                    culture shelves, which is exactly where the demo's sample sat

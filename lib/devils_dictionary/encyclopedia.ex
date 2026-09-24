@@ -15,8 +15,11 @@ defmodule DevilsDictionary.Encyclopedia do
       following it at every step walks *Larry* up to *abstract entity*. One
       parent per step, because the graph is a DAG and a plain walk fans out to
       eighteen rows for a walk of ten.
-    * **kinds and examples are only the children that have a word**, because a
-      chip that cannot be clicked is furniture.
+    * **kinds are only the children that have a word**, because a chip that
+      cannot be clicked is furniture. A thing's named *instances* left the
+      panel in #181: they are the word's examples, read by
+      `Examples.for_page/3`, where an unworded instance links to its entity
+      page and so is not furniture.
     * **`refers_to` and `lexeme_entity_candidate` are different claims.** A
       sense-backed mapping says this meaning names that thing. A title match
       says this spelling might. The second never propagates examples, and the
@@ -364,16 +367,15 @@ defmodule DevilsDictionary.Encyclopedia do
 
   @kinds_sql """
   WITH children AS (
-    SELECT r.subject_object_id AS id,
-           CASE WHEN p.key = 'instance_of' THEN 'example' ELSE 'kind' END AS bucket
+    SELECT DISTINCT r.subject_object_id AS id
     FROM assertion_revisions r
     JOIN predicates p ON p.id = r.predicate_id
     WHERE r.object_object_id = $1
       AND r.is_current AND r.lifecycle_state = 'active'
-      AND p.key IN ('parent_taxon', 'subclass_of', 'instance_of')
+      AND p.key IN ('parent_taxon', 'subclass_of')
   ),
   worded AS (
-    SELECT c.id, c.bucket, e.preferred_label, w.lemma, w.slug, w.object_id AS lexeme_id,
+    SELECT c.id, e.preferred_label, w.lemma, w.slug, w.object_id AS lexeme_id,
            (w.enriched_at IS NOT NULL) AS enriched
     FROM children c
     JOIN entities e ON e.object_id = c.id
@@ -389,48 +391,51 @@ defmodule DevilsDictionary.Encyclopedia do
       LIMIT 1
     ) w ON TRUE
   )
-  SELECT bucket, id, preferred_label, lemma, slug, lexeme_id, enriched,
-         COUNT(*) OVER (PARTITION BY bucket) AS total,
-         ROW_NUMBER() OVER (PARTITION BY bucket ORDER BY lemma) AS rank
+  SELECT id, preferred_label, lemma, slug, lexeme_id, enriched,
+         COUNT(*) OVER () AS total,
+         ROW_NUMBER() OVER (ORDER BY lemma) AS rank
   FROM worded
-  ORDER BY bucket, lemma
+  ORDER BY lemma
   """
 
   @doc """
-  What kinds of this thing there are, and which named individuals it has.
+  What kinds of this thing there are — its subclasses and child taxa.
 
   **Only the children that have a word.** The panel exists so a reader can hop,
-  so a chip that cannot be clicked is furniture — *cat* has four named
-  individuals under it and not one of them is a word, while ten of its nineteen
-  subclasses are.
+  so a chip that cannot be clicked is furniture — ten of *cat*'s nineteen
+  subclasses are words.
+
+  Its named individuals (`instance_of`) are not here: since #181 they are the
+  word's examples, `Examples.for_page/3`, drawn once in the Examples section.
 
   Capped, with the exact total beside the cap: the count is the expensive half
   on a hub, and knowing there are 7,141 is worth more than seeing twelve of them
   and wondering.
   """
-  def kinds_and_examples(object_id, cap \\ 12) do
+  def kinds(object_id, cap \\ 12) do
     # The cap is applied below rather than in SQL: the window function needs the
-    # whole partition to report an exact total, which is the number worth having.
+    # whole set to report an exact total, which is the number worth having.
     %{rows: rows} = Repo.query!(@kinds_sql, [object_id, @refers_to])
 
-    rows
-    |> Enum.map(fn [bucket, id, label, lemma, slug, lexeme_id, enriched, total, rank] ->
-      %{
-        bucket: String.to_existing_atom(bucket),
-        object_id: id,
-        label: label,
-        lemma: lemma,
-        slug: slug,
-        lexeme_id: lexeme_id,
-        enriched?: enriched,
-        total: total,
-        rank: rank
-      }
-    end)
-    |> Enum.group_by(& &1.bucket)
-    |> Map.new(fn {bucket, items} ->
-      {bucket, %{total: List.first(items).total, items: Enum.filter(items, &(&1.rank <= cap))}}
-    end)
+    items =
+      for [id, label, lemma, slug, lexeme_id, enriched, _total, rank] <- rows, rank <= cap do
+        %{
+          object_id: id,
+          label: label,
+          lemma: lemma,
+          slug: slug,
+          lexeme_id: lexeme_id,
+          enriched?: enriched
+        }
+      end
+
+    total =
+      case rows do
+        [[_, _, _, _, _, _, total, _] | _] -> total
+        [] -> 0
+      end
+
+    %{total: total, items: items}
   end
 
   @doc """

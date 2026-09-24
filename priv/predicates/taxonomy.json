@@ -19,7 +19,11 @@
     "per predicate would be a worse record of the same rule.",
     "",
     "`cycles_allowed` is false for all four: a taxonomy that loops is a data defect, and",
-    "the recursive chain walk depends on it terminating."
+    "the recursive chain walk depends on it terminating.",
+    "",
+    "`instance_of` also carries `sense/- -> sense/-` (#181): WordNet's instance_hypernym is",
+    "the same relation as P31, stated between meanings rather than things. It lives here",
+    "rather than in core.json because a predicate is declared once, and this is where it was."
   ],
   "predicates": [
     {
@@ -48,12 +52,12 @@
       "key": "instance_of",
       "forward_label": "instance of",
       "reverse_label": "examples",
-      "description": "Wikidata P31. Followed only at the first step of a chain: following it at every step walks a named individual up to 'abstract entity'.",
+      "description": "Wikidata P31, and WordNet's instance_hypernym (#181): a named individual filed under a class, always written instance -> class, so no inverse row exists and one predicate answers 'what are the instances of X' for both sources. Between entities it is followed only at the first step of a chain: following it at every step walks a named individual up to 'abstract entity'. Between senses it is WordNet's claim about a meaning, and the word page reads it from the object side (#181).",
       "is_symmetric": false,
       "is_transitive": false,
       "cycles_allowed": false,
       "source_native": true,
-      "endpoints": [["entity/*", "entity/*"]]
+      "endpoints": [["entity/*", "entity/*"], ["sense/-", "sense/-"]]
     },
     {
       "key": "taxon_item",

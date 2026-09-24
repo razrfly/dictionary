@@ -47,13 +47,6 @@ defmodule DevilsDictionaryWeb.Thing do
         trail={@trail}
         demo={@demo}
       />
-      <.thing_chips
-        id="thing-examples"
-        label="examples"
-        chips={@thing.examples}
-        trail={@trail}
-        demo={@demo}
-      />
 
       <.may_refer_to :if={@thing.may_refer_to != []} concepts={@thing.may_refer_to} />
     </section>
@@ -230,9 +223,10 @@ defmodule DevilsDictionaryWeb.Thing do
   end
 
   @doc """
-  The things under this one that have a word — its kinds, its examples — capped
-  with the exact count of the rest. Only worded children are here: a chip that
-  cannot be clicked is furniture.
+  The things under this one that have a word — its kinds — capped with the
+  exact count of the rest. Only worded children are here: a chip that cannot be
+  clicked is furniture. Its named instances are the word's examples since #181,
+  drawn once, in the Examples section above.
   """
   attr :id, :string, required: true
   attr :label, :string, required: true

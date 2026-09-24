@@ -24,6 +24,21 @@ defmodule DevilsDictionary.Lexicon.WordPage do
   and wrong for Wiktionary, whose senses all share the nil group: *cat* listed
   *kitty* and *tabby* beside *bloke* and *prostitute*.
 
+  ## The one object-side read
+
+  Every relation is read from the side of its **subject**: a page lists what
+  its word says about other words. `instance_of` is the exception, and the
+  only one (#181). WordNet files *Korean War* under *war* as an edge from the
+  named thing to the class — instance → class, as Wikidata's P31, so no
+  inverse row is ever written — which means *war*'s own subject-side read
+  could never see its 43 wars. `relations/2` therefore also reads the
+  `instance_of` claims whose **object** is one of the page's senses, through
+  `Examples.instance_edges/2`, in the same statement (`union_all`), and
+  `build/2` hands those rows to `Examples.for_page/3` rather than to the chips.
+  No other predicate is read this way: a hypernym already has its stated
+  inverse, and reading every edge both ways would put each relation on the
+  page twice.
+
   ## Batched page queries
 
   Sources; senses; content (by lexeme **or** by the primary entity, which is how
@@ -54,6 +69,7 @@ defmodule DevilsDictionary.Lexicon.WordPage do
   alias DevilsDictionary.Claims.AssertionRevision
   alias DevilsDictionary.Corpus.SourceRecordRevision
   alias DevilsDictionary.Encyclopedia
+  alias DevilsDictionary.Examples
   alias DevilsDictionary.Markdown
   alias DevilsDictionary.Quotations.Fingerprint
 
@@ -71,7 +87,13 @@ defmodule DevilsDictionary.Lexicon.WordPage do
   alias DevilsDictionary.Sources
   alias DevilsDictionary.Sources.SourceRecord
 
-  defstruct headword: nil, cards: [], source_groups: [], related: nil, thing: nil, trail: []
+  defstruct headword: nil,
+            cards: [],
+            source_groups: [],
+            related: nil,
+            examples: nil,
+            thing: nil,
+            trail: []
 
   @chip_cap 12
   # Above this, a group's “+N” is a scrolling list rather than a wall of chips.
@@ -273,7 +295,13 @@ defmodule DevilsDictionary.Lexicon.WordPage do
     # entry — it belongs with the thing, not among the sources that defined the
     # word (#133 R3).
     {about, entries} = Enum.split_with(entries(ids, sense_ids, concept), &(&1.concept_id != nil))
-    relations = relations(ids, sense_ids)
+
+    # The named things filed under this word's meanings arrive with the
+    # relations — the one object-side read — and go to the examples, never
+    # to the chips.
+    {instance_edges, relations} =
+      ids |> relations(sense_ids) |> Enum.split_with(&(&1.direction == "object"))
+
     chains = chains(senses, sources)
 
     by_lexeme = Map.new(lexemes, &{&1.object_id, &1})
@@ -289,6 +317,8 @@ defmodule DevilsDictionary.Lexicon.WordPage do
         pos_scoped
         |> related(by_lexeme, sources, hd(lexemes).lemma)
         |> sense_link(cards),
+      examples:
+        Examples.for_page(ids, :public, senses: senses, edges: instance_edges, sources: sources),
       thing: entity |> thing(ids, sources) |> put_article(about, sources, concept),
       trail: trail(opts[:trail])
     }
@@ -863,16 +893,18 @@ defmodule DevilsDictionary.Lexicon.WordPage do
     end
   end
 
+  # The thing's named instances are not here: they are the word's examples
+  # (#181), read by `Examples.for_page/3` with the unworded ones the panel
+  # never showed, and drawn once, in the Examples section.
   defp thing(%Entity{} = entity, ids, sources) do
-    buckets = Encyclopedia.kinds_and_examples(entity.object_id, @chip_cap)
+    kinds = Encyclopedia.kinds(entity.object_id, @chip_cap)
     candidates = Encyclopedia.candidates_for(ids)
     concept = Encyclopedia.view(entity)
 
     %{
       concept: concept,
       chain: Encyclopedia.chain(entity, @chain_depth),
-      kinds: bucket(buckets, :kind),
-      examples: bucket(buckets, :example),
+      kinds: %{shown: kinds.items, total: kinds.total},
       wikipedia_url: concept_url(sources, "wikipedia", concept),
       wikidata_url: concept_url(sources, "wikidata", concept),
       # The row behind the concept card's link, so the rail's stack can
@@ -882,21 +914,11 @@ defmodule DevilsDictionary.Lexicon.WordPage do
     |> Map.merge(candidates)
   end
 
-  # `kinds_and_examples/2` reports the exact total beside a capped list; the
-  # panel calls the capped half `shown`.
-  defp bucket(buckets, key) do
-    case Map.get(buckets, key) do
-      nil -> none()
-      %{total: total, items: items} -> %{shown: items, total: total}
-    end
-  end
-
   defp empty_thing do
     %{
       concept: nil,
       chain: [],
       kinds: none(),
-      examples: none(),
       wikipedia_url: nil,
       wikidata_url: nil,
       wikidata_source: nil,
@@ -1431,6 +1453,11 @@ defmodule DevilsDictionary.Lexicon.WordPage do
   # object itself where it is a word. `from_sense_id` is what the placement rule
   # reads: present means the edge belongs to that meaning, absent means it
   # belongs to the part of speech.
+  #
+  # `direction`, `assertion_id`, `subject_id` and `target_id` are there for the
+  # union with `Examples.instance_edges/2` — the one object-side read (see the
+  # moduledoc) — whose select this one matches key for key: a `union_all`
+  # reads its columns by position.
   defp relations(lexeme_ids, sense_ids) do
     subjects = lexeme_ids ++ sense_ids
 
@@ -1450,8 +1477,12 @@ defmodule DevilsDictionary.Lexicon.WordPage do
         where: r.is_current and r.lifecycle_state == :active,
         where: p.source_native,
         select: %{
+          direction: fragment("'subject'"),
           type: p.key,
           source_id: a.source_id,
+          assertion_id: a.id,
+          subject_id: r.subject_object_id,
+          target_id: r.object_object_id,
           from_lexeme_id: coalesce(fs.lexeme_id, r.subject_object_id),
           from_sense_id: fs.object_id,
           to_group_key: trev.group_key,
@@ -1460,7 +1491,8 @@ defmodule DevilsDictionary.Lexicon.WordPage do
           slug: t.slug,
           pos: t.part_of_speech,
           enriched?: not is_nil(t.enriched_at)
-        }
+        },
+        union_all: ^Examples.instance_edges(sense_ids)
     )
   end
 

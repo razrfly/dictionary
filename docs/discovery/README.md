@@ -33,7 +33,8 @@ finished. Where a claim is not yet true everywhere, the last column says so.
 
 Not goals, and listed so nobody builds toward them by accident: relevance
 ranking across sources (#101's assessor, on top of this), curation and
-exemplars (#105, a layer over any shelf's items), perceptual-hash dedup (until a
+exemplars (#105, a layer over any shelf's items; they render in the word page's
+Examples section, #181 — see *Composition* below), perceptual-hash dedup (until a
 ledger shows two sources serving one file under two URLs), a per-provider grid
 or tabs, and any trust weighting beyond `tier`.
 
@@ -1060,6 +1061,23 @@ What is settled, and what discovery must not blur:
   revision. The composer link is in the shelf's *About these results* list — the
   only place a contributor now finds it, after the tall candidate cards left the
   word page.
+
+**Examples are not discovery (#181).** Three things are called "examples", and
+only the first two are drawn outside a definition card:
+
+| layer | what it is | stored as | drawn |
+|---|---|---|---|
+| 0 · usage example | a sentence using the word | `sense_revisions.examples` | inside the definition card |
+| 1 · instance | a named thing a **source** files under a meaning — WordNet's `instance_hypernym`, Wikidata's P31 | `instance_of` claims, `method: "source"`; source-listed and disputable here | chips in the Examples section |
+| 2 · exemplar | a thing a **person** cites as an example of a meaning, with a why and evidence (#105) | `illustrates` claims, reviewed | cards in the Examples section (build 2) |
+
+The Examples section sits between the definitions and this block and reads
+`Examples.for_page/3`, never `discovery_*`: nothing is requested, there is no
+run, no budget and no content type. An instance is an identity a source matched
+offline, and it never feeds `PageEvidence` — *Korean War* is filed under *war*,
+but Q8663 is not a meaning of *war*, so no shelf searches for it here. Signals
+never cross the layers: a vote never reorders an instance, and a source count
+never scores an exemplar (`Examples.Rank`).
 
 ---
 
