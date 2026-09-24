@@ -251,6 +251,46 @@ least 350 ms apart, memoized so no QID was asked twice.
 
 **23 of 60.**
 
+After the build, on the dev database, each run in-process with this branch's
+code (no Oban job ever committed, so the main checkout's node on 4007 could
+not claim one):
+
+| # | requests | what was run | what came back | running total |
+|---|---|---|---|---|
+| W3 | 8 | Wikiquote for *grief* and *love*, word-level recipes (Q1026040, Q316) | 12 cited lines each, every one `"level": "word"` | **31** |
+| W4 | 8 | the same after one promotion run: new recipes, sense-level | the same pages, 12 lines each, none word-level | **39** |
+| W5 | 4 | Wikiquote for *prey* (word-level, Q170430 → *Predation*) for the screenshots | 12 lines | **43** |
+
+(*prey*'s Commons run, 2 requests, 12 word-level depictions, and its Met run,
+1 request, nothing, are on those providers' budgets.)
+
+### After the build, and after one promotion run
+
+The thirteen probe words, Wikiquote run for each page it covers:
+
+| | Quotes shelf | of which word-level |
+|---|---|---|
+| after build B | 4 (*war*, *coward*, *grief*, *love*) | 2 (*grief*, *love*) |
+| after one promotion run | 4 | 0 — *grief* and *love* each promoted to a Wiktionary sense (5 and 6 shared words) |
+
+*power* has no shelf only because its WordNet link was withdrawn today (see
+above); the other eight are in no ladder scope or, like *nepotism* and *bank*,
+in one with no candidates.
+
+The promotion run (`Linker.corroborate/1` per scope, app not started, run rows
+196–198): **6,003** senses promoted in animals, **227** in emotions, **0** in
+culture — the 6,230 the spike predicted. A second run wrote no revision.
+
+| English lexemes with a sense-backed Wikidata link | before | after |
+|---|---|---|
+| lexemes | 1,849 | **8,053** |
+| pages (lemmas) | 1,810 | **7,950** |
+| still read at the word level (in scope, ≥ 0.85, no sense link) | 13,117 + 281 | 7,137 + 57 |
+
+With the ladder's withdrawn WordNet links restored the before figure would be
+the issue's 15,010; promotion's 6,230 would sit on top of it, less whatever
+overlaps.
+
 ### Who gains a page
 
 *Base* is a direct sitelink from a sense's item; *A* adds the hop (merged);
