@@ -320,6 +320,53 @@ defmodule DevilsDictionaryWeb.CultureChromeTest do
     end
   end
 
+  describe "a rail clips what is inside it" do
+    # A card's `sr-only` label is `position: absolute`. Its containing block is
+    # the nearest positioned ancestor, and when that was outside the rail the
+    # rail's `overflow-x` did not clip it: `/define/coward` measured a
+    # `scrollWidth` of 5,268 px at a 1,024 px viewport, one escaped label per
+    # card. The rail is that ancestor now, so the label sits in its scroll box.
+    defp rails(html) do
+      html
+      |> LazyHTML.from_fragment()
+      |> LazyHTML.query(~s(ul[aria-label$="scroll for more"]))
+    end
+
+    defp positioned?(rail),
+      do:
+        rail |> LazyHTML.attribute("class") |> hd() |> String.split() |> Enum.member?("relative")
+
+    test "a server shelf's rail is the positioned ancestor of its cards' labels" do
+      html = render([searches("stub_a", "Stub A", 3)])
+      [rail] = Enum.to_list(rails(html))
+
+      assert rail |> LazyHTML.query(".sr-only") |> Enum.count() > 0
+      assert positioned?(rail)
+    end
+
+    test "and so is a browser shelf's, which its hook fills with cards" do
+      html =
+        render_component(&Culture.section/1,
+          states: %{},
+          browsers: [
+            %{
+              provider: "giphy",
+              provider_name: "GIPHY",
+              content_type: :gif,
+              hook: "GiphyShelf",
+              term: "war",
+              language: "en",
+              api_key: "test-key",
+              note: "Search matches."
+            }
+          ]
+        )
+
+      [rail] = Enum.to_list(rails(html))
+      assert positioned?(rail)
+    end
+  end
+
   describe "D1 — a search-only shelf is demoted, not hidden" do
     setup do
       html =
