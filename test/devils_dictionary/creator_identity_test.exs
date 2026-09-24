@@ -568,6 +568,36 @@ defmodule DevilsDictionary.CreatorIdentityTest do
     refute html =~ "/entities/#{person("Q9068")}/"
   end
 
+  test "a retired or merged-away object leaves the discovery shelf on the next render (#180 C2)",
+       ctx do
+    %{target: target, results: results} =
+      run!(ctx, "garden", rows(~w(voltaire-candide-garden voltaire-dangerous-right)))
+
+    render = fn ->
+      state = Discovery.state(target.object_id, @slug)
+      render_component(&Culture.section/1, states: %{@slug => state})
+    end
+
+    html = render.()
+    assert html =~ ~s(id="culture-result-quote_fixture-voltaire-candide-garden")
+    assert html =~ ~s(id="culture-result-quote_fixture-voltaire-dangerous-right")
+
+    {:ok, _} = Registry.retire(results["voltaire-candide-garden"].object_id, reason: "withdrawn")
+
+    {:ok, survivor} =
+      Registry.create_content(%{content_kind: :quotation, body: "A duplicate, kept instead."})
+
+    {:ok, _} =
+      Registry.merge([results["voltaire-dangerous-right"].object_id], survivor.object_id,
+        reason: "duplicate identity"
+      )
+
+    # Nothing about the run changed; the shelf reads the objects' lifecycle.
+    html = render.()
+    refute html =~ ~s(id="culture-result-quote_fixture-voltaire-candide-garden")
+    refute html =~ ~s(id="culture-result-quote_fixture-voltaire-dangerous-right")
+  end
+
   # ── failures (C7) ────────────────────────────────────────────────────────
 
   test "a 429 during prepare defers the relationship; the next refresh resolves it", ctx do
@@ -900,5 +930,308 @@ defmodule DevilsDictionary.CreatorIdentityTest do
     # A second run finds the open case and does not open another.
     rerun!(ctx, "garden", rows(~w(voltaire-candide-garden)))
     assert Repo.aggregate(ReconciliationCase, :count) == 1
+  end
+
+  test "audit: changing author to an unresolved QID removes the previous public credit", ctx do
+    %{results: %{"nepotism-bierce" => line}} = run!(ctx, "nepotism", rows(~w(nepotism-bierce)))
+    corrected = hd(rows(~w(nepotism-bierce))) |> with_author("Q900999")
+    %{results: %{"nepotism-bierce" => again}} = rerun!(ctx, "nepotism", [corrected])
+    assert [%{"state" => "unresolved"}] = again.preview_metadata["creators"]
+    assert Claims.outgoing(line.object_id, predicate: "authored_by") == []
+  end
+
+  # ── #180 finding 3: an unresolved replacement author (C3) ────────────────
+
+  test "a permanent failure withdraws the credit it replaces; a later resolution reinstates it",
+       ctx do
+    %{results: %{"nepotism-bierce" => line}} = run!(ctx, "nepotism", rows(~w(nepotism-bierce)))
+    assertion = assertion_for(line.object_id)
+    bierce_id = person("Q191050")
+    corrected = hd(rows(~w(nepotism-bierce))) |> with_author("Q900999")
+
+    rerun!(ctx, "nepotism", [corrected])
+
+    withdrawn = Claims.current_revision(assertion.id)
+    assert withdrawn.lifecycle_state == :withdrawn
+    assert withdrawn.rationale == Creators.unresolved_reason()
+    assert withdrawn.object_object_id == bierce_id, "the withdrawal says what it withdrew"
+    assert [%{payload: %{"qid" => "Q900999"}}] = Repo.all(ReconciliationCase)
+
+    # The same failure again changes nothing.
+    rerun!(ctx, "nepotism", [corrected])
+    assert Claims.current_revision(assertion.id).id == withdrawn.id
+
+    # Wikidata can supply the item now: the provider's own withdrawal is
+    # reinstated, naming the person it resolves to.
+    stub_wikidata(ctx.requests, %{"Q900999" => Conformance.human("Q900999", "A. Corrector")})
+
+    %{results: %{"nepotism-bierce" => resolved}} = rerun!(ctx, "nepotism", [corrected])
+
+    assert [%{"state" => "minted"}] = resolved.preview_metadata["creators"]
+    current = Claims.current_revision(assertion.id)
+    assert current.lifecycle_state == :active
+    assert current.object_object_id == person("Q900999")
+    assert [%{id: id}] = Claims.outgoing(line.object_id, predicate: "authored_by")
+    assert id == current.id
+  end
+
+  test "a transient failure leaves the credit it would replace", ctx do
+    %{results: %{"nepotism-bierce" => line}} = run!(ctx, "nepotism", rows(~w(nepotism-bierce)))
+    assertion = assertion_for(line.object_id)
+    before = Claims.current_revision(assertion.id)
+
+    Req.Test.stub(DevilsDictionary.Absorb.Clients, fn conn ->
+      conn
+      |> Plug.Conn.put_resp_header("retry-after", "30")
+      |> Plug.Conn.send_resp(429, "")
+    end)
+
+    %{results: %{"nepotism-bierce" => again}} =
+      rerun!(ctx, "nepotism", [hd(rows(~w(nepotism-bierce))) |> with_author("Q900999")])
+
+    assert [%{"state" => "deferred"}] = again.preview_metadata["creators"]
+    assert Claims.current_revision(assertion.id).id == before.id
+
+    assert [%{object_object_id: bierce_id}] =
+             Claims.outgoing(line.object_id, predicate: "authored_by")
+
+    assert bierce_id == person("Q191050")
+    assert Repo.aggregate(ReconciliationCase, :count) == 0
+  end
+
+  test "a reviewed or hand-withdrawn credit is untouched by a failure and by a resolution",
+       ctx do
+    %{results: %{"nepotism-bierce" => nepotism}} =
+      run!(ctx, "nepotism", rows(~w(nepotism-bierce)))
+
+    %{results: %{"voltaire-candide-garden" => garden}} =
+      run!(ctx, "garden", rows(~w(voltaire-candide-garden)))
+
+    reviewed_assertion = assertion_for(nepotism.object_id)
+    reviewed = Claims.current_revision(reviewed_assertion.id)
+    {:ok, _} = Claims.review(reviewed.id, :accepted)
+
+    withdrawn_assertion = assertion_for(garden.object_id)
+    {:ok, withdrawn} = Claims.withdraw(withdrawn_assertion.id, reason: "curator: not Voltaire's")
+
+    rerun_both = fn ->
+      rerun!(ctx, "nepotism", [hd(rows(~w(nepotism-bierce))) |> with_author("Q900999")])
+      rerun!(ctx, "garden", [hd(rows(~w(voltaire-candide-garden))) |> with_author("Q900999")])
+    end
+
+    # Permanently unresolvable: neither is withdrawn by the provider.
+    rerun_both.()
+    assert Claims.current_revision(reviewed_assertion.id).id == reviewed.id
+    assert Claims.current_revision(withdrawn_assertion.id).id == withdrawn.id
+
+    # Resolvable: neither is revised or reinstated by the provider either.
+    stub_wikidata(ctx.requests, %{"Q900999" => Conformance.human("Q900999", "A. Corrector")})
+    %{results: %{"voltaire-candide-garden" => again}} = rerun_both.()
+
+    assert Claims.current_revision(reviewed_assertion.id).id == reviewed.id
+    assert Claims.current_revision(withdrawn_assertion.id).id == withdrawn.id
+    assert [%{"state" => "overridden"}] = again.preview_metadata["creators"]
+  end
+
+  test "audit: a register arriving before a credit still supplies contradicting evidence", ctx do
+    base = hd(rows(~w(voltaire-candide-garden)))
+
+    register =
+      base
+      |> Map.put("id", "garden-register")
+      |> with_author(nil)
+      |> Map.put("misattributed_to_qid", "Q9068")
+
+    run!(ctx, "register-first", [register])
+    %{results: %{"voltaire-candide-garden" => line}} = run!(ctx, "credit-later", [base])
+    [credit] = Claims.outgoing(line.object_id, predicate: "authored_by")
+    assert Enum.any?(Claims.evidence(credit.id), &(&1.evidence_role == :contradicts))
+  end
+
+  # ── #180 finding 6: a register and a credit meet in either order (C4) ────
+
+  defp register_row(id, qid) do
+    hd(rows([id]))
+    |> Map.put("id", "#{id}-register")
+    |> with_author(nil)
+    |> Map.put("misattributed_to_qid", qid)
+  end
+
+  defp contradicts(subject_id) do
+    [credit] = Claims.outgoing(subject_id, predicate: "authored_by")
+
+    for e <- Claims.evidence(credit.id),
+        e.evidence_role == :contradicts,
+        do: Map.take(e, [:source_record_revision_id, :attribution_text, :locator])
+  end
+
+  # What the register row was read from: its result's record, at the revision
+  # current when it was read.
+  defp register_citation(result) do
+    record = Repo.get!(Sources.SourceRecord, result.source_record_id)
+
+    revision =
+      Repo.get_by!(DevilsDictionary.Corpus.SourceRecordRevision,
+        source_record_id: record.id,
+        revision_key: record.content_hash
+      )
+
+    %{source_record_revision_id: revision.id, attribution_text: nil, locator: nil}
+  end
+
+  test "a register and a credit meet in either order, once, with the same evidence", ctx do
+    orders = [
+      register_first: "voltaire-candide-garden",
+      credit_first: "voltaire-dangerous-right"
+    ]
+
+    for {order, id} <- orders do
+      credit = fn -> run!(ctx, "#{id}-credit", rows([id])).results[id] end
+
+      register = fn ->
+        run!(ctx, "#{id}-register", [register_row(id, "Q9068")]).results["#{id}-register"]
+      end
+
+      {line, register_result} =
+        case order do
+          :register_first ->
+            register_result = register.()
+            {credit.(), register_result}
+
+          :credit_first ->
+            line = credit.()
+            {line, register.()}
+        end
+
+      assert register_result.object_id == line.object_id, "one line, one subject"
+      assert contradicts(line.object_id) == [register_citation(register_result)], "#{order}"
+
+      # Re-running both, in the same order, adds no evidence row.
+      rerun!(ctx, "#{id}-register", [register_row(id, "Q9068")])
+      rerun!(ctx, "#{id}-credit", rows([id]))
+      assert contradicts(line.object_id) == [register_citation(register_result)], "#{order}"
+    end
+  end
+
+  test "a credit revised to the person a register names meets the register", ctx do
+    %{results: %{"nepotism-bierce" => line}} = run!(ctx, "nepotism", rows(~w(nepotism-bierce)))
+
+    %{results: %{"nepotism-bierce-register" => register}} =
+      run!(ctx, "nepotism-register", [register_row("nepotism-bierce", "Q9068")])
+
+    # The register names Voltaire and the credit is Bierce's: nothing to meet.
+    assert contradicts(line.object_id) == []
+
+    rerun!(ctx, "nepotism", [hd(rows(~w(nepotism-bierce))) |> with_author("Q9068")])
+
+    assert [%{object_object_id: voltaire_id}] =
+             Claims.outgoing(line.object_id, predicate: "authored_by")
+
+    assert voltaire_id == person("Q9068")
+    assert contradicts(line.object_id) == [register_citation(register)]
+
+    rerun!(ctx, "nepotism", [hd(rows(~w(nepotism-bierce))) |> with_author("Q9068")])
+    assert contradicts(line.object_id) == [register_citation(register)]
+  end
+
+  test "audit: two incompatible target QIDs cannot silently credit the first", ctx do
+    run!(ctx, "source-setup", rows(~w(nepotism-report-on-business)))
+    source = Repo.get_by!(Source, slug: @slug)
+    [row] = rows(~w(voltaire-candide-garden))
+    {:ok, entry} = Quotes.identity_record(%{external_namespace: "quote_fixture", row: row})
+    [relationship] = entry.relationships
+
+    conflicting = %{
+      relationship
+      | target_identifiers: [
+          %{namespace: "wikidata", external_id: "Q191050", metadata: %{}, exclusive: true},
+          %{namespace: "wikidata", external_id: "Q9068", metadata: %{}, exclusive: true}
+        ]
+    }
+
+    entry = %{entry | source_id: source.id, relationships: [conflicting]}
+    resolution = SourceIdentity.resolve(entry)
+    assert [%{state: :unresolved}] = resolution.relationships
+    assert Claims.outgoing(resolution.object_id, predicate: "authored_by") == []
+  end
+
+  test "two Wikidata ids for one creator open one case naming both, and nothing is minted",
+       ctx do
+    run!(ctx, "source-setup", rows(~w(nepotism-report-on-business)))
+    source = Repo.get_by!(Source, slug: @slug)
+    [row] = rows(~w(voltaire-candide-garden))
+    {:ok, entry} = Quotes.identity_record(%{external_namespace: "quote_fixture", row: row})
+    [relationship] = entry.relationships
+
+    targets = [
+      %{namespace: "wikidata", external_id: "Q191050", metadata: %{}, exclusive: true},
+      %{namespace: "wikidata", external_id: "Q9068", metadata: %{}, exclusive: true}
+    ]
+
+    entry = %{
+      entry
+      | source_id: source.id,
+        relationships: [%{relationship | target_identifiers: targets}]
+    }
+
+    # Voltaire could be minted, were either id the answer.
+    prepared = %{
+      "Q9068" => Creators.classify("Q9068", %{"Q9068" => Conformance.human("Q9068", "Voltaire")})
+    }
+
+    for _ <- 1..2 do
+      resolution = SourceIdentity.resolve(entry, prepared: prepared)
+
+      assert [%{state: :unresolved, reason: "conflicting_target_identifiers", write: :none}] =
+               resolution.relationships
+
+      assert authored_by(resolution.object_id) == []
+    end
+
+    assert [case] =
+             Repo.all(
+               from c in ReconciliationCase,
+                 where: c.kind == "unresolved_creator" and c.status == :open
+             )
+
+    assert case.payload["reason"] == "conflicting_target_identifiers"
+    assert case.payload["qids"] == ["Q191050", "Q9068"]
+    assert person("Q9068") == nil, "neither id is minted from"
+  end
+
+  test "audit: merging a work preserves the creators on its card", ctx do
+    %{results: %{"voltaire-candide-garden" => line}} =
+      run!(ctx, "garden", rows(~w(voltaire-candide-garden)))
+
+    {:ok, survivor} =
+      Registry.create_content(%{content_kind: :quotation, body: "We must cultivate our garden."})
+
+    {:ok, _} =
+      Registry.merge([line.object_id], survivor.object_id, reason: "audit duplicate identity")
+
+    assert [_] = Claims.outgoing(survivor.object_id, predicate: "authored_by")
+    assert [_] = Map.fetch!(Creators.credited([survivor.object_id]), survivor.object_id)
+  end
+
+  test "the batched read returns a merged-away subject's claims, grouped under the survivor",
+       ctx do
+    %{results: %{"voltaire-candide-garden" => line}} =
+      run!(ctx, "garden", rows(~w(voltaire-candide-garden)))
+
+    {:ok, survivor} =
+      Registry.create_content(%{content_kind: :quotation, body: "We must cultivate our garden."})
+
+    {:ok, _} = Registry.merge([line.object_id], survivor.object_id, reason: "duplicate identity")
+
+    # The list form reads the survivor's whole family, as the scalar form does;
+    # the row keeps the subject it was stored against.
+    assert [row] = Claims.outgoing([survivor.object_id], predicate: "authored_by")
+    assert row.subject_object_id == line.object_id
+
+    # Asked by either id, the credit is the survivor's.
+    credited = Creators.credited([survivor.object_id, line.object_id])
+    voltaire_id = person("Q9068")
+    assert [%{object_id: ^voltaire_id, label: "Voltaire"}] = credited[survivor.object_id]
+    assert credited[line.object_id] == credited[survivor.object_id]
   end
 end

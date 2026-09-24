@@ -46,7 +46,7 @@ defmodule DevilsDictionary.Quotations.Corpus do
   alias DevilsDictionary.Claims.{Assertion, AssertionEvidence, AssertionRevision, Predicate}
   alias DevilsDictionary.Corpus.SourceRecordRevision
   alias DevilsDictionary.Quotations.Badge
-  alias DevilsDictionary.Registry.ContentItem
+  alias DevilsDictionary.Registry.{ContentItem, ExternalIdentifier, Object}
   alias DevilsDictionary.Repo
   alias DevilsDictionary.SourceIdentity
   alias DevilsDictionary.SourceIdentity.Creators
@@ -331,9 +331,13 @@ defmodule DevilsDictionary.Quotations.Corpus do
 
   defp held([]), do: %{}
 
+  # Only an active object is held for the shelf: a retired or merged-away
+  # line leaves it on the next render (#180 C2).
   defp held(object_ids) do
     Repo.all(
       from item in ContentItem,
+        join: object in Object,
+        on: object.id == item.object_id and object.lifecycle_state == :active,
         left_join: revision in DevilsDictionary.Registry.ContentRevision,
         on: revision.content_id == item.object_id and revision.is_current,
         where: item.object_id in ^object_ids,
@@ -347,6 +351,11 @@ defmodule DevilsDictionary.Quotations.Corpus do
   with each row's `object_id` (the content item its fingerprint resolves to).
   Read from the corpus's own source records, so a page asks the registry for
   what was seeded and never reads the file.
+
+  A row whose item is not `active` — retired, or merged into another — is not
+  returned: a shelf never shows an object whose lifecycle says it is gone
+  (#180 C2). A merge moves the fingerprint to the survivor, so a merged line
+  comes back as the survivor's.
   """
   def rows_for_concepts([]), do: []
 
@@ -360,14 +369,28 @@ defmodule DevilsDictionary.Quotations.Corpus do
           s.slug == @slug and s.active and
             fragment("? \\?| ?", rev.payload["concept_qids"], type(^qids, {:array, :string})),
         order_by: [asc: r.external_id],
-        select: {rev.payload, r.id}
+        select: rev.payload
     )
-    |> Enum.map(fn {row, _record_id} ->
-      Map.put(
-        row,
-        "object_id",
-        DevilsDictionary.Registry.by_external_id("quotation_fingerprint", row["fingerprint"])
+    |> with_active_objects()
+  end
+
+  defp with_active_objects([]), do: []
+
+  defp with_active_objects(rows) do
+    held =
+      Repo.all(
+        from i in ExternalIdentifier,
+          join: object in Object,
+          on: object.id == i.object_id and object.lifecycle_state == :active,
+          where:
+            i.namespace == "quotation_fingerprint" and i.status == :verified and
+              i.external_id in ^Enum.map(rows, & &1["fingerprint"]),
+          select: {i.external_id, i.object_id}
       )
-    end)
+      |> Map.new()
+
+    for row <- rows,
+        object_id = held[row["fingerprint"]],
+        do: Map.put(row, "object_id", object_id)
   end
 end
