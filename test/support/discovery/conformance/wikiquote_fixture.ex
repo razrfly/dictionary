@@ -112,17 +112,34 @@ defmodule DevilsDictionary.Discovery.Conformance.WikiquoteFixture do
   @doc """
   Installs the stub. `sitelinks` maps a concept QID to its Wikiquote page
   title; `authors` maps a page title to its Wikidata item (or to `{:redirect,
-  title}`). Anything not named has no item.
+  title}`). Anything not named has no item. `humans` is the QIDs the query
+  service says are people (`P31` = `Q5`): every author's, unless a test says
+  otherwise.
   """
-  def respond(sitelinks, authors \\ %{}) do
-    Req.Test.stub(Wikiquote, fn conn -> answer(conn, sitelinks, authors) end)
+  def respond(sitelinks, authors \\ %{}, humans \\ :all) do
+    Req.Test.stub(Wikiquote, fn conn -> answer(conn, sitelinks, authors, humans) end)
   end
 
   @doc "The stub's answer for one request, for tests that wrap it."
-  def answer(conn, sitelinks, authors) do
+  def answer(conn, sitelinks, authors, humans \\ :all) do
     conn = fetch_query_params(conn)
 
     case {conn.host, conn.params} do
+      # The query service: which of the `VALUES` are people.
+      {"sparql.test", %{"query" => query}} ->
+        people =
+          ~r/wd:(Q\d+)/
+          |> Regex.scan(query, capture: :all_but_first)
+          |> List.flatten()
+          |> Enum.filter(&(humans == :all or &1 in humans))
+
+        Req.Test.json(conn, %{
+          "results" => %{
+            "bindings" =>
+              Enum.map(people, &%{"item" => %{"value" => "http://www.wikidata.org/entity/#{&1}"}})
+          }
+        })
+
       {"wikidata.test", %{"ids" => ids}} ->
         entities =
           ids

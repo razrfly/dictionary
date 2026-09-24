@@ -11,7 +11,7 @@ Wikiquote at all are #158 (Finding 1 and the Recommendation).
 |---|---|
 | Slug | `wikiquote` |
 | Archetype | discovery, on the `:quote` shelf (added here: build 1, which was to open it, had not started) |
-| Endpoints | `GET https://en.wikiquote.org/api/rest_v1/page/html/<title>` (Parsoid HTML); `wbgetentities` on `https://www.wikidata.org/w/api.php` for the concept's sitelink; `action=query&prop=pageprops&ppprop=wikibase_item&redirects=1` on `https://en.wikiquote.org/w/api.php` for the linked authors' items. **Never** `action=parse` wikitext and **never** `list=search` (#158 Finding 1) |
+| Endpoints | `GET https://en.wikiquote.org/api/rest_v1/page/html/<title>` (Parsoid HTML); `wbgetentities` on `https://www.wikidata.org/w/api.php` for the concept's sitelink; `action=query&prop=pageprops&ppprop=wikibase_item&redirects=1` on `https://en.wikiquote.org/w/api.php` for the linked authors' items; `https://query.wikidata.org/sparql` for which of those items are people (`P31` = `Q5`, one `VALUES` query per page). **Never** `action=parse` wikitext and **never** `list=search` (#158 Finding 1) |
 | Licence | CC BY-SA 4.0. Text may be stored with attribution; every card carries *Wikiquote, CC BY-SA 4.0*. Retention durable |
 | Key required | none |
 | Published rate limit | Wikimedia's API etiquette: identify with a User-Agent, go serially |
@@ -67,11 +67,23 @@ the review's change to the author stage.
   (`wikiquote_item`), beside the line's `quotation_fingerprint` (ADR 0003)
 - Encyclopedia identifier: the QID a sense `refers_to`
 - Crosswalk: Wikidata's own sitelink, read by `wbgetentities`. Authors: the
-  page a citation links to first, resolved to its Wikidata item by
-  Wikiquote's page properties (`wikibase_item`, the other end of the same
-  sitelink), redirects followed — never by name. A linked page with no item
-  is reported on the item as `author_unresolved`. `:candidate` on a theme
-  page; `:verified` for an author page's own cited work
+  first page a citation links to **whose item is a person**. Each linked page
+  is resolved to its Wikidata item by Wikiquote's page properties
+  (`wikibase_item`, the other end of the same sitelink, redirects followed),
+  and one `VALUES … wdt:P31 wd:Q5` query to the query service says which of
+  those items are humans. Never by name. A citation that links a work or a
+  theme page first (*Impropriety*, then *Horace*, on Grief) is credited to
+  the person. One whose linked items are none of them people credits nobody
+  and opens no `unresolved_creator` case (the audit of #169, residual 1). A
+  first link with no item at all is still reported on the item as
+  `author_unresolved`. If the query service cannot answer, the first link is
+  credited, as before. `:candidate` on a theme page; `:verified` for an author
+  page's own cited work
+- **No page property says "person".** Wikiquote's `pageprops` on an author
+  page are `wikibase_item`, `page_image_free` and sometimes `defaultsort`
+  ("Addison, Joseph", which is a sort key made from the name and is missing
+  on *Voltaire*). Only `P31` can say it, hence the one query (1 request,
+  2026-09-24)
 
 ## Measured facts
 

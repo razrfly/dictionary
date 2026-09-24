@@ -504,4 +504,108 @@ defmodule DevilsDictionary.Discovery.Providers.WikiquoteTest do
       end
     end
   end
+
+  describe "a credit is a person (the audit of #169, residual 1)" do
+    # Grief's Horace line cites "… / Horace, Carmina …" and links the theme
+    # page *Impropriety* before Horace. Read through `retrieve/4` with the
+    # answers written here, so the only thing under test is which link is
+    # credited.
+    @grief_page DevilsDictionary.Discovery.Providers.Wikiquote.Parser.parse(
+                  DevilsDictionary.WikiquoteFixtures.body("grief")
+                )
+
+    defp horace_run(humans) do
+      kept = Enum.filter(@grief_page.quotations, &(is_binary(&1.work) or is_integer(&1.year)))
+      at = Enum.find_index(kept, &(&1.citation_links == ["Impropriety", "Horace"]))
+      assert is_integer(at), "the fixture no longer has the Horace line"
+
+      mapping = %{
+        "term" => "grief",
+        "resolution_strategy" => "sitelink_qid_v1",
+        "entities" => [
+          %{"qid" => "Q900700", "label" => "Grief", "object_id" => 1, "kind" => "concept"}
+        ]
+      }
+
+      request_fun = fn
+        "sitelinks", _ ->
+          {:ok,
+           %{
+             "entities" => %{
+               "Q900700" => %{"sitelinks" => %{"enwikiquote" => %{"title" => "Grief"}}}
+             }
+           }}
+
+        "page", _ ->
+          {:ok, %{"page" => @grief_page}}
+
+        "authors", %{"titles" => titles} ->
+          items = %{"Impropriety" => "Q900720", "Horace" => "Q6197"}
+
+          {:ok,
+           %{
+             "query" => %{
+               "pages" =>
+                 for title <- titles, qid = items[title] do
+                   %{"title" => title, "pageprops" => %{"wikibase_item" => qid}}
+                 end
+             }
+           }}
+
+        "humans", %{"qids" => qids} ->
+          send(self(), {:humans_asked, qids})
+
+          case humans do
+            {:error, code} ->
+              {:error, code}
+
+            people ->
+              {:ok,
+               %{
+                 "results" => %{
+                   "bindings" =>
+                     for qid <- qids, qid in people do
+                       %{"item" => %{"value" => "http://www.wikidata.org/entity/#{qid}"}}
+                     end
+                 }
+               }}
+          end
+      end
+
+      {:ok, %{items: [item | _]}} =
+        Wikiquote.retrieve(
+          "wikiquote_page",
+          mapping,
+          %{"after" => "#{at}", "first" => 1},
+          request_fun
+        )
+
+      item.preview_metadata
+    end
+
+    test "the theme page linked first is skipped for the person linked after it" do
+      line = horace_run(["Q6197"])
+
+      assert line["author_qid"] == "Q6197"
+      assert line["artist"] == "Horace"
+      refute line["author_unresolved"]
+      assert_received {:humans_asked, qids}
+      assert "Q900720" in qids and "Q6197" in qids
+    end
+
+    test "a citation whose linked items are no one credits nobody and opens no case" do
+      line = horace_run([])
+
+      refute line["author_qid"]
+      refute line["author_unresolved"]
+      refute line["artist"]
+    end
+
+    test "when the query service cannot say, the first link is credited, as before" do
+      line = horace_run({:error, "provider_unavailable"})
+
+      assert line["author_qid"] == "Q900720"
+      assert line["artist"] == "Impropriety"
+    end
+  end
 end

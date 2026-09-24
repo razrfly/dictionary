@@ -15,7 +15,7 @@ defmodule DevilsDictionary.Discovery.Providers.Wikiquote do
   negative cache like any empty answer. `list=search` and `action=parse`
   wikitext are never called (#158 Finding 1).
 
-  ## One page, three requests at most
+  ## One page, four requests at most
 
     1. `sitelinks` — `wbgetentities` for the page's QIDs, `sitefilter=enwikiquote`
        (the Wikidata client's parameters, this provider's budget)
@@ -25,6 +25,9 @@ defmodule DevilsDictionary.Discovery.Providers.Wikiquote do
     3. `authors` — the pages the kept lines' citations link to, read from
        Wikiquote's own page properties (`wikibase_item`, the other end of the
        sitelink), redirects followed, 50 at a time
+    4. `humans` — which of those items are people (`P31` = `Q5`), one
+       `VALUES` query to the Wikidata query service, so a citation that links
+       a work or a theme before its author is credited to the author
 
   Paced 200 ms apart, the Wikidata client's own pace, by the transport.
   Pagination is an **offset into the page's kept lines**: one theme page is one
@@ -47,14 +50,25 @@ defmodule DevilsDictionary.Discovery.Providers.Wikiquote do
 
   ## Credits
 
-  A line's `authored_by` is the QID of the page its citation links to first,
-  read from that page's `enwikiquote` sitelink — **never a name lookup** — at
+  A line's `authored_by` is the QID of the first page its citation links to
+  **whose item is a human** (`P31` = `Q5`), read from that page's
+  `enwikiquote` sitelink — **never a name lookup** — at
   `:candidate` on a theme page (the citation names the author; nothing checked
   it) and at `:verified` on an author page's own cited work. A register row
   gets **no** `authored_by`: when its sentence links the person the line is
   attributed to (or the row sits on that person's own page), it gets a
   `misattributed_to` with `register: true` and the sentence, verbatim, as the
   rationale.
+
+  *Cato, a Tragedy (1713)* may link the play before Addison, and Grief's
+  Horace line links the theme page *Impropriety* first. Crediting the first
+  link credited the work, which the endpoint rule then refused, and every such
+  line opened an `unresolved_creator` case (the audit of #169, residual 1).
+  So the credit skips a linked item that is not a person. A citation whose
+  linked items are all something else credits nobody and opens no case. One
+  whose first link has no item at all is still reported as
+  `author_unresolved`. If the query service cannot answer, the old rule stands:
+  the first link.
   """
 
   @behaviour DevilsDictionary.Discovery.Provider
@@ -232,6 +246,23 @@ defmodule DevilsDictionary.Discovery.Providers.Wikiquote do
     ]
   end
 
+  # Which of the linked items are people: one small `VALUES` query, because a
+  # `wbgetentities` for their claims is every claim they have (Voltaire's alone
+  # is a megabyte) and there is no page property that says so.
+  def request_options(%{"endpoint" => "humans", "qids" => qids}) do
+    [
+      method: :get,
+      url: sparql_url(),
+      params: [
+        query:
+          "SELECT ?item WHERE { VALUES ?item { #{Enum.map_join(qids, " ", &"wd:#{&1}")} } " <>
+            "?item wdt:P31 wd:Q5 }",
+        format: "json"
+      ],
+      headers: [{"accept", "application/sparql-results+json"} | headers()]
+    ]
+  end
+
   def request_options(%{"endpoint" => "page", "title" => title}) do
     [
       method: :get,
@@ -251,6 +282,7 @@ defmodule DevilsDictionary.Discovery.Providers.Wikiquote do
 
   defp wikidata_url, do: config()[:wikidata_endpoint] || WikidataClient.api_url()
   defp api_url, do: config()[:api_endpoint] || "https://en.wikiquote.org/w/api.php"
+  defp sparql_url, do: config()[:sparql_endpoint] || "https://query.wikidata.org/sparql"
 
   defp page_path(title),
     do: title |> String.replace(" ", "_") |> URI.encode(&URI.char_unreserved?/1)
@@ -271,7 +303,16 @@ defmodule DevilsDictionary.Discovery.Providers.Wikiquote do
     end
   end
 
+  # The page is HTML; the query service's answer is JSON under a media type
+  # (`application/sparql-results+json`) that may reach here undecoded.
   @impl true
+  def parse_body("{" <> _ = json) do
+    case Jason.decode(json) do
+      {:ok, map} when is_map(map) -> {:ok, map}
+      _ -> :error
+    end
+  end
+
   def parse_body(html) when is_binary(html), do: {:ok, %{"page" => Parser.parse(html)}}
   def parse_body(_body), do: :error
 
@@ -352,39 +393,42 @@ defmodule DevilsDictionary.Discovery.Providers.Wikiquote do
     # provenance, not a list to page through.
     register_rows = if offset == 0, do: register, else: []
 
+    # Every linked page a credit could be, first links first so a long
+    # citation never crowds out another line's author.
     titles =
-      (Enum.flat_map(slice, &author_titles(&1, author_page?)) ++
-         Enum.flat_map(register_rows, &attributed_titles(&1, author_page?)))
+      (Enum.flat_map(slice, &Enum.take(author_titles(&1, author_page?), 1)) ++
+         Enum.flat_map(register_rows, &attributed_titles(&1, author_page?)) ++
+         Enum.flat_map(slice, &author_titles(&1, author_page?)))
       |> Enum.uniq()
       |> Enum.take(WikidataClient.batch_size())
 
-    case author_qids(titles, request_fun) do
-      {:ok, qids} ->
-        qids = if author_page?, do: Map.put(qids, title, target.qid), else: qids
+    with {:ok, qids} <- author_qids(titles, request_fun),
+         {:ok, humans} <- humans(Map.values(qids), request_fun) do
+      qids = if author_page?, do: Map.put(qids, title, target.qid), else: qids
 
-        context = %{
-          mapping: mapping,
-          target: target,
-          title: title,
-          revision_id: page.revision_id,
-          author_page?: author_page?,
-          qids: qids,
-          register: register_index(register)
-        }
+      context = %{
+        mapping: mapping,
+        target: target,
+        title: title,
+        revision_id: page.revision_id,
+        author_page?: author_page?,
+        qids: qids,
+        humans: humans,
+        register: register_index(register)
+      }
 
-        items =
-          Enum.map(slice, &kept_item(&1, context)) ++
-            Enum.map(register_rows, &register_item(&1, context))
+      items =
+        Enum.map(slice, &kept_item(&1, context)) ++
+          Enum.map(register_rows, &register_item(&1, context))
 
-        {:ok,
-         %{
-           request_parameters: Map.put(request, "offset", Integer.to_string(offset)),
-           items:
-             items |> Enum.with_index() |> Enum.map(fn {item, i} -> %{item | position: i} end),
-           next_cursor: if(offset + limit < length(kept), do: Integer.to_string(offset + limit)),
-           completion_reason: if(items == [], do: :no_results, else: :results)
-         }}
-
+      {:ok,
+       %{
+         request_parameters: Map.put(request, "offset", Integer.to_string(offset)),
+         items: items |> Enum.with_index() |> Enum.map(fn {item, i} -> %{item | position: i} end),
+         next_cursor: if(offset + limit < length(kept), do: Integer.to_string(offset + limit)),
+         completion_reason: if(items == [], do: :no_results, else: :results)
+       }}
+    else
       # The provider contract: a deferral carries the request back, so the
       # run is retried from where it stood (CodeRabbit on #169).
       {:deferred, code, seconds} ->
@@ -408,10 +452,8 @@ defmodule DevilsDictionary.Discovery.Providers.Wikiquote do
   # heading above it names a work or a year.
   defp cited?(line), do: is_binary(line.work) or is_integer(line.year)
 
-  defp author_titles(line, true),
-    do: if(line.about_subject, do: Enum.take(line.citation_links, 1), else: [])
-
-  defp author_titles(line, false), do: Enum.take(line.citation_links, 1)
+  defp author_titles(line, true), do: if(line.about_subject, do: line.citation_links, else: [])
+  defp author_titles(line, false), do: line.citation_links
 
   defp attributed_titles(_row, true), do: []
   defp attributed_titles(row, false), do: Enum.take(row.attributed_links, 1)
@@ -422,6 +464,32 @@ defmodule DevilsDictionary.Discovery.Providers.Wikiquote do
     case request_fun.("authors", %{"endpoint" => "authors", "titles" => titles}) do
       {:ok, body} -> {:ok, page_items(body, titles)}
       other -> other
+    end
+  end
+
+  # Which of these items are people, or `:unknown` when the query service did
+  # not say — in which case the first link is credited, as before. A deferral
+  # is still a deferral: the transport has already backed the source off.
+  defp humans([], _request_fun), do: {:ok, MapSet.new()}
+
+  defp humans(qids, request_fun) do
+    case request_fun.("humans", %{
+           "endpoint" => "humans",
+           "qids" => qids |> Enum.uniq() |> Enum.sort()
+         }) do
+      {:ok, %{"results" => %{"bindings" => bindings}}} ->
+        {:ok,
+         for(
+           %{"item" => %{"value" => "http://www.wikidata.org/entity/" <> qid}} <- bindings,
+           into: MapSet.new(),
+           do: qid
+         )}
+
+      {:deferred, _code, _seconds} = deferred ->
+        deferred
+
+      _unknown ->
+        {:ok, :unknown}
     end
   end
 
@@ -517,8 +585,7 @@ defmodule DevilsDictionary.Discovery.Providers.Wikiquote do
   defp credit(line, %{author_page?: true} = context) do
     cond do
       line.about_subject ->
-        title = List.first(line.citation_links)
-        {title && Map.get(context.qids, title), title, :candidate}
+        linked_credit(line.citation_links, context)
 
       is_binary(line.subsection) or is_binary(line.citation) ->
         {context.target.qid, context.title, :verified}
@@ -528,9 +595,26 @@ defmodule DevilsDictionary.Discovery.Providers.Wikiquote do
     end
   end
 
-  defp credit(line, context) do
-    title = List.first(line.citation_links)
+  defp credit(line, context), do: linked_credit(line.citation_links, context)
+
+  # The first linked page whose item is a person. Failing that: the first link
+  # reported as unresolved when it has no item at all, and no credit when its
+  # item is something else — a work, a theme — because crediting a work is a
+  # case nobody can close.
+  defp linked_credit(links, %{humans: :unknown} = context) do
+    title = List.first(links)
     {title && Map.get(context.qids, title), title, :candidate}
+  end
+
+  defp linked_credit(links, context) do
+    human = Enum.find(links, &MapSet.member?(context.humans, Map.get(context.qids, &1, "")))
+    first = List.first(links)
+
+    cond do
+      human -> {Map.fetch!(context.qids, human), human, :candidate}
+      first && not Map.has_key?(context.qids, first) -> {nil, first, :candidate}
+      true -> {nil, nil, nil}
+    end
   end
 
   defp provenance(nil), do: {"plausible", nil}
