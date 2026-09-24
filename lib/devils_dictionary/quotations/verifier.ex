@@ -60,6 +60,7 @@ defmodule DevilsDictionary.Quotations.Verifier do
     PersonDetails
   }
 
+  alias DevilsDictionary.Registry
   alias DevilsDictionary.Repo
   alias DevilsDictionary.Sources.Source
 
@@ -398,7 +399,10 @@ defmodule DevilsDictionary.Quotations.Verifier do
         :ignored
 
       revision ->
-        rebadge(revision.subject_object_id)
+        # The claim may be stored against an identity since merged into
+        # another (#180 finding 5): the badge lives on the survivor, and the
+        # claims that decide it are the whole family's.
+        rebadge(Registry.canonical_id(revision.subject_object_id))
         due_now(revision.object_object_id)
         :rebadged
     end
@@ -408,17 +412,23 @@ defmodule DevilsDictionary.Quotations.Verifier do
     item = lock_item!(content_id)
 
     if is_map((item.metadata || %{})["provenance"]) do
+      # Every identity merged into this one still holds its claims under its
+      # own id; the public reader walks the family, and so does this.
+      family = Registry.canonical_family(content_id)
+
       claims =
         Repo.all(
           from [r, p, a, s] in current_claims(),
-            where: r.subject_object_id == ^content_id,
+            where: r.subject_object_id in ^family,
             select: %{revision: r, predicate: p.key, source: s.slug}
         )
 
       year =
         Repo.one(
           from c in ContentRevision,
-            where: c.content_id == ^content_id and c.is_current,
+            where: c.content_id in ^family and c.is_current and not is_nil(c.year),
+            order_by: [desc: fragment("? = ?", c.content_id, ^content_id), desc: c.id],
+            limit: 1,
             select: c.year
         )
 
@@ -475,8 +485,25 @@ defmodule DevilsDictionary.Quotations.Verifier do
   @kinds %{"cited" => :cited, "primary" => :primary, "register" => :register}
   @roles %{"supports" => :supports, "contradicts" => :contradicts}
 
-  # The checks another person's pass recorded on their credit.
+  # The checks held on a credit, in either of the two shapes a credit carries
+  # them (#180 finding 1, second review): a verifier pass writes them into the
+  # revision's `metadata["checks"]`; the corpus seeder writes `assertion_evidence`
+  # rows whose source record is the manifest row, which carries the same checks
+  # under `raw["checks"]` with their own `source`, `kind` and `role`. Both are
+  # read as findings, each check once, so accepting a corpus credit does not
+  # strip the Gutenberg text that made it *Verified*, and a rejected credit
+  # still takes its support with it (a rejected revision is not current and
+  # public, so it never reaches here).
   defp held_checks(%{predicate: "authored_by", revision: revision}) do
+    case metadata_checks(revision) do
+      [] -> evidence_checks(revision)
+      checks -> checks
+    end
+  end
+
+  defp held_checks(_claim), do: []
+
+  defp metadata_checks(revision) do
     for %{"source" => source, "kind" => kind, "role" => role} = check <-
           (revision.metadata || %{})["checks"] || [],
         Map.has_key?(@kinds, kind) and Map.has_key?(@roles, role) do
@@ -484,7 +511,45 @@ defmodule DevilsDictionary.Quotations.Verifier do
     end
   end
 
-  defp held_checks(_claim), do: []
+  # An evidence row's locator is the check's locator (clamped as the seeder
+  # clamps it), and the record it cites holds the check that made it. A row
+  # whose record carries no checks is another writer's (a register's
+  # `contradicts`, a curator's link) and counts by its role and its source.
+  defp evidence_checks(revision) do
+    Repo.all(
+      from e in AssertionEvidence,
+        join: rev in DevilsDictionary.Corpus.SourceRecordRevision,
+        on: rev.id == e.source_record_revision_id,
+        join: rec in DevilsDictionary.Sources.SourceRecord,
+        on: rec.id == rev.source_record_id,
+        join: s in Source,
+        on: s.id == rec.source_id,
+        where: e.assertion_revision_id == ^revision.id,
+        select: %{
+          role: e.evidence_role,
+          locator: e.locator,
+          record_source: s.slug,
+          checks: rev.payload["checks"]
+        }
+    )
+    |> Enum.flat_map(fn row ->
+      held =
+        for %{"source" => source, "kind" => kind, "role" => role} = check <-
+              List.wrap(row.checks),
+            Map.has_key?(@kinds, kind) and Map.has_key?(@roles, role),
+            String.slice(to_string(check["locator"]), 0, 255) == row.locator do
+          %{source: source, kind: @kinds[kind], role: @roles[role], locator: check["locator"]}
+        end
+
+      case {held, row.role} do
+        {[_ | _], _} -> held
+        {[], :contradicts} -> [%{source: row.record_source, kind: :register, role: :contradicts}]
+        {[], :supports} -> [%{source: row.record_source, kind: :cited, role: :supports}]
+        _ -> []
+      end
+    end)
+    |> Enum.uniq_by(&{&1.source, &1.kind, &1.role, &1[:locator]})
+  end
 
   # A credit's verifier revision, and its evidence — only when what the
   # checks found changed, and never over a person's review.
