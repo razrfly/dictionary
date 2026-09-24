@@ -282,9 +282,12 @@ defmodule DevilsDictionary.Claims do
   # Many subjects in one read, for a reader that renders many things at once —
   # a shelf's creator lines (#164 C5). The same filters and visibility; the
   # limit is the caller's to size, because a page of claims across a dozen
-  # subjects is not a page of one subject's.
+  # subjects is not a page of one subject's. Each id reads its whole canonical
+  # family, as the scalar read does, so a claim stored against a merged-away
+  # subject is returned; a row keeps its stored subject, and a caller that
+  # groups by subject canonicalises it (#180 finding 5).
   def outgoing(subject_ids, opts) when is_list(subject_ids) do
-    case subject_ids |> Registry.canonical_ids() |> Map.values() |> Enum.uniq() do
+    case Registry.canonical_families(subject_ids) do
       [] ->
         []
 
@@ -593,13 +596,28 @@ defmodule DevilsDictionary.Claims do
   An importer cannot undo this: reviews are their own rows and the effective
   state is derived from the sequence, which is the fix for a `rejected` link
   returning to `auto` when its linking rung reran.
+
+  A decision on a quotation's credit or misattribution also recomputes the
+  badge stored on the line, in the same transaction
+  (`Quotations.Verifier.reviewed/1`, #180 finding 1): what a review hides
+  stops counting as an agreement on the next render, not the next pass.
   """
   def review(revision_id, decision, attrs \\ %{}) do
-    %AssertionReview{}
-    |> AssertionReview.changeset(
-      Map.merge(normalize(attrs), %{assertion_revision_id: revision_id, decision: decision})
-    )
-    |> Repo.insert()
+    Repo.transaction(fn ->
+      %AssertionReview{}
+      |> AssertionReview.changeset(
+        Map.merge(normalize(attrs), %{assertion_revision_id: revision_id, decision: decision})
+      )
+      |> Repo.insert()
+      |> case do
+        {:ok, review} ->
+          DevilsDictionary.Quotations.Verifier.reviewed(revision_id)
+          review
+
+        {:error, changeset} ->
+          Repo.rollback(changeset)
+      end
+    end)
   end
 
   @doc """

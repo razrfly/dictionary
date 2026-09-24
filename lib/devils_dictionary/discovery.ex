@@ -1221,9 +1221,12 @@ defmodule DevilsDictionary.Discovery do
             on: content.content_id == result.object_id and content.is_current,
             left_join: item in ContentItem,
             on: item.object_id == result.object_id,
+            # A result whose object was retired or merged away is not shown:
+            # retirement reaches the shelf at read time (#180 C2).
             where:
               result.run_id in ^run_ids and result.display_allowed and
-                (is_nil(result.source_record_id) or record.display_allowed),
+                (is_nil(result.source_record_id) or record.display_allowed) and
+                (is_nil(result.object_id) or object.lifecycle_state == :active),
             order_by: [asc: result.run_id, asc: result.position],
             select:
               {result, revision.payload["identifiers"], object.kind, content.id,

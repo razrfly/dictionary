@@ -20,6 +20,7 @@ defmodule DevilsDictionary.Artworks do
   }
 
   alias DevilsDictionary.Repo
+  alias DevilsDictionary.SourceIdentity.Creators
   alias DevilsDictionary.Sources.{Actor, MaterializedOutput, Source, SourceRecord}
 
   @catalog_limit 24
@@ -156,7 +157,23 @@ defmodule DevilsDictionary.Artworks do
 
     tiers = source_tiers(candidates)
 
-    {candidates |> interleave_by_source(tiers) |> Enum.take(@suggestion_limit), tiers}
+    {candidates |> interleave_by_source(tiers) |> Enum.take(@suggestion_limit) |> credit(), tiers}
+  end
+
+  # Who the registry credits for each work now, from one `Creators.credited/1`
+  # read over the whole shelf — the reader every card's creator line uses
+  # (#164 C5), so a corpus artwork's `authored_by` is a link here as a quotes
+  # corpus line's is (#180 finding 4).
+  defp credit([]), do: []
+
+  defp credit(candidates) do
+    credited =
+      candidates |> Enum.map(& &1.artwork.object_id) |> Enum.uniq() |> Creators.credited()
+
+    Enum.map(
+      candidates,
+      &Map.put(&1, :creator_links, Map.get(credited, &1.artwork.object_id, []))
+    )
   end
 
   # One candidate per work, kept *before* the limit is applied: a work that
@@ -225,6 +242,7 @@ defmodule DevilsDictionary.Artworks do
         "content_type" => "artwork",
         "provider" => shelf_provider(artwork)
       },
+      creator_links: candidate.creator_links,
       match_reasons: [MatchReason.from_candidate(candidate)],
       review_state: candidate.review_state,
       sense_id: candidate.sense_id,

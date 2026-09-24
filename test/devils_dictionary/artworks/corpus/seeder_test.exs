@@ -302,6 +302,29 @@ defmodule DevilsDictionary.Artworks.Corpus.SeederTest do
       assert Enum.sort(sense_ids) == Enum.sort([ctx.sense.object_id, second.object_id])
     end
 
+    test "audit: corpus shelf carries an existing creator assertion as a link", ctx do
+      [candidate] = Artworks.suggestions([ctx.war.object_id])
+      {:ok, author} = Registry.create_person(%{preferred_label: "Known Painter"})
+
+      {:ok, _} =
+        DevilsDictionary.Claims.assert(
+          candidate.artwork.object_id,
+          "authored_by",
+          author.object_id
+        )
+
+      [item] = Artworks.shelf_items([ctx.war.object_id])
+      assert [%{object_id: id}] = Map.get(item, :creator_links, [])
+      assert id == author.object_id
+    end
+
+    test "a retired artwork leaves the catalog shelf on the next read (#180 C2)", ctx do
+      assert [item] = Artworks.shelf_items([ctx.war.object_id])
+      {:ok, _} = Registry.retire(item.object_id, reason: "withdrawn from the catalog")
+
+      assert Artworks.shelf_items([ctx.war.object_id]) == []
+    end
+
     test "the shelf keeps one item per work before the limit, not after it", ctx do
       # The Met row matches both meanings of "war", and so would hold two of the
       # twelve slots if the limit were applied to (work, meaning) pairs and the

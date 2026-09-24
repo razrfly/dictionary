@@ -366,8 +366,13 @@ creator is a revision, a dropped one is withdrawn with the reason
 `provider_removed_creator` and reinstated if it comes back. A revision a
 curator, a reviewer or a verifier wrote is never touched by a refresh; the
 result reports it `overridden`. A transient failure defers the credit to the
-next refresh; a permanent one opens one `unresolved_creator` case per
-`(source, QID)`. A misattribution register row is `misattributed_to`, never
+next refresh and leaves the one it would replace; a permanent one opens one
+`unresolved_creator` case per `(source, QID)` and withdraws the credit that
+origin key held, with the reason `provider_creator_unresolved`, reinstated
+like a removal once the creator resolves (#180 C3). A human withdrawal is
+never reinstated. Two different `wikidata` ids in one relationship's targets
+resolve to neither: unresolved with `conflicting_target_identifiers`, nothing
+written, one case listing both (#180 C5). A misattribution register row is `misattributed_to`, never
 `authored_by` (`Entry.new/1` refuses the combination).
 
 `preview_metadata["creators"]` records what happened, for the operator's view
@@ -407,7 +412,10 @@ register row never carries `authored_by`; when it names the person a line is
 misattributed to by identifier, it carries `misattributed_to` with `register:
 true` and the register's sentence as its `rationale`, and writing it attaches
 `contradicts` evidence to every current `authored_by` from that line to that
-person, whoever wrote it. A kept line whose fingerprint matches a register row
+person, whoever wrote it. The register's own citation (its source record
+revision, locator and sentence) is kept as `supports` evidence on the
+misattribution, so a credit written *after* the register meets it too: the
+same `contradicts` row, whichever arrived second, added once (#180 C4). A kept line whose fingerprint matches a register row
 is badged `disputed` or `apocryphal`; every other kept line is `plausible`
 until build 5 verifies something. The Quotes shelf is **banded by the line's
 own year** (👑 before 1931 · 📚 to 1999 · 📱 since 2000), read from
@@ -434,9 +442,10 @@ re-verification rule.
 on a content revision, as #158's schema table first said. A revision's body is
 immutable, because a review cites it. Only its bookkeeping (`is_current`, its
 lifecycle) moves. The badge also belongs to the line rather than to one
-wording: each pass recomputes it from the line's **current, active**
-`authored_by` and `misattributed_to` claims, whichever wording each source
-holds, plus the checks each pass recorded. What `content_revisions.metadata`
+wording: each pass recomputes it from the line's **current, active, publicly
+visible** `authored_by` and `misattributed_to` claims, whichever wording each
+source holds, plus the checks each pass recorded. A review decision on one of
+those claims recomputes it at once from what remains (#180 C1). What `content_revisions.metadata`
 holds depends on the path that wrote it. A quotation written through
 `SourceIdentity` carries the writer's `source_slug`, plus `alternate_text` on a
 second wording; other writers, such as the dictionary absorbs, carry keys of
@@ -804,6 +813,10 @@ so every run in the ledger was "expired" at the moment it completed.)
 A page whose root retention took shows the honest empty and **asks again** on
 the next visit: `fresh_run/3` filters `display_allowed`, so a withdrawn root
 inside its refresh window is not a cache hit.
+
+Retirement reaches every shelf at read time: a discovery result, a quotes-corpus
+line or a catalog artwork whose object is no longer `active` (retired, split or
+merged away) is left off the next render, with nothing to invalidate (#180 C2).
 
 **What retention does not take.** A `source_record` is deleted only when
 nothing else is standing on it: no other discovery result, and nothing

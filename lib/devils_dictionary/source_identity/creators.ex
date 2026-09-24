@@ -40,6 +40,11 @@ defmodule DevilsDictionary.SourceIdentity.Creators do
   never touched by a provider refresh; the result's creator entry says
   `overridden` instead.
 
+  A withdrawal the provider made — `provider_removed_creator`, or
+  `provider_creator_unresolved` below — is reinstated when the provider names
+  a creator in that position again. A withdrawal with any other reason is a
+  person's and stays.
+
   ## Failures (#164 C7)
 
   `{:transient, _}` (a 429, a timeout, an exhausted budget, or a target nobody
@@ -47,7 +52,13 @@ defmodule DevilsDictionary.SourceIdentity.Creators do
   provider's next refresh tries again. `{:permanent, _}` (a missing or
   redirected item, a `P31` that is neither a human nor an organization) opens
   one `unresolved_creator` reconciliation case per `(source, QID)`, deduplicated
-  by `reconciliation_cases_open_qid_index`.
+  by `reconciliation_cases_open_qid_index`. A permanent failure also
+  withdraws the credit the same origin key held, with the reason
+  `provider_creator_unresolved` (#180 C3); a transient one leaves it.
+
+  Two distinct `wikidata` ids in one target set are unresolved with the reason
+  `conflicting_target_identifiers` (#180 C5): neither is matched or minted,
+  and the case lists both.
   """
 
   import Ecto.Query
@@ -55,18 +66,31 @@ defmodule DevilsDictionary.SourceIdentity.Creators do
   alias DevilsDictionary.Absorb.Clients.Wikidata, as: Client
   alias DevilsDictionary.Absorb.Sources.Wikidata, as: WikidataSource
   alias DevilsDictionary.Claims
-  alias DevilsDictionary.Claims.{Assertion, AssertionReview, AssertionRevision}
+  alias DevilsDictionary.Claims.{Assertion, AssertionEvidence, AssertionReview, AssertionRevision}
   alias DevilsDictionary.Claims.PredicateEndpointRule
+  alias DevilsDictionary.Corpus.SourceRecordRevision
   alias DevilsDictionary.Discovery.Budget
   alias DevilsDictionary.Registry
   alias DevilsDictionary.Registry.{ContentItem, Entity, ExternalIdentifier, Object}
   alias DevilsDictionary.Repo
   alias DevilsDictionary.SourceIdentity.Entry
   alias DevilsDictionary.Sources
-  alias DevilsDictionary.Sources.{Actor, MaterializedOutput, ReconciliationCase, Source}
+
+  alias DevilsDictionary.Sources.{
+    Actor,
+    MaterializedOutput,
+    ReconciliationCase,
+    Source,
+    SourceRecord
+  }
 
   @method "provider_relationship"
   @removed "provider_removed_creator"
+  @unresolved "provider_creator_unresolved"
+  # The withdrawals a provider made, and so may undo: a creator it stopped
+  # naming, or one it named that nothing could resolve. Any other rationale on
+  # a withdrawn revision is a person's, and a provider never reinstates it.
+  @provider_withdrawals [@removed, @unresolved]
   @case_kind "unresolved_creator"
 
   # Wikidata's `P31` classes a creator may be. Direct instance-of only: a
@@ -86,6 +110,12 @@ defmodule DevilsDictionary.SourceIdentity.Creators do
 
   @doc "The withdrawal reason for a creator a provider stopped naming."
   def removed_reason, do: @removed
+
+  @doc """
+  The withdrawal reason for a credit whose provider now names a creator that
+  permanently cannot be resolved (#180 C3).
+  """
+  def unresolved_reason, do: @unresolved
 
   @doc "The reconciliation case kind for a creator identifier nothing can resolve."
   def case_kind, do: @case_kind
@@ -128,9 +158,14 @@ defmodule DevilsDictionary.SourceIdentity.Creators do
       )
       |> Map.new()
 
+    # A claim on a merged-away subject is its survivor's: grouped under the id
+    # the subject canonicalises to, which is what each requested id is looked
+    # up by below.
+    survivors = revisions |> Enum.map(& &1.subject_object_id) |> Registry.canonical_ids()
+
     by_subject =
       revisions
-      |> Enum.group_by(& &1.subject_object_id)
+      |> Enum.group_by(&Map.fetch!(survivors, &1.subject_object_id))
       |> Map.new(fn {subject_id, rows} ->
         {subject_id,
          rows
@@ -569,7 +604,26 @@ defmodule DevilsDictionary.SourceIdentity.Creators do
     end
   end
 
+  # Two Wikidata ids for one creator disagree about who it is, and neither is
+  # the answer (#180 C5): nothing is matched, minted or written, and the case
+  # names both, whether or not either is held.
   defp locate(%{target_identifiers: identifiers}, prepared) do
+    case wikidata_ids(identifiers) do
+      [first, _ | _] = qids ->
+        %{
+          state: :unresolved,
+          reason: :conflicting_target_identifiers,
+          qid: first,
+          qids: qids,
+          open_case: true
+        }
+
+      _ ->
+        locate_identified(identifiers, prepared)
+    end
+  end
+
+  defp locate_identified(identifiers, prepared) do
     keys = Enum.map(identifiers, &{&1.namespace, &1.external_id})
     matches = held(keys)
 
@@ -598,6 +652,10 @@ defmodule DevilsDictionary.SourceIdentity.Creators do
             %{state: :unresolved, reason: reason}
         end
     end
+  end
+
+  defp wikidata_ids(identifiers) do
+    for %{namespace: "wikidata", external_id: qid} <- identifiers, uniq: true, do: qid
   end
 
   defp matched(object_id, identifiers, matches, qid \\ nil) do
@@ -739,8 +797,33 @@ defmodule DevilsDictionary.SourceIdentity.Creators do
         |> write(relationship, subject_id, object_id, key, actor_id, resolved, opts)
         |> outcome(relationship, resolved)
 
+      %{state: :unresolved} = unresolved ->
+        unresolved
+        |> outcome(relationship, unresolved)
+        |> Map.put(:write, withdraw_unresolved(entry, key))
+
       other ->
         outcome(other, relationship, other)
+    end
+  end
+
+  # A permanent failure to resolve the creator a provider now names withdraws
+  # the credit it replaces, under the same origin key (#180 C3): the provider
+  # no longer says who that credit said. A transient failure is `:deferred` and
+  # never reaches here, so the old credit stands until the next refresh can
+  # tell. A revision someone else owns is left alone, as a refresh leaves it.
+  defp withdraw_unresolved(entry, key) do
+    case existing(entry.source_id, key) do
+      {assertion, %{lifecycle_state: :active} = current} ->
+        if protected?(current) do
+          :none
+        else
+          {:ok, _} = Claims.withdraw(assertion.id, reason: @unresolved)
+          :withdrawn
+        end
+
+      _ ->
+        :none
     end
   end
 
@@ -810,14 +893,16 @@ defmodule DevilsDictionary.SourceIdentity.Creators do
           source_id: entry.source_id,
           source_record_id: entry.source_record_id,
           kind: @case_kind,
-          payload: %{
-            "qid" => qid,
-            "reason" => to_string(located.reason),
-            "role" => relationship.role,
-            "subject" => base_key(entry),
-            "provider_creator" =>
-              entry.metadata["author_display_name"] || entry.metadata["artist_display_name"]
-          },
+          payload:
+            %{
+              "qid" => qid,
+              "reason" => to_string(located.reason),
+              "role" => relationship.role,
+              "subject" => base_key(entry),
+              "provider_creator" =>
+                entry.metadata["author_display_name"] || entry.metadata["artist_display_name"]
+            }
+            |> then(&if(located[:qids], do: Map.put(&1, "qids", located.qids), else: &1)),
           status: :open,
           inserted_at: now,
           updated_at: now
@@ -828,7 +913,7 @@ defmodule DevilsDictionary.SourceIdentity.Creators do
         {:unsafe_fragment, "(source_id, kind, (payload->>'qid')) WHERE status = 'open'"}
     )
 
-    Map.delete(located, :open_case)
+    Map.drop(located, [:open_case, :qids])
   end
 
   defp maybe_open_case(_entry, _relationship, located), do: located
@@ -851,9 +936,6 @@ defmodule DevilsDictionary.SourceIdentity.Creators do
             rationale: relationship[:rationale]
           })
 
-        if relationship[:register],
-          do: contradict_credits!(entry, relationship, subject_id, object_id)
-
         :written
 
       {assertion, current} ->
@@ -861,7 +943,8 @@ defmodule DevilsDictionary.SourceIdentity.Creators do
           protected?(current) ->
             {:overridden, current}
 
-          current.lifecycle_state in [:withdrawn, :rejected] and current.rationale != @removed ->
+          current.lifecycle_state in [:withdrawn, :rejected] and
+              current.rationale not in @provider_withdrawals ->
             # A human withdrawal stays withdrawn; the provider's opinion is
             # reported, not applied.
             {:overridden, current}
@@ -889,7 +972,46 @@ defmodule DevilsDictionary.SourceIdentity.Creators do
             :revised
         end
     end
+    |> tap(&meet!(&1, entry, relationship, subject_id, object_id, key))
     |> then(&{&1, resolved})
+  end
+
+  # #164 C4, in either order (#180 C4): a register and a credit for the same
+  # person on the same line meet whichever is written second. Every write the
+  # provider still owns runs this, the unchanged re-run included, so a pair
+  # that met before this existed meets on its next refresh; each row is added
+  # once, so a re-run adds nothing.
+  defp meet!({:overridden, _current}, _entry, _relationship, _subject_id, _object_id, _key),
+    do: :ok
+
+  defp meet!(_write, entry, %{register: true} = relationship, subject_id, object_id, key) do
+    cite_register!(entry, relationship, key)
+    contradict_credits!(entry, relationship, subject_id, object_id)
+  end
+
+  defp meet!(_write, _entry, %{role: "authored_by"}, subject_id, object_id, _key),
+    do: meet_registers!(subject_id, object_id)
+
+  defp meet!(_write, _entry, _relationship, _subject_id, _object_id, _key), do: :ok
+
+  # The register's own citation, as `:supports` evidence on the
+  # misattribution: the source record revision it was read from, where on the
+  # page, and its sentence. It is what a credit arriving later is contradicted
+  # with, since the register is not being read then.
+  defp cite_register!(%Entry{source_record_revision_id: id} = entry, relationship, key)
+       when is_integer(id) do
+    {_assertion, current} = existing(entry.source_id, key)
+    add_evidence_once!(current.id, :supports, register_evidence(entry, relationship))
+  end
+
+  defp cite_register!(_entry, _relationship, _key), do: :ok
+
+  defp register_evidence(entry, relationship) do
+    %{
+      source_record_revision_id: entry.source_record_revision_id,
+      attribution_text: relationship[:rationale],
+      locator: entry.metadata["locator"] && String.slice(entry.metadata["locator"], 0, 255)
+    }
   end
 
   # #164 C4, written by #158 build 4: a register saying a line is not this
@@ -898,24 +1020,86 @@ defmodule DevilsDictionary.SourceIdentity.Creators do
   # verifier reads it and a reviewer rejects through `review/3`. The evidence
   # cites the register's own source record revision and quotes its sentence.
   defp contradict_credits!(entry, relationship, subject_id, object_id) do
-    credits =
-      Repo.all(
-        from r in AssertionRevision,
-          join: p in assoc(r, :predicate),
-          where:
-            r.subject_object_id == ^subject_id and r.object_object_id == ^object_id and
-              r.is_current and r.lifecycle_state == :active and p.key == "authored_by",
-          select: r.id
-      )
+    if is_integer(entry.source_record_revision_id) do
+      for revision_id <- current_ids(subject_id, "authored_by", object_id) do
+        add_evidence_once!(revision_id, :contradicts, register_evidence(entry, relationship))
+      end
+    end
 
-    for revision_id <- credits, is_integer(entry.source_record_revision_id) do
+    :ok
+  end
+
+  # The mirror, for a credit written after the register (#180 finding 6):
+  # every current misattribution from this line to this person contributes
+  # its register citation (`cite_register!/3`) as `:contradicts` on the
+  # credit. A citation is told from a verifier's `:supports` rows on the same
+  # misattribution by its record: the one that register's source materialized
+  # as this line, where a verifier's are pages it fetched.
+  defp meet_registers!(subject_id, object_id) do
+    registers = current_ids(subject_id, "misattributed_to", object_id)
+
+    citations =
+      if registers == [] do
+        []
+      else
+        Repo.all(
+          from e in AssertionEvidence,
+            join: r in AssertionRevision,
+            on: r.id == e.assertion_revision_id,
+            join: a in Assertion,
+            on: a.id == r.assertion_id,
+            join: rev in SourceRecordRevision,
+            on: rev.id == e.source_record_revision_id,
+            join: record in SourceRecord,
+            on: record.id == rev.source_record_id and record.source_id == a.source_id,
+            join: m in MaterializedOutput,
+            on:
+              m.source_record_id == record.id and m.output_role == "content" and
+                m.output_object_id == ^subject_id,
+            where: e.assertion_revision_id in ^registers and e.evidence_role == :supports,
+            distinct: true,
+            select: %{
+              source_record_revision_id: e.source_record_revision_id,
+              attribution_text: e.attribution_text,
+              locator: e.locator
+            }
+        )
+      end
+
+    for revision_id <- current_ids(subject_id, "authored_by", object_id),
+        citation <- citations,
+        do: add_evidence_once!(revision_id, :contradicts, citation)
+
+    :ok
+  end
+
+  defp current_ids(subject_id, predicate, object_id) do
+    Repo.all(
+      from r in AssertionRevision,
+        join: p in assoc(r, :predicate),
+        where:
+          r.subject_object_id == ^subject_id and r.object_object_id == ^object_id and
+            r.is_current and r.lifecycle_state == :active and p.key == ^predicate,
+        select: r.id
+    )
+  end
+
+  defp add_evidence_once!(revision_id, role, attrs) do
+    held =
+      from e in AssertionEvidence,
+        where:
+          e.assertion_revision_id == ^revision_id and e.evidence_role == ^role and
+            e.source_record_revision_id == ^attrs.source_record_revision_id
+
+    held =
+      case attrs.locator do
+        nil -> where(held, [e], is_nil(e.locator))
+        locator -> where(held, [e], e.locator == ^locator)
+      end
+
+    unless Repo.exists?(held) do
       {:ok, _evidence} =
-        Claims.add_evidence(revision_id, %{
-          evidence_role: :contradicts,
-          source_record_revision_id: entry.source_record_revision_id,
-          attribution_text: relationship[:rationale],
-          locator: entry.metadata["locator"]
-        })
+        Claims.add_evidence(revision_id, Map.put(attrs, :evidence_role, role))
     end
 
     :ok

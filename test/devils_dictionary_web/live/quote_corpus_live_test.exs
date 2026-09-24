@@ -13,6 +13,8 @@ defmodule DevilsDictionaryWeb.QuoteCorpusLiveTest do
   alias DevilsDictionary.Corpus.Seeder
   alias DevilsDictionary.QuotesCorpusFixtures
   alias DevilsDictionary.Registry
+  alias DevilsDictionary.Registry.ContentItem
+  alias DevilsDictionary.Repo
 
   @manifest QuotesCorpusFixtures.manifest()
 
@@ -78,5 +80,69 @@ defmodule DevilsDictionaryWeb.QuoteCorpusLiveTest do
 
     refute has_element?(live, "#culture-filter-quote")
     refute has_element?(live, ~s([id^="culture-held-"]))
+  end
+
+  test "audit: retired corpus quotations disappear from the public shelf", ctx do
+    voltaire_page!(ctx)
+    row = hd(@manifest["rows"])
+    id = Registry.by_external_id("quotation_fingerprint", row["fingerprint"])
+    {:ok, _} = Registry.retire(id, reason: "audit withdrawn content")
+    {:ok, view, _} = live(ctx.conn, ~p"/define/voltaire")
+    refute has_element?(view, "#culture-quote-#{row["fingerprint"]}")
+  end
+
+  # ── the review hook on a corpus line (#180 finding 1, second review) ────
+
+  test "accepting a seeded corpus credit keeps the primary evidence that made it Verified", ctx do
+    voltaire_page!(ctx)
+    row = hd(@manifest["rows"])
+    id = Registry.by_external_id("quotation_fingerprint", row["fingerprint"])
+    item = fn -> Repo.get!(ContentItem, id) end
+    assert item.().metadata["provenance"]["badge"] == "verified"
+
+    [credit] = Claims.outgoing(id, predicate: "authored_by")
+    assert Claims.evidence(credit.id) != []
+
+    assert {:ok, _} = Claims.review(credit.id, :accepted)
+    assert item.().metadata["provenance"]["badge"] == "verified"
+
+    # And the same evidence, once a reviewer rejects and another reinstates
+    # the decision, still decides: rejected → not Verified, accepted → Verified.
+    assert {:ok, _} = Claims.review(credit.id, :rejected)
+    refute item.().metadata["provenance"]["badge"] == "verified"
+    assert {:ok, _} = Claims.review(credit.id, :accepted)
+    assert item.().metadata["provenance"]["badge"] == "verified"
+  end
+
+  test "reviewing a credit inherited through a merge rebadges the survivor, not the old identity" do
+    row = hd(@manifest["rows"])
+    id = Registry.by_external_id("quotation_fingerprint", row["fingerprint"])
+    old = Repo.get!(ContentItem, id)
+
+    {:ok, survivor} =
+      Registry.create_content(%{
+        content_kind: :quotation,
+        body: row["text"],
+        item_metadata: old.metadata
+      })
+
+    {:ok, _} = Registry.merge([id], survivor.object_id, reason: "duplicate quotation")
+    badge = fn object_id -> Repo.get!(ContentItem, object_id).metadata["provenance"]["badge"] end
+    assert badge.(survivor.object_id) == "verified"
+
+    # Accepting the inherited credit: the survivor stays Verified, because the
+    # family's evidence is gathered, not only the survivor's own.
+    [credit] = Claims.outgoing(survivor.object_id, predicate: "authored_by")
+    assert {:ok, _} = Claims.review(credit.id, :accepted)
+    assert badge.(survivor.object_id) == "verified"
+
+    # Rejecting it: the public credit is gone and so is the survivor's badge —
+    # written on the survivor, the object a reader reaches, never the old id.
+    assert {:ok, _} = Claims.review(credit.id, :rejected)
+    assert Claims.outgoing(survivor.object_id, predicate: "authored_by") == []
+    refute badge.(survivor.object_id) == "verified"
+
+    assert badge.(id) == "verified",
+           "the merged-away item's stale metadata is not what the page reads"
   end
 end

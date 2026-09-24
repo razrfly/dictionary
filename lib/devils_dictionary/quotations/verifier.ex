@@ -60,6 +60,7 @@ defmodule DevilsDictionary.Quotations.Verifier do
     PersonDetails
   }
 
+  alias DevilsDictionary.Registry
   alias DevilsDictionary.Repo
   alias DevilsDictionary.Sources.Source
 
@@ -85,12 +86,8 @@ defmodule DevilsDictionary.Quotations.Verifier do
         select: run.subject_object_id
 
     Repo.all(
-      from r in AssertionRevision,
-        join: p in Predicate,
-        on: p.id == r.predicate_id and p.key in @predicates,
-        where:
-          r.is_current and r.lifecycle_state == :active and r.subject_kind == "content" and
-            r.subject_subkind == "quotation" and r.object_object_id not in subquery(fresh),
+      from r in current_claims(),
+        where: r.object_object_id not in subquery(fresh),
         distinct: true,
         order_by: r.object_object_id,
         limit: ^limit,
@@ -183,19 +180,27 @@ defmodule DevilsDictionary.Quotations.Verifier do
     )
   end
 
+  # Under the run's row lock, so a review deciding meanwhile either is seen by
+  # `reviewed_since?/1` or waits in `due_now/1` and moves this clock after.
   defp finish(run, status, seconds, summary, error \\ nil) do
-    now = DateTime.utc_now()
+    {:ok, finished} =
+      Repo.transaction(fn ->
+        run = Repo.one!(from r in VerificationRun, where: r.id == ^run.id, lock: "FOR UPDATE")
+        now = DateTime.utc_now()
+        seconds = if status == :succeeded and reviewed_since?(run), do: 0, else: seconds
 
-    run
-    |> Repo.reload!()
-    |> VerificationRun.changeset(%{
-      status: status,
-      completed_at: now,
-      refresh_after: DateTime.add(now, seconds, :second),
-      summary: summary,
-      error_code: error
-    })
-    |> Repo.update!()
+        run
+        |> VerificationRun.changeset(%{
+          status: status,
+          completed_at: now,
+          refresh_after: DateTime.add(now, seconds, :second),
+          summary: summary,
+          error_code: error
+        })
+        |> Repo.update!()
+      end)
+
+    finished
   end
 
   defp summary(verdicts) do
@@ -219,12 +224,7 @@ defmodule DevilsDictionary.Quotations.Verifier do
           select: r.subject_object_id
       )
 
-    claims =
-      Repo.all(
-        from [r, p, a, s] in current_claims(),
-          where: r.subject_object_id in ^content_ids,
-          select: %{revision: r, predicate: p.key, source: s.slug}
-      )
+    claims = claims_on(content_ids)
 
     bodies =
       Repo.all(
@@ -238,19 +238,11 @@ defmodule DevilsDictionary.Quotations.Verifier do
     claims
     |> Enum.group_by(& &1.revision.subject_object_id)
     |> Enum.flat_map(fn {content_id, claims} ->
-      {own, others} = Enum.split_with(claims, &(&1.revision.object_object_id == person_id))
-
       case Map.get(bodies, content_id) do
         %{body: body} = content when is_binary(body) ->
           [
-            %{
-              content_id: content_id,
-              body: body,
-              year: content.year,
-              credits: Enum.filter(own, &(&1.predicate == "authored_by")),
-              misattributions: Enum.filter(own, &(&1.predicate == "misattributed_to")),
-              others: others
-            }
+            %{content_id: content_id, body: body, year: content.year}
+            |> with_claims(claims, person_id)
           ]
 
         _ ->
@@ -259,8 +251,56 @@ defmodule DevilsDictionary.Quotations.Verifier do
     end)
   end
 
+  defp claims_on(content_ids) do
+    Repo.all(
+      from [r, p, a, s] in current_claims(),
+        where: r.subject_object_id in ^content_ids,
+        select: %{revision: r, predicate: p.key, source: s.slug}
+    )
+  end
+
+  defp with_claims(line, claims, person_id) do
+    {own, others} = Enum.split_with(claims, &(&1.revision.object_object_id == person_id))
+
+    Map.merge(line, %{
+      credits: Enum.filter(own, &(&1.predicate == "authored_by")),
+      misattributions: Enum.filter(own, &(&1.predicate == "misattributed_to")),
+      others: others
+    })
+  end
+
+  # The line's claims as they are now, read under the locks a review takes,
+  # in a review's order: every claim's assertion first (the order
+  # `Contributions.review/6` and `Claims.revise/2` lock in), then the item
+  # (`reviewed/1`). The pass fetched its pages outside any transaction, and a
+  # review that committed meanwhile is seen here; one that commits later
+  # waits, and rebadges from what this pass wrote (CodeRabbit on #182).
+  defp relock(line, person_id) do
+    Repo.all(
+      from a in Assertion,
+        where:
+          a.id in subquery(
+            from r in AssertionRevision,
+              where: r.subject_object_id == ^line.content_id and r.is_current,
+              select: r.assertion_id
+          ),
+        order_by: a.id,
+        lock: "FOR UPDATE",
+        select: a.id
+    )
+
+    lock_item!(line.content_id)
+    with_claims(line, claims_on([line.content_id]), person_id)
+  end
+
+  defp lock_item!(content_id),
+    do: Repo.one!(from i in ContentItem, where: i.object_id == ^content_id, lock: "FOR UPDATE")
+
+  # A finding is a claim a reader could see (#180 C1): current, active, and
+  # through `Claims.visible(:public)` — the filter the card and the person
+  # page read by — so a rejected or hidden credit is no agreement.
   defp current_claims do
-    from r in AssertionRevision,
+    from(r in AssertionRevision,
       join: p in Predicate,
       on: p.id == r.predicate_id and p.key in @predicates,
       join: a in Assertion,
@@ -270,14 +310,27 @@ defmodule DevilsDictionary.Quotations.Verifier do
       where:
         r.is_current and r.lifecycle_state == :active and r.subject_kind == "content" and
           r.subject_subkind == "quotation"
+    )
+    |> Claims.visible(:public)
   end
 
   defp record_line(line, person_id, page, misquotations, texts) do
+    line = relock(line, person_id)
+
     # What this person's own page and texts say: reached by their identifier,
-    # so it may count for or against a credit to them.
+    # so it may count for or against a credit to them — and for nothing on a
+    # line a review took from them while the pages were fetched.
     checks =
-      Checks.match_page(page, line.body, "wikiquote") ++
-        if(line.credits != [], do: Checks.match_texts(texts, line.body), else: [])
+      cond do
+        line.credits == [] and line.misattributions == [] ->
+          []
+
+        line.credits == [] ->
+          Checks.match_page(page, line.body, "wikiquote")
+
+        true ->
+          Checks.match_page(page, line.body, "wikiquote") ++ Checks.match_texts(texts, line.body)
+      end
 
     # *Misquotations* names no one by identifier: it only ever agrees with a
     # misattribution already held, and never counts against a credit.
@@ -298,20 +351,120 @@ defmodule DevilsDictionary.Quotations.Verifier do
 
     # The item's badge: every claim on the line, whoever it names; this pass's
     # checks; and the checks other people's passes left on their credits.
-    everyone = own ++ line.others
-    held = Enum.flat_map(line.others, &held_checks/1)
-
-    credited =
-      for claim <- everyone, claim.predicate == "authored_by", do: claim.revision.object_object_id
-
     item_verdict =
-      Badge.compute(claim_findings(everyone, line) ++ checks ++ held,
-        author_dated?: credited != [] and dated?(credited)
-      )
+      item_verdict(own ++ line.others, line, checks ++ Enum.flat_map(line.others, &held_checks/1))
 
     record_provenance(line.content_id, item_verdict)
 
     item_verdict
+  end
+
+  defp item_verdict(claims, line, checks) do
+    credited =
+      for claim <- claims, claim.predicate == "authored_by", do: claim.revision.object_object_id
+
+    Badge.compute(claim_findings(claims, line) ++ checks,
+      author_dated?: credited != [] and dated?(credited)
+    )
+  end
+
+  # ── a review ────────────────────────────────────────────────────────────
+
+  @doc """
+  What a review decision on a quotation's `authored_by` or `misattributed_to`
+  does to the stored badge (#180 finding 1), called by `Claims.review/3` in
+  its transaction.
+
+  The item's badge is recomputed at once from the claims that remain public
+  and the checks the verifier recorded on each remaining credit — the held
+  evidence, read without a request, through the pure `Badge.compute/2` — so a
+  *Verified* badge never outlives the review that took one of its agreements
+  away. The credited or misattributed person's next pass is then due now,
+  and that pass, with the author's page and texts in hand, has the last word.
+
+  An item with no stored badge is left without one: the provider's label
+  stands until a pass has something to say. Any other claim is ignored.
+  """
+  def reviewed(revision_id) do
+    case Repo.one(
+           from r in AssertionRevision,
+             join: p in Predicate,
+             on: p.id == r.predicate_id and p.key in @predicates,
+             where:
+               r.id == ^revision_id and r.subject_kind == "content" and
+                 r.subject_subkind == "quotation",
+             select: r
+         ) do
+      nil ->
+        :ignored
+
+      revision ->
+        # The claim may be stored against an identity since merged into
+        # another (#180 finding 5): the badge lives on the survivor, and the
+        # claims that decide it are the whole family's.
+        rebadge(Registry.canonical_id(revision.subject_object_id))
+        due_now(revision.object_object_id)
+        :rebadged
+    end
+  end
+
+  defp rebadge(content_id) do
+    item = lock_item!(content_id)
+
+    if is_map((item.metadata || %{})["provenance"]) do
+      # Every identity merged into this one still holds its claims under its
+      # own id; the public reader walks the family, and so does this.
+      family = Registry.canonical_family(content_id)
+
+      claims =
+        Repo.all(
+          from [r, p, a, s] in current_claims(),
+            where: r.subject_object_id in ^family,
+            select: %{revision: r, predicate: p.key, source: s.slug}
+        )
+
+      year =
+        Repo.one(
+          from c in ContentRevision,
+            where: c.content_id in ^family and c.is_current and not is_nil(c.year),
+            order_by: [desc: fragment("? = ?", c.content_id, ^content_id), desc: c.id],
+            limit: 1,
+            select: c.year
+        )
+
+      verdict = item_verdict(claims, %{year: year}, Enum.flat_map(claims, &held_checks/1))
+      record_provenance(content_id, verdict)
+    end
+  end
+
+  # The latest pass's clock, moved to now: `due/1` picks the person up on the
+  # next cron tick instead of at the end of their refresh window. A pass still
+  # running has no clock yet; it is included so that, when `finish/5` holds
+  # its row, this waits and then moves the clock `finish/5` wrote.
+  defp due_now(person_id) do
+    now = DateTime.utc_now()
+
+    from(run in VerificationRun,
+      where:
+        run.subject_object_id == ^person_id and
+          (run.refresh_after > ^now or (run.status == :running and is_nil(run.refresh_after)))
+    )
+    |> Repo.update_all(set: [refresh_after: now])
+  end
+
+  # A review of one of this person's claims while the pass ran: its findings
+  # may predate the decision, so the next pass is due now.
+  defp reviewed_since?(%VerificationRun{subject_object_id: person_id, started_at: started_at}) do
+    Repo.exists?(
+      from review in AssertionReview,
+        join: r in AssertionRevision,
+        on: r.id == review.assertion_revision_id,
+        join: p in Predicate,
+        on: p.id == r.predicate_id and p.key in @predicates,
+        where:
+          r.object_object_id == ^person_id and r.subject_kind == "content" and
+            r.subject_subkind == "quotation" and review.inserted_at >= ^started_at
+    )
   end
 
   defp claim_findings(claims, line) do
@@ -332,8 +485,25 @@ defmodule DevilsDictionary.Quotations.Verifier do
   @kinds %{"cited" => :cited, "primary" => :primary, "register" => :register}
   @roles %{"supports" => :supports, "contradicts" => :contradicts}
 
-  # The checks another person's pass recorded on their credit.
+  # The checks held on a credit, in either of the two shapes a credit carries
+  # them (#180 finding 1, second review): a verifier pass writes them into the
+  # revision's `metadata["checks"]`; the corpus seeder writes `assertion_evidence`
+  # rows whose source record is the manifest row, which carries the same checks
+  # under `raw["checks"]` with their own `source`, `kind` and `role`. Both are
+  # read as findings, each check once, so accepting a corpus credit does not
+  # strip the Gutenberg text that made it *Verified*, and a rejected credit
+  # still takes its support with it (a rejected revision is not current and
+  # public, so it never reaches here).
   defp held_checks(%{predicate: "authored_by", revision: revision}) do
+    case metadata_checks(revision) do
+      [] -> evidence_checks(revision)
+      checks -> checks
+    end
+  end
+
+  defp held_checks(_claim), do: []
+
+  defp metadata_checks(revision) do
     for %{"source" => source, "kind" => kind, "role" => role} = check <-
           (revision.metadata || %{})["checks"] || [],
         Map.has_key?(@kinds, kind) and Map.has_key?(@roles, role) do
@@ -341,7 +511,45 @@ defmodule DevilsDictionary.Quotations.Verifier do
     end
   end
 
-  defp held_checks(_claim), do: []
+  # An evidence row's locator is the check's locator (clamped as the seeder
+  # clamps it), and the record it cites holds the check that made it. A row
+  # whose record carries no checks is another writer's (a register's
+  # `contradicts`, a curator's link) and counts by its role and its source.
+  defp evidence_checks(revision) do
+    Repo.all(
+      from e in AssertionEvidence,
+        join: rev in DevilsDictionary.Corpus.SourceRecordRevision,
+        on: rev.id == e.source_record_revision_id,
+        join: rec in DevilsDictionary.Sources.SourceRecord,
+        on: rec.id == rev.source_record_id,
+        join: s in Source,
+        on: s.id == rec.source_id,
+        where: e.assertion_revision_id == ^revision.id,
+        select: %{
+          role: e.evidence_role,
+          locator: e.locator,
+          record_source: s.slug,
+          checks: rev.payload["checks"]
+        }
+    )
+    |> Enum.flat_map(fn row ->
+      held =
+        for %{"source" => source, "kind" => kind, "role" => role} = check <-
+              List.wrap(row.checks),
+            Map.has_key?(@kinds, kind) and Map.has_key?(@roles, role),
+            String.slice(to_string(check["locator"]), 0, 255) == row.locator do
+          %{source: source, kind: @kinds[kind], role: @roles[role], locator: check["locator"]}
+        end
+
+      case {held, row.role} do
+        {[_ | _], _} -> held
+        {[], :contradicts} -> [%{source: row.record_source, kind: :register, role: :contradicts}]
+        {[], :supports} -> [%{source: row.record_source, kind: :cited, role: :supports}]
+        _ -> []
+      end
+    end)
+    |> Enum.uniq_by(&{&1.source, &1.kind, &1.role, &1[:locator]})
+  end
 
   # A credit's verifier revision, and its evidence — only when what the
   # checks found changed, and never over a person's review.
