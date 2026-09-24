@@ -368,6 +368,17 @@ defmodule DevilsDictionary.Examples.ExemplarsTest do
       assert illustrates_count() == 1
     end
 
+    test "a row inserted above another does not make the other look moved", ctx do
+      hypocrite = word!(ctx, "hypocrite", ~w(wordnet))
+      sense!(ctx, hypocrite, "wordnet", gloss: "a person who professes beliefs")
+      %{results: [%{outcome: :created}]} = seed(ctx, [row()])
+
+      above =
+        row(%{"word" => "hypocrite", "sense" => %{"source" => "wordnet", "match" => "professes"}})
+
+      assert %{results: [%{outcome: :created}, %{outcome: :held}]} = seed(ctx, [above, row()])
+    end
+
     test "a manifest whose checksum does not match is refused on load" do
       path =
         Path.join(System.tmp_dir!(), "exemplars-drift-#{System.unique_integer([:positive])}.json")

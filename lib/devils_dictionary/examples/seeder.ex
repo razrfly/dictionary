@@ -116,7 +116,7 @@ defmodule DevilsDictionary.Examples.Seeder do
   defp plan(row, manifest, index) do
     with :ok <- tag(Manifest.validate_row(row)),
          {:ok, sense} <- resolve_sense(row["word"], row["sense"]),
-         :ok <- not_moved(manifest["manifest"], index, sense),
+         :ok <- not_moved(manifest["manifest"], row_key(row), sense),
          {:ok, subject} <- locate_subject(row["subject"]) do
       {:ok,
        %{
@@ -178,8 +178,10 @@ defmodule DevilsDictionary.Examples.Seeder do
 
   # A re-run whose match now lands on another sense than the claim this row
   # wrote refuses, printing both: a manifest names a meaning, and a meaning
-  # that moved is the curator's to re-read (#181 R6).
-  defp not_moved(manifest, index, sense) do
+  # that moved is the curator's to re-read (#181 R6). "This row" is its key —
+  # the word, the sense source and the subject — never its position, so a
+  # row inserted above another does not make the other look moved.
+  defp not_moved(manifest, key, sense) do
     previous =
       Repo.one(
         from r in AssertionRevision,
@@ -189,7 +191,7 @@ defmodule DevilsDictionary.Examples.Seeder do
           where:
             p.key == @predicate and r.is_current and r.lifecycle_state == :active and
               fragment("?->>'manifest' = ?", r.metadata, ^manifest) and
-              fragment("(?->>'row')::int = ?", r.metadata, ^index),
+              fragment("?->>'row_key' = ?", r.metadata, ^key),
           order_by: [desc: r.id],
           limit: 1,
           select: %{object_id: r.object_object_id, gloss: rev.gloss}
@@ -202,6 +204,13 @@ defmodule DevilsDictionary.Examples.Seeder do
       _ ->
         :ok
     end
+  end
+
+  @doc "What identifies a manifest row across edits: its word, sense source and subject."
+  def row_key(row) do
+    subject = row["subject"] || %{}
+    identity = subject["wikidata"] || (subject["entity_id"] && "entity:#{subject["entity_id"]}")
+    Enum.join([row["word"], get_in(row, ["sense", "source"]), identity], "|")
   end
 
   defp locate_subject(%{"wikidata" => qid, "kind" => kind}) when is_binary(qid) do
@@ -348,6 +357,7 @@ defmodule DevilsDictionary.Examples.Seeder do
       "manifest" => plan.manifest,
       "manifest_checksum" => plan.checksum,
       "row" => plan.index,
+      "row_key" => row_key(plan.row),
       "curator" => plan.row["curator"],
       "sense" => %{
         "source" => plan.sense.source,
