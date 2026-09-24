@@ -440,4 +440,45 @@ defmodule DevilsDictionary.Quotations.VerifierTest do
     assert run.status == :deferred
     refute Enum.any?(Agent.get(ctx.requests, & &1), &(elem(&1, 0) == "wikiquote.test"))
   end
+
+  test "audit: a rejected credit cannot supply the second agreement for Verified", ctx do
+    garden = item("We must cultivate our garden")
+    [credit] = Claims.outgoing(garden.object_id, predicate: "authored_by")
+    assert {:ok, _} = Claims.review(credit.id, :rejected)
+    assert Claims.outgoing(garden.object_id, predicate: "authored_by") == []
+    assert %{status: :succeeded} = Verifier.verify_author(ctx.voltaire)
+    refute badge("We must cultivate our garden") == "verified"
+  end
+
+  test "a review rebadges the line at once, from the evidence held, and makes its author due",
+       ctx do
+    Verifier.run_due(10)
+    assert badge("We must cultivate our garden") == "verified"
+    assert Verifier.due(10) == []
+
+    garden = item("We must cultivate our garden")
+    [credit] = Claims.outgoing(garden.object_id, predicate: "authored_by")
+
+    # An acceptance leaves the evidence as it was, and the badge recomputed
+    # from it without a request is the one the pass wrote.
+    {:ok, _} = Claims.review(credit.id, :accepted)
+    assert badge("We must cultivate our garden") == "verified"
+    assert Verifier.due(10) == [ctx.voltaire]
+
+    # Rejecting the credit takes away its agreement and the Gutenberg check
+    # recorded on it: the line is no longer Verified before any pass runs.
+    Verifier.run_due(10)
+    requests = length(Agent.get(ctx.requests, & &1))
+    {:ok, _} = Claims.review(credit.id, :rejected)
+
+    assert %{"badge" => nil, "agreements" => 0} =
+             item("We must cultivate our garden").metadata["provenance"]
+
+    assert length(Agent.get(ctx.requests, & &1)) == requests, "no request was made"
+    assert Verifier.due(10) == [ctx.voltaire]
+
+    # And the pass that follows agrees.
+    Verifier.verify_author(ctx.voltaire)
+    assert badge("We must cultivate our garden") == nil
+  end
 end

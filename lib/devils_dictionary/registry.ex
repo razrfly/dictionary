@@ -834,6 +834,20 @@ defmodule DevilsDictionary.Registry do
     collect_merge_inputs([canonical], MapSet.new()) |> MapSet.to_list()
   end
 
+  @doc """
+  Every id in the canonical families of `object_ids`: each one's survivor and
+  everything merged into it, in batched reads. The list form of
+  `canonical_family/1`, for a reader that asks about many subjects at once.
+  """
+  def canonical_families(object_ids) do
+    object_ids
+    |> canonical_ids()
+    |> Map.values()
+    |> Enum.uniq()
+    |> collect_merge_inputs(MapSet.new())
+    |> MapSet.to_list()
+  end
+
   defp collect_merge_inputs([], seen), do: seen
 
   defp collect_merge_inputs(ids, seen) do

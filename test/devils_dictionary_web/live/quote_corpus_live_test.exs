@@ -79,4 +79,13 @@ defmodule DevilsDictionaryWeb.QuoteCorpusLiveTest do
     refute has_element?(live, "#culture-filter-quote")
     refute has_element?(live, ~s([id^="culture-held-"]))
   end
+
+  test "audit: retired corpus quotations disappear from the public shelf", ctx do
+    voltaire_page!(ctx)
+    row = hd(@manifest["rows"])
+    id = Registry.by_external_id("quotation_fingerprint", row["fingerprint"])
+    {:ok, _} = Registry.retire(id, reason: "audit withdrawn content")
+    {:ok, view, _} = live(ctx.conn, ~p"/define/voltaire")
+    refute has_element?(view, "#culture-quote-#{row["fingerprint"]}")
+  end
 end

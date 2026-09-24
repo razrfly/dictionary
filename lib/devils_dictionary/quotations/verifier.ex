@@ -85,12 +85,8 @@ defmodule DevilsDictionary.Quotations.Verifier do
         select: run.subject_object_id
 
     Repo.all(
-      from r in AssertionRevision,
-        join: p in Predicate,
-        on: p.id == r.predicate_id and p.key in @predicates,
-        where:
-          r.is_current and r.lifecycle_state == :active and r.subject_kind == "content" and
-            r.subject_subkind == "quotation" and r.object_object_id not in subquery(fresh),
+      from r in current_claims(),
+        where: r.object_object_id not in subquery(fresh),
         distinct: true,
         order_by: r.object_object_id,
         limit: ^limit,
@@ -259,8 +255,11 @@ defmodule DevilsDictionary.Quotations.Verifier do
     end)
   end
 
+  # A finding is a claim a reader could see (#180 C1): current, active, and
+  # through `Claims.visible(:public)` — the filter the card and the person
+  # page read by — so a rejected or hidden credit is no agreement.
   defp current_claims do
-    from r in AssertionRevision,
+    from(r in AssertionRevision,
       join: p in Predicate,
       on: p.id == r.predicate_id and p.key in @predicates,
       join: a in Assertion,
@@ -270,6 +269,8 @@ defmodule DevilsDictionary.Quotations.Verifier do
       where:
         r.is_current and r.lifecycle_state == :active and r.subject_kind == "content" and
           r.subject_subkind == "quotation"
+    )
+    |> Claims.visible(:public)
   end
 
   defp record_line(line, person_id, page, misquotations, texts) do
@@ -298,20 +299,92 @@ defmodule DevilsDictionary.Quotations.Verifier do
 
     # The item's badge: every claim on the line, whoever it names; this pass's
     # checks; and the checks other people's passes left on their credits.
-    everyone = own ++ line.others
-    held = Enum.flat_map(line.others, &held_checks/1)
-
-    credited =
-      for claim <- everyone, claim.predicate == "authored_by", do: claim.revision.object_object_id
-
     item_verdict =
-      Badge.compute(claim_findings(everyone, line) ++ checks ++ held,
-        author_dated?: credited != [] and dated?(credited)
-      )
+      item_verdict(own ++ line.others, line, checks ++ Enum.flat_map(line.others, &held_checks/1))
 
     record_provenance(line.content_id, item_verdict)
 
     item_verdict
+  end
+
+  defp item_verdict(claims, line, checks) do
+    credited =
+      for claim <- claims, claim.predicate == "authored_by", do: claim.revision.object_object_id
+
+    Badge.compute(claim_findings(claims, line) ++ checks,
+      author_dated?: credited != [] and dated?(credited)
+    )
+  end
+
+  # ── a review ────────────────────────────────────────────────────────────
+
+  @doc """
+  What a review decision on a quotation's `authored_by` or `misattributed_to`
+  does to the stored badge (#180 finding 1), called by `Claims.review/3` in
+  its transaction.
+
+  The item's badge is recomputed at once from the claims that remain public
+  and the checks the verifier recorded on each remaining credit — the held
+  evidence, read without a request, through the pure `Badge.compute/2` — so a
+  *Verified* badge never outlives the review that took one of its agreements
+  away. The credited or misattributed person's next pass is then due now,
+  and that pass, with the author's page and texts in hand, has the last word.
+
+  An item with no stored badge is left without one: the provider's label
+  stands until a pass has something to say. Any other claim is ignored.
+  """
+  def reviewed(revision_id) do
+    case Repo.one(
+           from r in AssertionRevision,
+             join: p in Predicate,
+             on: p.id == r.predicate_id and p.key in @predicates,
+             where:
+               r.id == ^revision_id and r.subject_kind == "content" and
+                 r.subject_subkind == "quotation",
+             select: r
+         ) do
+      nil ->
+        :ignored
+
+      revision ->
+        rebadge(revision.subject_object_id)
+        due_now(revision.object_object_id)
+        :rebadged
+    end
+  end
+
+  defp rebadge(content_id) do
+    item = Repo.get!(ContentItem, content_id)
+
+    if is_map((item.metadata || %{})["provenance"]) do
+      claims =
+        Repo.all(
+          from [r, p, a, s] in current_claims(),
+            where: r.subject_object_id == ^content_id,
+            select: %{revision: r, predicate: p.key, source: s.slug}
+        )
+
+      year =
+        Repo.one(
+          from c in ContentRevision,
+            where: c.content_id == ^content_id and c.is_current,
+            select: c.year
+        )
+
+      verdict = item_verdict(claims, %{year: year}, Enum.flat_map(claims, &held_checks/1))
+      record_provenance(content_id, verdict)
+    end
+  end
+
+  # The latest pass's clock, moved to now: `due/1` picks the person up on the
+  # next cron tick instead of at the end of their refresh window.
+  defp due_now(person_id) do
+    now = DateTime.utc_now()
+
+    from(run in VerificationRun,
+      where: run.subject_object_id == ^person_id and run.refresh_after > ^now
+    )
+    |> Repo.update_all(set: [refresh_after: now])
   end
 
   defp claim_findings(claims, line) do
