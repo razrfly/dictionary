@@ -48,6 +48,7 @@ defmodule DevilsDictionary.Examples.Rank do
     do: featured_order(DateTime.from_naive!(at, "Etc/UTC"))
 
   defp instance_key(%{signals: s, subject: subject, id: id}) do
-    {-s.source_count, Map.get(@tier_rank, s.best_tier, 3), String.downcase(subject.label), id}
+    {-s.source_count, Map.get(@tier_rank, s.best_tier, 3), String.downcase(subject.label || ""),
+     id}
   end
 end

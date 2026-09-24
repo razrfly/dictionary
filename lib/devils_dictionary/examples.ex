@@ -88,6 +88,17 @@ defmodule DevilsDictionary.Examples do
 
   @tier_rank %{aristocracy: 0, middle: 1, plebs: 2}
 
+  # The verified QID of an entity, for an entity with no label — the same
+  # lookup `Encyclopedia.link_views/1` makes.
+  defmacrop qid(object_id) do
+    quote do
+      fragment(
+        "(SELECT external_id FROM external_identifiers WHERE object_id = ? AND namespace = 'wikidata' AND status = 'verified' ORDER BY external_id LIMIT 1)",
+        unquote(object_id)
+      )
+    end
+  end
+
   @doc "How many items of each layer the section shows before its disclosure."
   def cap, do: @cap
 
@@ -481,14 +492,18 @@ defmodule DevilsDictionary.Examples do
       on: true,
       where: p.key == @instance_of and r.object_object_id in ^classes,
       where: r.is_current and r.lifecycle_state == :active,
+      # A thing with no English label still has its QID, and a chip has to
+      # say something: `preferred_label` is nullable, and a nil label would
+      # reach the ordering and the entity link. One with neither is left out.
+      where: not is_nil(coalesce(e.preferred_label, qid(e.object_id))),
       select: %{
         source_id: a.source_id,
         assertion_id: a.id,
         entity_id: e.object_id,
-        label: e.preferred_label,
+        label: coalesce(e.preferred_label, qid(e.object_id)),
         entity_kind: e.entity_kind,
         class_id: c.object_id,
-        class_label: c.preferred_label,
+        class_label: coalesce(c.preferred_label, qid(c.object_id)),
         lexeme_id: w.lexeme_id,
         lemma: w.lemma,
         slug: w.slug,

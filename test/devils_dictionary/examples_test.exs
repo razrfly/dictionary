@@ -10,7 +10,7 @@ defmodule DevilsDictionary.ExamplesTest do
 
   import DevilsDictionary.WordFixtures
 
-  alias DevilsDictionary.{Claims, Examples, Fixtures, Lexicon}
+  alias DevilsDictionary.{Claims, Examples, Fixtures, Lexicon, Repo}
   alias DevilsDictionary.Examples.Rank
   alias DevilsDictionary.Lexicon.WordPage
 
@@ -166,6 +166,30 @@ defmodule DevilsDictionary.ExamplesTest do
                %{slug: "wikidata", kind: :entity, count: 2, words: 1, classes: ["war"]},
                %{slug: "wordnet", kind: :sense, count: 2, words: 2}
              ] = examples.sources
+    end
+
+    # `entities.preferred_label` is nullable; the materializer writes what the
+    # source gave. A nil label reached `Rank` and raised, taking the whole
+    # page with it (CodeRabbit on #183).
+    test "an instance without a label is named by its QID, or left out", ctx do
+      unlabeled = concept!("Q42", "placeholder")
+      nameless = concept!(nil, "placeholder")
+
+      for thing <- [unlabeled, nameless] do
+        concept_relation!(ctx, thing, :instance_of, ctx.q198)
+      end
+
+      Repo.update_all(
+        from(e in DevilsDictionary.Registry.Entity,
+          where: e.object_id in ^[unlabeled.object_id, nameless.object_id]
+        ),
+        set: [preferred_label: nil]
+      )
+
+      examples = page("war").examples
+
+      assert labels(examples) == ["Q42"]
+      assert [%{subject: %{kind: :entity, slug: nil}}] = examples.items
     end
 
     test "a synset naming two things does not merge on either", ctx do
