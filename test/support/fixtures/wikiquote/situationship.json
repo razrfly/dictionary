@@ -1,0 +1,12 @@
+{
+  "captured_at": "2026-09-23T17:53:48.123136Z",
+  "counts": null,
+  "headers": {
+    "content-type": "application/json"
+  },
+  "raw_bytes": 348,
+  "status": 404,
+  "title": "Situationship",
+  "url": "https://en.wikiquote.org/api/rest_v1/page/html/Situationship",
+  "body_file": "situationship.body.json"
+}

@@ -1,0 +1,13 @@
+{
+  "captured_at": "2026-09-23T17:53:47.076365Z",
+  "counts": null,
+  "headers": {
+    "content-type": "text/html; charset=utf-8",
+    "location": "/w/rest.php/v1/page/Banking/html?redirect=no"
+  },
+  "raw_bytes": 141,
+  "status": 307,
+  "title": "Bank",
+  "url": "https://en.wikiquote.org/api/rest_v1/page/html/Bank",
+  "body_file": "bank.html"
+}

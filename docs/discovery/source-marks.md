@@ -18,6 +18,7 @@ portraits, since a 1755 lexicographer has no brand kit. Fetched 2026-09-22.
 |---|---|---|---|
 | `wikipedia` | `wikipedia.png` | Commons `File:Wikipedia-logo-v2.svg`, rendered at 128 px | CC BY-SA 3.0; Wikimedia trademark, used to refer to and link to the site (Trademark Policy §3) |
 | `wiktionary` | `wiktionary.png` | Commons `File:Wiktionary-logo.svg` | CC BY-SA 3.0; as above |
+| `wikiquote` | `wikiquote.png` | Commons `File:Wikiquote-logo.svg`, the 250 px render fitted into 112 px and padded to 128 (fetched 2026-09-23, #158 build 4) | CC BY-SA 3.0; Wikimedia trademark, as above |
 | `wikidata` | `wikidata.png` | Commons `File:Wikidata-logo.svg` | Public domain; Wikimedia trademark, as above |
 | `commons` | `commons.png` | Commons `File:Commons-logo.svg` | CC BY-SA 3.0; as above |
 | `johnson` | `johnson.png` | Commons `File:Samuel Johnson by Joshua Reynolds.jpg`, cropped to the face | Public domain (Reynolds, c. 1772) |

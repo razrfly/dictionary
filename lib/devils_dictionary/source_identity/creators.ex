@@ -847,8 +847,12 @@ defmodule DevilsDictionary.SourceIdentity.Creators do
             origin_actor_id: actor_id,
             method: @method,
             confidence: confidence,
-            metadata: metadata
+            metadata: metadata,
+            rationale: relationship[:rationale]
           })
+
+        if relationship[:register],
+          do: contradict_credits!(entry, relationship, subject_id, object_id)
 
         :written
 
@@ -863,19 +867,58 @@ defmodule DevilsDictionary.SourceIdentity.Creators do
             {:overridden, current}
 
           current.lifecycle_state == :withdrawn ->
-            revise!(assertion.id, object_id, confidence, metadata, lifecycle_state: :active)
+            revise!(assertion.id, object_id, confidence, metadata,
+              lifecycle_state: :active,
+              rationale: relationship[:rationale]
+            )
+
             :reinstated
 
           current.object_object_id == object_id and current.confidence == confidence and
-            same_credit?(current.metadata, metadata) and current.method == @method ->
+            same_credit?(current.metadata, metadata) and current.method == @method and
+              current.rationale == relationship[:rationale] ->
             :unchanged
 
+          # A register whose sentence changed is a changed claim: the
+          # rationale is what `misattributed_to` rests on (CodeRabbit on #169).
           true ->
-            revise!(assertion.id, object_id, confidence, metadata, [])
+            revise!(assertion.id, object_id, confidence, metadata,
+              rationale: relationship[:rationale]
+            )
+
             :revised
         end
     end
     |> then(&{&1, resolved})
+  end
+
+  # #164 C4, written by #158 build 4: a register saying a line is not this
+  # person's is counterevidence to every current `authored_by` from that line
+  # to that person, whoever wrote it. It is attached, never applied — build 5's
+  # verifier reads it and a reviewer rejects through `review/3`. The evidence
+  # cites the register's own source record revision and quotes its sentence.
+  defp contradict_credits!(entry, relationship, subject_id, object_id) do
+    credits =
+      Repo.all(
+        from r in AssertionRevision,
+          join: p in assoc(r, :predicate),
+          where:
+            r.subject_object_id == ^subject_id and r.object_object_id == ^object_id and
+              r.is_current and r.lifecycle_state == :active and p.key == "authored_by",
+          select: r.id
+      )
+
+    for revision_id <- credits, is_integer(entry.source_record_revision_id) do
+      {:ok, _evidence} =
+        Claims.add_evidence(revision_id, %{
+          evidence_role: :contradicts,
+          source_record_revision_id: entry.source_record_revision_id,
+          attribution_text: relationship[:rationale],
+          locator: entry.metadata["locator"]
+        })
+    end
+
+    :ok
   end
 
   defp revise!(assertion_id, object_id, confidence, metadata, extra) do

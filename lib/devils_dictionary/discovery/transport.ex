@@ -41,8 +41,14 @@ defmodule DevilsDictionary.Discovery.Transport do
           # expects, so `retrieve/4`'s `request_fun` never sees XML and no
           # provider parses its body twice. An unparseable document is the same
           # `"malformed_response"` a bad JSON envelope gets.
+          # A body the provider's `into:` collector stopped reading because
+          # it passed the provider's cap (#158 build 4: a Wikiquote theme page
+          # can be 1.45 MB). Nothing partial is parsed.
+          {:ok, %Req.Response{private: %{body_capped: true}}} ->
+            {:error, "response_too_large"}
+
           {:ok, %Req.Response{status: 200, body: body}} when is_binary(body) ->
-            if body_format(provider) == :xml do
+            if body_format(provider) in [:xml, :html] do
               case provider.parse_body(body) do
                 {:ok, parsed} when is_map(parsed) or is_list(parsed) -> {:ok, parsed}
                 _other -> {:error, "malformed_response"}
@@ -51,8 +57,14 @@ defmodule DevilsDictionary.Discovery.Transport do
               {:error, "malformed_response"}
             end
 
-          {:ok, %Req.Response{} = response} ->
-            classify(provider, run_id, stage, payload, config, response)
+          # A status the provider says means "no such page" — Wikiquote's 404
+          # for a title that does not exist — is an answer, not a failure:
+          # the run completes empty and is negatively cached, as a search
+          # with no hits is.
+          {:ok, %Req.Response{status: status} = response} ->
+            if status != 200 and absent_status?(provider, status),
+              do: {:ok, %{"absent" => status}},
+              else: classify(provider, run_id, stage, payload, config, response)
 
           {:error, %Req.TransportError{reason: :timeout}} ->
             retry_transport(provider, run_id, stage, payload, config, "timeout")
@@ -194,11 +206,23 @@ defmodule DevilsDictionary.Discovery.Transport do
          function_exported?(provider, :parse_body, 1) do
       case Map.get(provider.capabilities(), :body) do
         :xml -> :xml
+        # Wikiquote's Parsoid pages (#158 build 4) are the second format:
+        # HTML, handed to the provider's `parse_body/1` exactly as XML is.
+        :html -> :html
         _other -> :json
       end
     else
       :json
     end
+  end
+
+  # Whether a non-200 status means "there is no such thing here" for this
+  # provider — an honest empty rather than a failure. Declared by the provider
+  # (`c:DevilsDictionary.Discovery.Provider.absent_status?/1`); nobody's 404 is
+  # absent by default, because for most APIs it is a wrong URL.
+  defp absent_status?(provider, status) do
+    Code.ensure_loaded?(provider) and function_exported?(provider, :absent_status?, 1) and
+      provider.absent_status?(status)
   end
 
   defp interval(provider, key) do

@@ -65,6 +65,42 @@ defmodule DevilsDictionary.Absorb.Clients.Wikidata do
     end
   end
 
+  @doc "The API endpoint, for a caller that sends the request through its own transport."
+  def api_url, do: @api
+
+  @doc """
+  Parameters for reading one wiki's sitelinks off up to #{@batch} items.
+
+  For a caller whose requests go through a budgeted transport rather than
+  `fetch/2` — a discovery provider (#158 build 4) asks Wikidata which
+  `enwikiquote` page a sense's QID links to, and that request is spent against
+  the provider's own ledger. `sitelink_titles/2` reads the answer.
+  """
+  def sitelink_params(qids, site) when is_list(qids) and length(qids) <= @batch do
+    [
+      action: "wbgetentities",
+      format: "json",
+      ids: Enum.join(qids, "|"),
+      props: "sitelinks",
+      sitefilter: site
+    ]
+  end
+
+  @doc """
+  `%{qid => title}` for every item in a `wbgetentities` answer that carries a
+  sitelink on `site`. Missing items (`"missing"`) are left out.
+  """
+  def sitelink_titles(%{"entities" => entities}, site) when is_map(entities) do
+    for {qid, entity} <- entities,
+        is_map(entity),
+        is_nil(entity["missing"]),
+        %{"title" => title} <- [get_in(entity, ["sitelinks", site])],
+        into: %{},
+        do: {qid, title}
+  end
+
+  def sitelink_titles(_body, _site), do: %{}
+
   @doc """
   The items carrying one exact statement value, by CirrusSearch's
   `haswbstatement`. Returns `{:ok, [qid]}`, in the search's own order.

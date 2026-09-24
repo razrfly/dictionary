@@ -28,6 +28,25 @@ defmodule Mix.Tasks.Dd.Fixtures.Capture do
     * `--lemma` — repeatable (default: cat, dog, oyster; the API sources add
       `seal`, which is a disambiguation page)
     * `--force` — overwrite existing fixtures
+
+  ## Wikiquote (#158 build 4a)
+
+      mix dd.fixtures.capture --source wikiquote
+      mix dd.fixtures.capture --source wikiquote --page Grief --force
+
+  Wikiquote is not an absorb source: it is a discovery provider, and its
+  fixtures are Parsoid pages (`GET /api/rest_v1/page/html/<title>`) captured
+  live, **one request each, 200 ms apart, with no redirect followed** so a
+  redirect is recorded as the redirect it is. It needs no database, so this
+  source does not start the application — a capture must never be a second
+  Oban node on a shared development database.
+
+  Each page is **sanitised** to what the parser reads: the Parsoid bookkeeping
+  attributes, images, tables, styles and the `<head>` are stripped. The task
+  parses the raw page and the sanitised one and **refuses to write** unless
+  the two parses are equal — every item, citation, link, section and the
+  revision — so a fixture can never be smaller by being different. `--raw-dir DIR` also keeps the untouched response there
+  (never committed).
   """
 
   use Mix.Task
@@ -36,6 +55,7 @@ defmodule Mix.Tasks.Dd.Fixtures.Capture do
 
   alias DevilsDictionary.Absorb.Clients
   alias DevilsDictionary.Absorb.GzipLines
+  alias DevilsDictionary.Discovery.Providers.Wikiquote.Parser
   alias DevilsDictionary.Registry.Lexeme
   alias DevilsDictionary.Repo
   alias DevilsDictionary.Sources
@@ -65,13 +85,31 @@ defmodule Mix.Tasks.Dd.Fixtures.Capture do
   }
   @dir "test/support/fixtures"
 
-  @requirements ["app.start"]
-
   @impl Mix.Task
   def run(args) do
     {opts, _, _} =
-      OptionParser.parse(args, strict: [source: :string, lemma: :keep, force: :boolean])
+      OptionParser.parse(args,
+        strict: [
+          source: :string,
+          lemma: :keep,
+          force: :boolean,
+          page: :keep,
+          raw_dir: :string
+        ]
+      )
 
+    if opts[:source] == "wikiquote" do
+      Application.ensure_all_started(:req)
+      captured = capture_wikiquote(Keyword.get_values(opts, :page), opts)
+      write_manifest_offline(captured)
+      Mix.shell().info("\ncaptured #{length(captured)} fixtures")
+    else
+      Mix.Task.run("app.start")
+      run_absorb_sources(opts)
+    end
+  end
+
+  defp run_absorb_sources(opts) do
     given = Keyword.get_values(opts, :lemma)
 
     sources =
@@ -172,6 +210,186 @@ defmodule Mix.Tasks.Dd.Fixtures.Capture do
     end)
   end
 
+  # ── Wikiquote (#158 build 4a) ────────────────────────────────────────────
+
+  # The pages #158's probe measured on 2026-09-22, each for a reason: a
+  # populated theme page, a thin one, a redirect, a missing page, and the two
+  # author pages whose *Misattributed* sections hold the test case's lines.
+  # The redirect's target is captured beside it so "follow one redirect" can
+  # be tested offline.
+  @wikiquote_pages ~w(Grief Nepotism Bank Banking Situationship Voltaire Kurt_Vonnegut)
+  @wikiquote_api "https://en.wikiquote.org/api/rest_v1/page/html/"
+  @wikiquote_headers ~w(content-revision-id etag location retry-after content-type)
+
+  defp capture_wikiquote(pages, opts) do
+    pages = if pages == [], do: @wikiquote_pages, else: pages
+
+    Enum.flat_map(pages, fn title ->
+      Process.sleep(200)
+
+      response =
+        Req.get!(@wikiquote_api <> URI.encode(title, &URI.char_unreserved?/1),
+          redirect: false,
+          retry: false,
+          decode_body: false,
+          headers: [{"user-agent", DevilsDictionary.Absorb.Clients.HTTP.user_agent()}]
+        )
+
+      if opts[:raw_dir] do
+        File.mkdir_p!(opts[:raw_dir])
+        File.write!(Path.join(opts[:raw_dir], "#{title}.html"), response.body)
+      end
+
+      write_wikiquote(title, response, opts)
+    end)
+  end
+
+  defp write_wikiquote(title, response, opts) do
+    slug = title |> String.downcase() |> String.replace(~r/[^a-z0-9]+/, "_")
+    path = Path.join([@dir, "wikiquote", "#{slug}.json"])
+    raw = IO.iodata_to_binary(response.body)
+
+    {body, counts} =
+      if response.status == 200 do
+        sanitised = sanitise_wikiquote(raw)
+
+        # The whole parse, not only its counts (CodeRabbit on #169): a
+        # sanitiser that kept every item but changed a citation, a link or
+        # the revision would otherwise pass. Nothing is excluded — what is
+        # stripped is exactly what the parser never reads.
+        if Parser.parse(raw) != Parser.parse(sanitised) do
+          Mix.raise("sanitising #{title} changed what the parser reads")
+        end
+
+        {sanitised, wikiquote_counts(sanitised)}
+      else
+        {raw, nil}
+      end
+
+    fixture = %{
+      "title" => title,
+      "url" => @wikiquote_api <> title,
+      "captured_at" => DateTime.to_iso8601(DateTime.utc_now()),
+      "status" => response.status,
+      "headers" =>
+        Map.new(
+          @wikiquote_headers,
+          &{&1, response |> Req.Response.get_header(&1) |> List.first()}
+        )
+        |> Enum.reject(fn {_k, v} -> is_nil(v) end)
+        |> Map.new(),
+      "raw_bytes" => byte_size(raw),
+      "counts" => counts,
+      "body_file" => body_file(slug, body, Req.Response.get_header(response, "content-type"))
+    }
+
+    if File.exists?(path) and !opts[:force] do
+      Mix.shell().info("  = #{path} (exists; --force to replace)")
+      []
+    else
+      File.mkdir_p!(Path.dirname(path))
+      File.write!(path, Jason.encode_to_iodata!(fixture, pretty: true))
+      write_body(Path.dirname(path), fixture["body_file"], body)
+
+      size =
+        File.stat!(path).size +
+          File.stat!(Path.join(Path.dirname(path), fixture["body_file"])).size
+
+      Mix.shell().info(
+        "  + #{path} — #{response.status}, #{div(byte_size(raw), 1024)} KB raw → #{div(size, 1024)} KB, #{inspect(counts)}"
+      )
+
+      [%{"source" => "wikiquote", "lemma" => slug, "records" => 1, "bytes" => size}]
+    end
+  end
+
+  # The body beside the metadata, as the HTML it is — readable in a diff —
+  # unless it is over the 100 kB a fixture may weigh, when it is gzipped.
+  # *Voltaire* and *Kurt Vonnegut* are ~150 kB of their own words after
+  # sanitising, and dropping any would change the counts the parser test
+  # asserts; gzip makes them ~45 kB without changing a byte of what is read.
+  @body_limit 100 * 1024
+
+  defp body_file(slug, body, content_type) do
+    extension = if Enum.any?(content_type, &(&1 =~ "json")), do: "body.json", else: "html"
+
+    if byte_size(body) > @body_limit,
+      do: "#{slug}.#{extension}.gz",
+      else: "#{slug}.#{extension}"
+  end
+
+  defp write_body(dir, file, body) do
+    data = if String.ends_with?(file, ".gz"), do: :zlib.gzip(body), else: body
+    File.write!(Path.join(dir, file), data)
+  end
+
+  defp wikiquote_counts(html) do
+    page = Parser.parse(html)
+    %{"quotations" => length(page.quotations), "register" => length(page.register)}
+  end
+
+  # What the parser reads, and nothing else: the `<html about>` revision, the
+  # `dc:isVersionOf` title, and the body's text-bearing structure. Parsoid's
+  # own bookkeeping (`data-mw`, `data-parsoid`, `typeof`, `about`, ids),
+  # styling, images and tables are the bulk of a page and none of its words.
+  @kept_attributes ~w(href rel class)
+  @dropped_elements ~w(style script img figure table link meta noscript)
+
+  defp sanitise_wikiquote(html) do
+    {:ok, document} = Floki.parse_document(html)
+
+    about = document |> Floki.attribute("html", "about") |> List.first()
+    title = document |> Floki.attribute(~s(link[rel="dc:isVersionOf"]), "href") |> List.first()
+    [body] = Floki.find(document, "body")
+
+    head =
+      [{"title", [], [Floki.find(document, "title") |> Floki.text()]}] ++
+        if title, do: [{"link", [{"rel", "dc:isVersionOf"}, {"href", title}], []}], else: []
+
+    {"html", if(about, do: [{"about", about}], else: []), [{"head", [], head}, prune(body)]}
+    |> Floki.raw_html()
+  end
+
+  defp prune({tag, attrs, children}) do
+    if tag in @dropped_elements do
+      nil
+    else
+      attrs =
+        attrs
+        |> Enum.filter(fn {name, _} -> name in @kept_attributes end)
+        |> Enum.map(fn
+          {"class", value} -> {"class", if(value =~ ~r/\breference\b/, do: "reference", else: "")}
+          other -> other
+        end)
+        |> Enum.reject(&(&1 == {"class", ""}))
+
+      {tag, attrs, children |> Enum.map(&prune/1) |> Enum.reject(&is_nil/1)}
+    end
+  end
+
+  defp prune({:comment, _}), do: nil
+  defp prune(text), do: text
+
+  # The manifest without the database: the Wikiquote capture never starts the
+  # application, so the per-source config the full manifest records is kept
+  # from the previous file rather than re-read.
+  defp write_manifest_offline([]), do: :ok
+
+  defp write_manifest_offline(captured) do
+    path = Path.join(@dir, "MANIFEST.json")
+    previous = path |> File.read!() |> Jason.decode!()
+
+    fixtures =
+      (captured ++ (previous["fixtures"] || []))
+      |> Enum.uniq_by(&{&1["source"], &1["lemma"]})
+      |> Enum.sort_by(&{&1["source"], &1["lemma"]})
+
+    File.write!(
+      path,
+      Jason.encode_to_iodata!(Map.merge(previous, %{"fixtures" => fixtures}), pretty: true)
+    )
+  end
+
   defp lemmas([], default), do: default
   defp lemmas(given, _default), do: given
 
@@ -260,7 +478,7 @@ defmodule Mix.Tasks.Dd.Fixtures.Capture do
   defp write(source, lemma, records, opts) do
     path = Path.join([@dir, source, "#{lemma}.json"])
 
-    if File.exists?(path) and not opts[:force] do
+    if File.exists?(path) and !opts[:force] do
       Mix.shell().info("  = #{path} (exists; --force to replace)")
       []
     else
