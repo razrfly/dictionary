@@ -927,7 +927,7 @@ defmodule DevilsDictionaryWeb.Word do
           </span>
         </span>
         <.quotations
-          :if={Map.get(@sense, :quotations, %{total: 0}).total > 0}
+          :if={@sense.quotations.total > 0}
           id={"#{@id}-quotations"}
           quotations={@sense.quotations}
           source={@source}

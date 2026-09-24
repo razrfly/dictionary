@@ -201,6 +201,8 @@ defmodule DevilsDictionary.Demo do
               tags: sense["tags"] || [],
               url: nil,
               record_id: nil,
+              # A sample sense is invented, so it attests nothing (#158 build 1).
+              quotations: %{shown: [], rest: [], total: 0},
               relations: %{}
             }
           end)
