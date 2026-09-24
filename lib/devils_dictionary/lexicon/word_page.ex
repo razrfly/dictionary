@@ -1129,8 +1129,11 @@ defmodule DevilsDictionary.Lexicon.WordPage do
   # and absent (45,433; 17,341 with a `ref`). A quotation is the first kind
   # with a citation — the issue's rule — and `quotation?/1` is the one place
   # that says so, so widening it to the untyped-but-cited lines is a decision
-  # taken once. The column's database default is `{}`, so anything but a
-  # list is no examples at all.
+  # taken once. It is a decision worth taking on purpose: *war*'s 39 examples
+  # are 24 typed quotations, 6 usage examples and 9 untyped lines with a
+  # citation, and Sherman's 1864 letter to Atlanta — the issue's own wireframe
+  # lead — is one of the 9. The column's database default is `{}`, so
+  # anything but a list is no examples at all.
   #
   # Folded at display time by the fingerprint (ADR 0003): two examples whose
   # wording differs only in typography are one quotation shown once, and the
