@@ -677,6 +677,22 @@ defmodule DevilsDictionaryWeb.ConnectionLive do
          |> put_flash(:info, "Proposed with attribution; awaiting review.")
          |> push_navigate(to: ~p"/connections/#{assertion.id}")}
 
+      # Already said: nothing is written, and the reader is sent to the claim
+      # that says it (#181 R4 — endorsing it is build 3).
+      {:error, {:held, assertion_id}} ->
+        {:noreply,
+         socket
+         |> put_flash(:info, "Already proposed; nothing new was saved.")
+         |> push_navigate(to: ~p"/connections/#{assertion_id}")}
+
+      {:error, :evidence_required_for_person} ->
+        {:noreply,
+         assign(
+           socket,
+           :error,
+           "A person is proposed only with evidence. Cite a source meaning or passage."
+         )}
+
       {:error, _} ->
         {:noreply,
          assign(

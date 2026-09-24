@@ -252,6 +252,9 @@ defmodule DevilsDictionary.Lexicon.WordPage do
   @doc """
   Builds the page from a `Lexicon.lookup/2` result.
 
+  `opts[:viewer]` is `:public` (the default) or `:internal`, and decides only
+  which exemplars the examples section reads (#181 build 2).
+
   `opts[:trail]` is a list of slugs already walked. A lookup that found nothing
   still returns a struct — `/define/zzzz` is a page that says *no such word*,
   never a raise, because X1 renders 200 random index rows and the index is
@@ -318,7 +321,11 @@ defmodule DevilsDictionary.Lexicon.WordPage do
         |> related(by_lexeme, sources, hd(lexemes).lemma)
         |> sense_link(cards),
       examples:
-        Examples.for_page(ids, :public, senses: senses, edges: instance_edges, sources: sources),
+        Examples.for_page(ids, opts[:viewer] || :public,
+          senses: senses,
+          edges: instance_edges,
+          sources: sources
+        ),
       thing: entity |> thing(ids, sources) |> put_article(about, sources, concept),
       trail: trail(opts[:trail])
     }

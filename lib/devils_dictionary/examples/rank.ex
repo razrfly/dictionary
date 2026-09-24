@@ -6,7 +6,8 @@ defmodule DevilsDictionary.Examples.Rank do
   Today's rule, as the issue wrote it:
 
     1. featured exemplars, in featured order;
-    2. the other exemplars by `human_up − human_down`, then evidence count;
+    2. the other exemplars by `human_up − human_down`, then evidence count,
+       then age (`nominated_at`, oldest first);
     3. instances by `source_count` descending, then `best_tier`, then label.
 
   Then `id` ascending, so two renders of one page agree.
@@ -38,9 +39,12 @@ defmodule DevilsDictionary.Examples.Rank do
   # among the featured the earlier feature leads.
   defp exemplar_key(%{signals: s, id: id}) do
     {is_nil(s[:featured_at]), featured_order(s[:featured_at]),
-     -((s[:human_up] || 0) - (s[:human_down] || 0)), -(s[:evidence_count] || 0), id}
+     -((s[:human_up] || 0) - (s[:human_down] || 0)), -(s[:evidence_count] || 0),
+     featured_order(s[:nominated_at]), id}
   end
 
+  # A timestamp as a sortable integer; nil (never featured, age unknown)
+  # sorts as zero.
   defp featured_order(nil), do: 0
   defp featured_order(%DateTime{} = at), do: DateTime.to_unix(at, :microsecond)
 

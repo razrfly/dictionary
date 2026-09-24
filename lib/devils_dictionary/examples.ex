@@ -10,8 +10,10 @@ defmodule DevilsDictionary.Examples do
       → class. Source-listed: the source adjudicated it, this site did not, and
       a reviewer can still reject one (`Claims.visible/2` hides it then).
     * **exemplars** (layer 2, build 2) — a thing a *person* cites as an example
-      of a meaning, with a why and evidence: an `illustrates` claim. None are
-      read yet; `exemplars/2` is the seam.
+      of a meaning, with a why and evidence: an `illustrates` claim, read by
+      `exemplars/3` through `Claims.visible/2` for the viewer, and backwards
+      on the subject's page by `cited_as/2`. Written only through
+      `Contributions.propose/6` (the form, or `mix dd.exemplars.seed`).
 
   A usage example — a sentence using the word — is neither, and is not read
   here: it belongs to the sense it illustrates and renders inside that card.
@@ -72,11 +74,14 @@ defmodule DevilsDictionary.Examples do
   import Ecto.Query
 
   alias DevilsDictionary.Claims
-  alias DevilsDictionary.Claims.AssertionRevision
+  alias DevilsDictionary.Claims.{AssertionEvidence, AssertionRevision, AssertionVote}
+  alias DevilsDictionary.Corpus.SourceRecordRevision
   alias DevilsDictionary.Examples.Rank
-  alias DevilsDictionary.Registry.{Entity, Lexeme, Sense, SenseRevision}
+  alias DevilsDictionary.Registry.{ContentRevision, Entity, Lexeme, Sense, SenseRevision}
+
   alias DevilsDictionary.Repo
   alias DevilsDictionary.Sources
+  alias DevilsDictionary.Sources.{Actor, SourceRecord}
 
   @instance_of "instance_of"
   @refers_to "refers_to"
@@ -133,9 +138,12 @@ defmodule DevilsDictionary.Examples do
     glosses = Map.new(senses, &{&1.id, &1.gloss})
     sense_order = senses |> Enum.with_index() |> Map.new(fn {s, i} -> {s.id, i} end)
 
+    # The record is read as the public reads it, whoever is looking: a
+    # reviewer's view of a rejected instance is `/connections/:id`, not a chip.
+    # Only the exemplars — the layer adjudicated here — read as the viewer.
     items =
-      (instances(edges, sense_ids, viewer, sources, glosses, sense_order) ++
-         exemplars(ids, viewer))
+      (instances(edges, sense_ids, :public, sources, glosses, sense_order) ++
+         exemplars(ids, viewer, senses: senses, sources: sources))
       |> Enum.map(&check!/1)
       |> Rank.order()
 
@@ -151,11 +159,375 @@ defmodule DevilsDictionary.Examples do
   end
 
   @doc """
-  The layer-2 read. Build 2 (#181) fills it with the `illustrates` claims a
-  viewer may see; until then nothing is cited, and the section says so by
-  holding instances only.
+  The layer-2 read (#181 build 2): the `illustrates` claims whose object is
+  one of these lexemes' senses, as items, through `Claims.visible/2` for the
+  viewer.
+
+  So the public never sees a person nominated here until a reviewer accepts
+  it, and an `:internal` viewer (a contributor or reviewer) sees it marked
+  `needs_review`. A claim a reviewer rejected or withdrew is on nobody's page:
+  `:internal` hides nothing at the query, and this drops those two states
+  after it, because the word page is not the review queue.
+
+  Each item's `claim` carries what the card draws — the rationale, who
+  nominated it (the manifest's curator when a manifest wrote it), the
+  evidence with its URLs, the display review state — and its `signals` carry
+  what `Rank.order/1` reads: votes (`assertion_votes`, split by actor kind,
+  which build 3 will cache), the evidence count, and `featured_at`, nil until
+  #105's features exist. `nominated_at` breaks ties by age.
+
+  Options: `:senses` (the page's senses, as `for_page/3` has them) and
+  `:sources` (the rows by id).
   """
-  def exemplars(_lexeme_ids, _viewer), do: []
+  def exemplars(lexeme_ids, viewer, opts \\ []) do
+    senses = Keyword.get_lazy(opts, :senses, fn -> senses(List.wrap(lexeme_ids)) end)
+    sources = Keyword.get_lazy(opts, :sources, fn -> source_rows() end)
+
+    case Enum.map(senses, & &1.id) do
+      [] ->
+        []
+
+      sense_ids ->
+        glosses = Map.new(senses, &{&1.id, &1.gloss})
+
+        exemplar_query()
+        |> where([r], r.object_object_id in ^sense_ids)
+        |> Claims.visible(viewer)
+        |> Repo.all()
+        |> exemplar_items(sources, glosses)
+    end
+  end
+
+  @doc """
+  The reverse view (#181 wireframe 5, #105): every exemplar whose **subject**
+  is this entity, grouped by the word whose sense it illustrates — each group
+  `%{lexeme: %{object_id, lemma, slug}, items: [...]}`, its items in
+  `Rank.order/1`'s order and the groups in the order of their best item.
+
+  Public by default, like the rest of the entity page: a person's pending
+  nominations are not on their page.
+  """
+  def cited_as(subject_ids, viewer \\ :public) do
+    subject_ids = List.wrap(subject_ids)
+
+    rows =
+      exemplar_query()
+      |> where([r], r.subject_object_id in ^subject_ids)
+      |> Claims.visible(viewer)
+      |> Repo.all()
+
+    targets = Enum.map(rows, & &1.object_id) |> Enum.uniq()
+
+    words =
+      if targets == [] do
+        %{}
+      else
+        Repo.all(
+          from s in Sense,
+            join: l in Lexeme,
+            on: l.object_id == s.lexeme_id,
+            left_join: rev in SenseRevision,
+            on: rev.sense_id == s.object_id and rev.is_current,
+            where: s.object_id in ^targets,
+            select:
+              {s.object_id,
+               %{object_id: l.object_id, lemma: l.lemma, slug: l.slug, gloss: rev.gloss}}
+        )
+        |> Map.new()
+      end
+
+    glosses = Map.new(words, fn {sense_id, word} -> {sense_id, word.gloss} end)
+
+    items = exemplar_items(rows, source_rows(), glosses)
+    order = items |> Rank.order() |> Enum.with_index() |> Map.new(fn {i, n} -> {i.id, n} end)
+
+    items
+    |> Enum.filter(&Map.has_key?(words, &1.target.object_id))
+    |> Enum.group_by(&Map.fetch!(words, &1.target.object_id).object_id)
+    |> Enum.map(fn {_lexeme_id, [first | _] = group} ->
+      word = Map.fetch!(words, first.target.object_id)
+
+      %{
+        lexeme: Map.take(word, [:object_id, :lemma, :slug]),
+        items: Enum.sort_by(group, &Map.fetch!(order, &1.id))
+      }
+    end)
+    |> Enum.sort_by(fn group -> Map.fetch!(order, hd(group.items).id) end)
+  end
+
+  @doc """
+  What the record names this entity under (#181 wireframe 5, the second
+  list): the words whose senses its own senses are filed under by WordNet,
+  and the things Wikidata files it as an instance of. `[%{label, slug,
+  object_id, kind: :lexeme | :entity, source}]`, each named once per source.
+  """
+  def named_under(entity_ids, viewer \\ :public) do
+    entity_ids = List.wrap(entity_ids)
+    sources = source_rows()
+
+    # Its words' senses: the senses that `refers_to` it.
+    subject_senses =
+      from(link in AssertionRevision,
+        join: p in assoc(link, :predicate),
+        where: p.key == @refers_to and link.object_object_id in ^entity_ids,
+        where: link.is_current and link.lifecycle_state == :active,
+        select: link.subject_object_id
+      )
+      |> Claims.visible(viewer)
+      |> Repo.all()
+
+    subjects = entity_ids ++ subject_senses
+
+    from(r in AssertionRevision,
+      join: p in assoc(r, :predicate),
+      join: a in assoc(r, :assertion),
+      left_join: ts in Sense,
+      on: ts.object_id == r.object_object_id,
+      left_join: tl in Lexeme,
+      on: tl.object_id == ts.lexeme_id,
+      left_join: te in Entity,
+      on: te.object_id == r.object_object_id,
+      where: p.key == @instance_of and r.subject_object_id in ^subjects,
+      where: r.is_current and r.lifecycle_state == :active,
+      where: not is_nil(tl.object_id) or not is_nil(te.object_id),
+      select: %{
+        source_id: a.source_id,
+        lexeme_id: tl.object_id,
+        lemma: tl.lemma,
+        slug: tl.slug,
+        entity_id: te.object_id,
+        entity_label: coalesce(te.preferred_label, qid(te.object_id))
+      }
+    )
+    |> Claims.visible(viewer)
+    |> Repo.all()
+    |> Enum.map(fn row ->
+      source = Map.fetch!(sources, row.source_id)
+      source = %{slug: source.slug, name: source.name, tier: source.tier, logo: source.logo}
+
+      if row.lexeme_id do
+        %{
+          kind: :lexeme,
+          object_id: row.lexeme_id,
+          label: row.lemma,
+          slug: row.slug,
+          source: source
+        }
+      else
+        %{
+          kind: :entity,
+          object_id: row.entity_id,
+          label: row.entity_label,
+          slug: nil,
+          source: source
+        }
+      end
+    end)
+    |> Enum.reject(&is_nil(&1.label))
+    |> Enum.uniq_by(&{&1.kind, &1.object_id, &1.source.slug})
+    |> Enum.sort_by(&{String.downcase(&1.label), &1.source.slug})
+  end
+
+  # ── layer 2 ──────────────────────────────────────────────────────────────
+
+  @illustrates "illustrates"
+
+  # One row per current, active `illustrates` revision, with the subject's
+  # name and who nominated it. The caller adds the endpoint filter and the
+  # viewer's visibility.
+  defp exemplar_query do
+    from r in AssertionRevision,
+      join: p in assoc(r, :predicate),
+      join: a in assoc(r, :assertion),
+      left_join: e in Entity,
+      on: e.object_id == r.subject_object_id,
+      left_join: c in ContentRevision,
+      on: c.content_id == r.subject_object_id and c.is_current,
+      left_join: nominator in Actor,
+      on: nominator.id == a.origin_actor_id,
+      where: p.key == @illustrates and r.is_current and r.lifecycle_state == :active,
+      select: %{
+        assertion_id: a.id,
+        revision_id: r.id,
+        source_id: a.source_id,
+        subject_object_id: r.subject_object_id,
+        subject_kind: r.subject_kind,
+        entity_kind: e.entity_kind,
+        label: coalesce(e.preferred_label, c.headword),
+        qid: qid(r.subject_object_id),
+        object_id: r.object_object_id,
+        object_kind: r.object_kind,
+        rationale: r.rationale,
+        method: r.method,
+        metadata: r.metadata,
+        nominated_at: r.inserted_at,
+        nominator_id: nominator.id,
+        nominator_label: nominator.label,
+        nominator_kind: nominator.actor_kind
+      }
+  end
+
+  defp exemplar_items([], _sources, _glosses), do: []
+
+  defp exemplar_items(rows, sources, glosses) do
+    revision_ids = Enum.map(rows, & &1.revision_id)
+    states = Claims.display_review_states(revision_ids)
+    evidence = evidence_for(revision_ids)
+    votes = votes_for(revision_ids)
+
+    rows
+    |> Enum.reject(&(Map.fetch!(states, &1.revision_id) in Claims.hidden_decisions()))
+    |> Enum.map(fn row ->
+      state = Map.fetch!(states, row.revision_id)
+      cited = Map.get(evidence, row.revision_id, [])
+      tally = Map.get(votes, row.revision_id, %{})
+      source = Map.get(sources, row.source_id)
+      metadata = row.metadata || %{}
+      gloss = glosses[row.object_id]
+      nominated_by = nominator(row, metadata)
+
+      %{
+        id: "ex:#{row.assertion_id}",
+        layer: :exemplar,
+        basis: :cited,
+        subject: %{
+          kind: if(row.subject_kind == "content", do: :content, else: :entity),
+          object_id: row.subject_object_id,
+          label: row.label || row.qid || "##{row.subject_object_id}",
+          slug: nil,
+          entity_id: row.entity_kind && row.subject_object_id,
+          entity_kind: row.entity_kind,
+          qid: row.qid,
+          aliases: [],
+          enriched?: false,
+          thumbnail: nil
+        },
+        target: %{
+          kind: if(row.object_kind == "sense", do: :sense, else: :entity),
+          object_id: row.object_id,
+          gloss: gloss,
+          label: nil
+        },
+        sources:
+          if(source,
+            do: [
+              %{
+                slug: source.slug,
+                name: source.name,
+                tier: source.tier,
+                logo: Map.get(source, :logo),
+                kind: :claim,
+                classes: nil,
+                assertion_ids: [row.assertion_id]
+              }
+            ],
+            else: []
+          ),
+        claim: %{
+          assertion_id: row.assertion_id,
+          revision_id: row.revision_id,
+          method: row.method,
+          rationale: row.rationale,
+          nominated_by: nominated_by,
+          evidence: cited,
+          evidence_count: length(cited),
+          review_state: state,
+          manifest:
+            if(metadata["manifest"],
+              do: %{slug: metadata["manifest"], row: metadata["row"]}
+            )
+        },
+        signals: %{
+          source_count: 0,
+          best_tier: nil,
+          human_up: Map.get(tally, :human_up, 0),
+          human_down: Map.get(tally, :human_down, 0),
+          bot_up: Map.get(tally, :bot_up, 0),
+          bot_down: Map.get(tally, :bot_down, 0),
+          evidence_count: Enum.count(cited, &(&1.role == :supports)),
+          featured_at: nil,
+          nominated_at: row.nominated_at
+        },
+        reason: exemplar_reason(nominated_by, gloss)
+      }
+    end)
+  end
+
+  # The card says who, in the words the nomination carried: a manifest names
+  # its curator; a form nomination is the account's own label.
+  defp nominator(row, metadata) do
+    %{
+      actor_id: row.nominator_id,
+      label: metadata["curator"] || row.nominator_label,
+      kind: row.nominator_kind
+    }
+  end
+
+  defp exemplar_reason(%{label: label}, gloss) when is_binary(gloss),
+    do: "Cited by #{label || "a contributor"} as an example of “#{gloss}”."
+
+  defp exemplar_reason(%{label: label}, _gloss),
+    do: "Cited by #{label || "a contributor"} as an example of this meaning."
+
+  # Every evidence row, with the URL a `community` record holds and the
+  # canonical URL a content revision has.
+  defp evidence_for(revision_ids) do
+    Repo.all(
+      from ev in AssertionEvidence,
+        left_join: srr in SourceRecordRevision,
+        on: srr.id == ev.source_record_revision_id,
+        left_join: sr in SourceRecord,
+        on: sr.id == srr.source_record_id,
+        left_join: cr in ContentRevision,
+        on: cr.id == ev.content_revision_id,
+        where: ev.assertion_revision_id in ^revision_ids,
+        order_by: [ev.assertion_revision_id, ev.evidence_role, ev.id],
+        select:
+          {ev.assertion_revision_id,
+           %{
+             role: ev.evidence_role,
+             url: coalesce(sr.url, cr.canonical_url),
+             attribution: ev.attribution_text,
+             locator: ev.locator
+           }}
+    )
+    |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
+    # What supports a claim reads first; what contradicts it follows, shown
+    # and never dropped. (The role sorts as text in SQL, which put
+    # `contradicts` first.)
+    |> Map.new(fn {id, rows} -> {id, Enum.sort_by(rows, &(&1.role != :supports))} end)
+  end
+
+  # Human and bot votes apart, never summed together (#105, #97).
+  defp votes_for(revision_ids) do
+    Repo.all(
+      from v in AssertionVote,
+        join: actor in Actor,
+        on: actor.id == v.actor_id,
+        where: v.assertion_revision_id in ^revision_ids,
+        group_by: [v.assertion_revision_id, actor.actor_kind, v.value],
+        select: {v.assertion_revision_id, actor.actor_kind, v.value, count(v.id)}
+    )
+    |> Enum.reduce(%{}, fn {revision_id, kind, value, n}, acc ->
+      case tally_key(kind, value) do
+        nil ->
+          acc
+
+        key ->
+          Map.update(acc, revision_id, %{key => n}, &Map.update(&1, key, n, fn m -> m + n end))
+      end
+    end)
+  end
+
+  # Only a `user` actor is a person agreeing (#181 C6); an import or an
+  # unknown claimant's vote counts as neither.
+  defp tally_key(:user, value) when value > 0, do: :human_up
+  defp tally_key(:user, _value), do: :human_down
+  defp tally_key(:bot, value) when value > 0, do: :bot_up
+  defp tally_key(:bot, _value), do: :bot_down
+  defp tally_key(_kind, _value), do: nil
+
+  defp source_rows, do: Map.new(Sources.list_sources(), &{&1.id, &1})
 
   @doc """
   WordNet's side of the instance layer, as a query: the current `instance_of`

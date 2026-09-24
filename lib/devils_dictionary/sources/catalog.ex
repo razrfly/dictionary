@@ -203,7 +203,8 @@ defmodule DevilsDictionary.Sources.Catalog do
       [artsy()] ++
       DevilsDictionary.Discovery.Providers.source_catalog() ++
       DevilsDictionary.Quotations.Checkers.source_catalog() ++
-      [DevilsDictionary.Quotations.Corpus.source_attrs()]
+      [DevilsDictionary.Quotations.Corpus.source_attrs()] ++
+      [DevilsDictionary.Examples.Community.source_attrs()]
   end
 
   # Artsy is a **corpus**, not a provider (#144 Phase 3, and §4 of #144).
