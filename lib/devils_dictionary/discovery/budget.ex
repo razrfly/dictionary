@@ -188,11 +188,19 @@ defmodule DevilsDictionary.Discovery.Budget do
 
   @doc "Persists provider-wide not-before time so visits and workers cannot bypass it."
   def defer_provider(run_id, retry_after, reason) do
+    run = Repo.get!(Run, run_id)
+    mapping = Repo.get!(Mapping, run.mapping_id)
+    defer_source(mapping.source_id, retry_after, reason)
+  end
+
+  @doc """
+  The same not-before time, on a source by id — for callers outside a
+  discovery run (the quotation verifier). Never moves an existing time earlier.
+  """
+  def defer_source(source_id, retry_after, reason) do
     Repo.transaction(fn ->
-      run = Repo.get!(Run, run_id)
-      mapping = Repo.get!(Mapping, run.mapping_id)
-      _ = Repo.query!("SELECT pg_advisory_xact_lock($1)", [mapping.source_id])
-      source = Repo.get!(Source, mapping.source_id)
+      _ = Repo.query!("SELECT pg_advisory_xact_lock($1)", [source_id])
+      source = Repo.get!(Source, source_id)
 
       retry_after =
         case source.discovery_retry_after do

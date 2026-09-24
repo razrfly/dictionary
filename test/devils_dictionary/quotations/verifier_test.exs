@@ -16,6 +16,8 @@ defmodule DevilsDictionary.Quotations.VerifierTest do
   """
   use DevilsDictionary.DataCase, async: false
 
+  import ExUnit.CaptureLog
+
   import DevilsDictionary.WordFixtures
 
   alias DevilsDictionary.Claims
@@ -28,6 +30,7 @@ defmodule DevilsDictionary.Quotations.VerifierTest do
   alias DevilsDictionary.Quotations.{VerificationRun, Verifier}
   alias DevilsDictionary.Registry
   alias DevilsDictionary.Registry.ContentItem
+  alias DevilsDictionary.Sources
   alias DevilsDictionary.WikiquoteFixtures
 
   @candide File.read!("test/support/fixtures/verifier/pg19942.txt.gz") |> :zlib.gunzip()
@@ -147,7 +150,12 @@ defmodule DevilsDictionary.Quotations.VerifierTest do
 
   defp answer(%{host: "sparql.test"} = conn) do
     qid = Regex.run(~r/wd:(Q\d+)/, conn.params["query"]) |> List.last()
-    body = File.read!("test/support/fixtures/verifier/sparql-#{qid}.json")
+
+    body =
+      case File.read("test/support/fixtures/verifier/sparql-#{qid}.json") do
+        {:ok, body} -> body
+        {:error, :enoent} -> ~s({"results": {"bindings": []}})
+      end
 
     conn
     |> Plug.Conn.put_resp_content_type("application/sparql-results+json")
@@ -323,6 +331,9 @@ defmodule DevilsDictionary.Quotations.VerifierTest do
     assert run.status == :deferred
     assert DateTime.diff(run.refresh_after, run.completed_at) == 120
     refute item("We must cultivate our garden").metadata["provenance"]
+
+    # The host's backoff is the source's, so the discovery provider waits too.
+    assert Sources.get_source_by_slug!("wikiquote").discovery_retry_after
   end
 
   test "a provider refresh never overwrites the verifier's revision (#164 C3)", ctx do
@@ -351,5 +362,81 @@ defmodule DevilsDictionary.Quotations.VerifierTest do
     assert [%{id: id}] = Claims.outgoing(garden.object_id, predicate: "authored_by")
     assert id == verified.id
     _ = ctx
+  end
+
+  test "Misquotations never counts against the right author's credit", ctx do
+    # A source credits the line to the person *Misquotations* says did write
+    # it. Her pass matches the row; it must not dispute her.
+    disapprove = item("I disapprove of what you say")
+    hall = concept!("Q1373916", "Evelyn Beatrice Hall", kind: :person).object_id
+    {:ok, _} = Claims.assert(disapprove.object_id, "authored_by", hall, %{confidence: 0.9})
+
+    runs = Verifier.run_due(10)
+    assert hall in Enum.map(runs, & &1.subject_object_id)
+
+    [credit] = Claims.outgoing(disapprove.object_id, predicate: "authored_by")
+    assert credit.object_object_id == hall
+
+    roles =
+      Repo.all(
+        from e in AssertionEvidence,
+          where: e.assertion_revision_id == ^credit.id,
+          select: e.evidence_role
+      )
+
+    refute :contradicts in roles
+
+    # The line's badge is the item's, from every claim on it: Voltaire's pass
+    # and hers agree on it whichever runs last.
+    after_hall =
+      Map.delete(item("I disapprove of what you say").metadata["provenance"], "computed_at")
+
+    assert after_hall["badge"] == "disputed"
+
+    Verifier.verify_author(ctx.voltaire)
+
+    assert Map.delete(item("I disapprove of what you say").metadata["provenance"], "computed_at") ==
+             after_hall
+  end
+
+  test "one person's pass raising fails that pass and not the batch", ctx do
+    stub_checkers(ctx.requests, %{
+      "sparql.test" => fn conn ->
+        if conn.params["query"] =~ "wd:Q9068" do
+          conn |> Plug.Conn.put_resp_content_type("text/plain") |> Plug.Conn.send_resp(200, "<")
+        else
+          answer(conn)
+        end
+      end
+    })
+
+    {runs, log} = with_log(fn -> Verifier.run_due(10) end)
+
+    by_person = Map.new(runs, &{&1.subject_object_id, &1})
+    assert %{status: :failed, error_code: "exception"} = by_person[ctx.voltaire]
+    assert by_person[ctx.voltaire].refresh_after
+    assert %{status: :succeeded} = by_person[ctx.vonnegut]
+    assert log =~ "quotation verifier"
+  end
+
+  test "a source switched off is skipped, and a source under a backoff defers", ctx do
+    gutenberg = Sources.get_source_by_slug!("gutenberg")
+    Repo.update!(Ecto.Changeset.change(gutenberg, active: false))
+
+    Verifier.run_due(10)
+
+    # No text to check against: the provider's citation and nothing primary.
+    assert badge("We must cultivate our garden") == "plausible"
+    refute Enum.any?(Agent.get(ctx.requests, & &1), &match?({"gutenberg.test", _}, &1))
+    refute Enum.any?(Agent.get(ctx.requests, & &1), &(elem(&1, 0) == "sparql.test"))
+
+    wikiquote = Sources.get_source_by_slug!("wikiquote")
+    later = DateTime.add(DateTime.utc_now(), 300, :second)
+    Repo.update!(Ecto.Changeset.change(wikiquote, discovery_retry_after: later))
+    Agent.update(ctx.requests, fn _ -> [] end)
+
+    run = Verifier.verify_author(ctx.vonnegut, max_age: 0)
+    assert run.status == :deferred
+    refute Enum.any?(Agent.get(ctx.requests, & &1), &(elem(&1, 0) == "wikiquote.test"))
   end
 end

@@ -9,6 +9,11 @@ defmodule DevilsDictionary.Quotations.Verifier.Fetch do
   claim, a `429` or a `5xx` is `{:deferred, seconds}` — the run stops and its
   refresh clock is set, never retried in a loop.
 
+  **The source row is the switch.** An inactive source is never called, and a
+  source under a `discovery_retry_after` (a `429` from the discovery provider
+  on the same host, or from the verifier) is deferred until it passes. A
+  verifier `429` or `5xx` sets that same row, so the backoff holds for both.
+
   **Keep.** Every answer is a source record under the checker's source, the
   way an absorb keeps a fetched record, and is reused while younger than the
   caller's `max_age`: an author's Wikiquote page, the Wikidata works list, a
@@ -66,11 +71,32 @@ defmodule DevilsDictionary.Quotations.Verifier.Fetch do
     end
   end
 
+  @doc "Whether the operator has this checker's source switched on."
+  def active?(source_slug), do: Sources.get_source_by_slug!(source_slug).active
+
   @doc """
   One budgeted GET. `{:ok, body}`, `{:ok, :absent}` for a `404`,
   `{:deferred, seconds}` or `{:error, code}`.
   """
   def get(%VerificationRun{} = run, source_slug, stage, request) do
+    source = Sources.get_source_by_slug!(source_slug)
+    now = DateTime.utc_now()
+
+    cond do
+      not source.active ->
+        {:error, "source_inactive"}
+
+      source.discovery_retry_after && DateTime.compare(source.discovery_retry_after, now) == :gt ->
+        {:deferred, max(DateTime.diff(source.discovery_retry_after, now), 1)}
+
+      true ->
+        claim_and_get(run, source, stage, request)
+    end
+  end
+
+  defp claim_and_get(run, source, stage, request) do
+    source_slug = source.slug
+
     case Budget.claim_shared(source_slug, {:verification, run.id}, stage,
            request_interval_ms: interval()
          ) do
@@ -94,6 +120,7 @@ defmodule DevilsDictionary.Quotations.Verifier.Fetch do
         |> Keyword.merge(Application.get_env(:devils_dictionary, :verification_req_options, []))
         |> Req.request()
         |> answer()
+        |> backoff(source)
 
       {:deferred, seconds} ->
         {:deferred, seconds}
@@ -125,6 +152,16 @@ defmodule DevilsDictionary.Quotations.Verifier.Fetch do
 
   defp answer({:ok, %Req.Response{status: status}}), do: {:error, "http_#{status}"}
   defp answer({:error, _exception}), do: {:deferred, 60}
+
+  # The host said wait: every caller of this source waits, the discovery
+  # provider on it included.
+  defp backoff({:deferred, seconds} = deferred, source) do
+    retry_after = DateTime.add(DateTime.utc_now(), seconds, :second)
+    Budget.defer_source(source.id, retry_after, "verifier_backoff")
+    deferred
+  end
+
+  defp backoff(answer, _source), do: answer
 
   defp interval do
     :devils_dictionary

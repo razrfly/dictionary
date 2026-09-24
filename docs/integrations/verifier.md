@@ -35,7 +35,7 @@ matching a name:
 |---|---|---|
 | `gutenberg` | the credited author's QID → Wikidata works with `P50` = that QID and a `P2034` ebook id → `pg<id>.txt`, cached as a source record | **supports**: the line is in a text Wikidata says this person wrote, at line *N* |
 | `wikiquote` (author page) | the credited author's QID → its `enwikiquote` sitelink → the author's own page, parsed by build 4a's parser | **supports**: the line (or a cited passage containing it) is on the author's page under a cited work or year. **contradicts**: it is in the page's *Misattributed* / *Disputed* / *Unsourced* register |
-| `wikiquote` (*Misquotations*) | one page, the same parser, shared by every line | **contradicts**: the line is on the misquotations register |
+| `wikiquote` (*Misquotations*) | one page, the same parser, shared by every line | **agrees with a misattribution** already held. Never against a credit: a row names no one by identifier, and its note usually names the true author |
 
 **Not built, by measurement:**
 
@@ -91,11 +91,12 @@ that is recorded (see the PR).
 | piece | where |
 |---|---|
 | the run record | `verification_runs` (migration `20260924005117`), `Quotations.VerificationRun`; `discovery_request_attempts.verification_run_id` beside a nullable `run_id`, exactly one set |
-| spending | `Verifier.Fetch.get/4` → `Budget.claim_shared/4` with `{:verification, id}`; a `429`, a `5xx` or a refused claim defers the whole pass |
+| spending | `Verifier.Fetch.get/4` → `Budget.claim_shared/4` with `{:verification, id}`; a `429`, a `5xx` or a refused claim defers the whole pass, and a `429`/`5xx` sets the source's `discovery_retry_after` (`Budget.defer_source/3`) so the discovery provider on the same host waits too |
+| switches | an inactive source is never called; its check is skipped (`Fetch.active?/1`); a source under `discovery_retry_after` defers the pass |
 | keeping | `Verifier.Fetch.cached/5`: each answer is a source record under its checker's source — `wikidata` (`enwikiquote-sitelink:Q…`, `gutenberg-works:Q…`), `wikiquote` (`verifier-page:<title>`), `gutenberg` (`pg<id>`, kept ten years) |
 | checks | `Verifier.Checks`: `author_page/3`, `misquotations/2` (every row register), `gutenberg_texts/3`; `match_page/3`, `match_texts/2` (fingerprint equality, or containment for lines of three words or more) |
 | verdict | `Quotations.Badge.compute/2`: the badge by agreements, the #65 score by its signal table |
-| writes | `Verifier.verify_author/2`: evidence on each credit's new `method: "verifier"` revision (only when the findings changed; never over a review), register agreement as `:supports` on a `misattributed_to`, the badge on `content_items.metadata["provenance"]` |
+| writes | `Verifier.verify_author/2`: evidence on each credit's new `method: "verifier"` revision (only when the findings changed; never over a review), register agreement as `:supports` on a `misattributed_to`, the badge on `content_items.metadata["provenance"]` — the item's, from every claim on the line plus the checks each person's pass left, so passes agree whichever ran last. An exception fails that person's pass (`error_code: "exception"`) and not the batch |
 | clock | `Verifier.due/1`, `VerifyWorker` at `:07` and `:37` past each hour; 30 days after a success, a day after a failure, the retry time after a deferral |
 | reader | `Result.provenance` (read at display time), the quote card's badge: *Verified* green, *Disputed* amber, *Apocryphal* rose, *Plausible* neutral |
 | operator | `/ops/discovery` → *Quotation verifier*: passes by outcome, badges, one row per checker with its budget and why it is off |

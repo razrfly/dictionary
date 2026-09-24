@@ -15,9 +15,12 @@ defmodule DevilsDictionary.Quotations.Verifier do
     * **`assertion_evidence`** — on each credit (`authored_by`) to this person,
       one row per finding: `:supports` for the author's page listing the line
       under a cited work or a primary text containing it (with its line),
-      `:contradicts` for a register row; `source_record_revision_id` is the
-      fetched record, `locator` says where. On a `misattributed_to`, a register
-      that agrees is `:supports`.
+      `:contradicts` for a row in the author's own page's register;
+      `source_record_revision_id` is the fetched record, `locator` says where.
+      On a `misattributed_to`, a register that agrees is `:supports` — the
+      author's page or *Misquotations*. A *Misquotations* row is never evidence
+      against a credit: it names no one by identifier, and its note usually
+      names the true author, whom it would otherwise dispute.
     * **a new revision of each credit**, `method: "verifier"`, `confidence` =
       the #65 score, `metadata["verifier"]` set — which is what makes it
       *protected*: a provider refresh never overwrites a verifier's revision
@@ -27,13 +30,19 @@ defmodule DevilsDictionary.Quotations.Verifier do
     * **the badge**, on `content_items.metadata["provenance"]` — derived,
       recomputed each pass, never authoritative. On the item and not on a
       content revision, because a revision is immutable (a review cites it).
+      It is the item's: every current credit and misattribution on the line,
+      whoever it names, plus this pass's checks and the checks other people's
+      passes left on their credits — so two people's passes over one line
+      agree on its badge.
 
   ## When
 
   `run_due/1`, from `VerifyWorker` on Oban's cron: every person with a
   quotation claim and no pass newer than their `refresh_after`. A deferral (a
   `429`, an exhausted budget) sets the clock to the retry time; a success to
-  the refresh window. Re-verification is the clock, not a rerun of the shelf.
+  the refresh window; a failure — an exception included, so one person cannot
+  stop the batch — to the failure backoff. Re-verification is the clock, not a
+  rerun of the shelf.
   """
 
   import Ecto.Query
@@ -53,6 +62,8 @@ defmodule DevilsDictionary.Quotations.Verifier do
 
   alias DevilsDictionary.Repo
   alias DevilsDictionary.Sources.Source
+
+  require Logger
 
   @method "verifier"
   @predicates ~w(authored_by misattributed_to)
@@ -108,6 +119,20 @@ defmodule DevilsDictionary.Quotations.Verifier do
       })
       |> Repo.insert!()
 
+    try do
+      pass(run, person_id, opts)
+    rescue
+      exception ->
+        Logger.error(
+          "quotation verifier: pass #{run.id} for #{person_id} raised " <>
+            Exception.format(:error, exception, __STACKTRACE__)
+        )
+
+        finish(run, :failed, failure_seconds(), %{}, "exception")
+    end
+  end
+
+  defp pass(run, person_id, opts) do
     lines = lines(person_id)
     max_age = Keyword.get(opts, :max_age, refresh_seconds())
 
@@ -115,11 +140,9 @@ defmodule DevilsDictionary.Quotations.Verifier do
          {:ok, page} <- Checks.author_page(run, qid, max_age),
          {:ok, misquotations} <- Checks.misquotations(run, max_age),
          {:ok, texts} <- texts(run, qid, lines, max_age) do
-      dated? = dated?(person_id)
-
       verdicts =
         Repo.transaction(fn ->
-          Enum.map(lines, &record_line(&1, page, misquotations, texts, dated?))
+          Enum.map(lines, &record_line(&1, person_id, page, misquotations, texts))
         end)
         |> elem(1)
 
@@ -152,11 +175,11 @@ defmodule DevilsDictionary.Quotations.Verifier do
     end
   end
 
-  defp dated?(person_id) do
+  defp dated?(person_ids) do
     Repo.exists?(
       from d in PersonDetails,
         where:
-          d.entity_id == ^person_id and (not is_nil(d.birth_date) or not is_nil(d.death_date))
+          d.entity_id in ^person_ids and (not is_nil(d.birth_date) or not is_nil(d.death_date))
     )
   end
 
@@ -185,25 +208,22 @@ defmodule DevilsDictionary.Quotations.Verifier do
   # ── the lines ───────────────────────────────────────────────────────────
 
   # Every quotation with a current, active credit or misattribution to this
-  # person, with its current words and each claim's source.
+  # person, with its current words and every current claim on it — this
+  # person's and anyone else's — with each claim's source.
   defp lines(person_id) do
+    content_ids =
+      Repo.all(
+        from r in current_claims(),
+          where: r.object_object_id == ^person_id,
+          distinct: true,
+          select: r.subject_object_id
+      )
+
     claims =
       Repo.all(
-        from r in AssertionRevision,
-          join: p in Predicate,
-          on: p.id == r.predicate_id and p.key in @predicates,
-          join: a in Assertion,
-          on: a.id == r.assertion_id,
-          left_join: s in Source,
-          on: s.id == a.source_id,
-          where:
-            r.object_object_id == ^person_id and r.is_current and r.lifecycle_state == :active and
-              r.subject_kind == "content" and r.subject_subkind == "quotation",
-          select: %{
-            revision: r,
-            predicate: p.key,
-            source: s.slug
-          }
+        from [r, p, a, s] in current_claims(),
+          where: r.subject_object_id in ^content_ids,
+          select: %{revision: r, predicate: p.key, source: s.slug}
       )
 
     bodies =
@@ -218,6 +238,8 @@ defmodule DevilsDictionary.Quotations.Verifier do
     claims
     |> Enum.group_by(& &1.revision.subject_object_id)
     |> Enum.flat_map(fn {content_id, claims} ->
+      {own, others} = Enum.split_with(claims, &(&1.revision.object_object_id == person_id))
+
       case Map.get(bodies, content_id) do
         %{body: body} = content when is_binary(body) ->
           [
@@ -225,8 +247,9 @@ defmodule DevilsDictionary.Quotations.Verifier do
               content_id: content_id,
               body: body,
               year: content.year,
-              credits: Enum.filter(claims, &(&1.predicate == "authored_by")),
-              misattributions: Enum.filter(claims, &(&1.predicate == "misattributed_to"))
+              credits: Enum.filter(own, &(&1.predicate == "authored_by")),
+              misattributions: Enum.filter(own, &(&1.predicate == "misattributed_to")),
+              others: others
             }
           ]
 
@@ -236,33 +259,89 @@ defmodule DevilsDictionary.Quotations.Verifier do
     end)
   end
 
-  defp record_line(line, page, misquotations, texts, dated?) do
+  defp current_claims do
+    from r in AssertionRevision,
+      join: p in Predicate,
+      on: p.id == r.predicate_id and p.key in @predicates,
+      join: a in Assertion,
+      on: a.id == r.assertion_id,
+      left_join: s in Source,
+      on: s.id == a.source_id,
+      where:
+        r.is_current and r.lifecycle_state == :active and r.subject_kind == "content" and
+          r.subject_subkind == "quotation"
+  end
+
+  defp record_line(line, person_id, page, misquotations, texts) do
+    # What this person's own page and texts say: reached by their identifier,
+    # so it may count for or against a credit to them.
     checks =
       Checks.match_page(page, line.body, "wikiquote") ++
-        Checks.match_page(misquotations, line.body, "wikiquote") ++
         if(line.credits != [], do: Checks.match_texts(texts, line.body), else: [])
 
-    claims =
-      Enum.map(line.credits, fn claim ->
-        %{source: claim.source || "unknown", kind: :cited, role: :supports, year: line.year}
-      end) ++
-        Enum.map(line.misattributions, fn claim ->
-          %{
-            source: claim.source || "unknown",
-            kind: :register,
-            role: :contradicts,
-            note: claim.revision.rationale
-          }
-        end)
+    # *Misquotations* names no one by identifier: it only ever agrees with a
+    # misattribution already held, and never counts against a credit.
+    registered =
+      if line.misattributions != [],
+        do: Checks.match_page(misquotations, line.body, "wikiquote"),
+        else: []
 
-    verdict = Badge.compute(claims ++ checks, author_dated?: dated?)
+    own = line.credits ++ line.misattributions
+
+    verdict =
+      Badge.compute(claim_findings(own, line) ++ checks, author_dated?: dated?([person_id]))
 
     for claim <- line.credits, do: record_credit(claim.revision, checks, verdict)
-    for claim <- line.misattributions, do: record_misattribution(claim.revision, checks)
-    record_provenance(line.content_id, verdict)
 
-    verdict
+    for claim <- line.misattributions,
+        do: record_misattribution(claim.revision, checks ++ registered)
+
+    # The item's badge: every claim on the line, whoever it names; this pass's
+    # checks; and the checks other people's passes left on their credits.
+    everyone = own ++ line.others
+    held = Enum.flat_map(line.others, &held_checks/1)
+
+    credited =
+      for claim <- everyone, claim.predicate == "authored_by", do: claim.revision.object_object_id
+
+    item_verdict =
+      Badge.compute(claim_findings(everyone, line) ++ checks ++ held,
+        author_dated?: credited != [] and dated?(credited)
+      )
+
+    record_provenance(line.content_id, item_verdict)
+
+    item_verdict
   end
+
+  defp claim_findings(claims, line) do
+    Enum.map(claims, fn
+      %{predicate: "authored_by"} = claim ->
+        %{source: claim.source || "unknown", kind: :cited, role: :supports, year: line.year}
+
+      %{predicate: "misattributed_to"} = claim ->
+        %{
+          source: claim.source || "unknown",
+          kind: :register,
+          role: :contradicts,
+          note: claim.revision.rationale
+        }
+    end)
+  end
+
+  @kinds %{"cited" => :cited, "primary" => :primary, "register" => :register}
+  @roles %{"supports" => :supports, "contradicts" => :contradicts}
+
+  # The checks another person's pass recorded on their credit.
+  defp held_checks(%{predicate: "authored_by", revision: revision}) do
+    for %{"source" => source, "kind" => kind, "role" => role} = check <-
+          (revision.metadata || %{})["checks"] || [],
+        Map.has_key?(@kinds, kind) and Map.has_key?(@roles, role) do
+      %{source: source, kind: @kinds[kind], role: @roles[role], locator: check["locator"]}
+    end
+  end
+
+  defp held_checks(_claim), do: []
 
   # A credit's verifier revision, and its evidence — only when what the
   # checks found changed, and never over a person's review.

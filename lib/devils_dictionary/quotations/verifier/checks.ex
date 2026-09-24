@@ -20,7 +20,9 @@ defmodule DevilsDictionary.Quotations.Verifier.Checks do
   own page or text, never across the web. No name is compared anywhere.
 
   Fetching goes through `Verifier.Fetch` (budgeted, ledgered, cached);
-  matching is pure.
+  matching is pure. A checker whose source the operator has switched off is
+  skipped — no page, no texts — rather than failing the pass, and before the
+  Wikidata request that would lead to it is spent.
   """
 
   alias DevilsDictionary.Absorb.Clients.Wikidata, as: WikidataClient
@@ -34,9 +36,10 @@ defmodule DevilsDictionary.Quotations.Verifier.Checks do
 
   # ── fetching ────────────────────────────────────────────────────────────
 
-  @doc "The person's own Wikiquote page, parsed, or `{:ok, nil}` when they have none."
+  @doc "The person's own Wikiquote page, parsed, or `{:ok, nil}` when they have none (or Wikiquote is off)."
   def author_page(run, qid, max_age) do
-    with {:ok, %{"title" => title}, _rev} when is_binary(title) <- sitelink(run, qid, max_age) do
+    with true <- Fetch.active?("wikiquote") || {:ok, nil},
+         {:ok, %{"title" => title}, _rev} when is_binary(title) <- sitelink(run, qid, max_age) do
       page(run, title, max_age)
     else
       {:ok, _no_title, _rev} -> {:ok, nil}
@@ -51,7 +54,8 @@ defmodule DevilsDictionary.Quotations.Verifier.Checks do
   row's being there at all is the finding, so none of them may support a line.
   """
   def misquotations(run, max_age) do
-    with {:ok, page} <- page(run, "Misquotations", max_age) do
+    with true <- Fetch.active?("wikiquote") || {:ok, nil},
+         {:ok, page} <- page(run, "Misquotations", max_age) do
       {:ok,
        Map.update(page, "items", [], fn items ->
          Enum.map(items, &Map.put(&1, "register", &1["register"] || "misquoted"))
@@ -135,7 +139,8 @@ defmodule DevilsDictionary.Quotations.Verifier.Checks do
 
   @doc "The Gutenberg texts of the works Wikidata says this person wrote."
   def gutenberg_texts(run, qid, max_age) do
-    with {:ok, %{"works" => works}, _rev} <- gutenberg_works(run, qid, max_age) do
+    with true <- Fetch.active?("gutenberg") || {:ok, []},
+         {:ok, %{"works" => works}, _rev} <- gutenberg_works(run, qid, max_age) do
       Enum.reduce_while(works, {:ok, []}, fn work, {:ok, acc} ->
         case gutenberg_text(run, work) do
           {:ok, text} -> {:cont, {:ok, [text | acc]}}
