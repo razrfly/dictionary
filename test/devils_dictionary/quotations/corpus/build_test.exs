@@ -169,4 +169,75 @@ defmodule DevilsDictionary.Quotations.Corpus.BuildTest do
     # The 1956 translation is Aeschylus's, 458 BC; the undated work is not read.
     assert [%{"work" => "Q1", "year" => -457, "year_basis" => "P629 P577"}] = works
   end
+
+  describe "the concept hop (#172 build A)" do
+    defp hop_stub(text), do: Fixtures.hop_stub(self(), text)
+
+    test "a line on a page the hop reached is filed under the concept that reached it" do
+      {:ok, [line | _], _selection, _ledger} = build([])
+      drain()
+
+      {:ok, rows, selection, ledger} =
+        build(
+          concept_qids: ["Q104605901", "Q900802", "Q9068"],
+          get: hop_stub(line["text"])
+        )
+
+      assert selection["hop"] == DevilsDictionary.Discovery.ConceptHop.rule()
+
+      # Cowardice joins the selection as no concept of its own, reached from
+      # coward; Voltaire is not reached from Q900802.
+      assert %{"concept" => false, "kind" => "concept", "via_from" => from} =
+               Enum.find(selection["pages"], &(&1["title"] == "Cowardice"))
+
+      assert from == [
+               %{
+                 "qid" => "Q104605901",
+                 "via" => [%{"property" => "P1552", "qid" => "Q1401607"}]
+               }
+             ]
+
+      assert %{"via_from" => []} = Enum.find(selection["pages"], &(&1["qid"] == "Q9068"))
+
+      # One request for the three concepts' sitelinks and claims, one for the
+      # hop's first step; none further.
+      assert ledger["wikidata:sitelinks+claims"]["requests"] == 1
+      assert ledger["wikidata:hop"]["requests"] == 1
+
+      # The same words on Voltaire's page and on Cowardice fold to one row,
+      # which reaches coward's page by the path and Voltaire's by his own.
+      row = Enum.find(rows, &(&1["fingerprint"] == line["fingerprint"]))
+      assert row["concept_qids"] == ["Q104605901", "Q9068"]
+
+      assert row["concept_qids_via"] == %{
+               "Q104605901" => [%{"property" => "P1552", "qid" => "Q1401607"}]
+             }
+
+      # And the page each concept was found on: the folded row keeps one
+      # "page", which is not Voltaire's concept's page.
+      assert row["concept_pages"] == %{"Q104605901" => "Cowardice", "Q9068" => "Voltaire"}
+
+      # Every row of a selection made with the hop says what reached it.
+      assert Enum.all?(rows, &is_map(&1["concept_qids_via"]))
+    end
+
+    test "a selection made before the hop re-runs to the same rows, with no paths" do
+      {:ok, rows, selection, _ledger} = build([])
+
+      v1 =
+        selection
+        |> Map.delete("hop")
+        |> Map.update!("pages", fn pages -> Enum.map(pages, &Map.delete(&1, "via_from")) end)
+
+      {:ok, again, _selection, _ledger} =
+        Build.run(endpoints: @endpoints, selection: v1, get: stub(self()))
+
+      refute Enum.any?(
+               again,
+               &(Map.has_key?(&1, "concept_qids_via") or Map.has_key?(&1, "concept_pages"))
+             )
+
+      assert Enum.map(again, & &1["fingerprint"]) == Enum.map(rows, & &1["fingerprint"])
+    end
+  end
 end

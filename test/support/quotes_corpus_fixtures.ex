@@ -47,14 +47,78 @@ defmodule DevilsDictionary.QuotesCorpusFixtures do
     Mix.Tasks.Dd.Quotes.Corpus.Build.manifest(rows, selection, ledger)
   end
 
+  # coward's item has no page; it has as its characteristic cowardice, whose
+  # page is Cowardice. A second concept's characteristic is, by a bad edit,
+  # Voltaire: a person, whose page the hop must not take (#172 build A).
+  @hop_items %{
+    "Q104605901" => %{"title" => nil, "claims" => %{"P1552" => ["Q1401607"]}},
+    "Q1401607" => %{"title" => "Cowardice", "claims" => %{}},
+    "Q900802" => %{"title" => nil, "claims" => %{"P1552" => ["Q9068"]}}
+  }
+
+  @doc """
+  The concept hop's corpus fixture (#172 build A): `stub/3` with coward's
+  items, and *Cowardice* served as a theme page with one line on it — `text`,
+  a line of *Candide* the plain build verifies, cited to Voltaire by a link,
+  which Wikiquote's page properties resolve to Q9068. Run with
+  `concept_qids: ["Q104605901", "Q900802", "Q9068"]`.
+  """
+  def hop_stub(test_pid, text) do
+    stub = stub(test_pid, candide(), @hop_items)
+    page = cowardice(text)
+
+    fn request ->
+      case URI.parse(request[:url]) do
+        %{host: "wikiquote.test", path: "/page/html/Cowardice" <> _} ->
+          send(test_pid, {:request, request[:url]})
+          {:ok, 200, page, %{}}
+
+        %{host: "wikiquote.test", path: "/w/api.php"} ->
+          send(test_pid, {:request, request[:url]})
+          voltaire = %{"title" => "Voltaire", "pageprops" => %{"wikibase_item" => "Q9068"}}
+          {:ok, 200, %{"query" => %{"pages" => [voltaire]}}, %{}}
+
+        _ ->
+          stub.(request)
+      end
+    end
+  end
+
+  @doc """
+  A committed-shaped manifest made with the hop: the first line the plain
+  build keeps, found on Voltaire's page and on Cowardice, folded to one row.
+  """
+  def hop_manifest do
+    {:ok, [line | _], _selection, _ledger} = build([])
+
+    manifest(
+      concept_qids: ["Q104605901", "Q900802", "Q9068"],
+      get: hop_stub(self(), line["text"])
+    )
+  end
+
+  defp cowardice(text) do
+    escaped = text |> Phoenix.HTML.html_escape() |> Phoenix.HTML.safe_to_string()
+
+    ~s(<html about="//en.wikiquote.org/wiki/Special:Redirect/revision/3927892">) <>
+      ~s(<head><title>Cowardice</title></head><body><section><h2>Quotes</h2><ul><li>) <>
+      escaped <>
+      ~s(<ul><li><a rel="mw:WikiLink" href="./Voltaire">Voltaire</a>, ) <>
+      ~s[<i>Candide</i> (1759)</li></ul></li></ul></section></body></html>]
+  end
+
   defp uri(qid), do: %{"type" => "uri", "value" => "http://www.wikidata.org/entity/#{qid}"}
   defp lit(value), do: %{"type" => "literal", "value" => value}
 
   @doc """
   What each test host answers, reporting every URL to `test_pid` as
   `{:request, url}`. `candide` swaps the text, for the drift case.
+
+  `items` adds Wikidata items to the sitelinks answer, for the concept hop
+  (#172 build A): `%{qid => %{"title" => title | nil, "claims" => %{property
+  => [qid]}}}`. Voltaire's is always there, with his page and his `P31`.
   """
-  def stub(test_pid, candide \\ candide()) do
+  def stub(test_pid, candide \\ candide(), items \\ %{}) do
     voltaire = WikiquoteFixtures.body("voltaire")
 
     fn request ->
@@ -96,9 +160,17 @@ defmodule DevilsDictionary.QuotesCorpusFixtures do
         {"wikiquote.test", "/w/api.php", _} ->
           {:ok, 200, %{"query" => %{"pages" => []}}, %{}}
 
-        {"wikidata.test", _, "sitelinks"} ->
-          links = %{"enwikiquote" => %{"site" => "enwikiquote", "title" => "Voltaire"}}
-          {:ok, 200, %{"entities" => %{"Q9068" => %{"id" => "Q9068", "sitelinks" => links}}}, %{}}
+        {"wikidata.test", _, "sitelinks" <> _ = props} ->
+          items =
+            Map.put_new(items, "Q9068", %{"title" => "Voltaire", "claims" => %{"P31" => ["Q5"]}})
+
+          entities =
+            for qid <- String.split(request[:params][:ids], "|"),
+                item = items[qid],
+                into: %{},
+                do: {qid, sitelink_entity(qid, item, props =~ "claims")}
+
+          {:ok, 200, %{"entities" => entities}, %{}}
 
         {"wikidata.test", _, _} ->
           ids = request[:params][:ids] |> String.split("|")
@@ -111,6 +183,34 @@ defmodule DevilsDictionary.QuotesCorpusFixtures do
           {:ok, 404, "", %{}}
       end
     end
+  end
+
+  defp sitelink_entity(qid, item, claims?) do
+    links =
+      case item["title"] do
+        nil -> %{}
+        title -> %{"enwikiquote" => %{"site" => "enwikiquote", "title" => title}}
+      end
+
+    entity = %{"id" => qid, "sitelinks" => links}
+
+    if claims?,
+      do:
+        Map.put(
+          entity,
+          "claims",
+          Map.new(item["claims"] || %{}, fn {property, ids} ->
+            {property,
+             Enum.map(
+               ids,
+               &claim(property, %{
+                 "type" => "wikibase-entityid",
+                 "value" => %{"id" => &1, "entity-type" => "item"}
+               })
+             )}
+          end)
+        ),
+      else: entity
   end
 
   defp entity("Q9068") do

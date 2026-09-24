@@ -505,6 +505,152 @@ defmodule DevilsDictionary.Discovery.Providers.WikiquoteTest do
     end
   end
 
+  describe "the concept hop (#172 build A)" do
+    # /define/coward, as it was on 2026-09-24: the noun sense refers to
+    # Q104605901 "cowardly or fearful person", which has no Wikiquote page and
+    # says has characteristic (P1552) Q1401607 cowardice, which has. The page
+    # is the one captured that day; the Wikidata answers are the live ones,
+    # trimmed to the properties the hop reads.
+    @coward %{
+      "Q104605901" => %{
+        "title" => nil,
+        "claims" => %{
+          "P1552" => ["Q1401607"],
+          "P279" => ["Q215627"],
+          "P31" => ["Q122213544"]
+        }
+      },
+      "Q1401607" => "Cowardice"
+    }
+
+    # Every host a run asked, in order, so a test can count what it cost.
+    defp respond_counting(sitelinks) do
+      test = self()
+
+      Req.Test.stub(Wikiquote, fn conn ->
+        send(test, {:asked, conn.host, Plug.Conn.fetch_query_params(conn).params["ids"]})
+        WikiquoteFixture.answer(conn, sitelinks, %{})
+      end)
+    end
+
+    defp asked(acc \\ []) do
+      receive do
+        {:asked, host, ids} -> asked([{host, ids} | acc])
+      after
+        0 -> Enum.reverse(acc)
+      end
+    end
+
+    test "coward reaches Cowardice by has-characteristic, and every result says so", ctx do
+      respond_counting(@coward)
+      {:ok, run, results} = ctx |> target("coward", "Q104605901") |> run!() |> ok()
+
+      assert run.status == :succeeded
+      assert results != []
+      assert Enum.all?(results, &(&1.preview_metadata["page"] == "Cowardice"))
+
+      assert Enum.all?(results, fn result ->
+               result.match_details["sitelinks"] == [
+                 %{
+                   "qid" => "Q1401607",
+                   "title" => "Cowardice",
+                   "site" => "enwikiquote",
+                   "wiki" => "Wikiquote",
+                   "from" => "Q104605901",
+                   "via" => [%{"property" => "P1552", "qid" => "Q1401607"}],
+                   "reached" => ["P1552"]
+                 }
+               ]
+             end)
+
+      [reason] =
+        DevilsDictionary.Discovery.MatchReason.from_result(hd(results).match_details, "coward")
+
+      assert DevilsDictionary.Discovery.MatchReason.evidence(reason) == :identity
+
+      assert DevilsDictionary.Discovery.MatchReason.describe(reason) ==
+               "From Wikiquote's page “Cowardice”, the concept a sense of “coward” has as " <>
+                 "its characteristic (Q1401607)."
+
+      # The sitelinks request carried the claims; the hop cost one more, for
+      # the items the first step reached, and then the page was read. Not
+      # Q122213544: coward is a subclass (P279), so its P31 is a metaclass
+      # and is not read.
+      assert [
+               {"wikidata.test", "Q104605901"},
+               {"wikidata.test", "Q1401607|Q215627"},
+               {"wikiquote.test", nil} | _
+             ] = asked()
+    end
+
+    test "a direct sitelink costs one Wikidata request and reads as it always has", ctx do
+      respond_counting(%{
+        "Q900701" => %{"title" => "Nepotism", "claims" => %{"P279" => ["Q900702"]}}
+      })
+
+      {:ok, _run, [first | _]} = ctx |> target("nepotism", "Q900701") |> run!() |> ok()
+
+      assert [%{"qid" => "Q900701"} = link] = first.match_details["sitelinks"]
+      refute Map.has_key?(link, "via") or Map.has_key?(link, "reached")
+      assert [{"wikidata.test", "Q900701"}, {"wikiquote.test", nil} | _] = asked()
+    end
+
+    test "a hop to a human is refused, though the human has a page", ctx do
+      # The concept's characteristic is, by a bad edit, Voltaire: an author
+      # page, and a person. The shelf stays empty rather than land on him.
+      respond_counting(%{
+        "Q900720" => %{"title" => nil, "claims" => %{"P1552" => ["Q9068"]}},
+        "Q9068" => %{"title" => "Voltaire", "claims" => %{"P31" => ["Q5"]}}
+      })
+
+      {:ok, run, results} = ctx |> target("sycophancy", "Q900720") |> run!() |> ok()
+
+      assert run.completion_reason == :no_results
+      assert results == []
+      refute Enum.any?(asked(), &match?({"wikiquote.test", _}, &1))
+    end
+
+    test "a person the page's sense refers to never hops", ctx do
+      respond_counting(%{
+        "Q900721" => %{"title" => nil, "claims" => %{"P279" => ["Q1401607"]}},
+        "Q1401607" => "Cowardice"
+      })
+
+      {:ok, run, []} = ctx |> target("somebody", "Q900721", :person) |> run!() |> ok()
+
+      assert run.completion_reason == :no_results
+      assert [{"wikidata.test", "Q900721"}] = asked()
+    end
+
+    test "the recipe freezes the hop's rule, and a changed rule is a changed recipe", ctx do
+      {"wikiquote_page", parameters} =
+        Wikiquote.automatic_mapping(target(ctx, "coward", "Q104605901"))
+
+      assert parameters["hop"] == DevilsDictionary.Discovery.ConceptHop.rule()
+      assert :ok = Wikiquote.validate_mapping("wikiquote_page", parameters)
+
+      identity = Wikiquote.mapping_identity(parameters)
+      without = Wikiquote.mapping_identity(Map.delete(parameters, "hop"))
+      one_step = Wikiquote.mapping_identity(put_in(parameters, ["hop", "max_steps"], 1))
+
+      fewer =
+        Wikiquote.mapping_identity(
+          put_in(parameters, ["hop", "properties"], ~w(P1552 P279 P1269))
+        )
+
+      assert identity == Wikiquote.mapping_identity(parameters)
+      assert length(Enum.uniq([identity, without, one_step, fewer])) == 4
+      # A recipe from before the hop keeps the identity it had.
+      assert without == DevilsDictionary.Discovery.PageEvidence.digest(parameters["entities"])
+
+      assert {:error, :invalid_mapping} =
+               Wikiquote.validate_mapping(
+                 "wikiquote_page",
+                 put_in(parameters, ["hop", "max_steps"], 3)
+               )
+    end
+  end
+
   describe "a credit is a person (the audit of #169, residual 1)" do
     # Grief's Horace line cites "… / Horace, Carmina …" and links the theme
     # page *Impropriety* before Horace. Read through `retrieve/4` with the

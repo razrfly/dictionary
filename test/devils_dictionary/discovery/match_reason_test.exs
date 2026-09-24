@@ -380,4 +380,74 @@ defmodule DevilsDictionary.Discovery.MatchReasonTest do
       }
     }
   end
+
+  describe "a sitelink reached by the concept hop (#172 build A)" do
+    defp hop(reached, extra \\ %{}) do
+      Map.merge(
+        %{
+          "kind" => "sitelink",
+          "evidence" => "identity",
+          "query" => "coward",
+          "sitelinks" => [
+            %{
+              "qid" => "Q1401607",
+              "title" => "Cowardice",
+              "site" => "enwikiquote",
+              "wiki" => "Wikiquote",
+              "from" => "Q104605901",
+              "via" => Enum.map(reached, &%{"property" => &1, "qid" => "Q1401607"}),
+              "reached" => reached
+            }
+          ]
+        },
+        extra
+      )
+    end
+
+    test "one step reads as its property, naming the word and the reached QID" do
+      [reason] = MatchReason.from_result(hop(["P1552"]), "coward")
+
+      assert %MatchReason{kind: :sitelink, via: ["P1552"], word: "coward", relation: :related} =
+               reason
+
+      assert MatchReason.evidence(reason) == :identity
+
+      assert MatchReason.describe(reason) ==
+               "From Wikiquote's page “Cowardice”, the concept a sense of “coward” has as its " <>
+                 "characteristic (Q1401607)."
+    end
+
+    test "each property has its own phrase" do
+      for {property, phrase} <- [
+            {"P279", "is a kind of"},
+            {"P1269", "is a facet of"},
+            {"P31", "is an instance of"}
+          ] do
+        [reason] = MatchReason.from_result(hop([property]), "coward")
+        assert MatchReason.describe(reason) =~ "a sense of “coward” #{phrase} (Q1401607)."
+      end
+    end
+
+    test "two steps name both, in order" do
+      [reason] = MatchReason.from_result(hop(["P1552", "P279"]), "coward")
+
+      assert MatchReason.describe(reason) ==
+               "From Wikiquote's page “Cowardice”, the concept a sense of “coward” reaches in " <>
+                 "two steps (has as its characteristic, then is a kind of) (Q1401607)."
+    end
+
+    test "with no word recorded, the sentence says this word" do
+      [reason] = MatchReason.from_result(Map.delete(hop(["P1552"]), "query"), nil)
+      assert MatchReason.describe(reason) =~ "a sense of this word has as its characteristic"
+    end
+
+    test "a property not on the list is not a hop, and reads as the direct case" do
+      [reason] = MatchReason.from_result(hop(["P50"]), "coward")
+      assert reason.via == []
+
+      assert MatchReason.describe(reason) ==
+               "From Wikiquote's page “Cowardice”, the page of the concept this meaning refers " <>
+                 "to (Q1401607)."
+    end
+  end
 end

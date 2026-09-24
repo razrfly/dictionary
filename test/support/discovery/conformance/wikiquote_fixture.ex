@@ -111,7 +111,8 @@ defmodule DevilsDictionary.Discovery.Conformance.WikiquoteFixture do
 
   @doc """
   Installs the stub. `sitelinks` maps a concept QID to its Wikiquote page
-  title; `authors` maps a page title to its Wikidata item (or to `{:redirect,
+  title, or to `%{"title" => title | nil, "claims" => %{property => [qid]}}`
+  for an item the concept hop (#172 build A) reads; `authors` maps a page title to its Wikidata item (or to `{:redirect,
   title}`). Anything not named has no item. `humans` is the QIDs the query
   service says are people (`P31` = `Q5`): every author's, unless a test says
   otherwise.
@@ -183,11 +184,33 @@ defmodule DevilsDictionary.Discovery.Conformance.WikiquoteFixture do
 
   defp entity(qid, nil), do: %{"type" => "item", "id" => qid, "sitelinks" => %{}}
 
-  defp entity(qid, title),
+  defp entity(qid, title) when is_binary(title),
     do: %{
       "type" => "item",
       "id" => qid,
       "sitelinks" => %{"enwikiquote" => %{"site" => "enwikiquote", "title" => title}}
+    }
+
+  # An item with statements, the way `wbgetentities` spells them.
+  defp entity(qid, %{} = item) do
+    qid
+    |> entity(item["title"])
+    |> Map.put(
+      "claims",
+      Map.new(item["claims"] || %{}, fn {property, ids} ->
+        {property, Enum.map(ids, &item_claim(property, &1))}
+      end)
+    )
+  end
+
+  defp item_claim(property, id),
+    do: %{
+      "rank" => "normal",
+      "mainsnak" => %{
+        "snaktype" => "value",
+        "property" => property,
+        "datavalue" => %{"type" => "wikibase-entityid", "value" => %{"id" => id}}
+      }
     }
 
   # `/api/rest_v1/page/html/Grief` → `grief`; the redirect target

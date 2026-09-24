@@ -58,9 +58,29 @@ defmodule DevilsDictionary.Discovery.MatchReason do
   through the tag “World War I” (Q361)*, in which `Q361` is the tag's QID and
   “War” is the concept the walk reached. Neither `term` nor `note` can hold it
   without one of them meaning two different things.
+
+  `via` and `word` are the concept hop's (#172 build A): a sitelink reached
+  from a sense's item by `ConceptHop`'s properties, not on it. `via` is the
+  properties in order (`["P1552"]`), and `word` the page's word the sentence
+  names — *the concept a sense of “coward” has as its characteristic*. Each
+  property's phrase is `ConceptHop.wording/1`'s, so there is one per property
+  and it lives beside the list it belongs to.
   """
 
-  defstruct [:kind, :identifier, :term, :relation, :scope, :locator, :note, :reached]
+  alias DevilsDictionary.Discovery.ConceptHop
+
+  defstruct [
+    :kind,
+    :identifier,
+    :term,
+    :relation,
+    :scope,
+    :locator,
+    :note,
+    :reached,
+    :word,
+    via: []
+  ]
 
   @type t :: %__MODULE__{
           kind: atom(),
@@ -70,7 +90,9 @@ defmodule DevilsDictionary.Discovery.MatchReason do
           scope: :sense | :lexeme | nil,
           locator: String.t() | nil,
           note: String.t() | nil,
-          reached: String.t() | nil
+          reached: String.t() | nil,
+          word: String.t() | nil,
+          via: [String.t()]
         }
 
   @doc """
@@ -219,7 +241,8 @@ defmodule DevilsDictionary.Discovery.MatchReason do
   # sitelink (#158 build 4): Wikiquote's *Grief* is `enwikiquote` on the
   # concept Q.... The sitelink is Wikidata's statement, not a title match, so it
   # is identity evidence at the meaning's scope — the same standing as a Met
-  # tag QID, one wiki further.
+  # tag QID, one wiki further. A hop (#172 build A) is the same evidence one
+  # stated relation further, and its `"reached"` properties say which.
   defp sitelinks(details) do
     details
     |> Map.get("sitelinks", [])
@@ -227,12 +250,20 @@ defmodule DevilsDictionary.Discovery.MatchReason do
     |> Enum.filter(&(is_map(&1) and is_binary(&1["qid"]) and is_binary(&1["title"])))
     |> Enum.uniq_by(& &1["qid"])
     |> Enum.map(fn link ->
+      via =
+        link
+        |> Map.get("reached")
+        |> List.wrap()
+        |> Enum.filter(&is_binary(ConceptHop.wording(&1)))
+
       %__MODULE__{
         kind: :sitelink,
         identifier: link["qid"],
         term: link["title"],
-        relation: :exact,
+        relation: if(via == [], do: :exact, else: :related),
         scope: :sense,
+        via: via,
+        word: if(via != [] and is_binary(details["query"]), do: details["query"]),
         # The wiki's display name travels in the reason, so this module still
         # names no provider (promise 9).
         reached: link["wiki"],
@@ -342,6 +373,11 @@ defmodule DevilsDictionary.Discovery.MatchReason do
   def describe(%__MODULE__{kind: :tag} = reason),
     do: "Reached through the tag #{quoted(reason.term)}#{parenthesis(reason.identifier)}."
 
+  def describe(%__MODULE__{kind: :sitelink, via: [_ | _] = via} = reason),
+    do:
+      "From #{wiki(reason.reached)}page #{quoted(reason.term)}, the concept a sense of " <>
+        "#{word(reason.word)} #{hop(via)}#{parenthesis(reason.identifier)}."
+
   def describe(%__MODULE__{kind: :sitelink} = reason),
     do:
       "From #{wiki(reason.reached)}page #{quoted(reason.term)}, the page of the concept this " <>
@@ -406,6 +442,21 @@ defmodule DevilsDictionary.Discovery.MatchReason do
   defp relation_word(:broader), do: "Broader-context"
   defp relation_word(:related), do: "Related"
   defp relation_word(_relation), do: "Direct"
+
+  # One step reads as its property's phrase; two read as both, in order,
+  # because a sentence that folds a path into one verb hides the middle item.
+  defp hop([property]), do: ConceptHop.wording(property)
+
+  defp hop(properties),
+    do:
+      "reaches in #{count(length(properties))} steps (" <>
+        Enum.map_join(properties, ", then ", &ConceptHop.wording/1) <> ")"
+
+  defp count(2), do: "two"
+  defp count(n), do: Integer.to_string(n)
+
+  defp word(word) when is_binary(word) and word != "", do: quoted(word)
+  defp word(_word), do: "this word"
 
   defp wiki(name) when is_binary(name) and name != "", do: "#{name}'s "
   defp wiki(_name), do: "the "

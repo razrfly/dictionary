@@ -10,6 +10,17 @@ defmodule DevilsDictionary.Quotations.Corpus.Build do
     * **Theme pages.** Every concept an active `refers_to` on a sense points
       at, and the page its `enwikiquote` sitelink names. Sense-level only:
       no lexeme fallback.
+    * **Theme pages by the concept hop** (#172 build A). A concept or event
+      with no page of its own reaches one the way the live provider does
+      (`ConceptHop`, at most two stated steps, never onto a person or a
+      work). The page records which concepts reached it and how
+      (`"via_from"`), and each line filed there carries them in
+      `concept_qids` with the path in `concept_qids_via`. A selection made
+      before the hop has no `"hop"` key and re-runs as it was built. One made
+      with it is a different set, which `mix dd.quotes.corpus.build` refuses
+      to write over the committed `wikiquote-pd-v1`: it goes out as a new
+      version, and that version (with its own source row) is a follow-up on
+      #172, not something this module decides.
     * **Author pages.** Every person the registry holds with a QID, and their
       own page. The page is read only when the person has a Gutenberg work
       dated before 1931, because nobody else can verify a line
@@ -65,6 +76,7 @@ defmodule DevilsDictionary.Quotations.Corpus.Build do
   import Ecto.Query
 
   alias DevilsDictionary.Absorb.Clients.Wikidata, as: WikidataClient
+  alias DevilsDictionary.Discovery.ConceptHop
   alias DevilsDictionary.Discovery.Providers.Wikiquote
   alias DevilsDictionary.Discovery.Providers.Wikiquote.Parser
   alias DevilsDictionary.Quotations.{Badge, Fingerprint}
@@ -103,8 +115,10 @@ defmodule DevilsDictionary.Quotations.Corpus.Build do
     * `:selection` — a committed manifest's `selection` block. The build reads
       those pages at those revisions with those credits and works, and asks
       nothing else of Wikidata or Wikiquote. Without it, a fresh selection is
-      made from the registry (`:concept_qids` and `:person_qids` override that
-      read, for tests).
+      made from the registry (`:concept_qids`, `:person_qids` and
+      `:hop_origins` override that read, for tests; `:hop_origins` defaults
+      to the registry's concepts and events, or to every `:concept_qids`
+      when those are given).
     * `:page_limit` — read only the first N pages (a sample, never a corpus).
     * `:get` — `fn request -> {:ok, status, body, headers} | {:error, reason}`,
       where `request` is a `Req` keyword list. The default is `Req` with an
@@ -140,6 +154,7 @@ defmodule DevilsDictionary.Quotations.Corpus.Build do
       ledger: ledger,
       concept_qids: opts[:concept_qids],
       person_qids: opts[:person_qids],
+      hop_origins: opts[:hop_origins],
       get: fn stage, request ->
         answer = get.(request)
         :ets.insert(ledger, {stage, status_of(answer)})
@@ -275,7 +290,14 @@ defmodule DevilsDictionary.Quotations.Corpus.Build do
       wanted =
         Enum.uniq(concept_qids ++ Enum.filter(person_qids, &MapSet.member?(pd_authors, &1)))
 
-      with {:ok, sitelinks} <- sitelinks(ctx, wanted) do
+      # The concepts a hop may start from are asked for their claims in the
+      # same request as their sitelinks; everything else, sitelinks only.
+      origins = hop_origins(ctx, concept_qids)
+
+      with {:ok, nodes} <- nodes(ctx, origins),
+           {:ok, sitelinks} <- sitelinks(ctx, wanted -- origins),
+           sitelinks = Map.merge(sitelinks, titles(nodes)),
+           {:ok, hops} <- hops(ctx, Enum.reject(origins, &sitelinks[&1]), nodes) do
         persons = MapSet.new(person_qids)
         concepts = MapSet.new(concept_qids)
 
@@ -288,15 +310,17 @@ defmodule DevilsDictionary.Quotations.Corpus.Build do
               "concept" => MapSet.member?(concepts, qid)
             }
           end
+          |> with_hops(hops)
           |> Enum.sort_by(& &1["title"])
 
-        ctx.progress.("pages: #{length(pages)}")
+        ctx.progress.("pages: #{length(pages)} (#{map_size(hops)} concepts by the hop)")
 
         {:ok,
          %{
            "issue" => "#174",
            "spike" => "docs/integrations/wikiquote.md#corpus",
            "public_domain_before" => @public_domain_before,
+           "hop" => ConceptHop.rule(),
            "rules" => rules(),
            "counts" => %{
              "concepts" => length(concept_qids),
@@ -322,8 +346,57 @@ defmodule DevilsDictionary.Quotations.Corpus.Build do
         "cited (a work or a year), credited to an author with a pre-line Gutenberg work, and Badge.compute/2 = verified over the corpus claim, the page's register, the author's own page and the author's pre-line Gutenberg texts",
       "work_year" =>
         "P577 of the Gutenberg item, or of the work it is an edition or translation of (P629) when that has one (#174 decision 3)",
-      "parser" => "Wikiquote.Parser over Parsoid HTML (the spike's route (a))"
+      "parser" => "Wikiquote.Parser over Parsoid HTML (the spike's route (a))",
+      "hop" =>
+        "a concept or event with no sitelink of its own reaches the first page ConceptHop's properties lead to, at most two steps, never onto a person or a work (#172 build A); the line's concept_qids_via records the path"
     }
+  end
+
+  defp hop_origins(%{hop_origins: origins}, concept_qids) when is_list(origins),
+    do: Enum.filter(concept_qids, &(&1 in origins))
+
+  defp hop_origins(%{concept_qids: qids}, _concept_qids) when is_list(qids), do: qids
+
+  defp hop_origins(_ctx, concept_qids) do
+    origins = MapSet.new(registry_hop_origins())
+    Enum.filter(concept_qids, &MapSet.member?(origins, &1))
+  end
+
+  defp titles(nodes),
+    do: for({qid, %{"title" => title}} <- nodes, is_binary(title), into: %{}, do: {qid, title})
+
+  # The hop from every concept that has no page, each to its own nearest one.
+  defp hops(_ctx, [], _nodes), do: {:ok, %{}}
+
+  defp hops(ctx, origins, nodes) do
+    ctx.progress.("hop: #{length(origins)} concepts with no page of their own")
+    ConceptHop.reach(origins, nodes, fn qids, _step -> nodes(ctx, qids, "wikidata:hop") end)
+  end
+
+  # Each page a hop reached, new or already selected, with the concepts that
+  # reached it and their paths. A page reached only by the hop is no concept
+  # of its own: its lines are filed under the concepts that reached it.
+  defp with_hops(pages, hops) do
+    reached =
+      hops
+      |> Enum.group_by(fn {_origin, hit} -> {hit["qid"], hit["title"]} end)
+      |> Map.new(fn {key, group} ->
+        {key,
+         group
+         |> Enum.map(fn {origin, hit} -> %{"qid" => origin, "via" => hit["via"]} end)
+         |> Enum.sort_by(& &1["qid"])}
+      end)
+
+    selected = Map.new(pages, &{&1["qid"], &1})
+
+    added =
+      for {{qid, title}, _from} <- reached, not Map.has_key?(selected, qid) do
+        %{"qid" => qid, "title" => title, "kind" => "concept", "concept" => false}
+      end
+
+    Enum.map(pages ++ added, fn page ->
+      Map.put(page, "via_from", Map.get(reached, {page["qid"], page["title"]}, []))
+    end)
   end
 
   @doc false
@@ -342,6 +415,30 @@ defmodule DevilsDictionary.Quotations.Corpus.Build do
         distinct: true,
         select: ei.external_id
     )
+    |> Enum.sort()
+  end
+
+  @doc false
+  # The concepts a hop may start from: those `registry_concept_qids/0` reads
+  # whose entity the registry holds as a concept or an event
+  # (`ConceptHop.origin?/1`).
+  def registry_hop_origins do
+    Repo.all(
+      from s in DevilsDictionary.Registry.Sense,
+        join: r in DevilsDictionary.Claims.AssertionRevision,
+        on: r.subject_object_id == s.object_id and r.is_current,
+        join: p in DevilsDictionary.Claims.Predicate,
+        on: p.id == r.predicate_id and p.key == "refers_to",
+        join: e in DevilsDictionary.Registry.Entity,
+        on: e.object_id == r.object_object_id,
+        join: ei in DevilsDictionary.Registry.ExternalIdentifier,
+        on: ei.object_id == e.object_id and ei.namespace == "wikidata",
+        where: r.lifecycle_state == :active and ei.status == :verified,
+        distinct: true,
+        select: {ei.external_id, e.entity_kind}
+    )
+    |> Enum.filter(fn {_qid, kind} -> ConceptHop.origin?(kind) end)
+    |> Enum.map(&elem(&1, 0))
     |> Enum.sort()
   end
 
@@ -462,6 +559,33 @@ defmodule DevilsDictionary.Quotations.Corpus.Build do
            ) do
         {:ok, body} when is_map(body) ->
           {:cont, {:ok, Map.merge(acc, WikidataClient.sitelink_titles(body, "enwikiquote"))}}
+
+        {:ok, _other} ->
+          {:cont, {:ok, acc}}
+
+        :absent ->
+          {:cont, {:ok, acc}}
+
+        {:error, reason} ->
+          {:halt, {:error, reason}}
+      end
+    end)
+  end
+
+  # Sitelinks and the hop's claims, fifty to a `wbgetentities`, as
+  # `WikidataClient.hop_nodes/3` keeps them: a title and a few ids per item.
+  defp nodes(ctx, qids, stage \\ "wikidata:sitelinks+claims") do
+    qids
+    |> Enum.sort()
+    |> Enum.chunk_every(WikidataClient.batch_size())
+    |> Enum.reduce_while({:ok, %{}}, fn chunk, {:ok, acc} ->
+      case get_ok(ctx, stage,
+             url: ctx.endpoints.wikidata_api,
+             params: WikidataClient.sitelink_params(chunk, "enwikiquote", claims: true)
+           ) do
+        {:ok, body} when is_map(body) ->
+          nodes = WikidataClient.hop_nodes(body, "enwikiquote", ConceptHop.claim_properties())
+          {:cont, {:ok, Map.merge(acc, nodes)}}
 
         {:ok, _other} ->
           {:cont, {:ok, acc}}
@@ -964,7 +1088,7 @@ defmodule DevilsDictionary.Quotations.Corpus.Build do
       "cited_work" => line.work,
       "cited_year" => line.year,
       "source_url" => source_url(title, line),
-      "concept_qids" => if(page["concept"], do: [page["qid"]], else: []),
+      "concept_qids" => concept_qids(page),
       "badge" => verdict.badge,
       "agreements" => verdict.agreements,
       "sources" => verdict.sources,
@@ -982,7 +1106,30 @@ defmodule DevilsDictionary.Quotations.Corpus.Build do
         end)
         |> Enum.sort_by(&{&1["source"], &1["kind"], &1["locator"] || ""})
     }
+    |> with_via(page)
   end
+
+  # The page's own item when it is a concept, and every concept the hop
+  # reached it from.
+  defp concept_qids(page) do
+    (if(page["concept"], do: [page["qid"]], else: []) ++
+       Enum.map(page["via_from"] || [], & &1["qid"]))
+    |> Enum.uniq()
+  end
+
+  # A selection made with the hop records every line's paths, even none, and
+  # the page each concept was found on; one made before it does not, so it
+  # re-runs to the same rows and checksum. The page per concept matters once
+  # `fold/1` merges a line found on two pages: the folded row keeps one
+  # `"page"`, and a reason naming that page for the other page's concept
+  # would be false (CodeRabbit on #184).
+  defp with_via(row, %{"via_from" => from} = page) do
+    row
+    |> Map.put("concept_qids_via", Map.new(from, &{&1["qid"], &1["via"]}))
+    |> Map.put("concept_pages", Map.new(concept_qids(page), &{&1, row["page"]}))
+  end
+
+  defp with_via(row, _page), do: row
 
   defp source_url(title, line) do
     anchor = (line.subsection || line.section || "") |> String.replace(" ", "_")
@@ -1001,6 +1148,12 @@ defmodule DevilsDictionary.Quotations.Corpus.Build do
 
       concepts = group |> Enum.flat_map(& &1["concept_qids"]) |> Enum.uniq() |> Enum.sort()
 
+      via =
+        for key <- ~w(concept_qids_via concept_pages),
+            Enum.any?(group, &Map.has_key?(&1, key)),
+            into: %{},
+            do: {key, Enum.reduce(group, %{}, &Map.merge(&2, &1[key] || %{}))}
+
       also =
         group
         |> Enum.map(& &1["locator"])
@@ -1010,6 +1163,7 @@ defmodule DevilsDictionary.Quotations.Corpus.Build do
 
       first
       |> Map.put("concept_qids", concepts)
+      |> Map.merge(via)
       |> Map.put("also_at", also)
     end)
     |> Enum.sort_by(& &1["fingerprint"])
