@@ -214,7 +214,12 @@ defmodule DevilsDictionaryWeb.WordLive do
 
     socket
     |> assign(:discovery_target, target)
-    |> assign(:cultures, Map.merge(cultures, catalog_shelf(page, target)))
+    |> assign(
+      :cultures,
+      cultures
+      |> Map.merge(catalog_shelf(page, target))
+      |> Map.merge(quote_corpus_shelf(page, target))
+    )
     # Every browser-transport provider the registry holds, in registry order,
     # asked for its own config — rather than one named module (#144 Phase 3).
     # A second one is a registration and nothing here.
@@ -381,6 +386,51 @@ defmodule DevilsDictionaryWeb.WordLive do
             mapping_id: nil,
             term: page.headword.lemma,
             relevance: if(length(page.headword.lexemes) > 1, do: "term_unverified", else: "term")
+          }
+        }
+    end
+  end
+
+  # The public-domain Wikiquote corpus as one more state on the Quotes shelf
+  # (#174): like the catalog, nothing is requested and no run is admitted —
+  # the lines are seeded, and the match is a concept the page's senses already
+  # refer to. `archetype: :corpus` makes every card say *held locally*; on
+  # this shelf alone it also opens the 👑 band rather than trailing it
+  # (decision 2, `Culture.archetype_rank/1`).
+  defp quote_corpus_shelf(%{headword: %{lexemes: []}}, _target), do: %{}
+
+  defp quote_corpus_shelf(page, target) do
+    lexeme_ids =
+      if target,
+        do: Discovery.page_lexeme_ids(target),
+        else: Enum.map(page.headword.lexemes, & &1.id)
+
+    slug = DevilsDictionary.Quotations.Corpus.slug()
+
+    case DevilsDictionary.Quotations.Corpus.shelf_items(lexeme_ids) do
+      [] ->
+        %{}
+
+      items ->
+        source = DevilsDictionary.Sources.get_source_by_slug(slug)
+
+        %{
+          slug => %{
+            status: :ready,
+            archetype: :corpus,
+            items: items,
+            provider: slug,
+            provider_name: "Wikiquote, public domain",
+            provider_detail: "a verified public-domain selection",
+            # The row's own mark on the card and in the byline: the corpus is
+            # Wikiquote's words, and says so the way the live shelf does.
+            tier: source && source.tier,
+            logo: source && source.logo,
+            held_since: Corpus.Manifest.held_since([slug]),
+            content_types: [:quote],
+            mapping_id: nil,
+            term: page.headword.lemma,
+            relevance: "term"
           }
         }
     end

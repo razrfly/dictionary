@@ -205,7 +205,21 @@ defmodule DevilsDictionaryWeb.Culture do
   # same content type and the same identity rule, but it was not asked for on
   # this visit, and a shelf that opened with the catalog would bury the answer
   # the page actually went and got.
-  defp archetype_rank(state), do: if(Map.get(state, :archetype) == :corpus, do: 1, else: 0)
+  #
+  # Except on the Quotes shelf (#174 decision 2). There the corpus is the
+  # public-domain Wikiquote selection, every line of it *Verified* against a
+  # text its author wrote before 1931, so it all lands in the 👑 band — and
+  # the band is the point of the corpus. Opening that band with it buries
+  # nothing: the lines a visit went and got are the other bands, and in the
+  # 👑 band a live line that is the same words folds into the corpus card
+  # (build 3), which then names both sources.
+  defp archetype_rank(state) do
+    cond do
+      Map.get(state, :archetype) != :corpus -> 0
+      content_type(state) == :quote -> -1
+      true -> 1
+    end
+  end
 
   # Where an entry's source sorts on its shelf: tier, then slug. A live state
   # is one provider and carries its tier; the catalog state carries several
@@ -325,6 +339,7 @@ defmodule DevilsDictionaryWeb.Culture do
                     item={entry.item}
                     also={entry.also}
                     source={badge_source(entry.state)}
+                    held={Map.get(entry.state, :archetype) == :corpus}
                     return_path={@return_path}
                   />
                   <.culture_thumbnail
@@ -790,6 +805,7 @@ defmodule DevilsDictionaryWeb.Culture do
   attr :item, :map, required: true
   attr :source, :map, required: true, doc: "the supplying source, as `badge_source/1` shapes it"
   attr :also, :list, default: [], doc: "every other source that holds this line"
+  attr :held, :boolean, default: false, doc: "a corpus line, held locally rather than fetched"
   attr :return_path, :string, default: nil
 
   defp quote_card(assigns) do
@@ -851,6 +867,9 @@ defmodule DevilsDictionaryWeb.Culture do
       </:citation>
       <:footer>
         <span :if={@attribution}>{@attribution}</span>
+        <%!-- #174: a corpus line was not fetched on this visit, and every card
+             says so, the way the About note does for the shelf. --%>
+        <span :if={@held} id={"culture-held-#{@item.external_id}"}>held locally</span>
         <.link
           :if={@evidence_path}
           navigate={@evidence_path}
@@ -1456,13 +1475,27 @@ defmodule DevilsDictionaryWeb.Culture do
         <p class="font-medium text-mist-950 dark:text-white">
           {state.provider_name}{provider_detail(state)}
         </p>
-        <p :if={Map.get(state, :archetype) == :corpus} class="text-pretty">
+        <p
+          :if={Map.get(state, :archetype) == :corpus and @shelf.type != :quote}
+          class="text-pretty"
+        >
           Catalog matches from {Map.get(state, :corpora, state.provider_name)}, held locally
           rather than searched for on this visit. None is an accepted interpretation: a
           contributor connects an exact meaning and reviewers decide the claim.
           <.link navigate={~p"/artworks"} class="underline underline-offset-4">
             Browse saved artworks
           </.link>
+        </p>
+        <%!-- The quotations corpus (#174) is not the artwork catalog: its lines
+             are verified against a text, and there is no saved-artworks page to
+             send a Quotes reader to (CodeRabbit on #178). --%>
+        <p
+          :if={Map.get(state, :archetype) == :corpus and @shelf.type == :quote}
+          class="text-pretty"
+        >
+          Public-domain lines from {state.provider_name}, held locally rather than searched
+          for on this visit. Each was found in a Project Gutenberg text its credited author
+          wrote before 1931, so the line and the credit agree with a primary source.
         </p>
         <p :if={Map.get(state, :archetype) != :corpus} class="text-pretty">
           Search matches from {state.provider_name}. These are provider results, not curated examples or dictionary interpretations.
