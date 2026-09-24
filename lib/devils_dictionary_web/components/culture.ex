@@ -303,7 +303,13 @@ defmodule DevilsDictionaryWeb.Culture do
                  are prepended when they arrive; CSS scroll snap re-snaps a
                  container to its previously snapped box after a layout change, so
                  the rail opened 1,584 px in — past every result the page had just
-                 gone and fetched. Measured on `/define/soldier`. --%>
+                 gone and fetched. Measured on `/define/soldier`.
+
+                 And `relative`, because the rail is the only thing that clips
+                 it: a card's `sr-only` label is `position: absolute`, and with
+                 no positioned ancestor inside the rail its containing block
+                 was the page, past the rail's `overflow-x` — `/define/coward`
+                 scrolled sideways to 5,268 px at every width. --%>
             <div :for={{band, index} <- Enum.with_index(shelf.bands)} :if={shelf.entries != []}>
               <p
                 :if={band.label}
@@ -327,7 +333,7 @@ defmodule DevilsDictionaryWeb.Culture do
                     else: shelf_id("culture-results", shelf, @shelf_count) <> "-#{band.era}"
                   )
                 }
-                class="flex gap-4 overflow-x-auto overscroll-x-contain pb-2 focus-visible:outline-2 focus-visible:outline-offset-2"
+                class="relative flex gap-4 overflow-x-auto overscroll-x-contain pb-2 focus-visible:outline-2 focus-visible:outline-offset-2"
               >
                 <li
                   :for={entry <- band.entries}
@@ -538,7 +544,7 @@ defmodule DevilsDictionaryWeb.Culture do
           data-results
           tabindex="0"
           aria-label={"#{@row.heading} matches; scroll for more"}
-          class="flex gap-4 overflow-x-auto overscroll-x-contain pb-2 focus-visible:outline-2 focus-visible:outline-offset-2"
+          class="relative flex gap-4 overflow-x-auto overscroll-x-contain pb-2 focus-visible:outline-2 focus-visible:outline-offset-2"
         >
         </ul>
         <%!-- The freshness a browser shelf can honestly claim (#144 Phase 4).

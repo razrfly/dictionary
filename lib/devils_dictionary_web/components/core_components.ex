@@ -344,8 +344,9 @@ defmodule DevilsDictionaryWeb.CoreComponents do
     pushing the page sideways. `min-w-0` is not decoration: the wrapper is a flex
     item in `Kit.section/1`, and a flex item's `min-width: auto` makes it grow to
     its content and ignore `overflow-x` — which is exactly how /admin/imports
-    came to scroll horizontally at 375 px. --%>
-    <div class="w-full min-w-0 overflow-x-auto">
+    came to scroll horizontally at 375 px. `relative` keeps the `sr-only` Actions
+    label, which is `position: absolute`, inside the box that clips it. --%>
+    <div class="relative w-full min-w-0 overflow-x-auto">
       <table class="w-full min-w-max text-left text-sm/7 text-mist-700 dark:text-mist-400">
         <thead>
           <tr class="border-b border-mist-950/10 dark:border-white/10">
