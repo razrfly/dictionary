@@ -61,7 +61,7 @@ defmodule Mix.Tasks.Dd.Provider.New do
   identity field, the `external_identifiers` namespace that field is written
   to, the `work_kind` it is seeded as and the `evidence` it carries — and the
   `entry/3` clause in
-  `DevilsDictionary.Artworks.Corpus.Seeder` that maps a row onto a
+  `DevilsDictionary.Corpus.Seeder` that maps a row onto a
   `SourceIdentity.Entry`. Only the person who has read the source's rows can
   write the second one, so the task prints both rather than guessing at them.
   This is a real gap between #109's K7 and the code, recorded here rather than
@@ -471,7 +471,7 @@ defmodule Mix.Tasks.Dd.Provider.New do
           back or Corpus.Conformance asks this corpus for a contract it does
           not have.
         * add an `entry("#{assigns.slug}", version, row)` clause to
-          lib/devils_dictionary/artworks/corpus/seeder.ex that maps a row onto a
+          lib/devils_dictionary/corpus/seeder.ex that maps a row onto a
           SourceIdentity.Entry
 
       Both are pattern matches in shared modules, and only a reader of the
@@ -1035,7 +1035,7 @@ defmodule Mix.Tasks.Dd.Provider.New do
            or identity and display facts only (`:none`). The suite asks a
            corpus only for the contract its `evidence` declares, and holds it
            to that declaration.
-        2. `DevilsDictionary.Artworks.Corpus.Seeder.entry/3` needs a clause for
+        2. `DevilsDictionary.Corpus.Seeder.entry/3` needs a clause for
            `"<%= @slug %>"` mapping one row onto a
            `DevilsDictionary.SourceIdentity.Entry` — the identity namespace, the
            label, the year, and the metadata the shelf reads.

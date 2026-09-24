@@ -115,9 +115,12 @@ defmodule DevilsDictionary.Quotations.Verifier.Checks do
     end
   end
 
-  # What a check reads of a page, and nothing more: the words, the citation,
-  # where it sits and whether it is register.
-  defp compact(page, title) do
+  @doc """
+  What a check reads of a parsed page, and nothing more: the words, the
+  citation, where each sits and whether it is register. The shape
+  `match_page/3` takes, and what the corpus build reads an author's page as.
+  """
+  def compact(page, title) do
     %{
       "title" => page.title || title,
       "revision_id" => page.revision_id,
@@ -219,7 +222,7 @@ defmodule DevilsDictionary.Quotations.Verifier.Checks do
                "ebook" => ebook,
                "work_qid" => work["qid"],
                "label" => work["label"],
-               "text" => text
+               "text" => text_body(text)
              }}
 
           {:ok, :absent} ->
@@ -241,18 +244,47 @@ defmodule DevilsDictionary.Quotations.Verifier.Checks do
         {:ok, nil}
 
       {:ok, payload, revision_id} ->
+        lines = String.split(payload["text"], ~r/\r?\n/)
+
         {:ok,
          %{
            ebook: payload["ebook"],
            label: payload["label"],
            revision_id: revision_id,
-           lines: String.split(payload["text"], ~r/\r?\n/),
+           lines: lines,
+           line_index: index_lines(lines),
            normalised: Fingerprint.normalise(payload["text"])
          }}
 
       other ->
         other
     end
+  end
+
+  @doc """
+  A Gutenberg answer as text. Most `pg<n>.txt` files arrive as UTF-8; some
+  are served as the gzip file itself with no `content-encoding` (the corpus
+  build met one on 2026-09-24), and some older ones are Latin-1. Gzip is
+  opened, and a body that is still not UTF-8 is read as Latin-1, which every
+  byte is, so nothing downstream is handed bytes it cannot case-fold.
+  """
+  def text_body(<<31, 139, _rest::binary>> = gzip) do
+    case safe_gunzip(gzip) do
+      {:ok, text} -> text_body(text)
+      :error -> ""
+    end
+  end
+
+  def text_body(text) when is_binary(text) do
+    if String.valid?(text),
+      do: text,
+      else: :unicode.characters_to_binary(text, :latin1, :utf8)
+  end
+
+  defp safe_gunzip(gzip) do
+    {:ok, :zlib.gunzip(gzip)}
+  rescue
+    _ -> :error
   end
 
   # ── matching (pure) ─────────────────────────────────────────────────────
@@ -311,7 +343,7 @@ defmodule DevilsDictionary.Quotations.Verifier.Checks do
               kind: :primary,
               role: :supports,
               locator:
-                "#{text.label || "Gutenberg"} (Gutenberg ##{text.ebook}), line #{line_number(text.lines, normalised)}",
+                "#{text.label || "Gutenberg"} (Gutenberg ##{text.ebook}), line #{line_number(text, normalised)}",
               record_revision_id: text.revision_id
             }
           ]
@@ -333,26 +365,48 @@ defmodule DevilsDictionary.Quotations.Verifier.Checks do
   defp long_enough?(normalised),
     do: length(String.split(normalised, " ", trim: true)) >= @min_words
 
-  # The line a match starts on, reading three lines at a time so a sentence
-  # wrapped across a line break is still found.
-  defp line_number(lines, normalised) do
-    windows = Enum.chunk_every(lines, 3, 1)
+  @doc """
+  A text's lines, normalised one by one and joined, with the byte offset each
+  non-blank line starts at: what `match_texts/2` finds a passage's first line
+  in. Built once per text — `gutenberg_texts/3` and the corpus build carry it
+  as `:line_index` — because a text is read for every line credited to its
+  author.
+  """
+  def index_lines(lines) do
+    {kept, starts, _offset} =
+      lines
+      |> Enum.with_index(1)
+      |> Enum.reduce({[], [], 0}, fn {line, number}, {kept, starts, offset} ->
+        case Fingerprint.normalise(line) do
+          "" -> {kept, starts, offset}
+          text -> {[text | kept], [{offset, number} | starts], offset + byte_size(text) + 1}
+        end
+      end)
 
-    case Enum.find_index(windows, &contains?(&1, normalised)) do
-      nil ->
-        "?"
-
-      index ->
-        # The window that first holds the line may start a line or two before
-        # it; the line it starts on is the latest start that still holds it.
-        window = Enum.at(windows, index)
-        start = Enum.find(2..0//-1, 0, &contains?(Enum.drop(window, &1), normalised))
-        index + start + 1
-    end
+    {kept |> Enum.reverse() |> Enum.join(" "), Enum.reverse(starts)}
   end
 
-  defp contains?(lines, normalised),
-    do: String.contains?(Fingerprint.normalise(Enum.join(lines, " ")), normalised)
+  # The line a match starts on: where the passage sits in the joined, per-line
+  # normalised text, and which line that byte belongs to. A passage of any
+  # length is found — a sentence wrapped over two lines, or eight lines of
+  # *O Captain!*, which a three-line window answered `"?"` for (the corpus
+  # build's first sample, #174). `"?"` is left for a passage the whole-text
+  # match found but the line-by-line one does not (a hyphen split at a line
+  # end).
+  defp line_number(text, normalised) do
+    {joined, starts} = Map.get(text, :line_index) || index_lines(text.lines)
+
+    case :binary.match(joined, normalised) do
+      {position, _length} ->
+        starts
+        |> Enum.take_while(fn {offset, _number} -> offset <= position end)
+        |> List.last()
+        |> elem(1)
+
+      :nomatch ->
+        "?"
+    end
+  end
 
   defp config, do: Application.get_env(:devils_dictionary, :verification, [])
   defp wikidata_api, do: config()[:wikidata_endpoint] || WikidataClient.api_url()
