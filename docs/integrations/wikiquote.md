@@ -202,10 +202,14 @@ User-Agent and was sent at least 300 ms after the one before.
   fingerprints (ADR 0003), so they would not fold into one subject, and that
   folding is #174's acceptance box. Route (a) runs the **same** `Parser.parse/1`
   that the live provider and the verifier's author-page check run.
-- **Reproducible anyway.** Parsoid serves a pinned revision at
-  `page/html/<title>/<revision>`. The manifest's `selection` block records
-  each page's revision id, so a re-run reads the same HTML the first run read.
-  The dump buys nothing here that the revision ids do not.
+- **Reproducible anyway, once the build pins it.** Parsoid serves a pinned
+  revision at `page/html/<title>/<revision>`. The page reader as it stands
+  (the live provider's and the verifier's) asks by title only, so on its own
+  a re-run would read whatever the page is today. The build therefore keeps
+  the revision id each first read returned (`<html about=…/revision/N>`) in
+  the manifest's `selection` block, and a re-run asks for the title **and**
+  that revision, which is the same HTML the first run read. The dump buys
+  nothing here that the revision ids do not.
 - **The dump still has a use**, and it is counting. The two small SQL files
   (10 MB) told the spike which pages to read. The 217 MB articles file is not
   needed.
