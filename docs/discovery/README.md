@@ -402,6 +402,15 @@ when two independent sources agree, one of them a primary text. Its requests
 are ledgered on `verification_runs`, whose `refresh_after` is the
 re-verification rule.
 
+**Where the badge is stored.** The badge is stored on the **item**, as
+`content_items.metadata["provenance"]`, with the keys `badge`, `score`,
+`agreements`, `sources`, `computed_at` and `verifier_version`. It is not stored
+on a content revision, as #158's schema table first said. A revision is
+immutable, because a review cites it, and the badge is the line's rather than
+one wording's: it is recomputed from every claim on the item, whichever
+wording each source holds. `content_revisions.metadata` carries only the
+writer's `source_slug` (and `alternate_text` on a second wording).
+
 **A discovery appearance is never a claim** about the word it was found for.
 No `illustrates` assertion is written, ever. A keyword-matched film is not curated evidence that the film is
 about the word; it is a provider result, shown as one. The path from a result to

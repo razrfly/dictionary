@@ -239,6 +239,7 @@ config :devils_dictionary, :wikiquote,
   endpoint: "https://wikiquote.test/api/rest_v1/page/html/",
   api_endpoint: "https://wikiquote.test/w/api.php",
   wikidata_endpoint: "https://wikidata.test/w/api.php",
+  sparql_endpoint: "https://sparql.test/sparql",
   request_interval_ms: 0,
   enabled: true
 

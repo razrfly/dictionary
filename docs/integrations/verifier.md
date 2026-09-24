@@ -35,7 +35,7 @@ matching a name:
 |---|---|---|
 | `gutenberg` | the credited author's QID → Wikidata works with `P50` = that QID and a `P2034` ebook id → `pg<id>.txt`, cached as a source record | **supports**: the line is in a text Wikidata says this person wrote, at line *N* |
 | `wikiquote` (author page) | the credited author's QID → its `enwikiquote` sitelink → the author's own page, parsed by build 4a's parser | **supports**: the line (or a cited passage containing it) is on the author's page under a cited work or year. **contradicts**: it is in the page's *Misattributed* / *Disputed* / *Unsourced* register |
-| `wikiquote` (*Misquotations*) | one page, the same parser, shared by every line | **agrees with a misattribution** already held. Never against a credit: a row names no one by identifier, and its note usually names the true author |
+| `wikiquote` (*Misquotations*) | one page, the same parser, shared by every line | **agrees with a misattribution** already held. Never against a credit: a row names no one by identifier, and its note usually names the true author. Every row on the page is register, *Unsourced* (93 of the 150) included: an unsourced row is a weaker claim than a *Misattributed* one, but the check treats the two alike, because being on the page at all is the finding |
 
 **Not built, by measurement:**
 
