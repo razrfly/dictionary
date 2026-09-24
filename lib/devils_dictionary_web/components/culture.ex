@@ -1475,13 +1475,27 @@ defmodule DevilsDictionaryWeb.Culture do
         <p class="font-medium text-mist-950 dark:text-white">
           {state.provider_name}{provider_detail(state)}
         </p>
-        <p :if={Map.get(state, :archetype) == :corpus} class="text-pretty">
+        <p
+          :if={Map.get(state, :archetype) == :corpus and @shelf.type != :quote}
+          class="text-pretty"
+        >
           Catalog matches from {Map.get(state, :corpora, state.provider_name)}, held locally
           rather than searched for on this visit. None is an accepted interpretation: a
           contributor connects an exact meaning and reviewers decide the claim.
           <.link navigate={~p"/artworks"} class="underline underline-offset-4">
             Browse saved artworks
           </.link>
+        </p>
+        <%!-- The quotations corpus (#174) is not the artwork catalog: its lines
+             are verified against a text, and there is no saved-artworks page to
+             send a Quotes reader to (CodeRabbit on #178). --%>
+        <p
+          :if={Map.get(state, :archetype) == :corpus and @shelf.type == :quote}
+          class="text-pretty"
+        >
+          Public-domain lines from {state.provider_name}, held locally rather than searched
+          for on this visit. Each was found in a Project Gutenberg text its credited author
+          wrote before 1931, so the line and the credit agree with a primary source.
         </p>
         <p :if={Map.get(state, :archetype) != :corpus} class="text-pretty">
           Search matches from {state.provider_name}. These are provider results, not curated examples or dictionary interpretations.

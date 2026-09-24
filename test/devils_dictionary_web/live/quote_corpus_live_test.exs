@@ -68,6 +68,8 @@ defmodule DevilsDictionaryWeb.QuoteCorpusLiveTest do
 
     # The About note says where the lines came from, as a corpus's does.
     assert has_element?(live, "#culture-about-quote-wikiquote-pd-v1", "held locally")
+    assert has_element?(live, "#culture-about-quote-wikiquote-pd-v1", "Project Gutenberg")
+    refute has_element?(live, ~s(#culture-about-quote-wikiquote-pd-v1 a[href="/artworks"]))
   end
 
   test "a page whose senses refer to nothing the corpus filed has no Quotes shelf", ctx do
