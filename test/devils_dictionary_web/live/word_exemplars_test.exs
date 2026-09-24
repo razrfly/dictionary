@@ -161,6 +161,60 @@ defmodule DevilsDictionaryWeb.WordExemplarsTest do
     assert has_element?(live, "#examples", "1 named by the record")
   end
 
+  test "a contributor can open the pending nomination the Review link names", ctx do
+    conn = log_in_user(ctx.conn, ctx.contributor)
+    {:ok, live, _html} = live(conn, ~p"/connections/#{ctx.claim_id}")
+
+    refute has_element?(live, "#no-such-connection")
+
+    {:ok, public, _html} = live(build_conn(), ~p"/connections/#{ctx.claim_id}")
+    assert has_element?(public, "#no-such-connection")
+  end
+
+  test "a pending nomination of a work is public, and its card says so honestly", ctx do
+    {:ok, work} =
+      Registry.create_work(%{preferred_label: "A Fleeing Figure", work_kind: "artwork"})
+
+    {:ok, claim} =
+      Contributions.propose(
+        Scope.for_user(ctx.contributor),
+        work.object_id,
+        "illustrates",
+        ctx.coward_sense.object_id,
+        %{rationale: "The figure runs from the fight."},
+        []
+      )
+
+    {:ok, live, _html} = live(ctx.conn, ~p"/define/coward")
+
+    assert has_element?(live, "#examples-ex-#{claim.id}", "Not yet reviewed.")
+    refute has_element?(live, "#examples-ex-#{claim.id}", "Not public until")
+    refute has_element?(live, "#examples-cited-byline", "contributors only")
+  end
+
+  test "a content subject links to its claim, which has a page", ctx do
+    {:ok, gif} =
+      Registry.create_content(%{content_kind: :media, body: "a gif", headword: "Running away"})
+
+    {:ok, claim} =
+      Contributions.propose(
+        Scope.for_user(ctx.contributor),
+        gif.object_id,
+        "illustrates",
+        ctx.coward_sense.object_id,
+        %{rationale: "Somebody running from a fight."},
+        []
+      )
+
+    {:ok, live, _html} = live(ctx.conn, ~p"/define/coward")
+
+    assert has_element?(
+             live,
+             "#examples-ex-#{claim.id} a[href='/connections/#{claim.id}']",
+             "Running away"
+           )
+  end
+
   test "the person page groups accepted claims by word", ctx do
     slug = Connection.slugify("Jeff Bezos")
 

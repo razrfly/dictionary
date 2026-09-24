@@ -263,6 +263,17 @@ defmodule DevilsDictionary.Examples.ExemplarsTest do
       assert Agent.get(ctx.requests, & &1) == requests
     end
 
+    test "a rejected claim holds nothing: a new nomination returns to review", ctx do
+      %{results: [%{assertion_id: first}]} = seed(ctx, [row()])
+      accept!(ctx, first, "rejected")
+
+      assert %{results: [%{outcome: :created, assertion_id: second}]} =
+               seed(ctx, [row(%{"rationale" => "New evidence, a new reason."})], slug: "test-v2")
+
+      assert second != first
+      assert Claims.review_state(Claims.current_revision(second).id) == :needs_review
+    end
+
     test "the form path holds a duplicate too", ctx do
       %{results: [%{assertion_id: id}]} = seed(ctx, [row()])
       bezos = Registry.by_external_id("wikidata", @bezos)
@@ -514,6 +525,16 @@ defmodule DevilsDictionary.Examples.ExemplarsTest do
   end
 
   describe "the person page (the reverse view)" do
+    test "a sourceless instance_of claim is not the record's and does not crash", _ctx do
+      {:ok, person} = Registry.create_person(%{preferred_label: "Someone"})
+      human = concept!("Q5", "human")
+
+      {:ok, _} =
+        Claims.assert(person.object_id, "instance_of", human.object_id, %{method: "curated"})
+
+      assert Examples.named_under(person.object_id) == []
+    end
+
     test "accepted claims grouped by word, and what the record files them under", ctx do
       hypocrite = word!(ctx, "hypocrite", ~w(wordnet))
 

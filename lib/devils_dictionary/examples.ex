@@ -289,6 +289,9 @@ defmodule DevilsDictionary.Examples do
       on: te.object_id == r.object_object_id,
       where: p.key == @instance_of and r.subject_object_id in ^subjects,
       where: r.is_current and r.lifecycle_state == :active,
+      # Named *by the record* means a source named it: a claim with no source
+      # is someone's, not the record's (CodeRabbit on #186).
+      where: not is_nil(a.source_id),
       where: not is_nil(tl.object_id) or not is_nil(te.object_id),
       select: %{
         source_id: a.source_id,

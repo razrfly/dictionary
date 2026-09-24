@@ -60,6 +60,7 @@ defmodule DevilsDictionaryWeb.Examples do
       |> assign(:exemplars, exemplars)
       |> assign(:cited, length(exemplars) - pending)
       |> assign(:pending, pending)
+      |> assign(:hidden, Enum.count(exemplars, &hidden_from_public?/1))
       |> assign(:cited_ids, cited_subjects(exemplars))
       |> assign(:shown, shown)
       |> assign(:rest, rest)
@@ -135,7 +136,7 @@ defmodule DevilsDictionaryWeb.Examples do
           class="mt-1 text-base/7 text-mist-500 sm:text-sm/7"
         >
           Cited by people who gave a reason and evidence; the reasons are theirs, not the record's.
-          <span :if={@pending > 0}>Nominations under review are shown to contributors only.</span>
+          <span :if={@hidden > 0}>A person's nomination is shown to contributors only until a reviewer accepts it.</span>
         </p>
       </div>
     </.slab>
@@ -145,6 +146,19 @@ defmodule DevilsDictionaryWeb.Examples do
   # A nomination nobody has decided yet — what the public never sees for a
   # person, and a contributor sees marked.
   defp pending?(%{claim: %{review_state: state}}), do: state in [:needs_review, :disputed]
+
+  # Only a person nominated here waits out of public view (`Claims.visible/2`);
+  # a pending work or artifact is public, and its card must not say otherwise.
+  defp hidden_from_public?(%{subject: %{entity_kind: :person}} = item), do: pending?(item)
+  defp hidden_from_public?(_item), do: false
+
+  # A thing's page, or — for a content subject (a GIF, a quotation), which has
+  # no entity page — the claim's own.
+  defp subject_path(%{subject: %{kind: :content}, claim: claim}),
+    do: "/connections/#{claim.assertion_id}"
+
+  defp subject_path(%{subject: subject}),
+    do: "/entities/#{subject.object_id}/#{Connection.slugify(subject.label)}"
 
   # The things both layers name: the chip gains a ✓ (#181 wireframe 2), and
   # the two stay two items, because their signals are different kinds of thing.
@@ -171,6 +185,8 @@ defmodule DevilsDictionaryWeb.Examples do
       |> assign(:claim, item.claim)
       |> assign(:signals, item.signals)
       |> assign(:pending?, pending?(item))
+      |> assign(:hidden_from_public?, hidden_from_public?(item))
+      |> assign(:href, subject_path(item))
 
     ~H"""
     <article class={[
@@ -183,7 +199,7 @@ defmodule DevilsDictionaryWeb.Examples do
       <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <h3 class="min-w-0 text-base/7 font-medium text-mist-950 sm:text-sm/6 dark:text-white">
           <.link
-            navigate={"/entities/#{@subject.object_id}/#{Connection.slugify(@subject.label)}"}
+            navigate={@href}
             class="break-words underline decoration-mist-950/20 underline-offset-4 hover:decoration-mist-950 dark:decoration-white/25 dark:hover:decoration-white"
           >
             {@subject.label}
@@ -265,7 +281,10 @@ defmodule DevilsDictionaryWeb.Examples do
       </p>
 
       <p :if={@pending?} class="mt-2 text-base/7 text-mist-500 sm:text-sm/6">
-        Not public until a reviewer accepts it.
+        {if(@hidden_from_public?,
+          do: "Not public until a reviewer accepts it.",
+          else: "Not yet reviewed."
+        )}
         <.link
           navigate={"/connections/#{@claim.assertion_id}"}
           id={"examples-review-#{@claim.assertion_id}"}

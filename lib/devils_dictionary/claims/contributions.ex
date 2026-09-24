@@ -75,7 +75,8 @@ defmodule DevilsDictionary.Claims.Contributions do
       nothing is cited (#105 rule 2). A claim about a living person under
       *coward* is never a bare name.
     * `{:error, {:held, assertion_id}}` — a current, active claim already says
-      the same `(subject, predicate, object)`. Nothing is written: a replayed
+      the same `(subject, predicate, object)`, and no reviewer has rejected or
+      withdrawn it. Nothing is written: a replayed
       manifest is a no-op, and a second nominator's agreement waits for
       endorsements (#181 build 3) rather than becoming a second claim.
 
@@ -154,13 +155,27 @@ defmodule DevilsDictionary.Claims.Contributions do
       "claim:#{subject}:#{predicate}:#{object}"
     ])
 
+    # A claim a reviewer rejected or withdrew holds nothing: it is on nobody's
+    # page, and a nomination with new evidence has to be able to return to
+    # review (CodeRabbit on #186).
+    hidden =
+      from review in Claims.AssertionReview,
+        where: review.assertion_revision_id == parent_as(:current).id,
+        order_by: [desc: review.inserted_at, desc: review.id],
+        limit: 1,
+        select: review.decision
+
     existing =
       Repo.one(
         from r in Claims.AssertionRevision,
+          as: :current,
           join: p in assoc(r, :predicate),
+          left_lateral_join: decision in subquery(hidden),
+          on: true,
           where:
             r.subject_object_id == ^subject and r.object_object_id == ^object and
               p.key == ^to_string(predicate) and r.is_current and r.lifecycle_state == :active,
+          where: is_nil(decision.decision) or decision.decision not in ^Claims.hidden_decisions(),
           order_by: [asc: r.assertion_id],
           limit: 1,
           select: r.assertion_id
