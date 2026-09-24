@@ -388,6 +388,20 @@ own year** (👑 before 1931 · 📚 to 1999 · 📱 since 2000), read from
 `preview_metadata["era"]`, and each card names every source that holds its
 line (`Shelf.fold/3`).
 
+**The verifier (#158 build 5).** A background pass per person
+(`Quotations.Verifier`, `VerifyWorker`) checks every stored line credited or
+misattributed to them against their own Wikiquote page (by their sitelink), the
+*Misquotations* register and the Gutenberg texts Wikidata says they wrote
+(`P50` + `P2034`) — each by identifier, never by name; Wikisource and the
+Internet Archive were measured out, Quote Investigator and Google Books wait on
+a permission and a key (`docs/integrations/verifier.md`). What it finds is
+`assertion_evidence` on the claim and a `method: "verifier"` revision a provider
+refresh never overwrites; the badge the card shows is read from
+`content_items.metadata["provenance"]` at display time and is *Verified* only
+when two independent sources agree, one of them a primary text. Its requests
+are ledgered on `verification_runs`, whose `refresh_after` is the
+re-verification rule.
+
 **A discovery appearance is never a claim** about the word it was found for.
 No `illustrates` assertion is written, ever. A keyword-matched film is not curated evidence that the film is
 about the word; it is a provider result, shown as one. The path from a result to

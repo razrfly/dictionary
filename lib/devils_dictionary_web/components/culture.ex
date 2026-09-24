@@ -783,9 +783,10 @@ defmodule DevilsDictionaryWeb.Culture do
   # to an entry; the caption is the author line only where an `authored_by`
   # stands now (#164), the provider's own citation otherwise; the badges are
   # every source that holds the line after build 3's fold; the provenance is
-  # what the provider recorded (*Plausible* until build 5 verifies anything,
-  # *Disputed* or *Apocryphal* on a register hit, with the register's
-  # sentence as the note); and the footer is the credit and the evidence link.
+  # the verifier's badge once build 5 has checked the line, and until then
+  # what the provider recorded (*Plausible*, or *Disputed* / *Apocryphal* on
+  # a register hit, with the register's sentence as the note); and the footer
+  # is the credit and the evidence link.
   attr :item, :map, required: true
   attr :source, :map, required: true, doc: "the supplying source, as `badge_source/1` shapes it"
   attr :also, :list, default: [], doc: "every other source that holds this line"
@@ -810,7 +811,10 @@ defmodule DevilsDictionaryWeb.Culture do
       )
       |> assign(:work, metadata["work"])
       |> assign(:year, year(metadata))
-      |> assign(:provenance, metadata["provenance"])
+      # The verifier's badge when it has spoken (#158 build 5), the provider's
+      # own first guess until then.
+      |> assign(:provenance, verified_badge(assigns.item) || metadata["provenance"])
+      |> assign(:agreements, verified_agreements(assigns.item))
       |> assign(:note, metadata["provenance_note"])
       |> assign(:attribution, attribution_line(:credited, metadata))
       |> assign(:source_url, external_href(metadata["source_url"]))
@@ -825,6 +829,7 @@ defmodule DevilsDictionaryWeb.Culture do
       href={@source_url}
       sources={@sources}
       provenance={@provenance}
+      agreements={@agreements}
       note={@note}
       clamp={ContentTypes.title_clamp(:quote)}
     >
@@ -857,6 +862,20 @@ defmodule DevilsDictionaryWeb.Culture do
       </:footer>
     </Quotation.card>
     """
+  end
+
+  defp verified_badge(item) do
+    case Map.get(item, :provenance) do
+      %{"badge" => badge} when is_binary(badge) -> badge
+      _ -> nil
+    end
+  end
+
+  defp verified_agreements(item) do
+    case Map.get(item, :provenance) do
+      %{"badge" => badge, "agreements" => n} when is_binary(badge) and is_integer(n) -> n
+      _ -> nil
+    end
   end
 
   defp register_kind("misattributed"), do: "Misattributed"

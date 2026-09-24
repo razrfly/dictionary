@@ -110,11 +110,21 @@ defmodule DevilsDictionary.Discovery.Budget do
   two nodes share one window. The run's own `transport_attempts` and
   `request_count` are the provider's and are not touched.
 
+  `run` is a discovery run's id, or `{:verification, id}` for the quotation
+  verifier's run (#158 build 5), whose checkers — Gutenberg, Wikiquote's author
+  pages, Wikidata — are spent from outside any discovery run.
+
   Same answers as `claim/3`: `{:ok, wait_ms}`, `{:deferred, seconds}` or
   `{:error, reason}`.
   """
-  def claim_shared(source_slug, run_id, stage, opts \\ [])
+  def claim_shared(source_slug, run, stage, opts \\ [])
       when is_binary(source_slug) and is_binary(stage) do
+    run_ref =
+      case run do
+        {:verification, id} -> %{run_id: nil, verification_run_id: id}
+        id -> %{run_id: id, verification_run_id: nil}
+      end
+
     now = DateTime.utc_now()
     interval_ms = Keyword.get(opts, :request_interval_ms, 0)
 
@@ -147,12 +157,9 @@ defmodule DevilsDictionary.Discovery.Budget do
       scheduled_at = next_slot(source.id, now, interval_ms)
 
       %RequestAttempt{}
-      |> RequestAttempt.changeset(%{
-        run_id: run_id,
-        source_id: source.id,
-        stage: stage,
-        attempted_at: scheduled_at
-      })
+      |> RequestAttempt.changeset(
+        Map.merge(run_ref, %{source_id: source.id, stage: stage, attempted_at: scheduled_at})
+      )
       |> Repo.insert!()
 
       {:ok, max(DateTime.diff(scheduled_at, now, :millisecond), 0)}
@@ -181,11 +188,19 @@ defmodule DevilsDictionary.Discovery.Budget do
 
   @doc "Persists provider-wide not-before time so visits and workers cannot bypass it."
   def defer_provider(run_id, retry_after, reason) do
+    run = Repo.get!(Run, run_id)
+    mapping = Repo.get!(Mapping, run.mapping_id)
+    defer_source(mapping.source_id, retry_after, reason)
+  end
+
+  @doc """
+  The same not-before time, on a source by id — for callers outside a
+  discovery run (the quotation verifier). Never moves an existing time earlier.
+  """
+  def defer_source(source_id, retry_after, reason) do
     Repo.transaction(fn ->
-      run = Repo.get!(Run, run_id)
-      mapping = Repo.get!(Mapping, run.mapping_id)
-      _ = Repo.query!("SELECT pg_advisory_xact_lock($1)", [mapping.source_id])
-      source = Repo.get!(Source, mapping.source_id)
+      _ = Repo.query!("SELECT pg_advisory_xact_lock($1)", [source_id])
+      source = Repo.get!(Source, source_id)
 
       retry_after =
         case source.discovery_retry_after do

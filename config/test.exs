@@ -64,6 +64,11 @@ config :devils_dictionary, :discovery,
   source_policies: %{
     "giphy" => [request_budget_limit: 100, request_budget_window_seconds: 3_600],
     "wikidata" => [request_budget_limit: 600, request_budget_window_seconds: 3_600],
+    "gutenberg" => [request_budget_limit: 200, request_budget_window_seconds: 3_600],
+    "google-books" => [request_budget_limit: 1_000, request_budget_window_seconds: 86_400],
+    "quote-investigator" => [request_budget_limit: 60, request_budget_window_seconds: 3_600],
+    "wikisource" => [request_budget_limit: 200, request_budget_window_seconds: 3_600],
+    "internet-archive" => [request_budget_limit: 200, request_budget_window_seconds: 3_600],
     "wikiquote" => [request_budget_limit: 600, request_budget_window_seconds: 3_600],
     "met" => [request_budget_limit: 1_000, request_budget_window_seconds: 3_600],
     # The Guardian's shipped policy (#142), repeated because the retention
@@ -236,3 +241,17 @@ config :devils_dictionary, :wikiquote,
   wikidata_endpoint: "https://wikidata.test/w/api.php",
   request_interval_ms: 0,
   enabled: true
+
+# The quotation verifier (#158 build 5): every request through the stub named
+# after the verifier, at the test hosts, unpaced.
+config :devils_dictionary, :verification,
+  refresh_seconds: 30 * 86_400,
+  failure_backoff_seconds: 86_400,
+  request_interval_ms: 0,
+  wikidata_endpoint: "https://wikidata.test/w/api.php",
+  sparql_endpoint: "https://sparql.test/sparql",
+  wikiquote_endpoint: "https://wikiquote.test/api/rest_v1/page/html/",
+  gutenberg_endpoint: "https://gutenberg.test/cache/epub/"
+
+config :devils_dictionary, :verification_req_options,
+  plug: {Req.Test, DevilsDictionary.Quotations.Verifier}

@@ -139,6 +139,15 @@ config :devils_dictionary, :discovery,
     # At most three requests a page (sitelink, page, authors). 600 an hour
     # is two hundred word pages, well above a reader-driven site's rate, and
     # refuses before Wikimedia would.
+    # The quotation verifier's checkers (#158 build 5). Gutenberg's texts are
+    # fetched once per work and cached; 200 an hour is far above what a
+    # verification pass per author needs (Voltaire: four texts). Google Books
+    # is 1,000 a day against the key, when there is one.
+    "gutenberg" => [request_budget_limit: 200, request_budget_window_seconds: 3_600],
+    "google-books" => [request_budget_limit: 1_000, request_budget_window_seconds: 86_400],
+    "quote-investigator" => [request_budget_limit: 60, request_budget_window_seconds: 3_600],
+    "wikisource" => [request_budget_limit: 200, request_budget_window_seconds: 3_600],
+    "internet-archive" => [request_budget_limit: 200, request_budget_window_seconds: 3_600],
     "wikiquote" => [request_budget_limit: 600, request_budget_window_seconds: 60 * 60],
     # One Met page is a search plus up to `Met.scan_window/0` hydrations, and the
     # probe put the sustainable rate near 1 req/s rather than the documented 80.
@@ -252,9 +261,19 @@ config :devils_dictionary, Oban,
     {Oban.Plugins.Lifeline, rescue_after: :timer.minutes(30)},
     {Oban.Plugins.Cron,
      crontab: [
-       {"*/15 * * * *", DevilsDictionary.Discovery.CleanupWorker}
+       {"*/15 * * * *", DevilsDictionary.Discovery.CleanupWorker},
+       # The quotation verifier (#158 build 5): a few due people per tick.
+       {"7,37 * * * *", DevilsDictionary.Quotations.VerifyWorker}
      ]}
   ]
+
+# The quotation verifier (#158 build 5). A pass per person, re-verified when
+# its clock runs out: thirty days after a success, a day after a failure, the
+# retry time after a deferral. 200 ms between its requests, whichever host.
+config :devils_dictionary, :verification,
+  refresh_seconds: 30 * 86_400,
+  failure_backoff_seconds: 86_400,
+  request_interval_ms: 200
 
 # PoetryDB is keyless and public. `request_interval_ms` is an override for the
 # measured default in the provider, not a second declaration of it.
