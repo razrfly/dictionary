@@ -141,6 +141,9 @@ defmodule Mix.Tasks.Dd.Link do
     if Map.has_key?(corroboration, :promoted),
       do: row("written this run", fmt(corroboration.promoted), 36)
 
+    if Map.has_key?(corroboration, :unpromoted),
+      do: row("withdrawn, evidence gone", fmt(corroboration.unpromoted), 36)
+
     row("lexemes with a promoted sense link", fmt(promotion.promoted_lexemes), 36)
     row("lexemes still at the word level", fmt(promotion.word_level_lexemes), 36)
   end

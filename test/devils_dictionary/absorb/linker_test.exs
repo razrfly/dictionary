@@ -634,6 +634,72 @@ defmodule DevilsDictionary.Absorb.LinkerTest do
       assert [_one] = promoted(cat)
     end
 
+    # CodeRabbit on #187: each candidate had a unique best sense, but two
+    # candidates can share that sense, and both were written.
+    test "a sense two candidates both choose is promoted to neither", ctx do
+      cat = lexeme!(ctx, "cat", metadata: %{"wikipedia_title" => "Cat"})
+      sense!(ctx, cat, "wiktionary", gloss: "A small domesticated carnivorous mammal.")
+
+      for {qid, body} <- [
+            {"Q146", "The cat is a small domesticated carnivorous mammal."},
+            {"Q20980826", "Felis catus, a small domesticated carnivorous mammal."}
+          ] do
+        entity = concept!(qid)
+        article!(ctx, entity, body)
+
+        {:ok, _} =
+          Claims.assert(cat.object_id, "lexeme_entity_candidate", entity.object_id, %{
+            method: "title_match",
+            confidence: 0.85,
+            metadata: %{"corroboration" => "gloss_overlap"}
+          })
+      end
+
+      assert %{promoted: 0} = Linker.corroborate(ctx.animals)
+      assert promoted(cat) == []
+    end
+
+    # CodeRabbit on #187: a promoted claim must not outlive its evidence.
+    test "a promotion whose evidence lapses is withdrawn, and returns with it", ctx do
+      {cat, _concept, [_sense]} =
+        corroborated_cat!(ctx, [{"wiktionary", "A domesticated carnivorous mammal."}])
+
+      Linker.run(ctx.animals)
+      assert [%{lifecycle_state: :active} = link] = promoted(cat)
+      candidate = link!(cat, :title_match)
+
+      # A curator rejects the candidate: its lifecycle stays active, and the
+      # promotion goes all the same.
+      Claims.review(candidate.id, :rejected)
+      assert %{promoted: 0, unpromoted: 1} = Linker.corroborate(ctx.animals)
+      assert [%{lifecycle_state: :withdrawn}] = promoted(cat)
+      assert [] = PageEvidence.query([cat.object_id]) |> Repo.all()
+
+      # Nothing more to withdraw on a rerun.
+      assert %{unpromoted: 0} = Linker.corroborate(ctx.animals)
+
+      # The review is reversed: the evidence stands again, and the claim is
+      # written again rather than held down by its own withdrawn revision.
+      Claims.review(candidate.id, :accepted)
+      assert %{promoted: 1} = Linker.corroborate(ctx.animals)
+      assert [%{lifecycle_state: :active, assertion_id: id}] = promoted(cat)
+      assert id == link.assertion_id
+    end
+
+    test "a promotion that became a tie is withdrawn", ctx do
+      {cat, _concept, _senses} =
+        corroborated_cat!(ctx, [{"wiktionary", "A domesticated carnivorous mammal."}])
+
+      Linker.run(ctx.animals)
+      assert [_] = promoted(cat)
+
+      # WordNet arrives with the same meaning: no single sense any more.
+      sense!(ctx, cat, "wordnet", gloss: "a domesticated carnivorous mammal")
+
+      assert %{unpromoted: 1} = Linker.corroborate(ctx.animals)
+      assert [%{lifecycle_state: :withdrawn}] = promoted(cat)
+    end
+
     test "counts both ways: promoted to a sense, and still at the word", ctx do
       corroborated_cat!(ctx, [{"wiktionary", "A domesticated carnivorous mammal."}])
 

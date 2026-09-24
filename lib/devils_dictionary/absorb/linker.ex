@@ -54,9 +54,14 @@ defmodule DevilsDictionary.Absorb.Linker do
   promoted claim carries no source record, so no source's reconcile can
   withdraw it as output it stopped emitting.
 
-  Offline and re-runnable: a second run proposes the same claims, and the
-  write path defers to a stored revision that already carries a
-  `corroboration` at the same confidence. No discovery provider writes
+  Also not promoted: a sense that is the best match of two candidates at once.
+
+  Offline and re-runnable, both ways: a second run proposes the same claims,
+  and the write path defers to a stored revision that already carries a
+  `corroboration` at the same confidence; and a promoted claim whose evidence
+  no longer supports it (candidate withdrawn or rejected, a tie, a person, a
+  source's own mapping) is withdrawn by the same pass, counted as
+  `unpromoted`. No discovery provider writes
   `refers_to`; this is where it comes from (#172 C5).
 
   ## Two policy changes #74 requires
@@ -410,9 +415,9 @@ defmodule DevilsDictionary.Absorb.Linker do
       taxon: corroborate_taxon(scope, run_id),
       gloss: corroborate_gloss(scope, run_id),
       agreement: corroborate_agreement(scope, run_id),
-      disambiguation_gloss: promote_candidates(scope, run_id),
-      promoted: promote_gloss(scope, run_id)
+      disambiguation_gloss: promote_candidates(scope, run_id)
     }
+    |> Map.merge(promote_gloss(scope, run_id))
   end
 
   @doc "The method a candidate promoted to a sense's `refers_to` is written under."
@@ -569,64 +574,121 @@ defmodule DevilsDictionary.Absorb.Linker do
   # sense is chosen only when it alone has the most. Runs after the gloss pass,
   # so a title match corroborated on this run is promoted on this run too.
   defp promote_gloss(scope, run_id) do
-    write(
-      """
-      WITH candidate AS (
-        SELECT r.assertion_id, l.object_id AS lexeme_id, e.object_id AS entity_id,
-               r.confidence, r.metadata
-          FROM assertion_revisions r
-          JOIN predicates p ON p.id = r.predicate_id AND p.key = '#{@word_level}'
-          JOIN lexemes l ON l.object_id = r.subject_object_id
-          JOIN entities e ON e.object_id = r.object_object_id
-         #{scope_join(scope, "l.object_id")}
-         WHERE r.is_current AND r.lifecycle_state = 'active'
-           AND r.method = 'title_match'
-           AND r.confidence >= #{@corroborated_gloss}
-           AND r.metadata->>'corroboration' = 'gloss_overlap'
-           AND e.entity_kind <> 'person'
-      ),
-      scored AS (
-        SELECT c.*, s.object_id AS sense_id,
-               (SELECT max(#{shared_words("srev.gloss", "coalesce(cr.body, '') || ' ' || coalesce(e.description, '')")})
-                  FROM assertion_revisions ar
-                  JOIN predicates ap ON ap.id = ar.predicate_id AND ap.key = 'about'
-                  JOIN content_revisions cr
-                    ON cr.content_id = ar.subject_object_id AND cr.is_current
-                  JOIN entities e ON e.object_id = c.entity_id
-                 WHERE ar.object_object_id = c.entity_id AND ar.is_current) AS shared
-          FROM candidate c
-          JOIN senses s ON s.lexeme_id = c.lexeme_id
-          JOIN sense_revisions srev ON srev.sense_id = s.object_id AND srev.is_current
-         WHERE srev.gloss IS NOT NULL
-      ),
-      ranked AS (
-        SELECT scored.*,
-               rank() OVER (PARTITION BY assertion_id ORDER BY shared DESC) AS place,
-               count(*) OVER (PARTITION BY assertion_id, shared) AS sharing
-          FROM scored
-         WHERE shared >= #{@min_shared_words}
-      )
-      SELECT x.sense_id, x.entity_id, #{source_id("wikipedia")},
-             '#{@promoted}', x.confidence,
-             x.metadata || jsonb_build_object(
-               'promoted_from', '#{@word_level}',
-               'candidate_assertion_id', x.assertion_id,
-               'shared_words', x.shared)
-        FROM ranked x
-       WHERE x.place = 1 AND x.sharing = 1
-         -- A sense a source already maps to another thing keeps that mapping
-         -- alone: a spelling's agreement does not add a second referent.
-         AND NOT EXISTS (
-           SELECT 1 FROM assertion_revisions o
-             JOIN predicates op ON op.id = o.predicate_id AND op.key = '#{@sense_backed}'
-            WHERE o.subject_object_id = x.sense_id
-              AND o.is_current AND o.lifecycle_state = 'active'
-              AND o.object_object_id <> x.entity_id)
-      """,
-      @sense_backed,
-      scope,
-      run_id
+    written = write(promotable(scope), @sense_backed, scope, run_id)
+    %{promoted: written, unpromoted: unpromote_gloss(scope)}
+  end
+
+  # Every promotion the ladder's evidence supports today, as the rows `write/4`
+  # reads. Shared by the write and the reconciliation below, so the two can
+  # never disagree about what "supported" means (CodeRabbit on #187).
+  defp promotable(scope) do
+    """
+    WITH candidate AS (
+      SELECT r.assertion_id, l.object_id AS lexeme_id, e.object_id AS entity_id,
+             r.confidence, r.metadata
+        FROM assertion_revisions r
+        JOIN predicates p ON p.id = r.predicate_id AND p.key = '#{@word_level}'
+        JOIN lexemes l ON l.object_id = r.subject_object_id
+        JOIN entities e ON e.object_id = r.object_object_id
+       #{scope_join(scope, "l.object_id")}
+       WHERE r.is_current AND r.lifecycle_state = 'active'
+         AND r.method = 'title_match'
+         AND r.confidence >= #{@corroborated_gloss}
+         AND r.metadata->>'corroboration' = 'gloss_overlap'
+         AND e.entity_kind <> 'person'
+         -- A candidate a curator rejected or withdrew is not evidence, even
+         -- while its lifecycle still reads active.
+         AND COALESCE(
+               (SELECT rv.decision FROM assertion_reviews rv
+                 WHERE rv.assertion_revision_id = r.id
+                 ORDER BY rv.inserted_at DESC, rv.id DESC LIMIT 1),
+               'needs_review') NOT IN ('rejected', 'withdrawn')
+    ),
+    scored AS (
+      SELECT c.*, s.object_id AS sense_id,
+             (SELECT max(#{shared_words("srev.gloss", "coalesce(cr.body, '') || ' ' || coalesce(e.description, '')")})
+                FROM assertion_revisions ar
+                JOIN predicates ap ON ap.id = ar.predicate_id AND ap.key = 'about'
+                JOIN content_revisions cr
+                  ON cr.content_id = ar.subject_object_id AND cr.is_current
+                JOIN entities e ON e.object_id = c.entity_id
+               WHERE ar.object_object_id = c.entity_id AND ar.is_current) AS shared
+        FROM candidate c
+        JOIN senses s ON s.lexeme_id = c.lexeme_id
+        JOIN sense_revisions srev ON srev.sense_id = s.object_id AND srev.is_current
+       WHERE srev.gloss IS NOT NULL
+    ),
+    ranked AS (
+      SELECT scored.*,
+             rank() OVER (PARTITION BY assertion_id ORDER BY shared DESC) AS place,
+             count(*) OVER (PARTITION BY assertion_id, shared) AS sharing
+        FROM scored
+       WHERE shared >= #{@min_shared_words}
+    ),
+    -- Each candidate's one best sense, and then each sense's one candidate:
+    -- two entities whose best sense is the same sense are no evidence which of
+    -- them that sense names, and neither is promoted.
+    winners AS (
+      SELECT ranked.*, count(*) OVER (PARTITION BY sense_id) AS contenders
+        FROM ranked
+       WHERE place = 1 AND sharing = 1
     )
+    SELECT x.sense_id, x.entity_id, #{source_id("wikipedia")},
+           '#{@promoted}', x.confidence,
+           x.metadata || jsonb_build_object(
+             'promoted_from', '#{@word_level}',
+             'candidate_assertion_id', x.assertion_id,
+             'shared_words', x.shared)
+      FROM winners x
+     WHERE x.contenders = 1
+       -- A sense a source already maps to another thing keeps that mapping
+       -- alone: a spelling's agreement does not add a second referent. An
+       -- earlier promotion is not such a mapping; it is reconciled below.
+       AND NOT EXISTS (
+         SELECT 1 FROM assertion_revisions o
+           JOIN predicates op ON op.id = o.predicate_id AND op.key = '#{@sense_backed}'
+          WHERE o.subject_object_id = x.sense_id
+            AND o.is_current AND o.lifecycle_state = 'active'
+            AND o.method IS DISTINCT FROM '#{@promoted}'
+            AND o.object_object_id <> x.entity_id)
+    """
+  end
+
+  # The other half of re-runnable: a promoted claim whose evidence no longer
+  # holds — its candidate withdrawn, rejected or no longer corroborated, its
+  # gloss match now a tie, its entity now a person, its sense now mapped by a
+  # source — is withdrawn, never deleted, so the history says it once stood.
+  # Otherwise `PageEvidence` would keep reading an unsupported sense identity
+  # at tier 1 for ever (CodeRabbit on #187).
+  defp unpromote_gloss(scope) do
+    %{rows: rows} =
+      Repo.query!(
+        """
+        WITH supported AS (#{promotable(scope)})
+        SELECT DISTINCT r.assertion_id
+          FROM assertion_revisions r
+          JOIN predicates p ON p.id = r.predicate_id AND p.key = '#{@sense_backed}'
+          JOIN senses s ON s.object_id = r.subject_object_id
+         #{scope_join(scope, "s.lexeme_id")}
+         WHERE r.is_current AND r.lifecycle_state = 'active'
+           AND r.method = '#{@promoted}'
+           AND NOT EXISTS (
+             SELECT 1 FROM supported x
+              WHERE x.sense_id = r.subject_object_id
+                AND x.entity_id = r.object_object_id)
+        """,
+        params(scope),
+        timeout: :infinity
+      )
+
+    Enum.each(rows, fn [assertion_id] ->
+      {:ok, _} =
+        Claims.withdraw(assertion_id,
+          reason: "The gloss match this sense's link was promoted from no longer holds."
+        )
+    end)
+
+    length(rows)
   end
 
   @doc """
@@ -842,7 +904,9 @@ defmodule DevilsDictionary.Absorb.Linker do
   # ever, and the history would record a claim oscillating between two
   # confidences it never actually changed between. A stored revision carrying a
   # `corroboration` at or above the proposal is the better answer, and the rung
-  # defers to it.
+  # defers to it — while it stands. A withdrawn revision outranks nothing: a
+  # promotion withdrawn because its evidence lapsed is written again when the
+  # evidence returns, rather than held down by its own old confidence (#187).
   defp filter_claims([]), do: []
 
   defp filter_claims(claims) do
@@ -859,7 +923,7 @@ defmodule DevilsDictionary.Absorb.Linker do
                  'needs_review'
                ),
                ar.confidence,
-               jsonb_exists(ar.metadata, 'corroboration')
+               jsonb_exists(ar.metadata, 'corroboration') AND ar.lifecycle_state = 'active'
           FROM assertions a
           JOIN assertion_revisions ar ON ar.assertion_id = a.id AND ar.is_current
          WHERE a.origin_key = ANY($1)
