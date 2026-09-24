@@ -3,11 +3,13 @@ defmodule Mix.Tasks.Dd.Artworks.Seed do
 
   @moduledoc """
   Seeds the committed **corpus** manifests built by `mix dd.artworks.manifest`
-  — `met-highlights`, `wikidata-famous`, `poetrydb` — which are recognised by
-  their contents rather than by a flag:
+  — `met-highlights`, `wikidata-famous`, `poetrydb`, `open-library` — and the
+  quotations one built by `mix dd.quotes.corpus.build` (`wikiquote-pd`, #174),
+  which are recognised by their contents rather than by a flag:
 
       mix dd.artworks.seed --manifest priv/artworks/manifests/met-highlights-v1.json
       mix dd.artworks.seed --manifest priv/artworks/manifests/wikidata-famous-v1.json --dry-run
+      mix dd.artworks.seed --manifest priv/quotes/manifests/wikiquote-pd-v1.json
 
   A corpus manifest is the whole input: nothing is searched, fetched or resumed,
   and rerunning it matches every row on its exact identifier, so the counts come
@@ -36,6 +38,7 @@ defmodule Mix.Tasks.Dd.Artworks.Seed do
   alias DevilsDictionary.Artworks
   alias DevilsDictionary.Artworks.Corpus
   alias DevilsDictionary.Artworks.{Manifest, WikidataCandidates}
+  alias DevilsDictionary.Corpus.Seeder
 
   @switches [
     manifest: :string,
@@ -83,7 +86,7 @@ defmodule Mix.Tasks.Dd.Artworks.Seed do
     manifest = Corpus.Manifest.load!(path)
 
     {:ok, summary} =
-      Corpus.Seeder.run(manifest,
+      Seeder.run(manifest,
         dry_run: opts[:dry_run] || false,
         limit: opts[:record_limit],
         refresh: opts[:refresh] || false
@@ -96,7 +99,7 @@ defmodule Mix.Tasks.Dd.Artworks.Seed do
     Mix.shell().info("Corpus seed summary: " <> inspect(summary, pretty: true))
 
     Mix.shell().info(
-      "Artwork catalog by source: " <> inspect(Corpus.Seeder.catalog_counts(), pretty: true)
+      "Artwork catalog by source: " <> inspect(Seeder.catalog_counts(), pretty: true)
     )
   rescue
     error in [ArgumentError, File.Error, Jason.DecodeError] -> Mix.raise(Exception.message(error))

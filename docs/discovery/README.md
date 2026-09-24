@@ -90,9 +90,22 @@ them names a provider.
 
 ### A corpus
 
-A committed, checksummed **selection** in `priv/artworks/manifests/`, built once
-and seeded onto the registry by `DevilsDictionary.Artworks.Corpus.Seeder`. It
-makes no provider call at seed time and none at read time. The reason it is a
+A committed, checksummed **selection**, built once and seeded onto the registry
+by `DevilsDictionary.Corpus.Seeder` (`DevilsDictionary.Artworks.Corpus.Seeder`
+until #174; the old name delegates for one release). It makes no provider call
+at seed time and none at read time. It holds **two kinds of content**:
+
+- **Works**, under `priv/artworks/manifests/`: artworks, poems and books, each
+  an `entities` row with its `work_details`. These are `met-highlights-v1`,
+  `wikidata-famous-v1`, `poetrydb-v1` and `open-library-v1`.
+- **Quotations**, under `priv/quotes/manifests/`: `wikiquote-pd-v1` (#174),
+  public-domain Wikiquote lines that build 5's checks call *Verified* against
+  a pre-1931 Gutenberg text by their credited author. Each line is a
+  `content_items` quotation in the live Wikiquote provider's entry shape,
+  identified by its fingerprint, so a corpus line and a live line with one
+  wording are one subject. Built by `mix dd.quotes.corpus.build`, which
+  refuses to overwrite a set that has drifted
+  ([`docs/integrations/wikiquote.md`](../integrations/wikiquote.md#corpus)). The reason it is a
 file rather than a query: the #99 P0 probe measured the Met's own search totals
 as parameter-order-sensitive — the same highlight query answered 2,310, 2,299 and
 62 depending on the order the parameters were written in — so a corpus that
@@ -544,7 +557,7 @@ declares the first.
 | `:news` | Bing News, The Guardian | — | Chronicling America's bulk OCR; GDELT (#134) | attestation, **dated** |
 | `:music` | Spotify | — | MusicBrainz (#116), identity via `P921`/`P2207` | a labelled search, gated on the track title |
 | `:gif` | GIPHY, browser-only — **inside** this chrome since #144 Phase 3, through `Culture.browser_shelf/1` | — | Tenor, after K10 | a labelled search |
-| `:quote` | Wikiquote (#158 build 4) | — | the public-domain Wikiquote corpus (build 6); Wiktionary as a *shelf* source only if a decision asks for it — its absorbed quotations already render **under the sense** on the word page (build 1, `Word.quotations/1`, the same `Quotation.card/1` as this shelf), not on this rail | identity: the sense's QID → the theme page's `enwikiquote` sitelink; one line from two sources folds on its `quotation_fingerprint` (ADR 0003) |
+| `:quote` | Wikiquote (#158 build 4) | `wikiquote-pd-v1` (#174), held locally | Wiktionary as a *shelf* source only if a decision asks for it — its absorbed quotations already render **under the sense** on the word page (build 1, `Word.quotations/1`, the same `Quotation.card/1` as this shelf), not on this rail | identity: the sense's QID → the theme page's `enwikiquote` sitelink; one line from two sources folds on its `quotation_fingerprint` (ADR 0003) |
 
 The `:text` decision is #109's second residual, settled here: the two text
 corpora are seeded `evidence: :none` and stay that way. Serving attestation
