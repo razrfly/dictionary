@@ -27,6 +27,7 @@ defmodule DevilsDictionaryWeb.QuotationTest do
       |> assign_new(:sources, fn -> [@wiktionary] end)
       |> assign_new(:provenance, fn -> nil end)
       |> assign_new(:note, fn -> nil end)
+      |> assign_new(:agreements, fn -> nil end)
       |> assign_new(:clamp, fn -> nil end)
       |> assign_new(:citation, fn -> nil end)
       |> assign_new(:footer, fn -> nil end)
@@ -39,6 +40,7 @@ defmodule DevilsDictionaryWeb.QuotationTest do
       text_id={@text_id}
       sources={@sources}
       provenance={@provenance}
+      agreements={@agreements}
       note={@note}
       clamp={@clamp}
     >
@@ -136,5 +138,25 @@ defmodule DevilsDictionaryWeb.QuotationTest do
            |> LazyHTML.query("blockquote")
            |> LazyHTML.attribute("class")
            |> hd() =~ "line-clamp-5"
+  end
+
+  test "Verified is the verifier's word, and the title counts sources honestly" do
+    verified = doc(provenance: "verified", agreements: 2)
+    badge = LazyHTML.query(verified, "#q-provenance")
+    assert LazyHTML.text(badge) =~ "Verified"
+    assert LazyHTML.attribute(badge, "title") == ["2 independent sources agree"]
+
+    one = doc(provenance: "plausible", agreements: 1)
+
+    assert LazyHTML.attribute(LazyHTML.query(one, "#q-provenance"), "title") == [
+             "1 source cites this line"
+           ]
+
+    # The register's sentence wins over the count.
+    noted = doc(provenance: "disputed", agreements: 1, note: "Evelyn Beatrice Hall, 1906.")
+
+    assert LazyHTML.attribute(LazyHTML.query(noted, "#q-provenance"), "title") == [
+             "Evelyn Beatrice Hall, 1906."
+           ]
   end
 end
