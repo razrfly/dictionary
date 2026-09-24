@@ -27,6 +27,7 @@ defmodule DevilsDictionaryWeb.Culture do
   alias DevilsDictionary.Discovery.ContentTypes
   alias DevilsDictionary.Discovery.MatchReason
   alias DevilsDictionary.Discovery.Shelf
+  alias DevilsDictionaryWeb.Quotation
   alias DevilsDictionaryWeb.SourceBadge
 
   attr :states, :map, required: true
@@ -775,15 +776,16 @@ defmodule DevilsDictionaryWeb.Culture do
     }
   end
 
-  # The quotation-first card (#158 build 4; build 1's Wiktionary lines reuse
-  # it). The words are the card — no image slot, the most room on the rail —
-  # then who said it and where, then who holds it: one badge per source that
-  # carries this line, which after build 3's fold can be more than one. The
-  # provenance badge is separate from the source badges and says how far the
-  # line is trusted (*Plausible* until build 5 verifies anything); a register
-  # hit says *Disputed* or *Apocryphal* with the register's sentence as its
-  # note. The author is a link only where an `authored_by` stands now
-  # (#164), and the title links out to the source, never to an entry.
+  # The quotation-first card on the rail (#158 build 4). The card itself is
+  # `DevilsDictionaryWeb.Quotation.card/1`, shared with the word page's
+  # sense-level quotations (build 1); what is decided here is what a
+  # *discovery result* puts in it: the words link out to the source, never
+  # to an entry; the caption is the author line only where an `authored_by`
+  # stands now (#164), the provider's own citation otherwise; the badges are
+  # every source that holds the line after build 3's fold; the provenance is
+  # what the provider recorded (*Plausible* until build 5 verifies anything,
+  # *Disputed* or *Apocryphal* on a register hit, with the register's
+  # sentence as the note); and the footer is the credit and the evidence link.
   attr :item, :map, required: true
   attr :source, :map, required: true, doc: "the supplying source, as `badge_source/1` shapes it"
   attr :also, :list, default: [], doc: "every other source that holds this line"
@@ -816,25 +818,18 @@ defmodule DevilsDictionaryWeb.Culture do
       |> assign(:sources, [assigns.source | assigns.also])
 
     ~H"""
-    <figure class="flex min-w-0 flex-col gap-2">
-      <blockquote class={[
-        "text-base/6 text-pretty text-mist-950 sm:text-sm/6 dark:text-white",
-        ContentTypes.title_clamp(:quote)
-      ]}>
-        <a
-          :if={@source_url}
-          href={@source_url}
-          target="_blank"
-          rel="noreferrer"
-          id={"culture-entry-title-#{@item.external_id}"}
-          class="rounded-sm hover:underline focus-visible:outline-2 focus-visible:outline-offset-2"
-        >“{@text}”</a>
-        <span :if={is_nil(@source_url)}>“{@text}”</span>
-      </blockquote>
-      <figcaption :if={@citation} class="line-clamp-3 text-sm/5 text-pretty text-mist-500">
-        {@citation}
-      </figcaption>
-      <figcaption :if={is_nil(@citation)} class="text-sm/5 text-pretty text-mist-500">
+    <Quotation.card
+      id={"culture-quote-#{@item.external_id}"}
+      text={@text}
+      text_id={"culture-entry-title-#{@item.external_id}"}
+      href={@source_url}
+      sources={@sources}
+      provenance={@provenance}
+      note={@note}
+      clamp={ContentTypes.title_clamp(:quote)}
+    >
+      <:citation :if={@citation} class="line-clamp-3">{@citation}</:citation>
+      <:citation :if={is_nil(@citation)}>
         <span
           :if={@creators != []}
           id={"culture-creator-#{@item.external_namespace}-#{@item.external_id}"}
@@ -848,36 +843,8 @@ defmodule DevilsDictionaryWeb.Culture do
           :if={@year}
           class="tabular-nums"
         >{@year}</span>
-      </figcaption>
-      <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
-        <span
-          :for={source <- @sources}
-          id={"culture-quote-source-#{@item.external_id}-#{source.slug}"}
-          class="inline-flex items-center gap-1 text-xs text-mist-500"
-          title={source.name}
-        >
-          <SourceBadge.badge source={source} decorative />
-          <span class="sr-only">{source.name}</span>
-        </span>
-        <span
-          :if={@provenance}
-          id={"culture-provenance-#{@item.external_id}"}
-          title={@note}
-          class={[
-            "inline-flex rounded-full px-2 py-0.5 text-xs",
-            @provenance == "plausible" &&
-              "bg-mist-950/5 text-mist-700 dark:bg-white/10 dark:text-mist-300",
-            @provenance == "disputed" &&
-              "bg-amber-100 text-amber-900 dark:bg-amber-400/20 dark:text-amber-100",
-            @provenance == "apocryphal" &&
-              "bg-rose-100 text-rose-900 dark:bg-rose-400/20 dark:text-rose-100"
-          ]}
-        >
-          {provenance_label(@provenance)}
-        </span>
-      </div>
-      <p :if={@note} class="line-clamp-2 text-xs text-pretty text-mist-500">{@note}</p>
-      <p class="flex flex-wrap gap-x-2 text-xs text-mist-500">
+      </:citation>
+      <:footer>
         <span :if={@attribution}>{@attribution}</span>
         <.link
           :if={@evidence_path}
@@ -887,15 +854,10 @@ defmodule DevilsDictionaryWeb.Culture do
         >
           Evidence
         </.link>
-      </p>
-    </figure>
+      </:footer>
+    </Quotation.card>
     """
   end
-
-  defp provenance_label("plausible"), do: "Plausible"
-  defp provenance_label("disputed"), do: "Disputed"
-  defp provenance_label("apocryphal"), do: "Apocryphal"
-  defp provenance_label(other), do: other
 
   defp register_kind("misattributed"), do: "Misattributed"
   defp register_kind("disputed"), do: "Disputed"

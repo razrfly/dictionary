@@ -22,6 +22,7 @@ defmodule DevilsDictionaryWeb.Word do
   use DevilsDictionaryWeb, :html
 
   alias DevilsDictionary.Lexicon.WordPage
+  alias DevilsDictionaryWeb.Quotation
   alias DevilsDictionaryWeb.SourceBadge
 
   @doc """
@@ -344,6 +345,7 @@ defmodule DevilsDictionaryWeb.Word do
       <.sense_group
         :for={{group, i} <- Enum.with_index(@card.groups)}
         card_id={@card.id}
+        source={@card.source}
         group={group}
         index={i}
         trail={@trail}
@@ -722,6 +724,7 @@ defmodule DevilsDictionaryWeb.Word do
         <.sense_group
           :for={{group, i} <- Enum.with_index(Enum.take(@card.groups, WordPage.group_cap()))}
           card_id={@card.id}
+          source={@card.source}
           group={group}
           index={i}
           trail={@trail}
@@ -739,6 +742,7 @@ defmodule DevilsDictionaryWeb.Word do
           <.sense_group
             :for={{group, i} <- Enum.with_index(Enum.drop(@card.groups, WordPage.group_cap()))}
             card_id={@card.id}
+            source={@card.source}
             group={group}
             index={i + WordPage.group_cap()}
             trail={@trail}
@@ -840,6 +844,11 @@ defmodule DevilsDictionaryWeb.Word do
   the whole card's synonyms into one row — U1a's remaining half-kept rule.
   """
   attr :card_id, :string, required: true
+
+  attr :source, :map,
+    required: true,
+    doc: "the card's source row — the badge on each quotation a sense carries"
+
   attr :group, :map, required: true
   attr :index, :integer, required: true
   attr :trail, :list, default: []
@@ -855,6 +864,7 @@ defmodule DevilsDictionaryWeb.Word do
           :for={{sense, i} <- Enum.with_index(Enum.take(@group.senses, WordPage.gloss_cap()))}
           id={"#{@id}-sense-#{sense.id}"}
           sense={sense}
+          source={@source}
           marker={if @group.group_key, do: "●", else: "#{i + 1}"}
           trail={@trail}
           demo={@demo}
@@ -870,6 +880,7 @@ defmodule DevilsDictionaryWeb.Word do
             :for={{sense, i} <- Enum.with_index(Enum.drop(@group.senses, WordPage.gloss_cap()))}
             id={"#{@id}-sense-#{sense.id}"}
             sense={sense}
+            source={@source}
             marker={if @group.group_key, do: "●", else: "#{i + WordPage.gloss_cap() + 1}"}
             trail={@trail}
             demo={@demo}
@@ -889,10 +900,17 @@ defmodule DevilsDictionaryWeb.Word do
   end
 
   @doc """
-  One numbered gloss with the relations that belong to it and to nothing else.
+  One numbered gloss with the quotations that illustrate it and the relations
+  that belong to it and to nothing else.
+
+  The quotations come before the chips, in the source's own order: on the wiki
+  page a citation sits directly under the definition line it attests, and the
+  synonyms follow. A chip is the way out of the sense; a quotation is the
+  sense, used.
   """
   attr :id, :string, required: true
   attr :sense, :map, required: true
+  attr :source, :map, required: true
   attr :marker, :string, required: true
   attr :trail, :list, default: []
   attr :demo, :boolean, default: false
@@ -901,13 +919,19 @@ defmodule DevilsDictionaryWeb.Word do
     ~H"""
     <li id={@id} class="flex gap-3">
       <span class="shrink-0 text-mist-400">{@marker}</span>
-      <div class="min-w-0">
+      <div class="min-w-0 flex-1">
         <span>
           {@sense.gloss}
           <span :if={@sense.tags != []} class="text-mist-400">
             ({Enum.join(@sense.tags, ", ")})
           </span>
         </span>
+        <.quotations
+          :if={@sense.quotations.total > 0}
+          id={"#{@id}-quotations"}
+          quotations={@sense.quotations}
+          source={@source}
+        />
         <.relation_group
           :for={{group, chips} <- ordered(@sense.relations)}
           id={"#{@id}-#{group_slug(group)}"}
@@ -920,6 +944,87 @@ defmodule DevilsDictionaryWeb.Word do
     </li>
     """
   end
+
+  @doc """
+  The quotations a source filed under one sense (#158 build 1): a few open,
+  the rest behind one disclosure, each the shared quotation card with the
+  citation as text.
+
+  Sense-scoped, so they sit inside the definition row where #133's chips do
+  and never on the culture rail; nothing here is a discovery result. A left
+  rule rather than a boxed card: the quotations are nested under the gloss,
+  not standalone, and the lightest separation that still reads as *under* is
+  a rule. The citation is text in this build — an absorbed example has no
+  object and no creator identifier, so #164's creator link does not apply,
+  and no name in a `ref` is matched to anyone. The provenance badge reads
+  *Plausible* on every card: one cited claim, unverified, which is what an
+  absorbed example is until build 5's verifier says more.
+
+  The disclosure is a `<details>`, so it opens without JavaScript and in the
+  dead render, and the row's `phx-update="ignore"` keeps it open across a
+  discovery result landing. Its wording counts what it hides, so a reader
+  who opens it knows what is coming.
+  """
+  attr :id, :string, required: true
+
+  attr :quotations, :map,
+    required: true,
+    doc: "`%{shown, rest, total}` as `WordPage` capped and folded them"
+
+  attr :source, :map, required: true
+
+  def quotations(assigns) do
+    ~H"""
+    <div id={@id} class="mt-2 mb-3 border-l-2 border-mist-950/10 pl-4 dark:border-white/10">
+      <ul role="list" class="space-y-4">
+        <li :for={quotation <- @quotations.shown} id={"#{@id}-#{quotation_key(quotation)}"}>
+          <.quotation
+            quotation={quotation}
+            source={@source}
+            id={"#{@id}-#{quotation_key(quotation)}-card"}
+          />
+        </li>
+      </ul>
+      <details :if={@quotations.rest != []} id={"#{@id}-more"} class="mt-2">
+        <summary class="w-fit cursor-pointer text-base/7 text-mist-500 hover:text-mist-950 sm:text-sm/7 dark:hover:text-white">
+          <span class="tabular-nums">{length(@quotations.rest)}</span>
+          more {if length(@quotations.rest) == 1, do: "quotation", else: "quotations"} for this sense
+        </summary>
+        <ul role="list" class="mt-3 space-y-4">
+          <li :for={quotation <- @quotations.rest} id={"#{@id}-#{quotation_key(quotation)}"}>
+            <.quotation
+              quotation={quotation}
+              source={@source}
+              id={"#{@id}-#{quotation_key(quotation)}-card"}
+            />
+          </li>
+        </ul>
+      </details>
+    </div>
+    """
+  end
+
+  attr :id, :string, required: true
+  attr :quotation, :map, required: true
+  attr :source, :map, required: true
+
+  defp quotation(assigns) do
+    ~H"""
+    <Quotation.card
+      id={@id}
+      text={@quotation.text}
+      sources={[@source]}
+      provenance={@quotation.provenance}
+    >
+      <:citation>{@quotation.citation}</:citation>
+    </Quotation.card>
+    """
+  end
+
+  # The first twelve hex characters of the line's fingerprint (ADR 0003): the
+  # id names the line rather than its position, so it is the same id after a
+  # fold, and the fold itself is why two ids never collide under one sense.
+  defp quotation_key(%{fingerprint: fingerprint}), do: String.slice(fingerprint, 0, 12)
 
   @doc """
   The walk upward from one synset — *bivalve › mollusk › invertebrate ›

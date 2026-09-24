@@ -140,6 +140,9 @@ defmodule DevilsDictionary.WordFixtures do
         url: Keyword.get(attrs, :url, "https://example.test/#{lexeme.lemma}"),
         position: Keyword.get(attrs, :position, 0),
         tags: Keyword.get(attrs, :tags, []),
+        # As the Wiktionary absorb keeps them: Kaikki's `text`, `ref` and
+        # `type` per example, string keys (#158 build 1).
+        examples: Keyword.get(attrs, :examples, []),
         source_record_revision_id: record && revision_id(record)
       })
 
