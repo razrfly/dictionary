@@ -55,6 +55,7 @@ encyclopedia already asserts**:
 | CineGraph | a TMDb keyword id | the lemma | exact keyword match on the word |
 | The Met | a Wikidata QID on a subject tag | a QID a sense `refers_to` | equal, or reached in ≤2 `P31`/`P279` steps |
 | Wikimedia Commons | a `P180` *depicts* QID in the file's own structured data | a QID a sense `refers_to` | equal QID; the search proposes, the hydrated statements dispose |
+| Wikiquote (and the `wikiquote-pd` corpus build) | the QID whose `enwikiquote` sitelink names the theme page | a QID a sense `refers_to` | equal, or reached in ≤2 steps by `P1552` *has characteristic*, `P279` *subclass of*, `P1269` *facet of* or — last step only, from an instance onto a class — `P31` *instance of*; never onto a person or a work (#172 build A, `Discovery.ConceptHop`). No search: `list=search` is never called |
 | The committed corpora | a `P180` depiction or a Met tag QID | the same `refers_to` | equal QID |
 | Artsy (retired client) | a gene id | a gene recipe on a sense | equal gene, read from the committed pilot only |
 

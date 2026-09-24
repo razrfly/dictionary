@@ -11,7 +11,7 @@ Wikiquote at all are #158 (Finding 1 and the Recommendation).
 |---|---|
 | Slug | `wikiquote` |
 | Archetype | discovery, on the `:quote` shelf (added here: build 1, which was to open it, had not started) |
-| Endpoints | `GET https://en.wikiquote.org/api/rest_v1/page/html/<title>` (Parsoid HTML); `wbgetentities` on `https://www.wikidata.org/w/api.php` for the concept's sitelink; `action=query&prop=pageprops&ppprop=wikibase_item&redirects=1` on `https://en.wikiquote.org/w/api.php` for the linked authors' items; `https://query.wikidata.org/sparql` for which of those items are people (`P31` = `Q5`, one `VALUES` query per page). **Never** `action=parse` wikitext and **never** `list=search` (#158 Finding 1) |
+| Endpoints | `GET https://en.wikiquote.org/api/rest_v1/page/html/<title>` (Parsoid HTML); `wbgetentities` on `https://www.wikidata.org/w/api.php` for the concept's sitelink and, in the same request, its claims for the concept hop (one more `wbgetentities` per hop step, at most two; #172 build A); `action=query&prop=pageprops&ppprop=wikibase_item&redirects=1` on `https://en.wikiquote.org/w/api.php` for the linked authors' items; `https://query.wikidata.org/sparql` for which of those items are people (`P31` = `Q5`, one `VALUES` query per page). **Never** `action=parse` wikitext and **never** `list=search` (#158 Finding 1) |
 | Licence | CC BY-SA 4.0. Text may be stored with attribution; every card carries *Wikiquote, CC BY-SA 4.0*. Retention durable |
 | Key required | none |
 | Published rate limit | Wikimedia's API etiquette: identify with a User-Agent, go serially |
@@ -114,6 +114,87 @@ the review's change to the author stage.
     mix test test/devils_dictionary/discovery/conformance/wikiquote_conformance_test.exs
     mix test test/devils_dictionary/discovery/providers/wikiquote_parser_test.exs
     mix test test/devils_dictionary/discovery/providers/wikiquote_test.exs
+
+## Concept hop
+
+Built 2026-09-24 as #172 build A. A sense's item with no `enwikiquote`
+sitelink still reaches the page of a concept Wikidata says it relates to:
+*coward* (Q104605901, "cowardly or fearful person") `P1552` *has
+characteristic* *cowardice* (Q1401607) → *Cowardice*. The walk is
+`DevilsDictionary.Discovery.ConceptHop`, shared by the provider and the
+corpus build.
+
+| | |
+|---|---|
+| Properties, in order | `P1552` has characteristic · `P279` subclass of · `P1269` facet of · `P31` instance of (`ConceptHop.@properties`, each with its one phrase) |
+| Steps | at most two; the first step that reaches any page ends a provider's walk; a third step is never fetched |
+| From | an item the registry holds as a `concept` or an `event`, and never one whose own `P31` is a person or a work |
+| Never onto or through | an item whose `P31` is human, fictional human, character, or one of 14 creative-work classes (`@refused`, labels confirmed live in H1) |
+| `P31` | only from an instance (no `P279` of its own), only onto a class (has a `P279`), and only as the last step — the two guards H3 and H4 added after H2 |
+| Cost | the sitelinks request carries `props=sitelinks|claims` (filtered client-side by `WikidataClient.hop_nodes/3`), so a direct sitelink costs nothing extra; each step one more `wbgetentities`. *coward* costs 5 requests on the Wikiquote budget (sitelinks, hop, page, authors, humans) |
+| Record | the recipe freezes the rule (`parameters["hop"]`) and `mapping_identity/1` digests it; each result's `match_details["sitelinks"][…]` carries `"from"`, `"via"` and `"reached"`; the corpus row carries `concept_qids_via` |
+| Reason | *From Wikiquote's page “Cowardice”, the concept a sense of “coward” has as its characteristic (Q1401607).* |
+
+### Ledger
+
+Ceiling: **60 live requests**. Every request carried the project's
+User-Agent, at least 300 ms after the one before.
+
+| # | requests | what was asked | what came back | running total |
+|---|---|---|---|---|
+| H1 | 1 | `wbgetentities props=labels` for the 17 refused classes | all 17 labels as intended (human … comic) | **1** |
+| H2 | 4 | the hop alone on the 13 probe words (#158's twelve + *coward*), senses from the dev registry: `sitelinks|claims` for the 3 words with a sense link, one hop step | table below | **5** |
+| H3 | 7 | the hop on a fixed sample of 50 of the registry's 2,165 hop origins (lowest `md5(qid)`), before the `P31` guards | direct 12 · hop 21 · neither 17 — with *luthier* → *profession* → **Wage**, *witch doctor* → *occupation* → **Labor**, *aunt* → **Brotherhood** | **12** |
+| H4 | 5 | the same sample with `P31` read only off an instance | direct 12 · hop 18 · neither 20; *witch doctor* → **Labor** still (it has no `P279`) | **17** |
+| H5 | 5 | the same sample with `P31` also a last step only (as built) | direct 12 · **hop 17** · neither 21 | **22** |
+| H6 | 1 | `mix dd.fixtures.capture --source wikiquote --page Cowardice` | 200, 55,883 → 33,701 bytes, 67 quotations, revision 3927892 | **23** |
+| H7 | ≤10 | two screenshot-server attempts with Oban `:inline`: the job ran inside `Discovery.request`'s own transaction and timed out; both rolled back, taking their budget rows with them, so this is an upper bound | no run persisted | **≤33** |
+| H8 | 6 | `/define/coward`'s mapping run once on the dev database, in-process with no Oban job (5 Wikiquote stages + 1 `wikidata:entity` for creator identity) | succeeded; 11 results from *Cowardice*, each with `via` `P1552` | **≤39** |
+
+**≤39 of 60.**
+
+### The probe words, by the hop alone
+
+| Word | Sense link (dev registry) | Before | After build A |
+|---|---|---|---|
+| **coward** | Q104605901 coward | no page | **Cowardice** by `P1552` → Q1401607 |
+| war | Q198 | War (direct) | unchanged |
+| power | Q911554 *business magnate* | Business magnate (direct) | unchanged |
+| nepotism, grief, love, family, solitude, justice, bank, pop art, situationship, narcissism | none | no shelf | no shelf — nothing to hop from; build B's |
+
+So the hop alone gains **one** of the thirteen. On the 50-concept sample it
+reaches a page for **17** that had none (34 %), against 12 with a page of
+their own. What it reached, as built:
+
+| From | Page | Path |
+|---|---|---|
+| plough | Tool | `P279` |
+| kitten | Cats | `P279` |
+| gelding | Horses | `P279` |
+| saltwater fish | Fish | `P279` |
+| Fighter aircraft | Airplane | `P279` → `P279` |
+| Suffolk Punch | Horses | `P279` → `P279` |
+| brit milah | Circumcision | `P279` → `P279` |
+| Romani language | Indo-Aryan languages | `P279` → `P279` |
+| roller skating | Sports | `P279` → `P279` |
+| fingerprint | Results | `P279` → `P279` |
+| loan shark | Abuse | `P1552` → `P279` |
+| Underground Railroad | Confidentiality | `P1552` |
+| Yellowknife | Cities | `P31` |
+| Connecticut River | Rivers | `P31` |
+| Cerro Bonete | Mountain | `P31` |
+| Danish Realm | Countries | `P31` |
+| West Coast of the United States | Coast | `P31` |
+
+Two read as a stretch (*fingerprint* → *Results*, *Underground Railroad* →
+*Confidentiality*), and both are what Wikidata states. The reason on every
+card prints the path, so a reader can see how it got there.
+
+**The registry's `concept` kind is loose.** The sample's direct pages
+include *Cosimo de' Medici*, *Scotland* and *Moscow*, all held as `concept`.
+The guards on `P31` refuse a person whatever the registry calls it. A place
+held as a concept can still hop by `P31` to its class (*Yellowknife* →
+*Cities*).
 
 ## Corpus
 

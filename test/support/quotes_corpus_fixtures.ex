@@ -53,8 +53,12 @@ defmodule DevilsDictionary.QuotesCorpusFixtures do
   @doc """
   What each test host answers, reporting every URL to `test_pid` as
   `{:request, url}`. `candide` swaps the text, for the drift case.
+
+  `items` adds Wikidata items to the sitelinks answer, for the concept hop
+  (#172 build A): `%{qid => %{"title" => title | nil, "claims" => %{property
+  => [qid]}}}`. Voltaire's is always there, with his page and his `P31`.
   """
-  def stub(test_pid, candide \\ candide()) do
+  def stub(test_pid, candide \\ candide(), items \\ %{}) do
     voltaire = WikiquoteFixtures.body("voltaire")
 
     fn request ->
@@ -96,9 +100,17 @@ defmodule DevilsDictionary.QuotesCorpusFixtures do
         {"wikiquote.test", "/w/api.php", _} ->
           {:ok, 200, %{"query" => %{"pages" => []}}, %{}}
 
-        {"wikidata.test", _, "sitelinks"} ->
-          links = %{"enwikiquote" => %{"site" => "enwikiquote", "title" => "Voltaire"}}
-          {:ok, 200, %{"entities" => %{"Q9068" => %{"id" => "Q9068", "sitelinks" => links}}}, %{}}
+        {"wikidata.test", _, "sitelinks" <> _ = props} ->
+          items =
+            Map.put_new(items, "Q9068", %{"title" => "Voltaire", "claims" => %{"P31" => ["Q5"]}})
+
+          entities =
+            for qid <- String.split(request[:params][:ids], "|"),
+                item = items[qid],
+                into: %{},
+                do: {qid, sitelink_entity(qid, item, props =~ "claims")}
+
+          {:ok, 200, %{"entities" => entities}, %{}}
 
         {"wikidata.test", _, _} ->
           ids = request[:params][:ids] |> String.split("|")
@@ -111,6 +123,34 @@ defmodule DevilsDictionary.QuotesCorpusFixtures do
           {:ok, 404, "", %{}}
       end
     end
+  end
+
+  defp sitelink_entity(qid, item, claims?) do
+    links =
+      case item["title"] do
+        nil -> %{}
+        title -> %{"enwikiquote" => %{"site" => "enwikiquote", "title" => title}}
+      end
+
+    entity = %{"id" => qid, "sitelinks" => links}
+
+    if claims?,
+      do:
+        Map.put(
+          entity,
+          "claims",
+          Map.new(item["claims"] || %{}, fn {property, ids} ->
+            {property,
+             Enum.map(
+               ids,
+               &claim(property, %{
+                 "type" => "wikibase-entityid",
+                 "value" => %{"id" => &1, "entity-type" => "item"}
+               })
+             )}
+          end)
+        ),
+      else: entity
   end
 
   defp entity("Q9068") do

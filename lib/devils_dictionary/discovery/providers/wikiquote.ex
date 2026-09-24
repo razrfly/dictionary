@@ -15,10 +15,25 @@ defmodule DevilsDictionary.Discovery.Providers.Wikiquote do
   negative cache like any empty answer. `list=search` and `action=parse`
   wikitext are never called (#158 Finding 1).
 
-  ## One page, four requests at most
+  ## The concept hop (#172 build A)
+
+  A sense's item without a page of its own may still say which concept's
+  page is its: *coward* (Q104605901, "cowardly or fearful person") *has
+  characteristic* *cowardice* (Q1401607), whose page is *Cowardice*. When
+  none of the page's QIDs has a sitelink, the walk in `ConceptHop` follows
+  its fixed properties at most two steps to the first item that has one, and
+  never onto a person or a work. The recipe freezes the rule (`"hop"`), so a
+  changed rule is a changed recipe; the path it took is on every result
+  (`match_details["sitelinks"]`, `"via"` and `"reached"`), because the item it
+  reaches is Wikidata's answer on the day, not the registry's.
+
+  ## One page, six requests at most
 
     1. `sitelinks` — `wbgetentities` for the page's QIDs, `sitefilter=enwikiquote`
-       (the Wikidata client's parameters, this provider's budget)
+       and their claims (the Wikidata client's parameters, this provider's
+       budget), which is also the hop's first step; then `hop`, at most two
+       more, one per step, only when none of those QIDs has a page
+       (`ConceptHop`)
     2. `page` — `GET /api/rest_v1/page/html/<title>`: Parsoid HTML, capped at
        2 MB (*Love* is 1.45 MB), one redirect followed (*Bank* → *Banking*), a
        `404` an honest empty (*Situationship*)
@@ -80,7 +95,7 @@ defmodule DevilsDictionary.Discovery.Providers.Wikiquote do
     only: [offset: 1, headers: 0, limit: 2, sparse: 1, clamp_label: 1]
 
   alias DevilsDictionary.Absorb.Clients.Wikidata, as: WikidataClient
-  alias DevilsDictionary.Discovery.PageEvidence
+  alias DevilsDictionary.Discovery.{ConceptHop, PageEvidence}
   alias DevilsDictionary.Discovery.Providers.Wikiquote.Parser
   alias DevilsDictionary.Quotations.Fingerprint
   alias DevilsDictionary.SourceIdentity.Entry
@@ -171,7 +186,8 @@ defmodule DevilsDictionary.Discovery.Providers.Wikiquote do
        "language" => target.language,
        "relevance" => target.relevance,
        "resolution_strategy" => "sitelink_qid_v1",
-       "entities" => entities
+       "entities" => entities,
+       "hop" => ConceptHop.rule()
      }}
   end
 
@@ -193,32 +209,51 @@ defmodule DevilsDictionary.Discovery.Providers.Wikiquote do
     Enum.map(entities, &Map.put(&1, "kind", Map.get(kinds, &1["object_id"])))
   end
 
+  # The QIDs, and the hop's rule when the recipe has one: another property
+  # on the list, or another step, is another recipe (#172 C3). The item a hop
+  # reaches is not here — it is Wikidata's answer at retrieve time, and a
+  # recipe is rebuilt on every render without a request — so it is recorded
+  # on each result instead.
   @impl true
-  def mapping_identity(%{"entities" => entities}) when is_list(entities),
-    do: PageEvidence.digest(entities)
+  def mapping_identity(%{"entities" => entities} = parameters) when is_list(entities) do
+    case {PageEvidence.digest(entities), ConceptHop.fingerprint(parameters["hop"])} do
+      {"no-entities", _hop} -> "no-entities"
+      {digest, nil} -> digest
+      {digest, hop} -> digest <> "." <> hop
+    end
+  end
 
   def mapping_identity(_parameters), do: "no-entities"
 
   @impl true
-  def validate_mapping(@operation, %{
-        "term" => term,
-        "resolution_strategy" => "sitelink_qid_v1",
-        "entities" => entities
-      })
+  def validate_mapping(
+        @operation,
+        %{
+          "term" => term,
+          "resolution_strategy" => "sitelink_qid_v1",
+          "entities" => entities
+        } = parameters
+      )
       when is_binary(term) and term != "" and is_list(entities) do
-    if PageEvidence.valid_entities?(entities), do: :ok, else: {:error, :invalid_mapping}
+    if PageEvidence.valid_entities?(entities) and valid_hop?(parameters["hop"]),
+      do: :ok,
+      else: {:error, :invalid_mapping}
   end
 
   def validate_mapping(_operation, _parameters), do: {:error, :invalid_mapping}
 
+  # A recipe from before the hop has none, and reads sitelinks only.
+  defp valid_hop?(nil), do: true
+  defp valid_hop?(rule), do: ConceptHop.valid_rule?(rule)
+
   # ── requests ────────────────────────────────────────────────────────────
 
   @impl true
-  def request_options(%{"endpoint" => "sitelinks", "qids" => qids}) do
+  def request_options(%{"endpoint" => "sitelinks", "qids" => qids} = payload) do
     [
       method: :get,
       url: wikidata_url(),
-      params: WikidataClient.sitelink_params(qids, @site),
+      params: WikidataClient.sitelink_params(qids, @site, claims: payload["claims"] == true),
       headers: headers()
     ]
   end
@@ -329,7 +364,7 @@ defmodule DevilsDictionary.Discovery.Providers.Wikiquote do
       offset = offset(request["after"])
       limit = limit(request["first"], @page_size)
 
-      with {:ok, target} <- sitelink(mapping["entities"], request_fun),
+      with {:ok, target} <- sitelink(mapping["entities"], mapping["hop"], request_fun),
            {:ok, page} <- fetch_page(target, request_fun) do
         build(mapping, request, target, page, offset, limit, request_fun)
       else
@@ -346,27 +381,79 @@ defmodule DevilsDictionary.Discovery.Providers.Wikiquote do
 
   # The first of the page's QIDs, in the page's own order, that has a
   # Wikiquote page. A page's senses rarely refer to more than one concept
-  # with a theme page, and when they do the best-evidenced one wins.
-  defp sitelink([], _request_fun), do: :none
+  # with a theme page, and when they do the best-evidenced one wins. When
+  # none has one, the hop: the first of them, in the same order, that reaches
+  # a page in the fewest steps.
+  defp sitelink([], _hop, _request_fun), do: :none
 
-  defp sitelink(entities, request_fun) do
+  defp sitelink(entities, hop, request_fun) do
     qids = Enum.map(entities, & &1["qid"])
 
-    case request_fun.("sitelinks", %{"endpoint" => "sitelinks", "qids" => qids}) do
+    case request_fun.("sitelinks", sitelinks_payload(qids, hop)) do
       {:ok, body} ->
-        titles = WikidataClient.sitelink_titles(body, @site)
+        nodes = WikidataClient.hop_nodes(body, @site, ConceptHop.claim_properties())
 
-        entities
-        |> Enum.find_value(:none, fn entity ->
-          case Map.get(titles, entity["qid"]) do
-            nil ->
-              nil
+        case Enum.find(entities, &is_binary(get_in(nodes, [&1["qid"], "title"]))) do
+          nil ->
+            hop(entities, nodes, hop, request_fun)
 
-            title ->
-              {:ok,
-               %{qid: entity["qid"], title: title, label: entity["label"], kind: entity["kind"]}}
-          end
-        end)
+          entity ->
+            {:ok,
+             %{
+               qid: entity["qid"],
+               title: nodes[entity["qid"]]["title"],
+               label: entity["label"],
+               kind: entity["kind"],
+               via: []
+             }}
+        end
+
+      other ->
+        other
+    end
+  end
+
+  defp sitelinks_payload(qids, hop),
+    do: %{"endpoint" => "sitelinks", "qids" => qids, "claims" => not is_nil(hop)}
+
+  defp hop(_entities, _nodes, nil, _request_fun), do: :none
+
+  defp hop(entities, nodes, rule, request_fun) do
+    origins = for entity <- entities, ConceptHop.origin?(entity["kind"]), do: entity["qid"]
+
+    fetch = fn qids ->
+      case request_fun.("hop", sitelinks_payload(qids, rule)) do
+        {:ok, body} ->
+          {:ok, WikidataClient.hop_nodes(body, @site, ConceptHop.claim_properties())}
+
+        other ->
+          other
+      end
+    end
+
+    case ConceptHop.reach(origins, nodes, fetch,
+           rule: rule,
+           first: true,
+           max_per_step: WikidataClient.batch_size()
+         ) do
+      {:ok, hits} ->
+        case Enum.find(origins, &Map.has_key?(hits, &1)) do
+          nil ->
+            :none
+
+          origin ->
+            hit = hits[origin]
+
+            {:ok,
+             %{
+               qid: hit["qid"],
+               title: hit["title"],
+               label: nil,
+               kind: "concept",
+               from: origin,
+               via: hit["via"]
+             }}
+        end
 
       other ->
         other
@@ -645,14 +732,7 @@ defmodule DevilsDictionary.Discovery.Providers.Wikiquote do
         "kind" => "sitelink",
         "evidence" => "identity",
         "query" => context.mapping["term"],
-        "sitelinks" => [
-          %{
-            "qid" => context.target.qid,
-            "title" => context.title,
-            "site" => @site,
-            "wiki" => "Wikiquote"
-          }
-        ]
+        "sitelinks" => [sitelink_detail(context)]
       },
       preview_metadata:
         sparse(
@@ -680,6 +760,25 @@ defmodule DevilsDictionary.Discovery.Providers.Wikiquote do
         ),
       display_allowed: true
     }
+  end
+
+  # Where the page came from: the sense's own item, or the item a hop reached
+  # from it, with the path (#172 build A). A direct sitelink reads as it
+  # always has.
+  defp sitelink_detail(%{target: target, title: title}) do
+    detail = %{"qid" => target.qid, "title" => title, "site" => @site, "wiki" => "Wikiquote"}
+
+    case Map.get(target, :via, []) do
+      [] ->
+        detail
+
+      via ->
+        Map.merge(detail, %{
+          "from" => target.from,
+          "via" => via,
+          "reached" => ConceptHop.reached(via)
+        })
+    end
   end
 
   @doc """

@@ -1,0 +1,17 @@
+{
+  "body_file": "cowardice.html",
+  "captured_at": "2026-09-24T16:12:15.215302Z",
+  "counts": {
+    "quotations": 67,
+    "register": 0
+  },
+  "headers": {
+    "content-revision-id": "3927892",
+    "content-type": "text/html; charset=utf-8; profile=\"https://www.mediawiki.org/wiki/Specs/HTML/2.8.0\"",
+    "etag": "W/\"3927892/955b3db7-b2af-11f1-bd6b-977314f9e12d/view/html\""
+  },
+  "raw_bytes": 55883,
+  "status": 200,
+  "title": "Cowardice",
+  "url": "https://en.wikiquote.org/api/rest_v1/page/html/Cowardice"
+}

@@ -75,13 +75,18 @@ defmodule DevilsDictionary.Absorb.Clients.Wikidata do
   `fetch/2` — a discovery provider (#158 build 4) asks Wikidata which
   `enwikiquote` page a sense's QID links to, and that request is spent against
   the provider's own ledger. `sitelink_titles/2` reads the answer.
+
+  `claims: true` asks for the items' statements in the same request, for the
+  concept hop (#172 build A): claims cannot be filtered server-side, so
+  `hop_nodes/3` keeps the few properties the hop reads and drops the rest.
   """
-  def sitelink_params(qids, site) when is_list(qids) and length(qids) <= @batch do
+  def sitelink_params(qids, site, opts \\ [])
+      when is_list(qids) and length(qids) <= @batch do
     [
       action: "wbgetentities",
       format: "json",
       ids: Enum.join(qids, "|"),
-      props: "sitelinks",
+      props: if(opts[:claims], do: "sitelinks|claims", else: "sitelinks"),
       sitefilter: site
     ]
   end
@@ -100,6 +105,42 @@ defmodule DevilsDictionary.Absorb.Clients.Wikidata do
   end
 
   def sitelink_titles(_body, _site), do: %{}
+
+  @doc """
+  `%{qid => %{"title" => title | nil, "claims" => %{property => [qid]}}}` for
+  every item in a `wbgetentities` answer: its sitelink on `site` and the item
+  ids it asserts under `properties`, read with the rank policy of
+  `entity_ids/2`. Everything else in the answer is dropped here, so a caller
+  holding the nodes holds a few ids per item and not every claim it has.
+  """
+  def hop_nodes(%{"entities" => entities}, site, properties)
+      when is_map(entities) and is_list(properties) do
+    for {qid, entity} <- entities,
+        is_map(entity),
+        is_nil(entity["missing"]),
+        into: %{} do
+      # An item with no statements or no sitelinks may answer `[]` for
+      # either, PHP's empty array, where one with some answers an object.
+      entity = if is_map(entity["claims"]), do: entity, else: Map.put(entity, "claims", %{})
+
+      claims =
+        for property <- properties,
+            ids = entity_ids(entity, property),
+            ids != [],
+            into: %{},
+            do: {property, ids}
+
+      title =
+        case entity["sitelinks"] do
+          %{^site => %{"title" => title}} when is_binary(title) -> title
+          _ -> nil
+        end
+
+      {qid, %{"title" => title, "claims" => claims}}
+    end
+  end
+
+  def hop_nodes(_body, _site, _properties), do: %{}
 
   @doc """
   The items carrying one exact statement value, by CirrusSearch's

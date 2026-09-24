@@ -240,6 +240,27 @@ defmodule DevilsDictionary.Quotations.Corpus do
 
   # ── reading ───────────────────────────────────────────────────────────────
 
+  # A concept the line's page is filed under, as the reason names it: the
+  # page's own item, or — for a concept the build reached the page from by
+  # the concept hop (#172 build A, `concept_qids_via`) — the page's item with
+  # the path, the way the live provider records one.
+  defp sitelink(row, qid) do
+    link = %{"qid" => qid, "title" => row["page"], "site" => "enwikiquote", "wiki" => "Wikiquote"}
+
+    case get_in(row, ["concept_qids_via", qid]) do
+      [_ | _] = via ->
+        Map.merge(link, %{
+          "qid" => List.last(via)["qid"],
+          "from" => qid,
+          "via" => via,
+          "reached" => DevilsDictionary.Discovery.ConceptHop.reached(via)
+        })
+
+      _ ->
+        link
+    end
+  end
+
   @doc """
   The corpus's lines for a page, as items on the Quotes shelf (#174 design 3).
 
@@ -286,15 +307,7 @@ defmodule DevilsDictionary.Quotations.Corpus do
         match_details: %{
           "kind" => "sitelink",
           "evidence" => "identity",
-          "sitelinks" =>
-            for qid <- row["concept_qids"] || [] do
-              %{
-                "qid" => qid,
-                "title" => row["page"],
-                "site" => "enwikiquote",
-                "wiki" => "Wikiquote"
-              }
-            end
+          "sitelinks" => Enum.map(row["concept_qids"] || [], &sitelink(row, &1))
         },
         preview_metadata: %{
           "title" => row["text"],
