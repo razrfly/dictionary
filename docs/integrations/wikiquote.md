@@ -218,3 +218,72 @@ The spend that matters for the build is not Wikiquote at all. It is
 **Gutenberg**: one text per pre-1931 work of every author a kept line credits,
 and at most 2,226 works exist. The build fetches each text once, paces it at
 one second, and records every text's ebook number in the manifest.
+
+### As built: `mix dd.quotes.corpus.build`
+
+The build is `Quotations.Corpus.Build`, and the task that runs it is
+`mix dd.quotes.corpus.build`. It writes
+`priv/quotes/manifests/wikiquote-pd-v1.json`.
+
+It reads the registry and writes nothing to the database. The task starts the
+Repo and nothing else, so no Oban node runs. Every answer is cached under
+`tmp/quotes-corpus-cache`.
+
+**The first build, 2026-09-24.**
+
+| stage | requests | |
+|---|---|---|
+| `sparql:works`, `sparql:originals` | 2 | every item with `P2034` + `P50` (and its `P577`); every one that is an edition or translation (`P629`) of a dated original. Apart, because together, with the label service, they timed out three times |
+| `wikidata:sitelinks` | 147 | `enwikiquote` sitelinks for the 6,972 concepts and the persons with a pre-line work, fifty to a `wbgetentities` (a 400-QID `VALUES` query got a 504) |
+| `parsoid` | 1,234 | 887 selected pages, then the own pages of the credited authors not already among them |
+| `pageprops` | 112 | 5,580 linked pages resolved to their items |
+| `wikidata:entities`, `wikidata:labels` | 7 + 28 | the 347 candidate authors' facts for the seeder, then the labels of their works |
+| `gutenberg` | 1,405 | 1,392 texts, 13 × 404. One file came back as the gzip itself and several as Latin-1, hence `Checks.text_body/1` |
+| **total** | **2,936** | |
+
+| | |
+|---|---|
+| pages read | 887 |
+| candidates: cited lines credited to an author with a pre-1931 Gutenberg work | 7,004, across 347 authors |
+| **kept: Verified** | **1,053 lines**, 136 authors, 252 works |
+| work year from the work's own `P577` / from its original's (`P629`) | 880 / 173 |
+| filed under a concept a sense refers to | 1,052 (one line came from an author page only) |
+| on `/define/war` (Q198) | 9: Scott's *Marmion* ×2 and *The Lady of the Lake*, Byron's *Childe Harold* ×2, Lincoln, Shaw's *Heartbreak House*, Wells's *War and the Future*, Campbell |
+| most lines | Bierce 141, Wilde 89, Scott 75, Twain 70, Dickens 60, Hardy 53, Chekhov 48 |
+| manifest | 3.5 MB; `set_checksum` `22d236e0cef4fff8555cb7e348b765923f037f9e3e5e1b4493dc6ad607336499` |
+
+**Kept only when Verified.** A line's findings are these:
+
+- the corpus's own claim (`wikiquote-pd-v1`, cited)
+- a row in the page's own register with the line's fingerprint, which
+  contradicts it
+- `Checks.match_page/3` on the credited author's own page
+- `Checks.match_texts/2` on that author's pre-1931 texts
+
+`Badge.compute/2` has to say `verified`: two sources agree, one of them the
+Gutenberg text, and nothing contradicts. The build does not call
+`Verifier.verify_author/2`, because that writes verification runs, source
+records and ledger rows. It runs the same pure checks.
+
+**The line number.** `Checks.line_number/2` read three lines at a time and
+answered `line ?` for a passage longer than that; the first sample had eight
+lines of *O Captain!* at `line ?`. It now finds the passage in a per-line
+normalised index, built once per text (`Checks.index_lines/1`). None of the
+1,053 locators is `?`.
+
+**Reproducible.** The `selection` block holds everything the network was
+asked:
+
+- the pages, each with its revision id
+- the credits that led to a pre-line author
+- each author's own page and revision
+- the works with their ebook numbers and years
+- each author's Wikidata facts
+
+`mix dd.quotes.corpus.build` with the manifest in place re-runs from that
+block alone. It reads each page as `page/html/<title>/<revision>` and asks
+Wikidata nothing. Then it compares the rebuilt set with the committed one by
+`set_checksum`. If they are the same, it writes nothing. If they differ, it
+**refuses**, names what went and what came, and asks for a new version
+(`--output …-v2.json`). `--reselect` makes a fresh selection from the
+registry and today's pages, and is held to the same rule.

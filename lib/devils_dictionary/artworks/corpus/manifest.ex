@@ -36,6 +36,11 @@ defmodule DevilsDictionary.Artworks.Corpus.Manifest do
   #   * `:depiction` — the row records the concepts the work *shows*, as
   #     `tags` or `depicts` QIDs, and `Artworks.shelf_items/1` matches them
   #     against the QIDs a page's senses refer to. Identity, not text.
+  #   * `:concept` — the row records the QIDs of the concepts whose Wikiquote
+  #     theme pages it was found on (`concept_qids`), and
+  #     `Quotations.Corpus.shelf_items/1` matches them against the QIDs a
+  #     page's senses refer to. Identity, as `:depiction` is, but of the page
+  #     the line was filed under rather than of anything it shows.
   #   * `:none` — the row records identity and display facts and nothing a
   #     page can match on. It reaches a reader another way or not at all: a
   #     PoetryDB poem reaches one through the live provider's attestation, and
@@ -81,10 +86,24 @@ defmodule DevilsDictionary.Artworks.Corpus.Manifest do
       namespace: "olid",
       work_kind: "book",
       evidence: :none
+    },
+    # The first kind that is not a work (#174): a quotation is content —
+    # `content_items`, kind `quotation` — seeded through the same entry shape
+    # the live Wikiquote provider writes, so a line held here and the same
+    # line found on a visit are one subject. Keyed on its fingerprint (ADR
+    # 0003), the identity a second source's copy folds on. `work_kind` is nil
+    # because nothing is a `work_details` row; the work a line comes from is a
+    # fact on the row (`work_qid`), not the row's identity.
+    "wikiquote-pd" => %{
+      source: "wikiquote-pd-v1",
+      identity: "fingerprint",
+      namespace: "quotation_fingerprint",
+      work_kind: nil,
+      evidence: :concept
     }
   }
 
-  @evidence ~w(depiction none)a
+  @evidence ~w(depiction concept none)a
 
   # The keys every kind registers, in the order above reads. `mix dd.provider.new`
   # prints one line per key as the edit it cannot make, and its test holds the
@@ -186,7 +205,7 @@ defmodule DevilsDictionary.Artworks.Corpus.Manifest do
     manifest
   end
 
-  @manifest_glob "priv/artworks/manifests/*.json"
+  @manifest_glob "priv/{artworks,quotes}/manifests/*.json"
 
   # Read once, at compile time, and recompiled when a manifest changes. A
   # corpus is a committed, checksummed selection — `generated_at` is a fact
