@@ -517,6 +517,45 @@ defmodule DevilsDictionary.SourceIdentity.Creators do
     outcomes
   end
 
+  @doc """
+  Finds or mints the one entity a set of identifiers names, and writes no
+  relationship — `apply/4`'s locate-and-mint half, for a caller whose claim
+  points the other way.
+
+  An exemplar nomination (#181 build 2) is the case: its person is the
+  *subject* of an `illustrates` claim, not the target of a credit, so there
+  is no `authored_by` for `apply/4` to write. The person is found exactly as a
+  creator is — held by a verified identifier, or minted from `prepare/2`'s
+  attrs with `minted_by: source_slug` — and nothing about them is read from a
+  label. Takes the same advisory lock `SourceIdentity.lock_entries/2` takes
+  for a creator key, so a nomination and a provider run reaching one absent
+  person serialise on them. Must run inside a transaction.
+
+  Returns `%{state: :matched | :minted, object_id, qid}` or `%{state:
+  :deferred | :unresolved, reason}`, the states `apply/4` reports.
+  """
+  def resolve_identified(identifiers, prepared, source_slug) when is_list(identifiers) do
+    unless Repo.in_transaction?(),
+      do: raise(ArgumentError, "resolve_identified/3 needs a transaction")
+
+    identifiers
+    |> Enum.map(&"#{&1.namespace}:#{&1.external_id}")
+    |> Enum.uniq()
+    |> Enum.sort()
+    |> Enum.each(&Repo.query!("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [&1]))
+
+    case locate(%{target_identifiers: identifiers}, prepared) do
+      %{state: :mint} = mint ->
+        %Entry{source_slug: source_slug} |> mint!(mint) |> Map.take([:state, :object_id, :qid])
+
+      %{state: :matched} = matched ->
+        Map.take(matched, [:state, :object_id, :qid])
+
+      other ->
+        Map.take(other, [:state, :reason, :qid])
+    end
+  end
+
   defp base_key(%Entry{stable_identifier: stable}),
     do: "#{stable.namespace}:#{stable.external_id}"
 

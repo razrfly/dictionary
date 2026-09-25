@@ -148,7 +148,15 @@ defmodule DevilsDictionaryWeb.EntityLive do
 
           <header
             id="entity-header"
-            class="grid items-start gap-6 sm:grid-cols-[8rem_minmax(0,1fr)] sm:gap-8"
+            class={
+              [
+                "grid items-start gap-6 sm:gap-8",
+                # The image column only when there is an image: without one,
+                # the name and description fell into the 8rem column.
+                (@page.entity.image_url || @artwork || @page.details[:work_kind] == "film") &&
+                  "sm:grid-cols-[8rem_minmax(0,1fr)]"
+              ]
+            }
           >
             <div
               :if={@page.entity.image_url || @artwork || @page.details[:work_kind] == "film"}
@@ -245,6 +253,85 @@ defmodule DevilsDictionaryWeb.EntityLive do
               Wikidata and independently supported identity data when that provider is unavailable.
             </p>
           </section>
+
+          <%!-- The reverse view (#105, #181 wireframe 5): what this person is
+               cited for, grouped by word, best first, with both counts on
+               every line; then what the record files them under. Public:
+               a nomination nobody has accepted is not on their page. --%>
+          <.panel
+            :if={@page.cited_as != []}
+            id="entity-cited-as"
+            label="cited as an example of"
+            count={Enum.sum(Enum.map(@page.cited_as, &length(&1.items)))}
+          >
+            <ul role="list" class="divide-y divide-mist-950/5 dark:divide-white/10">
+              <li
+                :for={group <- @page.cited_as}
+                id={"cited-as-#{group.lexeme.object_id}"}
+                class="grid gap-1 py-3 sm:grid-cols-[minmax(0,10rem)_minmax(0,1fr)] sm:gap-5"
+              >
+                <p class="text-base/7 font-medium sm:text-sm/6">
+                  <.a navigate={~p"/define/#{group.lexeme.slug}"}>{group.lexeme.lemma}</.a>
+                </p>
+                <ul role="list" class="flex min-w-0 flex-col gap-2">
+                  <li
+                    :for={item <- group.items}
+                    id={"cited-as-claim-#{item.claim.assertion_id}"}
+                    class="min-w-0 text-base/7 text-pretty sm:text-sm/6"
+                  >
+                    <p class="text-mist-700 dark:text-mist-300">
+                      <span
+                        class="tabular-nums text-mist-950 dark:text-white"
+                        aria-label={"#{item.signals.human_up} cite, #{item.signals.human_down} object"}
+                      >
+                        ▲ {item.signals.human_up} ▽ {item.signals.human_down}
+                      </span>
+                      <span :if={item.target.gloss}> · “{item.target.gloss}”</span>
+                    </p>
+                    <p class="text-mist-500">
+                      <span class="tabular-nums">{item.claim.evidence_count}</span>
+                      evidence · nominated by {item.claim.nominated_by.label} · {cited_state(
+                        item.claim.review_state
+                      )}
+                      <.a
+                        navigate={~p"/connections/#{item.claim.assertion_id}"}
+                        aria-label="Inspect this citation"
+                        class="ml-1 inline-flex align-text-bottom text-mist-400 hover:text-mist-950 dark:hover:text-white"
+                      >
+                        <.icon name="hero-information-circle" class="size-4 stroke-current" />
+                      </.a>
+                    </p>
+                  </li>
+                </ul>
+              </li>
+            </ul>
+          </.panel>
+
+          <.panel
+            :if={@page.named_under != []}
+            id="entity-named-under"
+            label="named by the record under"
+            count={length(@page.named_under)}
+          >
+            <ul role="list" class="flex flex-wrap gap-x-5 gap-y-2 py-3">
+              <li
+                :for={named <- @page.named_under}
+                id={"named-under-#{named.kind}-#{named.object_id}-#{named.source.slug}"}
+                class="min-w-0 text-base/7 sm:text-sm/6"
+              >
+                <.a :if={named.kind == :lexeme} navigate={~p"/define/#{named.slug}"}>
+                  {named.label}
+                </.a>
+                <.a
+                  :if={named.kind == :entity}
+                  navigate={~p"/entities/#{named.object_id}/#{Connection.slugify(named.label)}"}
+                >
+                  {named.label}
+                </.a>
+                <span class="text-mist-500"> · {named.source.name}</span>
+              </li>
+            </ul>
+          </.panel>
 
           <.panel
             :if={@page.meaning_connections != []}
@@ -807,6 +894,11 @@ defmodule DevilsDictionaryWeb.EntityLive do
   defp review_label(:disputed), do: "Disputed connection"
   defp review_label(:changed_since_review), do: "Changed since review"
   defp review_label(_state), do: "Awaiting review"
+
+  defp cited_state(:accepted), do: "selected by a reviewer"
+  defp cited_state(:changed_since_review), do: "changed since review"
+  defp cited_state(:disputed), do: "disputed"
+  defp cited_state(_state), do: "not yet reviewed"
 
   defp detail_line(details) do
     case details do

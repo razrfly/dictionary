@@ -135,7 +135,13 @@ defmodule DevilsDictionaryWeb.WordLive do
   end
 
   defp load(socket, slug, trail, demo) do
-    page = socket.assigns.object_id |> lookup(slug) |> WordPage.build(trail: trail)
+    # A contributor or reviewer reads the exemplars as `:internal`, so a
+    # nomination still under review shows, marked; everyone else reads the
+    # public view, where a person nominated here waits for acceptance.
+    viewer = if socket.assigns.contributor, do: :internal, else: :public
+
+    page =
+      socket.assigns.object_id |> lookup(slug) |> WordPage.build(trail: trail, viewer: viewer)
 
     samples =
       if demo, do: Samples.samples(page.headword.lemma || slug), else: %{cards: [], evidence: []}

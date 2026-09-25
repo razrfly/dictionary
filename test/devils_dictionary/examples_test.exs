@@ -51,6 +51,18 @@ defmodule DevilsDictionary.ExamplesTest do
       )
     end
 
+    test "a synset's name leads its description: Holocaust, not final solution", ctx do
+      genocide = wn_sense!(ctx, "genocide", "oewn-genocide-n", "systematic killing of a group")
+
+      for lemma <- ["final solution", "Holocaust"] do
+        instance!(ctx, wn_sense!(ctx, lemma, "oewn-holocaust-n"), genocide)
+      end
+
+      [holocaust] = page("genocide").examples.items
+      assert holocaust.subject.label == "Holocaust"
+      assert holocaust.subject.aliases == ["final solution"]
+    end
+
     test "one chip per synset, labelled by its fullest member", ctx do
       # WordNet files every member of Hitler's synset under dictator.
       for lemma <- ["Hitler", "Adolf Hitler", "Der Fuhrer"] do
@@ -101,16 +113,16 @@ defmodule DevilsDictionary.ExamplesTest do
                Enum.flat_map(page.cards, fn card -> Enum.flat_map(card.groups, & &1.senses) end)
     end
 
-    test "a rejected instance is gone for the public and kept internally", ctx do
+    test "a rejected instance is gone for every reader of the page", ctx do
       assertion = instance!(ctx, wn_sense!(ctx, "Judas", "oewn-judas-n"), ctx.dictator)
       {:ok, _} = Claims.review(Claims.current_revision(assertion.id).id, :rejected)
 
       {dictator, _sense} = ctx.dictator
 
+      # The record reads as the public reads it, whoever is looking: a
+      # reviewer finds the rejected edge on `/connections/:id`, not as a chip.
       assert Examples.for_page([dictator.object_id]).items == []
-
-      assert [%{subject: %{label: "Judas"}}] =
-               Examples.for_page([dictator.object_id], :internal).items
+      assert Examples.for_page([dictator.object_id], :internal).items == []
     end
 
     test "standalone, it reads what the page read", ctx do
