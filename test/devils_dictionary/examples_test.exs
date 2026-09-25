@@ -113,16 +113,16 @@ defmodule DevilsDictionary.ExamplesTest do
                Enum.flat_map(page.cards, fn card -> Enum.flat_map(card.groups, & &1.senses) end)
     end
 
-    test "a rejected instance is gone for the public and kept internally", ctx do
+    test "a rejected instance is gone for every reader of the page", ctx do
       assertion = instance!(ctx, wn_sense!(ctx, "Judas", "oewn-judas-n"), ctx.dictator)
       {:ok, _} = Claims.review(Claims.current_revision(assertion.id).id, :rejected)
 
       {dictator, _sense} = ctx.dictator
 
+      # The record reads as the public reads it, whoever is looking: a
+      # reviewer finds the rejected edge on `/connections/:id`, not as a chip.
       assert Examples.for_page([dictator.object_id]).items == []
-
-      assert [%{subject: %{label: "Judas"}}] =
-               Examples.for_page([dictator.object_id], :internal).items
+      assert Examples.for_page([dictator.object_id], :internal).items == []
     end
 
     test "standalone, it reads what the page read", ctx do

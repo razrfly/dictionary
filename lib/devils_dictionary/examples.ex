@@ -119,7 +119,7 @@ defmodule DevilsDictionary.Examples do
   is read twice:
 
     * `:senses` — the page's senses, each with `:id` and `:gloss`, in page order
-    * `:edges` — `instance_edges/2`'s rows for those senses
+    * `:edges` — `instance_edges/2`'s rows for those senses, read `:public`
     * `:sources` — the `sources` rows, keyed by id
   """
   def for_page(lexeme_ids, viewer \\ :public, opts \\ []) do
@@ -127,9 +127,11 @@ defmodule DevilsDictionary.Examples do
     senses = Keyword.get_lazy(opts, :senses, fn -> senses(ids) end)
     sense_ids = Enum.map(senses, & &1.id)
 
+    # Public whoever is looking (below); a caller passing `:edges` read them
+    # the same way, as `WordPage.relations/2` does (CodeRabbit on #186).
     edges =
       Keyword.get_lazy(opts, :edges, fn ->
-        sense_ids |> instance_edges(viewer) |> Repo.all()
+        sense_ids |> instance_edges(:public) |> Repo.all()
       end)
 
     sources =
