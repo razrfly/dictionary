@@ -27,6 +27,17 @@ defmodule DevilsDictionary.Discovery.Providers.Wikiquote do
   (`match_details["sitelinks"]`, `"via"` and `"reached"`), because the item it
   reaches is Wikidata's answer on the day, not the registry's.
 
+  ## The word-level tier (#172 build B)
+
+  A page whose senses refer to nothing reads the word's corroborated
+  candidate instead (`PageEvidence.entities/2`'s second tier): *grief* has no
+  sense link, but the ladder matched its Wikipedia title to Q1026040 and a
+  gloss agreed, at 0.85. The sitelink and the hop work on it unchanged; the
+  recipe records the level and every result carries it
+  (`PageEvidence.labelled/2`), so the shelf says *For the word “grief”, not a
+  particular sense*. Still an identifier reached by a stated ladder rung —
+  nothing here searches Wikidata or Wikiquote by the lemma (C1).
+
   ## One page, six requests at most
 
     1. `sitelinks` — `wbgetentities` for the page's QIDs, `sitefilter=enwikiquote`
@@ -165,6 +176,11 @@ defmodule DevilsDictionary.Discovery.Providers.Wikiquote do
   @impl true
   def shelf_detail, do: "theme pages by Wikidata sitelink"
 
+  # #172 build C: when neither tier names a concept, say so rather than let
+  # a missing Quotes shelf read as "no quotes exist".
+  @impl true
+  def uncovered_note, do: "No concept this word's senses refer to has a Wikiquote page."
+
   # ── the target ──────────────────────────────────────────────────────────
 
   @impl true
@@ -177,7 +193,7 @@ defmodule DevilsDictionary.Discovery.Providers.Wikiquote do
       target
       |> DevilsDictionary.Discovery.page_lexeme_ids()
       |> PageEvidence.entities(@max_entities)
-      |> Enum.map(&Map.take(&1, ["qid", "label", "object_id"]))
+      |> Enum.map(&Map.take(&1, ["qid", "label", "object_id", "level"]))
       |> with_kinds()
 
     {@operation,
@@ -366,7 +382,9 @@ defmodule DevilsDictionary.Discovery.Providers.Wikiquote do
 
       with {:ok, target} <- sitelink(mapping["entities"], mapping["hop"], request_fun),
            {:ok, page} <- fetch_page(target, request_fun) do
-        build(mapping, request, target, page, offset, limit, request_fun)
+        mapping
+        |> build(request, target, page, offset, limit, request_fun)
+        |> PageEvidence.labelled(mapping)
       else
         :none -> {:ok, empty(request, offset)}
         {:error, code} -> {:error, code}

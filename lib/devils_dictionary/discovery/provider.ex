@@ -153,6 +153,20 @@ defmodule DevilsDictionary.Discovery.Provider do
   @callback shelf_detail() :: String.t() | nil
 
   @doc """
+  One sentence the page shows when this provider declines a target, or
+  `nil` (#172 build C).
+
+  A provider that declines at `covers?/1` puts nothing on the page — no
+  mapping, no run, no shelf — and a missing shelf reads as *nothing exists*.
+  For a shelf whose absence is itself a fact worth stating, the sentence
+  says why, in the block's *About*: Wikiquote's *No concept this word's
+  senses refer to has a Wikiquote page.* It costs no request and writes no
+  row; the reader shows it only when no other source filled the content
+  type.
+  """
+  @callback uncovered_note() :: String.t() | nil
+
+  @doc """
   A mark this source's licence *requires* the page to carry, or `nil`.
 
   Not a logo a source would like shown — one its terms make a condition of
@@ -257,6 +271,7 @@ defmodule DevilsDictionary.Discovery.Provider do
                       validate_mapping: 2,
                       retrieve: 4,
                       shelf_detail: 0,
+                      uncovered_note: 0,
                       attribution_mark: 0,
                       retryable_status?: 1
 end

@@ -33,6 +33,10 @@ defmodule DevilsDictionary.Encyclopedia.EntityPage do
       weak evidence that they did
     * **editions** — `edition_of` pointing at this work
     * **contents** — what an edition's definitions define
+    * **cited as** — for a person, the `illustrates` claims they are the
+      subject of, grouped by word (`Examples.cited_as/2`, #181 build 2), and
+      **named under** — the words and things the record files them under
+      (`Examples.named_under/2`)
   Each role is paged independently. In particular, `authored_by` is queried
   once for work subjects and once for content subjects before either cursor is
   applied, so hundreds of definitions cannot crowd a person's works out of the
@@ -51,6 +55,7 @@ defmodule DevilsDictionary.Encyclopedia.EntityPage do
   alias DevilsDictionary.Claims.{AssertionRevision, Connection, Visibility}
   alias DevilsDictionary.Discovery.{Mapping, Result, Run}
   alias DevilsDictionary.Encyclopedia
+  alias DevilsDictionary.Examples
   alias DevilsDictionary.Registry
   alias DevilsDictionary.Registry.{ContentItem, ContentRevision, Entity, Lexeme, Sense}
   alias DevilsDictionary.Repo
@@ -68,6 +73,8 @@ defmodule DevilsDictionary.Encyclopedia.EntityPage do
             editions: [],
             contents: [],
             meaning_connections: [],
+            cited_as: [],
+            named_under: [],
             discovery_appearances: [],
             sources: [],
             connections: %{incoming: [], outgoing: []},
@@ -146,8 +153,21 @@ defmodule DevilsDictionary.Encyclopedia.EntityPage do
 
     {contents, contents_page} = contents_of(entity, id, opts[:contents_after])
 
+    # A person's page answers "what is this person cited for" (#105, #181
+    # wireframe 5): their exemplars grouped by word, in `Rank.order/1`'s
+    # order, and what the record files them under. Those claims are that
+    # section's, so the generic *connected meanings* list is not drawn for a
+    # person — it would be the same claims twice.
+    person? = entity.entity_kind == :person
+    family = Registry.canonical_family(id)
+
     {meaning_connections, meaning_connections_page} =
-      meaning_connections(id, opts[:meaning_connections_after])
+      if person?,
+        do: {[], %{count: 0, next: nil}},
+        else: meaning_connections(id, opts[:meaning_connections_after])
+
+    cited_as = if person?, do: Examples.cited_as(family), else: []
+    named_under = if person?, do: Examples.named_under(family), else: []
 
     {discovery_appearances, discovery_appearances_page} =
       discovery_appearances(id, opts[:discovery_appearances_after])
@@ -175,6 +195,8 @@ defmodule DevilsDictionary.Encyclopedia.EntityPage do
       editions: entity_views(Enum.map(editions, & &1.subject_object_id)),
       contents: definition_views(Enum.map(contents, & &1.subject_object_id)),
       meaning_connections: meaning_connections,
+      cited_as: cited_as,
+      named_under: named_under,
       discovery_appearances: discovery_appearances,
       sources: source_views(id),
       connections: %{incoming: connections_in, outgoing: connections_out},

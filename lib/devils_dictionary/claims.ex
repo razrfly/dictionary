@@ -414,6 +414,20 @@ defmodule DevilsDictionary.Claims do
   reviewer, and #74 requires that such a claim appear from **neither** endpoint.
   The decision is derived from `assertion_reviews` rather than stored, so no
   importer can write it — the same property `review_state/1` relies on.
+
+  ## A nomination of a person (#105 rule 1, #181 build 2)
+
+  A claim someone *submitted here* about a person — its subject an
+  `entity/person` and its submitter a `user` or `bot` actor — is hidden from
+  `:public` until a reviewer accepts it: no decision (`needs_review`), an
+  explicit `needs_review` and `disputed` all hide it. A pending nomination of
+  a living person under *coward* is never public.
+
+  The test is the submitter, not the predicate or the subject alone, because a
+  blanket person rule would hide what the record imported (#181 R3): Wikidata's
+  `instance_of` rows with a person subject have no submitting actor, and the
+  creator and verifier claims have an `import` one. Neither is a nomination,
+  and neither waits for a reviewer.
   """
   def visible(query, :internal), do: query
 
@@ -439,6 +453,23 @@ defmodule DevilsDictionary.Claims do
     |> where(
       [latest_review: review],
       is_nil(review.decision) or review.decision not in [:rejected, :withdrawn]
+    )
+    |> where(
+      [r, latest_review: review],
+      review.decision == :accepted or
+        not (r.subject_kind == "entity" and r.subject_subkind == "person" and
+               fragment(
+                 """
+                 EXISTS (
+                   SELECT 1
+                     FROM assertions nomination
+                     JOIN actors submitter ON submitter.id = nomination.submitted_by_actor_id
+                    WHERE nomination.id = ?
+                      AND submitter.actor_kind IN ('user', 'bot')
+                 )
+                 """,
+                 r.assertion_id
+               ))
     )
     |> where(
       [r],

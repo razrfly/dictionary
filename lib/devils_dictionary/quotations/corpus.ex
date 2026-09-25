@@ -282,9 +282,13 @@ defmodule DevilsDictionary.Quotations.Corpus do
   works dated before 1931.
   """
   def shelf_items(lexeme_ids) when is_list(lexeme_ids) do
+    {level, qids} = page_qids(lexeme_ids)
+    # The live Wikiquote shelf's tier, so the one Quotes shelf is one level
+    # (#172 C2); the card's word comes from the page.
+    labelled = DevilsDictionary.Discovery.PageEvidence.level_details(level, nil)
+
     rows =
-      lexeme_ids
-      |> page_qids()
+      qids
       |> rows_for_concepts()
       |> Enum.filter(&is_integer(&1["object_id"]))
 
@@ -308,11 +312,15 @@ defmodule DevilsDictionary.Quotations.Corpus do
         content_revision_id: revision_id,
         provenance: provenance,
         creator_links: Map.get(credited, object_id, []),
-        match_details: %{
-          "kind" => "sitelink",
-          "evidence" => "identity",
-          "sitelinks" => Enum.map(row["concept_qids"] || [], &sitelink(row, &1))
-        },
+        match_details:
+          Map.merge(
+            %{
+              "kind" => "sitelink",
+              "evidence" => "identity",
+              "sitelinks" => Enum.map(row["concept_qids"] || [], &sitelink(row, &1))
+            },
+            labelled
+          ),
         preview_metadata: %{
           "title" => row["text"],
           "artist" => row["author_label"],
@@ -335,12 +343,20 @@ defmodule DevilsDictionary.Quotations.Corpus do
   end
 
   # Every verified QID the page's senses refer to — not the eight a live
-  # recipe freezes, because this is a lookup and not a request.
-  defp page_qids([]), do: []
+  # recipe freezes, because this is a lookup and not a request. When they
+  # refer to nothing, the word's corroborated candidates, and the level says
+  # which (#172 build B, `PageEvidence`'s two tiers).
+  defp page_qids([]), do: {"sense", []}
 
   defp page_qids(lexeme_ids) do
-    lexeme_ids
-    |> DevilsDictionary.Discovery.PageEvidence.query()
+    case qids(DevilsDictionary.Discovery.PageEvidence.query(lexeme_ids)) do
+      [] -> {"word", qids(DevilsDictionary.Discovery.PageEvidence.word_query(lexeme_ids))}
+      sense -> {"sense", sense}
+    end
+  end
+
+  defp qids(query) do
+    query
     |> select([identifier: ei], ei.external_id)
     |> distinct(true)
     |> Repo.all()

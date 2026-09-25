@@ -424,6 +424,10 @@ defmodule DevilsDictionaryWeb.ConnectedFlowTest do
     test "source sense and evidence can be selected, saved and reviewed by an authorized reviewer",
          ctx do
       ctx = anchor!(ctx)
+      # The anchor already says (meme, illustrates, sense), and a second
+      # nomination of a current claim is held, not written (#181 R4). Withdraw
+      # it so this walk proposes a claim of its own.
+      {:ok, _} = Claims.withdraw(ctx.illustration.id)
       %{conn: conn, user: user} = register_and_log_in_user(%{conn: ctx.conn})
       _user = Repo.update!(Ecto.Changeset.change(user, internal_contributor: true))
       {:ok, view, _} = live(conn, "/connect")

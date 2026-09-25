@@ -196,6 +196,155 @@ The guards on `P31` refuse a person whatever the registry calls it. A place
 held as a concept can still hop by `P31` to its class (*Yellowknife* →
 *Cities*).
 
+## Word-level tier
+
+#172 build B. A page whose senses refer to nothing still reaches a concept
+when the ladder (`Absorb.Linker`) wrote a **corroborated** word-level
+candidate for it: a `lexeme_entity_candidate` at confidence ≥ 0.85. The shelf
+is then labelled *For the word "…", not a particular sense*. The spike below
+was measured before any code, on the dev database (`devils_dictionary_v2`),
+2026-09-24.
+
+**This does not put sense-level shelves on most words.** Candidates exist only
+where the ladder has run — the animals, emotions and culture scopes — so a
+random common noun almost never has one (0 of 50 below). Inside those scopes
+the tier roughly doubles what the hop alone reaches.
+
+Counts below say which unit they are: a **revision** is one row of a claim's
+history, a **link** is one claim (one current revision), a **lexeme** is one
+word-and-part-of-speech, and a **page** is one lemma, which may hold several
+lexemes.
+
+### What the ladder holds
+
+| | count |
+|---|---|
+| `lexeme_entity_candidate` revisions (the issue's 76,195) | 76,195 revisions; **59,770 links** (one current revision each; 59,769 active) |
+| links current, active, confidence ≥ 0.85, with a verified Wikidata identifier | **13,884** links on 13,884 lexemes, 13,548 pages |
+| … by corroboration | `gloss_overlap` 6,613 (0.85) · `taxon_name` 6,376 (0.90) · `qid_agreement` 895 (0.90) |
+| … on lexemes in a ladder scope | all of them: the ladder runs per scope (animals 25,385 · emotions 809 · culture 5 lexemes) |
+
+**The ladder does not record which sense a gloss matched.**
+`corroborate_gloss/2` asks `EXISTS (a sense of the lexeme whose gloss shares
+two content words with the article)` and writes
+`{"corroboration": "gloss_overlap"}` and nothing else. Recomputed per sense
+with the same rule:
+
+| the 6,613 gloss corroborations | |
+|---|---|
+| exactly one sense matches | 4,781 |
+| several match, one shares the most words | 1,479 |
+| several tie for the most | 353 (mostly one meaning in two dictionaries: *zooplankton*, *snakebird*, *world-weariness*) |
+| **promotable**: a unique best sense, the entity not a person (10), the sense without an active `refers_to` of its own (21) | **6,230** links, one per sense, on **6,180** pages |
+
+The rule as merged adds one more condition, from review: a sense that is the
+unique best of *two* candidates is promoted to neither. On the dev database no
+sense was, so the count is unchanged.
+
+`taxon_name` and `qid_agreement` are not gloss matches, so they are never
+promoted: a taxon name agrees with the *word*, and an agreement is already a
+sense-backed link to the same entity.
+
+**Every number here was measured on a dev database whose WordNet links had
+been withdrawn.** On 2026-09-24 at 18:41 a WordNet re-materialization's
+reconcile withdrew all 13,960 `wordnet_wikidata` and 10,236 `wordnet_ili`
+links as *no longer emitted by its source* (the ladder registers the WordNet
+record as their provenance). Pages with an active sense-backed link: **14,676**
+as the ladder wrote them, **1,810** at measurement time. The ownership fix is
+PR #188 and the restore is a separate step after it; neither is part of this
+build, and coverage should be measured again once both are done.
+
+### Ledger
+
+Ceiling: **60 live requests**, `wbgetentities props=sitelinks|claims
+sitefilter=enwikiquote`, fifty to a request, the project's User-Agent, at
+least 350 ms apart, memoized so no QID was asked twice.
+
+| # | requests | what was asked | what came back | running total |
+|---|---|---|---|---|
+| W1 | 2 | the 53 QIDs of 113 words (13 probe words, 50 random common nouns, 50 random nouns in the animals and emotions scopes), both tiers | sitelinks and hop claims for all 53 | **2** |
+| W2 | 21 | `ConceptHop.reach/4` steps, one per word that hopped, as the provider walks them | table below | **23** |
+
+**23 of 60.**
+
+After the build, on the dev database, each run in-process with this branch's
+code (no Oban job ever committed, so the main checkout's node on 4007 could
+not claim one):
+
+| # | requests | what was run | what came back | running total |
+|---|---|---|---|---|
+| W3 | 8 | Wikiquote for *grief* and *love*, word-level recipes (Q1026040, Q316) | 12 cited lines each, every one `"level": "word"` | **31** |
+| W4 | 8 | the same after one promotion run: new recipes, sense-level | the same pages, 12 lines each, none word-level | **39** |
+| W5 | 4 | Wikiquote for *prey* (word-level, Q170430 → *Predation*) for the screenshots | 12 lines | **43** |
+
+(*prey*'s Commons run, 2 requests, 12 word-level depictions, and its Met run,
+1 request, nothing, are on those providers' budgets.)
+
+### After the build, and after one promotion run
+
+The thirteen probe words, Wikiquote run for each page it covers:
+
+| | Quotes shelf | of which word-level |
+|---|---|---|
+| after build B | 4 (*war*, *coward*, *grief*, *love*) | 2 (*grief*, *love*) |
+| after one promotion run | 4 | 0 — *grief* and *love* each promoted to a Wiktionary sense (5 and 6 shared words) |
+
+*power* has no shelf only because its WordNet link was withdrawn on 2026-09-24 (see
+above); the other eight are in no ladder scope or, like *nepotism* and *bank*,
+in one with no candidates.
+
+The promotion run (`Linker.corroborate/1` per scope, app not started, run rows
+196–198): **6,003** links promoted in animals, **227** in emotions, **0** in
+culture — the 6,230 the spike predicted, each on its own sense. A second run
+wrote no revision (199–201), and a third, with the review fixes that also
+withdraw a promotion whose evidence has lapsed, promoted nothing and withdrew
+nothing (202–204).
+
+| English words with a sense-backed Wikidata link (WordNet links withdrawn) | before | after |
+|---|---|---|
+| lexemes | 1,849 | **8,053** |
+| pages (lemmas) | 1,810 | **7,950** |
+| lexemes still read at the word level (in scope, ≥ 0.85, no sense link), animals + emotions, which overlap | 13,117 + 281 | 7,137 + 57 |
+
+The issue measured 15,010 lexemes before the withdrawal. How much of the
+promotion overlaps the restored WordNet links is unknown until they are
+restored; this table does not predict it.
+
+### Who gains a page
+
+*Base* is a direct sitelink from a sense's item; *A* adds the hop (merged);
+*B* adds a corroborated candidate's direct sitelink when the page has no
+sense link; *A + B* is what ships. Sense links as the ladder wrote them; in
+brackets, the dev database at measurement time (WordNet links withdrawn).
+
+| sample | n | base | A | B | A + B | of which word-level |
+|---|---|---|---|---|---|---|
+| probe words | 13 | 2 (1) | 3 (2) | 4 (3) | **5 (4)** | 2 |
+| random common nouns (a WordNet and a Wiktionary noun, `^[a-z]{3,}$`, lowest `md5`) | 50 | 0 (0) | 1 (0) | 0 (0) | **1 (0)** | 0 |
+| random nouns inside the animals and emotions scopes, same rule | 50 | 5 (4) | 8 (5) | 8 (8) | **16 (15)** | 8 |
+
+The probe words:
+
+| word | sense link | candidate ≥ 0.85 | page |
+|---|---|---|---|
+| war | Q198 (`wiktionary_qid`) | — | War, direct |
+| power | Q911554 (`wordnet_wikidata`, withdrawn 2026-09-24) | — | Business magnate, direct; none while withdrawn |
+| coward | Q104605901 | — | Cowardice, by `P1552` (A) |
+| **grief** | none | Q1026040, `gloss_overlap` | **Grief**, word-level (B) |
+| **love** | none | Q316, `gloss_overlap` | **Love**, word-level (B) |
+| nepotism, bank | none | none (in the culture scope, which has no candidates) | none |
+| family, solitude, justice, pop art, situationship, narcissism | none | none (in no scope) | none |
+
+What B reached in the scoped sample: *prey* → Predation, *masochism* →
+Sadomasochism, *fondness* → Affection directly; *jennet* → Horses, *foxhound*
+→ Dogs, *menhaden* → Fish (`P279`), *larva* → Animals and *malacologist* →
+Zoology (`P279` → `P279`) by the hop from the candidate.
+
+**B is bounded by the ladder's scopes.** Of fifty random common nouns, none
+has a corroborated candidate, because the ladder has run on three scopes and
+no others; inside those scopes B doubles what A reaches (8 → 16). Growing it is
+a ladder run over another scope, not a change here.
+
 ## Corpus
 
 Build 6 of #158, issue #174: the public-domain Wikiquote corpus,

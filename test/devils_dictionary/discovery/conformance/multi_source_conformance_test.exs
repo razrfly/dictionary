@@ -263,6 +263,74 @@ defmodule DevilsDictionary.Discovery.Conformance.MultiSourceConformanceTest do
 
     refute html =~ "The provider returned this result"
 
-    assert ContentTypes.evidence(:image) == [:identity, :query]
+    assert ContentTypes.evidence(:image) == [:identity, :word_identity, :query]
+  end
+
+  # #172 build B, C4: a word-level identity is labelled on every reason and
+  # once on its shelf, on each of the three rows that admit it — and the one
+  # search source beside it on the Images row is still called a search.
+  test "a word-level identity says so on every reason and once on the shelf, on each row",
+       %{target: target} do
+    deliver!(target)
+    states = Discovery.states(target.object_id)
+    note = "For the word “soldier”, not a particular sense."
+
+    # The identity stub's results as a word-level recipe returns them.
+    word_level =
+      Map.update!(states, Middle.slug(), fn state ->
+        %{
+          state
+          | items:
+              Enum.map(state.items, fn item ->
+                %{
+                  item
+                  | match_details:
+                      Map.merge(
+                        item.match_details,
+                        DevilsDictionary.Discovery.PageEvidence.level_details("word", "soldier")
+                      )
+                }
+              end)
+        }
+      end)
+
+    for type <- [:quote, :artwork, :image] do
+      assert ContentTypes.admits?(type, :word_identity)
+
+      # The search stub stays only where its row admits a search.
+      shelf =
+        if type == :image,
+          do: word_level,
+          else: Map.delete(word_level, Plebs.slug())
+
+      shelf = Map.new(shelf, fn {slug, state} -> {slug, %{state | content_types: [type]}} end)
+      html = render_component(&Culture.section/1, states: shelf)
+      document = LazyHTML.from_fragment(html)
+
+      line = LazyHTML.query(document, "#culture-word-level-#{type}")
+      assert Enum.count(line) == 1, "the #{type} shelf states its level #{Enum.count(line)} times"
+      assert line |> LazyHTML.text() |> String.trim() == note
+
+      reasons =
+        document
+        |> LazyHTML.query("#culture-about-#{type}-#{Middle.slug()} li")
+        |> Enum.map(&(&1 |> LazyHTML.text() |> String.trim()))
+
+      assert length(reasons) == 8
+
+      for reason <- reasons do
+        assert reason =~ "Direct depiction of “soldier” (Q4991371). " <> note
+      end
+
+      if type == :image do
+        assert html =~
+                 "Search result for “soldier”, ranked by the provider and not matched on an identifier."
+      end
+    end
+
+    # And a sense-level shelf says nothing of the kind.
+    html = render_component(&Culture.section/1, states: states)
+    refute html =~ "not a particular sense"
+    assert count(html, "[id^='culture-word-level-']") == 0
   end
 end

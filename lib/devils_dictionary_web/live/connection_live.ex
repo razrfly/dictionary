@@ -119,19 +119,21 @@ defmodule DevilsDictionaryWeb.ConnectionLive do
   def handle_params(params, _uri, %{assigns: %{live_action: action}} = socket)
       when action in [:show, :edit, :challenge] do
     reviewer = Contributions.reviewer?(socket.assigns[:current_scope])
+    contributor = Contributions.internal_contributor?(socket.assigns[:current_scope])
 
-    socket =
-      assign(socket,
-        reviewer: reviewer,
-        contributor: Contributions.internal_contributor?(socket.assigns[:current_scope])
-      )
+    socket = assign(socket, reviewer: reviewer, contributor: contributor)
 
     with {id, ""} <- Integer.parse(params["id"] || ""),
          {:ok, revision} <- revision_number(params["revision"]) do
       connection =
         Connection.build(id,
           revision: revision,
-          visibility: if(reviewer, do: :internal, else: :public)
+          # A contributor reads internally too (reviewers are contributors):
+          # a person they nominated is hidden from the public until accepted
+          # (#105 rule 1), and they must still be able to open it — from the
+          # form's redirect, the word page's *Review* link, or a held
+          # duplicate's.
+          visibility: if(contributor, do: :internal, else: :public)
         )
 
       editable = connection && Contributions.can_revise?(socket.assigns[:current_scope], id)
@@ -676,6 +678,22 @@ defmodule DevilsDictionaryWeb.ConnectionLive do
          socket
          |> put_flash(:info, "Proposed with attribution; awaiting review.")
          |> push_navigate(to: ~p"/connections/#{assertion.id}")}
+
+      # Already said: nothing is written, and the reader is sent to the claim
+      # that says it (#181 R4 — endorsing it is build 3).
+      {:error, {:held, assertion_id}} ->
+        {:noreply,
+         socket
+         |> put_flash(:info, "Already proposed; nothing new was saved.")
+         |> push_navigate(to: ~p"/connections/#{assertion_id}")}
+
+      {:error, :evidence_required_for_person} ->
+        {:noreply,
+         assign(
+           socket,
+           :error,
+           "A person is proposed only with evidence. Cite a source meaning or passage."
+         )}
 
       {:error, _} ->
         {:noreply,

@@ -13,7 +13,9 @@ defmodule DevilsDictionary.Discovery.Providers.Met do
   point at through an active `refers_to` claim, or reaches one in at most two
   `P31`/`P279` steps on Wikidata — *World War I → world war → war*. That is the
   same shape as CineGraph's exact keyword-id match, and the reason shown on the
-  shelf names the tag that did it.
+  shelf names the tag that did it. When no sense refers to anything, the QIDs
+  are the word's corroborated candidates instead, and every object kept for
+  one is labelled as the word's (#172 build B, `PageEvidence.labelled/2`).
 
   Three consequences of the P0 probe are built in rather than documented:
 
@@ -223,8 +225,11 @@ defmodule DevilsDictionary.Discovery.Providers.Met do
   def retrieve(@operation, mapping, request, request_fun) do
     with :ok <- validate_mapping(@operation, mapping) do
       case mapping["entities"] do
-        [] -> {:ok, empty(request, :no_results)}
-        entities when is_list(entities) -> search(mapping, entities, request, request_fun)
+        [] ->
+          {:ok, empty(request, :no_results)}
+
+        entities when is_list(entities) ->
+          mapping |> search(entities, request, request_fun) |> PageEvidence.labelled(mapping)
       end
     else
       {:error, _} -> {:error, "invalid_mapping"}

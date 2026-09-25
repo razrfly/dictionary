@@ -43,6 +43,12 @@ defmodule DevilsDictionaryWeb.Culture do
     default: false,
     doc: "whether the reader may carry a corpus candidate into the review composer"
 
+  attr :notes, :list,
+    default: [],
+    doc:
+      "`%{type:, text:}` per content type a declining provider explains " <>
+        "(`uncovered_note/0`, #172 build C); shown in the About when no shelf of that type is"
+
   def section(assigns) do
     states = assigns.states |> Map.values() |> Enum.sort_by(&{archetype_rank(&1), &1.provider})
 
@@ -53,8 +59,9 @@ defmodule DevilsDictionaryWeb.Culture do
 
     ~H"""
     <.compact_section
-      :if={@shelves != [] or @browsers != []}
+      :if={@shelves != [] or @browsers != [] or @notes != []}
       shelves={@shelves}
+      notes={Enum.reject(@notes, fn note -> Enum.any?(@shelves, &(&1.type == note.type)) end)}
       browsers={@browsers}
       provider_count={@provider_count}
       return_path={@return_path}
@@ -124,7 +131,8 @@ defmodule DevilsDictionaryWeb.Culture do
         bands: bands(type, entries),
         register: register,
         searched?: searched?,
-        overflow: overflow
+        overflow: overflow,
+        word_level: word_level(entries)
       }
       |> then(fn shelf ->
         # What each state actually put on the rail, after the fold: the byline
@@ -142,6 +150,23 @@ defmodule DevilsDictionaryWeb.Culture do
   end
 
   defp register?(item), do: is_binary((Map.get(item, :preview_metadata) || %{})["register"])
+
+  # #172 build B: a shelf built from the word's corroborated candidate, where
+  # no sense refers to anything, says so once, above its rail, in the sentence
+  # each of its reasons ends with. Read from the entries' own reasons, like
+  # `attested?/1`, so it is a fact about what arrived and not about a row.
+  # One shelf is never both levels (C2), so the first word-level reason
+  # speaks for the shelf.
+  defp word_level(entries) do
+    Enum.find_value(entries, fn %{state: state, item: item} ->
+      item
+      |> reasons(Map.get(state, :term))
+      |> Enum.find_value(fn
+        %MatchReason{level: :word, word: word} -> MatchReason.word_level_note(word)
+        _reason -> nil
+      end)
+    end)
+  end
 
   defp entry_key(%{state: state, item: item}),
     do: {state.provider, item.external_namespace, item.external_id}
@@ -233,6 +258,7 @@ defmodule DevilsDictionaryWeb.Culture do
   end
 
   attr :shelves, :list, required: true
+  attr :notes, :list, default: []
   attr :browsers, :list, default: []
   attr :provider_count, :integer, required: true
   attr :return_path, :string, default: nil
@@ -310,6 +336,16 @@ defmodule DevilsDictionaryWeb.Culture do
                  no positioned ancestor inside the rail its containing block
                  was the page, past the rail's `overflow-x` — `/define/coward`
                  scrolled sideways to 5,268 px at every width. --%>
+            <%!-- The shelf's own line for a word-level match (#172): once, where
+                 the reader starts reading the rail, in the sentence each
+                 reason in the About note ends with. --%>
+            <p
+              :if={shelf.word_level && shelf.entries != []}
+              id={"culture-word-level-#{shelf.type}"}
+              class="text-pretty text-base/6 text-mist-600 sm:text-sm/6 dark:text-mist-400"
+            >
+              {shelf.word_level}
+            </p>
             <div :for={{band, index} <- Enum.with_index(shelf.bands)} :if={shelf.entries != []}>
               <p
                 :if={band.label}
@@ -447,12 +483,31 @@ defmodule DevilsDictionaryWeb.Culture do
       <%!-- One About for the block (D3 of #126, taken one step further): a
            section per kind, and inside each the section per source the shelf
            always had, in the rail's own order. --%>
-      <details :if={@about != []} id="culture-about" class="min-w-0 pt-3 pb-4">
+      <details :if={@about != [] or @notes != []} id="culture-about" class="min-w-0 pt-3 pb-4">
         <summary class="w-fit cursor-pointer text-base text-mist-500 hover:text-mist-700 focus-visible:outline-2 focus-visible:outline-offset-2 sm:text-sm dark:text-mist-400 dark:hover:text-mist-200">
-          Matches for “{@about |> hd() |> contributing() |> Enum.find_value(& &1[:term])}” · About these results
+          {if @about != [],
+            do:
+              "Matches for “#{@about |> hd() |> contributing() |> Enum.find_value(& &1[:term])}” · About these results",
+            else: "About these results"}
         </summary>
         <div class="space-y-5 pt-3">
           <.compact_note :for={shelf <- @about} shelf={shelf} contributor={@contributor} />
+          <%!-- #172 build C: a kind no source could look for on this page,
+               and the declining source's own sentence for why. Nothing was
+               requested; a missing shelf would otherwise read as nothing
+               existing. --%>
+          <section
+            :for={note <- @notes}
+            id={"culture-about-empty-#{note.type}"}
+            class="space-y-2"
+          >
+            <h4 class="text-base font-medium text-mist-950 sm:text-sm dark:text-white">
+              {shelf_heading(note.type)}
+            </h4>
+            <p class="text-pretty text-base text-mist-600 sm:text-sm dark:text-mist-300">
+              {note.text}
+            </p>
+          </section>
         </div>
       </details>
     </.slab>
@@ -1541,8 +1596,17 @@ defmodule DevilsDictionaryWeb.Culture do
   # A corpus item arrives with its reasons already built from the manifest and
   # the encyclopedia; a persisted or transient provider result carries the
   # `match_details` its provider wrote. Both end up as the same struct.
-  defp reasons(%{match_reasons: reasons}, _term) when is_list(reasons), do: reasons
-  defp reasons(item, term), do: MatchReason.from_result(item.match_details, term)
+  # A corpus reason reached for the word does not know the word; the page does.
+  defp reasons(%{match_reasons: reasons}, term) when is_list(reasons),
+    do: Enum.map(reasons, &with_word(&1, term))
+
+  defp reasons(item, term),
+    do: item.match_details |> MatchReason.from_result(term) |> Enum.map(&with_word(&1, term))
+
+  defp with_word(%MatchReason{level: :word, word: nil} = reason, term) when is_binary(term),
+    do: %{reason | word: term}
+
+  defp with_word(reason, _term), do: reason
 
   defp review_note(%{review_state: :not_yet_reviewed}), do: " · not yet reviewed"
   defp review_note(_item), do: ""

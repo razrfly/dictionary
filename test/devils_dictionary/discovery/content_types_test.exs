@@ -29,8 +29,23 @@ defmodule DevilsDictionary.Discovery.ContentTypesTest do
 
       evidence = ContentTypes.evidence(type)
       assert evidence != []
-      assert Enum.all?(evidence, &(&1 in [:identity, :attestation, :query]))
+      assert Enum.all?(evidence, &(&1 in [:identity, :word_identity, :attestation, :query]))
     end
+  end
+
+  test "a word-level identity reaches the three sense-level shelves and no other" do
+    # #172 build B: the shelves gated on a sense's concept — Quotes, Artworks,
+    # Images — read the word's corroborated candidate when no sense refers to
+    # anything, and say so. Every other row matches on the word already, or
+    # on a keyword, and has no use for the class; admitting it there would be
+    # a label with nothing to label.
+    assert Enum.filter(ContentTypes.known(), &ContentTypes.admits?(&1, :word_identity)) ==
+             [:artwork, :image, :quote]
+
+    word_level = %MatchReason{kind: :sitelink, level: :word}
+    assert ContentTypes.admits?(:quote, word_level)
+    refute ContentTypes.admits?(:film, word_level)
+    refute ContentTypes.admits?(:text, word_level)
   end
 
   test "the image shelf requires attribution, and a search reaches only the rows that name it" do
@@ -40,7 +55,7 @@ defmodule DevilsDictionary.Discovery.ContentTypesTest do
     # files are photographs but also engravings, maps and posters.
     assert ContentTypes.fetch!(:image).heading == "Images"
     assert ContentTypes.attribution(:image) == :required
-    assert ContentTypes.evidence(:image) == [:identity, :query]
+    assert ContentTypes.evidence(:image) == [:identity, :word_identity, :query]
 
     # This asserted `:image` was the *only* row that admits a search until
     # #143 added `:music`, whose first source is a catalogue search gated on

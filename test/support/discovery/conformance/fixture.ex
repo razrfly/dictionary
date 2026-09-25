@@ -89,7 +89,16 @@ defmodule DevilsDictionary.Discovery.Conformance.Fixture do
               optional(:certainty) => :verified | :candidate
             }
 
-  @optional_callbacks setup: 1, uncovered_target: 1, creator_case: 1
+  @doc """
+  A target this provider covers only through the word-level tier (#172 build
+  B): no sense on it refers to anything, and a corroborated
+  `lexeme_entity_candidate` names the same QIDs `covered_target/1`'s senses
+  do, so the `:results` stub answers it unchanged. Optional: only a provider
+  that reads `Discovery.PageEvidence` has a word-level tier to be held to.
+  """
+  @callback word_level_target(context :: map()) :: Discovery.target()
+
+  @optional_callbacks setup: 1, uncovered_target: 1, creator_case: 1, word_level_target: 1
 
   @doc """
   Installs one scenario's responses, the shared ones included.

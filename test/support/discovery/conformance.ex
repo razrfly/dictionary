@@ -37,10 +37,54 @@ defmodule DevilsDictionary.Discovery.Conformance do
   anyone remembering to move it.
   """
 
-  alias DevilsDictionary.Discovery.Providers
+  import ExUnit.Assertions
+
+  alias DevilsDictionary.Discovery.{MatchReason, PageEvidence, Providers}
 
   @doc false
   def uncovered_target(fixture, context), do: fixture.uncovered_target(context)
+
+  @doc """
+  C4 of #172: a result retrieved for a word-level recipe is labelled, or the
+  suite is red — the way an unlabelled `:query` fails the evidence checks.
+
+  Labelled means all of it: `match_details["level"]` says `"word"`, the
+  declared class is `:word_identity` (so the content-type row's `evidence`
+  is what admits it, and only three rows do), and every identity reason on
+  it is word-level and ends with `MatchReason.word_level_note/1`. A result
+  retrieved for a sense-level recipe says `"sense"` and none of that.
+
+  Public, so the suite's own test can hand it an unlabelled result and watch
+  it fail.
+  """
+  def assert_labelled!(details, term, entities) do
+    reasons = MatchReason.from_result(details, term)
+
+    case PageEvidence.level(entities) do
+      "word" ->
+        assert details["level"] == "word",
+               "a result from a word-level recipe carries match_details[\"level\"] " <>
+                 inspect(details["level"])
+
+        assert MatchReason.declared_evidence(details) == :word_identity,
+               "a result from a word-level recipe declares " <>
+                 inspect(details["evidence"]) <> ", not \"word_identity\""
+
+        for reason <- reasons, reason.kind not in [:attestation, :query] do
+          assert MatchReason.evidence(reason) == :word_identity
+
+          assert String.ends_with?(
+                   MatchReason.describe(reason),
+                   MatchReason.word_level_note(term)
+                 ),
+                 "a word-level reason reads #{inspect(MatchReason.describe(reason))}"
+        end
+
+      "sense" ->
+        assert details["level"] in [nil, "sense"]
+        refute Enum.any?(reasons, &(MatchReason.evidence(&1) == :word_identity))
+    end
+  end
 
   @doc """
   True when the provider *claims* the background pipeline.
@@ -864,7 +908,7 @@ defmodule DevilsDictionary.Discovery.Conformance do
 
               declared = MatchReason.declared_evidence(details)
 
-              assert declared in [:identity, :attestation, :query],
+              assert declared in [:identity, :word_identity, :attestation, :query],
                      "#{@slug} wrote no match_details[\"evidence\"] on #{item.external_id}"
 
               # The declaration is not decoration: it has to be the class of
@@ -878,6 +922,107 @@ defmodule DevilsDictionary.Discovery.Conformance do
               assert ContentTypes.admits?(type, declared),
                      "#{@slug} declared #{inspect(declared)} onto the #{type} shelf, " <>
                        "whose row admits #{inspect(ContentTypes.evidence(type))}"
+
+              # And the level matches the recipe it was retrieved for (#172 C4).
+              mapping = Repo.get!(DevilsDictionary.Discovery.Mapping, run.mapping_id)
+
+              DevilsDictionary.Discovery.Conformance.assert_labelled!(
+                details,
+                state.term,
+                mapping.parameters["entities"]
+              )
+            end
+          end
+        end
+
+        if function_exported?(@fixture, :word_level_target, 1) do
+          describe "#{@slug} — the word-level tier (#172 build B)" do
+            setup context do
+              target = @fixture.word_level_target(context)
+              @fixture.stub(:results, context)
+
+              assert {:queued, run} = Discovery.request(target, @slug)
+              assert :ok = Discovery.execute_run(run.id)
+
+              mapping = Repo.get!(DevilsDictionary.Discovery.Mapping, run.mapping_id)
+              state = Discovery.state(target.object_id, @slug)
+
+              type =
+                Enum.find(@provider.capabilities().content_types, &(&1 in ContentTypes.known()))
+
+              %{word_target: target, mapping: mapping, state: state, type: type}
+            end
+
+            test "a page whose senses refer to nothing reads the word's candidate, and says so",
+                 %{mapping: mapping, state: state, type: type} do
+              # The recipe is word-level, all of it (C2), and carries the level.
+              entities = mapping.parameters["entities"]
+              assert entities != []
+              assert Enum.all?(entities, &(&1["level"] == "word"))
+
+              assert state.items != [],
+                     "#{@slug} delivered nothing for a word-level recipe its :results stub answers"
+
+              assert ContentTypes.admits?(type, :word_identity)
+
+              for item <- state.items do
+                DevilsDictionary.Discovery.Conformance.assert_labelled!(
+                  item.match_details,
+                  state.term,
+                  entities
+                )
+              end
+
+              # And the shelf says it once, above the rail.
+              html = render_component(&Culture.section/1, states: %{@slug => state})
+              note = MatchReason.word_level_note(state.term)
+              document = LazyHTML.from_fragment(html)
+              line = LazyHTML.query(document, "#culture-word-level-#{type}")
+
+              assert Enum.count(line) == 1
+              assert line |> LazyHTML.text() |> String.trim() == note
+              refute html =~ "Search result for"
+            end
+
+            test "an unlabelled word-level result fails the check",
+                 %{mapping: mapping, state: state} do
+              [item | _] = state.items
+              entities = mapping.parameters["entities"]
+
+              # The label taken off, as a provider that forgot it would leave it:
+              # the declared class back to `identity`, and the level gone.
+              for stripped <- [
+                    Map.put(item.match_details, "evidence", "identity"),
+                    Map.drop(item.match_details, ["level", "evidence"])
+                    |> Map.put("evidence", "identity")
+                  ] do
+                assert_raise ExUnit.AssertionError, fn ->
+                  DevilsDictionary.Discovery.Conformance.assert_labelled!(
+                    stripped,
+                    state.term,
+                    entities
+                  )
+                end
+              end
+            end
+
+            test "a candidate below the corroborated floor covers nothing", context do
+              word = DevilsDictionary.WordFixtures.word!(context, "thither", ~w(wordnet))
+              DevilsDictionary.WordFixtures.sense!(context, word, "wordnet")
+
+              DevilsDictionary.WordFixtures.link!(
+                word,
+                DevilsDictionary.WordFixtures.concept!("Q900999", "Thither"),
+                method: :title_match,
+                confidence: 0.7
+              )
+
+              refute @provider.covers?(%{
+                       object_id: word.object_id,
+                       term: word.lemma,
+                       language: word.language_tag,
+                       relevance: "term"
+                     })
             end
           end
         end

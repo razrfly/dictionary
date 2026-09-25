@@ -5,7 +5,9 @@ defmodule DevilsDictionary.Claims.Visibility do
   Public relationship reads exclude withdrawn/rejected claim revisions and
   attachments whose current content or sense revision is withdrawn. Pending
   and disputed claims remain visible with their actual state: hiding a dispute
-  would make the correction process invisible.
+  would make the correction process invisible. The one exception is a person
+  nominated here (#105 rule 1): until a reviewer accepts it, it is not public
+  at all (`Claims.visible/2`).
 
   Rights restrictions are a different axis. They redact bodies, excerpts and
   quoted evidence while retaining identity, source and revision provenance.

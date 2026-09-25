@@ -1,0 +1,93 @@
+{
+  "checksum": "2b08b5c73fd3ce61550a5824f2caf6b5ab16d55400f7ed36175f64bdd5609cfd",
+  "description": "The first hand-curated exemplars (#181 build 2). Draft rows for the owner's review (#181 decision 4): every claim, date and URL was checked on 2026-09-24, and nothing here is public until a reviewer accepts it on /connections/:id.",
+  "kind": "exemplars",
+  "manifest": "first-v1",
+  "row_count": 3,
+  "rows": [
+    {
+      "curator": "holden",
+      "evidence": [
+        {
+          "attribution": "CNN Business, 25 October 2024",
+          "role": "supports",
+          "url": "https://www.cnn.com/2024/10/25/media/washington-post-wont-endorse-presidential-candidate"
+        },
+        {
+          "attribution": "NPR, 28 October 2024",
+          "role": "supports",
+          "url": "https://www.npr.org/2024/10/28/nx-s1-5168416/washington-post-bezos-endorsement-president-cancellations-resignations"
+        },
+        {
+          "attribution": "CBS News, 29 October 2024 (his own defence of the decision)",
+          "role": "contradicts",
+          "url": "https://www.cbsnews.com/news/jeff-bezos-washington-post-endorsement-decision/"
+        }
+      ],
+      "rationale": "Eleven days before the 2024 US presidential election, the owner of The Washington Post stopped the paper's editorial board from publishing the endorsement of Kamala Harris it had drafted. Staff and former editors read it as yielding in advance to Donald Trump; he said it was to restore trust in the press.",
+      "sense": {
+        "match": "shows fear or timidity",
+        "source": "wordnet"
+      },
+      "subject": {
+        "kind": "person",
+        "label": "Jeff Bezos",
+        "wikidata": "Q312556"
+      },
+      "word": "coward"
+    },
+    {
+      "curator": "holden",
+      "evidence": [
+        {
+          "attribution": "Meta Newsroom, 6–7 January 2021",
+          "role": "supports",
+          "url": "https://about.fb.com/news/2021/01/responding-to-the-violence-in-washington-dc/"
+        },
+        {
+          "attribution": "NPR, 7 January 2025",
+          "role": "supports",
+          "url": "https://www.npr.org/2025/01/07/nx-s1-5251151/meta-fact-checking-mark-zuckerberg-trump"
+        }
+      ],
+      "rationale": "In January 2021 his company blocked Donald Trump's Facebook and Instagram accounts indefinitely, citing the risk of further violence. In January 2025, weeks before Trump's second inauguration, he ended Meta's US third-party fact-checking programme, presenting it as a return to free expression.",
+      "sense": {
+        "match": "professes beliefs and opinions",
+        "source": "wordnet"
+      },
+      "subject": {
+        "kind": "person",
+        "label": "Mark Zuckerberg",
+        "wikidata": "Q36215"
+      },
+      "word": "hypocrite"
+    },
+    {
+      "curator": "holden",
+      "evidence": [
+        {
+          "attribution": "United States Holocaust Memorial Museum, Holocaust Encyclopedia",
+          "role": "supports",
+          "url": "https://encyclopedia.ushmm.org/content/en/timeline-event/holocaust/1933-1938/chamberlains-peace-for-our-time-speech"
+        },
+        {
+          "attribution": "The National WWII Museum",
+          "role": "supports",
+          "url": "https://www.nationalww2museum.org/war/articles/appeasement-and-peace-our-time"
+        }
+      ],
+      "rationale": "Signed the Munich Agreement in September 1938, ceding Czechoslovakia's Sudetenland to Hitler's Germany, and told the crowd outside Downing Street it was \"peace for our time\". Germany occupied the rest of Czechoslovakia six months later.",
+      "sense": {
+        "match": "bring peace by acceding to demands",
+        "source": "wordnet"
+      },
+      "subject": {
+        "kind": "person",
+        "label": "Neville Chamberlain",
+        "wikidata": "Q10664"
+      },
+      "word": "appeaser"
+    }
+  ],
+  "schema_version": 1
+}
