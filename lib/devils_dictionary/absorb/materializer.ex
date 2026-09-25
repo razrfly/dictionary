@@ -716,7 +716,13 @@ defmodule DevilsDictionary.Absorb.Materializer do
            source_record_revision_id: revisions[row[:source_record_id]]
          }}
       end),
-      [:gloss, :group_key, :position, :tags, :topics, :examples, :url],
+      # `metadata` carries meaning too: it is where a source publishes its own
+      # identifiers for a sense — WordNet's `ili` and `wikidata`, Wiktionary's
+      # `wikidata` — and the ladder links from the current revision's copy.
+      # Left out of the comparison, a synset that dropped or replaced its QID
+      # wrote no revision, the old QID stayed current, and the ladder went on
+      # asserting a link its source had stopped making (#188).
+      [:gloss, :group_key, :position, :tags, :topics, :examples, :url, :metadata],
       now
     )
 
