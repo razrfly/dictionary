@@ -73,6 +73,7 @@ defmodule Mix.Tasks.Dd.Link do
         "rungs" => stringify(written.rungs),
         "corroboration" => stringify(written.corroboration),
         "retired_unevidenced_people" => written.retired_unevidenced_people,
+        "retired_unsupported" => stringify(written.retired_unsupported),
         "l1_pct" => links.pct,
         "l1_strict_pct" => links.strict_pct,
         "l2_conflicts" => conflicts.count,
@@ -93,6 +94,9 @@ defmodule Mix.Tasks.Dd.Link do
     say("\nrungs — #{fmt_ms(elapsed)}")
     for {method, n} <- written.rungs, do: row(method, n)
     row("retired name-only people", written.retired_unevidenced_people)
+
+    for {method, n} <- written.retired_unsupported,
+        do: row("retired #{method}, evidence gone", n)
 
     if written.corroboration != %{} do
       say("\ncorroboration")

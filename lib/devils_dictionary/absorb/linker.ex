@@ -87,8 +87,15 @@ defmodule DevilsDictionary.Absorb.Linker do
   The reads are: each rung is one set-based statement over a million rows, which
   is the only sane way to do this. The **write** goes through
   `Materializer.write_assertions/3`, so the ladder and the importer share one
-  revision policy, one idempotency key and one ownership rule. Two spellings of
-  "write a claim" is how the two halves of a corpus come to disagree.
+  revision policy and one idempotency key. Two spellings of "write a claim" is
+  how the two halves of a corpus come to disagree.
+
+  What they do **not** share is ownership. A link is the ladder's reading of a
+  record, not something the record emits, so the rungs keep the record they
+  read in the claim's `metadata["source_record_id"]` and never register the
+  link in `source_assertion_outputs`. Registered there, every link became an
+  output that `Materializer.reconcile/2` withdraws when a materialize run does
+  not re-emit it — and a materialize run never emits a ladder link.
   """
 
   import Ecto.Query
@@ -161,22 +168,27 @@ defmodule DevilsDictionary.Absorb.Linker do
     retired = withdraw_unevidenced_people(scope)
     run_id = opts[:run_id]
 
-    rungs = %{
-      # A scoped run means exactly that population. Entity kind never changes
-      # membership; evidence outside it uses run_selected/2 below.
-      wiktionary_qid: wiktionary_qid(scope, run_id),
-      wordnet_wikidata: wordnet_wikidata(scope, run_id),
-      wordnet_ili: wordnet_ili(scope, run_id),
-      # Inference remains scoped: title and disambiguation matching are the
-      # expensive, lower-confidence population-expanding passes.
-      title_match: title_match(scope, run_id),
-      disambiguation: disambiguation(scope, run_id)
-    }
+    # A scoped run means exactly that population. Entity kind never changes
+    # membership; evidence outside it uses run_selected/2 below.
+    {identified, unsupported} = identifier_rungs(scope, run_id)
+
+    rungs =
+      Map.merge(identified, %{
+        # Inference remains scoped: title and disambiguation matching are the
+        # expensive, lower-confidence population-expanding passes.
+        title_match: title_match(scope, run_id),
+        disambiguation: disambiguation(scope, run_id)
+      })
 
     corroboration =
       if opts[:skip_corroboration], do: %{}, else: corroborate(scope, run_id: run_id)
 
-    %{rungs: rungs, corroboration: corroboration, retired_unevidenced_people: retired}
+    %{
+      rungs: rungs,
+      corroboration: corroboration,
+      retired_unevidenced_people: retired,
+      retired_unsupported: unsupported
+    }
   end
 
   @doc """
@@ -191,48 +203,84 @@ defmodule DevilsDictionary.Absorb.Linker do
     population = {:selected, normalize_selection!(selection)}
     run_id = opts[:run_id]
 
+    {identified, unsupported} = identifier_rungs(population, run_id)
+
     %{
-      rungs: %{
-        wiktionary_qid: wiktionary_qid(population, run_id),
-        wordnet_wikidata: wordnet_wikidata(population, run_id),
-        wordnet_ili: wordnet_ili(population, run_id),
-        title_match: 0,
-        disambiguation: 0
-      },
+      rungs: Map.merge(identified, %{title_match: 0, disambiguation: 0}),
       corroboration: %{},
-      retired_unevidenced_people: 0
+      retired_unevidenced_people: 0,
+      retired_unsupported: unsupported
     }
   end
 
-  # ── rung 1 · wiktionary_qid ──────────────────────────────────────────────
+  # ── rungs 1–3 · a source's own identifier ────────────────────────────────
+
+  # The identifier rungs read a mapping a source publishes on a sense, so a
+  # link they wrote is only as good as that mapping *now*. Each one therefore
+  # does two things with one proposal set: writes what the evidence supports,
+  # and withdraws what it no longer does (`retire_unsupported/3`). A retired
+  # sense is evidence withdrawn too — the source stopped publishing the meaning
+  # — so the evidence queries read only senses still in force.
+  #
+  # Not through `Materializer.reconcile/2`: that retires a record's *outputs*,
+  # and a link is not one — a materialize run never emits a ladder link, so
+  # registering links as outputs withdrew every one of them on the record's
+  # next import (#188).
+  @identifier_rungs [:wiktionary_qid, :wordnet_wikidata, :wordnet_ili]
+
+  defp identifier_rungs(population, run_id) do
+    Enum.reduce(@identifier_rungs, {%{}, %{}}, fn method, {written, retired} ->
+      {w, r} = identifier_rung(method, population, run_id)
+      {Map.put(written, method, w), Map.put(retired, method, r)}
+    end)
+  end
+
+  defp identifier_rung(method, population, run_id) do
+    claims = proposals(evidence(method, population), @sense_backed, population)
+    {write_claims(claims, run_id), retire_unsupported(method, population, claims)}
+  end
 
   @doc false
-  def wiktionary_qid(scope, run_id \\ nil) do
-    write(
-      """
-      SELECT s.object_id, e.object_id, s.source_id,
-             'wiktionary_qid', #{@confidence.wiktionary_qid},
-             jsonb_build_object(
-               'evidence', 'sense_metadata_wikidata',
-               'wikidata_qid', q.qid,
-               'source_record_id', source_rev.source_record_id),
-             source_rev.source_record_id
-        FROM senses s
-        JOIN sources so ON so.id = s.source_id AND so.slug = 'wiktionary'
-        JOIN sense_revisions rev ON rev.sense_id = s.object_id AND rev.is_current
-        LEFT JOIN source_record_revisions source_rev ON source_rev.id = rev.source_record_revision_id
-        CROSS JOIN LATERAL jsonb_array_elements_text(#{jsonb_array("rev.metadata->'wikidata'")}) AS q(qid)
-        JOIN external_identifiers x
-          ON x.namespace = 'wikidata' AND x.external_id = q.qid AND x.status = 'verified'
-        JOIN entities e ON e.object_id = x.object_id
-       #{identifier_population_join(scope, "s.lexeme_id")}
-       WHERE #{identifier_population_filter(scope, "s.lexeme_id", "e.object_id", "source_rev.source_record_id")}
-         AND jsonb_typeof(rev.metadata->'wikidata') = 'array'
-      """,
-      @sense_backed,
-      scope,
-      run_id
-    )
+  def wiktionary_qid(scope, run_id \\ nil),
+    do: identifier_rung(:wiktionary_qid, scope, run_id) |> elem(0)
+
+  @doc false
+  def wordnet_wikidata(scope, run_id \\ nil),
+    do: identifier_rung(:wordnet_wikidata, scope, run_id) |> elem(0)
+
+  @doc false
+  def wordnet_ili(scope, run_id \\ nil),
+    do: identifier_rung(:wordnet_ili, scope, run_id) |> elem(0)
+
+  @identifier_source %{
+    wiktionary_qid: "wiktionary",
+    wordnet_wikidata: "wordnet",
+    wordnet_ili: "wordnet"
+  }
+
+  # ── rung 1 · wiktionary_qid ──────────────────────────────────────────────
+
+  defp evidence(:wiktionary_qid, scope) do
+    """
+    SELECT s.object_id, e.object_id, s.source_id,
+           'wiktionary_qid', #{@confidence.wiktionary_qid},
+           jsonb_build_object(
+             'evidence', 'sense_metadata_wikidata',
+             'wikidata_qid', q.qid,
+             'source_record_id', source_rev.source_record_id)
+      FROM senses s
+      JOIN sources so ON so.id = s.source_id AND so.slug = 'wiktionary'
+      JOIN sense_revisions rev ON rev.sense_id = s.object_id AND rev.is_current
+      LEFT JOIN source_record_revisions source_rev ON source_rev.id = rev.source_record_revision_id
+      CROSS JOIN LATERAL jsonb_array_elements_text(#{jsonb_array("rev.metadata->'wikidata'")}) AS q(qid)
+      JOIN external_identifiers x
+        ON x.namespace = 'wikidata' AND x.external_id = q.qid AND x.status = 'verified'
+      JOIN entities e ON e.object_id = x.object_id
+     #{identifier_population_join(scope, "s.lexeme_id")}
+     WHERE #{identifier_population_filter(scope, "s.lexeme_id", "e.object_id", "source_rev.source_record_id")}
+       AND jsonb_typeof(rev.metadata->'wikidata') = 'array'
+       AND s.identity_state <> 'retired'
+    """
   end
 
   # ── rung 2 · wordnet_wikidata ────────────────────────────────────────────
@@ -241,61 +289,49 @@ defmodule DevilsDictionary.Absorb.Linker do
   # array (`panther` → `["Q35255", "Q109647288"]`). Reading only the string
   # shape skipped 265 references in the Animals scope, so those senses never
   # got a link however good the entity was.
-  @doc false
-  def wordnet_wikidata(scope, run_id \\ nil) do
-    write(
-      """
-      SELECT s.object_id, e.object_id, s.source_id,
-             'wordnet_wikidata', #{@confidence.wordnet_wikidata},
-             jsonb_build_object(
-               'evidence', 'sense_metadata_wikidata',
-               'wikidata_qid', q.qid,
-               'source_record_id', source_rev.source_record_id),
-             source_rev.source_record_id
-        FROM senses s
-        JOIN sources so ON so.id = s.source_id AND so.slug = 'wordnet'
-        JOIN sense_revisions rev ON rev.sense_id = s.object_id AND rev.is_current
-        LEFT JOIN source_record_revisions source_rev ON source_rev.id = rev.source_record_revision_id
-        CROSS JOIN LATERAL jsonb_array_elements_text(#{jsonb_qids("rev.metadata->'wikidata'")}) AS q(qid)
-        JOIN external_identifiers x
-          ON x.namespace = 'wikidata' AND x.external_id = q.qid AND x.status = 'verified'
-        JOIN entities e ON e.object_id = x.object_id
-       #{identifier_population_join(scope, "s.lexeme_id")}
-       WHERE #{identifier_population_filter(scope, "s.lexeme_id", "e.object_id", "source_rev.source_record_id")}
-         AND jsonb_typeof(rev.metadata->'wikidata') IN ('string', 'array')
-      """,
-      @sense_backed,
-      scope,
-      run_id
-    )
+  defp evidence(:wordnet_wikidata, scope) do
+    """
+    SELECT s.object_id, e.object_id, s.source_id,
+           'wordnet_wikidata', #{@confidence.wordnet_wikidata},
+           jsonb_build_object(
+             'evidence', 'sense_metadata_wikidata',
+             'wikidata_qid', q.qid,
+             'source_record_id', source_rev.source_record_id)
+      FROM senses s
+      JOIN sources so ON so.id = s.source_id AND so.slug = 'wordnet'
+      JOIN sense_revisions rev ON rev.sense_id = s.object_id AND rev.is_current
+      LEFT JOIN source_record_revisions source_rev ON source_rev.id = rev.source_record_revision_id
+      CROSS JOIN LATERAL jsonb_array_elements_text(#{jsonb_qids("rev.metadata->'wikidata'")}) AS q(qid)
+      JOIN external_identifiers x
+        ON x.namespace = 'wikidata' AND x.external_id = q.qid AND x.status = 'verified'
+      JOIN entities e ON e.object_id = x.object_id
+     #{identifier_population_join(scope, "s.lexeme_id")}
+     WHERE #{identifier_population_filter(scope, "s.lexeme_id", "e.object_id", "source_rev.source_record_id")}
+       AND jsonb_typeof(rev.metadata->'wikidata') IN ('string', 'array')
+       AND s.identity_state <> 'retired'
+    """
   end
 
   # ── rung 3 · wordnet_ili ─────────────────────────────────────────────────
 
-  @doc false
-  def wordnet_ili(scope, run_id \\ nil) do
-    write(
-      """
-      SELECT s.object_id, e.object_id, s.source_id,
-             'wordnet_ili', #{@confidence.wordnet_ili},
-             jsonb_build_object(
-               'evidence', 'sense_metadata_ili',
-               'ili', rev.metadata->>'ili',
-               'source_record_id', source_rev.source_record_id),
-             source_rev.source_record_id
-        FROM senses s
-        JOIN sources so ON so.id = s.source_id AND so.slug = 'wordnet'
-        JOIN sense_revisions rev ON rev.sense_id = s.object_id AND rev.is_current
-        LEFT JOIN source_record_revisions source_rev ON source_rev.id = rev.source_record_revision_id
-        JOIN entities e ON e.metadata->>'wordnet_ili' = rev.metadata->>'ili'
-       #{identifier_population_join(scope, "s.lexeme_id")}
-       WHERE #{identifier_population_filter(scope, "s.lexeme_id", "e.object_id", "source_rev.source_record_id")}
-         AND rev.metadata->>'ili' IS NOT NULL
-      """,
-      @sense_backed,
-      scope,
-      run_id
-    )
+  defp evidence(:wordnet_ili, scope) do
+    """
+    SELECT s.object_id, e.object_id, s.source_id,
+           'wordnet_ili', #{@confidence.wordnet_ili},
+           jsonb_build_object(
+             'evidence', 'sense_metadata_ili',
+             'ili', rev.metadata->>'ili',
+             'source_record_id', source_rev.source_record_id)
+      FROM senses s
+      JOIN sources so ON so.id = s.source_id AND so.slug = 'wordnet'
+      JOIN sense_revisions rev ON rev.sense_id = s.object_id AND rev.is_current
+      LEFT JOIN source_record_revisions source_rev ON source_rev.id = rev.source_record_revision_id
+      JOIN entities e ON e.metadata->>'wordnet_ili' = rev.metadata->>'ili'
+     #{identifier_population_join(scope, "s.lexeme_id")}
+     WHERE #{identifier_population_filter(scope, "s.lexeme_id", "e.object_id", "source_rev.source_record_id")}
+       AND rev.metadata->>'ili' IS NOT NULL
+       AND s.identity_state <> 'retired'
+    """
   end
 
   # ── rung 4 · title_match ─────────────────────────────────────────────────
@@ -848,40 +884,99 @@ defmodule DevilsDictionary.Absorb.Linker do
   # Every rung ends the same way: read set-based, write through the shared path.
   #
   # The `SELECT` yields `(subject_id, entity_id, source_id, method, confidence,
-  # metadata[, source_record_id])`. Deduplication happens here rather than in SQL because a rung can
+  # metadata)`. Deduplication happens here rather than in SQL because a rung can
   # propose the same claim twice — a Wiktionary sense listing one QID twice, two
   # candidate titles redirecting to one article — and `write_assertions/3` keys
   # on `origin_key`, which is what makes the second proposal the same claim.
   defp write(select, predicate, scope, run_id) do
+    select |> proposals(predicate, scope) |> write_claims(run_id)
+  end
+
+  defp proposals(select, predicate, scope) do
     %{rows: rows} = Repo.query!(select, params(scope), timeout: :infinity)
 
-    claims =
-      Enum.map(rows, fn row ->
-        [subject, object, source, method, confidence, metadata | provenance] = row
+    rows
+    |> Enum.map(fn row ->
+      [subject, object, source, method, confidence, metadata] = row
 
-        %{
-          subject: subject,
-          predicate: predicate,
-          object: object,
-          source_id: source,
-          origin_key: "link|#{method}|#{subject}|#{object}",
-          method: method,
-          # A bare `0.70` in SQL is `numeric`, and Postgrex hands numerics back
-          # as `Decimal`. `assertion_revisions.confidence` is a float8, so it is
-          # cast here rather than by decorating every literal in five rungs.
-          confidence: to_float(confidence),
-          metadata: metadata || %{},
-          source_record_id: List.first(provenance)
-        }
-      end)
-      |> Enum.uniq_by(& &1.origin_key)
-      |> filter_claims()
+      %{
+        subject: subject,
+        predicate: predicate,
+        object: object,
+        source_id: source,
+        origin_key: "link|#{method}|#{subject}|#{object}",
+        method: method,
+        # A bare `0.70` in SQL is `numeric`, and Postgrex hands numerics back
+        # as `Decimal`. `assertion_revisions.confidence` is a float8, so it is
+        # cast here rather than by decorating every literal in five rungs.
+        confidence: to_float(confidence),
+        # No `source_record_id`, deliberately. The record a rung read is
+        # evidence, and it is kept in `metadata`; passing it here would make
+        # the link an *output* of that record in `source_assertion_outputs`,
+        # and `Materializer.reconcile/2` withdraws every output a materialize
+        # run did not re-emit — which is every ladder link, since the
+        # materializer never emits one. #183's WordNet re-materialization
+        # withdrew 24,196 of them that way on 2026-09-24.
+        metadata: metadata || %{}
+      }
+    end)
+    |> Enum.uniq_by(& &1.origin_key)
+  end
 
+  defp write_claims(claims, run_id) do
     claims
+    |> filter_claims()
     |> Enum.chunk_every(2_000)
     |> Enum.reduce(0, fn chunk, acc ->
       acc + Materializer.write_assertions(chunk, run_id)
     end)
+  end
+
+  # What an identifier rung withdraws: every active link of its method, inside
+  # the population it just read, that this run did not propose. The population
+  # predicate is the rung's own — the sense's lexeme, the linked entity, the
+  # sense's current source record — so a link that is still supported is always
+  # in the proposal set, and a link outside the population is never looked at.
+  # An empty proposal set is an answer too: a selection whose evidence has all
+  # gone retires everything it held.
+  #
+  # Three things are never touched. A claim a person reviewed keeps its
+  # decision: withdrawing it would write a revision the review is not on, and a
+  # rerun would then read the claim as unreviewed. A claim some other method
+  # wrote — `manual`, the materializer's own links, a promotion — is not this
+  # rung's to retire. And a retirement is a revision, never a delete, so the
+  # history keeps what the ladder once read.
+  defp retire_unsupported(method, population, claims) do
+    proposed = MapSet.new(claims, & &1.origin_key)
+
+    %{rows: rows} =
+      Repo.query!(
+        """
+        SELECT a.id, a.origin_key
+          FROM assertions a
+          JOIN assertion_revisions ar ON ar.assertion_id = a.id AND ar.is_current
+          JOIN predicates p ON p.id = ar.predicate_id AND p.key = '#{@sense_backed}'
+          JOIN senses s ON s.object_id = ar.subject_object_id
+          JOIN sources so ON so.id = s.source_id AND so.slug = '#{@identifier_source[method]}'
+          LEFT JOIN sense_revisions rev ON rev.sense_id = s.object_id AND rev.is_current
+          LEFT JOIN source_record_revisions source_rev ON source_rev.id = rev.source_record_revision_id
+         #{identifier_population_join(population, "s.lexeme_id")}
+         WHERE #{identifier_population_filter(population, "s.lexeme_id", "ar.object_object_id", "source_rev.source_record_id")}
+           AND a.origin_key LIKE 'link|#{method}|%'
+           AND ar.method = '#{method}'
+           AND ar.lifecycle_state = 'active'
+           AND NOT EXISTS (SELECT 1 FROM assertion_reviews rv WHERE rv.assertion_revision_id = ar.id)
+        """,
+        params(population),
+        timeout: :infinity
+      )
+
+    rows
+    |> Enum.reject(fn [_id, key] -> MapSet.member?(proposed, key) end)
+    |> Enum.map(fn [id, _key] ->
+      {:ok, _} = Claims.withdraw(id, reason: "its source no longer carries the identifier")
+    end)
+    |> length()
   end
 
   defp to_float(nil), do: nil

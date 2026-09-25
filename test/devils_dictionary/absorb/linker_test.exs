@@ -6,7 +6,8 @@ defmodule DevilsDictionary.Absorb.LinkerTest do
   """
   use DevilsDictionary.DataCase, async: true
 
-  alias DevilsDictionary.Absorb.Linker
+  alias DevilsDictionary.Absorb.{Linker, Materializer}
+  alias DevilsDictionary.Absorb.Sources.{Wiktionary, Wordnet}
   alias DevilsDictionary.Claims.AssertionRevision
   alias DevilsDictionary.Fixtures
   alias DevilsDictionary.Lexicon.ScopeMember
@@ -136,6 +137,14 @@ defmodule DevilsDictionary.Absorb.LinkerTest do
   end
 
   defp qid_of(object_id), do: DevilsDictionary.Encyclopedia.qid(object_id)
+
+  defp owners(assertion_id) do
+    Repo.all(
+      from o in "source_assertion_outputs",
+        where: o.assertion_id == ^assertion_id,
+        select: o.source_record_id
+    )
+  end
 
   # An encyclopedia's prose about a thing: a content item and an `about` claim.
   defp article!(ctx, entity, body) do
@@ -272,30 +281,16 @@ defmodule DevilsDictionary.Absorb.LinkerTest do
       assert work_link.object_object_id == work.object_id
       assert work_link.predicate.key == "refers_to"
 
-      output =
-        Repo.one!(
-          from o in "source_assertion_outputs",
-            where: o.assertion_id == ^link.assertion_id,
-            select: %{
-              source_record_id: o.source_record_id,
-              last_seen_run_id: o.last_seen_run_id
-            }
-        )
-
-      assert output.source_record_id == link.metadata["source_record_id"]
-      assert output.last_seen_run_id == person_run.id
+      # The record is evidence, not an owner: a link in `source_assertion_outputs`
+      # is one `Materializer.reconcile/2` withdraws on the record's next import.
+      assert owners(link.assertion_id) == []
 
       before = length(Claims.history(work_link.assertion_id))
       rerun = Sources.start_run("link_selected")
       Linker.run_selected(%{lexeme_ids: [title.object_id]}, run_id: rerun.id)
 
       assert length(Claims.history(work_link.assertion_id)) == before
-
-      assert Repo.one!(
-               from o in "source_assertion_outputs",
-                 where: o.assertion_id == ^work_link.assertion_id,
-                 select: o.last_seen_run_id
-             ) == rerun.id
+      assert owners(work_link.assertion_id) == []
     end
 
     test "missing and oversized populations cannot become global crawls" do
@@ -830,6 +825,296 @@ defmodule DevilsDictionary.Absorb.LinkerTest do
 
       assert %{rungs: %{title_match: 0}} = Linker.run(ctx.animals)
       assert links(outside, :title_match) == []
+    end
+  end
+
+  defp synset(n, attrs) do
+    Map.merge(
+      %{
+        "id" => "oewn-9#{n}-n",
+        "members" => ["relinked-#{n}"],
+        "partOfSpeech" => "n",
+        "definition" => ["a thing the ladder links"],
+        "_edges" => []
+      },
+      attrs
+    )
+  end
+
+  defp publish!(ctx, slug, module, raw, external_id) do
+    source = ctx.sources[slug]
+    Sources.insert_records(source, [%{external_id: external_id, raw: raw}])
+
+    record =
+      Repo.get_by!(DevilsDictionary.Sources.SourceRecord,
+        source_id: source.id,
+        external_id: external_id
+      )
+      |> Sources.with_raw()
+
+    run = Sources.start_run("materialize", source_id: source.id)
+    {:ok, _} = Materializer.run(record, module, run_id: run.id)
+    Materializer.reconcile(run.id, [record.id])
+    record
+  end
+
+  defp wordnet!(ctx, raw), do: publish!(ctx, "wordnet", Wordnet, raw, raw["id"])
+
+  defp relink(selection) do
+    Linker.run_selected(selection, run_id: Sources.start_run("link_selected").id)
+  end
+
+  defp lexeme_named(lemma), do: Repo.get_by!(DevilsDictionary.Registry.Lexeme, lemma: lemma)
+
+  defp state(lexeme, method, entity) do
+    lexeme
+    |> links(method)
+    |> Enum.find(&(&1.object_object_id == entity.object_id))
+    |> case do
+      nil -> nil
+      link -> link.lifecycle_state
+    end
+  end
+
+  defp sense_ids(lexeme) do
+    Repo.all(
+      from s in DevilsDictionary.Registry.Sense,
+        where: s.lexeme_id == ^lexeme.object_id,
+        select: s.object_id
+    )
+  end
+
+  defp current_sense_metadata(sense_id) do
+    Repo.one!(
+      from r in DevilsDictionary.Registry.SenseRevision,
+        where: r.sense_id == ^sense_id and r.is_current,
+        select: r.metadata
+    )
+  end
+
+  # The ladder reads identifiers a source publishes on a sense, so these drive
+  # the whole path a real refresh takes: a new payload through
+  # `Sources.insert_records/2`, `Materializer.run/3` and `reconcile/2` under a
+  # materialize run, then the ladder over what landed on the current sense.
+  describe "when the source's evidence changes" do
+    # What #183's WordNet re-materialization did to the dev database on
+    # 2026-09-24: 24,196 links withdrawn as "no longer emitted by its source",
+    # because the rungs had registered each link as an output of the synset's
+    # record and a materialize run never emits one.
+    test "an unchanged re-materialization leaves the ladder's links standing", ctx do
+      n = System.unique_integer([:positive])
+      entity = concept!("Q9#{n}", wordnet_ili: "i9#{n}")
+      raw = synset(n, %{"wikidata" => "Q9#{n}", "ili" => "i9#{n}"})
+      record = wordnet!(ctx, raw)
+
+      assert %{rungs: %{wordnet_wikidata: 1, wordnet_ili: 1}} =
+               relink(%{source_record_ids: [record.id]})
+
+      revisions = Repo.aggregate(AssertionRevision, :count)
+      wordnet!(ctx, raw)
+
+      lexeme = lexeme_named("relinked-#{n}")
+      assert state(lexeme, :wordnet_wikidata, entity) == :active
+      assert state(lexeme, :wordnet_ili, entity) == :active
+
+      # Provenance survives as evidence on the claim, not as ownership.
+      assert link!(lexeme, :wordnet_wikidata).metadata["source_record_id"] == record.id
+      assert owners(link!(lexeme, :wordnet_wikidata).assertion_id) == []
+
+      # And a rerun over unchanged evidence has nothing to say.
+      assert %{retired_unsupported: %{wordnet_wikidata: 0, wordnet_ili: 0}} =
+               relink(%{source_record_ids: [record.id]})
+
+      assert Repo.aggregate(AssertionRevision, :count) == revisions
+    end
+
+    test "a synset that drops its QID and ILI withdraws both links, and only them", ctx do
+      n = System.unique_integer([:positive])
+      entity = concept!("Q9#{n}", wordnet_ili: "i9#{n}")
+      record = wordnet!(ctx, synset(n, %{"wikidata" => "Q9#{n}", "ili" => "i9#{n}"}))
+      lexeme = lexeme_named("relinked-#{n}")
+
+      # A neighbour whose synset keeps its evidence, and a curator's own claim
+      # on the very sense that loses it.
+      other = System.unique_integer([:positive])
+      neighbour_entity = concept!("Q9#{other}")
+      wordnet!(ctx, synset(other, %{"wikidata" => "Q9#{other}"}))
+      neighbour = lexeme_named("relinked-#{other}")
+
+      [sense_id] = sense_ids(lexeme)
+
+      {:ok, manual} =
+        Claims.assert(sense_id, "refers_to", entity.object_id, %{method: "manual"})
+
+      relink(%{lexeme_ids: [lexeme.object_id, neighbour.object_id]})
+      wikidata_link = link!(lexeme, :wordnet_wikidata)
+      history = length(Claims.history(wikidata_link.assertion_id))
+
+      wordnet!(ctx, synset(n, %{}))
+
+      # The evidence reached the current sense: that is the transition under test.
+      assert current_sense_metadata(sense_id)["wikidata"] == nil
+      assert current_sense_metadata(sense_id)["ili"] == nil
+
+      assert %{
+               rungs: %{wordnet_wikidata: 1, wordnet_ili: 0},
+               retired_unsupported: %{wordnet_wikidata: 1, wordnet_ili: 1}
+             } = relink(%{lexeme_ids: [lexeme.object_id, neighbour.object_id]})
+
+      assert state(lexeme, :wordnet_wikidata, entity) == :withdrawn
+      assert state(lexeme, :wordnet_ili, entity) == :withdrawn
+      assert state(neighbour, :wordnet_wikidata, neighbour_entity) == :active
+      assert Claims.current_revision(manual.id).lifecycle_state == :active
+
+      # Retired, never deleted: the history still says what the ladder read.
+      withdrawn = link!(lexeme, :wordnet_wikidata)
+      assert withdrawn.rationale == "its source no longer carries the identifier"
+      assert length(Claims.history(wikidata_link.assertion_id)) == history + 1
+
+      # Idempotent: nothing further to withdraw, nothing to write.
+      revisions = Repo.aggregate(AssertionRevision, :count)
+
+      assert %{retired_unsupported: %{wordnet_wikidata: 0, wordnet_ili: 0}} =
+               relink(%{lexeme_ids: [lexeme.object_id, neighbour.object_id]})
+
+      assert Repo.aggregate(AssertionRevision, :count) == revisions
+
+      # And the evidence coming back brings the claim back.
+      wordnet!(ctx, synset(n, %{"wikidata" => "Q9#{n}", "ili" => "i9#{n}"}))
+      relink(%{source_record_ids: [record.id]})
+      assert state(lexeme, :wordnet_wikidata, entity) == :active
+    end
+
+    test "a replaced identifier withdraws the old link and writes the new one", ctx do
+      n = System.unique_integer([:positive])
+      a = concept!("Q8#{n}")
+      b = concept!("Q7#{n}")
+      c = concept!("Q6#{n}")
+
+      # The array form: two QIDs, one of which is later replaced.
+      wordnet!(ctx, synset(n, %{"wikidata" => ["Q8#{n}", "Q7#{n}"]}))
+      lexeme = lexeme_named("relinked-#{n}")
+      relink(%{lexeme_ids: [lexeme.object_id]})
+
+      assert state(lexeme, :wordnet_wikidata, a) == :active
+      assert state(lexeme, :wordnet_wikidata, b) == :active
+
+      wordnet!(ctx, synset(n, %{"wikidata" => ["Q7#{n}", "Q6#{n}"]}))
+
+      assert %{rungs: %{wordnet_wikidata: 2}, retired_unsupported: %{wordnet_wikidata: 1}} =
+               relink(%{lexeme_ids: [lexeme.object_id]})
+
+      assert state(lexeme, :wordnet_wikidata, a) == :withdrawn
+      assert state(lexeme, :wordnet_wikidata, b) == :active
+      assert state(lexeme, :wordnet_wikidata, c) == :active
+    end
+
+    test "a Wiktionary sense that drops its QID loses the link on a scoped run", ctx do
+      n = System.unique_integer([:positive])
+      word = "wikilinked-#{n}"
+      entity = concept!("Q9#{n}")
+
+      raw = fn wikidata ->
+        sense = %{"glosses" => ["a thing Wiktionary names"]}
+        sense = if wikidata, do: Map.put(sense, "wikidata", wikidata), else: sense
+        %{"word" => word, "pos" => "noun", "lang_code" => "en", "senses" => [sense]}
+      end
+
+      publish!(ctx, "wiktionary", Wiktionary, raw.(["Q9#{n}"]), "#{word}/noun/0")
+      lexeme = lexeme_named(word)
+
+      Repo.insert!(%ScopeMember{
+        scope_id: ctx.animals.id,
+        lexeme_id: lexeme.object_id,
+        reasons: ["wordnet_closure"]
+      })
+
+      Linker.run(ctx.animals)
+      assert state(lexeme, :wiktionary_qid, entity) == :active
+
+      publish!(ctx, "wiktionary", Wiktionary, raw.(nil), "#{word}/noun/0")
+
+      # The scope now proposes nothing at all for this rung: an empty result is
+      # still an answer.
+      assert %{rungs: %{wiktionary_qid: 0}, retired_unsupported: %{wiktionary_qid: 1}} =
+               Linker.run(ctx.animals)
+
+      assert state(lexeme, :wiktionary_qid, entity) == :withdrawn
+    end
+
+    test "a member dropped from its synset takes its links with it", ctx do
+      n = System.unique_integer([:positive])
+      entity = concept!("Q9#{n}")
+      raw = synset(n, %{"members" => ["kept-#{n}", "dropped-#{n}"], "wikidata" => "Q9#{n}"})
+      record = wordnet!(ctx, raw)
+      relink(%{source_record_ids: [record.id]})
+
+      wordnet!(ctx, Map.put(raw, "members", ["kept-#{n}"]))
+      relink(%{source_record_ids: [record.id]})
+
+      assert state(lexeme_named("kept-#{n}"), :wordnet_wikidata, entity) == :active
+      assert state(lexeme_named("dropped-#{n}"), :wordnet_wikidata, entity) == :withdrawn
+    end
+
+    test "a selection retires only inside itself", ctx do
+      n = System.unique_integer([:positive])
+      entity = concept!("Q9#{n}")
+      wordnet!(ctx, synset(n, %{"wikidata" => "Q9#{n}"}))
+      lexeme = lexeme_named("relinked-#{n}")
+      relink(%{lexeme_ids: [lexeme.object_id]})
+
+      wordnet!(ctx, synset(n, %{}))
+
+      # A different word, a different entity: this link is outside both.
+      bystander = lexeme!(ctx, "bystander-#{n}")
+
+      assert %{retired_unsupported: %{wordnet_wikidata: 0}} =
+               relink(%{lexeme_ids: [bystander.object_id]})
+
+      assert state(lexeme, :wordnet_wikidata, entity) == :active
+
+      # Selecting the entity reaches it, even though no current evidence does.
+      assert %{retired_unsupported: %{wordnet_wikidata: 1}} =
+               relink(%{entity_ids: [entity.object_id]})
+
+      assert state(lexeme, :wordnet_wikidata, entity) == :withdrawn
+    end
+
+    test "a reviewed link keeps its decision, and a rejected one stays rejected", ctx do
+      n = System.unique_integer([:positive])
+      rejected_entity = concept!("Q9#{n}")
+      accepted_entity = concept!("Q8#{n}")
+      wordnet!(ctx, synset(n, %{"wikidata" => ["Q9#{n}", "Q8#{n}"]}))
+      lexeme = lexeme_named("relinked-#{n}")
+      relink(%{lexeme_ids: [lexeme.object_id]})
+
+      [rejected, accepted] =
+        for e <- [rejected_entity, accepted_entity] do
+          link =
+            Enum.find(links(lexeme, :wordnet_wikidata), &(&1.object_object_id == e.object_id))
+
+          link
+        end
+
+      {:ok, _} = Claims.review(rejected.id, :rejected)
+      {:ok, _} = Claims.review(accepted.id, :accepted)
+
+      wordnet!(ctx, synset(n, %{}))
+
+      assert %{retired_unsupported: %{wordnet_wikidata: 0}} =
+               relink(%{lexeme_ids: [lexeme.object_id]})
+
+      # Both current revisions are the ones the curator decided on.
+      assert Claims.current_revision(rejected.assertion_id).id == rejected.id
+      assert Claims.current_revision(accepted.assertion_id).id == accepted.id
+      assert Claims.review_state(rejected.id) == :rejected
+      assert Claims.review_state(accepted.id) == :accepted
+
+      # The evidence returning does not resurrect the rejected one.
+      wordnet!(ctx, synset(n, %{"wikidata" => ["Q9#{n}", "Q8#{n}"]}))
+      relink(%{lexeme_ids: [lexeme.object_id]})
+      assert Claims.current_revision(rejected.assertion_id).id == rejected.id
+      assert Claims.review_state(rejected.id) == :rejected
     end
   end
 end

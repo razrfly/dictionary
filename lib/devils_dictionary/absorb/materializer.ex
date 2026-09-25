@@ -716,7 +716,13 @@ defmodule DevilsDictionary.Absorb.Materializer do
            source_record_revision_id: revisions[row[:source_record_id]]
          }}
       end),
-      [:gloss, :group_key, :position, :tags, :topics, :examples, :url],
+      # `metadata` carries meaning too: it is where a source publishes its own
+      # identifiers for a sense — WordNet's `ili` and `wikidata`, Wiktionary's
+      # `wikidata` — and the ladder links from the current revision's copy.
+      # Left out of the comparison, a synset that dropped or replaced its QID
+      # wrote no revision, the old QID stayed current, and the ladder went on
+      # asserting a link its source had stopped making (#188).
+      [:gloss, :group_key, :position, :tags, :topics, :examples, :url, :metadata],
       now
     )
 
@@ -1158,7 +1164,13 @@ defmodule DevilsDictionary.Absorb.Materializer do
 
   One helper for every claim written anywhere in the absorb — `Absorb.Linker`
   calls it too, so the ladder's rungs and the materializer share one revision
-  policy, one idempotency key and one ownership rule rather than three.
+  policy and one idempotency key rather than two.
+
+  Ownership follows `source_record_id`: a claim that names one is registered as
+  that record's output in `source_assertion_outputs`, and `reconcile/2` will
+  withdraw it when a run over that record stops emitting it. So only a record's
+  own output may name it — the ladder, which reads records but is not emitted
+  by them, passes none.
 
   Each claim is a map of `subject`, `predicate` (a key), `object`, `source_id`,
   `origin_key`, and optionally `source_record_id`, `method`, `confidence` and
