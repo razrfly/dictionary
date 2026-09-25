@@ -350,8 +350,19 @@ defmodule DevilsDictionary.Artworks do
   # a lexeme-level `lexeme_entity_candidate` is the same QID asserted about the
   # word rather than one of its meanings, so it is admitted and labelled as such
   # rather than silently promoted to a meaning it was never claimed about.
+  #
+  # The same two tiers `Discovery.PageEvidence` reads (#172 build B): the word's
+  # candidates only when no meaning refers to anything (C2), and only once the
+  # ladder has corroborated them. Before that this path admitted every
+  # candidate beside the senses' QIDs, a 0.40 disambiguation guess included,
+  # on one shelf.
   defp qid_suggestions(lexeme_ids, senses, opts) do
-    evidence = sense_qid_evidence(senses) ++ lexeme_qid_evidence(lexeme_ids, senses)
+    evidence =
+      case sense_qid_evidence(senses) do
+        [] -> lexeme_qid_evidence(lexeme_ids, senses)
+        sense -> sense
+      end
+
     qids = evidence |> Enum.map(& &1.qid) |> Enum.uniq()
 
     if qids == [] do
@@ -519,7 +530,8 @@ defmodule DevilsDictionary.Artworks do
             identifier.status == :verified,
         where:
           revision.subject_object_id in ^lexeme_ids and revision.is_current and
-            revision.lifecycle_state == :active,
+            revision.lifecycle_state == :active and
+            revision.confidence >= ^DevilsDictionary.Discovery.PageEvidence.word_floor(),
         order_by: [desc: revision.confidence, asc: entity.object_id],
         select: %{
           qid: identifier.external_id,

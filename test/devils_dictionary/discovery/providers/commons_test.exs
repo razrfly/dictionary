@@ -231,6 +231,7 @@ defmodule DevilsDictionary.Discovery.Providers.CommonsTest do
       assert item.match_details == %{
                "kind" => "depiction",
                "evidence" => "identity",
+               "level" => "sense",
                "depicts" => [
                  %{
                    "qid" => "Q4991371",

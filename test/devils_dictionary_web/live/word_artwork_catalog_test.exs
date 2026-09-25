@@ -192,11 +192,50 @@ defmodule DevilsDictionaryWeb.WordArtworkCatalogTest do
 
     assert has_element?(view, "#culture-filter-artwork", "Artworks")
 
+    # The word-level tier's sentence (#172): on the reason, and once on the
+    # shelf.
     assert has_element?(
              view,
              "#culture-about-artwork-catalog",
-             "matched to the word and not to this meaning"
+             "For the word “love”, not a particular sense."
            )
+
+    assert has_element?(
+             view,
+             "#culture-word-level-artwork",
+             "For the word “love”, not a particular sense."
+           )
+  end
+
+  test "a word-level candidate below the ladder's corroborated floor is not an identity", ctx do
+    love = word!(ctx, "love", ["wordnet"])
+    sense!(ctx, love, "wordnet", gloss: "a strong affection")
+    link!(love, concept!("Q316", "love"), method: :title_match, confidence: 0.7)
+
+    assert %{newly_created: 1} = seed_famous!([%{"term" => "love", "qid" => "Q316"}])
+
+    {:ok, view, _html} = live(ctx.conn, ~p"/define/love")
+
+    refute has_element?(view, "#culture-filter-artwork")
+  end
+
+  test "a sense-backed QID keeps the word's candidates off the shelf (C2)", ctx do
+    war = word!(ctx, "war", ["wordnet"])
+    sense = sense!(ctx, war, "wordnet", gloss: "armed conflict")
+    link!(war, concept!("Q198", "war"), sense: sense)
+    link!(war, concept!("Q316", "love"), method: :title_match)
+
+    assert %{newly_created: 1} =
+             seed_famous!([
+               %{"term" => "war", "qid" => "Q198"},
+               %{"term" => "love", "qid" => "Q316"}
+             ])
+
+    {:ok, view, _html} = live(ctx.conn, ~p"/define/war")
+
+    assert has_element?(view, "#culture-filter-artwork")
+    refute has_element?(view, "#culture-word-level-artwork")
+    refute render(view) =~ "not a particular sense"
   end
 
   test "a word the encyclopedia has not linked to a QID shows no artwork section", ctx do

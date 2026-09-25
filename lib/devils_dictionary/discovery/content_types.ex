@@ -33,10 +33,14 @@ defmodule DevilsDictionary.Discovery.ContentTypes do
     * `evidence` — the classes of match reason a row admits, from
       `DevilsDictionary.Discovery.MatchReason.evidence/1`: `:identity` (an
       identifier the encyclopedia already asserts), `:attestation` (the work
-      uses the word, at a locator) or `:query` (a text search's own ranking,
+      uses the word, at a locator), `:word_identity` (an identifier the
+      ladder reached for the *word*, from a corroborated candidate, where no
+      sense refers to anything — #172 build B, always labelled *For the word
+      “…”, not a particular sense*) or `:query` (a text search's own ranking,
       allowed only where M6 says so and always labelled as such). Conformance
       asserts every result's reasons against it; the renderer reads it to
-      label an admitted `:query` reason as the search result it is.
+      label an admitted `:query` reason as the search result it is, and a
+      `:word_identity` shelf as the word's.
   """
 
   @table %{
@@ -67,7 +71,9 @@ defmodule DevilsDictionary.Discovery.ContentTypes do
       # museum asks for and what the manifests record, so it is shown when
       # the item carries one.
       attribution: :credited,
-      evidence: [:identity]
+      # The Met's tag QIDs, and the word's candidate's when no sense refers
+      # to anything (#172).
+      evidence: [:identity, :word_identity]
     },
     # A photograph of a soldier is a visual work but it is not an artwork, and a
     # shelf headed *Artworks* over a US Army photograph is the page misnaming
@@ -96,8 +102,9 @@ defmodule DevilsDictionary.Discovery.ContentTypes do
       # licence's one condition is the credit. Required, and never on hover.
       attribution: :required,
       # Commons matches on a `P180` depicts QID; a stock-photo search is text
-      # and says so (M6). The only row that admits a search result.
-      evidence: [:identity, :query]
+      # and says so (M6). The only row that admits a search result. A
+      # depiction of the word's candidate is admitted and labelled (#172).
+      evidence: [:identity, :word_identity, :query]
     },
     gif: %{
       heading: "GIFs",
@@ -188,7 +195,9 @@ defmodule DevilsDictionary.Discovery.ContentTypes do
       title_clamp: "line-clamp-5",
       thumbnail_keys: [],
       attribution: :credited,
-      evidence: [:identity, :attestation]
+      # And a theme page reached from the word's corroborated candidate when
+      # no sense refers to anything — labelled as the word's (#172).
+      evidence: [:identity, :word_identity, :attestation]
     },
     music: %{
       heading: "Music",
@@ -216,7 +225,7 @@ defmodule DevilsDictionary.Discovery.ContentTypes do
   }
 
   @attributions [:required, :credited, :none]
-  @evidence [:identity, :attestation, :query]
+  @evidence [:identity, :word_identity, :attestation, :query]
 
   # Every row registers every key, checked at compile time: the reader reads
   # `attribution` and `evidence` off whichever row it is handed, and a row

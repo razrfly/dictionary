@@ -11,6 +11,9 @@ defmodule DevilsDictionary.Discovery.Providers.Commons do
   and that search only **proposes**. A file is kept when its hydrated
   `statements.P180` carries one of those QIDs: the search proposes, the
   statements dispose. No broader walk; equal QID or nothing (#109 Phase 3a).
+  When no sense refers to anything, the QIDs are the word's corroborated
+  candidates instead, and every file kept for one is labelled as the word's
+  (#172 build B, `PageEvidence.labelled/2`).
 
   A page costs at most **two** requests: one `generator=search` that returns
   the window with `prop=imageinfo` (thumbnail URL and `extmetadata` licence in
@@ -214,7 +217,7 @@ defmodule DevilsDictionary.Discovery.Providers.Commons do
     with :ok <- validate_mapping(@operation, mapping) do
       case mapping["entities"] do
         [] -> {:ok, empty(request, nil)}
-        entities -> search(entities, request, request_fun)
+        entities -> entities |> search(request, request_fun) |> PageEvidence.labelled(mapping)
       end
     else
       {:error, _} -> {:error, "invalid_mapping"}

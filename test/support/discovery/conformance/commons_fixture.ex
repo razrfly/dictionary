@@ -45,6 +45,15 @@ defmodule DevilsDictionary.Discovery.Conformance.CommonsFixture do
     target(word)
   end
 
+  # The same QID, reached for the word by a corroborated candidate (#172).
+  @impl true
+  def word_level_target(context) do
+    word = word!(context, "soldier", ~w(wordnet))
+    sense!(context, word, "wordnet")
+    link!(word, concept!(@qid, @label), method: :title_match, confidence: 0.85)
+    target(word)
+  end
+
   @impl true
   def uncovered_target(context) do
     # No `refers_to` anywhere on this page, so there is no QID to search for and

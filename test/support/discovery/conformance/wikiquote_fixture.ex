@@ -46,6 +46,16 @@ defmodule DevilsDictionary.Discovery.Conformance.WikiquoteFixture do
   @impl true
   def covered_target(context), do: target(context, "grief", @grief_qid)
 
+  # *grief*'s page reached for the word: no sense link, the ladder's
+  # corroborated title match to the same concept (#172 build B).
+  @impl true
+  def word_level_target(context) do
+    word = word!(context, "grief", ~w(wordnet))
+    sense!(context, word, "wordnet")
+    link!(word, concept!(@grief_qid, "Grief"), method: :title_match, confidence: 0.85)
+    as_target(word)
+  end
+
   @impl true
   def uncovered_target(context) do
     # No `refers_to` on this page, so no QID and no sitelink to ask about.
