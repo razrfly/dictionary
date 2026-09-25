@@ -744,14 +744,18 @@ defmodule DevilsDictionary.Examples do
     Enum.find(members, &(String.downcase(&1.lemma) == label))
   end
 
-  # The fullest name leads: *Adolf Hitler* over *Hitler* and *Der Fuhrer*,
-  # *Francisco Franco* over *El Caudillo*, *Yom Kippur War* over the
-  # *Arab-Israeli War* WordNet also uses for 1967. Words, then length, then
-  # the lemma, so the choice is stable.
+  # A name leads a description, then the fullest name leads: *Holocaust*
+  # over *final solution* (a named thing is capitalised, its euphemism is
+  # not), *Adolf Hitler* over *Hitler* and *Der Fuhrer*, *Francisco Franco*
+  # over *El Caudillo*, *Yom Kippur War* over the *Arab-Israeli War* WordNet
+  # also uses for 1967. Then words, then length, then the lemma, so the
+  # choice is stable.
   defp member_rank(edge) do
     words = edge.lemma |> String.split(~r/\s+/, trim: true) |> length()
-    {-words, -String.length(edge.lemma), edge.lemma}
+    {not proper?(edge.lemma), -words, -String.length(edge.lemma), edge.lemma}
   end
+
+  defp proper?(lemma), do: String.match?(lemma, ~r/^\p{Lu}/u)
 
   # One sentence, from fields, full stop: who named it, and under what.
   defp reason(sources, target) do

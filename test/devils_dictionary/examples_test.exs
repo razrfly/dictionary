@@ -51,6 +51,18 @@ defmodule DevilsDictionary.ExamplesTest do
       )
     end
 
+    test "a synset's name leads its description: Holocaust, not final solution", ctx do
+      genocide = wn_sense!(ctx, "genocide", "oewn-genocide-n", "systematic killing of a group")
+
+      for lemma <- ["final solution", "Holocaust"] do
+        instance!(ctx, wn_sense!(ctx, lemma, "oewn-holocaust-n"), genocide)
+      end
+
+      [holocaust] = page("genocide").examples.items
+      assert holocaust.subject.label == "Holocaust"
+      assert holocaust.subject.aliases == ["final solution"]
+    end
+
     test "one chip per synset, labelled by its fullest member", ctx do
       # WordNet files every member of Hitler's synset under dictator.
       for lemma <- ["Hitler", "Adolf Hitler", "Der Fuhrer"] do

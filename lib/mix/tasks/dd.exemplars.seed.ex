@@ -66,6 +66,20 @@ defmodule Mix.Tasks.Dd.Exemplars.Seed do
   defp seed(path, opts) do
     start_repo_only()
 
+    # A database seeded before build 2 has no `community` row, and every
+    # cited URL is stored under it. Say how to add it rather than crash on
+    # the first row.
+    unless opts[:dry_run] ||
+             DevilsDictionary.Sources.get_source_by_slug(
+               DevilsDictionary.Examples.Community.slug()
+             ) do
+      Mix.raise(
+        "no `community` source row: run Sources.Catalog.seed!/0 first, e.g. " <>
+          "mix run --no-start -e 'Application.ensure_all_started(:ecto_sql); " <>
+          "DevilsDictionary.Repo.start_link(); DevilsDictionary.Sources.Catalog.seed!()'"
+      )
+    end
+
     email = opts[:as] || Mix.raise("--as <email> is required: whose nominations are these?")
     user = Repo.get_by(User, email: email) || Mix.raise("no account #{email}")
 
