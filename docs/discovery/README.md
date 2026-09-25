@@ -76,6 +76,11 @@ Commons, Wikiquote, the Quotes corpus and the artwork catalog all read it; the
 hop applies to either tier. Tier 2 shrinks as `Linker.corroborate/1` promotes
 a gloss match to the one sense it agrees with best (`refers_to`, method
 `corroborated_gloss`), and a promoted word is a tier-1 page with a new recipe.
+The same pass withdraws a promotion whose evidence no longer holds (candidate
+withdrawn or rejected, a tie, a person, a rival candidate, a source's own
+mapping), and the page falls back to tier 2 with the recipe it had. Tier 2
+exists only where the ladder has run (three scopes today), so it does not put
+these shelves on most words.
 
 A **text** provider is the exception that proves it: a text has no identity claim
 to make about a word, so its evidence is **attestation** — this work *uses* this

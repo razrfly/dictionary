@@ -205,12 +205,22 @@ is then labelled *For the word "…", not a particular sense*. The spike below
 was measured before any code, on the dev database (`devils_dictionary_v2`),
 2026-09-24.
 
+**This does not put sense-level shelves on most words.** Candidates exist only
+where the ladder has run — the animals, emotions and culture scopes — so a
+random common noun almost never has one (0 of 50 below). Inside those scopes
+the tier roughly doubles what the hop alone reaches.
+
+Counts below say which unit they are: a **revision** is one row of a claim's
+history, a **link** is one claim (one current revision), a **lexeme** is one
+word-and-part-of-speech, and a **page** is one lemma, which may hold several
+lexemes.
+
 ### What the ladder holds
 
 | | count |
 |---|---|
-| `lexeme_entity_candidate` revisions (the issue's 76,195) | 76,195, of which **59,770 current** (59,769 active) |
-| current, active, confidence ≥ 0.85, with a verified Wikidata identifier | **13,884** on 13,884 lexemes, 13,548 pages |
+| `lexeme_entity_candidate` revisions (the issue's 76,195) | 76,195 revisions; **59,770 links** (one current revision each; 59,769 active) |
+| links current, active, confidence ≥ 0.85, with a verified Wikidata identifier | **13,884** links on 13,884 lexemes, 13,548 pages |
 | … by corroboration | `gloss_overlap` 6,613 (0.85) · `taxon_name` 6,376 (0.90) · `qid_agreement` 895 (0.90) |
 | … on lexemes in a ladder scope | all of them: the ladder runs per scope (animals 25,385 · emotions 809 · culture 5 lexemes) |
 
@@ -225,18 +235,24 @@ with the same rule:
 | exactly one sense matches | 4,781 |
 | several match, one shares the most words | 1,479 |
 | several tie for the most | 353 (mostly one meaning in two dictionaries: *zooplankton*, *snakebird*, *world-weariness*) |
-| **promotable**: a unique best sense, the entity not a person (10), the sense without an active `refers_to` of its own (21) | **6,230** senses on **6,180** pages |
+| **promotable**: a unique best sense, the entity not a person (10), the sense without an active `refers_to` of its own (21) | **6,230** links, one per sense, on **6,180** pages |
+
+The rule as merged adds one more condition, from review: a sense that is the
+unique best of *two* candidates is promoted to neither. On the dev database no
+sense was, so the count is unchanged.
 
 `taxon_name` and `qid_agreement` are not gloss matches, so they are never
 promoted: a taxon name agrees with the *word*, and an agreement is already a
 sense-backed link to the same entity.
 
-**The dev database lost its WordNet links today.** At 18:41 a WordNet
-re-materialization's reconcile withdrew all 13,960 `wordnet_wikidata` and
-10,236 `wordnet_ili` links as *no longer emitted by its source* (the ladder
-registers the WordNet record as their provenance). Pages with an active
-sense-backed link: **14,676** as the ladder wrote them, **1,810** now. Both
-columns are measured below; the fix is a separate task, not this build.
+**Every number here was measured on a dev database whose WordNet links had
+been withdrawn.** On 2026-09-24 at 18:41 a WordNet re-materialization's
+reconcile withdrew all 13,960 `wordnet_wikidata` and 10,236 `wordnet_ili`
+links as *no longer emitted by its source* (the ladder registers the WordNet
+record as their provenance). Pages with an active sense-backed link: **14,676**
+as the ladder wrote them, **1,810** at measurement time. The ownership fix is
+PR #188 and the restore is a separate step after it; neither is part of this
+build, and coverage should be measured again once both are done.
 
 ### Ledger
 
@@ -273,30 +289,33 @@ The thirteen probe words, Wikiquote run for each page it covers:
 | after build B | 4 (*war*, *coward*, *grief*, *love*) | 2 (*grief*, *love*) |
 | after one promotion run | 4 | 0 — *grief* and *love* each promoted to a Wiktionary sense (5 and 6 shared words) |
 
-*power* has no shelf only because its WordNet link was withdrawn today (see
+*power* has no shelf only because its WordNet link was withdrawn on 2026-09-24 (see
 above); the other eight are in no ladder scope or, like *nepotism* and *bank*,
 in one with no candidates.
 
 The promotion run (`Linker.corroborate/1` per scope, app not started, run rows
-196–198): **6,003** senses promoted in animals, **227** in emotions, **0** in
-culture — the 6,230 the spike predicted. A second run wrote no revision.
+196–198): **6,003** links promoted in animals, **227** in emotions, **0** in
+culture — the 6,230 the spike predicted, each on its own sense. A second run
+wrote no revision (199–201), and a third, with the review fixes that also
+withdraw a promotion whose evidence has lapsed, promoted nothing and withdrew
+nothing (202–204).
 
-| English lexemes with a sense-backed Wikidata link | before | after |
+| English words with a sense-backed Wikidata link (WordNet links withdrawn) | before | after |
 |---|---|---|
 | lexemes | 1,849 | **8,053** |
 | pages (lemmas) | 1,810 | **7,950** |
-| still read at the word level (in scope, ≥ 0.85, no sense link) | 13,117 + 281 | 7,137 + 57 |
+| lexemes still read at the word level (in scope, ≥ 0.85, no sense link), animals + emotions, which overlap | 13,117 + 281 | 7,137 + 57 |
 
-With the ladder's withdrawn WordNet links restored the before figure would be
-the issue's 15,010; promotion's 6,230 would sit on top of it, less whatever
-overlaps.
+The issue measured 15,010 lexemes before the withdrawal. How much of the
+promotion overlaps the restored WordNet links is unknown until they are
+restored; this table does not predict it.
 
 ### Who gains a page
 
 *Base* is a direct sitelink from a sense's item; *A* adds the hop (merged);
 *B* adds a corroborated candidate's direct sitelink when the page has no
 sense link; *A + B* is what ships. Sense links as the ladder wrote them; in
-brackets, today's dev database.
+brackets, the dev database at measurement time (WordNet links withdrawn).
 
 | sample | n | base | A | B | A + B | of which word-level |
 |---|---|---|---|---|---|---|
@@ -309,7 +328,7 @@ The probe words:
 | word | sense link | candidate ≥ 0.85 | page |
 |---|---|---|---|
 | war | Q198 (`wiktionary_qid`) | — | War, direct |
-| power | Q911554 (`wordnet_wikidata`, withdrawn today) | — | Business magnate, direct; none today |
+| power | Q911554 (`wordnet_wikidata`, withdrawn 2026-09-24) | — | Business magnate, direct; none while withdrawn |
 | coward | Q104605901 | — | Cowardice, by `P1552` (A) |
 | **grief** | none | Q1026040, `gloss_overlap` | **Grief**, word-level (B) |
 | **love** | none | Q316, `gloss_overlap` | **Love**, word-level (B) |

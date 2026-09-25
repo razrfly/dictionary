@@ -700,6 +700,50 @@ defmodule DevilsDictionary.Absorb.LinkerTest do
       assert [%{lifecycle_state: :withdrawn}] = promoted(cat)
     end
 
+    test "a source mapping that arrives after a promotion withdraws it, method or none", ctx do
+      {cat, _concept, [sense]} =
+        corroborated_cat!(ctx, [{"wiktionary", "A domesticated carnivorous mammal."}])
+
+      Linker.run(ctx.animals)
+      assert [%{lifecycle_state: :active}] = promoted(cat)
+
+      # A source maps the sense to something else, recording no method.
+      other = concept!("Q999146", label: "house cat")
+      {:ok, _} = Claims.assert(sense.object_id, "refers_to", other.object_id, %{confidence: 0.95})
+
+      assert %{promoted: 0, unpromoted: 1} = Linker.corroborate(ctx.animals)
+      assert [%{lifecycle_state: :withdrawn}] = promoted(cat)
+
+      # The source's own mapping is untouched, and is all the sense refers to.
+      assert [%{object_object_id: object}] =
+               Claims.outgoing(sense.object_id, predicate: "refers_to")
+
+      assert object == other.object_id
+    end
+
+    test "a second candidate contesting a promoted sense withdraws the promotion", ctx do
+      {cat, _concept, [sense]} =
+        corroborated_cat!(ctx, [{"wiktionary", "A domesticated carnivorous mammal."}])
+
+      Linker.run(ctx.animals)
+      assert [%{subject_object_id: subject}] = promoted(cat)
+      assert subject == sense.object_id
+
+      rival = concept!("Q20980826")
+      article!(ctx, rival, "Felis catus, a domesticated carnivorous mammal.")
+
+      {:ok, _} =
+        Claims.assert(cat.object_id, "lexeme_entity_candidate", rival.object_id, %{
+          method: "title_match",
+          confidence: 0.85,
+          metadata: %{"corroboration" => "gloss_overlap"}
+        })
+
+      assert %{promoted: 0, unpromoted: 1} = Linker.corroborate(ctx.animals)
+      assert Enum.all?(promoted(cat), &(&1.lifecycle_state == :withdrawn))
+      assert [%{"level" => "word"} | _] = PageEvidence.entities([cat.object_id])
+    end
+
     test "counts both ways: promoted to a sense, and still at the word", ctx do
       corroborated_cat!(ctx, [{"wiktionary", "A domesticated carnivorous mammal."}])
 
