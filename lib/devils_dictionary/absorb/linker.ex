@@ -218,7 +218,9 @@ defmodule DevilsDictionary.Absorb.Linker do
   # The identifier rungs read a mapping a source publishes on a sense, so a
   # link they wrote is only as good as that mapping *now*. Each one therefore
   # does two things with one proposal set: writes what the evidence supports,
-  # and withdraws what it no longer does (`retire_unsupported/3`).
+  # and withdraws what it no longer does (`retire_unsupported/3`). A retired
+  # sense is evidence withdrawn too — the source stopped publishing the meaning
+  # — so the evidence queries read only senses still in force.
   #
   # Not through `Materializer.reconcile/2`: that retires a record's *outputs*,
   # and a link is not one — a materialize run never emits a ladder link, so
@@ -268,7 +270,6 @@ defmodule DevilsDictionary.Absorb.Linker do
              'source_record_id', source_rev.source_record_id)
       FROM senses s
       JOIN sources so ON so.id = s.source_id AND so.slug = 'wiktionary'
-                     AND s.identity_state <> 'retired'
       JOIN sense_revisions rev ON rev.sense_id = s.object_id AND rev.is_current
       LEFT JOIN source_record_revisions source_rev ON source_rev.id = rev.source_record_revision_id
       CROSS JOIN LATERAL jsonb_array_elements_text(#{jsonb_array("rev.metadata->'wikidata'")}) AS q(qid)
@@ -278,6 +279,7 @@ defmodule DevilsDictionary.Absorb.Linker do
      #{identifier_population_join(scope, "s.lexeme_id")}
      WHERE #{identifier_population_filter(scope, "s.lexeme_id", "e.object_id", "source_rev.source_record_id")}
        AND jsonb_typeof(rev.metadata->'wikidata') = 'array'
+       AND s.identity_state <> 'retired'
     """
   end
 
@@ -297,7 +299,6 @@ defmodule DevilsDictionary.Absorb.Linker do
              'source_record_id', source_rev.source_record_id)
       FROM senses s
       JOIN sources so ON so.id = s.source_id AND so.slug = 'wordnet'
-                     AND s.identity_state <> 'retired'
       JOIN sense_revisions rev ON rev.sense_id = s.object_id AND rev.is_current
       LEFT JOIN source_record_revisions source_rev ON source_rev.id = rev.source_record_revision_id
       CROSS JOIN LATERAL jsonb_array_elements_text(#{jsonb_qids("rev.metadata->'wikidata'")}) AS q(qid)
@@ -307,6 +308,7 @@ defmodule DevilsDictionary.Absorb.Linker do
      #{identifier_population_join(scope, "s.lexeme_id")}
      WHERE #{identifier_population_filter(scope, "s.lexeme_id", "e.object_id", "source_rev.source_record_id")}
        AND jsonb_typeof(rev.metadata->'wikidata') IN ('string', 'array')
+       AND s.identity_state <> 'retired'
     """
   end
 
@@ -322,13 +324,13 @@ defmodule DevilsDictionary.Absorb.Linker do
              'source_record_id', source_rev.source_record_id)
       FROM senses s
       JOIN sources so ON so.id = s.source_id AND so.slug = 'wordnet'
-                     AND s.identity_state <> 'retired'
       JOIN sense_revisions rev ON rev.sense_id = s.object_id AND rev.is_current
       LEFT JOIN source_record_revisions source_rev ON source_rev.id = rev.source_record_revision_id
       JOIN entities e ON e.metadata->>'wordnet_ili' = rev.metadata->>'ili'
      #{identifier_population_join(scope, "s.lexeme_id")}
      WHERE #{identifier_population_filter(scope, "s.lexeme_id", "e.object_id", "source_rev.source_record_id")}
        AND rev.metadata->>'ili' IS NOT NULL
+       AND s.identity_state <> 'retired'
     """
   end
 
