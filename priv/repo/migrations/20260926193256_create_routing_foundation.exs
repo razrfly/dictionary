@@ -235,14 +235,30 @@ defmodule DevilsDictionary.Repo.Migrations.CreateRoutingFoundation do
              check: "kind IN ('canonical','alias','tombstone')"
            )
 
-    # Structure only; Unicode normalization and slug rules are
-    # `Routing.Address`'s. No percent-encoding, query, fragment, backslash,
-    # whitespace, control character, empty or dot segment.
+    # A registered namespace and one slug (or the reserved locale form), NFC
+    # and lowercase, with no percent-encoding, query, fragment, backslash,
+    # whitespace, control character or dot segment. The slug's character rules
+    # are `Routing.Address`'s; this keeps a raw writer inside the registry.
+    namespaces = Enum.join(@families ++ ["on"], "|")
+
     create constraint(:public_paths, :public_paths_shape,
-             check: ~S"""
-             path ~ '^(/[^/[:space:][:cntrl:]?#%\\]+)+$'
-             AND path !~ '/\.\.?(/|$)'
+             check: ~s"""
+             (path ~ '^/(#{namespaces})/[^/]+$'
+              OR path ~ '^/l/[a-z]{2,3}(-[a-z0-9]{2,8})*/(#{namespaces})/[^/]+$')
+             AND path !~ '[[:space:][:cntrl:]?#%\\\\]'
+             AND path !~ '/\\.\\.?(/|$)'
+             AND path IS NFC NORMALIZED
+             AND path = lower(path)
              AND octet_length(path) <= 512
+             """
+           )
+
+    # The slug's ASCII: lowercase letters, digits and single inner hyphens —
+    # no `+`, `'`, `_` or `.`, which a request could never name. Non-ASCII
+    # letters, marks and numbers are `Routing.Address`'s to check.
+    create constraint(:public_paths, :public_paths_slug_characters,
+             check: ~S"""
+             path ~ '^[/a-z0-9\u0080-\U0010FFFF-]+$' AND path !~ '(/-|-/|--|-$)'
              """
            )
 
@@ -256,6 +272,8 @@ defmodule DevilsDictionary.Repo.Migrations.CreateRoutingFoundation do
              where: "kind = 'canonical'"
            )
 
+    # Every path serving a page: merge, retire and the commit-time checks.
+    create index(:public_paths, [:destination_page_id])
     create index(:public_paths, [:original_page_id])
   end
 
@@ -382,6 +400,36 @@ defmodule DevilsDictionary.Repo.Migrations.CreateRoutingFoundation do
              """
            )
 
+    # A row records a change, never a no-op a writer could slip in unapplied.
+    # A page row changes its route; a revision alone is editorial, and a
+    # revision-only row is exactly the phantom the continuity check cannot see.
+    create constraint(:route_changes, :route_changes_changes_something,
+             check: """
+             (path_id IS NULL OR before_kind IS NULL OR before_kind <> after_kind
+               OR before_destination_id <> after_destination_id)
+             AND (page_id IS NULL OR before_lifecycle <> after_lifecycle
+               OR before_canonical_path_id IS DISTINCT FROM after_canonical_path_id
+               OR before_merged_into_id IS DISTINCT FROM after_merged_into_id)
+             """
+           )
+
+    # What an allocation may do, whoever writes it: create or reclaim a
+    # canonical for its own page, and point an active page's empty canonical
+    # at it. Anything else — retiring, re-pointing, merging — is a human's
+    # operation, and naming it `allocate` does not make it one.
+    create constraint(:route_changes, :route_changes_allocate_shape,
+             check: """
+             operation <> 'allocate' OR (
+               (path_id IS NULL OR (after_kind = 'canonical'
+                 AND (before_kind IS NULL OR (before_kind <> 'canonical'
+                   AND before_destination_id = after_destination_id))))
+               AND (page_id IS NULL OR (before_lifecycle = 'active' AND after_lifecycle = 'active'
+                 AND before_canonical_path_id IS NULL AND after_canonical_path_id IS NOT NULL
+                 AND before_merged_into_id IS NULL AND after_merged_into_id IS NULL
+                 AND before_revision_id IS NOT DISTINCT FROM after_revision_id)))
+             """
+           )
+
     create constraint(:route_changes, :route_changes_reason, check: "btrim(reason) <> ''")
 
     create constraint(:route_changes, :route_changes_rollback,
@@ -391,6 +439,8 @@ defmodule DevilsDictionary.Repo.Migrations.CreateRoutingFoundation do
     create unique_index(:route_changes, [:operation_id, :sequence])
     create index(:route_changes, [:path_id])
     create index(:route_changes, [:page_id])
+    create index(:route_changes, [:before_destination_id])
+    create index(:route_changes, [:after_destination_id])
     create index(:route_changes, [:reverts_operation_id])
   end
 
@@ -464,6 +514,31 @@ defmodule DevilsDictionary.Repo.Migrations.CreateRoutingFoundation do
                 FOR EACH ROW EXECUTE FUNCTION routing_refuse_change('#{why}');
               """,
               "DROP TRIGGER #{table}_refuse_change ON #{table}"
+    end
+
+    # Row triggers do not see TRUNCATE, including one that cascades from
+    # `objects`. Only an explicit, transaction-local opt-in — the test
+    # suite's reset — may empty these tables.
+    execute """
+            CREATE FUNCTION routing_refuse_truncate() RETURNS trigger AS $$
+            BEGIN
+              IF current_setting('dictionary.allow_routing_truncate', true) IS DISTINCT FROM 'on' THEN
+                RAISE EXCEPTION '% cannot be truncated: routing history is permanent', TG_TABLE_NAME
+                  USING ERRCODE = 'integrity_constraint_violation';
+              END IF;
+              RETURN NULL;
+            END;
+            $$ LANGUAGE plpgsql;
+            """,
+            "DROP FUNCTION routing_refuse_truncate()"
+
+    for table <-
+          ~w(pages page_revisions page_memberships public_paths classification_decisions route_changes) do
+      execute """
+              CREATE TRIGGER #{table}_refuse_truncate BEFORE TRUNCATE ON #{table}
+                FOR EACH STATEMENT EXECUTE FUNCTION routing_refuse_truncate();
+              """,
+              "DROP TRIGGER #{table}_refuse_truncate ON #{table}"
     end
 
     # Membership is sealed by its revision: a row may only fill one of the
@@ -557,6 +632,12 @@ defmodule DevilsDictionary.Repo.Migrations.CreateRoutingFoundation do
                 RAISE EXCEPTION 'route % needs a human actor, not actor %', NEW.operation, NEW.actor_id
                   USING ERRCODE = 'integrity_constraint_violation';
               END IF;
+
+              IF NEW.operation = 'rollback' AND (NEW.reverts_operation_id = NEW.operation_id
+                 OR NOT EXISTS (SELECT 1 FROM route_changes WHERE operation_id = NEW.reverts_operation_id)) THEN
+                RAISE EXCEPTION 'a rollback reverts an earlier operation, not %', NEW.reverts_operation_id
+                  USING ERRCODE = 'integrity_constraint_violation';
+              END IF;
               RETURN NEW;
             END;
             $$ LANGUAGE plpgsql;
@@ -637,10 +718,14 @@ defmodule DevilsDictionary.Repo.Migrations.CreateRoutingFoundation do
                   USING ERRCODE = 'integrity_constraint_violation';
               END IF;
 
+              -- An active page's revision is editorial. A split page's revision
+              -- holds its successors, so for any other lifecycle it is routing.
               IF NEW.lifecycle_state = OLD.lifecycle_state
                  AND NEW.canonical_path_id IS NOT DISTINCT FROM OLD.canonical_path_id
                  AND NEW.merged_into_page_id IS NOT DISTINCT FROM OLD.merged_into_page_id
-                 AND NEW.last_route_change_id IS NOT DISTINCT FROM OLD.last_route_change_id THEN
+                 AND NEW.last_route_change_id IS NOT DISTINCT FROM OLD.last_route_change_id
+                 AND (OLD.lifecycle_state = 'active'
+                      OR NEW.current_revision_id IS NOT DISTINCT FROM OLD.current_revision_id) THEN
                 RETURN NEW;
               END IF;
 
@@ -680,6 +765,50 @@ defmodule DevilsDictionary.Repo.Migrations.CreateRoutingFoundation do
 
   # ── cross-row rules, checked at commit ───────────────────────────────────
   defp consistency do
+    # The registry's own reading of a merge (`Registry.resolve/1`): follow the
+    # latest merge event from each merged object to its output.
+    execute """
+            CREATE FUNCTION routing_identity_survivor(start bigint) RETURNS bigint AS $$
+            DECLARE
+              current bigint := start;
+              next_id bigint;
+              seen bigint[] := ARRAY[start];
+              final_state text;
+            BEGIN
+              LOOP
+                SELECT output.object_id INTO next_id
+                  FROM objects o
+                  JOIN identity_event_members input
+                    ON input.object_id = o.id AND input.role = 'input'
+                  JOIN identity_events e ON e.id = input.event_id AND e.operation = 'merge'
+                  JOIN identity_event_members output
+                    ON output.event_id = e.id AND output.role = 'output'
+                 WHERE o.id = current AND o.lifecycle_state = 'merged'
+                 ORDER BY e.id DESC
+                 LIMIT 1;
+
+                EXIT WHEN next_id IS NULL;
+                -- A cycle or an over-long chain has no survivor but the start.
+                IF next_id = ANY(seen) OR array_length(seen, 1) > 64 THEN
+                  RETURN start;
+                END IF;
+                current := next_id;
+                seen := seen || next_id;
+                next_id := NULL;
+              END LOOP;
+
+              -- As `Registry.canonical_id/1`: a chain ending in a split has no
+              -- single survivor, so the identity is its own.
+              SELECT lifecycle_state INTO final_state FROM objects WHERE id = current;
+              IF current <> start AND final_state = 'split' THEN
+                RETURN start;
+              END IF;
+              RETURN current;
+            END;
+            $$ LANGUAGE plpgsql;
+            """,
+            "DROP FUNCTION routing_identity_survivor(bigint)"
+
     execute """
             CREATE FUNCTION routing_check_page(target bigint) RETURNS void AS $$
             DECLARE
@@ -696,9 +825,9 @@ defmodule DevilsDictionary.Repo.Migrations.CreateRoutingFoundation do
                   FROM objects o LEFT JOIN entities e ON e.object_id = o.id
                  WHERE o.id = p.target_object_id;
 
-                IF NOT ((p.role = 'lexeme' AND object_kind = 'lexeme')
+                IF ((p.role = 'lexeme' AND object_kind = 'lexeme')
                      OR (p.role = 'subject' AND object_kind = 'entity' AND entity_kind <> 'edition')
-                     OR (p.role = 'edition' AND entity_kind = 'edition')) THEN
+                     OR (p.role = 'edition' AND entity_kind = 'edition')) IS NOT TRUE THEN
                   RAISE EXCEPTION 'a % page cannot target % object %', p.role,
                     coalesce(entity_kind, object_kind), p.target_object_id
                     USING ERRCODE = 'integrity_constraint_violation';
@@ -745,6 +874,25 @@ defmodule DevilsDictionary.Repo.Migrations.CreateRoutingFoundation do
                 RAISE EXCEPTION 'page % merged into a page of another role or locale', p.id
                   USING ERRCODE = 'integrity_constraint_violation';
               END IF;
+
+              IF p.lifecycle_state = 'split' AND p.target_object_id IS NOT NULL AND NOT EXISTS (
+                SELECT 1 FROM objects o WHERE o.id = p.target_object_id AND o.lifecycle_state = 'split'
+              ) THEN
+                RAISE EXCEPTION 'page % is split but its identity % is not', p.id, p.target_object_id
+                  USING ERRCODE = 'integrity_constraint_violation';
+              END IF;
+
+              -- A page about a registry object merges only where the registry
+              -- merged that object: into a page about the same surviving identity.
+              IF p.merged_into_page_id IS NOT NULL AND p.target_object_id IS NOT NULL AND NOT EXISTS (
+                SELECT 1 FROM pages s JOIN objects o ON o.id = p.target_object_id
+                 WHERE s.id = p.merged_into_page_id AND o.lifecycle_state = 'merged'
+                   AND routing_identity_survivor(p.target_object_id)
+                       = routing_identity_survivor(s.target_object_id)
+              ) THEN
+                RAISE EXCEPTION 'page % merged into a page about a different identity', p.id
+                  USING ERRCODE = 'integrity_constraint_violation';
+              END IF;
             END;
             $$ LANGUAGE plpgsql;
             """,
@@ -788,9 +936,27 @@ defmodule DevilsDictionary.Repo.Migrations.CreateRoutingFoundation do
 
     execute """
             CREATE FUNCTION routing_consistent() RETURNS trigger AS $$
+            DECLARE routed bigint;
             BEGIN
               IF TG_TABLE_NAME = 'pages' THEN
                 PERFORM routing_check_page(NEW.id);
+
+                -- Un-merging or re-pointing a page must not strand a path that
+                -- reached its destination through it: re-check every path whose
+                -- original owner merged, directly or not, into this page.
+                IF TG_OP = 'UPDATE' AND (OLD.lifecycle_state <> NEW.lifecycle_state
+                   OR OLD.merged_into_page_id IS DISTINCT FROM NEW.merged_into_page_id) THEN
+                  FOR routed IN
+                    WITH RECURSIVE feeders(id) AS (
+                      SELECT NEW.id
+                      UNION
+                      SELECT p.id FROM pages p JOIN feeders f ON p.merged_into_page_id = f.id
+                    )
+                    SELECT x.id FROM public_paths x WHERE x.original_page_id IN (SELECT id FROM feeders)
+                  LOOP
+                    PERFORM routing_check_path(routed);
+                  END LOOP;
+                END IF;
               ELSE
                 PERFORM routing_check_path(NEW.id);
                 IF TG_OP = 'UPDATE' AND OLD.destination_page_id <> NEW.destination_page_id THEN
@@ -802,6 +968,66 @@ defmodule DevilsDictionary.Repo.Migrations.CreateRoutingFoundation do
             $$ LANGUAGE plpgsql;
             """,
             "DROP FUNCTION routing_consistent()"
+
+    # Every ledger row was applied and continues the one before it for the
+    # same path or page, so the ledger is a chain with no invented links.
+    execute """
+            CREATE FUNCTION routing_check_change() RETURNS trigger AS $$
+            DECLARE
+              prev route_changes%ROWTYPE;
+              applied bigint;
+            BEGIN
+              IF NEW.path_id IS NOT NULL THEN
+                SELECT * INTO prev FROM route_changes
+                 WHERE path_id = NEW.path_id AND id < NEW.id ORDER BY id DESC LIMIT 1;
+
+                IF (NOT FOUND AND NEW.before_kind IS NOT NULL)
+                   OR (FOUND AND (NEW.before_kind IS NULL OR prev.after_kind <> NEW.before_kind
+                       OR prev.after_destination_id <> NEW.before_destination_id)) THEN
+                  RAISE EXCEPTION 'route change % does not continue the history of path %',
+                    NEW.id, NEW.path_id USING ERRCODE = 'integrity_constraint_violation';
+                END IF;
+
+                SELECT last_route_change_id INTO applied FROM public_paths WHERE id = NEW.path_id;
+                IF applied IS NULL OR applied < NEW.id THEN
+                  RAISE EXCEPTION 'route change % was never applied to path %', NEW.id, NEW.path_id
+                    USING ERRCODE = 'integrity_constraint_violation';
+                END IF;
+              END IF;
+
+              IF NEW.page_id IS NOT NULL THEN
+                SELECT * INTO prev FROM route_changes
+                 WHERE page_id = NEW.page_id AND id < NEW.id ORDER BY id DESC LIMIT 1;
+
+                IF (NOT FOUND AND (NEW.before_lifecycle <> 'active'
+                      OR NEW.before_canonical_path_id IS NOT NULL
+                      OR NEW.before_merged_into_id IS NOT NULL))
+                   OR (FOUND AND (prev.after_lifecycle <> NEW.before_lifecycle
+                      OR prev.after_canonical_path_id IS DISTINCT FROM NEW.before_canonical_path_id
+                      OR prev.after_merged_into_id IS DISTINCT FROM NEW.before_merged_into_id)) THEN
+                  RAISE EXCEPTION 'route change % does not continue the history of page %',
+                    NEW.id, NEW.page_id USING ERRCODE = 'integrity_constraint_violation';
+                END IF;
+
+                SELECT last_route_change_id INTO applied FROM pages WHERE id = NEW.page_id;
+                IF applied IS NULL OR applied < NEW.id THEN
+                  RAISE EXCEPTION 'route change % was never applied to page %', NEW.id, NEW.page_id
+                    USING ERRCODE = 'integrity_constraint_violation';
+                END IF;
+              END IF;
+
+              RETURN NULL;
+            END;
+            $$ LANGUAGE plpgsql;
+            """,
+            "DROP FUNCTION routing_check_change()"
+
+    execute """
+            CREATE CONSTRAINT TRIGGER route_changes_applied
+              AFTER INSERT ON route_changes DEFERRABLE INITIALLY DEFERRED
+              FOR EACH ROW EXECUTE FUNCTION routing_check_change();
+            """,
+            "DROP TRIGGER route_changes_applied ON route_changes"
 
     for table <- ~w(pages public_paths) do
       execute """

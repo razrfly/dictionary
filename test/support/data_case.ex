@@ -146,9 +146,19 @@ defmodule DevilsDictionary.DataCase do
 
     tables = rows |> List.flatten() |> Enum.map_join(", ", &~s("#{&1}"))
 
-    DevilsDictionary.Repo.query!("truncate #{tables} restart identity cascade", [],
-      timeout: 120_000
-    )
+    # The routing tables refuse TRUNCATE — their history is permanent — unless
+    # the transaction opts in. A test reset is the one caller that may.
+    {:ok, _} =
+      DevilsDictionary.Repo.transaction(
+        fn ->
+          DevilsDictionary.Repo.query!("SET LOCAL dictionary.allow_routing_truncate = 'on'")
+
+          DevilsDictionary.Repo.query!("truncate #{tables} restart identity cascade", [],
+            timeout: 120_000
+          )
+        end,
+        timeout: 120_000
+      )
   end
 
   @doc """

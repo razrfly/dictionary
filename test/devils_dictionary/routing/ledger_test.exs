@@ -4,7 +4,10 @@ defmodule DevilsDictionary.Routing.LedgerTest do
   exact rows and destinations, not counts alone. Every test ends by firing the
   deferred checks a real commit would run (`consistent!/0`).
   """
-  use DevilsDictionary.DataCase, async: true
+  # Not async: the sandbox holds each test's transaction — and so its
+  # advisory path locks and uncommitted unique paths — for the whole test, and
+  # these tests reuse addresses such as /people/voltaire.
+  use DevilsDictionary.DataCase, async: false
 
   import DevilsDictionary.RoutingFixtures
 
@@ -126,6 +129,48 @@ defmodule DevilsDictionary.Routing.LedgerTest do
       consistent!()
     end
 
+    test "stays idempotent after the page is reclassified", ctx do
+      page = live_page!("works", "/works/apple", ctx.human, :work)
+      classify!(page.target_object_id, "nature", revision: 2)
+      before = ledger_size()
+
+      assert {:ok, %PublicPath{path: "/works/apple"}} =
+               Ledger.allocate(page.id, "/works/apple", opts(ctx.importer))
+
+      assert {:ok, %PublicPath{path: "/works/apple"}} =
+               Ledger.move(page.id, "/works/apple", opts(ctx.human))
+
+      assert ledger_size() == before
+      consistent!()
+    end
+
+    test "a refusal inside a caller's transaction does not roll the caller back", ctx do
+      first = subject_page!("people", "Voltaire", :person)
+      second = subject_page!("people", "Candide", :person)
+
+      taken =
+        subject_page!("people", "Arouet", :person) |> allocated!("/people/arouet", ctx.human)
+
+      assert {:ok, results} =
+               Repo.transaction(fn ->
+                 [
+                   Ledger.allocate(first.id, "/people/voltaire", opts(ctx.importer)),
+                   Ledger.allocate(second.id, "/people/arouet", opts(ctx.importer))
+                 ]
+               end)
+
+      assert [
+               {:ok, %PublicPath{path: "/people/voltaire"}},
+               {:error, {:path_taken, %{page_id: id}}}
+             ] =
+               results
+
+      assert id == taken.id
+      assert %Page{canonical_path_id: kept} = Repo.get!(Page, first.id)
+      assert kept != nil
+      consistent!()
+    end
+
     test "reclassification never moves a published address", ctx do
       page = live_page!("works", "/works/apple", ctx.human, :work)
       [allocation | _] = Ledger.history(page_id: page.id)
@@ -244,7 +289,9 @@ defmodule DevilsDictionary.Routing.LedgerTest do
       {:ok, _} =
         Registry.split(
           mercury.target_object_id,
-          [planet.target_object_id, element.target_object_id], reason: "planet and element")
+          [planet.target_object_id, element.target_object_id],
+          reason: "planet and element"
+        )
 
       assert Ledger.split(mercury.id, [planet.id, stranger.id], opts(ctx.human)) ==
                {:error, :successor_not_a_split_output}
@@ -270,6 +317,34 @@ defmodule DevilsDictionary.Routing.LedgerTest do
 
       assert {first, second} == {element.id, planet.id}
       assert paths(mercury.id) == [{"/nature/mercury", :canonical, mercury.id}]
+      consistent!()
+    end
+
+    test "a published split names only published successors", ctx do
+      mercury = live_page!("nature", "/nature/mercury", ctx.human)
+      planet = live_page!("nature", "/nature/mercury-planet", ctx.human)
+      element = subject_page!("nature", "Mercury (element)")
+
+      {:ok, _} =
+        Registry.split(
+          mercury.target_object_id,
+          [planet.target_object_id, element.target_object_id],
+          reason: "planet and element"
+        )
+
+      assert Ledger.split(mercury.id, [planet.id, element.id], opts(ctx.human)) ==
+               {:error, :successor_not_published}
+    end
+
+    test "a retired page nobody saw answers 404, not 410", ctx do
+      draft =
+        subject_page!("people", "Candide", :person) |> allocated!("/people/candide", ctx.human)
+
+      {:ok, _} = Ledger.retire(draft.id, opts(ctx.human, "never launched"))
+
+      assert %Resolution{outcome: :unavailable} = r = resolve("/people/candide")
+      assert Resolution.http_status(r) == 404
+      assert %Resolution{outcome: :unavailable} = Resolver.resolve_page(draft.id)
       consistent!()
     end
 
@@ -306,11 +381,14 @@ defmodule DevilsDictionary.Routing.LedgerTest do
       assert Ledger.rollback(move, opts(ctx.importer)) == {:error, :human_approval_required}
       assert {:ok, ^move} = Ledger.rollback(move, opts(ctx.human, "wrong name"))
 
+      # The address the move created was public: it stays, as a redirect.
       assert %Resolution{outcome: :canonical} = resolve("/people/voltaire")
-      assert %Resolution{outcome: :gone} = resolve("/people/arouet")
+
+      assert %Resolution{outcome: :redirect, location: "/people/voltaire"} =
+               resolve("/people/arouet")
 
       assert paths(page.id) == [
-               {"/people/arouet", :tombstone, page.id},
+               {"/people/arouet", :alias, page.id},
                {"/people/voltaire", :canonical, page.id}
              ]
 
@@ -367,7 +445,7 @@ defmodule DevilsDictionary.Routing.LedgerTest do
       consistent!()
     end
 
-    test "an undone allocation stays reserved as a tombstone the page can reclaim", ctx do
+    test "an undone allocation stays reserved, unannounced, for its page to reclaim", ctx do
       page = subject_page!("people", "Voltaire", :person)
       other = subject_page!("people", "Voltaire (musician)", :person)
       {:ok, path} = Ledger.allocate(page.id, "/people/voltaire", opts(ctx.importer))
@@ -375,15 +453,135 @@ defmodule DevilsDictionary.Routing.LedgerTest do
 
       {:ok, _} = Ledger.rollback(allocation, opts(ctx.human, "held for review"))
       assert %Page{canonical_path_id: nil} = Repo.get!(Page, page.id)
-      assert paths(page.id) == [{"/people/voltaire", :tombstone, page.id}]
+      assert paths(page.id) == [{"/people/voltaire", :alias, page.id}]
 
-      assert {:error, {:path_taken, %{kind: :tombstone}}} =
+      # Never published, so the reservation answers 404, not 410.
+      assert %Resolution{outcome: :unavailable} = r = resolve("/people/voltaire")
+      assert Resolution.http_status(r) == 404
+
+      assert {:error, {:path_taken, %{kind: :alias}}} =
                Ledger.allocate(other.id, "/people/voltaire", opts(ctx.importer))
 
       assert {:ok, %PublicPath{id: id, kind: :canonical}} =
                Ledger.allocate(page.id, "/people/voltaire", opts(ctx.importer))
 
       assert id == path.id
+      consistent!()
+    end
+
+    test "is refused once anything it changed has changed again, even back", ctx do
+      page = live_page!("people", "/people/voltaire", ctx.human, :person)
+      {:ok, _} = Ledger.move(page.id, "/people/arouet", opts(ctx.human))
+
+      [%{operation_id: first} | _] =
+        Ledger.history(path_id: Repo.get!(Page, page.id).canonical_path_id)
+
+      {:ok, _} = Ledger.move(page.id, "/people/voltaire", opts(ctx.human))
+      {:ok, _} = Ledger.move(page.id, "/people/arouet", opts(ctx.human))
+
+      # The same state as after the first move, reached by two later ones.
+      assert {:error, {:stale, _}} = Ledger.rollback(first, opts(ctx.human))
+      assert %Resolution{outcome: :canonical} = resolve("/people/arouet")
+      consistent!()
+    end
+
+    test "undoes operations newest first, all the way back", ctx do
+      page = live_page!("people", "/people/voltaire", ctx.human, :person)
+      {:ok, _} = Ledger.move(page.id, "/people/arouet", opts(ctx.human))
+
+      [%{operation_id: first} | _] =
+        Ledger.history(path_id: Repo.get!(Page, page.id).canonical_path_id)
+
+      {:ok, _} = Ledger.move(page.id, "/people/francois-marie", opts(ctx.human))
+
+      [%{operation_id: second} | _] =
+        Ledger.history(path_id: Repo.get!(Page, page.id).canonical_path_id)
+
+      assert {:error, {:stale, _}} = Ledger.rollback(first, opts(ctx.human))
+      assert {:ok, ^second} = Ledger.rollback(second, opts(ctx.human))
+      assert {:ok, ^first} = Ledger.rollback(first, opts(ctx.human))
+
+      assert %Resolution{outcome: :canonical} = resolve("/people/voltaire")
+
+      for old <- ["/people/arouet", "/people/francois-marie"] do
+        assert %Resolution{outcome: :redirect, location: "/people/voltaire"} = resolve(old)
+      end
+
+      consistent!()
+    end
+
+    test "un-merges a merge chain from its last merge back", ctx do
+      [a, b, c] =
+        for path <- ["/people/arouet", "/people/voltaire", "/people/francois-marie-arouet"],
+            do: live_page!("people", path, ctx.human, :person)
+
+      {:ok, _} = Registry.merge([a.target_object_id], b.target_object_id, reason: "dup")
+      {:ok, _} = Ledger.merge(a.id, b.id, opts(ctx.human))
+      # The page's own merge row: history also lists merges that pointed into it.
+      merge_of = fn page ->
+        Enum.find(
+          Ledger.history(page_id: page.id),
+          &(&1.operation == :merge and &1.page_id == page.id)
+        )
+      end
+
+      %{operation_id: a_into_b} = merge_of.(a)
+      {:ok, _} = Registry.merge([b.target_object_id], c.target_object_id, reason: "dup")
+      {:ok, _} = Ledger.merge(b.id, c.id, opts(ctx.human))
+      %{operation_id: b_into_c} = merge_of.(b)
+
+      assert {:error, {:stale, _}} = Ledger.rollback(a_into_b, opts(ctx.human))
+      {:ok, _} = Ledger.rollback(b_into_c, opts(ctx.human))
+      {:ok, _} = Ledger.rollback(a_into_b, opts(ctx.human))
+
+      for {page, path} <- [
+            {a, "/people/arouet"},
+            {b, "/people/voltaire"},
+            {c, "/people/francois-marie-arouet"}
+          ] do
+        assert %Resolution{outcome: :canonical, page: %{id: id}} = resolve(path)
+        assert id == page.id
+
+        assert %Page{lifecycle_state: :active, merged_into_page_id: nil} =
+                 Repo.get!(Page, page.id)
+      end
+
+      consistent!()
+    end
+
+    test "a redone operation can be undone again", ctx do
+      page = live_page!("people", "/people/voltaire", ctx.human, :person)
+      {:ok, _} = Ledger.move(page.id, "/people/arouet", opts(ctx.human))
+
+      [%{operation_id: move} | _] =
+        Ledger.history(path_id: Repo.get!(Page, page.id).canonical_path_id)
+
+      {:ok, _} = Ledger.rollback(move, opts(ctx.human, "undo"))
+
+      %{operation_id: undo} =
+        Enum.find(Ledger.history(page_id: page.id), &(&1.reverts_operation_id == move))
+
+      {:ok, _} = Ledger.rollback(undo, opts(ctx.human, "redo"))
+      assert %Resolution{outcome: :canonical} = resolve("/people/arouet")
+
+      assert {:ok, ^move} = Ledger.rollback(move, opts(ctx.human, "undo again"))
+      assert %Resolution{outcome: :canonical} = resolve("/people/voltaire")
+      consistent!()
+    end
+
+    test "leaves an editorial revision alone and still undoes the route", ctx do
+      page = live_page!("people", "/people/voltaire", ctx.human, :person)
+      {:ok, _} = Ledger.move(page.id, "/people/arouet", opts(ctx.human))
+
+      [%{operation_id: move} | _] =
+        Ledger.history(path_id: Repo.get!(Page, page.id).canonical_path_id)
+
+      {:ok, typo_fix} = Pages.add_revision(page.id, %{title: "Voltaire"}, [], ctx.human.id)
+
+      assert {:ok, ^move} = Ledger.rollback(move, opts(ctx.human))
+      assert %Page{current_revision_id: current} = Repo.get!(Page, page.id)
+      assert current == typo_fix.id
+      assert %Resolution{outcome: :canonical} = resolve("/people/voltaire")
       consistent!()
     end
   end

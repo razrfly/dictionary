@@ -25,7 +25,7 @@ defmodule DevilsDictionary.Routing.AddressTest do
           {"/define/c", :unknown_namespace},
           {"/entities/voltaire", :unknown_namespace},
           {"/people/Voltaire", :not_normalized},
-          {"/places/kraków", :not_normalized},
+          {"/places/krako\u0301w", :not_normalized},
           {"/people/a--b", :invalid_segment},
           {"/people/c++", :invalid_segment},
           {"/people/" <> String.duplicate("é", 61), :segment_too_long},
@@ -50,8 +50,13 @@ defmodule DevilsDictionary.Routing.AddressTest do
     assert Address.normalize_request(exact) == {:ok, "/places/kraków", true}
     assert Address.normalize_request(String.downcase(exact)) == {:ok, "/places/kraków", false}
 
-    decomposed = Address.encode("/places/kraków")
+    decomposed = Address.encode("/places/krako\u0301w")
     assert Address.normalize_request(decomposed) == {:ok, "/places/kraków", false}
+
+    # A trailing slash is one byte, even after a prepended letter that would
+    # join it into one grapheme (U+0D4E MALAYALAM LETTER DOT REPH).
+    assert Address.normalize_request("/people/abc%E0%B5%8E/") ==
+             {:ok, "/people/abc\u0D4E", false}
 
     # Case folds (Polish and polish request one address) but nothing is
     # re-slugified: a raw C++ is not c-plus-plus.

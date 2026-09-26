@@ -4,7 +4,10 @@ defmodule DevilsDictionary.Routing.ResolverTest do
   the outcome, the destination and the status each outcome will be served
   with, by exact page identity.
   """
-  use DevilsDictionary.DataCase, async: true
+  # Not async: the sandbox holds each test's transaction — and so its
+  # advisory path locks and uncommitted unique paths — for the whole test, and
+  # these tests reuse addresses such as /people/voltaire.
+  use DevilsDictionary.DataCase, async: false
 
   import DevilsDictionary.RoutingFixtures
 
@@ -91,6 +94,35 @@ defmodule DevilsDictionary.Routing.ResolverTest do
     {:ok, _} = Ledger.retire(on.id, actor_id: ctx.human.id, reason: "withdrawn")
     assert Resolver.link(on.id) == :error
     assert %Resolution{outcome: :gone} = Resolver.resolve_page(duplicate.id)
+  end
+
+  test "a choice expands its own successors, not theirs", ctx do
+    [mercury, planet, element, inner, outer] =
+      for path <- ~w(/nature/mercury /nature/mercury-planet /nature/mercury-element
+                     /nature/mercury-inner /nature/mercury-outer),
+          do: live_page!("nature", path, ctx.human)
+
+    split = fn page, successors ->
+      {:ok, _} =
+        DevilsDictionary.Registry.split(
+          page.target_object_id,
+          Enum.map(successors, & &1.target_object_id),
+          reason: "fixture"
+        )
+
+      {:ok, _} =
+        Ledger.split(page.id, Enum.map(successors, & &1.id),
+          actor_id: ctx.human.id,
+          reason: "fixture"
+        )
+    end
+
+    split.(mercury, [planet, element])
+    split.(planet, [inner, outer])
+
+    assert %Resolution{outcome: :choice, successors: [first, second]} = resolve("/nature/mercury")
+    assert %{resolution: %Resolution{outcome: :choice, successors: []}} = first
+    assert %{resolution: %Resolution{outcome: :canonical}} = second
   end
 
   describe "corrupt state is reported, never guessed" do

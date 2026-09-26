@@ -7,7 +7,10 @@ defmodule DevilsDictionary.Routing.SchemaIntegrityTest do
   Each attempt runs in a savepoint and fires the deferred checks before it
   would commit, then is rolled back, so one test can try several.
   """
-  use DevilsDictionary.DataCase, async: true
+  # Not async: the sandbox holds each test's transaction — and so its
+  # advisory path locks and uncommitted unique paths — for the whole test, and
+  # these tests reuse addresses such as /people/voltaire.
+  use DevilsDictionary.DataCase, async: false
 
   import DevilsDictionary.RoutingFixtures
 
@@ -65,7 +68,8 @@ defmodule DevilsDictionary.Routing.SchemaIntegrityTest do
 
     assert {:refused, message} =
              attempt(fn ->
-               wrong = ledger_row!(%{ctx.path | kind: :alias}, :alias, ctx.page.id, ctx.human)
+               # Claims the path was a tombstone: a changing row, but a false one.
+               wrong = ledger_row!(%{ctx.path | kind: :tombstone}, :alias, ctx.page.id, ctx.human)
 
                Repo.query!(
                  "UPDATE public_paths SET kind = 'alias', last_route_change_id = $2 WHERE id = $1",

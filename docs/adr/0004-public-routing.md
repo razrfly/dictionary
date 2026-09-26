@@ -80,7 +80,7 @@ Define this interface before the first schema implementation. Use actual foreign
 
 ## 5. Persistence contract for the implementation
 
-Use separate page tables; **do not add an On registry object kind** or alter entity kinds to fit URLs. [Stage 1](../routing/stage-1-foundation.md) implements this table, maps each invariant to its database enforcement and test, and records six implementation decisions (role namespaces, mapped-family allocation, human approvals, one page per target and locale, split pages keeping their address, tombstones for undone allocations).
+Use separate page tables; **do not add an On registry object kind** or alter entity kinds to fit URLs. [Stage 1](../routing/stage-1-foundation.md) implements this table, maps each invariant to its database enforcement and test, and records seven implementation decisions (role namespaces, mapped-family allocation, human approvals, one page per target and locale, split pages keeping their address, reservations never released, refusals that never roll back a caller).
 
 | Table | Required data and integrity |
 |---|---|

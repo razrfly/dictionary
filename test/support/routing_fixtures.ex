@@ -78,18 +78,22 @@ defmodule DevilsDictionary.RoutingFixtures do
     decision
   end
 
-  @doc "The evaluator's raw result for an entity typed `type_qid`."
-  def evaluate(object_id, type_qid, opts \\ []) do
+  @doc """
+  The evaluator's raw result for an entity typed `types` (one QID or several).
+  `:revision` moves the source pin; `:lifecycle` is the registry state.
+  """
+  def evaluate(object_id, types, opts \\ []) do
     qid = "Q#{9_000_000 + object_id}"
     revision = opts[:revision] || 1
+    types = List.wrap(types)
 
     entity = %{
       "object_id" => object_id,
       "label" => "labels never classify",
       "entity_kind" => "concept",
-      "lifecycle" => "active",
+      "lifecycle" => opts[:lifecycle] || "active",
       "qids" => [qid],
-      "instance_of" => [type_qid],
+      "instance_of" => types,
       "subclass_of" => [],
       "disambiguation" => false
     }
@@ -99,7 +103,7 @@ defmodule DevilsDictionary.RoutingFixtures do
         "qid" => qid,
         "revision_id" => revision,
         "checksum" => "fixture-#{revision}",
-        "claims" => %{"P31" => [claim(type_qid)], "P279" => []}
+        "claims" => %{"P31" => Enum.map(types, &claim/1), "P279" => []}
       }
     }
 

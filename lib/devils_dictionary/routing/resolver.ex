@@ -9,6 +9,10 @@ defmodule DevilsDictionary.Routing.Resolver do
   impossible is reported as `:corrupt` with diagnostics and logged, never
   papered over with a guess.
 
+  Every decision is made from rows read in **one statement** — the path, its
+  page and that page's canonical together — so a move or merge committing
+  between two reads cannot make consistent state look corrupt.
+
   Nothing in the router calls this yet; reader integration is Stage 3.
   """
 
@@ -39,7 +43,7 @@ defmodule DevilsDictionary.Routing.Resolver do
             path
             |> decide(page, canonical, exact?)
             |> Map.put(:request, raw)
-            |> with_successors()
+            |> with_successors(true)
             |> report()
         end
 
@@ -53,15 +57,29 @@ defmodule DevilsDictionary.Routing.Resolver do
     end
   end
 
+  # One statement, one snapshot.
   defp load(normalized) do
-    with %PublicPath{} = path <- Repo.get_by(PublicPath, path: normalized) do
-      page = Repo.get!(Page, path.destination_page_id)
-      {path, page, canonical_of(page)}
-    end
+    Repo.one(
+      from path in PublicPath,
+        join: page in Page,
+        on: page.id == path.destination_page_id,
+        left_join: canonical in PublicPath,
+        on: canonical.id == page.canonical_path_id,
+        where: path.path == ^normalized,
+        select: {path, page, canonical}
+    )
   end
 
-  defp canonical_of(%Page{canonical_path_id: nil}), do: nil
-  defp canonical_of(%Page{canonical_path_id: id}), do: Repo.get(PublicPath, id)
+  # A page and its canonical, in one statement.
+  defp load_page(page_id) do
+    Repo.one(
+      from page in Page,
+        left_join: canonical in PublicPath,
+        on: canonical.id == page.canonical_path_id,
+        where: page.id == ^page_id,
+        select: {page, canonical}
+    )
+  end
 
   @doc """
   The decision, given the loaded rows. Pure, so every state — including ones
@@ -74,8 +92,12 @@ defmodule DevilsDictionary.Routing.Resolver do
       page.lifecycle_state == :merged ->
         corrupt(base, :path_on_merged_page, %{})
 
-      path.kind == :tombstone ->
+      # Gone is only news for a page the public has seen.
+      path.kind == :tombstone and page.publication_state in [:published, :withdrawn] ->
         %{base | outcome: :gone}
+
+      path.kind == :tombstone ->
+        %{base | outcome: :unavailable}
 
       page.lifecycle_state == :retired ->
         corrupt(base, :live_path_on_retired_page, %{})
@@ -128,24 +150,30 @@ defmodule DevilsDictionary.Routing.Resolver do
   it. A merged page redirects to its survivor's canonical; a retired page is
   `:gone`.
   """
-  def resolve_page(page_id) do
-    case follow(Repo.get(Page, page_id), 0, MapSet.new()) do
+  def resolve_page(page_id), do: resolve_page(page_id, true)
+
+  defp resolve_page(page_id, expand?) do
+    case follow(load_page(page_id), 0, MapSet.new()) do
       {:error, :missing} ->
         %Resolution{outcome: :missing}
 
       {:error, reason, page} ->
         %Resolution{outcome: :missing, page: page} |> corrupt(reason, %{}) |> report()
 
-      {:ok, %Page{lifecycle_state: :retired} = page, _hops} ->
+      {:ok, %Page{lifecycle_state: :retired, publication_state: state} = page, _, _hops}
+      when state in [:published, :withdrawn] ->
         %Resolution{outcome: :gone, page: page}
 
-      {:ok, page, hops} ->
-        case canonical_of(page) do
+      {:ok, %Page{lifecycle_state: :retired} = page, _, _hops} ->
+        %Resolution{outcome: :unavailable, page: page}
+
+      {:ok, page, canonical, hops} ->
+        case canonical do
           nil -> unrouted(page)
           canonical -> decide(canonical, page, canonical, true)
         end
         |> via_merge(hops)
-        |> with_successors()
+        |> with_successors(expand?)
         |> report()
     end
   end
@@ -163,22 +191,18 @@ defmodule DevilsDictionary.Routing.Resolver do
 
   defp via_merge(resolution, _hops), do: resolution
 
+  # Each hop is one consistent read of a page and its canonical.
   defp follow(nil, _hops, _seen), do: {:error, :missing}
 
-  defp follow(%Page{lifecycle_state: :merged} = page, hops, seen) do
+  defp follow({%Page{lifecycle_state: :merged} = page, _canonical}, hops, seen) do
     cond do
-      MapSet.member?(seen, page.id) ->
-        {:error, :merge_cycle, page}
-
-      hops >= @max_merge_hops ->
-        {:error, :merge_chain_too_long, page}
-
-      true ->
-        follow(Repo.get(Page, page.merged_into_page_id), hops + 1, MapSet.put(seen, page.id))
+      MapSet.member?(seen, page.id) -> {:error, :merge_cycle, page}
+      hops >= @max_merge_hops -> {:error, :merge_chain_too_long, page}
+      true -> follow(load_page(page.merged_into_page_id), hops + 1, MapSet.put(seen, page.id))
     end
   end
 
-  defp follow(%Page{} = page, hops, _seen), do: {:ok, page, hops}
+  defp follow({%Page{} = page, canonical}, hops, _seen), do: {:ok, page, canonical, hops}
 
   @doc """
   The encoded canonical link for a page id, following merges, or `:error` for
@@ -196,8 +220,10 @@ defmodule DevilsDictionary.Routing.Resolver do
   end
 
   # A choice names every successor the split recorded, in its order, each
-  # resolved by id. None is chosen for the reader.
-  defp with_successors(%Resolution{outcome: :choice, page: page} = resolution) do
+  # resolved by id. None is chosen for the reader. Only one level is expanded:
+  # a successor that is itself split is a choice the reader opens next, so
+  # successors that name each other cannot loop.
+  defp with_successors(%Resolution{outcome: :choice, page: page} = resolution, true) do
     successors =
       case Pages.current_revision(page) do
         nil ->
@@ -206,13 +232,15 @@ defmodule DevilsDictionary.Routing.Resolver do
         revision ->
           revision.memberships
           |> Enum.filter(&(&1.relationship == :split_successor))
-          |> Enum.map(&%{page_id: &1.target_page_id, resolution: resolve_page(&1.target_page_id)})
+          |> Enum.map(
+            &%{page_id: &1.target_page_id, resolution: resolve_page(&1.target_page_id, false)}
+          )
       end
 
     %{resolution | successors: successors}
   end
 
-  defp with_successors(resolution), do: resolution
+  defp with_successors(resolution, _expand?), do: resolution
 
   defp report(%Resolution{outcome: :corrupt} = resolution) do
     Logger.error("routing: corrupt resolver state",

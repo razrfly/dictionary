@@ -11,10 +11,14 @@ defmodule DevilsDictionary.Routing.Classifications do
 
     * **same evidence fingerprint** — the override stays current and nothing is
       written;
-    * **changed evidence that still supports the override** (a new Wikidata
-      revision with the same types, say) — the override stays current;
+    * **changed evidence that is not new against it** — the evaluator reaches
+      the outcome the reviewer already overrode, or still offers the override's
+      family (a new Wikidata revision with the same types, say) — the override
+      stays current, and the new evidence is kept in history as a non-current
+      decision;
     * **contradictory evidence** — a new current `needs_review` decision,
-      superseding the override, which stays in history.
+      superseding the override, which stays in history. That review is sticky:
+      later imports update its evidence but only a human's new override ends it.
 
   None of this touches an address. A decision has no foreign key to a path,
   and `Routing.Ledger` reads a decision only when it allocates or moves one;
@@ -29,6 +33,7 @@ defmodule DevilsDictionary.Routing.Classifications do
 
   @statuses Map.new(Decision.statuses(), &{Atom.to_string(&1), &1})
   @families Map.new(Decision.families(), &{Atom.to_string(&1), &1})
+  @decisive [:excluded_source_page, :identity_review]
 
   @doc "The current decision for an entity, or nil."
   def current(object_id) do
@@ -44,8 +49,9 @@ defmodule DevilsDictionary.Routing.Classifications do
   The evidence an evaluator result considered, as a SHA-256.
 
   Covers the pinned source revision, the pinned class evidence, the matched
-  rule paths and the warnings — what a reviewer looked at — not the label,
-  which never classifies.
+  rule paths, the warnings and the outcome — status, reasons and candidates,
+  which also carry the inputs that are not evidence records, such as a merged
+  identity or a disambiguation flag. Not the label, which never classifies.
   """
   def fingerprint(result) do
     %{
@@ -54,7 +60,10 @@ defmodule DevilsDictionary.Routing.Classifications do
       "evidence" => result.evidence,
       "matches" =>
         Enum.map(result.matches, &%{"rule" => &1.id, "family" => &1.family, "path" => &1.path}),
-      "warnings" => result.warnings
+      "warnings" => result.warnings,
+      "status" => result.status,
+      "reasons" => result.reasons,
+      "candidate_families" => result.candidate_families
     }
     |> canonical()
     |> Jason.encode!()
@@ -87,8 +96,15 @@ defmodule DevilsDictionary.Routing.Classifications do
       current = current(object_id)
 
       case outcome(current, attrs) do
-        {:keep, outcome} -> {outcome, current}
-        {:write, outcome, attrs} -> {outcome, supersede!(current, attrs)}
+        {:keep, outcome} ->
+          {outcome, current}
+
+        {:note, outcome} ->
+          note!(attrs)
+          {outcome, current}
+
+        {:write, outcome, attrs} ->
+          {outcome, supersede!(current, attrs)}
       end
     end)
     |> case do
@@ -101,29 +117,76 @@ defmodule DevilsDictionary.Routing.Classifications do
 
   defp outcome(%Decision{origin: :override} = override, attrs) do
     cond do
-      attrs.evidence_fingerprint == override.evidence_fingerprint -> {:keep, :override_preserved}
-      contradicts?(override, attrs) -> {:write, :override_contradicted, review(attrs)}
-      true -> {:keep, :override_preserved}
+      attrs.evidence_fingerprint == override.evidence_fingerprint ->
+        {:keep, :override_preserved}
+
+      contradicts?(override, reviewed(override), attrs) ->
+        {:write, :override_contradicted, review(attrs)}
+
+      true ->
+        {:note, :override_preserved}
     end
   end
 
   defp outcome(%Decision{} = current, attrs) do
-    if current.evidence_fingerprint == attrs.evidence_fingerprint and
-         current.policy_version == attrs.policy_version,
-       do: {:keep, :unchanged},
-       else: {:write, :recorded, attrs}
+    cond do
+      current.evidence_fingerprint == attrs.evidence_fingerprint and
+          current.policy_version == attrs.policy_version ->
+        {:keep, :unchanged}
+
+      # A contradicted override stays in review until a human decides again.
+      "override_contradicted" in current.reasons ->
+        {:write, :override_contradicted, review(attrs)}
+
+      true ->
+        {:write, :recorded, attrs}
+    end
   end
 
-  # New evidence contradicts an override when it no longer offers the chosen
-  # family, or when it now reaches an outcome the reviewer ruled out.
-  defp contradicts?(%Decision{status: :mapped, family: family}, attrs) do
-    attrs.status in [:excluded_source_page, :identity_review] or
+  # The evaluator decision an override (or a chain of them) was made against.
+  defp reviewed(%Decision{origin: :evaluator} = decision), do: decision
+  defp reviewed(%Decision{supersedes_id: nil}), do: nil
+  defp reviewed(%Decision{supersedes_id: id}), do: Decision |> Repo.get!(id) |> reviewed()
+
+  # The outcome the reviewer already overrode is not new evidence against the
+  # override, however its revision pins moved. Otherwise new evidence
+  # contradicts it when it no longer offers the chosen family, or reaches an
+  # outcome the reviewer ruled out.
+  defp contradicts?(override, reviewed, attrs) do
+    not already_reviewed?(reviewed, attrs) and against?(override, attrs)
+  end
+
+  # The reviewer saw these candidates. A contradiction review records
+  # `needs_review` in place of the evaluator's own status, so status counts
+  # only when it is decisive: an exclusion or an identity change.
+  defp already_reviewed?(nil, _attrs), do: false
+
+  defp already_reviewed?(%Decision{} = reviewed, attrs) do
+    reviewed.candidate_families == attrs.candidate_families and
+      (attrs.status not in @decisive or attrs.status == reviewed.status)
+  end
+
+  defp against?(%Decision{status: :mapped, family: family}, attrs) do
+    attrs.status in @decisive or
       (attrs.candidate_families != [] and Atom.to_string(family) not in attrs.candidate_families)
   end
 
-  defp contradicts?(%Decision{status: status}, attrs) do
-    attrs.status == :mapped or
-      (attrs.status in [:excluded_source_page, :identity_review] and attrs.status != status)
+  defp against?(%Decision{status: status}, attrs) do
+    attrs.status == :mapped or (attrs.status in @decisive and attrs.status != status)
+  end
+
+  # Evidence that moved under a standing override is kept, not made current.
+  defp note!(attrs) do
+    exists? =
+      Repo.exists?(
+        from d in Decision,
+          where:
+            d.object_id == ^attrs.object_id and d.origin == :evaluator and
+              d.evidence_fingerprint == ^attrs.evidence_fingerprint and
+              d.policy_version == ^attrs.policy_version
+      )
+
+    unless exists?, do: Repo.insert!(struct(Decision, Map.put(attrs, :is_current, false)))
   end
 
   defp review(attrs) do
@@ -140,7 +203,9 @@ defmodule DevilsDictionary.Routing.Classifications do
       object_id: result.object_id,
       origin: :evaluator,
       status: Map.fetch!(@statuses, result.status),
-      family: result.family && Map.fetch!(@families, result.family),
+      # The evaluator names a sole candidate as `family` whatever the status;
+      # only a mapping selects it.
+      family: if(result.status == "mapped", do: Map.fetch!(@families, result.family)),
       candidate_families: result.candidate_families,
       rule_ids: result.matches |> Enum.map(& &1.id) |> Enum.uniq() |> Enum.sort(),
       reasons: result.reasons,

@@ -32,6 +32,32 @@ defmodule DevilsDictionary.Routing.Pages do
   than on checking first.
   """
   def ensure(role, target_object_id, locale \\ "en") when role in [:subject, :edition, :lexeme] do
+    with :ok <- fits(role, target_object_id) do
+      insert_or_find(role, target_object_id, locale)
+    end
+  end
+
+  # What the database checks at commit, answered before it has to raise.
+  defp fits(role, target_object_id) do
+    kinds =
+      Repo.one(
+        from o in Object,
+          left_join: e in DevilsDictionary.Registry.Entity,
+          on: e.object_id == o.id,
+          where: o.id == ^target_object_id,
+          select: {o.kind, e.entity_kind}
+      )
+
+    case {role, kinds} do
+      {:lexeme, {:lexeme, _}} -> :ok
+      {:edition, {:entity, :edition}} -> :ok
+      {:subject, {:entity, kind}} when kind not in [nil, :edition] -> :ok
+      {_role, nil} -> {:error, :target_not_found}
+      _mismatch -> {:error, :target_kind_mismatch}
+    end
+  end
+
+  defp insert_or_find(role, target_object_id, locale) do
     changeset =
       Page.create_changeset(%{role: role, target_object_id: target_object_id, locale: locale})
 
@@ -140,13 +166,25 @@ defmodule DevilsDictionary.Routing.Pages do
   end
 
   defp validate_memberships(page, memberships) do
-    Enum.reduce_while(memberships, :ok, fn member, :ok ->
-      case membership(page, member) do
-        :ok -> {:cont, :ok}
-        error -> {:halt, error}
-      end
-    end)
+    keys = Enum.map(memberships, &{&1[:relationship], &1[:target_object_id], &1[:target_page_id]})
+
+    if length(Enum.uniq(keys)) != length(keys) do
+      {:error, :duplicate_membership}
+    else
+      Enum.reduce_while(memberships, :ok, fn member, :ok ->
+        case membership(page, member) do
+          :ok -> {:cont, :ok}
+          error -> {:halt, error}
+        end
+      end)
+    end
   end
+
+  defp membership(_page, %{target_object_id: object, target_page_id: page})
+       when not is_nil(object) and not is_nil(page),
+       do: {:error, :one_target_required}
+
+  defp membership(%Page{id: id}, %{target_page_id: id}), do: {:error, :page_cannot_contain_itself}
 
   defp membership(_page, %{relationship: :split_successor}),
     do: {:error, :split_successors_are_written_by_the_ledger}

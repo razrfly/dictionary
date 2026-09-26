@@ -4,7 +4,10 @@ defmodule DevilsDictionary.Routing.ClassificationsTest do
   evidence an override describes, and a published address that no decision
   can move.
   """
-  use DevilsDictionary.DataCase, async: true
+  # Not async: the sandbox holds each test's transaction — and so its
+  # advisory path locks and uncommitted unique paths — for the whole test, and
+  # these tests reuse addresses such as /people/voltaire.
+  use DevilsDictionary.DataCase, async: false
 
   import DevilsDictionary.RoutingFixtures
 
@@ -109,14 +112,20 @@ defmodule DevilsDictionary.Routing.ClassificationsTest do
     page |> allocated!("/people/voltaire", ctx.human) |> published!()
     decisions = Repo.aggregate(ClassificationDecision, :count)
 
-    # The same evidence again, then a new revision that still gives no family.
+    # The same evidence again writes nothing; a new revision that still gives
+    # no family keeps the override current and is itself kept, non-current.
     assert {:ok, :override_preserved, %{id: same}} = Classifications.record(evaluate(id, "Q1"))
-
-    assert {:ok, :override_preserved, %{id: ^same}} =
-             Classifications.record(evaluate(id, "Q1", revision: 2))
-
-    assert same == override.id
     assert Repo.aggregate(ClassificationDecision, :count) == decisions
+
+    moved = evaluate(id, "Q1", revision: 2)
+    assert {:ok, :override_preserved, %{id: ^same}} = Classifications.record(moved)
+    assert {:ok, :override_preserved, %{id: ^same}} = Classifications.record(moved)
+    assert same == override.id
+
+    assert [%{is_current: false, evidence_fingerprint: noted}] =
+             Classifications.history(id) |> Enum.filter(&(&1.id > override.id))
+
+    assert noted == Classifications.fingerprint(moved)
 
     # Evidence that now maps to Works contradicts the People override.
     assert {:ok, :override_contradicted, review} =
@@ -132,5 +141,139 @@ defmodule DevilsDictionary.Routing.ClassificationsTest do
              Resolver.resolve(Address.encode("/people/voltaire"))
 
     consistent!()
+  end
+
+  test "a review with one candidate records the candidate and selects no family", ctx do
+    id = ctx.entity.object_id
+
+    # A person type and an unknown one: the sole candidate is People, and the
+    # evaluator names it `family` — but review selects nothing.
+    result = evaluate(id, ["Q5", "Q1"])
+    assert {result.status, result.family} == {"needs_review", "people"}
+
+    assert {:ok, :recorded, decision} = Classifications.record(result)
+
+    assert {decision.status, decision.family, decision.candidate_families} ==
+             {:needs_review, nil, ["people"]}
+  end
+
+  test "a lifecycle change alone is new evidence", ctx do
+    id = ctx.entity.object_id
+    {:ok, :recorded, active} = Classifications.record(evaluate(id, "Q5"))
+
+    merged = evaluate(id, "Q5", lifecycle: "merged")
+    assert {merged.status, merged.family} == {"identity_review", "people"}
+    assert Classifications.fingerprint(merged) != active.evidence_fingerprint
+
+    assert {:ok, :recorded, review} = Classifications.record(merged)
+
+    assert {review.status, review.family, review.supersedes_id} ==
+             {:identity_review, nil, active.id}
+  end
+
+  test "an override of the evaluator's own mapping survives that mapping's return", ctx do
+    id = ctx.entity.object_id
+    {:ok, :recorded, works} = Classifications.record(evaluate(id, "Q482994"))
+
+    {:ok, override} =
+      Classifications.override(
+        id,
+        %{
+          status: :mapped,
+          family: :people,
+          reason: "a band's frontman, not the album",
+          evidence_fingerprint: works.evidence_fingerprint
+        },
+        ctx.human.id
+      )
+
+    # The reviewer already overrode "works"; a new revision saying the same is
+    # not contradictory evidence.
+    assert {:ok, :override_preserved, %{id: same}} =
+             Classifications.record(evaluate(id, "Q482994", revision: 2))
+
+    assert same == override.id
+  end
+
+  test "a contradicted override stays in review until a human decides again", ctx do
+    id = ctx.entity.object_id
+    reviewed = leave_unmapped!(id)
+
+    {:ok, _override} =
+      Classifications.override(
+        id,
+        %{
+          status: :mapped,
+          family: :people,
+          reason: "reviewed",
+          evidence_fingerprint: reviewed.evidence_fingerprint
+        },
+        ctx.human.id
+      )
+
+    assert {:ok, :override_contradicted, first} =
+             Classifications.record(evaluate(id, "Q482994", revision: 2))
+
+    # Later imports refresh the evidence but cannot clear the review by
+    # themselves, even when they map cleanly.
+    assert {:ok, :override_contradicted, second} =
+             Classifications.record(evaluate(id, "Q482994", revision: 3))
+
+    assert {second.status, second.family, second.supersedes_id} == {:needs_review, nil, first.id}
+
+    assert {:ok, :unchanged, ^second} =
+             Classifications.record(evaluate(id, "Q482994", revision: 3))
+
+    {:ok, resolved} =
+      Classifications.override(
+        id,
+        %{
+          status: :mapped,
+          family: :works,
+          reason: "it is the album after all",
+          evidence_fingerprint: second.evidence_fingerprint
+        },
+        ctx.human.id
+      )
+
+    assert {resolved.origin, resolved.family, resolved.is_current} == {:override, :works, true}
+  end
+
+  test "a second override stands on the evidence it was made on", ctx do
+    id = ctx.entity.object_id
+    {:ok, :recorded, works} = Classifications.record(evaluate(id, "Q482994"))
+
+    {:ok, _first} =
+      Classifications.override(
+        id,
+        %{
+          status: :mapped,
+          family: :people,
+          reason: "a person",
+          evidence_fingerprint: works.evidence_fingerprint
+        },
+        ctx.human.id
+      )
+
+    assert {:ok, :override_contradicted, review} =
+             Classifications.record(evaluate(id, "Q16521", revision: 2))
+
+    {:ok, second} =
+      Classifications.override(
+        id,
+        %{
+          status: :mapped,
+          family: :people,
+          reason: "still a person, having seen the taxon claim",
+          evidence_fingerprint: review.evidence_fingerprint
+        },
+        ctx.human.id
+      )
+
+    # The same types at a new revision are what the second reviewer saw.
+    assert {:ok, :override_preserved, %{id: same}} =
+             Classifications.record(evaluate(id, "Q16521", revision: 3))
+
+    assert same == second.id
   end
 end

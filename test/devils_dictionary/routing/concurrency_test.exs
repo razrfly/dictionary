@@ -10,7 +10,7 @@ defmodule DevilsDictionary.Routing.ConcurrencyTest do
 
   import DevilsDictionary.RoutingFixtures
 
-  alias DevilsDictionary.Routing.{Ledger, Page, Pages, PublicPath, RouteChange}
+  alias DevilsDictionary.Routing.{Ledger, Page, Pages, PublicPath, Resolver, RouteChange}
   alias Ecto.Adapters.SQL.Sandbox
 
   @moduletag :unboxed
@@ -138,12 +138,84 @@ defmodule DevilsDictionary.Routing.ConcurrencyTest do
     end
   end
 
-  test "the unique index decides a race the locks never saw, and the loser leaves nothing" do
-    importer = importer!()
-    ours = subject_page!("people", "Voltaire", :person)
-    theirs = subject_page!("people", "Voltaire (musician)", :person)
+  test "crossing moves wait in one order instead of deadlocking" do
+    human = human!()
+    handler = attach_retries()
+
+    pairs =
+      for n <- 1..div(@contenders, 2) do
+        {live_page!("people", "/people/cross-#{n}-a", human, :person),
+         live_page!("people", "/people/cross-#{n}-b", human, :person)}
+      end
+
+    move = fn page, onto ->
+      fn -> Ledger.move(page.id, "/people/cross-#{onto}", actor_id: human.id, reason: "race") end
+    end
+
+    {results, _backends} =
+      race(
+        Enum.flat_map(Enum.with_index(pairs, 1), fn {{a, b}, n} ->
+          [move.(a, "#{n}-b"), move.(b, "#{n}-a")]
+        end)
+      )
+
+    assert Enum.all?(results, &match?({:error, {:path_taken, _}}, &1))
+    refute_received {:retried, _attempt, _error}
+    :telemetry.detach(handler)
+  end
+
+  test "resolving during moves never mistakes a consistent change for corruption" do
+    human = human!()
+    page = live_page!("people", "/people/voltaire", human, :person)
+    {:ok, _} = Ledger.move(page.id, "/people/arouet", actor_id: human.id, reason: "setup")
     parent = self()
-    handler = "routing-retry-#{inspect(self())}"
+
+    reader =
+      Task.async(fn ->
+        :ok = Sandbox.checkout(Repo, sandbox: false)
+        send(parent, :reading)
+        read_until_stopped(page.id, [])
+      end)
+
+    assert_receive :reading, 10_000
+
+    mover =
+      Task.async(fn ->
+        :ok = Sandbox.checkout(Repo, sandbox: false)
+
+        for n <- 1..60 do
+          path = if rem(n, 2) == 0, do: "/people/arouet", else: "/people/voltaire"
+          {:ok, _} = Ledger.move(page.id, path, actor_id: human.id, reason: "churn")
+        end
+      end)
+
+    Task.await(mover, 60_000)
+    send(reader.pid, :stop)
+    outcomes = Task.await(reader, 60_000)
+
+    assert length(outcomes) > 100
+    assert outcomes |> Enum.uniq() |> Enum.sort() == [:canonical, :redirect]
+  end
+
+  # Resolves both addresses and the page id until told to stop; `after 0` only
+  # checks the mailbox, it does not wait.
+  defp read_until_stopped(page_id, outcomes) do
+    receive do
+      :stop -> outcomes
+    after
+      0 ->
+        found =
+          [Resolver.resolve("/people/voltaire"), Resolver.resolve("/people/arouet")]
+          |> Enum.map(& &1.outcome)
+
+        by_id = Resolver.resolve_page(page_id).outcome
+        read_until_stopped(page_id, [by_id | found] ++ outcomes)
+    end
+  end
+
+  defp attach_retries do
+    parent = self()
+    handler = "routing-retry-#{inspect(self())}-#{System.unique_integer()}"
 
     :telemetry.attach(
       handler,
@@ -154,6 +226,15 @@ defmodule DevilsDictionary.Routing.ConcurrencyTest do
       nil
     )
 
+    handler
+  end
+
+  test "the unique index decides a race the locks never saw, and the loser leaves nothing" do
+    importer = importer!()
+    ours = subject_page!("people", "Voltaire", :person)
+    theirs = subject_page!("people", "Voltaire (musician)", :person)
+    parent = self()
+    handler = attach_retries()
     on_exit(fn -> :telemetry.detach(handler) end)
 
     # A writer that skips the ledger's advisory lock and holds its row

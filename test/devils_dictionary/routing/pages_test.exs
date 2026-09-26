@@ -3,7 +3,10 @@ defmodule DevilsDictionary.Routing.PagesTest do
   Page identity and revisioned On storage (ADR 0004 §4): immutable revisions,
   typed ordered membership, and membership that never asserts identity.
   """
-  use DevilsDictionary.DataCase, async: true
+  # Not async: the sandbox holds each test's transaction — and so its
+  # advisory path locks and uncommitted unique paths — for the whole test, and
+  # these tests reuse addresses such as /people/voltaire.
+  use DevilsDictionary.DataCase, async: false
 
   import DevilsDictionary.RoutingFixtures
 
@@ -95,6 +98,28 @@ defmodule DevilsDictionary.Routing.PagesTest do
     end
 
     assert Pages.revisions(on.id) == before
+  end
+
+  test "a malformed page or membership is refused, not raised", ctx do
+    on = overview_page!()
+    lexeme = lexeme!("candide")
+    person = entity!(:person, "Voltaire")
+
+    assert Pages.ensure(:subject, lexeme.object_id) == {:error, :target_kind_mismatch}
+    assert Pages.ensure(:edition, person.object_id) == {:error, :target_kind_mismatch}
+    assert Pages.ensure(:subject, -1) == {:error, :target_not_found}
+
+    twice = %{relationship: :editorial_association, target_object_id: person.object_id}
+
+    for {members, error} <- [
+          {[twice, twice], :duplicate_membership},
+          {[%{twice | target_object_id: person.object_id} |> Map.put(:target_page_id, on.id)],
+           :one_target_required},
+          {[%{relationship: :editorial_association, target_page_id: on.id}],
+           :page_cannot_contain_itself}
+        ] do
+      assert Pages.add_revision(on.id, %{}, members, ctx.human.id) == {:error, error}
+    end
   end
 
   test "ensure finds or creates the one page for a target and locale" do

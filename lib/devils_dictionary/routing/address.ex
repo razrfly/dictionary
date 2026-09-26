@@ -153,9 +153,14 @@ defmodule DevilsDictionary.Routing.Address do
   end
 
   # One trailing slash is an equivalent spelling; an empty or dot segment is
-  # not a path we will interpret.
+  # not a path we will interpret. The slash is removed as one byte: grapheme
+  # slicing would take a prepended letter (U+0D4E, U+0600) with it.
   defp segments("/" <> rest) do
-    rest = if String.ends_with?(rest, "/"), do: String.slice(rest, 0..-2//1), else: rest
+    rest =
+      if String.ends_with?(rest, "/"),
+        do: binary_part(rest, 0, byte_size(rest) - 1),
+        else: rest
+
     segments = String.split(rest, "/")
 
     cond do
