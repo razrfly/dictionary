@@ -14,6 +14,7 @@ defmodule DevilsDictionary.Routing.CommittedLedgerTest do
 
   alias DevilsDictionary.Routing.{
     Address,
+    Classifications,
     Ledger,
     Page,
     Pages,
@@ -26,6 +27,8 @@ defmodule DevilsDictionary.Routing.CommittedLedgerTest do
   # A refused COMMIT is logged by Postgrex; it is the expected outcome here.
   @moduletag :unboxed
   @moduletag :capture_log
+
+  @beyond_bigint 9_223_372_036_854_775_808
 
   setup do
     %{human: human!(), importer: importer!()}
@@ -176,7 +179,9 @@ defmodule DevilsDictionary.Routing.CommittedLedgerTest do
                  Pages.ensure(:subject, Integer.to_string(entity.object_id)),
                  Pages.ensure(:subject, -1),
                  Pages.ensure(:subject, 1.5),
+                 Pages.ensure(:subject, @beyond_bigint),
                  Pages.ensure(:homepage, entity.object_id),
+                 Pages.ensure(:subject, entity.object_id, "en\n"),
                  Pages.ensure(:subject, entity.object_id)
                ]
              end)
@@ -186,10 +191,100 @@ defmodule DevilsDictionary.Routing.CommittedLedgerTest do
              {:error, :invalid_target},
              {:error, :invalid_target},
              {:error, :invalid_target},
+             {:error, :invalid_target},
              {:error, :invalid_role},
+             {:error, %Ecto.Changeset{errors: [locale: _]}},
              {:ok, %Page{id: id}}
            ] = results
 
     assert %Page{role: :subject} = Repo.get!(Page, id)
+  end
+
+  test "every routing writer refuses malformed input without aborting the caller's batch",
+       ctx do
+    entity = entity!(:person, "Candide")
+    classify!(entity.object_id, "people")
+    {:ok, page} = Pages.ensure(:subject, entity.object_id)
+    decisions = Classifications.history(entity.object_id)
+    human = opts(ctx.human)
+    author = ctx.human.id
+
+    stale = %{
+      status: :mapped,
+      family: :people,
+      reason: "a philosopher",
+      evidence_fingerprint: "not what the reviewer saw"
+    }
+
+    assert {:ok, results} =
+             Repo.transaction(fn ->
+               [
+                 Ledger.allocate(nil, "/people/candide", human),
+                 Ledger.allocate(Integer.to_string(page.id), "/people/candide", human),
+                 Ledger.move(@beyond_bigint, "/people/pangloss", human),
+                 Ledger.retire(-1, human),
+                 Ledger.restore(1.0, "/people/candide", human),
+                 Ledger.merge(nil, page.id, human),
+                 Ledger.split(page.id, [nil], human),
+                 Ledger.split(page.id, :pangloss, human),
+                 Pages.add_revision(nil, %{title: "Candide"}, [], author),
+                 Pages.add_revision(page.id, %{title: 1759}, [], author),
+                 Pages.add_revision(page.id, %{body_format: :html}, [], author),
+                 Pages.add_revision(page.id, %{reviewer_actor_id: @beyond_bigint}, [], author),
+                 Pages.add_revision(page.id, %{}, ["not a membership"], author),
+                 Pages.add_revision(
+                   page.id,
+                   %{},
+                   [%{relationship: :discusses_subject, target_object_id: @beyond_bigint}],
+                   author
+                 ),
+                 Pages.add_revision(page.id, %{}, [], @beyond_bigint),
+                 Pages.add_revision(999_999_999, %{}, [], author),
+                 Classifications.override(nil, stale, author),
+                 Classifications.override(entity.object_id, stale, author),
+                 Classifications.record(%{object_id: "7"}),
+                 Classifications.record(evaluate(999_999_999, "Q5")),
+                 Resolver.resolve_page(nil).outcome,
+                 Resolver.resolve_page(@beyond_bigint).outcome,
+                 Resolver.link("7"),
+                 Resolver.paths(nil),
+                 # The batch's one well-formed record, which must commit.
+                 Ledger.allocate(page.id, "/people/candide", opts(ctx.importer))
+               ]
+             end)
+
+    assert [
+             {:error, :invalid_page},
+             {:error, :invalid_page},
+             {:error, :invalid_page},
+             {:error, :invalid_page},
+             {:error, :invalid_page},
+             {:error, :invalid_page},
+             {:error, :invalid_page},
+             {:error, :successors_required},
+             {:error, :invalid_page},
+             {:error, :invalid_revision},
+             {:error, :invalid_body_format},
+             {:error, :invalid_reviewer},
+             {:error, :invalid_membership},
+             {:error, :membership_target_not_found},
+             {:error, :actor_required},
+             {:error, :page_not_found},
+             {:error, :invalid_object},
+             {:error, :stale_evidence},
+             {:error, :invalid_object},
+             {:error, :object_not_found},
+             :missing,
+             :missing,
+             :error,
+             [],
+             {:ok, %PublicPath{path: "/people/candide"}}
+           ] = results
+
+    # Committed, and nothing a refusal touched changed.
+    assert %Page{canonical_path_id: path_id, current_revision_id: nil} = Repo.get!(Page, page.id)
+    assert %PublicPath{path: "/people/candide"} = Repo.get!(PublicPath, path_id)
+    assert Classifications.history(entity.object_id) == decisions
+    assert %Resolution{outcome: :unavailable} = resolve("/people/candide")
   end
 end

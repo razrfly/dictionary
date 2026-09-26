@@ -129,15 +129,15 @@ Route moves and merges keep the binding on the page id. A split page has no sing
 
 Registry ids exist only in the database, and a rebuild from sources renumbers every object, so routing state is **restored, not regenerated**. The [recovery procedure](recovery.md) takes these steps:
 
-1. Snapshot the source.
+1. Quiesce and snapshot the source.
 2. Restore into an isolated database.
-3. Verify exact identities, references, resolutions and sequences with `mix dd.routing.verify`.
-4. Re-project from source records in any provider order (`mix dd.replay`, `mix dd.materialize --all`), and verify again.
+3. Verify with `mix dd.routing.verify`: every column of every table by exact id (Oban's queues apart), the schema's definitions, resolutions and sequences.
+4. Re-project the copy from its own records in any provider order (`mix dd.materialize --all`, and `mix dd.replay` from an archive exported from the copy), and verify again.
 5. Exercise the ledger and resolver.
 
 `RecoveryTest` runs these steps end to end against disposable databases, re-projecting with the providers reversed.
 
-`mix dd.reset`, `mix dd.snapshot --restore` and `mix dd.rebuild` refuse a database holding routing state unless a snapshot records its current routing high-water marks. The procedure has not yet been run on the development corpus; that is Stage 2's first gate.
+`mix dd.reset`, `mix dd.snapshot --restore`, `mix dd.rebuild` and `mix ecto.drop` refuse a database holding routing state unless given a snapshot of that same database whose recorded routing digest still matches. `mix dd.snapshot` computes the digest inside the exported snapshot it dumps, so it describes exactly the dumped rows. The procedure has not yet been run on the development corpus; that is Stage 2's first gate.
 
 ## Independent review
 
@@ -198,8 +198,8 @@ Three kinds of evidence, kept apart because they prove different things.
 | Batch safety | a refusal inside a caller's transaction keeps the caller's earlier allocation |
 | Versioned overrides | `classifications_test.exs`: human-only; stale evidence refused; sole-candidate review stored without a family; lifecycle-only change is new evidence; an override survives both identical evidence and the evaluator's own overridden outcome, and so does a second override made after a contradiction; contradiction is sticky until a human decides; the published address never moves |
 | Tombstones are not resurrected by machines | `committed_ledger_test.exs`, every step committed: an importer's `Ledger.allocate/3` and a hand-written `allocate` promotion are both refused (`route_changes_allocate_shape`), and the ledger, path and page are byte-for-byte unchanged afterwards; a human `move/3` onto a tombstone is refused; a human `restore/3` brings it back as a `restore` operation and it resolves again; a retired page is restored at one address while its other stays gone |
-| Malformed targets in a batch | `committed_ledger_test.exs`: nil, string, negative and float targets and an unknown role return error tuples inside one committed transaction, which still commits the valid page |
-| Recovery | `recovery_test.exs`, against disposable databases created and dropped by the test: exact restore; re-projection with the providers reversed, shown to have really run; exact again; ledger and resolver work afterwards; verification shown to be non-vacuous; the source only read. Guards refuse reset, restore-over and rebuild without a covering snapshot, and reject stale, unmarked and missing snapshots |
+| Malformed input in a batch | `committed_ledger_test.exs`, inside one committed transaction:<ul><li>`Pages.ensure/3`: nil, string, negative, float and beyond-`bigint` targets, an unknown role and a locale with a trailing newline;</li><li>every `Ledger` operation, `Pages.add_revision/4`, `Classifications.record/1` and `override/3`: malformed page, object, actor and membership input, and a stale override;</li><li>`Resolver`: malformed ids are `:missing`.</li></ul>Each returns an error tuple, and the batch still commits its valid page and allocation. Both tests fail on the previous code |
+| Recovery | `recovery_test.exs`, against disposable databases created and dropped by the test:<ul><li>an exact restore of every column of every table, the schema and the sequences;</li><li>re-projection from an archive exported from the copy, with the providers reversed and shown to have really run, then exact again apart from the projection's own bookkeeping;</li><li>the ledger and resolver work afterwards;</li><li>verification is non-vacuous: changing only an edition's work and a variant's canonical lexeme differs in exactly those two tables;</li><li>the source is only read.</li></ul>The guards refuse `reset`, restore-over, `rebuild` and `ecto.drop` without a covering snapshot. They also refuse a snapshot of another database, one without a digest, a missing one, one taken before a publication change, and one taken during a write that commits afterwards. `recovery_schema_test.exs` pins the one schema-text canonicalization |
 | The suite's own database claim | `data_case_test.exs`: the claim's lock stays on a connection the pool never hands out, through a sandbox mode change. This test fails on the previous claim implementation |
 | Exact-ID 404, no guessing | `resolver_test.exs`: near misses, unknown ids and draft pages never resolve to something else; corrupt states produce diagnostics, never a destination |
 | C++, C+, c; Unicode; malformed requests | `address_test.exs`, `resolver_test.exs` |
@@ -209,7 +209,9 @@ Additive preservation of existing readers is shown by the unchanged full suite. 
 
 ## Known limits
 
-- **Recovery on the real corpus.** The procedure is tested on disposable databases built by the test. It has not been run against `devils_dictionary_v2`, and the manifest's running time at corpus scale is unmeasured. `mix dd.rebuild` still cannot preserve routing identity, and is guarded rather than changed.
+- **Recovery on the real corpus.** The procedure is tested on disposable databases built by the test. It has not been run against `devils_dictionary_v2`, and the manifest's running time at corpus scale is unmeasured. `mix dd.rebuild` still cannot preserve routing identity, and is guarded rather than changed. The guards are conservative (any routing change refuses) but not transactional: a write between the check and the drop is lost, so the procedure quiesces first. See the [recovery limits](recovery.md#limits).
+- **The migration was amended in place** while the branch was unmerged. A database migrated at an earlier head has the same version and older constraints. The recovery manifest's schema section reports it; no real routing state exists yet, so rolling back and re-migrating is safe.
+- **"Human" is an actor check.** The ledger and the database require a `user` actor for human-only operations. Code holding the application's database role could still write a row naming a `user` actor; separate roles would close that.
 - **Publication** has a column and resolver outcomes, but no transition, gate or manifest.
 - **Collections and choice pages** have storage but no namespace.
 - **Editorial pages.** Merging On pages rests on the approving human's judgement; the database cannot tell whether two authored treatments are "related".
@@ -239,8 +241,8 @@ Each requirement, where it is implemented, and what verifies it.
 | 12 | Existing readers preserved; additive change (Stage 1 prompt) | one additive migration; no router change | full `mix precommit` |
 | 13 | Curation-composition interface recorded; no competing tables (ADR §4) | [binding contract](#curation-composition-binding-recorded-migration-deferred) | review of the migration: no composition tables |
 | A1 | No machine tombstone reclaim; human restoration preserved (audit 1) | allocation shape (`before_kind IS NULL OR 'alias'`); `allocate`/`move` refuse; `Ledger.restore/3` | `committed_ledger_test` |
-| A2 | `Pages.ensure` rejects nil and malformed targets before querying (audit 2) | guard clauses | `committed_ledger_test` (a committed batch), `pages_test` |
-| A3 | Tested recovery with exact identities; changed provider order; destructive tasks guarded (audit 3) | `Snapshot`, `Routing.Recovery`, `mix dd.routing.verify`, guards in `dd.reset`/`dd.snapshot`/`dd.rebuild`; [procedure](recovery.md) | `recovery_test` |
+| A2 | `Pages.ensure` rejects nil and malformed targets before querying (audit 2) | guard clauses (`Routing.Id.is_id/1`, positive and within `bigint`); the same guard on every routing writer and reader | `committed_ledger_test` (two committed batches), `pages_test` |
+| A3 | Tested recovery with exact identities; changed provider order; destructive tasks guarded (audit 3) | `Snapshot`, `Routing.Recovery` (every-column manifest, exported-snapshot digest), `mix dd.routing.verify`, guards in `dd.reset`/`dd.snapshot`/`dd.rebuild`/`ecto.drop`; [procedure](recovery.md) | `recovery_test`, `recovery_schema_test` |
 | A4 | Verification claims separated (audit 4) | [Evidence](#evidence) | this document, the PR description and the issue comment |
 | C5 | Targeted regressions and `mix precommit` on the final commit; the claim-lock failure investigated (completion) | the claim's dedicated connection | [Evidence](#evidence); `data_case_test` |
 | C6 | Fresh independent review of the final changes (completion) | — | [Independent review](#independent-review) |

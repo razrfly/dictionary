@@ -6,7 +6,9 @@
 python3 docs/routing/stage-2/candidates.py docs/routing/stage-2/candidates.json
 ```
 
-The script reads the ignored archives under `data/audits/2026-09-26-issue194/` (see [the audit's reproduction notes](../../audits/2026-09-26-issue194/policy-readiness.md#reproduce)). Every proposed and candidate path in the output passes `Routing.Address.parse/1`.
+By default the script reads the ignored archives under `data/audits/2026-09-26-issue194/` (see [the audit's reproduction notes](../../audits/2026-09-26-issue194/policy-readiness.md#reproduce)). `--audit DIR`, `--boundaries FILE` and `--stratified FILE` point it at a fresh export.
+
+All 183 proposed and candidate paths in the output pass `Routing.Address.parse/1` unchanged. Proposals are unique within their group, **across groups**, and against every candidate path in the snapshot (`global_proposal_conflicts: 0`).
 
 ## A bounded candidate population: 169 entities
 
@@ -54,7 +56,7 @@ Each group is decided as a whole, and import order never picks a primary. Qualif
 | `/places/daman` | 2 | `/places/daman-afghanistan`, `/places/daman-india` |
 | `/organizations/the-creatures` | 2 | `/organizations/the-creatures-australian-band`, `/organizations/the-creatures-british-group` |
 | `/works/crocodile-tears` | 2 | The film qualifies as `/works/crocodile-tears-2024-film`; the novel is blocked on classification review. |
-| `/works/the-devils-dictionary` | 2 | **Duplicate-identity review.** Seeded work 2 against 3740879, which has no description. Likely one work twice. |
+| `/works/the-devils-dictionary` | 2 | **Duplicate-identity review.** Seeded work 2 and record 3740879. Neither has a description to tell them apart. Likely one work twice. |
 | `/works/mona-lisa` | 2 | **Duplicate-identity review.** The painting against an undescribed record. |
 | `/works/love` | 2 | **Duplicate-identity review.** Two undescribed poems. |
 

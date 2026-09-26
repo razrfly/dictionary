@@ -59,10 +59,13 @@ defmodule DevilsDictionary.Routing.Page do
     |> cast(attrs, [:role, :locale, :target_object_id])
     |> validate_required([:role, :locale])
     |> update_change(:locale, &String.downcase/1)
-    |> validate_format(:locale, ~r/^[a-z]{2,3}(-[a-z0-9]{2,8})*$/)
+    # Anchored like the database's check, whose `$` is the end of the string:
+    # Elixir's `$` would also accept a trailing newline the check refuses.
+    |> validate_format(:locale, ~r/\A[a-z]{2,3}(-[a-z0-9]{2,8})*\z/)
     |> validate_target()
     |> foreign_key_constraint(:target_object_id)
     |> check_constraint(:target_object_id, name: :pages_target_by_role)
+    |> check_constraint(:locale, name: :pages_locale)
     |> unique_constraint([:target_object_id, :locale], name: :pages_subject_target_locale_index)
     |> unique_constraint([:target_object_id, :locale], name: :pages_lexeme_target_locale_index)
   end

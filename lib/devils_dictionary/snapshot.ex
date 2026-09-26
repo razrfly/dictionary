@@ -10,13 +10,20 @@ defmodule DevilsDictionary.Snapshot do
   isolated, disposable databases.
   """
 
-  @doc "Dumps `config[:database]` to `path` in pg_dump's custom format."
-  def dump!(config, path) do
+  @doc """
+  Dumps `config[:database]` to `path` in pg_dump's custom format.
+
+  `snapshot:` dumps under an exported snapshot (`pg_export_snapshot()`), so a
+  caller can read the database in the very state the dump contains.
+  """
+  def dump!(config, path, opts \\ []) do
     File.mkdir_p!(Path.dirname(path))
+    snapshot = if opts[:snapshot], do: ["--snapshot=#{opts[:snapshot]}"], else: []
 
     run!(
       "pg_dump",
       connection_args(config) ++
+        snapshot ++
         [
           "--format=custom",
           "--compress=6",

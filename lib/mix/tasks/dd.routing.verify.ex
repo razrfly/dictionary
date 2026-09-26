@@ -8,15 +8,19 @@ defmodule Mix.Tasks.Dd.Routing.Verify do
       DD_DATABASE=devils_dictionary_restore mix dd.routing.verify --baseline devils_dictionary_v2
       DD_DATABASE=devils_dictionary_restore mix dd.routing.verify --baseline devils_dictionary_v2 --projected
 
-  Compares, section by section, every registry identity and every routing row
-  by exact id and reference (`Routing.Recovery.manifest/1`), the sequences that
-  hand out the next ids, and what every stored path and page id resolves to.
-  Counts alone are not accepted as evidence.
+  Compares, section by section, every column of every table — registry
+  identities, references and routing rows alike, by exact id — plus the
+  schema's definitions and the sequences that hand out the next ids
+  (`Routing.Recovery.manifest/1`), and what every stored path and page id
+  resolves to. Only Oban's queue tables are left out. Counts alone are not
+  accepted as evidence.
 
   `--projected` is for the check after `mix dd.materialize --all` has
-  re-projected the restored copy: sequences must then only not have fallen
-  behind their tables, while every row must still match. Exits non-zero on any
-  difference.
+  re-projected the restored copy. The projection's own bookkeeping — its
+  `import_runs`, and the `updated_at`, `materialized_at` and
+  `last_seen_run_id` stamps — is left out, and sequences must only not have
+  fallen behind their tables; every other column must still match. Exits
+  non-zero on any difference.
 
   It starts the Repo and nothing else — no Oban, no endpoint — so a restored
   copy's queued jobs and cron do not run while it is being checked.

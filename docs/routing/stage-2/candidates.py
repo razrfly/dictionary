@@ -1,8 +1,23 @@
-"""Stage 2 candidate population, derived read-only from the 26 September
-routing audit manifest. Reproducible: same inputs, same output."""
-import gzip, json, collections, hashlib, re, sys
+"""Stage 2 candidate population, derived read-only from a routing audit
+manifest. Reproducible: same inputs, same output.
 
-AUD = 'data/audits/2026-09-26-issue194'
+    python3 docs/routing/stage-2/candidates.py OUT.json \
+        [--audit DIR] [--boundaries FILE] [--stratified FILE]
+
+The defaults are the 26 September audit. Point --audit at a fresh export's
+directory (assignments.jsonl.gz and input.jsonl.gz) to re-derive before
+Stage 2 writes anything."""
+import argparse, gzip, json, collections, hashlib, re
+
+args = argparse.ArgumentParser(description=__doc__.split('\n')[0])
+args.add_argument('out', help='where to write the candidates JSON')
+args.add_argument('--audit', default='data/audits/2026-09-26-issue194',
+                  help='directory holding assignments.jsonl.gz and input.jsonl.gz')
+args.add_argument('--boundaries', default='docs/audits/2026-09-26-issue194/policy-boundaries.jsonl')
+args.add_argument('--stratified', default='docs/audits/2026-09-26-issue194/stratified-review.json')
+args = args.parse_args()
+
+AUD = args.audit
 rows = {r['object_id']: r for r in map(json.loads, gzip.open(f'{AUD}/assignments.jsonl.gz', 'rt'))}
 inp = {}
 for line in gzip.open(f'{AUD}/input.jsonl.gz', 'rt'):
@@ -10,8 +25,8 @@ for line in gzip.open(f'{AUD}/input.jsonl.gz', 'rt'):
     if r.get('record_type') == 'entity':
         inp[r['object_id']] = r
 
-boundary = [json.loads(l)['object_id'] for l in open('docs/audits/2026-09-26-issue194/policy-boundaries.jsonl')]
-stratified = [r['object_id'] for r in json.load(open('docs/audits/2026-09-26-issue194/stratified-review.json'))['records']]
+boundary = [json.loads(l)['object_id'] for l in open(args.boundaries)]
+stratified = [r['object_id'] for r in json.load(open(args.stratified))['records']]
 
 # Named ADR edge cases, found by exact (case-insensitive) label in the snapshot.
 names = ['c++', 'c+', 'c', 'polish', 'mercury', 'apple', 'voltaire', 'putin', 'vladimir putin',
@@ -149,12 +164,23 @@ for p, members in touched.items():
             r['proposed_path_conflict'] = True
         else:
             r['disposition'] = 'collision review: proposed readable qualifier, needs human approval'
+
+# Groups are decided together, but addresses are one domain: a proposal must
+# also be unique across groups, and must not be any record's candidate path.
+proposed = collections.Counter(r.get('proposed_path') for r in records if r.get('proposed_path'))
+for r in records:
+    pp = r.get('proposed_path')
+    if pp and (proposed[pp] > 1 or pp in all_candidate_paths) and not r.get('proposed_path_conflict'):
+        r['disposition'] = 'collision review: qualifier still collides; hold for a human-chosen qualifier'
+        r['proposed_path_conflict'] = True
+
 for r in records:
     for k in ('_base', '_extra', '_fam'):
         r.pop(k, None)
 
 summary = {
-    'source': 'data/audits/2026-09-26-issue194/assignments.jsonl.gz (policy 1.0.0, 100,723 entities, read-only)',
+    'source': f"{AUD}/assignments.jsonl.gz (policy {', '.join(sorted({r['policy_version'] for r in rows.values()}))}, {len(rows):,} entities, read-only)",
+    'global_proposal_conflicts': sum(1 for r in records if r.get('proposed_path_conflict')),
     'selection': 'policy boundary examples (54) + stratified mapped sample (46) + named ADR edge cases present in the snapshot + every member of each candidate-path collision group touching those',
     'records': len(records),
     'by_reason': dict(collections.Counter(x for r in records for x in r['selected_because'])),
@@ -168,7 +194,6 @@ summary = {
     'deferred_outside_population': len(rows) - len(records),
 }
 out = {'summary': summary, 'groups': {p: m for p, m in sorted(touched.items())}, 'records': records}
-blob = json.dumps(out, ensure_ascii=False, indent=1, sort_keys=True)
 out['summary']['sha256_of_records'] = hashlib.sha256(json.dumps(records, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
-json.dump(out, open(sys.argv[1], 'w'), ensure_ascii=False, indent=1, sort_keys=True)
+json.dump(out, open(args.out, 'w'), ensure_ascii=False, indent=1, sort_keys=True)
 print(json.dumps(summary, indent=1, ensure_ascii=False))

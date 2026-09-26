@@ -47,6 +47,7 @@ defmodule DevilsDictionary.Routing.Ledger do
   """
 
   import Ecto.Query
+  import DevilsDictionary.Routing.Id, only: [is_id: 1]
 
   alias DevilsDictionary.{Registry, Repo}
   alias DevilsDictionary.Registry.Object
@@ -74,7 +75,8 @@ defmodule DevilsDictionary.Routing.Ledger do
   Options: `:actor_id` and `:reason` (both required).
   """
   def allocate(page_id, path, opts) do
-    with {:ok, parsed} <- Address.parse(path),
+    with :ok <- page_id(page_id),
+         {:ok, parsed} <- Address.parse(path),
          {:ok, actor} <- actor(opts, :allocate),
          {:ok, reason} <- reason(opts) do
       transact(fn -> do_allocate(page_id, parsed, actor, reason) end)
@@ -127,7 +129,8 @@ defmodule DevilsDictionary.Routing.Ledger do
   Options: `:actor_id` (a human) and `:reason`.
   """
   def move(page_id, path, opts) do
-    with {:ok, parsed} <- Address.parse(path),
+    with :ok <- page_id(page_id),
+         {:ok, parsed} <- Address.parse(path),
          {:ok, actor} <- actor(opts, :move),
          {:ok, reason} <- reason(opts) do
       transact(fn -> do_move(page_id, parsed, actor, reason) end)
@@ -189,7 +192,9 @@ defmodule DevilsDictionary.Routing.Ledger do
   Options: `:actor_id` (a human) and `:reason`.
   """
   def merge(from_page_id, into_page_id, opts) do
-    with :ok <- different(from_page_id, into_page_id),
+    with :ok <- page_id(from_page_id),
+         :ok <- page_id(into_page_id),
+         :ok <- different(from_page_id, into_page_id),
          {:ok, actor} <- actor(opts, :merge),
          {:ok, reason} <- reason(opts) do
       transact(fn -> do_merge(from_page_id, into_page_id, actor, reason) end)
@@ -258,15 +263,19 @@ defmodule DevilsDictionary.Routing.Ledger do
 
   Options: `:actor_id` (a human) and `:reason`.
   """
-  def split(page_id, successor_page_ids, opts) do
+  def split(page_id, successor_page_ids, opts) when is_list(successor_page_ids) do
     successors = Enum.uniq(successor_page_ids)
 
-    with :ok <- successors_named(page_id, successors, successor_page_ids),
+    with :ok <- page_id(page_id),
+         :ok <- page_ids(successors),
+         :ok <- successors_named(page_id, successors, successor_page_ids),
          {:ok, actor} <- actor(opts, :split),
          {:ok, reason} <- reason(opts) do
       transact(fn -> do_split(page_id, successors, actor, reason) end)
     end
   end
+
+  def split(_page_id, _successor_page_ids, _opts), do: {:error, :successors_required}
 
   defp successors_named(page_id, successors, given) do
     cond do
@@ -363,7 +372,8 @@ defmodule DevilsDictionary.Routing.Ledger do
   Options: `:actor_id` (a human) and `:reason`.
   """
   def retire(page_id, opts) do
-    with {:ok, actor} <- actor(opts, :retire),
+    with :ok <- page_id(page_id),
+         {:ok, actor} <- actor(opts, :retire),
          {:ok, reason} <- reason(opts) do
       transact(fn -> do_retire(page_id, actor, reason) end)
     end
@@ -398,7 +408,8 @@ defmodule DevilsDictionary.Routing.Ledger do
   Options: `:actor_id` (a human) and `:reason`.
   """
   def restore(page_id, path, opts) do
-    with {:ok, parsed} <- Address.parse(path),
+    with :ok <- page_id(page_id),
+         {:ok, parsed} <- Address.parse(path),
          {:ok, actor} <- actor(opts, :restore),
          {:ok, reason} <- reason(opts) do
       transact(fn -> do_restore(page_id, parsed, actor, reason) end)
@@ -780,6 +791,14 @@ defmodule DevilsDictionary.Routing.Ledger do
       reason -> {:ok, reason}
     end
   end
+
+  # Checked before any query or transaction: a malformed id is one record's
+  # refusal, not a cast or encoding exception that aborts a caller's batch.
+  defp page_id(id) when is_id(id), do: :ok
+  defp page_id(_id), do: {:error, :invalid_page}
+
+  defp page_ids(ids),
+    do: if(Enum.all?(ids, &is_id/1), do: :ok, else: {:error, :invalid_page})
 
   defp different(same, same), do: {:error, :same_page}
   defp different(_from, _into), do: :ok

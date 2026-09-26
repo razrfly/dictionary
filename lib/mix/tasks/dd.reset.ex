@@ -69,7 +69,10 @@ defmodule Mix.Tasks.Dd.Reset do
       say("")
     end)
 
-    Mix.Task.run("ecto.drop", ["--quiet"])
+    # The task itself, not the `ecto.drop` alias: the alias guards again with
+    # only `DD_ROUTING_SNAPSHOT`, and this task has already guarded with
+    # `--routing-snapshot`.
+    Mix.Tasks.Ecto.Drop.run(["--quiet"])
     Mix.Task.run("ecto.create", ["--quiet"])
     Mix.Task.run("ecto.migrate", ["--quiet"])
 

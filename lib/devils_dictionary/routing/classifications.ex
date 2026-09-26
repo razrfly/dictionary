@@ -26,7 +26,9 @@ defmodule DevilsDictionary.Routing.Classifications do
   """
 
   import Ecto.Query
+  import DevilsDictionary.Routing.Id, only: [is_id: 1]
 
+  alias DevilsDictionary.Registry.Entity
   alias DevilsDictionary.Repo
   alias DevilsDictionary.Routing.ClassificationDecision, as: Decision
   alias DevilsDictionary.Sources.Actor
@@ -36,11 +38,15 @@ defmodule DevilsDictionary.Routing.Classifications do
   @decisive [:excluded_source_page, :identity_review]
 
   @doc "The current decision for an entity, or nil."
+  def current(object_id) when not is_id(object_id), do: nil
+
   def current(object_id) do
     Repo.one(from d in Decision, where: d.object_id == ^object_id and d.is_current)
   end
 
   @doc "Every decision for an entity, newest first."
+  def history(object_id) when not is_id(object_id), do: []
+
   def history(object_id) do
     Repo.all(from d in Decision, where: d.object_id == ^object_id, order_by: [desc: d.id])
   end
@@ -86,32 +92,44 @@ defmodule DevilsDictionary.Routing.Classifications do
 
   Returns `{:ok, outcome, decision}` where `outcome` is `:recorded`,
   `:unchanged`, `:override_preserved` or `:override_contradicted`, and
-  `decision` is the entity's current decision afterwards.
+  `decision` is the entity's current decision afterwards. An object id that
+  is malformed, or names no entity, is refused before anything is written.
   """
-  def record(%{object_id: object_id} = result) do
+  def record(%{object_id: object_id} = result) when is_id(object_id) do
     attrs = evaluator_attrs(result)
 
     Repo.transaction(fn ->
       lock(object_id)
       current = current(object_id)
 
-      case outcome(current, attrs) do
-        {:keep, outcome} ->
-          {outcome, current}
+      # Only a first decision can name a missing entity: a current one
+      # already references it.
+      if is_nil(current) and not entity?(object_id) do
+        {:refused, :object_not_found}
+      else
+        case outcome(current, attrs) do
+          {:keep, outcome} ->
+            {outcome, current}
 
-        {:note, outcome} ->
-          note!(attrs)
-          {outcome, current}
+          {:note, outcome} ->
+            note!(attrs)
+            {outcome, current}
 
-        {:write, outcome, attrs} ->
-          {outcome, supersede!(current, attrs)}
+          {:write, outcome, attrs} ->
+            {outcome, supersede!(current, attrs)}
+        end
       end
     end)
     |> case do
+      {:ok, {:refused, reason}} -> {:error, reason}
       {:ok, {outcome, decision}} -> {:ok, outcome, decision}
       error -> error
     end
   end
+
+  def record(%{object_id: _object_id}), do: {:error, :invalid_object}
+
+  defp entity?(object_id), do: Repo.exists?(from e in Entity, where: e.object_id == ^object_id)
 
   defp outcome(nil, attrs), do: {:write, :recorded, attrs}
 
@@ -225,8 +243,12 @@ defmodule DevilsDictionary.Routing.Classifications do
   `:stale_evidence`: an override describes exact evidence. Only a `user` actor
   may override; the database refuses any other.
   """
+  #
+  # Refusals are returned from the transaction, not rolled back: a nested
+  # `Repo.rollback/1` would abort a caller's transaction too.
   def override(object_id, attrs, reviewer_actor_id) do
-    with :ok <- human(reviewer_actor_id),
+    with :ok <- object(object_id),
+         :ok <- human(reviewer_actor_id),
          {:ok, status, family} <- verdict(attrs),
          {:ok, reason} <- present(attrs[:reason]) do
       seen = attrs[:evidence_fingerprint]
@@ -236,7 +258,7 @@ defmodule DevilsDictionary.Routing.Classifications do
 
         case current(object_id) do
           nil ->
-            Repo.rollback(:no_evaluated_evidence)
+            {:refused, :no_evaluated_evidence}
 
           %Decision{evidence_fingerprint: ^seen} = current ->
             supersede!(current, %{
@@ -256,14 +278,21 @@ defmodule DevilsDictionary.Routing.Classifications do
             })
 
           _stale ->
-            Repo.rollback(:stale_evidence)
+            {:refused, :stale_evidence}
         end
       end)
+      |> case do
+        {:ok, {:refused, reason}} -> {:error, reason}
+        result -> result
+      end
     end
   end
 
+  defp object(object_id) when is_id(object_id), do: :ok
+  defp object(_object_id), do: {:error, :invalid_object}
+
   defp human(id) do
-    if is_integer(id) and
+    if is_id(id) and
          Repo.exists?(from a in Actor, where: a.id == ^id and a.actor_kind == :user),
        do: :ok,
        else: {:error, :human_reviewer_required}

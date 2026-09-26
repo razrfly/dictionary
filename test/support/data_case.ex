@@ -120,7 +120,16 @@ defmodule DevilsDictionary.DataCase do
     {:ok, claim} =
       config
       |> Keyword.take([:hostname, :port, :username, :password, :database, :socket_dir])
-      |> Keyword.merge(backoff_type: :stop, sync_connect: true)
+      # Idle pings are the one thing this connection does after the claim, and
+      # a ping that times out disconnects it — and so drops the lock. Under
+      # the load of a full suite a 15 s ping timeout is reachable; these are
+      # not, and a connection that is really gone still fails its ping.
+      |> Keyword.merge(
+        backoff_type: :stop,
+        sync_connect: true,
+        idle_interval: 30_000,
+        timeout: :timer.minutes(10)
+      )
       |> Postgrex.start_link()
 
     %{rows: [[locked?, backend]]} =

@@ -3090,6 +3090,7 @@
   },
   "collision_groups_touched": 11,
   "deferred_outside_population": 100554,
+  "global_proposal_conflicts": 0,
   "named_found": [
    "Ambrose Bierce",
    "Apple",

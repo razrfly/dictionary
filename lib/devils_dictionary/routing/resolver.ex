@@ -17,6 +17,7 @@ defmodule DevilsDictionary.Routing.Resolver do
   """
 
   import Ecto.Query
+  import DevilsDictionary.Routing.Id, only: [is_id: 1]
 
   require Logger
 
@@ -71,6 +72,9 @@ defmodule DevilsDictionary.Routing.Resolver do
   end
 
   # A page and its canonical, in one statement.
+  # Not an id — nil, a string, out of range — is missing, like an absent row.
+  defp load_page(page_id) when not is_id(page_id), do: nil
+
   defp load_page(page_id) do
     Repo.one(
       from page in Page,
@@ -146,8 +150,8 @@ defmodule DevilsDictionary.Routing.Resolver do
   @doc """
   Resolves an exact page id — the basis of every internal link.
 
-  A missing id is `:missing`: no record found by a name or slug stands in for
-  it. A merged page redirects to its survivor's canonical; a retired page is
+  A missing id — or anything that is not an id — is `:missing`: no record
+  found by a name or slug stands in for it. A merged page redirects to its survivor's canonical; a retired page is
   `:gone`.
   """
   def resolve_page(page_id), do: resolve_page(page_id, true)
@@ -254,6 +258,8 @@ defmodule DevilsDictionary.Routing.Resolver do
   defp report(resolution), do: resolution
 
   @doc "Every stored path serving a page, for history views and diagnostics."
+  def paths(page_id) when not is_id(page_id), do: []
+
   def paths(page_id) do
     Repo.all(from p in PublicPath, where: p.destination_page_id == ^page_id, order_by: p.id)
   end

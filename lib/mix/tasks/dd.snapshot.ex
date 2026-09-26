@@ -100,7 +100,7 @@ defmodule Mix.Tasks.Dd.Snapshot do
     started = System.monotonic_time(:millisecond)
 
     # Custom format so the restore can run in parallel and skip ownership;
-    # the routing high-water marks it covers are written beside it.
+    # the digest of exactly the routing rows it holds is written beside it.
     DevilsDictionary.Routing.Recovery.snapshot!(config, path)
 
     elapsed = System.monotonic_time(:millisecond) - started
@@ -127,14 +127,14 @@ defmodule Mix.Tasks.Dd.Snapshot do
       Mix.raise("no such snapshot: #{path}")
     end
 
-    tell(quiet?, fn -> say("restoring #{path} into #{named}") end)
-
-    started = System.monotonic_time(:millisecond)
-
     case DevilsDictionary.Routing.Recovery.guard(config, "restore over", opts[:routing_snapshot]) do
       :ok -> :ok
       {:error, message} -> Mix.raise(message)
     end
+
+    tell(quiet?, fn -> say("restoring #{path} into #{named}") end)
+
+    started = System.monotonic_time(:millisecond)
 
     DevilsDictionary.Snapshot.restore!(config, path, jobs)
 

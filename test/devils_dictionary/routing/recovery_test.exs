@@ -162,6 +162,35 @@ defmodule DevilsDictionary.Routing.RecoveryTest do
     %{cat: cat, dog: dog, oyster: oyster, voltaire: voltaire, zadig: undone, mercury: mercury}
   end
 
+  # Registry references outside the routing tables that a restore must keep:
+  # an edition's work and a variant spelling's canonical lexeme.
+  defp registry_references! do
+    {:ok, candide} = Registry.create_work(%{preferred_label: "Candide", work_kind: "novel"})
+    {:ok, zadig} = Registry.create_work(%{preferred_label: "Zadig", work_kind: "novel"})
+
+    {:ok, edition} =
+      Registry.create_edition(%{
+        preferred_label: "Candide (1759)",
+        work_id: candide.object_id,
+        publication_year: 1759
+      })
+
+    cockle = lexeme!("cockle")
+
+    {:ok, _variant} =
+      Registry.create_lexeme(%{
+        lemma: "cokel",
+        part_of_speech: "noun",
+        canonical_lexeme_id: cockle.object_id
+      })
+
+    %{
+      edition: edition.object_id,
+      other_work: zadig.object_id,
+      other_lexeme: lexeme!("whelk").object_id
+    }
+  end
+
   defp entity_on_projection_with_override!(object_id, human) do
     reviewed = leave_unmapped!(object_id)
 
@@ -198,11 +227,24 @@ defmodule DevilsDictionary.Routing.RecoveryTest do
     end
   end
 
+  defp with_env(name, value, fun) do
+    previous = System.get_env(name)
+    if value, do: System.put_env(name, value), else: System.delete_env(name)
+
+    try do
+      fun.()
+    after
+      if previous, do: System.put_env(name, previous), else: System.delete_env(name)
+    end
+  end
+
   test "a restored copy is the same registry and routing state, before and after re-projection",
        ctx do
     ids = project!()
     pages = history!(ids, ctx.human)
+    references = registry_references!()
     baseline = Recovery.manifest(rows: true)
+    baseline_projected = Recovery.manifest(rows: true, mode: :projected)
     resolutions = Recovery.resolutions()
 
     # The fixture reached every routing table and every operation.
@@ -213,11 +255,14 @@ defmodule DevilsDictionary.Routing.RecoveryTest do
            |> MapSet.new() ==
              MapSet.new(~w(allocate move merge split retire restore rollback))
 
-    capture_io(fn ->
-      Mix.Tasks.Dd.Export.Replay.run(["--out", ctx.archive, "--quiet"])
-    end)
+    # Nothing hand-picked: every table and the schema are sections.
+    assert Map.has_key?(baseline, "edition_details")
+    assert Map.has_key?(baseline, "lexemes")
+    assert Map.has_key?(baseline, "schema")
+    assert Map.has_key?(baseline, "sequences")
+    refute Map.has_key?(baseline, "oban_jobs")
 
-    Snapshot.dump!(Repo.config(), ctx.dump)
+    Recovery.snapshot!(Repo.config(), ctx.dump)
     Snapshot.restore!(Keyword.put(Repo.config(), :database, ctx.target), ctx.dump)
 
     # The operator's command, run from the source's side: exact, and read-only.
@@ -237,6 +282,12 @@ defmodule DevilsDictionary.Routing.RecoveryTest do
 
       # 4. Re-projection through the supported paths, providers reversed —
       #    and not vacuously: every record is replayed and re-materialized.
+      #    The replay archive is exported from the restored copy itself, so it
+      #    holds exactly the records the snapshot held.
+      capture_io(fn ->
+        Mix.Tasks.Dd.Export.Replay.run(["--out", ctx.archive, "--quiet"])
+      end)
+
       output =
         capture_io(fn ->
           for source <- ["wikidata", "wikipedia"] do
@@ -256,8 +307,9 @@ defmodule DevilsDictionary.Routing.RecoveryTest do
       assert :binary.match(output, "wikidata: materializing") <
                :binary.match(output, "wikipedia: materializing")
 
-      projected = Recovery.manifest(rows: true, sequences: false)
-      assert Recovery.diff(Map.delete(baseline, "sequences"), projected) == %{}
+      projected = Recovery.manifest(rows: true, mode: :projected)
+      assert Recovery.diff(baseline_projected, projected) == %{}
+      assert Map.keys(projected) == Map.keys(baseline_projected)
       assert Recovery.sequences_behind() == []
       assert Recovery.resolutions() == resolutions
       assert {:ok, _report} = Recovery.verify(ctx.source, projected: true)
@@ -293,6 +345,31 @@ defmodule DevilsDictionary.Routing.RecoveryTest do
       assert {:error, %{differences: differences}} = Recovery.verify(ctx.source)
       assert Map.has_key?(differences, "route_changes")
       assert Map.has_key?(differences, "pages")
+
+      # Nor is it hand-picked: a changed registry reference outside the
+      # routing tables — an edition's work, a variant's canonical lexeme — is
+      # a difference in exactly its own table.
+      untampered = Recovery.manifest(rows: true)
+
+      Repo.query!("UPDATE edition_details SET work_id = $1 WHERE entity_id = $2", [
+        references.other_work,
+        references.edition
+      ])
+
+      Repo.query!(
+        "UPDATE lexemes SET canonical_lexeme_id = $1 WHERE canonical_lexeme_id IS NOT NULL",
+        [references.other_lexeme]
+      )
+
+      tampered = Recovery.diff(untampered, Recovery.manifest(rows: true))
+      assert tampered |> Map.keys() |> Enum.sort() == ["edition_details", "lexemes"]
+      assert [changed] = tampered["edition_details"].only_after
+
+      assert Jason.decode!(changed) |> Enum.take(3) == [
+               references.edition,
+               "edition",
+               references.other_work
+             ]
     end)
 
     # The source was only read.
@@ -314,7 +391,11 @@ defmodule DevilsDictionary.Routing.RecoveryTest do
     assert {:error, refusal} = Recovery.guard(target_config, "reset", nil)
     assert refusal =~ "refusing to reset #{ctx.target}: it holds durable routing state"
     assert refusal =~ "docs/routing/recovery.md"
-    assert Recovery.guard(target_config, "reset", ctx.dump) == :ok
+
+    # The source's snapshot holds the same routing rows, but it is a snapshot
+    # of another database, so it covers nothing here.
+    assert {:error, elsewhere} = Recovery.guard(target_config, "reset", ctx.dump)
+    assert elsewhere =~ "is a snapshot of #{ctx.source}, not #{ctx.target}"
 
     # The tasks consult the guard before they drop, restore or rebuild anything.
     configured_as(ctx.target, fn ->
@@ -331,20 +412,73 @@ defmodule DevilsDictionary.Routing.RecoveryTest do
       Mix.Tasks.Dd.Rebuild.run(["--scope", "animals"])
     end
 
-    # A snapshot with no recorded marks does not count as covering anything.
+    # A plain dump, with no recorded digest, does not count as covering anything.
     bare = ctx.dump <> ".bare"
     Snapshot.dump!(target_config, bare)
     on_exit(fn -> File.rm(bare) end)
     assert {:error, unmarked} = Recovery.guard(target_config, "reset", bare)
-    assert unmarked =~ "no routing marks"
+    assert unmarked =~ "no routing digest"
 
-    # A snapshot taken before the latest routing write no longer covers it.
-    Recovery.with_database(ctx.target, fn ->
-      live_page!("people", "/people/micromegas", ctx.human, :person)
+    # A snapshot of the target covers it until its routing state changes.
+    covering = ctx.dump <> ".target"
+    on_exit(fn -> File.rm(covering) && File.rm(covering <> ".routing.json") end)
+    Recovery.snapshot!(target_config, covering)
+    assert Recovery.guard(target_config, "reset", covering) == :ok
+
+    # `mix ecto.drop` and `mix ecto.reset` are guarded too, through the alias.
+    assert Mix.Project.config()[:aliases][:"ecto.drop"] == ["dd.routing.guard drop", "ecto.drop"]
+
+    configured_as(ctx.target, fn ->
+      with_env("DD_ROUTING_SNAPSHOT", nil, fn ->
+        assert_raise Mix.Error, ~r/refusing to drop #{ctx.target}/, fn ->
+          Mix.Tasks.Dd.Routing.Guard.run(["drop"])
+        end
+      end)
+
+      with_env("DD_ROUTING_SNAPSHOT", covering, fn ->
+        assert Mix.Tasks.Dd.Routing.Guard.run(["drop"]) == :ok
+      end)
     end)
 
-    assert {:error, stale} = Recovery.guard(target_config, "reset", ctx.dump)
-    assert stale =~ "has routing writes after"
+    # A publication change writes no ledger row and no new id; it still counts.
+    Recovery.with_database(ctx.target, fn ->
+      Repo.query!("""
+      UPDATE pages SET publication_state = 'withdrawn'
+       WHERE id = (SELECT min(id) FROM pages WHERE publication_state = 'published')
+      """)
+    end)
+
+    assert {:error, stale} = Recovery.guard(target_config, "reset", covering)
+    assert stale =~ "routing state has changed since"
+
+    # A write in flight while the snapshot is taken is not in it: once it
+    # commits, the snapshot no longer covers the database.
+    Recovery.snapshot!(target_config, covering)
+    test = self()
+
+    writer =
+      Task.async(fn ->
+        Recovery.with_database(ctx.target, fn ->
+          Repo.transaction(fn ->
+            live_page!("people", "/people/micromegas", ctx.human, :person)
+            send(test, :written)
+
+            receive do
+              :commit -> :ok
+            end
+          end)
+        end)
+      end)
+
+    assert_receive :written, 30_000
+    Recovery.snapshot!(target_config, covering)
+    assert Recovery.guard(target_config, "reset", covering) == :ok
+    send(writer.pid, :commit)
+    assert {:ok, _} = Task.await(writer, 30_000)
+
+    assert {:error, raced} = Recovery.guard(target_config, "reset", covering)
+    assert raced =~ "routing state has changed since"
+
     assert {:error, missing} = Recovery.guard(target_config, "reset", ctx.dump <> ".absent")
     assert missing =~ "no snapshot"
 

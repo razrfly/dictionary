@@ -8,14 +8,15 @@ defmodule DevilsDictionary.Routing.Recovery do
   ledger cannot be regenerated. They can only be restored — whole, with the
   registry they reference — and then re-projected from source records.
 
-    * `manifest/1` — every registry identity and every routing row, by exact
-      id and reference, hashed section by section in one repeatable-read
-      snapshot. Counts alone would miss a renumbered object.
+    * `manifest/1` — **every column of every table** (Oban's queue state
+      apart), ordered by primary key, plus the schema's constraints, indexes,
+      triggers and functions and every sequence, hashed section by section in
+      one repeatable-read snapshot. Nothing is hand-picked, so no identity or
+      reference can be missed by omission.
     * `resolutions/0` — what every stored path and every page id resolves to.
-    * `diff/2` — the sections two manifests disagree on.
-    * `with_database/2` — runs code against another database, for comparing a
-      restored copy with its source without touching either's configuration.
-    * `snapshot!/2` — a snapshot with the routing high-water marks it covers.
+    * `diff/2` and `verify/2` — where two databases disagree.
+    * `with_database/2` — runs code against another database.
+    * `snapshot!/2` — a snapshot plus the exact routing content it contains.
     * `guard/3` — whether a destructive task may run against a database that
       holds durable routing state.
   """
@@ -27,82 +28,54 @@ defmodule DevilsDictionary.Routing.Recovery do
 
   @routing_tables ~w(pages page_revisions page_memberships public_paths classification_decisions route_changes)
 
-  # Each section is an exact, ordered projection of identity and reference
-  # columns. Bodies are hashed; bookkeeping timestamps are left out except on
-  # append-only history, where the time is part of the record.
-  @sections [
-    {"objects", "id", "id, kind, lifecycle_state"},
-    {"entities", "object_id", "object_id, entity_kind, preferred_label"},
-    {"lexemes", "object_id", "object_id, lexical_key, slug"},
-    {"senses", "object_id", "object_id, lexeme_id, source_id, external_key, identity_state"},
-    {"sense_revisions", "id",
-     "id, sense_id, revision_number, md5(coalesce(gloss, '')), lifecycle_state, is_current"},
-    {"content_items", "object_id", "object_id, content_kind, source_id"},
-    {"content_revisions", "id",
-     "id, content_id, revision_number, md5(coalesce(body, '')), lifecycle_state, is_current"},
-    {"external_identifiers", "id", "id, object_id, namespace, external_id, status"},
-    {"object_names", "id", "id, object_id, name, name_kind, language_tag"},
-    {"identity_events", "id", "id, operation, actor_id, reason"},
-    {"identity_event_members", "event_id, object_id, role", "event_id, object_id, role"},
-    {"assertions", "id", "id, source_id, origin_key"},
-    {"assertion_revisions", "id",
-     "id, assertion_id, revision_number, subject_object_id, predicate_id, object_object_id, lifecycle_state, is_current"},
-    {"actors", "id", "id, actor_kind, user_id, bot_source_id, entity_id"},
-    {"sources", "id", "id, slug"},
-    {"pages", "id",
-     "id, role, locale, target_object_id, publication_state, lifecycle_state, merged_into_page_id, current_revision_id, canonical_path_id, last_route_change_id"},
-    {"page_revisions", "id",
-     "id, page_id, revision_number, title, md5(coalesce(body, '')), body_format, author_actor_id, reviewer_actor_id, evidence, membership_count, inserted_at"},
-    {"page_memberships", "id",
-     "id, page_id, page_revision_id, position, relationship, target_object_id, target_page_id, rationale, evidence"},
-    {"classification_decisions", "id",
-     "id, object_id, origin, status, family, candidate_families, rule_ids, reasons, warnings, policy_version, evidence_fingerprint, source_pins, reviewer_actor_id, reason, supersedes_id, is_current, inserted_at"},
-    {"public_paths", "id",
-     "id, path, kind, original_page_id, destination_page_id, last_route_change_id"},
-    {"route_changes", "id",
-     "id, operation_id, sequence, operation, path_id, before_kind, after_kind, before_destination_id, after_destination_id, page_id, before_lifecycle, after_lifecycle, before_canonical_path_id, after_canonical_path_id, before_merged_into_id, after_merged_into_id, before_revision_id, after_revision_id, classification_decision_id, policy_version, actor_id, reason, reverts_operation_id, details, inserted_at"}
-  ]
+  # Operational queue state, not registry or routing: jobs and node heartbeats.
+  @unmanifested ~w(oban_jobs oban_peers)
 
-  # The next ids these hand out. Equal right after a restore; afterwards only
-  # required never to fall behind their table.
-  @sequences [
-    {"objects_id_seq", "objects"},
-    {"actors_id_seq", "actors"},
-    {"identity_events_id_seq", "identity_events"},
-    {"pages_id_seq", "pages"},
-    {"page_revisions_id_seq", "page_revisions"},
-    {"page_memberships_id_seq", "page_memberships"},
-    {"public_paths_id_seq", "public_paths"},
-    {"classification_decisions_id_seq", "classification_decisions"},
-    {"route_changes_id_seq", "route_changes"}
-  ]
+  # What re-projecting unchanged source records legitimately rewrites: its own
+  # runs, and the stamps that say when a record was last materialized and by
+  # which run. Everything else must be identical after `dd.materialize --all`.
+  @projection_tables ~w(import_runs)
+  @projection_columns ~w(updated_at materialized_at last_seen_run_id)
+
+  # Values hashed rather than compared verbatim: bodies and payloads.
+  @hashed ~r/^(text|json|jsonb|bytea)(\[\])?$/
 
   def routing_tables, do: @routing_tables
-  def section_names, do: Enum.map(@sections, &elem(&1, 0)) ++ ["sequences"]
 
   @doc """
-  The exact manifest of the current repo's database.
+  The manifest of the current repo's database.
 
-  Options: `rows: true` keeps every row (for exact differences in tests),
-  `sequences: false` leaves the sequence section out (after a re-projection,
-  whose upserts may consume ids without writing rows).
+  Options:
+
+    * `mode: :exact` (default) — every column, every sequence; what a restore
+      must reproduce byte for byte.
+    * `mode: :projected` — after `mix dd.materialize --all` on a restored copy:
+      leaves out `import_runs` and the columns `updated_at`, `materialized_at`
+      and `last_seen_run_id`, and the sequences, whose upserts may consume ids
+      without writing rows (`sequences_behind/0` checks them instead).
+    * `rows: true` — keeps every row, for exact differences in tests.
   """
   def manifest(opts \\ []) do
+    mode = Keyword.get(opts, :mode, :exact)
+
     {:ok, manifest} =
       Repo.transaction(
         fn ->
           Repo.query!("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
+          keys = primary_keys()
 
           sections =
-            Map.new(@sections, fn {table, key, columns} ->
-              {table,
-               capture(
-                 "SELECT json_build_array(#{columns})::text FROM #{table} ORDER BY #{key}",
-                 opts
-               )}
-            end)
+            for {table, columns} <- columns(),
+                table not in @unmanifested,
+                mode == :exact or table not in @projection_tables,
+                into: %{} do
+              kept = Enum.reject(columns, fn {name, _type} -> skipped?(name, mode) end)
+              {table, capture(table_sql(table, kept, Map.get(keys, table, [])), opts)}
+            end
 
-          if Keyword.get(opts, :sequences, true),
+          sections = Map.put(sections, "schema", schema(opts))
+
+          if mode == :exact,
             do: Map.put(sections, "sequences", capture(sequence_sql(), opts)),
             else: sections
         end,
@@ -112,12 +85,130 @@ defmodule DevilsDictionary.Routing.Recovery do
     manifest
   end
 
-  defp sequence_sql do
-    names = Enum.map_join(@sequences, ",", fn {sequence, _table} -> "'#{sequence}'" end)
+  defp skipped?(column, :projected), do: column in @projection_columns
+  defp skipped?(_column, :exact), do: false
 
+  defp columns do
+    %{rows: rows} =
+      Repo.query!("""
+      SELECT c.relname, a.attname, format_type(a.atttypid, a.atttypmod)
+        FROM pg_class c
+        JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped
+       WHERE c.relnamespace = 'public'::regnamespace AND c.relkind = 'r'
+       ORDER BY c.relname, a.attnum
+      """)
+
+    rows
+    |> Enum.group_by(&Enum.at(&1, 0), fn [_table, column, type] -> {column, type} end)
+    |> Enum.sort()
+  end
+
+  defp primary_keys do
+    %{rows: rows} =
+      Repo.query!("""
+      SELECT c.relname, a.attname
+        FROM pg_index i
+        JOIN pg_class c ON c.oid = i.indrelid
+        JOIN LATERAL unnest(i.indkey) WITH ORDINALITY AS k(attnum, position) ON true
+        JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum = k.attnum
+       WHERE i.indisprimary AND c.relnamespace = 'public'::regnamespace
+       ORDER BY c.relname, k.position
+      """)
+
+    Enum.group_by(rows, &Enum.at(&1, 0), &Enum.at(&1, 1))
+  end
+
+  defp table_sql(table, columns, key) do
+    rendered =
+      Enum.map_join(columns, ", ", fn {name, type} ->
+        if Regex.match?(@hashed, type), do: ~s|md5("#{name}"::text)|, else: ~s|"#{name}"|
+      end)
+
+    # The primary key, text in byte order so the server's collation cannot
+    # reorder it; every column, likewise, for a table without one.
+    types = Map.new(columns)
+
+    order =
+      case key do
+        [] -> Enum.map(columns, fn {name, _} -> ~s|"#{name}"::text COLLATE "C"| end)
+        key -> Enum.map(key, &ordered(&1, Map.get(types, &1, "")))
+      end
+
+    ~s|SELECT json_build_array(#{rendered})::text FROM "#{table}" ORDER BY #{Enum.join(order, ", ")}|
+  end
+
+  defp ordered(column, type) do
+    if type =~ ~r/^(text|character)/, do: ~s|"#{column}" COLLATE "C"|, else: ~s|"#{column}"|
+  end
+
+  # The schema's definitions, so a copy migrated to a different version of an
+  # amended migration is a difference too.
+  defp schema(opts) do
+    %{rows: rows} = Repo.query!(schema_sql())
+
+    rows
+    |> Enum.map(fn [kind, name, definition] ->
+      Jason.encode!([kind, name, canonical(definition)])
+    end)
+    |> summarize(opts)
+  end
+
+  # pg_dump writes `x = ANY ((ARRAY['a'::character varying, …])::text[])` as it
+  # is stored, and the restoring server re-parses it with the cast pushed into
+  # each element: `ARRAY[('a'::character varying)::text, …]`. The same
+  # condition, so both are compared in the restored form. Nothing else is
+  # rewritten.
+  @array_cast ~r/\(ARRAY\[((?:[^\[\]']|'(?:[^']|'')*')*)\]\)::([a-z ]+)\[\]/
+
+  @doc false
+  def canonical(definition) do
+    Regex.replace(@array_cast, definition, fn _match, elements, type ->
+      cast =
+        ~r/(?:[^,']|'(?:[^']|'')*')+/
+        |> Regex.scan(elements)
+        |> Enum.map_join(", ", fn [element] -> "(#{String.trim(element)})::#{type}" end)
+
+      "ARRAY[#{cast}]"
+    end)
+  end
+
+  defp summarize(rows, opts) do
+    hash =
+      Enum.reduce(rows, :crypto.hash_init(:sha256), &:crypto.hash_update(&2, [&1, ?\n]))
+
+    %{
+      count: length(rows),
+      sha256: hash |> :crypto.hash_final() |> Base.encode16(case: :lower),
+      rows: if(Keyword.get(opts, :rows, false), do: rows)
+    }
+  end
+
+  defp schema_sql do
+    """
+    SELECT kind, name, definition FROM (
+      SELECT 'constraint' AS kind, conrelid::regclass::text || '.' || conname AS name,
+             pg_get_constraintdef(oid) AS definition
+        FROM pg_constraint WHERE connamespace = 'public'::regnamespace
+      UNION ALL
+      SELECT 'index', indexrelid::regclass::text, pg_get_indexdef(indexrelid)
+        FROM pg_index WHERE indrelid IN (
+          SELECT oid FROM pg_class WHERE relnamespace = 'public'::regnamespace)
+      UNION ALL
+      SELECT 'trigger', tgrelid::regclass::text || '.' || tgname, pg_get_triggerdef(oid)
+        FROM pg_trigger WHERE NOT tgisinternal AND tgrelid IN (
+          SELECT oid FROM pg_class WHERE relnamespace = 'public'::regnamespace)
+      UNION ALL
+      SELECT 'function', oid::regprocedure::text, md5(pg_get_functiondef(oid))
+        FROM pg_proc WHERE pronamespace = 'public'::regnamespace AND prokind = 'f'
+    ) AS definitions
+    ORDER BY kind COLLATE "C", name COLLATE "C"
+    """
+  end
+
+  defp sequence_sql do
     """
     SELECT json_build_array(sequencename, last_value)::text FROM pg_sequences
-     WHERE schemaname = 'public' AND sequencename IN (#{names}) ORDER BY sequencename
+     WHERE schemaname = 'public' ORDER BY sequencename COLLATE "C"
     """
   end
 
@@ -153,7 +244,8 @@ defmodule DevilsDictionary.Routing.Recovery do
 
   @doc """
   The sections two manifests disagree on, with exact differences where rows
-  were kept. Sections present in only one manifest are ignored.
+  were kept. Sections present in only one manifest are ignored here; `verify/2`
+  reports them.
   """
   def diff(a, b) do
     for {section, left} <- a,
@@ -177,17 +269,17 @@ defmodule DevilsDictionary.Routing.Recovery do
   defp only(_rows, _other), do: :not_kept
 
   @doc """
-  Compares the current repo's database with `baseline`, exactly: every
-  manifest section, what every path and page id resolves to, and the
-  sequences. With `projected: true` — after `mix dd.materialize --all` — the
-  sequences need only not have fallen behind their tables, because upserts
-  may consume ids without writing rows. Neither database is modified.
+  Compares the current repo's database with `baseline`: every manifest
+  section, what every path and page id resolves to, and the sequences. With
+  `projected: true` — after `mix dd.materialize --all` — the manifest is taken
+  in `:projected` mode and the sequences need only not have fallen behind
+  their tables. Neither database is modified.
 
   Returns `{:ok, report}` or `{:error, report}`.
   """
   def verify(baseline, opts \\ []) do
-    projected? = Keyword.get(opts, :projected, false)
-    manifest_opts = [sequences: not projected?, rows: Keyword.get(opts, :rows, false)]
+    mode = if Keyword.get(opts, :projected, false), do: :projected, else: :exact
+    manifest_opts = [mode: mode, rows: Keyword.get(opts, :rows, false)]
 
     {expected, expected_resolutions} =
       with_database(baseline, fn -> {manifest(manifest_opts), resolutions()} end)
@@ -198,35 +290,55 @@ defmodule DevilsDictionary.Routing.Recovery do
       sections: Map.new(actual, fn {section, %{count: n}} -> {section, n} end),
       differences: diff(expected, actual),
       missing_sections: Enum.sort(Map.keys(expected) -- Map.keys(actual)),
+      extra_sections: Enum.sort(Map.keys(actual) -- Map.keys(expected)),
       resolutions_match: expected_resolutions == resolutions(),
       sequences_behind: sequences_behind()
     }
 
     exact? =
-      report.differences == %{} and report.missing_sections == [] and report.resolutions_match and
+      report.differences == %{} and report.missing_sections == [] and
+        report.extra_sections == [] and report.resolutions_match and
         report.sequences_behind == []
 
     if exact?, do: {:ok, report}, else: {:error, report}
   end
 
-  @doc "Sequences that would hand out an id their table already holds."
+  @doc """
+  Sequences whose next value their table already holds — `last_value + 1`
+  once called, `last_value` before — for every sequence a table column owns.
+  """
   def sequences_behind do
-    Enum.flat_map(@sequences, fn {sequence, table} ->
-      %{rows: [[last, max]]} =
-        Repo.query!(
-          "SELECT (SELECT last_value FROM #{sequence}), (SELECT coalesce(max(id), 0) FROM #{table})"
-        )
+    %{rows: owned} =
+      Repo.query!("""
+      SELECT s.relname, t.relname, a.attname
+        FROM pg_class s
+        JOIN pg_depend d ON d.objid = s.oid AND d.deptype = 'a'
+        JOIN pg_class t ON t.oid = d.refobjid
+        JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = d.refobjsubid
+       WHERE s.relkind = 'S' AND s.relnamespace = 'public'::regnamespace
+       ORDER BY s.relname
+      """)
 
-      if last < max, do: [{sequence, last, max}], else: []
+    Enum.flat_map(owned, fn [sequence, table, column] ->
+      %{rows: [[last, called?]]} =
+        Repo.query!(~s|SELECT last_value, is_called FROM "#{sequence}"|)
+
+      %{rows: [[max]]} = Repo.query!(~s|SELECT coalesce(max("#{column}"), 0) FROM "#{table}"|)
+      next = if called?, do: last + 1, else: last
+      if next <= max, do: [{sequence, next, max}], else: []
     end)
   end
 
   @doc """
-  What every stored path and every page id resolves to, in order: outcome,
-  page id, location and successor page ids.
+  What every stored path and every page id resolves to, in byte order of the
+  path and by id: outcome, page id, location and successor page ids.
   """
   def resolutions do
-    paths = Repo.all(from p in PublicPath, order_by: p.path, select: p.path)
+    paths =
+      Repo.all(
+        from p in PublicPath, order_by: fragment(~s|? COLLATE "C"|, p.path), select: p.path
+      )
+
     pages = Repo.all(from p in Page, order_by: p.id, select: p.id)
 
     %{
@@ -265,19 +377,17 @@ defmodule DevilsDictionary.Routing.Recovery do
     end
   end
 
-  # ── the guard on destructive tasks ───────────────────────────────────────
+  # ── snapshots and the guard on destructive tasks ─────────────────────────
 
   @doc """
-  Durable routing state in a database, or `nil` if it has none (or does not
-  exist, or predates the routing tables). Connects directly, so it works before
-  the application starts.
+  Durable routing state in a database — row counts and a digest of every
+  routing row — or `nil` if it has none, does not exist, or predates the
+  routing tables. Connects directly, so it works before the application
+  starts, and reads in one repeatable-read snapshot.
   """
   def durable_state(config) do
     {:ok, _apps} = Application.ensure_all_started(:postgrex)
-
-    connection =
-      Keyword.take(config, [:hostname, :port, :username, :password, :database, :socket_dir])
-
+    connection = connection(config)
     maintenance = Keyword.put(connection, :database, config[:maintenance_database] || "postgres")
 
     exists? =
@@ -287,8 +397,26 @@ defmodule DevilsDictionary.Routing.Recovery do
         ]).num_rows == 1
       end)
 
-    if exists?, do: connected(connection, &state/1)
+    if exists? do
+      connected(connection, fn conn ->
+        {:ok, state} =
+          Postgrex.transaction(conn, fn conn ->
+            Postgrex.query!(
+              conn,
+              "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY",
+              []
+            )
+
+            state(conn)
+          end)
+
+        state
+      end)
+    end
   end
+
+  defp connection(config),
+    do: Keyword.take(config, [:hostname, :port, :username, :password, :database, :socket_dir])
 
   # A connection that cannot be made raises in the caller, which for a
   # destructive task is the safe way to fail.
@@ -303,66 +431,98 @@ defmodule DevilsDictionary.Routing.Recovery do
   end
 
   defp state(conn) do
+    case digest(conn) do
+      nil ->
+        nil
+
+      digest ->
+        counts = Map.new(digest, fn {table, [n, _md5]} -> {table, n} end)
+
+        if Enum.all?(counts, fn {_table, n} -> n == 0 end),
+          do: nil,
+          else: %{counts: counts, digest: digest}
+    end
+  end
+
+  # Every routing row, whole, in id order: any committed routing change —
+  # a ledger write, a publication change, anything — changes it. Must run
+  # inside a repeatable-read transaction so the six tables are read at once.
+  defp digest(conn) do
     %{rows: [[present?]]} =
       Postgrex.query!(conn, "SELECT to_regclass('public.route_changes') IS NOT NULL", [])
 
     if present? do
-      counts =
-        Map.new(@routing_tables, fn table ->
-          %{rows: [[n]]} = Postgrex.query!(conn, "SELECT count(*) FROM #{table}", [])
-          {table, n}
-        end)
+      Map.new(@routing_tables, fn table ->
+        %{rows: [[n, md5]]} =
+          Postgrex.query!(
+            conn,
+            ~s|SELECT count(*), md5(coalesce(string_agg(to_jsonb(r)::text, E'\\n' ORDER BY r.id), '')) FROM "#{table}" AS r|,
+            []
+          )
 
-      if Enum.all?(counts, fn {_table, n} -> n == 0 end),
-        do: nil,
-        else: %{counts: counts, marks: marks(conn)}
+        {table, [n, md5]}
+      end)
     end
   end
 
-  # Routing high-water marks: the highest id in each append-only or ledgered
-  # table, and the last page update (publication is not on the ledger). Any
-  # routing write moves at least one.
-  defp marks(conn) do
-    ids =
-      Map.new(@routing_tables, fn table ->
-        %{rows: [[max]]} = Postgrex.query!(conn, "SELECT coalesce(max(id), 0) FROM #{table}", [])
-        {table, max}
-      end)
-
-    %{rows: [[updated]]} =
-      Postgrex.query!(conn, "SELECT max(updated_at)::text FROM pages", [])
-
-    Map.put(ids, "pages_updated_at", updated)
-  end
-
   @doc """
-  Snapshots `config[:database]` to `path` with `DevilsDictionary.Snapshot`,
-  and records beside it (`path <> ".routing.json"`) the routing high-water
-  marks it covers. The marks are read *before* the dump starts, so a routing
-  write racing the dump makes the snapshot look older, never newer: the guard
-  then refuses, which is the safe side.
+  Snapshots `config[:database]` to `path` and records beside it
+  (`path <> ".routing.json"`) the digest of exactly the routing rows the dump
+  contains.
+
+  Exact because both come from one database snapshot: a repeatable-read
+  transaction exports its snapshot, reads the digest, and `pg_dump` dumps
+  under the same snapshot while the transaction stays open. The dump is
+  written to a partial file and renamed only when complete, and any older
+  sidecar is removed first, so a failed dump never leaves a sidecar beside it.
   """
   def snapshot!(config, path) do
-    marks = with_state(config, fn state -> state && state.marks end)
-    Snapshot.dump!(config, path)
+    {:ok, _apps} = Application.ensure_all_started(:postgrex)
+    partial = path <> ".partial"
+    File.rm(digest_path(path))
+    File.rm(partial)
+
+    digest =
+      connected(connection(config), fn conn ->
+        {:ok, digest} =
+          Postgrex.transaction(
+            conn,
+            fn conn ->
+              Postgrex.query!(
+                conn,
+                "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY",
+                []
+              )
+
+              %{rows: [[snapshot]]} = Postgrex.query!(conn, "SELECT pg_export_snapshot()", [])
+              digest = digest(conn)
+              Snapshot.dump!(config, partial, snapshot: snapshot)
+              digest
+            end,
+            timeout: :infinity
+          )
+
+        digest
+      end)
+
+    File.rename!(partial, path)
 
     File.write!(
-      marks_path(path),
-      Jason.encode!(%{"database" => config[:database], "marks" => marks})
+      digest_path(path),
+      Jason.encode!(%{"database" => config[:database], "digest" => digest})
     )
 
     path
   end
 
-  defp with_state(config, fun), do: fun.(durable_state(config))
-  defp marks_path(path), do: path <> ".routing.json"
+  defp digest_path(path), do: path <> ".routing.json"
 
   @doc """
   `:ok` if `action` may destroy `config[:database]`: it holds no durable
-  routing state, or `snapshot` names a `snapshot!/2` of it that contains every
-  routing table and whose recorded high-water marks equal the database's now —
-  no routing write since. Otherwise `{:error, message}` explaining the
-  supported alternative.
+  routing state, or `snapshot` names a `snapshot!/2` of that same database
+  that contains every routing table and whose recorded routing digest equals
+  the database's now — no committed routing change since. Otherwise
+  `{:error, message}` explaining the supported alternative.
   """
   def guard(config, action, snapshot) do
     case durable_state(config) do
@@ -375,7 +535,7 @@ defmodule DevilsDictionary.Routing.Recovery do
 
   defp covered(database, action, state, path) do
     missing = MapSet.difference(MapSet.new(@routing_tables), tables_in(path))
-    recorded = recorded_marks(path)
+    recorded = recorded(path)
 
     cond do
       not File.regular?(path) ->
@@ -386,21 +546,24 @@ defmodule DevilsDictionary.Routing.Recovery do
 
       is_nil(recorded) ->
         {:error,
-         "#{action}: #{path} has no routing marks beside it; take it with `mix dd.snapshot`"}
+         "#{action}: #{path} has no routing digest beside it; take it with `mix dd.snapshot`"}
 
-      recorded != state.marks ->
+      recorded["database"] != database ->
+        {:error, "#{action}: #{path} is a snapshot of #{recorded["database"]}, not #{database}"}
+
+      recorded["digest"] != state.digest ->
         {:error,
-         "#{action}: #{database} has routing writes after #{path} was taken; snapshot it again"}
+         "#{action}: #{database}'s routing state has changed since #{path} was taken; snapshot it again"}
 
       true ->
         :ok
     end
   end
 
-  defp recorded_marks(path) do
-    with {:ok, json} <- File.read(marks_path(path)),
-         {:ok, %{"marks" => marks}} when is_map(marks) <- Jason.decode(json) do
-      marks
+  defp recorded(path) do
+    with {:ok, json} <- File.read(digest_path(path)),
+         {:ok, %{"digest" => digest} = recorded} when is_map(digest) <- Jason.decode(json) do
+      recorded
     else
       _ -> nil
     end
@@ -425,7 +588,7 @@ defmodule DevilsDictionary.Routing.Recovery do
     To proceed anyway, snapshot this database first and name it:
 
         mix dd.snapshot --out PATH
-        ... --routing-snapshot PATH
+        ... --routing-snapshot PATH     (or DD_ROUTING_SNAPSHOT=PATH for mix ecto.drop)
     """
   end
 end

@@ -13,6 +13,7 @@ defmodule DevilsDictionary.Routing.Pages do
   """
 
   import Ecto.Query
+  import DevilsDictionary.Routing.Id, only: [is_id: 1]
 
   alias DevilsDictionary.Registry.Object
   alias DevilsDictionary.Repo
@@ -34,8 +35,7 @@ defmodule DevilsDictionary.Routing.Pages do
   def ensure(role, target_object_id, locale \\ "en")
 
   def ensure(role, target_object_id, locale)
-      when role in [:subject, :edition, :lexeme] and is_integer(target_object_id) and
-             target_object_id > 0 do
+      when role in [:subject, :edition, :lexeme] and is_id(target_object_id) do
     with :ok <- fits(role, target_object_id) do
       insert_or_find(role, target_object_id, locale)
     end
@@ -112,20 +112,36 @@ defmodule DevilsDictionary.Routing.Pages do
   `:evidence`; list order is position. Only an active page is edited here.
   Split successors are written by `Routing.Ledger.split/3`, never by a caller.
   """
-  def add_revision(page_id, attrs, memberships, author_actor_id) do
-    Repo.transaction(fn ->
-      page = lock!(page_id)
+  #
+  # Every refusal is decided before anything is written and returned from the
+  # transaction rather than rolled back: a nested `Repo.rollback/1` would
+  # abort a caller's batch transaction along with this one revision.
+  def add_revision(page_id, attrs, memberships, author_actor_id)
+      when is_id(page_id) and is_map(attrs) and is_list(memberships) do
+    result =
+      Repo.transaction(fn ->
+        page = lock!(page_id)
 
-      with :ok <- editable(page),
-           :ok <- validate_memberships(page, memberships),
-           {:ok, revision} <- insert_revision(page, attrs, memberships, author_actor_id) do
-        page |> Ecto.Changeset.change(current_revision_id: revision.id) |> Repo.update!()
-        revision
-      else
-        {:error, reason} -> Repo.rollback(reason)
-      end
-    end)
+        with :ok <- editable(page),
+             :ok <- validate_revision(attrs),
+             :ok <- validate_memberships(page, memberships),
+             {:ok, revision} <- insert_revision(page, attrs, memberships, author_actor_id) do
+          page |> Ecto.Changeset.change(current_revision_id: revision.id) |> Repo.update!()
+          {:ok, revision}
+        end
+      end)
+
+    case result do
+      {:ok, outcome} -> outcome
+      {:error, reason} -> {:error, reason}
+    end
   end
+
+  def add_revision(page_id, _attrs, _memberships, _author_actor_id) when not is_id(page_id),
+    do: {:error, :invalid_page}
+
+  def add_revision(_page_id, _attrs, _memberships, _author_actor_id),
+    do: {:error, :invalid_revision}
 
   defp editable(nil), do: {:error, :page_not_found}
   defp editable(%Page{lifecycle_state: :active}), do: :ok
@@ -174,24 +190,50 @@ defmodule DevilsDictionary.Routing.Pages do
   end
 
   defp actor(id) do
-    if is_integer(id) and Repo.exists?(from a in Actor, where: a.id == ^id),
+    if is_id(id) and Repo.exists?(from a in Actor, where: a.id == ^id),
       do: :ok,
       else: {:error, :actor_required}
   end
 
-  defp validate_memberships(page, memberships) do
-    keys = Enum.map(memberships, &{&1[:relationship], &1[:target_object_id], &1[:target_page_id]})
-
-    if length(Enum.uniq(keys)) != length(keys) do
-      {:error, :duplicate_membership}
-    else
-      Enum.reduce_while(memberships, :ok, fn member, :ok ->
-        case membership(page, member) do
-          :ok -> {:cont, :ok}
-          error -> {:halt, error}
-        end
-      end)
+  # What the columns and their checks would otherwise refuse by raising.
+  defp validate_revision(attrs) do
+    cond do
+      not text?(attrs[:title]) or not text?(attrs[:body]) -> {:error, :invalid_revision}
+      attrs[:body_format] not in [nil, :markdown, :text] -> {:error, :invalid_body_format}
+      not (is_nil(attrs[:evidence]) or is_map(attrs[:evidence])) -> {:error, :invalid_evidence}
+      is_nil(attrs[:reviewer_actor_id]) -> :ok
+      actor(attrs[:reviewer_actor_id]) == :ok -> :ok
+      true -> {:error, :invalid_reviewer}
     end
+  end
+
+  defp text?(value), do: is_nil(value) or is_binary(value)
+
+  defp validate_memberships(page, memberships) do
+    keys = Enum.map(memberships, &membership_key/1)
+
+    cond do
+      :invalid in keys -> {:error, :invalid_membership}
+      length(Enum.uniq(keys)) != length(keys) -> {:error, :duplicate_membership}
+      true -> validate_each(page, memberships)
+    end
+  end
+
+  defp membership_key(%{} = member) do
+    if text?(member[:rationale]) and (is_nil(member[:evidence]) or is_map(member[:evidence])),
+      do: {member[:relationship], member[:target_object_id], member[:target_page_id]},
+      else: :invalid
+  end
+
+  defp membership_key(_member), do: :invalid
+
+  defp validate_each(page, memberships) do
+    Enum.reduce_while(memberships, :ok, fn member, :ok ->
+      case membership(page, member) do
+        :ok -> {:cont, :ok}
+        error -> {:halt, error}
+      end
+    end)
   end
 
   defp membership(_page, %{target_object_id: object, target_page_id: page})
@@ -205,6 +247,10 @@ defmodule DevilsDictionary.Routing.Pages do
 
   defp membership(%Page{role: role}, %{relationship: :choice_option}) when role != :choice,
     do: {:error, :choice_options_belong_to_choice_pages}
+
+  defp membership(_page, %{relationship: :choice_option} = member)
+       when not is_map_key(member, :target_page_id) or is_nil(member.target_page_id),
+       do: {:error, :choice_options_are_pages}
 
   defp membership(_page, %{relationship: :supplies_lexical_material} = member) do
     case target_kind(member) do
@@ -223,11 +269,11 @@ defmodule DevilsDictionary.Routing.Pages do
 
   defp membership(_page, _member), do: {:error, :relationship_required}
 
-  defp target_kind(%{target_object_id: id}) when is_integer(id) do
+  defp target_kind(%{target_object_id: id}) when is_id(id) do
     Repo.one(from o in Object, where: o.id == ^id, select: o.kind)
   end
 
-  defp target_kind(%{target_page_id: id}) when is_integer(id) do
+  defp target_kind(%{target_page_id: id}) when is_id(id) do
     if Repo.exists?(from p in Page, where: p.id == ^id), do: :page
   end
 
@@ -251,6 +297,8 @@ defmodule DevilsDictionary.Routing.Pages do
   end
 
   @doc false
+  def lock!(page_id) when not is_id(page_id), do: nil
+
   def lock!(page_id) do
     Repo.one(from p in Page, where: p.id == ^page_id, lock: "FOR UPDATE")
   end

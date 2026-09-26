@@ -15,14 +15,20 @@ So routing state is recovered, not regenerated:
 
 ## Guards on destructive tasks
 
-`mix dd.reset`, `mix dd.snapshot --restore` (over a target) and `mix dd.rebuild` (except with `--dry-run`) first ask `Routing.Recovery.guard/3` whether the target database holds durable routing state. If it does, they refuse unless `--routing-snapshot PATH` names a snapshot that:
+`mix dd.reset`, `mix dd.snapshot --restore` (over a target), `mix dd.rebuild` (except with `--dry-run`) and `mix ecto.drop` (so `mix ecto.reset` too) first ask `Routing.Recovery.guard/3` whether the target database holds durable routing state. If it does, they refuse unless they are given a snapshot that covers it: `--routing-snapshot PATH`, or `DD_ROUTING_SNAPSHOT=PATH` for `ecto.drop`, whose `mix.exs` alias runs `mix dd.routing.guard drop` first. A covering snapshot:
 
-- contains every routing table (checked with `pg_restore --list`), and
-- has a `PATH.routing.json` sidecar whose routing high-water marks equal the database's current ones. The marks are the maximum id of each routing table and the last page update. Equal marks mean no routing write has happened since the snapshot was taken.
+- contains every routing table (checked with `pg_restore --list`);
+- has a `PATH.routing.json` sidecar naming **the same database**; and
+- records a digest of every routing row, whole, equal to the database's digest now.
 
-`mix dd.snapshot` writes that sidecar. It reads the marks **before** the dump starts, so a routing write that races the dump makes the snapshot look older, never newer, and the guard errs toward refusing. A snapshot without the sidecar does not count.
+`mix dd.snapshot` writes that sidecar, and makes it exact. A repeatable-read transaction exports its snapshot (`pg_export_snapshot()`), computes the digest, and keeps the snapshot open while `pg_dump --snapshot` dumps under it. The digest therefore describes exactly the rows in the dump:
 
-These guards stop accidents. They do not stop an operator: `--routing-snapshot` is a deliberate acknowledgement. The routing tables also refuse `TRUNCATE`, including one cascading from `objects`, unless a transaction sets `dictionary.allow_routing_truncate`. Only the test suite's reset does that. Production should also deny the application's database role TRUNCATE and trigger control.
+- A write still in flight during the dump is in neither. Once it commits, the digests differ and the guard refuses.
+- Any committed routing change counts, including one that adds no id, such as a change of publication state.
+
+The dump is written to `PATH.partial` and renamed only when complete. Any older sidecar is deleted first, so a failed dump never leaves a sidecar that seems to vouch for it. A dump without the sidecar does not count.
+
+These guards stop accidents. They do not stop an operator: naming a snapshot is a deliberate acknowledgement. The routing tables also refuse `TRUNCATE`, including one cascading from `objects`, unless a transaction sets `dictionary.allow_routing_truncate`. Only the test suite's reset does that. Production should also deny the application's database role TRUNCATE and trigger control.
 
 ## Procedure
 
@@ -30,7 +36,7 @@ Every step except the first writes only to a new, separate database.
 
 A restored copy carries the source's queued and scheduled jobs. Tasks that start the application would otherwise run them against the copy, and the quotation verifier makes outbound requests. `mix dd.routing.verify` starts only the Repo. For every other command on the copy, set `DD_NO_OBAN=1`, which starts Oban with no queues and no plugins. Never restore over the live database: the guard refuses without a covering snapshot, and you would lose whatever the snapshot does not hold.
 
-1. **Snapshot the source.** This is read-only, and writes the dump and its `.routing.json` marks. Quiesce routing writes first if you can.
+1. **Quiesce, then snapshot the source.** Step 3 compares the copy with the **live** source, so the source must take no writes from here until step 3 is done. Stop the application, its Oban node and any running tasks. The snapshot itself is read-only, and writes the dump and its `.routing.json` digest.
 
    ```bash
    mix dd.snapshot --out ~/Backups/dictionary-routing.dump
@@ -42,27 +48,31 @@ A restored copy carries the source's queued and scheduled jobs. Tasks that start
    DD_DATABASE=devils_dictionary_restore mix dd.snapshot --restore ~/Backups/dictionary-routing.dump --database devils_dictionary_restore
    ```
 
-   ```bash
-   DD_DATABASE=devils_dictionary_restore mix ecto.migrate
-   ```
+   Do **not** run `mix ecto.migrate` on the copy before step 3. A copy migrated past its source is a different schema, and step 3 reports the difference. Migrate after switching over, like any deploy.
 
-3. **Verify exact identity.** This compares every registry identity and every routing row by exact id and reference (`Routing.Recovery.manifest/1`), the sequences that hand out the next ids, and what every stored path and page id resolves to. Counts alone are not accepted. It is read-only on both databases, and exits non-zero on any difference.
+3. **Verify exact identity.** This compares every column of every table: registry identities, references such as an edition's work or a variant's canonical lexeme, and every routing row, all by exact id. It also compares the schema's constraints, indexes, triggers and functions, the sequences that hand out the next ids, and what every stored path and page id resolves to. Only Oban's queue tables are left out. Counts alone are not accepted. It is read-only on both databases, and exits non-zero on any difference.
 
    ```bash
    DD_DATABASE=devils_dictionary_restore mix dd.routing.verify --baseline devils_dictionary_v2
    ```
 
-4. **Re-project from source records, in any provider order.** Replay archives (for the API sources) and re-materialize every implemented source. `--all` also asserts that nothing derived changed (scorecard M2).
-
-   ```bash
-   DD_NO_OBAN=1 DD_DATABASE=devils_dictionary_restore mix dd.replay --source wikidata
-   ```
+4. **Re-project the copy from its own records, in any provider order.** `mix dd.materialize --all` re-projects every implemented source from the source records the copy holds. It also asserts that nothing derived changed (scorecard M2). Repeat it for each source, in whatever order:
 
    ```bash
    DD_NO_OBAN=1 DD_DATABASE=devils_dictionary_restore mix dd.materialize --source wikidata --all
    ```
 
-   Repeat for each source, in whatever order. Then verify again. After re-projection, sequences need only not have fallen behind their tables, because upserts may consume ids without writing rows:
+   To exercise the replay path as well, replay the API sources **only from an archive exported from the copy itself**. The pinned `priv/replay` archive may be older than the snapshot, and would re-project different records:
+
+   ```bash
+   DD_NO_OBAN=1 DD_DATABASE=devils_dictionary_restore mix dd.export.replay --out /tmp/restore-replay --quiet
+   ```
+
+   ```bash
+   DD_NO_OBAN=1 DD_DATABASE=devils_dictionary_restore mix dd.replay --dir /tmp/restore-replay --source wikidata
+   ```
+
+   Then verify again. After re-projection the comparison leaves out the projection's own bookkeeping: its new `import_runs`, and the `updated_at`, `materialized_at` and `last_seen_run_id` stamps it rewrites. `RecoveryTest` observed each of these change, and nothing else. Sequences then need only not have fallen behind their tables, because upserts may consume ids without writing rows:
 
    ```bash
    DD_DATABASE=devils_dictionary_restore mix dd.routing.verify --baseline devils_dictionary_v2 --projected
@@ -74,19 +84,33 @@ A restored copy carries the source's queued and scheduled jobs. Tasks that start
 
 ## What the test proves
 
-`RecoveryTest` builds its registry through the real projection. It inserts Wikipedia's and Wikidata's fixture records for cat, dog and oyster and materializes them, Wikipedia first. On top of that it writes a routing history that reaches every routing table and every operation: allocate, move, merge, split, retire, restore and rollback. That history includes an evaluator decision with a human override, subject and On pages, and revisions with typed membership. The test then runs the procedure's steps:
+`RecoveryTest` builds its registry through the real projection. It inserts Wikipedia's and Wikidata's fixture records for cat, dog and oyster and materializes them, Wikipedia first. On top of that it writes:
 
-- the dump and restore go through `DevilsDictionary.Snapshot` (the code behind `mix dd.snapshot`) into a database created for the test and dropped after it;
-- every manifest section is compared row for row, along with every resolution and every sequence;
-- the copy is re-projected with `mix dd.replay` and `mix dd.materialize --all`, **Wikidata before Wikipedia**. The test asserts that each source's three records were really replayed and re-materialized, in that order, and then compares everything exactly again;
+- a routing history that reaches every routing table and every operation: allocate, move, merge, split, retire, restore and rollback. It includes an evaluator decision with a human override, subject and On pages, and revisions with typed membership;
+- registry references outside the routing tables: an edition of a work, and a variant spelling with its canonical lexeme.
+
+The test then runs the procedure's steps:
+
+- the snapshot goes through `Routing.Recovery.snapshot!/2` (the code behind `mix dd.snapshot`), and the restore through `DevilsDictionary.Snapshot`, into a database created for the test and dropped after it;
+- `mix dd.routing.verify` passes, and every section is compared row for row, along with every resolution and every sequence;
+- the copy exports its own replay archive, then re-projects with `mix dd.replay` and `mix dd.materialize --all`, **Wikidata before Wikipedia**. The test asserts that each source's three records were really replayed and re-materialized, in that order, and then compares everything again in projected mode;
 - on the restored copy it resolves known paths, moves a page, rolls back a move recorded before the snapshot, and allocates a new page whose id follows on;
-- the comparison is shown to be non-vacuous: after those writes, verification reports differences in `pages` and `route_changes`;
+- the comparison is shown to be non-vacuous. After those writes, verification reports differences in `pages` and `route_changes`. Changing only an edition's work and a variant's canonical lexeme is a difference in exactly `edition_details` and `lexemes`;
 - the source database was only read: its manifest is unchanged at the end.
 
-A second test shows that the guards refuse `dd.reset`, `dd.snapshot --restore` and `dd.rebuild` against a database holding routing state. They accept a covering snapshot, and refuse a stale one, one without marks, and a missing one.
+A second test covers the guards:
+
+- `dd.reset`, `dd.snapshot --restore`, `dd.rebuild` and `dd.routing.guard` (behind `ecto.drop`) refuse a database holding routing state without a covering snapshot;
+- they accept a covering one;
+- they refuse a snapshot of another database with the same rows, a plain dump without a digest, and a missing file;
+- they refuse a snapshot taken before a publication change;
+- they refuse a snapshot taken while a routing write was in flight, once that write commits.
 
 ## Limits
 
-- **Scale.** The manifest streams through a server-side cursor in constant memory. Its running time against the full corpus (about 3.7 million objects and 3.9 million assertion revisions) has not been measured.
-- **The comparison is of identities and references, not every column.** Bodies are compared by hash. Bookkeeping timestamps are left out, except on append-only history, where the timestamp is part of the record.
-- **A dump taken while routing writes continue** is still consistent, because pg_dump reads one database snapshot. Its recorded marks then lag the database, so the guard refuses to treat it as covering, and you snapshot again.
+- **Scale.** The manifest streams through a server-side cursor in constant memory. Its running time against the full corpus (about 3.7 million objects and 3.9 million assertion revisions) has not been measured. That is Stage 2's first gate.
+- **Bodies are compared by hash.** `text`, `json`, `jsonb` and `bytea` columns are compared by MD5, which catches accidents, not an adversary.
+- **Schema definitions** are compared as Postgres deparses them. There is one exception: an `IN` list written `x = ANY ((ARRAY['a'::varchar, …])::text[])` is compared in the form a restored server re-parses it to (`ARRAY[('a'::varchar)::text, …]`), because it is the same condition. Nothing else is rewritten.
+- **The routing migration was amended in place** while its branch was unmerged. A database migrated at an earlier head of the branch has the same version number and different constraints. The schema section reports that. Such a database can hold no real routing state yet, because nothing writes it before Stage 2, so the fix is to roll back that one migration and migrate again.
+- **The guards are conservative, not transactional.** Any routing change since the snapshot refuses, even one the operator would not care about. A write committed between the guard's check and the drop is still lost, which is why step 1 quiesces.
+- **"Human" is an actor check.** The ledger and the database require a `user` actor for human-only operations. Any code holding the application's database role could still write rows naming a `user` actor. Separate database roles for the application and for reviewers would close that; Stage 1 does not add them.
