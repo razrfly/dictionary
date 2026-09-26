@@ -350,6 +350,49 @@ defmodule DevilsDictionary.Curation.ManualFixtureTest do
     end
   end
 
+  # CodeRabbit on #202 (82d02d9): the committed-manifest lookup raised on a
+  # missing, malformed, tampered or unsupported file, inside the page render.
+  describe "a committed manifest that fails verification" do
+    @describetag :tmp_dir
+    @describetag :capture_log
+
+    setup %{tmp_dir: root} do
+      previous = Application.get_env(:devils_dictionary, :committed_manifest_root)
+      Application.put_env(:devils_dictionary, :committed_manifest_root, root)
+
+      on_exit(fn ->
+        if previous,
+          do: Application.put_env(:devils_dictionary, :committed_manifest_root, previous),
+          else: Application.delete_env(:devils_dictionary, :committed_manifest_root)
+      end)
+    end
+
+    for variant <- unreadable_manifests() do
+      test "a #{variant} manifest withholds the work as :catalog_changed, and only the work",
+           %{tmp_dir: root} do
+        committed_manifest!(root, unquote(variant))
+
+        opening = ManualFixture.opening(page("love"))
+
+        assert opening.withheld == [%{role: :highlight, position: 1, reason: :catalog_changed}]
+        # No substitute: the two quotations stay where they were, and no
+        # picture from anywhere else takes the first place.
+        assert Enum.map(opening.highlights, & &1.position) == [2, 3]
+        refute Enum.any?(opening.highlights, & &1.image)
+        assert %Lead{policy: :priority_source} = opening.lead
+      end
+    end
+
+    test "an exact copy of the committed manifest still shows the work", %{tmp_dir: root} do
+      committed_manifest!(root, :valid)
+
+      opening = ManualFixture.opening(page("love"))
+
+      assert opening.withheld == []
+      assert [%Highlight{position: 1, kind: :artwork} | _] = opening.highlights
+    end
+  end
+
   describe "explanations respect public claim review" do
     defp refers_to_revision(sense_id) do
       Repo.one!(

@@ -166,6 +166,36 @@ defmodule DevilsDictionaryWeb.WordOpeningLiveTest do
     refute has_element?(view, "#opening")
   end
 
+  describe "a committed manifest that fails verification" do
+    @describetag :tmp_dir
+    @describetag :capture_log
+
+    setup %{tmp_dir: root} do
+      previous = Application.get_env(:devils_dictionary, :committed_manifest_root)
+      Application.put_env(:devils_dictionary, :committed_manifest_root, root)
+
+      on_exit(fn ->
+        if previous,
+          do: Application.put_env(:devils_dictionary, :committed_manifest_root, previous),
+          else: Application.delete_env(:devils_dictionary, :committed_manifest_root)
+      end)
+    end
+
+    test "the page still renders, without the work and without a substitute", ctx do
+      committed_manifest!(ctx.tmp_dir, :invalid_checksum)
+
+      {:ok, view, _html} = live(ctx.conn, ~p"/define/love?opening=fixture")
+
+      assert has_element?(view, "#opening-lead-text", "temporary insanity")
+      refute has_element?(view, "#opening-highlight-1")
+      assert has_element?(view, "#opening-highlight-2-text", "cordial love")
+      assert has_element?(view, "#opening-about-withheld", "Highlight 1")
+      assert has_element?(view, "#opening-about-withheld", "its catalog has changed")
+      # The definitions below are untouched.
+      assert has_element?(view, "#card-bierce")
+    end
+  end
+
   describe "the gate" do
     setup do
       previous = Application.get_env(:devils_dictionary, :curated_opening_fixtures)

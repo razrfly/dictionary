@@ -49,6 +49,74 @@ defmodule DevilsDictionary.OpeningFixtures do
     |> Enum.find(&(&1["qid"] == "Q8777422"))
   end
 
+  @committed_famous "artworks/manifests/wikidata-famous-v1.json"
+
+  @doc """
+  Puts `wikidata-famous-v1` under `root` (a stand-in for `priv/`, via
+  `:committed_manifest_root`) in one of the states a committed manifest can
+  be found in on disk, and returns the path:
+
+    * `:valid` — an exact copy of the committed file;
+    * `:missing` — no file at all;
+    * `:malformed` — the file cut off mid-JSON;
+    * `:invalid_checksum` — a row edited without refreshing `checksum`;
+    * `:unsupported_schema` — a `schema_version` this code does not read;
+    * `:unsupported_shape` — valid JSON that is not a manifest (`[]`);
+    * `:not_compiled` — a manifest that verifies, but is not the one this
+      build was compiled with.
+  """
+  def committed_manifest!(root, variant) do
+    path = Path.join(root, @committed_famous)
+    File.mkdir_p!(Path.dirname(path))
+    File.rm(path)
+    real = File.read!(Path.join(:code.priv_dir(:devils_dictionary), @committed_famous))
+
+    case variant do
+      :valid ->
+        File.write!(path, real)
+
+      :missing ->
+        :ok
+
+      :malformed ->
+        File.write!(path, binary_part(real, 0, 4096))
+
+      :invalid_checksum ->
+        manifest = Jason.decode!(real)
+        [first | rest] = manifest["rows"]
+        tampered = %{manifest | "rows" => [Map.put(first, "title", "Edited by hand") | rest]}
+        File.write!(path, Jason.encode!(tampered))
+
+      :unsupported_schema ->
+        File.write!(
+          path,
+          real |> Jason.decode!() |> Map.put("schema_version", 2) |> Jason.encode!()
+        )
+
+      :unsupported_shape ->
+        File.write!(path, "[]")
+
+      :not_compiled ->
+        File.write!(
+          path,
+          "wikidata-famous" |> Manifest.new([cupid_and_psyche_row()]) |> Jason.encode!()
+        )
+    end
+
+    path
+  end
+
+  @doc "Every way `committed_manifest!/2` can leave a manifest that must not be read."
+  def unreadable_manifests,
+    do: [
+      :missing,
+      :malformed,
+      :invalid_checksum,
+      :unsupported_schema,
+      :unsupported_shape,
+      :not_compiled
+    ]
+
   def bierce_love_key, do: @bierce_love_key
   def wiktionary_love_key, do: @wiktionary_love_key
   def bierce_love, do: @bierce_love

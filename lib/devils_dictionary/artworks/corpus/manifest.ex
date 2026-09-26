@@ -18,6 +18,8 @@ defmodule DevilsDictionary.Artworks.Corpus.Manifest do
   needs rewriting to record what has already been seeded.
   """
 
+  require Logger
+
   @schema_version 1
 
   # `identity` is the row field this kind is keyed and ordered on; `namespace`
@@ -198,17 +200,66 @@ defmodule DevilsDictionary.Artworks.Corpus.Manifest do
   def load!(path) do
     manifest = path |> File.read!() |> Jason.decode!()
 
-    unless manifest["schema_version"] == @schema_version and
-             is_map_key(@kinds, manifest["kind"]) and is_list(manifest["rows"]) do
-      raise ArgumentError, "unsupported corpus manifest: #{path}"
-    end
+    case verify(manifest) do
+      :ok ->
+        manifest
 
-    unless manifest["checksum"] == checksum(Map.delete(manifest, "checksum")) do
-      raise ArgumentError, "corpus manifest checksum mismatch: #{path}"
-    end
+      {:error, :unsupported} ->
+        raise ArgumentError, "unsupported corpus manifest: #{path}"
 
-    manifest
+      {:error, :checksum_mismatch} ->
+        raise ArgumentError, "corpus manifest checksum mismatch: #{path}"
+    end
   end
+
+  @doc """
+  `load!/1` for a caller that must not raise: `{:ok, manifest}`, or
+  `{:error, reason}` for each failure a file on disk can present —
+
+    * `{:unreadable, posix}` — missing, or not readable (`File.read/1`'s reason);
+    * `:malformed` — not JSON;
+    * `:unsupported` — JSON, but not a manifest of a known kind and schema;
+    * `:checksum_mismatch` — its contents are not what its `checksum` says.
+
+  The same checks as `load!/1`, which raises on the same failures.
+  """
+  def load(path) do
+    with {:ok, body} <- read(path),
+         {:ok, manifest} <- decode(body),
+         :ok <- verify(manifest) do
+      {:ok, manifest}
+    end
+  end
+
+  defp read(path) do
+    case File.read(path) do
+      {:ok, body} -> {:ok, body}
+      {:error, reason} -> {:error, {:unreadable, reason}}
+    end
+  end
+
+  defp decode(body) do
+    case Jason.decode(body) do
+      {:ok, manifest} -> {:ok, manifest}
+      {:error, %Jason.DecodeError{}} -> {:error, :malformed}
+    end
+  end
+
+  defp verify(%{} = manifest) do
+    cond do
+      not (manifest["schema_version"] == @schema_version and
+             is_map_key(@kinds, manifest["kind"]) and is_list(manifest["rows"])) ->
+        {:error, :unsupported}
+
+      manifest["checksum"] != checksum(Map.delete(manifest, "checksum")) ->
+        {:error, :checksum_mismatch}
+
+      true ->
+        :ok
+    end
+  end
+
+  defp verify(_not_a_manifest), do: {:error, :unsupported}
 
   @manifest_glob "priv/{artworks,quotes}/manifests/*.json"
 
@@ -270,12 +321,16 @@ defmodule DevilsDictionary.Artworks.Corpus.Manifest do
   The row of the committed manifest `name` whose identity field is `value`, or
   `nil` when there is no such manifest or row.
 
-  The file is read through `load!/1`, so its checksum is verified, and must
+  The file is read through `load/1`, so its checksum is verified, and must
   still carry the checksum this module was compiled with. What a selection
   pinned is this row, not the database's copy of it: a reader that shows a
   pinned work compares what it is about to display with this (#156).
-  Memoised per manifest and checksum, since the files are megabytes and do
-  not change without a recompile.
+
+  Never raises. A committed manifest that is missing, malformed, tampered
+  with, of an unsupported schema or not the compiled one answers `nil` for
+  every row, and is logged once; `Curation.References` then withholds the
+  work as `:catalog_changed`. Memoised per root, manifest and checksum, since
+  the files are megabytes and do not change without a recompile.
   """
   def committed_row(name, value) when is_binary(name) do
     case Map.get(@committed, name) do
@@ -285,18 +340,27 @@ defmodule DevilsDictionary.Artworks.Corpus.Manifest do
   end
 
   defp committed_rows(name, path) do
-    key = {__MODULE__, :committed_rows, name, checksum_of(name)}
+    root = committed_root()
+    key = {__MODULE__, :committed_rows, root, name, checksum_of(name)}
 
     case :persistent_term.get(key, nil) do
       nil ->
-        manifest = load!(Path.join(:code.priv_dir(:devils_dictionary), path))
-
         rows =
-          if manifest["checksum"] == checksum_of(name) do
-            field = identity_field(manifest["kind"])
-            Map.new(manifest["rows"], &{&1[field], &1})
-          else
-            %{}
+          case rows_of(name, Path.join(root, path)) do
+            {:ok, rows} ->
+              rows
+
+            # Expected of a file on disk, and not the page's problem: the
+            # works pinned to it are withheld as `:catalog_changed` by their
+            # reader, and nothing stands in for them. Said once, when the
+            # memo is filled, rather than on every render.
+            {:error, reason} ->
+              Logger.warning(
+                "committed corpus manifest #{name} is unusable (#{inspect(reason)}); " <>
+                  "works pinned to it are withheld"
+              )
+
+              %{}
           end
 
         :persistent_term.put(key, rows)
@@ -305,6 +369,29 @@ defmodule DevilsDictionary.Artworks.Corpus.Manifest do
       rows ->
         rows
     end
+  end
+
+  # The rows of a manifest that verifies and is the one this module was
+  # compiled with, by identity. Anything else is an error, never a raise.
+  defp rows_of(name, path) do
+    with {:ok, manifest} <- load(path),
+         :ok <- compiled(manifest, name) do
+      field = identity_field(manifest["kind"])
+      {:ok, for(%{} = row <- manifest["rows"], into: %{}, do: {row[field], row})}
+    end
+  end
+
+  defp compiled(%{"checksum" => checksum}, name) do
+    if checksum == checksum_of(name), do: :ok, else: {:error, :not_the_compiled_manifest}
+  end
+
+  # Where committed manifests are read from at run time: this application's
+  # `priv/`. `:committed_manifest_root` overrides it, which only the tests do,
+  # to put a missing, malformed or tampered copy in a reader's way. It is part
+  # of the memo's key, so a different root is always a cold read.
+  defp committed_root do
+    Application.get_env(:devils_dictionary, :committed_manifest_root) ||
+      to_string(:code.priv_dir(:devils_dictionary))
   end
 
   @doc """
