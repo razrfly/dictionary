@@ -252,6 +252,61 @@ defmodule DevilsDictionary.Artworks.Corpus.Manifest do
   """
   def checksum_of(name) when is_binary(name), do: Map.get(@checksums, name)
 
+  # Where each committed manifest lives, relative to `priv/`, and which source
+  # row it is the catalog of — by manifest name, like the checksums.
+  @committed for path <- Path.wildcard(@manifest_glob),
+                 {:ok, body} = File.read(path),
+                 {:ok, manifest} = Jason.decode(body),
+                 is_binary(manifest["manifest"]),
+                 into: %{},
+                 do:
+                   {manifest["manifest"],
+                    %{path: Path.relative_to(path, "priv"), source: manifest["source"]}}
+
+  @doc "The source slug the committed manifest `name` is a catalog of, or `nil`."
+  def source_of(name) when is_binary(name), do: get_in(@committed, [name, :source])
+
+  @doc """
+  The row of the committed manifest `name` whose identity field is `value`, or
+  `nil` when there is no such manifest or row.
+
+  The file is read through `load!/1`, so its checksum is verified, and must
+  still carry the checksum this module was compiled with. What a selection
+  pinned is this row, not the database's copy of it: a reader that shows a
+  pinned work compares what it is about to display with this (#156).
+  Memoised per manifest and checksum, since the files are megabytes and do
+  not change without a recompile.
+  """
+  def committed_row(name, value) when is_binary(name) do
+    case Map.get(@committed, name) do
+      %{path: path} -> name |> committed_rows(path) |> Map.get(value)
+      nil -> nil
+    end
+  end
+
+  defp committed_rows(name, path) do
+    key = {__MODULE__, :committed_rows, name, checksum_of(name)}
+
+    case :persistent_term.get(key, nil) do
+      nil ->
+        manifest = load!(Path.join(:code.priv_dir(:devils_dictionary), path))
+
+        rows =
+          if manifest["checksum"] == checksum_of(name) do
+            field = identity_field(manifest["kind"])
+            Map.new(manifest["rows"], &{&1[field], &1})
+          else
+            %{}
+          end
+
+        :persistent_term.put(key, rows)
+        rows
+
+      rows ->
+        rows
+    end
+  end
+
   @doc """
   When each committed corpus was generated, by source slug.
 

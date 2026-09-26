@@ -6,6 +6,11 @@ defmodule DevilsDictionary.Curation.Opening.Lead do
       Dictionary* entry, which always leads where one exists
       (`DevilsDictionary.Curation.LeadPolicy`); `:manual_fallback` when no such
       entry exists and a person chose another sourced definition.
+    * `register` — what kind of text the lead is, so the page can say so:
+      `:satire` (the priority source is a satirical dictionary — quoted
+      exactly, which does not make it literally true) or `:definition` (a
+      sourced definition, historical or current). Decided by
+      `DevilsDictionary.Curation.LeadPolicy`, never by the component.
     * `excerpt` — `%{text, html, clipped?, chars}`: the opening of the exact
       revision, cut only at a sentence end (`DevilsDictionary.Curation.Excerpt`).
       `text` is the words; `html` is the same words through the app's own
@@ -24,6 +29,7 @@ defmodule DevilsDictionary.Curation.Opening.Lead do
   @enforce_keys [:reference, :policy, :source, :excerpt, :meaning]
   defstruct reference: nil,
             policy: nil,
+            register: nil,
             source: nil,
             author: nil,
             work: nil,
@@ -37,6 +43,7 @@ defmodule DevilsDictionary.Curation.Opening.Lead do
   @type t :: %__MODULE__{
           reference: Reference.t(),
           policy: :priority_source | :manual_fallback,
+          register: :satire | :definition,
           source: map(),
           author: String.t() | nil,
           work: String.t() | nil,

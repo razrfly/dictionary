@@ -144,8 +144,20 @@ defmodule DevilsDictionary.Curation.ManualFixtureTest do
 
       assert opening.review.state == :unreviewed
       assert opening.review.selected_by.kind == :model
-      assert is_nil(opening.review.panel)
-      assert opening.review.support == [] and opening.review.dissent == []
+      # No configuration, no panel, no invented votes (#201, #203).
+      assert is_nil(opening.configuration)
+      refute Map.has_key?(opening.review, :panel)
+      assert opening.lead.register == :satire
+      assert Enum.map(opening.highlights, & &1.register) == [nil, :quotation, :quotation]
+
+      # Required credits stay on the page; a locator and a CC0 catalog record
+      # may wait in the disclosure.
+      assert %{required?: false} = Enum.find(opening.lead.credits, &(&1.role == :entry))
+
+      assert Enum.all?(
+               opening.lead.credits -- Enum.filter(opening.lead.credits, &(&1.role == :entry)),
+               & &1.required?
+             )
     end
 
     test "reads the database only: no discovery run, no job, no row written" do
@@ -219,6 +231,29 @@ defmodule DevilsDictionary.Curation.ManualFixtureTest do
       assert [%{role: :highlight, position: 2, reason: :quotation_not_found}] = opening.withheld
     end
 
+    # CodeRabbit on #202: a hand-edited `null` in a pinned field reached an
+    # Ecto comparison with nil and raised, taking the whole page down.
+    test "a malformed reference is withheld, never a crash" do
+      fixtures =
+        love_with(fn love ->
+          love
+          |> put_in(["highlights", Access.at(1), "item", "quotation", "sense", "record"], nil)
+          |> put_in(["highlights", Access.at(2), "meaning", "sense", "revision_key"], nil)
+          |> put_in(["lead", "item", "content", "revision_key"], nil)
+        end)
+
+      opening = ManualFixture.opening(page("love"), fixtures: fixtures)
+
+      assert is_nil(opening.lead)
+      assert Enum.map(opening.highlights, & &1.position) == [1]
+
+      assert opening.withheld == [
+               %{role: :lead, position: nil, reason: :not_found},
+               %{role: :highlight, position: 2, reason: :not_found},
+               %{role: :highlight, position: 3, reason: :meaning_not_found}
+             ]
+    end
+
     test "never more than three highlights, never the same one twice" do
       fixtures =
         love_with(fn love ->
@@ -235,6 +270,181 @@ defmodule DevilsDictionary.Curation.ManualFixtureTest do
                %{role: :highlight, position: 2, reason: :duplicate},
                %{role: :highlight, position: 4, reason: :over_limit}
              ]
+    end
+  end
+
+  # The audit of #202 (issue #156, comment 5849658094) reproduced these
+  # against the first head: the reader checked the manifest file but then
+  # displayed whatever the database held, and used a relationship a reviewer
+  # had rejected as its explanation.
+  describe "the artwork displayed is the pinned one" do
+    defp artwork(opening), do: Enum.find(opening.highlights, &(&1.kind == :artwork))
+
+    defp edit_artwork!(ctx, fun) do
+      entity = Repo.get!(DevilsDictionary.Registry.Entity, ctx.artwork_id)
+
+      entity
+      |> Ecto.Changeset.change(metadata: fun.(entity.metadata))
+      |> Repo.update!()
+    end
+
+    test "the exact catalog row is shown, image and credit as the manifest pins them", ctx do
+      row = cupid_and_psyche_row()
+      artwork = artwork(ManualFixture.opening(page("love")))
+
+      assert artwork.reference.object_id == ctx.artwork_id
+      assert artwork.image.url == row["image_url"]
+      assert Enum.find(artwork.credits, &(&1.role == :image)).text == row["credit_line"]
+    end
+
+    test "a changed image is withheld, and no other picture takes its place", ctx do
+      edit_artwork!(ctx, &Map.put(&1, "image_url", "https://example.test/another-picture.jpg"))
+
+      opening = ManualFixture.opening(page("love"))
+
+      assert is_nil(artwork(opening))
+      assert [%{role: :highlight, position: 1, reason: :catalog_drift}] = opening.withheld
+      assert Enum.map(opening.highlights, & &1.position) == [2, 3]
+      refute Enum.any?(opening.highlights, &(&1.image != nil))
+    end
+
+    test "a changed credit is withheld", ctx do
+      edit_artwork!(ctx, &Map.put(&1, "image_attribution", "Someone else · Somewhere"))
+
+      assert [%{position: 1, reason: :catalog_drift}] =
+               ManualFixture.opening(page("love")).withheld
+    end
+
+    test "changed depictions are withheld: the match is part of what was pinned", ctx do
+      edit_artwork!(ctx, fn metadata ->
+        metadata
+        |> Map.put("depicts_qids", ["Q316"])
+        |> Map.put("depicts", [%{"qid" => "Q316", "term" => "love"}])
+      end)
+
+      assert [%{position: 1, reason: :catalog_drift}] =
+               ManualFixture.opening(page("love")).withheld
+    end
+
+    test "a disabled catalog source takes the work off the page", ctx do
+      Repo.update_all(
+        from(s in DevilsDictionary.Sources.Source, where: s.slug == "wikidata"),
+        set: [active: false]
+      )
+
+      opening = ManualFixture.opening(page("love"))
+
+      assert is_nil(artwork(opening))
+      assert [%{position: 1, reason: :source_inactive}] = opening.withheld
+      assert ctx.artwork_id
+    end
+
+    test "a retired work is withheld", ctx do
+      Repo.update_all(
+        from(o in DevilsDictionary.Registry.Object, where: o.id == ^ctx.artwork_id),
+        set: [lifecycle_state: :retired]
+      )
+
+      assert [%{position: 1, reason: :object_inactive}] =
+               ManualFixture.opening(page("love")).withheld
+    end
+  end
+
+  describe "explanations respect public claim review" do
+    defp refers_to_revision(sense_id) do
+      Repo.one!(
+        from r in DevilsDictionary.Claims.AssertionRevision,
+          join: p in assoc(r, :predicate),
+          where: r.subject_object_id == ^sense_id and r.is_current and p.key == "refers_to",
+          select: r.id
+      )
+    end
+
+    defp defines_revision(content_id) do
+      Repo.one!(
+        from r in DevilsDictionary.Claims.AssertionRevision,
+          join: p in assoc(r, :predicate),
+          where: r.subject_object_id == ^content_id and r.is_current and p.key == "defines",
+          select: r.id
+      )
+    end
+
+    defp source_match(opening) do
+      opening.highlights
+      |> Enum.find(&(&1.kind == :artwork))
+      |> Map.fetch!(:reasons)
+      |> Enum.find(&(&1.kind == :source_match))
+    end
+
+    test "an imported relationship explains the match; an accepted one still does", ctx do
+      assert source_match(ManualFixture.opening(page("love"))).text =~ "Q316"
+
+      {:ok, _} =
+        DevilsDictionary.Claims.review(refers_to_revision(ctx.benevolent.object_id), :accepted)
+
+      assert source_match(ManualFixture.opening(page("love"))).text =~ "Q316"
+    end
+
+    for decision <- [:rejected, :withdrawn] do
+      test "a #{decision} relationship is never offered as the reason, on any reread", ctx do
+        {:ok, _} =
+          DevilsDictionary.Claims.review(
+            refers_to_revision(ctx.benevolent.object_id),
+            unquote(decision)
+          )
+
+        for _read <- 1..2 do
+          opening = ManualFixture.opening(page("love"))
+          artwork = Enum.find(opening.highlights, &(&1.kind == :artwork))
+
+          # The work itself is still eligible on its own record; only the
+          # source-supported explanation goes, and nothing says Q316.
+          assert artwork
+          assert is_nil(source_match(opening))
+          refute Enum.any?(artwork.reasons, &(&1.text =~ "Q316"))
+        end
+      end
+    end
+
+    test "a lead whose `defines` a reviewer rejected does not lead", ctx do
+      {:ok, _} = DevilsDictionary.Claims.review(defines_revision(ctx.bierce.object_id), :rejected)
+
+      opening = ManualFixture.opening(page("love"))
+
+      assert is_nil(opening.lead)
+      assert [%{role: :lead, reason: :meaning_mismatch}] = opening.withheld
+    end
+  end
+
+  describe "exact revision identity" do
+    test "a new revision materialized from the pinned observation is not quoted in its place",
+         ctx do
+      bierce = Registry.current_content_revision(ctx.bierce.object_id)
+
+      {:ok, _new} =
+        Registry.add_content_revision(ctx.bierce.object_id, %{
+          body: "A temporary sanity. Rewritten by a parser.",
+          body_format: :markdown,
+          source_record_revision_id: bierce.source_record_revision_id
+        })
+
+      opening = ManualFixture.opening(page("love"))
+
+      assert is_nil(opening.lead)
+      assert [%{role: :lead, reason: :excerpt_changed}] = opening.withheld
+    end
+
+    test "the lead names the revision it quotes, and the pin is of those words", ctx do
+      opening = ManualFixture.opening(page("love"))
+
+      pin =
+        get_in(ManualFixture.read(), ["compositions", Access.at(0), "lead", "excerpt", "sha256"])
+
+      assert opening.lead.reference.content_revision_id ==
+               Registry.current_content_revision(ctx.bierce.object_id).id
+
+      assert pin ==
+               :crypto.hash(:sha256, opening.lead.excerpt.text) |> Base.encode16(case: :lower)
     end
   end
 

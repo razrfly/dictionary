@@ -77,11 +77,24 @@ defmodule DevilsDictionary.Curation.LeadPolicy do
     if applicable(page) == [], do: :ok, else: {:error, :priority_source_missing}
   end
 
-  @doc "The rule a lead was admitted under, as the page states it to a reader."
+  @doc """
+  The rule a lead was admitted under, as the page states it to a reader. It is
+  an editorial preference — a choice of voice — and says so: leading the
+  page does not make Bierce a factual authority (#204).
+  """
   def statement(:priority_source),
-    do: "Bierce first: where The Devil’s Dictionary defines a word, its entry leads."
+    do:
+      "Editorial preference: where The Devil’s Dictionary defines a word, its entry leads. Leading is a choice of voice, not a claim that the entry is literally true."
 
   def statement(:manual_fallback),
     do:
-      "The Devil’s Dictionary has no entry for this word, so another sourced definition was selected by hand."
+      "The Devil’s Dictionary has no entry for this word, so another sourced definition was selected by hand to lead."
+
+  @doc """
+  What kind of text a lead admitted under `policy` is. The priority source
+  is a satirical dictionary, so its lead is `:satire`; a fallback is a
+  sourced `:definition`.
+  """
+  def register(:priority_source), do: :satire
+  def register(:manual_fallback), do: :definition
 end

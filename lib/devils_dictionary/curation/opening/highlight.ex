@@ -10,6 +10,8 @@ defmodule DevilsDictionary.Curation.Opening.Highlight do
     * `position` — 1 to 3, the order the selection gave.
     * `title`, `creator`, `date` — as the source records them.
     * `image` — `%{url, alt}` for an artwork, or `nil`.
+    * `register` — `:quotation` for a line (an exact sourced quotation; its
+      accuracy does not make what it says true), `nil` for a picture.
     * `quotation` — `%{text, citation, provenance}` for a line, or `nil`.
       `provenance` is the badge the page already derives for that line.
     * `links` — `source` is the source's own page for the item. The durable
@@ -25,6 +27,7 @@ defmodule DevilsDictionary.Curation.Opening.Highlight do
   @enforce_keys [:position, :kind, :reference, :meaning, :source]
   defstruct position: nil,
             kind: nil,
+            register: nil,
             reference: nil,
             title: nil,
             creator: nil,
@@ -40,6 +43,7 @@ defmodule DevilsDictionary.Curation.Opening.Highlight do
   @type t :: %__MODULE__{
           position: 1..3,
           kind: :artwork | :quotation,
+          register: :quotation | nil,
           reference: Reference.t(),
           title: String.t() | nil,
           creator: String.t() | nil,

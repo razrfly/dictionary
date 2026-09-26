@@ -54,7 +54,17 @@ defmodule DevilsDictionary.Curation.LeadPolicyTest do
   end
 
   test "the rule a reader sees names the priority, and the fallback says what it is" do
-    assert LeadPolicy.statement(:priority_source) =~ "Bierce first"
+    # A preference about voice, and it says it is not a claim of truth.
+    assert LeadPolicy.statement(:priority_source) =~ "Editorial preference"
+
+    assert LeadPolicy.statement(:priority_source) =~
+             "not a claim that the entry is literally true"
+
     assert LeadPolicy.statement(:manual_fallback) =~ "no entry for this word"
+  end
+
+  test "the priority source's lead is satire; a fallback is a sourced definition" do
+    assert LeadPolicy.register(:priority_source) == :satire
+    assert LeadPolicy.register(:manual_fallback) == :definition
   end
 end

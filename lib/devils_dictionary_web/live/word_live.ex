@@ -776,149 +776,113 @@ defmodule DevilsDictionaryWeb.WordLive do
                between `auto` rows — so without it row one stretched to half the
                stream and the related words sat a screen below the rail. Row
                one is the rail's height; the rest is row two's. --%>
-          <%!-- The curated opening (#156) sits above the Definitions in the
-               column on a desktop, and straight after the headword on a phone
-               — by placement, not by a second copy. Only when there is one:
-               the rail and the column become `contents` below `lg`, so their
-               children are items of one flex column and `order` can lift the
-               opening to just under `#headword` (which is `order-first`).
-               Without an opening, nothing here changes. --%>
-          <div class={[
-            "lg:grid lg:grid-cols-[22.5rem_minmax(0,1fr)] lg:grid-rows-[auto_1fr] lg:gap-x-12",
-            @opening && "max-lg:flex max-lg:flex-col"
-          ]}>
+          <%!-- The curated opening (#156) changes the reading order, so it
+               has its own layout, and only when there is one — without it the
+               grid below is exactly what it was.
+
+               On a phone the document order *is* the visual and keyboard
+               order: the headword, the opening, the rest of the rail, the
+               definitions, the way out. On a desktop the same order is placed
+               into two columns with floats rather than the grid, because a
+               grid couples its rows across columns: with the opening between
+               the headword and the rest of the rail in the source, row one
+               would be as tall as the opening and leave a gap under the
+               headword. Every block floats — left for the rail's three,
+               right for the opening and the definitions — and `clear` stacks
+               each column on itself, so neither column's height moves the
+               other. (An in-flow block would pin every later float below it.)
+               The way out can start no higher than the definitions do, so on
+               a word whose opening is taller than its rail it sits a little
+               lower under the rail than it does without an opening. No
+               `order`, no `display: contents`, no second copy of anything. --%>
+          <div :if={@opening} class="lg:flow-root">
+            <Word.headword
+              headword={@page.headword}
+              choices={@choices}
+              thing={@page.thing}
+              thing_info={@page.thing && Word.info_path(@slug, @page.trail, "thing", @demo)}
+              demo={@demo}
+              class="lg:float-left lg:clear-left lg:w-[22.5rem]"
+            />
+
+            <%!-- Nothing in it is fetched and nothing in it changes after the
+                 first render for this word; `nil` on every public page in
+                 Phase 1 (the development fixture is the only reader). --%>
+            <Opening.section
+              opening={@opening}
+              class="mt-8 lg:float-right lg:mt-0 lg:mb-4 lg:w-[calc(100%-25.5rem)]"
+            />
+
+            <Word.rail
+              page={@page}
+              sources={@card_sources}
+              choices={@choices}
+              headword={false}
+              class="lg:float-left lg:clear-left lg:w-[22.5rem]"
+              demo={@demo}
+            />
+
+            <div class="min-w-0 max-lg:mt-8 lg:float-right lg:clear-right lg:w-[calc(100%-25.5rem)]">
+              <.column
+                page={@page}
+                card_sources={@card_sources}
+                object_id={@object_id}
+                slug={@slug}
+                demo={@demo}
+                evidence={@evidence}
+                urban_dictionary={@urban_dictionary}
+                cultures={@cultures}
+                culture_notes={@culture_notes}
+                browsers={@browsers}
+                contributor={@contributor}
+              />
+            </div>
+
+            <.way_out
+              :if={@page.related || @page_sources != []}
+              page={@page}
+              page_sources={@page_sources}
+              demo={@demo}
+              class="mt-8 lg:float-left lg:clear-left lg:mt-5 lg:w-[22.5rem] lg:border-t lg:border-mist-950/10 lg:pt-4 dark:lg:border-white/10"
+            />
+          </div>
+
+          <div
+            :if={is_nil(@opening)}
+            class="lg:grid lg:grid-cols-[22.5rem_minmax(0,1fr)] lg:grid-rows-[auto_1fr] lg:gap-x-12"
+          >
             <Word.rail
               page={@page}
               sources={@card_sources}
               choices={@choices}
               thing_info={@page.thing && Word.info_path(@slug, @page.trail, "thing", @demo)}
-              class={rail_class(@opening)}
+              class="lg:col-start-1 lg:row-start-1"
               demo={@demo}
             />
 
-            <div class={[
-              "min-w-0 lg:col-start-2 lg:row-span-2 lg:row-start-1",
-              if(@opening, do: "max-lg:contents", else: "max-lg:mt-8")
-            ]}>
-              <%!-- Nothing in it is fetched and nothing in it changes after
-                   the first render for this word; `nil` on every public page
-                   in Phase 1 (the development fixture is the only reader). --%>
-              <Opening.section
-                :if={@opening}
-                opening={@opening}
-                class="max-lg:-order-1 max-lg:mt-8 max-lg:mb-4 lg:mb-12"
-              />
-
-              <div class="min-w-0">
-                <%!-- `phx-update="ignore"` because `open` is DOM state the reader
-                   owns: without it, a discovery result arriving would re-render
-                   these rows and snap the reader's open source shut. Nothing
-                   here changes after the first render *for this word in this
-                   mode*, which is exactly what the id says — so a different
-                   word, or the demo banner going up, replaces the element
-                   rather than patching it. The `object_id` is in the id because
-                   a slug is not an identity: `/define/c` and `/words/<C++>/c`
-                   are two words under one slug, and the id has to tell them
-                   apart or the ignored rows would outlive the word. `any` is
-                   what `/define/:slug` means — every word the slug reaches —
-                   and it is a segment rather than a gap so the id reads. --%>
-                <.slab
-                  :if={@page.cards != []}
-                  id={"definitions-#{@object_id || "any"}-#{@slug}-#{@demo}"}
-                  phx-update="ignore"
-                  title="Definitions"
-                  class="mt-2"
-                >
-                  <:meta>{count_label(@card_sources, @page.cards)} · one open at a time</:meta>
-                  <div class="divide-y divide-mist-950/10 dark:divide-white/10">
-                    <Word.source_row
-                      :for={{card, i} <- Enum.with_index(@page.cards)}
-                      card={card}
-                      open={i == default_open(@page.cards)}
-                      continues={continues?(@page.cards, i)}
-                      trail={trail_here(@page)}
-                      info={Word.info_path(@slug, @page.trail, "card:" <> card.id, @demo)}
-                      demo={@demo}
-                    />
-                  </div>
-                </.slab>
-
-                <Word.bare_row :if={@page.cards == []} lemma={@page.headword.lemma} />
-
-                <%!-- The named things the sources file under this word's
-                   meanings (#181): asserted, so after the definitions and
-                   before anything searched for. Absent when nothing names
-                   any — a section, not a shelf, so there is no empty state
-                   to hold open while something loads. --%>
-                <Examples.section
-                  :if={@page.examples}
-                  examples={@page.examples}
-                  lemma={@page.headword.lemma}
-                  trail={trail_here(@page)}
-                  demo={@demo}
-                />
-
-                <%!-- The 📱 Crowd card (#136): after the real cards and before the
-                   culture shelves, which is exactly where the demo's sample sat
-                   from U3 until this replaced it. `nil` unless the environment
-                   switch and the source row both say yes, and then the hook
-                   removes the element on an empty answer or any failure — so
-                   the states are *card* and *absent*, never an empty card. The
-                   source line above counts server-known cards and does not know
-                   about this one, on purpose: it is a claim about what has been
-                   absorbed, and nothing here is. --%>
-                <CrowdCard.urban_dictionary :if={@urban_dictionary} config={@urban_dictionary} />
-
-                <%!-- One block for everything found rather than written, the GIFs
-                   among it (#111 L6 — the one piece of #109 K10 that never
-                   landed). The GIF shelf keeps its own hook and transport;
-                   what it loses is the second chrome 400 px below the first. --%>
-                <Culture.section
-                  :if={@cultures != %{} or @browsers != [] or @culture_notes != []}
-                  states={@cultures}
-                  notes={@culture_notes}
-                  browsers={@browsers}
-                  return_path={word_path(@page)}
-                  contributor={@contributor}
-                />
-
-                <Thing.thing_panel
-                  :if={@page.thing}
-                  thing={@page.thing}
-                  trail={trail_here(@page)}
-                  info={Word.info_path(@slug, @page.trail, "thing", @demo)}
-                  demo={@demo}
-                />
-
-                <Demo.evidence_wall :if={@demo} evidence={@evidence} />
-              </div>
-            </div>
-
-            <div
-              :if={@page.related || @page_sources != []}
-              class="mt-8 lg:col-start-1 lg:row-start-2 lg:mt-5 lg:border-t lg:border-mist-950/10 lg:pt-4 dark:lg:border-white/10"
-            >
-              <Word.related_block
-                :if={@page.related}
-                related={@page.related}
-                trail={trail_here(@page)}
+            <div class="min-w-0 max-lg:mt-8 lg:col-start-2 lg:row-span-2 lg:row-start-1">
+              <.column
+                page={@page}
+                card_sources={@card_sources}
+                object_id={@object_id}
+                slug={@slug}
                 demo={@demo}
-              />
-              <%!-- The one place that lists every source on the page (#152
-                   rule 3), under the related words because both are the way
-                   out of the word. It is composed from assigns the page
-                   already holds and grows as a shelf's live results arrive;
-                   a source whose shelf is still loading is not on the page
-                   yet, and is not in the stack yet. --%>
-              <SourceBadge.stack
-                id="page-sources"
-                sources={@page_sources}
-                class={[
-                  "mt-8",
-                  @page.related && "border-t border-mist-950/10 pt-4 dark:border-white/10"
-                ]}
+                evidence={@evidence}
+                urban_dictionary={@urban_dictionary}
+                cultures={@cultures}
+                culture_notes={@culture_notes}
+                browsers={@browsers}
+                contributor={@contributor}
               />
             </div>
+
+            <.way_out
+              :if={@page.related || @page_sources != []}
+              page={@page}
+              page_sources={@page_sources}
+              demo={@demo}
+              class="mt-8 lg:col-start-1 lg:row-start-2 lg:mt-5 lg:border-t lg:border-mist-950/10 lg:pt-4 dark:lg:border-white/10"
+            />
           </div>
         <% end %>
       </.container>
@@ -939,11 +903,121 @@ defmodule DevilsDictionaryWeb.WordLive do
     """
   end
 
-  # The rail's grid placement, and — only when an opening is on the page —
-  # `contents` below `lg`, so the headword and the facts are items of the same
-  # flex column as the opening (see the layout comment in `render/1`).
-  defp rail_class(nil), do: "lg:col-start-1 lg:row-start-1"
-  defp rail_class(_opening), do: "max-lg:contents lg:col-start-1 lg:row-start-1"
+  # Everything a source decides the size of, in the column beside the rail:
+  # one function so both layouts in `render/1` render the same elements.
+  defp column(assigns) do
+    ~H"""
+    <%!-- `phx-update="ignore"` because `open` is DOM state the reader
+         owns: without it, a discovery result arriving would re-render
+         these rows and snap the reader's open source shut. Nothing
+         here changes after the first render *for this word in this
+         mode*, which is exactly what the id says — so a different
+         word, or the demo banner going up, replaces the element
+         rather than patching it. The `object_id` is in the id because
+         a slug is not an identity: `/define/c` and `/words/<C++>/c`
+         are two words under one slug, and the id has to tell them
+         apart or the ignored rows would outlive the word. `any` is
+         what `/define/:slug` means — every word the slug reaches —
+         and it is a segment rather than a gap so the id reads. --%>
+    <.slab
+      :if={@page.cards != []}
+      id={"definitions-#{@object_id || "any"}-#{@slug}-#{@demo}"}
+      phx-update="ignore"
+      title="Definitions"
+      class="mt-2"
+    >
+      <:meta>{count_label(@card_sources, @page.cards)} · one open at a time</:meta>
+      <div class="divide-y divide-mist-950/10 dark:divide-white/10">
+        <Word.source_row
+          :for={{card, i} <- Enum.with_index(@page.cards)}
+          card={card}
+          open={i == default_open(@page.cards)}
+          continues={continues?(@page.cards, i)}
+          trail={trail_here(@page)}
+          info={Word.info_path(@slug, @page.trail, "card:" <> card.id, @demo)}
+          demo={@demo}
+        />
+      </div>
+    </.slab>
+
+    <Word.bare_row :if={@page.cards == []} lemma={@page.headword.lemma} />
+
+    <%!-- The named things the sources file under this word's
+         meanings (#181): asserted, so after the definitions and
+         before anything searched for. Absent when nothing names
+         any — a section, not a shelf, so there is no empty state
+         to hold open while something loads. --%>
+    <Examples.section
+      :if={@page.examples}
+      examples={@page.examples}
+      lemma={@page.headword.lemma}
+      trail={trail_here(@page)}
+      demo={@demo}
+    />
+
+    <%!-- The 📱 Crowd card (#136): after the real cards and before the
+         culture shelves, which is exactly where the demo's sample sat
+         from U3 until this replaced it. `nil` unless the environment
+         switch and the source row both say yes, and then the hook
+         removes the element on an empty answer or any failure — so
+         the states are *card* and *absent*, never an empty card. The
+         source line above counts server-known cards and does not know
+         about this one, on purpose: it is a claim about what has been
+         absorbed, and nothing here is. --%>
+    <CrowdCard.urban_dictionary :if={@urban_dictionary} config={@urban_dictionary} />
+
+    <%!-- One block for everything found rather than written, the GIFs
+         among it (#111 L6 — the one piece of #109 K10 that never
+         landed). The GIF shelf keeps its own hook and transport;
+         what it loses is the second chrome 400 px below the first. --%>
+    <Culture.section
+      :if={@cultures != %{} or @browsers != [] or @culture_notes != []}
+      states={@cultures}
+      notes={@culture_notes}
+      browsers={@browsers}
+      return_path={word_path(@page)}
+      contributor={@contributor}
+    />
+
+    <Thing.thing_panel
+      :if={@page.thing}
+      thing={@page.thing}
+      trail={trail_here(@page)}
+      info={Word.info_path(@slug, @page.trail, "thing", @demo)}
+      demo={@demo}
+    />
+
+    <Demo.evidence_wall :if={@demo} evidence={@evidence} />
+    """
+  end
+
+  # The way out of the word: the related words, then every source on the page.
+  defp way_out(assigns) do
+    ~H"""
+    <div class={@class}>
+      <Word.related_block
+        :if={@page.related}
+        related={@page.related}
+        trail={trail_here(@page)}
+        demo={@demo}
+      />
+      <%!-- The one place that lists every source on the page (#152
+           rule 3), under the related words because both are the way
+           out of the word. It is composed from assigns the page
+           already holds and grows as a shelf's live results arrive;
+           a source whose shelf is still loading is not on the page
+           yet, and is not in the stack yet. --%>
+      <SourceBadge.stack
+        id="page-sources"
+        sources={@page_sources}
+        class={[
+          "mt-8",
+          @page.related && "border-t border-mist-950/10 pt-4 dark:border-white/10"
+        ]}
+      />
+    </div>
+    """
+  end
 
   attr :slug, :string, required: true
   attr :suggestions, :list, default: []

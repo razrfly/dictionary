@@ -21,14 +21,20 @@ defmodule DevilsDictionary.Curation.References do
   what a reader withholds an item for: `:not_found`, `:ambiguous`,
   `:object_inactive`, `:revision_not_current`, `:revision_inactive`,
   `:display_not_allowed`, `:source_inactive`, `:catalog_changed`,
-  `:not_an_artwork`, `:no_image`. Nothing here writes and nothing leaves the
-  database.
+  `:catalog_drift`, `:not_an_artwork`, `:no_image`. Nothing here writes and
+  nothing leaves the database (and the committed manifests).
+
+  Relationships used as evidence — a definition `defines` a word, a meaning
+  `refers_to` a concept — are read through `Claims.visible(:public)`, the
+  same review policy every public page applies: a relationship a reviewer
+  rejected or withdrew is not evidence here either (#202 audit).
   """
 
   import Ecto.Query
 
   alias DevilsDictionary.Artworks
   alias DevilsDictionary.Artworks.Corpus.Manifest
+  alias DevilsDictionary.Claims
   alias DevilsDictionary.Claims.{AssertionRevision, Predicate}
   alias DevilsDictionary.Corpus.SourceRecordRevision
 
@@ -74,9 +80,12 @@ defmodule DevilsDictionary.Curation.References do
   @doc """
   The definition a source record's exact observation was materialized into.
 
-  `ref` is `%{"source", "record", "revision_key"}`. The revision must still be
-  the content item's **current** one: a lead quotes the text a reader can
-  check, and a pinned revision that has been superseded is a changed source.
+  `ref` is `%{"source", "record", "revision_key"}`. The content item's
+  **current** revision must be one materialized from that observation: a lead
+  quotes the text a reader can check, and a pinned observation that has been
+  superseded is a changed source. A re-materialization of the same
+  observation can still change the words, which is why a selection also pins
+  the words it quotes (`Curation.ManualFixture` checks that pin).
   """
   def content(%{"source" => slug, "record" => external_id, "revision_key" => key})
       when is_binary(slug) and is_binary(external_id) and is_binary(key) do
@@ -114,7 +123,7 @@ defmodule DevilsDictionary.Curation.References do
           }
       )
 
-    with {:ok, row} <- one(rows),
+    with {:ok, row} <- current_of_one_item(rows),
          :ok <- active(row.object_state),
          :ok <- current(row.current?, row.lifecycle_state),
          :ok <- displayable(row.display_allowed?, row.source) do
@@ -124,18 +133,34 @@ defmodule DevilsDictionary.Curation.References do
 
   def content(_ref), do: {:error, :not_found}
 
-  @doc "Whether content object `content_id` currently `defines` lexeme `lexeme_id` or one of its senses."
+  # Every revision of one content item that the observation produced; the
+  # current one if it is among them. Two items from one observation is not a
+  # reference a reader can resolve.
+  defp current_of_one_item([]), do: {:error, :not_found}
+
+  defp current_of_one_item(rows) do
+    case rows |> Enum.map(& &1.object_id) |> Enum.uniq() do
+      [_one] -> {:ok, Enum.find(rows, hd(rows), & &1.current?)}
+      _many -> {:error, :ambiguous}
+    end
+  end
+
+  @doc """
+  Whether content object `content_id` currently `defines` lexeme `lexeme_id`
+  or one of its senses, by a relationship the public may see.
+  """
   def defines?(content_id, lexeme_id) do
-    Repo.exists?(
-      from r in AssertionRevision,
-        join: p in Predicate,
-        on: p.id == r.predicate_id and p.key == "defines",
-        left_join: s in Sense,
-        on: s.object_id == r.object_object_id,
-        where:
-          r.subject_object_id == ^content_id and r.is_current and r.lifecycle_state == :active and
-            (r.object_object_id == ^lexeme_id or s.lexeme_id == ^lexeme_id)
+    from(r in AssertionRevision,
+      join: p in Predicate,
+      on: p.id == r.predicate_id and p.key == "defines",
+      left_join: s in Sense,
+      on: s.object_id == r.object_object_id,
+      where:
+        r.subject_object_id == ^content_id and r.is_current and r.lifecycle_state == :active and
+          (r.object_object_id == ^lexeme_id or s.lexeme_id == ^lexeme_id)
     )
+    |> Claims.visible(:public)
+    |> Repo.exists?()
   end
 
   @doc """
@@ -154,7 +179,8 @@ defmodule DevilsDictionary.Curation.References do
           "gloss" => gloss
         } = _ref
       )
-      when is_binary(lexical_key) and is_binary(slug) and is_binary(gloss) do
+      when is_binary(lexical_key) and is_binary(slug) and is_binary(external_id) and
+             is_binary(key) and is_binary(gloss) do
     rows =
       Repo.all(
         from s in Sense,
@@ -201,31 +227,45 @@ defmodule DevilsDictionary.Curation.References do
 
   def sense(_ref), do: {:error, :not_found}
 
-  @doc "The verified Wikidata QIDs a sense currently `refers_to`."
+  @doc """
+  The verified Wikidata QIDs a sense currently `refers_to`, by relationships
+  the public may see: a rejected or withdrawn `refers_to` is not a reason.
+  """
   def refers_to_qids(sense_id) do
-    Repo.all(
-      from r in AssertionRevision,
-        join: p in Predicate,
-        on: p.id == r.predicate_id and p.key == "refers_to",
-        join: e in Entity,
-        on: e.object_id == r.object_object_id,
-        join: i in ExternalIdentifier,
-        on: i.object_id == e.object_id and i.namespace == "wikidata" and i.status == :verified,
-        where: r.subject_object_id == ^sense_id and r.is_current and r.lifecycle_state == :active,
-        distinct: true,
-        select: i.external_id
+    from(r in AssertionRevision,
+      join: p in Predicate,
+      on: p.id == r.predicate_id and p.key == "refers_to",
+      join: e in Entity,
+      on: e.object_id == r.object_object_id,
+      join: i in ExternalIdentifier,
+      on: i.object_id == e.object_id and i.namespace == "wikidata" and i.status == :verified,
+      where: r.subject_object_id == ^sense_id and r.is_current and r.lifecycle_state == :active,
+      distinct: true,
+      select: i.external_id
     )
+    |> Claims.visible(:public)
+    |> Repo.all()
   end
 
   @doc """
-  A catalog artwork by its verified QID, seeded from the committed manifest a
-  selection pinned.
+  A catalog artwork by its verified QID, displayed exactly as the committed
+  manifest row a selection pinned.
 
-  `ref` is `%{"wikidata", "catalog", "checksum"}`. The work must still be an
-  active artwork from that manifest, the manifest committed now must carry the
-  pinned checksum, and the catalog view must still have an image to show —
-  `Artworks.get/1` is the view the shelf renders, so it applies the same
-  display rules.
+  `ref` is `%{"wikidata", "catalog", "checksum"}`. In order:
+
+    * the work is one active artwork, seeded from that manifest;
+    * the manifest committed now carries the pinned checksum, and has a row
+      for the QID (`Manifest.committed_row/2`) — that row is what was pinned;
+    * the manifest's catalog source exists and is active;
+    * what the page would display — title, date, image, image credit, Commons
+      file and depicted QIDs, through `Artworks.get/1`, the view the shelf
+      renders — is exactly that row. The database's copy can drift from the
+      file (an edited image URL, an image supplied by another source, a
+      changed credit or depiction), and a drifted work is `:catalog_drift`.
+      Nothing is substituted for it, and no other image is shown.
+
+  The row returned carries `pinned` (the manifest row) and `source` (the
+  catalog's source row); a reader credits the work from `pinned`.
   """
   def work(%{"wikidata" => qid, "catalog" => manifest, "checksum" => checksum})
       when is_binary(qid) and is_binary(manifest) and is_binary(checksum) do
@@ -251,9 +291,20 @@ defmodule DevilsDictionary.Curation.References do
          :ok <- active(row.object_state),
          :ok <- artwork(row.work_kind),
          :ok <- catalog(row.metadata, manifest, checksum),
+         {:ok, pinned} <- pinned_row(manifest, qid),
+         {:ok, source} <- catalog_source(manifest, row.metadata),
          %{} = view <- Artworks.get(row.object_id) || {:error, :not_found},
-         :ok <- image(view) do
-      {:ok, Map.merge(row, %{qid: qid, manifest: manifest, checksum: checksum, view: view})}
+         :ok <- image(view),
+         :ok <- as_pinned(view, row.metadata, pinned) do
+      {:ok,
+       Map.merge(row, %{
+         qid: qid,
+         manifest: manifest,
+         checksum: checksum,
+         view: view,
+         pinned: pinned,
+         source: source
+       })}
     end
   end
 
@@ -288,6 +339,70 @@ defmodule DevilsDictionary.Curation.References do
 
   defp catalog(_metadata, _manifest, _checksum), do: {:error, :catalog_changed}
 
+  defp pinned_row(manifest, qid) do
+    case Manifest.committed_row(manifest, qid) do
+      %{} = row -> {:ok, row}
+      nil -> {:error, :catalog_changed}
+    end
+  end
+
+  # The catalog is its manifest's source, and the work must say so too: a
+  # work credited to one source and shown under another is drift.
+  defp catalog_source(manifest, metadata) do
+    slug = Manifest.source_of(manifest)
+
+    cond do
+      is_nil(slug) or metadata["catalog_source"] != slug -> {:error, :catalog_drift}
+      source = DevilsDictionary.Sources.get_source_by_slug(slug) -> active_source(source)
+      true -> {:error, :source_inactive}
+    end
+  end
+
+  defp active_source(%Source{active: true} = source), do: {:ok, source}
+  defp active_source(_source), do: {:error, :source_inactive}
+
   defp image(%{image_url: url}) when is_binary(url) and url != "", do: :ok
   defp image(_view), do: {:error, :no_image}
+
+  # What would be displayed, field by field, against the pinned row.
+  defp as_pinned(view, metadata, pinned) do
+    displayed = %{
+      title: view.title,
+      date: view.date,
+      image: view.image_url,
+      credit: view.image_attribution,
+      commons_file: metadata["commons_file"],
+      depicts: metadata |> Map.get("depicts_qids", []) |> List.wrap() |> Enum.sort()
+    }
+
+    expected = %{
+      title: pinned["title"] && String.slice(pinned["title"], 0, 255),
+      date: pinned["date"],
+      image: pinned["image_url"],
+      credit: pinned["credit_line"],
+      commons_file: pinned["commons_file"],
+      depicts: pinned |> pinned_depicts() |> Enum.map(& &1["qid"]) |> Enum.sort()
+    }
+
+    if displayed == expected, do: :ok, else: {:error, :catalog_drift}
+  end
+
+  @doc """
+  A pinned catalog row's depictions as `%{"qid", "term"}`, with the QIDs the
+  seeder would keep — the same normalisation, so the comparison is exact.
+  """
+  def pinned_depicts(pinned) do
+    for %{"qid" => qid} = entry <- List.wrap(pinned["tags"] || pinned["depicts"]),
+        is_binary(qid) and Regex.match?(~r/\AQ[1-9]\d*\z/, qid),
+        do: %{"qid" => qid, "term" => blank_to_nil(entry["term"])}
+  end
+
+  defp blank_to_nil(value) when is_binary(value) do
+    case String.trim(value) do
+      "" -> nil
+      trimmed -> trimmed
+    end
+  end
+
+  defp blank_to_nil(_value), do: nil
 end

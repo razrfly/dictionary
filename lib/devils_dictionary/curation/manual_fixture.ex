@@ -14,17 +14,22 @@ defmodule DevilsDictionary.Curation.ManualFixture do
   discovery result is disposable and a selection is not.
 
   Every item is checked when the page is read. One that no longer resolves,
-  whose revision is no longer current, whose source may not be displayed, or
-  that breaks `DevilsDictionary.Curation.LeadPolicy` is withheld and listed in
+  whose revision is no longer current, whose quoted words no longer match the
+  words pinned for it, whose source is switched off or may not be displayed,
+  whose catalog row no longer matches what the page would display, or that
+  breaks `DevilsDictionary.Curation.LeadPolicy` is withheld and listed in
   `Opening.withheld` with its reason. Nothing is substituted for it and
   nothing is invented to fill its place: a composition whose items are all
-  withheld renders no section at all.
+  withheld renders no section at all. Relationships used as explanations are
+  read under the public claim-review policy, so a rejected or withdrawn one
+  explains nothing (`DevilsDictionary.Curation.References`).
 
   Gated twice, like `DevilsDictionary.Demo`: `Opening.reader/1` returns this
   module only when `:curated_opening_fixtures` is on (dev and test config
   only) **and** the request carries `?opening=fixture`. A public page never
   reaches it. It reads the database and the file; it makes no request and
-  calls no model.
+  calls no model. The only files it reads are this one and the committed
+  corpus manifests a work is pinned to.
 
   The selections are labelled as what they are. The file records who chose
   them (`selected_by`, with a `kind` of `human` or `model`), and whether a
@@ -48,7 +53,6 @@ defmodule DevilsDictionary.Curation.ManualFixture do
   }
 
   alias DevilsDictionary.Lexicon.WordPage
-  alias DevilsDictionary.Sources
 
   @path "curation/opening-fixtures.json"
 
@@ -133,6 +137,7 @@ defmodule DevilsDictionary.Curation.ManualFixture do
     with {:ok, content} <- References.content(get_in(spec, ["item", "content"])),
          {:ok, policy} <- LeadPolicy.check(ctx.page, content.object_id),
          {:ok, excerpt} <- Excerpt.sentences(content.body, content.body_format, count),
+         :ok <- pinned_words(excerpt, get_in(spec, ["excerpt", "sha256"])),
          {:ok, meaning} <- lexeme_meaning(spec["meaning"], ctx),
          :ok <- defines(content.object_id, meaning) do
       {card, entry} = LeadPolicy.page_entry(ctx.page, content.object_id)
@@ -147,6 +152,7 @@ defmodule DevilsDictionary.Curation.ManualFixture do
           locator: %{kind: :sentences, count: count}
         },
         policy: policy,
+        register: LeadPolicy.register(policy),
         source: source_view(source),
         author: author_of(source),
         work: work_of(source),
@@ -166,7 +172,7 @@ defmodule DevilsDictionary.Curation.ManualFixture do
         credits:
           compact([
             credit(:source, "Source", source.attribution || source.name, source.homepage),
-            credit(:entry, "Entry", entry_label(content), content.canonical_url),
+            credit(:entry, "Entry", entry_label(content), content.canonical_url, false),
             credit(:rights, "Rights", source.license, source.license_url)
           ]),
         reasons:
@@ -178,6 +184,18 @@ defmodule DevilsDictionary.Curation.ManualFixture do
       {:error, reason} -> {nil, [withheld(:lead, nil, reason)]}
     end
   end
+
+  # The words a selection quoted, pinned as the SHA-256 of the excerpt's text.
+  # The observation is pinned by its content hash; this pins what was read
+  # from it, so a re-materialization that changes the words is withheld
+  # rather than quoted under the old selection.
+  defp pinned_words(%{text: text}, pin) when is_binary(pin) do
+    if :crypto.hash(:sha256, text) |> Base.encode16(case: :lower) == pin,
+      do: :ok,
+      else: {:error, :excerpt_changed}
+  end
+
+  defp pinned_words(_excerpt, _pin), do: {:error, :excerpt_unpinned}
 
   defp entry_label(%{metadata: metadata, headword: headword}) do
     printed = metadata["printed_headword"] || headword
@@ -223,37 +241,41 @@ defmodule DevilsDictionary.Curation.ManualFixture do
   defp highlight(%{"item" => %{"work" => ref}} = spec, position, ctx) do
     with {:ok, work} <- References.work(ref),
          {:ok, meaning} <- sense_meaning(spec["meaning"], ctx) do
-      view = work.view
-      source = Sources.get_source_by_slug(view.catalog_source || "wikidata")
-      catalog_url = Enum.find_value(view.source_links, &(&1.label == "Wikidata" && &1.url))
+      # Everything shown is the pinned manifest row's, which `References.work/1`
+      # has just checked the displayed view against.
+      pinned = work.pinned
+      source = work.source
+      catalog_url = pinned["source_url"]
 
       {:ok,
        %Highlight{
          position: position,
          kind: :artwork,
+         register: nil,
          reference: %Reference{
            object_id: work.object_id,
            object_kind: :entity,
            catalog: %{manifest: work.manifest, checksum: work.checksum}
          },
-         title: view.title,
-         creator: creator_of(view),
-         date: view.date,
-         image: %{url: view.image_url, alt: ""},
+         title: pinned["title"],
+         creator: creator_of(pinned),
+         date: pinned["date"],
+         image: %{url: pinned["image_url"], alt: ""},
          meaning: meaning,
          source: source_view(source),
          credits:
            compact([
-             credit(:image, "Image", view.image_attribution, commons_page(work.metadata)),
+             credit(:image, "Image", pinned["credit_line"], commons_page(pinned)),
              credit(
                :catalog,
                "Catalog record",
                Enum.join(compact([source && source.attribution, work.qid]), " · "),
-               catalog_url
+               catalog_url,
+               false
              )
            ]),
          links: %{source: catalog_url},
-         reasons: compact([depiction_reason(view, meaning), note(spec, ctx)])
+         reasons: compact([depiction_reason(work, meaning), note(spec, ctx)])
        }}
     end
   end
@@ -282,6 +304,7 @@ defmodule DevilsDictionary.Curation.ManualFixture do
        %Highlight{
          position: position,
          kind: :quotation,
+         register: :quotation,
          reference: %Reference{
            object_id: sense.object_id,
            object_kind: :sense,
@@ -323,20 +346,30 @@ defmodule DevilsDictionary.Curation.ManualFixture do
   # catalog's own match reason. A work with no such overlap has no source
   # reason — the selection's own note is then the only why, and it is marked
   # as the selector's.
-  defp depiction_reason(view, %Meaning{kind: :sense, object_id: sense_id}) do
+  #
+  # `refers_to_qids/1` reads only relationships the public may see, so a
+  # `refers_to` a reviewer rejected or withdrew explains nothing here; the
+  # work may still be shown on its own record, without a source match.
+  defp depiction_reason(work, %Meaning{kind: :sense, object_id: sense_id}) do
     qids = References.refers_to_qids(sense_id)
 
-    case Enum.find(view.depicts, &(&1["qid"] in qids)) do
+    case Enum.find(References.pinned_depicts(work.pinned), &(&1["qid"] in qids)) do
       nil -> nil
-      depicted -> %Reason{kind: :source_match, text: Artworks.depiction_note(view, depicted)}
+      depicted -> %Reason{kind: :source_match, text: Artworks.depiction_note(work.view, depicted)}
     end
   end
 
-  defp depiction_reason(_view, _meaning), do: nil
+  defp depiction_reason(_work, _meaning), do: nil
 
-  defp creator_of(%{creators: [_ | _] = creators}), do: Enum.map_join(creators, ", ", & &1.label)
-  defp creator_of(%{artist: artist}) when is_binary(artist), do: artist
-  defp creator_of(_view), do: nil
+  # The creators the pinned row names, as the catalog committed them.
+  defp creator_of(%{"creators" => [_ | _] = creators}) do
+    creators |> Enum.map(& &1["term"]) |> Enum.reject(&is_nil/1) |> Enum.join(", ") |> presence()
+  end
+
+  defp creator_of(_pinned), do: nil
+
+  defp presence(""), do: nil
+  defp presence(value), do: value
 
   # The Commons file page, where an image's licence is stated, when the
   # catalog committed the file name.
@@ -446,10 +479,7 @@ defmodule DevilsDictionary.Curation.ManualFixture do
       selected_by: author(composition),
       selected_on: date(composition["selected_on"]),
       reviewed_by: reviewed_by,
-      reviewed_on: date(composition["reviewed_on"]),
-      panel: nil,
-      support: [],
-      dissent: []
+      reviewed_on: date(composition["reviewed_on"])
     }
   end
 
@@ -491,10 +521,13 @@ defmodule DevilsDictionary.Curation.ManualFixture do
     end
   end
 
-  defp credit(_role, _label, text, _href) when text in [nil, ""], do: nil
+  # A credit is required on the page unless said otherwise: only a locator
+  # or a CC0 catalog record may move into the item's disclosure.
+  defp credit(role, label, text, href, required? \\ true)
+  defp credit(_role, _label, text, _href, _required?) when text in [nil, ""], do: nil
 
-  defp credit(role, label, text, href),
-    do: %Credit{role: role, label: label, text: text, href: href}
+  defp credit(role, label, text, href, required?),
+    do: %Credit{role: role, label: label, text: text, href: href, required?: required?}
 
   defp compact(list), do: Enum.reject(list, &(&1 in [nil, false]))
 

@@ -18,7 +18,7 @@
             "revision_key": "764883999f1a0ef470bae07d0967596f894e3a2c220409249fb8e86e887a16c2"
           }
         },
-        "excerpt": { "sentences": 1 },
+        "excerpt": { "sentences": 1, "sha256": "b494927159b1418e38ecb6e48ea7b9db51595ce34f4e0898a03826b56a2dc074" },
         "meaning": { "lexeme": "en/love/noun" }
       },
       "highlights": [
@@ -107,7 +107,7 @@
             "revision_key": "e7ddcd8e1248913f23a69e5df491a0f3c69d397f86ea97d71de6a5e3aa29957d"
           }
         },
-        "excerpt": { "sentences": 1 },
+        "excerpt": { "sentences": 1, "sha256": "ff36742dd52957cdd68293d59a8dbc200eaaddff5cc57d5f30bde2c941b8ab95" },
         "meaning": { "lexeme": "en/oats/noun" },
         "note": "Chosen because Johnson's is the only authored definition on this page."
       },
@@ -129,7 +129,7 @@
             "revision_key": "deba2d994e73498d6108a18bf8a168830783077c1bd833e29e58e05239a69969"
           }
         },
-        "excerpt": { "sentences": 1 },
+        "excerpt": { "sentences": 1, "sha256": "2eb6566c7218b036e7132c72e70a29e0c817f461f31091cca74501a450fa29ac" },
         "meaning": { "lexeme": "en/nepotism/noun" }
       },
       "highlights": []

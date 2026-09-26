@@ -60,21 +60,71 @@ defmodule DevilsDictionaryWeb.WordOpeningLiveTest do
     end
   end
 
-  test "the opening comes before the definitions, and after the headword", ctx do
+  # The #202 audit: CSS `order` put the opening after the headword on screen
+  # while keyboard and screen-reader order still went through the whole rail
+  # first. The document order is now the reading order.
+  test "the document order is the reading order: headword, opening, rail, definitions", ctx do
     {:ok, view, _html} = live(ctx.conn, ~p"/define/love?opening=fixture")
     html = render(view)
 
-    {headword, _} = :binary.match(html, ~s(id="headword"))
-    {opening, _} = :binary.match(html, ~s(id="opening"))
-    {definitions, _} = :binary.match(html, ~s(id="definitions-))
+    order =
+      for marker <- [
+            ~s(id="headword"),
+            ~s(id="opening"),
+            ~s(id="word-rail"),
+            ~s(id="word-stats"),
+            ~s(id="definitions-),
+            ~s(id="page-sources")
+          ],
+          do: html |> :binary.match(marker) |> elem(0)
 
-    assert headword < opening and opening < definitions
+    assert order == Enum.sort(order)
 
-    # Below `lg` the rail and the column are one flex column, so `order` puts
-    # the opening straight after the headword on a phone.
-    assert has_element?(view, "#word-rail.max-lg\\:contents")
-    assert has_element?(view, "#headword.max-lg\\:order-first")
-    assert has_element?(view, "#opening.max-lg\\:-order-1")
+    # The headword now stands on its own, before the opening, not inside the
+    # rail; the rest of the rail keeps its id. One copy of each.
+    refute has_element?(view, "#word-rail #headword")
+    assert html |> String.split(~s(id="headword")) |> length() == 2
+    assert html |> String.split(~s(id="word-rail")) |> length() == 2
+
+    # No CSS reordering is left to disagree with it.
+    refute html =~ "order-first"
+    refute html =~ "-order-1"
+    refute html =~ "max-lg:contents"
+  end
+
+  test "without an opening the page keeps its own layout, headword inside the rail", ctx do
+    {:ok, view, _html} = live(ctx.conn, ~p"/define/love")
+
+    assert has_element?(view, "#word-rail #headword")
+    assert has_element?(view, "#word-rail[class='lg:col-start-1 lg:row-start-1']")
+  end
+
+  test "moving between words never carries one word's selection onto another", ctx do
+    word!(ctx, "rizz", ~w(wiktionary), scope: nil)
+
+    {:ok, view, _html} = live(ctx.conn, ~p"/define/love?opening=fixture")
+    assert has_element?(view, "#opening-lead-text", "temporary insanity")
+
+    render_patch(view, ~p"/define/rizz?opening=fixture")
+    refute has_element?(view, "#opening")
+    assert has_element?(view, "#word-rail #headword")
+
+    render_patch(view, ~p"/define/love?opening=fixture")
+    assert has_element?(view, "#opening-lead-text", "temporary insanity")
+
+    # A reconnect is a fresh mount; it reads the selection again, not a copy.
+    {:ok, again, _html} = live(ctx.conn, ~p"/define/love?opening=fixture")
+    assert has_element?(again, "#opening-highlight-1-title", "Cupid and Psyche")
+  end
+
+  test "the opening's disclosures are closed at first and keep their state across patches",
+       ctx do
+    {:ok, view, _html} = live(ctx.conn, ~p"/define/love?opening=fixture")
+
+    for id <- ~w(opening-lead-why opening-highlight-1-why opening-about) do
+      assert has_element?(view, "details##{id}[phx-mounted]")
+      refute has_element?(view, "details##{id}[open]")
+    end
   end
 
   test "a word no fixture names renders exactly as it does without the parameter", ctx do

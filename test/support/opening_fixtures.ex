@@ -41,6 +41,14 @@ defmodule DevilsDictionary.OpeningFixtures do
     "type" => "quotation"
   }
 
+  @doc "Q8777422's row in the committed `wikidata-famous-v1` manifest."
+  def cupid_and_psyche_row do
+    "priv/artworks/manifests/wikidata-famous-v1.json"
+    |> Manifest.load!()
+    |> Map.fetch!("rows")
+    |> Enum.find(&(&1["qid"] == "Q8777422"))
+  end
+
   def bierce_love_key, do: @bierce_love_key
   def wiktionary_love_key, do: @wiktionary_love_key
   def bierce_love, do: @bierce_love
@@ -113,25 +121,10 @@ defmodule DevilsDictionary.OpeningFixtures do
     concept = concept!("Q316", "love", description: "strong, positive emotion based on affection")
     link!(love, concept, sense: benevolent, confidence: 0.95)
 
-    {:ok, _summary} =
-      Manifest.new("wikidata-famous", [
-        %{
-          "qid" => "Q8777422",
-          "title" => "Cupid and Psyche",
-          "date" => "1798",
-          "sitelinks" => 10,
-          "image_url" => "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c5/Cupid.jpg",
-          "commons_file" => "Psyché et l'Amour - François Gérard.jpg",
-          "credit_line" => "Psyché et l'Amour - François Gérard.jpg · Wikimedia Commons",
-          "creators" => [%{"qid" => "Q163543", "term" => "François Gérard"}],
-          "depicts" => [
-            %{"qid" => "Q316", "term" => "love"},
-            %{"qid" => "Q5011", "term" => "Cupid"},
-            %{"qid" => "Q843382", "term" => "Psyche"}
-          ]
-        }
-      ])
-      |> Seeder.run()
+    # The committed catalog row itself, not a copy written for the test: the
+    # reader checks that what it displays is exactly what the pinned
+    # manifest says, so the seeded row has to be that row.
+    {:ok, _summary} = Manifest.new("wikidata-famous", [cupid_and_psyche_row()]) |> Seeder.run()
 
     %{
       love: love,

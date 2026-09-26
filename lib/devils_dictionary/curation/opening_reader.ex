@@ -15,8 +15,10 @@ defmodule DevilsDictionary.Curation.OpeningReader do
       asks a discovery provider, never calls a model and never writes.
 
   `DevilsDictionary.Curation.ManualFixture` is the Phase 1 implementation and
-  exists for development only. #196's approved-composition reader replaces it
-  without the component or the page changing.
+  exists for development only. #196's approved-composition reader replaces
+  it; the fields that reader adds (configuration and version provenance,
+  #201; structured decisions and history, #203) extend `Opening`, and the
+  component grows with them.
   """
 
   alias DevilsDictionary.Curation.Opening

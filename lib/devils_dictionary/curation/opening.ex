@@ -4,44 +4,63 @@ defmodule DevilsDictionary.Curation.Opening do
   definition and up to three highlights, above the Definitions, examples and
   discovery shelves, which it never changes.
 
-  This struct is the **contract**. `DevilsDictionaryWeb.Opening` renders it and
-  knows nothing else; a reader (`DevilsDictionary.Curation.OpeningReader`)
-  produces it and knows nothing about markup. Phase 1 has one reader, the
-  development-only `DevilsDictionary.Curation.ManualFixture`. Phase 2 adds the
-  reader of #196's approved `editorial_composition_versions`, which returns
-  this same struct with `origin: :published`, and the fixture goes away. The
-  component does not change.
+  This struct is the **contract** between where a selection comes from and
+  how it is shown. `DevilsDictionaryWeb.Opening` renders it and knows nothing
+  else; a reader (`DevilsDictionary.Curation.OpeningReader`) produces it and
+  knows nothing about markup. Phase 1 has one reader, the development-only
+  `DevilsDictionary.Curation.ManualFixture`.
 
   What each field promises:
 
     * `composition` — `%{id, version}` when the selection has an identity:
-      a fixture's key and version today, #196's `editorial_compositions.id` and
-      version number later. Never a URL, never a slug.
+      a fixture's key and version today. Never a URL, never a slug.
     * `origin` — `:fixture` (development, never public) or `:published`.
+    * `configuration` — the resolved curation configuration (#201), a
+      `Configuration`, or `nil`. **`nil` in Phase 1**: a fixture resolves
+      none and no panel ran, and the component says so.
     * `lead` — a `Lead` or `nil`. An honest empty lead is `nil`, not a
       placeholder.
     * `highlights` — zero to three `Highlight`s in position order. Never
       padded: two highlights are two, not three with a gap.
-    * `review` — who selected it, who (if anyone) reviewed it, and what panel
-      took part: a `Review`, whose empty lists mean *nothing recorded*, not
-      *unanimous*.
+    * `review` — who selected it and who, if anyone, reviewed it.
     * `withheld` — items the reader found ineligible at read time (a changed
-      revision, a withdrawn source, a Bierce entry the lead ignored). Each is
-      `%{role, position, reason}`; the item itself is **not** substituted.
+      revision, a drifted catalog row, a disabled source, a Bierce entry the
+      lead ignored). Each is `%{role, position, reason}`; the item itself is
+      **not** substituted.
 
   Every item carries a `Reference` to the durable registry object and the
-  exact revision it was read from, which is what #196 stores. Nothing here is
-  keyed by a discovery result id, and nothing is fetched to fill it.
+  exact revision it was read from. Nothing here is keyed by a discovery
+  result id, and nothing is fetched to fill it.
+
+  ## What later phases add, and where
+
+  The persisted reader will return this struct, but the contract is not
+  finished and the component will change with it. Deliberately absent now,
+  because there is no real data behind them yet:
+
+    * **#196 / #201** — the composition's persisted id and version, the
+      configuration id and version frozen for it, the resolution reason and
+      policy version (the typed `configuration` field is their place), and
+      version provenance such as the originating run.
+    * **#203** — structured decisions and history: the configured and actual
+      panel, per-profile final-round ballots and counts, the human decision
+      and any override with its reason, and links to authorized history,
+      profile and version pages. Typed fields, not text, when they exist.
+    * **#204** — a link to the editorial-method page, once that page exists.
+
+  None of it is invented for a fixture: a fixture has no configuration, no
+  panel and no approval, and the opening shows those absences plainly.
   """
 
   alias DevilsDictionary.Curation.ManualFixture
-  alias DevilsDictionary.Curation.Opening.{Highlight, Lead, Review}
+  alias DevilsDictionary.Curation.Opening.{Configuration, Highlight, Lead, Review}
 
   @max_highlights 3
 
   @enforce_keys [:origin, :review]
   defstruct composition: nil,
             origin: nil,
+            configuration: nil,
             lead: nil,
             highlights: [],
             review: nil,
@@ -56,6 +75,7 @@ defmodule DevilsDictionary.Curation.Opening do
   @type t :: %__MODULE__{
           composition: %{id: term(), version: pos_integer()} | nil,
           origin: :fixture | :published,
+          configuration: Configuration.t() | nil,
           lead: Lead.t() | nil,
           highlights: [Highlight.t()],
           review: Review.t(),
@@ -97,8 +117,8 @@ defmodule DevilsDictionary.Curation.Opening do
   The opening for a built `WordPage`, asked of `reader`; `nil` when there is no
   reader, the page names no word, or the reader has nothing for it.
 
-  Reads the database and nothing else. No provider is asked, no model is
-  called and nothing is written.
+  Reads the database and the committed corpus manifests, nothing else. No
+  provider is asked, no model is called and nothing is written.
   """
   def for_page(_page, nil), do: nil
   def for_page(%{headword: %{lexemes: []}}, _reader), do: nil
