@@ -1,6 +1,6 @@
 # ADR 0004 — Public routing, classification and curated On pages
 
-- **Status:** accepted design, 26 September 2026; production route migration pending.
+- **Status:** accepted design, 26 September 2026. Stage 1 — persistence, ledger and resolver — implemented ([record](../routing/stage-1-foundation.md)); no route is served from it yet, and backfill, reader integration, On editing and publication are pending.
 - **Approval:** the owner accepted the audit recommendations in this conversation and asked for the completed specification and corpus validation.
 - **Owner:** project owner; implementation changes are reviewed through the repository's normal PR process.
 - **Issue:** [Routing before launch](https://github.com/razrfly/dictionary/issues/194).
@@ -12,7 +12,7 @@
 
 Keep permanent local identities, evidence-backed classifications, page identities and allocated public addresses separate. Use eight approved subject families and the separate editorial On role. Borrow semantic meanings from external vocabularies; choose routes through a pinned local policy. No provider response or title change may mutate a published address.
 
-The current implementation work is the **offline reference evaluator and specification**. The next implementation adds persistence, the resolver, reader navigation, metadata and publication controls. No new contextual route is currently deployed.
+The offline reference evaluator and this specification came first. [Stage 1](../routing/stage-1-foundation.md) adds the persistence of §5, the transactional ledger and the resolver of §6. Reader navigation, metadata and publication controls follow in later stages. No new contextual route is currently deployed.
 
 The initial corpus contains incomplete classifications and source pages masquerading as subjects. A correct outcome may be `needs_review`. Coverage means every record receives an explicit disposition; it does not mean every record receives a publishable URL. Every namespace must support known local subjects without requiring a Wikidata identifier.
 
@@ -76,11 +76,11 @@ An `/on/:slug` page is a separately authored treatment with a durable page ID, r
 
 Bind a page to a composition through an explicit, audited relationship between durable IDs, with at most one active binding per page. Validate language and intended scope/membership compatibility; a shared label or URL cannot establish a binding. Preserve both identities across route moves and scope changes. Render only the version selected by the composition publication service and still eligible under its rights/evidence checks. A routing-page approval cannot approve a draft composition or an unaccepted semantic claim.
 
-Define this interface before the first schema implementation. Use actual foreign keys when the composition schema is available. If that work has not landed, defer the binding migration and continue with standalone manual On pages; do not create placeholder composition tables. Persona inference and visit-driven refresh are separately owned by [curated opening delivery](https://github.com/razrfly/dictionary/issues/193) and are not dependencies of the routing foundation.
+Define this interface before the first schema implementation. Use actual foreign keys when the composition schema is available. If that work has not landed, defer the binding migration and continue with standalone manual On pages; do not create placeholder composition tables. The binding table's columns and rules are [recorded with Stage 1](../routing/stage-1-foundation.md#curation-composition-binding-recorded-migration-deferred); its migration waits for #196. Persona inference and visit-driven refresh are separately owned by [curated opening delivery](https://github.com/razrfly/dictionary/issues/193) and are not dependencies of the routing foundation.
 
 ## 5. Persistence contract for the implementation
 
-Use separate page tables; **do not add an On registry object kind** or alter entity kinds to fit URLs.
+Use separate page tables; **do not add an On registry object kind** or alter entity kinds to fit URLs. [Stage 1](../routing/stage-1-foundation.md) implements this table, maps each invariant to its database enforcement and test, and records six implementation decisions (role namespaces, mapped-family allocation, human approvals, one page per target and locale, split pages keeping their address, tombstones for undone allocations).
 
 | Table | Required data and integrity |
 |---|---|
