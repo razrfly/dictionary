@@ -1,0 +1,3119 @@
+{
+ "groups": {
+  "/organizations/the-creatures": [
+   1865800,
+   1866188
+  ],
+  "/people/billy-lee": [
+   1885537,
+   1886848,
+   1887309,
+   1893398,
+   1897961
+  ],
+  "/places/daman": [
+   1846558,
+   1846577
+  ],
+  "/places/mount-tom": [
+   1875911,
+   1877353,
+   1878577,
+   1889047,
+   1892917,
+   1894782
+  ],
+  "/places/vik": [
+   1884890,
+   1885953,
+   1893365,
+   1893414,
+   1893450,
+   1899000,
+   1899664
+  ],
+  "/works/butterfly": [
+   1874255,
+   1874350,
+   1874536,
+   1880172,
+   1885293,
+   1885315,
+   1885840,
+   1886567,
+   1887631,
+   1887935,
+   1888063,
+   1888104,
+   1888474,
+   1888531,
+   1888558,
+   1888562,
+   1888564,
+   1889163,
+   1890422
+  ],
+  "/works/crocodile-tears": [
+   1846395,
+   1878370
+  ],
+  "/works/human": [
+   1873710,
+   1874309,
+   1875568,
+   1886046,
+   1886916,
+   1887382,
+   1887405,
+   1887623,
+   1888085,
+   1888560,
+   1888664,
+   1889379,
+   1889738,
+   1893917,
+   1894469
+  ],
+  "/works/love": [
+   3737584,
+   3739174
+  ],
+  "/works/mona-lisa": [
+   1894610,
+   3734402
+  ],
+  "/works/the-devils-dictionary": [
+   2,
+   3740879
+  ]
+ },
+ "records": [
+  {
+   "address_status": "candidate",
+   "candidate_families": [
+    "people"
+   ],
+   "candidate_path": "/people/ambrose-bierce",
+   "description": "American satirist; author of The Devil's Dictionary (1911).",
+   "disposition": "allocation candidate after classification review confirms the mapping",
+   "family": "people",
+   "label": "Ambrose Bierce",
+   "object_id": 1,
+   "selected_because": [
+    "boundary_example",
+    "named_edge_case"
+   ],
+   "status": "mapped",
+   "stored_kind": "person"
+  },
+  {
+   "address_status": "collision_review",
+   "candidate_families": [
+    "works"
+   ],
+   "candidate_path": "/works/the-devils-dictionary",
+   "description": "",
+   "disposition": "duplicate-identity review first: same name, too little evidence to tell apart",
+   "family": "works",
+   "label": "The Devil's Dictionary",
+   "object_id": 2,
+   "proposed_path": null,
+   "qualifier_evidence": "no description to qualify from",
+   "selected_because": [
+    "boundary_example",
+    "collision_group_member",
+    "named_edge_case"
+   ],
+   "status": "mapped",
+   "stored_kind": "work"
+  },
+  {
+   "address_status": "candidate",
+   "candidate_families": [
+    "works"
+   ],
+   "candidate_path": "/works/project-gutenberg-sharp-972-1911-text",
+   "description": "",
+   "disposition": "allocation candidate after classification review confirms the mapping",
+   "family": "works",
+   "label": "Project Gutenberg #972 (1911 text)",
+   "object_id": 3,
+   "selected_because": [
+    "boundary_example"
+   ],
+   "status": "mapped",
+   "stored_kind": "edition"
+  },
+  {
+   "address_status": "candidate",
+   "candidate_families": [
+    "works"
+   ],
+   "candidate_path": "/works/leme-ver-dot-1-dot-0-2023-transcription-of-the-1755-first-edition",
+   "description": "",
+   "disposition": "allocation candidate after classification review confirms the mapping",
+   "family": "works",
+   "label": "LEME ver. 1.0 (2023) transcription of the 1755 first edition",
+   "object_id": 6,
+   "selected_because": [
+    "boundary_example"
+   ],
+   "status": "mapped",
+   "stored_kind": "edition"
+  },
+  {
+   "address_status": "candidate",
+   "candidate_families": [
+    "nature"
+   ],
+   "candidate_path": "/nature/rissos-dolphin",
+   "description": "species of dolphin",
+   "disposition": "allocation candidate after classification review confirms the mapping",
+   "family": "nature",
+   "label": "Risso's Dolphin",
+   "object_id": 1829391,
+   "selected_because": [
+    "stratified_sample"
+   ],
+   "status": "mapped",
+   "stored_kind": "taxon"
+  },
+  {
+   "address_status": "classification_review",
+   "candidate_families": [
+    "concepts"
+   ],
+   "candidate_path": "/concepts/polish",
+   "description": "West Slavic language",
+   "disposition": "classification review: sole candidate family needs a human decision",
+   "family": null,
+   "label": "Polish",
+   "object_id": 1829906,
+   "selected_because": [
+    "boundary_example",
+    "named_edge_case"
+   ],
+   "status": "needs_review",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "candidate",
+   "candidate_families": [
+    "nature"
+   ],
+   "candidate_path": "/nature/american-plaice",
+   "description": "species of fish",
+   "disposition": "allocation candidate after classification review confirms the mapping",
+   "family": "nature",
+   "label": "American plaice",
+   "object_id": 1830427,
+   "selected_because": [
+    "stratified_sample"
+   ],
+   "status": "mapped",
+   "stored_kind": "taxon"
+  },
+  {
+   "address_status": "not_proposed",
+   "candidate_families": [],
+   "candidate_path": null,
+   "description": "Unix utility that concatenates and lists files",
+   "disposition": "deferred: no family evidence; stays unaddressed and visible",
+   "family": null,
+   "label": "cat",
+   "object_id": 1830738,
+   "selected_because": [
+    "boundary_example"
+   ],
+   "status": "needs_review",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "classification_review",
+   "candidate_families": [
+    "nature"
+   ],
+   "candidate_path": "/nature/cat",
+   "description": "small domesticated carnivorous mammal",
+   "disposition": "classification review: sole candidate family needs a human decision",
+   "family": null,
+   "label": "cat",
+   "object_id": 1830860,
+   "selected_because": [
+    "boundary_example"
+   ],
+   "status": "needs_review",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "candidate",
+   "candidate_families": [
+    "nature"
+   ],
+   "candidate_path": "/nature/human",
+   "description": "any single member of Homo sapiens, unique extant species of the genus Homo",
+   "disposition": "allocation candidate after classification review confirms the mapping",
+   "family": "nature",
+   "label": "human",
+   "object_id": 1831003,
+   "selected_because": [
+    "named_edge_case"
+   ],
+   "status": "mapped",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "classification_review",
+   "candidate_families": [
+    "nature"
+   ],
+   "candidate_path": "/nature/water",
+   "description": "chemical compound whose molecules are formed by two hydrogen atoms and one oxygen atom",
+   "disposition": "classification review: sole candidate family needs a human decision",
+   "family": null,
+   "label": "water",
+   "object_id": 1831199,
+   "selected_because": [
+    "boundary_example"
+   ],
+   "status": "needs_review",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "classification_review",
+   "candidate_families": [
+    "nature"
+   ],
+   "candidate_path": "/nature/mars",
+   "description": "fourth planet from the Solar System, tellurian and orange-red due to iron oxide",
+   "disposition": "classification review: sole candidate family needs a human decision",
+   "family": null,
+   "label": "Mars",
+   "object_id": 1831413,
+   "selected_because": [
+    "boundary_example"
+   ],
+   "status": "needs_review",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "candidate",
+   "candidate_families": [
+    "people"
+   ],
+   "candidate_path": "/people/apar-gupta",
+   "description": "Indian lawyer",
+   "disposition": "allocation candidate after classification review confirms the mapping",
+   "family": "people",
+   "label": "Apar Gupta",
+   "object_id": 1832144,
+   "selected_because": [
+    "stratified_sample"
+   ],
+   "status": "mapped",
+   "stored_kind": "person"
+  },
+  {
+   "address_status": "not_proposed",
+   "candidate_families": [],
+   "candidate_path": null,
+   "description": "Jewish religious male circumcision ceremony performed by a mohel on the eighth day of a male infant's life",
+   "disposition": "deferred: no family evidence; stays unaddressed and visible",
+   "family": null,
+   "label": "brit milah",
+   "object_id": 1833630,
+   "selected_because": [
+    "boundary_example"
+   ],
+   "status": "needs_review",
+   "stored_kind": "event"
+  },
+  {
+   "address_status": "not_proposed",
+   "candidate_families": [],
+   "candidate_path": null,
+   "description": "Wikimedia disambiguation page",
+   "disposition": "excluded: source page; never a subject address (can inform a future choice/collection page, whose namespace is undefined)",
+   "family": null,
+   "label": "Human",
+   "object_id": 1837057,
+   "selected_because": [
+    "named_edge_case"
+   ],
+   "status": "excluded_source_page",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "candidate",
+   "candidate_families": [
+    "places"
+   ],
+   "candidate_path": "/places/mount-everest",
+   "description": "Earth's highest mountain above sea level, located in the Mahalangur Himal sub-range of the Himalayas",
+   "disposition": "allocation candidate after classification review confirms the mapping",
+   "family": "places",
+   "label": "Mount Everest",
+   "object_id": 1838436,
+   "selected_because": [
+    "boundary_example"
+   ],
+   "status": "mapped",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "candidate",
+   "candidate_families": [
+    "subjects"
+   ],
+   "candidate_path": "/subjects/serpentor",
+   "description": "fictional character from the G.I. Joe universe",
+   "disposition": "allocation candidate after classification review confirms the mapping",
+   "family": "subjects",
+   "label": "Serpentor",
+   "object_id": 1841393,
+   "selected_because": [
+    "stratified_sample"
+   ],
+   "status": "mapped",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "candidate",
+   "candidate_families": [
+    "works"
+   ],
+   "candidate_path": "/works/grand-serpent-rising",
+   "description": "2026 studio album by Dimmu Borgir",
+   "disposition": "allocation candidate after classification review confirms the mapping",
+   "family": "works",
+   "label": "Grand Serpent Rising",
+   "object_id": 1841523,
+   "selected_because": [
+    "stratified_sample"
+   ],
+   "status": "mapped",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "candidate",
+   "candidate_families": [
+    "works"
+   ],
+   "candidate_path": "/works/apple",
+   "description": "1990 studio album by Mother Love Bone",
+   "disposition": "allocation candidate after classification review confirms the mapping",
+   "family": "works",
+   "label": "Apple",
+   "object_id": 1841806,
+   "selected_because": [
+    "boundary_example",
+    "named_edge_case"
+   ],
+   "status": "mapped",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "candidate",
+   "candidate_families": [
+    "concepts"
+   ],
+   "candidate_path": "/concepts/tom",
+   "description": "pattern matching language",
+   "disposition": "allocation candidate after classification review confirms the mapping",
+   "family": "concepts",
+   "label": "Tom",
+   "object_id": 1842234,
+   "selected_because": [
+    "stratified_sample"
+   ],
+   "status": "mapped",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "candidate",
+   "candidate_families": [
+    "people"
+   ],
+   "candidate_path": "/people/charles-bombardier",
+   "description": "Canadian industrial designer",
+   "disposition": "allocation candidate after classification review confirms the mapping",
+   "family": "people",
+   "label": "Charles Bombardier",
+   "object_id": 1845018,
+   "selected_because": [
+    "stratified_sample"
+   ],
+   "status": "mapped",
+   "stored_kind": "person"
+  },
+  {
+   "address_status": "candidate",
+   "candidate_families": [
+    "people"
+   ],
+   "candidate_path": "/people/aurelio-voltaire",
+   "description": "Cuban-American musician",
+   "disposition": "allocation candidate after classification review confirms the mapping",
+   "family": "people",
+   "label": "Aurelio Voltaire",
+   "object_id": 1845556,
+   "selected_because": [
+    "boundary_example"
+   ],
+   "status": "mapped",
+   "stored_kind": "person"
+  },
+  {
+   "address_status": "collision_review",
+   "candidate_families": [
+    "works"
+   ],
+   "candidate_path": "/works/crocodile-tears",
+   "description": "2009 novel by Anthony Horowitz",
+   "disposition": "collision review blocked: classification review first",
+   "family": null,
+   "label": "Crocodile Tears",
+   "object_id": 1846395,
+   "proposed_path": null,
+   "qualifier_evidence": "description \"2009 novel by Anthony Horowitz\"",
+   "selected_because": [
+    "boundary_example",
+    "collision_group_member"
+   ],
+   "status": "needs_review",
+   "stored_kind": "work"
+  },
+  {
+   "address_status": "collision_review",
+   "candidate_families": [
+    "places"
+   ],
+   "candidate_path": "/places/daman",
+   "description": "human settlement in Afghanistan",
+   "disposition": "collision review: proposed readable qualifier, needs human approval",
+   "family": "places",
+   "label": "Daman",
+   "object_id": 1846558,
+   "proposed_path": "/places/daman-afghanistan",
+   "qualifier_evidence": "description \"human settlement in Afghanistan\"",
+   "selected_because": [
+    "collision_group_member"
+   ],
+   "status": "mapped",
+   "stored_kind": "place"
+  },
+  {
+   "address_status": "collision_review",
+   "candidate_families": [
+    "places"
+   ],
+   "candidate_path": "/places/daman",
+   "description": "city in India",
+   "disposition": "collision review: proposed readable qualifier, needs human approval",
+   "family": "places",
+   "label": "Daman",
+   "object_id": 1846577,
+   "proposed_path": "/places/daman-india",
+   "qualifier_evidence": "description \"city in India\"",
+   "selected_because": [
+    "collision_group_member",
+    "stratified_sample"
+   ],
+   "status": "mapped",
+   "stored_kind": "place"
+  },
+  {
+   "address_status": "not_proposed",
+   "candidate_families": [],
+   "candidate_path": null,
+   "description": "business process",
+   "disposition": "deferred: no family evidence; stays unaddressed and visible",
+   "family": null,
+   "label": "Call for Bids",
+   "object_id": 1851364,
+   "selected_because": [
+    "boundary_example"
+   ],
+   "status": "needs_review",
+   "stored_kind": "event"
+  },
+  {
+   "address_status": "not_proposed",
+   "candidate_families": [],
+   "candidate_path": null,
+   "description": "military distinction of merit",
+   "disposition": "deferred: no family evidence; stays unaddressed and visible",
+   "family": null,
+   "label": "Mentioned in Despatches",
+   "object_id": 1851553,
+   "selected_because": [
+    "boundary_example"
+   ],
+   "status": "needs_review",
+   "stored_kind": "event"
+  },
+  {
+   "address_status": "classification_review",
+   "candidate_families": [
+    "nature"
+   ],
+   "candidate_path": "/nature/polish",
+   "description": "breed of chicken",
+   "disposition": "classification review: sole candidate family needs a human decision",
+   "family": null,
+   "label": "Polish",
+   "object_id": 1852573,
+   "selected_because": [
+    "boundary_example",
+    "named_edge_case"
+   ],
+   "status": "needs_review",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "not_proposed",
+   "candidate_families": [],
+   "candidate_path": null,
+   "description": "Wikimedia disambiguation page",
+   "disposition": "excluded: source page; never a subject address (can inform a future choice/collection page, whose namespace is undefined)",
+   "family": null,
+   "label": "Polish",
+   "object_id": 1852597,
+   "selected_because": [
+    "boundary_example",
+    "named_edge_case"
+   ],
+   "status": "excluded_source_page",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "candidate",
+   "candidate_families": [
+    "nature"
+   ],
+   "candidate_path": "/nature/yellow-naped-amazon",
+   "description": "species of bird",
+   "disposition": "allocation candidate after classification review confirms the mapping",
+   "family": "nature",
+   "label": "Yellow-naped Amazon",
+   "object_id": 1853183,
+   "selected_because": [
+    "stratified_sample"
+   ],
+   "status": "mapped",
+   "stored_kind": "taxon"
+  },
+  {
+   "address_status": "candidate",
+   "candidate_families": [
+    "nature"
+   ],
+   "candidate_path": "/nature/neafrapus",
+   "description": "bird",
+   "disposition": "allocation candidate after classification review confirms the mapping",
+   "family": "nature",
+   "label": "Neafrapus",
+   "object_id": 1854460,
+   "selected_because": [
+    "stratified_sample"
+   ],
+   "status": "mapped",
+   "stored_kind": "taxon"
+  },
+  {
+   "address_status": "not_proposed",
+   "candidate_families": [],
+   "candidate_path": null,
+   "description": "period of 68 years, spanning from 1948 to 2015, in which Easton Area High School in Easton, Pennsylvania produced at lea",
+   "disposition": "deferred: no family evidence; stays unaddressed and visible",
+   "family": null,
+   "label": "The Streak",
+   "object_id": 1854978,
+   "selected_because": [
+    "boundary_example"
+   ],
+   "status": "needs_review",
+   "stored_kind": "event"
+  },
+  {
+   "address_status": "candidate",
+   "candidate_families": [
+    "nature"
+   ],
+   "candidate_path": "/nature/zeus",
+   "description": "genus of fishes",
+   "disposition": "allocation candidate after classification review confirms the mapping",
+   "family": "nature",
+   "label": "Zeus",
+   "object_id": 1857160,
+   "selected_because": [
+    "boundary_example"
+   ],
+   "status": "mapped",
+   "stored_kind": "taxon"
+  },
+  {
+   "address_status": "classification_review",
+   "candidate_families": [
+    "nature"
+   ],
+   "candidate_path": "/nature/felis-catus",
+   "description": "species of mammal",
+   "disposition": "classification review: sole candidate family needs a human decision",
+   "family": null,
+   "label": "Felis catus",
+   "object_id": 1857525,
+   "selected_because": [
+    "boundary_example"
+   ],
+   "status": "needs_review",
+   "stored_kind": "taxon"
+  },
+  {
+   "address_status": "candidate",
+   "candidate_families": [
+    "nature"
+   ],
+   "candidate_path": "/nature/entosphenus",
+   "description": "genus of lampreys",
+   "disposition": "allocation candidate after classification review confirms the mapping",
+   "family": "nature",
+   "label": "Entosphenus",
+   "object_id": 1860394,
+   "selected_because": [
+    "stratified_sample"
+   ],
+   "status": "mapped",
+   "stored_kind": "taxon"
+  },
+  {
+   "address_status": "candidate",
+   "candidate_families": [
+    "nature"
+   ],
+   "candidate_path": "/nature/arca",
+   "description": "genus of molluscs",
+   "disposition": "allocation candidate after classification review confirms the mapping",
+   "family": "nature",
+   "label": "Arca",
+   "object_id": 1860823,
+   "selected_because": [
+    "stratified_sample"
+   ],
+   "status": "mapped",
+   "stored_kind": "taxon"
+  },
+  {
+   "address_status": "classification_review",
+   "candidate_families": [
+    "subjects"
+   ],
+   "candidate_path": "/subjects/zeus",
+   "description": "Greek god of the sky and king of the gods",
+   "disposition": "classification review: sole candidate family needs a human decision",
+   "family": null,
+   "label": "Zeus",
+   "object_id": 1863456,
+   "selected_because": [
+    "boundary_example"
+   ],
+   "status": "needs_review",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "candidate",
+   "candidate_families": [
+    "subjects"
+   ],
+   "candidate_path": "/subjects/hephaestus",
+   "description": "Greek god of blacksmiths",
+   "disposition": "allocation candidate after classification review confirms the mapping",
+   "family": "subjects",
+   "label": "Hephaestus",
+   "object_id": 1863579,
+   "selected_because": [
+    "stratified_sample"
+   ],
+   "status": "mapped",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "candidate",
+   "candidate_families": [
+    "people"
+   ],
+   "candidate_path": "/people/kaoru-ide",
+   "description": "Japanese architect",
+   "disposition": "allocation candidate after classification review confirms the mapping",
+   "family": "people",
+   "label": "Kaoru Ide",
+   "object_id": 1863885,
+   "selected_because": [
+    "stratified_sample"
+   ],
+   "status": "mapped",
+   "stored_kind": "person"
+  },
+  {
+   "address_status": "candidate",
+   "candidate_families": [
+    "subjects"
+   ],
+   "candidate_path": "/subjects/moros",
+   "description": "Greek spirit of doom",
+   "disposition": "allocation candidate after classification review confirms the mapping",
+   "family": "subjects",
+   "label": "Moros",
+   "object_id": 1863895,
+   "selected_because": [
+    "stratified_sample"
+   ],
+   "status": "mapped",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "not_proposed",
+   "candidate_families": [],
+   "candidate_path": null,
+   "description": "MMA promoter based in Japan",
+   "disposition": "deferred: no family evidence; stays unaddressed and visible",
+   "family": null,
+   "label": "Hero's",
+   "object_id": 1864142,
+   "selected_because": [
+    "boundary_example"
+   ],
+   "status": "needs_review",
+   "stored_kind": "event"
+  },
+  {
+   "address_status": "candidate",
+   "candidate_families": [
+    "works"
+   ],
+   "candidate_path": "/works/the-mandarins",
+   "description": "roman à clef by Simone de Beauvoir",
+   "disposition": "allocation candidate after classification review confirms the mapping",
+   "family": "works",
+   "label": "The Mandarins",
+   "object_id": 1864645,
+   "selected_because": [
+    "stratified_sample"
+   ],
+   "status": "mapped",
+   "stored_kind": "work"
+  },
+  {
+   "address_status": "collision_review",
+   "candidate_families": [
+    "organizations"
+   ],
+   "candidate_path": "/organizations/the-creatures",
+   "description": "Australian garage rock band",
+   "disposition": "collision review: proposed readable qualifier, needs human approval",
+   "family": "organizations",
+   "label": "The Creatures",
+   "object_id": 1865800,
+   "proposed_path": "/organizations/the-creatures-australian-band",
+   "qualifier_evidence": "description \"Australian garage rock band\"",
+   "selected_because": [
+    "collision_group_member",
+    "stratified_sample"
+   ],
+   "status": "mapped",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "collision_review",
+   "candidate_families": [
+    "organizations"
+   ],
+   "candidate_path": "/organizations/the-creatures",
+   "description": "British rock group",
+   "disposition": "collision review: proposed readable qualifier, needs human approval",
+   "family": "organizations",
+   "label": "The Creatures",
+   "object_id": 1866188,
+   "proposed_path": "/organizations/the-creatures-british-group",
+   "qualifier_evidence": "description \"British rock group\"",
+   "selected_because": [
+    "collision_group_member"
+   ],
+   "status": "mapped",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "classification_review",
+   "candidate_families": [
+    "concepts"
+   ],
+   "candidate_path": "/concepts/love",
+   "description": "strong, positive emotion based on affection",
+   "disposition": "classification review: sole candidate family needs a human decision",
+   "family": null,
+   "label": "love",
+   "object_id": 1867856,
+   "selected_because": [
+    "boundary_example",
+    "named_edge_case"
+   ],
+   "status": "needs_review",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "candidate",
+   "candidate_families": [
+    "concepts"
+   ],
+   "candidate_path": "/concepts/draco",
+   "description": "programming language",
+   "disposition": "allocation candidate after classification review confirms the mapping",
+   "family": "concepts",
+   "label": "Draco",
+   "object_id": 1869705,
+   "selected_because": [
+    "stratified_sample"
+   ],
+   "status": "mapped",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "candidate",
+   "candidate_families": [
+    "places"
+   ],
+   "candidate_path": "/places/sumbar-river",
+   "description": "river",
+   "disposition": "allocation candidate after classification review confirms the mapping",
+   "family": "places",
+   "label": "Sumbar River",
+   "object_id": 1870498,
+   "selected_because": [
+    "stratified_sample"
+   ],
+   "status": "mapped",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "candidate",
+   "candidate_families": [
+    "subjects"
+   ],
+   "candidate_path": "/subjects/ora",
+   "description": "Albanian mythological figure associated with human destiny",
+   "disposition": "allocation candidate after classification review confirms the mapping",
+   "family": "subjects",
+   "label": "Ora",
+   "object_id": 1871085,
+   "selected_because": [
+    "stratified_sample"
+   ],
+   "status": "mapped",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "candidate",
+   "candidate_families": [
+    "subjects"
+   ],
+   "candidate_path": "/subjects/planē",
+   "description": "personification of error in Ancient Greek mythology",
+   "disposition": "allocation candidate after classification review confirms the mapping",
+   "family": "subjects",
+   "label": "Planē",
+   "object_id": 1871190,
+   "selected_because": [
+    "stratified_sample"
+   ],
+   "status": "mapped",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "candidate",
+   "candidate_families": [
+    "organizations"
+   ],
+   "candidate_path": "/organizations/shan-food-industries",
+   "description": "shan foods pvt limited",
+   "disposition": "allocation candidate after classification review confirms the mapping",
+   "family": "organizations",
+   "label": "Shan Food Industries",
+   "object_id": 1871286,
+   "selected_because": [
+    "stratified_sample"
+   ],
+   "status": "mapped",
+   "stored_kind": "organization"
+  },
+  {
+   "address_status": "collision_review",
+   "candidate_families": [
+    "works"
+   ],
+   "candidate_path": "/works/human",
+   "description": "2006 studio album by Leo Ku",
+   "disposition": "collision review: proposed readable qualifier, needs human approval",
+   "family": "works",
+   "label": "Human",
+   "object_id": 1873710,
+   "proposed_path": "/works/human-2006-album",
+   "qualifier_evidence": "description \"2006 studio album by Leo Ku\"",
+   "selected_because": [
+    "collision_group_member",
+    "named_edge_case"
+   ],
+   "status": "mapped",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "classification_review",
+   "candidate_families": [
+    "places"
+   ],
+   "candidate_path": "/places/united-states",
+   "description": "country located primarily in North America",
+   "disposition": "classification review: sole candidate family needs a human decision",
+   "family": null,
+   "label": "United States",
+   "object_id": 1873905,
+   "selected_because": [
+    "boundary_example"
+   ],
+   "status": "needs_review",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "collision_review",
+   "candidate_families": [
+    "works"
+   ],
+   "candidate_path": "/works/butterfly",
+   "description": "2015 film by Marco Berger",
+   "disposition": "collision review: proposed readable qualifier, needs human approval",
+   "family": "works",
+   "label": "Butterfly",
+   "object_id": 1874255,
+   "proposed_path": "/works/butterfly-2015-film",
+   "qualifier_evidence": "description \"2015 film by Marco Berger\"",
+   "selected_because": [
+    "collision_group_member"
+   ],
+   "status": "mapped",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "collision_review",
+   "candidate_families": [
+    "works"
+   ],
+   "candidate_path": "/works/human",
+   "description": "2015 film by Yann Arthus-Bertrand",
+   "disposition": "collision review: proposed readable qualifier, needs human approval",
+   "family": "works",
+   "label": "Human",
+   "object_id": 1874309,
+   "proposed_path": "/works/human-2015-film",
+   "qualifier_evidence": "description \"2015 film by Yann Arthus-Bertrand\"",
+   "selected_because": [
+    "collision_group_member",
+    "named_edge_case"
+   ],
+   "status": "mapped",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "collision_review",
+   "candidate_families": [
+    "works"
+   ],
+   "candidate_path": "/works/butterfly",
+   "description": "1979 studio album by Kimiko Kasai ft. Herbie Hancock",
+   "disposition": "collision review: proposed readable qualifier, needs human approval",
+   "family": "works",
+   "label": "Butterfly",
+   "object_id": 1874350,
+   "proposed_path": "/works/butterfly-1979-album",
+   "qualifier_evidence": "description \"1979 studio album by Kimiko Kasai ft. Herbie Hancock\"",
+   "selected_because": [
+    "collision_group_member"
+   ],
+   "status": "mapped",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "not_proposed",
+   "candidate_families": [],
+   "candidate_path": null,
+   "description": "2025 single by Robbie Williams featuring Jesse & Joy",
+   "disposition": "deferred: no family evidence; stays unaddressed and visible",
+   "family": null,
+   "label": "Human",
+   "object_id": 1874438,
+   "selected_because": [
+    "named_edge_case"
+   ],
+   "status": "needs_review",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "collision_review",
+   "candidate_families": [
+    "works"
+   ],
+   "candidate_path": "/works/butterfly",
+   "description": "2009 studio album by Jolin Tsai",
+   "disposition": "collision review: proposed readable qualifier, needs human approval",
+   "family": "works",
+   "label": "Butterfly",
+   "object_id": 1874536,
+   "proposed_path": "/works/butterfly-2009-album",
+   "qualifier_evidence": "description \"2009 studio album by Jolin Tsai\"",
+   "selected_because": [
+    "collision_group_member"
+   ],
+   "status": "mapped",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "not_proposed",
+   "candidate_families": [],
+   "candidate_path": null,
+   "description": "Dutch broadcaster",
+   "disposition": "deferred: no family evidence; stays unaddressed and visible",
+   "family": null,
+   "label": "Human",
+   "object_id": 1874795,
+   "selected_because": [
+    "named_edge_case"
+   ],
+   "status": "needs_review",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "not_proposed",
+   "candidate_families": [],
+   "candidate_path": null,
+   "description": "village in Iran",
+   "disposition": "deferred: no family evidence; stays unaddressed and visible",
+   "family": null,
+   "label": "Human",
+   "object_id": 1874835,
+   "selected_because": [
+    "named_edge_case"
+   ],
+   "status": "needs_review",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "not_proposed",
+   "candidate_families": [],
+   "candidate_path": null,
+   "description": "2001 song by Goldfrapp",
+   "disposition": "deferred: no family evidence; stays unaddressed and visible",
+   "family": null,
+   "label": "Human",
+   "object_id": 1874926,
+   "selected_because": [
+    "named_edge_case"
+   ],
+   "status": "needs_review",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "not_proposed",
+   "candidate_families": [],
+   "candidate_path": null,
+   "description": "Indian Television Series",
+   "disposition": "deferred: no family evidence; stays unaddressed and visible",
+   "family": null,
+   "label": "Human",
+   "object_id": 1875041,
+   "selected_because": [
+    "named_edge_case"
+   ],
+   "status": "needs_review",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "not_proposed",
+   "candidate_families": [],
+   "candidate_path": null,
+   "description": "2024 song by Lenny Kravitz",
+   "disposition": "deferred: no family evidence; stays unaddressed and visible",
+   "family": null,
+   "label": "Human",
+   "object_id": 1875074,
+   "selected_because": [
+    "named_edge_case"
+   ],
+   "status": "needs_review",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "not_proposed",
+   "candidate_families": [],
+   "candidate_path": null,
+   "description": "2013 single by Christina Perri",
+   "disposition": "deferred: no family evidence; stays unaddressed and visible",
+   "family": null,
+   "label": "Human",
+   "object_id": 1875103,
+   "selected_because": [
+    "named_edge_case"
+   ],
+   "status": "needs_review",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "collision_review",
+   "candidate_families": [
+    "works"
+   ],
+   "candidate_path": "/works/human",
+   "description": "2014 album by Masaharu Fukuyama",
+   "disposition": "collision review: proposed readable qualifier, needs human approval",
+   "family": "works",
+   "label": "Human",
+   "object_id": 1875568,
+   "proposed_path": "/works/human-2014-album-masaharu-fukuyama",
+   "qualifier_evidence": "description \"2014 album by Masaharu Fukuyama\"",
+   "selected_because": [
+    "collision_group_member",
+    "named_edge_case"
+   ],
+   "status": "mapped",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "not_proposed",
+   "candidate_families": [],
+   "candidate_path": null,
+   "description": "2016 song by Rag'n'Bone Man",
+   "disposition": "deferred: no family evidence; stays unaddressed and visible",
+   "family": null,
+   "label": "Human",
+   "object_id": 1875666,
+   "selected_because": [
+    "named_edge_case"
+   ],
+   "status": "needs_review",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "candidate",
+   "candidate_families": [
+    "works"
+   ],
+   "candidate_path": "/works/cat",
+   "description": "Punjabi-language TV series (2022)",
+   "disposition": "allocation candidate after classification review confirms the mapping",
+   "family": "works",
+   "label": "CAT",
+   "object_id": 1875719,
+   "selected_because": [
+    "boundary_example"
+   ],
+   "status": "mapped",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "collision_review",
+   "candidate_families": [
+    "places"
+   ],
+   "candidate_path": "/places/mount-tom",
+   "description": "mountain in Massachusetts, United States of America",
+   "disposition": "collision review: proposed readable qualifier, needs human approval",
+   "family": "places",
+   "label": "Mount Tom",
+   "object_id": 1875911,
+   "proposed_path": "/places/mount-tom-massachusetts",
+   "qualifier_evidence": "description \"mountain in Massachusetts, United States of America\"",
+   "selected_because": [
+    "collision_group_member"
+   ],
+   "status": "mapped",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "classification_review",
+   "candidate_families": [
+    "events"
+   ],
+   "candidate_path": "/events/1948-ashgabat-earthquake",
+   "description": "earthquake in Turkmenistan",
+   "disposition": "classification review: sole candidate family needs a human decision",
+   "family": null,
+   "label": "1948 Ashgabat earthquake",
+   "object_id": 1876187,
+   "selected_because": [
+    "boundary_example"
+   ],
+   "status": "needs_review",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "candidate",
+   "candidate_families": [
+    "places"
+   ],
+   "candidate_path": "/places/purity-mountain",
+   "description": "mountain in British Columbia, Canada",
+   "disposition": "allocation candidate after classification review confirms the mapping",
+   "family": "places",
+   "label": "Purity Mountain",
+   "object_id": 1876594,
+   "selected_because": [
+    "stratified_sample"
+   ],
+   "status": "mapped",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "classification_review",
+   "candidate_families": [
+    "nature"
+   ],
+   "candidate_path": "/nature/laris",
+   "description": "genus of insects",
+   "disposition": "classification review: sole candidate family needs a human decision",
+   "family": null,
+   "label": "Laris",
+   "object_id": 1877206,
+   "selected_because": [
+    "boundary_example"
+   ],
+   "status": "needs_review",
+   "stored_kind": "taxon"
+  },
+  {
+   "address_status": "collision_review",
+   "candidate_families": [
+    "places"
+   ],
+   "candidate_path": "/places/mount-tom",
+   "description": "mountain in Woodstock, Vermont, United States of America",
+   "disposition": "collision review: proposed readable qualifier, needs human approval",
+   "family": "places",
+   "label": "Mount Tom",
+   "object_id": 1877353,
+   "proposed_path": "/places/mount-tom-woodstock",
+   "qualifier_evidence": "description \"mountain in Woodstock, Vermont, United States of America\"",
+   "selected_because": [
+    "collision_group_member"
+   ],
+   "status": "mapped",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "not_proposed",
+   "candidate_families": [],
+   "candidate_path": null,
+   "description": "ceremonial or honorific aircraft flight",
+   "disposition": "deferred: no family evidence; stays unaddressed and visible",
+   "family": null,
+   "label": "flypast",
+   "object_id": 1877688,
+   "selected_because": [
+    "boundary_example"
+   ],
+   "status": "needs_review",
+   "stored_kind": "event"
+  },
+  {
+   "address_status": "candidate",
+   "candidate_families": [
+    "concepts"
+   ],
+   "candidate_path": "/concepts/secure-operations-language",
+   "description": "domain-specific synchronous programming language for developing distributed applications",
+   "disposition": "allocation candidate after classification review confirms the mapping",
+   "family": "concepts",
+   "label": "Secure Operations Language",
+   "object_id": 1878047,
+   "selected_because": [
+    "stratified_sample"
+   ],
+   "status": "mapped",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "collision_review",
+   "candidate_families": [
+    "works"
+   ],
+   "candidate_path": "/works/crocodile-tears",
+   "description": "2024 film directed by Tumpal Tampubolon",
+   "disposition": "collision review: proposed readable qualifier, needs human approval",
+   "family": "works",
+   "label": "Crocodile Tears",
+   "object_id": 1878370,
+   "proposed_path": "/works/crocodile-tears-2024-film",
+   "qualifier_evidence": "description \"2024 film directed by Tumpal Tampubolon\"",
+   "selected_because": [
+    "collision_group_member"
+   ],
+   "status": "mapped",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "collision_review",
+   "candidate_families": [
+    "places"
+   ],
+   "candidate_path": "/places/mount-tom",
+   "description": "mountain in New Hampshire, United States of America",
+   "disposition": "collision review: proposed readable qualifier, needs human approval",
+   "family": "places",
+   "label": "Mount Tom",
+   "object_id": 1878577,
+   "proposed_path": "/places/mount-tom-new-hampshire",
+   "qualifier_evidence": "description \"mountain in New Hampshire, United States of America\"",
+   "selected_because": [
+    "collision_group_member",
+    "stratified_sample"
+   ],
+   "status": "mapped",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "not_proposed",
+   "candidate_families": [],
+   "candidate_path": null,
+   "description": "Dutch day of remembrance of war dead",
+   "disposition": "deferred: no family evidence; stays unaddressed and visible",
+   "family": null,
+   "label": "Remembrance of the Dead",
+   "object_id": 1878772,
+   "selected_because": [
+    "boundary_example"
+   ],
+   "status": "needs_review",
+   "stored_kind": "event"
+  },
+  {
+   "address_status": "candidate",
+   "candidate_families": [
+    "events"
+   ],
+   "candidate_path": "/events/apollo-8",
+   "description": "second crewed flight of the United States Apollo program",
+   "disposition": "allocation candidate after classification review confirms the mapping",
+   "family": "events",
+   "label": "Apollo 8",
+   "object_id": 1878949,
+   "selected_because": [
+    "stratified_sample"
+   ],
+   "status": "mapped",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "classification_review",
+   "candidate_families": [
+    "nature"
+   ],
+   "candidate_path": "/nature/mercury",
+   "description": "first planet from the Solar System and smallest among all, tellurian and with extreme temperatures",
+   "disposition": "classification review: sole candidate family needs a human decision",
+   "family": null,
+   "label": "Mercury",
+   "object_id": 1879477,
+   "selected_because": [
+    "boundary_example",
+    "named_edge_case"
+   ],
+   "status": "needs_review",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "collision_review",
+   "candidate_families": [
+    "works"
+   ],
+   "candidate_path": "/works/butterfly",
+   "description": "2000 American documentary film",
+   "disposition": "collision review: proposed readable qualifier, needs human approval",
+   "family": "works",
+   "label": "Butterfly",
+   "object_id": 1880172,
+   "proposed_path": "/works/butterfly-2000-film",
+   "qualifier_evidence": "description \"2000 American documentary film\"",
+   "selected_because": [
+    "collision_group_member"
+   ],
+   "status": "mapped",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "candidate",
+   "candidate_families": [
+    "organizations"
+   ],
+   "candidate_path": "/organizations/but",
+   "description": "French retail store brand",
+   "disposition": "allocation candidate after classification review confirms the mapping",
+   "family": "organizations",
+   "label": "But",
+   "object_id": 1880893,
+   "selected_because": [
+    "stratified_sample"
+   ],
+   "status": "mapped",
+   "stored_kind": "organization"
+  },
+  {
+   "address_status": "candidate",
+   "candidate_families": [
+    "works"
+   ],
+   "candidate_path": "/works/wicked-for-good",
+   "description": "2025 film directed by Jon M. Chu",
+   "disposition": "allocation candidate after classification review confirms the mapping",
+   "family": "works",
+   "label": "Wicked: For Good",
+   "object_id": 1882172,
+   "selected_because": [
+    "stratified_sample"
+   ],
+   "status": "mapped",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "candidate",
+   "candidate_families": [
+    "places"
+   ],
+   "candidate_path": "/places/maran-burma",
+   "description": "human settlement in Myanmar",
+   "disposition": "allocation candidate after classification review confirms the mapping",
+   "family": "places",
+   "label": "Maran, Burma",
+   "object_id": 1884171,
+   "selected_because": [
+    "stratified_sample"
+   ],
+   "status": "mapped",
+   "stored_kind": "place"
+  },
+  {
+   "address_status": "collision_review",
+   "candidate_families": [
+    "places"
+   ],
+   "candidate_path": "/places/vik",
+   "description": "village in Vestnes, Norway",
+   "disposition": "collision review: proposed readable qualifier, needs human approval",
+   "family": "places",
+   "label": "Vik",
+   "object_id": 1884890,
+   "proposed_path": "/places/vik-vestnes",
+   "qualifier_evidence": "description \"village in Vestnes, Norway\"",
+   "selected_because": [
+    "collision_group_member"
+   ],
+   "status": "mapped",
+   "stored_kind": "place"
+  },
+  {
+   "address_status": "candidate",
+   "candidate_families": [
+    "concepts"
+   ],
+   "candidate_path": "/concepts/elan",
+   "description": "educational programming language for learning and teaching systematic programming",
+   "disposition": "allocation candidate after classification review confirms the mapping",
+   "family": "concepts",
+   "label": "ELAN",
+   "object_id": 1885191,
+   "selected_because": [
+    "stratified_sample"
+   ],
+   "status": "mapped",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "not_proposed",
+   "candidate_families": [],
+   "candidate_path": null,
+   "description": "family name",
+   "disposition": "deferred: no family evidence; stays unaddressed and visible",
+   "family": null,
+   "label": "Human",
+   "object_id": 1885230,
+   "selected_because": [
+    "named_edge_case"
+   ],
+   "status": "needs_review",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "not_proposed",
+   "candidate_families": [],
+   "candidate_path": null,
+   "description": "song written and composed by Oscar Zia, Victor Thell and Maria Smith, originally performed by Oscar Zia at Melodifestiva",
+   "disposition": "deferred: no family evidence; stays unaddressed and visible",
+   "family": null,
+   "label": "Human",
+   "object_id": 1885264,
+   "selected_because": [
+    "named_edge_case"
+   ],
+   "status": "needs_review",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "collision_review",
+   "candidate_families": [
+    "works"
+   ],
+   "candidate_path": "/works/butterfly",
+   "description": "1997 album by Mariah Carey",
+   "disposition": "collision review: proposed readable qualifier, needs human approval",
+   "family": "works",
+   "label": "Butterfly",
+   "object_id": 1885293,
+   "proposed_path": "/works/butterfly-1997-album",
+   "qualifier_evidence": "description \"1997 album by Mariah Carey\"",
+   "selected_because": [
+    "collision_group_member"
+   ],
+   "status": "mapped",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "not_proposed",
+   "candidate_families": [],
+   "candidate_path": null,
+   "description": "2022 single by Cody Johnson",
+   "disposition": "deferred: no family evidence; stays unaddressed and visible",
+   "family": null,
+   "label": "Human",
+   "object_id": 1885309,
+   "selected_because": [
+    "named_edge_case"
+   ],
+   "status": "needs_review",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "collision_review",
+   "candidate_families": [
+    "works"
+   ],
+   "candidate_path": "/works/butterfly",
+   "description": "2012 studio album by L'Arc-en-Ciel",
+   "disposition": "collision review: proposed readable qualifier, needs human approval",
+   "family": "works",
+   "label": "Butterfly",
+   "object_id": 1885315,
+   "proposed_path": "/works/butterfly-2012-album",
+   "qualifier_evidence": "description \"2012 studio album by L'Arc-en-Ciel\"",
+   "selected_because": [
+    "collision_group_member"
+   ],
+   "status": "mapped",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "not_proposed",
+   "candidate_families": [],
+   "candidate_path": null,
+   "description": "serial killings in Spain",
+   "disposition": "deferred: no family evidence; stays unaddressed and visible",
+   "family": null,
+   "label": "Del Águila family killings",
+   "object_id": 1885503,
+   "selected_because": [
+    "boundary_example"
+   ],
+   "status": "needs_review",
+   "stored_kind": "event"
+  },
+  {
+   "address_status": "collision_review",
+   "candidate_families": [
+    "people"
+   ],
+   "candidate_path": "/people/billy-lee",
+   "description": "Irish jockey",
+   "disposition": "collision review: proposed readable qualifier, needs human approval",
+   "family": "people",
+   "label": "Billy Lee",
+   "object_id": 1885537,
+   "proposed_path": "/people/billy-lee-irish-jockey",
+   "qualifier_evidence": "description \"Irish jockey\"",
+   "selected_because": [
+    "collision_group_member"
+   ],
+   "status": "mapped",
+   "stored_kind": "person"
+  },
+  {
+   "address_status": "not_proposed",
+   "candidate_families": [],
+   "candidate_path": null,
+   "description": "2010 EP by Darren Criss",
+   "disposition": "deferred: no family evidence; stays unaddressed and visible",
+   "family": null,
+   "label": "Human",
+   "object_id": 1885695,
+   "selected_because": [
+    "named_edge_case"
+   ],
+   "status": "needs_review",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "collision_review",
+   "candidate_families": [
+    "works"
+   ],
+   "candidate_path": "/works/butterfly",
+   "description": "2023 Indian Marathi-language drama film directed by Meera Welankar",
+   "disposition": "collision review: proposed readable qualifier, needs human approval",
+   "family": "works",
+   "label": "Butterfly",
+   "object_id": 1885840,
+   "proposed_path": "/works/butterfly-2023-film",
+   "qualifier_evidence": "description \"2023 Indian Marathi-language drama film directed by Meera Welankar\"",
+   "selected_because": [
+    "collision_group_member"
+   ],
+   "status": "mapped",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "collision_review",
+   "candidate_families": [
+    "places"
+   ],
+   "candidate_path": "/places/vik",
+   "description": "settlement in Sømna Municipality, Norway",
+   "disposition": "collision review blocked: classification review first",
+   "family": null,
+   "label": "Vik",
+   "object_id": 1885953,
+   "proposed_path": null,
+   "qualifier_evidence": "description \"settlement in Sømna Municipality, Norway\"",
+   "selected_because": [
+    "collision_group_member"
+   ],
+   "status": "needs_review",
+   "stored_kind": "place"
+  },
+  {
+   "address_status": "collision_review",
+   "candidate_families": [
+    "works"
+   ],
+   "candidate_path": "/works/human",
+   "description": "2014 album by Max Cooper",
+   "disposition": "collision review: proposed readable qualifier, needs human approval",
+   "family": "works",
+   "label": "Human",
+   "object_id": 1886046,
+   "proposed_path": "/works/human-2014-album-max-cooper",
+   "qualifier_evidence": "description \"2014 album by Max Cooper\"",
+   "selected_because": [
+    "collision_group_member",
+    "named_edge_case"
+   ],
+   "status": "mapped",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "candidate",
+   "candidate_families": [
+    "organizations"
+   ],
+   "candidate_path": "/organizations/martins-famous-pastry-shoppe-inc-dot",
+   "description": "bakeries of the United States",
+   "disposition": "allocation candidate after classification review confirms the mapping",
+   "family": "organizations",
+   "label": "Martin's Famous Pastry Shoppe, Inc.",
+   "object_id": 1886465,
+   "selected_because": [
+    "stratified_sample"
+   ],
+   "status": "mapped",
+   "stored_kind": "organization"
+  },
+  {
+   "address_status": "collision_review",
+   "candidate_families": [
+    "works"
+   ],
+   "candidate_path": "/works/butterfly",
+   "description": "2004 Hong Kong film by Yan Yan Mak",
+   "disposition": "collision review: proposed readable qualifier, needs human approval",
+   "family": "works",
+   "label": "Butterfly",
+   "object_id": 1886567,
+   "proposed_path": "/works/butterfly-2004-film",
+   "qualifier_evidence": "description \"2004 Hong Kong film by Yan Yan Mak\"",
+   "selected_because": [
+    "collision_group_member"
+   ],
+   "status": "mapped",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "collision_review",
+   "candidate_families": [
+    "people"
+   ],
+   "candidate_path": "/people/billy-lee",
+   "description": "Limerick Gaelic footballer and manager",
+   "disposition": "collision review: proposed readable qualifier, needs human approval",
+   "family": "people",
+   "label": "Billy Lee",
+   "object_id": 1886848,
+   "proposed_path": "/people/billy-lee-footballer-manager",
+   "qualifier_evidence": "description \"Limerick Gaelic footballer and manager\"",
+   "selected_because": [
+    "collision_group_member"
+   ],
+   "status": "mapped",
+   "stored_kind": "person"
+  },
+  {
+   "address_status": "not_proposed",
+   "candidate_families": [],
+   "candidate_path": null,
+   "description": "crowd crush in Glasgow, 1849",
+   "disposition": "deferred: no family evidence; stays unaddressed and visible",
+   "family": null,
+   "label": "Theatre Royal disaster",
+   "object_id": 1886855,
+   "selected_because": [
+    "boundary_example"
+   ],
+   "status": "needs_review",
+   "stored_kind": "event"
+  },
+  {
+   "address_status": "collision_review",
+   "candidate_families": [
+    "works"
+   ],
+   "candidate_path": "/works/human",
+   "description": "2008 studio album by Brandy",
+   "disposition": "collision review: proposed readable qualifier, needs human approval",
+   "family": "works",
+   "label": "Human",
+   "object_id": 1886916,
+   "proposed_path": "/works/human-2008-album",
+   "qualifier_evidence": "description \"2008 studio album by Brandy\"",
+   "selected_because": [
+    "collision_group_member",
+    "named_edge_case"
+   ],
+   "status": "mapped",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "not_proposed",
+   "candidate_families": [],
+   "candidate_path": null,
+   "description": "2026 death in Delta state, Nigeria",
+   "disposition": "deferred: no family evidence; stays unaddressed and visible",
+   "family": null,
+   "label": "Killing of Mene Ogidi",
+   "object_id": 1886941,
+   "selected_because": [
+    "boundary_example"
+   ],
+   "status": "needs_review",
+   "stored_kind": "event"
+  },
+  {
+   "address_status": "not_proposed",
+   "candidate_families": [],
+   "candidate_path": null,
+   "description": "episode of Stargate Universe (S1 E14)",
+   "disposition": "deferred: no family evidence; stays unaddressed and visible",
+   "family": null,
+   "label": "Human",
+   "object_id": 1886986,
+   "selected_because": [
+    "named_edge_case"
+   ],
+   "status": "needs_review",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "candidate",
+   "candidate_families": [
+    "organizations"
+   ],
+   "candidate_path": "/organizations/human",
+   "description": "death metal band from New Zealand",
+   "disposition": "allocation candidate after classification review confirms the mapping",
+   "family": "organizations",
+   "label": "Human",
+   "object_id": 1887070,
+   "selected_because": [
+    "named_edge_case"
+   ],
+   "status": "mapped",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "collision_review",
+   "candidate_families": [
+    "people"
+   ],
+   "candidate_path": "/people/billy-lee",
+   "description": "actor (1929-1989)",
+   "disposition": "collision review: proposed readable qualifier, needs human approval",
+   "family": "people",
+   "label": "Billy Lee",
+   "object_id": 1887309,
+   "proposed_path": "/people/billy-lee-actor",
+   "qualifier_evidence": "description \"actor (1929-1989)\"",
+   "selected_because": [
+    "collision_group_member"
+   ],
+   "status": "mapped",
+   "stored_kind": "person"
+  },
+  {
+   "address_status": "not_proposed",
+   "candidate_families": [],
+   "candidate_path": null,
+   "description": "original song written and composed by Jimmy Jam and Terry Lewis; first recorded by The Human League",
+   "disposition": "deferred: no family evidence; stays unaddressed and visible",
+   "family": null,
+   "label": "Human",
+   "object_id": 1887379,
+   "selected_because": [
+    "named_edge_case"
+   ],
+   "status": "needs_review",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "collision_review",
+   "candidate_families": [
+    "works"
+   ],
+   "candidate_path": "/works/human",
+   "description": "2021 album by OneRepublic",
+   "disposition": "collision review: proposed readable qualifier, needs human approval",
+   "family": "works",
+   "label": "Human",
+   "object_id": 1887382,
+   "proposed_path": "/works/human-2021-album-onerepublic",
+   "qualifier_evidence": "description \"2021 album by OneRepublic\"",
+   "selected_because": [
+    "collision_group_member",
+    "named_edge_case"
+   ],
+   "status": "mapped",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "collision_review",
+   "candidate_families": [
+    "works"
+   ],
+   "candidate_path": "/works/human",
+   "description": "1971 film directed by Gustavo Alatriste",
+   "disposition": "collision review: proposed readable qualifier, needs human approval",
+   "family": "works",
+   "label": "Human",
+   "object_id": 1887405,
+   "proposed_path": "/works/human-1971-film",
+   "qualifier_evidence": "description \"1971 film directed by Gustavo Alatriste\"",
+   "selected_because": [
+    "collision_group_member",
+    "named_edge_case"
+   ],
+   "status": "mapped",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "collision_review",
+   "candidate_families": [
+    "works"
+   ],
+   "candidate_path": "/works/human",
+   "description": "2021 studio album by The Veronicas",
+   "disposition": "collision review: proposed readable qualifier, needs human approval",
+   "family": "works",
+   "label": "Human",
+   "object_id": 1887623,
+   "proposed_path": "/works/human-2021-album-the-veronicas",
+   "qualifier_evidence": "description \"2021 studio album by The Veronicas\"",
+   "selected_because": [
+    "collision_group_member",
+    "named_edge_case"
+   ],
+   "status": "mapped",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "collision_review",
+   "candidate_families": [
+    "works"
+   ],
+   "candidate_path": "/works/butterfly",
+   "description": "2022 film directed by Ghanta Satish Babu",
+   "disposition": "collision review: proposed readable qualifier, needs human approval",
+   "family": "works",
+   "label": "Butterfly",
+   "object_id": 1887631,
+   "proposed_path": "/works/butterfly-2022-film",
+   "qualifier_evidence": "description \"2022 film directed by Ghanta Satish Babu\"",
+   "selected_because": [
+    "collision_group_member"
+   ],
+   "status": "mapped",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "not_proposed",
+   "candidate_families": [],
+   "candidate_path": null,
+   "description": "2008 song by The Killers",
+   "disposition": "deferred: no family evidence; stays unaddressed and visible",
+   "family": null,
+   "label": "Human",
+   "object_id": 1887925,
+   "selected_because": [
+    "named_edge_case"
+   ],
+   "status": "needs_review",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "collision_review",
+   "candidate_families": [
+    "works"
+   ],
+   "candidate_path": "/works/butterfly",
+   "description": "2010 album by Sara Tunes",
+   "disposition": "collision review: proposed readable qualifier, needs human approval",
+   "family": "works",
+   "label": "Butterfly",
+   "object_id": 1887935,
+   "proposed_path": "/works/butterfly-2010-album",
+   "qualifier_evidence": "description \"2010 album by Sara Tunes\"",
+   "selected_because": [
+    "collision_group_member"
+   ],
+   "status": "mapped",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "collision_review",
+   "candidate_families": [
+    "works"
+   ],
+   "candidate_path": "/works/butterfly",
+   "description": "2017 studio album by Natalie Merchant",
+   "disposition": "collision review: proposed readable qualifier, needs human approval",
+   "family": "works",
+   "label": "Butterfly",
+   "object_id": 1888063,
+   "proposed_path": "/works/butterfly-2017-album",
+   "qualifier_evidence": "description \"2017 studio album by Natalie Merchant\"",
+   "selected_because": [
+    "collision_group_member"
+   ],
+   "status": "mapped",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "collision_review",
+   "candidate_families": [
+    "works"
+   ],
+   "candidate_path": "/works/human",
+   "description": "2012 album by Projected",
+   "disposition": "collision review: proposed readable qualifier, needs human approval",
+   "family": "works",
+   "label": "Human",
+   "object_id": 1888085,
+   "proposed_path": "/works/human-2012-album",
+   "qualifier_evidence": "description \"2012 album by Projected\"",
+   "selected_because": [
+    "collision_group_member",
+    "named_edge_case"
+   ],
+   "status": "mapped",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "collision_review",
+   "candidate_families": [
+    "works"
+   ],
+   "candidate_path": "/works/butterfly",
+   "description": "1982 American film by Matt Cimber",
+   "disposition": "collision review: proposed readable qualifier, needs human approval",
+   "family": "works",
+   "label": "Butterfly",
+   "object_id": 1888104,
+   "proposed_path": "/works/butterfly-1982-film",
+   "qualifier_evidence": "description \"1982 American film by Matt Cimber\"",
+   "selected_because": [
+    "collision_group_member"
+   ],
+   "status": "mapped",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "candidate",
+   "candidate_families": [
+    "organizations"
+   ],
+   "candidate_path": "/organizations/crain",
+   "description": "late 80s - early 90s indie band from Louisville, Kentucky",
+   "disposition": "allocation candidate after classification review confirms the mapping",
+   "family": "organizations",
+   "label": "Crain",
+   "object_id": 1888151,
+   "selected_because": [
+    "stratified_sample"
+   ],
+   "status": "mapped",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "collision_review",
+   "candidate_families": [
+    "works"
+   ],
+   "candidate_path": "/works/butterfly",
+   "description": "2016 album by Deen",
+   "disposition": "collision review: proposed readable qualifier, needs human approval",
+   "family": "works",
+   "label": "Butterfly",
+   "object_id": 1888474,
+   "proposed_path": "/works/butterfly-2016-album",
+   "qualifier_evidence": "description \"2016 album by Deen\"",
+   "selected_because": [
+    "collision_group_member"
+   ],
+   "status": "mapped",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "collision_review",
+   "candidate_families": [
+    "works"
+   ],
+   "candidate_path": "/works/butterfly",
+   "description": "novel by Sonya Hartnett",
+   "disposition": "collision review: proposed readable qualifier, needs human approval",
+   "family": "works",
+   "label": "Butterfly",
+   "object_id": 1888531,
+   "proposed_path": "/works/butterfly-novel",
+   "qualifier_evidence": "description \"novel by Sonya Hartnett\"",
+   "selected_because": [
+    "collision_group_member"
+   ],
+   "status": "mapped",
+   "stored_kind": "work"
+  },
+  {
+   "address_status": "collision_review",
+   "candidate_families": [
+    "works"
+   ],
+   "candidate_path": "/works/butterfly",
+   "description": "2018 film by Ramesh Aravind",
+   "disposition": "collision review: proposed readable qualifier, needs human approval",
+   "family": "works",
+   "label": "Butterfly",
+   "object_id": 1888558,
+   "proposed_path": "/works/butterfly-2018-film",
+   "qualifier_evidence": "description \"2018 film by Ramesh Aravind\"",
+   "selected_because": [
+    "collision_group_member",
+    "stratified_sample"
+   ],
+   "status": "mapped",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "collision_review",
+   "candidate_families": [
+    "works"
+   ],
+   "candidate_path": "/works/human",
+   "description": "2001 studio album by Rod Stewart",
+   "disposition": "collision review: proposed readable qualifier, needs human approval",
+   "family": "works",
+   "label": "Human",
+   "object_id": 1888560,
+   "proposed_path": "/works/human-2001-album",
+   "qualifier_evidence": "description \"2001 studio album by Rod Stewart\"",
+   "selected_because": [
+    "collision_group_member",
+    "named_edge_case"
+   ],
+   "status": "mapped",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "collision_review",
+   "candidate_families": [
+    "works"
+   ],
+   "candidate_path": "/works/butterfly",
+   "description": "2025 TV series",
+   "disposition": "collision review: proposed readable qualifier, needs human approval",
+   "family": "works",
+   "label": "Butterfly",
+   "object_id": 1888562,
+   "proposed_path": "/works/butterfly-2025-tv-series",
+   "qualifier_evidence": "description \"2025 TV series\"",
+   "selected_because": [
+    "collision_group_member"
+   ],
+   "status": "mapped",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "collision_review",
+   "candidate_families": [
+    "works"
+   ],
+   "candidate_path": "/works/butterfly",
+   "description": "1967 album by The Hollies",
+   "disposition": "collision review: proposed readable qualifier, needs human approval",
+   "family": "works",
+   "label": "Butterfly",
+   "object_id": 1888564,
+   "proposed_path": "/works/butterfly-1967-album",
+   "qualifier_evidence": "description \"1967 album by The Hollies\"",
+   "selected_because": [
+    "collision_group_member"
+   ],
+   "status": "mapped",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "collision_review",
+   "candidate_families": [
+    "works"
+   ],
+   "candidate_path": "/works/human",
+   "description": "anthology edited by Judith Merril",
+   "disposition": "collision review: proposed readable qualifier, needs human approval",
+   "family": "works",
+   "label": "Human?",
+   "object_id": 1888664,
+   "proposed_path": "/works/human-anthology",
+   "qualifier_evidence": "description \"anthology edited by Judith Merril\"",
+   "selected_because": [
+    "collision_group_member"
+   ],
+   "status": "mapped",
+   "stored_kind": "work"
+  },
+  {
+   "address_status": "collision_review",
+   "candidate_families": [
+    "places"
+   ],
+   "candidate_path": "/places/mount-tom",
+   "description": "mountain in Washington, United States of America",
+   "disposition": "collision review: proposed readable qualifier, needs human approval",
+   "family": "places",
+   "label": "Mount Tom",
+   "object_id": 1889047,
+   "proposed_path": "/places/mount-tom-washington",
+   "qualifier_evidence": "description \"mountain in Washington, United States of America\"",
+   "selected_because": [
+    "collision_group_member"
+   ],
+   "status": "mapped",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "collision_review",
+   "candidate_families": [
+    "works"
+   ],
+   "candidate_path": "/works/butterfly",
+   "description": "1974 album by Barbra Streisand",
+   "disposition": "collision review: proposed readable qualifier, needs human approval",
+   "family": "works",
+   "label": "ButterFly",
+   "object_id": 1889163,
+   "proposed_path": "/works/butterfly-1974-album",
+   "qualifier_evidence": "description \"1974 album by Barbra Streisand\"",
+   "selected_because": [
+    "collision_group_member"
+   ],
+   "status": "mapped",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "collision_review",
+   "candidate_families": [
+    "works"
+   ],
+   "candidate_path": "/works/human",
+   "description": "2015 studio album by Three Days Grace",
+   "disposition": "collision review: proposed readable qualifier, needs human approval",
+   "family": "works",
+   "label": "Human",
+   "object_id": 1889379,
+   "proposed_path": "/works/human-2015-album-three-days-grace",
+   "qualifier_evidence": "description \"2015 studio album by Three Days Grace\"",
+   "selected_because": [
+    "collision_group_member",
+    "named_edge_case"
+   ],
+   "status": "mapped",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "collision_review",
+   "candidate_families": [
+    "works"
+   ],
+   "candidate_path": "/works/human",
+   "description": "1991 album by Death",
+   "disposition": "collision review: proposed readable qualifier, needs human approval",
+   "family": "works",
+   "label": "Human",
+   "object_id": 1889738,
+   "proposed_path": "/works/human-1991-album",
+   "qualifier_evidence": "description \"1991 album by Death\"",
+   "selected_because": [
+    "collision_group_member",
+    "named_edge_case"
+   ],
+   "status": "mapped",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "collision_review",
+   "candidate_families": [
+    "works"
+   ],
+   "candidate_path": "/works/butterfly",
+   "description": "1924 film by Clarence Brown",
+   "disposition": "collision review: proposed readable qualifier, needs human approval",
+   "family": "works",
+   "label": "Butterfly",
+   "object_id": 1890422,
+   "proposed_path": "/works/butterfly-1924-film",
+   "qualifier_evidence": "description \"1924 film by Clarence Brown\"",
+   "selected_because": [
+    "collision_group_member"
+   ],
+   "status": "mapped",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "not_proposed",
+   "candidate_families": [],
+   "candidate_path": null,
+   "description": "2019 EP by Dodie",
+   "disposition": "deferred: no family evidence; stays unaddressed and visible",
+   "family": null,
+   "label": "Human",
+   "object_id": 1891018,
+   "selected_because": [
+    "named_edge_case"
+   ],
+   "status": "needs_review",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "candidate",
+   "candidate_families": [
+    "people"
+   ],
+   "candidate_path": "/people/éliane-basse",
+   "description": "French paleontologist, geologist, botanist and botanical collector (1899 – 1985)",
+   "disposition": "allocation candidate after classification review confirms the mapping",
+   "family": "people",
+   "label": "Éliane Basse",
+   "object_id": 1891546,
+   "selected_because": [
+    "stratified_sample"
+   ],
+   "status": "mapped",
+   "stored_kind": "person"
+  },
+  {
+   "address_status": "not_proposed",
+   "candidate_families": [],
+   "candidate_path": null,
+   "description": "event for young Europeans arranged by the European parliament",
+   "disposition": "deferred: no family evidence; stays unaddressed and visible",
+   "family": null,
+   "label": "European Youth Event",
+   "object_id": 1891666,
+   "selected_because": [
+    "boundary_example"
+   ],
+   "status": "needs_review",
+   "stored_kind": "event"
+  },
+  {
+   "address_status": "not_proposed",
+   "candidate_families": [],
+   "candidate_path": null,
+   "description": "fictional character in Red Dwarf",
+   "disposition": "deferred: no family evidence; stays unaddressed and visible",
+   "family": null,
+   "label": "Cat",
+   "object_id": 1892804,
+   "selected_because": [
+    "boundary_example"
+   ],
+   "status": "needs_review",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "candidate",
+   "candidate_families": [
+    "works"
+   ],
+   "candidate_path": "/works/yes",
+   "description": "studio album by Yes",
+   "disposition": "allocation candidate after classification review confirms the mapping",
+   "family": "works",
+   "label": "Yes",
+   "object_id": 1892805,
+   "selected_because": [
+    "stratified_sample"
+   ],
+   "status": "mapped",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "collision_review",
+   "candidate_families": [
+    "places"
+   ],
+   "candidate_path": "/places/mount-tom",
+   "description": "mountain in Herkimer County, New York, United States of America",
+   "disposition": "collision review: proposed readable qualifier, needs human approval",
+   "family": "places",
+   "label": "Mount Tom",
+   "object_id": 1892917,
+   "proposed_path": "/places/mount-tom-herkimer-county",
+   "qualifier_evidence": "description \"mountain in Herkimer County, New York, United States of America\"",
+   "selected_because": [
+    "collision_group_member"
+   ],
+   "status": "mapped",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "collision_review",
+   "candidate_families": [
+    "places"
+   ],
+   "candidate_path": "/places/vik",
+   "description": "village in Sortland, Norway",
+   "disposition": "collision review: proposed readable qualifier, needs human approval",
+   "family": "places",
+   "label": "Vik",
+   "object_id": 1893365,
+   "proposed_path": "/places/vik-sortland",
+   "qualifier_evidence": "description \"village in Sortland, Norway\"",
+   "selected_because": [
+    "collision_group_member"
+   ],
+   "status": "mapped",
+   "stored_kind": "place"
+  },
+  {
+   "address_status": "collision_review",
+   "candidate_families": [
+    "people"
+   ],
+   "candidate_path": "/people/billy-lee",
+   "description": "baseball player",
+   "disposition": "collision review: proposed readable qualifier, needs human approval",
+   "family": "people",
+   "label": "Billy Lee",
+   "object_id": 1893398,
+   "proposed_path": "/people/billy-lee-baseball-player",
+   "qualifier_evidence": "description \"baseball player\"",
+   "selected_because": [
+    "collision_group_member",
+    "stratified_sample"
+   ],
+   "status": "mapped",
+   "stored_kind": "person"
+  },
+  {
+   "address_status": "collision_review",
+   "candidate_families": [
+    "places"
+   ],
+   "candidate_path": "/places/vik",
+   "description": "village in Sunnfjord, Norway",
+   "disposition": "collision review: proposed readable qualifier, needs human approval",
+   "family": "places",
+   "label": "Vik",
+   "object_id": 1893414,
+   "proposed_path": "/places/vik-sunnfjord",
+   "qualifier_evidence": "description \"village in Sunnfjord, Norway\"",
+   "selected_because": [
+    "collision_group_member"
+   ],
+   "status": "mapped",
+   "stored_kind": "place"
+  },
+  {
+   "address_status": "collision_review",
+   "candidate_families": [
+    "places"
+   ],
+   "candidate_path": "/places/vik",
+   "description": "settlement in Grimstad Municipality, Norway",
+   "disposition": "collision review blocked: classification review first",
+   "family": null,
+   "label": "Vik",
+   "object_id": 1893450,
+   "proposed_path": null,
+   "qualifier_evidence": "description \"settlement in Grimstad Municipality, Norway\"",
+   "selected_because": [
+    "collision_group_member"
+   ],
+   "status": "needs_review",
+   "stored_kind": "place"
+  },
+  {
+   "address_status": "collision_review",
+   "candidate_families": [
+    "works"
+   ],
+   "candidate_path": "/works/human",
+   "description": "2015 album by Joell Ortiz",
+   "disposition": "collision review: proposed readable qualifier, needs human approval",
+   "family": "works",
+   "label": "Human",
+   "object_id": 1893917,
+   "proposed_path": "/works/human-2015-album-joell-ortiz",
+   "qualifier_evidence": "description \"2015 album by Joell Ortiz\"",
+   "selected_because": [
+    "collision_group_member",
+    "named_edge_case"
+   ],
+   "status": "mapped",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "candidate",
+   "candidate_families": [
+    "organizations"
+   ],
+   "candidate_path": "/organizations/base",
+   "description": "design and publishing company",
+   "disposition": "allocation candidate after classification review confirms the mapping",
+   "family": "organizations",
+   "label": "Base",
+   "object_id": 1894155,
+   "selected_because": [
+    "stratified_sample"
+   ],
+   "status": "mapped",
+   "stored_kind": "organization"
+  },
+  {
+   "address_status": "candidate",
+   "candidate_families": [
+    "concepts"
+   ],
+   "candidate_path": "/concepts/lua",
+   "description": "lightweight programming language",
+   "disposition": "allocation candidate after classification review confirms the mapping",
+   "family": "concepts",
+   "label": "Lua",
+   "object_id": 1894438,
+   "selected_because": [
+    "stratified_sample"
+   ],
+   "status": "mapped",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "collision_review",
+   "candidate_families": [
+    "works"
+   ],
+   "candidate_path": "/works/human",
+   "description": "2017 studio album by Rag'n'Bone Man",
+   "disposition": "collision review: proposed readable qualifier, needs human approval",
+   "family": "works",
+   "label": "Human",
+   "object_id": 1894469,
+   "proposed_path": "/works/human-2017-album",
+   "qualifier_evidence": "description \"2017 studio album by Rag'n'Bone Man\"",
+   "selected_because": [
+    "collision_group_member",
+    "named_edge_case"
+   ],
+   "status": "mapped",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "collision_review",
+   "candidate_families": [
+    "works"
+   ],
+   "candidate_path": "/works/mona-lisa",
+   "description": "oil painting by Leonardo da Vinci in the Louvre, Paris",
+   "disposition": "duplicate-identity review first: same name, too little evidence to tell apart",
+   "family": "works",
+   "label": "Mona Lisa",
+   "object_id": 1894610,
+   "proposed_path": null,
+   "qualifier_evidence": "description \"oil painting by Leonardo da Vinci in the Louvre, Paris\"",
+   "selected_because": [
+    "boundary_example",
+    "collision_group_member"
+   ],
+   "status": "mapped",
+   "stored_kind": "work"
+  },
+  {
+   "address_status": "collision_review",
+   "candidate_families": [
+    "places"
+   ],
+   "candidate_path": "/places/mount-tom",
+   "description": "mountain in the Sierra Nevada of California",
+   "disposition": "collision review: proposed readable qualifier, needs human approval",
+   "family": "places",
+   "label": "Mount Tom",
+   "object_id": 1894782,
+   "proposed_path": "/places/mount-tom-sierra-nevada-of-california",
+   "qualifier_evidence": "description \"mountain in the Sierra Nevada of California\"",
+   "selected_because": [
+    "collision_group_member"
+   ],
+   "status": "mapped",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "candidate",
+   "candidate_families": [
+    "subjects"
+   ],
+   "candidate_path": "/subjects/sambara",
+   "description": "character appearing in Bhagavad Purana",
+   "disposition": "allocation candidate after classification review confirms the mapping",
+   "family": "subjects",
+   "label": "Sambara",
+   "object_id": 1894934,
+   "selected_because": [
+    "stratified_sample"
+   ],
+   "status": "mapped",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "not_proposed",
+   "candidate_families": [],
+   "candidate_path": null,
+   "description": "day to commemorate war dead",
+   "disposition": "deferred: no family evidence; stays unaddressed and visible",
+   "family": null,
+   "label": "Remembrance Sunday",
+   "object_id": 1895205,
+   "selected_because": [
+    "boundary_example"
+   ],
+   "status": "needs_review",
+   "stored_kind": "event"
+  },
+  {
+   "address_status": "candidate",
+   "candidate_families": [
+    "concepts"
+   ],
+   "candidate_path": "/concepts/interlisp",
+   "description": "dialect of the Lisp programming language",
+   "disposition": "allocation candidate after classification review confirms the mapping",
+   "family": "concepts",
+   "label": "Interlisp",
+   "object_id": 1895463,
+   "selected_because": [
+    "stratified_sample"
+   ],
+   "status": "mapped",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "candidate",
+   "candidate_families": [
+    "events"
+   ],
+   "candidate_path": "/events/apollo-15",
+   "description": "fourth Moon landing and ninth crewed flight of the United States Apollo program",
+   "disposition": "allocation candidate after classification review confirms the mapping",
+   "family": "events",
+   "label": "Apollo 15",
+   "object_id": 1896394,
+   "selected_because": [
+    "stratified_sample"
+   ],
+   "status": "mapped",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "candidate",
+   "candidate_families": [
+    "events"
+   ],
+   "candidate_path": "/events/1991-sierra-madre-earthquake",
+   "description": "",
+   "disposition": "allocation candidate after classification review confirms the mapping",
+   "family": "events",
+   "label": "1991 Sierra Madre earthquake",
+   "object_id": 1897871,
+   "selected_because": [
+    "stratified_sample"
+   ],
+   "status": "mapped",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "collision_review",
+   "candidate_families": [
+    "people"
+   ],
+   "candidate_path": "/people/billy-lee",
+   "description": "English footballer (1878-1934)",
+   "disposition": "collision review: proposed readable qualifier, needs human approval",
+   "family": "people",
+   "label": "Billy Lee",
+   "object_id": 1897961,
+   "proposed_path": "/people/billy-lee-english-footballer",
+   "qualifier_evidence": "description \"English footballer (1878-1934)\"",
+   "selected_because": [
+    "collision_group_member"
+   ],
+   "status": "mapped",
+   "stored_kind": "person"
+  },
+  {
+   "address_status": "candidate",
+   "candidate_families": [
+    "people"
+   ],
+   "candidate_path": "/people/rick-link",
+   "description": "American professional wrestler (1959–2026)",
+   "disposition": "allocation candidate after classification review confirms the mapping",
+   "family": "people",
+   "label": "Rick Link",
+   "object_id": 1898725,
+   "selected_because": [
+    "stratified_sample"
+   ],
+   "status": "mapped",
+   "stored_kind": "person"
+  },
+  {
+   "address_status": "collision_review",
+   "candidate_families": [
+    "places"
+   ],
+   "candidate_path": "/places/vik",
+   "description": "village in Flatanger Municipality, Norway",
+   "disposition": "collision review: proposed readable qualifier, needs human approval",
+   "family": "places",
+   "label": "Vik",
+   "object_id": 1899000,
+   "proposed_path": "/places/vik-flatanger-municipality",
+   "qualifier_evidence": "description \"village in Flatanger Municipality, Norway\"",
+   "selected_because": [
+    "collision_group_member"
+   ],
+   "status": "mapped",
+   "stored_kind": "place"
+  },
+  {
+   "address_status": "collision_review",
+   "candidate_families": [
+    "places"
+   ],
+   "candidate_path": "/places/vik",
+   "description": "village and the administrative center of Hole in Buskerud, Norway",
+   "disposition": "collision review: proposed readable qualifier, needs human approval",
+   "family": "places",
+   "label": "Vik",
+   "object_id": 1899664,
+   "proposed_path": "/places/vik-buskerud",
+   "qualifier_evidence": "description \"village and the administrative center of Hole in Buskerud, Norway\"",
+   "selected_because": [
+    "collision_group_member",
+    "stratified_sample"
+   ],
+   "status": "mapped",
+   "stored_kind": "place"
+  },
+  {
+   "address_status": "not_proposed",
+   "candidate_families": [],
+   "candidate_path": null,
+   "description": "activity of reviewing one's actions and feeling contrition or regret for past wrongs",
+   "disposition": "deferred: no family evidence; stays unaddressed and visible",
+   "family": null,
+   "label": "repentance",
+   "object_id": 1901727,
+   "selected_because": [
+    "boundary_example"
+   ],
+   "status": "needs_review",
+   "stored_kind": "event"
+  },
+  {
+   "address_status": "not_proposed",
+   "candidate_families": [],
+   "candidate_path": null,
+   "description": "Private university in Cambridge, Massachusetts, US",
+   "disposition": "deferred: no family evidence; stays unaddressed and visible",
+   "family": null,
+   "label": "Harvard University",
+   "object_id": 1959866,
+   "selected_because": [
+    "boundary_example"
+   ],
+   "status": "needs_review",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "classification_review",
+   "candidate_families": [
+    "places"
+   ],
+   "candidate_path": "/places/warsaw",
+   "description": "Capital and largest city of Poland",
+   "disposition": "classification review: sole candidate family needs a human decision",
+   "family": null,
+   "label": "Warsaw",
+   "object_id": 1968096,
+   "selected_because": [
+    "boundary_example"
+   ],
+   "status": "needs_review",
+   "stored_kind": "place"
+  },
+  {
+   "address_status": "not_proposed",
+   "candidate_families": [],
+   "candidate_path": null,
+   "description": "Edible fruit",
+   "disposition": "deferred: no family evidence; stays unaddressed and visible",
+   "family": null,
+   "label": "Apple",
+   "object_id": 1985448,
+   "selected_because": [
+    "boundary_example",
+    "named_edge_case"
+   ],
+   "status": "needs_review",
+   "stored_kind": "concept"
+  },
+  {
+   "address_status": "classification_review",
+   "candidate_families": [
+    "organizations"
+   ],
+   "candidate_path": "/organizations/wikimedia-foundation",
+   "description": "American charitable organization",
+   "disposition": "classification review: sole candidate family needs a human decision",
+   "family": null,
+   "label": "Wikimedia Foundation",
+   "object_id": 3733859,
+   "selected_because": [
+    "boundary_example"
+   ],
+   "status": "needs_review",
+   "stored_kind": "organization"
+  },
+  {
+   "address_status": "candidate",
+   "candidate_families": [
+    "events"
+   ],
+   "candidate_path": "/events/apollo-11",
+   "description": "first Moon landing and fifth crewed flight of the United States Apollo program",
+   "disposition": "allocation candidate after classification review confirms the mapping",
+   "family": "events",
+   "label": "Apollo 11",
+   "object_id": 3733865,
+   "selected_because": [
+    "boundary_example",
+    "stratified_sample"
+   ],
+   "status": "mapped",
+   "stored_kind": "event"
+  },
+  {
+   "address_status": "not_proposed",
+   "candidate_families": [],
+   "candidate_path": null,
+   "description": "A fictional artwork used for the issue 84 browser walkthrough.",
+   "disposition": "deferred: no family evidence; stays unaddressed and visible",
+   "family": null,
+   "label": "Browser audit Family Table 84",
+   "object_id": 3733873,
+   "selected_because": [
+    "boundary_example"
+   ],
+   "status": "needs_review",
+   "stored_kind": "artifact"
+  },
+  {
+   "address_status": "not_proposed",
+   "candidate_families": [],
+   "candidate_path": null,
+   "description": "The displayed description changed after acceptance",
+   "disposition": "deferred: no family evidence; stays unaddressed and visible",
+   "family": null,
+   "label": "Issue 84 CHANGED reviewed artwork",
+   "object_id": 3733876,
+   "selected_because": [
+    "boundary_example"
+   ],
+   "status": "needs_review",
+   "stored_kind": "artifact"
+  },
+  {
+   "address_status": "not_proposed",
+   "candidate_families": [],
+   "candidate_path": null,
+   "description": "",
+   "disposition": "deferred: identity lifecycle review first (split/merged registry identity)",
+   "family": null,
+   "label": "Issue 84 split artwork",
+   "object_id": 3733878,
+   "selected_because": [
+    "boundary_example"
+   ],
+   "status": "identity_review",
+   "stored_kind": "artifact"
+  },
+  {
+   "address_status": "not_proposed",
+   "candidate_families": [],
+   "candidate_path": null,
+   "description": "",
+   "disposition": "deferred: no family evidence; stays unaddressed and visible",
+   "family": null,
+   "label": "Issue 84 artwork choice A",
+   "object_id": 3733879,
+   "selected_because": [
+    "boundary_example"
+   ],
+   "status": "needs_review",
+   "stored_kind": "artifact"
+  },
+  {
+   "address_status": "not_proposed",
+   "candidate_families": [],
+   "candidate_path": null,
+   "description": "",
+   "disposition": "deferred: no family evidence; stays unaddressed and visible",
+   "family": null,
+   "label": "Issue 84 artwork choice B",
+   "object_id": 3733880,
+   "selected_because": [
+    "boundary_example"
+   ],
+   "status": "needs_review",
+   "stored_kind": "artifact"
+  },
+  {
+   "address_status": "not_proposed",
+   "candidate_families": [],
+   "candidate_path": null,
+   "description": "Browser-created artifact for issue 84 end-to-end verification.",
+   "disposition": "deferred: no family evidence; stays unaddressed and visible",
+   "family": null,
+   "label": "Issue 84 browser walkthrough artwork",
+   "object_id": 3733888,
+   "selected_because": [
+    "boundary_example"
+   ],
+   "status": "needs_review",
+   "stored_kind": "artifact"
+  },
+  {
+   "address_status": "collision_review",
+   "candidate_families": [
+    "works"
+   ],
+   "candidate_path": "/works/mona-lisa",
+   "description": "",
+   "disposition": "duplicate-identity review first: same name, too little evidence to tell apart",
+   "family": "works",
+   "label": "Mona Lisa",
+   "object_id": 3734402,
+   "proposed_path": null,
+   "qualifier_evidence": "no description to qualify from",
+   "selected_because": [
+    "boundary_example",
+    "collision_group_member"
+   ],
+   "status": "mapped",
+   "stored_kind": "work"
+  },
+  {
+   "address_status": "candidate",
+   "candidate_families": [
+    "works"
+   ],
+   "candidate_path": "/works/the-parsonage-garden-at-nuenen",
+   "description": "",
+   "disposition": "allocation candidate after classification review confirms the mapping",
+   "family": "works",
+   "label": "The Parsonage Garden at Nuenen",
+   "object_id": 3734629,
+   "selected_because": [
+    "stratified_sample"
+   ],
+   "status": "mapped",
+   "stored_kind": "work"
+  },
+  {
+   "address_status": "collision_review",
+   "candidate_families": [
+    "works"
+   ],
+   "candidate_path": "/works/love",
+   "description": "",
+   "disposition": "duplicate-identity review first: same name, too little evidence to tell apart",
+   "family": "works",
+   "label": "Love",
+   "object_id": 3737584,
+   "proposed_path": null,
+   "qualifier_evidence": "no description to qualify from",
+   "selected_because": [
+    "boundary_example",
+    "collision_group_member",
+    "named_edge_case"
+   ],
+   "status": "mapped",
+   "stored_kind": "work"
+  },
+  {
+   "address_status": "collision_review",
+   "candidate_families": [
+    "works"
+   ],
+   "candidate_path": "/works/love",
+   "description": "",
+   "disposition": "duplicate-identity review first: same name, too little evidence to tell apart",
+   "family": "works",
+   "label": "Love",
+   "object_id": 3739174,
+   "proposed_path": null,
+   "qualifier_evidence": "no description to qualify from",
+   "selected_because": [
+    "boundary_example",
+    "collision_group_member",
+    "named_edge_case"
+   ],
+   "status": "mapped",
+   "stored_kind": "work"
+  },
+  {
+   "address_status": "collision_review",
+   "candidate_families": [
+    "works"
+   ],
+   "candidate_path": "/works/the-devils-dictionary",
+   "description": "",
+   "disposition": "duplicate-identity review first: same name, too little evidence to tell apart",
+   "family": "works",
+   "label": "The Devil's Dictionary",
+   "object_id": 3740879,
+   "proposed_path": null,
+   "qualifier_evidence": "no description to qualify from",
+   "selected_because": [
+    "boundary_example",
+    "collision_group_member",
+    "named_edge_case"
+   ],
+   "status": "mapped",
+   "stored_kind": "work"
+  }
+ ],
+ "summary": {
+  "by_disposition": {
+   "allocation candidate after classification review confirms the mapping": 50,
+   "classification review": 14,
+   "collision review": 55,
+   "collision review blocked": 3,
+   "deferred": 39,
+   "duplicate-identity review first": 6,
+   "excluded": 2
+  },
+  "by_family_mapped": {
+   "concepts": 6,
+   "events": 4,
+   "nature": 8,
+   "organizations": 8,
+   "people": 12,
+   "places": 17,
+   "subjects": 6,
+   "works": 50
+  },
+  "by_reason": {
+   "boundary_example": 54,
+   "collision_group_member": 64,
+   "named_edge_case": 45,
+   "stratified_sample": 46
+  },
+  "by_status": {
+   "excluded_source_page": 2,
+   "identity_review": 1,
+   "mapped": 111,
+   "needs_review": 55
+  },
+  "collision_group_sizes": {
+   "2": 6,
+   "5": 1,
+   "6": 1,
+   "7": 1,
+   "15": 1,
+   "19": 1
+  },
+  "collision_groups_touched": 11,
+  "deferred_outside_population": 100554,
+  "named_found": [
+   "Ambrose Bierce",
+   "Apple",
+   "Human",
+   "Love",
+   "Mercury",
+   "Polish",
+   "The Devil's Dictionary",
+   "human",
+   "love"
+  ],
+  "named_missing": [
+   "c",
+   "c+",
+   "c++",
+   "earthquake",
+   "poutine",
+   "putin",
+   "vladimir putin",
+   "voltaire"
+  ],
+  "records": 169,
+  "selection": "policy boundary examples (54) + stratified mapped sample (46) + named ADR edge cases present in the snapshot + every member of each candidate-path collision group touching those",
+  "sha256_of_records": "ec830ac72fff355a3dfc76d8fc39dcba7541e1a09f8dc3965d79fadcf4f0d7ed",
+  "source": "data/audits/2026-09-26-issue194/assignments.jsonl.gz (policy 1.0.0, 100,723 entities, read-only)"
+ }
+}

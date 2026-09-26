@@ -1,6 +1,6 @@
 # ADR 0004 — Public routing, classification and curated On pages
 
-- **Status:** accepted design, 26 September 2026. Stage 1 — persistence, ledger and resolver — implemented ([record](../routing/stage-1-foundation.md)); no route is served from it yet, and backfill, reader integration, On editing and publication are pending.
+- **Status:** accepted design, 26 September 2026. Stage 1 — persistence, ledger, resolver and a tested [recovery procedure](../routing/recovery.md) — implemented ([record](../routing/stage-1-foundation.md)); no route is served from it yet, and backfill, reader integration, On editing and publication are pending.
 - **Approval:** the owner accepted the audit recommendations in this conversation and asked for the completed specification and corpus validation.
 - **Owner:** project owner; implementation changes are reviewed through the repository's normal PR process.
 - **Issue:** [Routing before launch](https://github.com/razrfly/dictionary/issues/194).
@@ -80,7 +80,7 @@ Define this interface before the first schema implementation. Use actual foreign
 
 ## 5. Persistence contract for the implementation
 
-Use separate page tables; **do not add an On registry object kind** or alter entity kinds to fit URLs. [Stage 1](../routing/stage-1-foundation.md) implements this table, maps each invariant to its database enforcement and test, and records seven implementation decisions (role namespaces, mapped-family allocation, human approvals, one page per target and locale, split pages keeping their address, reservations never released, refusals that never roll back a caller).
+Use separate page tables; **do not add an On registry object kind** or alter entity kinds to fit URLs. [Stage 1](../routing/stage-1-foundation.md) implements this table, maps each invariant to its database enforcement and test, and records eight implementation decisions (role namespaces, mapped-family allocation, human approvals, one page per target and locale, split pages keeping their address, reservations never released, refusals that never roll back a caller, tombstones returning only by a human restore or rollback).
 
 | Table | Required data and integrity |
 |---|---|
@@ -142,7 +142,7 @@ The publication manifest explicitly lists approved page IDs/locales and their ga
 2. Review a candidate launch population independently of the classifier. Resolve all conflicts in that population; the larger corpus can remain explicitly deferred. Define useful content by reader value and permitted display, not an invented word/page-count threshold.
 3. Backfill decisions and durable pages in resumable batches. Save checkpoints keyed by stable object IDs and policy digest. Allocation within each page is atomic; restarting after interruption produces no extra pages or paths.
 4. Implement the resolver and link helpers, then metadata/indexing and On editing. Keep classification changes separate from route moves.
-5. Prove preservation of identity/content/evidence/membership sets, not just counts. Test a clean restore from registry plus editorial/route snapshots, including a changed provider import order. Replaying source data into newly numbered objects does not satisfy restore acceptance.
+5. Prove preservation of identity/content/evidence/membership sets, not just counts. Test a clean restore from registry plus editorial/route snapshots, including a changed provider import order. Replaying source data into newly numbered objects does not satisfy restore acceptance. The supported [recovery procedure](../routing/recovery.md) and its test implement this; destructive tasks refuse a database holding routing state without a covering snapshot.
 6. Use a feature flag for launch. Verify direct HTTP and live navigation, then publish only the approved manifest. Rollback restores the previous accepted mapping/reader behavior and preserves path reservations and historical redirects.
 
 To add a detailed type: declare authority, pin evidence, write inclusion/exclusion examples and expected fixture outcomes, amend the rule file, bump policy version, run the full dry run and review changes. A new public family additionally needs owner approval, a scope/overlap charter and migration analysis. A rename updates the label by default; an intentional public move uses a route-change transaction. A split retains choices until attachments have been reviewed. Rebuilds restore durable identity, editorial state, overrides and the address ledger before source projections.

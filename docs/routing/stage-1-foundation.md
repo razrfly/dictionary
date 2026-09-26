@@ -1,6 +1,6 @@
 # Routing Stage 1 — the durable foundation
 
-**Status: implemented, 26 September 2026, for [routing delivery issue #194](https://github.com/razrfly/dictionary/issues/194); delivered in [PR #205](https://github.com/razrfly/dictionary/pull/205), awaiting independent review.** [ADR 0004](../adr/0004-public-routing.md) is the contract. This page records how Stage 1 implements §5–6, the decisions made while implementing it, the review it has had, the evidence, and what Stage 2 inherits.
+**Status: implemented, 26–27 September 2026, for [routing delivery issue #194](https://github.com/razrfly/dictionary/issues/194), in [PR #205](https://github.com/razrfly/dictionary/pull/205). Completed against [the Stage 1 audit](https://github.com/razrfly/dictionary/issues/194#issuecomment-5850535055); awaiting reassessment and review before merge.** [ADR 0004](../adr/0004-public-routing.md) is the contract. This page records how Stage 1 implements §5–6 and §8's recovery requirement, the decisions made while implementing it, the reviews it has had, the evidence (kept separate by kind), an [acceptance matrix](#acceptance-matrix), and the [Stage 2 handoff](stage-2/README.md).
 
 Stage 1 adds storage, invariants, a ledger and a resolver. It **adds no route, rewrites no reader, allocates no production path and publishes nothing.** `/words/:id/:slug`, `/define/:slug` and `/entities/:id/:slug` are unchanged, and nothing in the router calls the new code. Backfill (Stage 2), reader integration (Stage 3), On editing (Stage 4) and publication (Stage 5) remain.
 
@@ -54,14 +54,15 @@ Every alias names a destination **page**, and the resolver reads that page's cur
 
 | Operation | Actor | Effect |
 |---|---|---|
-| `allocate(page, path)` | any (a batch job) | Reserves a new canonical for an active page, or reclaims the page's own alias. A subject or edition page needs its target's **current decision to be `mapped` to the path's family**, and the ledger row records that decision and its policy version. Idempotent: re-allocating a page's own canonical returns it and writes nothing, even after the page was reclassified. A taken path returns `{:path_taken, owner}`; a second canonical returns `{:page_has_canonical, path}`. |
-| `move(page, path)` | human | New canonical; the old one becomes a permanent alias. Moving back promotes the alias; moving to the current canonical is a no-op. |
+| `allocate(page, path)` | any (a batch job) | Reserves a new canonical for an active page, or reclaims the page's own alias — **never a tombstone**, which it refuses as `{:tombstoned, owner}`, in code and in the database. A subject or edition page needs its target's **current decision to be `mapped` to the path's family**, and the ledger row records that decision and its policy version. Idempotent: re-allocating a page's own canonical returns it and writes nothing, even after the page was reclassified. A taken path returns `{:path_taken, owner}`; a second canonical returns `{:page_has_canonical, path}`. |
+| `move(page, path)` | human | New canonical; the old one becomes a permanent alias. Moving back promotes the alias; moving to the current canonical is a no-op; moving onto a tombstone is refused. |
 | `merge(from, into)` | human | Every path serving `from` serves `into`, with canonicals becoming aliases. Requires the registry to have merged `from`'s identity into `into`'s; editorial pages merge on the approving human's judgement. A published page cannot merge into an unpublished one. |
 | `split(page, successors)` | human | Requires a registry split, and each successor must be the page of one split output. Writes a revision with `split_successor` memberships in the given order. The page keeps its paths and resolves to a choice, never a redirect to one successor. A published page's successors must be published. |
 | `retire(page)` | human | Every path becomes a tombstone: reserved forever. It answers 410 for a page the public has seen (published or withdrawn) and 404 otherwise. |
+| `restore(page, path)` | human | The deliberate way back from a removal: one of the page's own tombstones becomes its canonical again, passing the same family check as an allocation. A retired page becomes active; an active page's current canonical becomes an alias. Its other tombstones stay removed. |
 | `rollback(operation)` | human | Restores each recorded before-state in reverse order, as a new ledger operation. A path the operation created stays reserved as an alias of its page: a historical 301 where the page keeps a canonical, 404 where it has none. An editorial revision made since is kept unless the operation itself changed the revision (a split). Operations are undone newest first: an operation can be rolled back while every later change to its paths and pages has itself been rolled back, so merge chains and move sequences unwind all the way back. Otherwise it is refused as `{:stale, …}`, even when the state looks the same again (A→B→A), because the later operations are still in force. A rolled-back rollback is in force again, so its operation can be undone once more. Also refused if it would leave a published page without a canonical. |
 
-`Routing.Pages` creates pages and writes whole revisions. `ensure/3` is idempotent under concurrency, and a wrong target kind or malformed membership comes back as an error tuple rather than a database exception.
+`Routing.Pages` creates pages and writes whole revisions. `ensure/3` is idempotent under concurrency. It rejects a nil target (`:target_required`), a non-integer or non-positive target (`:invalid_target`) and an unknown role (`:invalid_role`) before any query. A missing object (`:target_not_found`), a wrong target kind and a malformed membership also come back as error tuples rather than database exceptions, so a malformed record is one record's error inside a caller's batch transaction.
 
 `Routing.Classifications` records `Routing.Policy.classify/3` results and human overrides:
 
@@ -102,6 +103,7 @@ These refine the ADR without changing it. Each is conservative and reversible by
 5. **Split pages keep their address.** The split page becomes a choice at its own canonical rather than a new page, and records its successors as a revision.
 6. **Nothing reserved is ever released.** An undone allocation or move leaves its path as an alias of its page. That alias is a redirect where the page keeps a canonical and unavailable where it has none, and the page can reclaim it.
 7. **A refusal never rolls back the caller.** This lets Stage 2 batch allocations inside one transaction and record per-record refusals.
+8. **A tombstone returns only by a human decision.** Allocation, including a batch's, can create a path or reclaim an owned alias. A tombstone records a deliberate removal, so it comes back only through `restore/3` or a rollback. Both are human operations, enforced in the database.
 
 ## Curation-composition binding (recorded; migration deferred)
 
@@ -122,6 +124,20 @@ The binding service must validate that the composition's language equals the pag
 The page renders only the composition version that the curation publication service has selected and that is still eligible under its own rights and evidence checks. A page approval cannot approve a draft composition or accept a semantic claim, and composition approval grants no page publication.
 
 Route moves and merges keep the binding on the page id. A split page has no single scope, so its binding goes to human reconciliation rather than being carried to a guessed successor (#196: split scopes are never guessed). Persona inference and refresh (#193) are not dependencies.
+
+## Recovery
+
+Registry ids exist only in the database, and a rebuild from sources renumbers every object, so routing state is **restored, not regenerated**. The [recovery procedure](recovery.md) takes these steps:
+
+1. Snapshot the source.
+2. Restore into an isolated database.
+3. Verify exact identities, references, resolutions and sequences with `mix dd.routing.verify`.
+4. Re-project from source records in any provider order (`mix dd.replay`, `mix dd.materialize --all`), and verify again.
+5. Exercise the ledger and resolver.
+
+`RecoveryTest` runs these steps end to end against disposable databases, re-projecting with the providers reversed.
+
+`mix dd.reset`, `mix dd.snapshot --restore` and `mix dd.rebuild` refuse a database holding routing state unless a snapshot records its current routing high-water marks. The procedure has not yet been run on the development corpus; that is Stage 2's first gate.
 
 ## Independent review
 
@@ -152,13 +168,21 @@ A second pass re-ran every scenario against the fixes. It confirmed 13 findings 
 
 It also found lower-severity gaps: a revision-only phantom ledger row, a raw split with no registry split, `+`/`'`/`--` slugs accepted by the database, and a survivor function more permissive than the registry.
 
-All are fixed, with tests. The same retirement now takes 91 ms at 50,602 paths, the same as at 301. This is an agent's review, not the owner's or an external reviewer's; [PR #205](https://github.com/razrfly/dictionary/pull/205) still needs independent review before merge.
+All are fixed, with tests. The same retirement now takes 91 ms at 50,602 paths, the same as at 301.
+
+{{THIRD_REVIEW}}
+
+These are agents' reviews and CodeRabbit's, not the owner's. Passing tests and review are not publication approval.
 
 ## Evidence
 
-- `mix test test/devils_dictionary/routing`: **3 doctests, 93 tests, 0 failures** (70 new, alongside the 23 policy/audit regressions), stable across repeated runs on a private partition.
-- `mix precommit` on the branch: **19 doctests, 2,158 tests, 0 failures**. That is main's 16 doctests and 2,088 tests plus exactly the new 3 and 70.
-- The migration was applied, rolled back and re-applied on a fresh private test database.
+Three kinds of evidence, kept apart because they prove different things.
+
+**Local test results.** {{LOCAL_EVIDENCE}}
+
+**GitHub checks.** The repository has **no test-suite CI**: there is no `.github/workflows`. The checks on PR #205 are GitGuardian, a secrets scan, and CodeRabbit's review status. Neither runs the tests. CodeRabbit's green status means its review completed, not that it found nothing: its review of `0b045d8` posted two actionable findings (the tombstone reclaim and `Pages.ensure`), and both are fixed here.
+
+**Independent review.** See [Independent review](#independent-review). The implementing agent's own tests are not independent review.
 
 | Invariant (ADR §5–6, §8) | Proven by |
 |---|---|
@@ -173,6 +197,10 @@ All are fixed, with tests. The same retirement now takes 91 ms at 50,602 paths, 
 | Rollback | exact restoration of a move and a merge; two moves and a three-page merge chain unwound newest first; undo, redo and undo again; a created path kept as a redirect; ABA, out-of-order and double rollbacks refused; an editorial revision survives a rollback; a rollback that would unpublish is refused |
 | Batch safety | a refusal inside a caller's transaction keeps the caller's earlier allocation |
 | Versioned overrides | `classifications_test.exs`: human-only; stale evidence refused; sole-candidate review stored without a family; lifecycle-only change is new evidence; an override survives both identical evidence and the evaluator's own overridden outcome, and so does a second override made after a contradiction; contradiction is sticky until a human decides; the published address never moves |
+| Tombstones are not resurrected by machines | `committed_ledger_test.exs`, every step committed: an importer's `Ledger.allocate/3` and a hand-written `allocate` promotion are both refused (`route_changes_allocate_shape`), and the ledger, path and page are byte-for-byte unchanged afterwards; a human `move/3` onto a tombstone is refused; a human `restore/3` brings it back as a `restore` operation and it resolves again; a retired page is restored at one address while its other stays gone |
+| Malformed targets in a batch | `committed_ledger_test.exs`: nil, string, negative and float targets and an unknown role return error tuples inside one committed transaction, which still commits the valid page |
+| Recovery | `recovery_test.exs`, against disposable databases created and dropped by the test: exact restore; re-projection with the providers reversed, shown to have really run; exact again; ledger and resolver work afterwards; verification shown to be non-vacuous; the source only read. Guards refuse reset, restore-over and rebuild without a covering snapshot, and reject stale, unmarked and missing snapshots |
+| The suite's own database claim | `data_case_test.exs`: the claim's lock stays on a connection the pool never hands out, through a sandbox mode change. This test fails on the previous claim implementation |
 | Exact-ID 404, no guessing | `resolver_test.exs`: near misses, unknown ids and draft pages never resolve to something else; corrupt states produce diagnostics, never a destination |
 | C++, C+, c; Unicode; malformed requests | `address_test.exs`, `resolver_test.exs` |
 | Revisioned On bodies and typed membership | `pages_test.exs`: whole revisions with exact ordered membership; an association writes no names or identifiers; malformed membership is an error tuple |
@@ -181,7 +209,7 @@ Additive preservation of existing readers is shown by the unchanged full suite. 
 
 ## Known limits
 
-- **Restore.** A `mix dd.snapshot` dump carries the routing tables with everything else. `mix dd.rebuild` replays sources into newly numbered objects and does not carry pages, decisions or the ledger. The ADR's restore order needs a real procedure and test: registry, editorial state, overrides and the address ledger, then source projections. That belongs to Stage 5, or earlier if Stage 2's backfill needs it.
+- **Recovery on the real corpus.** The procedure is tested on disposable databases built by the test. It has not been run against `devils_dictionary_v2`, and the manifest's running time at corpus scale is unmeasured. `mix dd.rebuild` still cannot preserve routing identity, and is guarded rather than changed.
 - **Publication** has a column and resolver outcomes, but no transition, gate or manifest.
 - **Collections and choice pages** have storage but no namespace.
 - **Editorial pages.** Merging On pages rests on the approving human's judgement; the database cannot tell whether two authored treatments are "related".
@@ -191,15 +219,33 @@ Additive preservation of existing readers is shown by the unchanged full suite. 
 - **Composition binding** waits for #196.
 - **Test isolation.** The database-backed routing tests are synchronous, because a sandboxed test holds its advisory path locks and uncommitted paths for its whole transaction. Run them on a private `MIX_TEST_PARTITION`; the concurrency and committed-integrity tests commit for real.
 
-## Proposed Stage 2 scope
+## Acceptance matrix
 
-Stage 2 is backfill and review against a fresh snapshot, with no publication.
+Each requirement, where it is implemented, and what verifies it.
 
-1. **Record decisions for every entity.** A resumable batch job runs `Routing.Policy.classify/3` over a read-only export and `Classifications.record/1`s each result, checkpointed by object id and policy digest. A rerun writes nothing (`:unchanged`), and a crash resumes without duplicates. Compare the per-object outcomes with the 26 September dry run (38,576 / 56,228 / 5,917 / 2) and explain every difference.
-2. **Pages for a candidate population only.** Run `Pages.ensure/3` for the reviewed candidate set, not the whole corpus. Pages are keyed by target object, so a rerun finds the same pages.
-3. **Readable collision resolution.** For the 1,406 collision groups, propose evidence-backed qualifiers as review items: person dates, work creator/year/type, scientific distinction or place. Review possible duplicate identities first. No opaque suffixes, and import order never picks the primary.
-4. **A review workflow** for classification overrides and collisions, using the existing reviewer role. Every decision is made by a human `user` actor.
-5. **Allocation only for reviewed records**, through `Ledger.allocate/3` with an import actor (batched; refusals are per record). This produces a **candidate launch manifest** of page ids and paths, and candidate status grants no publication.
-6. **Evidence.** Repeat and interrupted runs preserve exact page ids, paths and decision ids, compared as sets. Deferred records stay visible with their dispositions. A restore procedure for the routing tables is at least specified.
+| # | Requirement (source) | Implementation | Verification |
+|---|---|---|---|
+| 1 | Durable page identity, never an object kind (ADR §5; Stage 1 prompt) | `pages`; `Routing.Page`, `Routing.Pages` | `schema_integrity_test`, `pages_test`, `concurrency_test` (one page per target under races) |
+| 2 | Revisioned On body, typed ordered membership, never an identity claim (ADR §4) | `page_revisions`, `page_memberships` (sealed by count) | `pages_test`, `schema_integrity_test` |
+| 3 | Persisted classification decisions; versioned override evidence; no silent Subjects fallback (ADR §3) | `classification_decisions`; `Routing.Classifications` | `classifications_test`, `schema_integrity_test` |
+| 4 | Global uniqueness of current, historical and reserved paths; immutable ownership (ADR §5) | `public_paths` unique index, shape and slug checks, guards, the repurposing check | `schema_integrity_test`, `committed_integrity_test`, `concurrency_test` |
+| 5 | Exactly one canonical per published page (ADR §5) | partial unique index and deferred pointer checks | `schema_integrity_test` |
+| 6 | Atomic pointer, allocation and history; append-only ledger (ADR §5) | `route_changes` guards and the continuity trigger; `Routing.Ledger` | `schema_integrity_test`, `committed_integrity_test` |
+| 7 | Transactional allocation; bounded race handling; real concurrency (ADR §5) | `Ledger.allocate/3`, `transact/2` | `concurrency_test` (independent connections, real commits) |
+| 8 | Explicit approved moves, merges and splits (ADR §5–6) | `Ledger.move/merge/split`; database identity checks | `ledger_test`, `committed_integrity_test` |
+| 9 | Rollback behaviour (Stage 1 prompt) | `Ledger.rollback/2` | `ledger_test`, `recovery_test` (rollback of a pre-snapshot operation after restore) |
+| 10 | Explicit resolver results; never a guessed destination (ADR §6) | `Routing.Resolver`, `Routing.Resolution` | `resolver_test`, `concurrency_test` (consistent reads) |
+| 11 | Classification changes never move a published address (ADR §3) | no path foreign key on decisions; allocation reads a decision only when it writes | `ledger_test`, `classifications_test` |
+| 12 | Existing readers preserved; additive change (Stage 1 prompt) | one additive migration; no router change | full `mix precommit` |
+| 13 | Curation-composition interface recorded; no competing tables (ADR §4) | [binding contract](#curation-composition-binding-recorded-migration-deferred) | review of the migration: no composition tables |
+| A1 | No machine tombstone reclaim; human restoration preserved (audit 1) | allocation shape (`before_kind IS NULL OR 'alias'`); `allocate`/`move` refuse; `Ledger.restore/3` | `committed_ledger_test` |
+| A2 | `Pages.ensure` rejects nil and malformed targets before querying (audit 2) | guard clauses | `committed_ledger_test` (a committed batch), `pages_test` |
+| A3 | Tested recovery with exact identities; changed provider order; destructive tasks guarded (audit 3) | `Snapshot`, `Routing.Recovery`, `mix dd.routing.verify`, guards in `dd.reset`/`dd.snapshot`/`dd.rebuild`; [procedure](recovery.md) | `recovery_test` |
+| A4 | Verification claims separated (audit 4) | [Evidence](#evidence) | this document, the PR description and the issue comment |
+| C5 | Targeted regressions and `mix precommit` on the final commit; the claim-lock failure investigated (completion) | the claim's dedicated connection | [Evidence](#evidence); `data_case_test` |
+| C6 | Fresh independent review of the final changes (completion) | — | [Independent review](#independent-review) |
+| C7 | README, ADR, Stage 1 record, PR and issue synchronized (completion) | — | these documents |
 
-Before Stage 2 starts, the owner needs to decide which population forms the first candidate launch set and who reviews it.
+## Stage 2 handoff
+
+Not started. The [Stage 2 handoff](stage-2/README.md) proposes a bounded, reproducible candidate population. It has 169 entities spanning all eight families and the ADR's edge cases, derived read-only from the audit manifest. It resolves the 11 collision groups touching that population with evidence-backed qualifier proposals, and sends three suspected duplicate identities to review. Every other record keeps an explicit disposition. The handoff keeps classification and collision approval separate from publication, and leaves collection and choice namespaces unallocated. It requires three gates before any persistent backfill: recovery exercised on the development corpus, repeat-run identity preservation, and crash/resume proof. The owner decisions it needs are the population, the reviewers and, for Stage 5 only, the publication approver.
