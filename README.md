@@ -38,23 +38,52 @@ The current remaining-work inventory is [the MVP close-out report](docs/audits/2
 ## The backbone
 
 ```
-sources ──► source_records (raw, trimmed, hashed, linked) ──► materialize (pure, one transaction)
-                                                                      │
-              ┌───────────────────────────────────────────────────────┴──────────────────┐
-              ▼                                                                          ▼
-   LEXICON: lexemes (lang · lemma · pos) · senses · entries · lexical_relations   ENCYCLOPEDIA: concepts (QID) · concept_relations
-              └──────────────────────── concept_links (method · confidence · status) ────┘
-                                              ▲
-                     scopes (animals …) · examples · media · votes · users · bots  (layers, later)
+sources → source_records → immutable source_record_revisions → materialization
+                                                               │
+                      objects: permanent local identity + lifecycle
+                         ├─ lexemes (language · lemma · part of speech)
+                         ├─ senses (source-specific meanings + revisions)
+                         ├─ entities (people, works, places, concepts, taxa, …)
+                         └─ content (attributed text/media + revisions)
+                                                               │
+                      typed assertions + revisions + evidence + review
+                      optional external identifiers (Wikidata, catalog IDs, …)
 ```
 
 Three ideas carry everything:
 
-1. **Words and things are different tables.** Dictionaries attach to words (lemma + part of speech). Encyclopedias attach to things (Wikidata QID). They meet only through typed, scored links.
+1. **Words and things have separate identities.** Lexemes, source senses, entities and content share a permanent local object registry. Wikidata QIDs and other external identifiers are optional links; a locally created subject needs neither. Typed, evidenced assertions connect these identities without merging them by name.
 2. **Tier is a property of the source.** 👑 *Aristocracy of the Dead* (Bierce, Johnson, Webster 1913, EB1911) · 📚 *The Institutions* (Wiktionary, WordNet, Wikidata, Wikipedia, Merriam-Webster) · 📱 *The Crowd* (Urban Dictionary, the Guardian's explainers, our own users). Add a source, and the UI already knows how to dress it.
 3. **Raw first.** Every absorbed record is kept (trimmed to the fields we use) so every derived row can be rebuilt with the network off.
 
 Patterns are borrowed from [Cinegraph](https://github.com/razrfly/cinegraph): raw JSONB per record, a behaviour per source, idempotent materialization, terminal-state predicates, an import dashboard, health checks.
+
+## Classification and public URLs
+
+**Status: accepted design; offline evaluator implemented; production route migration pending.** [ADR 0002](docs/adr/0002-public-routing.md) defines curated `/on/:slug` pages and subject families: People, Organizations, Places, Events, Works, Concepts and Nature, plus Subjects for reviewed cases outside those families. [Issue #194](https://github.com/razrfly/dictionary/issues/194) tracks the implementation. Current reading routes remain `/entities/:id/:slug`, `/words/:id/:slug` and `/define/:slug`; the lexical routes are retained in the accepted launch design.
+
+The [26 September audit](docs/audits/2026-09-26-issue194/README.md) graded the original proposal B−. The owner accepted its recommendations; the [completed handoff and policy validation](docs/audits/2026-09-26-issue194/policy-readiness.md) now records the settled decisions, acceptance tests and full-corpus results. Use policy **1.0.0**: [namespace registry](priv/routing/namespaces.json), [classification rules](priv/routing/classification-rules.json), and [pinned source meanings](priv/routing/vocabulary-terms.json). The earlier eight-class screen is historical evidence, not the current evaluator.
+
+The accepted approach borrows semantic meaning from established vocabularies and keeps URL policy local:
+
+- **Schema.org** supplies broad web descriptions, such as Person and CreativeWork; its overlapping hierarchy does not dictate folders.
+- **Wikidata and domain authorities** supply detailed classifications and identities, with source evidence and reviewed mappings. Their updates must not automatically move public URLs.
+- **SKOS** informs stable category identifiers, labels, scope notes and mappings. Nature, Subjects and On are local product choices.
+- **Getty and BIBFRAME** help distinguish art terminology from named subjects, and works from editions or copies. They complement a general vocabulary within their domains.
+
+Keep **identity, classification, page role and address** separate. A subject can have several classifications and appear in several collections while its page keeps one canonical address per locale. A curated On page has its own editorial identity and explicit membership; it must not replace a lexical record or merge its subjects.
+
+Approved boundary examples: Mercury's planet and element use Nature, its deity Subjects, and a useful curated treatment On. Apple's album belongs with Works and its fruit with Nature. Polish the language uses Concepts and the chicken breed Nature; Polish/polish lexical identities stay distinct. Slug proposals deliberately distinguish `c-plus-plus`, `c-plus` and `c`. Works and their editions retain separate identities even though both use the Works family. These are policy examples, not allocated URLs; missing identities must still be verified and created through the normal process.
+
+The stored `entity_kind` is not a reliable routing classifier: the snapshot includes films, albums, mountains and planets stored as concepts, and general practices stored as events. **Subjects is a reviewed scope fallback; uncertain identity or contradictory classification needs review.** Imported disambiguation/list pages do not automatically become curated On pages. Names, matching slugs and editorial associations never establish identity.
+
+The offline [Routing.Policy](lib/devils_dictionary/routing/policy.ex) evaluator accounts for every entity with a mapping or an explicit review/exclusion outcome. `mapped` does not grant publication: useful public content, rights, identity review and a unique allocated address remain separate gates. The initial full run mapped 38,576 of 100,723 entities and found 1,406 candidate-path collision groups; the report records all remaining dispositions. No routes were allocated and no pages were approved for publication.
+
+To reproduce the audit, export with [policy-export.sql](docs/audits/2026-09-26-issue194/policy-export.sql), run `mix compile`, then `mix dd.routing.audit --input /tmp/routing-input.jsonl --output /tmp/routing-audit`. The [validation report](docs/audits/2026-09-26-issue194/policy-readiness.md#reproduce) gives the complete commands. Test with `mix test test/devils_dictionary/routing`, then `mix precommit`.
+
+For a new type, pin the authority's meaning and evidence, add positive/negative fixtures, update the rules and version, and review a full-corpus diff. New detailed types normally extend classifications or collections; a new family additionally needs owner-approved scope and overlap rules. Record the rule, evidence, exceptions and approval behind every launch assignment. A rename updates the display label by default; deliberate published moves use a 301 and preserve the old path reservation. Rebuilds preserve registry/page identity, allocated paths, overrides and editorial membership. Identity splits require an explicit successor choice. The ADR specifies the storage constraints, override process and rollback steps.
+
+Each useful overview and subject page has its own canonical URL. Readable namespaces help readers; more folders or schema markup do not guarantee better rankings. The route implementation must keep canonicals, server responses, internal links, structured data, indexability and sitemaps consistent and pass the ADR's HTTP, concurrency, restore and publication tests. Update this section's implementation status when those phases land.
 
 ## The map
 
