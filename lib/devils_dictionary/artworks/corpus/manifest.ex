@@ -233,6 +233,25 @@ defmodule DevilsDictionary.Artworks.Corpus.Manifest do
                      )
                  end)
 
+  @checksums for path <- Path.wildcard(@manifest_glob),
+                 {:ok, body} = File.read(path),
+                 {:ok, manifest} = Jason.decode(body),
+                 is_binary(manifest["manifest"]),
+                 is_binary(manifest["checksum"]),
+                 into: %{},
+                 do: {manifest["manifest"], manifest["checksum"]}
+
+  @doc """
+  The committed checksum of the manifest named `name` (`"wikidata-famous-v1"`),
+  or `nil` when no committed manifest has that name.
+
+  Read at compile time with the rest of this module's facts about the files.
+  A selection that pins a catalog row pins the manifest it came from, and this
+  is what tells it whether the file it named is still the file committed
+  (#156): a changed checksum is a changed revision of the catalog.
+  """
+  def checksum_of(name) when is_binary(name), do: Map.get(@checksums, name)
+
   @doc """
   When each committed corpus was generated, by source slug.
 

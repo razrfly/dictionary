@@ -48,7 +48,10 @@ defmodule DevilsDictionaryWeb.Word do
     assigns = assign(assigns, :other, Map.new(assigns.choices, &{&1.object_id, &1}))
 
     ~H"""
-    <div id="headword">
+    <%!-- `order-first` does nothing unless the rail is `contents` inside a
+         flex column, which `WordLive` makes it only below `lg` and only when
+         a curated opening follows the headword (#156). --%>
+    <div id="headword" class="max-lg:order-first">
       <h1 class="font-display text-5xl/none text-mist-950 sm:text-6xl/none dark:text-white">
         {@headword.lemma}
       </h1>

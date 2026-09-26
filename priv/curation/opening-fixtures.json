@@ -1,0 +1,149 @@
+{
+  "schema_version": 1,
+  "about": "Development-only manual selections for the curated opening section (#156 Phase 1). Rendered only where config enables :curated_opening_fixtures and the request carries ?opening=fixture. Every reference names a durable registry object by its source identity and exact revision; nothing here is a discovery result id, and nothing here is invented text. Replaced by #196's approved compositions in Phase 2.",
+  "compositions": [
+    {
+      "key": "love",
+      "version": 1,
+      "scope": { "lexemes": ["en/love/noun"] },
+      "selected_by": { "kind": "model", "label": "Claude Code (Opus 5.5)" },
+      "selected_on": "2026-09-26",
+      "reviewed_by": null,
+      "reviewed_on": null,
+      "lead": {
+        "item": {
+          "content": {
+            "source": "bierce",
+            "record": "LOVE/n",
+            "revision_key": "764883999f1a0ef470bae07d0967596f894e3a2c220409249fb8e86e887a16c2"
+          }
+        },
+        "excerpt": { "sentences": 1 },
+        "meaning": { "lexeme": "en/love/noun" }
+      },
+      "highlights": [
+        {
+          "item": {
+            "work": {
+              "wikidata": "Q8777422",
+              "catalog": "wikidata-famous-v1",
+              "checksum": "6ede00bd5f1d94f46f98f202260dce7552452953a4f340b6f0176c713e5feb14"
+            }
+          },
+          "meaning": {
+            "sense": {
+              "lexeme": "en/love/noun",
+              "source": "wiktionary",
+              "record": "love/noun/1",
+              "revision_key": "234effe43aa45fd2ab47e9b872d4a550dc341620c04dc2122e27e48602f858a3",
+              "gloss": "Affectionate, benevolent concern or care for other people or beings, and for their well-being."
+            }
+          },
+          "note": "Chosen as the picture: the catalog records this painting as depicting love, Cupid and Psyche."
+        },
+        {
+          "item": {
+            "quotation": {
+              "sense": {
+                "lexeme": "en/love/noun",
+                "source": "wiktionary",
+                "record": "love/noun/1",
+                "revision_key": "234effe43aa45fd2ab47e9b872d4a550dc341620c04dc2122e27e48602f858a3",
+                "gloss": "A profound and caring affection towards someone."
+              },
+              "fingerprint": "979209ffe17cf8cba4c7a216333b4a9987b7b52f6ee2d2e8d902f4b399084e29"
+            }
+          },
+          "meaning": {
+            "sense": {
+              "lexeme": "en/love/noun",
+              "source": "wiktionary",
+              "record": "love/noun/1",
+              "revision_key": "234effe43aa45fd2ab47e9b872d4a550dc341620c04dc2122e27e48602f858a3",
+              "gloss": "A profound and caring affection towards someone."
+            }
+          },
+          "note": "Chosen for the tender sense: it is the one quotation Wiktionary files under this meaning."
+        },
+        {
+          "item": {
+            "quotation": {
+              "sense": {
+                "lexeme": "en/love/noun",
+                "source": "wiktionary",
+                "record": "love/noun/1",
+                "revision_key": "234effe43aa45fd2ab47e9b872d4a550dc341620c04dc2122e27e48602f858a3",
+                "gloss": "A feeling of intense attraction towards someone."
+              },
+              "fingerprint": "31c2c3f4bc12bc85347d0dde6851fab16098bbd1c8619846ba37a44b55a74b38"
+            }
+          },
+          "meaning": {
+            "sense": {
+              "lexeme": "en/love/noun",
+              "source": "wiktionary",
+              "record": "love/noun/1",
+              "revision_key": "234effe43aa45fd2ab47e9b872d4a550dc341620c04dc2122e27e48602f858a3",
+              "gloss": "A feeling of intense attraction towards someone."
+            }
+          },
+          "note": "Chosen for the fierce sense: love turned to hatred, the earlier of the two quotations filed under this meaning."
+        }
+      ]
+    },
+    {
+      "key": "oats",
+      "version": 1,
+      "scope": { "lexemes": ["en/oats/noun"] },
+      "selected_by": { "kind": "model", "label": "Claude Code (Opus 5.5)" },
+      "selected_on": "2026-09-26",
+      "reviewed_by": null,
+      "reviewed_on": null,
+      "lead": {
+        "item": {
+          "content": {
+            "source": "johnson",
+            "record": "OATS/n. s./0",
+            "revision_key": "e7ddcd8e1248913f23a69e5df491a0f3c69d397f86ea97d71de6a5e3aa29957d"
+          }
+        },
+        "excerpt": { "sentences": 1 },
+        "meaning": { "lexeme": "en/oats/noun" },
+        "note": "Chosen because Johnson's is the only authored definition on this page."
+      },
+      "highlights": []
+    },
+    {
+      "key": "nepotism",
+      "version": 1,
+      "scope": { "lexemes": ["en/nepotism/noun"] },
+      "selected_by": { "kind": "model", "label": "Claude Code (Opus 5.5)" },
+      "selected_on": "2026-09-26",
+      "reviewed_by": null,
+      "reviewed_on": null,
+      "lead": {
+        "item": {
+          "content": {
+            "source": "bierce",
+            "record": "NEPOTISM/n",
+            "revision_key": "deba2d994e73498d6108a18bf8a168830783077c1bd833e29e58e05239a69969"
+          }
+        },
+        "excerpt": { "sentences": 1 },
+        "meaning": { "lexeme": "en/nepotism/noun" }
+      },
+      "highlights": []
+    },
+    {
+      "key": "topographagnosia",
+      "version": 1,
+      "scope": { "lexemes": ["en/topographagnosia/noun"] },
+      "selected_by": { "kind": "model", "label": "Claude Code (Opus 5.5)" },
+      "selected_on": "2026-09-26",
+      "reviewed_by": null,
+      "reviewed_on": null,
+      "lead": null,
+      "highlights": []
+    }
+  ]
+}
