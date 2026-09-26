@@ -1,0 +1,55 @@
+object_id,entity_kind,preferred_label,description,lifecycle_state,instance_of,subclass_of,disambiguation,content_type,catalog_source,taxon,work_kind,qids
+1,person,Ambrose Bierce,American satirist; author of The Devil's Dictionary (1911).,active,"[""Q5""]",[],,,,,,"[""Q191050""]"
+2,work,The Devil's Dictionary,,active,[],[],,,,,dictionary,"[""Q1197843""]"
+3,edition,Project Gutenberg #972 (1911 text),,active,[],[],,,,,,[]
+6,edition,LEME ver. 1.0 (2023) transcription of the 1755 first edition,,active,[],[],,,,,,[]
+1829906,concept,Polish,West Slavic language,active,"[""Q33742"", ""Q1288568""]","[""Q742782""]",,,,,,"[""Q809""]"
+1830738,concept,cat,Unix utility that concatenates and lists files,active,"[""Q18343316""]",[],,,,,,"[""Q300918""]"
+1830860,concept,cat,small domesticated carnivorous mammal,active,"[""Q55983715""]","[""Q57814795"", ""Q39201"", ""Q25265""]",,,,,,"[""Q146""]"
+1831199,concept,water,chemical compound whose molecules are formed by two hydrogen atoms and one oxygen atom,active,"[""Q113145171""]","[""Q50690"", ""Q11723014""]",,,,,,"[""Q283""]"
+1831413,concept,Mars,"fourth planet from the Solar System, tellurian and orange-red due to iron oxide",active,"[""Q3504248"", ""Q844911""]",[],,,,,,"[""Q111""]"
+1833630,event,brit milah,Jewish religious male circumcision ceremony performed by a mohel on the eighth day of a male infant's life,active,"[""Q1190554""]","[""Q7311376"", ""Q13537604"", ""Q3534263""]",,,,,,"[""Q848599""]"
+1838436,concept,Mount Everest,"Earth's highest mountain above sea level, located in the Mahalangur Himal sub-range of the Himalayas",active,"[""Q8502""]",[],,,,,,"[""Q513""]"
+1841806,concept,Apple,1990 studio album by Mother Love Bone,active,"[""Q482994""]",[],,,,,,"[""Q1754545""]"
+1845556,person,Aurelio Voltaire,Cuban-American musician,active,"[""Q5""]",[],,,,,,"[""Q944759""]"
+1846395,work,Crocodile Tears,2009 novel by Anthony Horowitz,active,"[""Q47461344""]",[],true,,,,,"[""Q3003167""]"
+1851364,event,Call for Bids,business process,active,"[""Q1656682""]","[""Q20920559""]",,,,,,"[""Q837379""]"
+1851553,event,Mentioned in Despatches,military distinction of merit,active,"[""Q618779"", ""Q1190554""]","[""Q1788716""]",,,,,,"[""Q1809982""]"
+1852573,concept,Polish,breed of chicken,active,"[""Q15304943""]","[""Q780""]",,,,,,"[""Q385059""]"
+1852597,concept,Polish,Wikimedia disambiguation page,active,"[""Q4167410""]",[],true,,,,,"[""Q346127""]"
+1854978,event,The Streak,"period of 68 years, spanning from 1948 to 2015, in which Easton Area High School in Easton, Pennsylvania produced at least one individual district champion in the sport of high school wrestling",active,"[""Q1190554""]",[],,,,,,"[""Q25222540""]"
+1857160,taxon,Zeus,genus of fishes,active,"[""Q16521""]",[],,,,"{""rank"": ""Q34740"", ""common_names"": [], ""scientific_name"": ""Zeus""}",,"[""Q1960850""]"
+1857525,taxon,Felis catus,species of mammal,active,"[""Q16521"", ""Q213907"", ""Q183368"", ""Q1297859""]",[],,,,"{""rank"": ""Q7432"", ""common_names"": [""cat""], ""scientific_name"": ""Felis catus""}",,"[""Q20980826""]"
+1863456,concept,Zeus,Greek god of the sky and king of the gods,active,"[""Q842697"", ""Q22989102"", ""Q1589492"", ""Q113103481""]",[],,,,,,"[""Q34201""]"
+1864142,event,Hero's,MMA promoter based in Japan,active,"[""Q1656682"", ""Q15416""]",[],,,,,,"[""Q1134834""]"
+1867856,concept,love,"strong, positive emotion based on affection",active,"[""Q16748888"", ""Q1053916""]","[""Q5489108"", ""Q1124198"", ""Q60539479""]",,,,,,"[""Q316""]"
+1873905,concept,United States,country located primarily in North America,active,"[""Q3624078"", ""Q6256""]",[],,,,,,"[""Q30""]"
+1875719,concept,CAT,Punjabi-language TV series (2022),active,"[""Q5398426""]",[],,,,,,"[""Q115715988""]"
+1876187,concept,1948 Ashgabat earthquake,earthquake in Turkmenistan,active,"[""Q7944"", ""Q8065"", ""Q3839081""]",[],,,,,,"[""Q2391429""]"
+1877206,taxon,Laris,genus of insects,active,"[""Q16521""]",[],true,,,"{""rank"": ""Q34740"", ""common_names"": [], ""scientific_name"": ""Laris""}",,"[""Q10316394""]"
+1877688,event,flypast,ceremonial or honorific aircraft flight,active,"[""Q1656682""]","[""Q15921555""]",,,,,,"[""Q1837149""]"
+1878772,event,Remembrance of the Dead,Dutch day of remembrance of war dead,active,"[""Q1656682"", ""Q1062856""]",[],,,,,,"[""Q1968047""]"
+1879477,concept,Mercury,"first planet from the Solar System and smallest among all, tellurian and with extreme temperatures",active,"[""Q3504248"", ""Q3901935""]",[],,,,,,"[""Q308""]"
+1885503,event,Del Águila family killings,serial killings in Spain,active,"[""Q1190554""]",[],,,,,,"[""Q135673225""]"
+1886855,event,Theatre Royal disaster,"crowd crush in Glasgow, 1849",active,"[""Q1190554"", ""Q2165983""]",[],,,,,,"[""Q107107761""]"
+1886941,event,Killing of Mene Ogidi,"2026 death in Delta state, Nigeria",active,"[""Q1190554""]",[],,,,,,"[""Q139855715""]"
+1891666,event,European Youth Event,event for young Europeans arranged by the European parliament,active,"[""Q1656682""]",[],,,,,,"[""Q28407083""]"
+1892804,concept,Cat,fictional character in Red Dwarf,active,"[""Q28020127"", ""Q15773317"", ""Q27303706""]",[],,,,,,"[""Q5050998""]"
+1894610,work,Mona Lisa,"oil painting by Leonardo da Vinci in the Louvre, Paris",active,"[""Q3305213""]",[],,artwork,wikidata,,artwork,"[""Q12418""]"
+1895205,event,Remembrance Sunday,day to commemorate war dead,active,"[""Q1656682""]",[],,,,,,"[""Q1770490""]"
+1901727,event,repentance,activity of reviewing one's actions and feeling contrition or regret for past wrongs,active,"[""Q1190554""]","[""Q4729246""]",,,,,,"[""Q497263""]"
+1959866,concept,Harvard University,"Private university in Cambridge, Massachusetts, US",active,[],[],,,,,,"[""Q13371""]"
+1968096,place,Warsaw,Capital and largest city of Poland,active,"[""Q925381"", ""Q515"", ""Q1901835"", ""Q1549591"", ""Q1200957"", ""Q51929311"", ""Q56061"", ""Q200250"", ""Q108178728""]",[],,,,,,"[""Q270""]"
+1985448,concept,Apple,Edible fruit,active,[],[],,,,,,"[""Q89""]"
+3733859,organization,Wikimedia Foundation,American charitable organization,active,"[""Q163740"", ""Q708676"", ""Q157031""]",[],,,,,,"[""Q180""]"
+3733865,event,Apollo 11,first Moon landing and fifth crewed flight of the United States Apollo program,active,"[""Q752783""]",[],,,,,,"[""Q43653""]"
+3733873,artifact,Browser audit Family Table 84,A fictional artwork used for the issue 84 browser walkthrough.,active,[],[],,,,,,[]
+3733876,artifact,Issue 84 CHANGED reviewed artwork,The displayed description changed after acceptance,active,[],[],,,,,,[]
+3733878,artifact,Issue 84 split artwork,,split,[],[],,,,,,[]
+3733879,artifact,Issue 84 artwork choice A,,active,[],[],,,,,,[]
+3733880,artifact,Issue 84 artwork choice B,,active,[],[],,,,,,[]
+3733888,artifact,Issue 84 browser walkthrough artwork,Browser-created artifact for issue 84 end-to-end verification.,active,[],[],,,,,,[]
+3734402,work,Mona Lisa,,active,[],[],,artwork,wikidata,,artwork,"[""Q2126369""]"
+3737584,work,Love,,active,[],[],,text,poetrydb,,poem,[]
+3739174,work,Love,,active,[],[],,text,poetrydb,,poem,[]
+3740879,work,The Devil's Dictionary,,active,[],[],,text,open-library,,book,"[""Q1147121""]"
