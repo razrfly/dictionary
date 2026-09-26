@@ -107,7 +107,9 @@ defmodule DevilsDictionary.Routing.PagesTest do
 
     assert Pages.ensure(:subject, lexeme.object_id) == {:error, :target_kind_mismatch}
     assert Pages.ensure(:edition, person.object_id) == {:error, :target_kind_mismatch}
-    assert Pages.ensure(:subject, -1) == {:error, :target_not_found}
+    assert Pages.ensure(:subject, 999_999_999) == {:error, :target_not_found}
+    assert Pages.ensure(:subject, -1) == {:error, :invalid_target}
+    assert Pages.ensure(:subject, nil) == {:error, :target_required}
 
     twice = %{relationship: :editorial_association, target_object_id: person.object_id}
 

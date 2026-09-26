@@ -15,6 +15,7 @@ defmodule DevilsDictionary.Routing.Ledger do
   | `merge/3` | a human | every path of the merged page aliases the survivor |
   | `split/3` | a human | the page becomes a choice among named successors |
   | `retire/2` | a human | every path becomes a reserved tombstone (410) |
+  | `restore/3` | a human | a tombstone of the page becomes its canonical again |
   | `rollback/2` | a human | restores the before-state of one operation |
 
   ## Concurrency
@@ -64,9 +65,11 @@ defmodule DevilsDictionary.Routing.Ledger do
 
   Idempotent: allocating a page's own canonical again returns it and writes
   nothing, even after the page was reclassified. A page's own alias is
-  reclaimed rather than refused. A subject or edition page needs its target's
-  current decision to be `mapped` to the path's family, recorded on the
-  ledger row.
+  reclaimed rather than refused. A tombstone is not: it records a deliberate
+  removal, so it comes back only through `restore/3` or a rollback, and
+  allocation refuses it as `{:tombstoned, owner}`. A subject or edition page
+  needs its target's current decision to be `mapped` to the path's family,
+  recorded on the ledger row.
 
   Options: `:actor_id` and `:reason` (both required).
   """
@@ -89,6 +92,9 @@ defmodule DevilsDictionary.Routing.Ledger do
 
       existing && existing.kind == :canonical ->
         existing
+
+      existing && existing.kind == :tombstone ->
+        refuse({:tombstoned, owner(existing)})
 
       page.lifecycle_state != :active ->
         refuse(:page_not_active)
@@ -115,8 +121,8 @@ defmodule DevilsDictionary.Routing.Ledger do
   @doc """
   An approved move: `path` becomes the page's canonical and the old canonical
   a permanent alias, answered with one 301. The target path must be new or
-  already one of this page's own aliases or tombstones. Moving to the current
-  canonical is a no-op.
+  already one of this page's own aliases; a tombstone is brought back with
+  `restore/3`. Moving to the current canonical is a no-op.
 
   Options: `:actor_id` (a human) and `:reason`.
   """
@@ -148,6 +154,9 @@ defmodule DevilsDictionary.Routing.Ledger do
 
       existing && existing.destination_page_id != page.id ->
         refuse({:path_taken, owner(existing)})
+
+      existing && existing.kind == :tombstone ->
+        refuse({:tombstoned, owner(existing)})
 
       true ->
         decision = addressable!(page, parsed)
@@ -374,6 +383,63 @@ defmodule DevilsDictionary.Routing.Ledger do
 
     {_op, page} = transition_page(op, page, %{lifecycle_state: :retired, canonical_path_id: nil})
     page
+  end
+
+  # ── restore ──────────────────────────────────────────────────────────────
+
+  @doc """
+  An approved restoration: one of the page's own tombstones becomes its
+  canonical again. A retired page becomes active; an active page's current
+  canonical, if it has one, becomes an alias of it. The page's other
+  tombstones stay tombstones. This is the deliberate, human way back from a
+  removal — ordinary allocation never resurrects a tombstone — and it passes
+  the same family check as an allocation.
+
+  Options: `:actor_id` (a human) and `:reason`.
+  """
+  def restore(page_id, path, opts) do
+    with {:ok, parsed} <- Address.parse(path),
+         {:ok, actor} <- actor(opts, :restore),
+         {:ok, reason} <- reason(opts) do
+      transact(fn -> do_restore(page_id, parsed, actor, reason) end)
+    end
+  end
+
+  defp do_restore(page_id, parsed, actor, reason) do
+    lock_paths([parsed.path])
+    page = Pages.lock!(page_id) || refuse(:page_not_found)
+    if page.lifecycle_state not in [:active, :retired], do: refuse(:page_not_restorable)
+
+    existing_id = Repo.one(from p in PublicPath, where: p.path == ^parsed.path, select: p.id)
+    paths = lock_path_ids([page.canonical_path_id, existing_id])
+    tombstone = existing_id && Map.get(paths, existing_id)
+
+    cond do
+      is_nil(tombstone) -> refuse(:no_such_reservation)
+      tombstone.destination_page_id != page.id -> refuse({:path_taken, owner(tombstone)})
+      tombstone.kind != :tombstone -> refuse({:not_a_tombstone, tombstone.kind})
+      true -> :ok
+    end
+
+    decision = addressable!(%{page | lifecycle_state: :active}, parsed)
+    op = new_op(:restore, actor, reason, decision: decision)
+
+    op =
+      case page.canonical_path_id && Map.fetch!(paths, page.canonical_path_id) do
+        nil ->
+          op
+
+        current ->
+          {op, _alias} = transition_path(op, current, :alias, page.id)
+          op
+      end
+
+    {op, path} = transition_path(op, tombstone, :canonical, page.id)
+
+    {_op, _page} =
+      transition_page(op, page, %{lifecycle_state: :active, canonical_path_id: path.id})
+
+    path
   end
 
   # ── rollback ─────────────────────────────────────────────────────────────

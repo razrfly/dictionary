@@ -146,9 +146,14 @@ defmodule DevilsDictionary.RawSqlTest do
     Enum.map(@sql_context, &String.replace(&1, "TABLE", table))
   end
 
+  # The schema's tables, and PostgreSQL's own catalog relations — `pg_database`,
+  # `pg_sequences` — which every database has, so naming one is never a stale
+  # table (#194's recovery checks read them).
   defp table_names do
     Repo.query!("""
     SELECT tablename FROM pg_tables WHERE schemaname = 'public'
+    UNION
+    SELECT relname FROM pg_class WHERE relnamespace = 'pg_catalog'::regnamespace
     """)
     |> Map.fetch!(:rows)
     |> Enum.map(&hd/1)
@@ -177,7 +182,14 @@ defmodule DevilsDictionary.RawSqlTest do
       |> Regex.scan(contents)
       |> Enum.map(&Enum.at(&1, 1))
 
-    MapSet.new(["lateral" | ctes ++ laterals ++ temps])
+    # A cursor is named by the file that declares it, and read with `FETCH …
+    # FROM name`, which looks like a table to the scan above.
+    cursors =
+      ~r/DECLARE\s+([a-z_][a-z0-9_]*)\s+(?:NO\s+SCROLL\s+)?CURSOR/i
+      |> Regex.scan(contents)
+      |> Enum.map(&Enum.at(&1, 1))
+
+    MapSet.new(["lateral" | ctes ++ laterals ++ temps ++ cursors])
   end
 
   # Words that follow FROM or JOIN without naming anything: `DELETE FROM x` is

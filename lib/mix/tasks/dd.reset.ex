@@ -28,6 +28,13 @@ defmodule Mix.Tasks.Dd.Reset do
   seeded: `sources`, `scopes`, `predicates`, `predicate_endpoint_rules`, and
   Bierce and Johnson as entities with their works and editions. That is the
   state `mix dd.rebuild` starts from.
+
+  ## It will not silently destroy routing state
+
+  Pages, classification decisions and the address ledger (#194) reference
+  registry object ids and cannot be rebuilt from sources. A database holding
+  them is refused unless `--routing-snapshot PATH` names a snapshot of it taken
+  after its latest routing write. See `docs/routing/recovery.md`.
   """
 
   use Mix.Task
@@ -41,12 +48,19 @@ defmodule Mix.Tasks.Dd.Reset do
   @impl Mix.Task
   def run(args) do
     {opts, _, _} =
-      OptionParser.parse(args, strict: [database: :string, force: :string, quiet: :boolean])
+      OptionParser.parse(args,
+        strict: [database: :string, force: :string, quiet: :boolean, routing_snapshot: :string]
+      )
 
     configured = configured_database()
     named = opts[:database]
 
     check!(named, configured, opts[:force])
+
+    case DevilsDictionary.Routing.Recovery.guard(repo_config(), "reset", opts[:routing_snapshot]) do
+      :ok -> :ok
+      {:error, message} -> Mix.raise(message)
+    end
 
     quiet? = opts[:quiet] || false
 
@@ -103,8 +117,10 @@ defmodule Mix.Tasks.Dd.Reset do
     end
   end
 
-  defp configured_database do
+  defp configured_database, do: repo_config()[:database]
+
+  defp repo_config do
     Application.load(:devils_dictionary)
-    get_in(Application.get_env(:devils_dictionary, DevilsDictionary.Repo), [:database])
+    Application.get_env(:devils_dictionary, DevilsDictionary.Repo)
   end
 end

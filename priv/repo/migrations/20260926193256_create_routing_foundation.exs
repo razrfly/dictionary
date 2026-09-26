@@ -379,7 +379,8 @@ defmodule DevilsDictionary.Repo.Migrations.CreateRoutingFoundation do
     end
 
     create constraint(:route_changes, :route_changes_operation,
-             check: "operation IN ('allocate','move','merge','split','retire','rollback')"
+             check:
+               "operation IN ('allocate','move','merge','split','retire','restore','rollback')"
            )
 
     create constraint(:route_changes, :route_changes_subject,
@@ -413,15 +414,16 @@ defmodule DevilsDictionary.Repo.Migrations.CreateRoutingFoundation do
              """
            )
 
-    # What an allocation may do, whoever writes it: create or reclaim a
-    # canonical for its own page, and point an active page's empty canonical
-    # at it. Anything else — retiring, re-pointing, merging — is a human's
-    # operation, and naming it `allocate` does not make it one.
+    # What an allocation may do, whoever writes it: create a canonical, or
+    # reclaim its own page's alias, and point an active page's empty canonical
+    # at it. A tombstone is a deliberate removal: bringing one back is a
+    # human's `restore`, like retiring, re-pointing or merging, and naming it
+    # `allocate` does not make it one.
     create constraint(:route_changes, :route_changes_allocate_shape,
              check: """
              operation <> 'allocate' OR (
                (path_id IS NULL OR (after_kind = 'canonical'
-                 AND (before_kind IS NULL OR (before_kind <> 'canonical'
+                 AND (before_kind IS NULL OR (before_kind = 'alias'
                    AND before_destination_id = after_destination_id))))
                AND (page_id IS NULL OR (before_lifecycle = 'active' AND after_lifecycle = 'active'
                  AND before_canonical_path_id IS NULL AND after_canonical_path_id IS NOT NULL

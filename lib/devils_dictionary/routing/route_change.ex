@@ -17,7 +17,7 @@ defmodule DevilsDictionary.Routing.RouteChange do
   alias DevilsDictionary.Routing.{ClassificationDecision, Page, PageRevision, PublicPath}
   alias DevilsDictionary.Sources.Actor
 
-  @operations [:allocate, :move, :merge, :split, :retire, :rollback]
+  @operations [:allocate, :move, :merge, :split, :retire, :restore, :rollback]
   @kinds [:canonical, :alias, :tombstone]
   @lifecycles [:active, :merged, :split, :retired]
 

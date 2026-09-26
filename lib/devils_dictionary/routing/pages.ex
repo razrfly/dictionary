@@ -31,11 +31,25 @@ defmodule DevilsDictionary.Routing.Pages do
   two callers get the same page. A resumable backfill relies on this rather
   than on checking first.
   """
-  def ensure(role, target_object_id, locale \\ "en") when role in [:subject, :edition, :lexeme] do
+  def ensure(role, target_object_id, locale \\ "en")
+
+  def ensure(role, target_object_id, locale)
+      when role in [:subject, :edition, :lexeme] and is_integer(target_object_id) and
+             target_object_id > 0 do
     with :ok <- fits(role, target_object_id) do
       insert_or_find(role, target_object_id, locale)
     end
   end
+
+  # Refused before any query: a missing or malformed target must be one
+  # record's error in a batch, not an exception that rolls the batch back.
+  def ensure(role, nil, _locale) when role in [:subject, :edition, :lexeme],
+    do: {:error, :target_required}
+
+  def ensure(role, _target_object_id, _locale) when role in [:subject, :edition, :lexeme],
+    do: {:error, :invalid_target}
+
+  def ensure(_role, _target_object_id, _locale), do: {:error, :invalid_role}
 
   # What the database checks at commit, answered before it has to raise.
   defp fits(role, target_object_id) do
