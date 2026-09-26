@@ -1,6 +1,6 @@
 # Routing Stage 1 — the durable foundation
 
-**Status: implemented, 26 September 2026, for [routing delivery issue #194](https://github.com/razrfly/dictionary/issues/194); awaiting independent review of the PR.** [ADR 0004](../adr/0004-public-routing.md) is the contract. This page records how Stage 1 implements §5–6, the decisions made while implementing it, the review it has had, the evidence, and what Stage 2 inherits.
+**Status: implemented, 26 September 2026, for [routing delivery issue #194](https://github.com/razrfly/dictionary/issues/194); delivered in [PR #205](https://github.com/razrfly/dictionary/pull/205), awaiting independent review.** [ADR 0004](../adr/0004-public-routing.md) is the contract. This page records how Stage 1 implements §5–6, the decisions made while implementing it, the review it has had, the evidence, and what Stage 2 inherits.
 
 Stage 1 adds storage, invariants, a ledger and a resolver. It **adds no route, rewrites no reader, allocates no production path and publishes nothing.** `/words/:id/:slug`, `/define/:slug` and `/entities/:id/:slug` are unchanged, and nothing in the router calls the new code. Backfill (Stage 2), reader integration (Stage 3), On editing (Stage 4) and publication (Stage 5) remain.
 
@@ -152,7 +152,7 @@ A second pass re-ran every scenario against the fixes. It confirmed 13 findings 
 
 It also found lower-severity gaps: a revision-only phantom ledger row, a raw split with no registry split, `+`/`'`/`--` slugs accepted by the database, and a survivor function more permissive than the registry.
 
-All are fixed, with tests. The same retirement now takes 91 ms at 50,602 paths, the same as at 301. This is an agent's review, not the owner's or an external reviewer's.
+All are fixed, with tests. The same retirement now takes 91 ms at 50,602 paths, the same as at 301. This is an agent's review, not the owner's or an external reviewer's; [PR #205](https://github.com/razrfly/dictionary/pull/205) still needs independent review before merge.
 
 ## Evidence
 
