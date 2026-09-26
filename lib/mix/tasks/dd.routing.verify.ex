@@ -17,6 +17,9 @@ defmodule Mix.Tasks.Dd.Routing.Verify do
   re-projected the restored copy: sequences must then only not have fallen
   behind their tables, while every row must still match. Exits non-zero on any
   difference.
+
+  It starts the Repo and nothing else — no Oban, no endpoint — so a restored
+  copy's queued jobs and cron do not run while it is being checked.
   """
 
   use Mix.Task
@@ -24,7 +27,7 @@ defmodule Mix.Tasks.Dd.Routing.Verify do
   alias DevilsDictionary.Repo
   alias DevilsDictionary.Routing.Recovery
 
-  @requirements ["app.start"]
+  @requirements ["app.config"]
 
   @impl Mix.Task
   def run(args) do
@@ -34,6 +37,13 @@ defmodule Mix.Tasks.Dd.Routing.Verify do
     if invalid != [] or is_nil(opts[:baseline]), do: Mix.raise("--baseline DATABASE is required")
     current = Repo.config()[:database]
     if current == opts[:baseline], do: Mix.raise("the baseline must be a different database")
+
+    {:ok, _apps} = Application.ensure_all_started(:ecto_sql)
+
+    case Repo.start_link(pool_size: 2) do
+      {:ok, _pid} -> :ok
+      {:error, {:already_started, _pid}} -> :ok
+    end
 
     {result, report} = Recovery.verify(opts[:baseline], projected: opts[:projected] || false)
 

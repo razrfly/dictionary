@@ -7,6 +7,14 @@ import Config
 # any compile-time configuration in here, as it won't be applied.
 # The block below contains prod specific runtime configuration.
 
+# Recovery work on a restored copy (docs/routing/recovery.md) starts the
+# application to re-project it, and must not run the copy's queued jobs or
+# cron — the quotation verifier makes outbound requests. `DD_NO_OBAN=1` starts
+# Oban with no queues and no plugins. The test suite runs Oban in `:manual`.
+if config_env() != :test and System.get_env("DD_NO_OBAN") in ["1", "true"] do
+  config :devils_dictionary, Oban, queues: false, plugins: false
+end
+
 # ## Using releases
 #
 # If you use `mix release`, you need to explicitly enable the server

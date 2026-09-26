@@ -220,6 +220,12 @@ defmodule DevilsDictionary.Routing.RecoveryTest do
     Snapshot.dump!(Repo.config(), ctx.dump)
     Snapshot.restore!(Keyword.put(Repo.config(), :database, ctx.target), ctx.dump)
 
+    # The operator's command, run from the source's side: exact, and read-only.
+    verified =
+      capture_io(fn -> Mix.Tasks.Dd.Routing.Verify.run(["--baseline", ctx.target]) end)
+
+    assert verified =~ "#{ctx.source} matches #{ctx.target} exactly."
+
     Recovery.with_database(ctx.target, fn ->
       # 3. Exactly the same, section by section and row by row.
       restored = Recovery.manifest(rows: true)

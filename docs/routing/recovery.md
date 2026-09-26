@@ -26,7 +26,9 @@ These guards stop accidents. They do not stop an operator: `--routing-snapshot` 
 
 ## Procedure
 
-Every step except the first writes only to a new, separate database. Never restore over the live database: the guard refuses without a covering snapshot, and you would lose whatever the snapshot does not hold.
+Every step except the first writes only to a new, separate database.
+
+A restored copy carries the source's queued and scheduled jobs. Tasks that start the application would otherwise run them against the copy, and the quotation verifier makes outbound requests. `mix dd.routing.verify` starts only the Repo. For every other command on the copy, set `DD_NO_OBAN=1`, which starts Oban with no queues and no plugins. Never restore over the live database: the guard refuses without a covering snapshot, and you would lose whatever the snapshot does not hold.
 
 1. **Snapshot the source.** This is read-only, and writes the dump and its `.routing.json` marks. Quiesce routing writes first if you can.
 
@@ -53,11 +55,11 @@ Every step except the first writes only to a new, separate database. Never resto
 4. **Re-project from source records, in any provider order.** Replay archives (for the API sources) and re-materialize every implemented source. `--all` also asserts that nothing derived changed (scorecard M2).
 
    ```bash
-   DD_DATABASE=devils_dictionary_restore mix dd.replay --source wikidata
+   DD_NO_OBAN=1 DD_DATABASE=devils_dictionary_restore mix dd.replay --source wikidata
    ```
 
    ```bash
-   DD_DATABASE=devils_dictionary_restore mix dd.materialize --source wikidata --all
+   DD_NO_OBAN=1 DD_DATABASE=devils_dictionary_restore mix dd.materialize --source wikidata --all
    ```
 
    Repeat for each source, in whatever order. Then verify again. After re-projection, sequences need only not have fallen behind their tables, because upserts may consume ids without writing rows:
