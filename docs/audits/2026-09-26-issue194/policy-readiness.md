@@ -4,6 +4,8 @@
 
 **Updated grade: A+ for the implementation brief. Production launch readiness remains unproven.** This is a judgment of the specification's clarity, completeness, reproducible evidence and explicit failure handling, not a claim that every classification is correct or that the routing feature is implemented.
 
+The [five-stage rollout and copyable implementation prompt](implementation-rollout.md) provide the execution handoff. The grade is the author's assessment; independent review of the specification remains a merge checkpoint. No related issue was closed by this audit.
+
 The original gaps are closed at the specification level: family boundaries, uncertainty, lexical/On coexistence, normalization, locale strategy, slug collisions, database invariants, published moves, rebuild persistence, source evidence, HTTP behavior, indexing and README ownership all have explicit decisions. The offline evaluator and its tests make the classification policy executable.
 
 **This is not an all-clear to publish the corpus.** Classification coverage, editorial readiness and production routing correctness are different gates. The route migration, transactional address allocation, On editing and HTTP/SEO integration remain implementation work with explicit acceptance tests. An A+ implementation brief must state these limits rather than describe existing app tests as proof of unbuilt behavior.

@@ -83,6 +83,8 @@ To reproduce the audit, export with [policy-export.sql](docs/audits/2026-09-26-i
 
 For a new type, pin the authority's meaning and evidence, add positive/negative fixtures, update the rules and version, and review a full-corpus diff. New detailed types normally extend classifications or collections; a new family additionally needs owner-approved scope and overlap rules. Record the rule, evidence, exceptions and approval behind every launch assignment. A rename updates the display label by default; deliberate published moves use a 301 and preserve the old path reservation. Rebuilds preserve registry/page identity, allocated paths, overrides and editorial membership. Identity splits require an explicit successor choice. The ADR specifies the storage constraints, override process and rollback steps.
 
+For implementation, use the [five-stage rollout and copyable agent prompt](docs/audits/2026-09-26-issue194/implementation-rollout.md). The routing issue is the single delivery tracker. Routing pages bind explicitly to the curation system's durable compositions; composition approval, claim approval and page publication remain separate.
+
 Each useful overview and subject page has its own canonical URL. Readable namespaces help readers; more folders or schema markup do not guarantee better rankings. The route implementation must keep canonicals, server responses, internal links, structured data, indexability and sitemaps consistent and pass the ADR's HTTP, concurrency, restore and publication tests. Update this section's implementation status when those phases land.
 
 ## The map

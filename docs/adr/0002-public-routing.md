@@ -70,6 +70,14 @@ The source-specific senses, content revisions, language, part of speech, homogra
 
 An `/on/:slug` page is a separately authored treatment with a durable page ID, revisioned editorial body and ordered membership. Membership records whether an item supplies lexical material, discusses a subject, or forms an editorial association. Wordplay such as Putin/poutine is an association, never identity or synonymy. On pages are optional: lexical availability cannot depend on someone writing an overview. Do not create an On duplicate for every biography.
 
+### Interface with curation persistence
+
+[Curation persistence](https://github.com/razrfly/dictionary/issues/196) owns `editorial_compositions`, their immutable versions/items and human presentation approval. Routing owns page identities, paths, authored On bodies and page publication/indexability. `page_revisions` must not become a competing composition or ballot store.
+
+Bind a page to a composition through an explicit, audited relationship between durable IDs, with at most one active binding per page. Validate language and intended scope/membership compatibility; a shared label or URL cannot establish a binding. Preserve both identities across route moves and scope changes. Render only the version selected by the composition publication service and still eligible under its rights/evidence checks. A routing-page approval cannot approve a draft composition or an unaccepted semantic claim.
+
+Define this interface before the first schema implementation. Use actual foreign keys when the composition schema is available. If that work has not landed, defer the binding migration and continue with standalone manual On pages; do not create placeholder composition tables. Persona inference and visit-driven refresh are separately owned by [curated opening delivery](https://github.com/razrfly/dictionary/issues/193) and are not dependencies of the routing foundation.
+
 ## 5. Persistence contract for the implementation
 
 Use separate page tables; **do not add an On registry object kind** or alter entity kinds to fit URLs.
@@ -127,6 +135,8 @@ Publication requires **all** of: resolved identity; approved classification/exce
 The publication manifest explicitly lists approved page IDs/locales and their gates. An empty manifest is not a successful launch. Sitemaps contain only approved, indexable, canonical 200 pages; maximum 50,000 URLs and 50 MB uncompressed per sitemap, with an index when needed, following [Google's sitemap limits](https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap). Last-modified timestamps reflect content changes, not audit runs. Search, raw evidence, operations, fixtures, unresolved pages and uncurated lookup variants are noindex by default; useful lexical pages can be approved independently of On. Let crawlers retrieve noindex responses. Treat operational access control separately from indexing.
 
 ## 8. Migration, verification and maintenance
+
+[Implementation rollout and agent prompt](../audits/2026-09-26-issue194/implementation-rollout.md) orders this contract into five reviewable stages under the existing routing delivery issue. It includes related-work boundaries and the specification-review checkpoint.
 
 1. Export the read-only corpus and evaluate the pinned rules. Account for every input entity and count the retained lexical population. Preserve ambiguous/unmapped/source-page dispositions.
 2. Review a candidate launch population independently of the classifier. Resolve all conflicts in that population; the larger corpus can remain explicitly deferred. Define useful content by reader value and permitted display, not an invented word/page-count threshold.
