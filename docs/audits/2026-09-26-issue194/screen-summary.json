@@ -1,0 +1,102 @@
+{
+  "screen_version": "issue194-risk-probe-v1",
+  "input_sha256": "a0f9f852b45c30fa084a46fae567fc6ed0498bc8473c2fe08eb36da0c455d6dc",
+  "entity_rows": 100723,
+  "status_counts": {
+    "boundary_review": 21,
+    "identity_review": 2,
+    "kind_candidate": 34534,
+    "metadata_review": 260,
+    "reclassification_candidate": 7475,
+    "source_page_review": 5917,
+    "unresolved_concept": 52514
+  },
+  "reason_counts": {
+    "direct P31 differs from kind mapping": 7475,
+    "disambiguation flag without matching P31": 260,
+    "existing kind only; not semantically verified": 34532,
+    "kind and direct P31 agree; not semantically verified": 2,
+    "no audited probe establishes a family": 52514,
+    "page role or family scope requires a decision": 21,
+    "source page is not its named subject": 5917,
+    "split": 2
+  },
+  "concept_direct_probes": {
+    "Q482994": {
+      "label": "album",
+      "candidate_family": "works",
+      "count": 2425
+    },
+    "Q11424": {
+      "label": "film",
+      "candidate_family": "works",
+      "count": 1881
+    },
+    "Q5398426": {
+      "label": "television series",
+      "candidate_family": "works",
+      "count": 771
+    },
+    "Q7889": {
+      "label": "video game",
+      "candidate_family": "works",
+      "count": 520
+    },
+    "Q215380": {
+      "label": "musical group",
+      "candidate_family": "organizations",
+      "count": 982
+    },
+    "Q4022": {
+      "label": "river",
+      "candidate_family": "places",
+      "count": 557
+    },
+    "Q8502": {
+      "label": "mountain",
+      "candidate_family": "places",
+      "count": 336
+    },
+    "Q3504248": {
+      "label": "inner planet of the Solar System",
+      "candidate_family": "nature",
+      "count": 4
+    }
+  },
+  "source_page_p31": {
+    "Q4167410": {
+      "label": "Wikimedia disambiguation page",
+      "count": 5115
+    },
+    "Q13406463": {
+      "label": "Wikimedia list article",
+      "count": 738
+    },
+    "Q15623926": {
+      "label": "Wikimedia set index article",
+      "count": 72
+    }
+  },
+  "disambiguation_flag_vs_p31": {
+    "flag_False_p31_False": 95345,
+    "flag_False_p31_True": 436,
+    "flag_True_p31_False": 263,
+    "flag_True_p31_True": 4679
+  },
+  "no_p31_or_p279_by_kind": {
+    "artifact": 6,
+    "concept": 21889,
+    "edition": 2,
+    "person": 1,
+    "work": 7552
+  },
+  "candidate_family_casefolded_label_collision_groups": 1351,
+  "candidate_family_casefolded_label_collision_rows": 4350,
+  "limitations": [
+    "Complete row coverage; no claim of complete semantic classification.",
+    "Probes match direct stored P31 only; not an exhaustive vocabulary.",
+    "Metadata may be stale or contradictory; no source revision adjudication.",
+    "Kind candidates do not establish publishable or indexable pages.",
+    "Label collision counts are not slug allocation results."
+  ]
+}

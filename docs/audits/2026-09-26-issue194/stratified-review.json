@@ -1,0 +1,378 @@
+{
+  "method": "First six mapped rows per family by SHA-256 of object ID; all four mapped Events included. Same-auditor metadata review, not independent expert adjudication.",
+  "sample_size": 46,
+  "outcomes": {
+    "consistent_with_description": 43,
+    "needs_independent_verification": 3
+  },
+  "records": [
+    {
+      "object_id": 1869705,
+      "label": "Draco",
+      "description": "programming language",
+      "candidate_family": "concepts",
+      "review": "consistent_with_description",
+      "rationale": "Available description supports the charter-level family; this is not independent identity or publication verification."
+    },
+    {
+      "object_id": 1878047,
+      "label": "Secure Operations Language",
+      "description": "domain-specific synchronous programming language for developing distributed applications",
+      "candidate_family": "concepts",
+      "review": "consistent_with_description",
+      "rationale": "Available description supports the charter-level family; this is not independent identity or publication verification."
+    },
+    {
+      "object_id": 1842234,
+      "label": "Tom",
+      "description": "pattern matching language",
+      "candidate_family": "concepts",
+      "review": "consistent_with_description",
+      "rationale": "Available description supports the charter-level family; this is not independent identity or publication verification."
+    },
+    {
+      "object_id": 1894438,
+      "label": "Lua",
+      "description": "lightweight programming language",
+      "candidate_family": "concepts",
+      "review": "consistent_with_description",
+      "rationale": "Available description supports the charter-level family; this is not independent identity or publication verification."
+    },
+    {
+      "object_id": 1885191,
+      "label": "ELAN",
+      "description": "educational programming language for learning and teaching systematic programming",
+      "candidate_family": "concepts",
+      "review": "consistent_with_description",
+      "rationale": "Available description supports the charter-level family; this is not independent identity or publication verification."
+    },
+    {
+      "object_id": 1895463,
+      "label": "Interlisp",
+      "description": "dialect of the Lisp programming language",
+      "candidate_family": "concepts",
+      "review": "consistent_with_description",
+      "rationale": "Available description supports the charter-level family; this is not independent identity or publication verification."
+    },
+    {
+      "object_id": 1896394,
+      "label": "Apollo 15",
+      "description": "fourth Moon landing and ninth crewed flight of the United States Apollo program",
+      "candidate_family": "events",
+      "review": "consistent_with_description",
+      "rationale": "Available description supports the charter-level family; this is not independent identity or publication verification."
+    },
+    {
+      "object_id": 1878949,
+      "label": "Apollo 8",
+      "description": "second crewed flight of the United States Apollo program",
+      "candidate_family": "events",
+      "review": "consistent_with_description",
+      "rationale": "Available description supports the charter-level family; this is not independent identity or publication verification."
+    },
+    {
+      "object_id": 1897871,
+      "label": "1991 Sierra Madre earthquake",
+      "description": "",
+      "candidate_family": "events",
+      "review": "needs_independent_verification",
+      "rationale": "Description absent. The name and P31 suggest a dated earthquake; independently verify the event identity."
+    },
+    {
+      "object_id": 3733865,
+      "label": "Apollo 11",
+      "description": "first Moon landing and fifth crewed flight of the United States Apollo program",
+      "candidate_family": "events",
+      "review": "consistent_with_description",
+      "rationale": "Available description supports the charter-level family; this is not independent identity or publication verification."
+    },
+    {
+      "object_id": 1853183,
+      "label": "Yellow-naped Amazon",
+      "description": "species of bird",
+      "candidate_family": "nature",
+      "review": "consistent_with_description",
+      "rationale": "Available description supports the charter-level family; this is not independent identity or publication verification."
+    },
+    {
+      "object_id": 1829391,
+      "label": "Risso's Dolphin",
+      "description": "species of dolphin",
+      "candidate_family": "nature",
+      "review": "consistent_with_description",
+      "rationale": "Available description supports the charter-level family; this is not independent identity or publication verification."
+    },
+    {
+      "object_id": 1854460,
+      "label": "Neafrapus",
+      "description": "bird",
+      "candidate_family": "nature",
+      "review": "consistent_with_description",
+      "rationale": "Available description supports the charter-level family; this is not independent identity or publication verification."
+    },
+    {
+      "object_id": 1860823,
+      "label": "Arca",
+      "description": "genus of molluscs",
+      "candidate_family": "nature",
+      "review": "consistent_with_description",
+      "rationale": "Available description supports the charter-level family; this is not independent identity or publication verification."
+    },
+    {
+      "object_id": 1860394,
+      "label": "Entosphenus",
+      "description": "genus of lampreys",
+      "candidate_family": "nature",
+      "review": "consistent_with_description",
+      "rationale": "Available description supports the charter-level family; this is not independent identity or publication verification."
+    },
+    {
+      "object_id": 1830427,
+      "label": "American plaice",
+      "description": "species of fish",
+      "candidate_family": "nature",
+      "review": "consistent_with_description",
+      "rationale": "Available description supports the charter-level family; this is not independent identity or publication verification."
+    },
+    {
+      "object_id": 1871286,
+      "label": "Shan Food Industries",
+      "description": "shan foods pvt limited",
+      "candidate_family": "organizations",
+      "review": "consistent_with_description",
+      "rationale": "Available description supports the charter-level family; this is not independent identity or publication verification."
+    },
+    {
+      "object_id": 1865800,
+      "label": "The Creatures",
+      "description": "Australian garage rock band",
+      "candidate_family": "organizations",
+      "review": "consistent_with_description",
+      "rationale": "Available description supports the charter-level family; this is not independent identity or publication verification."
+    },
+    {
+      "object_id": 1886465,
+      "label": "Martin's Famous Pastry Shoppe, Inc.",
+      "description": "bakeries of the United States",
+      "candidate_family": "organizations",
+      "review": "consistent_with_description",
+      "rationale": "Available description supports the charter-level family; this is not independent identity or publication verification."
+    },
+    {
+      "object_id": 1880893,
+      "label": "But",
+      "description": "French retail store brand",
+      "candidate_family": "organizations",
+      "review": "needs_independent_verification",
+      "rationale": "Description says brand; confirm whether the identity is the retail organization or the brand before publication."
+    },
+    {
+      "object_id": 1888151,
+      "label": "Crain",
+      "description": "late 80s - early 90s indie band from Louisville, Kentucky",
+      "candidate_family": "organizations",
+      "review": "consistent_with_description",
+      "rationale": "Available description supports the charter-level family; this is not independent identity or publication verification."
+    },
+    {
+      "object_id": 1894155,
+      "label": "Base",
+      "description": "design and publishing company",
+      "candidate_family": "organizations",
+      "review": "consistent_with_description",
+      "rationale": "Available description supports the charter-level family; this is not independent identity or publication verification."
+    },
+    {
+      "object_id": 1845018,
+      "label": "Charles Bombardier",
+      "description": "Canadian industrial designer",
+      "candidate_family": "people",
+      "review": "consistent_with_description",
+      "rationale": "Available description supports the charter-level family; this is not independent identity or publication verification."
+    },
+    {
+      "object_id": 1863885,
+      "label": "Kaoru Ide",
+      "description": "Japanese architect",
+      "candidate_family": "people",
+      "review": "consistent_with_description",
+      "rationale": "Available description supports the charter-level family; this is not independent identity or publication verification."
+    },
+    {
+      "object_id": 1891546,
+      "label": "Éliane Basse",
+      "description": "French paleontologist, geologist, botanist and botanical collector (1899 – 1985)",
+      "candidate_family": "people",
+      "review": "consistent_with_description",
+      "rationale": "Available description supports the charter-level family; this is not independent identity or publication verification."
+    },
+    {
+      "object_id": 1898725,
+      "label": "Rick Link",
+      "description": "American professional wrestler (1959–2026)",
+      "candidate_family": "people",
+      "review": "consistent_with_description",
+      "rationale": "Available description supports the charter-level family; this is not independent identity or publication verification."
+    },
+    {
+      "object_id": 1832144,
+      "label": "Apar Gupta",
+      "description": "Indian lawyer",
+      "candidate_family": "people",
+      "review": "consistent_with_description",
+      "rationale": "Available description supports the charter-level family; this is not independent identity or publication verification."
+    },
+    {
+      "object_id": 1893398,
+      "label": "Billy Lee",
+      "description": "baseball player",
+      "candidate_family": "people",
+      "review": "consistent_with_description",
+      "rationale": "Available description supports the charter-level family; this is not independent identity or publication verification."
+    },
+    {
+      "object_id": 1878577,
+      "label": "Mount Tom",
+      "description": "mountain in New Hampshire, United States of America",
+      "candidate_family": "places",
+      "review": "consistent_with_description",
+      "rationale": "Available description supports the charter-level family; this is not independent identity or publication verification."
+    },
+    {
+      "object_id": 1870498,
+      "label": "Sumbar River",
+      "description": "river",
+      "candidate_family": "places",
+      "review": "consistent_with_description",
+      "rationale": "Available description supports the charter-level family; this is not independent identity or publication verification."
+    },
+    {
+      "object_id": 1846577,
+      "label": "Daman",
+      "description": "city in India",
+      "candidate_family": "places",
+      "review": "consistent_with_description",
+      "rationale": "Available description supports the charter-level family; this is not independent identity or publication verification."
+    },
+    {
+      "object_id": 1876594,
+      "label": "Purity Mountain",
+      "description": "mountain in British Columbia, Canada",
+      "candidate_family": "places",
+      "review": "consistent_with_description",
+      "rationale": "Available description supports the charter-level family; this is not independent identity or publication verification."
+    },
+    {
+      "object_id": 1884171,
+      "label": "Maran, Burma",
+      "description": "human settlement in Myanmar",
+      "candidate_family": "places",
+      "review": "consistent_with_description",
+      "rationale": "Available description supports the charter-level family; this is not independent identity or publication verification."
+    },
+    {
+      "object_id": 1899664,
+      "label": "Vik",
+      "description": "village and the administrative center of Hole in Buskerud, Norway",
+      "candidate_family": "places",
+      "review": "consistent_with_description",
+      "rationale": "Available description supports the charter-level family; this is not independent identity or publication verification."
+    },
+    {
+      "object_id": 1863895,
+      "label": "Moros",
+      "description": "Greek spirit of doom",
+      "candidate_family": "subjects",
+      "review": "consistent_with_description",
+      "rationale": "Available description supports the charter-level family; this is not independent identity or publication verification."
+    },
+    {
+      "object_id": 1894934,
+      "label": "Sambara",
+      "description": "character appearing in Bhagavad Purana",
+      "candidate_family": "subjects",
+      "review": "consistent_with_description",
+      "rationale": "Available description supports the charter-level family; this is not independent identity or publication verification."
+    },
+    {
+      "object_id": 1871085,
+      "label": "Ora",
+      "description": "Albanian mythological figure associated with human destiny",
+      "candidate_family": "subjects",
+      "review": "consistent_with_description",
+      "rationale": "Available description supports the charter-level family; this is not independent identity or publication verification."
+    },
+    {
+      "object_id": 1863579,
+      "label": "Hephaestus",
+      "description": "Greek god of blacksmiths",
+      "candidate_family": "subjects",
+      "review": "consistent_with_description",
+      "rationale": "Available description supports the charter-level family; this is not independent identity or publication verification."
+    },
+    {
+      "object_id": 1841393,
+      "label": "Serpentor",
+      "description": "fictional character from the G.I. Joe universe",
+      "candidate_family": "subjects",
+      "review": "consistent_with_description",
+      "rationale": "Available description supports the charter-level family; this is not independent identity or publication verification."
+    },
+    {
+      "object_id": 1871190,
+      "label": "Planē",
+      "description": "personification of error in Ancient Greek mythology",
+      "candidate_family": "subjects",
+      "review": "consistent_with_description",
+      "rationale": "Available description supports the charter-level family; this is not independent identity or publication verification."
+    },
+    {
+      "object_id": 1841523,
+      "label": "Grand Serpent Rising",
+      "description": "2026 studio album by Dimmu Borgir",
+      "candidate_family": "works",
+      "review": "consistent_with_description",
+      "rationale": "Available description supports the charter-level family; this is not independent identity or publication verification."
+    },
+    {
+      "object_id": 1892805,
+      "label": "Yes",
+      "description": "studio album by Yes",
+      "candidate_family": "works",
+      "review": "consistent_with_description",
+      "rationale": "Available description supports the charter-level family; this is not independent identity or publication verification."
+    },
+    {
+      "object_id": 1864645,
+      "label": "The Mandarins",
+      "description": "roman à clef by Simone de Beauvoir",
+      "candidate_family": "works",
+      "review": "consistent_with_description",
+      "rationale": "Available description supports the charter-level family; this is not independent identity or publication verification."
+    },
+    {
+      "object_id": 1882172,
+      "label": "Wicked: For Good",
+      "description": "2025 film directed by Jon M. Chu",
+      "candidate_family": "works",
+      "review": "consistent_with_description",
+      "rationale": "Available description supports the charter-level family; this is not independent identity or publication verification."
+    },
+    {
+      "object_id": 3734629,
+      "label": "The Parsonage Garden at Nuenen",
+      "description": null,
+      "candidate_family": "works",
+      "review": "needs_independent_verification",
+      "rationale": "Description absent. Work subtype supports a candidate, but independent content/identity review is still required."
+    },
+    {
+      "object_id": 1888558,
+      "label": "Butterfly",
+      "description": "2018 film by Ramesh Aravind",
+      "candidate_family": "works",
+      "review": "consistent_with_description",
+      "rationale": "Available description supports the charter-level family; this is not independent identity or publication verification."
+    }
+  ]
+}

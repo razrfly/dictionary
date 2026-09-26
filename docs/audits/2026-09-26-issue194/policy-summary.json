@@ -1,0 +1,61 @@
+{
+  "address_status": {
+    "candidate": 34048,
+    "classification_review": 2364,
+    "collision_review": 4643,
+    "not_proposed": 59668
+  },
+  "allocated_paths": 0,
+  "candidate_families": {
+    "concepts": 125,
+    "events": 5,
+    "nature": 15376,
+    "organizations": 2552,
+    "people": 6861,
+    "places": 1825,
+    "subjects": 49,
+    "works": 14347
+  },
+  "class_evidence_records": 72997,
+  "classification_status": {
+    "excluded_source_page": 5917,
+    "identity_review": 2,
+    "mapped": 38576,
+    "needs_review": 56228
+  },
+  "colliding_entities": 4643,
+  "collision_groups": 1406,
+  "entities": 100723,
+  "input_sha256": "8878ed147b7fee672769a18ec22e112d169213d6b4f88538811e8571e2b46289",
+  "lexical_population": {
+    "count": 1541669,
+    "languages": [
+      "en"
+    ],
+    "parts_of_speech": 28,
+    "record_type": "lexical_population"
+  },
+  "limits": [
+    "Mapped is a policy result, not verified publication readiness.",
+    "Unknown or incomplete graph branches require review.",
+    "Current subject metadata and archived evidence can disagree.",
+    "Lexical routes are retained; lexical population is counted, not reallocated.",
+    "Candidate paths are not persisted addresses; collisions remain explicit."
+  ],
+  "policy_sha256": "e62a554c7540d9833ea7e6ce54de047ad79e7f1c05cc84352db162019c9ea1f2",
+  "policy_version": "1.0.0",
+  "publication_approved": 0,
+  "snapshot": {
+    "database": "devils_dictionary_v2",
+    "observed_at": "2026-09-26T18:06:17.337127+00:00",
+    "read_only": "on",
+    "record_type": "snapshot"
+  },
+  "warning_counts": {
+    "graph_depth_limit": 283,
+    "missing_class": 63146,
+    "projection_differs_from_source": 17,
+    "unmapped_class": 152,
+    "unversioned_type_projection": 1
+  }
+}

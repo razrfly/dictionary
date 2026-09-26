@@ -1,0 +1,17 @@
+{
+  "method": "Separate BEAM processes; identical snapshot records in original and reversed line order; sorted entity manifests compared byte-for-byte. Summary counts and metadata match except the intentionally different input file digest.",
+  "entity_count": 100723,
+  "assignments_sha256": "36453ebd813b32000cdd966b427a90b9889b49bac6261e8f22c91cee21e669ee",
+  "reverse_input_sha256": "6f41d0881b2fcc0424b7a22ab125c99d9881ea48a2fa5564793d928423d5bcfd",
+  "file_sha256": {
+    "lib/devils_dictionary/routing/policy.ex": "cb03417faf45bd171c15bc5e9a3770ae4a8ceab9a17002802d83440c74f1aad4",
+    "lib/mix/tasks/dd.routing.audit.ex": "173fd35e47a8c353c2340901de82b14d72dc20ce1920946bbbedce7039b5246f",
+    "priv/routing/namespaces.json": "287a892c0c90c6a8bb4d44ba679b078c957a84102ca1beaf8ed721ef7540624b",
+    "priv/routing/classification-rules.json": "af110bbf6a444a411baee5d91114d2e5249ffb97e246d0962fbf5d0af6c7d646",
+    "priv/routing/vocabulary-terms.json": "d70e519f8960e54092c5992c9f0617d3adba8086b3c102284cb93594e5a80d0c"
+  },
+  "equal_manifest_bytes": true,
+  "equal_summary_except_input_digest": true,
+  "integration_base": "828cdf2be650a216adb44090e1a99aa1edab3d86",
+  "current_main_manifest_equal": true
+}

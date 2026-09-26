@@ -1,0 +1,213 @@
+{
+  "version": "1.0.0",
+  "accepted_on": "2026-09-26",
+  "decision": "docs/adr/0002-public-routing.md",
+  "public_families": [
+    {
+      "key": "people",
+      "prefix": "people",
+      "label": "People",
+      "scope": "Human biographies.",
+      "storage_kind_hints_only": [
+        "person"
+      ],
+      "exclusions": [
+        "fictional characters",
+        "occupations",
+        "human species"
+      ],
+      "examples": [
+        "voltaire",
+        "ambrose-bierce"
+      ],
+      "semantic_anchor": "https://schema.org/Person",
+      "mapping_relation": "locally_scoped_inspiration",
+      "status": "accepted_for_implementation"
+    },
+    {
+      "key": "organizations",
+      "prefix": "organizations",
+      "label": "Organizations",
+      "scope": "Institutions and organized groups, including bands, teams and governments.",
+      "storage_kind_hints_only": [
+        "organization"
+      ],
+      "exclusions": [
+        "campus buildings",
+        "countries as places"
+      ],
+      "examples": [
+        "wikimedia-foundation"
+      ],
+      "semantic_anchor": "https://schema.org/Organization",
+      "mapping_relation": "locally_scoped_inspiration",
+      "status": "accepted_for_implementation"
+    },
+    {
+      "key": "places",
+      "prefix": "places",
+      "label": "Places",
+      "scope": "Named terrestrial locations, geographic features and administrative territories.",
+      "storage_kind_hints_only": [
+        "place"
+      ],
+      "exclusions": [
+        "celestial bodies",
+        "fictional places",
+        "general landform types"
+      ],
+      "examples": [
+        "warsaw",
+        "mount-everest"
+      ],
+      "semantic_anchor": "https://schema.org/Place",
+      "mapping_relation": "locally_scoped_inspiration",
+      "status": "accepted_for_implementation"
+    },
+    {
+      "key": "events",
+      "prefix": "events",
+      "label": "Events",
+      "scope": "Particular occurrences and named organized event series; occurrences remain identifiable.",
+      "storage_kind_hints_only": [
+        "event"
+      ],
+      "exclusions": [
+        "general processes",
+        "practices",
+        "cultural observance concepts"
+      ],
+      "examples": [
+        "apollo-11"
+      ],
+      "semantic_anchor": "https://schema.org/Event",
+      "mapping_relation": "locally_scoped_inspiration",
+      "status": "accepted_for_implementation"
+    },
+    {
+      "key": "works",
+      "prefix": "works",
+      "label": "Works",
+      "scope": "Authored creations, software, recipes and publication editions as separately identified pages.",
+      "storage_kind_hints_only": [
+        "work",
+        "edition"
+      ],
+      "exclusions": [
+        "subject of an article",
+        "non-art physical objects"
+      ],
+      "examples": [
+        "the-devils-dictionary"
+      ],
+      "semantic_anchor": "https://schema.org/CreativeWork",
+      "mapping_relation": "locally_scoped_inspiration",
+      "status": "accepted_for_implementation"
+    },
+    {
+      "key": "concepts",
+      "prefix": "concepts",
+      "label": "Concepts",
+      "scope": "Ideas, languages, programming languages, practices, disciplines and cultural periods.",
+      "storage_kind_hints_only": [
+        "concept"
+      ],
+      "exclusions": [
+        "coarse imported concept rows without evidence",
+        "natural phenomena"
+      ],
+      "examples": [
+        "love",
+        "polish-language"
+      ],
+      "semantic_anchor": null,
+      "mapping_relation": "local_grouping",
+      "status": "accepted_for_implementation"
+    },
+    {
+      "key": "nature",
+      "prefix": "nature",
+      "label": "Nature",
+      "scope": "Organisms and taxa, scientific substances including synthetic ones, natural phenomena and celestial bodies.",
+      "storage_kind_hints_only": [
+        "taxon"
+      ],
+      "exclusions": [
+        "human biographies",
+        "named terrestrial places",
+        "particular dated occurrences"
+      ],
+      "examples": [
+        "mercury-planet",
+        "water"
+      ],
+      "semantic_anchor": null,
+      "mapping_relation": "local_grouping",
+      "status": "accepted_for_implementation"
+    },
+    {
+      "key": "subjects",
+      "prefix": "subjects",
+      "label": "Subjects",
+      "scope": "Known subjects outside approved families: devices, non-art objects, dishes and fictional/mythological beings or places.",
+      "storage_kind_hints_only": [],
+      "exclusions": [
+        "uncertain identity",
+        "missing classification",
+        "contradictory evidence"
+      ],
+      "examples": [
+        "mercury-roman-god"
+      ],
+      "semantic_anchor": null,
+      "mapping_relation": "local_grouping",
+      "status": "accepted_for_implementation"
+    }
+  ],
+  "editorial_prefix": "on",
+  "lexical_prefixes": [
+    "words",
+    "define"
+  ],
+  "future_locale_prefix": "l",
+  "reserved_prefixes": [
+    "on",
+    "words",
+    "define",
+    "entities",
+    "l",
+    "sources",
+    "evidence",
+    "connections",
+    "connect",
+    "reconciliation",
+    "artworks",
+    "users",
+    "ops",
+    "admin",
+    "health",
+    "s",
+    "kit",
+    "dev",
+    "assets",
+    "fonts",
+    "images",
+    "live",
+    "phoenix",
+    "api",
+    "sitemap.xml",
+    "robots.txt",
+    "favicon.ico"
+  ],
+  "policy": {
+    "default_locale": "en",
+    "future_locale_pattern": "/l/:bcp47/:family/:slug",
+    "slug_normalization": "NFC then Unicode lowercase; letter/mark/number/hyphen; explicit +/#/&/. tokens",
+    "max_slug_utf8_bytes": 120,
+    "permanent_redirect_status": 301,
+    "automatic_publication": false,
+    "collision_outcome": "needs_review",
+    "source_page_outcome": "excluded_source_page",
+    "missing_evidence_outcome": "needs_review"
+  }
+}

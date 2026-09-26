@@ -1,0 +1,402 @@
+[
+  {
+    "label": "human",
+    "description": "any single member of Homo sapiens, unique extant species of the genus Homo",
+    "modified": "2026-09-21T17:04:20Z",
+    "uri": "https://www.wikidata.org/entity/Q5",
+    "revision": 2548180049,
+    "qid": "Q5"
+  },
+  {
+    "label": "organization",
+    "description": "social entity established to meet needs or pursue goals",
+    "modified": "2026-09-25T16:50:26Z",
+    "uri": "https://www.wikidata.org/entity/Q43229",
+    "revision": 2549306978,
+    "qid": "Q43229"
+  },
+  {
+    "label": "musical group",
+    "description": "musical ensemble which performs music",
+    "modified": "2026-09-23T07:39:43Z",
+    "uri": "https://www.wikidata.org/entity/Q215380",
+    "revision": 2548723394,
+    "qid": "Q215380"
+  },
+  {
+    "label": "business",
+    "description": "organization undertaking commercial, industrial, or professional activity",
+    "modified": "2026-09-23T22:39:12Z",
+    "uri": "https://www.wikidata.org/entity/Q4830453",
+    "revision": 2548927054,
+    "qid": "Q4830453"
+  },
+  {
+    "label": "nonprofit organization",
+    "description": "organization operated for a collective benefit",
+    "modified": "2026-09-17T16:50:59Z",
+    "uri": "https://www.wikidata.org/entity/Q163740",
+    "revision": 2547089805,
+    "qid": "Q163740"
+  },
+  {
+    "label": "company",
+    "description": "legal entity representing an association of people, whether natural, legal or a mixture of both, with a specific objective",
+    "modified": "2026-09-23T11:34:45Z",
+    "uri": "https://www.wikidata.org/entity/Q783794",
+    "revision": 2548789816,
+    "qid": "Q783794"
+  },
+  {
+    "label": "work",
+    "description": "intellectual or artistic creation",
+    "modified": "2026-09-25T16:38:25Z",
+    "uri": "https://www.wikidata.org/entity/Q386724",
+    "revision": 2549304529,
+    "qid": "Q386724"
+  },
+  {
+    "label": "literary work",
+    "description": "written work read for enjoyment or edification",
+    "modified": "2026-09-08T13:26:14Z",
+    "uri": "https://www.wikidata.org/entity/Q7725634",
+    "revision": 2542268616,
+    "qid": "Q7725634"
+  },
+  {
+    "label": "written work",
+    "description": "any work expressed in writing, such as inscriptions, manuscripts, documents or maps",
+    "modified": "2026-09-14T11:55:35Z",
+    "uri": "https://www.wikidata.org/entity/Q47461344",
+    "revision": 2545579742,
+    "qid": "Q47461344"
+  },
+  {
+    "label": "creative work",
+    "description": "artistic creation",
+    "modified": "2026-09-21T16:53:14Z",
+    "uri": "https://www.wikidata.org/entity/Q17537576",
+    "revision": 2548178556,
+    "qid": "Q17537576"
+  },
+  {
+    "label": "book",
+    "description": "medium for recording information (words or images) typically on bound pages or more abstractly in electronic or audio form",
+    "modified": "2026-09-23T16:11:50Z",
+    "uri": "https://www.wikidata.org/entity/Q571",
+    "revision": 2548853434,
+    "qid": "Q571"
+  },
+  {
+    "label": "film",
+    "description": "visual art work that simulates experiences and communicates ideas, stories, or emotions through moving images, generally synchronized with sound since the 1930s",
+    "modified": "2026-09-26T12:52:46Z",
+    "uri": "https://www.wikidata.org/entity/Q11424",
+    "revision": 2549646829,
+    "qid": "Q11424"
+  },
+  {
+    "label": "animated film",
+    "description": "film for the cinema, television or computer screen that is made by using drawings, stop motion or computer animation",
+    "modified": "2026-08-07T15:48:45Z",
+    "uri": "https://www.wikidata.org/entity/Q202866",
+    "revision": 2528466594,
+    "qid": "Q202866"
+  },
+  {
+    "label": "television film",
+    "description": "film format that is broadcast and distributed specifically for television networks.",
+    "modified": "2026-08-25T22:46:36Z",
+    "uri": "https://www.wikidata.org/entity/Q506240",
+    "revision": 2536412620,
+    "qid": "Q506240"
+  },
+  {
+    "label": "painting",
+    "description": "visual artwork, surface artistically covered with paint",
+    "modified": "2026-09-25T16:21:03Z",
+    "uri": "https://www.wikidata.org/entity/Q3305213",
+    "revision": 2549300493,
+    "qid": "Q3305213"
+  },
+  {
+    "label": "album",
+    "description": "grouping of album releases by an artist usually released at the same time with the same title and tracks but in different formats for consumption (digital, CD, LP)",
+    "modified": "2026-09-25T16:36:57Z",
+    "uri": "https://www.wikidata.org/entity/Q482994",
+    "revision": 2549304230,
+    "qid": "Q482994"
+  },
+  {
+    "label": "television series",
+    "description": "connected set of television program episodes under the same title",
+    "modified": "2026-09-26T15:38:08Z",
+    "uri": "https://www.wikidata.org/entity/Q5398426",
+    "revision": 2549694485,
+    "qid": "Q5398426"
+  },
+  {
+    "label": "video game",
+    "description": "electronic game with user interface and visual feedback",
+    "modified": "2026-09-23T16:24:17Z",
+    "uri": "https://www.wikidata.org/entity/Q7889",
+    "revision": 2548856605,
+    "qid": "Q7889"
+  },
+  {
+    "label": "software",
+    "description": "non-tangible executable component of a computer",
+    "modified": "2026-09-23T16:24:57Z",
+    "uri": "https://www.wikidata.org/entity/Q7397",
+    "revision": 2548856824,
+    "qid": "Q7397"
+  },
+  {
+    "label": "physical location",
+    "description": "position of something in space",
+    "modified": "2026-09-21T15:00:25Z",
+    "uri": "https://www.wikidata.org/entity/Q17334923",
+    "revision": 2548163948,
+    "qid": "Q17334923"
+  },
+  {
+    "label": "geographic location",
+    "description": "point, line or area on or near Earth",
+    "modified": "2026-09-25T16:34:19Z",
+    "uri": "https://www.wikidata.org/entity/Q2221906",
+    "revision": 2549303696,
+    "qid": "Q2221906"
+  },
+  {
+    "label": "city",
+    "description": "large human settlement",
+    "modified": "2026-09-23T16:49:20Z",
+    "uri": "https://www.wikidata.org/entity/Q515",
+    "revision": 2548865372,
+    "qid": "Q515"
+  },
+  {
+    "label": "metropolis",
+    "description": "large and significant city or urban area usually with millions of inhabitants",
+    "modified": "2026-09-15T17:03:12Z",
+    "uri": "https://www.wikidata.org/entity/Q200250",
+    "revision": 2546284299,
+    "qid": "Q200250"
+  },
+  {
+    "label": "human settlement",
+    "description": "place of any size, in which people permanently live",
+    "modified": "2026-09-22T18:15:48Z",
+    "uri": "https://www.wikidata.org/entity/Q486972",
+    "revision": 2548531024,
+    "qid": "Q486972"
+  },
+  {
+    "label": "administrative territorial entity",
+    "description": "territorial entity for administration purposes, with or without its own local government",
+    "modified": "2026-09-14T16:43:37Z",
+    "uri": "https://www.wikidata.org/entity/Q56061",
+    "revision": 2545707253,
+    "qid": "Q56061"
+  },
+  {
+    "label": "river",
+    "description": "larger natural watercourse",
+    "modified": "2026-09-20T08:17:14Z",
+    "uri": "https://www.wikidata.org/entity/Q4022",
+    "revision": 2547895221,
+    "qid": "Q4022"
+  },
+  {
+    "label": "mountain",
+    "description": "large natural elevation of the Earth's surface",
+    "modified": "2026-08-17T20:06:01Z",
+    "uri": "https://www.wikidata.org/entity/Q8502",
+    "revision": 2532480244,
+    "qid": "Q8502"
+  },
+  {
+    "label": "country",
+    "description": "distinct territorial body or political entity",
+    "modified": "2026-09-08T02:35:59Z",
+    "uri": "https://www.wikidata.org/entity/Q6256",
+    "revision": 2542042535,
+    "qid": "Q6256"
+  },
+  {
+    "label": "lake",
+    "description": "body of relatively still water, localized in a basin",
+    "modified": "2026-09-14T03:26:55Z",
+    "uri": "https://www.wikidata.org/entity/Q23397",
+    "revision": 2545380640,
+    "qid": "Q23397"
+  },
+  {
+    "label": "inner planet of the Solar System",
+    "description": "Mercury, Venus, Earth, and Mars",
+    "modified": "2025-11-24T02:56:35Z",
+    "uri": "https://www.wikidata.org/entity/Q3504248",
+    "revision": 2433145666,
+    "qid": "Q3504248"
+  },
+  {
+    "label": "taxon",
+    "description": "group of one or more organism(s), which a taxonomist adjudges to be a unit",
+    "modified": "2026-09-10T14:24:01Z",
+    "uri": "https://www.wikidata.org/entity/Q16521",
+    "revision": 2543311119,
+    "qid": "Q16521"
+  },
+  {
+    "label": "chicken breed",
+    "description": "breed of domestic chickens",
+    "modified": "2026-07-11T09:19:14Z",
+    "uri": "https://www.wikidata.org/entity/Q15304943",
+    "revision": 2516208356,
+    "qid": "Q15304943"
+  },
+  {
+    "label": "organisms known by a particular common name",
+    "description": "organisms which have been assigned common names in addition to their taxon name",
+    "modified": "2026-02-21T17:26:41Z",
+    "uri": "https://www.wikidata.org/entity/Q55983715",
+    "revision": 2465329476,
+    "qid": "Q55983715"
+  },
+  {
+    "label": "type of chemical entity",
+    "description": "Wikidata metaclass that covers physical entities of interest in chemistry including molecular entities and pure chemical substances",
+    "modified": "2026-09-17T18:36:41Z",
+    "uri": "https://www.wikidata.org/entity/Q113145171",
+    "revision": 2547117311,
+    "qid": "Q113145171"
+  },
+  {
+    "label": "chemical compound",
+    "description": "pure chemical substance consisting of two or more different chemical elements",
+    "modified": "2026-09-24T20:29:09Z",
+    "uri": "https://www.wikidata.org/entity/Q11173",
+    "revision": 2549092441,
+    "qid": "Q11173"
+  },
+  {
+    "label": "chemical substance",
+    "description": "matter of constant composition best characterized by the entities (molecules, formula units, atoms) it is composed of and characterized by physical properties like density",
+    "modified": "2026-09-11T09:15:34Z",
+    "uri": "https://www.wikidata.org/entity/Q79529",
+    "revision": 2543858586,
+    "qid": "Q79529"
+  },
+  {
+    "label": "natural language",
+    "description": "language naturally spoken or signed by humans, as opposed to \"constructed\" and \"formal\" languages",
+    "modified": "2026-09-23T03:57:23Z",
+    "uri": "https://www.wikidata.org/entity/Q33742",
+    "revision": 2548684975,
+    "qid": "Q33742"
+  },
+  {
+    "label": "programming language",
+    "description": "language for communicating instructions to a machine",
+    "modified": "2026-09-23T01:23:06Z",
+    "uri": "https://www.wikidata.org/entity/Q9143",
+    "revision": 2548654027,
+    "qid": "Q9143"
+  },
+  {
+    "label": "advanced emotion",
+    "description": "according to the theory of emotion",
+    "modified": "2026-07-17T08:45:53Z",
+    "uri": "https://www.wikidata.org/entity/Q16748888",
+    "revision": 2518549450,
+    "qid": "Q16748888"
+  },
+  {
+    "label": "theme",
+    "description": "central topic, subject, or message within a narrative",
+    "modified": "2026-09-22T02:28:05Z",
+    "uri": "https://www.wikidata.org/entity/Q1053916",
+    "revision": 2548271823,
+    "qid": "Q1053916"
+  },
+  {
+    "label": "human spaceflight",
+    "description": "space travel with humans aboard spacecraft",
+    "modified": "2026-08-31T20:09:53Z",
+    "uri": "https://www.wikidata.org/entity/Q752783",
+    "revision": 2538726452,
+    "qid": "Q752783"
+  },
+  {
+    "label": "earthquake",
+    "description": "result of a sudden release of energy in the Earth's crust that creates seismic waves",
+    "modified": "2026-09-19T00:23:17Z",
+    "uri": "https://www.wikidata.org/entity/Q7944",
+    "revision": 2547610537,
+    "qid": "Q7944"
+  },
+  {
+    "label": "character",
+    "description": "fictional human or non-human character in a narrative work of art",
+    "modified": "2026-09-10T15:43:41Z",
+    "uri": "https://www.wikidata.org/entity/Q95074",
+    "revision": 2543345950,
+    "qid": "Q95074"
+  },
+  {
+    "label": "deity",
+    "description": "natural or supernatural god or goddess, divine being",
+    "modified": "2026-09-26T12:43:03Z",
+    "uri": "https://www.wikidata.org/entity/Q178885",
+    "revision": 2549644567,
+    "qid": "Q178885"
+  },
+  {
+    "label": "thunder deity",
+    "description": "type of god",
+    "modified": "2026-05-26T09:11:13Z",
+    "uri": "https://www.wikidata.org/entity/Q842697",
+    "revision": 2497769543,
+    "qid": "Q842697"
+  },
+  {
+    "label": "Greek deity",
+    "description": "type or kind of deity belonging to the Greek mythological universe",
+    "modified": "2026-07-27T18:12:43Z",
+    "uri": "https://www.wikidata.org/entity/Q22989102",
+    "revision": 2523552041,
+    "qid": "Q22989102"
+  },
+  {
+    "label": "Wikimedia disambiguation page",
+    "description": "type of wiki page usually in main namespace (article namespace, ns=0) containing links to articles with similar names, and very little details only, use with P31 \"instance of\"",
+    "modified": "2026-09-20T16:21:15Z",
+    "uri": "https://www.wikidata.org/entity/Q4167410",
+    "revision": 2547961102,
+    "qid": "Q4167410"
+  },
+  {
+    "label": "Wikimedia list article",
+    "description": "page of a Wikimedia project with a list of something",
+    "modified": "2026-08-05T08:16:45Z",
+    "uri": "https://www.wikidata.org/entity/Q13406463",
+    "revision": 2527537695,
+    "qid": "Q13406463"
+  },
+  {
+    "label": "Wikimedia set index article",
+    "description": "list article about a set of items of a specific type that share the same (or similar) name",
+    "modified": "2026-08-08T13:10:15Z",
+    "uri": "https://www.wikidata.org/entity/Q15623926",
+    "revision": 2528798334,
+    "qid": "Q15623926"
+  },
+  {
+    "label": "Wikimedia category",
+    "description": "use with 'instance of' (P31) for Wikimedia category",
+    "modified": "2026-09-17T07:27:27Z",
+    "uri": "https://www.wikidata.org/entity/Q4167836",
+    "revision": 2546936716,
+    "qid": "Q4167836"
+  }
+]

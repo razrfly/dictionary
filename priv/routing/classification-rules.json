@@ -1,0 +1,201 @@
+{
+  "version": "1.0.0",
+  "max_depth": 8,
+  "max_nodes": 128,
+  "source_page_anchors": [
+    "Q4167410",
+    "Q13406463",
+    "Q15623926",
+    "Q4167836"
+  ],
+  "instance_rules": [
+    {
+      "id": "people",
+      "family": "people",
+      "instance_anchors": [
+        "Q5"
+      ],
+      "relation": "local_routing_rule",
+      "rationale": "Apply the accepted family charter to accepted instance-of facts and bounded subclass ancestry."
+    },
+    {
+      "id": "organizations",
+      "family": "organizations",
+      "instance_anchors": [
+        "Q43229",
+        "Q215380",
+        "Q4830453",
+        "Q163740",
+        "Q783794"
+      ],
+      "relation": "local_routing_rule",
+      "rationale": "Apply the accepted family charter to accepted instance-of facts and bounded subclass ancestry."
+    },
+    {
+      "id": "authored_works",
+      "family": "works",
+      "instance_anchors": [
+        "Q386724",
+        "Q7725634",
+        "Q47461344",
+        "Q17537576",
+        "Q571",
+        "Q11424",
+        "Q202866",
+        "Q506240",
+        "Q3305213",
+        "Q482994",
+        "Q5398426",
+        "Q7889",
+        "Q7397"
+      ],
+      "relation": "local_routing_rule",
+      "rationale": "Apply the accepted family charter to accepted instance-of facts and bounded subclass ancestry."
+    },
+    {
+      "id": "geographic_locations",
+      "family": "places",
+      "instance_anchors": [
+        "Q2221906",
+        "Q515",
+        "Q200250",
+        "Q486972",
+        "Q56061",
+        "Q4022",
+        "Q8502",
+        "Q6256",
+        "Q23397"
+      ],
+      "relation": "local_routing_rule",
+      "rationale": "Apply the accepted family charter to accepted instance-of facts and bounded subclass ancestry."
+    },
+    {
+      "id": "celestial_bodies",
+      "family": "nature",
+      "instance_anchors": [
+        "Q3504248"
+      ],
+      "relation": "local_routing_rule",
+      "rationale": "Apply the accepted family charter to accepted instance-of facts and bounded subclass ancestry."
+    },
+    {
+      "id": "biological_groups",
+      "family": "nature",
+      "instance_anchors": [
+        "Q16521",
+        "Q15304943",
+        "Q55983715"
+      ],
+      "relation": "local_routing_rule",
+      "rationale": "Apply the accepted family charter to accepted instance-of facts and bounded subclass ancestry."
+    },
+    {
+      "id": "substances",
+      "family": "nature",
+      "instance_anchors": [
+        "Q113145171",
+        "Q11173",
+        "Q79529"
+      ],
+      "relation": "local_routing_rule",
+      "rationale": "Apply the accepted family charter to accepted instance-of facts and bounded subclass ancestry."
+    },
+    {
+      "id": "languages_and_ideas",
+      "family": "concepts",
+      "instance_anchors": [
+        "Q33742",
+        "Q9143",
+        "Q16748888",
+        "Q1053916"
+      ],
+      "relation": "local_routing_rule",
+      "rationale": "Apply the accepted family charter to accepted instance-of facts and bounded subclass ancestry."
+    },
+    {
+      "id": "specific_occurrences",
+      "family": "events",
+      "instance_anchors": [
+        "Q752783",
+        "Q7944"
+      ],
+      "relation": "local_routing_rule",
+      "rationale": "Apply the accepted family charter to accepted instance-of facts and bounded subclass ancestry."
+    },
+    {
+      "id": "fictional_and_mythological_subjects",
+      "family": "subjects",
+      "instance_anchors": [
+        "Q95074",
+        "Q178885",
+        "Q842697",
+        "Q22989102"
+      ],
+      "relation": "local_routing_rule",
+      "rationale": "Apply the accepted family charter to accepted instance-of facts and bounded subclass ancestry."
+    }
+  ],
+  "self_rules": {
+    "Q5": "nature",
+    "Q11424": "concepts",
+    "Q9143": "concepts",
+    "Q33742": "concepts",
+    "Q43229": "concepts",
+    "Q4022": "nature",
+    "Q8502": "nature",
+    "Q7944": "nature",
+    "Q11173": "nature",
+    "Q79529": "nature",
+    "Q16521": "nature"
+  },
+  "class_anchors": {
+    "Q11173": "nature",
+    "Q79529": "nature",
+    "Q33742": "concepts",
+    "Q9143": "concepts"
+  },
+  "precedence": [
+    {
+      "winner": "fictional_and_mythological_subjects",
+      "over": [
+        "people",
+        "geographic_locations",
+        "biological_groups"
+      ]
+    },
+    {
+      "winner": "people",
+      "over": [
+        "biological_groups"
+      ]
+    },
+    {
+      "winner": "celestial_bodies",
+      "over": [
+        "geographic_locations"
+      ]
+    }
+  ],
+  "local_work_kinds": [
+    "artwork",
+    "poem",
+    "book",
+    "film",
+    "image",
+    "dictionary",
+    "software",
+    "recipe",
+    "album"
+  ],
+  "forbidden_inference_relations": [
+    "P361",
+    "P170",
+    "P180",
+    "about",
+    "depicts",
+    "authored_by",
+    "lexeme_entity_candidate",
+    "label_match"
+  ],
+  "publication_gate": "Requires an independent editorial identity/content/rights approval; classifier output never grants publication."
+}
