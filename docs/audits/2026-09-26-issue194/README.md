@@ -1,6 +1,6 @@
 # Issue #194 routing and classification audit
 
-**Follow-up:** the owner accepted the recommendations. [ADR 0002](../../adr/0002-public-routing.md) now settles the design, and [policy readiness](policy-readiness.md) records the executable policy's full-corpus results. The B− grade below applies to the original issue version, not the completed handoff.
+**Follow-up:** the owner accepted the recommendations. [ADR 0004](../../adr/0004-public-routing.md) now settles the design, and [policy readiness](policy-readiness.md) records the executable policy's full-corpus results. The B− grade below applies to the original issue version, not the completed handoff.
 
 **Grade: B−, 76/100 against the requested implementation-ready brief.** The architecture is sound; the issue is a strong design proposal. It explicitly calls itself a design issue, so missing implementation is not a defect. The deduction is for decisions and evidence an implementing agent would still have to invent.
 

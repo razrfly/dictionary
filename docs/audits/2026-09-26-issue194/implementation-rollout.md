@@ -1,14 +1,14 @@
 # Draft routing rollout and Stage 1 handoff
 
-[Routing delivery issue](https://github.com/razrfly/dictionary/issues/194) is the single delivery tracker. [The specification PR](https://github.com/razrfly/dictionary/pull/200) contains the accepted design and offline evaluator. [ADR 0002](../../adr/0002-public-routing.md) is the normative contract; [the evidence report](policy-readiness.md) records the measured corpus and test results.
+[Routing delivery issue](https://github.com/razrfly/dictionary/issues/194) is the single delivery tracker. [The specification PR](https://github.com/razrfly/dictionary/pull/200) contains the accepted design and offline evaluator. [ADR 0004](../../adr/0004-public-routing.md) is the normative contract; [the evidence report](policy-readiness.md) records the measured corpus and test results.
 
 The five stages below are a rough sequence for the existing acceptance checklist. Refine each stage when work reaches it. Start with comments on the main issue; create a separate child issue only when a stage needs its own scope or owner. One agent can retain ownership across stages. No issue was closed by the audit, and this outline creates no new issues.
 
 ## Before implementation
 
-Check the latest issue, specification PR, main branch and applicable AGENTS.md. The specification PR was a draft without independent review when this handoff was written. Its A+ grade is the author's assessment of the brief, not external approval or production certification.
+Check the latest issue, specification PR, main branch and applicable AGENTS.md. Verify that the specification PR is merged and its review findings are resolved before starting from main. Its A+ grade is the author's assessment of the brief, not external approval or production certification.
 
-Independent review of the specification is the first merge checkpoint. Development may proceed on an explicitly stacked branch while review is pending; the implementing agent must keep the base dependency visible and must not treat its own tests as independent review.
+Independent review of the specification is the first merge checkpoint. Start Stage 1 from the reviewed specification on current main. The implementing agent must not treat its own tests as independent review.
 
 ## Five stages
 
@@ -24,7 +24,7 @@ Each implemented stage should leave reviewable changes, test evidence and a prog
 
 ## Related work and ownership
 
-- [Curation persistence](https://github.com/razrfly/dictionary/issues/196) owns durable editorial compositions, versions/items and their human presentation approval. Routing owns page identity, addresses, authored On bodies and publication/indexability. Link these identities explicitly as defined in ADR 0002; do not recreate the composition, ballot or claim-review system.
+- [Curation persistence](https://github.com/razrfly/dictionary/issues/196) owns durable editorial compositions, versions/items and their human presentation approval. Routing owns page identity, addresses, authored On bodies and publication/indexability. Link these identities explicitly as defined in ADR 0004; do not recreate the composition, ballot or claim-review system.
 - [Curated opening delivery](https://github.com/razrfly/dictionary/issues/193) owns the persona/runtime/refresh pipeline. That pipeline is not a prerequisite for a manually authored On page or the routing foundation. If composition tables have not landed, defer their binding migration without creating placeholder tables that compete with their owner.
 - [Creator identity](https://github.com/razrfly/dictionary/issues/164) and [people population](https://github.com/razrfly/dictionary/issues/165) remain separate. Reuse their implemented services after inspecting current code. An open issue may contain completed pieces; its dated description is not proof of current behavior. Do not mint missing people merely to make routing examples pass.
 - The routing audit did not close these issues. Close an issue only when its own acceptance criteria have been verified. The routing delivery tracker stays open until its release criteria pass; broader unresolved corpus records may remain explicitly deferred.
@@ -42,7 +42,7 @@ This starter prompt begins the foundation only. Later stage prompts can use the 
 ```text
 Implement Stage 1, the durable routing foundation, for https://github.com/razrfly/dictionary/issues/194.
 
-First inspect the current issue and comments, the latest state and reviews of https://github.com/razrfly/dictionary/pull/200, current main, AGENTS.md, README, docs/adr/0002-public-routing.md, and docs/audits/2026-09-26-issue194/policy-readiness.md. Use docs/audits/2026-09-26-issue194/implementation-rollout.md for the rough five-stage context. Do not assume the specification PR has merged or received independent review.
+First inspect the current issue and comments, the latest state and reviews of https://github.com/razrfly/dictionary/pull/200, current main, AGENTS.md, README, docs/adr/0004-public-routing.md, and docs/audits/2026-09-26-issue194/policy-readiness.md. Use docs/audits/2026-09-26-issue194/implementation-rollout.md for the rough five-stage context. Verify the specification PR is merged and its review findings are resolved; then branch from current main using the codex/ prefix. Reuse a suitable free worktree and account for local edits before changing its branch.
 
 Own Stage 1 through a reviewable PR or small set of PRs: durable page identity, revisioned On body and typed membership storage, persisted classification decisions, unique path reservations, canonical pointers, append-only history, transactional allocation, and explicit resolver result types. Preserve existing reading behavior. Full corpus backfill, reader route replacement, On editing UI and production publication belong to later stages.
 
@@ -52,7 +52,7 @@ Use the accepted ADR constraints and the project's Ecto migration conventions. P
 
 Implement and test the Stage 1 invariants: exactly one canonical for a published page/locale; global current/historical path uniqueness; atomic pointer/allocation/history updates; bounded race handling; explicit approved moves/merges/splits; immutable historical reservations; versioned override evidence; and restore/rollback behavior. Prove concurrency with independent database connections. Preserve exact references as well as counts. Only add tests that demonstrate required behavior.
 
-While specification review is pending, you may prepare an explicitly stacked branch and identify the dependency. Independent review remains a merge checkpoint. Do not self-approve the specification or infer publication approval from a passing test.
+Keep each implementation PR reviewable and address independent review findings before merge. Do not infer publication approval from a passing test.
 
 Run appropriate targeted tests and mix precommit. Keep README, ADR and implementation status synchronized. Post a concise Stage 1 result to the routing issue with PR links, tests, schema changes, remaining blockers and a proposed refined scope for Stage 2. Use an issue comment initially; create a child issue only if there is a concrete benefit, keeping the main issue as the delivery tracker.
 

@@ -1,7 +1,7 @@
 {
   "version": "1.0.0",
   "accepted_on": "2026-09-26",
-  "decision": "docs/adr/0002-public-routing.md",
+  "decision": "docs/adr/0004-public-routing.md",
   "public_families": [
     {
       "key": "people",

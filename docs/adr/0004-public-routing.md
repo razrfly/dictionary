@@ -1,4 +1,4 @@
-# ADR 0002 — Public routing, classification and curated On pages
+# ADR 0004 — Public routing, classification and curated On pages
 
 - **Status:** accepted design, 26 September 2026; production route migration pending.
 - **Approval:** the owner accepted the audit recommendations in this conversation and asked for the completed specification and corpus validation.

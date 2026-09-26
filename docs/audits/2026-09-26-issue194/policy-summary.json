@@ -42,7 +42,7 @@
     "Lexical routes are retained; lexical population is counted, not reallocated.",
     "Candidate paths are not persisted addresses; collisions remain explicit."
   ],
-  "policy_sha256": "e62a554c7540d9833ea7e6ce54de047ad79e7f1c05cc84352db162019c9ea1f2",
+  "policy_sha256": "54695faa6e686d2b23f59f0f328d54e033b956e7dfb9d21fda7800a2082b7eac",
   "policy_version": "1.0.0",
   "publication_approved": 0,
   "snapshot": {

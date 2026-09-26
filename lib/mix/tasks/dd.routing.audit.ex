@@ -1,6 +1,6 @@
 defmodule Mix.Tasks.Dd.Routing.Audit do
   @moduledoc """
-  Evaluate ADR 0002 against an offline, read-only database export.
+  Evaluate ADR 0004 against an offline, read-only database export.
 
       mix dd.routing.audit --input /tmp/routing-input.jsonl --output /tmp/routing-audit
 

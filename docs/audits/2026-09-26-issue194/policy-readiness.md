@@ -1,10 +1,10 @@
 # Routing policy v1 — implementation handoff
 
-**The design decisions are settled and the issue is ready for implementation.** The owner accepted the original audit's recommendations. [ADR 0002](../../adr/0002-public-routing.md) is now the authoritative contract; the earlier B− audit remains a record of the issue before this work.
+**The design decisions are settled and the issue is ready for implementation.** The owner accepted the original audit's recommendations. [ADR 0004](../../adr/0004-public-routing.md) is now the authoritative contract; the earlier B− audit remains a record of the issue before this work.
 
 **Updated grade: A+ for the implementation brief. Production launch readiness remains unproven.** This is a judgment of the specification's clarity, completeness, reproducible evidence and explicit failure handling, not a claim that every classification is correct or that the routing feature is implemented.
 
-The [five-stage rollout and copyable implementation prompt](implementation-rollout.md) provide the execution handoff. The grade is the author's assessment; independent review of the specification remains a merge checkpoint. No related issue was closed by this audit.
+The [five-stage rollout and copyable implementation prompt](implementation-rollout.md) provide the execution handoff. The grade is the author's assessment. CodeRabbit independently reviewed PR #200 and found two audit-script issues; both were fixed and covered by three Python safety regressions. Independent review of implementation and the launch set remains required. No related issue was closed by this audit.
 
 The original gaps are closed at the specification level: family boundaries, uncertainty, lexical/On coexistence, normalization, locale strategy, slug collisions, database invariants, published moves, rebuild persistence, source evidence, HTTP behavior, indexing and README ownership all have explicit decisions. The offline evaluator and its tests make the classification policy executable.
 
@@ -92,5 +92,8 @@ For a type change, update the pinned vocabulary/rule files, add expected positiv
 - All **23** evaluator/audit regressions pass, including contradictory types, qualified or unpinned ancestry, subclass-only evidence, duplicate identities, source-page exclusion, Unicode slugs and collisions.
 - Separate evaluator processes produced **byte-identical manifests for all 100,723 entities**, including with the complete input in reversed line order. Summaries match except for the expected input-file digest. [Reproducibility evidence](reproducibility.json) pins the manifest and evaluator files.
 - On the original audit checkout, `mix precommit` passed **16 doctests and 1,919 tests, zero failures**. On current main (`828cdf2be650a216adb44090e1a99aa1edab3d86`), the isolated review checkout passed **16 doctests and 2,088 tests, zero failures**. Its full-corpus manifest also matches byte for byte. The worktree reuses the existing local source archives required by the manifest test; no source data was downloaded.
-- Local documentation links and `git diff --check` pass. The pre-existing word-page test edits are unchanged.
+- Three Python safety regressions pass, including optimized execution and input/output aliases; the original full-corpus diagnostic remains unchanged. Run `python3 -m unittest discover -s docs/audits/2026-09-26-issue194 -p test_screen.py`.
+- Local documentation links and `git diff --check` pass. The routing specification does not change word-page assertions; the repository reconciliation records the superseded local workaround.
 - No development corpus rows, public paths or publication approvals were changed. The full JSONL manifest remains an audit artifact; the repository includes its summary, digest and boundary sample.
+
+[Repository reconciliation](repository-readiness.md) accounts for historical branches, local drafts and retained worktrees before the foundation starts.

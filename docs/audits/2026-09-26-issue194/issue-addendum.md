@@ -1,6 +1,6 @@
 # Proposed additions to issue #194
 
-**Historical draft, now superseded:** the owner accepted these recommendations. Use [ADR 0002](../../adr/0002-public-routing.md) and the [policy validation](policy-readiness.md) for the settled decisions and implementation contract. The unchecked items below preserve the original proposal and are not the current status tracker.
+**Historical draft, now superseded:** the owner accepted these recommendations. Use [ADR 0004](../../adr/0004-public-routing.md) and the [policy validation](policy-readiness.md) for the settled decisions and implementation contract. The unchecked items below preserve the original proposal and are not the current status tracker.
 
 This is a handoff draft supported by the [26 September audit](README.md). It does not publish routes, replace approved product decisions, or claim the mapping is already implemented.
 
@@ -12,7 +12,7 @@ The audit reproduced 100,723 entities and 1,541,669 lexemes. A deliberately narr
 
 ## A. Publish the design contract before the route migration
 
-- [ ] Add `docs/adr/0002-public-routing.md` with status, owner, policy version, approved defaults and unresolved decisions. On approval, link it from ADR 0001 §10; on implementation, mark the old route policy superseded.
+- [ ] Add `docs/adr/0004-public-routing.md` with status, owner, policy version, approved defaults and unresolved decisions. On approval, link it from ADR 0001 §10; on implementation, mark the old route policy superseded.
 - [ ] Add a versioned machine-readable namespace registry, suggested location `priv/routing/namespaces.json`, and classification rules, suggested location `priv/routing/classification-rules.json`.
 - [ ] Give each family a stable key, prefix, scope, inclusions, exclusions, overlap precedence, examples, reviewed mappings and change history. Prefixes are allowlisted; imported names cannot create new families.
 - [ ] Define one result contract: proposed family, rule ID/version, supporting source revisions/classification path, contradictions, and one of `approved`, `needs_review`, `out_of_scope`, or `excluded_source_page`. Keep publication and indexing states separate.

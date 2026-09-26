@@ -1,6 +1,6 @@
 defmodule DevilsDictionary.Routing.Policy do
   @moduledoc """
-  Offline reference evaluator for ADR 0002. It proposes classifications, never
+  Offline reference evaluator for ADR 0004. It proposes classifications, never
   writes assignments, allocates addresses, or grants publication permission.
   Inputs are explicit snapshot records, so provider changes cannot affect a read.
   """

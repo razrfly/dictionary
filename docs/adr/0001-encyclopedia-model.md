@@ -171,7 +171,7 @@ exercise. Full mapping in [`docs/rebuild/score-rows.md`](../rebuild/score-rows.m
 
 ### 10. URLs carry identity, slugs are cosmetic
 
-**Routing follow-up:** [ADR 0002](0002-public-routing.md) is the accepted design for contextual subject addresses and curated On pages. Its offline evaluator is available; the production route migration is still pending. The routes described here remain the current implementation until that migration lands. Stable registry identities and exact provenance references remain required.
+**Routing follow-up:** [ADR 0004](0004-public-routing.md) is the accepted design for contextual subject addresses and curated On pages. Its offline evaluator is available; the production route migration is still pending. The routes described here remain the current implementation until that migration lands. Stable registry identities and exact provenance references remain required.
 
 Canonical: `/words/:object_id/:slug`, `/entities/:object_id/:slug`. `/define/:slug`
 survives as a resolver — unambiguous slugs redirect, ambiguous ones (28,306 slug groups

@@ -12,6 +12,7 @@ import collections
 import csv
 import hashlib
 import json
+from itertools import combinations
 from pathlib import Path
 
 
@@ -44,9 +45,14 @@ def main():
     parser.add_argument("--rows", type=Path, required=True)
     parser.add_argument("--summary", type=Path, required=True)
     args = parser.parse_args()
+    paths = [path.resolve() for path in (args.input, args.rows, args.summary)]
+    if any(a == b or (a.exists() and b.exists() and a.samefile(b))
+           for a, b in combinations(paths, 2)):
+        raise ValueError("input, rows and summary must be distinct files")
     with args.input.open(newline="") as source:
         rows = list(csv.DictReader(source))
-    assert len({row["object_id"] for row in rows}) == len(rows)
+    if len({row["object_id"] for row in rows}) != len(rows):
+        raise ValueError("duplicate object_id in input")
     statuses = collections.Counter()
     reasons = collections.Counter()
     probes = collections.Counter()
