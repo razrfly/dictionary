@@ -1,6 +1,6 @@
 # Historical draft — preserved 26 September 2026
 
-This is retained research, not an implementation instruction or current product policy. This unmerged editorial guide predates the routing policy and curation plans. Its routing, CineGraph identity and editorial-order statements are superseded where they conflict with current code and the current design. Relative links in the preserved draft use its former docs/encyclopedia location. Use [the current README](../../../README.md), [routing ADR 0004](../../adr/0004-public-routing.md), and curation issues [#193](https://github.com/razrfly/dictionary/issues/193) / [#196](https://github.com/razrfly/dictionary/issues/196) for current direction. The original text follows unchanged.
+This is retained research, not an implementation instruction or current product policy. This unmerged editorial guide predates the routing policy and curation plans. Its routing, CineGraph identity and editorial-order statements are superseded where they conflict with current code and the current design. Local links have been adjusted for the archive location. Use [the current README](../../../README.md), [routing ADR 0004](../../adr/0004-public-routing.md), and curation issues [#193](https://github.com/razrfly/dictionary/issues/193) / [#196](https://github.com/razrfly/dictionary/issues/196) for current direction. The draft text follows; only local link destinations have been adjusted.
 
 ---
 
@@ -72,7 +72,7 @@ correct a stale slug using the ID. The current missing-ID behavior falls back
 to lexical lookup, so a syntactically valid word URL is not proof that its ID
 resolved.
 
-[ADR 0001](../adr/0001-encyclopedia-model.md) describes unambiguous resolver
+[ADR 0001](../../adr/0001-encyclopedia-model.md) describes unambiguous resolver
 redirects as the decision. The current router and LiveView render resolved
 lookups directly at `/define`; do not infer an automatic redirect from that ADR
 sentence. Its durable-ID principle still applies. No route rename or
@@ -164,7 +164,7 @@ does not yet create a local film entity for each unmatched result. A nullable
 
 GIPHY currently searches directly in the browser and keeps results transient.
 It does not ingest a durable GIF catalog or automatically create local GIF
-entities. See the [GIPHY integration guide](../integrations/giphy.md) for delivery,
+entities. See the [GIPHY integration guide](../../integrations/giphy.md) for delivery,
 attribution and cache settings. Film refresh scheduling and GIPHY's transient
 display are provider policies; neither determines what a reviewed conceptual
 example means.
@@ -215,7 +215,7 @@ identity reconciliation provide the foundation for presentation changes.
 Source refresh can retire withdrawn support without deleting identities out
 from under attachments. Local entities do not need QIDs to exist; supported
 external identifiers can be added later. Bounded import selection is separate
-from entity kind, as [ADR 0002](../adr/0002-bounded-general-entity-selection.md)
+from entity kind, as [ADR 0002](../../adr/0002-bounded-general-entity-selection.md)
 explains. Its trimmed operational snapshots are not complete source archives.
 
 The desired editorial layer should be able to choose sections, select items,
@@ -245,7 +245,7 @@ replace the registry or permanently freeze the current source order.
 
 ## Documentation map and code references
 
-The root [README](../../README.md) is the living project record, but contains
+The root [README](../../../README.md) is the living project record, but contains
 dated milestones and historical schema sketches. Its “not Wikipedia” statement
 describes source storage/authorship limits, not a prohibition on an
 encyclopedia-like reader experience. “Every word, every source” should not be
@@ -253,21 +253,21 @@ read as requiring every source card in every future default entry.
 
 | Existing documentation | How to use it |
 | --- | --- |
-| [ADR 0001](../adr/0001-encyclopedia-model.md), [ADR 0002](../adr/0002-bounded-general-entity-selection.md) | Accepted identity/assertion and bounded-selection decisions. Read completion amendments as well as initial decisions. |
-| [Rebuild completion](../rebuild/completion-2026-09-09.md), [connection reliability](../rebuild/issue-84-connection-reliability-2026-09-11.md) | Implementation evidence and limitations for the current foundation. |
-| [Map README](../map/README.md) | Earlier product-layer explanation and nepotism trace. Its old table names are historical; use the registry model above for current implementation. |
-| [Gate 0 README](../spikes/2026-09-gate0/README.md), [rebuild W1 README](../rebuild/w1-2026-09-10/README.md) | Dated experiments and validation evidence. |
-| [Mobile README](../mobile/README.md), [sketches README](../sketches/README.md), [audit reports](../audits/2026-09-11-mvp-closeout/README.md) | Specific historical checks and retired sketches, not current composition specifications. |
-| [GIPHY guide](../integrations/giphy.md), [discovery handoff](../discovery/issue-88-handoff-2026-09-12.md) | Provider behavior and discovery delivery context; verify older snapshots against current code. |
+| [ADR 0001](../../adr/0001-encyclopedia-model.md), [ADR 0002](../../adr/0002-bounded-general-entity-selection.md) | Accepted identity/assertion and bounded-selection decisions. Read completion amendments as well as initial decisions. |
+| [Rebuild completion](../../rebuild/completion-2026-09-09.md), [connection reliability](../../rebuild/issue-84-connection-reliability-2026-09-11.md) | Implementation evidence and limitations for the current foundation. |
+| [Map README](../../map/README.md) | Earlier product-layer explanation and nepotism trace. Its old table names are historical; use the registry model above for current implementation. |
+| [Gate 0 README](../../spikes/2026-09-gate0/README.md), [rebuild W1 README](../../rebuild/w1-2026-09-10/README.md) | Dated experiments and validation evidence. |
+| [Mobile README](../../mobile/README.md), [sketches README](../../sketches/README.md), [audit reports](../../audits/2026-09-11-mvp-closeout/README.md) | Specific historical checks and retired sketches, not current composition specifications. |
+| [GIPHY guide](../../integrations/giphy.md), [discovery handoff](../../discovery/issue-88-handoff-2026-09-12.md) | Provider behavior and discovery delivery context; verify older snapshots against current code. |
 
-Implementation reading order: [registry schemas](../../lib/devils_dictionary/registry/),
-[lexical lookup](../../lib/devils_dictionary/lexicon.ex),
-[router](../../lib/devils_dictionary_web/router.ex),
-[WordLive](../../lib/devils_dictionary_web/live/word_live.ex),
-[WordPage](../../lib/devils_dictionary/lexicon/word_page.ex),
-[EntityPage](../../lib/devils_dictionary/encyclopedia/entity_page.ex),
-[source adapters](../../lib/devils_dictionary/absorb/sources/), then
-[discovery](../../lib/devils_dictionary/discovery.ex).
+Implementation reading order: [registry schemas](../../../lib/devils_dictionary/registry/),
+[lexical lookup](../../../lib/devils_dictionary/lexicon.ex),
+[router](../../../lib/devils_dictionary_web/router.ex),
+[WordLive](../../../lib/devils_dictionary_web/live/word_live.ex),
+[WordPage](../../../lib/devils_dictionary/lexicon/word_page.ex),
+[EntityPage](../../../lib/devils_dictionary/encyclopedia/entity_page.ex),
+[source adapters](../../../lib/devils_dictionary/absorb/sources/), then
+[discovery](../../../lib/devils_dictionary/discovery.ex).
 
 Related product work: [#64 vision](https://github.com/razrfly/dictionary/issues/64),
 [#66 reader design](https://github.com/razrfly/dictionary/issues/66),
