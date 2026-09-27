@@ -64,12 +64,12 @@ A restored copy carries the source's queued and scheduled jobs. Tasks that start
    A restore drops its target first, so it must never land on the database the snapshot came from. A pre-routing source has no routing state for the routing guard to protect, so `Snapshot.restore!/3` makes this check itself, before dropping anything. `mix dd.snapshot --restore` makes it too.
 
    Names and endpoints cannot decide which database is which. A Unix socket and a TCP address reach the same server, and two servers can each hold a database of the same name. So the snapshot's sidecar records the source as its server reports it: the cluster's `system_identifier`, the database's name and oid, and the dump's size and SHA-256. The restore **refuses** when:
-   - the sidecar is missing, malformed, or from before identities were recorded;
-   - the dump is not the one the sidecar describes: different bytes, or a header naming another database;
-   - the target server's identity cannot be read, over the same endpoint `pg_restore` uses;
-   - the target is the source: the same cluster, with the same database name or oid (a renamed source is still the source).
+   - **always**, when the sidecar is malformed, or does not describe its dump: different bytes, or a header naming another database;
+   - **when the target database exists**, and so would be dropped, if the sidecar is missing or from before identities were recorded;
+   - when the target server's identity cannot be read, over the same endpoint `pg_restore` uses;
+   - when the target is the source: the same cluster, with the same database name or oid. A renamed source is still the source.
 
-   A restore to another database, or to a database of any name on another cluster, is allowed. A dump whose sidecar is missing or predates identities can still be restored into a database that does not exist yet, because nothing is dropped. That keeps an older snapshot usable as a rollback point. Otherwise, take the snapshot again with `mix dd.snapshot`. A malformed sidecar, or one that does not describe its dump, is refused everywhere.
+   A restore to another database, or to a database of any name on another cluster, is allowed. A dump whose sidecar is missing or predates identities can be restored only into a database that does not exist yet, where nothing is dropped. That keeps an older snapshot usable as a rollback point. To restore it anywhere else, take the snapshot again with `mix dd.snapshot`.
 
    The identity probe, the drop and `pg_restore` all reach one endpoint. It is settled once, as Postgrex settles it: a `socket_dir`, or else `hostname` and `port`, defaulting to `PGHOST` and `PGPORT`. A `socket:` or `endpoints:` configuration, which the `pg_*` tools cannot follow, is refused.
 
