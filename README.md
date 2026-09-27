@@ -358,6 +358,11 @@ mise install                               # erlang 28.1, elixir 1.19.0-otp-28, 
 mix setup                                  # deps, empty db, assets
 ```
 
+The server must be **PostgreSQL 15 or newer**, in development, CI and production
+alike. The curation migration uses column-list referential actions
+(`ON DELETE SET NULL (column)`), which older versions reject. On an older server it
+stops with an explicit error rather than failing partway through.
+
 That leaves a working app with an **empty** database. Two things are deliberately
 not in git and have to arrive another way:
 
