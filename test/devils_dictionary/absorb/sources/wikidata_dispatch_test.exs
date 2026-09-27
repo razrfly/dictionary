@@ -12,7 +12,8 @@ defmodule DevilsDictionary.Absorb.Sources.WikidataDispatchTest do
 
   And an item with no name in any language the source reads keeps the
   established entity exactly as it was, reported as `label_missing` rather
-  than stopping the run or erasing the name another source gave it.
+  than stopping the run or erasing the name another source gave it — or the
+  output with which the creator-identity flow recorded minting it.
   """
   use DevilsDictionary.DataCase, async: true
 
@@ -22,7 +23,8 @@ defmodule DevilsDictionary.Absorb.Sources.WikidataDispatchTest do
   alias DevilsDictionary.Absorb.Sources.Wikidata
   alias DevilsDictionary.{Fixtures, Registry, Repo, Sources}
   alias DevilsDictionary.Registry.Entity
-  alias DevilsDictionary.Sources.CacheRecord
+  alias DevilsDictionary.SourceIdentity.Creators
+  alias DevilsDictionary.Sources.{CacheRecord, SourceRecord}
 
   defp record(raw, external_id),
     do: Fixtures.source_record(raw, source_id: 3, id: 99, external_id: external_id)
@@ -122,7 +124,25 @@ defmodule DevilsDictionary.Absorb.Sources.WikidataDispatchTest do
         }
       ])
 
-      Map.merge(ctx, %{wikidata: source, person: person})
+      # The creator-identity flow minted the person from this record and
+      # recorded it as the record's output, unstamped, before any
+      # materializer had seen the record.
+      nameless = Repo.get_by!(SourceRecord, source_id: source.id, external_id: "Q17386297")
+      now = DateTime.utc_now()
+      %{role: role} = Creators.minted_output()
+
+      Repo.insert_all("source_materialized_outputs", [
+        %{
+          source_record_id: nameless.id,
+          output_role: role,
+          output_key: "Q17386297",
+          output_object_id: person.object_id,
+          inserted_at: now,
+          updated_at: now
+        }
+      ])
+
+      Map.merge(ctx, %{wikidata: source, person: person, nameless: nameless})
     end
 
     test "completes, counts every disposition, and changes no identity", ctx do
@@ -139,6 +159,14 @@ defmodule DevilsDictionary.Absorb.Sources.WikidataDispatchTest do
       assert after_run.entity_kind == before.entity_kind
 
       assert Repo.aggregate(from(c in "reconciliation_cases"), :count) == 0
+
+      # The mint's evidence is not the materializer's to retire.
+      assert [[nil]] =
+               Repo.all(
+                 from o in "source_materialized_outputs",
+                   where: o.source_record_id == ^ctx.nameless.id,
+                   select: [o.retired_at]
+               )
     end
   end
 end
