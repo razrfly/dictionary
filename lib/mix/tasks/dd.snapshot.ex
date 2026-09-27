@@ -129,6 +129,8 @@ defmodule Mix.Tasks.Dd.Snapshot do
       Mix.raise("no such snapshot: #{path}")
     end
 
+    refuse_restoring_over_source!(config, path)
+
     case DevilsDictionary.Routing.Recovery.guard(config, "restore over", opts[:routing_snapshot]) do
       :ok -> :ok
       {:error, message} -> Mix.raise(message)
@@ -148,8 +150,21 @@ defmodule Mix.Tasks.Dd.Snapshot do
       row("from", path)
       row("elapsed", fmt_ms(elapsed))
       say("")
-      say("  `mix ecto.migrate` next, in case the snapshot predates a migration.")
+      say("  For a recovery, verify it before migrating anything (docs/routing/recovery.md);")
+      say("  otherwise `mix ecto.migrate` next, in case the snapshot predates a migration.")
     end)
+  end
+
+  # A restore drops its target first. The routing guard protects a database
+  # holding routing state; this protects the database the snapshot was taken
+  # from — including one that predates routing — as the server identifies it
+  # (`Snapshot.check_restore/2`). `Snapshot.restore!/3` checks again before
+  # dropping anything.
+  defp refuse_restoring_over_source!(config, path) do
+    case DevilsDictionary.Snapshot.check_restore(config, path) do
+      :ok -> :ok
+      {:error, message} -> Mix.raise(message)
+    end
   end
 
   defp check!(nil, configured) do

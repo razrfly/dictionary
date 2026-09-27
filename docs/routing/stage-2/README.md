@@ -106,7 +106,11 @@ Each record's proposal, evidence and disposition is in `candidates.json`.
 
 ## Gates before any persistent backfill
 
-1. **Tested recovery.** Delivered in Stage 1: [recovery procedure](../recovery.md) and `RecoveryTest`. Before the first persistent write, **exercise it on the development corpus**: snapshot `devils_dictionary_v2`, restore it into a separate database, run `mix dd.routing.verify`, and record the timing.
+1. **Tested recovery.** Delivered in Stage 1: [recovery procedure](../recovery.md) and `RecoveryTest`. **Rehearsed on the development corpus in Stage 2A** ([report](recovery-rehearsal.md)).
+   - **Passes:** snapshot, restore and exact verification, at the original pre-routing schema and again with nonempty routing state.
+   - **Fails:** re-projection. It fails for reasons that predate routing: the corpus is not a fixed point of today's materializers, one source's replay and full materialization crash, and the runbook omits the resolve pass.
+
+   This gate stays open until re-projection passes.
 2. **Repeat-run identity preservation.** Running the backfill twice must leave page, path and decision ids unchanged, compared as sets.
 3. **Crash and resume.** An interrupted run resumed from its checkpoint (keyed by object id and policy digest) must equal an uninterrupted run, by exact identities and references.
 

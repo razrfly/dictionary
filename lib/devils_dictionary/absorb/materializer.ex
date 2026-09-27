@@ -81,6 +81,9 @@ defmodule DevilsDictionary.Absorb.Materializer do
   # ~16 columns, so 2,000 leaves plenty of headroom.
   @chunk 2_000
 
+  # `dispositions` are not rows: they are what a source says about a record it
+  # deliberately wrote nothing for — `%{kind: :verifier_cache | :label_missing,
+  # key: external_id}` — counted per run so no record passes unreported.
   @empty %{
     lexemes: [],
     senses: [],
@@ -88,7 +91,8 @@ defmodule DevilsDictionary.Absorb.Materializer do
     relations: [],
     concepts: [],
     links: [],
-    concept_relations: []
+    concept_relations: [],
+    dispositions: []
   }
 
   @doc "The shape `materialize/1` may return. A source emits only the kinds it has."
@@ -1910,7 +1914,10 @@ defmodule DevilsDictionary.Absorb.Materializer do
       concept_relations_skipped_parent_taxon: changes.concept_relations.skipped_parent_taxon,
       concept_relations_skipped_unchased: changes.concept_relations.skipped_unchased,
       relations_offered: changes.relations.offered,
-      concept_relations_offered: length(merged.concept_relations)
+      concept_relations_offered: length(merged.concept_relations),
+      dispositions:
+        merged.dispositions
+        |> Enum.frequencies_by(&to_string(&1.kind))
     }
   end
 end
