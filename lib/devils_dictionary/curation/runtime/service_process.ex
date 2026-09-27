@@ -10,19 +10,29 @@ defmodule DevilsDictionary.Curation.Runtime.ServiceProcess do
       OLLAMA_MAX_LOADED_MODELS=1            # one loaded model: personas share it
       OLLAMA_NUM_PARALLEL=1                 # one request at a time, as defense in depth
       OLLAMA_KEEP_ALIVE=10m                 # a bounded warm window
+      OLLAMA_NO_CLOUD=1                     # no remote inference or web search
+      HOME=<run_dir>/home                   # its key and cache stay on the volume too
+      TMPDIR=<run_dir>/tmp                  # and so does any scratch file
+
+  Ollama writes a signing key and a cache under `$HOME/.ollama` on first
+  start. Without its own `HOME` that would land on the internal disk. The
+  process also runs from `run_dir`, not from the caller's checkout.
 
   `start/1` refuses, and never falls back, when the volume is not mounted and
   external, the cache directory is missing, or the binary is absent. It
-  downloads nothing. `stop/1` is the only proof `Runtime.recover/1` accepts that
+  downloads nothing. It binds the service to the connected database
+  (`Runtime.Authority`), and refuses when the service is bound to another one
+  unless `rebind: true`. `stop/1` is the only proof `Runtime.recover/1` accepts that
   a generation ended: the recorded process is signalled, and it must be gone,
   and its port closed, before the stop is confirmed.
 
-  The process id and log live in `run_dir` on the same volume. For a service
-  that must survive a reboot, `docs/curation/runtime-operations.md` gives a
-  user LaunchAgent. Installing one is an operator's choice, never done here.
+  The process id, log and authority marker live in `run_dir` on the same
+  volume. For a service that must survive a reboot,
+  `docs/curation/runtime-operations.md` says what a user LaunchAgent must
+  keep. Installing one is an operator's choice, never done here.
   """
 
-  alias DevilsDictionary.Curation.Runtime.Endpoint
+  alias DevilsDictionary.Curation.Runtime.{Authority, Endpoint}
 
   @stop_wait_ms 30_000
 
@@ -50,25 +60,33 @@ defmodule DevilsDictionary.Curation.Runtime.ServiceProcess do
          :ok <- present(system.dir?(root), :models_root_missing),
          :ok <- present(File.regular?(binary), :runtime_binary_missing),
          :ok <- present(system.dir?(run_dir), :run_dir_missing),
-         :ok <- present(not status(opts).alive and listening(opts) == [], :already_running) do
+         :ok <- present(not status(opts).alive and listening(opts) == [], :already_running),
+         {:ok, authority} <- Authority.bind(opts) do
       log = Path.join(run_dir, "ollama.log")
+      home = Path.join(run_dir, "home")
+      tmp = Path.join(run_dir, "tmp")
+      Enum.each([home, tmp], &File.mkdir_p!/1)
 
       env = [
         {"OLLAMA_HOST", "127.0.0.1:#{Endpoint.port(opts)}"},
         {"OLLAMA_MODELS", root},
         {"OLLAMA_MAX_LOADED_MODELS", "1"},
         {"OLLAMA_NUM_PARALLEL", "1"},
-        {"OLLAMA_KEEP_ALIVE", "10m"}
+        {"OLLAMA_KEEP_ALIVE", "10m"},
+        {"OLLAMA_NO_CLOUD", "1"},
+        {"HOME", home},
+        {"TMPDIR", tmp}
       ]
 
       {out, 0} =
         System.cmd("sh", ["-c", ~s(nohup "$0" serve >> "$1" 2>&1 & echo $!), binary, log],
-          env: env
+          env: env,
+          cd: run_dir
         )
 
       pid = out |> String.trim() |> String.to_integer()
       File.write!(pid_file(opts), Integer.to_string(pid))
-      {:ok, %{pid: pid, log: log}}
+      {:ok, %{pid: pid, log: log, authority: authority["database"]}}
     end
   end
 

@@ -115,6 +115,26 @@ defmodule DevilsDictionary.Curation.Runtime.ContractTest do
              reasons(validate(ctx, selection({"c1", "m0"}, [{"c1", "m0", nil}])))
   end
 
+  test "a refused answer keeps the ids it named, and never its reasons or quotes", ctx do
+    fabricated = selection({"c1", "m0"}, [{"c1", "m0", "words the source never said"}])
+
+    assert {:refused, [["selection", "duplicate_candidate"], ["highlight_1", "fabricated_quote"]],
+            observed} = validate(ctx, fabricated)
+
+    assert observed["refused_shape"] == %{
+             "decision" => "select",
+             "lead" => ["c1", "m0"],
+             "highlights" => [["c1", "m0", true]]
+           }
+
+    refute Jason.encode!(observed) =~ "never said"
+    refute Jason.encode!(observed) =~ "defines the word"
+
+    long = selection({String.duplicate("x", 500), "m0"}, [])
+    {:refused, _reasons, observed} = validate(ctx, long)
+    assert observed["refused_shape"]["lead"] == [String.duplicate("x", 24), "m0"]
+  end
+
   test "Bierce first applies: another definition cannot lead where Bierce applies", ctx do
     assert [["lead", "priority_source_available"]] =
              reasons(validate(ctx, selection({"c2", "m0"}, [])))

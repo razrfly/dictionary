@@ -8,7 +8,12 @@ defmodule Mix.Tasks.Dd.Runtime do
   **The service**, one private `ollama serve` on loopback, with its models on
   the external volume:
 
-      mix dd.runtime service start|stop|restart|status
+      mix dd.runtime service start|stop|restart|status [--rebind]
+
+  `start` binds the service's one slot to the connected database
+  (`Runtime.Authority`). Callers of any other database are refused at
+  readiness. `--rebind` moves the binding, and is for an operator who has
+  checked that the old database's slot holds no live attempt.
 
   **Setup.** This is explicit, and the only thing that ever downloads:
 
@@ -24,11 +29,12 @@ defmodule Mix.Tasks.Dd.Runtime do
 
       mix dd.runtime ready   --model-config SLUG [--smoke]
       mix dd.runtime packet  --lexeme ID[,ID] [--language en] --out PATH
-      mix dd.runtime request --model-config SLUG --packet PATH --key KEY
+      mix dd.runtime request --model-config SLUG --packet PATH --key KEY [--deadline-ms MS]
 
   `request` runs one frozen packet and prints its receipt. It writes an
   attempt and its accounting, and never a composition, review, publication,
-  claim or page.
+  claim or page. `--deadline-ms` shortens the call's deadline, and with it the
+  reservation and the lease, for a recovery drill. It never lengthens them.
 
   **The slot:**
 
@@ -82,7 +88,9 @@ defmodule Mix.Tasks.Dd.Runtime do
     reason: :string,
     plan: :string,
     packets: :string,
-    min_free_gib: :integer
+    min_free_gib: :integer,
+    deadline_ms: :integer,
+    rebind: :boolean
   ]
 
   @impl Mix.Task
@@ -93,11 +101,13 @@ defmodule Mix.Tasks.Dd.Runtime do
     command(rest, opts)
   end
 
-  defp command(["service", action], _opts) do
+  defp command(["service", action], opts) do
+    start = Keyword.take(opts, [:rebind])
+
     case action do
-      "start" -> print(ServiceProcess.start())
+      "start" -> print(ServiceProcess.start(start))
       "stop" -> print(ServiceProcess.stop())
-      "restart" -> print(with({:ok, _} <- ServiceProcess.stop(), do: ServiceProcess.start()))
+      "restart" -> print(with({:ok, _} <- ServiceProcess.stop(), do: ServiceProcess.start(start)))
       "status" -> print({:ok, ServiceProcess.status()})
       other -> Mix.raise("unknown service action #{other}")
     end
@@ -119,7 +129,7 @@ defmodule Mix.Tasks.Dd.Runtime do
         free = free_gib(Endpoint.get(:models_root))
         min = Keyword.get(opts, :min_free_gib, 20)
         if free < min, do: Mix.raise("only #{free} GiB free on the model volume; need #{min}")
-        Mix.shell().info("pulling #{model} (explicit setup; #{free} GiB free)…")
+        Mix.shell().info("pulling #{model} (explicit setup; #{free} GiB free)...")
         print(Ollama.pull(model))
       end
 
@@ -179,9 +189,10 @@ defmodule Mix.Tasks.Dd.Runtime do
     config = config!(opts)
 
     print(
-      Runtime.run(config, required(opts, :packet),
-        request_key: required(opts, :key),
-        actor_id: operator!().id
+      Runtime.run(
+        config,
+        required(opts, :packet),
+        [request_key: required(opts, :key), actor_id: operator!().id] ++ deadline(opts)
       )
     )
   end
@@ -253,6 +264,15 @@ defmodule Mix.Tasks.Dd.Runtime do
       )
   end
 
+  # A drill may shorten the deadline, never lengthen it.
+  defp deadline(opts) do
+    case opts[:deadline_ms] do
+      nil -> []
+      ms when ms > 0 -> [deadline_ms: min(ms, Endpoint.get(:deadline_ms))]
+      _ -> Mix.raise("--deadline-ms must be positive")
+    end
+  end
+
   defp required(opts, key),
     do: opts[key] || Mix.raise("--#{String.replace(to_string(key), "_", "-")} is required")
 
@@ -281,6 +301,8 @@ defmodule Mix.Tasks.Dd.Runtime do
 
   defp start! do
     Mix.Task.run("app.config")
+    # Receipts are the output; dev's per-query debug logs would bury them.
+    Logger.configure(level: :info)
     {:ok, _} = Application.ensure_all_started([:postgrex, :ecto_sql, :req])
 
     case Repo.start_link() do

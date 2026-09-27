@@ -5,7 +5,8 @@ defmodule DevilsDictionary.RuntimeFixtures do
 
     * `model_config!/1` inserts a pinned model config whose manifest body
       hashes to its digest, as a real one does.
-    * `ready!/1` puts that manifest on the fake external root.
+    * `ready!/1` puts that manifest on the fake external root, and `bind!/1`
+      binds the fake service's slot to the test database.
     * `stub_ollama!/1` answers `/api/version`, `/api/tags`, `/api/show` and
       `/api/chat` through `Req.Test`. `:chat` is a function of the decoded
       request, so a test chooses the model's answer, or a transport error.
@@ -15,7 +16,7 @@ defmodule DevilsDictionary.RuntimeFixtures do
   import DevilsDictionary.CurationFixtures, only: [actor!: 1]
 
   alias DevilsDictionary.Curation.Digest
-  alias DevilsDictionary.Curation.Runtime.{FakeSystem, ModelConfig, Ollama, Readiness}
+  alias DevilsDictionary.Curation.Runtime.{Authority, FakeSystem, ModelConfig, Ollama, Readiness}
   alias DevilsDictionary.Repo
 
   @runtime_version "0.21.0"
@@ -68,6 +69,16 @@ defmodule DevilsDictionary.RuntimeFixtures do
       config_hash: Digest.sha256("config-#{System.unique_integer([:positive])}"),
       created_by_actor_id: actor.id
     })
+  end
+
+  @doc """
+  Binds the fake service to this test's database and `opts`' service key, as
+  `ServiceProcess.start/1` binds the real one (`Runtime.Authority`). Returns
+  `opts`.
+  """
+  def bind!(opts \\ []) do
+    FakeSystem.put_file(Authority.path(opts), Jason.encode!(Authority.identity(opts)))
+    opts
   end
 
   @doc "Puts the config's manifest on the fake external models root."

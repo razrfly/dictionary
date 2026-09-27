@@ -102,7 +102,7 @@ defmodule DevilsDictionary.Curation.Runtime.Contract do
 
       case references(decoded, packet) ++ evidence do
         [] -> {:ok, accepted(decoded, packet, observed)}
-        reasons -> {:refused, reasons, observed}
+        reasons -> {:refused, reasons, Map.put(observed, "refused_shape", refused_shape(decoded))}
       end
     else
       {:refused, reasons} -> {:refused, reasons, observed}
@@ -114,6 +114,21 @@ defmodule DevilsDictionary.Curation.Runtime.Contract do
       "done_reason" => response["done_reason"],
       "thinking_chars" => String.length(message["thinking"] || ""),
       "output_bytes" => byte_size(message["content"] || "")
+    }
+  end
+
+  # What a well-shaped but refused answer pointed at, so the refusal can be
+  # read: the decision and the ids it named, each id cut to 24 characters.
+  # Never its reasons or quote text; only whether it gave a quote.
+  defp refused_shape(decoded) do
+    id = fn value -> String.slice(value, 0, 24) end
+    pair = fn choice -> [id.(choice["candidate_id"]), id.(choice["meaning_id"])] end
+
+    %{
+      "decision" => decoded["decision"],
+      "lead" => decoded["lead"] && pair.(decoded["lead"]),
+      "highlights" =>
+        Enum.map(decoded["highlights"], fn h -> pair.(h) ++ [is_binary(h["quote"])] end)
     }
   end
 

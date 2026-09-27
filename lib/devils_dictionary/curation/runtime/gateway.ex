@@ -168,8 +168,15 @@ defmodule DevilsDictionary.Curation.Runtime.Gateway do
     attempt
   end
 
-  @doc "Who is asking: the node and process, for the record."
-  def owner, do: "#{node()}/#{inspect(self())}"
+  @doc """
+  Who is asking, for the record: host, OS process, node and BEAM process. Every
+  `mix` task is `nonode@nohost`, so the OS process is what tells two callers
+  apart. The fence, not the owner, decides what is accepted.
+  """
+  def owner do
+    {:ok, host} = :inet.gethostname()
+    "#{host}/os:#{System.pid()}/#{node()}/#{inspect(self())}"
+  end
 
   # ── dispatch ──────────────────────────────────────────────────────────────
 

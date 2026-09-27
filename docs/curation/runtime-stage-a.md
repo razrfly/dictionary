@@ -18,21 +18,35 @@ process per persona.
 
 | Piece | Module | Holds |
 |---|---|---|
-| Model provenance | `Runtime.ModelConfig` (`local_model_configs`) | Immutable: tag, manifest and layer digests, quantization, license digest, template digest, runtime version, generation settings, instruction and output-contract versions |
-| Endpoint | `Runtime.Endpoint` (application config) | Operational only: base URL, models root, binary, timeouts. Never on a model config, never a persona property |
-| Physical service | `Runtime.Service` (`inference_services`) | The one slot: state, holder, fence, epoch, quarantine and pause reasons |
-| Attempts | `Runtime.Attempt` (`inference_attempts`) | Request identity, owner, fence, lifecycle, packet hash, validated result, metrics |
-| Accounting | `Runtime.Ledger` (`inference_ledger_entries`) | Append-only reserve, release and charge entries per UTC day |
+| Model provenance | `Runtime.ModelConfig` (`local_model_configs`), written by `Runtime.Provenance` | Immutable: tag, manifest and layer digests, weights digest, quantization, license name and digest, template digest, runtime version, capabilities, generation settings, instruction and output-contract versions |
+| Endpoint | `Runtime.Endpoint` (application config) | Operational only: base URL, mount point, models root, run directory, binary, limits. Never on a model config, never a persona property |
+| Physical service | `Runtime.Service` (`inference_services`) | The one slot: state, holder, fence, epoch, lease, quarantine and pause reasons |
+| Attempts | `Runtime.Attempt` (`inference_attempts`) | Request identity, owner, fence, lifecycle, packet hash and summary, validated result, metrics |
+| Accounting | `Runtime.LedgerEntry` (`inference_ledger_entries`) | Append-only reserve, release and charge entries per UTC day |
 | Client | `Runtime.Ollama` | Req, nonstreaming `/api/chat` with a JSON-schema `format`, no automatic retries |
-| Checks | `Runtime.Readiness`, `Runtime.Volume`, `Runtime.Host` | Mount and external device, service version, served digest, manifest on the models root, memory and swap |
+| Host | `Runtime.System` | The volume (`diskutil`: mounted, external, device), memory and swap, files, process liveness. Tests swap in `RuntimeFakeSystem` |
+| Service process | `Runtime.ServiceProcess` | Start, stop (the confirmed stop recovery needs) and status of the one private `ollama serve` |
+| Slot authority | `Runtime.Authority` (`<run_dir>/authority.json`) | The one database, cluster and service key whose slot row governs the physical service |
+| Checks | `Runtime.Readiness` | Slot, volume, models root, authority, runtime version, served digest, manifest on the models root |
 | Contracts | `Runtime.Packet`, `Runtime.Contract` | The frozen input and the validated output |
-| Coordination | `Runtime.Gateway` | Admission, dispatch, completion, quarantine, recovery, pause and resume |
-| Entry point | `Runtime.run/3` and the `dd.runtime.*` tasks | Readiness → packet check → admission → dispatch → validation → settlement |
+| Coordination | `Runtime.Gateway` | Admission, dispatch, completion, quarantine, sweep, recovery, pause and resume |
+| Entry point | `Runtime.run/3` and `mix dd.runtime` | Readiness → packet check → admission → dispatch → validation → settlement |
+| Benchmark | `Runtime.Bench`, `priv/curation/runtime_bench/` | The predeclared plan, its frozen packets, and the runner |
+
+Operating the service is in [runtime-operations.md](runtime-operations.md). The measured
+benchmark is in [runtime-benchmark-2026-09-27.md](runtime-benchmark-2026-09-27.md).
 
 ## The slot protocol
 
 The authority is PostgreSQL, not a BEAM process. Every caller of the physical service,
 on any node, goes through the same `inference_services` row.
+
+"The same row" also means the same database. A caller connected to another database,
+such as a test partition, a benchmark database or a second environment, would find a
+slot row of its own. So `ServiceProcess.start/1` binds the service to one database,
+cluster (`system_identifier`) and service key, in a marker on the volume
+(`Runtime.Authority`). Readiness refuses every other caller with `foreign_authority`
+before anything is sent. Moving the binding takes an explicit `--rebind`.
 
 1. **Admit** (one transaction). Lock the service row with `FOR UPDATE`, then:
    - replay an existing attempt with the same `request_key`;
@@ -68,28 +82,32 @@ charged nothing.
 ## Invariants → enforcement → test
 
 `G` is the gateway, `P` the packet, `C` the output contract, `R` readiness. The tests are
-in `test/devils_dictionary/curation/runtime/`.
+in `test/devils_dictionary/curation/runtime/`. `GatewayRaceTest` is unboxed: each caller
+is its own process with its own database connection and committed transactions, so it
+proves what a single-process mutex could not.
 
 | # | Invariant | Enforced by | Test |
 |---|---|---|---|
-| G1 | At most one live attempt (admitted, dispatched or uncertain) per physical service, across nodes | service row lock; partial unique index `inference_attempts_one_live_per_service` | `GatewayRaceTest` (unboxed, separate connections): two callers, one admitted, fake runtime sees concurrency 1; raw second live insert refused |
-| G2 | The holder belongs to the service, and an `occupied` service has a holder | composite FK `(holder_attempt_id, id)`; checks | `GatewayTest` "the slot and its holder" |
-| G3 | Admission is idempotent per `request_key`; a different request under a used key is a conflict | unique `request_key`; replay compares the packet hash and model config | "a duplicate request replays its receipt" |
-| G4 | A result is accepted only from the current holder under its fence; stale, late or duplicate results are refused | completion checks holder, fence and state under the row lock | "a late result after recovery is refused"; "a duplicate completion is refused" |
-| G5 | A timeout, crash or expired lease after dispatch quarantines; it frees and refunds nothing | `dispatched` committed before send; `uncertain` handling; lease sweep | "a timeout after dispatch quarantines the service"; "an expired dispatched lease quarantines, an expired admitted lease releases" |
-| G6 | Recovery requires a confirmed stop of the service process, and settles once | `Gateway.recover/2` takes the stop confirmation; ledger uniques | "recovery settles the uncertain attempt once and restores the slot only after readiness" |
-| G7 | Each attempt reserves once, releases once, and is charged at most once per UTC day | append-only ledger; unique `(attempt, kind, day)`; transition trigger | "accounting settles once" (unboxed double-settle) |
-| G8 | Daily occupancy is bounded; occupancy crossing midnight is charged to both days; no reset loophole | admission checks charged plus open reservations; charge split by UTC day | "budget exhaustion refuses admission"; "occupancy crossing midnight charges both days" |
-| G9 | Only a confirmed pre-dispatch connection failure is retried, at most twice | `Runtime.Ollama` `retry: false`; gateway retry loop | "connection refused is retried twice, then fails pre-dispatch" |
-| G10 | Memory pressure, swap growth or repeated runtime failures pause the service until an operator resumes it | `Runtime.Host` samples; pause rules | "swap growth pauses"; "three runtime failures pause"; "resume" |
-| P1 | A packet is bounded: at most 12 candidates, bounded excerpts, an estimated prompt within context minus reserved output. Oversized packets are refused, never silently trimmed of the target meaning | `Packet.freeze/1` limits | `PacketTest` limits |
-| P2 | Every candidate is an exact, current, eligible registry revision. Its excerpt hashes to the revision text, and restricted evidence never enters a packet | `Packet.verify/1` re-checks with `Curation.Eligibility` before dispatch | "a stale or restricted candidate refuses the packet" |
-| P3 | Excerpts are untrusted data; attempts store hashes, ids and locators, never excerpt text or prompts | prompt rendering; attempt columns | "no prompt or excerpt text is persisted" |
-| C1 | Output is bounded, parseable, exactly shaped, and free of tool calls and reasoning | `Contract.validate/2` | `ContractTest` malformed, oversized, extra keys, tool calls, thinking |
-| C2 | Every id is from the packet, every meaning is allowed for its candidate, and every quote is an exact substring of its excerpt | `Contract.validate/2` | fabricated id, wrong meaning, fabricated quote |
-| C3 | The selection is still eligible at validation time, and Bierce-first applies | `Curation.Eligibility`, `Curation.LeadRule` | "restricted evidence at validation time is refused"; "a non-Bierce lead is refused where Bierce applies" |
-| R1 | Readiness refuses with a stable reason, and never downloads or creates directories | `Runtime.Readiness` | `ReadinessTest`: unmounted, internal, unreachable, version, missing model, digest mismatch, manifest not on the root, quarantined, paused |
-| R2 | The served model is the pinned artifact on the external models root | `/api/tags` digest equals the pinned manifest digest, which equals the sha256 of the manifest file under the root | "digest mismatch refuses" |
+| G1 | At most one live attempt (admitted, dispatched or uncertain) per physical service, across nodes and databases | service row lock; partial unique index `inference_attempts_one_live_per_service`; the authority marker, checked by readiness | `GatewayRaceTest` "two independent callers: one generation, one busy refusal, one settlement" and "callers that skip the gateway still cannot both make a live attempt"; `GatewayTest` "an admitted attempt holds the slot; a second caller is refused, and so is the database" |
+| G1′ | The physical service is governed by exactly one database, cluster and service key | `Runtime.Authority`; readiness step `authority`; `ServiceProcess.start/1` refuses to rebind silently | `ReadinessTest` "a caller of any database but the bound one is refused, before the service is asked"; "binds once, keeps its own binding, and moves only on an explicit rebind" |
+| G2 | The holder belongs to the service and is live under the fence; an `occupied` service has a holder | composite FK `(holder_attempt_id, id)`; shape check; deferred `inference_services_holder` trigger | same `GatewayTest` case |
+| G3 | Admission is idempotent per `request_key`; a different request under a used key is a conflict | unique `request_key`; replay compares the packet hash and model config | "a duplicate request replays its receipt; a different request under the key conflicts" |
+| G4 | A result is accepted only from the current holder under its fence; stale, late or duplicate results are refused | completion checks holder, fence and state under the row lock | "a result is accepted once, from the holder under its fence"; `GatewayRaceTest` "a caller that dies mid-generation leaves the slot held until a confirmed stop" (its late completion is stale) |
+| G5 | A timeout, crash or expired lease after dispatch quarantines; it frees and refunds nothing | `dispatched` committed before send; `uncertain` handling; lease sweep | "a timeout after dispatch quarantines the service, frees nothing and refunds nothing"; "an expired admitted lease releases the slot; an expired dispatched lease quarantines it"; `RuntimeTest` "a timeout after dispatch quarantines the service; the next caller is refused" |
+| G6 | Recovery requires a confirmed stop of the service process, settles once, and holds the slot until resume | `Gateway.recover/2` takes the stop confirmation; epoch bump; paused until `resume` | "a confirmed stop settles the uncertain attempt once and holds the slot until resume"; the killed-caller race test |
+| G7 | Each attempt reserves once, releases once, and is charged at most once per UTC day | append-only ledger; unique `(attempt, kind, day)`; ledger guard and lifecycle triggers; deferred `inference_attempts_settled` | "the ledger settles each attempt once, and only a finished one"; the killed-caller race test (a duplicate charge from another connection is refused) |
+| G8 | Daily occupancy is bounded; occupancy crossing midnight is charged to both days; pending work is capped | admission checks charged plus open reservations; charge split by UTC day | "the budget refuses admission once today's occupancy is spent"; "occupancy crossing midnight is charged to both UTC days"; "the pending-work cap refuses admission"; `BenchTest` "an interval is charged to each UTC day it touches" |
+| G9 | Only a refused connection (never sent) is retried, at most twice | `Runtime.Ollama` `retry: false`; the retry loop in `Runtime.run/3` | `RuntimeTest` "a refused connection is retried twice, then fails before dispatch"; `ReadinessTest` "a refused connection was never sent; a timeout is uncertain; an error answer is an answer" |
+| G10 | Memory pressure, swap growth or repeated runtime failures pause the service until an operator resumes it | `Runtime.System` samples; pause rules | "memory pressure refuses and pauses; swap growth during a call pauses after it"; "three runtime failures in a row pause the service until an operator resumes it"; "a validation refusal is an answer, not a runtime failure" |
+| P1 | A packet is bounded: at most 12 candidates, bounded excerpts, an estimated prompt within context minus reserved output. Oversized packets are refused, never trimmed | `Packet.freeze/2`, `Packet.fits?/2` | `PacketTest` "limits refuse; they never trim the packet"; "excerpts are cut at a word boundary, never rewritten"; `RuntimeTest` "an oversized, stale or unready packet is refused before admission" |
+| P2 | Every candidate is an exact, current, eligible registry revision; restricted evidence never enters a packet | `Packet.build/2`; `Packet.verify/1` re-checks with `Curation.Eligibility` before dispatch | "a packet is built from the registry, Bierce first, and frozen under one hash"; "restricted or withdrawn evidence never enters a packet"; "a packet that no longer matches the registry is refused before dispatch" |
+| P3 | Excerpts are untrusted data; attempts store hashes, ids and a text-free summary, never excerpt text or prompts | prompt rendering; attempt columns | "an attempt keeps ids and hashes, and never the excerpts"; `RuntimeTest` "instructions inside a source excerpt stay data: obeying them is refused" |
+| C1 | Output is bounded, parseable, exactly shaped, and free of tool calls; emitted reasoning is measured as a length and never kept | `Contract.validate/3` | `ContractTest` "malformed, oversized, truncated or tool-calling output is refused"; "extra keys, wrong types and more than three highlights are refused"; "emitted reasoning is measured as a length and never kept" |
+| C2 | Every id is from the packet, every meaning is allowed for its candidate, and every quote is an exact substring of its excerpt, kept as a hash and a byte range | `Contract.validate/3` | "fabricated ids, wrong meanings, fabricated quotes and duplicates are refused"; "a sound selection is accepted, and its quote kept as a hash and a range" |
+| C3 | The selection is still eligible at validation time, and Bierce-first applies | `Curation.Eligibility`, `Curation.LeadRule` | "evidence restricted after the packet was frozen is refused at validation"; "Bierce first applies: another definition cannot lead where Bierce applies" |
+| R1 | Readiness refuses with a stable reason, and never downloads or creates directories | `Runtime.Readiness` | `ReadinessTest`: "a missing or internal drive refuses before anything is asked of the service"; "an unreachable service, another version or a missing model refuses"; "a quarantined or paused slot refuses" |
+| R2 | The served model is the pinned artifact on the external models root | `/api/tags` digest equals the pinned manifest digest, which equals the sha256 of the manifest file under the root | "a served tag that moved to another artifact refuses, and nothing is pulled"; "a served manifest that is not the one on the external root refuses" |
+| — | Nothing public is written | `Runtime.run/3` writes attempts and ledger entries only | `RuntimeTest` "a packet gets a validated result, a receipt and accounting, and nothing public" |
 
 ## Operating limits
 

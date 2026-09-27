@@ -28,7 +28,7 @@ defmodule DevilsDictionary.Curation.Runtime.GatewayRaceTest do
       config: config,
       frozen: frozen,
       actor: actor,
-      opts: [service_key: "race", actor_id: actor.id]
+      opts: bind!(service_key: "race", actor_id: actor.id)
     })
   end
 

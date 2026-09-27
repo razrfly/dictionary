@@ -10,6 +10,9 @@ defmodule DevilsDictionary.Curation.Runtime.Readiness do
   | `:models_root_unmounted` | the model volume is not mounted |
   | `:models_root_not_external` | the "volume" is the internal disk |
   | `:models_root_missing` | the cache directory is absent |
+  | `:authority_unbound` | no database owns the service's slot yet (`Runtime.Authority`) |
+  | `:foreign_authority` | the service's slot belongs to another database |
+  | `:authority_unreadable` | the authority marker is not what `ServiceProcess.start/1` writes |
   | `:service_unreachable` | nothing answers on the private endpoint |
   | `:runtime_version_mismatch` | the runtime is not the pinned version |
   | `:model_missing` | the pinned model is not installed |
@@ -23,7 +26,7 @@ defmodule DevilsDictionary.Curation.Runtime.Readiness do
   """
 
   alias DevilsDictionary.Curation.Digest
-  alias DevilsDictionary.Curation.Runtime.{Endpoint, Gateway, ModelConfig, Ollama}
+  alias DevilsDictionary.Curation.Runtime.{Authority, Endpoint, Gateway, ModelConfig, Ollama}
 
   @doc "Checks everything, in order, and stops at the first refusal."
   def check(%ModelConfig{} = config, opts \\ []) do
@@ -31,6 +34,7 @@ defmodule DevilsDictionary.Curation.Runtime.Readiness do
       &slot/2,
       &volume/2,
       &root/2,
+      &authority/2,
       &runtime_version/2,
       &served_digest/2,
       &manifest_on_root/2
@@ -89,6 +93,15 @@ defmodule DevilsDictionary.Curation.Runtime.Readiness do
     if Endpoint.system(opts).dir?(root),
       do: {:ok, :models_root, root},
       else: {:error, :models_root, :models_root_missing, root}
+  end
+
+  # Only callers of the database the service is bound to share its slot, so
+  # only they may use it.
+  defp authority(_config, opts) do
+    case Authority.check(opts) do
+      {:ok, identity} -> {:ok, :authority, identity["database"]}
+      {:error, reason, detail} -> {:error, :authority, reason, detail}
+    end
   end
 
   defp runtime_version(config, opts) do

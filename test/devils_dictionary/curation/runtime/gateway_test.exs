@@ -54,6 +54,7 @@ defmodule DevilsDictionary.Curation.Runtime.GatewayTest do
       assert %Service{state: :occupied, holder_attempt_id: holder, fence: 1} = service(ctx)
       assert holder == first.id
       assert first.fence == 1 and first.state == :admitted
+      assert first.owner =~ "/os:#{System.pid()}/"
       assert [{:reserve, _day, 125_000}] = ledger(first)
 
       assert {:refused, :slot_busy} = admit(ctx)

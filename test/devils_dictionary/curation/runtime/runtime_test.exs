@@ -29,7 +29,7 @@ defmodule DevilsDictionary.Curation.RuntimeTest do
       packet: packet,
       key: key,
       actor: actor,
-      opts: [service_key: key, actor_id: actor.id]
+      opts: bind!(service_key: key, actor_id: actor.id)
     })
   end
 

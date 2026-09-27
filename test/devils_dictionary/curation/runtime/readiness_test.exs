@@ -8,13 +8,20 @@ defmodule DevilsDictionary.Curation.Runtime.ReadinessTest do
 
   import DevilsDictionary.RuntimeFixtures
 
-  alias DevilsDictionary.Curation.Runtime.{Contract, FakeSystem, Gateway, Ollama, Readiness}
+  alias DevilsDictionary.Curation.Runtime.{
+    Authority,
+    Contract,
+    FakeSystem,
+    Gateway,
+    Ollama,
+    Readiness
+  }
 
   setup do
     DevilsDictionary.Fixtures.seed_catalog!()
     config = model_config!() |> ready!()
     key = "ready-#{System.unique_integer([:positive])}"
-    %{config: config, opts: [service_key: key], key: key}
+    %{config: config, opts: bind!(service_key: key), key: key}
   end
 
   defp refusal(ctx, opts \\ []) do
@@ -30,7 +37,15 @@ defmodule DevilsDictionary.Curation.Runtime.ReadinessTest do
     assert {:ok, %{checks: checks}} = Readiness.check(ctx.config, ctx.opts)
 
     assert Enum.map(checks, & &1.check) ==
-             [:slot, :volume, :models_root, :runtime_version, :served_digest, :manifest_on_root]
+             [
+               :slot,
+               :volume,
+               :models_root,
+               :authority,
+               :runtime_version,
+               :served_digest,
+               :manifest_on_root
+             ]
   end
 
   test "a missing or internal drive refuses before anything is asked of the service", ctx do
@@ -83,6 +98,7 @@ defmodule DevilsDictionary.Curation.Runtime.ReadinessTest do
   test "a served manifest that is not the one on the external root refuses", ctx do
     stub_ollama!(ctx.config)
     FakeSystem.put(files: %{})
+    bind!(ctx.opts)
     assert refusal(ctx) == :artifact_not_on_models_root
 
     FakeSystem.put_file(Readiness.manifest_path(ctx.config.model_name), "{}")
@@ -96,6 +112,63 @@ defmodule DevilsDictionary.Curation.Runtime.ReadinessTest do
 
     assert refusal(ctx) == :paused
     assert refusal(ctx, allow_paused: true) == :ok
+  end
+
+  test "a caller of any database but the bound one is refused, before the service is asked",
+       ctx do
+    # No stub: a refusal here must not reach the service at all.
+    marker = fn identity -> FakeSystem.put_file(Authority.path(), Jason.encode!(identity)) end
+    mine = Authority.identity(ctx.opts)
+
+    marker.(%{mine | "database" => "devils_dictionary_elsewhere"})
+    assert refusal(ctx) == :foreign_authority
+
+    assert {:error, :foreign_authority, %{checks: checks}} = Readiness.check(ctx.config, ctx.opts)
+
+    assert %{check: :authority, detail: %{"database" => "devils_dictionary_elsewhere"}} =
+             List.last(checks)
+
+    # The same database name on another PostgreSQL cluster is another database.
+    marker.(%{mine | "system_identifier" => "1"})
+    assert refusal(ctx) == :foreign_authority
+
+    # A second slot row under another key would be a second slot.
+    marker.(%{mine | "service_key" => "another-key"})
+    assert refusal(ctx) == :foreign_authority
+
+    FakeSystem.put_file(Authority.path(), "not json")
+    assert refusal(ctx) == :authority_unreadable
+
+    FakeSystem.put(files: %{})
+    assert refusal(ctx) == :authority_unbound
+  end
+
+  describe "binding the service (ServiceProcess.start/1)" do
+    @describetag :tmp_dir
+
+    test "binds once, keeps its own binding, and moves only on an explicit rebind", ctx do
+      opts = [run_dir: ctx.tmp_dir, system: DevilsDictionary.Curation.Runtime.System]
+      path = Authority.path(opts)
+      mine = Authority.identity(opts)
+
+      assert {:ok, ^mine} = Authority.bind(opts)
+      assert Jason.decode!(File.read!(path)) == mine
+      assert {:ok, ^mine} = Authority.check(opts)
+      assert {:ok, ^mine} = Authority.bind(opts)
+
+      File.write!(path, Jason.encode!(%{mine | "database" => "devils_dictionary_elsewhere"}))
+
+      assert {:error, {:bound_to_other_database, "devils_dictionary_elsewhere"}} =
+               Authority.bind(opts)
+
+      assert Jason.decode!(File.read!(path))["database"] == "devils_dictionary_elsewhere"
+
+      File.write!(path, "not json")
+      assert {:error, :authority_unreadable} = Authority.bind(opts)
+
+      assert {:ok, ^mine} = Authority.bind(Keyword.put(opts, :rebind, true))
+      assert Jason.decode!(File.read!(path)) == mine
+    end
   end
 
   test "the manifest path is the library layout under the models root" do
