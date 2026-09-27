@@ -116,8 +116,8 @@ Each record's proposal, evidence and disposition is in `candidates.json`.
    - **Open:** the corpus is not yet a fixed point of today's materializers. The measured [catch-up](corpus-catch-up.md) needs the owner's decision, and the checkpoint needs independent reassessment.
 
    This gate stays open until both are done.
-2. **Repeat-run identity preservation.** Running the backfill twice must leave page, path and decision ids unchanged, compared as sets. **Shown**, in `BackfillTest` and on copies of the corpus: a second run, with or without reviews, left every page, path, decision, ledger and checkpoint id identical ([backfill](backfill.md#rehearsal)).
-3. **Crash and resume.** An interrupted run resumed from its checkpoint (keyed by object id and policy digest) must equal an uninterrupted run, by exact identities and references. **Shown**, in `BackfillTest` and on a copy: a run was killed with `SIGKILL` after 42 of 170 records and resumed. Every one of the 170 objects then had the same decision, page, addresses and disposition as on an uninterrupted copy. Numeric ids differ only by the sequence values the killed batch consumed.
+2. **Repeat-run identity preservation.** Running the backfill twice must leave page, path and decision ids unchanged, compared as sets. **Shown**, in `BackfillTest` and on copies of the corpus ([backfill](backfill.md#rehearsal)). A second run, with or without reviews, wrote nothing. A second full pass under a new run key left every page, path, decision and ledger id identical, adding only its own checkpoint.
+3. **Crash and resume.** An interrupted run resumed from its checkpoint (keyed by object id and policy digest) must equal an uninterrupted run, by exact identities and references. **Shown**, in `BackfillTest` and on a copy. A run was killed with `SIGKILL` after 72 of 170 records and resumed. Every one of the 170 objects then matched an uninterrupted copy: decision history, page, addresses, ledger rows and checkpoint references. Numeric ids differ only by the sequence values the killed batch consumed.
 
 Stage 2's exit evidence:
 - those three tests;
