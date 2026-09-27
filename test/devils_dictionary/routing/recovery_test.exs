@@ -406,6 +406,16 @@ defmodule DevilsDictionary.Routing.RecoveryTest do
       assert Recovery.diff(untampered, Recovery.manifest(rows: true)) |> Map.keys() == ["schema"]
       Repo.query!("ALTER TABLE route_changes ENABLE TRIGGER route_changes_guard")
       assert Recovery.diff(untampered, Recovery.manifest(rows: true)) == %{}
+
+      # Schema and default privileges, which `--no-privileges` does not
+      # restore either, are compared too.
+      Repo.query!("ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO PUBLIC")
+      assert Recovery.diff(untampered, Recovery.manifest(rows: true)) |> Map.keys() == ["schema"]
+      Repo.query!("ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE SELECT ON TABLES FROM PUBLIC")
+      Repo.query!("GRANT CREATE ON SCHEMA public TO PUBLIC")
+      assert Recovery.diff(untampered, Recovery.manifest(rows: true)) |> Map.keys() == ["schema"]
+      Repo.query!("REVOKE CREATE ON SCHEMA public FROM PUBLIC")
+      assert Recovery.diff(untampered, Recovery.manifest(rows: true)) == %{}
     end)
 
     # The source was only read.

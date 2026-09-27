@@ -62,7 +62,9 @@ defmodule Mix.Tasks.Dd.Snapshot do
 
   import Mix.Tasks.Dd.Report
 
-  @requirements []
+  # Runtime config too: a production Repo names its database only in the
+  # `url:` that config/runtime.exs reads from DATABASE_URL.
+  @requirements ["app.config"]
 
   @prefix "devils_dictionary"
 
@@ -175,7 +177,10 @@ defmodule Mix.Tasks.Dd.Snapshot do
 
   defp repo_config do
     Application.load(:devils_dictionary)
-    Application.get_env(:devils_dictionary, DevilsDictionary.Repo)
+
+    :devils_dictionary
+    |> Application.get_env(DevilsDictionary.Repo)
+    |> DevilsDictionary.Snapshot.resolve()
   end
 
   defp default_out(database) do

@@ -36,6 +36,14 @@ rows = {r['object_id']: r for r in assignments}
 inp = {r['object_id']: r for r in jsonl(args.input or f'{AUD}/input.jsonl')[0]
        if r.get('record_type') == 'entity'}
 
+# The export must be the one the audit read. An entity missing from it would
+# look undescribed, and silently turn a collision group into a duplicate-
+# identity review.
+unexported = sorted(set(rows) - set(inp))
+if unexported:
+    raise SystemExit(f'{len(unexported)} audited entities are missing from the export '
+                     f'(first: {unexported[:5]}); pass the export this audit read as --input')
+
 selected_boundary = [json.loads(l)['object_id'] for l in open(args.boundaries)]
 selected_stratified = [r['object_id'] for r in json.load(open(args.stratified))['records']]
 selection_missing = sorted({o for o in selected_boundary + selected_stratified if o not in rows})

@@ -188,7 +188,8 @@ defmodule DevilsDictionary.Routing.Recovery do
   # Relations with their owner, row security and privileges; columns (type,
   # collation, nullability, default, privileges); constraints and indexes
   # with their validity; triggers with whether they fire; functions with
-  # their owner and privileges; sequence parameters; policies; extension
+  # their owner and privileges; sequence parameters; policies; the public
+  # schema's owner and privileges, and default privileges; extension
   # versions.
   #
   # Privileges are compared as granted, not as stored: a NULL ACL and the
@@ -249,6 +250,18 @@ defmodule DevilsDictionary.Routing.Recovery do
       SELECT 'policy', tablename::text || '.' || policyname,
              concat_ws(' ', permissive, roles::text, cmd, qual, with_check)
         FROM pg_policies WHERE schemaname = 'public'
+      UNION ALL
+      SELECT 'namespace', n.nspname::text,
+             concat_ws(' ', 'owner=' || pg_get_userbyid(n.nspowner),
+                       'acl=' || #{privileges("n.nspacl", "'n'", "n.nspowner")})
+        FROM pg_namespace n WHERE n.oid = 'public'::regnamespace
+      UNION ALL
+      SELECT 'default privileges',
+             concat_ws('.', pg_get_userbyid(d.defaclrole),
+                       CASE WHEN d.defaclnamespace = 0 THEN '*' ELSE d.defaclnamespace::regnamespace::text END,
+                       d.defaclobjtype::text),
+             #{privileges("d.defaclacl", "CASE d.defaclobjtype WHEN 'S' THEN 's' ELSE d.defaclobjtype END", "d.defaclrole")}
+        FROM pg_default_acl d WHERE d.defaclnamespace IN (0, 'public'::regnamespace)
       UNION ALL
       SELECT 'extension', extname::text, extversion FROM pg_extension
     ) AS definitions

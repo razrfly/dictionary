@@ -279,6 +279,10 @@ defmodule DevilsDictionary.Routing.CommittedLedgerTest do
                    evaluate(entity.object_id, "Q5")
                    | policy_version: <<0xFF>>
                  }),
+                 Classifications.record(%{
+                   evaluate(entity.object_id, "Q5")
+                   | reasons: [<<0xFF>>]
+                 }),
                  # Readers answer "nothing" for what is not an id.
                  Ledger.history(page_id: "x"),
                  Ledger.history(path_id: nil),
@@ -329,6 +333,7 @@ defmodule DevilsDictionary.Routing.CommittedLedgerTest do
              {:error, :invalid_evidence},
              {:error, :invalid_membership},
              {:error, :invalid_reason},
+             {:error, :invalid_result},
              {:error, :invalid_result},
              {:error, :invalid_result},
              [],

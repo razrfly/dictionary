@@ -96,12 +96,21 @@ defmodule DevilsDictionary.Routing.Classifications do
   is malformed, or names no entity, is refused before anything is written.
   """
   def record(%{object_id: object_id} = result) when is_id(object_id) do
-    attrs = evaluator_attrs(result)
-
-    with :ok <- storable(attrs), do: write(object_id, attrs)
+    with {:ok, attrs} <- attrs(result),
+         :ok <- storable(attrs),
+         do: write(object_id, attrs)
   end
 
   def record(%{object_id: _object_id}), do: {:error, :invalid_object}
+
+  # Building the attributes encodes the result for its fingerprint, which
+  # raises on text that is not UTF-8 or a value JSON cannot hold. Nothing has
+  # been written yet, so that is this record's refusal.
+  defp attrs(result) do
+    {:ok, evaluator_attrs(result)}
+  rescue
+    _error in [Jason.EncodeError, Protocol.UndefinedError] -> {:error, :invalid_result}
+  end
 
   # The evaluator's text, checked like any other input: a NUL byte or an
   # invalid sequence would be refused by PostgreSQL inside the caller's

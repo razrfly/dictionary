@@ -60,7 +60,7 @@ A restored copy carries the source's queued and scheduled jobs. Tasks that start
 
 3. **Verify exact identity.** This compares every column of every table: registry identities, references such as an edition's work or a variant's canonical lexeme, and every routing row, all by exact id. Only Oban's queue tables are left out. It also compares:
 
-   - the schema: owners; column types, collations, nullability and defaults; constraints and indexes, including whether they are valid; triggers, including whether they fire; functions, views and rules; sequence parameters; row security and policies; privileges; extension versions;
+   - the schema: owners; column types, collations, nullability and defaults; constraints and indexes, including whether they are valid; triggers, including whether they fire; functions, views and rules; sequence parameters; row security and policies; object, schema and default privileges; extension versions;
    - the sequences that hand out the next ids;
    - what every stored path and page id resolves to.
 
