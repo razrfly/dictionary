@@ -98,7 +98,7 @@ defmodule DevilsDictionaryWeb.ExemplarProvenanceLiveTest do
       {:ok, live, _html} = live(build_conn(), ~p"/define/coward")
 
       assert has_element?(live, "#{card(id)} #{why(id)} summary", "Why this example is here")
-      assert has_element?(live, "#{why(id)}-source", "None. A person cited it here.")
+      assert has_element?(live, "#{why(id)}-source", "Not listed by a source.")
 
       assert has_element?(
                live,
@@ -126,8 +126,8 @@ defmodule DevilsDictionaryWeb.ExemplarProvenanceLiveTest do
       assert has_element?(
                live,
                "#{why(id)}-opening",
-               "Selected by #{nominator} (version 1), published on /define/coward on " <>
-                 "#{ExampleProvenance.date(receipt.committed_at)}."
+               "In the opening of /define/coward since " <>
+                 "#{ExampleProvenance.date(receipt.committed_at)}, selected by #{nominator} (version 1)."
              )
     end
 
@@ -347,7 +347,7 @@ defmodule DevilsDictionaryWeb.ExemplarProvenanceLiveTest do
              "from the #{shelf.source.name} shelf"
            )
 
-    assert has_element?(live, "#{why(assertion_id)}-opening", "published on /define/coward")
+    assert has_element?(live, "#{why(assertion_id)}-opening", "In the opening of /define/coward")
 
     # One quotation, one claim about it, no evidence copied from the result.
     assert Repo.aggregate(

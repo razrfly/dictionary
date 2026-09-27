@@ -65,7 +65,7 @@ defmodule DevilsDictionaryWeb.ExampleProvenance do
     ]
   end
 
-  defp source(:none), do: "None. A person cited it here."
+  defp source(:none), do: "Not listed by a source."
 
   defp source(sources) when is_list(sources),
     do: "Listed by #{sources |> Enum.map(& &1.name) |> Enum.uniq() |> sentence_list()}."
@@ -122,7 +122,7 @@ defmodule DevilsDictionaryWeb.ExampleProvenance do
     down = s[:human_down] || 0
     cited = s[:evidence_count] || 0
 
-    "Ranked by its votes (#{up} for, #{down} against) and " <>
+    "Ranked by votes (#{up} for, #{down} against) and " <>
       "#{cited} supporting #{if cited == 1, do: "citation", else: "citations"}."
   end
 
@@ -144,10 +144,10 @@ defmodule DevilsDictionaryWeb.ExampleProvenance do
 
   defp opening(%Provenance{featured: featured}) do
     Enum.map_join(featured, " ", fn f ->
-      page = if f.page, do: " on /define/#{f.page.slug}", else: ""
+      page = if f.page, do: " of /define/#{f.page.slug}", else: ""
 
-      "Selected by #{f.selected_by.label || "an unnamed author"} (version #{f.version}), " <>
-        "published#{page} on #{date(f.published_at)}."
+      "In the opening#{page} since #{date(f.published_at)}, selected by " <>
+        "#{f.selected_by.label || "an unnamed author"} (version #{f.version})."
     end)
   end
 
