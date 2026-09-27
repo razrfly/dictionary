@@ -15,13 +15,21 @@ So routing state is recovered, not regenerated:
 
 ## Guards on destructive tasks
 
-`mix dd.reset`, `mix dd.snapshot --restore` (over a target), `mix dd.rebuild` (except with `--dry-run`) and `mix ecto.drop` (so `mix ecto.reset` too) first ask `Routing.Recovery.guard/3` whether the target database holds durable routing state. If it does, they refuse unless they are given a snapshot that covers it: `--routing-snapshot PATH`, or `DD_ROUTING_SNAPSHOT=PATH` for `ecto.drop`, whose `mix.exs` alias runs `mix dd.routing.guard drop` first. A covering snapshot:
+`mix dd.reset`, `mix dd.snapshot --restore` (over a target), `mix dd.rebuild` (except with `--dry-run`) and `mix ecto.drop` (so `mix ecto.reset` too) first ask `Routing.Recovery.guard/3` whether the target database holds durable routing state. If it does, they refuse unless they are given a snapshot that covers it: `--routing-snapshot PATH`, or `DD_ROUTING_SNAPSHOT=PATH` for `ecto.drop`, whose `mix.exs` alias runs `mix dd.routing.guard drop` first.
 
-- contains every routing table (checked with `pg_restore --list`);
-- has a `PATH.routing.json` sidecar naming **the same database**; and
-- records a digest of every routing row, whole, equal to the database's digest now.
+The guard reads the database name as Ecto does, so a production `url:` configuration is checked too. A configuration that names no database is refused.
 
-`mix dd.snapshot` writes that sidecar, and makes it exact. A repeatable-read transaction exports its snapshot (`pg_export_snapshot()`), computes the digest, and keeps the snapshot open while `pg_dump --snapshot` dumps under it. The digest therefore describes exactly the rows in the dump:
+A covering snapshot has a `PATH.routing.json` sidecar that records:
+
+- **the dump itself**: its size and SHA-256, so a truncated or replaced file is refused even when `pg_restore --list` can still read it;
+- **the same database**, by name;
+- **a digest of every routing row**, whole, equal to the database's digest now.
+
+The dump must also contain every routing table (checked with `pg_restore --list`).
+
+Rolling the routing migration back would drop every routing table, so it refuses while any routing row exists (`mix ecto.rollback` raises). Emptying the tables first is a deliberate act: it needs `dictionary.allow_routing_truncate` set in the transaction that does it.
+
+`mix dd.snapshot` writes that sidecar, and makes it exact. A repeatable-read transaction exports its snapshot (`pg_export_snapshot()`), computes the digest by streaming each routing table through a cursor, and keeps the snapshot open while `pg_dump --snapshot` dumps under it. The digest therefore describes exactly the rows in the dump:
 
 - A write still in flight during the dump is in neither. Once it commits, the digests differ and the guard refuses.
 - Any committed routing change counts, including one that adds no id, such as a change of publication state.
@@ -50,7 +58,15 @@ A restored copy carries the source's queued and scheduled jobs. Tasks that start
 
    Do **not** run `mix ecto.migrate` on the copy before step 3. A copy migrated past its source is a different schema, and step 3 reports the difference. Migrate after switching over, like any deploy.
 
-3. **Verify exact identity.** This compares every column of every table: registry identities, references such as an edition's work or a variant's canonical lexeme, and every routing row, all by exact id. It also compares the schema's constraints, indexes, triggers and functions, the sequences that hand out the next ids, and what every stored path and page id resolves to. Only Oban's queue tables are left out. Counts alone are not accepted. It is read-only on both databases, and exits non-zero on any difference.
+3. **Verify exact identity.** This compares every column of every table: registry identities, references such as an edition's work or a variant's canonical lexeme, and every routing row, all by exact id. Only Oban's queue tables are left out. It also compares:
+
+   - the schema: column types, nullability and defaults; constraints and indexes, including whether they are valid; triggers, including whether they fire; functions; sequence parameters; row security and policies; access privileges; extension versions;
+   - the sequences that hand out the next ids;
+   - what every stored path and page id resolves to.
+
+   Counts alone are not accepted. It is read-only on both databases, and exits non-zero on any difference.
+
+   `mix dd.snapshot --restore` restores neither ownership nor privileges (`--no-owner --no-privileges`). Where the source grants privileges, as production should when it withholds TRUNCATE from the application role, verification reports the difference until the grants are applied to the copy.
 
    ```bash
    DD_DATABASE=devils_dictionary_restore mix dd.routing.verify --baseline devils_dictionary_v2
@@ -95,22 +111,31 @@ The test then runs the procedure's steps:
 - `mix dd.routing.verify` passes, and every section is compared row for row, along with every resolution and every sequence;
 - the copy exports its own replay archive, then re-projects with `mix dd.replay` and `mix dd.materialize --all`, **Wikidata before Wikipedia**. The test asserts that each source's three records were really replayed and re-materialized, in that order, and then compares everything again in projected mode;
 - on the restored copy it resolves known paths, moves a page, rolls back a move recorded before the snapshot, and allocates a new page whose id follows on;
-- the comparison is shown to be non-vacuous. After those writes, verification reports differences in `pages` and `route_changes`. Changing only an edition's work and a variant's canonical lexeme is a difference in exactly `edition_details` and `lexemes`;
+- the comparison is shown to be non-vacuous:
+  - after those writes, verification reports differences in `pages` and `route_changes`;
+  - changing only an edition's work and a variant's canonical lexeme differs in exactly `edition_details` and `lexemes`;
+  - disabling the ledger's guard trigger, or granting a privilege, differs in exactly the schema;
 - the source database was only read: its manifest is unchanged at the end.
 
 A second test covers the guards:
 
-- `dd.reset`, `dd.snapshot --restore`, `dd.rebuild` and `dd.routing.guard` (behind `ecto.drop`) refuse a database holding routing state without a covering snapshot;
-- they accept a covering one;
-- they refuse a snapshot of another database with the same rows, a plain dump without a digest, and a missing file;
-- they refuse a snapshot taken before a publication change;
-- they refuse a snapshot taken while a routing write was in flight, once that write commits.
+- `dd.reset`, `dd.snapshot --restore`, `dd.rebuild` and `dd.routing.guard` refuse a database holding routing state without a covering snapshot, and accept a covering one;
+- the guard reads a `url:` configuration, and refuses one that names no database;
+- rolling the routing migration back refuses, and the tables are still there;
+- the guard refuses:
+  - a snapshot of another database with the same rows;
+  - a plain dump without a digest, and a missing file;
+  - a truncated dump, and a dump replaced by another;
+  - a snapshot taken before a publication change;
+  - a snapshot taken while a routing write was in flight, once that write commits;
+- the real `mix ecto.drop`, alias and all, refuses the disposable copy, then drops it once `DD_ROUTING_SNAPSHOT` names a covering snapshot.
 
 ## Limits
 
 - **Scale.** The manifest streams through a server-side cursor in constant memory. Its running time against the full corpus (about 3.7 million objects and 3.9 million assertion revisions) has not been measured. That is Stage 2's first gate.
 - **Bodies are compared by hash.** `text`, `json`, `jsonb` and `bytea` columns are compared by MD5, which catches accidents, not an adversary.
+- **Ownership is not compared,** because a restore makes the restoring role the owner. Privileges are compared, and are not restored.
 - **Schema definitions** are compared as Postgres deparses them. There is one exception: an `IN` list written `x = ANY ((ARRAY['a'::varchar, …])::text[])` is compared in the form a restored server re-parses it to (`ARRAY[('a'::varchar)::text, …]`), because it is the same condition. Nothing else is rewritten.
-- **The routing migration was amended in place** while its branch was unmerged. A database migrated at an earlier head of the branch has the same version number and different constraints. The schema section reports that. Such a database can hold no real routing state yet, because nothing writes it before Stage 2, so the fix is to roll back that one migration and migrate again.
+- **The routing migration was amended in place** while its branch was unmerged. A database migrated at an earlier head of the branch has the same version number and different constraints. The schema section reports that. Such a database can hold no real routing state yet, because nothing writes it before Stage 2, so the fix is to roll back that one migration and migrate again. The rollback refuses if any routing row exists.
 - **The guards are conservative, not transactional.** Any routing change since the snapshot refuses, even one the operator would not care about. A write committed between the guard's check and the drop is still lost, which is why step 1 quiesces.
 - **"Human" is an actor check.** The ledger and the database require a `user` actor for human-only operations. Any code holding the application's database role could still write rows naming a `user` actor. Separate database roles for the application and for reviewers would close that; Stage 1 does not add them.

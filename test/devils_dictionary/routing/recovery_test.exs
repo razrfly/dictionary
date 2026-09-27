@@ -370,6 +370,16 @@ defmodule DevilsDictionary.Routing.RecoveryTest do
                "edition",
                references.other_work
              ]
+
+      # A switched-off guard or a new grant changes no row, but it is a
+      # different database to restore into: the schema section differs.
+      untampered = Recovery.manifest(rows: true)
+      Repo.query!("ALTER TABLE route_changes DISABLE TRIGGER route_changes_guard")
+      Repo.query!("GRANT SELECT ON pages TO PUBLIC")
+      weakened = Recovery.diff(untampered, Recovery.manifest(rows: true))
+      assert Map.keys(weakened) == ["schema"]
+      assert Enum.any?(weakened["schema"].only_after, &(&1 =~ "route_changes_guard"))
+      assert Enum.any?(weakened["schema"].only_after, &(&1 =~ ~s|"relation","pages"|))
     end)
 
     # The source was only read.
@@ -391,6 +401,37 @@ defmodule DevilsDictionary.Routing.RecoveryTest do
     assert {:error, refusal} = Recovery.guard(target_config, "reset", nil)
     assert refusal =~ "refusing to reset #{ctx.target}: it holds durable routing state"
     assert refusal =~ "docs/routing/recovery.md"
+
+    # A production config names its database only in `url:`; the guard reads
+    # it as Ecto does. A config naming no database at all is refused.
+    url_config =
+      target_config
+      |> Keyword.drop([:database, :hostname, :port, :username, :password])
+      |> Keyword.put(:url, url(target_config))
+
+    assert {:error, by_url} = Recovery.guard(url_config, "drop", nil)
+    assert by_url =~ "refusing to drop #{ctx.target}: it holds durable routing state"
+
+    assert {:error, nameless} =
+             Recovery.guard(Keyword.delete(target_config, :database), "drop", nil)
+
+    assert nameless =~ "names no database"
+
+    # Rolling the routing migration back would drop every routing table; it
+    # refuses while they hold anything.
+    Recovery.with_database(ctx.target, fn ->
+      rollback =
+        assert_raise Postgrex.Error, fn ->
+          Ecto.Migrator.run(Repo, Ecto.Migrator.migrations_path(Repo), :down,
+            to: 20_260_926_193_256,
+            dynamic_repo: Repo.get_dynamic_repo(),
+            log: false
+          )
+        end
+
+      assert rollback.postgres.message =~ "refusing to roll back the routing foundation"
+      assert %{rows: [[true]]} = Repo.query!("SELECT to_regclass('route_changes') IS NOT NULL")
+    end)
 
     # The source's snapshot holds the same routing rows, but it is a snapshot
     # of another database, so it covers nothing here.
@@ -424,6 +465,23 @@ defmodule DevilsDictionary.Routing.RecoveryTest do
     on_exit(fn -> File.rm(covering) && File.rm(covering <> ".routing.json") end)
     Recovery.snapshot!(target_config, covering)
     assert Recovery.guard(target_config, "reset", covering) == :ok
+
+    # The digest vouches for the dump it was taken with, not for whatever
+    # file later has that name: a truncated or a replaced dump is refused
+    # even though `pg_restore --list` may still read it.
+    damaged = ctx.dump <> ".damaged"
+    on_exit(fn -> File.rm(damaged) && File.rm(damaged <> ".routing.json") end)
+    File.cp!(covering <> ".routing.json", damaged <> ".routing.json")
+    bytes = File.read!(covering)
+    File.write!(damaged, binary_part(bytes, 0, byte_size(bytes) - 64))
+    assert {:error, truncated} = Recovery.guard(target_config, "reset", damaged)
+    assert truncated =~ "is not the dump its routing digest was taken with"
+    # The source's dump: every routing table, the same routing rows, and so
+    # `pg_restore --list` alone would accept it.
+    File.cp!(ctx.dump, damaged)
+    assert File.read!(damaged) != bytes
+    assert {:error, replaced} = Recovery.guard(target_config, "reset", damaged)
+    assert replaced =~ "is not the dump its routing digest was taken with"
 
     # `mix ecto.drop` and `mix ecto.reset` are guarded too, through the alias.
     assert Mix.Project.config()[:aliases][:"ecto.drop"] == ["dd.routing.guard drop", "ecto.drop"]
@@ -485,5 +543,32 @@ defmodule DevilsDictionary.Routing.RecoveryTest do
     # Still there: nothing was dropped.
     assert Recovery.with_database(ctx.target, fn -> Repo.aggregate(Page, :count) end) > 0
     assert Repo.aggregate(PublicPath, :count) > 0
+
+    # And the real `mix ecto.drop`, alias and all, on the disposable copy:
+    # refused without a covering snapshot, then allowed with one.
+    configured_as(ctx.target, fn ->
+      with_env("DD_ROUTING_SNAPSHOT", nil, fn ->
+        assert_raise Mix.Error, ~r/refusing to drop #{ctx.target}/, fn ->
+          Mix.Task.rerun("ecto.drop", ["--quiet"])
+        end
+      end)
+
+      assert Recovery.durable_state(target_config) != nil
+      Recovery.snapshot!(target_config, covering)
+
+      with_env("DD_ROUTING_SNAPSHOT", covering, fn ->
+        capture_io(fn -> Mix.Task.rerun("ecto.drop", ["--quiet"]) end)
+      end)
+    end)
+
+    assert Recovery.durable_state(target_config) == nil
+    assert Ecto.Adapters.Postgres.storage_status(target_config) == :down
+  end
+
+  defp url(config) do
+    password = if config[:password], do: ":" <> URI.encode_www_form(config[:password]), else: ""
+    port = if config[:port], do: ":#{config[:port]}", else: ""
+
+    "ecto://#{config[:username]}#{password}@#{config[:hostname] || "localhost"}#{port}/#{config[:database]}"
   end
 end

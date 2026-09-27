@@ -3114,6 +3114,7 @@
   ],
   "records": 169,
   "selection": "policy boundary examples (54) + stratified mapped sample (46) + named ADR edge cases present in the snapshot + every member of each candidate-path collision group touching those",
+  "selection_missing_from_audit": [],
   "sha256_of_records": "ec830ac72fff355a3dfc76d8fc39dcba7541e1a09f8dc3965d79fadcf4f0d7ed",
   "source": "data/audits/2026-09-26-issue194/assignments.jsonl.gz (policy 1.0.0, 100,723 entities, read-only)"
  }

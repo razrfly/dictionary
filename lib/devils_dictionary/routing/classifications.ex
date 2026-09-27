@@ -26,7 +26,7 @@ defmodule DevilsDictionary.Routing.Classifications do
   """
 
   import Ecto.Query
-  import DevilsDictionary.Routing.Id, only: [is_id: 1]
+  import DevilsDictionary.Routing.Input, only: [is_id: 1, text?: 1]
 
   alias DevilsDictionary.Registry.Entity
   alias DevilsDictionary.Repo
@@ -310,9 +310,10 @@ defmodule DevilsDictionary.Routing.Classifications do
   defp verdict(_attrs), do: {:error, :invalid_verdict}
 
   defp present(reason) when is_binary(reason) do
-    case String.trim(reason) do
-      "" -> {:error, :reason_required}
-      trimmed -> {:ok, trimmed}
+    cond do
+      not text?(reason) -> {:error, :invalid_reason}
+      String.trim(reason) == "" -> {:error, :reason_required}
+      true -> {:ok, String.trim(reason)}
     end
   end
 

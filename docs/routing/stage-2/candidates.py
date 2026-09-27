@@ -1,32 +1,46 @@
-"""Stage 2 candidate population, derived read-only from a routing audit
+r"""Stage 2 candidate population, derived read-only from a routing audit
 manifest. Reproducible: same inputs, same output.
 
     python3 docs/routing/stage-2/candidates.py OUT.json \
-        [--audit DIR] [--boundaries FILE] [--stratified FILE]
+        [--audit DIR] [--input FILE] [--boundaries FILE] [--stratified FILE]
 
-The defaults are the 26 September audit. Point --audit at a fresh export's
-directory (assignments.jsonl.gz and input.jsonl.gz) to re-derive before
-Stage 2 writes anything."""
-import argparse, gzip, json, collections, hashlib, re
+The defaults are the 26 September audit's archives. For a fresh audit, pass
+the `mix dd.routing.audit --output` directory as --audit and the export it
+read as --input (plain or gzipped JSONL both work). The boundary and
+stratified files name registry object ids, which a fresh export of the same
+database keeps; a selected id missing from the fresh audit is reported, not
+dropped silently."""
+import argparse, gzip, json, collections, hashlib, os, re
 
 args = argparse.ArgumentParser(description=__doc__.split('\n')[0])
 args.add_argument('out', help='where to write the candidates JSON')
 args.add_argument('--audit', default='data/audits/2026-09-26-issue194',
-                  help='directory holding assignments.jsonl.gz and input.jsonl.gz')
+                  help='directory holding assignments.jsonl[.gz] from mix dd.routing.audit')
+args.add_argument('--input', help='the export the audit read (default: DIR/input.jsonl[.gz])')
 args.add_argument('--boundaries', default='docs/audits/2026-09-26-issue194/policy-boundaries.jsonl')
 args.add_argument('--stratified', default='docs/audits/2026-09-26-issue194/stratified-review.json')
 args = args.parse_args()
 
-AUD = args.audit
-rows = {r['object_id']: r for r in map(json.loads, gzip.open(f'{AUD}/assignments.jsonl.gz', 'rt'))}
-inp = {}
-for line in gzip.open(f'{AUD}/input.jsonl.gz', 'rt'):
-    r = json.loads(line)
-    if r.get('record_type') == 'entity':
-        inp[r['object_id']] = r
+def jsonl(path):
+    """A JSONL file, gzipped or not; `path` may name either form."""
+    for candidate in [path, path + '.gz', path[:-3] if path.endswith('.gz') else None]:
+        if candidate and os.path.exists(candidate):
+            opener = gzip.open if candidate.endswith('.gz') else open
+            with opener(candidate, 'rt') as f:
+                return [json.loads(line) for line in f if line.strip()], candidate
+    raise SystemExit(f'no such file: {path}[.gz]')
 
-boundary = [json.loads(l)['object_id'] for l in open(args.boundaries)]
-stratified = [r['object_id'] for r in json.load(open(args.stratified))['records']]
+AUD = args.audit
+assignments, ASSIGNMENTS = jsonl(f'{AUD}/assignments.jsonl')
+rows = {r['object_id']: r for r in assignments}
+inp = {r['object_id']: r for r in jsonl(args.input or f'{AUD}/input.jsonl')[0]
+       if r.get('record_type') == 'entity'}
+
+selected_boundary = [json.loads(l)['object_id'] for l in open(args.boundaries)]
+selected_stratified = [r['object_id'] for r in json.load(open(args.stratified))['records']]
+selection_missing = sorted({o for o in selected_boundary + selected_stratified if o not in rows})
+boundary = [o for o in selected_boundary if o in rows]
+stratified = [o for o in selected_stratified if o in rows]
 
 # Named ADR edge cases, found by exact (case-insensitive) label in the snapshot.
 names = ['c++', 'c+', 'c', 'polish', 'mercury', 'apple', 'voltaire', 'putin', 'vladimir putin',
@@ -179,9 +193,10 @@ for r in records:
         r.pop(k, None)
 
 summary = {
-    'source': f"{AUD}/assignments.jsonl.gz (policy {', '.join(sorted({r['policy_version'] for r in rows.values()}))}, {len(rows):,} entities, read-only)",
+    'source': f"{ASSIGNMENTS} (policy {', '.join(sorted({r['policy_version'] for r in rows.values()}))}, {len(rows):,} entities, read-only)",
     'global_proposal_conflicts': sum(1 for r in records if r.get('proposed_path_conflict')),
-    'selection': 'policy boundary examples (54) + stratified mapped sample (46) + named ADR edge cases present in the snapshot + every member of each candidate-path collision group touching those',
+    'selection': f'policy boundary examples ({len(boundary)}) + stratified mapped sample ({len(stratified)}) + named ADR edge cases present in the snapshot + every member of each candidate-path collision group touching those',
+    'selection_missing_from_audit': selection_missing,
     'records': len(records),
     'by_reason': dict(collections.Counter(x for r in records for x in r['selected_because'])),
     'by_status': dict(collections.Counter(r['status'] for r in records)),

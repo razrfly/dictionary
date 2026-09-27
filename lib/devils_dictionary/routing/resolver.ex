@@ -17,7 +17,7 @@ defmodule DevilsDictionary.Routing.Resolver do
   """
 
   import Ecto.Query
-  import DevilsDictionary.Routing.Id, only: [is_id: 1]
+  import DevilsDictionary.Routing.Input, only: [is_id: 1]
 
   require Logger
 

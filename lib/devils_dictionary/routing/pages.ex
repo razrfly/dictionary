@@ -13,7 +13,7 @@ defmodule DevilsDictionary.Routing.Pages do
   """
 
   import Ecto.Query
-  import DevilsDictionary.Routing.Id, only: [is_id: 1]
+  import DevilsDictionary.Routing.Input, only: [is_id: 1, text?: 1, json?: 1]
 
   alias DevilsDictionary.Registry.Object
   alias DevilsDictionary.Repo
@@ -200,14 +200,12 @@ defmodule DevilsDictionary.Routing.Pages do
     cond do
       not text?(attrs[:title]) or not text?(attrs[:body]) -> {:error, :invalid_revision}
       attrs[:body_format] not in [nil, :markdown, :text] -> {:error, :invalid_body_format}
-      not (is_nil(attrs[:evidence]) or is_map(attrs[:evidence])) -> {:error, :invalid_evidence}
+      not json?(attrs[:evidence]) -> {:error, :invalid_evidence}
       is_nil(attrs[:reviewer_actor_id]) -> :ok
       actor(attrs[:reviewer_actor_id]) == :ok -> :ok
       true -> {:error, :invalid_reviewer}
     end
   end
-
-  defp text?(value), do: is_nil(value) or is_binary(value)
 
   defp validate_memberships(page, memberships) do
     keys = Enum.map(memberships, &membership_key/1)
@@ -220,7 +218,7 @@ defmodule DevilsDictionary.Routing.Pages do
   end
 
   defp membership_key(%{} = member) do
-    if text?(member[:rationale]) and (is_nil(member[:evidence]) or is_map(member[:evidence])),
+    if text?(member[:rationale]) and json?(member[:evidence]),
       do: {member[:relationship], member[:target_object_id], member[:target_page_id]},
       else: :invalid
   end

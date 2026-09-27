@@ -53,6 +53,32 @@ defmodule DevilsDictionary.Repo.Migrations.CreateRoutingFoundation do
     immutability()
     ledger_guards()
     consistency()
+    # Last, so that on rollback it runs first, before any table is dropped.
+    irreversible_once_used()
+  end
+
+  # Rolling this migration back drops every routing table, and routing state
+  # cannot be regenerated (docs/routing/recovery.md). So the rollback refuses
+  # while any routing row exists. Emptying the tables first is deliberate: it
+  # needs `dictionary.allow_routing_truncate` in the transaction that does it,
+  # and a snapshot should be taken before.
+  defp irreversible_once_used do
+    execute(
+      "SELECT 1",
+      """
+      DO $$
+      BEGIN
+        IF EXISTS (SELECT 1 FROM route_changes) OR EXISTS (SELECT 1 FROM public_paths)
+           OR EXISTS (SELECT 1 FROM pages) OR EXISTS (SELECT 1 FROM page_revisions)
+           OR EXISTS (SELECT 1 FROM page_memberships)
+           OR EXISTS (SELECT 1 FROM classification_decisions) THEN
+          RAISE EXCEPTION 'refusing to roll back the routing foundation: it holds durable routing state, which cannot be regenerated (docs/routing/recovery.md). Snapshot it, then empty the routing tables deliberately, before rolling back.'
+            USING ERRCODE = 'object_in_use';
+        END IF;
+      END
+      $$
+      """
+    )
   end
 
   # ── pages ────────────────────────────────────────────────────────────────

@@ -63,7 +63,8 @@ defmodule DevilsDictionary.Routing.Address do
       {:error, :unknown_namespace}
   """
   def parse(path) when is_binary(path) do
-    with "/" <> rest <- path,
+    with true <- String.valid?(path) || {:error, :invalid_encoding},
+         "/" <> rest <- path,
          {:ok, locale, namespace, slug} <- split(String.split(rest, "/")),
          :ok <- namespace(namespace),
          :ok <- segment(slug) do

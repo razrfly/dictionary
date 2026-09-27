@@ -6,9 +6,23 @@
 python3 docs/routing/stage-2/candidates.py docs/routing/stage-2/candidates.json
 ```
 
-By default the script reads the ignored archives under `data/audits/2026-09-26-issue194/` (see [the audit's reproduction notes](../../audits/2026-09-26-issue194/policy-readiness.md#reproduce)). `--audit DIR`, `--boundaries FILE` and `--stratified FILE` point it at a fresh export.
+By default the script reads the ignored archives under `data/audits/2026-09-26-issue194/` (see [the audit's reproduction notes](../../audits/2026-09-26-issue194/policy-readiness.md#reproduce)). To re-derive the population from a fresh audit before Stage 2 writes:
 
-All 183 proposed and candidate paths in the output pass `Routing.Address.parse/1` unchanged. Proposals are unique within their group, **across groups**, and against every candidate path in the snapshot (`global_proposal_conflicts: 0`).
+```bash
+psql -X -qAt -v ON_ERROR_STOP=1 -h localhost -U postgres -d devils_dictionary_v2 -f docs/audits/2026-09-26-issue194/policy-export.sql > /tmp/routing-input.jsonl
+```
+
+```bash
+mix dd.routing.audit --input /tmp/routing-input.jsonl --output /tmp/routing-audit
+```
+
+```bash
+python3 docs/routing/stage-2/candidates.py /tmp/candidates.json --audit /tmp/routing-audit --input /tmp/routing-input.jsonl
+```
+
+The export is read-only. The boundary and stratified selections name registry object ids, which a fresh export of the same database keeps. `--boundaries` and `--stratified` replace them. A selected id that the fresh audit lacks is listed under `selection_missing_from_audit`, not dropped silently. Run on the 26 September audit decompressed into that shape, the script yields the same records digest as the archives.
+
+All 130 distinct paths in the output pass `Routing.Address.parse/1` unchanged. These are 75 candidate paths, shared within collision groups, and 55 proposed qualifiers. Proposals are unique within their group, **across groups**, and against every candidate path in the snapshot (`global_proposal_conflicts: 0`).
 
 ## A bounded candidate population: 169 entities
 

@@ -183,23 +183,57 @@ defmodule DevilsDictionary.Routing.Recovery do
     }
   end
 
+  # Relations, columns (type, nullability, default), constraints, indexes,
+  # triggers with whether they fire, functions, sequence parameters, row
+  # security and its policies, access privileges, and extension versions.
+  # Ownership is not compared: a restore makes the restoring role the owner.
   defp schema_sql do
     """
     SELECT kind, name, definition FROM (
-      SELECT 'constraint' AS kind, conrelid::regclass::text || '.' || conname AS name,
-             pg_get_constraintdef(oid) AS definition
+      SELECT 'relation' AS kind, c.relname::text AS name,
+             concat_ws(' ', c.relkind::text, 'rls=' || c.relrowsecurity,
+                       'force=' || c.relforcerowsecurity, 'acl=' || c.relacl::text) AS definition
+        FROM pg_class c WHERE c.relnamespace = 'public'::regnamespace
+         AND c.relkind IN ('r', 'p', 'S', 'v', 'm', 'f')
+      UNION ALL
+      SELECT 'column', a.attrelid::regclass::text || '.' || a.attname,
+             concat_ws(' ', format_type(a.atttypid, a.atttypmod),
+                       CASE WHEN a.attnotnull THEN 'NOT NULL' END,
+                       'DEFAULT ' || pg_get_expr(d.adbin, d.adrelid), 'acl=' || a.attacl::text)
+        FROM pg_attribute a
+        JOIN pg_class c ON c.oid = a.attrelid
+        LEFT JOIN pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
+       WHERE c.relnamespace = 'public'::regnamespace AND c.relkind IN ('r', 'p')
+         AND a.attnum > 0 AND NOT a.attisdropped
+      UNION ALL
+      SELECT 'constraint', conrelid::regclass::text || '.' || conname,
+             concat_ws(' ', pg_get_constraintdef(oid), CASE WHEN NOT convalidated THEN 'NOT VALID' END)
         FROM pg_constraint WHERE connamespace = 'public'::regnamespace
       UNION ALL
-      SELECT 'index', indexrelid::regclass::text, pg_get_indexdef(indexrelid)
-        FROM pg_index WHERE indrelid IN (
+      SELECT 'index', i.indexrelid::regclass::text,
+             concat_ws(' ', pg_get_indexdef(i.indexrelid), CASE WHEN NOT i.indisvalid THEN 'INVALID' END)
+        FROM pg_index i WHERE i.indrelid IN (
           SELECT oid FROM pg_class WHERE relnamespace = 'public'::regnamespace)
       UNION ALL
-      SELECT 'trigger', tgrelid::regclass::text || '.' || tgname, pg_get_triggerdef(oid)
+      SELECT 'trigger', tgrelid::regclass::text || '.' || tgname,
+             pg_get_triggerdef(oid) || ' [enabled=' || tgenabled::text || ']'
         FROM pg_trigger WHERE NOT tgisinternal AND tgrelid IN (
           SELECT oid FROM pg_class WHERE relnamespace = 'public'::regnamespace)
       UNION ALL
-      SELECT 'function', oid::regprocedure::text, md5(pg_get_functiondef(oid))
+      SELECT 'function', oid::regprocedure::text,
+             concat_ws(' ', md5(pg_get_functiondef(oid)), 'acl=' || proacl::text)
         FROM pg_proc WHERE pronamespace = 'public'::regnamespace AND prokind = 'f'
+      UNION ALL
+      SELECT 'sequence', sequencename::text,
+             concat_ws(' ', data_type, start_value, min_value, max_value, increment_by,
+                       cycle, cache_size)
+        FROM pg_sequences WHERE schemaname = 'public'
+      UNION ALL
+      SELECT 'policy', tablename::text || '.' || policyname,
+             concat_ws(' ', permissive, roles::text, cmd, qual, with_check)
+        FROM pg_policies WHERE schemaname = 'public'
+      UNION ALL
+      SELECT 'extension', extname::text, extversion FROM pg_extension
     ) AS definitions
     ORDER BY kind COLLATE "C", name COLLATE "C"
     """
@@ -386,6 +420,7 @@ defmodule DevilsDictionary.Routing.Recovery do
   starts, and reads in one repeatable-read snapshot.
   """
   def durable_state(config) do
+    config = Snapshot.resolve(config)
     {:ok, _apps} = Application.ensure_all_started(:postgrex)
     connection = connection(config)
     maintenance = Keyword.put(connection, :database, config[:maintenance_database] || "postgres")
@@ -445,23 +480,40 @@ defmodule DevilsDictionary.Routing.Recovery do
   end
 
   # Every routing row, whole, in id order: any committed routing change —
-  # a ledger write, a publication change, anything — changes it. Must run
-  # inside a repeatable-read transaction so the six tables are read at once.
+  # a ledger write, a publication change, anything — changes it. Hashed as it
+  # streams through a cursor, so no table is ever one value (PostgreSQL caps
+  # a value at 1 GB). Must run inside a repeatable-read transaction so the six
+  # tables are read at once.
   defp digest(conn) do
     %{rows: [[present?]]} =
       Postgrex.query!(conn, "SELECT to_regclass('public.route_changes') IS NOT NULL", [])
 
     if present? do
       Map.new(@routing_tables, fn table ->
-        %{rows: [[n, md5]]} =
-          Postgrex.query!(
-            conn,
-            ~s|SELECT count(*), md5(coalesce(string_agg(to_jsonb(r)::text, E'\\n' ORDER BY r.id), '')) FROM "#{table}" AS r|,
-            []
-          )
+        Postgrex.query!(
+          conn,
+          ~s|DECLARE routing_digest NO SCROLL CURSOR FOR SELECT to_jsonb(r)::text FROM "#{table}" AS r ORDER BY r.id|,
+          []
+        )
 
-        {table, [n, md5]}
+        {n, hash} = digest_rows(conn, {0, :crypto.hash_init(:sha256)})
+        Postgrex.query!(conn, "CLOSE routing_digest", [])
+        {table, [n, hash |> :crypto.hash_final() |> Base.encode16(case: :lower)]}
       end)
+    end
+  end
+
+  defp digest_rows(conn, {n, hash}) do
+    case Postgrex.query!(conn, "FETCH FORWARD 5000 FROM routing_digest", []) do
+      %{rows: []} ->
+        {n, hash}
+
+      %{rows: rows} ->
+        rows
+        |> Enum.reduce({n, hash}, fn [row], {n, hash} ->
+          {n + 1, :crypto.hash_update(hash, [row, ?\n])}
+        end)
+        |> then(&digest_rows(conn, &1))
     end
   end
 
@@ -477,6 +529,7 @@ defmodule DevilsDictionary.Routing.Recovery do
   sidecar is removed first, so a failed dump never leaves a sidecar beside it.
   """
   def snapshot!(config, path) do
+    config = Snapshot.resolve(config)
     {:ok, _apps} = Application.ensure_all_started(:postgrex)
     partial = path <> ".partial"
     File.rm(digest_path(path))
@@ -509,13 +562,27 @@ defmodule DevilsDictionary.Routing.Recovery do
 
     File.write!(
       digest_path(path),
-      Jason.encode!(%{"database" => config[:database], "digest" => digest})
+      Jason.encode!(%{"database" => config[:database], "digest" => digest, "dump" => dump(path)})
     )
 
     path
   end
 
   defp digest_path(path), do: path <> ".routing.json"
+
+  # The dump the digest describes, so a truncated or replaced file is not
+  # vouched for by its sidecar.
+  defp dump(path) do
+    hash =
+      path
+      |> File.stream!(4 * 1024 * 1024)
+      |> Enum.reduce(:crypto.hash_init(:sha256), &:crypto.hash_update(&2, &1))
+
+    %{
+      "bytes" => File.stat!(path).size,
+      "sha256" => hash |> :crypto.hash_final() |> Base.encode16(case: :lower)
+    }
+  end
 
   @doc """
   `:ok` if `action` may destroy `config[:database]`: it holds no durable
@@ -525,28 +592,41 @@ defmodule DevilsDictionary.Routing.Recovery do
   `{:error, message}` explaining the supported alternative.
   """
   def guard(config, action, snapshot) do
-    case durable_state(config) do
-      nil -> :ok
-      state -> covered(config[:database], action, state, snapshot)
+    config = Snapshot.resolve(config)
+
+    # A config that names no database cannot be checked, so it is refused:
+    # the destructive task might still resolve one by another route.
+    if is_binary(config[:database]) do
+      case durable_state(config) do
+        nil -> :ok
+        state -> covered(config[:database], action, state, snapshot)
+      end
+    else
+      {:error, "refusing to #{action}: the configuration names no database to check"}
     end
   end
 
   defp covered(database, action, state, nil), do: {:error, refusal(database, action, state)}
 
   defp covered(database, action, state, path) do
-    missing = MapSet.difference(MapSet.new(@routing_tables), tables_in(path))
     recorded = recorded(path)
 
     cond do
       not File.regular?(path) ->
         {:error, "#{action}: no snapshot at #{path}"}
 
-      MapSet.size(missing) > 0 ->
-        {:error, "#{action}: #{path} does not contain #{Enum.join(missing, ", ")}"}
-
       is_nil(recorded) ->
         {:error,
          "#{action}: #{path} has no routing digest beside it; take it with `mix dd.snapshot`"}
+
+      # Checked before `pg_restore --list` reads the file: a damaged dump can
+      # still list every table.
+      recorded["dump"] != dump(path) ->
+        {:error,
+         "#{action}: #{path} is not the dump its routing digest was taken with (size or SHA-256 differ)"}
+
+      (missing = missing_tables(path)) != [] ->
+        {:error, "#{action}: #{path} does not contain #{Enum.join(missing, ", ")}"}
 
       recorded["database"] != database ->
         {:error, "#{action}: #{path} is a snapshot of #{recorded["database"]}, not #{database}"}
@@ -569,9 +649,8 @@ defmodule DevilsDictionary.Routing.Recovery do
     end
   end
 
-  defp tables_in(path) do
-    if File.regular?(path), do: Snapshot.tables(path), else: MapSet.new()
-  end
+  defp missing_tables(path),
+    do: @routing_tables |> MapSet.new() |> MapSet.difference(Snapshot.tables(path)) |> Enum.sort()
 
   defp refusal(database, action, state) do
     rows = Enum.map_join(state.counts, ", ", fn {table, n} -> "#{table} #{n}" end)

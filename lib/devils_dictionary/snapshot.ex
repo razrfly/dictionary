@@ -11,12 +11,25 @@ defmodule DevilsDictionary.Snapshot do
   """
 
   @doc """
+  `config` with a `url:` expanded into its parts, taking precedence over them
+  exactly as Ecto does, so that `config[:database]` names the database Ecto
+  would connect to. A production config names its database only in the URL.
+  """
+  def resolve(config) do
+    case config[:url] do
+      nil -> config
+      url -> Keyword.merge(config, Ecto.Repo.Supervisor.parse_url(url))
+    end
+  end
+
+  @doc """
   Dumps `config[:database]` to `path` in pg_dump's custom format.
 
   `snapshot:` dumps under an exported snapshot (`pg_export_snapshot()`), so a
   caller can read the database in the very state the dump contains.
   """
   def dump!(config, path, opts \\ []) do
+    config = resolve(config)
     File.mkdir_p!(Path.dirname(path))
     snapshot = if opts[:snapshot], do: ["--snapshot=#{opts[:snapshot]}"], else: []
 
@@ -47,6 +60,7 @@ defmodule DevilsDictionary.Snapshot do
   callers decide whether that is allowed.
   """
   def restore!(config, path, jobs \\ 4) do
+    config = resolve(config)
     unless File.exists?(path), do: raise(ArgumentError, "no such snapshot: #{path}")
 
     case Ecto.Adapters.Postgres.storage_down(config) do

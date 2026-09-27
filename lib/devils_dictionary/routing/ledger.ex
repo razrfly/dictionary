@@ -47,7 +47,9 @@ defmodule DevilsDictionary.Routing.Ledger do
   """
 
   import Ecto.Query
-  import DevilsDictionary.Routing.Id, only: [is_id: 1]
+  import DevilsDictionary.Routing.Input, only: [is_id: 1]
+
+  alias DevilsDictionary.Routing.Input
 
   alias DevilsDictionary.{Registry, Repo}
   alias DevilsDictionary.Registry.Object
@@ -477,7 +479,7 @@ defmodule DevilsDictionary.Routing.Ledger do
   Options: `:actor_id` (a human) and `:reason`.
   """
   def rollback(operation_id, opts) do
-    with {:ok, operation_id} <- Ecto.UUID.cast(operation_id),
+    with {:ok, operation_id} <- operation_id(operation_id),
          {:ok, actor} <- actor(opts, :rollback),
          {:ok, reason} <- reason(opts) do
       transact(fn -> do_rollback(operation_id, actor, reason) end)
@@ -777,8 +779,8 @@ defmodule DevilsDictionary.Routing.Ledger do
 
   # Allocation may be a batch job's; everything else is an approved decision.
   defp actor(opts, operation) do
-    case opts[:actor_id] && Repo.get(Actor, opts[:actor_id]) do
-      nil -> {:error, :actor_required}
+    case is_id(opts[:actor_id]) && Repo.get(Actor, opts[:actor_id]) do
+      falsy when falsy in [nil, false] -> {:error, :actor_required}
       %Actor{actor_kind: :user} = actor -> {:ok, actor}
       %Actor{} = actor when operation == :allocate -> {:ok, actor}
       %Actor{} -> {:error, :human_approval_required}
@@ -786,9 +788,13 @@ defmodule DevilsDictionary.Routing.Ledger do
   end
 
   defp reason(opts) do
-    case opts[:reason] |> to_string() |> String.trim() do
-      "" -> {:error, :reason_required}
-      reason -> {:ok, reason}
+    reason = opts[:reason]
+
+    cond do
+      not is_binary(reason) -> {:error, :reason_required}
+      not Input.text?(reason) -> {:error, :invalid_reason}
+      String.trim(reason) == "" -> {:error, :reason_required}
+      true -> {:ok, String.trim(reason)}
     end
   end
 
@@ -796,6 +802,13 @@ defmodule DevilsDictionary.Routing.Ledger do
   # refusal, not a cast or encoding exception that aborts a caller's batch.
   defp page_id(id) when is_id(id), do: :ok
   defp page_id(_id), do: {:error, :invalid_page}
+
+  defp operation_id(id) do
+    case Ecto.UUID.cast(id) do
+      {:ok, id} -> {:ok, id}
+      :error -> {:error, :invalid_operation}
+    end
+  end
 
   defp page_ids(ids),
     do: if(Enum.all?(ids, &is_id/1), do: :ok, else: {:error, :invalid_page})

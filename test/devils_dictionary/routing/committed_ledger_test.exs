@@ -248,6 +248,32 @@ defmodule DevilsDictionary.Routing.CommittedLedgerTest do
                  Resolver.resolve_page(@beyond_bigint).outcome,
                  Resolver.link("7"),
                  Resolver.paths(nil),
+                 # Actors, reasons, paths and operation ids the database or
+                 # Ecto would refuse by raising.
+                 Ledger.allocate(page.id, "/people/candide", actor_id: "7", reason: "r"),
+                 Ledger.allocate(page.id, "/people/candide", actor_id: 1.5, reason: "r"),
+                 Ledger.allocate(page.id, "/people/candide",
+                   actor_id: @beyond_bigint,
+                   reason: "r"
+                 ),
+                 Ledger.allocate(page.id, "/people/candide", actor_id: author, reason: %{}),
+                 Ledger.allocate(page.id, "/people/candide", actor_id: author, reason: "a\0b"),
+                 Ledger.allocate(page.id, <<"/people/", 0xFF>>, human),
+                 Ledger.rollback("junk", human),
+                 # Text and JSON PostgreSQL will not store.
+                 Pages.add_revision(page.id, %{title: "a\0b"}, [], author),
+                 Pages.add_revision(page.id, %{title: <<0xFF>>}, [], author),
+                 Pages.add_revision(page.id, %{evidence: %{"at" => {1, 2}}}, [], author),
+                 Pages.add_revision(page.id, %{evidence: %{"note" => "a\0b"}}, [], author),
+                 Pages.add_revision(
+                   page.id,
+                   %{},
+                   [
+                     %{relationship: :discusses_subject, target_page_id: page.id, rationale: "\0"}
+                   ],
+                   author
+                 ),
+                 Classifications.override(entity.object_id, %{stale | reason: "a\0b"}, author),
                  # The batch's one well-formed record, which must commit.
                  Ledger.allocate(page.id, "/people/candide", opts(ctx.importer))
                ]
@@ -278,6 +304,19 @@ defmodule DevilsDictionary.Routing.CommittedLedgerTest do
              :missing,
              :error,
              [],
+             {:error, :actor_required},
+             {:error, :actor_required},
+             {:error, :actor_required},
+             {:error, :reason_required},
+             {:error, :invalid_reason},
+             {:error, :invalid_encoding},
+             {:error, :invalid_operation},
+             {:error, :invalid_revision},
+             {:error, :invalid_revision},
+             {:error, :invalid_evidence},
+             {:error, :invalid_evidence},
+             {:error, :invalid_membership},
+             {:error, :invalid_reason},
              {:ok, %PublicPath{path: "/people/candide"}}
            ] = results
 

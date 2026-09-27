@@ -28,7 +28,8 @@ defmodule Mix.Tasks.Dd.Routing.Guard do
   @impl Mix.Task
   def run(args) do
     action = List.first(args) || "drop"
-    config = Application.get_env(:devils_dictionary, DevilsDictionary.Repo)
+    # What `ecto.drop` itself will drop: the runtime config, URL included.
+    config = DevilsDictionary.Repo.config()
 
     snapshot =
       case System.get_env("DD_ROUTING_SNAPSHOT") do
