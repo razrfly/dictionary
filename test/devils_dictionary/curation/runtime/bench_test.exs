@@ -6,7 +6,8 @@ defmodule DevilsDictionary.Curation.Runtime.BenchTest do
   """
   use DevilsDictionary.DataCase, async: true
 
-  alias DevilsDictionary.Curation.Runtime.{Bench, Gateway}
+  alias DevilsDictionary.Curation.Runtime.{Bench, Gateway, Packet}
+  alias DevilsDictionary.RuntimeFixtures
 
   @plan "priv/curation/runtime_bench/plan.json"
 
@@ -106,6 +107,54 @@ defmodule DevilsDictionary.Curation.Runtime.BenchTest do
     assert summary.warm_wall_ms.n == 6
     assert summary.peak_rss_gib.n == 0
     assert summary.max_swap_growth_mib == nil
+  end
+
+  describe "cold samples" do
+    @describetag :tmp_dir
+
+    setup ctx do
+      world = DevilsDictionary.CurationFixtures.world!()
+      config = RuntimeFixtures.model_config!() |> RuntimeFixtures.ready!()
+      actor = DevilsDictionary.CurationFixtures.actor!(world.reviewer)
+      key = "bench-#{System.unique_integer([:positive])}"
+
+      {:ok, packet} = Packet.build([world.love.object_id], "en")
+      {:ok, frozen} = Packet.freeze(packet)
+      Packet.write!(frozen, Path.join(ctx.tmp_dir, "ordinary.json"))
+
+      plan = %{
+        "models" => [config.slug],
+        "samples" => %{
+          "cold_case" => "ordinary",
+          "cold_samples_per_model" => 1,
+          "warm_samples_per_case" => 1
+        },
+        "cases" => []
+      }
+
+      opts =
+        RuntimeFixtures.bind!(service_key: key, actor_id: actor.id, run_id: "t", unload_polls: 2)
+
+      %{config: config, plan: plan, opts: opts}
+    end
+
+    test "a cold sample runs only after a confirmed unload", ctx do
+      RuntimeFixtures.stub_ollama!(ctx.config)
+
+      assert {[smoke, cold], []} = Bench.run(ctx.plan, ctx.tmp_dir, ctx.opts)
+      assert {smoke.phase, cold.phase, cold.status} == {"smoke", "cold", :ok}
+    end
+
+    test "an unload that is not confirmed skips the sample: a warm call is never cold", ctx do
+      RuntimeFixtures.stub_ollama!(ctx.config, loaded: [ctx.config.model_name])
+
+      assert {[smoke], [gap]} = Bench.run(ctx.plan, ctx.tmp_dir, ctx.opts)
+      assert smoke.phase == "smoke"
+      assert gap == %{model: ctx.config.slug, what: "cold ordinary call 2", why: "unload_timeout"}
+
+      summary = Bench.summarize([smoke], ctx.plan, ctx.tmp_dir)
+      assert summary[ctx.config.slug].cold_wall_ms.n == 0
+    end
   end
 
   test "an interval is charged to each UTC day it touches" do

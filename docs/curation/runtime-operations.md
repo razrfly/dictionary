@@ -51,7 +51,10 @@ mix dd.runtime service start      # refuses if the volume is not mounted and ext
                                   # or something already listens on the port
 mix dd.runtime service status     # %{pid, alive, listening}
 mix dd.runtime service stop       # SIGTERM, then SIGKILL after 30 s; confirms the
-                                  # process is gone and the port is closed
+                                  # process is gone and the port is closed. A pid
+                                  # file whose pid no longer runs bin/ollama (after a
+                                  # reboot) is stale: nothing is signalled, and the
+                                  # stop is recorded as "not_running"
 mix dd.runtime service restart
 ```
 
@@ -166,10 +169,12 @@ mix dd.runtime recover                       # a quarantined service, see below
 **Quarantine** follows any call that was sent and not answered: a timeout, a closed
 connection, a dead caller or an expired dispatched lease. None of these proves the
 generation stopped, so the slot stays held and nothing is refunded. `recover`:
-1. stops the service and confirms it: the process is gone and the port is closed;
-2. settles the uncertain attempt as `ended_by_restart`, charging its occupancy up to
+1. refuses, and stops nothing, unless this database is the bound one and its slot is
+   quarantined (`foreign_authority`, `not_quarantined`);
+2. stops the service and confirms it: the process is gone and the port is closed;
+3. settles the uncertain attempt as `ended_by_restart`, charging its occupancy up to
    the confirmed stop, and bumps the service epoch;
-3. starts the service again.
+4. starts the service again.
 
 The service stays **paused** until `resume` passes readiness. A late answer from
 before the restart is refused as stale.

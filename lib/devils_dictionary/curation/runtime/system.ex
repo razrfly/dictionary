@@ -8,7 +8,8 @@ defmodule DevilsDictionary.Curation.Runtime.System do
     * `memory/0`: swap in use and the system-wide free-memory percentage.
       This is the pause signal of #195, not a benchmark of a model.
     * `read_file/1`, `dir?/1`: the manifest and root checks.
-    * `process_alive?/1`: whether a process id still exists, for recovery.
+    * `process_alive?/1`, `process_command/1`: whether a process id still
+      exists, and what it runs, for recovery.
 
   The suite substitutes `Runtime.FakeSystem`. Nothing here creates, downloads
   or starts anything.
@@ -60,6 +61,18 @@ defmodule DevilsDictionary.Curation.Runtime.System do
   @doc "Whether an OS process id is still running."
   def process_alive?(pid) when is_integer(pid) do
     match?({_, 0}, System.cmd("kill", ["-0", Integer.to_string(pid)], stderr_to_stdout: true))
+  end
+
+  @doc """
+  The executable an OS process id runs, as `ps` reports it (a full path on
+  macOS): `{:ok, path}` or `:error`. After a reboot a recorded pid can belong
+  to another program, so being alive does not make it the service.
+  """
+  def process_command(pid) when is_integer(pid) do
+    case System.cmd("ps", ["-p", Integer.to_string(pid), "-o", "comm="], stderr_to_stdout: true) do
+      {out, 0} -> {:ok, String.trim(out)}
+      _ -> :error
+    end
   end
 
   defp megabytes(value) do

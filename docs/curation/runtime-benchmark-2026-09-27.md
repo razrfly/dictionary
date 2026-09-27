@@ -134,6 +134,12 @@ the gateway.
 - The whole day, including the live checks, charged 96,652 ms (5.4%).
 - No reservation was left open.
 
+**Cold means cold.** The run's harness did not yet check that each unload finished;
+review of PR #210 caught that. Every recorded cold sample was nonetheless a real load:
+Ollama reported a load time of 1,535–1,538 ms for 4B and 2,290–2,292 ms for 9B, against
+0–1 ms for warm calls. The harness now runs a cold sample only after a confirmed
+unload, and otherwise lists it as not measured.
+
 **Determinism.** Temperature 0 and seed 195 gave identical output for every repeat of
 a case: the same token counts, decisions and ids. The 3 samples per case therefore
 measure latency variance, not three independent judgments.

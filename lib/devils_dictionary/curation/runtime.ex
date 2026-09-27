@@ -27,6 +27,7 @@ defmodule DevilsDictionary.Curation.Runtime do
 
   alias DevilsDictionary.Curation.Runtime.{
     Attempt,
+    Authority,
     Contract,
     Endpoint,
     Gateway,
@@ -97,12 +98,33 @@ defmodule DevilsDictionary.Curation.Runtime do
   confirms it is gone, which is the proof that any old generation ended. It
   then settles the uncertain attempt and starts the service again. The
   service stays paused until `resume/2`.
+
+  It stops nothing unless the caller's database is the one the service is
+  bound to (`Runtime.Authority`) and that database's slot is quarantined.
+  Otherwise a stray `recover` could end the authoritative caller's generation.
+  `Gateway.recover/2` checks the quarantine again under the row lock.
   """
   def recover(opts \\ []) do
-    with {:ok, confirmation} <- ServiceProcess.stop(opts),
+    with :ok <- bound_here(opts),
+         :ok <- quarantined(opts),
+         {:ok, confirmation} <- ServiceProcess.stop(opts),
          {:ok, recovered} <- Gateway.recover(confirmation, opts),
          {:ok, started} <- ServiceProcess.start(opts) do
       {:ok, Map.put(recovered, :started, started)}
+    end
+  end
+
+  defp bound_here(opts) do
+    case Authority.check(opts) do
+      {:ok, _identity} -> :ok
+      {:error, reason, _detail} -> {:error, reason}
+    end
+  end
+
+  defp quarantined(opts) do
+    case Gateway.service!(Keyword.get(opts, :service_key)) do
+      %{state: :quarantined} -> :ok
+      _other -> {:error, :not_quarantined}
     end
   end
 

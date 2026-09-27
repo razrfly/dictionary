@@ -12,7 +12,16 @@ defmodule DevilsDictionary.Curation.RuntimeTest do
 
   alias DevilsDictionary.Claims.{Assertion, AssertionReview}
   alias DevilsDictionary.Curation.{CompositionPublication, CompositionVersion, Runtime}
-  alias DevilsDictionary.Curation.Runtime.{Attempt, FakeSystem, Gateway, Packet, Service}
+
+  alias DevilsDictionary.Curation.Runtime.{
+    Attempt,
+    Authority,
+    FakeSystem,
+    Gateway,
+    Packet,
+    Service
+  }
+
   alias DevilsDictionary.{Registry, WordFixtures}
 
   setup do
@@ -143,6 +152,24 @@ defmodule DevilsDictionary.Curation.RuntimeTest do
 
     assert {:refused, :quarantined} = run(ctx)
     settle!()
+  end
+
+  # No service runs in the suite, so reaching `ServiceProcess.stop/1` answers
+  # `:no_recorded_service`. Any other refusal came before the stop.
+  test "recovery stops nothing unless this database owns a quarantined slot", ctx do
+    assert {:error, :not_quarantined} = Runtime.recover(ctx.opts)
+
+    stub_ollama!(ctx.config, chat: fn _ -> {:transport, :timeout} end)
+    assert {:uncertain, _receipt} = run(ctx)
+    settle!()
+
+    foreign = %{Authority.identity(ctx.opts) | "database" => "devils_dictionary_elsewhere"}
+    FakeSystem.put_file(Authority.path(), Jason.encode!(foreign))
+    assert {:error, :foreign_authority} = Runtime.recover(ctx.opts)
+
+    bind!(ctx.opts)
+    assert {:error, :no_recorded_service} = Runtime.recover(ctx.opts)
+    assert %Service{state: :quarantined} = service(ctx)
   end
 
   test "a refused connection is retried twice, then fails before dispatch", ctx do

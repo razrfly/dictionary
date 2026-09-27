@@ -36,14 +36,17 @@ defmodule DevilsDictionary.Curation.Runtime.ServiceProcess do
 
   @stop_wait_ms 30_000
 
-  @doc "`%{pid, alive, listening}` for the recorded service."
+  @doc """
+  `%{pid, alive, listening}` for the recorded service. `alive` means the
+  recorded pid is running the configured binary, not merely that the id is in
+  use: after a reboot it can belong to another program.
+  """
   def status(opts \\ []) do
     pid = recorded_pid(opts)
-    system = Endpoint.system(opts)
 
     %{
       pid: pid,
-      alive: is_integer(pid) and system.process_alive?(pid),
+      alive: is_integer(pid) and ours?(pid, opts),
       listening: listening(opts)
     }
   end
@@ -93,6 +96,11 @@ defmodule DevilsDictionary.Curation.Runtime.ServiceProcess do
   @doc """
   Stops the recorded service and confirms it: the process is gone and nothing
   listens on the port. `{:ok, %{stopped_at, evidence}}` or `{:error, reason}`.
+
+  Only a recorded pid that runs the configured binary is signalled. A pid
+  file whose process is gone, or now belongs to another program, is stale:
+  the service already ended, so nothing is signalled, and the stop is
+  confirmed as `"not_running"` once the port is closed.
   """
   def stop(opts \\ []) do
     system = Endpoint.system(opts)
@@ -102,17 +110,21 @@ defmodule DevilsDictionary.Curation.Runtime.ServiceProcess do
         {:error, :no_recorded_service}
 
       pid ->
-        if system.process_alive?(pid) do
-          System.cmd("kill", ["-TERM", Integer.to_string(pid)], stderr_to_stdout: true)
+        method =
+          if ours?(pid, opts) do
+            System.cmd("kill", ["-TERM", Integer.to_string(pid)], stderr_to_stdout: true)
 
-          unless wait_gone(system, pid, @stop_wait_ms),
-            do: System.cmd("kill", ["-KILL", Integer.to_string(pid)])
+            unless wait_gone(system, pid, @stop_wait_ms),
+              do: System.cmd("kill", ["-KILL", Integer.to_string(pid)])
 
-          wait_gone(system, pid, 5_000)
-        end
+            wait_gone(system, pid, 5_000)
+            "sigterm"
+          else
+            "not_running"
+          end
 
         cond do
-          system.process_alive?(pid) ->
+          ours?(pid, opts) ->
             {:error, :still_running}
 
           listening(opts) != [] ->
@@ -127,11 +139,19 @@ defmodule DevilsDictionary.Curation.Runtime.ServiceProcess do
                evidence: %{
                  "stopped_pid" => pid,
                  "port" => Endpoint.port(opts),
-                 "method" => "sigterm"
+                 "method" => method
                }
              }}
         end
     end
+  end
+
+  # The recorded pid is this service: alive, and running the configured binary.
+  defp ours?(pid, opts) do
+    system = Endpoint.system(opts)
+
+    system.process_alive?(pid) and
+      system.process_command(pid) == {:ok, Endpoint.get(:binary, opts)}
   end
 
   defp wait_gone(system, pid, remaining) when remaining <= 0, do: not system.process_alive?(pid)

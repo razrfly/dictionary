@@ -16,7 +16,9 @@ defmodule DevilsDictionary.Curation.Runtime.FakeSystem do
     dirs: :all,
     files: %{},
     memory: [{:ok, %{swap_used_bytes: 0, swap_total_bytes: 8 * 1024 ** 3, free_percent: 60}}],
-    alive: MapSet.new()
+    alive: MapSet.new(),
+    # pid => executable. A live pid with no entry runs the configured binary.
+    commands: %{}
   }
 
   @doc "Overrides the host for this test (and its processes)."
@@ -79,4 +81,12 @@ defmodule DevilsDictionary.Curation.Runtime.FakeSystem do
   end
 
   def process_alive?(pid), do: MapSet.member?(state().alive, pid)
+
+  def process_command(pid) do
+    cond do
+      Map.has_key?(state().commands, pid) -> {:ok, state().commands[pid]}
+      process_alive?(pid) -> {:ok, DevilsDictionary.Curation.Runtime.Endpoint.get(:binary)}
+      true -> :error
+    end
+  end
 end

@@ -203,38 +203,54 @@ defmodule DevilsDictionary.Curation.Runtime.Bench do
   defp calls(config, plan_calls, packet_dir, run_id, opts) do
     plan_calls
     |> Enum.with_index(1)
-    |> Enum.reduce_while({[], []}, fn {{phase, case_id, _n}, i}, {records, missing} ->
+    |> Enum.reduce_while({[], []}, fn {{phase, case_id, _n}, i} = call, {records, missing} ->
       # A cold sample follows an explicit unload. Warm samples follow the cold
-      # ones, which leave the model loaded.
-      if phase == "cold", do: unload(config, opts)
+      # ones, which leave the model loaded. An unload that is not confirmed
+      # skips the call: a sample that may be warm is not recorded as cold.
+      case if(phase == "cold", do: unload(config, opts), else: :ok) do
+        :ok ->
+          measure(config, call, packet_dir, run_id, opts, plan_calls, {records, missing})
 
-      key = "bench:#{run_id}:#{config.slug}:#{phase}:#{case_id || "smoke"}:#{i}"
+        unconfirmed ->
+          gap = %{
+            model: config.slug,
+            what: "#{phase} #{case_id} call #{i}",
+            why: "unload_#{unconfirmed}"
+          }
 
-      {result, peak} =
-        with_peak_rss(fn -> call(config, phase, case_id, packet_dir, key, opts) end, opts)
-
-      record = sample(config, phase, case_id, key, result, peak)
-
-      case result do
-        {:refused, reason}
-        when reason in [:budget_exhausted, :quarantined, :paused, :memory_pressure] ->
-          rest = Enum.drop(plan_calls, i - 1)
-
-          {:halt,
-           {records ++ [record],
-            missing ++
-              [
-                %{
-                  model: config.slug,
-                  what: "#{length(rest)} planned calls",
-                  why: to_string(reason)
-                }
-              ]}}
-
-        _ ->
-          {:cont, {records ++ [record], missing}}
+          {:cont, {records, missing ++ [gap]}}
       end
     end)
+  end
+
+  defp measure(config, {{phase, case_id, _n}, i}, packet_dir, run_id, opts, plan_calls, acc) do
+    {records, missing} = acc
+    key = "bench:#{run_id}:#{config.slug}:#{phase}:#{case_id || "smoke"}:#{i}"
+
+    {result, peak} =
+      with_peak_rss(fn -> call(config, phase, case_id, packet_dir, key, opts) end, opts)
+
+    record = sample(config, phase, case_id, key, result, peak)
+
+    case result do
+      {:refused, reason}
+      when reason in [:budget_exhausted, :quarantined, :paused, :memory_pressure] ->
+        rest = Enum.drop(plan_calls, i - 1)
+
+        {:halt,
+         {records ++ [record],
+          missing ++
+            [
+              %{
+                model: config.slug,
+                what: "#{length(rest)} planned calls",
+                why: to_string(reason)
+              }
+            ]}}
+
+      _ ->
+        {:cont, {records ++ [record], missing}}
+    end
   end
 
   defp call(config, "smoke", _case, _dir, key, opts),
@@ -250,8 +266,10 @@ defmodule DevilsDictionary.Curation.Runtime.Bench do
 
   @doc """
   Unloads the model, so the next call loads it cold (`keep_alive: 0`, the
-  documented Ollama unload). Waits until `/api/ps` no longer lists it. This
-  generates nothing, and it runs between calls, never during one.
+  documented Ollama unload). Waits until `/api/ps` no longer lists it, polling
+  every 250 ms up to `:unload_polls` times (40). Returns `:ok`, `:timeout` or
+  `:unknown`; only `:ok` lets a cold sample run. This generates nothing, and
+  it runs between calls, never during one.
   """
   def unload(config, opts) do
     Req.request(
@@ -264,7 +282,7 @@ defmodule DevilsDictionary.Curation.Runtime.Bench do
       ] ++ Endpoint.req_options()
     )
 
-    wait_unloaded(config, opts, 40)
+    wait_unloaded(config, opts, Keyword.get(opts, :unload_polls, 40))
   end
 
   defp wait_unloaded(_config, _opts, 0), do: :timeout

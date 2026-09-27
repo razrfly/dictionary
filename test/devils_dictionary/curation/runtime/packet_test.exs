@@ -78,6 +78,16 @@ defmodule DevilsDictionary.Curation.Runtime.PacketTest do
     assert {:error, :language_mismatch} = Packet.build([ctx.love.object_id], "fr")
   end
 
+  test "a Bierce entry that applies but cannot be a candidate refuses the packet", ctx do
+    # Markup with no text: leadable by the lead rule, but no excerpt to show.
+    empty = WordFixtures.entry!(ctx, ctx.oats, "bierce", body: "<br/>", body_format: :html)
+
+    assert {:error, {:priority_candidate_unavailable, [id]}} =
+             Packet.build([ctx.oats.object_id], "en")
+
+    assert id == empty.object_id
+  end
+
   test "a packet that no longer matches the registry is refused before dispatch", ctx do
     {:ok, packet} = Packet.build([ctx.love.object_id], "en")
     {:ok, frozen} = Packet.freeze(packet)

@@ -49,7 +49,9 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
   @doc """
   Builds a packet for registry lexemes in one language. Returns `{:ok,
   packet}` or `{:error, reason}`: `:not_lexemes`, `:language_mismatch`,
-  `:no_candidates`, `{:too_many_candidates, n}` or `{:too_many_meanings, n}`.
+  `:no_candidates`, `{:too_many_candidates, n}`, `{:too_many_meanings, n}` or
+  `{:priority_candidate_unavailable, content_ids}` (an entry Bierce-first
+  applies to that cannot be put in the packet).
   """
   def build(lexeme_ids, language_tag, opts \\ []) do
     ids = lexeme_ids |> Enum.uniq() |> Enum.sort()
@@ -64,14 +66,15 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
 
       true ->
         meanings = meanings(lexemes)
-        candidates = candidates(ids, meanings)
         max = Endpoint.get(:max_candidates, opts)
 
-        cond do
-          candidates == [] -> {:error, :no_candidates}
-          length(candidates) > max -> {:error, {:too_many_candidates, length(candidates)}}
-          length(meanings) > @max_meanings -> {:error, {:too_many_meanings, length(meanings)}}
-          true -> {:ok, assemble(lexemes, language_tag, meanings, candidates, ids)}
+        with {:ok, candidates} <- candidates(ids, meanings) do
+          cond do
+            candidates == [] -> {:error, :no_candidates}
+            length(candidates) > max -> {:error, {:too_many_candidates, length(candidates)}}
+            length(meanings) > @max_meanings -> {:error, {:too_many_meanings, length(meanings)}}
+            true -> {:ok, assemble(lexemes, language_tag, meanings, candidates, ids)}
+          end
         end
     end
   end
@@ -167,7 +170,16 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
           q <- quotation_candidates(m, lexeme_meaning_ids),
           do: q
 
-    Enum.filter(contents ++ quotations, &eligible?(&1, ids))
+    kept = Enum.filter(contents ++ quotations, &eligible?(&1, ids))
+    kept_contents = for c <- kept, c["kind"] == "content", do: c["object_id"]
+
+    # Validation holds the lead to Bierce-first against the registry. A packet
+    # that lost an applicable entry (an empty excerpt, or a stricter check
+    # here than `LeadRule`'s) could then only ever be abstained on.
+    case priority -- kept_contents do
+      [] -> {:ok, kept}
+      missing -> {:error, {:priority_candidate_unavailable, missing}}
+    end
   end
 
   defp content_candidate(content_id, meaning_ids) do

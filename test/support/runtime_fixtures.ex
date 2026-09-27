@@ -109,11 +109,20 @@ defmodule DevilsDictionary.RuntimeFixtures do
 
     version = Keyword.get(opts, :version, @runtime_version)
     chat = Keyword.get(opts, :chat, fn _request -> {:json, answer(abstain())} end)
+    # What `/api/ps` lists as loaded: nothing, unless a test says the model
+    # will not unload.
+    loaded = Keyword.get(opts, :loaded, [])
 
     Req.Test.stub(Ollama, fn conn ->
       case {conn.method, conn.request_path} do
         {"GET", "/api/version"} ->
           Req.Test.json(conn, %{"version" => version})
+
+        {"POST", "/api/generate"} ->
+          Req.Test.json(conn, %{"done" => true})
+
+        {"GET", "/api/ps"} ->
+          Req.Test.json(conn, %{"models" => Enum.map(loaded, &%{"name" => &1})})
 
         {"GET", "/api/tags"} ->
           Req.Test.json(conn, %{"models" => models})

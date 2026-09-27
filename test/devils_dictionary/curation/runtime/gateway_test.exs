@@ -69,6 +69,56 @@ defmodule DevilsDictionary.Curation.Runtime.GatewayTest do
                end)
     end
 
+    test "an attempt cannot finish while it still holds the slot, even if the service is untouched",
+         ctx do
+      {:ok, holder} = admit(ctx)
+      settle!()
+
+      # Finish the holder completely, ledger and all, but leave the service
+      # naming it. Only the attempt-side holder check can see this.
+      assert {:refused, :integrity_constraint_violation, message} =
+               refused(fn ->
+                 released =
+                   holder
+                   |> Ecto.Changeset.change(
+                     state: :released,
+                     outcome: :never_sent,
+                     finished_at: holder.admitted_at,
+                     settled_at: holder.admitted_at
+                   )
+                   |> Repo.update!()
+
+                 Repo.insert!(%LedgerEntry{
+                   service_id: released.service_id,
+                   attempt_id: released.id,
+                   kind: :release,
+                   day: released.budget_day,
+                   amount_ms: released.reserved_ms
+                 })
+               end)
+
+      assert message =~ "holds its service without being live"
+      assert %Service{state: :occupied, holder_attempt_id: id} = service(ctx)
+      assert id == holder.id
+    end
+
+    test "a model config without its context and output bounds is refused", ctx do
+      for key <- ["num_ctx", "num_predict"] do
+        assert {:refused, :check, "local_model_configs_shape"} =
+                 refused(fn ->
+                   ctx.config
+                   |> Ecto.put_meta(state: :built)
+                   |> Map.merge(%{
+                     id: nil,
+                     slug: key("unbounded"),
+                     config_hash: Digest.sha256(key("unbounded")),
+                     generation: Map.delete(ctx.config.generation, key)
+                   })
+                   |> Repo.insert!()
+                 end)
+      end
+    end
+
     test "a duplicate request replays its receipt; a different request under the key conflicts",
          ctx do
       k = key("dup")
