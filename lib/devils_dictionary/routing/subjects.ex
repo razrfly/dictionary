@@ -39,6 +39,14 @@ defmodule DevilsDictionary.Routing.Subjects do
 
   @default_limit 24
 
+  # The statement's enum columns come back as text; these are the schemas' own
+  # values, so no atom is made from a row (and none depends on a module having
+  # been loaded first).
+  @roles Map.new(Ecto.Enum.values(Page, :role), &{Atom.to_string(&1), &1})
+  @publications Map.new(Ecto.Enum.values(Page, :publication_state), &{Atom.to_string(&1), &1})
+  @lifecycles Map.new(Ecto.Enum.values(Page, :lifecycle_state), &{Atom.to_string(&1), &1})
+  @kinds Map.new(Ecto.Enum.values(PublicPath, :kind), &{Atom.to_string(&1), &1})
+
   # The matched names come in through a lateral join per pattern, so each
   # pattern can use the trigram index on `entities.preferred_label` (a
   # `LIKE ANY (array)` cannot); the folded equality then decides. Recorded
@@ -195,10 +203,10 @@ defmodule DevilsDictionary.Routing.Subjects do
   defp page_rows(row) do
     page = %Page{
       id: row.page_id,
-      role: String.to_existing_atom(row.role),
+      role: Map.fetch!(@roles, row.role),
       target_object_id: row.object_id,
-      publication_state: String.to_existing_atom(row.publication),
-      lifecycle_state: String.to_existing_atom(row.lifecycle),
+      publication_state: Map.fetch!(@publications, row.publication),
+      lifecycle_state: Map.fetch!(@lifecycles, row.lifecycle),
       canonical_path_id: row.canonical_path_id
     }
 
@@ -207,7 +215,7 @@ defmodule DevilsDictionary.Routing.Subjects do
         %PublicPath{
           id: row.path_id,
           path: row.path,
-          kind: String.to_existing_atom(row.path_kind),
+          kind: Map.fetch!(@kinds, row.path_kind),
           destination_page_id: row.destination_page_id,
           original_page_id: row.original_page_id
         }
