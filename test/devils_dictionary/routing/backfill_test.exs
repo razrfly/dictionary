@@ -25,7 +25,11 @@ defmodule DevilsDictionary.Routing.BackfillTest do
 
   import Ecto.Query
 
+  import DevilsDictionary.RoutingFixtures,
+    only: [subject_page!: 2, subject_page!: 3, allocated!: 3]
+
   alias DevilsDictionary.{AccountsFixtures, Fixtures, Registry, Sources}
+  alias Ecto.Adapters.SQL.Sandbox
 
   alias DevilsDictionary.Routing.{
     AuditSnapshot,
@@ -34,7 +38,9 @@ defmodule DevilsDictionary.Routing.BackfillTest do
     BackfillRun,
     ClassificationDecision,
     Classifications,
+    Ledger,
     Page,
+    Pages,
     Policy,
     PublicPath,
     RouteChange
@@ -684,6 +690,282 @@ defmodule DevilsDictionary.Routing.BackfillTest do
     end
   end
 
+  # ── evidence the evaluation depended on without matching it (#219 A1) ────
+  #
+  # The independent audit's probe, and its two siblings: the run classifies
+  # from the exported graph, so every record that graph lent the evaluation —
+  # matched or not, present or absent — must still be what the export saw.
+
+  test "an unmatched ancestor that changed defers the record and needs a fresh review", ctx do
+    # Polish's one type, Q1, is held but maps nowhere when the export is taken.
+    class!("Q1", [])
+    snapshot = export!(ctx.dir)
+    ctx = %{ctx | snapshot: snapshot, population: population!(ctx.dir, snapshot, ctx.world)}
+    reviews = reviews!(ctx, [{ctx.world.polish, confirm("concepts", "/concepts/polish")}])
+
+    # Then Q1 becomes a kind of human, without the entity or its own record
+    # changing.
+    class!("Q1", ["Q5"])
+
+    {plan, _} = run!(ctx, reviews)
+
+    assert %{disposition: "evidence_changed", reason: "not current: Q1"} =
+             item(plan, ctx.world.polish)
+
+    refute override?(ctx.world.polish)
+    assert Repo.aggregate(PublicPath, :count) == 0
+
+    # A fresh export reaches another result, under another fingerprint, so
+    # the review made on the old one cannot be carried over.
+    fresh = export!(Path.join(ctx.dir, "fresh") |> tap(&File.mkdir_p!/1))
+    row = Enum.find(fresh.entities, &(&1["object_id"] == ctx.world.polish.object_id))
+    assert Policy.classify(row, fresh.graph, Policy.load()).candidate_families == ["people"]
+
+    refute fingerprint(%{ctx | snapshot: fresh}, ctx.world.polish) ==
+             fingerprint(ctx, ctx.world.polish)
+  end
+
+  test "an ancestor the export did not hold, arriving later, defers the record", ctx do
+    # Q1 is not held at all when the setup's export is taken...
+    row = Enum.find(ctx.snapshot.entities, &(&1["object_id"] == ctx.world.polish.object_id))
+    result = Policy.classify(row, ctx.snapshot.graph, Policy.load())
+    assert %{"qid" => "Q1", "absent" => true} in result.dependencies
+
+    reviews = reviews!(ctx, [{ctx.world.polish, confirm("concepts", "/concepts/polish")}])
+
+    # ...and arrives, mapped, before the run.
+    class!("Q1", ["Q5"])
+
+    {plan, _} = run!(ctx, reviews)
+
+    assert %{disposition: "evidence_changed", reason: "not current: Q1"} =
+             item(plan, ctx.world.polish)
+
+    refute override?(ctx.world.polish)
+  end
+
+  test "an unmatched branch that gains a contradicting family defers a reviewed mapping", ctx do
+    # Bierce is also typed Q2 at export time, a class that maps nowhere, and a
+    # reviewer confirms People over that warning.
+    typed!("Q9200001", ["Q5", "Q2"])
+    class!("Q2", [])
+    snapshot = export!(ctx.dir)
+    ctx = %{ctx | snapshot: snapshot, population: population!(ctx.dir, snapshot, ctx.world)}
+    reviews = reviews!(ctx, [{ctx.world.bierce, %{"action" => "confirm", "family" => "people"}}])
+
+    # Then Q2 turns out to be a kind of country.
+    class!("Q2", ["Q6256"])
+
+    {plan, _} = run!(ctx, reviews)
+
+    assert %{disposition: "evidence_changed", reason: "not current: Q2"} =
+             item(plan, ctx.world.bierce)
+
+    refute override?(ctx.world.bierce)
+    assert Repo.aggregate(PublicPath, :count) == 0
+
+    fresh = export!(Path.join(ctx.dir, "fresh") |> tap(&File.mkdir_p!/1))
+    row = Enum.find(fresh.entities, &(&1["object_id"] == ctx.world.bierce.object_id))
+    fresh_result = Policy.classify(row, fresh.graph, Policy.load())
+
+    assert {fresh_result.status, fresh_result.candidate_families} ==
+             {"needs_review", ["people", "places"]}
+  end
+
+  # ── a refused confirmation writes nothing (#219 A2) ──────────────────────
+  #
+  # Each test runs once without reviews first, so the evaluator's decisions
+  # and the draft pages exist, then takes the record's routing state by value
+  # and runs the confirmation. Whatever refuses it — a check made before
+  # writing, or a step after the override, or a concurrent writer — the
+  # record's decision, page, path and ledger state must be what they were,
+  # its checkpoint must say `refused` with the reason, and the batch must go
+  # on to the records after it.
+
+  test "a retired page: refused, nothing written, the batch goes on", ctx do
+    {:ok, page} = Pages.ensure(:subject, ctx.world.bierce.object_id)
+    human = human_actor!(ctx)
+    {:ok, _} = Ledger.retire(page.id, actor_id: human.id, reason: "retired before review")
+    run!(ctx)
+    before = state_of(ctx.world.bierce)
+
+    reviews =
+      reviews!(ctx, [
+        {ctx.world.bierce, %{"action" => "confirm", "family" => "people"}},
+        {ctx.world.daman_af, confirm("places", "/places/daman-afghanistan")}
+      ])
+
+    {plan, _} = run!(ctx, reviews, batch_size: 5)
+
+    assert %{disposition: "refused", reason: reason, page_id: page_id} =
+             item(plan, ctx.world.bierce)
+
+    assert reason =~ "retired"
+    assert page_id == page.id
+    assert state_of(ctx.world.bierce) == before
+    assert item(plan, ctx.world.daman_af).disposition == "allocated"
+  end
+
+  test "a page of another role, refused after the override was written: rolled back", ctx do
+    # A concept with a subject page, whose stored kind then becomes an
+    # edition's: its page is now the wrong role, and only the page step can
+    # find that out — after the override has been written.
+    concept = entity!(:concept, "Stray edition", "Q9200006", "Q1")
+    {:ok, _page} = Pages.ensure(:subject, concept.object_id)
+
+    Repo.query!("UPDATE entities SET entity_kind = 'edition' WHERE object_id = $1", [
+      concept.object_id
+    ])
+
+    {ctx, reviews} =
+      with_record(ctx, concept, "/works/stray-edition", [
+        {concept, confirm("works", "/works/stray-edition")},
+        {ctx.world.bierce, %{"action" => "confirm", "family" => "people"}}
+      ])
+
+    run!(ctx)
+    before = state_of(concept)
+
+    {plan, _} = run!(ctx, reviews, batch_size: 10)
+
+    assert %{disposition: "refused", reason: "page: :target_has_other_role"} =
+             item(plan, concept)
+
+    assert state_of(concept) == before
+    refute override?(concept)
+    assert item(plan, ctx.world.bierce).disposition == "allocated"
+  end
+
+  test "a path another writer takes after the checks: rolled back, the batch goes on", ctx do
+    run!(ctx)
+    before = state_of(ctx.world.polish)
+    rival = subject_page!("concepts", "Polish (language)")
+
+    reviews =
+      reviews!(ctx, [
+        {ctx.world.bierce, %{"action" => "confirm", "family" => "people"}},
+        {ctx.world.polish, confirm("concepts", "/concepts/polish")},
+        {ctx.world.daman_in, confirm("places", "/places/daman-india")}
+      ])
+
+    # The rival holds /concepts/polish, allocated and uncommitted, until the
+    # backfill has passed its checks and is waiting on the address's lock.
+    holder = hold(fn -> allocated!(rival, "/concepts/polish", ctx.importer) end)
+    backfill = backfill(ctx, reviews, batch_size: 10)
+    blocked!(backfill.backend, "advisory")
+    release(holder)
+
+    assert {:ok, plan} = await(backfill)
+
+    assert %{disposition: "refused", reason: reason} = item(plan, ctx.world.polish)
+    assert reason =~ ":path_taken"
+    assert state_of(ctx.world.polish) == before
+    refute override?(ctx.world.polish)
+
+    assert [%{destination_page_id: owner}] =
+             Repo.all(from p in PublicPath, where: p.path == "/concepts/polish")
+
+    assert owner == rival.id
+    # Before and after the refusal, in the same batch.
+    assert item(plan, ctx.world.bierce).disposition == "allocated"
+    assert item(plan, ctx.world.daman_in).disposition == "allocated"
+  end
+
+  test "a canonical another writer gives the page after the checks: rolled back", ctx do
+    # Bierce mapped by the evaluator itself, so another writer may address
+    # his page: his projection agrees with his record.
+    ctx = mapped_bierce!(ctx)
+    run!(ctx)
+    before = state_of(ctx.world.bierce)
+    page = Repo.get_by!(Page, target_object_id: ctx.world.bierce.object_id)
+    reviews = reviews!(ctx, [{ctx.world.bierce, %{"action" => "confirm", "family" => "people"}}])
+
+    # Another writer gives the page a different address and holds the page
+    # row until the backfill is waiting for it.
+    holder = hold(fn -> allocated!(page, "/people/ambrose-gwinnett-bierce", ctx.importer) end)
+    backfill = backfill(ctx, reviews, batch_size: 10)
+    blocked!(backfill.backend, "transactionid")
+    release(holder)
+
+    assert {:ok, plan} = await(backfill)
+
+    assert %{disposition: "refused", reason: reason} = item(plan, ctx.world.bierce)
+    assert reason =~ ":page_has_canonical"
+    refute override?(ctx.world.bierce)
+
+    after_state = state_of(ctx.world.bierce)
+    assert after_state.decisions == before.decisions
+    assert [%{path: "/people/ambrose-gwinnett-bierce", kind: :canonical}] = after_state.paths
+    # Only the other writer's operation is on the ledger.
+    assert length(after_state.ledger) == 2
+    assert Repo.aggregate(PublicPath, :count) == 1
+  end
+
+  test "the subject's kind changing after the checks: refused at the page, rolled back", ctx do
+    subject = entity!(:concept, "Late kind", "Q9200007", "Q1")
+
+    {ctx, reviews} =
+      with_record(ctx, subject, "/concepts/late-kind", [
+        {ctx.world.bierce, %{"action" => "confirm", "family" => "people"}},
+        {subject, confirm("concepts", "/concepts/late-kind")}
+      ])
+
+    run!(ctx)
+    before = state_of(subject)
+
+    # Bierce's address is held, so the batch — its inputs already read and
+    # compared — waits on the first record while the second one's kind
+    # changes underneath it.
+    holder = hold(fn -> lock_path!("/people/ambrose-bierce") end)
+    backfill = backfill(ctx, reviews, batch_size: 10)
+    blocked!(backfill.backend, "advisory")
+
+    Repo.query!("UPDATE entities SET entity_kind = 'edition' WHERE object_id = $1", [
+      subject.object_id
+    ])
+
+    release(holder)
+
+    assert {:ok, plan} = await(backfill)
+
+    assert item(plan, ctx.world.bierce).disposition == "allocated"
+
+    assert %{disposition: "refused", reason: "page: :target_kind_mismatch"} =
+             item(plan, subject)
+
+    assert state_of(subject) == before
+    refute override?(subject)
+  end
+
+  test "a lost race on the address index rolls the batch back, and the rerun resumes", ctx do
+    run!(ctx)
+    before = state_of(ctx.world.bierce)
+    rival = subject_page!("people", "Ambrose Bierce (namesake)", :person)
+    reviews = reviews!(ctx, [{ctx.world.bierce, %{"action" => "confirm", "family" => "people"}}])
+    {:ok, plan} = Backfill.load(ctx.snapshot.path, ctx.population, reviews)
+
+    # A writer that bypasses the ledger's locks: only the unique index can see
+    # it, and inside the batch's transaction the ledger cannot retry.
+    holder = hold(fn -> lock_free_allocation!(rival, "/people/ambrose-bierce", ctx.importer) end)
+    backfill = backfill(ctx, reviews, batch_size: 10)
+    blocked!(backfill.backend, "transactionid")
+    release(holder)
+
+    assert {:raised, %Ecto.ConstraintError{constraint: "public_paths_path_index"}} =
+             await(backfill)
+
+    # The whole batch rolled back: no checkpoint, no confirmation.
+    run = Repo.get_by!(BackfillRun, run_key: plan.run_key)
+    refute Repo.exists?(from i in BackfillItem, where: i.run_id == ^run.id)
+    assert state_of(ctx.world.bierce) == before
+
+    # Running it again resumes it, and the address is now refused up front.
+    {:ok, _summary} = Backfill.run(plan, ctx.importer.id, batch_size: 10)
+    assert %{disposition: "refused", reason: reason} = item(plan, ctx.world.bierce)
+    assert reason =~ "belongs to object #{rival.target_object_id}"
+    assert state_of(ctx.world.bierce) == before
+  end
+
   # ── helpers used by the tests ────────────────────────────────────────────
 
   defp identities do
@@ -706,4 +988,248 @@ defmodule DevilsDictionary.Routing.BackfillTest do
 
   defp anchor(type),
     do: %{"rank" => "normal", "mainsnak" => %{"datavalue" => %{"value" => %{"id" => type}}}}
+
+  # ── helpers for the atomicity and dependency tests (#219) ────────────────
+
+  defp confirm(family, path), do: %{"action" => "confirm", "family" => family, "path" => path}
+
+  # A class record: `parents` are its P279 values.
+  defp class!(qid, parents) do
+    Sources.insert_records(Sources.get_source_by_slug!("wikidata"), [
+      %{
+        external_id: qid,
+        raw: %{"id" => qid, "claims" => %{"P279" => Enum.map(parents, &anchor/1)}}
+      }
+    ])
+  end
+
+  # An item record with several P31 types.
+  defp typed!(qid, types) do
+    Sources.insert_records(Sources.get_source_by_slug!("wikidata"), [
+      %{external_id: qid, raw: %{"id" => qid, "claims" => %{"P31" => Enum.map(types, &anchor/1)}}}
+    ])
+  end
+
+  # A fresh export and population with one more record, a classification
+  # review of `entity` proposing `path`, and reviews bound to them.
+  defp with_record(ctx, entity, path, entries) do
+    snapshot = export!(ctx.dir)
+
+    extra = %{
+      "object_id" => entity.object_id,
+      "label" => entity.preferred_label,
+      "disposition" => "classification review: sole candidate family needs a human decision",
+      "address_status" => "classification_review",
+      "candidate_path" => path,
+      "status" => "needs_review"
+    }
+
+    base =
+      ctx.population
+      |> File.read!()
+      |> Jason.decode!()
+      |> Map.fetch!("records")
+
+    population = write_population!(ctx.dir, snapshot, base ++ [extra])
+    ctx = %{ctx | snapshot: snapshot, population: population}
+    {ctx, reviews!(ctx, entries)}
+  end
+
+  # The setup's Bierce is `needs_review`: his stored projection names no type
+  # while his record says Q5. Agreeing, he is mapped; a fresh export and
+  # population follow.
+  defp mapped_bierce!(ctx) do
+    Repo.query!(
+      "UPDATE entities SET metadata = metadata || '{\"wikidata_instance_of\": [\"Q5\"]}' WHERE object_id = $1",
+      [ctx.world.bierce.object_id]
+    )
+
+    snapshot = export!(ctx.dir)
+    row = Enum.find(snapshot.entities, &(&1["object_id"] == ctx.world.bierce.object_id))
+    assert Policy.classify(row, snapshot.graph, Policy.load()).status == "mapped"
+    %{ctx | snapshot: snapshot, population: population!(ctx.dir, snapshot, ctx.world)}
+  end
+
+  defp human_actor!(ctx),
+    do: Repo.insert!(%Actor{actor_kind: :user, user_id: ctx.reviewer.id, label: "reviewer"})
+
+  # Everything a confirmation can write about one entity, by value.
+  defp state_of(entity) do
+    id = entity.object_id
+
+    pages =
+      Repo.all(from p in Page, where: p.target_object_id == ^id, order_by: p.id)
+      |> Enum.map(
+        &Map.take(&1, [
+          :id,
+          :role,
+          :lifecycle_state,
+          :publication_state,
+          :canonical_path_id,
+          :current_revision_id,
+          :last_route_change_id
+        ])
+      )
+
+    page_ids = Enum.map(pages, & &1.id)
+
+    paths =
+      Repo.all(
+        from p in PublicPath,
+          where: p.original_page_id in ^page_ids or p.destination_page_id in ^page_ids,
+          order_by: p.id
+      )
+      |> Enum.map(&Map.take(&1, [:id, :path, :kind, :destination_page_id, :last_route_change_id]))
+
+    path_ids = Enum.map(paths, & &1.id)
+
+    %{
+      decisions:
+        Repo.all(from d in ClassificationDecision, where: d.object_id == ^id, order_by: d.id)
+        |> Enum.map(
+          &Map.take(&1, [
+            :id,
+            :origin,
+            :status,
+            :family,
+            :is_current,
+            :evidence_fingerprint,
+            :reviewer_actor_id,
+            :supersedes_id
+          ])
+        ),
+      pages: pages,
+      paths: paths,
+      ledger:
+        Repo.all(
+          from c in RouteChange,
+            where:
+              c.page_id in ^page_ids or c.path_id in ^path_ids or
+                c.after_destination_id in ^page_ids or c.before_destination_id in ^page_ids,
+            order_by: c.id,
+            select: c.id
+        )
+    }
+  end
+
+  # A writer on its own connection, holding its transaction open after `fun`
+  # until released: a concurrent caller the backfill cannot see yet.
+  defp hold(fun) do
+    parent = self()
+
+    task =
+      Task.async(fn ->
+        :ok = Sandbox.checkout(Repo, sandbox: false)
+
+        Repo.transaction(fn ->
+          fun.()
+          send(parent, {:holding, self()})
+          receive do: (:release -> :ok)
+        end)
+      end)
+
+    assert_receive {:holding, pid}, 10_000
+    %{task: task, pid: pid}
+  end
+
+  defp release(%{task: task, pid: pid}) do
+    send(pid, :release)
+    assert {:ok, :ok} = Task.await(task, 30_000)
+  end
+
+  # The backfill on its own connection; `backend` is its Postgres pid.
+  defp backfill(ctx, reviews, opts) do
+    parent = self()
+
+    task =
+      Task.async(fn ->
+        :ok = Sandbox.checkout(Repo, sandbox: false)
+        send(parent, {:backend, self(), backend_pid()})
+        {:ok, plan} = Backfill.load(ctx.snapshot.path, ctx.population, reviews)
+
+        try do
+          {:ok, _summary} = Backfill.run(plan, ctx.importer.id, opts)
+          {:ok, plan}
+        rescue
+          error -> {:raised, error}
+        end
+      end)
+
+    assert_receive {:backend, pid, backend}, 10_000
+    %{task: task, pid: pid, backend: backend}
+  end
+
+  defp await(%{task: task}), do: Task.await(task, 30_000)
+
+  defp backend_pid do
+    %{rows: [[pid]]} = Repo.query!("SELECT pg_backend_pid()")
+    pid
+  end
+
+  # Waits, in Postgres, until `backend` waits on a lock of `event` — which no
+  # message can announce, because the waiting process is inside a query.
+  # Bounded at ten seconds.
+  defp blocked!(backend, event, tries \\ 1_000) do
+    %{rows: [[blocked?]]} =
+      Repo.query!(
+        "SELECT count(*) = 1 FROM pg_stat_activity WHERE pid = $1 AND wait_event_type = 'Lock' AND wait_event = $2",
+        [backend, event]
+      )
+
+    cond do
+      blocked? -> :ok
+      tries == 0 -> flunk("the backfill never waited on a #{event} lock")
+      true -> Repo.query!("SELECT pg_sleep(0.01)") && blocked!(backend, event, tries - 1)
+    end
+  end
+
+  # The ledger's own lock on an address, taken and held.
+  defp lock_path!(path),
+    do:
+      Repo.query!("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", ["route-path:" <> path])
+
+  # What a writer that bypassed `Routing.Ledger` would do (as in
+  # `ConcurrencyTest`): every row the database requires, none of its locks.
+  defp lock_free_allocation!(page, path, actor) do
+    operation = Ecto.UUID.generate()
+    %{rows: [[id]]} = Repo.query!("SELECT nextval('public_paths_id_seq')")
+
+    created =
+      Repo.insert!(%RouteChange{
+        operation_id: operation,
+        sequence: 1,
+        operation: :allocate,
+        path_id: id,
+        after_kind: :canonical,
+        after_destination_id: page.id,
+        actor_id: actor.id,
+        reason: "lock-free writer"
+      })
+
+    Repo.insert!(%PublicPath{
+      id: id,
+      path: path,
+      kind: :canonical,
+      original_page_id: page.id,
+      destination_page_id: page.id,
+      last_route_change_id: created.id
+    })
+
+    pointed =
+      Repo.insert!(%RouteChange{
+        operation_id: operation,
+        sequence: 2,
+        operation: :allocate,
+        page_id: page.id,
+        before_lifecycle: :active,
+        after_lifecycle: :active,
+        after_canonical_path_id: id,
+        actor_id: actor.id,
+        reason: "lock-free writer"
+      })
+
+    page
+    |> Ecto.Changeset.change(canonical_path_id: id, last_route_change_id: pointed.id)
+    |> Repo.update!()
+  end
 end

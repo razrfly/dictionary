@@ -73,6 +73,11 @@ defmodule DevilsDictionary.Routing.Policy do
     class_walk = walk(p279, graph, class_anchors(policy), policy.rules)
     self_family = if length(qids) == 1, do: policy.rules["self_rules"][hd(qids)]
 
+    # Every graph record the result was read from, found or not. A class rule
+    # decides a self-classified subject, so its walks are not dependencies.
+    source_lookup = if length(qids) == 1, do: [hd(qids)], else: []
+    walked = if self_family, do: [], else: walk.consulted ++ class_walk.consulted
+
     matches =
       cond do
         self_family -> [%{id: "class_subject", family: self_family, path: qids}]
@@ -128,6 +133,7 @@ defmodule DevilsDictionary.Routing.Policy do
       warnings: Enum.sort(Enum.uniq(warnings)),
       source_revision: source && Map.take(source, ["qid", "revision_id", "checksum"]),
       evidence: evidence_for(matches, graph),
+      dependencies: dependencies(source_lookup ++ walked, matches, graph),
       publishable: false,
       allocated: false
     }
@@ -169,7 +175,7 @@ defmodule DevilsDictionary.Routing.Policy do
 
   defp walk(starts, graph, anchors, rules) do
     queue = starts |> Enum.sort() |> Enum.map(&{&1, [&1], 0})
-    walk_queue(queue, graph, anchors, rules, %{matches: [], warnings: []}, 0)
+    walk_queue(queue, graph, anchors, rules, %{matches: [], warnings: [], consulted: []}, 0)
   end
 
   defp walk_queue([], _graph, _anchors, _rules, result, _count), do: result
@@ -202,12 +208,22 @@ defmodule DevilsDictionary.Routing.Policy do
             do: ["unmapped_class:#{qid}" | warnings],
             else: warnings
 
-        next = %{result | warnings: warnings ++ result.warnings}
+        next = %{
+          result
+          | warnings: warnings ++ result.warnings,
+            consulted: [qid | result.consulted]
+        }
+
         more = Enum.map(parents, &{&1, path ++ [&1], depth + 1})
         walk_queue(rest ++ more, graph, anchors, rules, next, count + 1)
 
       true ->
-        next = %{result | warnings: ["missing_class:#{qid}" | result.warnings]}
+        next = %{
+          result
+          | warnings: ["missing_class:#{qid}" | result.warnings],
+            consulted: [qid | result.consulted]
+        }
+
         walk_queue(rest, graph, anchors, rules, next, count + 1)
     end
   end
@@ -266,6 +282,30 @@ defmodule DevilsDictionary.Routing.Policy do
 
   defp warn(warnings, true, reason), do: [reason | warnings]
   defp warn(warnings, false, _reason), do: warnings
+
+  # The pins of everything the evaluation read: each record it looked up, at
+  # the revision it read, and each one it looked for and did not find. The
+  # result is a function of the entity's input, the policy and exactly these
+  # records, so while every one of them is still what it was — present at the
+  # same revision, or still absent — a fresh evaluation reaches the same
+  # result. The matched paths alone are not enough: an unmatched class that
+  # gains an ancestor, or a missing one that arrives, changes the outcome.
+  #
+  # The records on matched paths stay pinned, as they are in `evidence`, even
+  # though an anchor matches by its identifier rather than by its content.
+  defp dependencies(consulted, matches, graph) do
+    matched = matches |> Enum.flat_map(& &1.path) |> Enum.filter(&Map.has_key?(graph, &1))
+
+    (consulted ++ matched)
+    |> Enum.uniq()
+    |> Enum.sort()
+    |> Enum.map(fn qid ->
+      case Map.get(graph, qid) do
+        nil -> %{"qid" => qid, "absent" => true}
+        record -> Map.merge(Map.take(record, ["revision_id", "checksum"]), %{"qid" => qid})
+      end
+    end)
+  end
 
   defp evidence_for(matches, graph) do
     matches

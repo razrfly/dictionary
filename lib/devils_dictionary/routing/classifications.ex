@@ -54,16 +54,20 @@ defmodule DevilsDictionary.Routing.Classifications do
   @doc """
   The evidence an evaluator result considered, as a SHA-256.
 
-  Covers the pinned source revision, the pinned class evidence, the matched
-  rule paths, the warnings and the outcome — status, reasons and candidates,
-  which also carry the inputs that are not evidence records, such as a merged
-  identity or a disambiguation flag. Not the label, which never classifies.
+  Covers the pinned source revision, the pinned class evidence, every other
+  record the evaluation read or looked for and did not find (its
+  `dependencies`: an unmatched ancestor decides an outcome as surely as a
+  matched one), the matched rule paths, the warnings and the outcome —
+  status, reasons and candidates, which also carry the inputs that are not
+  evidence records, such as a merged identity or a disambiguation flag. Not
+  the label, which never classifies.
   """
   def fingerprint(result) do
     %{
       "stored_kind" => result.stored_kind,
       "source_revision" => result.source_revision,
       "evidence" => result.evidence,
+      "dependencies" => result.dependencies,
       "matches" =>
         Enum.map(result.matches, &%{"rule" => &1.id, "family" => &1.family, "path" => &1.path}),
       "warnings" => result.warnings,
@@ -260,7 +264,9 @@ defmodule DevilsDictionary.Routing.Classifications do
       warnings: result.warnings,
       policy_version: result.policy_version,
       evidence_fingerprint: fingerprint(result),
-      source_pins: Enum.reject([result.source_revision | result.evidence], &is_nil/1)
+      # Everything the result was read from, absences included, so a stored
+      # decision says what it rested on.
+      source_pins: result.dependencies
     }
   end
 

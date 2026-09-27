@@ -24,9 +24,12 @@ defmodule DevilsDictionary.Routing.Backfill do
   ## Per record, in object-id order
 
     1. The record's evaluator input is read back from the database and
-       compared with the export, and every revision the evaluator pins must
-       still be its record's current one. Anything else is a deferral with
-       its reason, never a classification of stale evidence.
+       compared with the export, and every graph record the evaluation
+       depended on (`Policy.classify/3`'s `dependencies`: each one it read,
+       matched or not, and each one it looked for and did not find) must
+       still be what the export saw — its record's current revision, or
+       still absent. Anything else is a deferral with its reason, never a
+       classification of stale evidence.
     2. `Policy.classify/3`, then `Classifications.record/1` — which writes
        nothing when the evidence is unchanged, and keeps a standing override.
     3. What the population and the reviews say:
@@ -35,8 +38,9 @@ defmodule DevilsDictionary.Routing.Backfill do
          to qualify): `Pages.ensure/3` — a subject page, or an edition's own
          page — and then, only with a reviewer's `confirm` of the current
          evidence, the reviewer's override (once) and `Ledger.allocate/3` of
-         the approved path. Every check that could refuse the confirmation
-         is made before the override is written;
+         the approved path. What can be checked before writing is; the
+         override, the page and the address are then written under one
+         savepoint, so a refusal at any step leaves none of them;
        * **awaiting a classification or identity review**: no page until a
          reviewer confirms a family;
        * a reviewer's `defer`: nothing more, with the reviewer's reason.
@@ -46,9 +50,14 @@ defmodule DevilsDictionary.Routing.Backfill do
   A batch is one transaction: its writes and its checkpoints commit
   together, so an interruption loses at most the batch in hand, and a resumed
   run starts after the last committed record. Every writer it calls refuses
-  per record without rolling the batch back (Stage 1, decision 7). A defect,
-  or an allocation that loses a race three times, raises: the batch rolls
-  back, the run stops, and running it again resumes it.
+  per record without rolling the batch back (Stage 1, decision 7), and a
+  confirmation's writes are one unit within it: a refusal rolls back to the
+  savepoint taken before them, records `refused` with its reason, and the
+  batch goes on. A defect raises instead, and so does a lost race on an
+  address's unique index, which inside a caller's transaction the ledger
+  cannot retry (a writer that bypassed its locks; its own locks turn every
+  other race into a refusal): the batch rolls back, the run stops, and
+  running it again resumes it.
 
   Nothing here publishes: pages stay `draft`, and candidate status grants no
   publication approval.
@@ -77,7 +86,9 @@ defmodule DevilsDictionary.Routing.Backfill do
   alias DevilsDictionary.Routing.ClassificationDecision, as: Decision
   alias DevilsDictionary.Sources.Actor
 
-  @version "routing-backfill/1"
+  # Part of every run key. 2: every dependency checked, confirmations atomic —
+  # a run keyed under 1 is not resumed by this code.
+  @version "routing-backfill/2"
 
   # The population's dispositions, as candidates.py writes them.
   @heading_for_address ["allocation candidate", "collision review:", "collision review blocked"]
@@ -470,7 +481,7 @@ defmodule DevilsDictionary.Routing.Backfill do
       true ->
         result = Policy.classify(exported, plan.graph, plan.policy)
 
-        case stale_pins(result) do
+        case changed_dependencies(result) do
           [] ->
             case Classifications.record(result) do
               {:ok, _outcome, decision} ->
@@ -490,8 +501,8 @@ defmodule DevilsDictionary.Routing.Backfill do
                 deferral("classification_refused", inspect(reason), proposed)
             end
 
-          stale ->
-            deferral("evidence_changed", "not current: " <> Enum.join(stale, ", "), proposed)
+          changed ->
+            deferral("evidence_changed", "not current: " <> Enum.join(changed, ", "), proposed)
         end
     end
   end
@@ -549,38 +560,84 @@ defmodule DevilsDictionary.Routing.Backfill do
     end
   end
 
-  # A reviewer's confirmation of the evidence they saw. Everything that could
-  # refuse it is checked first; only then the override (once), the page and
-  # the address.
+  # A reviewer's confirmation of the evidence they saw. What can be checked
+  # before writing is checked first; then the override (once), the page and
+  # the address are written as one unit, and a refusal at any of them — the
+  # ledger's included, and whatever a concurrent writer changed after the
+  # checks — leaves none of them.
   defp confirm(ctx, review, reviewer) do
     path = review.path || uncontested(ctx)
 
     with {:ok, parsed} <- address(path, review.family, ctx.role),
          :ok <- seen(ctx.decision, review),
          :ok <- available(parsed.path, ctx),
-         {:ok, decision} <- override(ctx, review, reviewer),
-         {:ok, page} <- page(ctx) do
-      reason =
-        "Stage 2 backfill: address approved by reviewer ##{reviewer.user_id} — #{review.reason}"
-
-      case Ledger.allocate(page.id, parsed.path, actor_id: ctx.actor_id, reason: reason) do
-        {:ok, _} ->
-          %{
-            disposition: "allocated",
-            decision_id: decision.id,
-            page_id: page.id,
-            path_id: Repo.get!(Page, page.id).canonical_path_id,
-            proposed_path: parsed.path,
-            review: review.entry
-          }
-
-        {:error, refusal} ->
-          %{refused(ctx, inspect(refusal), parsed.path, review.entry) | decision_id: decision.id}
-          |> Map.put(:page_id, page.id)
-      end
+         {:ok, item} <- atomically(fn -> write_confirmation(ctx, review, reviewer, parsed) end) do
+      item
     else
-      {:refused, reason} -> refused(ctx, reason, path, review.entry)
+      {:refused, reason} ->
+        ctx
+        |> refused(reason, path, review.entry)
+        |> Map.put(:page_id, existing_page_id(ctx))
     end
+  end
+
+  defp write_confirmation(ctx, review, reviewer, parsed) do
+    reason =
+      "Stage 2 backfill: address approved by reviewer ##{reviewer.user_id} — #{review.reason}"
+
+    with {:ok, decision} <- override(ctx, review, reviewer),
+         {:ok, page} <- page(ctx),
+         {:ok, path} <- allocate(page, parsed.path, ctx.actor_id, reason) do
+      {:ok,
+       %{
+         disposition: "allocated",
+         decision_id: decision.id,
+         page_id: page.id,
+         path_id: path.id,
+         proposed_path: parsed.path,
+         review: review.entry
+       }}
+    end
+  end
+
+  defp allocate(page, path, actor_id, reason) do
+    case Ledger.allocate(page.id, path, actor_id: actor_id, reason: reason) do
+      {:ok, path} -> {:ok, path}
+      {:error, refusal} -> {:refused, inspect(refusal)}
+    end
+  end
+
+  # One record's writes as a unit inside the batch's transaction. A refusal
+  # rolls back to the savepoint, so nothing written since survives it, and
+  # the batch goes on (Stage 1, decision 7). A nested `Repo.transaction/1`
+  # cannot do this: its rollback aborts the whole batch. An exception is not
+  # a refusal; it leaves the savepoint to the batch's own rollback.
+  @savepoint "routing_backfill_confirmation"
+
+  defp atomically(fun) do
+    Repo.query!("SAVEPOINT #{@savepoint}")
+
+    case fun.() do
+      {:ok, _item} = written ->
+        Repo.query!("RELEASE SAVEPOINT #{@savepoint}")
+        written
+
+      {:refused, _reason} = refusal ->
+        Repo.query!("ROLLBACK TO SAVEPOINT #{@savepoint}")
+        Repo.query!("RELEASE SAVEPOINT #{@savepoint}")
+        refusal
+    end
+  end
+
+  # The record's page as it stands after a refusal: one that existed before
+  # the confirmation, or none — never one the refusal rolled back.
+  defp existing_page_id(ctx) do
+    Repo.one(
+      from p in Page,
+        where: p.target_object_id == ^ctx.record["object_id"] and p.role == ^ctx.role,
+        where: p.locale == "en",
+        select: p.id
+    )
   end
 
   defp refused(ctx, reason, path, entry) do
@@ -647,6 +704,9 @@ defmodule DevilsDictionary.Routing.Backfill do
       page && page.canonical_path_id && Repo.get!(PublicPath, page.canonical_path_id).path
 
     cond do
+      page && page.lifecycle_state != :active ->
+        {:refused, "the page is #{page.lifecycle_state}; only an active page takes an address"}
+
       canonical && canonical != path ->
         {:refused, "the page already has the address #{canonical}"}
 
@@ -749,37 +809,41 @@ defmodule DevilsDictionary.Routing.Backfill do
 
   defp comparable(row), do: Map.drop(row, ["record_type"])
 
-  # The pinned revisions that are no longer their record's current one: the
-  # revision whose key is the record's content hash, which may be an earlier
-  # row when a payload returns to what it was.
-  defp stale_pins(result) do
-    pins = Enum.reject([result.source_revision | result.evidence], &is_nil/1)
+  # The records the evaluation depended on that are no longer what the export
+  # saw, read as the export reads them: a record's current revision is the
+  # one whose key is its content hash (which may be an earlier row when a
+  # payload returns to what it was), and a record the export did not hold
+  # must still be absent. Every dependency is checked — matched or not — so
+  # an unmatched ancestor that changed, or a missing one that has arrived,
+  # defers the record like a moved pin does.
+  defp changed_dependencies(%{dependencies: []}), do: []
 
-    current =
-      if pins == [] do
-        %{}
-      else
-        %{rows: rows} =
-          Repo.query!(
-            """
-            SELECT r.external_id, v.id, v.checksum
-              FROM source_records r
-              JOIN sources s ON s.id = r.source_id AND s.slug = 'wikidata'
-              JOIN source_record_revisions v
-                ON v.source_record_id = r.id AND v.revision_key = r.content_hash
-             WHERE r.external_id = ANY($1)
-            """,
-            [Enum.map(pins, & &1["qid"])]
-          )
+  defp changed_dependencies(%{dependencies: dependencies}) do
+    %{rows: rows} =
+      Repo.query!(
+        """
+        SELECT r.external_id, v.id, v.checksum
+          FROM source_records r
+          JOIN sources s ON s.id = r.source_id AND s.slug = 'wikidata'
+          JOIN source_record_revisions v
+            ON v.source_record_id = r.id AND v.revision_key = r.content_hash
+         WHERE r.external_id = ANY($1)
+        """,
+        [Enum.map(dependencies, & &1["qid"])]
+      )
 
-        Map.new(rows, fn [qid, id, checksum] -> {qid, {id, checksum}} end)
-      end
+    current = Map.new(rows, fn [qid, id, checksum] -> {qid, {id, checksum}} end)
 
-    for pin <- pins,
-        Map.get(current, pin["qid"]) != {pin["revision_id"], pin["checksum"]},
+    for dependency <- dependencies,
+        changed?(dependency, Map.get(current, dependency["qid"])),
         uniq: true,
-        do: pin["qid"]
+        do: dependency["qid"]
   end
+
+  defp changed?(%{"absent" => true}, current), do: current != nil
+
+  defp changed?(pinned, current),
+    do: current != {pinned["revision_id"], pinned["checksum"]}
 
   # ── what a run produced ──────────────────────────────────────────────────
 
