@@ -163,7 +163,9 @@ defmodule DevilsDictionaryWeb.OnReaderTest do
       {:ok, _} =
         Registry.split(
           mercury.target_object_id,
-          [planet.target_object_id, element.target_object_id], reason: "fixture")
+          [planet.target_object_id, element.target_object_id],
+          reason: "fixture"
+        )
 
       {:ok, _} =
         Ledger.split(mercury.id, [planet.id, element.id],
@@ -248,7 +250,9 @@ defmodule DevilsDictionaryWeb.OnReaderTest do
         overview!(
           "On the Red Planet",
           "/on/the-red-planet",
-          [{:discusses_subject, planet.entity.object_id}], author: ctx.human)
+          [{:discusses_subject, planet.entity.object_id}],
+          author: ctx.human
+        )
 
       reading(false, fn ->
         assert ctx.conn |> get("/on/the-red-planet") |> html_response(404) =~ "no-such-word"
@@ -380,6 +384,10 @@ defmodule DevilsDictionaryWeb.OnReaderTest do
       planet = card(on, "discovered", world.planet.entity)
       deity = card(on, "discovered", world.deity.entity)
       album = card(on, "discovered", world.album.entity)
+
+      # The rail counts them and leads down to them.
+      assert has_element?(on, "#rail-subjects[href='#subjects']", "3")
+      assert on |> element("#rail-subjects") |> render() =~ "at their own address"
 
       assert has_element?(on, "#{planet}-link[href='/nature/mars']")
       assert has_element?(on, "#{deity}-link[href='/subjects/mars']")

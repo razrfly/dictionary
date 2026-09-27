@@ -378,6 +378,10 @@ defmodule DevilsDictionaryWeb.Word do
   attr :class, :string, default: nil
   attr :demo, :boolean, default: false
 
+  attr :subjects, :map,
+    default: nil,
+    doc: "the Subjects section's cards (#219), counted here with a way down to them"
+
   attr :headword, :boolean,
     default: true,
     doc:
@@ -395,6 +399,7 @@ defmodule DevilsDictionaryWeb.Word do
         demo={@demo}
       />
       <.stats page={@page} sources={@sources} />
+      <.subjects_link :if={@subjects} subjects={@subjects} />
 
       <%!-- On screen, not behind a summary (#133 R5). The Wikimedia A/B #131
            read says ~60% of readers never expand a collapsed section, and the
@@ -531,6 +536,43 @@ defmodule DevilsDictionaryWeb.Word do
         </p>
       </div>
     </div>
+    """
+  end
+
+  attr :subjects, :map, required: true
+
+  # The Subjects section sits low on a long page, after the definitions and
+  # the culture; the rail says how many there are and takes the reader there.
+  defp subjects_link(assigns) do
+    cards =
+      Enum.reject(assigns.subjects.curated, &match?({:withheld, _}, &1)) ++
+        assigns.subjects.discovered
+
+    assigns =
+      assigns
+      |> assign(:count, length(cards))
+      |> assign(:addressed, Enum.count(cards, &(&1.state == :addressed)))
+
+    ~H"""
+    <a
+      :if={@count > 0}
+      id="rail-subjects"
+      href="#subjects"
+      class="mt-2 flex min-h-11 items-center justify-between gap-4 rounded-xl bg-mist-950/2.5 p-4 hover:bg-mist-950/5 dark:bg-white/5 dark:hover:bg-white/10"
+    >
+      <span class="flex items-baseline gap-2">
+        <span class="text-2xl/8 tracking-tight tabular-nums text-mist-950 dark:text-white">
+          {@count}
+        </span>
+        <span class="text-base/6 text-mist-700 sm:text-sm/6 dark:text-mist-400">
+          {if @count == 1, do: "subject", else: "subjects"}
+        </span>
+      </span>
+      <span class="flex items-center gap-1 text-base/6 text-mist-500 sm:text-sm/6">
+        <span class="tabular-nums">{@addressed}</span>
+        at their own address <.icon name="hero-arrow-down-mini" class="size-4 shrink-0" />
+      </span>
+    </a>
     """
   end
 

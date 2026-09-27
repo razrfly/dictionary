@@ -969,6 +969,7 @@ defmodule DevilsDictionaryWeb.WordLive do
                 headword={false}
                 class="lg:float-left lg:clear-left lg:w-[22.5rem]"
                 demo={@demo}
+                subjects={@subjects}
               />
 
               <div class="min-w-0 max-lg:mt-8 lg:float-right lg:clear-right lg:w-[calc(100%-25.5rem)]">
@@ -1014,6 +1015,7 @@ defmodule DevilsDictionaryWeb.WordLive do
                 thing_info={@page.thing && Word.info_path(@base, @page.trail, "thing", @demo)}
                 class="lg:col-start-1 lg:row-start-1"
                 demo={@demo}
+                subjects={@subjects}
               />
 
               <div class="min-w-0 max-lg:mt-8 lg:col-start-2 lg:row-span-2 lg:row-start-1">
