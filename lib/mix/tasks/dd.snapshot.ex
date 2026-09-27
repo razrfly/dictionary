@@ -31,6 +31,15 @@ defmodule Mix.Tasks.Dd.Snapshot do
 
   Dumping is read-only and needs no confirmation.
 
+  ## Durable routing state is not disposable
+
+  A restore replaces everything in the target, including pages, classification
+  decisions and the address ledger (#194). Those exist nowhere else, so a
+  restore over a database that holds them is refused unless
+  `--routing-snapshot PATH` names a snapshot of that database taken after its
+  latest routing write. Restore into a separate, empty database instead; the
+  supported recovery procedure is `docs/routing/recovery.md`.
+
   ## What it does not carry
 
   `.env` is never read or written here — credentials move by their own route.
@@ -44,6 +53,8 @@ defmodule Mix.Tasks.Dd.Snapshot do
     * `--restore` — restore this file instead of dumping
     * `--database` — required with `--restore`; must match the configured database
     * `--jobs` — parallel workers for dump/restore (default 4)
+    * `--routing-snapshot` — with `--restore`, a snapshot of the target's own
+      routing state, required when the target holds any
     * `--quiet` — suppress the report
   """
 
@@ -51,7 +62,9 @@ defmodule Mix.Tasks.Dd.Snapshot do
 
   import Mix.Tasks.Dd.Report
 
-  @requirements []
+  # Runtime config too: a production Repo names its database only in the
+  # `url:` that config/runtime.exs reads from DATABASE_URL.
+  @requirements ["app.config"]
 
   @prefix "devils_dictionary"
 
@@ -64,6 +77,7 @@ defmodule Mix.Tasks.Dd.Snapshot do
           restore: :string,
           database: :string,
           jobs: :integer,
+          routing_snapshot: :string,
           quiet: :boolean
         ]
       )
@@ -87,19 +101,9 @@ defmodule Mix.Tasks.Dd.Snapshot do
 
     started = System.monotonic_time(:millisecond)
 
-    # Custom format so the restore can run in parallel and skip ownership.
-    args =
-      connection_args(config) ++
-        [
-          "--format=custom",
-          "--compress=6",
-          "--no-owner",
-          "--no-privileges",
-          "--file=#{path}",
-          database
-        ]
-
-    run!("pg_dump", args, config)
+    # Custom format so the restore can run in parallel and skip ownership;
+    # the digest of exactly the routing rows it holds is written beside it.
+    DevilsDictionary.Routing.Recovery.snapshot!(config, path)
 
     elapsed = System.monotonic_time(:millisecond) - started
 
@@ -125,27 +129,16 @@ defmodule Mix.Tasks.Dd.Snapshot do
       Mix.raise("no such snapshot: #{path}")
     end
 
+    case DevilsDictionary.Routing.Recovery.guard(config, "restore over", opts[:routing_snapshot]) do
+      :ok -> :ok
+      {:error, message} -> Mix.raise(message)
+    end
+
     tell(quiet?, fn -> say("restoring #{path} into #{named}") end)
 
     started = System.monotonic_time(:millisecond)
 
-    # Drop and recreate rather than restoring over a populated schema: a
-    # --clean restore into a half-built database leaves whichever objects the
-    # dump did not know about, which is exactly the state nobody can reason about.
-    Mix.Task.run("ecto.drop", ["--quiet"])
-    Mix.Task.run("ecto.create", ["--quiet"])
-
-    args =
-      connection_args(config) ++
-        [
-          "--no-owner",
-          "--no-privileges",
-          "--jobs=#{jobs}",
-          "--dbname=#{named}",
-          path
-        ]
-
-    run!("pg_restore", args, config)
+    DevilsDictionary.Snapshot.restore!(config, path, jobs)
 
     elapsed = System.monotonic_time(:millisecond) - started
 
@@ -157,29 +150,6 @@ defmodule Mix.Tasks.Dd.Snapshot do
       say("")
       say("  `mix ecto.migrate` next, in case the snapshot predates a migration.")
     end)
-  end
-
-  defp connection_args(config) do
-    [
-      "--host=#{config[:hostname] || "localhost"}",
-      "--port=#{config[:port] || 5432}",
-      "--username=#{config[:username] || "postgres"}"
-    ]
-  end
-
-  defp run!(executable, args, config) do
-    binary = System.find_executable(executable) || Mix.raise("#{executable} is not on PATH")
-
-    env = [{"PGPASSWORD", to_string(config[:password] || "")}]
-
-    case System.cmd(binary, args,
-           env: env,
-           into: IO.stream(:stdio, :line),
-           stderr_to_stdout: true
-         ) do
-      {_output, 0} -> :ok
-      {_output, status} -> Mix.raise("#{executable} exited with #{status}")
-    end
   end
 
   defp check!(nil, configured) do
@@ -207,7 +177,10 @@ defmodule Mix.Tasks.Dd.Snapshot do
 
   defp repo_config do
     Application.load(:devils_dictionary)
-    Application.get_env(:devils_dictionary, DevilsDictionary.Repo)
+
+    :devils_dictionary
+    |> Application.get_env(DevilsDictionary.Repo)
+    |> DevilsDictionary.Snapshot.resolve()
   end
 
   defp default_out(database) do

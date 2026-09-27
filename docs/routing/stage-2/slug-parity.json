@@ -1,0 +1,150 @@
+{
+  "about": "Routing.Policy.slug/1 on each input. test/devils_dictionary/routing/slug_parity_test.exs holds the application to it, and test_candidates.py holds the proposal generator to it.",
+  "cases": [
+    {
+      "case": "composed accent",
+      "input": "Café 2020 film",
+      "slug": "café-2020-film"
+    },
+    {
+      "case": "decomposed accent (NFD)",
+      "input": "Café 2020 film",
+      "slug": "café-2020-film"
+    },
+    {
+      "case": "combining marks in an Indic script",
+      "input": "हिन्दी 2020 film",
+      "slug": "हिन्दी-2020-film"
+    },
+    {
+      "case": "plus signs",
+      "input": "C++",
+      "slug": "c-plus-plus"
+    },
+    {
+      "case": "sharp",
+      "input": "C#",
+      "slug": "c-sharp"
+    },
+    {
+      "case": "ampersand",
+      "input": "AT&T",
+      "slug": "at-and-t"
+    },
+    {
+      "case": "dot",
+      "input": "Node.js",
+      "slug": "node-dot-js"
+    },
+    {
+      "case": "straight apostrophes",
+      "input": "Rock 'n' Roll",
+      "slug": "rock-n-roll"
+    },
+    {
+      "case": "curly apostrophe",
+      "input": "Devil’s Dictionary",
+      "slug": "devils-dictionary"
+    },
+    {
+      "case": "underscore is a separator",
+      "input": "snake_case name",
+      "slug": "snake-case-name"
+    },
+    {
+      "case": "leading and trailing separators",
+      "input": "  --Leading & trailing--  ",
+      "slug": "leading-and-trailing"
+    },
+    {
+      "case": "final sigma is not contextual",
+      "input": "ΣΑΣ",
+      "slug": "σασ"
+    },
+    {
+      "case": "final sigma inside a word",
+      "input": "ΟΔΥΣΣΕΥΣ",
+      "slug": "οδυσσευσ"
+    },
+    {
+      "case": "dotted capital I",
+      "input": "İstanbul",
+      "slug": "i̇stanbul"
+    },
+    {
+      "case": "sharp s is kept",
+      "input": "Straße",
+      "slug": "straße"
+    },
+    {
+      "case": "CJK and kana",
+      "input": "東京 タワー",
+      "slug": "東京-タワー"
+    },
+    {
+      "case": "Arabic-Indic digits",
+      "input": "١٢٣ Arabic",
+      "slug": "١٢٣-arabic"
+    },
+    {
+      "case": "precomposed A-ring",
+      "input": "Ångström",
+      "slug": "ångström"
+    },
+    {
+      "case": "decomposed A-ring and umlaut",
+      "input": "Ångström",
+      "slug": "ångström"
+    },
+    {
+      "case": "titlecase digraph",
+      "input": "ǅemal",
+      "slug": "ǆemal"
+    },
+    {
+      "case": "ligature is not decomposed",
+      "input": "ﬁle",
+      "slug": "ﬁle"
+    },
+    {
+      "case": "Roman numeral letter",
+      "input": "Ⅻ century",
+      "slug": "ⅻ-century"
+    },
+    {
+      "case": "120 bytes is allowed",
+      "input": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "slug": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "case": "121 bytes is refused",
+      "input": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "slug": null
+    },
+    {
+      "case": "120 bytes of two-byte letters",
+      "input": "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé",
+      "slug": "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé"
+    },
+    {
+      "case": "122 bytes of two-byte letters",
+      "input": "ééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé",
+      "slug": null
+    },
+    {
+      "case": "120 bytes once composed",
+      "input": "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé",
+      "slug": "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé"
+    },
+    {
+      "case": "only separators",
+      "input": "!!!",
+      "slug": null
+    },
+    {
+      "case": "empty",
+      "input": "",
+      "slug": null
+    }
+  ]
+}

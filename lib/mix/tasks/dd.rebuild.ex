@@ -72,6 +72,15 @@ defmodule Mix.Tasks.Dd.Rebuild do
   their records exist **only** in a database: ~3 hours of batched API calls, and
   the reason `mix dd.export.replay` exists. `--live` forces the network instead.
 
+  ## Durable routing state
+
+  A rebuild re-derives the corpus from its inputs; it cannot regenerate pages,
+  classification decisions or the address ledger (#194), and run after
+  `mix dd.reset` it renumbers every object those rows reference. So it is
+  refused on a database that holds routing state unless `--routing-snapshot
+  PATH` names a snapshot taken after the latest routing write. Recovery is a
+  restore plus `mix dd.materialize --all`: `docs/routing/recovery.md`.
+
   ## What it reports
 
   Per stage: what it wrote, what it could not resolve, and what failed. #74 asks
@@ -117,11 +126,24 @@ defmodule Mix.Tasks.Dd.Rebuild do
           scope: :string,
           limit: :integer,
           dry_run: :boolean,
-          live: :boolean
+          live: :boolean,
+          routing_snapshot: :string
         ]
       )
 
     scope = opts[:scope] || require_scope!("dd.rebuild")
+
+    unless opts[:dry_run] do
+      case DevilsDictionary.Routing.Recovery.guard(
+             DevilsDictionary.Repo.config(),
+             "rebuild",
+             opts[:routing_snapshot]
+           ) do
+        :ok -> :ok
+        {:error, message} -> Mix.raise(message)
+      end
+    end
+
     plan = plan(opts)
 
     say("rebuild · scope #{scope} · #{length(plan)} stages")

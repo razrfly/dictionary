@@ -63,9 +63,9 @@ This was a same-auditor review of available metadata, not independent expert adj
 |---|---|---|
 | Authority, scope, provenance and versions | Defined; class meanings pinned | Provider enrichment and reviewer integration |
 | Deterministic classification and uncertainty | Executable; all input entities accounted for | Independent review of the chosen launch set |
-| Slug semantics and collision behavior | Executable proposals; collisions retained | Transactional ledger and concurrent allocation |
+| Slug semantics and collision behavior | Executable proposals; collisions retained | Transactional ledger and concurrent allocation implemented in [Stage 1](../../routing/stage-1-foundation.md); readable collision review is Stage 2 |
 | Lexical/On distinction | Explicit decision and data contract | On storage/editor and lossless reader navigation |
-| Identity moves and rebuilds | Explicit invariants and rollback procedure | Real database restore/merge/split/rollback tests |
+| Identity moves and rebuilds | Explicit invariants and rollback procedure | Merge/split/rollback tests and a tested [recovery procedure](../../routing/recovery.md) implemented in [Stage 1](../../routing/stage-1-foundation.md). The test restores a fixture registry into a disposable database, verifies it exactly, re-projects it with the providers reversed and runs the ledger. The full-corpus rehearsal on the development database, with timing, remains Stage 2's first gate |
 | HTTP, metadata and indexing | Explicit request and page-role matrix | Initial HTTP and live-navigation assertions |
 | Agent documentation | README, ADR, policy files and reproduction commands linked | Keep documentation synchronized as feature phases land |
 
