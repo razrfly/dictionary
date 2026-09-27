@@ -127,6 +127,13 @@ config :devils_dictionary, dev_routes: true
 # `demo_inert_test.exs` reads `prod.exs` back and fails if it ever grows one.
 config :devils_dictionary, demo_mode: true
 
+# The curated opening's manual fixtures (#156 Phase 1). `?opening=fixture`
+# renders `priv/curation/opening-fixtures.json` only where this is set — here
+# and in `dev.exs` — and `word_opening_live_test.exs` fails if `config.exs`,
+# `prod.exs` or `runtime.exs` ever mention it, so a public page never shows
+# a fixture.
+config :devils_dictionary, curated_opening_fixtures: true
+
 # The health page's scorecard cache would leak one test's rows into the next.
 config :devils_dictionary, cache_scorecard: false
 
