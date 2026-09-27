@@ -98,7 +98,9 @@ defmodule DevilsDictionary.Routing.OnPageTest do
       overview!(
         "On C++ (draft)",
         "/on/c-plus-plus-history",
-        [{:supplies_lexical_material, cpp.object_id}], author: ctx.human)
+        [{:supplies_lexical_material, cpp.object_id}],
+        author: ctx.human
+      )
 
     assert [%{page_id: id, path: "/on/c-plus-plus", title: "On C++"}] =
              OnPage.linked([cpp.object_id, c.object_id], :public)
