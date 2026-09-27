@@ -101,7 +101,8 @@ defmodule DevilsDictionary.Routing.Pages do
     )
   end
 
-  def get(id), do: Repo.get(Page, id)
+  def get(id) when is_id(id), do: Repo.get(Page, id)
+  def get(_id), do: nil
 
   @doc """
   Writes a new revision and makes it current.
@@ -285,6 +286,8 @@ defmodule DevilsDictionary.Routing.Pages do
   end
 
   @doc "Every revision of a page, oldest first, with membership."
+  def revisions(page_id) when not is_id(page_id), do: []
+
   def revisions(page_id) do
     Repo.all(
       from r in PageRevision,

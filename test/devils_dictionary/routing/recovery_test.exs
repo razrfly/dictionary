@@ -210,6 +210,18 @@ defmodule DevilsDictionary.Routing.RecoveryTest do
     page |> allocated!("/nature/oyster", human) |> published!()
   end
 
+  # Replaces the Repo's configuration for tasks that read it.
+  defp configured_with(config, fun) do
+    original = Application.get_env(:devils_dictionary, DevilsDictionary.Repo)
+    Application.put_env(:devils_dictionary, DevilsDictionary.Repo, config)
+
+    try do
+      fun.()
+    after
+      Application.put_env(:devils_dictionary, DevilsDictionary.Repo, original)
+    end
+  end
+
   # Points the configured database at `database` for tasks that read it.
   defp configured_as(database, fun) do
     original = Application.get_env(:devils_dictionary, DevilsDictionary.Repo)
@@ -380,6 +392,20 @@ defmodule DevilsDictionary.Routing.RecoveryTest do
       assert Map.keys(weakened) == ["schema"]
       assert Enum.any?(weakened["schema"].only_after, &(&1 =~ "route_changes_guard"))
       assert Enum.any?(weakened["schema"].only_after, &(&1 =~ ~s|"relation","pages"|))
+
+      # Privileges are compared as granted: revoking the grant leaves an
+      # explicit ACL equal to the default a NULL one stands for, which is no
+      # difference at all.
+      Repo.query!("REVOKE SELECT ON pages FROM PUBLIC")
+
+      assert %{rows: [[true]]} =
+               Repo.query!(
+                 "SELECT relacl IS NOT NULL FROM pg_class WHERE oid = 'pages'::regclass"
+               )
+
+      assert Recovery.diff(untampered, Recovery.manifest(rows: true)) |> Map.keys() == ["schema"]
+      Repo.query!("ALTER TABLE route_changes ENABLE TRIGGER route_changes_guard")
+      assert Recovery.diff(untampered, Recovery.manifest(rows: true)) == %{}
     end)
 
     # The source was only read.
@@ -416,6 +442,14 @@ defmodule DevilsDictionary.Routing.RecoveryTest do
              Recovery.guard(Keyword.delete(target_config, :database), "drop", nil)
 
     assert nameless =~ "names no database"
+
+    # Verification under such a config reads the database it is asked to,
+    # not the one the URL names.
+    configured_with(url_config |> Keyword.put(:url, url(Repo.config())), fn ->
+      assert Recovery.with_database(ctx.target, fn ->
+               Repo.query!("SELECT current_database()").rows
+             end) == [[ctx.target]]
+    end)
 
     # Rolling the routing migration back would drop every routing table; it
     # refuses while they hold anything.

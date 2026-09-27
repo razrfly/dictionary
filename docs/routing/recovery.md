@@ -60,13 +60,18 @@ A restored copy carries the source's queued and scheduled jobs. Tasks that start
 
 3. **Verify exact identity.** This compares every column of every table: registry identities, references such as an edition's work or a variant's canonical lexeme, and every routing row, all by exact id. Only Oban's queue tables are left out. It also compares:
 
-   - the schema: column types, nullability and defaults; constraints and indexes, including whether they are valid; triggers, including whether they fire; functions; sequence parameters; row security and policies; access privileges; extension versions;
+   - the schema: owners; column types, collations, nullability and defaults; constraints and indexes, including whether they are valid; triggers, including whether they fire; functions, views and rules; sequence parameters; row security and policies; privileges; extension versions;
    - the sequences that hand out the next ids;
    - what every stored path and page id resolves to.
 
    Counts alone are not accepted. It is read-only on both databases, and exits non-zero on any difference.
 
-   `mix dd.snapshot --restore` restores neither ownership nor privileges (`--no-owner --no-privileges`). Where the source grants privileges, as production should when it withholds TRUNCATE from the application role, verification reports the difference until the grants are applied to the copy.
+   `mix dd.snapshot --restore` restores neither ownership nor privileges (`--no-owner --no-privileges`). Every restored object belongs to the role that ran the restore, and carries its type's default privileges.
+   - **Restore as the role that owns the source.** An owner implicitly holds TRUNCATE and may disable triggers, so ownership matters, and it is compared by role name.
+   - **Then apply the source's grants to the copy.** Privileges are compared as granted, not as stored. An ACL that was reset to its default equals one that was never set, and the owner appears in it only as `owner`. So once the copy has the same owner and the same grants, it matches.
+   - Where the source grants nothing beyond the defaults, as in development, there is nothing to apply.
+
+   The report lists the schema and sequence rows that differ.
 
    ```bash
    DD_DATABASE=devils_dictionary_restore mix dd.routing.verify --baseline devils_dictionary_v2
@@ -114,13 +119,13 @@ The test then runs the procedure's steps:
 - the comparison is shown to be non-vacuous:
   - after those writes, verification reports differences in `pages` and `route_changes`;
   - changing only an edition's work and a variant's canonical lexeme differs in exactly `edition_details` and `lexemes`;
-  - disabling the ledger's guard trigger, or granting a privilege, differs in exactly the schema;
+  - disabling the ledger's guard trigger, or granting a privilege, differs in exactly the schema, while revoking the grant again, which leaves an explicit default ACL, does not;
 - the source database was only read: its manifest is unchanged at the end.
 
 A second test covers the guards:
 
 - `dd.reset`, `dd.snapshot --restore`, `dd.rebuild` and `dd.routing.guard` refuse a database holding routing state without a covering snapshot, and accept a covering one;
-- the guard reads a `url:` configuration, and refuses one that names no database;
+- the guard reads a `url:` configuration, and refuses one that names no database. Under a `url:` configuration, verification still reads the database it is asked to;
 - rolling the routing migration back refuses, and the tables are still there;
 - the guard refuses:
   - a snapshot of another database with the same rows;
@@ -134,7 +139,7 @@ A second test covers the guards:
 
 - **Scale.** The manifest streams through a server-side cursor in constant memory. Its running time against the full corpus (about 3.7 million objects and 3.9 million assertion revisions) has not been measured. That is Stage 2's first gate.
 - **Bodies are compared by hash.** `text`, `json`, `jsonb` and `bytea` columns are compared by MD5, which catches accidents, not an adversary.
-- **Ownership is not compared,** because a restore makes the restoring role the owner. Privileges are compared, and are not restored.
+- **Ownership and privileges are compared, but not restored.** Step 3 says how to make them match.
 - **Schema definitions** are compared as Postgres deparses them. There is one exception: an `IN` list written `x = ANY ((ARRAY['a'::varchar, …])::text[])` is compared in the form a restored server re-parses it to (`ARRAY[('a'::varchar)::text, …]`), because it is the same condition. Nothing else is rewritten.
 - **The routing migration was amended in place** while its branch was unmerged. A database migrated at an earlier head of the branch has the same version number and different constraints. The schema section reports that. Such a database can hold no real routing state yet, because nothing writes it before Stage 2, so the fix is to roll back that one migration and migrate again. The rollback refuses if any routing row exists.
 - **The guards are conservative, not transactional.** Any routing change since the snapshot refuses, even one the operator would not care about. A write committed between the guard's check and the drop is still lost, which is why step 1 quiesces.

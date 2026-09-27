@@ -610,10 +610,20 @@ defmodule DevilsDictionary.Routing.Ledger do
 
   @doc "The ledger rows of one operation, in order."
   def operation(operation_id) do
+    case Ecto.UUID.cast(operation_id) do
+      {:ok, operation_id} -> operation_rows(operation_id)
+      :error -> []
+    end
+  end
+
+  defp operation_rows(operation_id) do
     Repo.all(from c in RouteChange, where: c.operation_id == ^operation_id, order_by: c.sequence)
   end
 
   @doc "The ledger rows that touched a path or page, oldest first."
+  def history(page_id: page_id) when not is_id(page_id), do: []
+  def history(path_id: path_id) when not is_id(path_id), do: []
+
   def history(page_id: page_id) do
     Repo.all(
       from c in RouteChange,

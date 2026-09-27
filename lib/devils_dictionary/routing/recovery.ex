@@ -76,7 +76,7 @@ defmodule DevilsDictionary.Routing.Recovery do
           sections = Map.put(sections, "schema", schema(opts))
 
           if mode == :exact,
-            do: Map.put(sections, "sequences", capture(sequence_sql(), opts)),
+            do: Map.put(sections, "sequences", capture(sequence_sql(), rows: true)),
             else: sections
         end,
         timeout: :infinity
@@ -142,15 +142,17 @@ defmodule DevilsDictionary.Routing.Recovery do
   end
 
   # The schema's definitions, so a copy migrated to a different version of an
-  # amended migration is a difference too.
-  defp schema(opts) do
+  # amended migration is a difference too. Its rows are always kept, as are
+  # the sequences': both are small, and an operator needs to see which
+  # definition differs.
+  defp schema(_opts) do
     %{rows: rows} = Repo.query!(schema_sql())
 
     rows
     |> Enum.map(fn [kind, name, definition] ->
       Jason.encode!([kind, name, canonical(definition)])
     end)
-    |> summarize(opts)
+    |> summarize(rows: true)
   end
 
   # pg_dump writes `x = ANY ((ARRAY['a'::character varying, …])::text[])` as it
@@ -183,23 +185,37 @@ defmodule DevilsDictionary.Routing.Recovery do
     }
   end
 
-  # Relations, columns (type, nullability, default), constraints, indexes,
-  # triggers with whether they fire, functions, sequence parameters, row
-  # security and its policies, access privileges, and extension versions.
-  # Ownership is not compared: a restore makes the restoring role the owner.
+  # Relations with their owner, row security and privileges; columns (type,
+  # collation, nullability, default, privileges); constraints and indexes
+  # with their validity; triggers with whether they fire; functions with
+  # their owner and privileges; sequence parameters; policies; extension
+  # versions.
+  #
+  # Privileges are compared as granted, not as stored: a NULL ACL and the
+  # explicit default it stands for are the same, and the owner appears as
+  # `owner` (it is compared once, by name), so a copy owned by the same role
+  # with the same grants matches.
   defp schema_sql do
     """
     SELECT kind, name, definition FROM (
       SELECT 'relation' AS kind, c.relname::text AS name,
-             concat_ws(' ', c.relkind::text, 'rls=' || c.relrowsecurity,
-                       'force=' || c.relforcerowsecurity, 'acl=' || c.relacl::text) AS definition
+             concat_ws(' ', c.relkind::text, 'owner=' || pg_get_userbyid(c.relowner),
+                       'rls=' || c.relrowsecurity, 'force=' || c.relforcerowsecurity,
+                       'acl=' || #{privileges("c.relacl", "CASE WHEN c.relkind = 'S' THEN 's' ELSE 'r' END", "c.relowner")},
+                       CASE WHEN c.relkind IN ('v', 'm') THEN md5(pg_get_viewdef(c.oid)) END) AS definition
         FROM pg_class c WHERE c.relnamespace = 'public'::regnamespace
          AND c.relkind IN ('r', 'p', 'S', 'v', 'm', 'f')
       UNION ALL
+      SELECT 'rule', ev_class::regclass::text || '.' || rulename, md5(pg_get_ruledef(r.oid))
+        FROM pg_rewrite r JOIN pg_class c ON c.oid = r.ev_class
+       WHERE c.relnamespace = 'public'::regnamespace AND r.rulename <> '_RETURN'
+      UNION ALL
       SELECT 'column', a.attrelid::regclass::text || '.' || a.attname,
              concat_ws(' ', format_type(a.atttypid, a.atttypmod),
+                       CASE WHEN a.attcollation <> 0 THEN 'COLLATE ' || a.attcollation::regcollation::text END,
                        CASE WHEN a.attnotnull THEN 'NOT NULL' END,
-                       'DEFAULT ' || pg_get_expr(d.adbin, d.adrelid), 'acl=' || a.attacl::text)
+                       'DEFAULT ' || pg_get_expr(d.adbin, d.adrelid),
+                       'acl=' || #{privileges("a.attacl", "'c'", "c.relowner")})
         FROM pg_attribute a
         JOIN pg_class c ON c.oid = a.attrelid
         LEFT JOIN pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
@@ -220,9 +236,10 @@ defmodule DevilsDictionary.Routing.Recovery do
         FROM pg_trigger WHERE NOT tgisinternal AND tgrelid IN (
           SELECT oid FROM pg_class WHERE relnamespace = 'public'::regnamespace)
       UNION ALL
-      SELECT 'function', oid::regprocedure::text,
-             concat_ws(' ', md5(pg_get_functiondef(oid)), 'acl=' || proacl::text)
-        FROM pg_proc WHERE pronamespace = 'public'::regnamespace AND prokind = 'f'
+      SELECT 'function', p.oid::regprocedure::text,
+             concat_ws(' ', md5(pg_get_functiondef(p.oid)), 'owner=' || pg_get_userbyid(p.proowner),
+                       'acl=' || #{privileges("p.proacl", "'f'", "p.proowner")})
+        FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace AND p.prokind = 'f'
       UNION ALL
       SELECT 'sequence', sequencename::text,
              concat_ws(' ', data_type, start_value, min_value, max_value, increment_by,
@@ -236,6 +253,21 @@ defmodule DevilsDictionary.Routing.Recovery do
       SELECT 'extension', extname::text, extversion FROM pg_extension
     ) AS definitions
     ORDER BY kind COLLATE "C", name COLLATE "C"
+    """
+  end
+
+  # An ACL as the privileges it grants, sorted: NULL means the object type's
+  # default for its owner, and the owner is written `owner`.
+  defp privileges(acl, type, owner) do
+    """
+    (SELECT coalesce(string_agg(g, ',' ORDER BY g COLLATE "C"), '')
+       FROM (SELECT concat_ws(':',
+                      CASE WHEN x.grantor = #{owner} THEN 'owner' ELSE pg_get_userbyid(x.grantor) END,
+                      CASE WHEN x.grantee = 0 THEN 'PUBLIC'
+                           WHEN x.grantee = #{owner} THEN 'owner'
+                           ELSE pg_get_userbyid(x.grantee) END,
+                      x.privilege_type, x.is_grantable) AS g
+               FROM aclexplode(coalesce(#{acl}, acldefault((#{type})::"char", #{owner}))) AS x) AS grants)
     """
   end
 
@@ -391,8 +423,14 @@ defmodule DevilsDictionary.Routing.Recovery do
   its own. The configured database, and any other process, is untouched.
   """
   def with_database(database, fun) do
+    # The URL expanded, then removed: Ecto lets a configured `url:` override a
+    # `database:` passed here, which would point the pool back at the
+    # configured database and compare a database with itself.
     config =
-      Keyword.merge(Repo.config(),
+      Repo.config()
+      |> Snapshot.resolve()
+      |> Keyword.merge(
+        url: nil,
         name: nil,
         database: database,
         pool: DBConnection.ConnectionPool,
@@ -480,10 +518,11 @@ defmodule DevilsDictionary.Routing.Recovery do
   end
 
   # Every routing row, whole, in id order: any committed routing change —
-  # a ledger write, a publication change, anything — changes it. Hashed as it
-  # streams through a cursor, so no table is ever one value (PostgreSQL caps
-  # a value at 1 GB). Must run inside a repeatable-read transaction so the six
-  # tables are read at once.
+  # a ledger write, a publication change, anything — changes it. Each row is
+  # hashed by the server and the hashes stream through a cursor, so neither a
+  # table nor a batch of long On bodies is ever one value in memory
+  # (PostgreSQL caps a value at 1 GB). Must run inside a repeatable-read
+  # transaction so the six tables are read at once.
   defp digest(conn) do
     %{rows: [[present?]]} =
       Postgrex.query!(conn, "SELECT to_regclass('public.route_changes') IS NOT NULL", [])
@@ -492,7 +531,7 @@ defmodule DevilsDictionary.Routing.Recovery do
       Map.new(@routing_tables, fn table ->
         Postgrex.query!(
           conn,
-          ~s|DECLARE routing_digest NO SCROLL CURSOR FOR SELECT to_jsonb(r)::text FROM "#{table}" AS r ORDER BY r.id|,
+          ~s|DECLARE routing_digest NO SCROLL CURSOR FOR SELECT md5(to_jsonb(r)::text) FROM "#{table}" AS r ORDER BY r.id|,
           []
         )
 

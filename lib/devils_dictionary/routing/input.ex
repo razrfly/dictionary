@@ -12,8 +12,8 @@ defmodule DevilsDictionary.Routing.Input do
     * `is_id/1` — a positive integer that fits `bigint`.
     * `text?/1` — nil, or valid UTF-8 without a NUL byte (`text` stores
       neither an invalid sequence nor NUL).
-    * `json?/1` — nil, or a map that encodes as JSON without a NUL escape
-      (`jsonb` refuses `\\u0000`).
+    * `json?/1` — nil, or a map that encodes as JSON with no NUL byte in any
+      key or string (`jsonb` refuses `\\u0000`).
   """
 
   @max 9_223_372_036_854_775_807
@@ -30,13 +30,18 @@ defmodule DevilsDictionary.Routing.Input do
   def json?(nil), do: true
 
   def json?(value) when is_map(value) do
-    case Jason.encode(value) do
-      {:ok, json} -> not String.contains?(json, "\\u0000")
-      {:error, _reason} -> false
-    end
+    match?({:ok, _json}, Jason.encode(value)) and not nul?(value)
   rescue
     _error -> false
   end
 
   def json?(_value), do: false
+
+  # The values themselves, not their encoding: the text `\\u0000` is six
+  # ordinary characters, which `jsonb` stores.
+  defp nul?(value) when is_binary(value), do: String.contains?(value, <<0>>)
+  defp nul?(value) when is_list(value), do: Enum.any?(value, &nul?/1)
+  defp nul?(value) when is_map(value), do: Enum.any?(value, fn {k, v} -> nul?(k) or nul?(v) end)
+  defp nul?(value) when is_atom(value), do: nul?(Atom.to_string(value))
+  defp nul?(_value), do: false
 end

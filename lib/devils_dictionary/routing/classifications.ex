@@ -26,7 +26,7 @@ defmodule DevilsDictionary.Routing.Classifications do
   """
 
   import Ecto.Query
-  import DevilsDictionary.Routing.Input, only: [is_id: 1, text?: 1]
+  import DevilsDictionary.Routing.Input, only: [is_id: 1, text?: 1, json?: 1]
 
   alias DevilsDictionary.Registry.Entity
   alias DevilsDictionary.Repo
@@ -98,6 +98,29 @@ defmodule DevilsDictionary.Routing.Classifications do
   def record(%{object_id: object_id} = result) when is_id(object_id) do
     attrs = evaluator_attrs(result)
 
+    with :ok <- storable(attrs), do: write(object_id, attrs)
+  end
+
+  def record(%{object_id: _object_id}), do: {:error, :invalid_object}
+
+  # The evaluator's text, checked like any other input: a NUL byte or an
+  # invalid sequence would be refused by PostgreSQL inside the caller's
+  # transaction.
+  defp storable(attrs) do
+    lists = [attrs.candidate_families, attrs.rule_ids, attrs.reasons, attrs.warnings]
+
+    valid? =
+      Enum.all?(lists, &strings?/1) and is_binary(attrs.policy_version) and
+        text?(attrs.policy_version) and is_list(attrs.source_pins) and
+        Enum.all?(attrs.source_pins, &(is_map(&1) and json?(&1)))
+
+    if valid?, do: :ok, else: {:error, :invalid_result}
+  end
+
+  defp strings?(list),
+    do: is_list(list) and Enum.all?(list, &(is_binary(&1) and text?(&1)))
+
+  defp write(object_id, attrs) do
     Repo.transaction(fn ->
       lock(object_id)
       current = current(object_id)
@@ -126,8 +149,6 @@ defmodule DevilsDictionary.Routing.Classifications do
       error -> error
     end
   end
-
-  def record(%{object_id: _object_id}), do: {:error, :invalid_object}
 
   defp entity?(object_id), do: Repo.exists?(from e in Entity, where: e.object_id == ^object_id)
 

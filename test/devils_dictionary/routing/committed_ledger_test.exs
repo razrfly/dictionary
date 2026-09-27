@@ -274,6 +274,18 @@ defmodule DevilsDictionary.Routing.CommittedLedgerTest do
                    author
                  ),
                  Classifications.override(entity.object_id, %{stale | reason: "a\0b"}, author),
+                 Classifications.record(%{evaluate(entity.object_id, "Q5") | reasons: ["a\0b"]}),
+                 Classifications.record(%{
+                   evaluate(entity.object_id, "Q5")
+                   | policy_version: <<0xFF>>
+                 }),
+                 # Readers answer "nothing" for what is not an id.
+                 Ledger.history(page_id: "x"),
+                 Ledger.history(path_id: nil),
+                 Ledger.operation("x"),
+                 Pages.revisions("x"),
+                 Pages.get("x"),
+                 Classifications.current("x"),
                  # The batch's one well-formed record, which must commit.
                  Ledger.allocate(page.id, "/people/candide", opts(ctx.importer))
                ]
@@ -317,6 +329,14 @@ defmodule DevilsDictionary.Routing.CommittedLedgerTest do
              {:error, :invalid_evidence},
              {:error, :invalid_membership},
              {:error, :invalid_reason},
+             {:error, :invalid_result},
+             {:error, :invalid_result},
+             [],
+             [],
+             [],
+             [],
+             nil,
+             nil,
              {:ok, %PublicPath{path: "/people/candide"}}
            ] = results
 
