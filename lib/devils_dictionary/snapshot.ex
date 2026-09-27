@@ -32,6 +32,20 @@ defmodule DevilsDictionary.Snapshot do
 
   A restore to another server, or to another database on the same server, is
   what recovery is for, and is allowed.
+
+  One exception: a dump whose sidecar is missing or predates identities may
+  still be restored into a database that does not exist yet, because nothing
+  is dropped. That keeps an older snapshot usable as a rollback point after
+  its source has changed. A malformed sidecar, or one that does not describe
+  its dump, is refused everywhere.
+
+  ## One endpoint
+
+  The identity probe, Ecto's drop and create, and the `pg_*` tools must reach
+  the same server. `resolve/1` settles the endpoint once, as Postgrex would:
+  a `socket_dir`, or else `hostname` (default `PGHOST`, then `localhost`) and
+  `port` (default `PGPORT`, then 5432). A `socket:` or `endpoints:` config,
+  which the `pg_*` tools cannot follow, is refused.
   """
 
   @doc """
@@ -40,9 +54,60 @@ defmodule DevilsDictionary.Snapshot do
   would connect to. A production config names its database only in the URL.
   """
   def resolve(config) do
-    case config[:url] do
-      nil -> config
-      url -> Keyword.merge(config, Ecto.Repo.Supervisor.parse_url(url))
+    config =
+      case config[:url] do
+        nil -> config
+        url -> Keyword.merge(config, Ecto.Repo.Supervisor.parse_url(url))
+      end
+
+    endpoint(config)
+  end
+
+  # The server Postgrex would reach, written into the config so that every
+  # caller reaches it too. A socket directory takes precedence over a host.
+  defp endpoint(config) do
+    pghost = System.get_env("PGHOST")
+
+    cond do
+      unfollowable(config) != [] ->
+        config
+
+      config[:socket_dir] ->
+        Keyword.delete(config, :hostname)
+
+      is_nil(config[:hostname]) and is_binary(pghost) and String.starts_with?(pghost, "/") ->
+        config |> Keyword.put(:socket_dir, pghost) |> Keyword.put_new(:port, pgport())
+
+      true ->
+        config
+        |> Keyword.put_new_lazy(:hostname, fn -> pghost || "localhost" end)
+        |> Keyword.put_new_lazy(:port, &pgport/0)
+    end
+  end
+
+  defp pgport do
+    case Integer.parse(System.get_env("PGPORT") || "") do
+      {port, ""} -> port
+      _ -> 5432
+    end
+  end
+
+  defp unfollowable(config), do: Enum.filter([:socket, :endpoints], &config[&1])
+
+  @doc """
+  `:ok`, or `{:error, message}` for a config whose endpoint the `pg_*` tools
+  cannot follow (`socket:` or `endpoints:`).
+  """
+  def followable(config) do
+    case unfollowable(config) do
+      [] ->
+        :ok
+
+      keys ->
+        {:error,
+         "refusing: pg_dump and pg_restore cannot follow a #{Enum.map_join(keys, " or ", &"`#{&1}:`")} " <>
+           "config, so they could reach another server than the one checked. Configure " <>
+           "`hostname:`/`port:` or `socket_dir:`."}
     end
   end
 
@@ -159,34 +224,46 @@ defmodule DevilsDictionary.Snapshot do
   def check_restore(config, path) do
     config = resolve(config)
 
-    with :ok <- exists(path),
-         {:ok, source} <- trusted_source(path),
-         :ok <- bound(path, source),
+    with :ok <- followable(config),
+         :ok <- exists(path),
          {:ok, target} <- target_identity(config) do
-      if same_database?(source, target),
-        do:
-          {:error,
-           "refusing to restore #{path} over #{target.database}: it is the database this snapshot " <>
-             "was taken from (cluster #{target.system_identifier}). Restore into a separate database " <>
-             "(docs/routing/recovery.md), verify it, and switch over deliberately."},
-        else: :ok
+      case source(path) do
+        {:ok, source} ->
+          with :ok <- bound(path, source), do: not_the_source(path, source, target)
+
+        # Nothing to drop, so nothing a wrong guess could destroy.
+        {:error, reason} when reason in [:missing, :legacy] and is_nil(target.database_oid) ->
+          :ok
+
+        {:error, reason} ->
+          {:error, untrusted(path, reason, target)}
+      end
     end
   end
+
+  defp not_the_source(path, source, target) do
+    if same_database?(source, target),
+      do:
+        {:error,
+         "refusing to restore #{path} over #{target.database}: it is the database this snapshot " <>
+           "was taken from (cluster #{target.system_identifier}). Restore into a separate database " <>
+           "(docs/routing/recovery.md), verify it, and switch over deliberately."},
+      else: :ok
+  end
+
+  defp untrusted(path, :malformed, _target),
+    do:
+      "refusing to restore #{path}: its sidecar is malformed, so where it was taken from " <>
+        "cannot be established. Take the snapshot again with `mix dd.snapshot`."
+
+  defp untrusted(path, reason, target),
+    do:
+      "refusing to restore #{path} over #{target.database}: its sidecar is #{reason}, so where " <>
+        "it was taken from cannot be established. Take the snapshot again with `mix dd.snapshot`, " <>
+        "or restore it into a database that does not exist yet."
 
   defp exists(path) do
     if File.regular?(path), do: :ok, else: {:error, "no such snapshot: #{path}"}
-  end
-
-  defp trusted_source(path) do
-    case source(path) do
-      {:ok, source} ->
-        {:ok, source}
-
-      {:error, reason} ->
-        {:error,
-         "refusing to restore #{path}: its sidecar is #{reason}, so where it was taken from " <>
-           "cannot be established. Take the snapshot again with `mix dd.snapshot`."}
-    end
   end
 
   defp bound(path, source) do
@@ -223,7 +300,17 @@ defmodule DevilsDictionary.Snapshot do
   # the maintenance database.
   defp maintenance(config) do
     config
-    |> Keyword.take([:hostname, :port, :username, :password, :socket_dir])
+    |> Keyword.take([
+      :hostname,
+      :port,
+      :username,
+      :password,
+      :socket_dir,
+      :ssl,
+      :ssl_opts,
+      :parameters,
+      :connect_timeout
+    ])
     |> Keyword.put(:database, config[:maintenance_database] || "postgres")
   end
 
@@ -279,6 +366,9 @@ defmodule DevilsDictionary.Snapshot do
   """
   def dump!(config, path, opts \\ []) do
     config = resolve(config)
+
+    with {:error, message} <- followable(config), do: raise(ArgumentError, message)
+
     File.mkdir_p!(Path.dirname(path))
     snapshot = if opts[:snapshot], do: ["--snapshot=#{opts[:snapshot]}"], else: []
 
@@ -356,8 +446,8 @@ defmodule DevilsDictionary.Snapshot do
   # the server over exactly this endpoint before a restore.
   defp connection_args(config) do
     [
-      "--host=#{config[:socket_dir] || config[:hostname] || "localhost"}",
-      "--port=#{config[:port] || 5432}",
+      "--host=#{config[:socket_dir] || config[:hostname]}",
+      "--port=#{config[:port]}",
       "--username=#{config[:username] || "postgres"}"
     ]
   end

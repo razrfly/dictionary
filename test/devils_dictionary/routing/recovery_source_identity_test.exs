@@ -11,7 +11,11 @@ defmodule DevilsDictionary.Routing.RecoverySourceIdentityTest do
       on a genuinely different cluster, is allowed;
     * a missing, malformed or legacy sidecar, a dump that is not the one its
       sidecar describes, and a target whose server cannot be read are all
-      refused;
+      refused — except that a missing or legacy sidecar may restore into a
+      database that does not exist yet, where nothing is dropped;
+    * a config whose endpoint the `pg_*` tools cannot follow is refused, and
+      the probe, the drop and `pg_restore` resolve one endpoint;
+    * a snapshot that fails leaves the previous one restorable;
     * every refusal comes before anything is dropped.
 
   Every database, and the second cluster, is created and removed here.
@@ -217,6 +221,94 @@ defmodule DevilsDictionary.Routing.RecoverySourceIdentityTest do
     )
 
     refused(target, dump, "its header names")
+  end
+
+  test "a dump whose source is unknown may restore only where nothing would be dropped",
+       %{db: db, dump: dump} do
+    sidecar = dump <> ".routing.json"
+    {:ok, recorded} = Snapshot.sidecar(dump)
+    fresh = config(db["source"] <> "_fresh")
+
+    on_exit(fn -> Ecto.Adapters.Postgres.storage_down(fresh) end)
+
+    for {state, write} <- [
+          missing: fn -> File.rm!(sidecar) end,
+          legacy: fn ->
+            File.write!(sidecar, Jason.encode!(Map.drop(recorded, ["source", "format"])))
+          end
+        ] do
+      write.()
+      assert Snapshot.source(dump) == {:error, state}
+
+      # Over any database that exists, the source is unknown: refused.
+      refused(config(db["target"]), dump, "sidecar is #{state}")
+
+      # Into one that does not, there is nothing to drop.
+      assert Snapshot.check_restore(fresh, dump) == :ok
+      Snapshot.restore!(fresh, dump)
+      assert marks(fresh) == [["source"]]
+
+      # And once it exists, the same dump is refused over it.
+      refused(fresh, dump, "sidecar is #{state}")
+      Ecto.Adapters.Postgres.storage_down(fresh)
+    end
+
+    # A sidecar that contradicts itself or its dump is refused everywhere.
+    File.write!(sidecar, "not json")
+    assert {:error, message} = Snapshot.check_restore(fresh, dump)
+    assert message =~ "sidecar is malformed"
+
+    File.write!(
+      sidecar,
+      Jason.encode!(put_in(recorded, ["dump", "sha256"], String.duplicate("0", 64)))
+    )
+
+    assert {:error, message} = Snapshot.check_restore(fresh, dump)
+    assert message =~ "not the dump its sidecar describes"
+  end
+
+  test "a snapshot that fails leaves the previous one restorable", %{db: db, dump: dump} do
+    {:ok, before} = Snapshot.sidecar(dump)
+    bytes = File.read!(dump)
+
+    assert_raise RuntimeError, ~r/does not exist/, fn ->
+      Recovery.snapshot!(config(db["source"] <> "_absent"), dump)
+    end
+
+    assert Snapshot.sidecar(dump) == {:ok, before}
+    assert File.read!(dump) == bytes
+    refute File.exists?(dump <> ".partial")
+    assert Snapshot.check_restore(config(db["target"]), dump) == :ok
+  end
+
+  test "an endpoint the pg tools cannot follow is refused before anything is dropped",
+       %{db: db, dump: dump} do
+    target = config(db["target"])
+    port = target[:port] || 5432
+
+    for extra <- [
+          socket: "/tmp/.s.PGSQL.#{port}",
+          endpoints: [{"localhost", port}]
+        ] do
+      odd = Keyword.merge(target, [extra])
+      assert {:error, message} = Snapshot.check_restore(odd, dump)
+      assert message =~ "cannot follow"
+      assert_raise ArgumentError, ~r/cannot follow/, fn -> Snapshot.restore!(odd, dump) end
+    end
+
+    assert marks(target) == [["keep me"]]
+  end
+
+  test "the probe, the drop and pg_restore resolve one endpoint, as Postgrex would" do
+    base = Keyword.drop(Repo.config(), [:hostname, :port, :socket_dir, :url])
+    resolved = Snapshot.resolve(base)
+
+    assert resolved[:hostname] == (System.get_env("PGHOST") || "localhost")
+    assert resolved[:port] == String.to_integer(System.get_env("PGPORT") || "5432")
+
+    socket = Snapshot.resolve(Keyword.put(base, :socket_dir, "/tmp"))
+    assert socket[:socket_dir] == "/tmp"
+    refute Keyword.has_key?(socket, :hostname)
   end
 
   test "a target whose server cannot be read is refused, and nothing crashes",

@@ -737,16 +737,21 @@ defmodule DevilsDictionary.Routing.Recovery do
 
   Exact because both come from one database snapshot: a repeatable-read
   transaction exports its snapshot, reads the digest, and `pg_dump` dumps
-  under the same snapshot while the transaction stays open. The dump is
-  written to a partial file and renamed only when complete, and any older
-  sidecar is removed first, so a failed dump never leaves a sidecar beside it.
+  under the same snapshot while the transaction stays open.
+
+  The dump and its sidecar are each written to a partial file and renamed
+  into place only when complete, the dump first. A snapshot that fails leaves
+  an earlier one at `path` exactly as it was, still restorable. At no moment
+  does a sidecar vouch for bytes it does not describe: between the two
+  renames, the old sidecar's recorded SHA-256 no longer matches, and a
+  restore refuses.
   """
   def snapshot!(config, path) do
     config = Snapshot.resolve(config)
     {:ok, _apps} = Application.ensure_all_started(:postgrex)
     partial = path <> ".partial"
-    File.rm(digest_path(path))
     File.rm(partial)
+    File.rm(digest_path(path) <> ".partial")
 
     # The source as its server reports it; a snapshot whose source cannot be
     # established would be one no restore can trust.
@@ -780,12 +785,11 @@ defmodule DevilsDictionary.Routing.Recovery do
         digest
       end)
 
-    File.rename!(partial, path)
-
     {host, port, database} = identity(config)
+    sidecar = digest_path(path) <> ".partial"
 
     File.write!(
-      digest_path(path),
+      sidecar,
       Jason.encode!(%{
         "format" => 2,
         "source" => %{
@@ -798,10 +802,12 @@ defmodule DevilsDictionary.Routing.Recovery do
         "host" => host,
         "port" => port,
         "digest" => digest,
-        "dump" => Snapshot.fingerprint(path)
+        "dump" => Snapshot.fingerprint(partial)
       })
     )
 
+    File.rename!(partial, path)
+    File.rename!(sidecar, digest_path(path))
     path
   end
 
