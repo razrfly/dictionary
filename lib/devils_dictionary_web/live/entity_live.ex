@@ -302,18 +302,18 @@ defmodule DevilsDictionaryWeb.EntityLive do
                       </.a>
                     </p>
                     <%!-- The reverse of selection (#212 decision 3): each
-                         published opening that shows this claim now, from
-                         the same provenance the word page's card reads. --%>
+                         published composition of the global default that
+                         selects this claim now, from the same provenance the
+                         word page's card reads. No page shows an opening
+                         yet, and the line says so. --%>
                     <p
                       :for={featured <- featured_in(item)}
                       id={"cited-as-featured-#{item.claim.assertion_id}-#{featured.composition_id}"}
                       class="text-mist-500"
                     >
-                      featured in the opening of
-                      <.a navigate={~p"/define/#{featured.page.slug}"}>
-                        /define/{featured.page.slug}
-                      </.a>
-                      since {ExampleProvenance.date(featured.published_at)}
+                      selected for the opening of {Enum.map_join(featured.scope, ", ", & &1.lemma)} since {ExampleProvenance.date(
+                        featured.published_at
+                      )}<span :if={not featured.shown_on_page}> · not yet shown on its page</span>
                     </p>
                   </li>
                 </ul>
@@ -914,7 +914,7 @@ defmodule DevilsDictionaryWeb.EntityLive do
   defp cited_by(%{label: label}), do: "nominated by #{label}"
 
   defp featured_in(%{provenance: %{featured: featured}}),
-    do: Enum.filter(featured, & &1.page)
+    do: Enum.filter(featured, &(&1.scope != []))
 
   defp featured_in(_item), do: []
 

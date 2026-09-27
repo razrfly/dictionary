@@ -112,6 +112,20 @@ defmodule DevilsDictionary.Artworks do
   end
 
   @doc """
+  The slug of the catalog source a work is shown under on the Artworks shelf
+  (the shelf item's `source_slug`), read from the registry, or `nil` when the
+  object is not a catalog artwork. The connect form checks a prefilled
+  `provider` against it (#212), so a shelf is named only for a work that was
+  on it.
+  """
+  def catalog_source_slug(object_id) when is_integer(object_id) do
+    case get(object_id) do
+      nil -> nil
+      artwork -> catalog_slug(artwork)
+    end
+  end
+
+  @doc """
   Local, exact suggestions for a page's lexemes, from the whole catalog.
 
   Two independent kinds of evidence, one section. The Artsy pilot's evidence is a

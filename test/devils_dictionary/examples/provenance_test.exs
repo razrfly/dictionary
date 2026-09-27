@@ -22,9 +22,11 @@ defmodule DevilsDictionary.Examples.ProvenanceTest do
   # the stub below names whoever is asked "Pat Fixture".
   @subject "Q999999912"
 
+  # Compositions are made under the enabled global default, the only
+  # configuration whose selections are ever listed (`featured`).
   setup do
     world = world!()
-    {config, _version} = enabled_test_configuration!(world.reviewer, "provenance")
+    {config, _version} = enabled_default!(world.reviewer)
 
     {:ok, composition} =
       Compositions.provision(world.contributor, config.id, %{
@@ -52,9 +54,11 @@ defmodule DevilsDictionary.Examples.ProvenanceTest do
     |> Enum.find(&(&1.claim.revision_id == revision.id))
   end
 
-  defp publish!(ctx, revision) do
+  # The reviewer authors the composition, so its selection's actor is not the
+  # nomination's (C5).
+  defp publish!(ctx, revision, composition \\ nil) do
     {:ok, version} =
-      Compositions.create_version(ctx.contributor, ctx.composition.id, %{
+      Compositions.create_version(ctx.reviewer, (composition || ctx.composition).id, %{
         lead: content_spec(ctx.bierce, ctx.love),
         highlights: [
           %{
@@ -183,12 +187,15 @@ defmodule DevilsDictionary.Examples.ProvenanceTest do
              }
     end
 
-    test "an unknown claimant is named as the record names it", ctx do
+    test "a cited claimant is named apart; the nominator is the account", ctx do
       revision = nominate!(ctx, ctx.person, nil, %{claimant: :unknown})
       provenance = Provenance.of(item(ctx, revision), :internal)
+      label = actor!(ctx.contributor).label
 
-      assert %{kind: :unknown, label: "Unknown claimant"} = provenance.nomination.by
+      assert %{kind: :user, label: ^label} = provenance.nomination.by
+      assert provenance.nomination.claimant == %{kind: :unknown, label: "Unknown claimant"}
       assert provenance.nomination.origin == :form
+      assert item(ctx, revision).claim.nominated_by.label == label
     end
 
     test "a claim the record is silent about is unknown, never 'a contributor'", ctx do
@@ -258,7 +265,8 @@ defmodule DevilsDictionary.Examples.ProvenanceTest do
       decide!(ctx, revision)
       {version, receipt} = publish!(ctx, revision)
       [composed] = version.id |> Compositions.items() |> Enum.filter(&(&1.role == :highlight))
-      author = actor!(ctx.contributor).label
+      nominator = actor!(ctx.contributor).label
+      author = actor!(ctx.reviewer).label
       publisher = actor!(ctx.reviewer).label
 
       provenance = Provenance.of(composed, :public)
@@ -279,11 +287,15 @@ defmodule DevilsDictionary.Examples.ProvenanceTest do
 
       # Both histories stay apart (C5): the nomination keeps its own actor
       # and time; the selection and the publication have theirs.
+      assert provenance.nomination.by.label == nominator
+      refute nominator == author
       assert provenance.nomination.at == Repo.get!(Assertion, revision.assertion_id).inserted_at
 
-      # The card's provenance lists the opening that shows the claim now.
+      # The card's provenance lists the published selection, with its
+      # scope's words, and says no page shows it yet.
       assert [featured] = Provenance.of(item(ctx, revision), :public).featured
-      assert featured.page == %{lemma: "love", slug: "love"}
+      assert featured.scope == [%{lemma: "love", slug: "love"}]
+      assert featured.shown_on_page == false
       assert featured.version == 1
       assert featured.published_at == receipt.committed_at
       assert featured.selected_by.label == author
@@ -298,6 +310,25 @@ defmodule DevilsDictionary.Examples.ProvenanceTest do
 
       assert Provenance.of(composed, :public).publication.withdrawn_at == withdrawal.committed_at
       assert Provenance.of(item(ctx, revision), :public).featured == []
+    end
+
+    test "an internal test configuration's composition is never listed", ctx do
+      revision = nominate!(ctx, ctx.person)
+      decide!(ctx, revision)
+      {config, _version} = enabled_test_configuration!(ctx.reviewer, "provenance-test-config")
+
+      {:ok, test_composition} =
+        Compositions.provision(ctx.contributor, config.id, %{
+          scope_kind: :lexeme,
+          lexeme_ids: [ctx.love.object_id],
+          language_tag: "en",
+          reason: "an internal trial"
+        })
+
+      publish!(ctx, revision, test_composition)
+      assert {:ok, _} = DevilsDictionary.Curation.Published.current(test_composition.id)
+      assert Provenance.of(item(ctx, revision), :public).featured == []
+      assert Provenance.of(item(ctx, revision), :internal).featured == []
     end
 
     test "an item withheld at read is not featured", ctx do
@@ -315,6 +346,25 @@ defmodule DevilsDictionary.Examples.ProvenanceTest do
   end
 
   describe "who may see it" do
+    test "the public sees no provenance for a nomination nobody has accepted, of any subject",
+         ctx do
+      {:ok, work} = Registry.create_work(%{preferred_label: "Fixture Work", work_kind: "artwork"})
+      pending = nominate!(ctx, work, [])
+
+      # The public gate is person-only (#190), so the card is public...
+      assert %{} = public = item(ctx, pending, :public)
+      # ...but no new surface carries a nomination nobody has accepted.
+      assert Provenance.of(public, :public) == nil
+      assert %Provenance{review: :none} = Provenance.of(public, :internal)
+
+      decide!(ctx, pending, "disputed")
+      assert Provenance.of(item(ctx, pending, :public), :public) == nil
+      assert %Provenance{review: %{state: :disputed}} = Provenance.of(public, :internal)
+
+      decide!(ctx, pending)
+      assert %Provenance{review: %{state: :accepted}} = Provenance.of(public, :public)
+    end
+
     test "a claim the viewer may not see has no provenance at all", ctx do
       pending = nominate!(ctx, ctx.person)
       internal = item(ctx, pending, :internal)
@@ -365,7 +415,7 @@ defmodule DevilsDictionary.Examples.ProvenanceTest do
     provenance = Provenance.of(item(ctx, revision), :public)
     assert provenance.nomination.shelf.provider == "wikiquote"
     assert provenance.nomination.shelf.name == shelf.source.name
-    assert [%{page: %{slug: "love"}}] = provenance.featured
+    assert [%{scope: [%{slug: "love"}], shown_on_page: false}] = provenance.featured
     refute Repo.get(DevilsDictionary.Discovery.Result, shelf.result.id)
   end
 end

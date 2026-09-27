@@ -23,10 +23,11 @@ defmodule DevilsDictionaryWeb.ExemplarProvenanceLiveTest do
   alias DevilsDictionaryWeb.ExampleProvenance
 
   # The pages are drawn for *coward*, a WordNet word with one sense and no
-  # Bierce entry, so its compositions have no lead.
+  # Bierce entry, so its compositions have no lead. They are made under the
+  # enabled global default, the only configuration ever listed.
   setup do
     world = world!()
-    {config, _version} = enabled_test_configuration!(world.reviewer, "provenance-live")
+    {config, _version} = enabled_default!(world.reviewer)
     coward = WordFixtures.word!(world, "coward", ["wordnet"], scope: nil)
 
     sense =
@@ -51,9 +52,11 @@ defmodule DevilsDictionaryWeb.ExemplarProvenanceLiveTest do
   defp decide!(ctx, revision, decision \\ "accepted"),
     do: ExemplarFixtures.decide!(ctx.reviewer, revision, decision)
 
+  # The reviewer authors the composition, so its selection's actor is not
+  # the nomination's (C5).
   defp publish!(ctx, revision) do
     {:ok, version} =
-      Compositions.create_version(ctx.contributor, ctx.composition.id, %{
+      Compositions.create_version(ctx.reviewer, ctx.composition.id, %{
         lead: nil,
         highlights: [
           %{
@@ -87,7 +90,8 @@ defmodule DevilsDictionaryWeb.ExemplarProvenanceLiveTest do
     do: ~p"/entities/#{person.object_id}/#{Connection.slugify(person.preferred_label)}"
 
   describe "Why this example is here" do
-    test "six rows from the records, and the opening that shows it", ctx do
+    test "six rows from the records, and the published selection, which no page shows yet",
+         ctx do
       claim = ExemplarFixtures.nominate!(ctx.contributor, ctx.person, ctx.sense)
       review = decide!(ctx, claim)
       nominator = actor!(ctx.contributor).label
@@ -115,7 +119,7 @@ defmodule DevilsDictionaryWeb.ExemplarProvenanceLiveTest do
              )
 
       assert has_element?(live, "#{why(id)}-shown", "and 1 supporting citation.")
-      assert has_element?(live, "#{why(id)}-opening", "Not in a published opening.")
+      assert has_element?(live, "#{why(id)}-opening", "Not selected for a published opening.")
 
       # The card's own line names the nominator the disclosure does.
       assert has_element?(live, card(id), "nominated by #{nominator}")
@@ -123,12 +127,17 @@ defmodule DevilsDictionaryWeb.ExemplarProvenanceLiveTest do
       receipt = publish!(ctx, claim)
       {:ok, live, _html} = live(build_conn(), ~p"/define/coward")
 
+      # Two histories, two actors (C5): nominated by the contributor, selected
+      # by the reviewer. And no claim that a page shows it.
       assert has_element?(
                live,
                "#{why(id)}-opening",
-               "In the opening of /define/coward since " <>
-                 "#{ExampleProvenance.date(receipt.committed_at)}, selected by #{nominator} (version 1)."
+               "Selected for the opening of coward by #{reviewer} (version 1), published on " <>
+                 "#{ExampleProvenance.date(receipt.committed_at)}. The page does not show openings yet."
              )
+
+      assert has_element?(live, "#{why(id)}-nominated", "By #{nominator},")
+      refute has_element?(live, "#{why(id)}-opening", "/define/")
     end
 
     test "a claim the record is silent about says unknown, and invents no nominator", ctx do
@@ -156,7 +165,7 @@ defmodule DevilsDictionaryWeb.ExemplarProvenanceLiveTest do
   end
 
   describe "the person page" do
-    test "gains one line per published opening that shows the claim", ctx do
+    test "gains one line per published selection, and says no page shows it yet", ctx do
       claim = ExemplarFixtures.nominate!(ctx.contributor, ctx.person, ctx.sense)
       decide!(ctx, claim)
       {:ok, live, _html} = live(build_conn(), person_path(ctx.person))
@@ -172,11 +181,12 @@ defmodule DevilsDictionaryWeb.ExemplarProvenanceLiveTest do
       assert has_element?(
                live,
                line,
-               "featured in the opening of /define/coward since " <>
+               "selected for the opening of coward since " <>
                  ExampleProvenance.date(receipt.committed_at)
              )
 
-      assert has_element?(live, "#{line} a[href='/define/coward']")
+      assert has_element?(live, line, "not yet shown on its page")
+      refute has_element?(live, "#{line} a")
 
       # Withdrawn, and the line is gone: only a publication that stands counts.
       {:ok, _} =
@@ -230,6 +240,50 @@ defmodule DevilsDictionaryWeb.ExemplarProvenanceLiveTest do
     end
   end
 
+  describe "a nomination of a work nobody has accepted" do
+    setup ctx do
+      {:ok, work} =
+        Registry.create_work(%{preferred_label: "Fixture Pending Work", work_kind: "artwork"})
+
+      Map.put(ctx, :claim, ExemplarFixtures.nominate!(ctx.contributor, work, ctx.sense, []))
+    end
+
+    # The card and the count stay as the person-only gate leaves them (#190
+    # owns that); the new surfaces carry nothing until a reviewer accepts.
+    test "pending or disputed: its card stays public, with no disclosure; a contributor sees it",
+         ctx do
+      id = ctx.claim.assertion_id
+
+      for decision <- [nil, "disputed"] do
+        if decision, do: decide!(ctx, ctx.claim, decision)
+        {:ok, live, _html} = live(build_conn(), ~p"/define/coward")
+        assert has_element?(live, card(id))
+        refute has_element?(live, why(id))
+
+        conn = log_in_user(build_conn(), ctx.contributor.user)
+        {:ok, live, _html} = live(conn, ~p"/define/coward")
+        expected = if decision, do: "Disputed", else: "Not yet reviewed."
+        assert has_element?(live, "#{why(id)}-reviewed", expected)
+      end
+    end
+
+    test "rejected or withdrawn: no card, no count and no disclosure, for anyone", ctx do
+      id = ctx.claim.assertion_id
+      decide!(ctx, ctx.claim, "rejected")
+
+      for conn <- [build_conn(), log_in_user(build_conn(), ctx.contributor.user)] do
+        {:ok, live, html} = live(conn, ~p"/define/coward")
+        refute has_element?(live, card(id))
+        refute has_element?(live, why(id))
+        refute html =~ "Fixture Pending Work"
+      end
+
+      {:ok, _} = Claims.review(ctx.claim.id, :withdrawn, %{reason: "withdrawn"})
+      {:ok, _live, html} = live(build_conn(), ~p"/define/coward")
+      refute html =~ "Fixture Pending Work"
+    end
+  end
+
   describe "the connect form" do
     setup ctx do
       shelf = ExemplarFixtures.shelved_quotation!(ctx, ctx.coward, "fixture passage words")
@@ -268,8 +322,22 @@ defmodule DevilsDictionaryWeb.ExemplarProvenanceLiveTest do
              }
     end
 
-    test "records a catalog shelf's provider, which must be a known source", ctx do
-      assert propose_from(ctx, %{provider: "artsy"}).metadata == %{"provider" => "artsy"}
+    test "records a catalog shelf's provider only for that catalog's own work", ctx do
+      {:ok, work} =
+        Registry.create_work(%{
+          preferred_label: "Fixture Catalog Work",
+          work_kind: "artwork",
+          metadata: %{"catalog_source" => "met"}
+        })
+
+      ctx = %{ctx | shelf: %{ctx.shelf | quotation: work}}
+      revision = propose_from(ctx, %{provider: "met"})
+      assert revision.metadata == %{"provider" => "met"}
+
+      # A malformed result id is a bad request, not a catalog link: nothing is
+      # recorded, even beside the work's own catalog.
+      {:ok, _} = Claims.withdraw(revision.assertion_id)
+      assert propose_from(ctx, %{from_result: "abc", provider: "met"}).metadata == %{}
     end
 
     test "records nothing once the contributor proposes another subject than the shelf's", ctx do
@@ -299,16 +367,35 @@ defmodule DevilsDictionaryWeb.ExemplarProvenanceLiveTest do
       assert revision.metadata == %{}
     end
 
-    test "records nothing for an unknown provider, or a result about something else", ctx do
-      {:ok, _} = Claims.withdraw(propose_from(ctx, %{provider: "no-such-shelf"}).assertion_id)
+    test "records nothing a URL asserts that the registry does not", ctx do
+      # A known source that is not this subject's catalog, an unknown one, a
+      # malformed or out-of-range result id, and a result about something
+      # else: each proposal is saved, and none says where it was found.
       other = ExemplarFixtures.shelved_quotation!(ctx, ctx.coward, "other fixture words")
-      revision = propose_from(ctx, %{from_result: other.result.id})
 
-      assert revision.metadata == %{}
+      for params <- [
+            %{provider: "artsy"},
+            %{provider: "no-such-shelf"},
+            %{from_result: "not-a-number", provider: "wikiquote"},
+            %{from_result: "99999999999999999999"},
+            %{from_result: other.result.id}
+          ] do
+        revision = propose_from(ctx, params)
+
+        assert revision.metadata == %{},
+               "#{inspect(params)} recorded #{inspect(revision.metadata)}"
+
+        {:ok, _} = Claims.withdraw(revision.assertion_id)
+      end
     end
   end
 
-  test "the named discovery path, read back after retention with every provider off (C7)", ctx do
+  # Part of the named discovery path: the quote card has no connect link on
+  # `main` and the form prefills no provider evidence, so this starts at the
+  # form with the shelf's parameters (#212 comment, item 3; deferred to the
+  # linked follow-up).
+  test "a shelf-prefilled nomination, read back after retention with every provider off (C7)",
+       ctx do
     shelf = ExemplarFixtures.shelved_quotation!(ctx, ctx.coward, "fixture passage words")
     conn = log_in_user(build_conn(), ctx.contributor.user)
 
@@ -344,10 +431,14 @@ defmodule DevilsDictionaryWeb.ExemplarProvenanceLiveTest do
     assert has_element?(
              live,
              "#{why(assertion_id)}-nominated",
-             "from the #{shelf.source.name} shelf"
+             "prefilled from a #{shelf.source.name} result on the page"
            )
 
-    assert has_element?(live, "#{why(assertion_id)}-opening", "In the opening of /define/coward")
+    assert has_element?(
+             live,
+             "#{why(assertion_id)}-opening",
+             "Selected for the opening of coward"
+           )
 
     # One quotation, one claim about it, no evidence copied from the result.
     assert Repo.aggregate(

@@ -76,6 +76,7 @@ defmodule DevilsDictionaryWeb.ExampleProvenance do
   defp nomination(n) do
     [
       "By #{n.by.label || "someone the record does not name"}",
+      claimant(n.claimant),
       origin(n),
       n.at && "on #{date(n.at)}",
       meaning(n.meaning)
@@ -89,10 +90,21 @@ defmodule DevilsDictionaryWeb.ExampleProvenance do
     do: "from manifest #{slug} row #{row}"
 
   defp origin(%{origin: :manifest, manifest: %{slug: slug}}), do: "from manifest #{slug}"
-  defp origin(%{origin: :form, shelf: %{name: name}}), do: "from the #{name} shelf"
+
+  defp origin(%{origin: :form, shelf: %{name: name, result_id: id}}) when not is_nil(id),
+    do: "through the connect form, prefilled from a #{name} result on the page"
+
+  defp origin(%{origin: :form, shelf: %{name: name}}),
+    do: "through the connect form, prefilled from #{name}'s catalog on the page"
+
   defp origin(%{origin: :form}), do: "through the connect form"
   defp origin(%{origin: :agent}), do: "by an agent"
   defp origin(_nomination), do: nil
+
+  # The claim's own claimant, when it cites someone other than its nominator.
+  defp claimant(%{kind: :unknown}), do: "citing an unknown claimant"
+  defp claimant(%{label: label}) when is_binary(label), do: "citing #{label}"
+  defp claimant(_claimant), do: nil
 
   defp meaning(%{gloss: gloss, lemma: lemma}) when is_binary(gloss) and is_binary(lemma),
     do: "under “#{gloss}” (#{lemma})"
@@ -140,16 +152,21 @@ defmodule DevilsDictionaryWeb.ExampleProvenance do
     "Published on #{date(at)}.#{state}"
   end
 
-  defp opening(%Provenance{featured: []}), do: "Not in a published opening."
+  defp opening(%Provenance{featured: []}), do: "Not selected for a published opening."
 
+  # Selected and published, but no page shows a composition yet (#194's
+  # binding, #156's reader): the row says so rather than place it on a page.
   defp opening(%Provenance{featured: featured}) do
     Enum.map_join(featured, " ", fn f ->
-      page = if f.page, do: " of /define/#{f.page.slug}", else: ""
-
-      "In the opening#{page} since #{date(f.published_at)}, selected by " <>
-        "#{f.selected_by.label || "an unnamed author"} (version #{f.version})."
+      "Selected for the opening of #{words(f.scope)} by " <>
+        "#{f.selected_by.label || "an unnamed author"} (version #{f.version}), " <>
+        "published on #{date(f.published_at)}." <>
+        if(f.shown_on_page, do: "", else: " The page does not show openings yet.")
     end)
   end
+
+  defp words([]), do: "a word"
+  defp words(scope), do: scope |> Enum.map(& &1.lemma) |> sentence_list()
 
   @doc "A date as the site writes one: *27 Sep 2026*."
   def date(%DateTime{} = at), do: Calendar.strftime(at, "%-d %b %Y")

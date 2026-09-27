@@ -14,36 +14,44 @@ defmodule DevilsDictionary.Examples.Provenance do
       %Provenance{
         id: "ex:<assertion_id>" | "inst:<family>" | "sel:<composition_item_id>",
         source: [%{slug, name, tier, assertion_id, record_url}] | :none,
-        nomination: %{by, origin, shelf, manifest, rationale, meaning, evidence, at}
-                    | :none | :unknown,
+        nomination: %{by, claimant, origin, shelf, manifest, rationale, meaning,
+                      evidence, at} | :none | :unknown,
         agent: :none | :unknown,
         review: %{state, by, decided_at, context_changed?} | :none,
         selection: %{kind: :ranked, signals} | %{kind: :composed, ...},
         publication: %{receipt_id, authority_kind, actor, committed_at,
                        superseded_at, withdrawn_at} | :none,
-        featured: [%{composition_id, version, position, selected_by, published_at, page}]
+        featured: [%{composition_id, version, selected_by, published_at, scope,
+                     shown_on_page: false}]
       }
 
   | Stage | Read from | `:none` means | `:unknown` means |
   |---|---|---|---|
   | `source` | `assertions.source_id`, `source_assertion_outputs` → `source_records.url` | not source-listed (an exemplar) | never |
-  | `nomination` | the claim's actors, the revision's `rationale`, `metadata` and `method`, `assertion_evidence`, `assertions.inserted_at` | not cited (an instance) | a claim with no actor and no manifest |
-  | `agent` | the revision's `method` (and #197's records, once they exist) | human work (`curated`) or a source's | a persona's method, or no method recorded |
+  | `nomination` | the submitting account (or a manifest's curator), the revision's `rationale`, `metadata` and `method`, `assertion_evidence`, `assertions.inserted_at` | not cited (an instance) | a claim no account submitted and no manifest wrote |
+  | `agent` | the revision's `method` (and #197's records, once they exist) | human work (`curated`), or a source's (an instance) | any other method, or none recorded |
   | `review` | the latest `assertion_reviews` row, and its context against what is displayed | no review yet | never |
   | `selection` | `Rank.order/1`'s signals, or the composition item and its version's author | — | never |
   | `publication` | the receipt that published the item's version | unpublished | never |
 
   `featured` is the reverse of selection (#212 decision 3): the published
-  openings that show this claim now, read through `Published.current/1`, so
-  a withheld item is never listed. An example's card reads its "Opening" row
-  from it, and the person page its "featured in" line.
+  compositions of the enabled global default configuration that select this
+  claim now, read through `Published.current/1`, so a withheld item is never
+  listed and an internal test configuration's never are. Each names the words
+  of its scope. No page shows a composition yet (the binding is #194's, the
+  reader #156 Phase 2's), so each entry says `shown_on_page: false`, and no
+  surface claims the claim is on a page. The card's "Opening" row and the
+  person page's line read it.
 
   ## Who may see what
 
   A claim is read through `Claims.visible/2` for the viewer, and a claim the
   viewer may not see has no provenance at all (`nil`): no stage, no count, no
-  label. Every attribution is an actor's public label, never an account id or
-  an email. `nomination.by` follows the card's rule, `nominator/3`.
+  label. For the public, a nomination whose latest review is not `accepted`
+  has none either, whatever its subject. Every attribution is an actor's
+  public label, never an account id or an email. `nomination.by` is the
+  nominating account, by the card's own rule (`nominator/2`); a claimant the
+  claim cites is `nomination.claimant`, never the nominator.
 
   Only a receipt's `committed_at` is a publication time; a row's update time
   never is.
@@ -57,8 +65,10 @@ defmodule DevilsDictionary.Examples.Provenance do
   alias DevilsDictionary.Curation.{
     Composition,
     CompositionItem,
+    CompositionMembership,
     CompositionPublication,
     CompositionVersion,
+    Configuration,
     Published
   }
 
@@ -66,6 +76,8 @@ defmodule DevilsDictionary.Examples.Provenance do
   alias DevilsDictionary.Registry.{Entity, Lexeme, Sense, SenseRevision}
   alias DevilsDictionary.Repo
   alias DevilsDictionary.Sources.{Actor, Source, SourceRecord}
+
+  @no_author %{kind: :unknown, label: nil}
 
   @enforce_keys [:id, :source, :nomination, :agent, :review, :selection, :publication]
   defstruct [:id, :source, :nomination, :agent, :review, :selection, :publication, featured: []]
@@ -117,12 +129,13 @@ defmodule DevilsDictionary.Examples.Provenance do
   end
 
   @doc """
-  Who a nomination is by, as every surface names it: a manifest's curator,
-  else the claimant's label, else the submitter's. `nil` when the record
-  names nobody.
+  Who nominated a claim, as every surface names it: a manifest's curator,
+  else the account that submitted it. A cited claimant is who *makes* the
+  claim, not who nominated it here (the form's "Who makes this
+  interpretation?"), so it is never the nominator; `claimant/2` names it
+  apart. `nil` when the record names nobody.
   """
-  def nominator(metadata, claimant_label, submitter_label),
-    do: (metadata || %{})["curator"] || claimant_label || submitter_label
+  def nominator(metadata, submitter_label), do: (metadata || %{})["curator"] || submitter_label
 
   # ── loading ───────────────────────────────────────────────────────────────
 
@@ -133,10 +146,14 @@ defmodule DevilsDictionary.Examples.Provenance do
       |> Enum.uniq()
       |> visible(viewer)
 
+    claims = claims(ids)
+    reviews = reviews(ids)
+    ids = Enum.filter(ids, &disclosed?(viewer, claims[&1], reviews[&1]))
+
     %{
       visible: MapSet.new(ids),
-      claims: claims(ids),
-      reviews: reviews(ids),
+      claims: claims,
+      reviews: reviews,
       states: Claims.display_review_states(ids),
       evidence: Examples.evidence(ids),
       meanings: meanings(ids),
@@ -158,6 +175,19 @@ defmodule DevilsDictionary.Examples.Provenance do
     |> Claims.visible(viewer)
     |> Repo.all()
   end
+
+  # The public sees no provenance for a nomination nobody has accepted yet,
+  # whatever its subject (#212 comment, item 1, option a). `Claims.visible/2`
+  # hides a pending *person* everywhere; a pending work or passage may still
+  # have its card (#190 owns that gate), but none of the new surfaces carries
+  # it. A claim no account submitted (an import, a legacy row) is not a
+  # nomination, and follows `Claims.visible/2` alone.
+  defp disclosed?(:internal, _claim, _review), do: true
+
+  defp disclosed?(:public, %{submitter: %{kind: kind}}, review) when kind in [:user, :bot],
+    do: match?(%{state: :accepted}, review)
+
+  defp disclosed?(:public, _claim, _review), do: true
 
   defp claims([]), do: %{}
 
@@ -232,81 +262,98 @@ defmodule DevilsDictionary.Examples.Provenance do
     |> Map.new()
   end
 
-  # The published openings that show each claim revision now. A composition
-  # is a candidate when its published version holds an exemplar naming the
-  # revision, and it features the claim only if `Published.current/1` shows
-  # that item.
+  # The published compositions that select each claim revision now, under
+  # the enabled global default configuration: the only configuration a page
+  # would ever read (ADR 0004). An internal test configuration's compositions
+  # are never listed. A composition features the claim only if
+  # `Published.current/1` shows that item, so a withheld one never is.
+  #
+  # No page shows a composition yet: the page binding is #194's and the
+  # reader #156 Phase 2's. So `shown_on_page` is `false` for every entry, and
+  # the surfaces say so rather than claim the item is on a page.
   defp featured([]), do: %{}
 
   defp featured(ids) do
-    Repo.all(
-      from i in CompositionItem,
-        join: c in Composition,
-        on: c.current_published_version_id == i.composition_version_id,
-        where: i.item_kind == :exemplar and i.assertion_revision_id in ^ids,
-        select: {c.id, i.id, i.assertion_revision_id}
-    )
+    rows =
+      Repo.all(
+        from i in CompositionItem,
+          join: c in Composition,
+          on: c.current_published_version_id == i.composition_version_id,
+          join: config in Configuration,
+          on: config.id == c.curation_configuration_id,
+          where: config.role == :global_default and config.state == :enabled,
+          where: i.item_kind == :exemplar and i.assertion_revision_id in ^ids,
+          select: {c.id, i.id, i.assertion_revision_id}
+      )
+
+    composition_ids = rows |> Enum.map(&elem(&1, 0)) |> Enum.uniq()
+    scopes = scopes(composition_ids)
+
+    rows
     |> Enum.group_by(&elem(&1, 0))
     |> Enum.flat_map(fn {composition_id, rows} ->
       case Published.current(composition_id) do
         {:ok, published} ->
-          shown = Map.new(published.highlights, &{&1.id, &1})
+          shown = MapSet.new(published.highlights, & &1.id)
 
-          for {_composition, item_id, revision_id} <- rows, Map.has_key?(shown, item_id) do
-            {revision_id, featured_entry(published, shown[item_id])}
+          for {_composition, item_id, revision_id} <- rows, MapSet.member?(shown, item_id) do
+            {revision_id, published, Map.get(scopes, composition_id, [])}
           end
 
         _withheld_or_unpublished ->
           []
       end
     end)
+    |> then(fn entries ->
+      authors =
+        entries
+        |> Enum.map(fn {_rid, published, _scope} -> published.version.created_by_actor_id end)
+        |> authors()
+
+      entries
+      |> Enum.group_by(&elem(&1, 0), fn {_rid, published, scope} ->
+        %{
+          composition_id: published.composition.id,
+          version: published.version.version,
+          selected_by: Map.get(authors, published.version.created_by_actor_id, @no_author),
+          published_at: published.receipt.committed_at,
+          scope: scope,
+          shown_on_page: false
+        }
+      end)
+      |> Map.new(fn {id, entries} -> {id, Enum.sort_by(entries, & &1.composition_id)} end)
+    end)
+  end
+
+  # The words a composition is for: its scope's member lexemes, never an
+  # item's intended meaning.
+  defp scopes([]), do: %{}
+
+  defp scopes(composition_ids) do
+    Repo.all(
+      from m in CompositionMembership,
+        join: l in Lexeme,
+        on: l.object_id == m.object_id,
+        where: m.composition_id in ^composition_ids,
+        order_by: [m.composition_id, l.lemma],
+        select: {m.composition_id, %{lemma: l.lemma, slug: l.slug}}
+    )
     |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
-    |> Map.new(fn {id, entries} -> {id, Enum.sort_by(entries, & &1.composition_id)} end)
   end
 
-  defp featured_entry(published, item) do
-    %{
-      composition_id: published.composition.id,
-      version: published.version.version,
-      position: item.position,
-      selected_by: author(published.version.created_by_actor_id),
-      published_at: published.receipt.committed_at,
-      page: page(item)
-    }
-  end
+  defp authors([]), do: %{}
 
-  # The word whose page the opening is on: the item's intended meaning.
-  defp page(%CompositionItem{meaning_lexeme_id: id}) when is_integer(id), do: word(id)
-
-  defp page(%CompositionItem{meaning_sense_revision_id: id}) when is_integer(id) do
-    from(r in SenseRevision,
-      join: s in Sense,
-      on: s.object_id == r.sense_id,
-      where: r.id == ^id,
-      select: s.lexeme_id
-    )
-    |> Repo.one()
-    |> word()
-  end
-
-  defp page(_item), do: nil
-
-  defp word(nil), do: nil
-
-  defp word(lexeme_id) do
-    Repo.one(
-      from l in Lexeme, where: l.object_id == ^lexeme_id, select: %{lemma: l.lemma, slug: l.slug}
-    )
+  defp authors(actor_ids) do
+    Repo.all(from a in Actor, where: a.id in ^Enum.uniq(actor_ids))
+    |> Map.new(&{&1.id, author_of(&1)})
   end
 
   # A version's author: a person, or (after #197) a model's bot.
-  defp author(actor_id) do
-    case Repo.get(Actor, actor_id) do
-      %Actor{actor_kind: :user, label: label} -> %{kind: :human, label: label}
-      %Actor{actor_kind: :bot, label: label} -> %{kind: :model, label: label}
-      _other -> %{kind: :unknown, label: nil}
-    end
-  end
+  defp author(actor_id), do: Map.get(authors([actor_id]), actor_id, @no_author)
+
+  defp author_of(%Actor{actor_kind: :user, label: label}), do: %{kind: :human, label: label}
+  defp author_of(%Actor{actor_kind: :bot, label: label}), do: %{kind: :model, label: label}
+  defp author_of(_actor), do: @no_author
 
   # Each contributing claim's source record URL, for an instance's sources.
   defp record_urls(items) do
@@ -429,18 +476,23 @@ defmodule DevilsDictionary.Examples.Provenance do
     end
   end
 
-  # A claim with no actor and no manifest is one the record is silent about:
-  # its nominator is unknown, never "a contributor".
+  # A claim with no submitting account and no manifest is one the record is
+  # silent about: its nominator is unknown, never "a contributor", and never
+  # the claimant it cites.
   defp nomination(claim, rid, records) do
     metadata = claim.metadata || %{}
-    label = nominator(metadata, claim.claimant.label, claim.submitter.label)
-    actor = if claim.claimant.id, do: claim.claimant, else: claim.submitter
+    submitter = claim.submitter
 
-    if is_nil(label) and is_nil(actor.id) do
+    if is_nil(metadata["curator"]) and submitter.kind not in [:user, :bot] do
       :unknown
     else
       %{
-        by: %{kind: actor.kind || :unknown, label: label, actor_id: actor.id},
+        by: %{
+          kind: submitter.kind,
+          label: nominator(metadata, submitter.label),
+          actor_id: submitter.id
+        },
+        claimant: claimant(claim.claimant, submitter),
         origin: origin(metadata, claim),
         shelf: shelf(metadata, records.sources),
         manifest: manifest(metadata),
@@ -451,6 +503,14 @@ defmodule DevilsDictionary.Examples.Provenance do
       }
     end
   end
+
+  @doc """
+  Who the claim cites as making it, when that is not the nominating account
+  itself: `%{kind: :external | :unknown | ..., label}`, or `nil`.
+  """
+  def claimant(%{id: nil}, _submitter), do: nil
+  def claimant(%{id: id}, %{id: id}), do: nil
+  def claimant(%{kind: kind, label: label}, _submitter), do: %{kind: kind, label: label}
 
   # How the claim was nominated, as far as the record says. A manifest names
   # itself; a persona's method is an agent's. A claim an account submitted
@@ -481,9 +541,8 @@ defmodule DevilsDictionary.Examples.Provenance do
 
   # No model record exists before #197, so a persona's work is `:unknown`,
   # never a fabricated model, run or proposal.
-  defp agent("persona:" <> _), do: :unknown
-  defp agent(nil), do: :unknown
-  defp agent(_method), do: :none
+  defp agent("curated"), do: :none
+  defp agent(_method), do: :unknown
 
   defp review(rid, records) do
     case records.reviews[rid] do

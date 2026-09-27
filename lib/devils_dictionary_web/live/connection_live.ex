@@ -35,7 +35,7 @@ defmodule DevilsDictionaryWeb.ConnectionLive do
 
   alias DevilsDictionary.Claims
   alias DevilsDictionary.Claims.{Connection, Contributions}
-  alias DevilsDictionary.{Encyclopedia, Lexicon, Markdown, Registry, Repo, Sources}
+  alias DevilsDictionary.{Artworks, Encyclopedia, Lexicon, Markdown, Registry, Repo}
   alias DevilsDictionary.Discovery.{Mapping, Result, Run}
 
   on_mount {DevilsDictionaryWeb.UserAuth, :mount_current_scope}
@@ -229,44 +229,48 @@ defmodule DevilsDictionaryWeb.ConnectionLive do
   defp preselected_subject(_value), do: nil
 
   # The shelf a prefilled form came from (#212), so the nomination's
-  # provenance can say where it was found. A result id is kept only when that
-  # result is about the prefilled subject, and its provider is read from the
-  # result's run, not the URL. A link with no result (a catalog shelf) names
-  # its provider, which must be a known source. The shelf is recorded only
-  # if the subject proposed is the one prefilled (`shelf_metadata/2`).
-  defp shelf(result_id, provider, %{object_id: subject_id}) do
-    case {positive_id(result_id), provider} do
-      {nil, slug} when is_binary(slug) ->
-        if Sources.get_source_by_slug(slug),
-          do: %{subject_id: subject_id, metadata: %{"provider" => slug}}
+  # provenance can say where it was found. Nothing in the URL is taken on
+  # trust. A result id is kept only when that result is about the prefilled
+  # subject, and its provider is read from the result's run. A catalog link
+  # (no result) names its provider, kept only when the registry shows the
+  # subject is that catalog's work (`Artworks.catalog_source_slug/1`). A
+  # malformed result id records nothing, and so does anything unverified: an
+  # unknown origin, never a guessed one. The shelf is recorded only if the
+  # subject proposed is the one prefilled (`shelf_metadata/2`).
+  defp shelf(nil, provider, %{object_id: subject_id}) when is_binary(provider) do
+    if Artworks.catalog_source_slug(subject_id) == provider,
+      do: %{subject_id: subject_id, metadata: %{"provider" => provider}}
+  end
 
-      {id, _slug} when is_integer(id) ->
-        from(r in Result,
-          join: run in Run,
-          on: run.id == r.run_id,
-          join: m in Mapping,
-          on: m.id == run.mapping_id,
-          join: s in DevilsDictionary.Sources.Source,
-          on: s.id == m.source_id,
-          where: r.id == ^id and r.object_id == ^subject_id,
-          select: s.slug
-        )
-        |> Repo.one()
-        |> case do
-          nil -> nil
-          slug -> %{subject_id: subject_id, metadata: %{"from_result" => id, "provider" => slug}}
-        end
-
-      _none ->
-        nil
+  defp shelf(result_id, _provider, %{object_id: subject_id}) when is_binary(result_id) do
+    with id when is_integer(id) <- positive_id(result_id),
+         slug when is_binary(slug) <-
+           Repo.one(
+             from r in Result,
+               join: run in Run,
+               on: run.id == r.run_id,
+               join: m in Mapping,
+               on: m.id == run.mapping_id,
+               join: s in DevilsDictionary.Sources.Source,
+               on: s.id == m.source_id,
+               where: r.id == ^id and r.object_id == ^subject_id,
+               select: s.slug
+           ) do
+      %{subject_id: subject_id, metadata: %{"from_result" => id, "provider" => slug}}
+    else
+      _unverified -> nil
     end
   end
 
   defp shelf(_result_id, _provider, _subject), do: nil
 
+  # A database id: positive, and inside bigint, so a long digit string is a
+  # bad request rather than an encoding crash.
+  @max_id 9_223_372_036_854_775_807
+
   defp positive_id(value) when is_binary(value) do
     case Integer.parse(value) do
-      {id, ""} when id > 0 -> id
+      {id, ""} when id > 0 and id <= @max_id -> id
       _ -> nil
     end
   end

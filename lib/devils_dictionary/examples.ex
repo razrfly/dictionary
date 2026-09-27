@@ -348,8 +348,6 @@ defmodule DevilsDictionary.Examples do
       on: e.object_id == r.subject_object_id,
       left_join: c in ContentRevision,
       on: c.content_id == r.subject_object_id and c.is_current,
-      left_join: nominator in Actor,
-      on: nominator.id == a.origin_actor_id,
       left_join: submitter in Actor,
       on: submitter.id == a.submitted_by_actor_id,
       where: p.key == @illustrates and r.is_current and r.lifecycle_state == :active,
@@ -368,9 +366,6 @@ defmodule DevilsDictionary.Examples do
         method: r.method,
         metadata: r.metadata,
         nominated_at: r.inserted_at,
-        nominator_id: nominator.id,
-        nominator_label: nominator.label,
-        nominator_kind: nominator.actor_kind,
         submitter_id: submitter.id,
         submitter_label: submitter.label,
         submitter_kind: submitter.actor_kind
@@ -463,20 +458,16 @@ defmodule DevilsDictionary.Examples do
     end)
   end
 
-  # The card says who, in the words the nomination carried, by the one rule
-  # every surface uses (`Provenance.nominator/3`): a manifest names its
-  # curator; a form nomination is the account's own label. A claim with no
-  # actor names nobody, and says so (#212).
+  # The card says who nominated it, by the one rule every surface uses
+  # (`Provenance.nominator/2`): a manifest names its curator; a form
+  # nomination is the submitting account's own label. The claimant a claim
+  # cites is who makes the claim, not who nominated it. A claim no account
+  # submitted names nobody, and says so (#212).
   defp nominator(row, metadata) do
-    {actor_id, kind} =
-      if row.nominator_id,
-        do: {row.nominator_id, row.nominator_kind},
-        else: {row.submitter_id, row.submitter_kind}
-
     %{
-      actor_id: actor_id,
-      label: Provenance.nominator(metadata, row.nominator_label, row.submitter_label),
-      kind: kind
+      actor_id: row.submitter_id,
+      label: Provenance.nominator(metadata, row.submitter_label),
+      kind: row.submitter_kind
     }
   end
 
