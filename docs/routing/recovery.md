@@ -1,6 +1,6 @@
 # Routing recovery procedure
 
-**Status:** supported procedure, 27 September 2026, for [routing issue #194](https://github.com/razrfly/dictionary/issues/194). It is exercised end to end by `test/devils_dictionary/routing/recovery_test.exs` against isolated, disposable databases. It was **rehearsed on the development corpus** in Stage 2A ([rehearsal report](stage-2/recovery-rehearsal.md)). Snapshot, restore and exact verification work at corpus scale, including with nonempty routing state. Re-projection (step 4) does **not** yet run cleanly on the corpus, for reasons that predate routing; see the report.
+**Status:** supported procedure, 27 September 2026, for [routing issue #194](https://github.com/razrfly/dictionary/issues/194). It is exercised end to end by `test/devils_dictionary/routing/recovery_test.exs` against isolated, disposable databases. It was **rehearsed on the development corpus**, in [Stage 2A](stage-2/recovery-rehearsal.md) and again in the [recovery repair](stage-2/recovery-repair.md). Snapshot, restore and exact verification work at corpus scale, with routing and curation state. Re-projection (step 4) completes for every provider and keeps every identity, route and approval. On the development corpus it still writes a measured catch-up to today's materializers, which awaits the owner's decision ([proposal](stage-2/corpus-catch-up.md)).
 
 ## What must survive, and why a rebuild cannot provide it
 
@@ -34,7 +34,7 @@ Rolling the routing migration back would drop every routing table, so it refuses
 - A write still in flight during the dump is in neither. Once it commits, the digests differ and the guard refuses.
 - Any committed routing change counts, including one that adds no id, such as a change of publication state.
 
-The dump is written to `PATH.partial` and renamed only when complete. Any older sidecar is deleted first, so a failed dump never leaves a sidecar that seems to vouch for it. A dump without the sidecar does not count.
+The dump and its sidecar are each written to a partial file and renamed into place only when complete, the dump first. A snapshot that fails leaves an earlier one at the same path as it was, still restorable. A sidecar never vouches for bytes it does not describe: it records the dump's SHA-256, and a restore refuses a mismatch. A dump without the sidecar does not count.
 
 These guards stop accidents. They do not stop an operator: naming a snapshot is a deliberate acknowledgement. The routing tables also refuse `TRUNCATE`, including one cascading from `objects`, unless a transaction sets `dictionary.allow_routing_truncate`. Only the test suite's reset does that. Production should also deny the application's database role TRUNCATE and trigger control.
 
@@ -69,7 +69,9 @@ A restored copy carries the source's queued and scheduled jobs. Tasks that start
    - the target server's identity cannot be read, over the same endpoint `pg_restore` uses;
    - the target is the source: the same cluster, with the same database name or oid (a renamed source is still the source).
 
-   A restore to another database, or to a database of any name on another cluster, is allowed. A dump without a trustworthy sidecar has to be taken again with `mix dd.snapshot`.
+   A restore to another database, or to a database of any name on another cluster, is allowed. A dump whose sidecar is missing or predates identities can still be restored into a database that does not exist yet, because nothing is dropped. That keeps an older snapshot usable as a rollback point. Otherwise, take the snapshot again with `mix dd.snapshot`. A malformed sidecar, or one that does not describe its dump, is refused everywhere.
+
+   The identity probe, the drop and `pg_restore` all reach one endpoint. It is settled once, as Postgrex settles it: a `socket_dir`, or else `hostname` and `port`, defaulting to `PGHOST` and `PGPORT`. A `socket:` or `endpoints:` configuration, which the `pg_*` tools cannot follow, is refused.
 
    ```bash
    DD_DATABASE=devils_dictionary_restore mix dd.snapshot --restore ~/Backups/dictionary-routing.dump --database devils_dictionary_restore
@@ -148,18 +150,9 @@ A restored copy carries the source's queued and scheduled jobs. Tasks that start
    DD_NO_OBAN=1 DD_DATABASE=devils_dictionary_restore mix dd.replay --dir /tmp/restore-replay --source wikidata
    ```
 
-   **Then resolve.** Materialization writes an edge whose target is still a string into `pending_relations`. The rebuild pipeline drains those edges into assertions with `mix dd.resolve`, and so must a re-projection. Without it, Stage 2A found 2.48 million re-created pending edges left behind:
+   **Why `--resolve`.** Materialization writes an edge whose target is still a string into `pending_relations`, and the resolve pass drains it into an assertion. A re-projection without it leaves every such edge re-created and waiting: Stage 2A found 2.48 million. Several records can attest one edge, each with its own provenance. The resolve pass chooses one attestation for the claim before it drains anything, by content: the first attesting record by external id, then the stated part of speech, the metadata and the method. So the claim changes neither with the order of the rows nor with the order in which records were first inserted.
 
-   ```bash
-   DD_NO_OBAN=1 DD_DATABASE=devils_dictionary_restore mix dd.resolve
-   ```
-
-   **Known to fail on the development corpus (Stage 2A).** These failures come from corpus and code drift that predates routing. Identities and routing state came through re-projection exactly; the failures are these:
-   - **Wikidata replay crashes.** The quotation verifier caches its lookups as records of the `wikidata` source, and the entity materializer cannot project them.
-   - **Wikidata `materialize --all` crashes.** 1,218 label-less entities from the original build are refused by today's source-identity rules.
-   - **Today's materializers write rows and fields the corpus was built without.**
-
-   Until these are fixed, a re-projection of that corpus is not expected to match. See the [rehearsal report](stage-2/recovery-rehearsal.md).
+   **On the development corpus** ([recovery repair](stage-2/recovery-repair.md)), every provider now re-projects to completion. Identities, references, routing history and curation approvals come through exactly. Wikipedia, Wikidata and Wiktionary still exit non-zero, because M2 finds derived state changed: the corpus was built by older materializers, and today's write rows and fields it never had. The difference is measured in full in the [catch-up proposal](stage-2/corpus-catch-up.md). Until the owner decides on it, a re-projection of that corpus is not expected to match its source.
 
    Then verify again. After re-projection the comparison leaves out the projection's own bookkeeping: its new `import_runs`, and the `updated_at`, `materialized_at` and `last_seen_run_id` stamps it rewrites. `RecoveryTest` observed each of these change, and nothing else. Sequences then need only not have fallen behind their tables, because upserts may consume ids without writing rows:
 

@@ -106,11 +106,11 @@ Each record's proposal, evidence and disposition is in `candidates.json`.
 
 ## Gates before any persistent backfill
 
-1. **Tested recovery.** Delivered in Stage 1: [recovery procedure](../recovery.md) and `RecoveryTest`. **Rehearsed on the development corpus in Stage 2A** ([report](recovery-rehearsal.md)).
-   - **Passes:** snapshot, restore and exact verification, at the original pre-routing schema and again with nonempty routing state.
-   - **Fails:** re-projection. It fails for reasons that predate routing: the corpus is not a fixed point of today's materializers, one source's replay and full materialization crash, and the runbook omits the resolve pass.
+1. **Tested recovery.** Delivered in Stage 1: [recovery procedure](../recovery.md) and `RecoveryTest`. Rehearsed on the development corpus in [Stage 2A](recovery-rehearsal.md), and again, with routing and curation state, in the [recovery repair](recovery-repair.md).
+   - **Passes:** snapshot, restore and exact verification. Every provider re-projects to completion, with identities, references, routing history and curation approvals exact, and normal operations work on the projected copy.
+   - **Open:** the corpus is not yet a fixed point of today's materializers. The measured [catch-up](corpus-catch-up.md) needs the owner's decision, and the checkpoint needs independent reassessment.
 
-   This gate stays open until re-projection passes.
+   This gate stays open until both are done.
 2. **Repeat-run identity preservation.** Running the backfill twice must leave page, path and decision ids unchanged, compared as sets.
 3. **Crash and resume.** An interrupted run resumed from its checkpoint (keyed by object id and policy digest) must equal an uninterrupted run, by exact identities and references.
 

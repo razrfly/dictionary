@@ -2,6 +2,8 @@
 
 **27 September 2026**, for [routing issue #194](https://github.com/razrfly/dictionary/issues/194). A rehearsal of the [recovery procedure](../recovery.md) on the full development corpus, before any persistent backfill.
 
+> **Superseded in part by the [recovery repair](recovery-repair.md).** The repair fixed the crashes and defects found here and re-ran recovery with routing and curation state. It also corrects one count below. 1,226 Wikidata items have no English label, but the materializer also reads `mul` labels (1,218 of them) and taxon names (2), so only 6 have no name it can use, not 1,218.
+
 - **Source:** `devils_dictionary_v2`, 14 GB, 28.6 million rows. It still predates the routing migration.
 - **Working databases:** isolated copies in a disposable scratch PostgreSQL 18.2 cluster.
 - **Untouched:** the source's data and schema. No backfill, route, reader or publication change was made.
