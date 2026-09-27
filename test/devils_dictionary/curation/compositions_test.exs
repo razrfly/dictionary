@@ -302,11 +302,21 @@ defmodule DevilsDictionary.Curation.CompositionsTest do
       assert {note.note_author_kind, note.note_author_label} ==
                {:human, actor!(ctx.contributor).label}
 
-      # Manual work has no run, participant, ballot or model anywhere.
-      for table <- ~w(curation_runs curation_participants curation_ballots local_model_configs) do
+      # Manual work has no run, participant or ballot anywhere (#197 adds
+      # them). Model configs exist since #195's runtime, whose attempts are
+      # receipts: no composition table refers to a model.
+      for table <- ~w(curation_runs curation_participants curation_ballots) do
         assert %{rows: [[false]]} =
                  Repo.query!("SELECT to_regclass($1) IS NOT NULL", [table])
       end
+
+      assert %{rows: []} =
+               Repo.query!("""
+               SELECT conrelid::regclass::text FROM pg_constraint
+               WHERE contype = 'f'
+                 AND confrelid = 'local_model_configs'::regclass
+                 AND conrelid::regclass::text LIKE 'editorial_composition%'
+               """)
 
       # And no model-authored note can be written into it.
       assert {:error, {:note_invalid, :highlight, 1}} =
