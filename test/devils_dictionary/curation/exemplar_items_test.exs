@@ -18,7 +18,7 @@ defmodule DevilsDictionary.Curation.ExemplarItemsTest do
 
   import DevilsDictionary.CurationFixtures
 
-  alias DevilsDictionary.{Claims, Discovery, Registry, WordFixtures}
+  alias DevilsDictionary.{Claims, Discovery, ExemplarFixtures, Registry, WordFixtures}
   alias DevilsDictionary.Claims.{Assertion, AssertionReview, AssertionRevision, Contributions}
 
   alias DevilsDictionary.Curation.{
@@ -30,13 +30,9 @@ defmodule DevilsDictionary.Curation.ExemplarItemsTest do
     Reviews
   }
 
-  alias DevilsDictionary.Discovery.{Mapping, Result, Run}
-  alias DevilsDictionary.Discovery.Providers.Wikiquote
-  alias DevilsDictionary.Examples.Community
+  alias DevilsDictionary.Discovery.Result
   alias DevilsDictionary.Registry.Entity
-  alias DevilsDictionary.Sources.{Actor, Source}
-
-  @evidence "https://example.test/fixture-evidence"
+  alias DevilsDictionary.Sources.Actor
 
   setup do
     world = world!()
@@ -63,46 +59,11 @@ defmodule DevilsDictionary.Curation.ExemplarItemsTest do
 
   # ── the steps ─────────────────────────────────────────────────────────────
 
-  # A contributor's nomination through the one path every nomination takes.
-  # A person needs evidence (#105 rule 2); a passage may go without.
-  defp nominate!(ctx, subject, object, evidence \\ nil) do
-    evidence =
-      evidence ||
-        [
-          Map.merge(Community.cite!(@evidence, "Fixture"), %{
-            locator: @evidence,
-            evidence_role: :supports
-          })
-        ]
+  defp nominate!(ctx, subject, object, evidence \\ nil),
+    do: ExemplarFixtures.nominate!(ctx.contributor, subject, object, evidence)
 
-    {:ok, assertion} =
-      Contributions.propose(
-        ctx.contributor,
-        subject.object_id,
-        "illustrates",
-        object.object_id,
-        %{rationale: "fixture rationale"},
-        evidence
-      )
-
-    Claims.current_revision(assertion.id)
-  end
-
-  # A reviewer's decision on exactly what is displayed, which opens the
-  # review context the item's eligibility compares against.
-  defp decide_claim!(ctx, revision, decision \\ "accepted") do
-    {:ok, review} =
-      Contributions.review(
-        ctx.reviewer,
-        revision.assertion_id,
-        revision.id,
-        decision,
-        "Checked.",
-        Contributions.context_items(revision)
-      )
-
-    review
-  end
+  defp decide_claim!(ctx, revision, decision \\ "accepted"),
+    do: ExemplarFixtures.decide!(ctx.reviewer, revision, decision)
 
   defp exemplar(revision, meaning),
     do: %{kind: :exemplar, assertion_revision_id: revision.id, meaning: meaning}
@@ -176,116 +137,9 @@ defmodule DevilsDictionary.Curation.ExemplarItemsTest do
      Repo.aggregate(AssertionReview, :count)}
   end
 
-  # A quotation as a provider with a durable identity leaves it behind: a
-  # `content/quotation` object whose first revision cites the provider's
-  # record (Wikiquote's `identity_record/1`), and a shelf result naming it.
-  defp shelved_quotation!(ctx, body) do
-    {:ok, source} =
-      %Source{}
-      |> Source.changeset(Wikiquote.source_attrs())
-      |> Repo.insert(on_conflict: :nothing, conflict_target: [:slug])
+  defp shelved_quotation!(ctx, body), do: ExemplarFixtures.shelved_quotation!(ctx, ctx.love, body)
 
-    source = Repo.get_by!(Source, slug: source.slug)
-    record = WordFixtures.record!(put_in(ctx.sources["wikiquote"], source), "wikiquote")
-
-    record_revision =
-      Repo.one!(
-        from r in "source_record_revisions", where: r.source_record_id == ^record.id, select: r.id
-      )
-
-    {:ok, quotation} =
-      Registry.create_content(%{
-        content_kind: :quotation,
-        source_id: source.id,
-        headword: "Fixture quotation",
-        body: body,
-        source_record_revision_id: record_revision
-      })
-
-    run = shelf_run!(ctx, source)
-
-    result =
-      Repo.insert!(
-        Result.changeset(%Result{}, %{
-          run_id: run.id,
-          external_namespace: "wikiquote_item",
-          external_id: "fixture-#{quotation.object_id}",
-          object_id: quotation.object_id,
-          source_record_id: record.id,
-          position: 0,
-          match_details: %{},
-          preview_metadata: %{},
-          display_allowed: true,
-          resolution_state: :newly_created
-        })
-      )
-
-    %{quotation: quotation, record_revision: record_revision, run: run, result: result}
-  end
-
-  defp shelf_run!(ctx, source) do
-    actor =
-      Repo.insert!(Actor.changeset(%Actor{}, %{actor_kind: :import, label: "fixture shelf"}))
-
-    mapping =
-      Repo.insert!(
-        Mapping.create_changeset(%Mapping{}, %{
-          mapping_key: "wikiquote:#{ctx.love.object_id}",
-          version: 1,
-          target_object_id: ctx.love.object_id,
-          source_id: source.id,
-          operation: "term_quote_discovery",
-          parameters: %{},
-          configured_by_actor_id: actor.id,
-          enabled: true
-        })
-      )
-
-    now = DateTime.utc_now()
-
-    run =
-      Repo.insert!(
-        Run.create_changeset(%Run{}, %{
-          mapping_id: mapping.id,
-          adapter_version: "wikiquote.fixture",
-          request_parameters: %{},
-          request_key: "fixture-request",
-          position_key: "fixture-position",
-          page_context: Ecto.UUID.generate(),
-          page: 0,
-          status: :pending
-        })
-      )
-
-    Repo.update!(
-      Run.lifecycle_changeset(run, %{
-        status: :succeeded,
-        started_at: now,
-        completed_at: now,
-        refresh_after: DateTime.add(now, 3_600),
-        expires_at: DateTime.add(now, 86_400),
-        completion_reason: :results,
-        result_count: 1,
-        request_count: 1
-      })
-    )
-  end
-
-  # C7: no provider and no model is reachable. Every HTTP plug the test
-  # configuration routes through raises, and the provider registry is empty.
-  defp offline! do
-    for plug <- [
-          DevilsDictionary.Absorb.Clients,
-          DevilsDictionary.Discovery.Providers.CineGraph,
-          DevilsDictionary.Quotations.Verifier
-        ] do
-      Req.Test.stub(plug, fn _conn -> raise "a curation read made an HTTP request" end)
-    end
-
-    providers = Application.fetch_env!(:devils_dictionary, :discovery_providers)
-    Application.put_env(:devils_dictionary, :discovery_providers, [])
-    on_exit(fn -> Application.put_env(:devils_dictionary, :discovery_providers, providers) end)
-  end
+  defp offline!, do: ExemplarFixtures.offline!()
 
   # An item written past the service, into a version that already stands.
   # Every one of these is refused at insert, before the deferred arrangement

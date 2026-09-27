@@ -65,3 +65,53 @@ For each exemplar it shows, `Published.current/1` fills the item's virtual `subj
 ## The review that accepts a claim
 
 A review that accepts a claim needs a context. `Contributions.review/6` opens one. `Claims.review/3` does not, and an acceptance without a context reads as *changed since review* on the card. An exemplar resting on such an acceptance is withheld as `:claim_context_changed`.
+
+## Provenance (Build 2)
+
+`Examples.Provenance.of/2` is the one answer to "why is this example here". The exemplar card's disclosure, the person page, the opening (Build 3, #156) and #203's history all read it. It has no table, and reading it writes nothing.
+
+Its stages:
+
+| Stage | Read from | `:none` means | `:unknown` means |
+|---|---|---|---|
+| `source` | `assertions.source_id`, and `source_assertion_outputs` to `source_records.url` | not source-listed (an exemplar) | never |
+| `nomination` | the submitting account, or a manifest's curator; a cited claimant, kept apart; the revision's `rationale`, `metadata` and `method`; `assertion_evidence`; `assertions.inserted_at` | not cited (an instance) | a claim no account submitted and no manifest wrote |
+| `agent` | the revision's `method`, and #197's records once they exist | human work (`curated`), or a source's (an instance) | any other method, or none recorded |
+| `review` | the latest `assertion_reviews` row, and whether its context still matches what is displayed | no review yet | never |
+| `selection` | `Rank.order/1`'s signals, or the composition item and its version's author | never | never |
+| `publication` | the receipt that published the item's version | unpublished | never |
+| `featured` | the published compositions of the enabled global default that select the claim now, through `Published.current/1`, each with its scope's words and `shown_on_page: false` | (an empty list) | never |
+
+How it reads:
+
+- **It goes through the viewer's gate.** Every read is through `Claims.visible/2` for the viewer. A claim the viewer may not see has no provenance at all (`nil`).
+- **The public sees nothing a reviewer has not accepted.** For the public, a nomination (a claim an account submitted) whose latest review is not `accepted` also has no provenance, whatever its subject. The person-only public gate still decides the card and the count; that gate is #190's, and this issue does not change it. A claim no account submitted is not a nomination, and follows `Claims.visible/2` alone.
+- **The nominator is an account.** `nomination.by` is the submitting account, or a manifest's curator (`Provenance.nominator/2`, the rule the card uses too). A claimant the claim cites, such as a named person or an unknown claimant, is `nomination.claimant`, shown as "citing …". It is never presented as the nominator.
+- **No page is claimed.** `featured` lists only the global default's compositions, the one configuration a page would read. An internal test configuration's are never listed. No page shows a composition yet: the binding is #194's, and the reader is #156 Phase 2's. So every entry says `shown_on_page: false`, and the surfaces say "selected for the opening of *word* … the page does not show openings yet".
+- **Only a receipt dates a publication.** Publication times come from `editorial_composition_publications.committed_at` and nowhere else.
+- **Where a nomination came from.** A form nomination records the shelf it was prefilled from, written by `ConnectionLive`, and nothing in the URL is taken on trust:
+  - a result is recorded as `metadata["from_result"]` and `metadata["provider"]` only if it is about the prefilled subject, and the provider is read from the result's run;
+  - a catalog link records `metadata["provider"]` only if `Artworks.catalog_source_slug/1` says the subject is that catalog's work;
+  - anything unverified records nothing, so the origin stays unknown rather than guessed.
+
+  The provider's name comes from `sources`, which retention never deletes.
+
+## Service reuse map
+
+| Surface | What it calls |
+|---|---|
+| Word page, `#examples` card | `WordPage.build/2` → `Examples.for_page/3` → `Provenance.attach/2` with the viewer; the card draws `DevilsDictionaryWeb.ExampleProvenance.why/1` |
+| Word page, instance chip | nothing new. Each contributing claim keeps its own `/connections/:id`, one per source, never merged. |
+| Person page, *cited as* | `EntityPage.build/2` → `Examples.cited_as/2` → `Provenance.attach/2` (`:public`); the "selected for the opening of…" line reads `provenance.featured` |
+| Connect form | `ConnectionLive` → `Contributions.propose/6` with `metadata` (the shelf, verified against `discovery_results` or `Artworks.catalog_source_slug/1`) |
+| Composing | `Compositions.create_version/3` → `Eligibility.evaluate/5` |
+| Reviewing and publishing a composition | `Reviews.decide/4`, `Publications.publish/3` → `Standing.evaluate/2` (which passes the recorded claim contexts) |
+| Reading a composition | `Published.current/1` → `Standing.evaluate/2`, then `subject` from the registry |
+| The opening (Build 3, #156) | `Published.current/1` → `Provenance.of/2` on each `CompositionItem`, drawn by the same `ExampleProvenance.why/1` |
+| #203's history | `Provenance.of/2` on a `CompositionItem`: its `selection` and `publication` |
+
+**The seam #197's packet uses.** An exemplar candidate is an item of `Examples.exemplars(member_ids, :public)`. It stands if `Compositions.create_version/3` would accept `%{kind: :exemplar, assertion_revision_id: item.claim.revision_id, meaning: ...}`. That check is `Eligibility.check/3` on the item the spec builds. No candidate store or new object is involved.
+
+The `agent` stage is the input contract #197's adapter must fill: profile and version, model digest and configuration, run and proposal ids, and a note. Until #197's records exist it reads `:none` for curated work and `:unknown` for anything else.
+
+**What is not built here.** The issue's named discovery path, a Quotes-shelf card's connect link with the provider's record prefilled as evidence, does not exist on `main`. The quote card has no connect link, and `ConnectionLive` preselects only Artsy evidence. The test that covers this starts at the form with the shelf's parameters and proves the rest: the verified shelf record, the published exemplar read back after retention with every provider off, and no second object or claim. The link and the evidence prefill are deferred to #222.

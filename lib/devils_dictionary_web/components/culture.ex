@@ -1625,7 +1625,8 @@ defmodule DevilsDictionaryWeb.Culture do
         predicate: "illustrates",
         evidence_revision: item[:source_record_revision_id],
         evidence_locator: reason.locator,
-        rationale: reason.note
+        rationale: reason.note,
+        provider: item[:source_slug]
       }
       |> Enum.reject(fn {_key, value} -> is_nil(value) end)
       |> Map.new()
