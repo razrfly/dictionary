@@ -345,6 +345,120 @@ has a corroborated candidate, because the ladder has run on three scopes and
 no others; inside those scopes B doubles what A reaches (8 → 16). Growing it is
 a ladder run over another scope, not a change here.
 
+### Final sweep, on the restored database (2026-09-27)
+
+The scripts, queries, captured output and the recovery point's location are in
+`docs/spikes/2026-09-27-issue-172-sweep/`.
+
+Everything above in this section is **historical**: it was measured on
+2026-09-24 while the ladder's WordNet links were withdrawn. PR #188 restored
+them (run 205, 2026-09-25). This is the state after that, at `main`
+`c6bd882`.
+
+**Recovery point, before any write.** The database holds 14 GB and the internal
+drive had 6.5 GB free, so a full copy was not taken. Instead the sweep recorded
+high-water marks on every table a run touches (`assertion_revisions`
+4,373,560; `assertions` 3,901,280; `import_runs` 205; `discovery_runs` 365)
+and a file of the current revision for every `refers_to` and
+`lexeme_entity_candidate` claim (92,476 rows, count checked against the
+database). That is enough to reverse exactly what the sweep wrote.
+
+**Promotion after the restore.** No promotion had run since run 205. A dry run
+inside a rolled-back transaction predicted 267 withdrawals and nothing else;
+the real run (import runs 206–208, `Linker.corroborate/1`, Repo only, no Oban)
+wrote exactly that: 267 new revisions, every one `corroborated_gloss` →
+withdrawn, 0 promoted, 0 reinstated, 0 new claims, 0 revisions of any other
+method. Each withdrawn promotion sat on a sense that a restored WordNet or
+Wiktionary link maps to a different entity (*mud puppy*: promoted *Necturus*,
+WordNet *Necturus maculosus*), so the source's mapping now stands alone. A
+repeat run (209–211) wrote nothing. Afterwards no active promotion shares a
+sense with a source link to another entity.
+
+| links (one current revision each), active | 2026-09-24, withdrawn WordNet | 2026-09-27 |
+|---|---|---|
+| `wordnet_wikidata` | 0 | 13,969 |
+| `wordnet_ili` | 0 | 10,239 |
+| `wiktionary_qid` | 2,268 | 2,268 |
+| `corroborated_gloss` (promotion) | 6,230 | **5,963** |
+| `lexeme_entity_candidate` ≥ 0.85 | 13,884 | 13,884 |
+
+| English words, 2026-09-27 | lexemes | pages (lemmas) |
+|---|---|---|
+| total | 1,541,669 | 1,407,971 |
+| with an active sense-backed Wikidata link | **20,700** (1.34 %) | **20,246** (1.44 %) |
+| … by source links alone (the issue's 15,010) | 15,010 | 14,676 |
+| … only through promotion | 5,690 | 5,570 |
+| word-level only: a candidate ≥ 0.85, no sense link | — | **2,571** (0.18 %) |
+
+Those are pages **eligible** for a sense-level shelf, not pages that retrieve
+anything: a Quotes shelf also needs the concept (or a hop from it) to have a
+Wikiquote page.
+
+**The thirteen probe words**, Wikiquote run for each page it covers:
+
+| word | recipe | page retrieved | results |
+|---|---|---|---|
+| war | sense, Q198 | War | 12 |
+| coward | sense, Q104605901 | Cowardice, by `P1552` from Q104605901 | 12 |
+| grief | sense (promoted), Q1026040 | Grief | 12 |
+| love | sense (promoted), Q316 | Love | 12 |
+| power | sense, Q911554 *business magnate* | Business magnate | 3 |
+| nepotism, family, solitude, justice, bank, pop art, situationship, narcissism | no evidence in either tier | — | — |
+
+**5 of 13** show a Quotes shelf, 0 of them word-level. *power*'s shelf is
+back because its WordNet link is. That link is right for the sense it is on
+(*a very wealthy or powerful businessperson* → Q911554), but it is one minor
+sense, and it supplies the whole shelf: */define/power* shows quotes about
+business magnates. A restored link says a sense means that concept, not that
+the concept suits the page; which sense a shelf should follow is the
+assessor's question (#101).
+
+**Presentation, checked on the connected page** (this sweep's server on port
+4172, Oban unable to run, every run pre-executed in-process so no visit
+admitted one):
+
+- *bunny* is word-level on three shelves (Q9394 *rabbit*, no sense link):
+  Artworks 24 (Met 12, catalog 12), Images (Commons 12 beside three labelled
+  stock searches), Quotes 8 from *Rabbits*. Every identity reason, 44 of 44,
+  ends *For the word “bunny”, not a particular sense.*, each shelf states it
+  once above the rail, and every stock result says *Search result for
+  “bunny”*.
+- *grief* after promotion: sense-level, no sentence. The before state is the
+  2026-09-24 W3/W4 record above and `wikiquote_word_level_live_test.exs`.
+- *situationship*: no Quotes, Artworks or Images shelf and the About's
+  *No concept this word's senses refer to has a Wikiquote page.* The page has
+  no Wikiquote, Met or Commons mapping, and the 80 screenshot loads created no
+  run and no job.
+- Screenshots: `docs/discovery/issue-172-sweep-*-2026-09-27.jpg`, 375 and
+  1024, light and dark, page scroll width equal to the window's in all 20.
+
+**Found and fixed:** a Wikiquote citation's red link (a page nobody has
+written) is `./Leonardo_Fibonacci?action=edit&redlink=1`, and the parser kept
+the query string, so the card credited *Leonardo Fibonacci?action=edit&redlink=1*.
+Two stored results carried it; *bunny*'s run was refreshed with the fix
+(run 400, 4 requests) and credits *Leonardo Fibonacci*.
+
+| # | requests | what was run | running total this sweep |
+|---|---|---|---|
+| F1 | 16 | Wikiquote: *war*, *power*, *bunny*, *bunny* again with the fix (4 each) | **16** of the 600-an-hour budget |
+
+The other providers' runs for *bunny*, *grief* and *situationship* (71
+requests) are on their own budgets.
+
+**`wikiquote-pd-v2` was not built.** Two blockers, both concrete:
+
+1. *No path to seed it.* `Quotations.Corpus` hard-codes `wikiquote-pd-v1`
+   (source slug and compiled-in manifest path), the manifest kind
+   `wikiquote-pd` names source `wikiquote-pd-v1`, the source catalog registers
+   only v1, and the Quotes shelf reads only v1. A v2 file would need a v2 source
+   row, a version-aware corpus module and a decision on which version the shelf
+   reads before it could be seeded; that is a feature change, not a rebuild.
+2. *Unbudgeted cost.* v1's own ledger is 2,936 requests (1,234 Parsoid, 1,405
+   Gutenberg). v2's selection now starts from 10,862 concept QIDs and 3,410 hop
+   origins (v1: 6,972 and 2,165), and the builder paces requests but has no
+   budget, so a `--reselect` would make well over 3,000 requests against a
+   Wikiquote budget of 600 an hour.
+
 ## Corpus
 
 Build 6 of #158, issue #174: the public-domain Wikiquote corpus,

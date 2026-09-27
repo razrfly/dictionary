@@ -75,6 +75,16 @@ defmodule DevilsDictionary.Discovery.Providers.Wikiquote.ParserTest do
     assert Enum.all?(page.quotations, & &1.citation)
   end
 
+  # Found in #172's final sweep, on /define/bunny: Parsoid writes a link to a
+  # page that does not exist as `./Ibn_Ezra?action=edit&redlink=1`, and the
+  # query string reached the card as the author, "Ibn Ezra?action=edit&redlink=1".
+  test "a red link is credited by its page title, without the edit query" do
+    links = parse("grief").quotations |> Enum.flat_map(& &1.citation_links)
+
+    assert "Ibn Ezra" in links
+    refute Enum.any?(links, &String.contains?(&1, "?")), inspect(Enum.filter(links, &(&1 =~ "?")))
+  end
+
   test "the redirect and the missing page are what the API answered" do
     assert %{status: 307, headers: %{"location" => location}} = WikiquoteFixtures.load("bank")
     assert location =~ "/Banking/"

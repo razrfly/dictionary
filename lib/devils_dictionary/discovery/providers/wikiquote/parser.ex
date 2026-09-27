@@ -175,13 +175,21 @@ defmodule DevilsDictionary.Discovery.Providers.Wikiquote.Parser do
   # Main-namespace pages a citation links to, in order: `./Ambrose_Bierce` is
   # the page `Ambrose Bierce`. A link with a namespace (`./Category:…`,
   # `./File:…`) or to another wiki is not a page this could be credited to.
+  # A red link — a page nobody has written — is `./Ibn_Ezra?action=edit&redlink=1`:
+  # its title is still the name, and the query string is not part of it.
   defp wiki_links(node) do
     node
     |> Floki.find(~s(a[rel="mw:WikiLink"]))
     |> Enum.flat_map(fn link ->
       case Floki.attribute(link, "href") do
         ["./" <> path | _] ->
-          title = path |> String.split("#") |> hd() |> URI.decode() |> String.replace("_", " ")
+          title =
+            path
+            |> String.split(["#", "?"])
+            |> hd()
+            |> URI.decode()
+            |> String.replace("_", " ")
+
           if String.contains?(title, ":") or title == "", do: [], else: [title]
 
         _ ->

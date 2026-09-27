@@ -1,0 +1,4 @@
+animals run=206 50408ms written=%{agreement: 0, disambiguation_gloss: 0, gloss: 0, taxon: 0, promoted: 0, unpromoted: 267} before=%{promoted_lexemes: 6003, word_level_lexemes: 2766} after=%{promoted_lexemes: 5736, word_level_lexemes: 2766}
+emotions run=207 797ms written=%{agreement: 0, disambiguation_gloss: 0, gloss: 0, taxon: 0, promoted: 0, unpromoted: 0} before=%{promoted_lexemes: 230, word_level_lexemes: 46} after=%{promoted_lexemes: 230, word_level_lexemes: 46}
+culture run=208 20ms written=%{agreement: 0, disambiguation_gloss: 0, gloss: 0, taxon: 0, promoted: 0, unpromoted: 0} before=%{promoted_lexemes: 0, word_level_lexemes: 0} after=%{promoted_lexemes: 0, word_level_lexemes: 0}
+breakdown since HWM: %{corroborated_gloss: %{"withdrawn" => 267}, other_methods: %{}}
