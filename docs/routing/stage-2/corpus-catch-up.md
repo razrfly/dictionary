@@ -78,7 +78,7 @@ On copies, the caught-up state is a fixed point of today's code. It was restored
 4. Verify the source against that copy with `mix dd.routing.verify --projected`. Both were projected from the same snapshot, so they must agree on everything but bookkeeping. The rehearsal's own copies carry marked routing and curation fixtures, so they cannot serve as this reference.
 5. The caught-up source becomes the accepted baseline. Snapshot it; from then on, a recovery re-projects to it exactly, as the stability runs show.
 
-Reversal: restore the step-1 snapshot. The superseded assertion revisions stay as history in any case.
+Reversal: restore the step-1 snapshot into a new database, verify it against the dump's record, and point the application at it. A restore refuses to overwrite the database its snapshot came from (see [the runbook](../recovery.md), step 2). The superseded assertion revisions stay as history in any case.
 
 **B. Make today's materializers reproduce the old corpus.** Not recommended. It would freeze behaviour that later issues deliberately changed: source identity, kinds, creator identity and edge labels.
 
