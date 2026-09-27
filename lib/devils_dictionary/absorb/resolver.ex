@@ -94,11 +94,51 @@ defmodule DevilsDictionary.Absorb.Resolver do
     if is_nil(min_id) do
       0
     else
+      attestations = attestations(source_id)
+
       min_id
       |> id_windows(max_id)
       |> Enum.reduce(0, fn {from, to}, acc ->
-        acc + resolve_window(source_id, run_id, from, to)
+        acc + resolve_window(source_id, run_id, from, to, attestations)
       end)
+    end
+  end
+
+  # Several records can attest one claim, each with its own provenance.
+  # Wiktionary keys a record by etymology, so `cat/noun/1`, `/2` and `/3` all
+  # say *calico cat* is a hyponym of *cat*, and one names the sense while
+  # another names the Thesaurus page. Resolved window by window in pending-id
+  # order, the claim took whichever attestation its chunk met first, so a full
+  # re-projection wrote two revisions and ended where it started, every time
+  # (#194). So one attestation speaks for the claim: the one from the lowest
+  # source record, then the lowest pending id. It is chosen here, over every
+  # pending row, before any is drained. Its metadata, method and confidence
+  # are the claim's, and its stated part of speech picks the claim's target.
+  defp attestations(source_id) do
+    %{rows: rows} =
+      Repo.query!(
+        """
+        SELECT DISTINCT ON (p.source_id, p.origin_key)
+               p.source_id, p.origin_key, p.to_pos, p.metadata, p.method, p.confidence
+          FROM pending_relations p
+         WHERE p.origin_key IS NOT NULL
+           AND ($1::bigint IS NULL OR p.source_id = $1)
+           AND NOT (p.metadata ? 'to_sense')
+           AND EXISTS (
+                 SELECT 1 FROM pending_relations q
+                  WHERE q.source_id = p.source_id AND q.origin_key = p.origin_key
+                    AND q.id <> p.id AND NOT (q.metadata ? 'to_sense'))
+         ORDER BY p.source_id, p.origin_key, p.source_record_id, p.id
+        """,
+        [source_id],
+        timeout: :infinity
+      )
+
+    rows
+    |> Enum.zip_with(& &1)
+    |> case do
+      [] -> [[], [], [], [], [], []]
+      columns -> columns
     end
   end
 
@@ -108,12 +148,12 @@ defmodule DevilsDictionary.Absorb.Resolver do
   # index does not cover NULLs — pairing an inserted row back to its pending row
   # through `ON CONFLICT … RETURNING` would join every null-key row to every
   # other. The transaction is what makes it atomic; the CTE was only shorter.
-  defp resolve_window(source_id, run_id, from, to) do
+  defp resolve_window(source_id, run_id, from, to, attestations) do
     {:ok, n} =
       Repo.transaction(
         fn ->
           source_id
-          |> matched(from, to)
+          |> matched(from, to, attestations)
           # The window is sized for the **scan**; the write has to be sized for
           # the **wire**. Postgres accepts at most 65,535 bind parameters in one
           # statement and a revision row is twelve of them, so a window holding
@@ -155,16 +195,25 @@ defmodule DevilsDictionary.Absorb.Resolver do
   # One `DISTINCT ON` per pending row picks the target lexeme, in the preference
   # order #69 §4 fixed: a stated part of speech, then an exact-case lemma, then
   # `@pos_priority`, then the lexical key. Ties are broken by rule rather
-  # than by whichever row the planner happened to return.
-  defp matched(source_id, from, to) do
+  # than by whichever row the planner happened to return. A claim several rows
+  # attest takes its speaking attestation's fields (`attestations/1`).
+  defp matched(source_id, from, to, attestations) do
     %{rows: rows} =
       Repo.query!(
         """
+        WITH speaking AS (
+          SELECT * FROM unnest($5::bigint[], $6::text[], $7::text[], $8::jsonb[], $9::text[], $10::float8[])
+            AS s(source_id, origin_key, to_pos, metadata, method, confidence)
+        )
         SELECT DISTINCT ON (p.id)
                p.id, p.source_id, p.source_record_id, p.origin_key,
-               p.subject_object_id, pred.key, p.confidence, p.method, p.metadata,
+               p.subject_object_id, pred.key,
+               CASE WHEN s.origin_key IS NULL THEN p.confidence ELSE s.confidence END,
+               CASE WHEN s.origin_key IS NULL THEN p.method ELSE s.method END,
+               CASE WHEN s.origin_key IS NULL THEN p.metadata ELSE s.metadata END,
                l.object_id
           FROM pending_relations p
+          LEFT JOIN speaking s ON s.source_id = p.source_id AND s.origin_key = p.origin_key
           JOIN predicates pred ON pred.id = p.predicate_id
           JOIN lexemes l
             ON l.language_tag = 'en' AND lower(l.lemma) = lower(p.to_lemma)
@@ -176,12 +225,13 @@ defmodule DevilsDictionary.Absorb.Resolver do
            -- wrong endpoint and call it resolved.
            AND NOT (p.metadata ? 'to_sense')
          ORDER BY p.id,
-                  (l.part_of_speech = p.to_pos) DESC NULLS LAST,
+                  (l.part_of_speech =
+                     CASE WHEN s.origin_key IS NULL THEN p.to_pos ELSE s.to_pos END) DESC NULLS LAST,
                   (l.lemma = p.to_lemma) DESC,
                   array_position($4::text[], l.part_of_speech) NULLS LAST,
                   l.lexical_key COLLATE "C", l.object_id
         """,
-        [from, to, source_id, @pos_priority],
+        [from, to, source_id, @pos_priority | attestations],
         timeout: :infinity
       )
 
