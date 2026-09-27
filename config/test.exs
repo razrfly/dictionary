@@ -256,3 +256,16 @@ config :devils_dictionary, :verification,
 
 config :devils_dictionary, :verification_req_options,
   plug: {Req.Test, DevilsDictionary.Quotations.Verifier}
+
+# The curation runtime (#195): every call goes through the `Req.Test` stub
+# named after the client, at a test host, and the host and volume checks read
+# a fake. The ordinary suite never reaches a model.
+config :devils_dictionary, :curation_runtime,
+  base_url: "http://ollama.test",
+  mount_point: "/Volumes/Test Models",
+  models_root: "/Volumes/Test Models/dictionary/ollama",
+  run_dir: "/Volumes/Test Models/dictionary/run",
+  system: DevilsDictionary.Curation.Runtime.FakeSystem
+
+config :devils_dictionary, :curation_runtime_req_options,
+  plug: {Req.Test, DevilsDictionary.Curation.Runtime.Ollama}
