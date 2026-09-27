@@ -1,6 +1,6 @@
 # Routing recovery procedure
 
-**Status:** supported procedure, 27 September 2026, for [routing issue #194](https://github.com/razrfly/dictionary/issues/194). It has been exercised end to end by `test/devils_dictionary/routing/recovery_test.exs` against isolated, disposable databases. It has **not** been run against the development corpus (`devils_dictionary_v2`), which this work did not touch. The first real exercise must happen before Stage 2 writes any persistent backfill.
+**Status:** supported procedure, 27 September 2026, for [routing issue #194](https://github.com/razrfly/dictionary/issues/194). It is exercised end to end by `test/devils_dictionary/routing/recovery_test.exs` against isolated, disposable databases. It was **rehearsed on the development corpus** in Stage 2A ([rehearsal report](stage-2/recovery-rehearsal.md)). Snapshot, restore and exact verification work at corpus scale, including with nonempty routing state. Re-projection (step 4) does **not** yet run cleanly on the corpus, for reasons that predate routing; see the report.
 
 ## What must survive, and why a rebuild cannot provide it
 
@@ -44,16 +44,31 @@ Every step except the first writes only to a new, separate database.
 
 A restored copy carries the source's queued and scheduled jobs. Tasks that start the application would otherwise run them against the copy, and the quotation verifier makes outbound requests. `mix dd.routing.verify` starts only the Repo. For every other command on the copy, set `DD_NO_OBAN=1`, which starts Oban with no queues and no plugins. Never restore over the live database: the guard refuses without a covering snapshot, and you would lose whatever the snapshot does not hold.
 
-1. **Quiesce, then snapshot the source.** Step 3 compares the copy with the **live** source, so the source must take no writes from here until step 3 is done. Stop the application, its Oban node and any running tasks. The snapshot itself is read-only, and writes the dump and its `.routing.json` digest.
+1. **Quiesce, then snapshot the source.** Step 3 compares the copy with the **live** source, so the source must take no writes from here until step 3 is done.
+
+   **Find the writers:** the source's connections in `pg_stat_activity`, and the local processes holding them (`lsof -iTCP:PORT`). Stop the application, its Oban node and any running tasks.
+   - Stop a server in an interactive terminal (`iex -S mix phx.server`) through its owner, in that terminal.
+   - **Never `SIGSTOP` a foreground terminal job.** The shell takes the terminal back. After `SIGCONT` the job reads the terminal as a background job and stops again (`SIGTTIN`), until someone types `fg` there.
+   - A process that does not read the terminal (for example `mix run script.exs`) can be suspended with `SIGSTOP` and resumed with `SIGCONT`.
+
+   **Prove the window was write-free:** `tup_inserted`, `tup_updated` and `tup_deleted` in `pg_stat_database` for the source must be equal before the snapshot and after the comparison.
+
+   The snapshot itself is read-only. It writes the dump and its `.routing.json` sidecar, which records the source's server, port and name.
 
    ```bash
    mix dd.snapshot --out ~/Backups/dictionary-routing.dump
    ```
 
-2. **Restore into an isolated database.** The name must begin with `devils_dictionary`, and `DD_DATABASE` must name it.
+2. **Restore into an isolated database.** The name must begin with `devils_dictionary`, and `DD_DATABASE` must name it. `mix dd.snapshot --restore` refuses to restore over the database the snapshot was taken from (same server, port and name), whether or not that database holds routing state.
 
    ```bash
    DD_DATABASE=devils_dictionary_restore mix dd.snapshot --restore ~/Backups/dictionary-routing.dump --database devils_dictionary_restore
+   ```
+
+   **Another local server.** Where the usual server lacks room for the copy, restore into a scratch cluster, and point the tasks at it with `DD_DATABASE_PORT`. Initialize the scratch cluster with the source's encoding and locale, then name the source by URL in step 3. Stage 2A did this; see the report.
+
+   ```bash
+   DD_DATABASE=devils_dictionary_restore DD_DATABASE_PORT=5433 mix dd.snapshot --restore ~/Backups/dictionary-routing.dump --database devils_dictionary_restore
    ```
 
    Do **not** run `mix ecto.migrate` on the copy before step 3. A copy migrated past its source is a different schema, and step 3 reports the difference. Migrate after switching over, like any deploy.
@@ -77,6 +92,19 @@ A restored copy carries the source's queued and scheduled jobs. Tasks that start
    DD_DATABASE=devils_dictionary_restore mix dd.routing.verify --baseline devils_dictionary_v2
    ```
 
+   With the copy on another server, name the source by URL:
+
+   ```bash
+   DD_DATABASE=devils_dictionary_restore DD_DATABASE_PORT=5433 mix dd.routing.verify --baseline ecto://postgres:postgres@localhost:5432/devils_dictionary_v2
+   ```
+
+   **A source that predates the routing migration** has none of the six routing tables. Verification then compares the corpus exactly and reports **routing: not applicable**. That proves the corpus was recovered, and nothing about routing. Routing tables on one side only, or only some of them on either side, fail.
+
+   To rehearse routing recovery from such a source, work only on copies:
+   1. Prove the restore at the original schema, as above.
+   2. Migrate the copy, never the source, and prove that the migration left every pre-existing section byte-identical and added only the routing schema (`docs/routing/stage-2/rehearsal/migration_check.exs`).
+   3. Add a marked routing fixture (`fixtures.exs`), then snapshot and restore that copy into a second one, and verify the pair: routing is then present on both sides and compared.
+
 4. **Re-project the copy from its own records, in any provider order.** `mix dd.materialize --all` re-projects every implemented source from the source records the copy holds. It also asserts that nothing derived changed (scorecard M2). Repeat it for each source, in whatever order:
 
    ```bash
@@ -92,6 +120,19 @@ A restored copy carries the source's queued and scheduled jobs. Tasks that start
    ```bash
    DD_NO_OBAN=1 DD_DATABASE=devils_dictionary_restore mix dd.replay --dir /tmp/restore-replay --source wikidata
    ```
+
+   **Then resolve.** Materialization writes an edge whose target is still a string into `pending_relations`. The rebuild pipeline drains those edges into assertions with `mix dd.resolve`, and so must a re-projection. Without it, Stage 2A found 2.48 million re-created pending edges left behind:
+
+   ```bash
+   DD_NO_OBAN=1 DD_DATABASE=devils_dictionary_restore mix dd.resolve
+   ```
+
+   **Known to fail on the development corpus (Stage 2A).** These failures come from corpus and code drift that predates routing. Identities and routing state came through re-projection exactly; the failures are these:
+   - **Wikidata replay crashes.** The quotation verifier caches its lookups as records of the `wikidata` source, and the entity materializer cannot project them.
+   - **Wikidata `materialize --all` crashes.** 1,218 label-less entities from the original build are refused by today's source-identity rules.
+   - **Today's materializers write rows and fields the corpus was built without.**
+
+   Until these are fixed, a re-projection of that corpus is not expected to match. See the [rehearsal report](stage-2/recovery-rehearsal.md).
 
    Then verify again. After re-projection the comparison leaves out the projection's own bookkeeping: its new `import_runs`, and the `updated_at`, `materialized_at` and `last_seen_run_id` stamps it rewrites. `RecoveryTest` observed each of these change, and nothing else. Sequences then need only not have fallen behind their tables, because upserts may consume ids without writing rows:
 
@@ -136,9 +177,21 @@ A second test covers the guards:
   - a snapshot taken while a routing write was in flight, once that write commits;
 - the real `mix ecto.drop`, alias and all, refuses the disposable copy, then drops it once `DD_ROUTING_SNAPSHOT` names a covering snapshot.
 
+`RecoveryPreRoutingTest` covers databases that predate the routing migration, again on disposable databases:
+- a pre-routing copy verifies exactly, with routing **not applicable**, and a changed reference or a moved unused sequence still fails;
+- routing tables on one side only, or only some of them on either side, fail, even when every section matches;
+- a baseline named by URL on any server is read, not the configured database, and identity is server, port and name;
+- `mix dd.snapshot --restore` refuses to restore over the database a snapshot was taken from, including a sidecar that names only the database.
+
 ## Limits
 
-- **Scale.** The manifest streams through a server-side cursor in constant memory. Its running time against the full corpus (about 3.7 million objects and 3.9 million assertion revisions) has not been measured. That is Stage 2's first gate.
+- **Scale.** Measured in Stage 2A on the development corpus (14 GB, 28.6 million rows), on one machine:
+  - a full manifest takes about 70 s;
+  - a snapshot takes about 80 s, for a 1.26 GB dump;
+  - a restore takes 76–110 s;
+  - an exact verification takes 73–88 s, the two manifests being taken at once.
+
+  A restored copy is 9.45 GB, because a fresh restore carries no bloat.
 - **Bodies are compared by hash.** `text`, `json`, `jsonb` and `bytea` columns are compared by MD5, which catches accidents, not an adversary.
 - **Ownership and privileges are compared, but not restored.** Step 3 says how to make them match.
 - **Schema definitions** are compared as Postgres deparses them. There is one exception: an `IN` list written `x = ANY ((ARRAY['a'::varchar, …])::text[])` is compared in the form a restored server re-parses it to (`ARRAY[('a'::varchar)::text, …]`), because it is the same condition. Nothing else is rewritten.
