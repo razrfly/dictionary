@@ -76,7 +76,8 @@ defmodule DevilsDictionary.Absorb.Batch do
       concept_relations: 0,
       concept_relations_skipped: 0,
       concept_relations_skipped_parent_taxon: 0,
-      concept_relations_skipped_unchased: 0
+      concept_relations_skipped_unchased: 0,
+      dispositions: %{}
     }
 
     source
@@ -109,6 +110,10 @@ defmodule DevilsDictionary.Absorb.Batch do
           |> Map.update!(
             :concept_relations_skipped_unchased,
             &(&1 + counts.concept_relations_skipped_unchased)
+          )
+          |> Map.update!(
+            :dispositions,
+            &Map.merge(&1, counts.dispositions, fn _, a, b -> a + b end)
           )
 
         {:error, reason} ->
