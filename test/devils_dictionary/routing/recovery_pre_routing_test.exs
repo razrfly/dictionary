@@ -9,7 +9,8 @@ defmodule DevilsDictionary.Routing.RecoveryPreRoutingTest do
     * routing tables on one side only, or only some of them on either side,
       always fail;
     * a baseline may be on another server, named by URL, and "the same
-      database" means the same server, port and name;
+      database" means the same server, port and name; a URL names its whole
+      endpoint, so a configured port or socket never carries over to it;
     * migration history decides as well: the routing migration recorded
       without its tables, or the tables without the migration, is
       inconsistent and fails. Restores over a snapshot's own source are
@@ -95,6 +96,35 @@ defmodule DevilsDictionary.Routing.RecoveryPreRoutingTest do
     after
       Application.put_env(:devils_dictionary, DevilsDictionary.Repo, original)
     end
+  end
+
+  defp configured_with(config, fun) do
+    original = Application.get_env(:devils_dictionary, DevilsDictionary.Repo)
+    Application.put_env(:devils_dictionary, DevilsDictionary.Repo, config)
+
+    try do
+      fun.()
+    after
+      Application.put_env(:devils_dictionary, DevilsDictionary.Repo, original)
+    end
+  end
+
+  defp with_env(name, value, fun) do
+    previous = System.get_env(name)
+    System.put_env(name, value)
+
+    try do
+      fun.()
+    after
+      if previous, do: System.put_env(name, previous), else: System.delete_env(name)
+    end
+  end
+
+  defp free_port do
+    {:ok, socket} = :gen_tcp.listen(0, ip: {127, 0, 0, 1})
+    {:ok, port} = :inet.port(socket)
+    :gen_tcp.close(socket)
+    port
   end
 
   test "a pre-routing copy is compared exactly, and routing is not applicable, never recovered",
@@ -198,6 +228,44 @@ defmodule DevilsDictionary.Routing.RecoveryPreRoutingTest do
       assert_raise Mix.Error, ~r/the baseline must be a different database/, fn ->
         Mix.Tasks.Dd.Routing.Verify.run(["--baseline", url(db["a"])])
       end
+    end)
+  end
+
+  test "a URL names its own server: a configured port or socket never survives it (#219 A4)",
+       %{db: db} do
+    corpus!(db["a"])
+    original = Application.get_env(:devils_dictionary, DevilsDictionary.Repo)
+    # Where a URL without a port goes: PGPORT, else 5432.
+    {_host, usual, _db} = Recovery.identity(Repo.config())
+    c = config(db["a"])
+    no_port = "ecto://#{c[:username]}:#{c[:password]}@localhost/#{db["a"]}"
+
+    # What config/dev.exs builds under DD_DATABASE_PORT=5433 (a port nothing
+    # listens on here, so the old behaviour cannot pass by luck), and a
+    # configured socket directory.
+    scratch = Keyword.put(original, :port, free_port())
+    socket = original |> Keyword.delete(:hostname) |> Keyword.put(:socket_dir, "/nonexistent")
+
+    for configured <- [scratch, socket] do
+      configured_with(configured, fn ->
+        assert Recovery.identity(no_port) == {"localhost", usual, db["a"]}
+
+        assert Recovery.with_database(no_port, fn ->
+                 Repo.query!("SELECT current_database(), inet_server_port()").rows
+               end) == [[db["a"], usual]]
+      end)
+    end
+
+    # PGHOST as a socket directory, with no hostname configured.
+    with_env("PGHOST", "/nonexistent", fn ->
+      configured_with(Keyword.delete(original, :hostname), fn ->
+        assert Recovery.identity(no_port) == {"localhost", usual, db["a"]}
+      end)
+    end)
+
+    # A bare database name still means the configured server.
+    configured_with(scratch, fn ->
+      assert Recovery.identity(db["a"]) == {"localhost", scratch[:port], db["a"]}
     end)
   end
 
