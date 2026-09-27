@@ -30,7 +30,8 @@ defmodule DevilsDictionary.Routing.Backfill do
     3. What the population and the reviews say:
        * **excluded or deferred** in the population: nothing more;
        * **heading for an address** (an allocation candidate or a collision
-         to qualify): `Pages.ensure/3`, then, only with a reviewer's
+         to qualify): `Pages.ensure/3` — a subject page, or an edition's own
+         page for an edition — then, only with a reviewer's
          `confirm`, the reviewer's override (once) and `Ledger.allocate/3`
          of the approved path;
        * **awaiting a classification or identity review**: no page until a
@@ -395,14 +396,19 @@ defmodule DevilsDictionary.Routing.Backfill do
   defp classified(result, record, review, reviewers, actor_id, proposed) do
     case Classifications.record(result) do
       {:ok, _outcome, decision} ->
-        act(record, review, decision, reviewers, actor_id, proposed)
+        act(record, review, decision, reviewers, actor_id, proposed, role(result))
 
       {:error, reason} ->
         deferral("classification_refused", inspect(reason), proposed)
     end
   end
 
-  defp act(record, review, decision, reviewers, actor_id, proposed) do
+  # The page an entity gets: an edition's own role, whose addresses live in
+  # /works; every other entity a subject page (Stage 1, decision 1).
+  defp role(%{page_role: "edition"}), do: :edition
+  defp role(_result), do: :subject
+
+  defp act(record, review, decision, reviewers, actor_id, proposed, role) do
     kind = population_kind(record["disposition"])
 
     cond do
@@ -424,10 +430,10 @@ defmodule DevilsDictionary.Routing.Backfill do
         }
 
       review && review.action == :confirm ->
-        confirm(record, review, decision, Map.fetch!(reviewers, review.reviewer), actor_id)
+        confirm(record, review, decision, Map.fetch!(reviewers, review.reviewer), actor_id, role)
 
       kind == :heading_for_address ->
-        with_page(record, decision, fn page ->
+        with_page(record, decision, role, fn page ->
           %{
             disposition: "awaiting_review",
             reason: record["disposition"],
@@ -449,13 +455,13 @@ defmodule DevilsDictionary.Routing.Backfill do
 
   # A reviewer's confirmation: their override of the decision they saw (once),
   # the page, and the approved address.
-  defp confirm(record, review, decision, reviewer, actor_id) do
+  defp confirm(record, review, decision, reviewer, actor_id, role) do
     path = review.path || uncontested(record)
 
     with {:ok, parsed} <- path_for(path),
          :ok <- same_family(parsed, review.family),
          {:ok, decision} <- confirmed(record["object_id"], review, decision, reviewer) do
-      with_page(record, decision, fn page ->
+      with_page(record, decision, role, fn page ->
         reason =
           "Stage 2 backfill: address approved by reviewer ##{reviewer.user_id} — #{review.reason}"
 
@@ -539,8 +545,8 @@ defmodule DevilsDictionary.Routing.Backfill do
     end
   end
 
-  defp with_page(record, decision, fun) do
-    case Pages.ensure(:subject, record["object_id"]) do
+  defp with_page(record, decision, role, fun) do
+    case Pages.ensure(role, record["object_id"]) do
       {:ok, page} ->
         fun.(page)
 

@@ -195,6 +195,11 @@ defmodule DevilsDictionary.Routing.BackfillTest do
       })
     ]
 
+    write_population!(dir, snapshot, records, overrides)
+  end
+
+  # A candidates file for `records`, bound to the export and the policy.
+  defp write_population!(dir, snapshot, records, overrides \\ %{}) do
     inputs =
       Map.merge(
         %{"input_sha256" => snapshot.sha256, "policy_sha256" => AuditSnapshot.policy_digest()},
@@ -304,6 +309,47 @@ defmodule DevilsDictionary.Routing.BackfillTest do
     # The collision is never qualified by import order: no path for India.
     assert item(plan, ctx.world.daman_in).disposition == "deferred_by_review"
     assert Repo.all(from p in Page, where: p.publication_state != :draft) == []
+  end
+
+  test "an edition gets its own page, and its address in /works", ctx do
+    {:ok, work} =
+      Registry.create_work(%{preferred_label: "The Devil's Dictionary", work_kind: "book"})
+
+    {:ok, edition} =
+      Registry.create_edition(%{
+        preferred_label: "Project Gutenberg #972",
+        work_id: work.object_id,
+        edition_label: "1911 text"
+      })
+
+    snapshot = export!(ctx.dir)
+
+    population =
+      write_population!(ctx.dir, snapshot, [
+        %{
+          "object_id" => edition.object_id,
+          "label" => edition.preferred_label,
+          "disposition" =>
+            "allocation candidate after classification review confirms the mapping",
+          "address_status" => "candidate",
+          "candidate_path" => "/works/project-gutenberg-sharp-972",
+          "status" => "mapped",
+          "family" => "works"
+        }
+      ])
+
+    reviews =
+      reviews!(ctx, [{edition, %{"action" => "confirm", "family" => "works"}}])
+
+    {:ok, plan} = Backfill.load(snapshot.path, population, reviews)
+    {:ok, summary} = Backfill.run(plan, ctx.importer.id)
+
+    assert summary.dispositions == %{"allocated" => 1}
+    page = Repo.get_by!(Page, target_object_id: edition.object_id)
+    assert page.role == :edition
+
+    assert Repo.get!(PublicPath, page.canonical_path_id).path ==
+             "/works/project-gutenberg-sharp-972"
   end
 
   test "a confirmation that cannot stand is refused for its record only", ctx do
