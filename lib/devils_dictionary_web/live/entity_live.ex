@@ -305,6 +305,14 @@ defmodule DevilsDictionaryWeb.EntityLive do
                   >
                     Draft
                   </span>
+                  <span
+                    :if={@subject.fixture}
+                    id="subject-fixture"
+                    title={@subject.fixture}
+                    class="rounded-full border border-dashed border-amber-600/60 px-2 py-0.5 text-sm/5 font-medium text-amber-800 dark:border-amber-400/50 dark:text-amber-200"
+                  >
+                    Fixture
+                  </span>
                 </div>
                 <.eyebrow :if={is_nil(@subject)}>{@page.entity.kind}</.eyebrow>
                 <.heading>{@page.entity.label}</.heading>
@@ -924,6 +932,10 @@ defmodule DevilsDictionaryWeb.EntityLive do
           <span class="tabular-nums">{Calendar.strftime(@subject.allocation.at, "%-d %B %Y")}</span>
           by {@subject.allocation.actor || "an import"}
         </dd>
+        <dt :if={@subject.allocation} class="font-medium text-mist-700 dark:text-mist-300">Why</dt>
+        <dd :if={@subject.allocation} class="text-pretty">{@subject.allocation.reason}</dd>
+        <dt :if={@subject.fixture} class="font-medium text-mist-700 dark:text-mist-300">Fixture</dt>
+        <dd :if={@subject.fixture} class="text-pretty">{@subject.fixture}</dd>
         <dt :if={@subject.decision} class="font-medium text-mist-700 dark:text-mist-300">
           Classification
         </dt>
@@ -1172,8 +1184,16 @@ defmodule DevilsDictionaryWeb.EntityLive do
 
     family = Address.family(URI.decode(base))
 
+    fixture =
+      Repo.one(
+        from e in DevilsDictionary.Registry.Entity,
+          where: e.object_id == ^object_id,
+          select: fragment("?->>'fixture'", e.metadata)
+      )
+
     %{
       family: family,
+      fixture: fixture,
       family_label: Address.label(family),
       address: URI.decode(base),
       draft?: page.publication_state == :draft,

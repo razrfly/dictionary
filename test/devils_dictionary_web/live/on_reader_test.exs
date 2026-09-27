@@ -428,6 +428,9 @@ defmodule DevilsDictionaryWeb.OnReaderTest do
 
       assert html =~ "Roman god of war"
       assert has_element?(subjects, "#subject-family", "Subjects")
+      # A fixture says so on its own page as on its card.
+      assert has_element?(subjects, "#subject-fixture")
+      assert subjects |> element("#subject-provenance") |> render() =~ "fixture allocation"
     end)
   end
 
