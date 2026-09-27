@@ -218,7 +218,9 @@ defmodule DevilsDictionary.Curation.CompositionsTest do
                Compositions.change_scope(
                  ctx.contributor,
                  page.id,
-                 [ctx.love.object_id, ctx.amor.object_id], reason: "amor merges into love's page")
+                 [ctx.love.object_id, ctx.amor.object_id],
+                 reason: "amor merges into love's page"
+               )
 
       assert changed.scope_signature ==
                Compositions.signature([ctx.love.object_id, ctx.amor.object_id])

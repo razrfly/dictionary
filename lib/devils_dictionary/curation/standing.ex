@@ -30,11 +30,18 @@ defmodule DevilsDictionary.Curation.Standing do
 
   alias DevilsDictionary.Repo
 
-  @doc "The version's items evaluated against its composition's current members."
+  @doc """
+  The version's items evaluated against its composition's current members,
+  under the configuration version it was made with.
+  """
   def evaluate(%CompositionVersion{} = version, %Composition{} = composition) do
     version.id
     |> Compositions.items()
-    |> Eligibility.evaluate(Compositions.member_ids(composition.id), version.scope_signature)
+    |> Eligibility.evaluate(
+      Compositions.member_ids(composition.id),
+      version.scope_signature,
+      version.configuration_version_id
+    )
   end
 
   @doc "`:ok` while the configuration is enabled, ready and on this version's configuration version."

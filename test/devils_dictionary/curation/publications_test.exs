@@ -299,6 +299,7 @@ defmodule DevilsDictionary.Curation.PublicationsTest do
                  Repo.insert!(%CompositionPublication{
                    composition_id: ctx.composition.id,
                    action: :publish,
+                   authority_kind: :operator,
                    published_version_id: ctx.version.id,
                    authorizing_review_id: review.id,
                    actor_id: actor!(ctx.reviewer).id,
@@ -390,7 +391,9 @@ defmodule DevilsDictionary.Curation.PublicationsTest do
         Compositions.change_scope(
           ctx.contributor,
           page.id,
-          [ctx.love.object_id, ctx.amor.object_id], reason: "amor joins the page")
+          [ctx.love.object_id, ctx.amor.object_id],
+          reason: "amor joins the page"
+        )
 
       assert Published.current(page.id) == {:withheld, [:scope_changed]}
       settle!()
@@ -448,14 +451,7 @@ defmodule DevilsDictionary.Curation.PublicationsTest do
   describe "deletion and retention (R7)" do
     test "a deleted source revision tombstones the item, and nothing prohibited is kept", ctx do
       work = WordFixtures.concept!(nil, "fixture work")
-      record = WordFixtures.record!(ctx, "wikidata", raw: %{"fixture" => "record payload"})
-
-      [record_revision] =
-        Repo.all(
-          from r in "source_record_revisions",
-            where: r.source_record_id == ^record.id,
-            select: r.id
-        )
+      {record, record_revision} = owned_record!(ctx, work)
 
       {:ok, v2} =
         Compositions.create_version(ctx.contributor, ctx.composition.id, %{
@@ -463,12 +459,7 @@ defmodule DevilsDictionary.Curation.PublicationsTest do
           highlights: [
             quotation_spec(ctx.sense, 1),
             content_spec(ctx.definition, ctx.love),
-            %{
-              kind: :work,
-              object_id: work.object_id,
-              source_record_revision_id: record_revision,
-              meaning: {:lexeme, ctx.love.object_id}
-            }
+            record_work_spec(work, record_revision, ctx.love)
           ],
           reason: "with a work",
           expected_parent: ctx.version.id
@@ -550,19 +541,6 @@ defmodule DevilsDictionary.Curation.PublicationsTest do
     Repo.update_all(
       from(r in "content_revisions", where: r.content_id == ^content.object_id and r.is_current),
       set: [lifecycle_state: "active"]
-    )
-  end
-
-  defp disallow_record!(content) do
-    revision = Registry.current_content_revision(content.object_id)
-
-    Repo.update_all(
-      from(rec in "source_records",
-        join: rev in "source_record_revisions",
-        on: rev.source_record_id == rec.id,
-        where: rev.id == ^revision.source_record_revision_id
-      ),
-      set: [display_allowed: false]
     )
   end
 end

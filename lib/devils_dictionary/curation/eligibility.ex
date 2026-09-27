@@ -6,28 +6,45 @@ defmodule DevilsDictionary.Curation.Eligibility do
 
   An item is eligible when:
 
-    * **its exact revision still exists**: a deletion nulls the reference
-      (R7), and a nulled one is `:revision_deleted`;
-    * **that revision is the current, active one of its own object**: a
+    * **every reference it was made with still exists.** A deletion nulls a
+      reference (R7), and the item records which references it had
+      (`required_references`), so a deleted revision, object, meaning or claim
+      withholds it (`:revision_deleted`, `:object_deleted`,
+      `:meaning_deleted`, `:claim_deleted`). A deletion never makes an item
+      eligible again;
+    * **its exact revision is the current, active one of its own object.** A
       newer revision is `:revision_superseded`; a pin is a pin;
-    * **display is allowed** at every layer. That means the revision's rights
-      (`Claims.Visibility`), its source record's `display_allowed`, and the
+    * **display is allowed** at every layer: the revision's rights
+      (`Claims.Visibility`), its source record's `display_allowed`, and its
       source being active;
     * **for a quotation**, the example at its locator still hashes to the
       words that were chosen (`:words_changed`);
-    * **for a catalog work**, the committed manifest still has the pinned
-      checksum and row (`:catalog_changed`, `:catalog_row_missing`);
+    * **for a work, its evidence is of that work.**
+      - A catalog pin must name a committed manifest with the pinned checksum
+        and row (`:catalog_changed`, `:catalog_row_missing`). If the item
+        also names a registry object, that object must carry the row's
+        identity as a verified external identifier.
+      - A source-record revision must be one whose record materialized the
+        item's object.
+      - Anything else is `:work_identity_mismatch`. A catalog pin with no
+        object is a legitimate catalog-only work;
     * **its intended meaning is on the scope**: a member lexeme, or a
       current sense of one;
-    * **its claim, if it cites one**, is current, active and publicly
-      visible (`Claims.visible/2`). This slice writes no claim; it reads the
-      state #190's review workflow leaves.
+    * **its claim, if it was made with one**, is current, active and
+      publicly visible (`Claims.visible/2`). This slice writes no claim; it
+      reads the state #190's review workflow leaves.
 
-  `evaluate/3` also applies the lead rule and returns the **eligibility
-  fingerprint**: the digest of the scope, the applicable Bierce entries and
-  every item's result. A review accepts a fingerprint, and a publication
-  publishes the one that was accepted. Anything that changes an item's
-  eligibility, or the lead rule's inputs, changes it (R4).
+  `evaluate/4` also applies the lead rule and returns the **eligibility
+  fingerprint**. That is the digest of:
+
+    * the configuration version;
+    * the scope;
+    * the applicable Bierce entries;
+    * the lead rule and every item's result.
+
+  A review accepts a fingerprint, and a publication publishes the one that
+  was accepted. Anything that changes an item's eligibility, the lead rule's
+  inputs or the configuration version changes it (R4).
   """
 
   import Ecto.Query
@@ -37,16 +54,37 @@ defmodule DevilsDictionary.Curation.Eligibility do
   alias DevilsDictionary.Claims.{AssertionRevision, Visibility}
   alias DevilsDictionary.Corpus.SourceRecordRevision
   alias DevilsDictionary.Curation.{CompositionItem, Digest, LeadRule}
-  alias DevilsDictionary.Registry.{ContentItem, ContentRevision, Object, Sense, SenseRevision}
+
+  alias DevilsDictionary.Registry.{
+    ContentItem,
+    ContentRevision,
+    ExternalIdentifier,
+    Object,
+    Sense,
+    SenseRevision
+  }
+
   alias DevilsDictionary.Repo
-  alias DevilsDictionary.Sources.{Source, SourceRecord}
+  alias DevilsDictionary.Sources.{MaterializedOutput, Source, SourceRecord}
+
+  # The references a deletion can null, and what each one's loss means.
+  # `meaning_lexeme_id` is RESTRICT, so it is never nulled.
+  @references %{
+    "item_object_id" => {:item_object_id, :object_deleted},
+    "content_revision_id" => {:content_revision_id, :revision_deleted},
+    "sense_revision_id" => {:sense_revision_id, :revision_deleted},
+    "source_record_revision_id" => {:source_record_revision_id, :revision_deleted},
+    "meaning_sense_revision_id" => {:meaning_sense_revision_id, :meaning_deleted},
+    "assertion_revision_id" => {:assertion_revision_id, :claim_deleted}
+  }
 
   @doc """
-  Evaluates an arrangement against a scope's member lexeme ids. Returns
-  `%{results: [{role, position, :ok | reason}], lead_rule: {:ok, rule} |
-  {:error, reason}, applicable: [id], fingerprint: hex, ok?: boolean}`.
+  Evaluates an arrangement against a scope's member lexeme ids, under a
+  configuration version. Returns `%{results: [{role, position, :ok |
+  reason}], lead_rule: {:ok, rule} | {:error, reason}, applicable: [id],
+  fingerprint: hex, ok?: boolean}`.
   """
-  def evaluate(items, member_ids, scope_signature) do
+  def evaluate(items, member_ids, scope_signature, configuration_version_id) do
     applicable = LeadRule.applicable(member_ids)
     lead = Enum.find(items, &(&1.role == :lead))
     lead_rule = LeadRule.check(member_ids, lead && lead.item_object_id, applicable)
@@ -61,64 +99,83 @@ defmodule DevilsDictionary.Curation.Eligibility do
       lead_rule: lead_rule,
       applicable: applicable,
       ok?: match?({:ok, _}, lead_rule) and Enum.all?(results, &(elem(&1, 2) == :ok)),
-      fingerprint: fingerprint(scope_signature, applicable, lead_rule, results)
+      fingerprint:
+        Digest.term(%{
+          "configuration_version" => configuration_version_id,
+          "scope" => scope_signature,
+          "priority_leads" => applicable,
+          "lead_rule" => lead_rule |> elem(1) |> to_string(),
+          "items" =>
+            Enum.map(results, fn {role, pos, st} -> [to_string(role), pos, to_string(st)] end)
+        })
     }
   end
 
   defp status(:ok), do: :ok
   defp status({:error, reason}), do: reason
 
-  defp fingerprint(scope_signature, applicable, lead_rule, results) do
-    Digest.term(%{
-      "scope" => scope_signature,
-      "priority_leads" => applicable,
-      "lead_rule" => lead_rule |> elem(1) |> to_string(),
-      "items" =>
-        Enum.map(results, fn {role, pos, st} -> [to_string(role), pos, to_string(st)] end)
-    })
-  end
-
   @doc "`:ok`, or `{:error, reason}` for one item on a scope of member lexeme ids."
   def check(%CompositionItem{} = item, member_ids) do
-    with :ok <- reference(item),
+    with :ok <- still_present(item),
+         :ok <- reference(item),
          :ok <- meaning(item, member_ids) do
       assertion(item.assertion_revision_id)
     end
   end
 
+  @doc """
+  Whether content object `content_id` may lead now. Its current revision
+  must be active and displayable, its object and source active, and its
+  source record allowing display. A priority source's entry that fails this
+  neither leads nor blocks another lead (K10).
+  """
+  def leadable?(content_id) do
+    case Repo.one(from r in ContentRevision, where: r.content_id == ^content_id and r.is_current) do
+      nil -> false
+      revision -> content_revision(revision, content_id) == :ok
+    end
+  end
+
+  # A reference an item was made with and a deletion has since nulled. An
+  # item not yet stored has exactly the references it names.
+  defp still_present(%CompositionItem{required_references: nil}), do: :ok
+
+  defp still_present(%CompositionItem{required_references: required} = item) do
+    Enum.find_value(required, :ok, fn column ->
+      case Map.fetch(@references, column) do
+        {:ok, {field, reason}} -> if is_nil(Map.fetch!(item, field)), do: {:error, reason}
+        :error -> {:error, :revision_deleted}
+      end
+    end)
+  end
+
   # ── the reference itself ──────────────────────────────────────────────────
 
   defp reference(%CompositionItem{item_kind: :content} = item) do
-    with {:ok, id} <- need(item.content_revision_id, :revision_deleted),
+    with {:ok, object_id} <- need(item.item_object_id, :object_missing),
+         {:ok, id} <- need(item.content_revision_id, :revision_deleted),
          {:ok, revision} <-
            need(
              Repo.one(
-               from r in ContentRevision,
-                 where: r.id == ^id and r.content_id == ^item.item_object_id
+               from r in ContentRevision, where: r.id == ^id and r.content_id == ^object_id
              ),
              :revision_deleted
-           ),
-         :ok <- current(revision),
-         :ok <- ensure(Visibility.content_displayable?(revision), :display_restricted),
-         :ok <- object_active(item.item_object_id),
-         :ok <- content_source_active(item.item_object_id) do
-      record_displayable(revision.source_record_revision_id)
+           ) do
+      content_revision(revision, object_id)
     end
   end
 
   defp reference(%CompositionItem{item_kind: :sense_quotation} = item) do
-    with {:ok, id} <- need(item.sense_revision_id, :revision_deleted),
+    with {:ok, object_id} <- need(item.item_object_id, :object_missing),
+         {:ok, id} <- need(item.sense_revision_id, :revision_deleted),
          {:ok, revision} <-
            need(
-             Repo.one(
-               from r in SenseRevision,
-                 where: r.id == ^id and r.sense_id == ^item.item_object_id
-             ),
+             Repo.one(from r in SenseRevision, where: r.id == ^id and r.sense_id == ^object_id),
              :revision_deleted
            ),
          :ok <- current(revision),
-         :ok <- object_active(item.item_object_id),
-         :ok <- sense_source_active(item.item_object_id),
+         :ok <- object_active(object_id),
+         :ok <- sense_source_active(object_id),
          :ok <- record_displayable(revision.source_record_revision_id) do
       words(revision, item.locator, item.words_sha256)
     end
@@ -126,23 +183,39 @@ defmodule DevilsDictionary.Curation.Eligibility do
 
   defp reference(%CompositionItem{item_kind: :work, catalog_manifest: name} = item)
        when is_binary(name) do
-    with :ok <- catalog(name, item.catalog_checksum, item.catalog_identity) do
-      if item.item_object_id, do: object_active(item.item_object_id), else: :ok
+    with {:ok, manifest} <- catalog(name, item.catalog_checksum, item.catalog_identity) do
+      case item.item_object_id do
+        nil ->
+          :ok
+
+        object_id ->
+          with :ok <- object_active(object_id),
+               do: catalog_identity(object_id, manifest, item.catalog_identity)
+      end
     end
   end
 
   defp reference(%CompositionItem{item_kind: :work} = item) do
-    with {:ok, id} <- need(item.source_record_revision_id, :revision_deleted),
-         :ok <- record_displayable(id) do
-      if item.item_object_id, do: object_active(item.item_object_id), else: :ok
+    with {:ok, object_id} <- need(item.item_object_id, :object_missing),
+         {:ok, id} <- need(item.source_record_revision_id, :revision_deleted),
+         :ok <- record_displayable(id),
+         :ok <- object_active(object_id) do
+      record_describes(id, object_id)
+    end
+  end
+
+  defp content_revision(revision, object_id) do
+    with :ok <- current(revision),
+         :ok <- ensure(Visibility.content_displayable?(revision), :display_restricted),
+         :ok <- object_active(object_id),
+         :ok <- content_source_active(object_id) do
+      record_displayable(revision.source_record_revision_id)
     end
   end
 
   defp current(%{is_current: true, lifecycle_state: :active}), do: :ok
   defp current(%{is_current: true}), do: {:error, :revision_withdrawn}
   defp current(_revision), do: {:error, :revision_superseded}
-
-  defp object_active(nil), do: {:error, :revision_deleted}
 
   defp object_active(id) do
     ensure(
@@ -192,6 +265,20 @@ defmodule DevilsDictionary.Curation.Eligibility do
     end
   end
 
+  # A source record is evidence of a work only if it materialized that work:
+  # a displayable record about something else is not.
+  defp record_describes(revision_id, object_id) do
+    query =
+      from rev in SourceRecordRevision,
+        join: out in MaterializedOutput,
+        on: out.source_record_id == rev.source_record_id,
+        where:
+          rev.id == ^revision_id and out.output_object_id == ^object_id and
+            is_nil(out.retired_at)
+
+    ensure(Repo.exists?(query), :work_identity_mismatch)
+  end
+
   defp words(%SenseRevision{examples: examples}, "quotation:" <> index, sha256)
        when is_list(examples) do
     with {n, ""} <- Integer.parse(index),
@@ -219,12 +306,28 @@ defmodule DevilsDictionary.Curation.Eligibility do
            ensure(
              Enum.any?(manifest["rows"], &(to_string(&1[field]) == identity)),
              :catalog_row_missing
+           ),
+         :ok <-
+           ensure(
+             Repo.exists?(from s in Source, where: s.slug == ^manifest["source"] and s.active),
+             :source_inactive
            ) do
-      ensure(
-        Repo.exists?(from s in Source, where: s.slug == ^manifest["source"] and s.active),
-        :source_inactive
-      )
+      {:ok, manifest}
     end
+  end
+
+  # A registry object shown with a catalog pin must be the pinned work: it
+  # carries the row's identity in the kind's namespace, verified.
+  defp catalog_identity(object_id, manifest, identity) do
+    namespace = Manifest.identity_namespace(manifest["kind"])
+
+    query =
+      from x in ExternalIdentifier,
+        where:
+          x.object_id == ^object_id and x.namespace == ^namespace and
+            x.external_id == ^identity and x.status == :verified
+
+    ensure(Repo.exists?(query), :work_identity_mismatch)
   end
 
   defp committed_manifest(name) do
@@ -262,6 +365,8 @@ defmodule DevilsDictionary.Curation.Eligibility do
 
   defp on_scope(lexeme_id, member_ids), do: ensure(lexeme_id in member_ids, :meaning_off_scope)
 
+  # An item made without a claim needs none (a deleted one was caught by
+  # `still_present/1`).
   defp assertion(nil), do: :ok
 
   defp assertion(id) do

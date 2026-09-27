@@ -12,6 +12,15 @@ defmodule DevilsDictionary.Curation.CompositionItem do
 
   When a referenced source row is deleted, the database nulls the reference
   and the reader withholds the item. Nothing else about an item ever changes.
+
+  `required_references` is written by the database at insert: the reference
+  columns the item was made with. It is what tells a claim or object that a
+  deletion removed apart from one the item never had, so a deletion can
+  never make a withheld item eligible again.
+
+  A note is attributed to `note_author_actor_id`, the actor who wrote it,
+  under that actor's own label. The database checks both; a caller never
+  supplies attribution.
   """
   use Ecto.Schema
 
@@ -36,6 +45,8 @@ defmodule DevilsDictionary.Curation.CompositionItem do
     field :note, :string
     field :note_author_kind, Ecto.Enum, values: [:human, :model]
     field :note_author_label, :string
+    field :note_author_actor_id, :id
+    field :required_references, {:array, :string}, read_after_writes: true
 
     timestamps(type: :utc_datetime_usec, updated_at: false)
   end

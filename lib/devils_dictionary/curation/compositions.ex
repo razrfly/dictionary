@@ -248,8 +248,14 @@ defmodule DevilsDictionary.Curation.Compositions do
     * `:work`: `:source_record_revision_id`, or `:catalog` as
       `%{manifest, checksum, identity}`.
 
-  An item may also carry `:assertion_revision_id`, and `:note` (the author's
-  own words, attributed to them).
+  An item may also carry `:assertion_revision_id`, and `:note` as `%{text:
+  text}`: the author's own words, attributed to the authenticated actor. A
+  note spec naming its own author or kind is refused
+  (`:note_attribution_not_an_input`).
+
+  The same arrangement under the same configuration version is refused as
+  `{:duplicate_version, id}`. Under a newer configuration version it is a new
+  version, with no approval of its own until it is reviewed.
   """
   def create_version(scope, composition_id, attrs) do
     Transaction.run(fn ->
@@ -267,12 +273,12 @@ defmodule DevilsDictionary.Curation.Compositions do
              ),
            {:ok, items} <- build_items(Map.get(attrs, :lead), highlights, actor) do
         members = member_ids(c.id)
-        evaluation = Eligibility.evaluate(items, members, c.scope_signature)
+        evaluation = Eligibility.evaluate(items, members, c.scope_signature, cv.id)
         arrangement = Digest.arrangement_hash(items)
 
         with {:ok, rule} <- evaluation.lead_rule,
              :ok <- eligible(evaluation),
-             :ok <- not_duplicate(c.id, arrangement, evaluation.fingerprint) do
+             :ok <- not_duplicate(c.id, cv.id, arrangement, evaluation.fingerprint) do
           version =
             Repo.insert!(%CompositionVersion{
               composition_id: c.id,
@@ -331,12 +337,16 @@ defmodule DevilsDictionary.Curation.Compositions do
   defp eligible(%{results: results}),
     do: {:error, {:ineligible, Enum.reject(results, &(elem(&1, 2) == :ok))}}
 
-  defp not_duplicate(composition_id, arrangement, fingerprint) do
+  # The same arrangement under the same configuration version is the same
+  # version. Under a newer configuration version it is a new one, which needs
+  # its own review: approval never transfers.
+  defp not_duplicate(composition_id, configuration_version_id, arrangement, fingerprint) do
     case Repo.one(
            from v in CompositionVersion,
              where:
-               v.composition_id == ^composition_id and v.arrangement_hash == ^arrangement and
-                 v.eligibility_fingerprint == ^fingerprint,
+               v.composition_id == ^composition_id and
+                 v.configuration_version_id == ^configuration_version_id and
+                 v.arrangement_hash == ^arrangement and v.eligibility_fingerprint == ^fingerprint,
              select: v.id
          ) do
       nil -> :ok
@@ -398,11 +408,17 @@ defmodule DevilsDictionary.Curation.Compositions do
 
   defp meaning(_meaning), do: {:error, :meaning_required}
 
-  # A manual version's note is its author's own words, attributed to them.
-  # A model note has no place in manual work.
-  defp note(nil, _actor), do: {:ok, %{note: nil, note_author_kind: nil, note_author_label: nil}}
+  # A manual version's note is its author's own words, attributed to the
+  # authenticated actor and nobody else. A note spec is its text alone:
+  # attribution is never an input, so a caller naming an author, or a kind,
+  # is refused rather than quietly overridden. A model note has no place in
+  # manual work. The database checks the same (`note_author_actor_id`).
+  defp note(nil, _actor),
+    do:
+      {:ok,
+       %{note: nil, note_author_kind: nil, note_author_label: nil, note_author_actor_id: nil}}
 
-  defp note(%{text: text} = note, actor) when is_binary(text) do
+  defp note(%{text: text} = note, actor) when is_binary(text) and map_size(note) == 1 do
     if String.trim(text) == "" do
       {:error, :note_empty}
     else
@@ -410,12 +426,17 @@ defmodule DevilsDictionary.Curation.Compositions do
        %{
          note: text,
          note_author_kind: :human,
-         note_author_label: note[:author_label] || actor.label || "Account"
+         note_author_label: author_label(actor),
+         note_author_actor_id: actor.id
        }}
     end
   end
 
+  defp note(%{text: _text}, _actor), do: {:error, :note_attribution_not_an_input}
   defp note(_note, _actor), do: {:error, :note_invalid}
+
+  @doc "The label an actor's notes are attributed under: its own, or its account number."
+  def author_label(actor), do: actor.label || "Account ##{actor.id}"
 
   defp lock_active(id) do
     case Repo.one(from c in Composition, where: c.id == ^id, lock: "FOR UPDATE") do

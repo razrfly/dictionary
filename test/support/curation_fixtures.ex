@@ -168,6 +168,78 @@ defmodule DevilsDictionary.CurationFixtures do
     }
   end
 
+  @doc """
+  A registry work that *is* the committed catalog row: an entity carrying the
+  row's QID as a verified Wikidata identifier.
+  """
+  def catalog_work!(label \\ "Cupid and Psyche (fixture)") do
+    WordFixtures.concept!(@catalog_row, label)
+  end
+
+  @doc """
+  A source record that materialized `object`, and its revision id: the
+  evidence a source-record work item names.
+  """
+  def owned_record!(ctx, object, source_slug \\ "wikidata") do
+    record = WordFixtures.record!(ctx, source_slug, raw: %{"fixture" => "record payload"})
+    now = DateTime.utc_now()
+
+    Repo.insert_all("source_materialized_outputs", [
+      %{
+        source_record_id: record.id,
+        output_role: "work",
+        output_key: "fixture:#{object.object_id}",
+        output_object_id: object.object_id,
+        inserted_at: now,
+        updated_at: now
+      }
+    ])
+
+    revision_id =
+      Repo.one!(
+        from r in "source_record_revisions",
+          where: r.source_record_id == ^record.id,
+          select: r.id
+      )
+
+    {record, revision_id}
+  end
+
+  @doc "A work spec backed by a source-record revision."
+  def record_work_spec(object, revision_id, lexeme) do
+    %{
+      kind: :work,
+      object_id: object.object_id,
+      source_record_revision_id: revision_id,
+      meaning: {:lexeme, lexeme.object_id}
+    }
+  end
+
+  @doc "The current `defines` claim revision from a content item to a lexeme."
+  def defines_claim!(content, lexeme) do
+    Repo.one!(
+      from r in DevilsDictionary.Claims.AssertionRevision,
+        join: p in assoc(r, :predicate),
+        where:
+          r.subject_object_id == ^content.object_id and r.object_object_id == ^lexeme.object_id and
+            r.is_current and p.key == "defines"
+    )
+  end
+
+  @doc "Takes down the source record behind a content item's current revision."
+  def disallow_record!(content) do
+    revision = Registry.current_content_revision(content.object_id)
+
+    Repo.update_all(
+      from(rec in "source_records",
+        join: rev in "source_record_revisions",
+        on: rev.source_record_id == rec.id,
+        where: rev.id == ^revision.source_record_revision_id
+      ),
+      set: [display_allowed: false]
+    )
+  end
+
   @doc "Unique idempotency keys."
   def key(prefix \\ "key"), do: "#{prefix}-#{System.unique_integer([:positive])}"
 

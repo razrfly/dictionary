@@ -1,10 +1,18 @@
 defmodule DevilsDictionary.Curation.Reviews do
   @moduledoc """
-  Human presentation review of composition versions (R1, R2).
+  Operator presentation review of composition versions (R1, R2).
+
+  This is the **optional operator path**: a person accepting a manual
+  composition, an override or a correction, which then authorizes an
+  operator publication (`Publications.publish/3`). It is not the gate every
+  selection must pass. Routine selections are meant to publish on the
+  authority of a genuine panel decision, which is not available yet
+  (`docs/curation/persistence-slice-1.md`, "Publication authority").
 
   Only an account with the reviewer role decides. The role is rechecked
   under a row lock, and the database checks it again. There is no bot
-  approver.
+  operator: a panel's authority is its own decision record, never a review
+  written in a person's name.
 
   Decisions are append-only, and the latest one is the version's state. An
   idempotency key replays its own decision and refuses a different one.

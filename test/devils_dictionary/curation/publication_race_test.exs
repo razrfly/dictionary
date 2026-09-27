@@ -121,6 +121,7 @@ defmodule DevilsDictionary.Curation.PublicationRaceTest do
             Repo.insert!(%CompositionPublication{
               composition_id: ctx.composition.id,
               action: :publish,
+              authority_kind: :operator,
               published_version_id: version.id,
               authorizing_review_id: ctx.reviews[version.id].id,
               actor_id: actor.id,

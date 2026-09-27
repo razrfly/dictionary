@@ -32,11 +32,29 @@ defmodule DevilsDictionary.Repo.Migrations.CreateCurationFoundation do
   use Ecto.Migration
 
   def change do
+    require_postgresql_15()
     profiles()
     configurations()
     revision_ownership_indexes()
     compositions()
     triggers()
+  end
+
+  # Column-list referential actions (`ON DELETE SET NULL (column)`, R7) arrived
+  # in PostgreSQL 15. On an older server the migration would fail halfway
+  # through with a syntax error; it says why instead.
+  defp require_postgresql_15 do
+    execute """
+            DO $$
+            BEGIN
+              IF current_setting('server_version_num')::int < 150000 THEN
+                RAISE EXCEPTION 'the curation foundation needs PostgreSQL 15 or newer (column-list ON DELETE SET NULL); this server is %',
+                  current_setting('server_version');
+              END IF;
+            END
+            $$;
+            """,
+            "SELECT 1"
   end
 
   # ── profiles (#196 curator_profiles, curator_profile_versions) ──────────────
