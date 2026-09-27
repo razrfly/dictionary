@@ -76,7 +76,7 @@ defmodule DevilsDictionary.Examples do
   alias DevilsDictionary.Claims
   alias DevilsDictionary.Claims.{AssertionEvidence, AssertionRevision, AssertionVote}
   alias DevilsDictionary.Corpus.SourceRecordRevision
-  alias DevilsDictionary.Examples.Rank
+  alias DevilsDictionary.Examples.{Provenance, Rank}
   alias DevilsDictionary.Registry.{ContentRevision, Entity, Lexeme, Sense, SenseRevision}
 
   alias DevilsDictionary.Repo
@@ -350,6 +350,8 @@ defmodule DevilsDictionary.Examples do
       on: c.content_id == r.subject_object_id and c.is_current,
       left_join: nominator in Actor,
       on: nominator.id == a.origin_actor_id,
+      left_join: submitter in Actor,
+      on: submitter.id == a.submitted_by_actor_id,
       where: p.key == @illustrates and r.is_current and r.lifecycle_state == :active,
       select: %{
         assertion_id: a.id,
@@ -368,7 +370,10 @@ defmodule DevilsDictionary.Examples do
         nominated_at: r.inserted_at,
         nominator_id: nominator.id,
         nominator_label: nominator.label,
-        nominator_kind: nominator.actor_kind
+        nominator_kind: nominator.actor_kind,
+        submitter_id: submitter.id,
+        submitter_label: submitter.label,
+        submitter_kind: submitter.actor_kind
       }
   end
 
@@ -377,7 +382,7 @@ defmodule DevilsDictionary.Examples do
   defp exemplar_items(rows, sources, glosses) do
     revision_ids = Enum.map(rows, & &1.revision_id)
     states = Claims.display_review_states(revision_ids)
-    evidence = evidence_for(revision_ids)
+    evidence = evidence(revision_ids)
     votes = votes_for(revision_ids)
 
     rows
@@ -458,25 +463,43 @@ defmodule DevilsDictionary.Examples do
     end)
   end
 
-  # The card says who, in the words the nomination carried: a manifest names
-  # its curator; a form nomination is the account's own label.
+  # The card says who, in the words the nomination carried, by the one rule
+  # every surface uses (`Provenance.nominator/3`): a manifest names its
+  # curator; a form nomination is the account's own label. A claim with no
+  # actor names nobody, and says so (#212).
   defp nominator(row, metadata) do
+    {actor_id, kind} =
+      if row.nominator_id,
+        do: {row.nominator_id, row.nominator_kind},
+        else: {row.submitter_id, row.submitter_kind}
+
     %{
-      actor_id: row.nominator_id,
-      label: metadata["curator"] || row.nominator_label,
-      kind: row.nominator_kind
+      actor_id: actor_id,
+      label: Provenance.nominator(metadata, row.nominator_label, row.submitter_label),
+      kind: kind
     }
   end
 
+  defp exemplar_reason(%{label: nil}, gloss) when is_binary(gloss),
+    do: "Cited as an example of “#{gloss}”; the record does not say by whom."
+
+  defp exemplar_reason(%{label: nil}, _gloss),
+    do: "Cited as an example of this meaning; the record does not say by whom."
+
   defp exemplar_reason(%{label: label}, gloss) when is_binary(gloss),
-    do: "Cited by #{label || "a contributor"} as an example of “#{gloss}”."
+    do: "Cited by #{label} as an example of “#{gloss}”."
 
   defp exemplar_reason(%{label: label}, _gloss),
-    do: "Cited by #{label || "a contributor"} as an example of this meaning."
+    do: "Cited by #{label} as an example of this meaning."
 
-  # Every evidence row, with the URL a `community` record holds and the
-  # canonical URL a content revision has.
-  defp evidence_for(revision_ids) do
+  @doc """
+  Every evidence row of these claim revisions, by revision: `%{role, url,
+  attribution, locator}`, with the URL a `community` record holds and the
+  canonical URL a content revision has. What supports a claim reads first.
+  """
+  def evidence([]), do: %{}
+
+  def evidence(revision_ids) do
     Repo.all(
       from ev in AssertionEvidence,
         left_join: srr in SourceRecordRevision,

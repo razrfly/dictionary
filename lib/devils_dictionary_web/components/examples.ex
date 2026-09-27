@@ -37,7 +37,7 @@ defmodule DevilsDictionaryWeb.Examples do
   use DevilsDictionaryWeb, :html
 
   alias DevilsDictionary.Claims.Connection
-  alias DevilsDictionaryWeb.{SourceBadge, Word}
+  alias DevilsDictionaryWeb.{ExampleProvenance, SourceBadge, Word}
 
   # Above this, the disclosure's chips scroll inside their own box rather
   # than opening as a wall — the related block's rule and number
@@ -269,7 +269,7 @@ defmodule DevilsDictionaryWeb.Examples do
       <p class="mt-3 text-base/7 text-pretty text-mist-500 sm:text-sm/6">
         <span class="tabular-nums">{@claim.evidence_count}</span>
         evidence
-        · nominated by {@claim.nominated_by.label}<span :if={not @pending?}> · {state_label(
+        · {nominated_by(@claim.nominated_by)}<span :if={not @pending?}> · {state_label(
           @claim.review_state
         )}</span>
         ·
@@ -293,9 +293,24 @@ defmodule DevilsDictionaryWeb.Examples do
           Review
         </.link>
       </p>
+
+      <%!-- Where it came from, stage by stage (#212): one line until opened.
+           Read from `Examples.Provenance`, which the person page and the
+           opening read too. --%>
+      <div :if={@item[:provenance]} class="mt-1">
+        <ExampleProvenance.why
+          id={"examples-why-#{@claim.assertion_id}"}
+          provenance={@item.provenance}
+        />
+      </div>
     </article>
     """
   end
+
+  # The record names the nominator, or the card says it does not; it never
+  # supplies one.
+  defp nominated_by(%{label: nil}), do: "nominator unknown"
+  defp nominated_by(%{label: label}), do: "nominated by #{label}"
 
   defp kind_line(%{entity_kind: kind, qid: qid}) do
     [kind && to_string(kind), qid] |> Enum.reject(&is_nil/1) |> Enum.join(" · ")

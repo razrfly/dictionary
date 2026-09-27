@@ -56,6 +56,7 @@ defmodule DevilsDictionary.Encyclopedia.EntityPage do
   alias DevilsDictionary.Discovery.{Mapping, Result, Run}
   alias DevilsDictionary.Encyclopedia
   alias DevilsDictionary.Examples
+  alias DevilsDictionary.Examples.Provenance
   alias DevilsDictionary.Registry
   alias DevilsDictionary.Registry.{ContentItem, ContentRevision, Entity, Lexeme, Sense}
   alias DevilsDictionary.Repo
@@ -166,7 +167,9 @@ defmodule DevilsDictionary.Encyclopedia.EntityPage do
         do: {[], %{count: 0, next: nil}},
         else: meaning_connections(id, opts[:meaning_connections_after])
 
-    cited_as = if person?, do: Examples.cited_as(family), else: []
+    cited_as =
+      if person?, do: family |> Examples.cited_as() |> Provenance.attach(:public), else: []
+
     named_under = if person?, do: Examples.named_under(family), else: []
 
     {discovery_appearances, discovery_appearances_page} =

@@ -35,7 +35,8 @@ defmodule DevilsDictionaryWeb.ConnectionLive do
 
   alias DevilsDictionary.Claims
   alias DevilsDictionary.Claims.{Connection, Contributions}
-  alias DevilsDictionary.{Encyclopedia, Lexicon, Markdown, Registry, Repo}
+  alias DevilsDictionary.{Encyclopedia, Lexicon, Markdown, Registry, Repo, Sources}
+  alias DevilsDictionary.Discovery.{Mapping, Result, Run}
 
   on_mount {DevilsDictionaryWeb.UserAuth, :mount_current_scope}
 
@@ -66,7 +67,8 @@ defmodule DevilsDictionaryWeb.ConnectionLive do
        claimant: nil,
        language_tag: "",
        valid_from: "",
-       valid_to: ""
+       valid_to: "",
+       shelf: nil
      )
      |> assign(subject_query: "", object_query: "")
      |> assign(
@@ -194,6 +196,7 @@ defmodule DevilsDictionaryWeb.ConnectionLive do
      socket
      |> assign(
        page_title: "propose a connection",
+       shelf: shelf(params["from_result"], params["provider"], subject),
        subject: subject,
        object: object,
        predicate: predicate,
@@ -224,6 +227,54 @@ defmodule DevilsDictionaryWeb.ConnectionLive do
   end
 
   defp preselected_subject(_value), do: nil
+
+  # The shelf a prefilled form came from (#212), so the nomination's
+  # provenance can say where it was found. A result id is kept only when that
+  # result is about the prefilled subject, and its provider is read from the
+  # result's run, not the URL. A link with no result (a catalog shelf) names
+  # its provider, which must be a known source. The shelf is recorded only
+  # if the subject proposed is the one prefilled (`shelf_metadata/2`).
+  defp shelf(result_id, provider, %{object_id: subject_id}) do
+    case {positive_id(result_id), provider} do
+      {nil, slug} when is_binary(slug) ->
+        if Sources.get_source_by_slug(slug),
+          do: %{subject_id: subject_id, metadata: %{"provider" => slug}}
+
+      {id, _slug} when is_integer(id) ->
+        from(r in Result,
+          join: run in Run,
+          on: run.id == r.run_id,
+          join: m in Mapping,
+          on: m.id == run.mapping_id,
+          join: s in DevilsDictionary.Sources.Source,
+          on: s.id == m.source_id,
+          where: r.id == ^id and r.object_id == ^subject_id,
+          select: s.slug
+        )
+        |> Repo.one()
+        |> case do
+          nil -> nil
+          slug -> %{subject_id: subject_id, metadata: %{"from_result" => id, "provider" => slug}}
+        end
+
+      _none ->
+        nil
+    end
+  end
+
+  defp shelf(_result_id, _provider, _subject), do: nil
+
+  defp positive_id(value) when is_binary(value) do
+    case Integer.parse(value) do
+      {id, ""} when id > 0 -> id
+      _ -> nil
+    end
+  end
+
+  defp positive_id(_value), do: nil
+
+  defp shelf_metadata(%{subject_id: id, metadata: metadata}, %{object_id: id}), do: metadata
+  defp shelf_metadata(_shelf, _subject), do: nil
 
   defp preselected_evidence(nil, _locator, _subject), do: {%{}, []}
 
@@ -669,7 +720,8 @@ defmodule DevilsDictionaryWeb.ConnectionLive do
                socket.assigns.jurisdiction && socket.assigns.jurisdiction.object_id,
              language_tag: socket.assigns.language_tag,
              valid_from: parse_date(socket.assigns.valid_from),
-             valid_to: parse_date(socket.assigns.valid_to)
+             valid_to: parse_date(socket.assigns.valid_to),
+             metadata: shelf_metadata(socket.assigns.shelf, subject)
            },
            evidence_params(socket, include_pending: true)
          ) do
