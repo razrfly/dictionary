@@ -5,8 +5,8 @@ defmodule DevilsDictionary.Lexicon do
   `scope_lexeme_members`. Dictionaries attach here. Spec: issue #69 §4.
 
   A word is addressed by its `object_id`. `slug` is a cosmetic label and
-  deliberately not unique — #74 ADR decision 10, and the reason `C++` no longer
-  lands on `/define/c`.
+  deliberately not unique — #74 ADR decision 10, and the reason `C++` is
+  `/words/<id>/c`, while `/on/c` reads every word the slug reaches (#219).
   """
 
   import Ecto.Query, warn: false
@@ -63,7 +63,7 @@ defmodule DevilsDictionary.Lexicon do
   def by_object_id(_), do: nil
 
   @doc """
-  Every lexeme sharing a slug — what `/define/:slug` renders, across every part
+  Every lexeme sharing a slug — what `/on/:slug` renders, across every part
   of speech and every casing.
   """
   def list_by_slug(slug) do
@@ -88,7 +88,7 @@ defmodule DevilsDictionary.Lexicon do
   end
 
   @doc """
-  Resolves what someone typed (or a `/define/:slug` segment) to lexemes.
+  Resolves what someone typed (or an `/on/:slug` segment) to lexemes.
 
   Three steps, in order, stopping at the first that finds anything:
 
@@ -168,7 +168,7 @@ defmodule DevilsDictionary.Lexicon do
   string a reader typed, because that is what a discovery target, a mapping and
   a catalog read all hold. `by_lemma_or_slug/2` cannot answer it: it anchors on
   the input word, so the same page reached by `/words/:id/:slug` and by
-  `/define/:slug` would resolve to different sets.
+  `/on/:slug` would resolve to different sets.
 
   It is a query and not a list so a caller can join senses onto it in one round
   trip; `page_lexeme_ids/1` is the list.

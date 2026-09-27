@@ -15,7 +15,7 @@ defmodule DevilsDictionaryWeb.ArtworkLive do
   alias DevilsDictionary.Claims.Contributions
   alias DevilsDictionaryWeb.Artwork
 
-  on_mount {DevilsDictionaryWeb.UserAuth, :mount_current_scope}
+  on_mount DevilsDictionaryWeb.ReadingMode
 
   @impl true
   def mount(_params, _session, socket) do
@@ -110,6 +110,7 @@ defmodule DevilsDictionaryWeb.ArtworkLive do
               id={dom_id}
               artwork={artwork}
               connect={@contributor}
+              mode={@reading_mode}
             />
           </div>
           <nav

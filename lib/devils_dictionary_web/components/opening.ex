@@ -39,12 +39,12 @@ defmodule DevilsDictionaryWeb.Opening do
 
   use DevilsDictionaryWeb, :html
 
-  alias DevilsDictionary.Claims.Connection
   alias DevilsDictionary.Curation.Opening, as: Composition
   alias DevilsDictionaryWeb.{Quotation, SourceBadge}
 
   attr :opening, Composition, required: true
   attr :class, :any, default: nil
+  attr :mode, :atom, default: :public, doc: "the reading mode, for subject links"
 
   def section(assigns) do
     ~H"""
@@ -79,11 +79,12 @@ defmodule DevilsDictionaryWeb.Opening do
             :for={highlight <- @opening.highlights}
             highlight={highlight}
             stacked={length(@opening.highlights) > 1}
+            mode={@mode}
           />
         </ul>
       </div>
 
-      <.about opening={@opening} />
+      <.about opening={@opening} mode={@mode} />
     </section>
     """
   end
@@ -151,6 +152,7 @@ defmodule DevilsDictionaryWeb.Opening do
   # ── highlights ───────────────────────────────────────────────────────────
 
   attr :highlight, :map, required: true
+  attr :mode, :atom, default: :public
 
   attr :stacked, :boolean,
     default: true,
@@ -180,7 +182,7 @@ defmodule DevilsDictionaryWeb.Opening do
           <p class="text-base/6 font-medium text-mist-950 sm:text-sm/6 dark:text-white">
             <.link
               id={"#{@id}-title"}
-              navigate={entity_path(@highlight)}
+              navigate={entity_path(@highlight, @mode)}
               class="rounded-sm hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:focus-visible:outline-white"
             >
               {@highlight.title}
@@ -453,6 +455,7 @@ defmodule DevilsDictionaryWeb.Opening do
   # ── how it was chosen ────────────────────────────────────────────────────
 
   attr :opening, Composition, required: true
+  attr :mode, :atom, default: :public
 
   defp about(assigns) do
     ~H"""
@@ -538,7 +541,7 @@ defmodule DevilsDictionaryWeb.Opening do
             >
               Highlight {highlight.position} · {reference(highlight.reference)} ·
               <.link
-                navigate={inspect_path(highlight)}
+                navigate={inspect_path(highlight, @mode)}
                 class="rounded-sm underline underline-offset-4 hover:text-mist-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:hover:text-white dark:focus-visible:outline-white"
               >
                 {if highlight.kind == :artwork, do: "work", else: "evidence"}
@@ -710,11 +713,12 @@ defmodule DevilsDictionaryWeb.Opening do
   defp evidence_path(%{object_kind: :sense, sense_revision_id: id}) when is_integer(id),
     do: ~p"/evidence/sense/#{id}"
 
-  defp inspect_path(%{kind: :artwork} = highlight), do: entity_path(highlight)
-  defp inspect_path(highlight), do: evidence_path(highlight.reference)
+  defp inspect_path(%{kind: :artwork} = highlight, mode), do: entity_path(highlight, mode)
+  defp inspect_path(highlight, _mode), do: evidence_path(highlight.reference)
 
-  defp entity_path(%{reference: %{object_id: id}, title: title}),
-    do: ~p"/entities/#{id}/#{Connection.slugify(title || "work")}"
+  # A subject link goes through the one link helper (#219).
+  defp entity_path(%{reference: %{object_id: id}, title: title}, mode),
+    do: DevilsDictionary.Routing.Links.path(id, title || "work", mode)
 
   # A line of verse as its source broke it: Wiktionary marks some breaks with
   # a newline, which becomes a `<br>`; the ` / ` it uses elsewhere is its own

@@ -91,7 +91,7 @@ defmodule DevilsDictionary.Encyclopedia.EntityPage do
   Builds the page for an object id, or nil when it is not an entity.
 
   Nil rather than a raise: `/entities/999/x` is a page that says so, the same
-  way `/define/zzzz` is.
+  way `/on/zzzz` is.
   """
   def build(object_id, opts \\ [])
 

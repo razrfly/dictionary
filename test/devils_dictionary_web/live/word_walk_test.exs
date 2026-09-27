@@ -60,7 +60,7 @@ defmodule DevilsDictionaryWeb.WordWalkTest do
     # Seen words, not seen URLs: the same word reached with a different trail is
     # the same word, and a walk that revisits it is a walk going nowhere.
     {seen, final_url} =
-      Enum.reduce(1..@hops, {["oyster"], "/define/oyster"}, fn hop, {seen, url} ->
+      Enum.reduce(1..@hops, {["oyster"], "/on/oyster"}, fn hop, {seen, url} ->
         {:ok, _live, html} = live(ctx.conn, url)
 
         assert html =~ ~s(id="headword"), "hop #{hop}: #{url} has no headword"
@@ -106,12 +106,12 @@ defmodule DevilsDictionaryWeb.WordWalkTest do
     tabby = word!(ctx, "tabby", ~w(wiktionary))
     relation!(ctx, kitten, :derived, tabby)
 
-    {:ok, live, _html} = live(ctx.conn, ~p"/define/cat")
+    {:ok, live, _html} = live(ctx.conn, ~p"/on/cat")
 
     {:error, {:live_redirect, %{to: to}}} =
       live |> element("#thing-kinds-kitten") |> render_click()
 
-    assert to == "/define/kitten?trail=cat"
+    assert to == "/on/kitten?trail=cat"
 
     {:ok, _live, html} = live(ctx.conn, to)
 
@@ -122,7 +122,7 @@ defmodule DevilsDictionaryWeb.WordWalkTest do
   test "a page reached by a pasted URL reproduces the same walk", ctx do
     graph!(ctx)
 
-    url = "/define/mollusk?trail=oyster,bivalve"
+    url = "/on/mollusk?trail=oyster,bivalve"
 
     {:ok, _live, html} = live(ctx.conn, url)
 
@@ -134,11 +134,11 @@ defmodule DevilsDictionaryWeb.WordWalkTest do
   # Every chip and chain step on the page, in render order, as the hrefs a
   # reader could actually click.
   defp slug_of(href) do
-    href |> String.replace_prefix("/define/", "") |> String.split("?") |> hd()
+    href |> String.replace_prefix("/on/", "") |> String.split("?") |> hd()
   end
 
   defp hop_targets(html) do
-    ~r/href="(\/define\/[^"]+)"/
+    ~r/href="(\/on\/[^"]+)"/
     |> Regex.scan(html)
     |> Enum.map(fn [_, href] -> String.replace(href, "&amp;", "&") end)
     |> Enum.uniq()

@@ -1,6 +1,6 @@
 defmodule DevilsDictionaryWeb.WordExamplesTest do
   @moduledoc """
-  The Examples section on `/define/:slug` (#181 build 1): the named things a
+  The Examples section on `/on/:slug` (#181 build 1): the named things a
   source files under the word's meanings, as chips under one heading with one
   byline — after the definitions, and in place of the thing panel's old
   *examples* row.
@@ -47,7 +47,7 @@ defmodule DevilsDictionaryWeb.WordExamplesTest do
     named!(ctx, "Korean War", "oewn-korean-war-n")
     named!(ctx, "Boer War", "oewn-boer-war-n")
 
-    {:ok, live, _html} = live(ctx.conn, ~p"/define/war")
+    {:ok, live, _html} = live(ctx.conn, ~p"/on/war")
 
     assert has_element?(live, "#examples")
     assert has_element?(live, "#examples-instances li", "Korean War")
@@ -62,12 +62,12 @@ defmodule DevilsDictionaryWeb.WordExamplesTest do
   test "a chip hops to the thing's word, with the trail", ctx do
     named!(ctx, "Korean War", "oewn-korean-war-n")
 
-    {:ok, live, _html} = live(ctx.conn, ~p"/define/war")
+    {:ok, live, _html} = live(ctx.conn, ~p"/on/war")
 
     {:error, {:live_redirect, %{to: to}}} =
       live |> element("#examples-instances a", "Korean War") |> render_click()
 
-    assert to == "/define/korean-war?trail=war"
+    assert to == "/on/korean-war?trail=war"
   end
 
   test "Wikidata's instances are here, a wordless one linking to its thing", ctx do
@@ -75,7 +75,7 @@ defmodule DevilsDictionaryWeb.WordExamplesTest do
     concept_relation!(ctx, pig_war, :instance_of, ctx.q198)
     named!(ctx, "Korean War", "oewn-korean-war-n")
 
-    {:ok, live, _html} = live(ctx.conn, ~p"/define/war")
+    {:ok, live, _html} = live(ctx.conn, ~p"/on/war")
 
     assert live
            |> element(chip_id("inst:e#{pig_war.object_id}"))
@@ -93,7 +93,7 @@ defmodule DevilsDictionaryWeb.WordExamplesTest do
   test "past the cap, the rest fold behind a disclosure that counts them", ctx do
     for i <- 1..15, do: named!(ctx, "War #{i}", "oewn-war-#{i}-n")
 
-    {:ok, live, _html} = live(ctx.conn, ~p"/define/war")
+    {:ok, live, _html} = live(ctx.conn, ~p"/on/war")
 
     assert live |> element("#examples-instances") |> render() |> count_chips() == 12
     assert has_element?(live, "#examples-more summary", "3")
@@ -103,7 +103,7 @@ defmodule DevilsDictionaryWeb.WordExamplesTest do
   test "a word nothing names has no section", ctx do
     word!(ctx, "coward", ~w(wordnet))
 
-    {:ok, live, _html} = live(ctx.conn, ~p"/define/coward")
+    {:ok, live, _html} = live(ctx.conn, ~p"/on/coward")
 
     refute has_element?(live, "#examples")
   end

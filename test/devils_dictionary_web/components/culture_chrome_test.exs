@@ -323,7 +323,7 @@ defmodule DevilsDictionaryWeb.CultureChromeTest do
   describe "a rail clips what is inside it" do
     # A card's `sr-only` label is `position: absolute`. Its containing block is
     # the nearest positioned ancestor, and when that was outside the rail the
-    # rail's `overflow-x` did not clip it: `/define/coward` measured a
+    # rail's `overflow-x` did not clip it: `/on/coward` measured a
     # `scrollWidth` of 5,268 px at a 1,024 px viewport, one escaped label per
     # card. The rail is that ancestor now, so the label sits in its scroll box.
     defp rails(html) do

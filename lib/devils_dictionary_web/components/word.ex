@@ -289,6 +289,7 @@ defmodule DevilsDictionaryWeb.Word do
   attr :trail, :list, default: []
   attr :info, :string, default: nil
   attr :demo, :boolean, default: false
+  attr :mode, :atom, default: :public, doc: "the reading mode, for subject links"
 
   def source_card(assigns) do
     assigns = assign(assigns, :sample?, Map.get(assigns.card, :sample?, false))
@@ -335,7 +336,7 @@ defmodule DevilsDictionaryWeb.Word do
           <.link
             :for={author <- Map.get(entry, :authors, [])}
             id={"#{@card.id}-author-#{author.id}"}
-            navigate={"/entities/#{author.id}/#{DevilsDictionary.Claims.Connection.slugify(author.label)}"}
+            navigate={DevilsDictionary.Routing.Links.path(author.id, author.label, @mode)}
             class="mr-2 underline underline-offset-4 hover:text-amber-700"
           >
             {author.label}
@@ -654,6 +655,7 @@ defmodule DevilsDictionaryWeb.Word do
   attr :trail, :list, default: []
   attr :info, :string, default: nil
   attr :demo, :boolean, default: false
+  attr :mode, :atom, default: :public, doc: "the reading mode, for subject links"
 
   def source_row(assigns) do
     assigns = assign(assigns, :sample?, Map.get(assigns.card, :sample?, false))
@@ -726,6 +728,7 @@ defmodule DevilsDictionaryWeb.Word do
           :for={{entry, i} <- Enum.with_index(@card.entries)}
           id={"#{@card.id}-entry-#{i}"}
           entry={entry}
+          mode={@mode}
         />
 
         <.sense_group
@@ -807,6 +810,7 @@ defmodule DevilsDictionaryWeb.Word do
   @doc "One prose entry: its opening, and the disclosure holding the rest of the original."
   attr :id, :string, required: true
   attr :entry, :map, required: true
+  attr :mode, :atom, default: :public, doc: "the reading mode, for subject links"
 
   def entry(assigns) do
     ~H"""
@@ -830,7 +834,7 @@ defmodule DevilsDictionaryWeb.Word do
         <.link
           :for={author <- Map.get(@entry, :authors, [])}
           id={"#{@id}-author-#{author.id}"}
-          navigate={"/entities/#{author.id}/#{DevilsDictionary.Claims.Connection.slugify(author.label)}"}
+          navigate={DevilsDictionary.Routing.Links.path(author.id, author.label, @mode)}
           class="mr-2 underline underline-offset-4 hover:text-amber-700"
         >
           {author.label}
@@ -1297,15 +1301,20 @@ defmodule DevilsDictionaryWeb.Word do
   end
 
   @doc """
-  The path that opens the ⓘ drawer for `ref` — the same word, the same trail,
+  The path that opens the ⓘ drawer for `ref` — the same page, the same trail,
   one parameter more — or closes it when `ref` is `nil`.
 
-  The slug is the one in the address bar rather than the canonical one: a
-  reader who typed *oysters* stays on *oysters*, keeps the *redirected from*
-  line, and gets a URL that reproduces exactly what they are looking at.
+  `base` is the page's own path, as it is in the address bar: `/on/oysters`
+  for a reader who typed *oysters* (who keeps the *redirected from* line), and
+  `/words/:id/:slug` for an exact word, whose identity a drawer must keep
+  through a reload (ADR 0004 §4). The URL reproduces exactly what the reader
+  is looking at.
   """
-  def info_path(slug, trail, ref \\ nil, demo? \\ false) do
-    trail |> query(demo?, ref) |> to_path(slug)
+  def info_path(base, trail, ref \\ nil, demo? \\ false) do
+    case query(trail, demo?, ref) do
+      [] -> base
+      query -> base <> "?" <> URI.encode_query(query)
+    end
   end
 
   # `?demo=1` rides along with the trail rather than being dropped at the first
@@ -1320,6 +1329,6 @@ defmodule DevilsDictionaryWeb.Word do
     |> Enum.reject(fn {_k, v} -> v in [nil, false, ""] end)
   end
 
-  defp to_path([], slug), do: ~p"/define/#{slug}"
-  defp to_path(query, slug), do: ~p"/define/#{slug}?#{query}"
+  defp to_path([], slug), do: ~p"/on/#{slug}"
+  defp to_path(query, slug), do: ~p"/on/#{slug}?#{query}"
 end

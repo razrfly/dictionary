@@ -27,11 +27,13 @@ defmodule DevilsDictionaryWeb.Culture do
   alias DevilsDictionary.Discovery.ContentTypes
   alias DevilsDictionary.Discovery.MatchReason
   alias DevilsDictionary.Discovery.Shelf
+  alias DevilsDictionary.Routing.Links
   alias DevilsDictionaryWeb.Quotation
   alias DevilsDictionaryWeb.SourceBadge
 
   attr :states, :map, required: true
   attr :return_path, :string, default: nil
+  attr :mode, :atom, default: :public, doc: "the reading mode, for subject links"
 
   attr :browsers, :list,
     default: [],
@@ -57,6 +59,8 @@ defmodule DevilsDictionaryWeb.Culture do
       |> assign(:shelves, shelves(states))
       |> assign(:provider_count, length(states))
 
+    assigns = assign(assigns, :paths, subject_paths(assigns.shelves, assigns.mode))
+
     ~H"""
     <.compact_section
       :if={@shelves != [] or @browsers != [] or @notes != []}
@@ -65,6 +69,7 @@ defmodule DevilsDictionaryWeb.Culture do
       browsers={@browsers}
       provider_count={@provider_count}
       return_path={@return_path}
+      paths={@paths}
       contributor={@contributor}
     />
     """
@@ -262,6 +267,7 @@ defmodule DevilsDictionaryWeb.Culture do
   attr :browsers, :list, default: []
   attr :provider_count, :integer, required: true
   attr :return_path, :string, default: nil
+  attr :paths, :map, default: %{}
   attr :contributor, :boolean, default: false
 
   # Every kind on screen at once, one chrome for the lot (#131 Phase 2, V3).
@@ -383,6 +389,7 @@ defmodule DevilsDictionaryWeb.Culture do
                     source={badge_source(entry.state)}
                     held={Map.get(entry.state, :archetype) == :corpus}
                     return_path={@return_path}
+                    paths={@paths}
                   />
                   <.culture_thumbnail
                     :if={shelf.type != :quote}
@@ -391,6 +398,7 @@ defmodule DevilsDictionaryWeb.Culture do
                     mark={card_mark(entry.state)}
                     source_name={entry.item.preview_metadata["provider"] || entry.state.provider_name}
                     return_path={@return_path}
+                    paths={@paths}
                   />
                 </li>
                 <li
@@ -868,6 +876,7 @@ defmodule DevilsDictionaryWeb.Culture do
   attr :also, :list, default: [], doc: "every other source that holds this line"
   attr :held, :boolean, default: false, doc: "a corpus line, held locally rather than fetched"
   attr :return_path, :string, default: nil
+  attr :paths, :map, default: %{}
 
   defp quote_card(assigns) do
     metadata = assigns.item.preview_metadata
@@ -875,14 +884,14 @@ defmodule DevilsDictionaryWeb.Culture do
     assigns =
       assigns
       |> assign(:text, metadata["title"])
-      |> assign(:creators, creator_links(assigns.item, assigns.return_path))
+      |> assign(:creators, creator_links(assigns.item, assigns.return_path, assigns.paths))
       |> assign(:author, metadata["artist"])
       # With no identified author, the source's own citation says who and
       # where, verbatim — a name is shown as the source wrote it, and is
       # never a link (#164).
       |> assign(
         :citation,
-        if(is_nil(metadata["artist"]) and creator_links(assigns.item, nil) == [],
+        if(is_nil(metadata["artist"]) and creator_links(assigns.item, nil, %{}) == [],
           do: metadata["citation"]
         )
       )
@@ -966,6 +975,7 @@ defmodule DevilsDictionaryWeb.Culture do
   attr :item, :map, required: true
   attr :type, :atom, required: true
   attr :return_path, :string, default: nil
+  attr :paths, :map, default: %{}
 
   attr :mark, :map,
     default: nil,
@@ -983,7 +993,7 @@ defmodule DevilsDictionaryWeb.Culture do
     assigns =
       assigns
       |> assign(:image, ContentTypes.thumbnail_url(assigns.type, metadata))
-      |> assign(:entry_path, entry_path(assigns.item, assigns.return_path))
+      |> assign(:entry_path, entry_path(assigns.item, assigns.return_path, assigns.paths))
       |> assign(:evidence_path, evidence_path(assigns.item))
       # A required credit already names the creator (below), so the line is
       # not repeated there, linked or not.
@@ -991,7 +1001,7 @@ defmodule DevilsDictionaryWeb.Culture do
         :creators,
         if(presentation.attribution == :required and attribution,
           do: [],
-          else: creator_links(assigns.item, assigns.return_path)
+          else: creator_links(assigns.item, assigns.return_path, assigns.paths)
         )
       )
       |> assign(:aspect, presentation.aspect)
@@ -1479,31 +1489,61 @@ defmodule DevilsDictionaryWeb.Culture do
   # never presented as one (#164 C5): it has no entry path, and
   # `evidence_path/1` is its way in. An item that does not say what kind its
   # object is (a catalog artwork) is an entity, which is all a corpus holds.
-  defp entry_path(%{object_kind: kind}, _return_path) when kind not in [nil, :entity], do: nil
+  defp entry_path(%{object_kind: kind}, _return_path, _paths) when kind not in [nil, :entity],
+    do: nil
 
-  defp entry_path(%{object_id: object_id, preview_metadata: metadata}, return_path)
+  defp entry_path(%{object_id: object_id, preview_metadata: metadata}, return_path, paths)
        when is_integer(object_id) do
-    slug = DevilsDictionary.Claims.Connection.slugify(metadata["title"])
-    query = if return_path, do: %{from: return_path}, else: %{}
-    ~p"/entities/#{object_id}/#{slug}?#{query}"
+    paths
+    |> Map.get(object_id, Links.entity_path(object_id, metadata["title"]))
+    |> with_return(return_path)
   end
 
-  defp entry_path(_item, _return_path), do: nil
+  defp entry_path(_item, _return_path, _paths), do: nil
+
+  # Every entity a shelf links — its entries and their creators — through the
+  # one link helper in one query (#219): the address in the reading mode, or
+  # the exact-identity route.
+  defp subject_paths(shelves, mode) do
+    shelves
+    |> Enum.flat_map(& &1.entries)
+    |> Enum.flat_map(fn %{item: item} ->
+      entry =
+        case item do
+          %{object_kind: kind} when kind not in [nil, :entity] ->
+            []
+
+          %{object_id: id, preview_metadata: metadata} when is_integer(id) ->
+            [{id, metadata["title"]}]
+
+          _other ->
+            []
+        end
+
+      creators =
+        item |> Map.get(:creator_links, []) |> List.wrap() |> Enum.map(&{&1.object_id, &1.label})
+
+      entry ++ creators
+    end)
+    |> Enum.uniq_by(&elem(&1, 0))
+    |> Links.paths(mode)
+  end
+
+  defp with_return(path, nil), do: path
+  defp with_return(path, return_path), do: path <> "?" <> URI.encode_query(%{from: return_path})
 
   defp evidence_path(%{object_kind: :content, content_revision_id: id}) when is_integer(id),
     do: ~p"/evidence/content/#{id}"
 
   defp evidence_path(_item), do: nil
 
-  defp creator_links(item, return_path) do
-    query = if return_path, do: %{from: return_path}, else: %{}
-
+  defp creator_links(item, return_path, paths) do
     item
     |> Map.get(:creator_links, [])
     |> List.wrap()
     |> Enum.map(fn %{object_id: id, label: label} ->
-      slug = DevilsDictionary.Claims.Connection.slugify(label)
-      %{label: label, path: ~p"/entities/#{id}/#{slug}?#{query}"}
+      path = paths |> Map.get(id, Links.entity_path(id, label)) |> with_return(return_path)
+      %{label: label, path: path}
     end)
   end
 

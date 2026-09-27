@@ -35,7 +35,7 @@ defmodule DevilsDictionaryWeb.FilmIdentityFlowTest do
     ship_sense = sense!(ctx, rejected, "wordnet", gloss: "a large seagoing vessel")
 
     stub_titanic("mountain")
-    {:ok, definition_live, _html} = live(ctx.conn, ~p"/define/mountain")
+    {:ok, definition_live, _html} = live(ctx.conn, ~p"/on/mountain")
     assert :ok = Discovery.execute_run(Repo.one!(Run).id)
     _ = render(definition_live)
 
@@ -145,7 +145,7 @@ defmodule DevilsDictionaryWeb.FilmIdentityFlowTest do
     {:ok, view, _} =
       live(
         ctx.conn,
-        "/entities/#{film.object_id}/pagination-film?from=%2Fdefine%2Fpaging"
+        "/entities/#{film.object_id}/pagination-film?from=%2Fon%2Fpaging"
       )
 
     first = EntityPage.build(film.object_id)
@@ -154,7 +154,7 @@ defmodule DevilsDictionaryWeb.FilmIdentityFlowTest do
     assert has_element?(view, "#more-meaning-connections")
     view |> element("#more-meaning-connections") |> render_click()
     refute has_element?(view, "#more-meaning-connections")
-    assert has_element?(view, "#entity-back-link[href='/define/paging']")
+    assert has_element?(view, "#entity-back-link[href='/on/paging']")
 
     second =
       EntityPage.build(film.object_id,
@@ -225,14 +225,14 @@ defmodule DevilsDictionaryWeb.FilmIdentityFlowTest do
     {:ok, view, _html} =
       live(
         ctx.conn,
-        "/entities/#{film.object_id}/discovery-pages?from=%2Fdefine%2Fappearance-1"
+        "/entities/#{film.object_id}/discovery-pages?from=%2Fon%2Fappearance-1"
       )
 
     assert has_element?(view, "#entity-discovery-appearances", "26 total")
     assert has_element?(view, "#discovery-appearances-next")
     view |> element("#discovery-appearances-next") |> render_click()
     refute has_element?(view, "#discovery-appearances-next")
-    assert has_element?(view, "#entity-back-link[href='/define/appearance-1']")
+    assert has_element?(view, "#entity-back-link[href='/on/appearance-1']")
   end
 
   defp illustrates!(film_id, sense, rationale) do

@@ -71,6 +71,13 @@ config :devils_dictionary, dev_routes: true
 # `demo_inert_test.exs` reads `prod.exs` back and fails if it ever grows one.
 config :devils_dictionary, demo_mode: true
 
+# Internal reading (#219): draft routing pages resolve and link, marked as
+# drafts, for every request. It publishes and approves nothing, and it is
+# refused in the production configuration (ReadingModeConfigTest). A server
+# with it on shows drafts to anyone who reaches it, so never expose one
+# through a tunnel. Without it, only an internal contributor reads internally.
+config :devils_dictionary, :internal_reading, true
+
 # The curated opening's manual fixtures (#156 Phase 1). `?opening=fixture`
 # renders `priv/curation/opening-fixtures.json` only where this is set — here
 # and in `test.exs` — and `word_opening_live_test.exs` fails if `config.exs`,

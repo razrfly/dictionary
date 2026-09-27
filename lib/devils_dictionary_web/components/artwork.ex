@@ -11,11 +11,12 @@ defmodule DevilsDictionaryWeb.Artwork do
 
   use DevilsDictionaryWeb, :html
 
-  alias DevilsDictionary.Claims.Connection
+  alias DevilsDictionary.Routing.Links
 
   attr :artwork, :map, required: true
   attr :connect, :boolean, default: false
   attr :id, :string, required: true
+  attr :mode, :atom, default: :public, doc: "the reading mode, for subject links"
 
   def card(assigns) do
     ~H"""
@@ -25,7 +26,7 @@ defmodule DevilsDictionaryWeb.Artwork do
     >
       <.link
         id={"#{@id}-image"}
-        navigate={entity_path(@artwork)}
+        navigate={entity_path(@artwork, @mode)}
         phx-hook="ArtworkImage"
         phx-update="ignore"
         data-image-state={if(@artwork.image_url, do: "loading", else: "empty")}
@@ -52,7 +53,7 @@ defmodule DevilsDictionaryWeb.Artwork do
 
       <div class="min-w-0">
         <.link
-          navigate={entity_path(@artwork)}
+          navigate={entity_path(@artwork, @mode)}
           class="font-display text-xl text-balance text-mist-950 underline-offset-4 group-hover:underline dark:text-white"
         >
           {@artwork.title}
@@ -61,7 +62,7 @@ defmodule DevilsDictionaryWeb.Artwork do
           by
           <span :for={{creator, index} <- Enum.with_index(@artwork.creators)}>
             <span :if={index > 0}>, </span><.link
-              navigate={creator_path(creator)}
+              navigate={creator_path(creator, @mode)}
               class="hover:underline"
             >{creator.label}</.link>
           </span>
@@ -99,7 +100,10 @@ defmodule DevilsDictionaryWeb.Artwork do
         </p>
 
         <div class="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-sm/6">
-          <.link navigate={entity_path(@artwork)} class="font-medium underline underline-offset-4">Open work</.link>
+          <.link
+            navigate={entity_path(@artwork, @mode)}
+            class="font-medium underline underline-offset-4"
+          >Open work</.link>
           <.link
             :if={@connect}
             navigate={~p"/connect?subject=#{@artwork.object_id}"}
@@ -120,9 +124,9 @@ defmodule DevilsDictionaryWeb.Artwork do
     """
   end
 
-  defp entity_path(artwork),
-    do: ~p"/entities/#{artwork.object_id}/#{Connection.slugify(artwork.title)}"
+  # Every subject link goes through the one helper (#219): the address in the
+  # reading mode, or the exact-identity route.
+  defp entity_path(artwork, mode), do: Links.path(artwork.object_id, artwork.title, mode)
 
-  defp creator_path(creator),
-    do: ~p"/entities/#{creator.object_id}/#{Connection.slugify(creator.label)}"
+  defp creator_path(creator, mode), do: Links.path(creator.object_id, creator.label, mode)
 end

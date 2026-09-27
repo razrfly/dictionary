@@ -1,6 +1,6 @@
 defmodule DevilsDictionaryWeb.WordExemplarsTest do
   @moduledoc """
-  The exemplar register on `/define/:slug` and the reverse view on the
+  The exemplar register on `/on/:slug` and the reverse view on the
   person's page (#181 build 2). Cards above the chips in the one `#examples`
   section; the public sees a person's card only once a reviewer accepts it,
   and a contributor sees it before that, marked.
@@ -94,7 +94,7 @@ defmodule DevilsDictionaryWeb.WordExemplarsTest do
   defp card(ctx), do: "#examples-ex-#{ctx.claim_id}"
 
   test "the public never sees a person nominated here before it is accepted", ctx do
-    {:ok, live, _html} = live(ctx.conn, ~p"/define/coward")
+    {:ok, live, _html} = live(ctx.conn, ~p"/on/coward")
 
     refute has_element?(live, card(ctx))
     refute has_element?(live, "#examples")
@@ -102,7 +102,7 @@ defmodule DevilsDictionaryWeb.WordExemplarsTest do
 
   test "a contributor sees the nomination, marked and linked to its review", ctx do
     conn = log_in_user(ctx.conn, ctx.contributor)
-    {:ok, live, _html} = live(conn, ~p"/define/coward")
+    {:ok, live, _html} = live(conn, ~p"/on/coward")
 
     assert has_element?(live, "#examples-exemplars #{card(ctx)}")
     assert has_element?(live, "#examples-state-#{ctx.claim_id}", "needs review")
@@ -118,7 +118,7 @@ defmodule DevilsDictionaryWeb.WordExemplarsTest do
   test "a reviewer's accept makes the card public; a reject removes it", ctx do
     accept!(ctx)
 
-    {:ok, live, _html} = live(ctx.conn, ~p"/define/coward")
+    {:ok, live, _html} = live(ctx.conn, ~p"/on/coward")
 
     assert has_element?(live, card(ctx), "Jeff Bezos")
     assert has_element?(live, card(ctx), "cited as an example of")
@@ -134,7 +134,7 @@ defmodule DevilsDictionaryWeb.WordExemplarsTest do
     assert has_element?(live, "#{card(ctx)} a[href='/entities/#{ctx.bezos}/#{slug}']")
 
     accept!(ctx, "rejected")
-    {:ok, live, _html} = live(ctx.conn, ~p"/define/coward")
+    {:ok, live, _html} = live(ctx.conn, ~p"/on/coward")
     refute has_element?(live, card(ctx))
   end
 
@@ -148,11 +148,11 @@ defmodule DevilsDictionaryWeb.WordExemplarsTest do
       to_sense: ctx.coward_sense
     )
 
-    {:ok, live, _html} = live(ctx.conn, ~p"/define/coward")
+    {:ok, live, _html} = live(ctx.conn, ~p"/on/coward")
     before = live |> element("#examples-instances") |> render()
 
     accept!(ctx)
-    {:ok, live, _html} = live(ctx.conn, ~p"/define/coward")
+    {:ok, live, _html} = live(ctx.conn, ~p"/on/coward")
 
     assert has_element?(live, "#examples-exemplars #{card(ctx)}")
     assert live |> element("#examples-instances") |> render() == before
@@ -185,7 +185,7 @@ defmodule DevilsDictionaryWeb.WordExemplarsTest do
         []
       )
 
-    {:ok, live, _html} = live(ctx.conn, ~p"/define/coward")
+    {:ok, live, _html} = live(ctx.conn, ~p"/on/coward")
 
     assert has_element?(live, "#examples-ex-#{claim.id}", "Not yet reviewed.")
     refute has_element?(live, "#examples-ex-#{claim.id}", "Not public until")
@@ -206,7 +206,7 @@ defmodule DevilsDictionaryWeb.WordExemplarsTest do
         []
       )
 
-    {:ok, live, _html} = live(ctx.conn, ~p"/define/coward")
+    {:ok, live, _html} = live(ctx.conn, ~p"/on/coward")
 
     assert has_element?(
              live,

@@ -44,7 +44,7 @@ defmodule DevilsDictionaryWeb.UrbanDictionaryCardTest do
     test "renders with the hook and everything the browser needs", ctx do
       rizz!(ctx)
 
-      {:ok, view, _html} = live(ctx.conn, ~p"/define/rizz")
+      {:ok, view, _html} = live(ctx.conn, ~p"/on/rizz")
 
       assert has_element?(view, ~s([phx-hook="UrbanDictionary"][data-term="rizz"]))
 
@@ -53,7 +53,7 @@ defmodule DevilsDictionaryWeb.UrbanDictionaryCardTest do
                ~s([phx-hook="UrbanDictionary"][data-endpoint="https://api.urbandictionary.com/v0/define"])
              )
 
-      assert has_element?(view, ~s([phx-hook="UrbanDictionary"][data-define-path="/define"]))
+      assert has_element?(view, ~s([phx-hook="UrbanDictionary"][data-word-path="/on"]))
 
       # `phx-update="ignore"` for the same reason the definitions slab has it:
       # what the hook wrote is DOM state the server does not model.
@@ -74,7 +74,7 @@ defmodule DevilsDictionaryWeb.UrbanDictionaryCardTest do
     test "the plaque is server-rendered, so it cannot go missing with the script", ctx do
       rizz!(ctx)
 
-      {:ok, view, _html} = live(ctx.conn, ~p"/define/rizz")
+      {:ok, view, _html} = live(ctx.conn, ~p"/on/rizz")
 
       card = view |> element(~s([phx-hook="UrbanDictionary"])) |> render()
       assert card =~ "Crowd-sourced and unreviewed."
@@ -85,7 +85,7 @@ defmodule DevilsDictionaryWeb.UrbanDictionaryCardTest do
     test "nothing secret is in the assign: the endpoint is keyless", ctx do
       rizz!(ctx)
 
-      {:ok, _view, html} = live(ctx.conn, ~p"/define/rizz")
+      {:ok, _view, html} = live(ctx.conn, ~p"/on/rizz")
 
       config = UrbanDictionary.browser_config(%{term: "rizz", language: "en", object_id: 1})
       # `source` is the row's slug, name and tier — the card's header and the
@@ -99,7 +99,7 @@ defmodule DevilsDictionaryWeb.UrbanDictionaryCardTest do
       word = rizz!(ctx)
       entry!(ctx, word, "bierce", body: "A modern charm.")
 
-      {:ok, _view, html} = live(ctx.conn, ~p"/define/rizz")
+      {:ok, _view, html} = live(ctx.conn, ~p"/on/rizz")
 
       definitions = :binary.match(html, "Definitions") |> elem(0)
       card = :binary.match(html, ~s(phx-hook="UrbanDictionary")) |> elem(0)
@@ -110,7 +110,7 @@ defmodule DevilsDictionaryWeb.UrbanDictionaryCardTest do
     test "the server makes no request of its own", ctx do
       rizz!(ctx)
 
-      {:ok, _view, _html} = live(ctx.conn, ~p"/define/rizz")
+      {:ok, _view, _html} = live(ctx.conn, ~p"/on/rizz")
 
       # The discovery ledger is where every server-side outbound request in
       # this app is written down. This card spends none, because the request
@@ -124,7 +124,7 @@ defmodule DevilsDictionaryWeb.UrbanDictionaryCardTest do
       rizz!(ctx)
       switch(endpoint: "https://api.urbandictionary.com/v0/define", enabled: false)
 
-      {:ok, view, html} = live(ctx.conn, ~p"/define/rizz")
+      {:ok, view, html} = live(ctx.conn, ~p"/on/rizz")
 
       refute has_element?(view, ~s([phx-hook="UrbanDictionary"]))
       refute html =~ "UrbanDictionary"
@@ -140,7 +140,7 @@ defmodule DevilsDictionaryWeb.UrbanDictionaryCardTest do
       |> Ecto.Changeset.change(active: false)
       |> Repo.update!()
 
-      {:ok, view, html} = live(ctx.conn, ~p"/define/rizz")
+      {:ok, view, html} = live(ctx.conn, ~p"/on/rizz")
 
       refute has_element?(view, ~s([phx-hook="UrbanDictionary"]))
       refute html =~ "Crowd-sourced and unreviewed"
@@ -224,7 +224,7 @@ defmodule DevilsDictionaryWeb.UrbanDictionaryCardTest do
       rizz!(ctx)
       source = Sources.get_source_by_slug!("urban-dictionary")
 
-      {:ok, _view, _html} = live(ctx.conn, ~p"/define/rizz")
+      {:ok, _view, _html} = live(ctx.conn, ~p"/on/rizz")
 
       assert Repo.aggregate(
                from(r in DevilsDictionary.Sources.SourceRecord, where: r.source_id == ^source.id),
