@@ -347,6 +347,9 @@ a ladder run over another scope, not a change here.
 
 ### Final sweep, on the restored database (2026-09-27)
 
+The scripts, queries, captured output and the recovery point's location are in
+`docs/spikes/2026-09-27-issue-172-sweep/`.
+
 Everything above in this section is **historical**: it was measured on
 2026-09-24 while the ladder's WordNet links were withdrawn. PR #188 restored
 them (run 205, 2026-09-25). This is the state after that, at `main`
