@@ -30,7 +30,7 @@ Code.require_file("guard.exs", __DIR__)
 alias DevilsDictionary.Routing.MigrationCheck
 
 {:ok, _} = Application.ensure_all_started(:ecto_sql)
-{_host, _port, database} = Stage2A.Guard.check!(oban: false)
+{_host, _port, database} = Stage2.Guard.check!(oban: false)
 load = fn path -> path |> File.read!() |> :erlang.binary_to_term() end
 
 case System.argv() do

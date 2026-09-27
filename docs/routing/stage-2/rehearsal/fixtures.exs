@@ -1,8 +1,9 @@
-# Stage 2A, step 3: a small, clearly marked routing history on the migrated
-# rehearsal baseline copy, written through the supported APIs.
+# Stage 2 rehearsal: a small, clearly marked routing history — and, at
+# current main, a curation composition — on the migrated rehearsal baseline
+# copy, written through the supported APIs.
 #
-#   DD_STAGE2A_REHEARSAL=1 DD_NO_OBAN=1 \
-#   DD_DATABASE=devils_dictionary_stage2a_baseline DD_DATABASE_PORT=5433 \
+#   DD_STAGE2_REHEARSAL=1 DD_NO_OBAN=1 \
+#   DD_DATABASE=devils_dictionary_stage2r_baseline DD_DATABASE_PORT=5433 \
 #     mix run docs/routing/stage-2/rehearsal/fixtures.exs FIXTURES.json
 #
 # Every registry row it creates is labelled "Stage 2A rehearsal: …", every
@@ -17,7 +18,13 @@
 # anchor, exactly as the Stage 1 tests do. Publication has no workflow before
 # Stage 5, so publishing is a direct update here, as in the tests: rehearsal
 # state on an isolated copy, not an editorial approval.
+#
+# At current main it also writes the curation fixture in `curation.exs`: a real
+# word's composition accepted and published by a marked reviewer, and a second
+# version rejected. At the pinned routing-only boundary (Stage 2A's), there is
+# no curation schema; the script says so and writes the routing part alone.
 Code.require_file("guard.exs", __DIR__)
+Code.require_file("curation.exs", __DIR__)
 
 import Ecto.Query
 
@@ -26,7 +33,7 @@ alias DevilsDictionary.Routing.{Classifications, Ledger, Page, Pages, Policy, Pu
 alias DevilsDictionary.Sources.Actor
 
 [out] = System.argv()
-{_host, _port, database} = Stage2A.Guard.check!()
+{_host, _port, database} = Stage2.Guard.check!()
 
 if Recovery.routing_schema() != :present, do: raise("the routing migration is not applied to #{database}")
 
@@ -175,6 +182,15 @@ on = on |> allocate!.("/on/stage2a-rehearsal-mercury", human) |> publish!.()
 
 {:ok, _} = Pages.add_revision(on.id, %{title: marker <> "On Mercury", body: "Revised."}, [], human.id)
 
+# Curation (#206), on a copy at current main.
+curation =
+  if Stage2.Curation.present?() do
+    Stage2.Curation.write!(marker)
+  else
+    IO.puts("curation schema absent (the routing-only boundary): no curation fixture")
+    nil
+  end
+
 pages = [cat, dog, oyster, arouet, voltaire, mercury, planet, element, candide, pangloss, zadig, on]
 page_ids = Enum.map(pages, & &1.id)
 
@@ -211,7 +227,8 @@ inventory = %{
   "paths" => Repo.all(from pp in PublicPath, order_by: pp.id, select: [pp.id, pp.path, pp.kind]) |> Enum.map(fn [id, path, kind] -> [id, path, to_string(kind)] end),
   "override_decision_id" => override.id,
   "routing_row_counts" => counts,
-  "operations" => operations
+  "operations" => operations,
+  "curation" => curation
 }
 
 # Every routing row references only fixture pages and objects.

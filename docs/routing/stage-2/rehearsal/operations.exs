@@ -1,8 +1,9 @@
-# Stage 2A, step 6: normal operations on the recovered working copy, after
-# every equality check has passed. Writes only marked scratch pages.
+# Stage 2 rehearsal: normal operations on a recovered working copy, after
+# every equality check has passed. Writes only marked scratch pages and marked
+# curation receipts.
 #
-#   DD_STAGE2A_REHEARSAL=1 DD_NO_OBAN=1 \
-#   DD_DATABASE=devils_dictionary_stage2a_working DD_DATABASE_PORT=5433 \
+#   DD_STAGE2_REHEARSAL=1 DD_NO_OBAN=1 \
+#   DD_DATABASE=devils_dictionary_stage2r_working DD_DATABASE_PORT=5433 \
 #     mix run docs/routing/stage-2/rehearsal/operations.exs FIXTURES.json OPERATIONS.json
 #
 # Checks, on the recovered fixture: a canonical path, a moved page's alias,
@@ -10,7 +11,12 @@
 # tombstone, a restored page, a rolled-back move, and an On page. Then, on new
 # scratch pages: an allocation whose ids continue the restored sequences, a
 # move (the old path becomes an alias) and its rollback.
+#
+# When the fixture holds curation (current main): the composition stands as it
+# was approved, then `Stage2.Curation.operations!/2` replays, refuses,
+# withdraws and republishes (see `curation.exs`).
 Code.require_file("guard.exs", __DIR__)
+Code.require_file("curation.exs", __DIR__)
 
 import Ecto.Query
 
@@ -19,7 +25,7 @@ alias DevilsDictionary.Routing.{Address, Classifications, Ledger, Page, Pages, P
 alias DevilsDictionary.Sources.Actor
 
 [fixtures_path, out] = System.argv()
-{_host, _port, database} = Stage2A.Guard.check!()
+{_host, _port, database} = Stage2.Guard.check!()
 fixture = fixtures_path |> File.read!() |> Jason.decode!()
 marker = fixture["marker"]
 human = Repo.get!(Actor, fixture["actors"]["human"])
@@ -45,6 +51,9 @@ expect = fn result, outcome, extra ->
 end
 
 pages = fixture["pages"]
+
+# The curation fixture stands as it was approved, before anything is written.
+curation_before = fixture["curation"] && Stage2.Curation.check(fixture["curation"])
 
 recovered = [
   expect.(outcome.(p.("cat", "nature")), "canonical", %{"page_id" => pages["cat"]}),
@@ -117,6 +126,8 @@ after_rollback = [
 # A tombstone the batch may not take back.
 refused = Ledger.allocate(pages["candide"], p.("candide", "people"), as.(importer, "must be refused"))
 
+curation_operations = fixture["curation"] && Stage2.Curation.operations!(fixture["curation"], marker)
+
 report = %{
   "database" => database,
   "recovered_resolutions" => recovered,
@@ -131,14 +142,17 @@ report = %{
     "old_path_kind_after_move" => to_string(old.kind),
     "canonical_restored_by_rollback" => restored.canonical_path_id == allocated.id
   },
-  "tombstone_reallocation" => inspect(refused)
+  "tombstone_reallocation" => inspect(refused),
+  "curation_before" => curation_before,
+  "curation_operations" => curation_operations
 }
 
 pass? =
   Enum.all?(recovered, & &1["pass"]) and after_allocate["pass"] and Enum.all?(after_move, & &1["pass"]) and
     Enum.all?(after_rollback, & &1["pass"]) and
     page.id > max_page and allocated.id > max_path and old.kind == :alias and
-    restored.canonical_path_id == allocated.id and match?({:error, {:tombstoned, _}}, refused)
+    restored.canonical_path_id == allocated.id and match?({:error, {:tombstoned, _}}, refused) and
+    (is_nil(fixture["curation"]) or (curation_before["pass"] and curation_operations["pass"]))
 
 File.write!(out, Jason.encode_to_iodata!(Map.put(report, "pass", pass?), pretty: true))
 IO.puts(if pass?, do: "PASS: #{length(recovered)} recovered resolutions and the scratch operations", else: "FAIL: see #{out}")
