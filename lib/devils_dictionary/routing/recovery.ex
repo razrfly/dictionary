@@ -36,7 +36,8 @@ defmodule DevilsDictionary.Routing.Recovery do
 
   # What re-projecting unchanged source records legitimately rewrites: its own
   # runs, and the stamps that say when a record was last materialized and by
-  # which run. Everything else must be identical after `dd.materialize --all`.
+  # which run. Everything else must be identical after
+  # `dd.materialize --all --resolve`.
   @projection_tables ~w(import_runs)
   @projection_columns ~w(updated_at materialized_at last_seen_run_id)
 
@@ -58,7 +59,8 @@ defmodule DevilsDictionary.Routing.Recovery do
     * `mode: :exact` (default) — every column, and every sequence's
       `last_value` and `is_called`, used or not; what a restore must reproduce
       byte for byte.
-    * `mode: :projected` — after `mix dd.materialize --all` on a restored copy:
+    * `mode: :projected` — after `mix dd.materialize --all --resolve` on a
+      restored copy:
       leaves out `import_runs` and the columns `updated_at`, `materialized_at`
       and `last_seen_run_id`, and the sequences, whose upserts may consume ids
       without writing rows (`sequences_behind/0` checks them instead).
@@ -373,7 +375,7 @@ defmodule DevilsDictionary.Routing.Recovery do
   Compares the current repo's database with `baseline` — a database name on
   the same server, or an `ecto://` URL naming one on another: every manifest
   section, what every path and page id resolves to, and the sequences. With
-  `projected: true` — after `mix dd.materialize --all` — the manifest is taken
+  `projected: true` — after `mix dd.materialize --all --resolve` — the manifest is taken
   in `:projected` mode and the sequences need only not have fallen behind
   their tables. Neither database is modified.
 
@@ -900,7 +902,7 @@ defmodule DevilsDictionary.Routing.Recovery do
     object ids, and a rebuild from sources renumbers every object. They cannot be
     regenerated, only restored. The supported recovery is in
     docs/routing/recovery.md: snapshot, restore into a separate database, verify
-    with `mix dd.routing.verify`, then re-project with `mix dd.materialize --all`.
+    with `mix dd.routing.verify`, then re-project with `mix dd.materialize --all --resolve`.
 
     To proceed anyway, snapshot this database first and name it:
 

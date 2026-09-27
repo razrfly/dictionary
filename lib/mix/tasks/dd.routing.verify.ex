@@ -28,8 +28,8 @@ defmodule Mix.Tasks.Dd.Routing.Verify do
   but nothing about routing recovery has been shown. One database with the
   routing tables and one without, or either with only some of them, fails.
 
-  `--projected` is for the check after `mix dd.materialize --all` has
-  re-projected the restored copy. The projection's own bookkeeping — its
+  `--projected` is for the check after `mix dd.materialize --all --resolve`
+  has re-projected the restored copy. The projection's own bookkeeping — its
   `import_runs`, and the `updated_at`, `materialized_at` and
   `last_seen_run_id` stamps — is left out, and sequences must only not have
   fallen behind their tables; every other column must still match. Exits

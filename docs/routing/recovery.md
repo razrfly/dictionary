@@ -51,9 +51,9 @@ A restored copy carries the source's queued and scheduled jobs. Tasks that start
    - **Never `SIGSTOP` a foreground terminal job.** The shell takes the terminal back. After `SIGCONT` the job reads the terminal as a background job and stops again (`SIGTTIN`), until someone types `fg` there.
    - A process that does not read the terminal (for example `mix run script.exs`) can be suspended with `SIGSTOP` and resumed with `SIGCONT`.
 
-   **Prove the window was write-free:** `tup_inserted`, `tup_updated` and `tup_deleted` in `pg_stat_database` for the source must be equal before the snapshot and after the comparison.
+   **Prove the window was write-free:** the source's row counters must be equal before the snapshot and after the comparison. Use the sums of `n_tup_ins`, `n_tup_upd` and `n_tup_del` over `pg_stat_user_tables`. `pg_stat_database`'s `tup_*` counters also count catalog maintenance.
 
-   The snapshot itself is read-only. It writes the dump and its `.routing.json` sidecar, which records the source's server, port and name.
+   The snapshot itself is read-only. It writes the dump and its `.routing.json` sidecar, which records the source as its server reports it (step 2).
 
    ```bash
    mix dd.snapshot --out ~/Backups/dictionary-routing.dump
@@ -124,11 +124,19 @@ A restored copy carries the source's queued and scheduled jobs. Tasks that start
       - no `--to` checks current main, which adds #206's curation schema after routing.
    3. Add a marked routing fixture (`fixtures.exs`), then snapshot and restore that copy into a second one, and verify the pair: routing is then present on both sides and compared.
 
-4. **Re-project the copy from its own records, in any provider order.** `mix dd.materialize --all` re-projects every implemented source from the source records the copy holds. It also asserts that nothing derived changed (scorecard M2). Repeat it for each source, in whatever order:
+4. **Re-project the copy from its own records, in any provider order, and resolve.** `mix dd.materialize --all --resolve` re-projects every record of one source from the source records the copy holds. It then drains the pending edges that source wrote into assertions (the pass `mix dd.resolve` makes). Last, it asserts that nothing derived changed (scorecard M2) across every table the fingerprint covers, `pending_relations` included. Repeat it for each source, in whatever order:
 
    ```bash
-   DD_NO_OBAN=1 DD_DATABASE=devils_dictionary_restore mix dd.materialize --source wikidata --all
+   DD_NO_OBAN=1 DD_DATABASE=devils_dictionary_restore mix dd.materialize --source wikidata --all --resolve
    ```
+
+   Without `--resolve`, the comparison leaves `pending_relations` out and prints that it did. Such a run cannot show a re-projection equal: it re-creates the pending edges that the build had already drained.
+
+   Each run also counts what it did not project, by kind, in its report and its `import_runs` stats. Nothing is skipped silently:
+   - `verifier_cache`: the quotation verifier's pinned Wikidata lookups (`Sources.CacheRecord`). These are evidence, never entities.
+   - `label_missing`: a Wikidata item with no name in any language the source reads. The established entity keeps the name another source gave it, and no identity entry is made for it.
+
+   Any other record that is not an entity payload stops the run.
 
    To exercise the replay path as well, replay the API sources **only from an archive exported from the copy itself**. The pinned `priv/replay` archive may be older than the snapshot, and would re-project different records:
 
@@ -175,7 +183,7 @@ The test then runs the procedure's steps:
 - the snapshot goes through `Routing.Recovery.snapshot!/2` (the code behind `mix dd.snapshot`), and the restore through `DevilsDictionary.Snapshot`, into a database created for the test and dropped after it;
 - `mix dd.routing.verify` passes, and every section is compared row for row, along with every resolution and every sequence;
 - moving a sequence that was never used, to any value with or without `is_called`, is a difference in exactly `sequences`. So is changing only a used sequence's `is_called`. Restoring either state verifies exactly again;
-- the copy exports its own replay archive, then re-projects with `mix dd.replay` and `mix dd.materialize --all`, **Wikidata before Wikipedia**. The test asserts that each source's three records were really replayed and re-materialized, in that order, and then compares everything again in projected mode;
+- the copy exports its own replay archive, then re-projects with `mix dd.replay` and `mix dd.materialize --all --resolve`, **Wikidata before Wikipedia**. The test asserts that each source's three records were really replayed and re-materialized, in that order, that each materialization found every fingerprinted table identical, pending relations included, and then compares everything again in projected mode;
 - on the restored copy it resolves known paths, moves a page, rolls back a move recorded before the snapshot, and allocates a new page whose id follows on;
 - the comparison is shown to be non-vacuous:
   - after those writes, verification reports differences in `pages` and `route_changes`;
@@ -199,8 +207,16 @@ A second test covers the guards:
 `RecoveryPreRoutingTest` covers databases that predate the routing migration, again on disposable databases:
 - a pre-routing copy verifies exactly, with routing **not applicable**, and a changed reference or a moved unused sequence still fails;
 - routing tables on one side only, or only some of them on either side, fail, even when every section matches;
-- a baseline named by URL on any server is read, not the configured database, and identity is server, port and name;
-- `mix dd.snapshot --restore` refuses to restore over the database a snapshot was taken from, including a sidecar that names only the database.
+- routing is judged by migration history too: two databases that both record the routing migration and both lost every routing table fail as inconsistent, and so do the tables without the recorded migration, or no migration history at all;
+- a baseline named by URL on any server is read, not the configured database.
+
+`RecoverySourceIdentityTest` holds a restore to the identity the server reports:
+- the source is refused however it is reached — `127.0.0.1` for `localhost`, the Unix socket for TCP, `mix dd.snapshot --restore` — and after a rename, by its oid; every refusal comes before anything is dropped;
+- another database on the same server may be restored over, and so may a database of the same name on a genuinely different cluster (a throwaway `initdb` cluster on a free port), which then verifies against the source across the two;
+- a missing, malformed or legacy sidecar, a dump that is not the one its sidecar describes, a dump whose header names another database, and a target whose server cannot be read are refused;
+- verification refuses to compare a database with itself, however the baseline is named.
+
+`MigrationCheckTest` runs the real migrations over disposable databases, a copy holding corpus rows and an empty reference, from the development corpus's version to the pinned routing boundary and to current main. The copy passes exactly when it adds what the reference adds and keeps everything it had; an extra index, a changed row, a reference that started elsewhere, or a copy that migrated nothing fails.
 
 ## Limits
 

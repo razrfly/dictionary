@@ -132,7 +132,7 @@ Registry ids exist only in the database, and a rebuild from sources renumbers ev
 1. Quiesce and snapshot the source.
 2. Restore into an isolated database.
 3. Verify with `mix dd.routing.verify`: every column of every table by exact id (Oban's queues apart), the schema's definitions, resolutions and sequences.
-4. Re-project the copy from its own records in any provider order (`mix dd.materialize --all`, and `mix dd.replay` from an archive exported from the copy), and verify again.
+4. Re-project the copy from its own records in any provider order (`mix dd.materialize --all --resolve`, and `mix dd.replay` from an archive exported from the copy), and verify again.
 5. Exercise the ledger and resolver.
 
 `RecoveryTest` runs these steps end to end against disposable databases, re-projecting with the providers reversed.
