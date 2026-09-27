@@ -170,7 +170,31 @@ It also found lower-severity gaps: a revision-only phantom ledger row, a raw spl
 
 All are fixed, with tests. The same retirement now takes 91 ms at 50,602 paths, the same as at 301.
 
-{{THIRD_REVIEW}}
+The completion work answering the [Stage 1 audit](https://github.com/razrfly/dictionary/issues/194#issuecomment-5850535055) was reviewed afresh by a separate agent, which had not written it, and then re-verified after each round of fixes:
+
+1. **On `9da137a`.** The recovery manifest hand-picked its columns, so an edition's work and a variant's canonical lexeme were invisible. The guard's high-water marks missed publication changes and could vouch for a dump that raced a write. Malformed ids raised inside a caller's transaction, and two writers used a nested `Repo.rollback/1`, which aborts the caller. The procedure replayed the pinned archive instead of the copy's own records. `ecto.drop` was unguarded, and the Page locale check accepted a trailing newline. All fixed in `1a3a89e`.
+2. **On `1a3a89e`,** two major findings:
+   - the guard failed open under a production `url:` configuration;
+   - `mix ecto.rollback` dropped every routing table.
+
+   And four minor ones:
+   - a sidecar vouched for whatever file had the dump's name;
+   - the schema section could not see a disabled trigger;
+   - some inputs still raised inside a batch;
+   - the digest would hit PostgreSQL's 1 GB value limit.
+
+   All fixed in `8c5470f`, each with a regression test.
+3. **On `8c5470f`.** The reviewer reproduced all six as fixed. It found one more major issue, older than these commits: under a `url:` configuration, verification connected back to the configured database and compared it with itself. Five minor issues and nits came with it: privileges compared as stored ACL text, an evaluator text path, readers that raised, a JSON check refusing valid text, and batch memory. All fixed in `c415f9b`.
+4. **On `c415f9b`.** The reviewer found N1 and N3–N6 fixed and N2 partly fixed, since invalid UTF-8 still raised while building the fingerprint. Schema and default privileges were not compared. Both fixed in `00ab53f`.
+5. **On `00ab53f`.** Nothing remains. The reviewer confirmed that:
+   - invalid UTF-8 and non-JSON evaluator results return error tuples inside a committed caller transaction;
+   - schema and default privileges show as differences, while a plain snapshot and restore still verifies exactly;
+   - `dd.reset` and `dd.snapshot`, run from the command line, behave as before;
+   - `candidates.py` refuses a partial export, and reproduces `candidates.json` exactly.
+
+No finding was rejected. Two are recorded as limits rather than code: a copy owned by a different role is reported as a difference by construction, which is untested because it needs a second cluster role; and ownership and privileges must be re-applied after a `--no-owner --no-privileges` restore.
+
+CodeRabbit reviewed each pushed head and posted actionable findings on every one. Its findings overlapped the agent's (the actor-id check, the URL guard) and added others (the placeholders, `candidates.py` inputs and cross-group uniqueness, the `url:` handling in `dd.reset`/`dd.snapshot`, a missing-export check, wording). All are fixed.
 
 These are agents' reviews and CodeRabbit's, not the owner's. Passing tests and review are not publication approval.
 
@@ -178,9 +202,22 @@ These are agents' reviews and CodeRabbit's, not the owner's. Passing tests and r
 
 Three kinds of evidence, kept apart because they prove different things.
 
-**Local test results.** {{LOCAL_EVIDENCE}}
+**Local test results.** On this machine (PostgreSQL 18.2 from Postgres.app, Elixir 1.19.0 on OTP 28), in a private test database (`MIX_TEST_PARTITION=_r194`):
 
-**GitHub checks.** The repository has **no test-suite CI**: there is no `.github/workflows`. The checks on PR #205 are GitGuardian, a secrets scan, and CodeRabbit's review status. Neither runs the tests. CodeRabbit's green status means its review completed, not that it found nothing: its review of `0b045d8` posted two actionable findings (the tombstone reclaim and `Pages.ensure`), and both are fixed here.
+| Commit | Command | Result |
+|---|---|---|
+| `00ab53f13514774f9a8a4266c57273761b1c116c` (final code) | `MIX_TEST_PARTITION=_r194 mix precommit` | compile with warnings as errors, `deps.unlock --unused`, `format` (nothing to change), then **19 doctests, 2,172 tests, 0 failures**, seed 963359 |
+| same | `MIX_TEST_PARTITION=_r194 mix test test/devils_dictionary/routing test/devils_dictionary/data_case_test.exs test/devils_dictionary/raw_sql_test.exs` | **3 doctests, 113 tests, 0 failures**, seed 420540 |
+| `c415f9b`, `8c5470f`, `1a3a89e` | `mix precommit`, same partition | 2,172, 2,169 and 2,169 tests, 0 failures (seeds 156730, 609168, 121482) |
+
+Main at `5713f8e` had 16 doctests and 2,088 tests. The commits after `00ab53f` change documentation only. The database-claim lock has not failed since its fix: five full runs (`c388041` and the four above) and every targeted run passed without it. `candidates.py` reproduces `candidates.json` byte for byte, and all 130 of its distinct paths pass `Routing.Address.parse/1`.
+
+**Limits of this evidence:**
+- It comes from one machine; there is no CI.
+- The recovery procedure has not been run on `devils_dictionary_v2`, and its timing at corpus scale is unmeasured.
+- Two restore details are untested: a copy owned by a different role, and grants re-applied in production.
+
+**GitHub checks.** The repository has **no test-suite CI**: there is no `.github/workflows`. The checks on PR #205 are GitGuardian, a secrets scan, and CodeRabbit's review status. Neither runs the tests. CodeRabbit's green status means its review completed, not that it found nothing. Its reviews of `0b045d8`, `c388041`, `1a3a89e`, `8c5470f` and `c415f9b` posted 2, 4, 1, 2 and 1 actionable findings, plus findings outside the diff, and all are fixed here.
 
 **Independent review.** See [Independent review](#independent-review). The implementing agent's own tests are not independent review.
 
