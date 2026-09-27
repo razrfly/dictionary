@@ -3,7 +3,7 @@
 # in this process, with this branch's code — and never lets the main checkout's
 # Oban node (port 4007, same database) see a job.
 #
-#   mix run --no-start run_pages.exs grief love
+#   REFRESH=1 ONLY=wikiquote mix run --no-start run_pages_refresh.exs bunny
 #
 # Oban starts in :manual mode with no queues and no plugins. Discovery.request
 # is called inside an outer transaction; the RunWorker job it inserts is deleted
