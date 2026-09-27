@@ -110,7 +110,7 @@ A restored copy carries the source's queued and scheduled jobs. Tasks that start
    DD_DATABASE=devils_dictionary_restore DD_DATABASE_PORT=5433 mix dd.routing.verify --baseline ecto://postgres:postgres@localhost:5432/devils_dictionary_v2
    ```
 
-   A URL names its whole endpoint. Nothing configured carries over to it: not `DD_DATABASE_PORT`, not a configured or `PGHOST` socket directory. A URL without a port means `PGPORT`, else 5432, as it would to `psql`. Credentials it leaves out are the configured ones.
+   A URL names its whole endpoint. Nothing configured carries over to it: not `DD_DATABASE_PORT`, not a configured or `PGHOST` socket directory. A URL without a port means `PGPORT`, else 5432, as it would to `psql`. Credentials it leaves out are the configured ones. A URL must name a host (`ecto://user@/db` is refused), and a `socket` or `endpoints` query option is refused, because the identity check could not follow it.
 
    **A source that predates the routing migration** has none of the six routing tables, and no record of the routing migration (`20260926193256`) in `schema_migrations`. Verification then compares the corpus exactly and reports **routing: not applicable**. That proves the corpus was recovered, and nothing about routing. The following all fail:
    - routing tables on one side only, or only some of them on either side;

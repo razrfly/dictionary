@@ -589,10 +589,19 @@ defmodule DevilsDictionary.Routing.Recovery do
     base = Repo.config() |> Snapshot.resolve() |> Keyword.put(:url, nil)
 
     if url?(target) do
+      parsed = Ecto.Repo.Supervisor.parse_url(target)
+
+      # A `socket` or `endpoints` query option would be connected through by
+      # the pool but not by the identity probe, which follows host, port and
+      # socket directory only; the two could then name different servers.
+      with {:error, message} <- Snapshot.followable(parsed) do
+        raise ArgumentError, "baseline URL #{inspect(redact(target))}: " <> message
+      end
+
       resolved =
         base
         |> Keyword.drop(@endpoint_keys)
-        |> Keyword.merge(Ecto.Repo.Supervisor.parse_url(target))
+        |> Keyword.merge(parsed)
         |> Snapshot.resolve()
 
       Keyword.merge(Enum.map(@endpoint_keys, &{&1, nil}), resolved)
@@ -602,6 +611,9 @@ defmodule DevilsDictionary.Routing.Recovery do
   end
 
   defp url?(target), do: String.contains?(target, "://")
+
+  # A URL as an error may show it: without its password.
+  defp redact(url), do: String.replace(url, ~r{(://[^:/@]*):[^@]*@}, "\\1:…@")
 
   @doc """
   The server and database a Repo config, a snapshot's recorded source, or a

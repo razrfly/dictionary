@@ -266,7 +266,22 @@ defmodule DevilsDictionary.Routing.RecoveryPreRoutingTest do
     # A bare database name still means the configured server.
     configured_with(scratch, fn ->
       assert Recovery.identity(db["a"]) == {"localhost", scratch[:port], db["a"]}
+
+      # And "the same database" is decided on the URL's server, not the
+      # configured one: the baseline on the usual server is `a` itself.
+      assert Recovery.same_database?(c, no_port)
     end)
+
+    # A socket or endpoints option in the URL would be connected through but
+    # not probed; refused, without echoing the password.
+    for option <- ["socket=/tmp/.s.PGSQL.5433", "endpoints=elsewhere"] do
+      error =
+        assert_raise ArgumentError, ~r/cannot follow/, fn ->
+          Recovery.identity(no_port <> "?" <> option)
+        end
+
+      refute error.message =~ ":#{c[:password]}@"
+    end
   end
 
   test "routing is judged by migration history too: a recorded migration without its tables fails",
