@@ -72,6 +72,17 @@ defmodule DevilsDictionary.Curation.PublicationsTest do
     )
   end
 
+  # Row counts of every page table routing has (#194), so a test holds
+  # whether or not those tables exist in the checkout it runs in.
+  defp page_counts do
+    %{rows: tables} =
+      Repo.query!(
+        "SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename LIKE 'page%' ORDER BY 1"
+      )
+
+    for [table] <- tables, into: %{}, do: {table, Repo.aggregate(table, :count)}
+  end
+
   defp claim_counts do
     {Repo.aggregate(Assertion, :count), Repo.aggregate(AssertionRevision, :count),
      Repo.aggregate(AssertionReview, :count)}
@@ -112,7 +123,7 @@ defmodule DevilsDictionary.Curation.PublicationsTest do
     end
 
     test "approval publishes nothing and accepts no claim or page", ctx do
-      before = claim_counts()
+      before = {claim_counts(), page_counts()}
       review = accept!(ctx)
       settle!()
 
@@ -122,12 +133,12 @@ defmodule DevilsDictionary.Curation.PublicationsTest do
       assert Repo.reload!(ctx.composition).current_published_version_id == nil
       assert Repo.aggregate(CompositionPublication, :count) == 0
       assert Published.current(ctx.composition.id) == :unpublished
-      assert claim_counts() == before
+      assert {claim_counts(), page_counts()} == before
 
-      # This slice has no page tables to write, and adds none.
-      for table <- ~w(pages page_composition_bindings) do
-        assert %{rows: [[false]]} = Repo.query!("SELECT to_regclass($1) IS NOT NULL", [table])
-      end
+      # Binding a composition to a page is #194's (#205), and this slice adds
+      # no binding table.
+      assert %{rows: [[false]]} =
+               Repo.query!("SELECT to_regclass('page_composition_bindings') IS NOT NULL")
     end
 
     test "decisions are append-only and idempotent", ctx do
@@ -191,7 +202,7 @@ defmodule DevilsDictionary.Curation.PublicationsTest do
          ctx do
       assert {:error, :not_approved} = publish(ctx)
       review = accept!(ctx)
-      before = claim_counts()
+      before = {claim_counts(), page_counts()}
 
       assert {:ok, %CompositionPublication{} = receipt} = publish(ctx)
       settle!()
@@ -209,7 +220,10 @@ defmodule DevilsDictionary.Curation.PublicationsTest do
 
       assert receipt.actor_id == actor!(ctx.reviewer).id
       assert Repo.reload!(ctx.composition).current_published_version_id == ctx.version.id
-      assert claim_counts() == before
+
+      # Publishing a composition writes no claim, and no page row: showing it
+      # on a page is a binding, which is #194's.
+      assert {claim_counts(), page_counts()} == before
     end
 
     test "is idempotent, checks the expected pointer, and refuses a replay of a different act",
