@@ -47,8 +47,9 @@ defmodule DevilsDictionary.Routing.Recovery do
 
   Options:
 
-    * `mode: :exact` (default) — every column, every sequence; what a restore
-      must reproduce byte for byte.
+    * `mode: :exact` (default) — every column, and every sequence's
+      `last_value` and `is_called`, used or not; what a restore must reproduce
+      byte for byte.
     * `mode: :projected` — after `mix dd.materialize --all` on a restored copy:
       leaves out `import_runs` and the columns `updated_at`, `materialized_at`
       and `last_seen_run_id`, and the sequences, whose upserts may consume ids
@@ -76,7 +77,7 @@ defmodule DevilsDictionary.Routing.Recovery do
           sections = Map.put(sections, "schema", schema(opts))
 
           if mode == :exact,
-            do: Map.put(sections, "sequences", capture(sequence_sql(), rows: true)),
+            do: Map.put(sections, "sequences", sequences()),
             else: sections
         end,
         timeout: :infinity
@@ -284,11 +285,24 @@ defmodule DevilsDictionary.Routing.Recovery do
     """
   end
 
-  defp sequence_sql do
-    """
-    SELECT json_build_array(sequencename, last_value)::text FROM pg_sequences
-     WHERE schemaname = 'public' ORDER BY sequencename COLLATE "C"
-    """
+  # Every sequence's own state: the value it last handed out and whether it
+  # has handed it out yet (`is_called`), which together fix the next id. Read
+  # from the sequence itself, because `pg_sequences.last_value` is null for a
+  # sequence never used, whatever `setval/3` has set it to.
+  defp sequences do
+    %{rows: names} =
+      Repo.query!("""
+      SELECT relname FROM pg_class
+       WHERE relkind = 'S' AND relnamespace = 'public'::regnamespace
+       ORDER BY relname COLLATE "C"
+      """)
+
+    names
+    |> Enum.map(fn [name] ->
+      %{rows: [[last, called?]]} = Repo.query!(~s|SELECT last_value, is_called FROM "#{name}"|)
+      Jason.encode!([name, last, called?])
+    end)
+    |> summarize(rows: true)
   end
 
   # A server-side cursor, fetched in batches: constant memory at corpus

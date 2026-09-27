@@ -200,6 +200,68 @@ defmodule DevilsDictionary.Routing.CommittedLedgerTest do
     assert %Page{role: :subject} = Repo.get!(Page, id)
   end
 
+  test "every page-creation entry point refuses a malformed page without aborting the batch" do
+    entity = entity!(:concept, "Candide")
+    lexeme = lexeme!("candide")
+    # Well-formed as a tag, but longer than the column (the audit's case).
+    overlong = "en" <> String.duplicate("-abcdefgh", 30)
+    # Exactly the column's 255 bytes.
+    longest = "en" <> String.duplicate("-abcdefgh", 25) <> String.duplicate("-abcdef", 4)
+    assert byte_size(longest) == 255
+
+    assert {:ok, results} =
+             Repo.transaction(fn ->
+               [
+                 # A subject page targeting a lexeme: the audit's case, which
+                 # the deferred target check used to raise at this COMMIT.
+                 Pages.create(%{role: :subject, target_object_id: lexeme.object_id}),
+                 Pages.create(%{role: :subject, target_object_id: entity.object_id}),
+                 Pages.create(%{"role" => "lexeme", "target_object_id" => lexeme.object_id}),
+                 Pages.create(%{role: :overview, locale: overlong}),
+                 Pages.create(%{role: :overview, locale: <<0xFF>>}),
+                 Pages.create(%{role: :overview, target_object_id: entity.object_id}),
+                 Pages.create(%{role: :homepage}),
+                 Pages.create(%{"role" => "overview", locale: "en"}),
+                 Pages.create(:overview),
+                 Pages.ensure(:subject, entity.object_id, overlong),
+                 Pages.ensure(:subject, entity.object_id, <<0xFF>>),
+                 Pages.ensure(:subject, entity.object_id, 42),
+                 Pages.ensure(:subject, lexeme.object_id),
+                 Pages.ensure(:lexeme, entity.object_id),
+                 # The batch's well-formed pages, which must commit.
+                 Pages.create(%{role: :overview, locale: longest}),
+                 Pages.create(%{role: :choice}),
+                 Pages.ensure(:subject, entity.object_id),
+                 Pages.ensure(:lexeme, lexeme.object_id)
+               ]
+             end)
+
+    assert [
+             {:error, :targeted_role},
+             {:error, :targeted_role},
+             {:error, :targeted_role},
+             {:error, %Ecto.Changeset{errors: [locale: {_, [count: 255] ++ _}]}},
+             {:error, %Ecto.Changeset{errors: [locale: _]}},
+             {:error, %Ecto.Changeset{errors: [target_object_id: _]}},
+             {:error, %Ecto.Changeset{errors: [role: _]}},
+             {:error, :invalid_attrs},
+             {:error, :invalid_attrs},
+             {:error, %Ecto.Changeset{errors: [locale: _]}},
+             {:error, %Ecto.Changeset{errors: [locale: _]}},
+             {:error, %Ecto.Changeset{errors: [locale: _]}},
+             {:error, :target_kind_mismatch},
+             {:error, :target_kind_mismatch},
+             {:ok, %Page{id: overview, locale: ^longest}},
+             {:ok, %Page{id: choice}},
+             {:ok, %Page{id: subject, role: :subject}},
+             {:ok, %Page{id: lexical, role: :lexeme}}
+           ] = results
+
+    # Committed: exactly the four well-formed pages exist.
+    assert Repo.all(from p in Page, order_by: p.id, select: p.id) ==
+             Enum.sort([overview, choice, subject, lexical])
+  end
+
   test "every routing writer refuses malformed input without aborting the caller's batch",
        ctx do
     entity = entity!(:person, "Candide")

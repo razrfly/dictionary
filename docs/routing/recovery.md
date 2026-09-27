@@ -61,7 +61,7 @@ A restored copy carries the source's queued and scheduled jobs. Tasks that start
 3. **Verify exact identity.** This compares every column of every table: registry identities, references such as an edition's work or a variant's canonical lexeme, and every routing row, all by exact id. Only Oban's queue tables are left out. It also compares:
 
    - the schema: owners; column types, collations, nullability and defaults; constraints and indexes, including whether they are valid; triggers, including whether they fire; functions, views and rules; sequence parameters; row security and policies; object, schema and default privileges; extension versions;
-   - the sequences that hand out the next ids;
+   - every sequence's own state: its last value and whether it has been used (`is_called`), which together fix the next id it hands out. This includes sequences never used, whose `pg_sequences.last_value` is null;
    - what every stored path and page id resolves to.
 
    Counts alone are not accepted. It is read-only on both databases, and exits non-zero on any difference.
@@ -114,6 +114,7 @@ The test then runs the procedure's steps:
 
 - the snapshot goes through `Routing.Recovery.snapshot!/2` (the code behind `mix dd.snapshot`), and the restore through `DevilsDictionary.Snapshot`, into a database created for the test and dropped after it;
 - `mix dd.routing.verify` passes, and every section is compared row for row, along with every resolution and every sequence;
+- moving a sequence that was never used, to any value with or without `is_called`, is a difference in exactly `sequences`. So is changing only a used sequence's `is_called`. Restoring either state verifies exactly again;
 - the copy exports its own replay archive, then re-projects with `mix dd.replay` and `mix dd.materialize --all`, **Wikidata before Wikipedia**. The test asserts that each source's three records were really replayed and re-materialized, in that order, and then compares everything again in projected mode;
 - on the restored copy it resolves known paths, moves a page, rolls back a move recorded before the snapshot, and allocates a new page whose id follows on;
 - the comparison is shown to be non-vacuous:

@@ -20,9 +20,39 @@ defmodule DevilsDictionary.Routing.Pages do
   alias DevilsDictionary.Routing.{Page, PageMembership, PageRevision}
   alias DevilsDictionary.Sources.Actor
 
-  @doc "Creates a new, unrouted draft page."
-  def create(attrs) do
-    attrs |> Page.create_changeset() |> Repo.insert()
+  @doc """
+  Creates a new, unrouted draft **editorial** page: an overview, collection or
+  choice page, which has no target.
+
+  A page about one registry object — subject, edition or lexeme — is created
+  with `ensure/3`, which checks the target's kind first and is idempotent.
+  Here it is refused as `{:error, :targeted_role}` rather than inserted
+  unchecked: the database's deferred target-kind check would otherwise raise
+  at the caller's commit and roll back the caller's whole batch.
+
+  Anything else the changeset refuses — an unknown role, a malformed or
+  overlong locale, a target on an editorial page — is `{:error, changeset}`,
+  decided before any query.
+  """
+  def create(attrs) when is_map(attrs) do
+    case changeset(attrs) do
+      {:ok, changeset} ->
+        if Ecto.Changeset.get_field(changeset, :role) in Page.targeted_roles(),
+          do: {:error, :targeted_role},
+          else: Repo.insert(changeset)
+
+      error ->
+        error
+    end
+  end
+
+  def create(_attrs), do: {:error, :invalid_attrs}
+
+  # `cast/4` raises on a map mixing atom and string keys.
+  defp changeset(attrs) do
+    {:ok, Page.create_changeset(attrs)}
+  rescue
+    Ecto.CastError -> {:error, :invalid_attrs}
   end
 
   @doc """

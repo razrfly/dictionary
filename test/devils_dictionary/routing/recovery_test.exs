@@ -292,6 +292,41 @@ defmodule DevilsDictionary.Routing.RecoveryTest do
       assert {:ok, report} = Recovery.verify(ctx.source)
       assert report.sections["objects"] == baseline["objects"].count
 
+      # Sequences are compared by their own `last_value` and `is_called`, so
+      # a changed next id is a difference even for a sequence never used,
+      # whose `pg_sequences.last_value` is null (the audit's case).
+      %{rows: [[unused]]} =
+        Repo.query!("""
+        SELECT sequencename::text FROM pg_sequences
+         WHERE schemaname = 'public' AND last_value IS NULL
+         ORDER BY sequencename COLLATE "C" LIMIT 1
+        """)
+
+      [[start, false]] = Repo.query!(~s|SELECT last_value, is_called FROM "#{unused}"|).rows
+
+      for {value, called?} <- [{100, false}, {200, false}, {start, true}] do
+        Repo.query!("SELECT setval($1::text::regclass, $2, $3)", [unused, value, called?])
+        assert {:error, %{differences: moved}} = Recovery.verify(ctx.source)
+        assert Map.keys(moved) == ["sequences"]
+        assert [changed] = moved["sequences"].only_after
+        assert changed == Jason.encode!([unused, value, called?])
+      end
+
+      Repo.query!("SELECT setval($1::text::regclass, $2, false)", [unused, start])
+      assert {:ok, _report} = Recovery.verify(ctx.source)
+
+      # And a used one whose `is_called` alone changes: the same last value,
+      # but a different next id.
+      [[last, true]] = Repo.query!("SELECT last_value, is_called FROM pages_id_seq").rows
+      Repo.query!("SELECT setval('pages_id_seq', $1, false)", [last])
+
+      assert {:error, %{differences: %{"sequences" => _} = uncalled}} =
+               Recovery.verify(ctx.source)
+
+      assert Map.keys(uncalled) == ["sequences"]
+      Repo.query!("SELECT setval('pages_id_seq', $1, true)", [last])
+      assert {:ok, _report} = Recovery.verify(ctx.source)
+
       # 4. Re-projection through the supported paths, providers reversed —
       #    and not vacuously: every record is replayed and re-materialized.
       #    The replay archive is exported from the restored copy itself, so it

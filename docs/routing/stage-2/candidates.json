@@ -3091,6 +3091,15 @@
   "collision_groups_touched": 11,
   "deferred_outside_population": 100554,
   "global_proposal_conflicts": 0,
+  "inputs": {
+   "assignments": "data/audits/2026-09-26-issue194/assignments.jsonl.gz",
+   "assignments_sha256": "36453ebd813b32000cdd966b427a90b9889b49bac6261e8f22c91cee21e669ee",
+   "audit_summary": "data/audits/2026-09-26-issue194/summary.json",
+   "input": "data/audits/2026-09-26-issue194/input.jsonl.gz",
+   "input_sha256": "8878ed147b7fee672769a18ec22e112d169213d6b4f88538811e8571e2b46289",
+   "policy_sha256": "54695faa6e686d2b23f59f0f328d54e033b956e7dfb9d21fda7800a2082b7eac",
+   "policy_version": "1.0.0"
+  },
   "named_found": [
    "Ambrose Bierce",
    "Apple",

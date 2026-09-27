@@ -62,6 +62,9 @@ defmodule DevilsDictionary.Routing.Page do
     # Anchored like the database's check, whose `$` is the end of the string:
     # Elixir's `$` would also accept a trailing newline the check refuses.
     |> validate_format(:locale, ~r/\A[a-z]{2,3}(-[a-z0-9]{2,8})*\z/)
+    # The column's own limit (`varchar(255)`), which the format does not bound:
+    # past it, PostgreSQL raises inside the caller's transaction.
+    |> validate_length(:locale, max: 255, count: :bytes)
     |> validate_target()
     |> foreign_key_constraint(:target_object_id)
     |> check_constraint(:target_object_id, name: :pages_target_by_role)

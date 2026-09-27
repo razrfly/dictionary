@@ -22,7 +22,27 @@ python3 docs/routing/stage-2/candidates.py /tmp/candidates.json --audit /tmp/rou
 
 The export is read-only. The boundary and stratified selections name registry object ids, which a fresh export of the same database keeps. `--boundaries` and `--stratified` replace them. A selected id that the fresh audit lacks is listed under `selection_missing_from_audit`, not dropped silently. Run on the 26 September audit decompressed into that shape, the script yields the same records digest as the archives.
 
+**The inputs are bound to the audit.** Otherwise descriptions from one snapshot could qualify classifications from another. The script refuses, and writes nothing, when:
+- the export's SHA-256 over its uncompressed bytes differs from the audit summary's `input_sha256`;
+- the summary's entity count or policy version does not match the assignments;
+- an object id appears twice among the assignments or the exported entities.
+
+The output's `summary.inputs` records the audit summary, the assignments and export files, their SHA-256 digests (for the archives, the assignments digest equals the one pinned in [`reproducibility.json`](../../audits/2026-09-26-issue194/reproducibility.json)), and the policy version and digest.
+
+**Slugs are the application's.** The script's `slug/1` follows `Routing.Policy.slug/1` step for step:
+- NFC normalization;
+- per-character lowercase, so a final sigma stays σ, as in Elixir;
+- `+ # & .` spelled out, and apostrophes removed;
+- letters, marks and numbers kept, and every other run of characters turned into one hyphen;
+- at most 120 bytes.
+
+[`slug-parity.json`](slug-parity.json) records 29 cases, covering NFC/NFD, combining marks, punctuation and the byte limit. `slug_parity_test.exs` holds the application to them, and `test_candidates.py` holds the script to them. Collisions are detected on the normalized final paths.
+
 All 130 distinct paths in the output pass `Routing.Address.parse/1` unchanged. These are 75 candidate paths, shared within collision groups, and 55 proposed qualifiers. Proposals are unique within their group, **across groups**, and against every candidate path in the snapshot (`global_proposal_conflicts: 0`).
+
+```bash
+python3 -m unittest discover -s docs/routing/stage-2 -p 'test_candidates.py'
+```
 
 ## A bounded candidate population: 169 entities
 
