@@ -88,6 +88,9 @@ defmodule DevilsDictionary.MixProject do
       setup: ["deps.get", "ecto.setup", "assets.setup", "assets.build"],
       "ecto.setup": ["ecto.create", "ecto.migrate", "run priv/repo/seeds.exs"],
       "ecto.reset": ["ecto.drop", "ecto.setup"],
+      # Durable routing state cannot be regenerated (docs/routing/recovery.md),
+      # so dropping a database that holds it needs DD_ROUTING_SNAPSHOT.
+      "ecto.drop": ["dd.routing.guard drop", "ecto.drop"],
       test: ["ecto.create --quiet", "ecto.migrate --quiet", "test"],
       "assets.setup": ["tailwind.install --if-missing", "esbuild.install --if-missing"],
       "assets.build": ["compile", "tailwind devils_dictionary", "esbuild devils_dictionary"],

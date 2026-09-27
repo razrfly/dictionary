@@ -86,34 +86,59 @@ defmodule DevilsDictionary.DataCase do
   @doc """
   Claims the test database for this run, from `test_helper.exs`.
 
-  Two things, on one connection this process holds for the life of the run:
+  Two things:
 
-    * **An advisory lock on the database's name.** A second `mix test` on the
-      same database — the default partition shared by two sessions, which is
-      how the suite came to fail one run in four — would truncate under the
-      first one's sandboxed tests and show them its committed rows. It now
-      refuses to start, and says which variable to set.
+    * **An advisory lock on the database's name,** held on a connection of its
+      own. A second `mix test` on the same database — the default partition
+      shared by two sessions, which is how the suite came to fail one run in
+      four — would truncate under the first one's sandboxed tests and show them
+      its committed rows. It now refuses to start, and says which variable to
+      set.
     * **A truncate,** so the run starts on the empty database every sandboxed
       test assumes, whatever the run before it left behind. Measured at
       58–82 ms.
 
-  The lock is session-level and the connection is checked out from the
-  sandbox pool without a sandbox; both go away when this VM does, so a run
-  killed under load never leaves a lock behind.
+  The lock used to live on a connection this process checked out of the
+  sandbox pool. That does not last: whenever a synchronous test puts the
+  sandbox into shared mode, the ownership manager checks in every other
+  owner's connection, so the claim's connection went back to the pool still
+  holding the lock. From then on it was a lock on a random pooled connection,
+  lost when that connection disconnected — a refused COMMIT always does — and
+  invisible to the claim test when that test happened to run on it (session
+  locks are re-entrant). Found by watching the proxy during PR #205 (#194).
+
+  So the lock now has a connection outside the pool, which no sandbox mode
+  change can touch, and which stops rather than silently reconnecting without
+  the lock: losing the claim ends the run instead of leaving it unprotected.
+  Both go away when this VM does, so a run killed under load never leaves a
+  lock behind.
   """
   def claim_database! do
-    # `:infinity`, because the sandbox's ownership timeout is 120 s by default
-    # and closes the owned connection when it expires — which would drop the
-    # advisory lock a run under load is still relying on (CodeRabbit on #160).
-    Ecto.Adapters.SQL.Sandbox.checkout(DevilsDictionary.Repo,
-      sandbox: false,
-      ownership_timeout: :infinity
-    )
+    config = DevilsDictionary.Repo.config()
+    database = config[:database]
 
-    database = DevilsDictionary.Repo.config()[:database]
+    {:ok, claim} =
+      config
+      |> Keyword.take([:hostname, :port, :username, :password, :database, :socket_dir])
+      # Idle pings are the one thing this connection does after the claim, and
+      # a ping that times out disconnects it — and so drops the lock. Under
+      # the load of a full suite a 15 s ping timeout is reachable; these are
+      # not, and a connection that is really gone still fails its ping.
+      |> Keyword.merge(
+        backoff_type: :stop,
+        sync_connect: true,
+        idle_interval: 30_000,
+        timeout: :timer.minutes(10)
+      )
+      |> Postgrex.start_link()
 
-    %{rows: [[locked?]]} =
-      DevilsDictionary.Repo.query!("select pg_try_advisory_lock(hashtext($1))", [database])
+    %{rows: [[locked?, backend]]} =
+      Postgrex.query!(claim, "select pg_try_advisory_lock(hashtext($1)), pg_backend_pid()", [
+        database
+      ])
+
+    # Remembered so that a lost claim can be explained rather than re-run.
+    :persistent_term.put({__MODULE__, :claimant_backend}, backend)
 
     unless locked? do
       raise """
@@ -126,7 +151,40 @@ defmodule DevilsDictionary.DataCase do
       """
     end
 
+    # `:infinity`, because the sandbox's ownership timeout is 120 s by default
+    # and closes the owned connection when it expires (CodeRabbit on #160).
+    Ecto.Adapters.SQL.Sandbox.checkout(DevilsDictionary.Repo,
+      sandbox: false,
+      ownership_timeout: :infinity
+    )
+
     truncate_all!()
+  end
+
+  @doc """
+  Why the run's claim might not hold: whether the session that took it is
+  still connected, and which sessions hold advisory locks now. For a failure
+  message, so a recurrence is diagnosed on the spot.
+  """
+  def claim_diagnostics do
+    backend = :persistent_term.get({__MODULE__, :claimant_backend}, nil)
+
+    %{rows: activity} =
+      DevilsDictionary.Repo.query!(
+        "select pid, state, backend_start::text, query_start::text from pg_stat_activity where pid = $1",
+        [backend]
+      )
+
+    %{rows: locks} =
+      DevilsDictionary.Repo.query!(
+        "select pid, classid, objid, granted from pg_locks where locktype = 'advisory' order by pid"
+      )
+
+    """
+    claimant backend #{inspect(backend)}: #{if activity == [], do: "GONE — its session ended, so its lock went with it", else: inspect(activity)}
+    advisory locks now held: #{inspect(locks)}
+    this session: #{inspect(DevilsDictionary.Repo.query!("select pg_backend_pid()").rows)}
+    """
   end
 
   @doc """
@@ -146,9 +204,19 @@ defmodule DevilsDictionary.DataCase do
 
     tables = rows |> List.flatten() |> Enum.map_join(", ", &~s("#{&1}"))
 
-    DevilsDictionary.Repo.query!("truncate #{tables} restart identity cascade", [],
-      timeout: 120_000
-    )
+    # The routing tables refuse TRUNCATE — their history is permanent — unless
+    # the transaction opts in. A test reset is the one caller that may.
+    {:ok, _} =
+      DevilsDictionary.Repo.transaction(
+        fn ->
+          DevilsDictionary.Repo.query!("SET LOCAL dictionary.allow_routing_truncate = 'on'")
+
+          DevilsDictionary.Repo.query!("truncate #{tables} restart identity cascade", [],
+            timeout: 120_000
+          )
+        end,
+        timeout: 120_000
+      )
   end
 
   @doc """
