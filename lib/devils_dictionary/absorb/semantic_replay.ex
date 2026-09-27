@@ -16,7 +16,11 @@ defmodule DevilsDictionary.Absorb.SemanticReplay do
       endpoints included.
 
   A recovery re-projection uses `resolve: true` (`mix dd.materialize --all
-  --resolve`).
+  --resolve`). The resolve pass drains only this source's edges, but its
+  canonical linking (`Resolver.link_canonical/0`) spans every source, so a
+  variant link another source's claim now supports shows as a `lexemes`
+  change here. On a re-projection that has already run once, there is none
+  left to make.
   """
 
   alias DevilsDictionary.Absorb.{Batch, Resolver}

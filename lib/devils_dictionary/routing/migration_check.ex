@@ -7,9 +7,14 @@ defmodule DevilsDictionary.Routing.MigrationCheck do
   **reference**: an empty database migrated over the same range of versions.
   The copy must add the same migrations, schema rows, sequences and tables,
   with the same contents, as the reference did — and leave every table it
-  already had byte-identical. So one check is exact for any boundary: the
-  historical routing-only reproduction (`--to 20260926193256`) and current
-  main, whatever it adds after routing.
+  already had byte-identical. So one check is exact for any boundary made of
+  schema additions: the historical routing-only reproduction (`--to
+  20260926193256`) and current main, whatever it adds after routing.
+
+  A migration that rewrites rows a table already held — a backfill — cannot
+  be judged this way, because the reference has no rows to rewrite. The copy
+  reports it under `pre_existing_tables_changed` and fails; such a migration
+  needs a check of its own.
 
   `capture/1` reads a database (`Recovery.manifest/1`, its routing state and
   its migration history); `compare/4` judges four captures. Both only read.

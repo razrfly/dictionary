@@ -110,17 +110,29 @@ defmodule DevilsDictionary.Absorb.Resolver do
   # another names the Thesaurus page. Resolved window by window in pending-id
   # order, the claim took whichever attestation its chunk met first, so a full
   # re-projection wrote two revisions and ended where it started, every time
-  # (#194). So one attestation speaks for the claim: the one from the lowest
-  # source record, then the lowest pending id. It is chosen here, over every
-  # pending row, before any is drained. Its metadata, method and confidence
-  # are the claim's, and its stated part of speech picks the claim's target.
+  # (#194). So one attestation speaks for the claim, chosen here over every
+  # pending row before any is drained. Its metadata, method and confidence are
+  # the claim's, and its stated part of speech picks the claim's target.
+  #
+  # It is chosen by content, never by id: the first attesting record by
+  # external id, then the stated part of speech, the metadata and the method.
+  # Ids say only who was inserted first, and a rebuild inserts in another
+  # order (see "Picking one target" above). The pending id breaks only an
+  # exact tie, where the choice cannot change the claim.
+  #
+  # Each claim carries the span of its rows' ids, so a window is sent only the
+  # claims it holds rows of. A materializer writing the same source meanwhile
+  # could add a row the choice did not see: resolve with background jobs off,
+  # as a re-projection does.
   defp attestations(source_id) do
     %{rows: rows} =
       Repo.query!(
         """
         SELECT DISTINCT ON (p.source_id, p.origin_key)
-               p.source_id, p.origin_key, p.to_pos, p.metadata, p.method, p.confidence
+               p.source_id, p.origin_key, p.to_pos, p.metadata, p.method, p.confidence,
+               min(p.id) OVER claim, max(p.id) OVER claim
           FROM pending_relations p
+          LEFT JOIN source_records r ON r.id = p.source_record_id
          WHERE p.origin_key IS NOT NULL
            AND ($1::bigint IS NULL OR p.source_id = $1)
            AND NOT (p.metadata ? 'to_sense')
@@ -128,13 +140,30 @@ defmodule DevilsDictionary.Absorb.Resolver do
                  SELECT 1 FROM pending_relations q
                   WHERE q.source_id = p.source_id AND q.origin_key = p.origin_key
                     AND q.id <> p.id AND NOT (q.metadata ? 'to_sense'))
-         ORDER BY p.source_id, p.origin_key, p.source_record_id, p.id
+        WINDOW claim AS (PARTITION BY p.source_id, p.origin_key)
+         ORDER BY p.source_id, p.origin_key,
+                  r.external_id COLLATE "C" NULLS LAST,
+                  p.to_pos COLLATE "C" NULLS LAST,
+                  p.metadata::text COLLATE "C",
+                  p.method COLLATE "C" NULLS LAST,
+                  p.confidence NULLS LAST,
+                  p.id
         """,
         [source_id],
         timeout: :infinity
       )
 
-    rows
+    Enum.map(rows, fn [src, key, to_pos, metadata, method, confidence, first, last] ->
+      {first, last, [src, key, to_pos, metadata, method, confidence]}
+    end)
+  end
+
+  # The speaking attestations of the claims with rows in `[from, to)`, as the
+  # six parallel arrays `matched/4` unnests.
+  defp speaking(attestations, from, to) do
+    attestations
+    |> Enum.filter(fn {first, last, _row} -> first < to and last >= from end)
+    |> Enum.map(fn {_first, _last, row} -> row end)
     |> Enum.zip_with(& &1)
     |> case do
       [] -> [[], [], [], [], [], []]
@@ -153,7 +182,7 @@ defmodule DevilsDictionary.Absorb.Resolver do
       Repo.transaction(
         fn ->
           source_id
-          |> matched(from, to, attestations)
+          |> matched(from, to, speaking(attestations, from, to))
           # The window is sized for the **scan**; the write has to be sized for
           # the **wire**. Postgres accepts at most 65,535 bind parameters in one
           # statement and a revision row is twelve of them, so a window holding
@@ -197,7 +226,7 @@ defmodule DevilsDictionary.Absorb.Resolver do
   # `@pos_priority`, then the lexical key. Ties are broken by rule rather
   # than by whichever row the planner happened to return. A claim several rows
   # attest takes its speaking attestation's fields (`attestations/1`).
-  defp matched(source_id, from, to, attestations) do
+  defp matched(source_id, from, to, speaking) do
     %{rows: rows} =
       Repo.query!(
         """
@@ -231,7 +260,7 @@ defmodule DevilsDictionary.Absorb.Resolver do
                   array_position($4::text[], l.part_of_speech) NULLS LAST,
                   l.lexical_key COLLATE "C", l.object_id
         """,
-        [from, to, source_id, @pos_priority | attestations],
+        [from, to, source_id, @pos_priority | speaking],
         timeout: :infinity
       )
 

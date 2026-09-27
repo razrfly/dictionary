@@ -161,12 +161,56 @@ defmodule DevilsDictionary.Absorb.Sources.WikidataDispatchTest do
       assert Repo.aggregate(from(c in "reconciliation_cases"), :count) == 0
 
       # The mint's evidence is not the materializer's to retire.
-      assert [[nil]] =
-               Repo.all(
-                 from o in "source_materialized_outputs",
-                   where: o.source_record_id == ^ctx.nameless.id,
-                   select: [o.retired_at]
-               )
+      assert_mint_output_live(ctx)
     end
+
+    test "a replay records what it materialized and what it did not project", ctx do
+      dir = Path.join(System.tmp_dir!(), "dispatch-replay-#{System.unique_integer([:positive])}")
+      on_exit(fn -> File.rm_rf(dir) end)
+
+      ExUnit.CaptureIO.capture_io(fn ->
+        Mix.Tasks.Dd.Export.Replay.run(["--source", "wikidata", "--out", dir, "--quiet"])
+      end)
+
+      # As a restored copy's records would be before their first projection.
+      Repo.update_all(
+        from(r in SourceRecord, where: r.source_id == ^ctx.wikidata.id),
+        set: [materialized_at: nil]
+      )
+
+      output =
+        ExUnit.CaptureIO.capture_io(fn ->
+          Mix.Tasks.Dd.Replay.run(["--dir", dir, "--source", "wikidata"])
+        end)
+
+      assert output =~ ~r/materialized\s+3 record\(s\) in 1 pass\(es\)/
+      assert output =~ "not projected"
+
+      assert %{
+               "records" => 3,
+               "materialized" => %{
+                 "records" => 3,
+                 "passes" => 1,
+                 "dispositions" => %{"verifier_cache" => 2, "label_missing" => 1}
+               }
+             } =
+               Repo.one!(
+                 from r in "import_runs",
+                   where: r.task == "replay" and r.source_id == ^ctx.wikidata.id,
+                   select: r.stats
+               )
+
+      assert_mint_output_live(ctx)
+    end
+  end
+
+  # The mint's evidence is not the materializer's to retire.
+  defp assert_mint_output_live(ctx) do
+    assert [[nil]] =
+             Repo.all(
+               from o in "source_materialized_outputs",
+                 where: o.source_record_id == ^ctx.nameless.id,
+                 select: [o.retired_at]
+             )
   end
 end

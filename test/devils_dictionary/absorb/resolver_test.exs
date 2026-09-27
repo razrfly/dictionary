@@ -161,29 +161,33 @@ defmodule DevilsDictionary.Absorb.ResolverTest do
       assert %{"hyponym" => %{total: 1, resolved: 0, unresolved: 1}} = Resolver.by_type(source.id)
     end
 
-    test "a claim several records attest takes the lowest record's attestation, whatever the order" do
+    test "a claim several records attest takes its first record's attestation, by content, not id" do
       # Wiktionary's `mother/noun/1` and `/2` both say *mother* is related to
       # *mom*, each with its own provenance and stated part of speech. Resolved
       # in pending-id order, the claim took whichever came first, so a
       # re-projection that re-created the rows in another order revised it —
-      # every time (#194).
+      # every time (#194). And the choice is by the records' external ids, not
+      # their numeric ones, which say only who was inserted first.
       source = source!("wiktionary")
       mother = lexeme!("mother", "noun")
       noun = lexeme!("mom", "noun")
       _verb = lexeme!("mom", "verb")
 
-      Sources.insert_records(source, [
-        %{external_id: "mother/noun/1", raw: %{"n" => 1}},
-        %{external_id: "mother/noun/2", raw: %{"n" => 2}}
-      ])
+      # `/2` is inserted first, so it has the lower id.
+      Sources.insert_records(source, [%{external_id: "mother/noun/2", raw: %{"n" => 2}}])
+      Sources.insert_records(source, [%{external_id: "mother/noun/1", raw: %{"n" => 1}}])
 
-      [low, high] =
-        Repo.all(
+      record = fn external_id ->
+        Repo.one!(
           from r in SourceRecord,
-            where: r.source_id == ^source.id,
-            order_by: r.id,
+            where: r.source_id == ^source.id and r.external_id == ^external_id,
             select: r.id
         )
+      end
+
+      first = record.("mother/noun/1")
+      second = record.("mother/noun/2")
+      assert second < first
 
       attest = fn record_id, to_pos, metadata ->
         Repo.insert!(%PendingRelation{
@@ -202,9 +206,9 @@ defmodule DevilsDictionary.Absorb.ResolverTest do
 
       spoken = %{"sense" => "a female parent"}
 
-      # The higher record's row first, so pending-id order is the wrong one.
-      attest.(high, "verb", %{"label" => "instances"})
-      attest.(low, "noun", spoken)
+      # `/2`'s row first, so neither record ids nor pending ids point at `/1`.
+      attest.(second, "verb", %{"label" => "instances"})
+      attest.(first, "noun", spoken)
       assert Resolver.resolve_targets(source.id) == 2
 
       [current] =
@@ -218,8 +222,8 @@ defmodule DevilsDictionary.Absorb.ResolverTest do
 
       # A re-projection re-creates both rows, now in the other order: the
       # claim is not revised.
-      attest.(low, "noun", spoken)
-      attest.(high, "verb", %{"label" => "instances"})
+      attest.(first, "noun", spoken)
+      attest.(second, "verb", %{"label" => "instances"})
       assert Resolver.resolve_targets(source.id) == 2
 
       assert Repo.aggregate(

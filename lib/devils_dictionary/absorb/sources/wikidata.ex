@@ -612,7 +612,9 @@ defmodule DevilsDictionary.Absorb.Sources.Wikidata do
   @impl DevilsDictionary.SourceIdentity.Adapter
   # Without a label there is no eligible identity entry to resolve: the
   # resolver records it as insufficient evidence, writes nothing, and leaves
-  # the established entity — and every attachment — exactly as it was.
+  # the established entity — and every attachment — exactly as it was. A
+  # source-identity output an earlier, named observation wrote is no longer
+  # emitted, so reconciliation retires that output; the entity stays.
   def identity_record(%{label: nil, kind: kind} = row)
       when kind == :person or (kind == :work and row.work_kind in ["film", "artwork"]) do
     Entry.new(%{
