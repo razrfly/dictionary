@@ -129,7 +129,7 @@ defmodule DevilsDictionary.Curation.Runtime.BenchTest do
           "cold_samples_per_model" => 1,
           "warm_samples_per_case" => 1
         },
-        "cases" => []
+        "cases" => [%{"id" => "ordinary", "expect" => %{"lead" => "bierce"}}]
       }
 
       opts =
@@ -138,22 +138,29 @@ defmodule DevilsDictionary.Curation.Runtime.BenchTest do
       %{config: config, plan: plan, opts: opts}
     end
 
-    test "a cold sample runs only after a confirmed unload", ctx do
+    test "a cold sample runs only after a confirmed unload, then the warm ones", ctx do
       RuntimeFixtures.stub_ollama!(ctx.config)
 
-      assert {[smoke, cold], []} = Bench.run(ctx.plan, ctx.tmp_dir, ctx.opts)
-      assert {smoke.phase, cold.phase, cold.status} == {"smoke", "cold", :ok}
+      assert {[smoke, cold, warm], []} = Bench.run(ctx.plan, ctx.tmp_dir, ctx.opts)
+      assert Enum.map([smoke, cold, warm], & &1.phase) == ["smoke", "cold", "warm"]
     end
 
-    test "an unload that is not confirmed skips the sample: a warm call is never cold", ctx do
+    test "an unload that is not confirmed ends the model's run: no cold or warm sample lies",
+         ctx do
       RuntimeFixtures.stub_ollama!(ctx.config, loaded: [ctx.config.model_name])
 
       assert {[smoke], [gap]} = Bench.run(ctx.plan, ctx.tmp_dir, ctx.opts)
       assert smoke.phase == "smoke"
-      assert gap == %{model: ctx.config.slug, what: "cold ordinary call 2", why: "unload_timeout"}
+
+      assert gap == %{
+               model: ctx.config.slug,
+               what: "2 planned calls, from cold ordinary",
+               why: "unload_timeout"
+             }
 
       summary = Bench.summarize([smoke], ctx.plan, ctx.tmp_dir)
       assert summary[ctx.config.slug].cold_wall_ms.n == 0
+      assert summary[ctx.config.slug].warm_wall_ms.n == 0
     end
   end
 

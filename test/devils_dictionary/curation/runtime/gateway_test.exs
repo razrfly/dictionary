@@ -102,8 +102,17 @@ defmodule DevilsDictionary.Curation.Runtime.GatewayTest do
       assert id == holder.id
     end
 
-    test "a model config without its context and output bounds is refused", ctx do
-      for key <- ["num_ctx", "num_predict"] do
+    test "a model config without numeric context and output bounds is refused", ctx do
+      unbounded =
+        for key <- ["num_ctx", "num_predict"],
+            generation <- [
+              Map.delete(ctx.config.generation, key),
+              Map.put(ctx.config.generation, key, nil),
+              Map.put(ctx.config.generation, key, "8")
+            ],
+            do: generation
+
+      for generation <- unbounded do
         assert {:refused, :check, "local_model_configs_shape"} =
                  refused(fn ->
                    ctx.config
@@ -112,7 +121,7 @@ defmodule DevilsDictionary.Curation.Runtime.GatewayTest do
                      id: nil,
                      slug: key("unbounded"),
                      config_hash: Digest.sha256(key("unbounded")),
-                     generation: Map.delete(ctx.config.generation, key)
+                     generation: generation
                    })
                    |> Repo.insert!()
                  end)

@@ -31,7 +31,7 @@ process per persona.
 | Contracts | `Runtime.Packet`, `Runtime.Contract` | The frozen input and the validated output |
 | Coordination | `Runtime.Gateway` | Admission, dispatch, completion, quarantine, sweep, recovery, pause and resume |
 | Entry point | `Runtime.run/3` and `mix dd.runtime` | Readiness → packet check → admission → dispatch → validation → settlement |
-| Benchmark | `Runtime.Bench`, `priv/curation/runtime_bench/` | The predeclared plan, its frozen packets, and the runner. A cold sample runs only after a confirmed unload; otherwise it is reported as not measured |
+| Benchmark | `Runtime.Bench`, `priv/curation/runtime_bench/` | The predeclared plan, its frozen packets, and the runner. A cold sample runs only after a confirmed unload; otherwise that model's remaining calls are reported as not measured, since neither a cold nor a warm sample would mean what it says |
 
 Operating the service is in [runtime-operations.md](runtime-operations.md). The measured
 benchmark is in [runtime-benchmark-2026-09-27.md](runtime-benchmark-2026-09-27.md).

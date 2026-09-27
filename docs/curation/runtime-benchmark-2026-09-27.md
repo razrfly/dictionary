@@ -138,7 +138,8 @@ the gateway.
 review of PR #210 caught that. Every recorded cold sample was nonetheless a real load:
 Ollama reported a load time of 1,535–1,538 ms for 4B and 2,290–2,292 ms for 9B, against
 0–1 ms for warm calls. The harness now runs a cold sample only after a confirmed
-unload, and otherwise lists it as not measured.
+unload. Otherwise it stops that model's run and lists the remaining calls as not
+measured.
 
 **Determinism.** Temperature 0 and seed 195 gave identical output for every repeat of
 a case: the same token counts, decisions and ids. The 3 samples per case therefore

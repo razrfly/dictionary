@@ -206,7 +206,8 @@ defmodule DevilsDictionary.Curation.Runtime.Bench do
     |> Enum.reduce_while({[], []}, fn {{phase, case_id, _n}, i} = call, {records, missing} ->
       # A cold sample follows an explicit unload. Warm samples follow the cold
       # ones, which leave the model loaded. An unload that is not confirmed
-      # skips the call: a sample that may be warm is not recorded as cold.
+      # ends this model's run: the next call might be warm, or might load the
+      # model, so neither a cold nor a warm sample would mean what it says.
       case if(phase == "cold", do: unload(config, opts), else: :ok) do
         :ok ->
           measure(config, call, packet_dir, run_id, opts, plan_calls, {records, missing})
@@ -214,11 +215,11 @@ defmodule DevilsDictionary.Curation.Runtime.Bench do
         unconfirmed ->
           gap = %{
             model: config.slug,
-            what: "#{phase} #{case_id} call #{i}",
+            what: "#{length(plan_calls) - i + 1} planned calls, from #{phase} #{case_id}",
             why: "unload_#{unconfirmed}"
           }
 
-          {:cont, {records, missing ++ [gap]}}
+          {:halt, {records, missing ++ [gap]}}
       end
     end)
   end
