@@ -28,6 +28,9 @@ defmodule DevilsDictionary.Routing.Recovery do
 
   @routing_tables ~w(pages page_revisions page_memberships public_paths classification_decisions route_changes)
 
+  # The migration that creates them.
+  @routing_migration 20_260_926_193_256
+
   # Operational queue state, not registry or routing: jobs and node heartbeats.
   @unmanifested ~w(oban_jobs oban_peers)
 
@@ -427,9 +430,19 @@ defmodule DevilsDictionary.Routing.Recovery do
   end
 
   @doc """
-  Whether the current database has the routing tables: `:present` (all
-  six), `:absent` (none: it predates the routing migration) or
-  `{:partial, tables}` (only those), which no comparison accepts.
+  Where the current database stands on the routing migration
+  (`#{@routing_migration}`), judged by its tables **and** its migration history:
+
+    * `:present` — all six routing tables, and the migration recorded;
+    * `:absent` — none of them, and the migration not recorded: the database
+      predates routing;
+    * `{:partial, tables}` — only some of the tables;
+    * `{:inconsistent, reason}` — the tables and the history disagree:
+      `:migration_without_tables` (recorded, but every table gone),
+      `:tables_without_migration`, or `:no_migration_history` (no
+      `schema_migrations` at all, so nothing can be said).
+
+  Only `:present` and `:absent` can be compared; `verify/2` fails on the rest.
   """
   def routing_schema do
     %{rows: rows} =
@@ -438,14 +451,31 @@ defmodule DevilsDictionary.Routing.Recovery do
         [@routing_tables]
       )
 
-    case Enum.map(rows, &hd/1) do
-      [] ->
-        :absent
+    present = rows |> Enum.map(&hd/1) |> Enum.sort()
+    all? = length(present) == length(@routing_tables)
 
-      present ->
-        if length(present) == length(@routing_tables),
-          do: :present,
-          else: {:partial, Enum.sort(present)}
+    case {present, all?, routing_migration()} do
+      {_present, _all?, :no_history} -> {:inconsistent, :no_migration_history}
+      {[], _all?, false} -> :absent
+      {[], _all?, true} -> {:inconsistent, :migration_without_tables}
+      {_present, true, true} -> :present
+      {_present, true, false} -> {:inconsistent, :tables_without_migration}
+      {present, false, _recorded?} -> {:partial, present}
+    end
+  end
+
+  defp routing_migration do
+    %{rows: [[history?]]} = query!("SELECT to_regclass('public.schema_migrations') IS NOT NULL")
+
+    if history? do
+      %{rows: [[recorded?]]} =
+        query!("SELECT EXISTS (SELECT 1 FROM schema_migrations WHERE version = $1)", [
+          @routing_migration
+        ])
+
+      recorded?
+    else
+      :no_history
     end
   end
 
@@ -565,6 +595,25 @@ defmodule DevilsDictionary.Routing.Recovery do
       config[:socket_dir] -> "socket:" <> config[:socket_dir]
       config[:hostname] in [nil, "localhost", "127.0.0.1", "::1"] -> "localhost"
       true -> config[:hostname]
+    end
+  end
+
+  @doc """
+  Whether a Repo config and a `with_database/2` target reach the same
+  database, as their servers identify it (`Snapshot.database_identity/1`).
+  Raises if either server cannot say: a comparison must not run against an
+  unknown baseline.
+  """
+  def same_database?(config, target) when is_list(config) do
+    target_config = if is_binary(target), do: target_config(target), else: target
+
+    with {:ok, a} <- Snapshot.database_identity(config),
+         {:ok, b} <- Snapshot.database_identity(target_config) do
+      a.system_identifier == b.system_identifier and
+        (a.database == b.database or
+           (is_integer(a.database_oid) and a.database_oid == b.database_oid))
+    else
+      {:error, reason} -> raise "cannot establish which database is which: #{reason}"
     end
   end
 
@@ -697,6 +746,15 @@ defmodule DevilsDictionary.Routing.Recovery do
     File.rm(digest_path(path))
     File.rm(partial)
 
+    # The source as its server reports it; a snapshot whose source cannot be
+    # established would be one no restore can trust.
+    source =
+      case Snapshot.database_identity(config) do
+        {:ok, %{database_oid: oid} = source} when is_integer(oid) -> source
+        {:ok, _} -> raise "cannot snapshot #{config[:database]}: it does not exist"
+        {:error, reason} -> raise "cannot snapshot #{config[:database]}: #{reason}"
+      end
+
     digest =
       connected(connection(config), fn conn ->
         {:ok, digest} =
@@ -727,54 +785,25 @@ defmodule DevilsDictionary.Routing.Recovery do
     File.write!(
       digest_path(path),
       Jason.encode!(%{
+        "format" => 2,
+        "source" => %{
+          "system_identifier" => source.system_identifier,
+          "database" => source.database,
+          "database_oid" => source.database_oid
+        },
+        # The endpoint it was taken through, for a reader; identity is `source`.
         "database" => database,
         "host" => host,
         "port" => port,
         "digest" => digest,
-        "dump" => dump(path)
+        "dump" => Snapshot.fingerprint(path)
       })
     )
 
     path
   end
 
-  defp digest_path(path), do: path <> ".routing.json"
-
-  @doc """
-  The identity of the database `path` was taken from, as its
-  `snapshot!/2` sidecar records it, or nil without one. A sidecar written
-  before servers were recorded names only the database: `{nil, nil, name}`.
-  """
-  def snapshot_source(path) do
-    with {:ok, json} <- File.read(digest_path(path)),
-         {:ok, %{"database" => database} = recorded} when is_binary(database) <-
-           Jason.decode(json) do
-      {recorded["host"], recorded["port"], database}
-    else
-      _ -> nil
-    end
-  end
-
-  @doc """
-  Whether a snapshot's recorded source is `identity`. Where the sidecar
-  names only a database, the name decides — erring towards "the same".
-  """
-  def same_source?({nil, nil, name}, {_host, _port, database}), do: name == database
-  def same_source?(recorded, identity), do: recorded == identity
-
-  # The dump the digest describes, so a truncated or replaced file is not
-  # vouched for by its sidecar.
-  defp dump(path) do
-    hash =
-      path
-      |> File.stream!(4 * 1024 * 1024)
-      |> Enum.reduce(:crypto.hash_init(:sha256), &:crypto.hash_update(&2, &1))
-
-    %{
-      "bytes" => File.stat!(path).size,
-      "sha256" => hash |> :crypto.hash_final() |> Base.encode16(case: :lower)
-    }
-  end
+  defp digest_path(path), do: Snapshot.sidecar_path(path)
 
   @doc """
   `:ok` if `action` may destroy `config[:database]`: it holds no durable
@@ -791,17 +820,18 @@ defmodule DevilsDictionary.Routing.Recovery do
     if is_binary(config[:database]) do
       case durable_state(config) do
         nil -> :ok
-        state -> covered(identity(config), action, state, snapshot)
+        state -> covered(config, action, state, snapshot)
       end
     else
       {:error, "refusing to #{action}: the configuration names no database to check"}
     end
   end
 
-  defp covered({_host, _port, database}, action, state, nil),
-    do: {:error, refusal(database, action, state)}
+  defp covered(config, action, state, nil),
+    do: {:error, refusal(config[:database], action, state)}
 
-  defp covered({_host, _port, database} = identity, action, state, path) do
+  defp covered(config, action, state, path) do
+    database = config[:database]
     recorded = recorded(path)
 
     cond do
@@ -814,16 +844,15 @@ defmodule DevilsDictionary.Routing.Recovery do
 
       # Checked before `pg_restore --list` reads the file: a damaged dump can
       # still list every table.
-      recorded["dump"] != dump(path) ->
+      recorded["dump"] != Snapshot.fingerprint(path) ->
         {:error,
          "#{action}: #{path} is not the dump its routing digest was taken with (size or SHA-256 differ)"}
 
       (missing = missing_tables(path)) != [] ->
         {:error, "#{action}: #{path} does not contain #{Enum.join(missing, ", ")}"}
 
-      not same_source?(snapshot_source(path), identity) ->
-        {:error,
-         "#{action}: #{path} is a snapshot of #{describe(snapshot_source(path))}, not #{describe(identity)}"}
+      (mismatch = source_mismatch(config, path)) != nil ->
+        {:error, "#{action}: #{path} #{mismatch}"}
 
       recorded["digest"] != state.digest ->
         {:error,
@@ -831,6 +860,21 @@ defmodule DevilsDictionary.Routing.Recovery do
 
       true ->
         :ok
+    end
+  end
+
+  # A snapshot covers only the database it was taken from, as the server
+  # identifies both: nil when it does, otherwise why not.
+  defp source_mismatch(config, path) do
+    with {:ok, source} <- Snapshot.source(path),
+         {:ok, target} <- Snapshot.database_identity(config) do
+      if Snapshot.same_database?(source, target),
+        do: nil,
+        else:
+          "is a snapshot of #{source.database} (cluster #{source.system_identifier}), " <>
+            "not #{target.database} (cluster #{target.system_identifier})"
+    else
+      {:error, reason} -> "cannot be tied to #{config[:database]}: #{inspect(reason)}"
     end
   end
 

@@ -59,10 +59,13 @@ defmodule Mix.Tasks.Dd.Routing.Verify do
     current = Recovery.identity(Repo.config())
     baseline = Recovery.identity(opts[:baseline])
 
-    if current == baseline,
+    # The same database reached two ways — a socket and TCP, `localhost` and
+    # an address — is still one database; the servers say which it is.
+    if Recovery.same_database?(Repo.config(), opts[:baseline]),
       do:
         Mix.raise(
-          "the baseline must be a different database: both are #{Recovery.describe(current)}"
+          "the baseline must be a different database: #{Recovery.describe(current)} and " <>
+            "#{Recovery.describe(baseline)} are the same database"
         )
 
     {:ok, _apps} = Application.ensure_all_started(:ecto_sql)
@@ -116,4 +119,13 @@ defmodule Mix.Tasks.Dd.Routing.Verify do
   defp state(:present), do: "present"
   defp state(:absent), do: "absent"
   defp state({:partial, tables}), do: "only partly present (#{Enum.join(tables, ", ")})"
+
+  defp state({:inconsistent, :migration_without_tables}),
+    do: "missing although the routing migration is recorded"
+
+  defp state({:inconsistent, :tables_without_migration}),
+    do: "present although the routing migration is not recorded"
+
+  defp state({:inconsistent, :no_migration_history}),
+    do: "unknown: the database has no migration history"
 end

@@ -116,12 +116,16 @@ DD_STAGE2A_REHEARSAL=1 DD_DATABASE=devils_dictionary_stage2a_baseline DD_DATABAS
 ```
 
 ```bash
-DD_DATABASE=devils_dictionary_stage2a_baseline DD_DATABASE_PORT=5433 mix ecto.migrate
+DD_DATABASE=devils_dictionary_stage2a_baseline DD_DATABASE_PORT=5433 mix ecto.migrate --to 20260926193256
 ```
 
+The rehearsal ran when main's last migration was the routing one. `--to` pins that routing-only boundary: without it, today's main would also apply #206's curation migrations.
+
 ```bash
-DD_STAGE2A_REHEARSAL=1 DD_DATABASE=devils_dictionary_stage2a_baseline DD_DATABASE_PORT=5433 mix run --no-start docs/routing/stage-2/rehearsal/migration_check.exs compare BEFORE.bin CHECK.json
+DD_STAGE2A_REHEARSAL=1 DD_DATABASE=devils_dictionary_stage2a_baseline DD_DATABASE_PORT=5433 mix run --no-start docs/routing/stage-2/rehearsal/migration_check.exs compare BEFORE.bin REF_BEFORE.bin REF_AFTER.bin CHECK.json
 ```
+
+`REF_BEFORE.bin` and `REF_AFTER.bin` are captures of an empty reference database, migrated `--to 20260924222346` and then `--to 20260926193256`. The rehearsal itself compared against a stricter, routing-only rule written into the script. It has since been replaced by this reference-derived check, which also serves current main; see [the runbook](../recovery.md).
 
 ```bash
 DD_STAGE2A_REHEARSAL=1 DD_NO_OBAN=1 DD_DATABASE=devils_dictionary_stage2a_baseline DD_DATABASE_PORT=5433 mix run docs/routing/stage-2/rehearsal/fixtures.exs FIXTURES.json

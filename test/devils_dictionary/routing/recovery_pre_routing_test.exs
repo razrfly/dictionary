@@ -10,7 +10,10 @@ defmodule DevilsDictionary.Routing.RecoveryPreRoutingTest do
       always fail;
     * a baseline may be on another server, named by URL, and "the same
       database" means the same server, port and name;
-    * a snapshot is never restored over the database it was taken from.
+    * migration history decides as well: the routing migration recorded
+      without its tables, or the tables without the migration, is
+      inconsistent and fails. Restores over a snapshot's own source are
+      covered by `RecoverySourceIdentityTest`.
 
   Every database here is created and dropped by the test.
   """
@@ -198,45 +201,73 @@ defmodule DevilsDictionary.Routing.RecoveryPreRoutingTest do
     end)
   end
 
-  test "a snapshot is never restored over the database it was taken from", %{db: db, dump: dump} do
-    corpus!(db["a"])
-    Recovery.snapshot!(config(db["a"]), dump)
-    port = Repo.config()[:port] || 5432
+  test "routing is judged by migration history too: a recorded migration without its tables fails",
+       %{db: db} do
+    marker = fn ->
+      Repo.query!("INSERT INTO schema_migrations VALUES (20260926193256, '2026-09-26 19:32:56')")
+    end
 
-    assert Recovery.snapshot_source(dump) == {"localhost", port, db["a"]}
+    # The routing migration recorded, every routing table gone — on both
+    # sides, identically. They match each other, and still fail.
+    corpus!(db["a"], marker)
+    corpus!(db["b"], marker)
 
-    # The routing guard has nothing to protect in a pre-routing database, so
-    # only this refusal stands between the restore and the source.
-    assert Recovery.guard(config(db["a"]), "restore over", nil) == :ok
+    assert Recovery.with_database(db["a"], &Recovery.routing_schema/0) ==
+             {:inconsistent, :migration_without_tables}
 
-    configured_as(db["a"], fn ->
-      assert_raise Mix.Error, ~r/database this snapshot was taken from/, fn ->
-        Mix.Tasks.Dd.Snapshot.run(["--restore", dump, "--database", db["a"], "--quiet"])
-      end
-    end)
+    assert {:error, report} = Recovery.with_database(db["b"], fn -> Recovery.verify(db["a"]) end)
+    assert report.differences == %{}
 
-    # A sidecar that names only the database still refuses.
-    sidecar = dump <> ".routing.json"
-    recorded = sidecar |> File.read!() |> Jason.decode!() |> Map.drop(["host", "port"])
-    File.write!(sidecar, Jason.encode!(recorded))
-    assert Recovery.snapshot_source(dump) == {nil, nil, db["a"]}
+    assert report.routing ==
+             {:mismatch, {:inconsistent, :migration_without_tables},
+              {:inconsistent, :migration_without_tables}}
 
-    configured_as(db["a"], fn ->
-      assert_raise Mix.Error, ~r/database this snapshot was taken from/, fn ->
-        Mix.Tasks.Dd.Snapshot.run(["--restore", dump, "--database", db["a"], "--quiet"])
-      end
-    end)
+    # Against a genuinely pre-routing database, too.
+    corpus!(db["c"])
 
-    assert Recovery.with_database(db["a"], fn ->
-             Repo.query!("SELECT count(*) FROM lexemes").rows
-           end) ==
-             [[2]]
+    assert {:error, %{routing: {:mismatch, :absent, {:inconsistent, :migration_without_tables}}}} =
+             Recovery.with_database(db["b"], fn -> Recovery.verify(db["c"]) end)
 
-    # Into another database, it restores and verifies.
     configured_as(db["b"], fn ->
-      Mix.Tasks.Dd.Snapshot.run(["--restore", dump, "--database", db["b"], "--quiet"])
+      error =
+        assert_raise Mix.Error, fn ->
+          capture_io(fn -> Mix.Tasks.Dd.Routing.Verify.run(["--baseline", db["a"]]) end)
+        end
+
+      assert error.message =~ "does not match"
+    end)
+  end
+
+  test "all six tables without the recorded migration, or no migration history, fail",
+       %{db: db} do
+    tables = fn ->
+      for table <- Recovery.routing_tables(),
+          do: Repo.query!(~s|CREATE TABLE "#{table}" (id bigserial PRIMARY KEY)|)
+    end
+
+    corpus!(db["a"], tables)
+    corpus!(db["b"], tables)
+
+    assert Recovery.with_database(db["a"], &Recovery.routing_schema/0) ==
+             {:inconsistent, :tables_without_migration}
+
+    assert {:error, %{routing: {:mismatch, same, same}}} =
+             Recovery.with_database(db["b"], fn -> Recovery.verify(db["a"]) end)
+
+    assert same == {:inconsistent, :tables_without_migration}
+
+    Recovery.with_database(db["c"], fn ->
+      Repo.query!("CREATE TABLE marks (id bigserial PRIMARY KEY)")
     end)
 
-    assert {:ok, _report} = Recovery.with_database(db["b"], fn -> Recovery.verify(db["a"]) end)
+    Recovery.with_database(db["d"], fn ->
+      Repo.query!("CREATE TABLE marks (id bigserial PRIMARY KEY)")
+    end)
+
+    assert Recovery.with_database(db["c"], &Recovery.routing_schema/0) ==
+             {:inconsistent, :no_migration_history}
+
+    assert {:error, %{routing: {:mismatch, _, _}}} =
+             Recovery.with_database(db["d"], fn -> Recovery.verify(db["c"]) end)
   end
 end

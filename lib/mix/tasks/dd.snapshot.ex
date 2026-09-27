@@ -156,26 +156,14 @@ defmodule Mix.Tasks.Dd.Snapshot do
   end
 
   # A restore drops its target first. The routing guard protects a database
-  # holding routing state; this protects any database the snapshot was taken
-  # from — including one that predates routing — by the identity its sidecar
-  # recorded: server, port and name.
+  # holding routing state; this protects the database the snapshot was taken
+  # from — including one that predates routing — as the server identifies it
+  # (`Snapshot.check_restore/2`). `Snapshot.restore!/3` checks again before
+  # dropping anything.
   defp refuse_restoring_over_source!(config, path) do
-    alias DevilsDictionary.Routing.Recovery
-
-    target = Recovery.identity(config)
-
-    case Recovery.snapshot_source(path) do
-      nil ->
-        :ok
-
-      source ->
-        if Recovery.same_source?(source, target) do
-          Mix.raise("""
-          refusing to restore #{path} over #{Recovery.describe(target)}: it is the
-          database this snapshot was taken from. Restore into a separate database
-          (docs/routing/recovery.md), verify it, and switch over deliberately.
-          """)
-        end
+    case DevilsDictionary.Snapshot.check_restore(config, path) do
+      :ok -> :ok
+      {:error, message} -> Mix.raise(message)
     end
   end
 

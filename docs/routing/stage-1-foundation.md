@@ -107,7 +107,7 @@ These refine the ADR without changing it. Each is conservative and reversible by
 
 ## Curation-composition binding (recorded; migration deferred)
 
-[Curation persistence (#196)](https://github.com/razrfly/dictionary/issues/196) owns `editorial_compositions`, their immutable versions and items, and human presentation approval. Those tables do **not** exist on main, so Stage 1 creates no binding table and no placeholder composition table. When #196 lands, one additive migration adds:
+[Curation persistence (#196)](https://github.com/razrfly/dictionary/issues/196) owns `editorial_compositions`, their immutable versions and items, and human presentation approval. Those tables did not exist when Stage 1 was built, so Stage 1 created no binding table and no placeholder composition table. [#206](https://github.com/razrfly/dictionary/pull/206) (merged 27 September 2026) has since created the composition schema. The binding itself is still unwritten: it belongs with curated On pages (Stage 4), as one additive migration with real foreign keys, adding:
 
 | Column | Rule |
 |---|---|
@@ -284,7 +284,7 @@ Additive preservation of existing readers is shown by the unchanged full suite. 
 - **Database roles.** The TRUNCATE refusal guards against accidents, including cascades. A session that sets the opt-in deliberately can still truncate, so production should also withhold TRUNCATE and trigger control from the application role.
 - **Slug characters.** The database enforces the slug's ASCII rules; a non-ASCII punctuation character written by raw SQL is caught only by `Routing.Address`.
 - **Scale.** Path lookups by page are indexed. Stage 2 should still measure allocation throughput and the commit-time checks on the real candidate population.
-- **Composition binding** waits for #196.
+- **Composition binding.** #206 created the composition schema; the binding migration comes with Stage 4.
 - **Test isolation.** The database-backed routing tests are synchronous, because a sandboxed test holds its advisory path locks and uncommitted paths for its whole transaction. Run them on a private `MIX_TEST_PARTITION`; the concurrency and committed-integrity tests commit for real.
 
 ## Acceptance matrix

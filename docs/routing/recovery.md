@@ -42,7 +42,7 @@ These guards stop accidents. They do not stop an operator: naming a snapshot is 
 
 Every step except the first writes only to a new, separate database.
 
-A restored copy carries the source's queued and scheduled jobs. Tasks that start the application would otherwise run them against the copy, and the quotation verifier makes outbound requests. `mix dd.routing.verify` starts only the Repo. For every other command on the copy, set `DD_NO_OBAN=1`, which starts Oban with no queues and no plugins. Never restore over the live database: the guard refuses without a covering snapshot, and you would lose whatever the snapshot does not hold.
+A restored copy carries the source's queued and scheduled jobs. Tasks that start the application would otherwise run them against the copy, and the quotation verifier makes outbound requests. `mix dd.routing.verify` starts none of it: it opens its own connections through `Recovery.with_database/2`, starting `:ecto_sql` but not the application's Repo, Oban or the endpoint. For every other command on the copy, set `DD_NO_OBAN=1`, which starts Oban with no queues and no plugins. Never restore over the live database: the guard refuses without a covering snapshot, and you would lose whatever the snapshot does not hold.
 
 1. **Quiesce, then snapshot the source.** Step 3 compares the copy with the **live** source, so the source must take no writes from here until step 3 is done.
 
@@ -59,7 +59,17 @@ A restored copy carries the source's queued and scheduled jobs. Tasks that start
    mix dd.snapshot --out ~/Backups/dictionary-routing.dump
    ```
 
-2. **Restore into an isolated database.** The name must begin with `devils_dictionary`, and `DD_DATABASE` must name it. `mix dd.snapshot --restore` refuses to restore over the database the snapshot was taken from (same server, port and name), whether or not that database holds routing state.
+2. **Restore into an isolated database.** The name must begin with `devils_dictionary`, and `DD_DATABASE` must name it.
+
+   A restore drops its target first, so it must never land on the database the snapshot came from. A pre-routing source has no routing state for the routing guard to protect, so `Snapshot.restore!/3` makes this check itself, before dropping anything. `mix dd.snapshot --restore` makes it too.
+
+   Names and endpoints cannot decide which database is which. A Unix socket and a TCP address reach the same server, and two servers can each hold a database of the same name. So the snapshot's sidecar records the source as its server reports it: the cluster's `system_identifier`, the database's name and oid, and the dump's size and SHA-256. The restore **refuses** when:
+   - the sidecar is missing, malformed, or from before identities were recorded;
+   - the dump is not the one the sidecar describes: different bytes, or a header naming another database;
+   - the target server's identity cannot be read, over the same endpoint `pg_restore` uses;
+   - the target is the source: the same cluster, with the same database name or oid (a renamed source is still the source).
+
+   A restore to another database, or to a database of any name on another cluster, is allowed. A dump without a trustworthy sidecar has to be taken again with `mix dd.snapshot`.
 
    ```bash
    DD_DATABASE=devils_dictionary_restore mix dd.snapshot --restore ~/Backups/dictionary-routing.dump --database devils_dictionary_restore
@@ -98,11 +108,20 @@ A restored copy carries the source's queued and scheduled jobs. Tasks that start
    DD_DATABASE=devils_dictionary_restore DD_DATABASE_PORT=5433 mix dd.routing.verify --baseline ecto://postgres:postgres@localhost:5432/devils_dictionary_v2
    ```
 
-   **A source that predates the routing migration** has none of the six routing tables. Verification then compares the corpus exactly and reports **routing: not applicable**. That proves the corpus was recovered, and nothing about routing. Routing tables on one side only, or only some of them on either side, fail.
+   **A source that predates the routing migration** has none of the six routing tables, and no record of the routing migration (`20260926193256`) in `schema_migrations`. Verification then compares the corpus exactly and reports **routing: not applicable**. That proves the corpus was recovered, and nothing about routing. The following all fail:
+   - routing tables on one side only, or only some of them on either side;
+   - the routing migration recorded with its tables gone, or the tables present without the migration, even when both databases match;
+   - a database with no migration history.
+
+   `mix dd.routing.verify` also refuses to compare a database with itself. It asks both servers which database each is, so a socket and TCP, or `localhost` and `127.0.0.1`, cannot disguise one database as two.
 
    To rehearse routing recovery from such a source, work only on copies:
    1. Prove the restore at the original schema, as above.
-   2. Migrate the copy, never the source, and prove that the migration left every pre-existing section byte-identical and added only the routing schema (`docs/routing/stage-2/rehearsal/migration_check.exs`).
+   2. Migrate the copy, never the source, and prove the migration changed nothing the copy held and added exactly what the migrations add, with `migration_check.exs` (`Routing.MigrationCheck`).
+
+      The expected additions are not a list. They are what the same migrations add to an empty reference database, migrated over the same range of versions. Pin the boundary with `mix ecto.migrate --to`:
+      - `--to 20260926193256` reproduces the routing-only rehearsal;
+      - no `--to` checks current main, which adds #206's curation schema after routing.
    3. Add a marked routing fixture (`fixtures.exs`), then snapshot and restore that copy into a second one, and verify the pair: routing is then present on both sides and compared.
 
 4. **Re-project the copy from its own records, in any provider order.** `mix dd.materialize --all` re-projects every implemented source from the source records the copy holds. It also asserts that nothing derived changed (scorecard M2). Repeat it for each source, in whatever order:
