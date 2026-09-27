@@ -392,8 +392,8 @@ defmodule DevilsDictionaryWeb.ExemplarProvenanceLiveTest do
 
   # Part of the named discovery path: the quote card has no connect link on
   # `main` and the form prefills no provider evidence, so this starts at the
-  # form with the shelf's parameters (#212 comment, item 3; deferred to the
-  # linked follow-up).
+  # form with the shelf's parameters (#212 comment, item 3). The link and
+  # the evidence prefill are #222.
   test "a shelf-prefilled nomination, read back after retention with every provider off (C7)",
        ctx do
     shelf = ExemplarFixtures.shelved_quotation!(ctx, ctx.coward, "fixture passage words")
