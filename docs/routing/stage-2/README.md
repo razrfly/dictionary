@@ -107,7 +107,7 @@ Each record's proposal, evidence and disposition is in `candidates.json`.
 - **Split pages keep their existing address** and their ordered successor choice. A split never redirects to one successor.
 - **Classification and address changes are separate.** A reclassification never moves an allocated address; only an approved `move/3` does.
 - **A tombstone is never re-allocated by a batch.** Only a human `restore/3` or a rollback brings one back.
-- **Refusals are per record.** `Ledger.allocate/3` and `Pages.ensure/3` return error tuples without rolling back a caller's batch transaction.
+- **Refusals are per record.** `Ledger.allocate/3` and `Pages.ensure/3` return error tuples without rolling back a caller's batch transaction. The backfill writes a confirmation's override, page and address under one savepoint, so a refusal at any of those steps leaves none of them ([backfill](backfill.md#per-record-in-object-id-order)).
 
 ## Gates before any persistent backfill
 
