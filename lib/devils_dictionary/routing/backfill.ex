@@ -827,7 +827,7 @@ defmodule DevilsDictionary.Routing.Backfill do
           JOIN sources s ON s.id = r.source_id AND s.slug = 'wikidata'
           JOIN source_record_revisions v
             ON v.source_record_id = r.id AND v.revision_key = r.content_hash
-         WHERE r.external_id = ANY($1)
+         WHERE r.external_id = ANY($1) AND r.external_id ~ '^Q[0-9]+$'
         """,
         [Enum.map(dependencies, & &1["qid"])]
       )

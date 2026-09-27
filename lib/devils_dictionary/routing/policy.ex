@@ -132,8 +132,8 @@ defmodule DevilsDictionary.Routing.Policy do
       matches: matches,
       warnings: Enum.sort(Enum.uniq(warnings)),
       source_revision: source && Map.take(source, ["qid", "revision_id", "checksum"]),
-      evidence: evidence_for(matches, graph),
-      dependencies: dependencies(source_lookup ++ walked, matches, graph),
+      evidence: evidence_for(matches, graph, MapSet.new(source_lookup ++ walked)),
+      dependencies: dependencies(source_lookup ++ walked, graph),
       publishable: false,
       allocated: false
     }
@@ -285,18 +285,19 @@ defmodule DevilsDictionary.Routing.Policy do
 
   # The pins of everything the evaluation read: each record it looked up, at
   # the revision it read, and each one it looked for and did not find. The
-  # result is a function of the entity's input, the policy and exactly these
-  # records, so while every one of them is still what it was — present at the
-  # same revision, or still absent — a fresh evaluation reaches the same
-  # result. The matched paths alone are not enough: an unmatched class that
-  # gains an ancestor, or a missing one that arrives, changes the outcome.
+  # result — outcome, evidence and fingerprint alike — is a function of the
+  # entity's input, the policy and exactly these records, so while every one
+  # of them is still what it was (present at the same revision, or still
+  # absent) a fresh evaluation reaches the same result. The matched paths
+  # alone are not enough: an unmatched class that gains an ancestor, or a
+  # missing one that arrives, changes the outcome.
   #
-  # The records on matched paths stay pinned, as they are in `evidence`, even
-  # though an anchor matches by its identifier rather than by its content.
-  defp dependencies(consulted, matches, graph) do
-    matched = matches |> Enum.flat_map(& &1.path) |> Enum.filter(&Map.has_key?(graph, &1))
-
-    (consulted ++ matched)
+  # A policy anchor that ends a matched path is matched by its identifier and
+  # never read, so it is not a dependency: its record's edits (Q5's, which
+  # every person matches through) cannot change a result, and must not defer
+  # one (#219 A6).
+  defp dependencies(consulted, graph) do
+    consulted
     |> Enum.uniq()
     |> Enum.sort()
     |> Enum.map(fn qid ->
@@ -307,9 +308,12 @@ defmodule DevilsDictionary.Routing.Policy do
     end)
   end
 
-  defp evidence_for(matches, graph) do
+  # The records on matched paths that the evaluation read: a subset of the
+  # dependencies, for the same reason an anchor is not one.
+  defp evidence_for(matches, graph, consulted) do
     matches
     |> Enum.flat_map(& &1.path)
+    |> Enum.filter(&MapSet.member?(consulted, &1))
     |> Enum.uniq()
     |> Enum.sort()
     |> Enum.flat_map(fn qid ->

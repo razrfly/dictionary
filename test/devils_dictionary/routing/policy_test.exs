@@ -251,6 +251,12 @@ defmodule DevilsDictionary.Routing.PolicyTest do
     # path's records — never see the unmatched branch.
     assert [result.source_revision | result.evidence] |> Enum.map(& &1["qid"]) == ["Q900000"]
 
+    # An anchor ending a matched path is matched by its id and never read:
+    # held in the graph (Q5 here), it is neither a dependency nor evidence.
+    refute Enum.any?(result.dependencies, &(&1["qid"] == "Q5"))
+    held = Map.put(graph, "Q5", evidence("Q5", [], ["Q215627"]))
+    assert Policy.classify(entity(["Q5", "Q900001", "Q900003"]), held, policy) == result
+
     # A class rule decides a self-classified subject: its walks are not read.
     self = Policy.classify(%{entity([]) | "qids" => ["Q7944"]}, %{}, policy)
     assert self.dependencies == [%{"qid" => "Q7944", "absent" => true}]

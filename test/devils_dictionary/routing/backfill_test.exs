@@ -966,6 +966,77 @@ defmodule DevilsDictionary.Routing.BackfillTest do
     assert state_of(ctx.world.bierce) == before
   end
 
+  # A policy anchor is matched by its identifier and never read (A6 of #219):
+  # its record arriving or changing between the export and the run changes
+  # neither the outcome nor the fingerprint, so it defers nothing — on the
+  # corpus, Q5 is the anchor every person matches through.
+  test "a matched anchor's own record arriving or changing defers nothing", ctx do
+    ctx = mapped_bierce!(ctx)
+    row = Enum.find(ctx.snapshot.entities, &(&1["object_id"] == ctx.world.bierce.object_id))
+    before = Policy.classify(row, ctx.snapshot.graph, Policy.load())
+    refute Enum.any?(before.dependencies, &(&1["qid"] == "Q5"))
+
+    reviews = reviews!(ctx, [{ctx.world.bierce, %{"action" => "confirm", "family" => "people"}}])
+
+    # Q5 arrives after the export, then changes.
+    class!("Q5", [])
+    class!("Q5", ["Q215627"])
+
+    {plan, _} = run!(ctx, reviews)
+    assert item(plan, ctx.world.bierce).disposition == "allocated"
+
+    fresh = export!(Path.join(ctx.dir, "fresh") |> tap(&File.mkdir_p!/1))
+    row = Enum.find(fresh.entities, &(&1["object_id"] == ctx.world.bierce.object_id))
+    now = Policy.classify(row, fresh.graph, Policy.load())
+
+    assert Classifications.fingerprint(now) == Classifications.fingerprint(before)
+  end
+
+  # Two callers of the backfill at once (#219 A2's concurrency acceptance):
+  # the second waits on the first's locks and then refuses what the first
+  # allocated. One override and one address survive.
+  test "two concurrent runs confirming one record in different families", ctx do
+    run!(ctx)
+
+    reviews_a =
+      reviews!(ctx, [
+        {ctx.world.bierce, %{"action" => "confirm", "family" => "people"}},
+        {ctx.world.polish, confirm("concepts", "/concepts/polish")}
+      ])
+
+    reviews_b =
+      reviews!(ctx, [
+        {ctx.world.bierce, %{"action" => "confirm", "family" => "people"}},
+        {ctx.world.polish, confirm("subjects", "/subjects/polish")}
+      ])
+
+    # Run A stops inside Polish's confirmation, its override written under the
+    # savepoint, on the address's lock; run B then waits on run A.
+    holder = hold(fn -> lock_path!("/concepts/polish") end)
+    a = backfill(ctx, reviews_a, batch_size: 10)
+    blocked!(a.backend, "advisory")
+    b = backfill(ctx, reviews_b, batch_size: 10)
+    blocked!(b.backend, "advisory")
+    release(holder)
+
+    assert {:ok, plan_a} = await(a)
+    assert {:ok, plan_b} = await(b)
+
+    assert item(plan_a, ctx.world.polish).disposition == "allocated"
+    assert %{disposition: "refused", reason: reason} = item(plan_b, ctx.world.polish)
+    assert reason =~ "already has the address /concepts/polish"
+    assert item(plan_b, ctx.world.bierce).disposition == "allocated"
+
+    assert Repo.all(
+             from d in ClassificationDecision,
+               where: d.object_id == ^ctx.world.polish.object_id and d.origin == :override,
+               select: d.family
+           ) == [:concepts]
+
+    assert Repo.all(from p in PublicPath, where: like(p.path, "%polish%"), select: p.path) ==
+             ["/concepts/polish"]
+  end
+
   # ── helpers used by the tests ────────────────────────────────────────────
 
   defp identities do
