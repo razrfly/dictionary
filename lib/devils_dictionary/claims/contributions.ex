@@ -939,6 +939,14 @@ defmodule DevilsDictionary.Claims.Contributions do
     end
   end
 
+  @doc """
+  The `user` actor of an account, created on first use. It is what every
+  human decision is recorded against, here and in curation (#196). Call
+  inside a transaction: the account row is locked while the actor is found or
+  made.
+  """
+  def account_actor!(%User{} = user), do: actor!(user)
+
   defp actor!(user) do
     # Serializes first-use actor creation for this account.
     Repo.one!(from u in User, where: u.id == ^user.id, lock: "FOR UPDATE")
