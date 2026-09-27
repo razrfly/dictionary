@@ -7,12 +7,14 @@
 #
 #   reviewer EMAIL
 #       A marked rehearsal account with the reviewer role, on this copy.
-#   reviews POPULATION EMAIL OUT
+#   reviews POPULATION MANIFEST EMAIL OUT
 #       **Rehearsal reviews, not approvals.** A rule applied to the
 #       population so that allocation can be exercised at corpus scale:
 #       confirm each allocation candidate's family; confirm each proposed
-#       qualifier as proposed; defer everything else. Every reason says so.
-#       Never use this file on the development corpus.
+#       qualifier as proposed; defer everything else. Each confirmation names
+#       the decision fingerprint a run without reviews reported in MANIFEST,
+#       as a reviewer's would. The file is marked `"rehearsal": true`, which
+#       the backfill refuses anywhere but a rehearsal copy.
 #   state RUN_KEY OUT
 #       `Routing.Backfill.state/1`: what the run left for each object, by
 #       identity, for comparing an interrupted run with an uninterrupted one.
@@ -35,17 +37,33 @@ case System.argv() do
     user |> Ecto.Changeset.change(reviewer: true) |> Repo.update!()
     IO.puts("rehearsal reviewer #{email} (user #{user.id}) on #{database}")
 
-  ["reviews", population, email, out] ->
+  ["reviews", population, manifest, email, out] ->
     records = population |> File.read!() |> Jason.decode!() |> Map.fetch!("records")
+
+    fingerprints =
+      manifest
+      |> File.read!()
+      |> Jason.decode!()
+      |> Map.fetch!("records")
+      |> Map.new(&{&1["object_id"], &1["evidence_fingerprint"]})
     reason = "Stage 2 rehearsal on an isolated copy: a rule, not an approval"
 
     review = fn r ->
       cond do
         String.starts_with?(r["disposition"], "allocation candidate") ->
-          %{"action" => "confirm", "family" => r["family"]}
+          %{
+            "action" => "confirm",
+            "family" => r["family"],
+            "evidence_fingerprint" => fingerprints[r["object_id"]]
+          }
 
         String.starts_with?(r["disposition"], "collision review: proposed") ->
-          %{"action" => "confirm", "family" => r["family"], "path" => r["proposed_path"]}
+          %{
+            "action" => "confirm",
+            "family" => r["family"],
+            "path" => r["proposed_path"],
+            "evidence_fingerprint" => fingerprints[r["object_id"]]
+          }
 
         String.starts_with?(r["disposition"], ["deferred", "excluded"]) ->
           nil
@@ -60,23 +78,21 @@ case System.argv() do
         Map.merge(entry, %{"object_id" => r["object_id"], "reviewer" => email, "reason" => reason})
       end
 
-    write.(out, %{"rehearsal" => true, "reviews" => reviews})
+    population_sha256 = :crypto.hash(:sha256, File.read!(population)) |> Base.encode16(case: :lower)
+    write.(out, %{"rehearsal" => true, "population_sha256" => population_sha256, "reviews" => reviews})
     IO.puts("#{length(reviews)} rehearsal reviews: #{inspect(Enum.frequencies_by(reviews, & &1["action"]))}")
 
   ["state", run_key, out] ->
-    state =
-      run_key
-      |> Backfill.state()
-      |> Map.new(fn {id, s} ->
-        {id,
-         %{
-           "item" => s.item && Tuple.to_list(s.item),
-           "decision" => s.decision && s.decision |> Tuple.to_list() |> Enum.map(&to_string/1),
-           "page" => s.page && s.page |> Tuple.to_list() |> Enum.map(&(&1 && to_string(&1))),
-           "paths" => Enum.map(s.paths, fn {path, kind} -> [path, to_string(kind)] end)
-         }}
-      end)
+    # Tuples as lists and atoms as strings, all the way down, for JSON.
+    plain = fn
+      plain, value when is_tuple(value) -> value |> Tuple.to_list() |> Enum.map(&plain.(plain, &1))
+      plain, value when is_list(value) -> Enum.map(value, &plain.(plain, &1))
+      plain, %{} = value -> Map.new(value, fn {k, v} -> {to_string(k), plain.(plain, v)} end)
+      _plain, value when is_atom(value) and not is_nil(value) and not is_boolean(value) -> Atom.to_string(value)
+      _plain, value -> value
+    end
 
+    state = run_key |> Backfill.state() |> then(&plain.(plain, &1))
     write.(out, state)
     IO.puts("state of #{map_size(state)} objects")
 

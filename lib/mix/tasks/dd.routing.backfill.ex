@@ -16,7 +16,12 @@ defmodule Mix.Tasks.Dd.Routing.Backfill do
 
   Re-running the same inputs resumes the run from its checkpoint, and a
   finished run writes nothing. Nothing is published. `--manifest` writes the
-  candidate launch manifest.
+  candidate launch manifest, whose decision fingerprints are what a review
+  file's confirmations name.
+
+  A review file marked `"rehearsal": true` is refused except on an isolated
+  rehearsal copy (`DD_STAGE2_REHEARSAL=1`, a `devils_dictionary_stage2*_*`
+  database off port 5432).
   """
 
   use Mix.Task
@@ -48,7 +53,9 @@ defmodule Mix.Tasks.Dd.Routing.Backfill do
     end
 
     plan =
-      case Backfill.load(opts[:snapshot], opts[:population], opts[:reviews]) do
+      case Backfill.load(opts[:snapshot], opts[:population], opts[:reviews],
+             allow_rehearsal: rehearsal_copy?()
+           ) do
         {:ok, plan} -> plan
         {:error, message} -> Mix.raise(message)
       end
@@ -74,6 +81,17 @@ defmodule Mix.Tasks.Dd.Routing.Backfill do
       File.write!(path, Jason.encode_to_iodata!(Backfill.manifest(plan.run_key), pretty: true))
       Mix.shell().info("manifest  #{path}")
     end
+  end
+
+  # Rule-made rehearsal reviews may drive a run only on an isolated
+  # rehearsal copy: DD_STAGE2_REHEARSAL=1, a devils_dictionary_stage2*_*
+  # database, and not the usual server's port.
+  defp rehearsal_copy? do
+    config = Repo.config()
+
+    System.get_env("DD_STAGE2_REHEARSAL") == "1" and
+      Regex.match?(~r/^devils_dictionary_stage2[a-z]?_/, config[:database] || "") and
+      (config[:port] || 5432) != 5432
   end
 
   # One import actor for the backfill, found by its label.

@@ -12,8 +12,10 @@ defmodule DevilsDictionary.Routing.Backfill do
     * the routing policy (`AuditSnapshot.policy_digest/0`);
     * the population (`docs/routing/stage-2/candidates.py`'s output, whose
       own inputs must name that export and that policy);
-    * the reviews, if any: each names one population record, an action, the
-      reviewer's account and a reason.
+    * the reviews, if any. The file names the population's digest, and each
+      confirmation names the decision fingerprint the reviewer saw (from a
+      run's manifest), so a review cannot outlive the evidence it was made
+      on.
 
   The same four digests are the same run: its checkpoint is reused. A new
   review file is a new run over the same population, and its writes are the
@@ -22,18 +24,19 @@ defmodule DevilsDictionary.Routing.Backfill do
   ## Per record, in object-id order
 
     1. The record's evaluator input is read back from the database and
-       compared with the export, and the evidence the evaluator pins must
-       still be current. Anything else is a deferral with its reason, never
-       a classification of stale evidence.
+       compared with the export, and every revision the evaluator pins must
+       still be its record's current one. Anything else is a deferral with
+       its reason, never a classification of stale evidence.
     2. `Policy.classify/3`, then `Classifications.record/1` — which writes
        nothing when the evidence is unchanged, and keeps a standing override.
     3. What the population and the reviews say:
        * **excluded or deferred** in the population: nothing more;
        * **heading for an address** (an allocation candidate or a collision
          to qualify): `Pages.ensure/3` — a subject page, or an edition's own
-         page for an edition — then, only with a reviewer's
-         `confirm`, the reviewer's override (once) and `Ledger.allocate/3`
-         of the approved path;
+         page — and then, only with a reviewer's `confirm` of the current
+         evidence, the reviewer's override (once) and `Ledger.allocate/3` of
+         the approved path. Every check that could refuse the confirmation
+         is made before the override is written;
        * **awaiting a classification or identity review**: no page until a
          reviewer confirms a family;
        * a reviewer's `defer`: nothing more, with the reviewer's reason.
@@ -43,13 +46,16 @@ defmodule DevilsDictionary.Routing.Backfill do
   A batch is one transaction: its writes and its checkpoints commit
   together, so an interruption loses at most the batch in hand, and a resumed
   run starts after the last committed record. Every writer it calls refuses
-  per record without rolling the batch back (Stage 1, decision 7).
+  per record without rolling the batch back (Stage 1, decision 7). A defect,
+  or an allocation that loses a race three times, raises: the batch rolls
+  back, the run stops, and running it again resumes it.
 
   Nothing here publishes: pages stay `draft`, and candidate status grants no
   publication approval.
   """
 
   import Ecto.Query
+  import DevilsDictionary.Routing.Input, only: [json?: 1, text?: 1]
 
   alias DevilsDictionary.Accounts.User
   alias DevilsDictionary.Repo
@@ -64,7 +70,8 @@ defmodule DevilsDictionary.Routing.Backfill do
     Page,
     Pages,
     Policy,
-    PublicPath
+    PublicPath,
+    RouteChange
   }
 
   alias DevilsDictionary.Routing.ClassificationDecision, as: Decision
@@ -82,15 +89,17 @@ defmodule DevilsDictionary.Routing.Backfill do
   @doc """
   Reads and cross-checks a run's inputs. Returns `{:ok, plan}` or `{:error,
   message}`; nothing is written.
+
+  A review file marked `"rehearsal": true` — rule-made reviews for exercising
+  allocation on an isolated copy — is refused unless `allow_rehearsal: true`.
   """
-  def load(snapshot_path, population_path, reviews_path \\ nil) do
+  def load(snapshot_path, population_path, reviews_path \\ nil, opts \\ []) do
     with {:ok, snapshot} <- AuditSnapshot.read(snapshot_path),
          {:ok, population} <- population(population_path),
          policy_sha256 = AuditSnapshot.policy_digest(),
          :ok <- bound(population, snapshot, policy_sha256),
-         {:ok, reviews, reviews_sha256} <- reviews(reviews_path, population.records) do
-      entities = Map.new(snapshot.entities, &{&1["object_id"], &1})
-
+         {:ok, reviews, reviews_sha256} <-
+           reviews(reviews_path, population, Keyword.get(opts, :allow_rehearsal, false)) do
       key =
         AuditSnapshot.digest(
           Enum.join(
@@ -114,7 +123,8 @@ defmodule DevilsDictionary.Routing.Backfill do
          population_sha256: population.sha256,
          reviews_sha256: reviews_sha256,
          records: Enum.sort_by(population.records, & &1["object_id"]),
-         entities: entities,
+         contested: population.contested,
+         entities: Map.new(snapshot.entities, &{&1["object_id"], &1}),
          graph: snapshot.graph,
          reviews: reviews
        }}
@@ -123,28 +133,48 @@ defmodule DevilsDictionary.Routing.Backfill do
 
   defp population(path) do
     with {:ok, bytes} <- File.read(path),
-         {:ok, %{"records" => records, "summary" => summary}} <- Jason.decode(bytes) do
-      ids = Enum.map(records, & &1["object_id"])
-
-      cond do
-        not Enum.all?(ids, &(is_integer(&1) and &1 > 0)) ->
-          {:error, "population #{path}: every record needs a positive object_id"}
-
-        length(ids) != length(Enum.uniq(ids)) ->
-          {:error, "population #{path}: an object id appears twice"}
-
-        true ->
-          {:ok,
-           %{
-             records: records,
-             inputs: summary["inputs"] || %{},
-             sha256: AuditSnapshot.digest(bytes)
-           }}
-      end
+         {:ok, %{"records" => records, "summary" => summary} = file} <- Jason.decode(bytes),
+         :ok <- population_records(path, records) do
+      {:ok,
+       %{
+         records: records,
+         inputs: summary["inputs"] || %{},
+         # Every candidate path shared by a collision group the population
+         # touches: never an uncontested address.
+         contested: file |> Map.get("groups", %{}) |> Map.keys() |> MapSet.new(),
+         sha256: AuditSnapshot.digest(bytes)
+       }}
     else
-      {:ok, _other} -> {:error, "population #{path}: not a candidates file (records, summary)"}
-      {:error, %Jason.DecodeError{}} -> {:error, "population #{path}: not JSON"}
-      {:error, reason} -> {:error, "cannot read #{path}: #{:file.format_error(reason)}"}
+      {:ok, _other} ->
+        {:error, "population #{path}: not a candidates file (records, summary)"}
+
+      {:error, %Jason.DecodeError{}} ->
+        {:error, "population #{path}: not JSON"}
+
+      {:error, reason} when is_atom(reason) ->
+        {:error, "cannot read #{path}: #{:file.format_error(reason)}"}
+
+      {:error, _message} = error ->
+        error
+    end
+  end
+
+  defp population_records(path, records) do
+    ids = Enum.map(records, & &1["object_id"])
+
+    cond do
+      not Enum.all?(ids, &(is_integer(&1) and &1 > 0)) ->
+        {:error, "population #{path}: every record needs a positive object_id"}
+
+      length(ids) != length(Enum.uniq(ids)) ->
+        {:error, "population #{path}: an object id appears twice"}
+
+      bad = Enum.find(records, &(population_kind(&1["disposition"]) == :unknown)) ->
+        {:error,
+         "population #{path}: object #{bad["object_id"]} has an unknown disposition #{inspect(bad["disposition"])}"}
+
+      true ->
+        :ok
     end
   end
 
@@ -167,14 +197,13 @@ defmodule DevilsDictionary.Routing.Backfill do
     end
   end
 
-  defp reviews(nil, _records), do: {:ok, %{}, nil}
+  defp reviews(nil, _population, _allow_rehearsal), do: {:ok, %{}, nil}
 
-  defp reviews(path, records) do
-    known = MapSet.new(records, & &1["object_id"])
-
+  defp reviews(path, population, allow_rehearsal) do
     with {:ok, bytes} <- File.read(path),
-         {:ok, %{"reviews" => entries}} when is_list(entries) <- Jason.decode(bytes),
-         {:ok, reviews} <- review_entries(entries, known) do
+         {:ok, %{"reviews" => entries} = file} when is_list(entries) <- Jason.decode(bytes),
+         :ok <- review_file(path, file, population, allow_rehearsal),
+         {:ok, reviews} <- review_entries(entries, population) do
       {:ok, reviews, AuditSnapshot.digest(bytes)}
     else
       {:ok, _other} ->
@@ -191,43 +220,100 @@ defmodule DevilsDictionary.Routing.Backfill do
     end
   end
 
-  defp review_entries(entries, known) do
-    Enum.reduce_while(entries, {:ok, %{}}, fn entry, {:ok, acc} ->
-      case review(entry, known) do
-        {:ok, review} ->
-          if Map.has_key?(acc, review.object_id),
-            do: {:halt, {:error, "two reviews for object #{review.object_id}"}},
-            else: {:cont, {:ok, Map.put(acc, review.object_id, review)}}
+  defp review_file(path, file, population, allow_rehearsal) do
+    cond do
+      file["population_sha256"] != population.sha256 ->
+        {:error,
+         "reviews #{path} were made on population #{inspect(file["population_sha256"])}, " <>
+           "not on #{population.sha256}"}
 
-        {:error, message} ->
-          {:halt, {:error, message}}
+      file["rehearsal"] == true and not allow_rehearsal ->
+        {:error,
+         "reviews #{path} are rehearsal reviews, made by a rule; they approve nothing here"}
+
+      true ->
+        :ok
+    end
+  end
+
+  defp review_entries(entries, population) do
+    records = Map.new(population.records, &{&1["object_id"], &1})
+
+    # Each record's own qualifier belongs to that record alone.
+    proposals =
+      for r <- population.records,
+          is_binary(r["proposed_path"]),
+          into: %{},
+          do: {r["proposed_path"], r["object_id"]}
+
+    Enum.reduce_while(entries, {:ok, %{}}, fn entry, {:ok, acc} ->
+      with {:ok, review} <- review(entry, records, proposals),
+           :ok <- unique(review, acc) do
+        {:cont, {:ok, Map.put(acc, review.object_id, review)}}
+      else
+        {:error, message} -> {:halt, {:error, message}}
       end
     end)
   end
 
-  defp review(%{"object_id" => id, "action" => action} = entry, known) do
-    reviewer = entry["reviewer"]
-    reason = entry["reason"]
+  defp unique(review, acc) do
+    cond do
+      Map.has_key?(acc, review.object_id) ->
+        {:error, "two reviews for object #{review.object_id}"}
+
+      review.path && Enum.any?(Map.values(acc), &(&1.path == review.path)) ->
+        {:error, "two reviews approve #{review.path}; import order may not choose between them"}
+
+      true ->
+        :ok
+    end
+  end
+
+  defp review(%{"object_id" => id, "action" => action} = entry, records, proposals) do
+    record = Map.get(records, id)
+    path = entry["path"]
 
     cond do
-      not MapSet.member?(known, id) ->
+      is_nil(record) ->
         {:error, "review for object #{inspect(id)}, which is not in the population"}
 
       action not in ["confirm", "defer"] ->
         {:error, "review for object #{id}: unknown action #{inspect(action)}"}
 
-      not (is_binary(reason) and String.trim(reason) != "") ->
-        {:error, "review for object #{id}: a reason is required"}
+      population_kind(record["disposition"]) == :not_addressed ->
+        {:error,
+         "review for object #{id}: the population does not address it (#{record["disposition"]})"}
 
-      not is_binary(reviewer) ->
+      not (is_binary(entry["reason"]) and String.trim(entry["reason"]) != "" and
+               text?(entry["reason"])) ->
+        {:error, "review for object #{id}: a reason is required, as plain text"}
+
+      not (is_binary(entry["reviewer"]) and text?(entry["reviewer"])) ->
         {:error, "review for object #{id}: name the reviewer's account by email"}
+
+      not json?(entry) ->
+        {:error, "review for object #{id}: the entry holds something JSON cannot store"}
 
       action == "confirm" and entry["family"] not in families() ->
         {:error,
          "review for object #{id}: a confirmation names a family, one of #{Enum.join(families(), ", ")}"}
 
-      not (is_nil(entry["path"]) or is_binary(entry["path"])) ->
+      action == "confirm" and not fingerprint?(entry["evidence_fingerprint"]) ->
+        {:error,
+         "review for object #{id}: a confirmation names the evidence_fingerprint of the decision reviewed"}
+
+      not (is_nil(path) or is_binary(path)) ->
         {:error, "review for object #{id}: a path is a string"}
+
+      is_binary(path) and not match?({:ok, _}, Address.parse(path)) ->
+        {:error, "review for object #{id}: #{inspect(path)} is not an address"}
+
+      is_binary(path) and elem(Address.parse(path), 1).namespace != entry["family"] ->
+        {:error, "review for object #{id}: #{path} is not in /#{entry["family"]}"}
+
+      is_binary(path) and Map.get(proposals, path, id) != id ->
+        {:error,
+         "review for object #{id}: #{path} is object #{proposals[path]}'s proposed qualifier"}
 
       true ->
         {:ok,
@@ -235,42 +321,42 @@ defmodule DevilsDictionary.Routing.Backfill do
            object_id: id,
            action: String.to_existing_atom(action),
            family: entry["family"],
-           path: entry["path"],
-           reviewer: reviewer,
-           reason: reason,
+           path: path,
+           fingerprint: entry["evidence_fingerprint"],
+           reviewer: entry["reviewer"],
+           reason: entry["reason"],
            entry: entry
          }}
     end
   end
 
-  defp review(_entry, _known), do: {:error, "a review needs object_id and action"}
+  defp review(_entry, _records, _proposals), do: {:error, "a review needs object_id and action"}
 
   defp families, do: Enum.map(Ecto.Enum.values(Decision, :family), &Atom.to_string/1)
+
+  defp fingerprint?(value), do: is_binary(value) and value =~ ~r/\A[0-9a-f]{64}\z/
 
   # ── running ──────────────────────────────────────────────────────────────
 
   @doc """
-  Runs `plan` (from `load/3`) with the import actor `actor_id`, resuming its
+  Runs `plan` (from `load/4`) with the import actor `actor_id`, resuming its
   checkpoint if one exists. Options: `batch_size` (default 25);
   `crash_after`, for tests, raises after that many records of this call have
   been processed, inside their batch.
 
-  Returns `{:ok, summary}` or `{:error, message}` for a refusal made before
+  Returns `{:ok, summary}`, or `{:error, message}` for a refusal made before
   anything is written (an unknown reviewer, say).
   """
   def run(plan, actor_id, opts \\ []) do
-    with {:ok, reviewers} <- reviewers(plan.reviews) do
+    with {:ok, users} <- reviewers(plan.reviews) do
+      reviewers = Map.new(users, fn {email, user} -> {email, user_actor!(user)} end)
       run = open!(plan, actor_id)
       done = done(run.id)
-
-      todo =
-        Enum.reject(Enum.with_index(plan.records), fn {r, _i} ->
-          MapSet.member?(done, r["object_id"])
-        end)
-
       crash_after = Keyword.get(opts, :crash_after)
 
-      todo
+      plan.records
+      |> Enum.with_index()
+      |> Enum.reject(fn {r, _i} -> MapSet.member?(done, r["object_id"]) end)
       |> Enum.chunk_every(Keyword.get(opts, :batch_size, 25))
       |> Enum.reduce(0, fn batch, processed ->
         {:ok, processed} =
@@ -306,8 +392,8 @@ defmodule DevilsDictionary.Routing.Backfill do
     end)
   end
 
-  # Every reviewer named is an account with the reviewer role, answered as a
-  # `user` actor — the only kind the database lets override or approve.
+  # Every reviewer named is an account with the reviewer role — all of them
+  # checked before anything is written.
   defp reviewers(reviews) do
     reviews
     |> Map.values()
@@ -315,13 +401,14 @@ defmodule DevilsDictionary.Routing.Backfill do
     |> Enum.uniq()
     |> Enum.reduce_while({:ok, %{}}, fn email, {:ok, acc} ->
       case Repo.get_by(User, email: email) do
-        %User{reviewer: true} = user -> {:cont, {:ok, Map.put(acc, email, user_actor!(user))}}
+        %User{reviewer: true} = user -> {:cont, {:ok, Map.put(acc, email, user)}}
         %User{} -> {:halt, {:error, "#{email} does not hold the reviewer role"}}
         nil -> {:halt, {:error, "no account #{email}"}}
       end
     end)
   end
 
+  # The account's `user` actor — the only kind the database lets override.
   defp user_actor!(user) do
     Repo.get_by(Actor, actor_kind: :user, user_id: user.id) ||
       Repo.insert!(%Actor{actor_kind: :user, user_id: user.id, label: "Reviewer ##{user.id}"})
@@ -385,21 +472,27 @@ defmodule DevilsDictionary.Routing.Backfill do
 
         case stale_pins(result) do
           [] ->
-            classified(result, record, Map.get(plan.reviews, id), reviewers, actor_id, proposed)
+            case Classifications.record(result) do
+              {:ok, _outcome, decision} ->
+                context = %{
+                  plan: plan,
+                  record: record,
+                  result: result,
+                  decision: decision,
+                  role: role(result),
+                  proposed: proposed,
+                  actor_id: actor_id
+                }
+
+                act(context, Map.get(plan.reviews, id), reviewers)
+
+              {:error, reason} ->
+                deferral("classification_refused", inspect(reason), proposed)
+            end
 
           stale ->
             deferral("evidence_changed", "not current: " <> Enum.join(stale, ", "), proposed)
         end
-    end
-  end
-
-  defp classified(result, record, review, reviewers, actor_id, proposed) do
-    case Classifications.record(result) do
-      {:ok, _outcome, decision} ->
-        act(record, review, decision, reviewers, actor_id, proposed, role(result))
-
-      {:error, reason} ->
-        deferral("classification_refused", inspect(reason), proposed)
     end
   end
 
@@ -408,172 +501,222 @@ defmodule DevilsDictionary.Routing.Backfill do
   defp role(%{page_role: "edition"}), do: :edition
   defp role(_result), do: :subject
 
-  defp act(record, review, decision, reviewers, actor_id, proposed, role) do
-    kind = population_kind(record["disposition"])
+  defp act(ctx, review, reviewers) do
+    kind = population_kind(ctx.record["disposition"])
 
     cond do
       kind == :not_addressed ->
         %{
           disposition: "not_addressed",
-          reason: record["disposition"],
-          decision_id: decision.id,
-          proposed_path: nil
+          reason: ctx.record["disposition"],
+          decision_id: ctx.decision.id
         }
 
       review && review.action == :defer ->
         %{
           disposition: "deferred_by_review",
           reason: review.reason,
-          decision_id: decision.id,
-          proposed_path: proposed,
+          decision_id: ctx.decision.id,
+          proposed_path: ctx.proposed,
           review: review.entry
         }
 
       review && review.action == :confirm ->
-        confirm(record, review, decision, Map.fetch!(reviewers, review.reviewer), actor_id, role)
+        confirm(ctx, review, Map.fetch!(reviewers, review.reviewer))
 
       kind == :heading_for_address ->
-        with_page(record, decision, role, fn page ->
-          %{
-            disposition: "awaiting_review",
-            reason: record["disposition"],
-            decision_id: decision.id,
-            page_id: page.id,
-            proposed_path: proposed
-          }
-        end)
+        case Pages.ensure(ctx.role, ctx.record["object_id"]) do
+          {:ok, page} ->
+            %{
+              disposition: "awaiting_review",
+              reason: ctx.record["disposition"],
+              decision_id: ctx.decision.id,
+              page_id: page.id,
+              proposed_path: ctx.proposed
+            }
+
+          {:error, reason} ->
+            refused(ctx, "page: #{inspect(reason)}", ctx.proposed, nil)
+        end
 
       true ->
         %{
           disposition: "awaiting_review",
-          reason: record["disposition"],
-          decision_id: decision.id,
-          proposed_path: proposed
+          reason: ctx.record["disposition"],
+          decision_id: ctx.decision.id,
+          proposed_path: ctx.proposed
         }
     end
   end
 
-  # A reviewer's confirmation: their override of the decision they saw (once),
-  # the page, and the approved address.
-  defp confirm(record, review, decision, reviewer, actor_id, role) do
-    path = review.path || uncontested(record)
+  # A reviewer's confirmation of the evidence they saw. Everything that could
+  # refuse it is checked first; only then the override (once), the page and
+  # the address.
+  defp confirm(ctx, review, reviewer) do
+    path = review.path || uncontested(ctx)
 
-    with {:ok, parsed} <- path_for(path),
-         :ok <- same_family(parsed, review.family),
-         {:ok, decision} <- confirmed(record["object_id"], review, decision, reviewer) do
-      with_page(record, decision, role, fn page ->
-        reason =
-          "Stage 2 backfill: address approved by reviewer ##{reviewer.user_id} — #{review.reason}"
+    with {:ok, parsed} <- address(path, review.family, ctx.role),
+         :ok <- seen(ctx.decision, review),
+         :ok <- available(parsed.path, ctx),
+         {:ok, decision} <- override(ctx, review, reviewer),
+         {:ok, page} <- page(ctx) do
+      reason =
+        "Stage 2 backfill: address approved by reviewer ##{reviewer.user_id} — #{review.reason}"
 
-        case Ledger.allocate(page.id, parsed.path, actor_id: actor_id, reason: reason) do
-          {:ok, _} ->
-            %{
-              disposition: "allocated",
-              decision_id: decision.id,
-              page_id: page.id,
-              path_id: Repo.get!(Page, page.id).canonical_path_id,
-              proposed_path: parsed.path,
-              review: review.entry
-            }
+      case Ledger.allocate(page.id, parsed.path, actor_id: ctx.actor_id, reason: reason) do
+        {:ok, _} ->
+          %{
+            disposition: "allocated",
+            decision_id: decision.id,
+            page_id: page.id,
+            path_id: Repo.get!(Page, page.id).canonical_path_id,
+            proposed_path: parsed.path,
+            review: review.entry
+          }
 
-          {:error, refusal} ->
-            %{
-              disposition: "refused",
-              reason: inspect(refusal),
-              decision_id: decision.id,
-              page_id: page.id,
-              proposed_path: parsed.path,
-              review: review.entry
-            }
-        end
-      end)
+        {:error, refusal} ->
+          %{refused(ctx, inspect(refusal), parsed.path, review.entry) | decision_id: decision.id}
+          |> Map.put(:page_id, page.id)
+      end
     else
-      {:refused, reason} ->
-        %{
-          disposition: "refused",
-          reason: reason,
-          decision_id: decision.id,
-          proposed_path: path,
-          review: review.entry
-        }
+      {:refused, reason} -> refused(ctx, reason, path, review.entry)
     end
   end
 
-  # The candidate path only when nothing else in the population proposes it:
-  # a collision group is qualified by a reviewer, never by import order.
-  defp uncontested(%{"address_status" => "candidate", "candidate_path" => path}), do: path
-  defp uncontested(_record), do: nil
+  defp refused(ctx, reason, path, entry) do
+    %{
+      disposition: "refused",
+      reason: reason,
+      decision_id: ctx.decision.id,
+      proposed_path: path,
+      review: entry
+    }
+  end
 
-  defp path_for(nil), do: {:refused, "no approved path: a collision is qualified by its reviewer"}
+  # The evaluator's own candidate path, only when nothing else proposes it:
+  # the population calls it a candidate, the evaluator derives the same path
+  # from this evidence, and no collision group the population touches shares
+  # it. A collision is qualified by its reviewer, never by import order.
+  defp uncontested(%{record: record, result: result, plan: plan}) do
+    path = record["candidate_path"]
 
-  defp path_for(path) do
+    if record["address_status"] == "candidate" and is_binary(path) and
+         AuditSnapshot.candidate_path(result) == path and not MapSet.member?(plan.contested, path),
+       do: path
+  end
+
+  defp address(nil, _family, _role),
+    do: {:refused, "no approved path: a collision is qualified by its reviewer"}
+
+  defp address(path, family, role) do
     case Address.parse(path) do
-      {:ok, parsed} -> {:ok, parsed}
-      {:error, reason} -> {:refused, "the approved path is not an address: #{inspect(reason)}"}
+      {:ok, %{namespace: ^family} = parsed} ->
+        if role == :edition and family != "works",
+          do: {:refused, "an edition's address is in /works, not /#{family}"},
+          else: {:ok, parsed}
+
+      {:ok, %{namespace: namespace}} ->
+        {:refused, "the approved path is in /#{namespace}, the confirmed family is #{family}"}
+
+      {:error, reason} ->
+        {:refused, "the approved path is not an address: #{inspect(reason)}"}
     end
   end
 
-  defp same_family(%{namespace: family}, family), do: :ok
+  # The reviewer confirmed this decision's evidence, not other evidence.
+  defp seen(%Decision{evidence_fingerprint: fingerprint}, %{fingerprint: fingerprint}), do: :ok
 
-  defp same_family(%{namespace: namespace}, family),
-    do: {:refused, "the approved path is in /#{namespace}, the confirmed family is #{family}"}
+  defp seen(_decision, _review),
+    do: {:refused, "stale review: the evidence changed after the reviewer saw it"}
 
-  # Already the reviewer's current decision for this family: nothing to write.
-  defp confirmed(
-         _id,
-         %{family: family},
-         %Decision{origin: :override, status: :mapped} = decision,
+  # The path is free, or already this record's own page's.
+  defp available(path, ctx) do
+    owner =
+      Repo.one(
+        from pp in PublicPath,
+          join: p in Page,
+          on: p.id == pp.original_page_id,
+          where: pp.path == ^path,
+          select: {p.target_object_id, p.role, pp.kind}
+      )
+
+    page =
+      Repo.get_by(Page, target_object_id: ctx.record["object_id"], role: ctx.role, locale: "en")
+
+    canonical =
+      page && page.canonical_path_id && Repo.get!(PublicPath, page.canonical_path_id).path
+
+    cond do
+      canonical && canonical != path ->
+        {:refused, "the page already has the address #{canonical}"}
+
+      is_nil(owner) ->
+        :ok
+
+      elem(owner, 0) == ctx.record["object_id"] and elem(owner, 2) != :tombstone ->
+        :ok
+
+      elem(owner, 2) == :tombstone ->
+        {:refused, "#{path} is a tombstone; only a human restoration brings it back"}
+
+      true ->
+        {:refused, "#{path} belongs to object #{elem(owner, 0)}"}
+    end
+  end
+
+  # The reviewer's own current override for this family is already the
+  # decision: nothing to write. Otherwise an override of the evidence the
+  # reviewer saw — which replaces the reviewer's own earlier one.
+  defp override(
+         %{decision: %Decision{origin: :override, status: :mapped} = decision},
+         review,
          reviewer
        )
        when decision.reviewer_actor_id == reviewer.id do
-    if Atom.to_string(decision.family) == family,
+    if Atom.to_string(decision.family) == review.family,
       do: {:ok, decision},
-      else: {:refused, "a standing override maps it to #{decision.family}"}
+      else: write_override(decision.object_id, review, reviewer)
   end
 
-  defp confirmed(id, review, decision, reviewer) do
+  defp override(%{decision: decision}, review, reviewer),
+    do: write_override(decision.object_id, review, reviewer)
+
+  defp write_override(object_id, review, reviewer) do
     attrs = %{
       status: :mapped,
       family: String.to_existing_atom(review.family),
       reason: review.reason,
-      evidence_fingerprint: decision.evidence_fingerprint
+      evidence_fingerprint: review.fingerprint
     }
 
-    case Classifications.override(id, attrs, reviewer.id) do
+    case Classifications.override(object_id, attrs, reviewer.id) do
       {:ok, override} -> {:ok, override}
       {:error, reason} -> {:refused, "the reviewer's override was refused: #{inspect(reason)}"}
     end
   end
 
-  defp with_page(record, decision, role, fun) do
-    case Pages.ensure(role, record["object_id"]) do
-      {:ok, page} ->
-        fun.(page)
-
-      {:error, reason} ->
-        %{
-          disposition: "refused",
-          reason: "page: #{inspect(reason)}",
-          decision_id: decision.id,
-          proposed_path: record["proposed_path"] || record["candidate_path"]
-        }
+  defp page(ctx) do
+    case Pages.ensure(ctx.role, ctx.record["object_id"]) do
+      {:ok, page} -> {:ok, page}
+      {:error, reason} -> {:refused, "page: #{inspect(reason)}"}
     end
   end
 
   defp deferral(disposition, reason, proposed),
     do: %{disposition: disposition, reason: reason, proposed_path: proposed}
 
-  defp population_kind(disposition) do
+  defp population_kind(disposition) when is_binary(disposition) do
     cond do
       starts_with_any?(disposition, @not_addressed) -> :not_addressed
       starts_with_any?(disposition, @heading_for_address) -> :heading_for_address
       starts_with_any?(disposition, @awaiting_review) -> :awaiting_review
-      true -> :awaiting_review
+      true -> :unknown
     end
   end
 
-  defp starts_with_any?(text, prefixes),
-    do: Enum.any?(prefixes, &String.starts_with?(text || "", &1))
+  defp population_kind(_disposition), do: :unknown
+
+  defp starts_with_any?(text, prefixes), do: Enum.any?(prefixes, &String.starts_with?(text, &1))
 
   # ── the evidence is still what the export saw ───────────────────────────
 
@@ -606,31 +749,36 @@ defmodule DevilsDictionary.Routing.Backfill do
 
   defp comparable(row), do: Map.drop(row, ["record_type"])
 
-  # The pinned revisions that are no longer their record's latest.
+  # The pinned revisions that are no longer their record's current one: the
+  # revision whose key is the record's content hash, which may be an earlier
+  # row when a payload returns to what it was.
   defp stale_pins(result) do
     pins = Enum.reject([result.source_revision | result.evidence], &is_nil/1)
 
-    latest =
+    current =
       if pins == [] do
         %{}
       else
         %{rows: rows} =
           Repo.query!(
             """
-            SELECT r.external_id, max(v.id)
+            SELECT r.external_id, v.id, v.checksum
               FROM source_records r
               JOIN sources s ON s.id = r.source_id AND s.slug = 'wikidata'
-              JOIN source_record_revisions v ON v.source_record_id = r.id
+              JOIN source_record_revisions v
+                ON v.source_record_id = r.id AND v.revision_key = r.content_hash
              WHERE r.external_id = ANY($1)
-             GROUP BY r.external_id
             """,
             [Enum.map(pins, & &1["qid"])]
           )
 
-        Map.new(rows, fn [qid, id] -> {qid, id} end)
+        Map.new(rows, fn [qid, id, checksum] -> {qid, {id, checksum}} end)
       end
 
-    for pin <- pins, Map.get(latest, pin["qid"]) != pin["revision_id"], uniq: true, do: pin["qid"]
+    for pin <- pins,
+        Map.get(current, pin["qid"]) != {pin["revision_id"], pin["checksum"]},
+        uniq: true,
+        do: pin["qid"]
   end
 
   # ── what a run produced ──────────────────────────────────────────────────
@@ -651,8 +799,10 @@ defmodule DevilsDictionary.Routing.Backfill do
 
   @doc """
   The candidate launch manifest for a run: every population record, its
-  disposition, decision, page and address (allocated, or proposed and
-  awaiting review). Candidate status grants no publication approval.
+  disposition, its current decision (with the evidence fingerprint a
+  reviewer confirms), its page and its address — allocated, or proposed and
+  awaiting review. `publication_approved` counts its pages that are
+  published: candidate status grants no publication approval.
   """
   def manifest(run_key) do
     run = Repo.get_by!(BackfillRun, run_key: run_key)
@@ -662,7 +812,7 @@ defmodule DevilsDictionary.Routing.Backfill do
         from i in BackfillItem,
           where: i.run_id == ^run.id,
           left_join: d in Decision,
-          on: d.id == i.decision_id,
+          on: d.object_id == i.object_id and d.is_current,
           left_join: p in Page,
           on: p.id == i.page_id,
           left_join: c in PublicPath,
@@ -675,7 +825,9 @@ defmodule DevilsDictionary.Routing.Backfill do
             status: d.status,
             family: d.family,
             decided_by: d.origin,
+            evidence_fingerprint: d.evidence_fingerprint,
             page_id: p.id,
+            page_role: p.role,
             publication_state: p.publication_state,
             address: c.path,
             proposed_path: i.proposed_path
@@ -691,7 +843,7 @@ defmodule DevilsDictionary.Routing.Backfill do
         "population_sha256" => run.population_sha256,
         "reviews_sha256" => run.reviews_sha256
       },
-      "publication_approved" => 0,
+      "publication_approved" => Enum.count(items, &(&1.publication_state == :published)),
       "dispositions" => Enum.frequencies_by(items, & &1.disposition),
       "records" => items
     }
@@ -699,35 +851,36 @@ defmodule DevilsDictionary.Routing.Backfill do
 
   @doc """
   What a run left for each of its objects, by identity rather than by
-  numeric id: the current decision, the page and its addresses. Two runs
-  over the same database state — one interrupted and resumed, one not —
-  must answer the same, whatever sequence values a rolled-back batch used.
+  numeric id: its checkpoint row and what it references, every decision in
+  order, the page, every address the page owns, and every ledger row about
+  the page. Two runs over the same database state — one interrupted and
+  resumed, one not — must answer the same, whatever sequence values a
+  rolled-back batch used.
   """
   def state(run_key) do
     run = Repo.get_by!(BackfillRun, run_key: run_key)
     ids = done(run.id) |> MapSet.to_list()
 
-    decisions =
-      Repo.all(
-        from d in Decision,
-          where: d.object_id in ^ids and d.is_current,
-          select:
-            {d.object_id,
-             {d.origin, d.status, d.family, d.evidence_fingerprint, d.policy_version}}
-      )
-      |> Map.new()
+    decision_row = fn d ->
+      reviewer =
+        d.reviewer_actor_id &&
+          Repo.one(from a in Actor, where: a.id == ^d.reviewer_actor_id, select: a.user_id)
 
-    pages =
-      Repo.all(
-        from p in Page,
-          where: p.target_object_id in ^ids,
-          left_join: c in PublicPath,
-          on: c.id == p.canonical_path_id,
-          select:
-            {p.target_object_id,
-             {p.role, p.locale, p.publication_state, p.lifecycle_state, c.path}}
-      )
-      |> Map.new()
+      {d.origin, d.status, d.family, d.evidence_fingerprint, d.policy_version, d.is_current,
+       reviewer}
+    end
+
+    decisions =
+      Repo.all(from d in Decision, where: d.object_id in ^ids, order_by: d.id)
+      |> Enum.group_by(& &1.object_id, decision_row)
+
+    pages = Repo.all(from p in Page, where: p.target_object_id in ^ids)
+    page_of = Map.new(pages, &{&1.id, &1})
+
+    path_of = fn
+      nil -> nil
+      id -> Repo.get!(PublicPath, id).path
+    end
 
     paths =
       Repo.all(
@@ -735,26 +888,58 @@ defmodule DevilsDictionary.Routing.Backfill do
           join: p in Page,
           on: p.id == pp.original_page_id,
           where: p.target_object_id in ^ids,
+          order_by: pp.path,
           select: {p.target_object_id, {pp.path, pp.kind}}
       )
       |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
-      |> Map.new(fn {id, list} -> {id, Enum.sort(list)} end)
+
+    # Path rows name their destination page, page rows the page itself. The
+    # operation's random id is left out; its sequence and content are not.
+    ledger =
+      Repo.all(
+        from c in RouteChange,
+          join: p in Page,
+          on:
+            p.id == c.page_id or p.id == c.after_destination_id or p.id == c.before_destination_id,
+          where: p.target_object_id in ^ids,
+          order_by: c.id,
+          select: {p.target_object_id, c}
+      )
+      |> Enum.group_by(&elem(&1, 0), fn {_id, c} ->
+        decision =
+          c.classification_decision_id && Repo.get!(Decision, c.classification_decision_id)
+
+        {c.operation, c.sequence, path_of.(c.path_id), c.before_kind, c.after_kind,
+         path_of.(c.before_canonical_path_id), path_of.(c.after_canonical_path_id),
+         c.before_lifecycle, c.after_lifecycle, c.policy_version, c.reason,
+         decision && decision_row.(decision)}
+      end)
 
     items =
-      Repo.all(
-        from i in BackfillItem,
-          where: i.run_id == ^run.id,
-          select: {i.object_id, {i.position, i.disposition, i.reason, i.proposed_path}}
-      )
-      |> Map.new()
+      Repo.all(from i in BackfillItem, where: i.run_id == ^run.id)
+      |> Map.new(fn i ->
+        decision = i.decision_id && Repo.get!(Decision, i.decision_id)
+        page = i.page_id && page_of[i.page_id]
+
+        {i.object_id,
+         {i.position, i.disposition, i.reason, i.proposed_path,
+          decision && decision_row.(decision), page && {page.role, page.locale},
+          path_of.(i.path_id)}}
+      end)
 
     Map.new(ids, fn id ->
+      page = Enum.find(pages, &(&1.target_object_id == id))
+
       {id,
        %{
          item: items[id],
-         decision: decisions[id],
-         page: pages[id],
-         paths: Map.get(paths, id, [])
+         decisions: Map.get(decisions, id, []),
+         page:
+           page &&
+             {page.role, page.locale, page.publication_state, page.lifecycle_state,
+              path_of.(page.canonical_path_id)},
+         paths: Map.get(paths, id, []),
+         ledger: Map.get(ledger, id, [])
        }}
     end)
   end

@@ -7,6 +7,9 @@ defmodule DevilsDictionary.Routing.Policy do
 
   @root Path.expand("../../../priv/routing", __DIR__)
 
+  @doc "Where the policy files are read from: the same files its digest covers."
+  def root, do: @root
+
   def load(root \\ @root) do
     rules = root |> Path.join("classification-rules.json") |> File.read!() |> Jason.decode!()
     registry = root |> Path.join("namespaces.json") |> File.read!() |> Jason.decode!()

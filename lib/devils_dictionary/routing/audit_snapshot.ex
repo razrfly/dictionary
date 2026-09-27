@@ -95,12 +95,10 @@ defmodule DevilsDictionary.Routing.AuditSnapshot do
   @doc "The SHA-256 of the routing policy files: the digest every audit and backfill records."
   def policy_digest do
     @policy_files
-    |> Enum.map(&File.read!(Path.join(policy_dir(), &1)))
+    |> Enum.map(&File.read!(Path.join(Policy.root(), &1)))
     |> IO.iodata_to_binary()
     |> digest()
   end
-
-  defp policy_dir, do: Application.app_dir(:devils_dictionary, "priv/routing")
 
   @doc "A lowercase hex SHA-256."
   def digest(bytes), do: :crypto.hash(:sha256, bytes) |> Base.encode16(case: :lower)

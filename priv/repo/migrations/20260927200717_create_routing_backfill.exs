@@ -5,8 +5,9 @@ defmodule DevilsDictionary.Repo.Migrations.CreateRoutingBackfill do
   Two additive tables. A run is bound to the digests of its export, policy,
   population and reviews; an item is one population record's outcome in that
   run, written in the same transaction as the decision, page and address it
-  produced. Both are append-only, apart from a run's `finished_at`, so the
-  checkpoint cannot be rewritten after the fact. Nothing existing is altered.
+  produced. Both are append-only, apart from a run's `finished_at` (set
+  once), and refuse TRUNCATE as the routing tables do, so the checkpoint
+  cannot be rewritten after the fact. Nothing existing is altered.
   """
   use Ecto.Migration
 
@@ -83,10 +84,17 @@ defmodule DevilsDictionary.Repo.Migrations.CreateRoutingBackfill do
     $$ LANGUAGE plpgsql;
     """
 
+    # Row triggers do not see TRUNCATE; Stage 1's statement guard does, with
+    # the same transaction-local opt-in for the test suite's reset.
     for table <- ~w(routing_backfill_runs routing_backfill_items) do
       execute """
       CREATE TRIGGER #{table}_append_only BEFORE UPDATE OR DELETE ON #{table}
         FOR EACH ROW EXECUTE FUNCTION routing_backfill_append_only()
+      """
+
+      execute """
+      CREATE TRIGGER #{table}_refuse_truncate BEFORE TRUNCATE ON #{table}
+        FOR EACH STATEMENT EXECUTE FUNCTION routing_refuse_truncate()
       """
     end
   end

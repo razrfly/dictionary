@@ -33,7 +33,9 @@ defmodule DevilsDictionary.Routing.BackfillTest do
     BackfillItem,
     BackfillRun,
     ClassificationDecision,
+    Classifications,
     Page,
+    Policy,
     PublicPath,
     RouteChange
   }
@@ -217,23 +219,48 @@ defmodule DevilsDictionary.Routing.BackfillTest do
     |> Repo.update!()
   end
 
-  defp reviews!(ctx, entries) do
+  # A review file as a reviewer would write it from a run's manifest: bound
+  # to the population, each confirmation naming the fingerprint of the
+  # decision reviewed (computed here as the evaluator computes it) unless the
+  # test gives its own.
+  defp reviews!(ctx, entries, file \\ %{}) do
     path = Path.join(ctx.dir, "reviews-#{System.unique_integer([:positive])}.json")
 
     entries =
       Enum.map(entries, fn {entity, fields} ->
-        Map.merge(
-          %{
-            "object_id" => entity.object_id,
-            "reviewer" => ctx.reviewer.email,
-            "reason" => "reviewed"
-          },
-          fields
-        )
+        entry =
+          Map.merge(
+            %{
+              "object_id" => entity.object_id,
+              "reviewer" => ctx.reviewer.email,
+              "reason" => "reviewed"
+            },
+            fields
+          )
+
+        if entry["action"] == "confirm" and not Map.has_key?(entry, "evidence_fingerprint"),
+          do: Map.put(entry, "evidence_fingerprint", fingerprint(ctx, entity)),
+          else: entry
       end)
 
-    File.write!(path, Jason.encode!(%{"reviews" => entries}))
+    body =
+      Map.merge(
+        %{
+          "population_sha256" => AuditSnapshot.digest(File.read!(ctx.population)),
+          "reviews" => entries
+        },
+        file
+      )
+
+    File.write!(path, Jason.encode!(body))
     path
+  end
+
+  defp fingerprint(ctx, entity) do
+    case Enum.find(ctx.snapshot.entities, &(&1["object_id"] == entity.object_id)) do
+      nil -> String.duplicate("0", 64)
+      row -> Classifications.fingerprint(Policy.classify(row, ctx.snapshot.graph, Policy.load()))
+    end
   end
 
   defp approvals(ctx) do
@@ -339,7 +366,9 @@ defmodule DevilsDictionary.Routing.BackfillTest do
       ])
 
     reviews =
-      reviews!(ctx, [{edition, %{"action" => "confirm", "family" => "works"}}])
+      reviews!(%{ctx | population: population, snapshot: snapshot}, [
+        {edition, %{"action" => "confirm", "family" => "works"}}
+      ])
 
     {:ok, plan} = Backfill.load(snapshot.path, population, reviews)
     {:ok, summary} = Backfill.run(plan, ctx.importer.id)
@@ -352,50 +381,104 @@ defmodule DevilsDictionary.Routing.BackfillTest do
              "/works/project-gutenberg-sharp-972"
   end
 
-  test "a confirmation that cannot stand is refused for its record only", ctx do
+  test "a confirmation refused for a reason found before writing leaves no override", ctx do
+    # A collision confirmed without a path: import order may not choose.
     reviews =
-      reviews!(ctx, [
-        # A collision confirmed without a path: import order may not choose.
-        {ctx.world.daman_af, %{"action" => "confirm", "family" => "places"}},
-        # A path outside the confirmed family.
-        {ctx.world.bierce,
-         %{"action" => "confirm", "family" => "people", "path" => "/works/ambrose-bierce"}}
-      ])
+      reviews!(ctx, [{ctx.world.daman_af, %{"action" => "confirm", "family" => "places"}}])
 
     {plan, summary} = run!(ctx, reviews)
 
-    assert summary.dispositions["refused"] == 2
+    assert summary.dispositions["refused"] == 1
     assert item(plan, ctx.world.daman_af).reason =~ "qualified by its reviewer"
-    assert item(plan, ctx.world.bierce).reason =~ "/works"
+
+    # A path another record already holds.
+    taken =
+      reviews!(ctx, [
+        {ctx.world.daman_af,
+         %{"action" => "confirm", "family" => "places", "path" => "/places/daman"}},
+        {ctx.world.daman_in, %{"action" => "defer"}}
+      ])
+
+    run!(ctx, taken)
+
+    clash =
+      reviews!(ctx, [
+        {ctx.world.daman_in,
+         %{"action" => "confirm", "family" => "places", "path" => "/places/daman"}}
+      ])
+
+    {plan, _} = run!(ctx, clash)
+
+    assert item(plan, ctx.world.daman_in).disposition == "refused"
+
+    assert item(plan, ctx.world.daman_in).reason =~
+             "belongs to object #{ctx.world.daman_af.object_id}"
+
+    refute override?(ctx.world.daman_in)
+    assert Repo.aggregate(PublicPath, :count) == 1
+  end
+
+  test "a stale review is refused and writes no override", ctx do
+    reviews =
+      reviews!(ctx, [
+        {ctx.world.bierce,
+         %{
+           "action" => "confirm",
+           "family" => "people",
+           "evidence_fingerprint" => String.duplicate("a", 64)
+         }}
+      ])
+
+    {plan, _} = run!(ctx, reviews)
+
+    assert item(plan, ctx.world.bierce).disposition == "refused"
+    assert item(plan, ctx.world.bierce).reason =~ "stale review"
+    refute override?(ctx.world.bierce)
     assert Repo.aggregate(PublicPath, :count) == 0
   end
 
   test "a second run over the same inputs writes nothing", ctx do
     reviews = approvals(ctx)
     run!(ctx, reviews)
-
-    before =
-      for schema <- [Page, PublicPath, ClassificationDecision, RouteChange, BackfillItem],
-          into: %{},
-          do: {schema, ids(schema)}
+    before = identities()
 
     {_plan, summary} = run!(ctx, reviews)
 
-    for {schema, set} <- before, do: assert(ids(schema) == set, "#{inspect(schema)} changed")
+    assert identities() == before
     assert summary.items == 5
     assert Repo.aggregate(BackfillRun, :count) == 1
+  end
+
+  test "a new run over the same state writes nothing but its checkpoint", ctx do
+    reviews = approvals(ctx)
+    run!(ctx, reviews)
+    before = identities()
+
+    # The same reviews, other bytes: a new run key, so every record is
+    # processed again, and every write it makes must already be there.
+    again = Path.join(ctx.dir, "reviews-again.json")
+    File.write!(again, reviews |> File.read!() |> Jason.decode!() |> Jason.encode!(pretty: true))
+
+    {plan, summary} = run!(ctx, again)
+
+    assert Repo.aggregate(BackfillRun, :count) == 2
+    assert summary.items == 5
+    assert summary.dispositions["allocated"] == 2
+    assert Map.delete(identities(), BackfillItem) == Map.delete(before, BackfillItem)
+    assert item(plan, ctx.world.bierce).path_id
   end
 
   test "a new review file carries every identity over", ctx do
     {_plan, _} = run!(ctx)
     pages = Repo.all(from p in Page, select: {p.target_object_id, p.id}) |> Map.new()
-    evaluator = ids(ClassificationDecision)
+    evaluator = evaluator_decisions()
 
     {plan, _} = run!(ctx, approvals(ctx))
 
     assert Repo.all(from p in Page, select: {p.target_object_id, p.id}) |> Map.new() == pages
-    # The reviewer's overrides are added; the evaluator's decisions stay.
-    assert MapSet.subset?(evaluator, ids(ClassificationDecision))
+    # The evaluator's decisions are the same set; the reviewer's overrides
+    # are added beside them.
+    assert evaluator_decisions() == evaluator
     assert item(plan, ctx.world.bierce).page_id == pages[ctx.world.bierce.object_id]
     assert Repo.aggregate(BackfillRun, :count) == 2
   end
@@ -405,16 +488,14 @@ defmodule DevilsDictionary.Routing.BackfillTest do
     {:ok, plan} = Backfill.load(ctx.snapshot.path, ctx.population, reviews)
 
     # Uninterrupted, then undone: the state it reaches, by identity.
-    {:ok, expected} =
+    {:error, expected} =
       Repo.transaction(fn ->
         {:ok, _} = Backfill.run(plan, ctx.importer.id, batch_size: 2)
         Repo.rollback(Backfill.state(plan.run_key))
       end)
-      |> case do
-        {:error, state} -> {:ok, state}
-      end
 
     assert Repo.aggregate(BackfillRun, :count) == 0
+    assert Enum.any?(expected, fn {_id, s} -> s.ledger != [] end)
 
     # Interrupted inside its second batch: the first batch stays committed.
     assert_raise RuntimeError, ~r/crash injected/, fn ->
@@ -460,6 +541,29 @@ defmodule DevilsDictionary.Routing.BackfillTest do
            )
   end
 
+  test "evidence that returned to an earlier payload is not the revision the export pinned",
+       ctx do
+    # The export pins revision B; the item then returns to payload A. No
+    # revision is added, so the newest revision is still B — but the current
+    # one is A.
+    moved = %{"id" => "Q9200001", "claims" => %{"P31" => [anchor("Q5")]}, "note" => "b"}
+
+    Sources.insert_records(Sources.get_source_by_slug!("wikidata"), [
+      %{external_id: "Q9200001", raw: moved}
+    ])
+
+    snapshot = export!(ctx.dir)
+    population = population!(ctx.dir, snapshot, ctx.world)
+
+    record!("Q9200001", "Q5")
+
+    {:ok, plan} = Backfill.load(snapshot.path, population, nil)
+    {:ok, _} = Backfill.run(plan, ctx.importer.id)
+
+    assert item(plan, ctx.world.bierce).disposition == "evidence_changed"
+    assert item(plan, ctx.world.bierce).reason =~ "Q9200001"
+  end
+
   test "inputs that do not belong together are refused before anything is written", ctx do
     other =
       population!(ctx.dir, ctx.snapshot, ctx.world, %{"input_sha256" => String.duplicate("a", 64)})
@@ -475,50 +579,131 @@ defmodule DevilsDictionary.Routing.BackfillTest do
     assert {:error, message} = Backfill.load(ctx.snapshot.path, stale, nil)
     assert message =~ "policy"
 
-    for {entries, pattern} <- [
-          {[{%{object_id: 999_999_999}, %{"action" => "defer"}}], "not in the population"},
-          {[{ctx.world.bierce, %{"action" => "confirm", "family" => "wizards"}}], "a family"},
-          {[{ctx.world.bierce, %{"action" => "publish"}}], "unknown action"},
+    bierce = %{"action" => "confirm", "family" => "people"}
+
+    for {entries, file, pattern} <- [
+          {[{%{object_id: 999_999_999}, %{"action" => "defer"}}], %{}, "not in the population"},
+          {[{ctx.world.bierce, %{"action" => "confirm", "family" => "wizards"}}], %{},
+           "a family"},
+          {[{ctx.world.bierce, %{"action" => "publish"}}], %{}, "unknown action"},
           {[
              {ctx.world.bierce, %{"action" => "defer"}},
              {ctx.world.bierce, %{"action" => "defer"}}
-           ], "two reviews"}
+           ], %{}, "two reviews for"},
+          {[{ctx.world.bierce, Map.put(bierce, "evidence_fingerprint", nil)}], %{},
+           "evidence_fingerprint"},
+          {[{ctx.world.bierce, Map.put(bierce, "path", "/works/ambrose-bierce")}], %{},
+           "not in /people"},
+          {[{ctx.world.bierce, Map.put(bierce, "reason", "nul\u0000")}], %{}, "plain text"},
+          {[{ctx.world.cat, %{"action" => "defer"}}], %{}, "does not address it"},
+          {[
+             {ctx.world.daman_in,
+              %{
+                "action" => "confirm",
+                "family" => "places",
+                "path" => "/places/daman-afghanistan"
+              }}
+           ], %{}, "proposed qualifier"},
+          {[
+             {ctx.world.daman_af,
+              %{"action" => "confirm", "family" => "places", "path" => "/places/daman"}},
+             {ctx.world.daman_in,
+              %{"action" => "confirm", "family" => "places", "path" => "/places/daman"}}
+           ], %{}, "two reviews approve"},
+          {[{ctx.world.bierce, bierce}], %{"population_sha256" => String.duplicate("c", 64)},
+           "made on population"},
+          {[{ctx.world.bierce, bierce}], %{"rehearsal" => true}, "rehearsal reviews"}
         ] do
       assert {:error, message} =
-               Backfill.load(ctx.snapshot.path, ctx.population, reviews!(ctx, entries))
+               Backfill.load(ctx.snapshot.path, ctx.population, reviews!(ctx, entries, file))
 
       assert message =~ pattern
     end
 
+    # Rehearsal reviews load only where they are allowed.
+    rehearsal = reviews!(ctx, [{ctx.world.bierce, bierce}], %{"rehearsal" => true})
+
+    assert {:ok, _} =
+             Backfill.load(ctx.snapshot.path, ctx.population, rehearsal, allow_rehearsal: true)
+
+    # A population whose disposition says nothing the backfill knows.
+    odd =
+      write_population!(ctx.dir, ctx.snapshot, [
+        %{"object_id" => ctx.world.bierce.object_id, "disposition" => "ship it"}
+      ])
+
+    assert {:error, message} = Backfill.load(ctx.snapshot.path, odd, nil)
+    assert message =~ "unknown disposition"
+
     # A reviewer the database does not know, or one without the role.
     for account <- ["nobody@example.invalid", reviewer!(reviewer: false).email] do
-      reviews =
-        reviews!(%{ctx | reviewer: %{email: account}}, [
-          {ctx.world.bierce, %{"action" => "confirm", "family" => "people"}}
-        ])
-
+      reviews = reviews!(%{ctx | reviewer: %{email: account}}, [{ctx.world.bierce, bierce}])
       {:ok, plan} = Backfill.load(ctx.snapshot.path, ctx.population, reviews)
       assert {:error, _} = Backfill.run(plan, ctx.importer.id)
     end
 
     assert Repo.aggregate(BackfillRun, :count) == 0
     assert Repo.aggregate(ClassificationDecision, :count) == 0
+    refute Repo.exists?(from a in Actor, where: a.actor_kind == :user)
+  end
+
+  test "the manifest counts published pages rather than asserting none", ctx do
+    {plan, _} = run!(ctx, approvals(ctx))
+    assert Backfill.manifest(plan.run_key)["publication_approved"] == 0
+
+    page = Repo.get_by!(Page, target_object_id: ctx.world.bierce.object_id)
+
+    {1, _} =
+      Repo.update_all(from(p in Page, where: p.id == ^page.id),
+        set: [publication_state: :published]
+      )
+
+    assert Backfill.manifest(plan.run_key)["publication_approved"] == 1
   end
 
   test "the checkpoint is append-only", ctx do
     {plan, _} = run!(ctx)
     item = item(plan, ctx.world.cat)
 
-    assert_raise Postgrex.Error, ~r/append-only/, fn ->
-      Repo.query!("UPDATE routing_backfill_items SET reason = 'x' WHERE id = $1", [item.id])
+    for sql <- [
+          {"UPDATE routing_backfill_items SET reason = 'x' WHERE id = $1", [item.id]},
+          {"DELETE FROM routing_backfill_items WHERE id = $1", [item.id]},
+          {"UPDATE routing_backfill_runs SET records = 0", []},
+          {"UPDATE routing_backfill_runs SET finished_at = now()", []},
+          {"DELETE FROM routing_backfill_runs", []}
+        ] do
+      {statement, params} = sql
+
+      assert_raise Postgrex.Error, ~r/append-only/, fn -> Repo.query!(statement, params) end
     end
 
-    assert_raise Postgrex.Error, ~r/append-only/, fn ->
-      Repo.query!("DELETE FROM routing_backfill_items WHERE id = $1", [item.id])
-    end
-
-    assert_raise Postgrex.Error, ~r/append-only/, fn ->
-      Repo.query!("UPDATE routing_backfill_runs SET records = 0")
+    for table <- ~w(routing_backfill_items routing_backfill_runs) do
+      assert_raise Postgrex.Error, ~r/cannot be truncated/, fn ->
+        Repo.query!("TRUNCATE #{table} CASCADE")
+      end
     end
   end
+
+  # ── helpers used by the tests ────────────────────────────────────────────
+
+  defp identities do
+    for schema <- [Page, PublicPath, ClassificationDecision, RouteChange, BackfillItem],
+        into: %{},
+        do: {schema, ids(schema)}
+  end
+
+  defp evaluator_decisions,
+    do:
+      Repo.all(from d in ClassificationDecision, where: d.origin == :evaluator, select: d.id)
+      |> MapSet.new()
+
+  defp override?(entity) do
+    Repo.exists?(
+      from d in ClassificationDecision,
+        where: d.object_id == ^entity.object_id and d.origin == :override
+    )
+  end
+
+  defp anchor(type),
+    do: %{"rank" => "normal", "mainsnak" => %{"datavalue" => %{"value" => %{"id" => type}}}}
 end
