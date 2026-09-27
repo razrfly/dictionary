@@ -34,7 +34,7 @@ defmodule Mix.Tasks.Dd.Routing.Backfill do
 
   @impl Mix.Task
   def run(args) do
-    {opts, _, invalid} =
+    {opts, extra, invalid} =
       OptionParser.parse(args,
         strict: [
           snapshot: :string,
@@ -45,7 +45,9 @@ defmodule Mix.Tasks.Dd.Routing.Backfill do
         ]
       )
 
-    unless (invalid == [] and opts[:snapshot]) && opts[:population] do
+    # A stray argument (a review file without --reviews) would otherwise run
+    # without reviews and say nothing.
+    unless (extra == [] and invalid == [] and opts[:snapshot]) && opts[:population] do
       Mix.raise(
         "usage: mix dd.routing.backfill --snapshot EXPORT --population CANDIDATES " <>
           "[--reviews REVIEWS] [--batch N] [--manifest OUT]"

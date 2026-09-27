@@ -24,9 +24,12 @@ defmodule DevilsDictionary.Routing.AuditSnapshot do
       {:ok, bytes} ->
         bytes
         |> String.split("\n", trim: true)
-        |> Enum.reduce_while({:ok, empty()}, fn line, {:ok, state} ->
-          case add(Jason.decode!(line), state) do
-            {:ok, state} -> {:cont, {:ok, state}}
+        |> Enum.with_index(1)
+        |> Enum.reduce_while({:ok, empty()}, fn {line, number}, {:ok, state} ->
+          with {:ok, row} <- decode(line, number),
+               {:ok, state} <- add(row, state) do
+            {:cont, {:ok, state}}
+          else
             {:error, _message} = error -> {:halt, error}
           end
         end)
@@ -38,6 +41,16 @@ defmodule DevilsDictionary.Routing.AuditSnapshot do
   end
 
   defp empty, do: %{graph: %{}, entities: [], info: nil, lexical: nil}
+
+  # A truncated export (an interrupted psql) or a line that is not a JSON
+  # object is a refusal, never a crash.
+  defp decode(line, number) do
+    case Jason.decode(line) do
+      {:ok, %{} = row} -> {:ok, row}
+      {:ok, _other} -> {:error, "snapshot line #{number} is not a JSON object"}
+      {:error, _} -> {:error, "snapshot line #{number} is not valid JSON"}
+    end
+  end
 
   defp add(%{"record_type" => "snapshot"} = row, %{info: nil} = state),
     do: {:ok, %{state | info: row}}
