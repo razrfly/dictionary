@@ -17,20 +17,31 @@ defmodule DevilsDictionary.Curation.Published do
   appears after a fallback lead was published withholds that lead
   (`:priority_source_available`); it does not promote itself.
 
+  An exemplar it shows (#212) carries its `subject`, read from the registry
+  now: the entity's label and kind, or a passage's label and its pinned
+  words. Nothing is copied into the composition, and nothing here calls a
+  provider or a model (C7).
+
   Nothing in the web layer calls this yet. Production selection stays
   disabled: no page reads compositions, and binding one to a page is #194's
   (#205). Mapping the answer onto the #156 opening view model waits for PR
   #202, which is not merged.
   """
 
+  import Ecto.Query
+
+  alias DevilsDictionary.Claims.Visibility
+
   alias DevilsDictionary.Curation.{
     Composition,
+    CompositionItem,
     CompositionVersion,
     Compositions,
     Publications,
     Standing
   }
 
+  alias DevilsDictionary.Registry.{ContentItem, ContentRevision, Entity}
   alias DevilsDictionary.Repo
 
   @doc """
@@ -38,7 +49,9 @@ defmodule DevilsDictionary.Curation.Published do
 
     * `{:ok, %{composition, version, receipt, lead, highlights, withheld}}`,
       where `lead` is an item or `nil`, `highlights` are the eligible
-      highlights in order, and `withheld` lists `%{role, position, reason}`;
+      highlights in order, and `withheld` lists `%{role, position, reason}`.
+      An exemplar highlight's `subject` is `%{object_id, kind: :entity |
+      :content, subkind, label, words}`, `words` being `nil` for an entity;
     * `{:withheld, reasons}`;
     * `:unpublished`;
     * `{:error, :not_found}`.
@@ -98,8 +111,54 @@ defmodule DevilsDictionary.Curation.Published do
       version: version,
       receipt: Publications.latest(composition.id),
       lead: Enum.find(shown, &(&1.role == :lead)),
-      highlights: Enum.filter(shown, &(&1.role == :highlight)),
+      highlights: shown |> Enum.filter(&(&1.role == :highlight)) |> Enum.map(&with_subject/1),
       withheld: withheld
+    }
+  end
+
+  # Only an exemplar that is shown is described: a withheld one's words are
+  # not read.
+  defp with_subject(%CompositionItem{item_kind: :exemplar} = item),
+    do: %{item | subject: subject(item)}
+
+  defp with_subject(item), do: item
+
+  defp subject(%CompositionItem{item_object_id: id, content_revision_id: nil}) do
+    {kind, label} =
+      Repo.one!(
+        from e in Entity,
+          where: e.object_id == ^id,
+          select:
+            {e.entity_kind,
+             coalesce(
+               e.preferred_label,
+               fragment(
+                 "(SELECT external_id FROM external_identifiers WHERE object_id = ? AND namespace = 'wikidata' AND status = 'verified' ORDER BY external_id LIMIT 1)",
+                 e.object_id
+               )
+             )}
+      )
+
+    %{object_id: id, kind: :entity, subkind: kind, label: label || "##{id}", words: nil}
+  end
+
+  defp subject(%CompositionItem{item_object_id: id, content_revision_id: revision_id}) do
+    {kind, revision} =
+      Repo.one!(
+        from r in ContentRevision,
+          join: c in ContentItem,
+          on: c.object_id == r.content_id,
+          where: r.id == ^revision_id and r.content_id == ^id,
+          select: {c.content_kind, r}
+      )
+
+    %{
+      object_id: id,
+      kind: :content,
+      subkind: kind,
+      label:
+        Visibility.content_label(revision.headword, revision.body, id, revision.rights_metadata),
+      words: revision.body
     }
   end
 

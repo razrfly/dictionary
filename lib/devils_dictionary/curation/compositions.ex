@@ -41,7 +41,9 @@ defmodule DevilsDictionary.Curation.Compositions do
     Transaction
   }
 
-  alias DevilsDictionary.Registry.Lexeme
+  alias DevilsDictionary.Claims.AssertionRevision
+  alias DevilsDictionary.Registry
+  alias DevilsDictionary.Registry.{ContentRevision, Lexeme}
   alias DevilsDictionary.Repo
 
   # ── identity ──────────────────────────────────────────────────────────────
@@ -238,20 +240,29 @@ defmodule DevilsDictionary.Curation.Compositions do
     * `:expected_parent`: the latest version id the author saw, or `nil`.
       Required, so two authors cannot both write "version 2".
 
-  An item spec is a map with `:kind` (`:content`, `:sense_quotation` or
-  `:work`), `:object_id`, its exact reference, and `:meaning`
+  An item spec is a map with `:kind` (`:content`, `:sense_quotation`,
+  `:work` or `:exemplar`), `:object_id`, its exact reference, and `:meaning`
   (`{:lexeme, id}` or `{:sense_revision, id}`):
 
     * `:content`: `:content_revision_id`;
     * `:sense_quotation`: `:sense_revision_id`, `:locator`
       (`"quotation:N"`), `:words_sha256`;
     * `:work`: `:source_record_revision_id`, or `:catalog` as
-      `%{manifest, checksum, identity}`.
+      `%{manifest, checksum, identity}`;
+    * `:exemplar` (#212, a highlight only): `:assertion_revision_id`, an
+      accepted `illustrates` claim. It names no `:object_id`: the object is
+      the claim's subject (`:subject_not_an_input`). A passage or quotation
+      subject pins its words, the current content revision unless the spec
+      names `:content_revision_id`; an entity has none to pin.
 
   An item may also carry `:assertion_revision_id`, and `:note` as `%{text:
   text}`: the author's own words, attributed to the authenticated actor. A
   note spec naming its own author or kind is refused
   (`:note_attribution_not_an_input`).
+
+  No two items of an arrangement that include an exemplar show the same
+  thing: the same object, or a passage's same words
+  (`{:duplicate_display_identity, object_id}`, C6).
 
   The same arrangement under the same configuration version is refused as
   `{:duplicate_version, id}`. Under a newer configuration version it is a new
@@ -271,7 +282,8 @@ defmodule DevilsDictionary.Curation.Compositions do
                length(highlights) <= cv.max_highlights,
                {:too_many_highlights, cv.max_highlights}
              ),
-           {:ok, items} <- build_items(Map.get(attrs, :lead), highlights, actor) do
+           {:ok, items} <- build_items(Map.get(attrs, :lead), highlights, actor),
+           :ok <- one_display_identity(items) do
         members = member_ids(c.id)
         evaluation = Eligibility.evaluate(items, members, c.scope_signature, cv.id)
         arrangement = Digest.arrangement_hash(items)
@@ -290,12 +302,16 @@ defmodule DevilsDictionary.Curation.Compositions do
               created_by_actor_id: actor.id,
               scope_signature: c.scope_signature,
               scope_members: Enum.map(members, &["lexeme", &1]),
-              resolution: %{
-                "lead_rule" => to_string(rule),
-                "priority_leads" => evaluation.applicable,
-                "language_tag" => c.language_tag,
-                "configuration_version" => cv.version
-              },
+              resolution:
+                resolution(
+                  %{
+                    "lead_rule" => to_string(rule),
+                    "priority_leads" => evaluation.applicable,
+                    "language_tag" => c.language_tag,
+                    "configuration_version" => cv.version
+                  },
+                  evaluation
+                ),
               lead_policy: cv.lead_policy,
               arrangement_hash: arrangement,
               eligibility_fingerprint: evaluation.fingerprint
@@ -308,6 +324,15 @@ defmodule DevilsDictionary.Curation.Compositions do
       end
     end)
   end
+
+  # What the version was resolved against. An arrangement with an exemplar
+  # also records the review context each claim was accepted under, which
+  # its fingerprint was computed from (C3); one without is as slice 1 wrote
+  # it.
+  defp resolution(base, %{claim_contexts: contexts}) when contexts == %{}, do: base
+
+  defp resolution(base, %{claim_contexts: contexts}),
+    do: Map.put(base, "claim_contexts", contexts)
 
   @doc "A version's items, in `(role, position)` order."
   def items(version_id) do
@@ -398,7 +423,93 @@ defmodule DevilsDictionary.Curation.Compositions do
     end
   end
 
+  # An exemplar shows a claim's subject, so the claim names the object, and
+  # a passage's words are pinned when the version is made.
+  defp item(:highlight, position, %{kind: :exemplar} = spec, actor) do
+    with :ok <- Transaction.check(not Map.has_key?(spec, :object_id), :subject_not_an_input),
+         {:ok, claim} <- claim(spec[:assertion_revision_id]),
+         {:ok, words} <- pinned_words(claim, spec[:content_revision_id]),
+         {:ok, meaning} <- meaning(spec[:meaning]),
+         {:ok, note} <- note(spec[:note], actor) do
+      {:ok,
+       struct(
+         CompositionItem,
+         %{
+           role: :highlight,
+           position: position,
+           item_kind: :exemplar,
+           item_object_id: claim.subject_object_id,
+           content_revision_id: words,
+           assertion_revision_id: claim.id,
+           selection_origin: :manual
+         }
+         |> Map.merge(meaning)
+         |> Map.merge(note)
+       )}
+    end
+  end
+
+  defp item(_role, _position, %{kind: :exemplar}, _actor), do: {:error, :exemplar_is_a_highlight}
+
   defp item(_role, _position, _spec, _actor), do: {:error, :unknown_item_kind}
+
+  defp claim(id) when is_integer(id) do
+    Transaction.need(Repo.get(AssertionRevision, id), :claim_not_found)
+  end
+
+  defp claim(_id), do: {:error, :claim_required}
+
+  defp pinned_words(%AssertionRevision{subject_kind: "content"} = claim, nil) do
+    case Registry.current_content_revision(claim.subject_object_id) do
+      %{id: id} -> {:ok, id}
+      nil -> {:error, :words_not_found}
+    end
+  end
+
+  defp pinned_words(%AssertionRevision{subject_kind: "content"}, id) when is_integer(id),
+    do: {:ok, id}
+
+  defp pinned_words(%AssertionRevision{}, nil), do: {:ok, nil}
+  defp pinned_words(%AssertionRevision{}, _id), do: {:error, :entity_has_no_words}
+
+  # C6: within one arrangement that includes an exemplar, no two items show
+  # the same thing. An item is identified by its object and, for words, by
+  # their digest: a passage's pinned revision, a quotation's hash, a
+  # definition's body. Only pairs with an exemplar are compared, so an
+  # arrangement of the other kinds is judged as slice 1 judged it.
+  defp one_display_identity(items) do
+    identities = Enum.map(items, &{&1, display_identity(&1)})
+    exemplars = Enum.filter(identities, fn {item, _keys} -> item.item_kind == :exemplar end)
+
+    duplicate =
+      Enum.find_value(exemplars, fn {exemplar, keys} ->
+        Enum.any?(identities, fn {other, other_keys} ->
+          other != exemplar and not MapSet.disjoint?(keys, other_keys)
+        end) && exemplar.item_object_id
+      end)
+
+    if duplicate, do: {:error, {:duplicate_display_identity, duplicate}}, else: :ok
+  end
+
+  defp display_identity(%CompositionItem{} = item) do
+    words =
+      case item do
+        %{item_kind: :sense_quotation, words_sha256: sha} -> sha
+        %{content_revision_id: id} when is_integer(id) -> words_digest(id)
+        _other -> nil
+      end
+
+    [item.item_object_id && {:object, item.item_object_id}, words && {:words, words}]
+    |> Enum.reject(&is_nil/1)
+    |> MapSet.new()
+  end
+
+  defp words_digest(content_revision_id) do
+    case Repo.one(from r in ContentRevision, where: r.id == ^content_revision_id, select: r.body) do
+      body when is_binary(body) -> Digest.sha256(body)
+      _none -> nil
+    end
+  end
 
   defp meaning({:lexeme, id}) when is_integer(id),
     do: {:ok, %{meaning_lexeme_id: id, meaning_sense_revision_id: nil}}
