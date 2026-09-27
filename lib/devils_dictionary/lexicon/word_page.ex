@@ -1,6 +1,7 @@
 defmodule DevilsDictionary.Lexicon.WordPage do
   @moduledoc """
-  Everything `/define/:slug` renders, assembled in one round of queries.
+  Everything a word page (`/on/:slug`, `/words/:id/:slug`) renders from the
+  lexicon, assembled in one round of queries.
 
   Issue #71 §7 and §8a.4: the templates do no logic. `build/2` takes what
   `Lexicon.lookup/2` resolved and returns a `%WordPage{}` whose every field is
@@ -256,7 +257,7 @@ defmodule DevilsDictionary.Lexicon.WordPage do
   which exemplars the examples section reads (#181 build 2).
 
   `opts[:trail]` is a list of slugs already walked. A lookup that found nothing
-  still returns a struct — `/define/zzzz` is a page that says *no such word*,
+  still returns a struct — `/on/zzzz` is a page that says *no such word*,
   never a raise, because X1 renders 200 random index rows and the index is
   mostly bare.
   """
@@ -381,6 +382,9 @@ defmodule DevilsDictionary.Lexicon.WordPage do
         |> Enum.map(fn l ->
           %{
             id: l.object_id,
+            # Each word's own spelling, which the On page's name matching reads
+            # (#219): the headword's lemma is only the first of them.
+            lemma: l.lemma,
             language: l.language_tag,
             pos: l.part_of_speech,
             etymology: l.etymology,

@@ -22,6 +22,7 @@ defmodule DevilsDictionary.Routing.Address do
   @namespaces @registry |> File.read!() |> Jason.decode!()
 
   @families Enum.map(@namespaces["public_families"], & &1["prefix"])
+  @labels Map.new(@namespaces["public_families"], &{&1["prefix"], &1["label"]})
   @editorial @namespaces["editorial_prefix"]
   @locale_prefix @namespaces["future_locale_prefix"]
   @default_locale @namespaces["policy"]["default_locale"]
@@ -36,6 +37,22 @@ defmodule DevilsDictionary.Routing.Address do
   @doc "The eight subject-family prefixes, in registry order."
   def families, do: @families
 
+  @doc """
+  A family's reader-facing label, from the registry: `"nature"` is
+  `"Nature"`. Nil for anything that is not a family.
+  """
+  def label(family), do: Map.get(@labels, family)
+
+  @doc "The family a stored path is in, or nil for an `/on` path or no path."
+  def family(path) when is_binary(path) do
+    case parse(path) do
+      {:ok, %{namespace: namespace}} when namespace in @families -> namespace
+      _other -> nil
+    end
+  end
+
+  def family(_path), do: nil
+
   @doc "The launch locale, whose paths carry no locale prefix."
   def default_locale, do: @default_locale
 
@@ -43,8 +60,8 @@ defmodule DevilsDictionary.Routing.Address do
   The namespaces a page role may be allocated under.
 
   Subjects take their approved family; editions are Works pages; On overviews
-  are `/on`. Lexeme pages keep `/words/:id/:slug` and `/define/:slug`, which the
-  ledger does not allocate. The registry does not yet give collections or
+  are `/on`. Lexeme pages keep `/words/:id/:slug`, and `/on/:slug` is also the
+  aggregate lexical reader (#219); the ledger allocates neither. The registry does not yet give collections or
   choice pages a namespace, so allocating one is refused rather than guessed.
   """
   def namespaces_for(:subject), do: {:ok, @families}
