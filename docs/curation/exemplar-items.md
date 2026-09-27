@@ -65,3 +65,44 @@ For each exemplar it shows, `Published.current/1` fills the item's virtual `subj
 ## The review that accepts a claim
 
 A review that accepts a claim needs a context. `Contributions.review/6` opens one. `Claims.review/3` does not, and an acceptance without a context reads as *changed since review* on the card. An exemplar resting on such an acceptance is withheld as `:claim_context_changed`.
+
+## Provenance (Build 2)
+
+`Examples.Provenance.of/2` is the one answer to "why is this example here". The exemplar card's disclosure, the person page, the opening (Build 3, #156) and #203's history all read it. It has no table, and reading it writes nothing.
+
+Its stages:
+
+| Stage | Read from | `:none` means | `:unknown` means |
+|---|---|---|---|
+| `source` | `assertions.source_id`, and `source_assertion_outputs` to `source_records.url` | not source-listed (an exemplar) | never |
+| `nomination` | the claim's actors; the revision's `rationale`, `metadata` and `method`; `assertion_evidence`; `assertions.inserted_at` | not cited (an instance) | a claim with no actor and no manifest |
+| `agent` | the revision's `method`, and #197's records once they exist | human work, or a source's | a persona's method, or no method recorded |
+| `review` | the latest `assertion_reviews` row, and whether its context still matches what is displayed | no review yet | never |
+| `selection` | `Rank.order/1`'s signals, or the composition item and its version's author | never | never |
+| `publication` | the receipt that published the item's version | unpublished | never |
+| `featured` | the published openings that show the claim now, through `Published.current/1` | (an empty list) | never |
+
+How it reads:
+
+- **It goes through the viewer's gate.** Every read is through `Claims.visible/2` for the viewer. A claim the viewer may not see has no provenance at all (`nil`).
+- **Attribution is by public label.** `nomination.by` follows the card's own rule, `Provenance.nominator/3`: a manifest's curator, else the claimant's label, else the submitter's.
+- **Only a receipt dates a publication.** Publication times come from `editorial_composition_publications.committed_at` and nowhere else.
+- **Where a nomination came from.** A form nomination records its shelf when the form was prefilled from one: `metadata["from_result"]` and `metadata["provider"]`, written by `ConnectionLive`. The provider's name then comes from `sources`, which retention never deletes.
+
+## Service reuse map
+
+| Surface | What it calls |
+|---|---|
+| Word page, `#examples` card | `WordPage.build/2` → `Examples.for_page/3` → `Provenance.attach/2` with the viewer; the card draws `DevilsDictionaryWeb.ExampleProvenance.why/1` |
+| Word page, instance chip | nothing new. Each contributing claim keeps its own `/connections/:id`, one per source, never merged. |
+| Person page, *cited as* | `EntityPage.build/2` → `Examples.cited_as/2` → `Provenance.attach/2` (`:public`); the "featured in the opening of…" line reads `provenance.featured` |
+| Connect form | `ConnectionLive` → `Contributions.propose/6` with `metadata` (the shelf) |
+| Composing | `Compositions.create_version/3` → `Eligibility.evaluate/5` |
+| Reviewing and publishing a composition | `Reviews.decide/4`, `Publications.publish/3` → `Standing.evaluate/2` (which passes the recorded claim contexts) |
+| Reading a composition | `Published.current/1` → `Standing.evaluate/2`, then `subject` from the registry |
+| The opening (Build 3, #156) | `Published.current/1` → `Provenance.of/2` on each `CompositionItem`, drawn by the same `ExampleProvenance.why/1` |
+| #203's history | `Provenance.of/2` on a `CompositionItem`: its `selection` and `publication` |
+
+**The seam #197's packet uses.** An exemplar candidate is an item of `Examples.exemplars(member_ids, :public)`. It stands if `Compositions.create_version/3` would accept `%{kind: :exemplar, assertion_revision_id: item.claim.revision_id, meaning: ...}`. That check is `Eligibility.check/3` on the item the spec builds. No candidate store or new object is involved.
+
+The `agent` stage is the input contract #197's adapter must fill: profile and version, model digest and configuration, run and proposal ids, and a note. Until #197's records exist it reads `:none` for human work and `:unknown` for a persona's method.
