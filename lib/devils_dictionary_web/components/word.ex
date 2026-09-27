@@ -43,12 +43,13 @@ defmodule DevilsDictionaryWeb.Word do
   attr :thing, :map, default: nil
   attr :thing_info, :string, default: nil
   attr :demo, :boolean, default: false
+  attr :class, :string, default: nil
 
   def headword(assigns) do
     assigns = assign(assigns, :other, Map.new(assigns.choices, &{&1.object_id, &1}))
 
     ~H"""
-    <div id="headword">
+    <div id="headword" class={@class}>
       <h1 class="font-display text-5xl/none text-mist-950 sm:text-6xl/none dark:text-white">
         {@headword.lemma}
       </h1>
@@ -376,10 +377,16 @@ defmodule DevilsDictionaryWeb.Word do
   attr :class, :string, default: nil
   attr :demo, :boolean, default: false
 
+  attr :headword, :boolean,
+    default: true,
+    doc:
+      "whether the rail opens with the headword; `WordLive` renders it on its own, before a curated opening, when there is one (#156)"
+
   def rail(assigns) do
     ~H"""
     <aside id="word-rail" class={@class}>
       <.headword
+        :if={@headword}
         headword={@page.headword}
         choices={@choices}
         thing={@page.thing}
