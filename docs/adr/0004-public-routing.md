@@ -1,6 +1,9 @@
 # ADR 0004 — Public routing, classification and curated On pages
 
-- **Status:** accepted design, 26 September 2026. Stage 1 — persistence, ledger, resolver and a tested [recovery procedure](../routing/recovery.md) — implemented ([record](../routing/stage-1-foundation.md)); no route is served from it yet, and backfill, reader integration, On editing and publication are pending.
+- **Status:** accepted design, 26 September 2026.
+  - **Stage 1** is implemented: persistence, ledger, resolver and a tested [recovery procedure](../routing/recovery.md) ([record](../routing/stage-1-foundation.md)).
+  - **Stage 2**'s resumable [backfill](../routing/stage-2/backfill.md) is implemented and rehearsed on copies of the development corpus. It has not run on the corpus itself.
+  - No route is served yet. Reader integration, On editing and publication are pending.
 - **Approval:** the owner accepted the audit recommendations in this conversation and asked for the completed specification and corpus validation.
 - **Owner:** project owner; implementation changes are reviewed through the repository's normal PR process.
 - **Issue:** [Routing before launch](https://github.com/razrfly/dictionary/issues/194).

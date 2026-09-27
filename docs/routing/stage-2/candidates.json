@@ -76,7 +76,8 @@
   ],
   "/works/love": [
    3737584,
-   3739174
+   3739174,
+   3742759
   ],
   "/works/mona-lisa": [
    1894610,
@@ -3046,6 +3047,26 @@
    ],
    "status": "mapped",
    "stored_kind": "work"
+  },
+  {
+   "address_status": "collision_review",
+   "candidate_families": [
+    "works"
+   ],
+   "candidate_path": "/works/love",
+   "description": "",
+   "disposition": "duplicate-identity review first: same name, too little evidence to tell apart",
+   "family": "works",
+   "label": "Love",
+   "object_id": 3742759,
+   "proposed_path": null,
+   "qualifier_evidence": "no description to qualify from",
+   "selected_because": [
+    "collision_group_member",
+    "named_edge_case"
+   ],
+   "status": "mapped",
+   "stored_kind": "work"
   }
  ],
  "summary": {
@@ -3055,7 +3076,7 @@
    "collision review": 55,
    "collision review blocked": 3,
    "deferred": 39,
-   "duplicate-identity review first": 6,
+   "duplicate-identity review first": 7,
    "excluded": 2
   },
   "by_family_mapped": {
@@ -3066,22 +3087,23 @@
    "people": 12,
    "places": 17,
    "subjects": 6,
-   "works": 50
+   "works": 51
   },
   "by_reason": {
    "boundary_example": 54,
-   "collision_group_member": 64,
-   "named_edge_case": 45,
+   "collision_group_member": 65,
+   "named_edge_case": 46,
    "stratified_sample": 46
   },
   "by_status": {
    "excluded_source_page": 2,
    "identity_review": 1,
-   "mapped": 111,
+   "mapped": 112,
    "needs_review": 55
   },
   "collision_group_sizes": {
-   "2": 6,
+   "2": 5,
+   "3": 1,
    "5": 1,
    "6": 1,
    "7": 1,
@@ -3089,14 +3111,14 @@
    "19": 1
   },
   "collision_groups_touched": 11,
-  "deferred_outside_population": 100554,
+  "deferred_outside_population": 100614,
   "global_proposal_conflicts": 0,
   "inputs": {
-   "assignments": "data/audits/2026-09-26-issue194/assignments.jsonl.gz",
-   "assignments_sha256": "36453ebd813b32000cdd966b427a90b9889b49bac6261e8f22c91cee21e669ee",
-   "audit_summary": "data/audits/2026-09-26-issue194/summary.json",
-   "input": "data/audits/2026-09-26-issue194/input.jsonl.gz",
-   "input_sha256": "8878ed147b7fee672769a18ec22e112d169213d6b4f88538811e8571e2b46289",
+   "assignments": "data/audits/2026-09-27-stage2r/candidates-refresh/audit/assignments.jsonl",
+   "assignments_sha256": "00be652fd7e9a92b5d022dfcc9ecbc4074a0e69c6f9855998e0a143a5dc2d433",
+   "audit_summary": "data/audits/2026-09-27-stage2r/candidates-refresh/audit/summary.json",
+   "input": "data/audits/2026-09-27-stage2r/candidates-refresh/input.jsonl",
+   "input_sha256": "7524e9e3ad00e60f54448b4aaf95bb6ddcbf95970df0723df053e833473cad53",
    "policy_sha256": "54695faa6e686d2b23f59f0f328d54e033b956e7dfb9d21fda7800a2082b7eac",
    "policy_version": "1.0.0"
   },
@@ -3121,10 +3143,10 @@
    "vladimir putin",
    "voltaire"
   ],
-  "records": 169,
+  "records": 170,
   "selection": "policy boundary examples (54) + stratified mapped sample (46) + named ADR edge cases present in the snapshot + every member of each candidate-path collision group touching those",
   "selection_missing_from_audit": [],
-  "sha256_of_records": "ec830ac72fff355a3dfc76d8fc39dcba7541e1a09f8dc3965d79fadcf4f0d7ed",
-  "source": "data/audits/2026-09-26-issue194/assignments.jsonl.gz (policy 1.0.0, 100,723 entities, read-only)"
+  "sha256_of_records": "5abe2235ac1ea2145376ba019ab7bcedc8aa012bc0816b3c307eda0adf4bdcb4",
+  "source": "data/audits/2026-09-27-stage2r/candidates-refresh/audit/assignments.jsonl (policy 1.0.0, 100,784 entities, read-only)"
  }
 }
