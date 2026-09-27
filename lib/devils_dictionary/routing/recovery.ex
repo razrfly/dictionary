@@ -42,6 +42,11 @@ defmodule DevilsDictionary.Routing.Recovery do
 
   def routing_tables, do: @routing_tables
 
+  # No timeout: at corpus scale a sort before the first batch, or one batch
+  # of a wide table, can outlast the pool's default 15 seconds. Every query
+  # here only reads.
+  defp query!(sql, params \\ []), do: Repo.query!(sql, params, timeout: :infinity)
+
   @doc """
   The manifest of the current repo's database.
 
@@ -62,7 +67,7 @@ defmodule DevilsDictionary.Routing.Recovery do
     {:ok, manifest} =
       Repo.transaction(
         fn ->
-          Repo.query!("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
+          query!("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
           keys = primary_keys()
 
           sections =
@@ -91,7 +96,7 @@ defmodule DevilsDictionary.Routing.Recovery do
 
   defp columns do
     %{rows: rows} =
-      Repo.query!("""
+      query!("""
       SELECT c.relname, a.attname, format_type(a.atttypid, a.atttypmod)
         FROM pg_class c
         JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped
@@ -106,7 +111,7 @@ defmodule DevilsDictionary.Routing.Recovery do
 
   defp primary_keys do
     %{rows: rows} =
-      Repo.query!("""
+      query!("""
       SELECT c.relname, a.attname
         FROM pg_index i
         JOIN pg_class c ON c.oid = i.indrelid
@@ -147,7 +152,7 @@ defmodule DevilsDictionary.Routing.Recovery do
   # the sequences': both are small, and an operator needs to see which
   # definition differs.
   defp schema(_opts) do
-    %{rows: rows} = Repo.query!(schema_sql())
+    %{rows: rows} = query!(schema_sql())
 
     rows
     |> Enum.map(fn [kind, name, definition] ->
@@ -291,7 +296,7 @@ defmodule DevilsDictionary.Routing.Recovery do
   # sequence never used, whatever `setval/3` has set it to.
   defp sequences do
     %{rows: names} =
-      Repo.query!("""
+      query!("""
       SELECT relname FROM pg_class
        WHERE relkind = 'S' AND relnamespace = 'public'::regnamespace
        ORDER BY relname COLLATE "C"
@@ -299,7 +304,7 @@ defmodule DevilsDictionary.Routing.Recovery do
 
     names
     |> Enum.map(fn [name] ->
-      %{rows: [[last, called?]]} = Repo.query!(~s|SELECT last_value, is_called FROM "#{name}"|)
+      %{rows: [[last, called?]]} = query!(~s|SELECT last_value, is_called FROM "#{name}"|)
       Jason.encode!([name, last, called?])
     end)
     |> summarize(rows: true)
@@ -310,9 +315,9 @@ defmodule DevilsDictionary.Routing.Recovery do
   # repo, so the same code reads a restored copy.
   defp capture(sql, opts) do
     keep? = Keyword.get(opts, :rows, false)
-    Repo.query!("DECLARE routing_manifest NO SCROLL CURSOR FOR #{sql}")
+    query!("DECLARE routing_manifest NO SCROLL CURSOR FOR #{sql}")
     {count, hash, rows} = fetch({0, :crypto.hash_init(:sha256), []}, keep?)
-    Repo.query!("CLOSE routing_manifest")
+    query!("CLOSE routing_manifest")
 
     %{
       count: count,
@@ -322,7 +327,7 @@ defmodule DevilsDictionary.Routing.Recovery do
   end
 
   defp fetch(acc, keep?) do
-    case Repo.query!("FETCH FORWARD 5000 FROM routing_manifest") do
+    case query!("FETCH FORWARD 5000 FROM routing_manifest") do
       %{rows: []} ->
         acc
 
@@ -362,38 +367,93 @@ defmodule DevilsDictionary.Routing.Recovery do
   defp only(_rows, _other), do: :not_kept
 
   @doc """
-  Compares the current repo's database with `baseline`: every manifest
+  Compares the current repo's database with `baseline` — a database name on
+  the same server, or an `ecto://` URL naming one on another: every manifest
   section, what every path and page id resolves to, and the sequences. With
   `projected: true` — after `mix dd.materialize --all` — the manifest is taken
   in `:projected` mode and the sequences need only not have fallen behind
   their tables. Neither database is modified.
+
+  Routing is compared only where it exists. `report.routing` is:
+
+    * `:present` — both databases have all six routing tables, and
+      `report.resolutions_match` says whether every path and page resolves
+      the same;
+    * `:not_applicable` — neither has any of them: both predate the routing
+      migration. The manifest comparison still decides the result, but
+      nothing about routing recovery has been shown, and
+      `report.resolutions_match` is `:not_applicable`;
+    * `{:mismatch, baseline, current}` — anything else: one side has them and
+      the other not, or either has only some (`{:partial, tables}`). Always a
+      failure.
+
+  The two manifests are taken at once, one in a task: at corpus scale each
+  reads every row.
 
   Returns `{:ok, report}` or `{:error, report}`.
   """
   def verify(baseline, opts \\ []) do
     mode = if Keyword.get(opts, :projected, false), do: :projected, else: :exact
     manifest_opts = [mode: mode, rows: Keyword.get(opts, :rows, false)]
+    capture = fn -> {manifest(manifest_opts), routing_state()} end
 
-    {expected, expected_resolutions} =
-      with_database(baseline, fn -> {manifest(manifest_opts), resolutions()} end)
+    baseline_task = Task.async(fn -> with_database(baseline, capture) end)
+    {actual, {actual_routing, actual_resolutions}} = capture.()
+    {expected, {expected_routing, expected_resolutions}} = Task.await(baseline_task, :infinity)
 
-    actual = manifest(manifest_opts)
+    {routing, resolutions_match} =
+      case {expected_routing, actual_routing} do
+        {:present, :present} -> {:present, expected_resolutions == actual_resolutions}
+        {:absent, :absent} -> {:not_applicable, :not_applicable}
+        {baseline_state, current_state} -> {{:mismatch, baseline_state, current_state}, false}
+      end
 
     report = %{
       sections: Map.new(actual, fn {section, %{count: n}} -> {section, n} end),
       differences: diff(expected, actual),
       missing_sections: Enum.sort(Map.keys(expected) -- Map.keys(actual)),
       extra_sections: Enum.sort(Map.keys(actual) -- Map.keys(expected)),
-      resolutions_match: expected_resolutions == resolutions(),
+      routing: routing,
+      resolutions_match: resolutions_match,
       sequences_behind: sequences_behind()
     }
 
     exact? =
       report.differences == %{} and report.missing_sections == [] and
-        report.extra_sections == [] and report.resolutions_match and
+        report.extra_sections == [] and resolutions_match in [true, :not_applicable] and
         report.sequences_behind == []
 
     if exact?, do: {:ok, report}, else: {:error, report}
+  end
+
+  @doc """
+  Whether the current database has the routing tables: `:present` (all
+  six), `:absent` (none: it predates the routing migration) or
+  `{:partial, tables}` (only those), which no comparison accepts.
+  """
+  def routing_schema do
+    %{rows: rows} =
+      query!(
+        "SELECT t FROM unnest($1::text[]) AS t WHERE to_regclass('public.' || t) IS NOT NULL",
+        [@routing_tables]
+      )
+
+    case Enum.map(rows, &hd/1) do
+      [] ->
+        :absent
+
+      present ->
+        if length(present) == length(@routing_tables),
+          do: :present,
+          else: {:partial, Enum.sort(present)}
+    end
+  end
+
+  defp routing_state do
+    case routing_schema() do
+      :present -> {:present, resolutions()}
+      other -> {other, nil}
+    end
   end
 
   @doc """
@@ -402,7 +462,7 @@ defmodule DevilsDictionary.Routing.Recovery do
   """
   def sequences_behind do
     %{rows: owned} =
-      Repo.query!("""
+      query!("""
       SELECT s.relname, t.relname, a.attname
         FROM pg_class s
         JOIN pg_depend d ON d.objid = s.oid AND d.deptype = 'a'
@@ -414,9 +474,9 @@ defmodule DevilsDictionary.Routing.Recovery do
 
     Enum.flat_map(owned, fn [sequence, table, column] ->
       %{rows: [[last, called?]]} =
-        Repo.query!(~s|SELECT last_value, is_called FROM "#{sequence}"|)
+        query!(~s|SELECT last_value, is_called FROM "#{sequence}"|)
 
-      %{rows: [[max]]} = Repo.query!(~s|SELECT coalesce(max("#{column}"), 0) FROM "#{table}"|)
+      %{rows: [[max]]} = query!(~s|SELECT coalesce(max("#{column}"), 0) FROM "#{table}"|)
       next = if called?, do: last + 1, else: last
       if next <= max, do: [{sequence, next, max}], else: []
     end)
@@ -446,20 +506,17 @@ defmodule DevilsDictionary.Routing.Recovery do
   end
 
   @doc """
-  Runs `fun` with `Repo` pointed at `database`, through a short-lived pool of
-  its own. The configured database, and any other process, is untouched.
+  Runs `fun` with `Repo` pointed at `target` — a database name on the
+  configured server, or an `ecto://` URL naming a database on any server —
+  through a short-lived pool of its own. The configured database, and any
+  other process, is untouched.
   """
-  def with_database(database, fun) do
-    # The URL expanded, then removed: Ecto lets a configured `url:` override a
-    # `database:` passed here, which would point the pool back at the
-    # configured database and compare a database with itself.
+  def with_database(target, fun) do
     config =
-      Repo.config()
-      |> Snapshot.resolve()
+      target
+      |> target_config()
       |> Keyword.merge(
-        url: nil,
         name: nil,
-        database: database,
         pool: DBConnection.ConnectionPool,
         pool_size: 2
       )
@@ -475,6 +532,45 @@ defmodule DevilsDictionary.Routing.Recovery do
       Supervisor.stop(pid)
     end
   end
+
+  # The configured connection with `target` applied. The URL is expanded,
+  # then removed: Ecto lets a configured `url:` override a `database:` passed
+  # to `start_link/1`, which would point the pool back at the configured
+  # database and compare a database with itself.
+  defp target_config(target) do
+    base = Repo.config() |> Snapshot.resolve() |> Keyword.put(:url, nil)
+
+    if url?(target),
+      do: Keyword.merge(base, Ecto.Repo.Supervisor.parse_url(target)),
+      else: Keyword.put(base, :database, target)
+  end
+
+  defp url?(target), do: String.contains?(target, "://")
+
+  @doc """
+  The server and database a Repo config, a snapshot's recorded source, or a
+  `with_database/2` target names: `{host, port, database}`, with the local
+  host's spellings made one and the default port filled in. Two identities
+  are equal exactly when they name the same database.
+  """
+  def identity(config) when is_list(config) do
+    config = Snapshot.resolve(config)
+    {host(config), config[:port] || 5432, config[:database]}
+  end
+
+  def identity(target) when is_binary(target), do: target |> target_config() |> identity()
+
+  defp host(config) do
+    cond do
+      config[:socket_dir] -> "socket:" <> config[:socket_dir]
+      config[:hostname] in [nil, "localhost", "127.0.0.1", "::1"] -> "localhost"
+      true -> config[:hostname]
+    end
+  end
+
+  @doc "An identity, as an operator reads it."
+  def describe({nil, _port, database}), do: database
+  def describe({host, port, database}), do: "#{database} on #{host}:#{port}"
 
   # ── snapshots and the guard on destructive tasks ─────────────────────────
 
@@ -626,15 +722,45 @@ defmodule DevilsDictionary.Routing.Recovery do
 
     File.rename!(partial, path)
 
+    {host, port, database} = identity(config)
+
     File.write!(
       digest_path(path),
-      Jason.encode!(%{"database" => config[:database], "digest" => digest, "dump" => dump(path)})
+      Jason.encode!(%{
+        "database" => database,
+        "host" => host,
+        "port" => port,
+        "digest" => digest,
+        "dump" => dump(path)
+      })
     )
 
     path
   end
 
   defp digest_path(path), do: path <> ".routing.json"
+
+  @doc """
+  The identity of the database `path` was taken from, as its
+  `snapshot!/2` sidecar records it, or nil without one. A sidecar written
+  before servers were recorded names only the database: `{nil, nil, name}`.
+  """
+  def snapshot_source(path) do
+    with {:ok, json} <- File.read(digest_path(path)),
+         {:ok, %{"database" => database} = recorded} when is_binary(database) <-
+           Jason.decode(json) do
+      {recorded["host"], recorded["port"], database}
+    else
+      _ -> nil
+    end
+  end
+
+  @doc """
+  Whether a snapshot's recorded source is `identity`. Where the sidecar
+  names only a database, the name decides — erring towards "the same".
+  """
+  def same_source?({nil, nil, name}, {_host, _port, database}), do: name == database
+  def same_source?(recorded, identity), do: recorded == identity
 
   # The dump the digest describes, so a truncated or replaced file is not
   # vouched for by its sidecar.
@@ -665,16 +791,17 @@ defmodule DevilsDictionary.Routing.Recovery do
     if is_binary(config[:database]) do
       case durable_state(config) do
         nil -> :ok
-        state -> covered(config[:database], action, state, snapshot)
+        state -> covered(identity(config), action, state, snapshot)
       end
     else
       {:error, "refusing to #{action}: the configuration names no database to check"}
     end
   end
 
-  defp covered(database, action, state, nil), do: {:error, refusal(database, action, state)}
+  defp covered({_host, _port, database}, action, state, nil),
+    do: {:error, refusal(database, action, state)}
 
-  defp covered(database, action, state, path) do
+  defp covered({_host, _port, database} = identity, action, state, path) do
     recorded = recorded(path)
 
     cond do
@@ -694,8 +821,9 @@ defmodule DevilsDictionary.Routing.Recovery do
       (missing = missing_tables(path)) != [] ->
         {:error, "#{action}: #{path} does not contain #{Enum.join(missing, ", ")}"}
 
-      recorded["database"] != database ->
-        {:error, "#{action}: #{path} is a snapshot of #{recorded["database"]}, not #{database}"}
+      not same_source?(snapshot_source(path), identity) ->
+        {:error,
+         "#{action}: #{path} is a snapshot of #{describe(snapshot_source(path))}, not #{describe(identity)}"}
 
       recorded["digest"] != state.digest ->
         {:error,

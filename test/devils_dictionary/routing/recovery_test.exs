@@ -281,7 +281,10 @@ defmodule DevilsDictionary.Routing.RecoveryTest do
     verified =
       capture_io(fn -> Mix.Tasks.Dd.Routing.Verify.run(["--baseline", ctx.target]) end)
 
-    assert verified =~ "#{ctx.source} matches #{ctx.target} exactly."
+    assert verified =~ "#{ctx.source} on localhost:"
+    assert verified =~ "matches #{ctx.target} on localhost:"
+    assert verified =~ "every path and page resolves the same"
+    refute verified =~ "not applicable"
 
     Recovery.with_database(ctx.target, fn ->
       # 3. Exactly the same, section by section and row by row.
@@ -515,7 +518,8 @@ defmodule DevilsDictionary.Routing.RecoveryTest do
     # The source's snapshot holds the same routing rows, but it is a snapshot
     # of another database, so it covers nothing here.
     assert {:error, elsewhere} = Recovery.guard(target_config, "reset", ctx.dump)
-    assert elsewhere =~ "is a snapshot of #{ctx.source}, not #{ctx.target}"
+    assert elsewhere =~ "is a snapshot of #{ctx.source} on localhost"
+    assert elsewhere =~ ", not #{ctx.target} on localhost"
 
     # The tasks consult the guard before they drop, restore or rebuild anything.
     configured_as(ctx.target, fn ->
