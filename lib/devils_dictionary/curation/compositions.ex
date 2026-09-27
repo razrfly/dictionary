@@ -255,13 +255,15 @@ defmodule DevilsDictionary.Curation.Compositions do
       subject pins its words, the current content revision unless the spec
       names `:content_revision_id`; an entity has none to pin.
 
-  An item may also carry `:assertion_revision_id`, and `:note` as `%{text:
-  text}`: the author's own words, attributed to the authenticated actor. A
-  note spec naming its own author or kind is refused
-  (`:note_attribution_not_an_input`).
+  An item may also carry `:assertion_revision_id`, a claim about the object
+  it shows (`:claim_not_about_object` otherwise; the database's claim-subject
+  key binds every kind), and `:note` as `%{text: text}`: the author's own
+  words, attributed to the authenticated actor. A note spec naming its own
+  author or kind is refused (`:note_attribution_not_an_input`).
 
   No two items of an arrangement that include an exemplar show the same
-  thing: the same object, or a passage's same words
+  thing: the same object (a catalog work counts as the registry work that
+  carries its row's identity), or the same words
   (`{:duplicate_display_identity, object_id}`, C6).
 
   The same arrangement under the same configuration version is refused as
@@ -499,10 +501,20 @@ defmodule DevilsDictionary.Curation.Compositions do
         _other -> nil
       end
 
-    [item.item_object_id && {:object, item.item_object_id}, words && {:words, words}]
+    object = item.item_object_id || catalog_object(item)
+
+    [object && {:object, object}, words && {:words, words}]
     |> Enum.reject(&is_nil/1)
     |> MapSet.new()
   end
+
+  # A catalog-only work is the registry work carrying its row's identity,
+  # when there is one: an exemplar of that work shows the same thing.
+  defp catalog_object(%CompositionItem{item_kind: :work, catalog_manifest: name} = item)
+       when is_binary(name),
+       do: Eligibility.catalog_object(name, item.catalog_checksum, item.catalog_identity)
+
+  defp catalog_object(_item), do: nil
 
   defp words_digest(content_revision_id) do
     case Repo.one(from r in ContentRevision, where: r.id == ^content_revision_id, select: r.body) do

@@ -438,9 +438,21 @@ defmodule DevilsDictionary.Curation.ExemplarItemsTest do
       assert_withheld(ctx, :claim_not_accepted)
     end
 
-    test "and a disputed one too, though the public still sees a dispute", ctx do
+    test "and a disputed one too", ctx do
       ctx = published!(ctx)
       decide_claim!(ctx, ctx.claim, "disputed")
+      assert_withheld(ctx, :claim_not_accepted)
+    end
+
+    test "a disputed work is withheld though the public still sees the dispute (C2)", ctx do
+      {:ok, work} = Registry.create_work(%{preferred_label: "Fixture Work", work_kind: "artwork"})
+      claim = nominate!(ctx, work, ctx.sense, [])
+      decide_claim!(ctx, claim)
+      publish!(ctx, compose!(ctx, [exemplar(claim, by_sense(ctx))]))
+      assert [%{subject: %{kind: :entity, subkind: :work}}] = current!(ctx).highlights
+
+      decide_claim!(ctx, claim, "disputed")
+      assert Claims.publicly_visible_revision?(claim)
       assert_withheld(ctx, :claim_not_accepted)
     end
   end
@@ -537,6 +549,23 @@ defmodule DevilsDictionary.Curation.ExemplarItemsTest do
         assert {:error, {:ineligible, [{:highlight, 1, :meaning_mismatch}]}} =
                  compose(ctx, [exemplar(claim, meaning)])
       end
+    end
+
+    test "a concept's example needs that concept, referred to by a sense of that word", ctx do
+      concept = WordFixtures.concept!(nil, "fixture concept")
+      other = WordFixtures.concept!(nil, "another fixture concept")
+      {:ok, _} = Claims.assert(ctx.sense.object_id, "refers_to", other.object_id, %{})
+
+      amor_sense = WordFixtures.sense!(ctx, ctx.amor, "wiktionary", gloss: "a meaning of amor")
+      {:ok, _} = Claims.assert(amor_sense.object_id, "refers_to", concept.object_id, %{})
+
+      # Love's sense refers to another concept, and another word's sense to
+      # this one: neither makes this claim an example of love.
+      claim = nominate!(ctx, ctx.person, concept)
+      decide_claim!(ctx, claim)
+
+      assert {:error, {:ineligible, [{:highlight, 1, :meaning_mismatch}]}} =
+               compose(ctx, [exemplar(claim, {:lexeme, ctx.love.object_id})])
     end
 
     test "withholds a concept's example once no sense of the word refers to it", ctx do
@@ -652,6 +681,18 @@ defmodule DevilsDictionary.Curation.ExemplarItemsTest do
       assert id == ctx.person.object_id
     end
 
+    test "a catalog work and an exemplar of the registry work that carries its row are refused",
+         ctx do
+      work = WordFixtures.concept!("Q8777422", "Fixture catalog work", kind: :work)
+      claim = nominate!(ctx, work, ctx.sense, [])
+      decide_claim!(ctx, claim)
+
+      assert {:error, {:duplicate_display_identity, id}} =
+               compose(ctx, [catalog_spec(ctx.love), exemplar(claim, by_sense(ctx))])
+
+      assert id == work.object_id
+    end
+
     test "a passage whose words are already a highlight's is refused", ctx do
       %{quotation: quotation} = shelved_quotation!(ctx, "fixture quotation words")
       claim = nominate!(ctx, quotation, ctx.sense, [])
@@ -740,6 +781,23 @@ defmodule DevilsDictionary.Curation.ExemplarItemsTest do
                refused(fn -> Repo.insert!(raw(ctx, %{content_revision_id: words.id})) end)
 
       assert detail =~ "pins no words"
+    end
+
+    test "the service refuses, rather than raises on, a claim about another object", ctx do
+      # The claim-subject key binds every kind; slice 1's content item may
+      # still carry a claim about itself (`AuditFindingsTest`, finding 1).
+      bierce_defines = defines_claim!(ctx.bierce, ctx.love)
+
+      annotated =
+        Map.put(content_spec(ctx.definition, ctx.love), :assertion_revision_id, bierce_defines.id)
+
+      assert {:error, {:ineligible, [{:highlight, 1, :claim_not_about_object}]}} =
+               compose(ctx, [annotated], ctx.version.id)
+
+      own =
+        Map.put(annotated, :assertion_revision_id, defines_claim!(ctx.definition, ctx.love).id)
+
+      assert {:ok, _version} = compose(ctx, [own], ctx.version.id)
     end
 
     test "binds any item that names a claim to the claim's subject", ctx do

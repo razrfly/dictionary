@@ -31,8 +31,10 @@ defmodule DevilsDictionary.Curation.Eligibility do
     * **its intended meaning is on the scope**: a member lexeme, or a
       current sense of one;
     * **its claim, if it was made with one**, is current, active and
-      publicly visible (`Claims.visible/2`). This slice writes no claim; it
-      reads the state #190's review workflow leaves.
+      publicly visible (`Claims.visible/2`), and is about the object the item
+      shows (`:claim_not_about_object`, the claim-subject key #212 added).
+      This slice writes no claim; it reads the state #190's review workflow
+      leaves.
 
   **An exemplar** (#212) is a claim before it is a reference, so it is held
   to more than visibility. In this order, it stands when:
@@ -186,7 +188,7 @@ defmodule DevilsDictionary.Curation.Eligibility do
       with :ok <- still_present(item),
            :ok <- reference(item),
            :ok <- meaning(item, member_ids) do
-        assertion(item.assertion_revision_id)
+        assertion(item)
       end
 
     {result, nil}
@@ -393,6 +395,29 @@ defmodule DevilsDictionary.Curation.Eligibility do
     end
   end
 
+  @doc """
+  The registry object that carries a committed catalog row's identity as a
+  verified identifier, or `nil`: the work a catalog pin with no object shows,
+  when the registry has it. `Compositions` uses it so one work is not shown
+  twice (#212, C6).
+  """
+  def catalog_object(name, checksum, identity) do
+    with {:ok, manifest} <- catalog(name, checksum, identity) do
+      namespace = Manifest.identity_namespace(manifest["kind"])
+
+      Repo.one(
+        from x in ExternalIdentifier,
+          where:
+            x.namespace == ^namespace and x.external_id == ^identity and x.status == :verified,
+          order_by: x.object_id,
+          limit: 1,
+          select: x.object_id
+      )
+    else
+      _ -> nil
+    end
+  end
+
   # A registry object shown with a catalog pin must be the pinned work: it
   # carries the row's identity in the kind's namespace, verified.
   defp catalog_identity(object_id, manifest, identity) do
@@ -443,16 +468,32 @@ defmodule DevilsDictionary.Curation.Eligibility do
   defp on_scope(lexeme_id, member_ids), do: ensure(lexeme_id in member_ids, :meaning_off_scope)
 
   # An item made without a claim needs none (a deleted one was caught by
-  # `still_present/1`).
-  defp assertion(nil), do: :ok
+  # `still_present/1`). A claim it names must be current, active and publicly
+  # visible, and about the object the item shows: the database's
+  # claim-subject key (#212) binds every kind, so it is refused here, with a
+  # reason, rather than at the insert. A catalog work with no registry object
+  # has no object for the claim to be about, and the key does not bind it.
+  defp assertion(%CompositionItem{assertion_revision_id: nil}), do: :ok
 
-  defp assertion(id) do
-    from(r in AssertionRevision,
-      where: r.id == ^id and r.is_current and r.lifecycle_state == :active
-    )
-    |> Claims.visible(:public)
+  defp assertion(%CompositionItem{assertion_revision_id: id, item_object_id: object_id}) do
+    visible? =
+      from(r in AssertionRevision,
+        where: r.id == ^id and r.is_current and r.lifecycle_state == :active
+      )
+      |> Claims.visible(:public)
+      |> Repo.exists?()
+
+    with :ok <- ensure(visible?, :claim_not_visible) do
+      about(id, object_id)
+    end
+  end
+
+  defp about(_id, nil), do: :ok
+
+  defp about(id, object_id) do
+    from(r in AssertionRevision, where: r.id == ^id and r.subject_object_id == ^object_id)
     |> Repo.exists?()
-    |> ensure(:claim_not_visible)
+    |> ensure(:claim_not_about_object)
   end
 
   # ── an exemplar ───────────────────────────────────────────────────────────

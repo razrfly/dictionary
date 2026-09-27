@@ -4,9 +4,10 @@ defmodule DevilsDictionary.Repo.Migrations.AddExemplarCompositionItems do
   an accepted `illustrates` claim's subject, a person, a work or a passage
   someone cited as an example of a meaning.
 
-  Additive. Nothing about the `content`, `sense_quotation` and `work` kinds
-  changes, and no existing function is recomputed: `arrangement_hash` and
-  `required_references` already cover every column an exemplar uses.
+  Additive. The shapes of the `content`, `sense_quotation` and `work` kinds do
+  not change, and no existing function is recomputed: `arrangement_hash` and
+  `required_references` already cover every column an exemplar uses. The one
+  rule that reaches the other kinds is the claim-subject key below.
 
     * `item_kind` gains `'exemplar'`, a highlight only (the lead stays a
       `content` definition, K10);
@@ -23,9 +24,16 @@ defmodule DevilsDictionary.Repo.Migrations.AddExemplarCompositionItems do
     * the sense-quotation and work references stay NULL (the shape check).
 
   PostgreSQL has no per-kind foreign key, so the composite key binds every
-  item that names both an object and a claim. Slice 1's one use of the
-  optional claim, a `defines` claim on its own content item, already
-  satisfies it.
+  item that names both an object and a claim: an optional claim on a
+  `content`, `sense_quotation` or `work` item must be about that item's
+  object too. Slice 1's one use of it, a `defines` claim on its own content
+  item, already satisfies it, and `Eligibility` refuses any other with
+  `:claim_not_about_object` before the insert.
+
+  The key's target is a unique index on `assertion_revisions (id,
+  subject_object_id)`. It is built in the migration's transaction, so writes
+  to `assertion_revisions` wait for it (4.2M rows on the dev database,
+  2026-09-27).
 
   Reversible. Rollback restores the previous shape check and insert trigger
   and drops the key and its index. It fails, rather than dropping anything,
