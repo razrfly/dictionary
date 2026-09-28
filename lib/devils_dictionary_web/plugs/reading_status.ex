@@ -19,9 +19,10 @@ defmodule DevilsDictionaryWeb.ReadingStatus do
   | | malformed (bad encoding, dot segment, NUL) | 400 |
   | | inconsistent ledger state | 500, logged with diagnostics |
   | `/on/:slug` | words for the slug, or an overview served in the mode | 200 |
-  | | an equivalent spelling of an overview served in the mode | 301 |
+  | | no words; an equivalent spelling or alias of an overview served in the mode | 301 |
+  | | malformed | 400 |
   | | neither | 404 (410 or 500 as its overview's outcome says) |
-  | `/words/:id/:slug` | no such lexeme | 404, never a word found by the slug |
+  | `/words/:id/:slug` | no such lexeme, or not an id at all | 404, never a word found by the slug |
 
   Live navigation re-runs the same decision in the LiveView, which follows a
   redirect itself; the status only matters to a direct request.
@@ -57,12 +58,16 @@ defmodule DevilsDictionaryWeb.ReadingStatus do
   defp on(conn, mode) do
     resolution = Resolver.resolve(conn.request_path, mode: mode)
 
+    # Words first: an overview's alias never redirects them away.
     cond do
-      resolution.outcome == :redirect and resolution.page.role == :overview ->
-        redirect(conn, resolution.location)
+      resolution.outcome == :invalid ->
+        put_status(conn, 400)
 
       Lexicon.lookup(conn.path_params["slug"]).lexemes != [] ->
         conn
+
+      resolution.outcome == :redirect and resolution.page.role == :overview ->
+        redirect(conn, resolution.location)
 
       resolution.outcome == :canonical and resolution.page.role == :overview ->
         conn

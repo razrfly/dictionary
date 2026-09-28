@@ -59,7 +59,10 @@ defmodule DevilsDictionary.Lexicon do
     end
   end
 
-  def by_object_id(id) when is_integer(id), do: Repo.get(Lexeme, id)
+  # An id outside `bigint` names nothing; asking would raise.
+  def by_object_id(id) when is_integer(id) and id > 0 and id <= 9_223_372_036_854_775_807,
+    do: Repo.get(Lexeme, id)
+
   def by_object_id(_), do: nil
 
   @doc """

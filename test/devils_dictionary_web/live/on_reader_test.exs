@@ -194,6 +194,9 @@ defmodule DevilsDictionaryWeb.OnReaderTest do
 
         # An exact address never substitutes the word the slug would find.
         missing = ctx.conn |> get("/words/999999999/mars") |> html_response(404)
+        # Past bigint, or not an id: still a 404, never a crash.
+        assert ctx.conn |> get("/words/99999999999999999999/mars") |> html_response(404)
+        assert ctx.conn |> get("/on/%2E%2E") |> html_response(400)
         assert missing =~ ~s(id="no-such-word-identity")
         refute missing =~ ~s(id="headword")
 
@@ -625,6 +628,37 @@ defmodule DevilsDictionaryWeb.OnReaderTest do
 
       assert ctx.conn |> get("/works/butterfly-1997-album") |> html_response(200) =~ "1997 album"
       assert ctx.conn |> get("/works/butterfly-novel") |> html_response(200) =~ "Sonya Hartnett"
+    end)
+  end
+
+  test "a moved overview's old address never takes the words away", ctx do
+    world = mars!(ctx, published: true)
+
+    moved =
+      overview!("On Mars", "/on/mars", [{:supplies_lexical_material, world.noun.object_id}],
+        author: ctx.human,
+        published: true
+      )
+
+    alone = overview!("On Zeta", "/on/zeta", [], author: ctx.human, published: true)
+
+    for {page, path} <- [{moved, "/on/mars-in-culture"}, {alone, "/on/zeta-overview"}] do
+      {:ok, _} = Ledger.move(page.id, path, actor_id: ctx.human.id, reason: "fixture")
+    end
+
+    reading(false, fn ->
+      # Words hold `mars`: the lexical page, and the overview linked by its
+      # membership at its new address.
+      conn = get(ctx.conn, "/on/mars")
+      assert conn.status == 200
+      assert get_resp_header(conn, "location") == []
+
+      {:ok, on, _html} = live(ctx.conn, "/on/mars")
+      assert has_element?(on, "#headword")
+      assert has_element?(on, "#linked-overviews a[href='/on/mars-in-culture']")
+
+      # No word holds `zeta`: the alias is one hop to the overview.
+      assert get(ctx.conn, "/on/zeta") |> redirected_to(301) == "/on/zeta-overview"
     end)
   end
 

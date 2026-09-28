@@ -247,10 +247,15 @@ defmodule DevilsDictionaryWeb.WordLive do
       if socket.assigns.live_action == :on,
         do: OnPage.overview(socket.assigns.base, lexeme_ids, mode)
 
+    # A moved overview's old address answers with it only where no word
+    # holds the slug: words are never redirected away (#219 B1).
     {overview, follow} =
       case at_address do
-        %{resolution: %{outcome: :redirect, location: location}} ->
+        %{resolution: %{outcome: :redirect, location: location}} when lexeme_ids == [] ->
           {nil, DevilsDictionary.Routing.Address.encode(location)}
+
+        %{resolution: %{outcome: :redirect}} ->
+          {nil, nil}
 
         %{resolution: _gone_or_corrupt} ->
           {nil, nil}
