@@ -79,7 +79,7 @@ defmodule Mix.Tasks.Dd.Rebuild do
   `mix dd.reset` it renumbers every object those rows reference. So it is
   refused on a database that holds routing state unless `--routing-snapshot
   PATH` names a snapshot taken after the latest routing write. Recovery is a
-  restore plus `mix dd.materialize --all`: `docs/routing/recovery.md`.
+  restore plus `mix dd.materialize --all --resolve`: `docs/routing/recovery.md`.
 
   ## What it reports
 

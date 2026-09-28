@@ -22,14 +22,17 @@ defmodule Mix.Tasks.Dd.Materialize do
 
     * `--source` — one source slug; defaults to every implemented source
     * `--dry-run` — compare only, write nothing
-    * `--all` — ignore the "needs materialization" filter
+    * `--all` — ignore the "needs materialization" filter, and check M2
+    * `--resolve` — after materializing, run the resolver for the source, and
+      include `pending_relations` in M2 (`Absorb.SemanticReplay`); without it,
+      `--all` re-creates drained pending edges and cannot compare them
     * `--limit` — stop after roughly N records (a smoke test)
   """
 
   use Mix.Task
 
   alias DevilsDictionary.{Absorb, Health, Sources}
-  alias DevilsDictionary.Absorb.Batch
+  alias DevilsDictionary.Absorb.{Batch, SemanticReplay}
 
   @requirements ["app.start"]
 
@@ -37,7 +40,13 @@ defmodule Mix.Tasks.Dd.Materialize do
   def run(args) do
     {opts, _, _} =
       OptionParser.parse(args,
-        strict: [source: :string, dry_run: :boolean, all: :boolean, limit: :integer]
+        strict: [
+          source: :string,
+          dry_run: :boolean,
+          all: :boolean,
+          resolve: :boolean,
+          limit: :integer
+        ]
       )
 
     slugs = if opts[:source], do: [opts[:source]], else: Absorb.implemented()
@@ -72,51 +81,44 @@ defmodule Mix.Tasks.Dd.Materialize do
     end)
   end
 
-  # Hash all semantic columns and revision histories; counts alone miss changed text and endpoints.
-  defp table_fingerprints, do: Health.StateFingerprint.capture()
-
-  defp m2_stats(true), do: %{}
-
-  defp m2_stats(before) do
-    now = table_fingerprints()
-
-    changed =
-      for {k, v} <- before, now[k] != v, into: %{}, do: {k, %{"before" => v, "after" => now[k]}}
-
-    %{
-      "m2_version" => 2,
-      "m2_identical" => changed == %{},
-      "m2_changed" => changed,
-      "m2_before" => before
-    }
-  end
-
   defp materialize(slug, opts) do
     module = Absorb.source_module!(slug)
     source = Sources.get_source_by_slug!(slug)
-    only_stale = not (opts[:all] || false)
+    all? = opts[:all] || false
+    resolve? = opts[:resolve] || false
 
-    pending = Batch.count(source, only_stale: only_stale)
+    pending = Batch.count(source, only_stale: not all?)
     Mix.shell().info("#{slug}: materializing #{pending} record(s)…")
 
     run_row = Sources.start_run("materialize", source_id: source.id)
     started = System.monotonic_time(:millisecond)
 
-    # Scorecard M2: rebuilding every derived row from `raw`, with the network
-    # off, must change nothing. The check has to be taken here, around the
-    # rebuild — reading it back afterwards would only measure the database, not
-    # the rebuild — so `--all` records what it saw before and after.
-    before = only_stale || table_fingerprints()
-
     try do
-      counts = Batch.run(module, source, only_stale: only_stale)
+      # Scorecard M2 is taken around the rebuild itself — reading it back
+      # afterwards would only measure the database — and, with `--resolve`,
+      # around the resolve pass that closes it (`Absorb.SemanticReplay`).
+      replay =
+        SemanticReplay.run(module, source, all: all?, resolve: resolve?, run_id: run_row.id)
+
       elapsed = System.monotonic_time(:millisecond) - started
 
-      comparison = m2_stats(before)
+      comparison =
+        if all? do
+          %{
+            "m2_version" => 3,
+            "m2_identical" => replay.identical,
+            "m2_changed" => replay.changed,
+            "m2_compared" => replay.compared,
+            "m2_not_compared" => replay.not_compared,
+            "resolved" => replay.resolved && Map.take(replay.resolved, [:resolved, :canonical])
+          }
+        else
+          %{}
+        end
 
       Sources.finish_run(
         run_row,
-        counts
+        replay.counts
         |> Map.new(fn {k, v} -> {to_string(k), v} end)
         |> Map.put("elapsed_ms", elapsed)
         |> Map.merge(comparison)
@@ -124,14 +126,30 @@ defmodule Mix.Tasks.Dd.Materialize do
 
       Mix.shell().info("\n#{slug} — #{elapsed} ms")
 
-      Enum.each(Enum.sort(counts), fn {key, value} ->
-        Mix.shell().info("  #{String.pad_trailing(to_string(key), 22)} #{value}")
+      Enum.each(Enum.sort(replay.counts), fn {key, value} ->
+        Mix.shell().info("  #{String.pad_trailing(to_string(key), 22)} #{inspect_count(value)}")
       end)
 
-      if opts[:all],
-        do: Mix.shell().info("  semantic replay identical: #{comparison["m2_identical"]}")
+      if replay.resolved,
+        do:
+          Mix.shell().info(
+            "  resolved               #{replay.resolved.resolved} edges, #{replay.resolved.canonical} canonical links"
+          )
 
-      comparison["m2_identical"] != false
+      if all? do
+        Mix.shell().info("  semantic replay identical: #{replay.identical}")
+
+        if replay.not_compared != [],
+          do:
+            Mix.shell().info(
+              "  not compared: #{Enum.join(replay.not_compared, ", ")} (the resolve pass closes them: add --resolve)"
+            )
+
+        if replay.changed != %{},
+          do: Mix.shell().info("  changed: #{Enum.join(Map.keys(replay.changed), ", ")}")
+      end
+
+      replay.identical != false
     rescue
       error ->
         elapsed = System.monotonic_time(:millisecond) - started
@@ -139,4 +157,7 @@ defmodule Mix.Tasks.Dd.Materialize do
         reraise error, __STACKTRACE__
     end
   end
+
+  defp inspect_count(value) when is_map(value), do: inspect(value)
+  defp inspect_count(value), do: value
 end

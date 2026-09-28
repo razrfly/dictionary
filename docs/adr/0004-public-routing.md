@@ -1,6 +1,9 @@
 # ADR 0004 — Public routing, classification and curated On pages
 
-- **Status:** accepted design, 26 September 2026. Stage 1 — persistence, ledger, resolver and a tested [recovery procedure](../routing/recovery.md) — implemented ([record](../routing/stage-1-foundation.md)); no route is served from it yet, and backfill, reader integration, On editing and publication are pending.
+- **Status:** accepted design, 26 September 2026.
+  - **Stage 1** is implemented: persistence, ledger, resolver and a tested [recovery procedure](../routing/recovery.md) ([record](../routing/stage-1-foundation.md)).
+  - **Stage 2**'s resumable [backfill](../routing/stage-2/backfill.md) is implemented and rehearsed on copies of the development corpus. It has not run on the corpus itself.
+  - No route is served yet. Reader integration, On editing and publication are pending.
 - **Approval:** the owner accepted the audit recommendations in this conversation and asked for the completed specification and corpus validation.
 - **Owner:** project owner; implementation changes are reviewed through the repository's normal PR process.
 - **Issue:** [Routing before launch](https://github.com/razrfly/dictionary/issues/194).
@@ -86,7 +89,7 @@ The page–composition binding below stays deferred: the reader renders authored
 
 Bind a page to a composition through an explicit, audited relationship between durable IDs, with at most one active binding per page. Validate language and intended scope/membership compatibility; a shared label or URL cannot establish a binding. Preserve both identities across route moves and scope changes. Render only the version selected by the composition publication service and still eligible under its rights/evidence checks. A routing-page approval cannot approve a draft composition or an unaccepted semantic claim.
 
-Define this interface before the first schema implementation. Use actual foreign keys when the composition schema is available. If that work has not landed, defer the binding migration and continue with standalone manual On pages; do not create placeholder composition tables. The binding table's columns and rules are [recorded with Stage 1](../routing/stage-1-foundation.md#curation-composition-binding-recorded-migration-deferred); its migration waits for #196. Persona inference and visit-driven refresh are separately owned by [curated opening delivery](https://github.com/razrfly/dictionary/issues/193) and are not dependencies of the routing foundation.
+Define this interface before the first schema implementation. Use actual foreign keys when the composition schema is available. If that work has not landed, defer the binding migration and continue with standalone manual On pages; do not create placeholder composition tables. The binding table's columns and rules are [recorded with Stage 1](../routing/stage-1-foundation.md#curation-composition-binding-recorded-migration-deferred); [#206](https://github.com/razrfly/dictionary/pull/206) created the composition schema on 27 September 2026, and the binding migration, with real foreign keys, belongs to Stage 4. Persona inference and visit-driven refresh are separately owned by [curated opening delivery](https://github.com/razrfly/dictionary/issues/193) and are not dependencies of the routing foundation.
 
 ## 5. Persistence contract for the implementation
 
@@ -152,7 +155,7 @@ The publication manifest explicitly lists approved page IDs/locales and their ga
 
 1. Export the read-only corpus and evaluate the pinned rules. Account for every input entity and count the retained lexical population. Preserve ambiguous/unmapped/source-page dispositions.
 2. Review a candidate launch population independently of the classifier. Resolve all conflicts in that population; the larger corpus can remain explicitly deferred. Define useful content by reader value and permitted display, not an invented word/page-count threshold.
-3. Backfill decisions and durable pages in resumable batches. Save checkpoints keyed by stable object IDs and policy digest. Allocation within each page is atomic; restarting after interruption produces no extra pages or paths.
+3. Backfill decisions and durable pages in resumable batches. Save checkpoints keyed by stable object IDs and policy digest. Classify only while every record the evaluation depended on — matched, visited without a match, or looked for and absent — is still what the export saw. A reviewer's confirmation is atomic per record: its override, page, path and ledger rows are written together or, on any refusal, not at all, and the batch continues. Restarting after interruption produces no extra pages or paths.
 4. Implement the resolver and link helpers, then metadata/indexing and On editing. Keep classification changes separate from route moves.
 5. Prove preservation of identity/content/evidence/membership sets, not just counts. Test a clean restore from registry plus editorial/route snapshots, including a changed provider import order. Replaying source data into newly numbered objects does not satisfy restore acceptance. The supported [recovery procedure](../routing/recovery.md) and its test implement this; destructive tasks refuse a database holding routing state without a covering snapshot.
 6. Use a feature flag for launch. Verify direct HTTP and live navigation, then publish only the approved manifest. Rollback restores the previous accepted mapping/reader behavior and preserves path reservations and historical redirects.

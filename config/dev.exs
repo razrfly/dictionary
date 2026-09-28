@@ -15,6 +15,10 @@ config :devils_dictionary, DevilsDictionary.Repo,
   # it. Overriding it is deliberate and has to be typed, and `mix dd.reset` still
   # demands the name of whatever it is about to drop.
   database: System.get_env("DD_DATABASE") || "devils_dictionary_v2",
+  # `DD_DATABASE_PORT` points the same tasks at another PostgreSQL server on
+  # this machine — the scratch cluster a recovery rehearsal restores into
+  # (docs/routing/recovery.md). Unset, it is the usual server.
+  port: String.to_integer(System.get_env("DD_DATABASE_PORT") || "5432"),
   stacktrace: true,
   show_sensitive_data_on_connection_error: true,
   pool_size: 10

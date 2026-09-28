@@ -13,8 +13,8 @@ defmodule DevilsDictionary.Absorb.ResolverTest do
   alias DevilsDictionary.Absorb.Resolver
   alias DevilsDictionary.Claims.{AssertionRevision, PendingRelation}
   alias DevilsDictionary.Registry.Lexeme
-  alias DevilsDictionary.{Claims, Registry, Repo}
-  alias DevilsDictionary.Sources.Source
+  alias DevilsDictionary.{Claims, Registry, Repo, Sources}
+  alias DevilsDictionary.Sources.{Source, SourceRecord}
 
   setup do
     # A relation needs its predicate registered: a predicate is a row now, and
@@ -159,6 +159,77 @@ defmodule DevilsDictionary.Absorb.ResolverTest do
       assert Resolver.resolve_targets(source.id) == 0
       assert Resolver.unresolved_lemmas(source.id) == [{"wamplebug", 1}]
       assert %{"hyponym" => %{total: 1, resolved: 0, unresolved: 1}} = Resolver.by_type(source.id)
+    end
+
+    test "a claim several records attest takes its first record's attestation, by content, not id" do
+      # Wiktionary's `mother/noun/1` and `/2` both say *mother* is related to
+      # *mom*, each with its own provenance and stated part of speech. Resolved
+      # in pending-id order, the claim took whichever came first, so a
+      # re-projection that re-created the rows in another order revised it —
+      # every time (#194). And the choice is by the records' external ids, not
+      # their numeric ones, which say only who was inserted first.
+      source = source!("wiktionary")
+      mother = lexeme!("mother", "noun")
+      noun = lexeme!("mom", "noun")
+      _verb = lexeme!("mom", "verb")
+
+      # `/2` is inserted first, so it has the lower id.
+      Sources.insert_records(source, [%{external_id: "mother/noun/2", raw: %{"n" => 2}}])
+      Sources.insert_records(source, [%{external_id: "mother/noun/1", raw: %{"n" => 1}}])
+
+      record = fn external_id ->
+        Repo.one!(
+          from r in SourceRecord,
+            where: r.source_id == ^source.id and r.external_id == ^external_id,
+            select: r.id
+        )
+      end
+
+      first = record.("mother/noun/1")
+      second = record.("mother/noun/2")
+      assert second < first
+
+      attest = fn record_id, to_pos, metadata ->
+        Repo.insert!(%PendingRelation{
+          source_id: source.id,
+          source_record_id: record_id,
+          subject_object_id: mother.object_id,
+          predicate_id: Claims.predicate!("other").id,
+          to_lemma: "mom",
+          to_pos: to_pos,
+          origin_key: "rel|mother|other|mom",
+          metadata: metadata,
+          inserted_at: DateTime.utc_now(),
+          updated_at: DateTime.utc_now()
+        })
+      end
+
+      spoken = %{"sense" => "a female parent"}
+
+      # `/2`'s row first, so neither record ids nor pending ids point at `/1`.
+      attest.(second, "verb", %{"label" => "instances"})
+      attest.(first, "noun", spoken)
+      assert Resolver.resolve_targets(source.id) == 2
+
+      [current] =
+        Repo.all(
+          from r in AssertionRevision,
+            where: r.subject_object_id == ^mother.object_id and r.is_current
+        )
+
+      assert current.metadata == spoken
+      assert current.object_object_id == noun.object_id
+
+      # A re-projection re-creates both rows, now in the other order: the
+      # claim is not revised.
+      attest.(first, "noun", spoken)
+      attest.(second, "verb", %{"label" => "instances"})
+      assert Resolver.resolve_targets(source.id) == 2
+
+      assert Repo.aggregate(
+               from(r in AssertionRevision, where: r.subject_object_id == ^mother.object_id),
+               :count
+             ) == 1
     end
 
     test "does not touch rows another source already resolved" do
