@@ -116,6 +116,57 @@ defmodule DevilsDictionary.Routing.OnPageTest do
     assert OnPage.linked([c.object_id], :internal) == []
   end
 
+  test "a merged or unserved overview's own title never shows under another address", ctx do
+    mars = lexeme!("Mars")
+
+    shown =
+      overview!("On the planet", "/on/the-planet", [], author: ctx.human, published: true)
+
+    secret =
+      overview!("SECRET DRAFT TITLE", "/on/secret-draft", [
+        {:supplies_lexical_material, mars.object_id}
+      ])
+
+    {:ok, _} =
+      DevilsDictionary.Routing.Ledger.merge(secret.id, shown.id,
+        actor_id: ctx.human.id,
+        reason: "fixture"
+      )
+
+    for mode <- [:public, :internal] do
+      refute Enum.any?(OnPage.linked([mars.object_id], mode), &(&1.title =~ "SECRET"))
+    end
+  end
+
+  test "a subject page member is named by its identity, never by a draft page's title", ctx do
+    mars = lexeme!("Mars")
+    deity = subject!("Mars", "subjects", path: "/subjects/mars", actor: ctx.human)
+
+    {:ok, _} =
+      DevilsDictionary.Routing.Pages.add_revision(
+        deity.page.id,
+        %{title: "DRAFT SUBJECT PAGE TITLE", body: "unpublished"},
+        [],
+        ctx.human.id
+      )
+
+    other = lexeme!("Mars bar", "noun")
+
+    overview!(
+      "On Mars bars",
+      "/on/mars",
+      [
+        {:supplies_lexical_material, other.object_id},
+        {:discusses_subject, {:page, deity.page.id}}
+      ],
+      author: ctx.human,
+      published: true
+    )
+
+    %{members: [_word, subject]} = OnPage.overview("/on/mars", [mars.object_id], :public)
+    assert %{kind: :subject, label: "Mars"} = subject
+  end
+
   test "members keep their order and relationship; the unshowable are withheld, not replaced",
        ctx do
     mars = lexeme!("Mars")

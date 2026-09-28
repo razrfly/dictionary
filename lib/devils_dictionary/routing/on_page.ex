@@ -127,6 +127,11 @@ defmodule DevilsDictionary.Routing.OnPage do
     )
     |> Repo.all()
     |> Enum.reject(fn {page, _title} -> page.id == except_page_id end)
+    # Its own page, served in the mode: a merged or unserved overview's title
+    # is never shown under its successor's address.
+    |> Enum.filter(fn {page, _title} ->
+      page.lifecycle_state == :active and Resolver.visible?(page, mode)
+    end)
     |> Enum.flat_map(fn {page, title} ->
       case Resolver.link(page.id, mode: mode) do
         {:ok, path} ->
@@ -196,7 +201,7 @@ defmodule DevilsDictionary.Routing.OnPage do
           left_join: e in Entity,
           on: e.object_id == p.target_object_id,
           where: p.id in ^page_ids,
-          select: {p.id, {p, coalesce(r.title, e.preferred_label)}}
+          select: {p.id, {p, r.title, e.preferred_label}}
       )
       |> Map.new()
 
@@ -234,17 +239,23 @@ defmodule DevilsDictionary.Routing.OnPage do
       nil ->
         %{kind: :withheld, reason: :missing}
 
-      {%Page{publication_state: :withdrawn}, _title} ->
+      {%Page{publication_state: :withdrawn}, _title, _label} ->
         %{kind: :withheld, reason: :withdrawn}
 
-      {%Page{role: role, target_object_id: object_id}, label}
+      # A subject is named by its identity's label; the page's own revision
+      # title is its content, which a draft does not show publicly.
+      {%Page{role: role, target_object_id: object_id}, _title, label}
       when role in [:subject, :edition] ->
         %{kind: :subject, object_id: object_id, label: label}
 
-      {%Page{} = page, title} ->
-        case Resolver.link(page.id, mode: mode) do
-          {:ok, path} -> %{kind: :page, title: title, path: path}
-          :error -> %{kind: :withheld, reason: :unavailable}
+      # Any other page shows its title only when it is itself served in the
+      # mode, never through a successor.
+      {%Page{} = page, title, label} ->
+        with true <- page.lifecycle_state == :active and Resolver.visible?(page, mode),
+             {:ok, path} <- Resolver.link(page.id, mode: mode) do
+          %{kind: :page, title: title || label, path: path}
+        else
+          _unserved -> %{kind: :withheld, reason: :unavailable}
         end
     end
   end
