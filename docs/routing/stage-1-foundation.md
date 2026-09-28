@@ -102,7 +102,7 @@ These refine the ADR without changing it. Each is conservative and reversible by
 4. **One page per target and locale, ever.** A retired or merged page keeps its target. A new treatment of the same object in the same locale is a rollback or a new locale, not a second page.
 5. **Split pages keep their address.** The split page becomes a choice at its own canonical rather than a new page, and records its successors as a revision.
 6. **Nothing reserved is ever released.** An undone allocation or move leaves its path as an alias of its page. That alias is a redirect where the page keeps a canonical and unavailable where it has none, and the page can reclaim it.
-7. **A refusal never rolls back the caller.** This lets Stage 2 batch allocations inside one transaction and record per-record refusals.
+7. **A refusal never rolls back the caller.** This lets Stage 2 batch allocations inside one transaction and record per-record refusals. A caller that writes something before asking the ledger — the backfill writes a reviewer's override first — undoes it on a refusal with its own savepoint ([backfill](stage-2/backfill.md)); a nested `Repo.transaction/1` cannot, because its rollback aborts the caller's whole transaction.
 8. **A tombstone returns only by a human decision.** Allocation, including a batch's, can create a path or reclaim an owned alias. A tombstone records a deliberate removal, so it comes back only through `restore/3` or a rollback. Both are human operations, enforced in the database.
 
 ## Curation-composition binding (recorded; migration deferred)

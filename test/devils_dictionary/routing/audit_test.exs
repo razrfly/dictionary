@@ -58,6 +58,41 @@ defmodule DevilsDictionary.Routing.AuditTest do
     end
   end
 
+  test "a truncated or non-object line rejects the snapshot instead of crashing", %{
+    directory: dir
+  } do
+    input = Path.join(dir, "input.jsonl")
+    valid = [%{"record_type" => "snapshot", "read_only" => "on"}, work(1, "Love")]
+    lines = Enum.map(valid, &Jason.encode!/1)
+
+    for {bad, pattern} <- [
+          {~s({"record_type": "entity", "object_id"), ~r/line 3 is not valid JSON/},
+          {"[]", ~r/line 3 is not a JSON object/},
+          {"1", ~r/line 3 is not a JSON object/}
+        ] do
+      File.write!(input, Enum.map(lines ++ [bad], &[&1, "\n"]))
+      assert {:error, message} = DevilsDictionary.Routing.AuditSnapshot.read(input)
+      assert message =~ pattern
+
+      assert_raise Mix.Error, pattern, fn ->
+        Mix.Tasks.Dd.Routing.Audit.run(["--input", input, "--output", Path.join(dir, "output")])
+      end
+    end
+  end
+
+  test "the backfill refuses an argument it would otherwise ignore" do
+    # A review file passed without --reviews must not run a review-less backfill.
+    assert_raise Mix.Error, ~r/usage: mix dd.routing.backfill/, fn ->
+      Mix.Tasks.Dd.Routing.Backfill.run([
+        "--snapshot",
+        "export.jsonl",
+        "--population",
+        "candidates.json",
+        "reviews.json"
+      ])
+    end
+  end
+
   defp run(dir, entities) do
     rows =
       [

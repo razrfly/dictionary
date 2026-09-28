@@ -227,6 +227,41 @@ defmodule DevilsDictionary.Routing.PolicyTest do
     assert Policy.slug(String.duplicate("é", 61)) == nil
   end
 
+  test "dependencies name every record read, matched or not, and every one looked for and missing",
+       %{policy: policy} do
+    # Q900000 is P31 Q5 (an anchor, matched by identity), Q900001 (held,
+    # P279 Q900002) and Q900003 (not held); Q900002 is held and maps nowhere.
+    graph =
+      graph(["Q5", "Q900001", "Q900003"])
+      |> Map.put("Q900001", evidence("Q900001", [], ["Q900002"]))
+      |> Map.put("Q900002", evidence("Q900002", [], []))
+
+    result = Policy.classify(entity(["Q5", "Q900001", "Q900003"]), graph, policy)
+
+    assert result.status == "needs_review"
+
+    assert result.dependencies == [
+             %{"qid" => "Q900000", "revision_id" => 10, "checksum" => "fixture"},
+             %{"qid" => "Q900001", "revision_id" => 10, "checksum" => "fixture"},
+             %{"qid" => "Q900002", "revision_id" => 10, "checksum" => "fixture"},
+             %{"qid" => "Q900003", "absent" => true}
+           ]
+
+    # The pins a guard used to check — the source revision and the matched
+    # path's records — never see the unmatched branch.
+    assert [result.source_revision | result.evidence] |> Enum.map(& &1["qid"]) == ["Q900000"]
+
+    # An anchor ending a matched path is matched by its id and never read:
+    # held in the graph (Q5 here), it is neither a dependency nor evidence.
+    refute Enum.any?(result.dependencies, &(&1["qid"] == "Q5"))
+    held = Map.put(graph, "Q5", evidence("Q5", [], ["Q215627"]))
+    assert Policy.classify(entity(["Q5", "Q900001", "Q900003"]), held, policy) == result
+
+    # A class rule decides a self-classified subject: its walks are not read.
+    self = Policy.classify(%{entity([]) | "qids" => ["Q7944"]}, %{}, policy)
+    assert self.dependencies == [%{"qid" => "Q7944", "absent" => true}]
+  end
+
   test "input order does not select a winning class", %{policy: policy} do
     a = Policy.classify(entity(["Q5", "Q482994"]), graph(["Q5", "Q482994"]), policy)
     b = Policy.classify(entity(["Q482994", "Q5"]), graph(["Q482994", "Q5"]), policy)
