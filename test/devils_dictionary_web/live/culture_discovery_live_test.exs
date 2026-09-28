@@ -114,9 +114,11 @@ defmodule DevilsDictionaryWeb.CultureDiscoveryLiveTest do
   end
 
   test "invalid routes and demo audit data never create discovery work", ctx do
-    missing = ctx.conn |> get(~p"/on/not-a-real-entry") |> html_response(404)
-    assert missing =~ ~s(id="no-such-word")
-    refute missing =~ ~s(id="in-culture")
+    missing =
+      ctx.conn |> get(~p"/on/not-a-real-entry") |> html_response(404) |> LazyHTML.from_document()
+
+    assert Enum.count(LazyHTML.query(missing, "#no-such-word")) == 1
+    assert Enum.empty?(LazyHTML.query(missing, "#in-culture"))
     assert Repo.aggregate(Mapping, :count) == 0
     assert Repo.aggregate(Run, :count) == 0
 

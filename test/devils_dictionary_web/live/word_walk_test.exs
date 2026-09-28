@@ -138,9 +138,10 @@ defmodule DevilsDictionaryWeb.WordWalkTest do
   end
 
   defp hop_targets(html) do
-    ~r/href="(\/on\/[^"]+)"/
-    |> Regex.scan(html)
-    |> Enum.map(fn [_, href] -> String.replace(href, "&amp;", "&") end)
+    html
+    |> LazyHTML.from_fragment()
+    |> LazyHTML.query("a[href^='/on/']")
+    |> LazyHTML.attribute("href")
     |> Enum.uniq()
   end
 end

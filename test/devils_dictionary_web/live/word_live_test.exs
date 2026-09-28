@@ -155,10 +155,9 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
       word!(ctx, "spat", ~w(wiktionary), enriched_at: nil)
       word!(ctx, "spit", ~w(wiktionary), forms: [%{"form" => "spat", "tags" => ["past"]}])
 
-      {:ok, _live, html} = live(ctx.conn, ~p"/on/spat")
+      {:ok, live, _html} = live(ctx.conn, ~p"/on/spat")
 
-      assert html =~ ~s(id="also-a-form-of")
-      assert html =~ ~s(href="/on/spit")
+      assert has_element?(live, "#also-a-form-of a[href='/on/spit']")
     end
   end
 
@@ -727,7 +726,7 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
       {:ok, live, _html} = live(ctx.conn, ~p"/on/mollusk?trail=oyster,bivalve")
 
       # The first entry truncates to nothing before it; the second keeps the first.
-      assert live |> element("#trail-oyster") |> render() =~ ~s(href="/on/oyster")
+      assert has_element?(live, "#trail-oyster[href='/on/oyster']")
       assert live |> element("#trail-bivalve") |> render() =~ "trail=oyster"
     end
 
