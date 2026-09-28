@@ -41,6 +41,11 @@ defmodule Mix.Tasks.Dd.Replay do
   So it re-materializes while the open edges are still falling, capped at five
   passes, and what is left is reported rather than swallowed: an edge that
   genuinely names something nobody fetched should be visible.
+
+  Each source's run records how many records its passes materialized, how
+  many passes they took, and every record not projected by kind (for Wikidata,
+  the quotation verifier's caches and nameless items), in the report and in
+  the run's `import_runs` stats.
   """
 
   use Mix.Task
@@ -87,7 +92,7 @@ defmodule Mix.Tasks.Dd.Replay do
     tell(quiet?, fn ->
       say("")
       row("total records", results |> Enum.map(& &1.records) |> Enum.sum())
-      row("materialized", results |> Enum.map(& &1.materialized) |> Enum.sum())
+      row("records materialized", results |> Enum.map(& &1.materialized) |> Enum.sum())
     end)
   end
 
@@ -141,13 +146,30 @@ defmodule Mix.Tasks.Dd.Replay do
     materialized =
       materialize(DevilsDictionary.Absorb.source_module!(source.slug), source, run.id)
 
-    Sources.finish_run(run, %{"records" => records, "replayed_from" => entry["file"]})
+    Sources.finish_run(run, %{
+      "records" => records,
+      "replayed_from" => entry["file"],
+      # A later pass revisits every record: its count is the final pass's.
+      "materialized" => %{
+        "records" => materialized.records,
+        "passes" => materialized.passes,
+        "dispositions" => materialized.dispositions
+      }
+    })
 
     tell(quiet?, fn ->
       row(source.slug, "#{records} records replayed")
+
+      row(
+        "  materialized",
+        "#{materialized.records} record(s) in #{materialized.passes} pass(es)"
+      )
+
+      if materialized.dispositions != %{},
+        do: row("  not projected", inspect(materialized.dispositions))
     end)
 
-    %{source: source.slug, records: records, materialized: Map.get(materialized, :senses, 0)}
+    %{source: source.slug, records: records, materialized: materialized.records}
   end
 
   # One pass, then more while the open edges are still falling. Both kinds

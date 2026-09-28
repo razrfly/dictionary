@@ -119,7 +119,8 @@ defmodule DevilsDictionary.FakeSource do
                from_sense: "fake-#{lemma}",
                to_lemma: raw["to_lemma"] || "thing",
                to_pos: "noun",
-               type: :hypernym
+               type: :hypernym,
+               subtype: raw["subtype"]
              }
            ]
          ),

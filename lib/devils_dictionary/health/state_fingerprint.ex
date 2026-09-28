@@ -5,7 +5,11 @@ defmodule DevilsDictionary.Health.StateFingerprint do
   @tables ~w(objects lexemes senses sense_revisions entities person_details work_details edition_details
     content_items content_revisions lexeme_forms object_names external_identifiers
     assertions assertion_revisions assertion_evidence assertion_reviews assertion_votes
-    review_contexts review_context_items source_materialized_outputs source_assertion_outputs)
+    review_contexts review_context_items source_materialized_outputs source_assertion_outputs
+    pending_relations)
+
+  @doc "Every table the fingerprint covers."
+  def tables, do: @tables
 
   def capture(tables \\ @tables) do
     unless Enum.all?(tables, &(&1 in @tables)),

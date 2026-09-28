@@ -15,8 +15,10 @@ defmodule DevilsDictionary.Routing.RecoveryTest do
      every resolution and every sequence, the same.
   4. The restored copy is re-projected through the supported paths in the
      **opposite provider order**: `mix dd.replay` from an exported archive,
-     Wikidata before Wikipedia, then `mix dd.materialize --all`, Wikidata
-     before Wikipedia. It still matches exactly.
+     Wikidata before Wikipedia, then `mix dd.materialize --all --resolve`,
+     Wikidata before Wikipedia. It still matches exactly, and each
+     materialization found every table it fingerprints, pending relations
+     included, identical.
   5. The ledger and resolver work on the restored copy, and the destructive
      tasks refuse it without a covering snapshot.
 
@@ -281,7 +283,10 @@ defmodule DevilsDictionary.Routing.RecoveryTest do
     verified =
       capture_io(fn -> Mix.Tasks.Dd.Routing.Verify.run(["--baseline", ctx.target]) end)
 
-    assert verified =~ "#{ctx.source} matches #{ctx.target} exactly."
+    assert verified =~ "#{ctx.source} on localhost:"
+    assert verified =~ "matches #{ctx.target} on localhost:"
+    assert verified =~ "every path and page resolves the same"
+    refute verified =~ "not applicable"
 
     Recovery.with_database(ctx.target, fn ->
       # 3. Exactly the same, section by section and row by row.
@@ -342,17 +347,30 @@ defmodule DevilsDictionary.Routing.RecoveryTest do
           end
 
           for source <- ["wikidata", "wikipedia"] do
-            Mix.Tasks.Dd.Materialize.run(["--source", source, "--all"])
+            Mix.Tasks.Dd.Materialize.run(["--source", source, "--all", "--resolve"])
           end
         end)
 
       assert output =~ ~r/wikidata\s+3 records replayed/
       assert output =~ ~r/wikipedia\s+3 records replayed/
+
+      # Each replay's run records what its passes materialized, and what
+      # they did not project.
+      replays = Repo.all(from r in "import_runs", where: r.task == "replay", select: r.stats)
+      assert length(replays) == 2
+
+      for stats <- replays do
+        assert %{"materialized" => %{"records" => _, "passes" => _, "dispositions" => _}} = stats
+      end
+
       assert output =~ "wikidata: materializing 3 record(s)"
       assert output =~ "wikipedia: materializing 3 record(s)"
 
       assert :binary.match(output, "wikidata: materializing") <
                :binary.match(output, "wikipedia: materializing")
+
+      assert length(Regex.scan(~r/semantic replay identical: true/, output)) == 2
+      refute output =~ "not compared"
 
       projected = Recovery.manifest(rows: true, mode: :projected)
       assert Recovery.diff(baseline_projected, projected) == %{}
@@ -515,7 +533,8 @@ defmodule DevilsDictionary.Routing.RecoveryTest do
     # The source's snapshot holds the same routing rows, but it is a snapshot
     # of another database, so it covers nothing here.
     assert {:error, elsewhere} = Recovery.guard(target_config, "reset", ctx.dump)
-    assert elsewhere =~ "is a snapshot of #{ctx.source}, not #{ctx.target}"
+    assert elsewhere =~ "is a snapshot of #{ctx.source} (cluster"
+    assert elsewhere =~ ", not #{ctx.target} (cluster"
 
     # The tasks consult the guard before they drop, restore or rebuild anything.
     configured_as(ctx.target, fn ->

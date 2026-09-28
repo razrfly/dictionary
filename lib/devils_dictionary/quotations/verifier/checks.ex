@@ -29,6 +29,7 @@ defmodule DevilsDictionary.Quotations.Verifier.Checks do
   alias DevilsDictionary.Discovery.Providers.Wikiquote.Parser
   alias DevilsDictionary.Quotations.Fingerprint
   alias DevilsDictionary.Quotations.Verifier.Fetch
+  alias DevilsDictionary.Sources.CacheRecord
 
   @site "enwikiquote"
   @day 86_400
@@ -66,7 +67,7 @@ defmodule DevilsDictionary.Quotations.Verifier.Checks do
   defp sitelink(run, qid, max_age) do
     Fetch.cached(
       "wikidata",
-      "enwikiquote-sitelink:#{qid}",
+      CacheRecord.key("wikidata", "enwikiquote-sitelink", qid),
       max_age,
       "https://www.wikidata.org/wiki/#{qid}",
       fn ->
@@ -165,7 +166,7 @@ defmodule DevilsDictionary.Quotations.Verifier.Checks do
 
     Fetch.cached(
       "wikidata",
-      "gutenberg-works:#{qid}",
+      CacheRecord.key("wikidata", "gutenberg-works", qid),
       max_age,
       "https://www.wikidata.org/wiki/#{qid}",
       fn ->

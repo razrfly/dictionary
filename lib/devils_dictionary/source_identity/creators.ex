@@ -866,6 +866,18 @@ defmodule DevilsDictionary.SourceIdentity.Creators do
     end
   end
 
+  @doc """
+  The output a mint writes on the creator's Wikidata record: role `entity`,
+  keyed by the bare QID, as a PostgreSQL regular expression.
+
+  It is this module's evidence that the record minted the creator, not a
+  materializer's. No materializer emits that key, so
+  `Absorb.Materializer.reconcile/2` must never retire it: a first
+  materialization of the record would otherwise erase the mint's evidence,
+  and the next mint would restore it (#194).
+  """
+  def minted_output, do: %{role: "entity", key_pattern: "^Q[1-9][0-9]*$"}
+
   defp mint!(entry, %{qid: qid, attrs: attrs} = mint) do
     wikidata = Repo.get_by!(Source, slug: "wikidata")
 
@@ -889,7 +901,7 @@ defmodule DevilsDictionary.SourceIdentity.Creators do
     %MaterializedOutput{}
     |> MaterializedOutput.changeset(%{
       source_record_id: record.id,
-      output_role: "entity",
+      output_role: minted_output().role,
       output_key: qid,
       output_object_id: entity.object_id,
       retired_at: nil,
