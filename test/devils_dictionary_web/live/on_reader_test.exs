@@ -197,6 +197,12 @@ defmodule DevilsDictionaryWeb.OnReaderTest do
         # Past bigint, or not an id: still a 404, never a crash.
         assert ctx.conn |> get("/words/99999999999999999999/mars") |> html_response(404)
         assert ctx.conn |> get("/on/%2E%2E") |> html_response(400)
+
+        # Not text: answered before any query can see it.
+        for path <- ["/on/%FF", "/on/%E0%A4%A", "/on/mars%00", "/words/999999999/a%00b"] do
+          assert ctx.conn |> get(path) |> html_response(400) =~ "Not an address", path
+        end
+
         assert missing =~ ~s(id="no-such-word-identity")
         refute missing =~ ~s(id="headword")
 

@@ -22,7 +22,7 @@ defmodule DevilsDictionaryWeb.ReadingStatus do
   | | no words; an equivalent spelling or alias of an overview served in the mode | 301 |
   | | malformed | 400 |
   | | neither | 404 (410 or 500 as its overview's outcome says) |
-  | `/words/:id/:slug` | no such lexeme, or not an id at all | 404, never a word found by the slug |
+  | `/words/:id/:slug` | no such lexeme, or not an id at all | 404, never a word found by the slug; 400 if the slug is not text |
 
   Live navigation re-runs the same decision in the LiveView, which follows a
   redirect itself; the status only matters to a direct request.
@@ -31,7 +31,7 @@ defmodule DevilsDictionaryWeb.ReadingStatus do
   import Plug.Conn
 
   alias DevilsDictionary.Lexicon
-  alias DevilsDictionary.Routing.{Address, Resolution, Resolver}
+  alias DevilsDictionary.Routing.{Address, Input, Resolution, Resolver}
   alias DevilsDictionaryWeb.ReadingMode
 
   def init(opts), do: opts
@@ -80,8 +80,14 @@ defmodule DevilsDictionaryWeb.ReadingStatus do
     end
   end
 
+  # A found word with a wrong or unreadable slug is redirected to its own by
+  # the LiveView; a missing one is 404, or 400 if its slug is not text.
   defp word(conn) do
-    if Lexicon.by_object_id(conn.path_params["id"]), do: conn, else: put_status(conn, 404)
+    cond do
+      Lexicon.by_object_id(conn.path_params["id"]) -> conn
+      Input.text?(conn.path_params["slug"]) -> put_status(conn, 404)
+      true -> put_status(conn, 400)
+    end
   end
 
   defp redirect(conn, location) do

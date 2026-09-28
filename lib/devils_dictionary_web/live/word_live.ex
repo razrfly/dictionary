@@ -156,6 +156,13 @@ defmodule DevilsDictionaryWeb.WordLive do
         do: assign(socket, object_id: nil, exact: nil),
         else: socket
 
+    # Not text (bad UTF-8, a NUL): no word can have it, and no query may see
+    # it. The page says so, under the plug's 400.
+    {slug, socket} =
+      if DevilsDictionary.Routing.Input.text?(slug),
+        do: {slug, socket},
+        else: {"", assign(socket, object_id: nil, exact: :invalid)}
+
     base = URI.parse(uri).path
     trail = parse_trail(params["trail"])
     demo = Samples.on?(params)
@@ -813,6 +820,8 @@ defmodule DevilsDictionaryWeb.WordLive do
 
   # Only a miss pays for suggestions: on every other page the trigram would be
   # answering a question nobody asked.
+  defp suggestions(_page, ""), do: []
+
   defp suggestions(%{headword: %{lexemes: []}}, slug) do
     slug
     |> Lexicon.search(limit: @suggestions)
@@ -1221,7 +1230,14 @@ defmodule DevilsDictionaryWeb.WordLive do
 
   defp miss(assigns) do
     ~H"""
-    <div id="no-such-word" class="py-12">
+    <div :if={@exact == :invalid} id="not-an-address" class="py-12">
+      <.heading>Not an address</.heading>
+      <.text class="mt-4">
+        This address is not readable text, so it names no word.
+      </.text>
+      <.a navigate={~p"/"} class="mt-6">Start somewhere else</.a>
+    </div>
+    <div :if={@exact != :invalid} id="no-such-word" class="py-12">
       <.heading>“{@slug}”</.heading>
       <.text :if={@exact == :missing} id="no-such-word-identity" class="mt-4">
         No word with that identity. An exact address names one word by its id, and this id names
