@@ -68,7 +68,7 @@ Patterns are borrowed from [Cinegraph](https://github.com/razrfly/cinegraph): ra
 |---|---|
 | Stage 1: pages, ledger, resolver, recovery | **implemented** |
 | Stage 2: the resumable backfill | **implemented**; rehearsed at corpus scale on isolated copies; **not run** on the development corpus |
-| The On reader: `/on/:slug`, `/words/:id/:slug`, the eight family routes, Subjects cards, public and internal modes | **implemented**; **demonstrated** on a disposable copy with rehearsal reviews and marked fixtures |
+| The On reader: `/on/:slug`, `/words/:id/:slug`, the eight family routes, Subjects cards, public and internal modes | **implemented**; **[demonstrated](docs/routing/on-demo/README.md)** from `main` on a disposable copy with rehearsal reviews and marked fixtures |
 | Namespace addresses on the owner's working installation | **not enabled**: after #211, CP4 backfills the reviewed population with real reviewers |
 | The curated opening (#202) | **merged**; its selection is a development and test fixture |
 | The page–composition binding (Stage 4); publication, indexing and sitemaps (Stage 5) | **deferred** |
