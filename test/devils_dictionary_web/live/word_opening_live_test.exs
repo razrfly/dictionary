@@ -22,7 +22,7 @@ defmodule DevilsDictionaryWeb.WordOpeningLiveTest do
   end
 
   test "love, with the fixture asked for: Bierce leads, three highlights, a fixture label", ctx do
-    {:ok, view, _html} = live(ctx.conn, ~p"/define/love?opening=fixture")
+    {:ok, view, _html} = live(ctx.conn, ~p"/on/love?opening=fixture")
 
     assert has_element?(view, "#opening-fixture", "Development fixture")
     assert has_element?(view, "#opening-lead-text", "A temporary insanity curable by marriage")
@@ -34,15 +34,15 @@ defmodule DevilsDictionaryWeb.WordOpeningLiveTest do
   end
 
   test "the same page without the parameter has no opening and no trace of one", ctx do
-    {:ok, view, _html} = live(ctx.conn, ~p"/define/love")
+    {:ok, view, _html} = live(ctx.conn, ~p"/on/love")
 
     refute has_element?(view, "#opening")
     assert has_element?(view, "#word-rail[class='lg:col-start-1 lg:row-start-1']")
   end
 
   test "the definitions are untouched: the same cards, the same ids, the same open row", ctx do
-    {:ok, plain, _} = live(ctx.conn, ~p"/define/love")
-    {:ok, curated, _} = live(ctx.conn, ~p"/define/love?opening=fixture")
+    {:ok, plain, _} = live(ctx.conn, ~p"/on/love")
+    {:ok, curated, _} = live(ctx.conn, ~p"/on/love?opening=fixture")
 
     cards = fn view ->
       view
@@ -64,7 +64,7 @@ defmodule DevilsDictionaryWeb.WordOpeningLiveTest do
   # while keyboard and screen-reader order still went through the whole rail
   # first. The document order is now the reading order.
   test "the document order is the reading order: headword, opening, rail, definitions", ctx do
-    {:ok, view, _html} = live(ctx.conn, ~p"/define/love?opening=fixture")
+    {:ok, view, _html} = live(ctx.conn, ~p"/on/love?opening=fixture")
     html = render(view)
 
     order =
@@ -93,7 +93,7 @@ defmodule DevilsDictionaryWeb.WordOpeningLiveTest do
   end
 
   test "without an opening the page keeps its own layout, headword inside the rail", ctx do
-    {:ok, view, _html} = live(ctx.conn, ~p"/define/love")
+    {:ok, view, _html} = live(ctx.conn, ~p"/on/love")
 
     assert has_element?(view, "#word-rail #headword")
     assert has_element?(view, "#word-rail[class='lg:col-start-1 lg:row-start-1']")
@@ -102,24 +102,24 @@ defmodule DevilsDictionaryWeb.WordOpeningLiveTest do
   test "moving between words never carries one word's selection onto another", ctx do
     word!(ctx, "rizz", ~w(wiktionary), scope: nil)
 
-    {:ok, view, _html} = live(ctx.conn, ~p"/define/love?opening=fixture")
+    {:ok, view, _html} = live(ctx.conn, ~p"/on/love?opening=fixture")
     assert has_element?(view, "#opening-lead-text", "temporary insanity")
 
-    render_patch(view, ~p"/define/rizz?opening=fixture")
+    render_patch(view, ~p"/on/rizz?opening=fixture")
     refute has_element?(view, "#opening")
     assert has_element?(view, "#word-rail #headword")
 
-    render_patch(view, ~p"/define/love?opening=fixture")
+    render_patch(view, ~p"/on/love?opening=fixture")
     assert has_element?(view, "#opening-lead-text", "temporary insanity")
 
     # A reconnect is a fresh mount; it reads the selection again, not a copy.
-    {:ok, again, _html} = live(ctx.conn, ~p"/define/love?opening=fixture")
+    {:ok, again, _html} = live(ctx.conn, ~p"/on/love?opening=fixture")
     assert has_element?(again, "#opening-highlight-1-title", "Cupid and Psyche")
   end
 
   test "the opening's disclosures are closed at first and keep their state across patches",
        ctx do
-    {:ok, view, _html} = live(ctx.conn, ~p"/define/love?opening=fixture")
+    {:ok, view, _html} = live(ctx.conn, ~p"/on/love?opening=fixture")
 
     for id <- ~w(opening-lead-why opening-highlight-1-why opening-about) do
       assert has_element?(view, "details##{id}[phx-mounted]")
@@ -130,7 +130,7 @@ defmodule DevilsDictionaryWeb.WordOpeningLiveTest do
   test "a word no fixture names renders exactly as it does without the parameter", ctx do
     word!(ctx, "rizz", ~w(wiktionary), scope: nil)
 
-    {:ok, view, _html} = live(ctx.conn, ~p"/define/rizz?opening=fixture")
+    {:ok, view, _html} = live(ctx.conn, ~p"/on/rizz?opening=fixture")
 
     refute has_element?(view, "#opening")
     assert has_element?(view, "#word-rail[class='lg:col-start-1 lg:row-start-1']")
@@ -139,7 +139,7 @@ defmodule DevilsDictionaryWeb.WordOpeningLiveTest do
   test "an explicitly empty composition draws no section, heading or skeleton", ctx do
     word!(ctx, "topographagnosia", ~w(wiktionary), scope: nil)
 
-    {:ok, view, _html} = live(ctx.conn, ~p"/define/topographagnosia?opening=fixture")
+    {:ok, view, _html} = live(ctx.conn, ~p"/on/topographagnosia?opening=fixture")
 
     refute has_element?(view, "#opening")
     refute has_element?(view, "#opening-heading")
@@ -156,13 +156,13 @@ defmodule DevilsDictionaryWeb.WordOpeningLiveTest do
   end
 
   test "turning the fixture on and off is a patch that rebuilds the page", ctx do
-    {:ok, view, _html} = live(ctx.conn, ~p"/define/love")
+    {:ok, view, _html} = live(ctx.conn, ~p"/on/love")
     refute has_element?(view, "#opening")
 
-    render_patch(view, ~p"/define/love?opening=fixture")
+    render_patch(view, ~p"/on/love?opening=fixture")
     assert has_element?(view, "#opening-lead")
 
-    render_patch(view, ~p"/define/love")
+    render_patch(view, ~p"/on/love")
     refute has_element?(view, "#opening")
   end
 
@@ -184,7 +184,7 @@ defmodule DevilsDictionaryWeb.WordOpeningLiveTest do
     test "the page still renders, without the work and without a substitute", ctx do
       committed_manifest!(ctx.tmp_dir, :invalid_checksum)
 
-      {:ok, view, _html} = live(ctx.conn, ~p"/define/love?opening=fixture")
+      {:ok, view, _html} = live(ctx.conn, ~p"/on/love?opening=fixture")
 
       assert has_element?(view, "#opening-lead-text", "temporary insanity")
       refute has_element?(view, "#opening-highlight-1")
@@ -210,7 +210,7 @@ defmodule DevilsDictionaryWeb.WordOpeningLiveTest do
 
       assert is_nil(Opening.reader(%{"opening" => "fixture"}))
 
-      {:ok, view, _html} = live(ctx.conn, ~p"/define/love?opening=fixture")
+      {:ok, view, _html} = live(ctx.conn, ~p"/on/love?opening=fixture")
       refute has_element?(view, "#opening")
     end
 

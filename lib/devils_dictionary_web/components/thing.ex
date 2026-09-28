@@ -24,6 +24,7 @@ defmodule DevilsDictionaryWeb.Thing do
   attr :trail, :list, default: []
   attr :info, :string, default: nil
   attr :demo, :boolean, default: false
+  attr :mode, :atom, default: :public, doc: "the reading mode, for subject links"
 
   def thing_panel(assigns) do
     ~H"""
@@ -31,7 +32,13 @@ defmodule DevilsDictionaryWeb.Thing do
       <.eyebrow>the thing</.eyebrow>
 
       <.disagreement :if={@thing.disagreement != []} concepts={@thing.disagreement} />
-      <.concept_card :if={@thing.concept} concept={@thing.concept} thing={@thing} info={@info} />
+      <.concept_card
+        :if={@thing.concept}
+        concept={@thing.concept}
+        thing={@thing}
+        info={@info}
+        mode={@mode}
+      />
       <.article :if={@thing[:article]} article={@thing.article} info={@info} />
       <.thing_chain
         :if={@thing.chain != []}
@@ -57,6 +64,7 @@ defmodule DevilsDictionaryWeb.Thing do
   attr :concept, :map, required: true
   attr :thing, :map, required: true
   attr :info, :string, default: nil
+  attr :mode, :atom, default: :public, doc: "the reading mode, for subject links"
 
   def concept_card(assigns) do
     ~H"""
@@ -80,9 +88,7 @@ defmodule DevilsDictionaryWeb.Thing do
         <h2 class="font-display text-2xl/8 text-mist-950 dark:text-white">
           <.link
             id="concept-card-entity"
-            navigate={
-              "/entities/#{@concept.object_id}/#{DevilsDictionary.Claims.Connection.slugify(@concept.label)}"
-            }
+            navigate={DevilsDictionary.Routing.Links.path(@concept.object_id, @concept.label, @mode)}
             class="underline-offset-4 transition-colors hover:text-amber-700 hover:underline dark:hover:text-amber-300"
           >
             {@concept.label}

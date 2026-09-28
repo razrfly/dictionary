@@ -95,7 +95,7 @@ defmodule DevilsDictionaryWeb.ConnectedFlowTest do
       person = ctx.bierce.person
 
       # 1. The word page has Bierce's definition on it.
-      {:ok, word_live, html} = live(ctx.conn, ~p"/define/nepotism")
+      {:ok, word_live, html} = live(ctx.conn, ~p"/on/nepotism")
       assert html =~ "Appointing your grandmother"
 
       # 2. Follow the actual definition's author link.
@@ -241,7 +241,7 @@ defmodule DevilsDictionaryWeb.ConnectedFlowTest do
           }
         )
 
-      {:ok, _live, html} = live(ctx.conn, ~p"/define/nepotism")
+      {:ok, _live, html} = live(ctx.conn, ~p"/on/nepotism")
 
       # The panel shows the thing the *meaning* names, and offers the spelling's
       # possibilities separately.
@@ -344,7 +344,7 @@ defmodule DevilsDictionaryWeb.ConnectedFlowTest do
       word!(ctx, "C++", ~w(wiktionary), slug: "c", scope: nil)
       word!(ctx, "c", ~w(wiktionary), slug: "c", scope: nil)
 
-      {:ok, _live, html} = live(ctx.conn, ~p"/define/c")
+      {:ok, _live, html} = live(ctx.conn, ~p"/on/c")
 
       assert html =~ ~s(id="disambiguation")
       assert html =~ "C++"

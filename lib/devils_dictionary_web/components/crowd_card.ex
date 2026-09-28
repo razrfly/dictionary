@@ -32,7 +32,7 @@ defmodule DevilsDictionaryWeb.CrowdCard do
       phx-update="ignore"
       data-term={@config.term}
       data-endpoint={@config.endpoint}
-      data-define-path="/define"
+      data-word-path="/on"
       aria-label="Urban Dictionary, fetched by your browser"
       class="mt-6 rounded-xl border-l-2 border-mist-950/10 py-6 pl-6 dark:border-white/10"
     >

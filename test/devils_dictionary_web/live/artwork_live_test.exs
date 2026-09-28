@@ -160,7 +160,7 @@ defmodule DevilsDictionaryWeb.ArtworkLiveTest do
     assert %{installed: 1} = Artworks.install_meaning_mappings!()
     assertion_count = Repo.aggregate(Assertion, :count)
 
-    {:ok, view, _html} = live(ctx.conn, ~p"/define/war")
+    {:ok, view, _html} = live(ctx.conn, ~p"/on/war")
 
     # The one reader surface (K2 of #109): a gene candidate is a shelf item on
     # the artwork shelf, not a tall card of its own beside it.
@@ -328,7 +328,7 @@ defmodule DevilsDictionaryWeb.ArtworkLiveTest do
     assert artwork.object_id == target.object_id
     assert sense_id == sense.object_id
 
-    {:ok, view, _html} = live(ctx.conn, ~p"/define/love")
+    {:ok, view, _html} = live(ctx.conn, ~p"/on/love")
     assert has_element?(view, "#culture-about-artwork-catalog", "Related Artsy gene")
   end
 
@@ -427,7 +427,7 @@ defmodule DevilsDictionaryWeb.ArtworkLiveTest do
 
     assert %{installed: 1} = Artworks.install_meaning_mappings!()
 
-    {:ok, anonymous, _html} = live(ctx.conn, ~p"/define/war")
+    {:ok, anonymous, _html} = live(ctx.conn, ~p"/on/war")
 
     assert has_element?(anonymous, "#culture-result-catalog_artwork-c#{ctx.work.object_id}")
     refute has_element?(anonymous, "#in-culture a[href^='/connect?']")
@@ -435,7 +435,7 @@ defmodule DevilsDictionaryWeb.ArtworkLiveTest do
     %{conn: conn, user: user} = register_and_log_in_user(%{conn: ctx.conn})
     Repo.update!(Ecto.Changeset.change(user, internal_contributor: true))
 
-    {:ok, contributor, _html} = live(conn, ~p"/define/war")
+    {:ok, contributor, _html} = live(conn, ~p"/on/war")
 
     # The composer link followed the candidate onto the shelf, with the exact
     # sense and the evidence locator still preselected.
@@ -474,7 +474,7 @@ defmodule DevilsDictionaryWeb.ArtworkLiveTest do
     sense!(ctx, war, "wordnet", external_id: "oewn-00975181-n#war", gloss: "armed conflict")
     assert %{installed: 1} = Artworks.install_meaning_mappings!()
 
-    {:ok, word_view, _html} = live(ctx.conn, ~p"/define/war")
+    {:ok, word_view, _html} = live(ctx.conn, ~p"/on/war")
     assert has_element?(word_view, "#culture-filter-artwork", "Artworks")
   end
 

@@ -36,7 +36,7 @@ defmodule DevilsDictionaryWeb.Examples do
 
   use DevilsDictionaryWeb, :html
 
-  alias DevilsDictionary.Claims.Connection
+  alias DevilsDictionary.Routing.Links
   alias DevilsDictionaryWeb.{SourceBadge, Word}
 
   # Above this, the disclosure's chips scroll inside their own box rather
@@ -48,6 +48,7 @@ defmodule DevilsDictionaryWeb.Examples do
   attr :lemma, :string, required: true
   attr :trail, :list, default: []
   attr :demo, :boolean, default: false
+  attr :mode, :atom, default: :public, doc: "the reading mode, for subject links"
 
   def section(assigns) do
     instances = Enum.filter(assigns.examples.items, &(&1.layer == :instance))
@@ -66,6 +67,7 @@ defmodule DevilsDictionaryWeb.Examples do
       |> assign(:rest, rest)
       |> assign(:total, assigns.examples.totals.instance)
       |> assign(:badges?, assigns.examples.sources |> Enum.uniq_by(& &1.slug) |> length() > 1)
+      |> assign(:paths, subject_paths(assigns.examples.items, assigns.mode))
 
     ~H"""
     <.slab :if={@examples.items != []} id="examples" title="Examples">
@@ -87,7 +89,7 @@ defmodule DevilsDictionaryWeb.Examples do
           class={["flex flex-col gap-3", @shown != [] && "mb-5"]}
         >
           <li :for={item <- @exemplars} id={"examples-" <> dom_id(item.id)} class="min-w-0">
-            <.card item={item} />
+            <.card item={item} paths={@paths} />
           </li>
         </ul>
 
@@ -99,6 +101,7 @@ defmodule DevilsDictionaryWeb.Examples do
               cited?={MapSet.member?(@cited_ids, item.subject.entity_id)}
               trail={@trail}
               demo={@demo}
+              paths={@paths}
             />
           </li>
         </ul>
@@ -124,6 +127,7 @@ defmodule DevilsDictionaryWeb.Examples do
                 cited?={MapSet.member?(@cited_ids, item.subject.entity_id)}
                 trail={@trail}
                 demo={@demo}
+                paths={@paths}
               />
             </li>
           </ul>
@@ -154,11 +158,24 @@ defmodule DevilsDictionaryWeb.Examples do
 
   # A thing's page, or — for a content subject (a GIF, a quotation), which has
   # no entity page — the claim's own.
-  defp subject_path(%{subject: %{kind: :content}, claim: claim}),
+  defp subject_path(%{subject: %{kind: :content}, claim: claim}, _paths),
     do: "/connections/#{claim.assertion_id}"
 
-  defp subject_path(%{subject: subject}),
-    do: "/entities/#{subject.object_id}/#{Connection.slugify(subject.label)}"
+  defp subject_path(%{subject: subject}, paths),
+    do: Map.get(paths, subject.object_id) || Links.entity_path(subject.object_id, subject.label)
+
+  # Every entity the section links, through the one link helper in one query
+  # (#219): its address in the reading mode, or the exact-identity route.
+  defp subject_paths(items, mode) do
+    items
+    |> Enum.flat_map(fn
+      %{subject: %{kind: kind}} when kind in [:content, :lexeme] -> []
+      %{subject: %{object_id: id, label: label}} when is_integer(id) -> [{id, label}]
+      _other -> []
+    end)
+    |> Enum.uniq_by(&elem(&1, 0))
+    |> Links.paths(mode)
+  end
 
   # The things both layers name: the chip gains a ✓ (#181 wireframe 2), and
   # the two stay two items, because their signals are different kinds of thing.
@@ -171,6 +188,7 @@ defmodule DevilsDictionaryWeb.Examples do
   end
 
   attr :item, :map, required: true
+  attr :paths, :map, default: %{}
 
   # One exemplar: a thing someone cites for a meaning. A card because it is
   # a different kind of content from the chips beneath — a claim with a why,
@@ -186,7 +204,7 @@ defmodule DevilsDictionaryWeb.Examples do
       |> assign(:signals, item.signals)
       |> assign(:pending?, pending?(item))
       |> assign(:hidden_from_public?, hidden_from_public?(item))
-      |> assign(:href, subject_path(item))
+      |> assign(:href, subject_path(item, assigns.paths))
 
     ~H"""
     <article class={[
@@ -314,6 +332,7 @@ defmodule DevilsDictionaryWeb.Examples do
   attr :cited?, :boolean, default: false
   attr :trail, :list, default: []
   attr :demo, :boolean, default: false
+  attr :paths, :map, default: %{}
 
   defp chip(assigns) do
     subject = assigns.item.subject
@@ -321,7 +340,7 @@ defmodule DevilsDictionaryWeb.Examples do
     assigns =
       assigns
       |> assign(:subject, subject)
-      |> assign(:href, href(subject, assigns.trail, assigns.demo))
+      |> assign(:href, href(subject, assigns.trail, assigns.demo, assigns.paths))
       |> assign(:badge_sources, Enum.uniq_by(assigns.item.sources, & &1.slug))
       |> assign(:title, title(assigns.item))
 
@@ -404,10 +423,10 @@ defmodule DevilsDictionaryWeb.Examples do
 
   defp words(_source), do: nil
 
-  defp href(%{kind: :lexeme, slug: slug}, trail, demo), do: Word.hop(slug, trail, demo)
+  defp href(%{kind: :lexeme, slug: slug}, trail, demo, _paths), do: Word.hop(slug, trail, demo)
 
-  defp href(%{kind: :entity, object_id: id, label: label}, _trail, _demo),
-    do: "/entities/#{id}/#{Connection.slugify(label)}"
+  defp href(%{kind: :entity, object_id: id, label: label}, _trail, _demo, paths),
+    do: Map.get(paths, id) || Links.entity_path(id, label)
 
   # The chip names the thing; the tooltip says what else WordNet calls it and
   # who filed it where — the item's own reason, never a new sentence.

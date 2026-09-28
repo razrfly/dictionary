@@ -13,7 +13,25 @@ defmodule DevilsDictionary.Routing.Resolver do
   page and that page's canonical together — so a move or merge committing
   between two reads cannot make consistent state look corrupt.
 
-  Nothing in the router calls this yet; reader integration is Stage 3.
+  ## Reading modes (#219)
+
+  Every entry point takes `mode:`, `:public` (the default) or `:internal`,
+  and link generation and direct requests use the same one:
+
+    * `:public` serves only `published` pages. A draft is `:unavailable`,
+      indistinguishable from missing.
+    * `:internal` also serves `draft` pages, for a reader who may see work in
+      progress (`DevilsDictionaryWeb.ReadingMode` decides who). It changes no
+      publication state, approval or ledger row.
+
+  `withdrawn` pages are withheld in both modes, and every lifecycle rule —
+  merged, split, retired, tombstones — is the same in both. An alias or an
+  equivalent spelling answers with its **destination's** outcome in the same
+  mode, so a public request never redirects to a draft.
+
+  The reader serves the eight family routes and the `/on` overviews through
+  this module (`DevilsDictionaryWeb.ReadingStatus`, `EntityLive`, `WordLive`)
+  and links subjects through `Routing.Links`.
   """
 
   import Ecto.Query
@@ -25,6 +43,7 @@ defmodule DevilsDictionary.Routing.Resolver do
   alias DevilsDictionary.Routing.{Address, Page, Pages, PublicPath, Resolution}
 
   @max_merge_hops 64
+  @modes [:public, :internal]
 
   @doc """
   Resolves a raw request path, as received (percent-encoded).
@@ -33,7 +52,9 @@ defmodule DevilsDictionary.Routing.Resolver do
   slash — resolves to the same page and is answered with a redirect to the
   canonical, never a second 200.
   """
-  def resolve(raw) do
+  def resolve(raw, opts \\ []) do
+    mode = mode!(opts)
+
     case Address.normalize_request(raw) do
       {:ok, normalized, exact?} ->
         case load(normalized) do
@@ -42,9 +63,9 @@ defmodule DevilsDictionary.Routing.Resolver do
 
           {path, page, canonical} ->
             path
-            |> decide(page, canonical, exact?)
+            |> decide(page, canonical, exact?, mode)
             |> Map.put(:request, raw)
-            |> with_successors(true)
+            |> with_successors(true, mode)
             |> report()
         end
 
@@ -86,10 +107,12 @@ defmodule DevilsDictionary.Routing.Resolver do
   end
 
   @doc """
-  The decision, given the loaded rows. Pure, so every state — including ones
-  the database refuses to store — can be examined.
+  The decision, given the loaded rows, in `mode` (`:public` by default). Pure,
+  so every state — including ones the database refuses to store — can be
+  examined.
   """
-  def decide(%PublicPath{} = path, %Page{} = page, canonical, exact?) do
+  def decide(%PublicPath{} = path, %Page{} = page, canonical, exact?, mode \\ :public)
+      when mode in @modes do
     base = %Resolution{outcome: :missing, path: path, page: page}
 
     cond do
@@ -120,7 +143,7 @@ defmodule DevilsDictionary.Routing.Resolver do
           canonical_destination_page_id: canonical.destination_page_id
         })
 
-      page.publication_state != :published ->
+      not visible?(page, mode) ->
         %{base | outcome: :unavailable}
 
       path.id != canonical.id or not exact? ->
@@ -148,15 +171,24 @@ defmodule DevilsDictionary.Routing.Resolver do
   end
 
   @doc """
-  Resolves an exact page id — the basis of every internal link.
+  Whether a page may be served in `mode`: a published page always, a draft
+  only internally, a withdrawn page never.
+  """
+  def visible?(%Page{publication_state: :published}, _mode), do: true
+  def visible?(%Page{publication_state: :draft}, :internal), do: true
+  def visible?(%Page{}, _mode), do: false
+
+  @doc """
+  Resolves an exact page id — the basis of every internal link — in the
+  reading mode `opts[:mode]` (`:public` by default).
 
   A missing id — or anything that is not an id — is `:missing`: no record
   found by a name or slug stands in for it. A merged page redirects to its survivor's canonical; a retired page is
   `:gone`.
   """
-  def resolve_page(page_id), do: resolve_page(page_id, true)
+  def resolve_page(page_id, opts \\ []), do: resolve_page(page_id, true, mode!(opts))
 
-  defp resolve_page(page_id, expand?) do
+  defp resolve_page(page_id, expand?, mode) do
     case follow(load_page(page_id), 0, MapSet.new()) do
       {:error, :missing} ->
         %Resolution{outcome: :missing}
@@ -174,10 +206,10 @@ defmodule DevilsDictionary.Routing.Resolver do
       {:ok, page, canonical, hops} ->
         case canonical do
           nil -> unrouted(page)
-          canonical -> decide(canonical, page, canonical, true)
+          canonical -> decide(canonical, page, canonical, true, mode)
         end
         |> via_merge(hops)
-        |> with_successors(expand?)
+        |> with_successors(expand?, mode)
         |> report()
     end
   end
@@ -210,10 +242,11 @@ defmodule DevilsDictionary.Routing.Resolver do
 
   @doc """
   The encoded canonical link for a page id, following merges, or `:error` for
-  a page that is missing, retired, unpublished or inconsistent.
+  a page that is missing, retired, not visible in the reading mode
+  (`opts[:mode]`, `:public` by default) or inconsistent.
   """
-  def link(page_id) do
-    case resolve_page(page_id) do
+  def link(page_id, opts \\ []) do
+    case resolve_page(page_id, opts) do
       %Resolution{outcome: outcome, location: location}
       when outcome in [:canonical, :redirect, :choice] ->
         {:ok, Address.encode(location)}
@@ -227,7 +260,7 @@ defmodule DevilsDictionary.Routing.Resolver do
   # resolved by id. None is chosen for the reader. Only one level is expanded:
   # a successor that is itself split is a choice the reader opens next, so
   # successors that name each other cannot loop.
-  defp with_successors(%Resolution{outcome: :choice, page: page} = resolution, true) do
+  defp with_successors(%Resolution{outcome: :choice, page: page} = resolution, true, mode) do
     successors =
       case Pages.current_revision(page) do
         nil ->
@@ -237,14 +270,24 @@ defmodule DevilsDictionary.Routing.Resolver do
           revision.memberships
           |> Enum.filter(&(&1.relationship == :split_successor))
           |> Enum.map(
-            &%{page_id: &1.target_page_id, resolution: resolve_page(&1.target_page_id, false)}
+            &%{
+              page_id: &1.target_page_id,
+              resolution: resolve_page(&1.target_page_id, false, mode)
+            }
           )
       end
 
     %{resolution | successors: successors}
   end
 
-  defp with_successors(resolution, _expand?), do: resolution
+  defp with_successors(resolution, _expand?, _mode), do: resolution
+
+  defp mode!(opts) do
+    case Keyword.get(opts, :mode, :public) do
+      mode when mode in @modes -> mode
+      other -> raise ArgumentError, "unknown reading mode: #{inspect(other)}"
+    end
+  end
 
   defp report(%Resolution{outcome: :corrupt} = resolution) do
     Logger.error("routing: corrupt resolver state",

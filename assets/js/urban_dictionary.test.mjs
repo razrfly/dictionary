@@ -148,7 +148,7 @@ function context(term = 'cromulent') {
     render: Hook.render,
     removed: () => removed,
     el: {
-      dataset: {term, endpoint: 'https://api.urbandictionary.com/v0/define', definePath: '/define'},
+      dataset: {term, endpoint: 'https://api.urbandictionary.com/v0/define', wordPath: '/on'},
       remove() { removed = true },
       querySelector() { return null }
     }

@@ -7,7 +7,8 @@ defmodule DevilsDictionary.Registry.Lexeme do
   one distinct lowercased lemma, and searching for `C++` landed on `/define/c`
   headed `-c-`, because a slug generator's output was being treated as identity.
   So `slug` survives as a cosmetic, deliberately non-unique label: a word page
-  is addressed by `object_id`, and `/define/:slug` resolves or disambiguates.
+  is addressed by `object_id`, and `/on/:slug` reads every word a slug reaches
+  and names each by its address (#219; it was `/define/:slug`).
 
   Forms moved out to `lexeme_forms`, where each carries the source revision that
   attested it. `pronunciations`, `etymology` and `metadata` stay here; the

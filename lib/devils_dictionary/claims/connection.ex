@@ -361,7 +361,9 @@ defmodule DevilsDictionary.Claims.Connection do
     |> select([e], {e.object_id, e.preferred_label})
     |> Repo.all()
     |> Map.new(fn {id, label} ->
-      %{label: label || "##{id}", path: "/entities/#{id}/#{slugify(label)}"}
+      # `subject_id` lets a reader link the subject at its address in the
+      # reading mode (`Routing.Links`); `path` is its exact identity.
+      %{label: label || "##{id}", path: "/entities/#{id}/#{slugify(label)}", subject_id: id}
       |> then(&{id, &1})
     end)
   end

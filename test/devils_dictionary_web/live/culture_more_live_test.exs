@@ -39,7 +39,7 @@ defmodule DevilsDictionaryWeb.CultureMoreLiveTest do
     word = word!(ctx, "elegy", ~w(wordnet))
     sense!(ctx, word, "wordnet", gloss: "a lament for the dead")
 
-    {:ok, live, _html} = live(ctx.conn, ~p"/define/elegy")
+    {:ok, live, _html} = live(ctx.conn, ~p"/on/elegy")
 
     run_all!()
     _ = render(live)
@@ -72,7 +72,7 @@ defmodule DevilsDictionaryWeb.CultureMoreLiveTest do
     word = word!(ctx, "elegy", ~w(wordnet))
     sense!(ctx, word, "wordnet", gloss: "a lament for the dead")
 
-    {:ok, live, _html} = live(ctx.conn, ~p"/define/elegy")
+    {:ok, live, _html} = live(ctx.conn, ~p"/on/elegy")
     run_all!()
     _ = render(live)
 

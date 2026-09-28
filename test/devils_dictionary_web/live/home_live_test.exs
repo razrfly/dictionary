@@ -23,13 +23,13 @@ defmodule DevilsDictionaryWeb.HomeLiveTest do
 
   describe "the page" do
     test "renders the hero, the search box and the seed words", ctx do
-      {:ok, _live, html} = live(ctx.conn, ~p"/")
+      {:ok, live, html} = live(ctx.conn, ~p"/")
 
       assert html =~ "Every word. Every source. One page."
       assert html =~ ~s(id="search-q")
       assert html =~ ~s(id="surprise")
       assert html =~ ~s(id="seed-oyster")
-      assert html =~ ~s(href="/define/joy")
+      assert has_element?(live, "#seed-joy[href='/on/joy']")
 
       # The title is the default, so it does not read "wordhoard · wordhoard".
       assert html =~ ~s(Every word, every source · wordhoard</title>)
@@ -145,7 +145,7 @@ defmodule DevilsDictionaryWeb.HomeLiveTest do
 
       live |> form("#search", %{"q" => "oyster"}) |> render_submit()
 
-      assert_redirect(live, "/define/oyster")
+      assert_redirect(live, "/on/oyster")
     end
 
     test "enter on an inflected form goes to the word it belongs to", ctx do
@@ -155,7 +155,7 @@ defmodule DevilsDictionaryWeb.HomeLiveTest do
 
       live |> form("#search", %{"q" => "oysters"}) |> render_submit()
 
-      assert_redirect(live, "/define/oyster")
+      assert_redirect(live, "/on/oyster")
     end
 
     test "enter on a miss stays on the page with what the trigram found", ctx do
@@ -180,7 +180,7 @@ defmodule DevilsDictionaryWeb.HomeLiveTest do
 
       live |> element("#surprise") |> render_click()
 
-      assert_redirect(live, "/define/quark")
+      assert_redirect(live, "/on/quark")
     end
 
     test "an empty index leaves the reader where they are", ctx do
