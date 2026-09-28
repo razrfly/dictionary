@@ -589,7 +589,7 @@ defmodule DevilsDictionary.Routing.Recovery do
     base = Repo.config() |> Snapshot.resolve() |> Keyword.put(:url, nil)
 
     if url?(target) do
-      parsed = Ecto.Repo.Supervisor.parse_url(target)
+      parsed = parse_url!(target)
 
       # A `socket` or `endpoints` query option would be connected through by
       # the pool but not by the identity probe, which follows host, port and
@@ -613,7 +613,23 @@ defmodule DevilsDictionary.Routing.Recovery do
   defp url?(target), do: String.contains?(target, "://")
 
   # A URL as an error may show it: without its password.
-  defp redact(url), do: String.replace(url, ~r{(://[^:/@]*):[^@]*@}, "\\1:…@")
+  # Ecto's own message repeats the URL and its parsed userinfo, password
+  # included; only its reason is kept.
+  defp parse_url!(url) do
+    Ecto.Repo.Supervisor.parse_url(url)
+  rescue
+    error in Ecto.InvalidURLError ->
+      reason =
+        error.message
+        |> String.split(". The parsed URL is:")
+        |> hd()
+        |> String.replace_prefix("invalid URL #{error.url}, ", "")
+
+      raise ArgumentError, "baseline URL #{inspect(redact(url))}: #{redact(reason)}"
+  end
+
+  # Up to the authority's last `@`, so a raw `@` in a password is hidden too.
+  defp redact(url), do: String.replace(url, ~r{(://[^:/@]*):[^/]*@}, "\\1:…@")
 
   @doc """
   The server and database a Repo config, a snapshot's recorded source, or a

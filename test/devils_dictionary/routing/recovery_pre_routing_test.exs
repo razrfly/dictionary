@@ -282,6 +282,15 @@ defmodule DevilsDictionary.Routing.RecoveryPreRoutingTest do
 
       refute error.message =~ ":#{c[:password]}@"
     end
+
+    # Nor does an invalid URL, or a password with a raw `@` in it.
+    for url <- [
+          "ecto://#{c[:username]}:s3cret@/#{db["a"]}",
+          "ecto://u:s3@cret@localhost/db?socket=/x"
+        ] do
+      error = assert_raise ArgumentError, fn -> Recovery.identity(url) end
+      refute error.message =~ "s3", error.message
+    end
   end
 
   test "routing is judged by migration history too: a recorded migration without its tables fails",
