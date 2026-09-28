@@ -2,8 +2,9 @@
 
 **Status:** 27 September 2026, for [routing issue #194](https://github.com/razrfly/dictionary/issues/194).
 - **Population:** a proposal. It was **refreshed** from a read-only export of the development corpus as captured at 13:29 UTC on 27 September (policy 1.0.0, 100,784 entities; export SHA-256 `7524e9e3…`) by [`candidates.py`](candidates.py), whose output is [`candidates.json`](candidates.json). It replaces the 26 September derivation (100,723 entities, 169 records), which differed by one record.
-- **Backfill:** implemented, and rehearsed on isolated copies ([backfill](backfill.md)).
-- **Development corpus:** nothing has been backfilled, allocated, approved or published on it.
+- **Backfill:** implemented, and rehearsed on isolated copies ([backfill](backfill.md)). It was corrected under [#219](https://github.com/razrfly/dictionary/issues/219): every dependency is validated, and a confirmation is atomic. It was then [rehearsed again on the corrected code](backfill.md#re-run-on-the-corrected-code-219) on 28 September.
+- **Reader:** On and the family routes serve what the ledger holds (#219). They were demonstrated on a disposable copy backfilled with rehearsal reviews and marked fixtures ([`rehearsal/on_demo.exs`](rehearsal/on_demo.exs)).
+- **Development corpus:** nothing has been backfilled, allocated, approved or published on it. That waits for the move ([#211](https://github.com/razrfly/dictionary/issues/211)), then [CP4 (#224)](https://github.com/razrfly/dictionary/issues/224): the owner's decisions and real reviewers.
 
 Re-derive the population from a fresh export before any persistent run: the backfill refuses a population derived from any other export. After the proposed [corpus catch-up](corpus-catch-up.md), a fresh derivation has the same 170 records and dispositions. Only 14 records' stored kind changes (concept → work or event), which the policy does not classify by.
 

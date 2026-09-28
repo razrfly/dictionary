@@ -3,7 +3,9 @@
 - **Status:** accepted design, 26 September 2026.
   - **Stage 1** is implemented: persistence, ledger, resolver and a tested [recovery procedure](../routing/recovery.md) ([record](../routing/stage-1-foundation.md)).
   - **Stage 2**'s resumable [backfill](../routing/stage-2/backfill.md) is implemented and rehearsed on copies of the development corpus. It has not run on the corpus itself.
-  - No route is served yet. Reader integration, On editing and publication are pending.
+  - **Stage 2**'s backfill was corrected and rehearsed again under [#219](https://github.com/razrfly/dictionary/issues/219): every dependency is checked, and a confirmation is atomic.
+  - **The reader (Stage 3)** is implemented under #219. It serves `/on/:slug` as the reading entry, `/words/:id/:slug` for one exact word, and the eight family routes, in public and internal reading modes (§4, §6). It was demonstrated on a disposable copy of the corpus. On the owner's working installation it serves no namespace address yet: that needs the move ([#211](https://github.com/razrfly/dictionary/issues/211)) and the reviewed population ([CP4, #224](https://github.com/razrfly/dictionary/issues/224)).
+  - Pending: On editing and the page–composition binding (Stage 4); publication, indexing and sitemaps (Stage 5).
 - **Approval:** the owner accepted the audit recommendations in this conversation and asked for the completed specification and corpus validation.
 - **Owner:** project owner; implementation changes are reviewed through the repository's normal PR process.
 - **Issue:** [Routing before launch](https://github.com/razrfly/dictionary/issues/194).
