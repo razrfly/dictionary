@@ -497,7 +497,9 @@ defmodule DevilsDictionaryWeb.EntityLive do
                   id={"connection-out-#{claim.assertion_id}"}
                   class="grid gap-1 py-3 sm:grid-cols-[minmax(0,10rem)_minmax(0,1fr)] sm:gap-5"
                 >
-                  <.a :if={claim.path} navigate={claim.path} class="font-medium">{claim.label}</.a>
+                  <.a :if={claim.path} navigate={endpoint_path(@paths, claim)} class="font-medium">
+                    {claim.label}
+                  </.a>
                   <span :if={is_nil(claim.path)} class="font-medium">{claim.label}</span>
                   <div class="min-w-0">
                     <p
@@ -547,7 +549,11 @@ defmodule DevilsDictionaryWeb.EntityLive do
                   id={"discovery-appearance-#{appearance.target_object_id}-#{appearance.provider_slug}"}
                   class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-3"
                 >
-                  <.a :if={appearance.path} navigate={appearance.path} class="font-medium">
+                  <.a
+                    :if={appearance.path}
+                    navigate={endpoint_path(@paths, appearance)}
+                    class="font-medium"
+                  >
                     {appearance.label}
                   </.a>
                   <span :if={is_nil(appearance.path)} class="font-medium">{appearance.term}</span>
@@ -835,7 +841,7 @@ defmodule DevilsDictionaryWeb.EntityLive do
                   id={"connection-in-#{claim.assertion_id}"}
                   class="flex flex-wrap items-baseline gap-x-2 py-3"
                 >
-                  <.a :if={claim.path} navigate={claim.path}>{claim.label}</.a>
+                  <.a :if={claim.path} navigate={endpoint_path(@paths, claim)}>{claim.label}</.a>
                   <span :if={is_nil(claim.path)}>{claim.label}</span>
                   <span class="text-mist-500">{claim.predicate.forward_label} → this</span>
                   <.a
@@ -852,7 +858,7 @@ defmodule DevilsDictionaryWeb.EntityLive do
                   class="flex flex-wrap items-baseline gap-x-2 py-3"
                 >
                   <span class="text-mist-500">this → {claim.predicate.forward_label}</span>
-                  <.a :if={claim.path} navigate={claim.path}>{claim.label}</.a>
+                  <.a :if={claim.path} navigate={endpoint_path(@paths, claim)}>{claim.label}</.a>
                   <span :if={is_nil(claim.path)}>{claim.label}</span>
                   <.a
                     navigate={~p"/connections/#{claim.assertion_id}"}
@@ -1149,7 +1155,18 @@ defmodule DevilsDictionaryWeb.EntityLive do
       for(%{kind: :entity} = named <- page.named_under, do: {named.object_id, named.label}),
       Enum.map(page.works, &{&1.object_id, &1.label}),
       for(%{published_in: %{} = p} <- page.definitions, do: {p.object_id, p.label}),
-      Enum.map(page.editions, &{&1.object_id, &1.label})
+      Enum.map(page.editions, &{&1.object_id, &1.label}),
+      # Connection and discovery endpoints that are subjects.
+      for(
+        rows <- [
+          page.connections.incoming,
+          page.connections.outgoing,
+          page.meaning_connections,
+          page.discovery_appearances
+        ],
+        %{subject_id: id, label: label} <- rows,
+        do: {id, label}
+      )
     ]
     |> Enum.concat()
     |> Enum.uniq_by(&elem(&1, 0))
@@ -1158,6 +1175,13 @@ defmodule DevilsDictionaryWeb.EntityLive do
 
   defp subject_path(paths, object_id, label),
     do: Map.get(paths, object_id) || Links.entity_path(object_id, label)
+
+  # A connection's other end: a subject through the link helper, a word or
+  # a content item at its own route.
+  defp endpoint_path(paths, %{subject_id: id, label: label}),
+    do: subject_path(paths, id, label)
+
+  defp endpoint_path(_paths, endpoint), do: endpoint.path
 
   # The subject header's facts: the family (from the address), the draft
   # mark, the way back to On, and the provenance drawer's contents.

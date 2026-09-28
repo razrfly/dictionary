@@ -406,6 +406,33 @@ defmodule DevilsDictionaryWeb.OnReaderTest do
     end
   end
 
+  test "a connection's subject end links to its address, through the one helper", ctx do
+    world = mars!(ctx, published: true)
+
+    singer =
+      subject!("Bruno Mars", "people",
+        kind: :person,
+        path: "/people/bruno-mars",
+        published: true,
+        actor: ctx.human
+      )
+
+    {:ok, claim} =
+      DevilsDictionary.Claims.assert(
+        world.album.entity.object_id,
+        "authored_by",
+        singer.entity.object_id
+      )
+
+    reading(false, fn ->
+      {:ok, view, _html} = live(ctx.conn, "/entities/#{world.album.entity.object_id}/mars")
+      assert has_element?(view, "#connection-out-#{claim.id} a[href='/people/bruno-mars']")
+
+      {:ok, detail, _html} = live(ctx.conn, "/connections/#{claim.id}")
+      assert has_element?(detail, "a[href='/people/bruno-mars']")
+    end)
+  end
+
   test "a revoked role stops internal reading at the next navigation", ctx do
     mars!(ctx)
     scope = DevilsDictionary.CurationFixtures.account([:contributor])
