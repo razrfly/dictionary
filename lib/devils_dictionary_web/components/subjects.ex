@@ -320,7 +320,7 @@ defmodule DevilsDictionaryWeb.Subjects do
   end
 
   defp state(%{card: %{state: pending}} = assigns)
-       when pending in [:not_yet_public, :awaiting_review, :identity_review, :withdrawn] do
+       when pending in [:not_yet_public, :awaiting_review, :identity_review] do
     ~H"""
     <p class="flex flex-wrap items-center gap-x-2 gap-y-1 text-base/7 text-mist-500 sm:text-sm/6">
       <span class="inline-flex items-center gap-1 rounded-full bg-amber-500/10 py-0.5 pr-2 pl-1 font-medium text-amber-800 dark:bg-amber-400/10 dark:text-amber-300">
@@ -360,7 +360,6 @@ defmodule DevilsDictionaryWeb.Subjects do
 
   defp state_label(:addressed), do: "Addressed"
   defp state_label(:not_yet_public), do: "Not yet public"
-  defp state_label(:withdrawn), do: "Withdrawn"
   defp state_label(:no_address), do: "No public address yet"
   defp state_label(:awaiting_review), do: "Awaiting classification review"
   defp state_label(:identity_review), do: "Awaiting identity review"

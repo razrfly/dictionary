@@ -50,14 +50,18 @@ defmodule DevilsDictionary.Routing.SubjectsTest do
     assert internal[published.entity.object_id].state == :addressed
 
     d = public[draft.entity.object_id]
-    assert {d.state, d.draft?} == {:not_yet_public, false}
+    # Publicly, nothing of the draft's address; its family is the decision's.
+    assert {d.state, d.draft?, d.address, d.family} == {:not_yet_public, false, nil, "subjects"}
     assert d.path == "/entities/#{draft.entity.object_id}/mercury"
     di = internal[draft.entity.object_id]
     assert {di.state, di.path, di.draft?} == {:addressed, "/subjects/mercury", true}
 
     for mode_cards <- [public, internal] do
+      # Withdrawn reads as no address at all: not its state, not its path.
       w = mode_cards[withdrawn.entity.object_id]
-      assert {w.state, w.path} == {:withdrawn, "/entities/#{withdrawn.entity.object_id}/mercury"}
+
+      assert {w.state, w.path, w.address, w.family} ==
+               {:no_address, "/entities/#{withdrawn.entity.object_id}/mercury", nil, "works"}
 
       m = mode_cards[mapped.entity.object_id]
       assert {m.state, m.family, m.address} == {:no_address, "concepts", nil}

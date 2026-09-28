@@ -27,8 +27,7 @@ defmodule DevilsDictionary.Routing.Subjects do
   |---|---|---|
   | `:addressed` | the page's canonical is served in the reading mode | the canonical (a draft marked in internal mode) |
   | `:not_yet_public` | an address, but a draft read publicly | `/entities/:id/:slug` |
-  | `:withdrawn` | an address whose page is withdrawn | `/entities/:id/:slug` |
-  | `:no_address` | mapped, no address yet | `/entities/:id/:slug` |
+  | `:no_address` | mapped, no address yet — or its page withdrawn, which reads as none | `/entities/:id/:slug` |
   | `:awaiting_review` | `needs_review`, with its candidate families | `/entities/:id/:slug` |
   | `:identity_review` | `identity_review` | `/entities/:id/:slug` |
   | `:source_page` | `excluded_source_page` | `/entities/:id/:slug` |
@@ -176,11 +175,13 @@ defmodule DevilsDictionary.Routing.Subjects do
     {page, canonical} = page_rows(row)
     served = page && canonical && Links.served(page, canonical, mode)
 
+    # A withdrawn page is withheld in both modes, as a request for its address
+    # is: the card reads as if there were none. An unserved address is never
+    # shown, nor its namespace.
     state =
       cond do
         served -> :addressed
         canonical && page.publication_state == :draft -> :not_yet_public
-        canonical && page.publication_state == :withdrawn -> :withdrawn
         row.status == "mapped" -> :no_address
         row.status == "needs_review" -> :awaiting_review
         row.status == "identity_review" -> :identity_review
@@ -188,7 +189,14 @@ defmodule DevilsDictionary.Routing.Subjects do
         true -> :unclassified
       end
 
-    family = Address.family(row.path) || (state == :no_address && row.decided_family) || nil
+    family =
+      cond do
+        served -> Address.family(row.path)
+        # The decision's family, which an allocation must match: never the
+        # unserved address itself.
+        state in [:no_address, :not_yet_public] -> row.decided_family
+        true -> nil
+      end
 
     %{
       object_id: row.object_id,
@@ -203,7 +211,7 @@ defmodule DevilsDictionary.Routing.Subjects do
       candidate_families: row.candidate_families || [],
       role: page && page.role,
       page_id: page && page.id,
-      address: canonical && canonical.path,
+      address: served && canonical.path,
       draft?: state == :addressed and page.publication_state == :draft,
       path: served || Links.entity_path(row.object_id, row.label)
     }
