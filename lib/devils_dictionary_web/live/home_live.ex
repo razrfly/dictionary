@@ -64,9 +64,10 @@ defmodule DevilsDictionaryWeb.HomeLive do
   # picked from: showing *oyster · adj* because "adj" sorts first would be a
   # lie about the word.
   #
-  # Within a slug, a word is its exact lemma (#219): `Mars`, `mars` and `MARS`
-  # are three, each kept with the id of its first lexeme so that selecting it
-  # is selecting that identity.
+  # Selecting is by identity (#219). A slug that reaches one lexeme opens it
+  # exactly. One lemma in several parts of speech opens On, which reads exactly
+  # those. Several lemmas (`Mars`, `mars`, `MARS`) get the On row and one row
+  # per lexeme, each opening the word it names.
   defp results(q, mode), do: word_results(q) ++ entity_results(q, mode)
 
   defp word_results(q) do
@@ -82,16 +83,15 @@ defmodule DevilsDictionaryWeb.HomeLive do
 
       words =
         group
-        |> Enum.group_by(& &1.lemma)
-        |> Enum.map(fn {lemma, rows} ->
+        |> Enum.uniq_by(& &1.lexeme_id)
+        |> Enum.map(fn row ->
           %{
-            lemma: lemma,
-            lexeme_id: rows |> hd() |> Map.get(:lexeme_id),
-            pos: rows |> Enum.map(& &1.pos) |> Enum.uniq() |> Enum.join(" · "),
-            enriched?: Enum.any?(rows, &(not is_nil(&1.enriched_at)))
+            lemma: row.lemma,
+            lexeme_id: row.lexeme_id,
+            pos: row.pos,
+            enriched?: not is_nil(row.enriched_at)
           }
         end)
-        |> Enum.sort_by(fn word -> Enum.find_index(group, &(&1.lemma == word.lemma)) end)
 
       %{
         kind: :word,
@@ -99,7 +99,8 @@ defmodule DevilsDictionaryWeb.HomeLive do
         lemma: group |> hd() |> Map.get(:lemma),
         pos: group |> Enum.map(& &1.pos) |> Enum.uniq() |> Enum.join(" · "),
         enriched?: Enum.any?(group, &(not is_nil(&1.enriched_at))),
-        words: words
+        words: words,
+        lemmas: words |> Enum.map(& &1.lemma) |> Enum.uniq() |> length()
       }
     end)
   end
@@ -254,12 +255,18 @@ defmodule DevilsDictionaryWeb.HomeLive do
               class="flex flex-col divide-y divide-mist-950/5 dark:divide-white/10"
             >
               <li :for={result <- @results}>
-                <%!-- A word alone under its slug: selecting it selects that
-                     word, by identity. --%>
+                <%!-- One lemma under its slug: one lexeme opens itself, by
+                     identity; several parts of speech open On, which reads
+                     exactly them. --%>
                 <.link
-                  :if={result.kind == :word and length(result.words) == 1}
+                  :if={result.kind == :word and result.lemmas == 1}
                   id={"result-#{result.slug}"}
-                  navigate={~p"/words/#{hd(result.words).lexeme_id}/#{result.slug}"}
+                  navigate={
+                    if(length(result.words) == 1,
+                      do: ~p"/words/#{hd(result.words).lexeme_id}/#{result.slug}",
+                      else: ~p"/on/#{result.slug}"
+                    )
+                  }
                   class="flex min-w-0 items-baseline justify-between gap-4 py-3 hover:bg-mist-950/2.5 dark:hover:bg-white/5"
                 >
                   <span class="min-w-0">
@@ -272,9 +279,9 @@ defmodule DevilsDictionaryWeb.HomeLive do
                   </span>
                   <span class="shrink-0 text-mist-500">Word · {result.pos}</span>
                 </.link>
-                <%!-- Several words under one slug: the row opens On, which
-                     reads them together, and each word opens itself. --%>
-                <div :if={result.kind == :word and length(result.words) > 1} class="py-3">
+                <%!-- Several lemmas under one slug: the row opens On, which
+                     reads them together, and each lexeme opens itself. --%>
+                <div :if={result.kind == :word and result.lemmas > 1} class="py-3">
                   <.link
                     id={"result-#{result.slug}"}
                     navigate={~p"/on/#{result.slug}"}
@@ -284,7 +291,7 @@ defmodule DevilsDictionaryWeb.HomeLive do
                       On {result.lemma}
                     </span>
                     <span class="shrink-0 text-mist-500">
-                      {length(result.words)} words spelled “{result.slug}”
+                      {result.lemmas} words spelled “{result.slug}”
                     </span>
                   </.link>
                   <ul role="list" class="mt-1 flex flex-col">

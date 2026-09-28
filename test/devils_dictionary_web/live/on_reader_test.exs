@@ -311,9 +311,19 @@ defmodule DevilsDictionaryWeb.OnReaderTest do
 
         assert has_element?(view, "#overview")
         # Stored order, and a member named otherwise than the page.
-        curated = view |> element("#subjects-curated") |> render()
-        assert curated =~ "Ares"
-        assert :binary.match(curated, "Ares") < :binary.match(curated, "fourth planet")
+        curated =
+          view
+          |> element("#subjects-curated")
+          |> render()
+          |> LazyHTML.from_fragment()
+          |> LazyHTML.query("article[id]")
+          |> LazyHTML.attribute("id")
+
+        assert Enum.find_index(curated, &(&1 == "subject-curated-#{ares.entity.object_id}")) <
+                 Enum.find_index(
+                   curated,
+                   &(&1 == "subject-curated-#{world.planet.entity.object_id}")
+                 )
 
         assert has_element?(
                  view,
@@ -330,7 +340,8 @@ defmodule DevilsDictionaryWeb.OnReaderTest do
 
         # The withdrawn member is withheld, not replaced.
         assert has_element?(view, "#subjects-withheld")
-        refute render(view) =~ "Mars probe"
+        refute has_element?(view, "#subjects", "Mars probe")
+        refute has_element?(view, "#overview", "Mars probe")
 
         # Curated once; discovered subjects never repeat a curated one.
         refute has_element?(view, card(view, "discovered", world.planet.entity))
@@ -387,7 +398,7 @@ defmodule DevilsDictionaryWeb.OnReaderTest do
 
       # The rail counts them and leads down to them.
       assert has_element?(on, "#rail-subjects[href='#subjects']", "3")
-      assert on |> element("#rail-subjects") |> render() =~ "at their own address"
+      assert has_element?(on, "#rail-subjects", "at their own address")
 
       assert has_element?(on, "#{planet}-link[href='/nature/mars']")
       assert has_element?(on, "#{deity}-link[href='/subjects/mars']")
@@ -399,8 +410,8 @@ defmodule DevilsDictionaryWeb.OnReaderTest do
 
       assert has_element?(on, "#{planet}[data-state='addressed']")
       assert has_element?(on, "#{album}[data-state='no_address']")
-      assert on |> element(deity) |> render() =~ "Fixture"
-      assert on |> element(deity) |> render() =~ "Draft"
+      assert has_element?(on, deity, "Fixture")
+      assert has_element?(on, deity, "Draft")
 
       {:ok, nature, html} =
         on
@@ -448,9 +459,31 @@ defmodule DevilsDictionaryWeb.OnReaderTest do
                "#{planet}-link[href='/entities/#{world.planet.entity.object_id}/mars']"
              )
 
-      refute render(on) =~ ~s(href="/nature/mars")
-      refute on |> element(planet) |> render() =~ "Draft"
+      refute has_element?(on, "a[href='/nature/mars']")
+      refute has_element?(on, planet, "Draft")
     end)
+  end
+
+  test "a search row never stands for fewer words than it names", ctx do
+    # One lemma in two parts of speech: the row opens On, which reads both.
+    word!(ctx, "oyster", ~w(wiktionary), pos: "noun", scope: nil)
+    word!(ctx, "oyster", ~w(wiktionary), pos: "verb", scope: nil)
+    {:ok, home, _html} = live(ctx.conn, "/?q=oyster")
+    assert has_element?(home, "#result-oyster[href='/on/oyster']", "noun · verb")
+
+    # Several lemmas: every lexeme has its own exact row, the lowercase noun
+    # and verb included.
+    world = mars!(ctx)
+    lower_noun = word!(ctx, "mars", ~w(wiktionary), pos: "noun", scope: nil)
+    {:ok, home, _html} = live(ctx.conn, "/?q=mars")
+    assert has_element?(home, "#result-mars[href='/on/mars']")
+
+    for lexeme <- [world.noun, world.verb, world.upper, lower_noun] do
+      assert has_element?(
+               home,
+               "#result-word-#{lexeme.object_id}[href='/words/#{lexeme.object_id}/mars']"
+             )
+    end
   end
 
   test "an exact selection keeps its identity through a drawer and a reload", ctx do
@@ -645,7 +678,7 @@ defmodule DevilsDictionaryWeb.OnReaderTest do
                "#{card(on, "discovered", deity.entity)}[data-state='awaiting_review']"
              )
 
-      assert on |> element(card(on, "discovered", deity.entity)) |> render() =~ "Nature or Works"
+      assert has_element?(on, card(on, "discovered", deity.entity), "Nature or Works")
       assert has_element?(on, "#subjects", "3 subjects")
     end)
   end
