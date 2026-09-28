@@ -4,8 +4,9 @@ defmodule DevilsDictionary.Routing.SubjectsTest do
   its current decision and page, in the reading mode; curated members in
   their stored order, never truncated or reordered; discovered subjects
   deduplicated by identity, matched by name after NFC and case folding,
-  sorted addressed first then by family, label and id, and capped with the
-  total kept. Mars, Mercury and Café here are CI fixtures, not corpus rows.
+  sorted addressed first (served in the mode) then by family, label and id,
+  and capped with the total kept. Mars, Mercury and Café here are CI
+  fixtures, not corpus rows.
   """
   use DevilsDictionary.DataCase, async: false
 
@@ -161,6 +162,20 @@ defmodule DevilsDictionary.Routing.SubjectsTest do
     # Among equals, by id.
     rest = first.discovered |> tl() |> Enum.map(& &1.object_id)
     assert rest == Enum.sort(rest)
+  end
+
+  test "addressed first means served in the mode: a draft sorts as unaddressed in public",
+       ctx do
+    draft = subject!("Delta", "works", kind: :work, path: "/works/delta", actor: ctx.importer)
+    plain = subject!("Delta", "concepts")
+
+    [public] = cards([], [], ["delta"], :public, limit: 1).discovered
+    [internal] = cards([], [], ["delta"], :internal, limit: 1).discovered
+
+    # Public: neither is served, so family decides (concepts before works).
+    assert public.object_id == plain.entity.object_id
+    # Internal: the draft is served, so it leads.
+    assert {internal.object_id, internal.state} == {draft.entity.object_id, :addressed}
   end
 
   test "an edition's page counts, with its address in Works", ctx do

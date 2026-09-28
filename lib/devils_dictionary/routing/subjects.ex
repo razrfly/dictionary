@@ -13,8 +13,9 @@ defmodule DevilsDictionary.Routing.Subjects do
       disagreements, `may_refer_to` candidates) and the active entities whose
       preferred label, or any recorded name, equals one of the page's lemmas
       after NFC and case folding. Deduplicated by object id, never by label,
-      and without anything already curated. Sorted addressed first, then by
-      family, label and id, and capped at `limit`, with the total kept.
+      and without anything already curated. Sorted addressed first (an
+      address the reading mode serves), then by family, label and id, and
+      capped at `limit`, with the total kept.
 
   Nothing here writes: the section reads state and a draft is never shown as
   public (the link and the state come from `Routing.Links.served/3`, the
@@ -96,7 +97,9 @@ defmodule DevilsDictionary.Routing.Subjects do
   UNION ALL
   (SELECT *, count(*) OVER () AS total FROM cards
     WHERE NOT curated AND identity = 'active'
-    ORDER BY (path_id IS NOT NULL) DESC, coalesce(substring(path from '^/([^/]+)/'), decided_family) NULLS LAST,
+    ORDER BY (path_id IS NOT NULL AND lifecycle = 'active'
+              AND (publication = 'published' OR ($6::boolean AND publication = 'draft'))) DESC,
+             coalesce(substring(path from '^/([^/]+)/'), decided_family) NULLS LAST,
              lower(label), object_id
     LIMIT $5)
   """
@@ -118,7 +121,10 @@ defmodule DevilsDictionary.Routing.Subjects do
         Enum.uniq(discovered),
         patterns,
         folded,
-        limit
+        limit,
+        # "Addressed" is what the mode serves (merged and split pages, which
+        # `Links` resolves by id, sort as unaddressed).
+        mode == :internal
       ])
 
     # The statement's own column names, a fixed set.
