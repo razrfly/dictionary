@@ -461,6 +461,7 @@ defmodule DevilsDictionaryWeb.OnReaderTest do
 
       {:ok, on, _html} = live(ctx.conn, "/on/mars")
       assert page_title(on) =~ "On mars"
+      assert has_element?(on, "#on-title", "On mars")
 
       planet = card(on, "discovered", world.planet.entity)
       deity = card(on, "discovered", world.deity.entity)
@@ -570,6 +571,8 @@ defmodule DevilsDictionaryWeb.OnReaderTest do
       |> follow_redirect(ctx.conn, "/words/#{world.verb.object_id}/mars")
 
     assert word |> element("#headword") |> render() =~ "mars"
+    # One exact word, not the aggregate: it does not call itself On.
+    refute has_element?(word, "#on-title")
 
     path = "/words/#{world.verb.object_id}/mars?provenance=thing"
     word |> render_patch(path)

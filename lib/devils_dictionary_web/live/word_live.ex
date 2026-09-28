@@ -911,6 +911,16 @@ defmodule DevilsDictionaryWeb.WordLive do
           demo={@demo}
         />
 
+        <%!-- The aggregate names itself (#219 B5): "On mars" over the words it
+             reads; the headword stays the page's h1. --%>
+        <p
+          :if={@live_action == :on and @page.headword.lexemes != []}
+          id="on-title"
+          class="mb-2 text-base/7 font-semibold text-mist-700 sm:text-sm/6 dark:text-mist-400"
+        >
+          On {@page.headword.lemma}
+        </p>
+
         <%= cond do %>
           <% @page.headword.lexemes == [] and @overview -> %>
             <%!-- An authored overview with no words behind it (#219 B2):
