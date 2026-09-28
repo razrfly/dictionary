@@ -136,9 +136,14 @@ defmodule DevilsDictionary.Routing.Subjects do
     %{
       curated:
         Enum.map(curated, fn id ->
+          # Withdrawn content is withheld, never shown in its place (B3).
           case by_id[id] do
-            %{identity: "active"} = row -> card(row, mode)
-            _missing_or_inactive -> {:withheld, id}
+            %{identity: "active", publication: publication} = row
+            when publication != "withdrawn" ->
+              card(row, mode)
+
+            _missing_inactive_or_withdrawn ->
+              {:withheld, id}
           end
         end),
       discovered: Enum.map(discovered_rows, &card(&1, mode)),

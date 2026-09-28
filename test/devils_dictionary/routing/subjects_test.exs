@@ -69,21 +69,37 @@ defmodule DevilsDictionary.Routing.SubjectsTest do
     end
   end
 
-  test "curated members keep their order and are never capped; the inactive are withheld", ctx do
+  test "curated members keep their order and are never capped; inactive or withdrawn are withheld",
+       ctx do
     subjects = for label <- ~w(Zeta Alpha Mu), do: subject!(label, "concepts").entity
     gone = subject!("Retired", "concepts").entity
 
     {:ok, _} =
       DevilsDictionary.Registry.retire(gone.object_id, reason: "fixture")
 
+    # Named by its identity, its page withdrawn: withheld in both modes too.
+    withdrawn =
+      subject!("Probe", "works",
+        kind: :work,
+        path: "/works/probe",
+        published: true,
+        actor: ctx.human
+      )
+
+    withdrawn!(withdrawn.page)
+
     ids = Enum.map(subjects, & &1.object_id)
 
-    result = cards(ids ++ [gone.object_id], [], [], :public, limit: 1)
+    for mode <- [:public, :internal] do
+      result = cards(ids ++ [gone.object_id, withdrawn.entity.object_id], [], [], mode, limit: 1)
 
-    assert Enum.map(Enum.take(result.curated, 3), & &1.object_id) == ids
-    assert List.last(result.curated) == {:withheld, gone.object_id}
-    assert result.discovered == []
-    _ = ctx
+      assert Enum.map(Enum.take(result.curated, 3), & &1.object_id) == ids
+
+      assert Enum.drop(result.curated, 3) ==
+               [{:withheld, gone.object_id}, {:withheld, withdrawn.entity.object_id}]
+
+      assert result.discovered == []
+    end
   end
 
   test "discovery is by identity and by folded name, never merging two things with one label",
