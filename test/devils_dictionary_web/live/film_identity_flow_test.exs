@@ -66,8 +66,8 @@ defmodule DevilsDictionaryWeb.FilmIdentityFlowTest do
     hidden = illustrates!(result.object_id, ship_sense, "A rejected title-only reading.")
     {:ok, _review} = Claims.review(Claims.current_revision(hidden.id).id, :rejected)
 
-    local_path =
-      "/entities/#{result.object_id}/titanic?from=%2Fwords%2F#{mountain.object_id}%2Fmountain"
+    # The way back is the page the reader came from, On mountain (#219).
+    local_path = "/entities/#{result.object_id}/titanic?from=%2Fon%2Fmountain"
 
     assert has_element?(
              definition_live,
@@ -97,7 +97,7 @@ defmodule DevilsDictionaryWeb.FilmIdentityFlowTest do
 
     assert has_element?(
              film_live,
-             "#entity-back-link[href='/words/#{mountain.object_id}/mountain']"
+             "#entity-back-link[href='/on/mountain']"
            )
 
     assert has_element?(film_live, "#entity-source-cinegraph")

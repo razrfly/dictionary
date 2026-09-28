@@ -272,8 +272,12 @@ defmodule DevilsDictionaryWeb.OnReaderTest do
       reading(false, fn ->
         html = ctx.conn |> get("/on/the-red-planet") |> html_response(200)
         assert html =~ ~s(id="overview")
-        assert html =~ "On the Red Planet"
         assert html =~ ~s(href="/nature/mars")
+
+        # The overview is the page, so its title is the page's one h1.
+        headings = html |> LazyHTML.from_document() |> LazyHTML.query("h1")
+        assert [heading] = Enum.to_list(headings)
+        assert LazyHTML.text(heading) =~ "On the Red Planet"
       end)
     end
 
@@ -309,7 +313,9 @@ defmodule DevilsDictionaryWeb.OnReaderTest do
           {:discusses_subject, ares.entity.object_id},
           {:discusses_subject, {:page, world.planet.page.id}},
           {:editorial_association, company.entity.object_id},
-          {:discusses_subject, {:page, gone.page.id}}
+          {:discusses_subject, {:page, gone.page.id}},
+          # Ares again, by its page: one identity, one card.
+          {:discusses_subject, {:page, ares.page.id}}
         ],
         author: ctx.human,
         published: true
@@ -327,6 +333,8 @@ defmodule DevilsDictionaryWeb.OnReaderTest do
           |> LazyHTML.from_fragment()
           |> LazyHTML.query("article[id]")
           |> LazyHTML.attribute("id")
+
+        assert Enum.count(curated, &(&1 == "subject-curated-#{ares.entity.object_id}")) == 1
 
         assert Enum.find_index(curated, &(&1 == "subject-curated-#{ares.entity.object_id}")) <
                  Enum.find_index(
@@ -361,8 +369,15 @@ defmodule DevilsDictionaryWeb.OnReaderTest do
     test "an overview whose words are other words is a separate choice, through reload", ctx do
       world = mars!(ctx, published: true)
       candy = word!(ctx, "Mars bar", ~w(wiktionary), pos: "noun", scope: nil)
+      company = subject!("Mars, Incorporated", "organizations", fixture: @fixture)
 
-      overview!("On Mars bars", "/on/mars", [{:supplies_lexical_material, candy.object_id}],
+      overview!(
+        "On Mars bars",
+        "/on/mars",
+        [
+          {:supplies_lexical_material, candy.object_id},
+          {:editorial_association, company.entity.object_id}
+        ],
         author: ctx.human,
         published: true
       )
@@ -374,6 +389,9 @@ defmodule DevilsDictionaryWeb.OnReaderTest do
           refute has_element?(view, "#overview")
           assert has_element?(view, "#headword")
           refute has_element?(view, "#subjects-curated")
+          # Its association is said to be one, not listed as what it discusses.
+          assert has_element?(view, "#overview-choice", "Associated, not the same thing")
+          refute has_element?(view, "#overview-choice", "It discusses")
         end
 
         # Reached by navigation, the same.
@@ -386,6 +404,22 @@ defmodule DevilsDictionaryWeb.OnReaderTest do
         _ = world
       end)
     end
+  end
+
+  test "a revoked role stops internal reading at the next navigation", ctx do
+    mars!(ctx)
+    scope = DevilsDictionary.CurationFixtures.account([:contributor])
+    conn = log_in_user(ctx.conn, scope.user)
+
+    reading(false, fn ->
+      {:ok, view, _html} = live(conn, "/nature/mars")
+      assert has_element?(view, "#subject-draft")
+
+      DevilsDictionary.CurationFixtures.revoke!(scope)
+      render_patch(view, "/subjects/mars")
+      refute has_element?(view, "#subject-draft")
+      assert has_element?(view, "#subject-unresolved")
+    end)
   end
 
   # ── the reader's journeys ────────────────────────────────────────────────
@@ -551,6 +585,19 @@ defmodule DevilsDictionaryWeb.OnReaderTest do
       _ = c
 
       assert has_element?(aggregate, "#linked-overviews a[href='/on/c-plus-plus']")
+
+      # A subject named C++ leads to the words spelled `c`, named as that page
+      # names itself.
+      language =
+        subject!("C++", "concepts",
+          path: "/concepts/c-plus-plus",
+          published: true,
+          actor: ctx.human
+        )
+
+      {:ok, subject, _html} = live(ctx.conn, "/concepts/c-plus-plus")
+      assert has_element?(subject, "#subject-on[href='/on/c']", "On c")
+      _ = language
 
       # The overview is its own page and links back to the exact word.
       {:ok, on_cpp, _html} = live(ctx.conn, "/on/c-plus-plus")

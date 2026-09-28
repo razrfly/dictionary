@@ -1,8 +1,9 @@
 defmodule DevilsDictionaryWeb.ReadingMode do
   @moduledoc """
   Which pages a reader may see (#219 B1): `:public` or `:internal`, decided
-  once per request or socket and used for every link and every address the
-  page serves (`Routing.Resolver`, `Routing.Links`, `Routing.Subjects`).
+  per request, and again at each navigation of a mounted socket, and used
+  for every link and every address the page serves (`Routing.Resolver`,
+  `Routing.Links`, `Routing.Subjects`).
 
   Internal reading comes only from trusted places:
 
@@ -33,12 +34,24 @@ defmodule DevilsDictionaryWeb.ReadingMode do
 
   @doc """
   The `on_mount` for reader LiveViews: the current scope, as
-  `UserAuth`'s `:mount_current_scope` gives it, and `:reading_mode`.
+  `UserAuth`'s `:mount_current_scope` gives it, and `:reading_mode`, read
+  again before each `handle_params` so a revoked role stops reading
+  internally at the next navigation, not at the next page load.
   """
   def on_mount(:default, params, session, socket) do
     {:cont, socket} =
       DevilsDictionaryWeb.UserAuth.on_mount(:mount_current_scope, params, session, socket)
 
-    {:cont, Phoenix.Component.assign(socket, :reading_mode, mode(socket.assigns.current_scope))}
+    socket =
+      socket
+      |> assign_mode()
+      |> Phoenix.LiveView.attach_hook(:reading_mode, :handle_params, fn _params, _uri, socket ->
+        {:cont, assign_mode(socket)}
+      end)
+
+    {:cont, socket}
   end
+
+  defp assign_mode(socket),
+    do: Phoenix.Component.assign(socket, :reading_mode, mode(socket.assigns.current_scope))
 end

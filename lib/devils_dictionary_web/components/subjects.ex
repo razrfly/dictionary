@@ -31,6 +31,11 @@ defmodule DevilsDictionaryWeb.Subjects do
   attr :as, :atom, values: [:treatment, :choice], default: :treatment
   attr :subject_paths, :map, default: %{}
 
+  attr :heading, :string,
+    values: ~w(h1 h2),
+    default: "h2",
+    doc: "h1 when the overview is the page"
+
   def overview(assigns) do
     members = assigns.overview.members
 
@@ -42,7 +47,14 @@ defmodule DevilsDictionaryWeb.Subjects do
       )
       |> assign(:pages, for(%{kind: :page} = m <- members, do: m))
       |> assign(:withheld, Enum.count(members, &(&1.kind == :withheld)))
-      |> assign(:discusses, for(%{kind: :subject} = m <- members, do: m))
+      |> assign(
+        :discusses,
+        for(%{kind: :subject, relationship: :discusses_subject} = m <- members, do: m)
+      )
+      |> assign(
+        :associated,
+        for(%{kind: :subject, relationship: :editorial_association} = m <- members, do: m)
+      )
 
     ~H"""
     <section
@@ -61,12 +73,13 @@ defmodule DevilsDictionaryWeb.Subjects do
         <.mark :if={@overview.draft?} id="overview-draft" kind={:draft} />
       </div>
 
-      <h2
+      <.dynamic_tag
+        tag_name={@heading}
         id={"#{if(@as == :treatment, do: "overview", else: "overview-choice")}-title"}
         class="font-display text-3xl text-balance text-mist-950 dark:text-white"
       >
         {@overview.revision.title}
-      </h2>
+      </.dynamic_tag>
 
       <p
         :if={@as == :choice}
@@ -99,6 +112,17 @@ defmodule DevilsDictionaryWeb.Subjects do
       >
         It discusses:
         <span :for={{member, i} <- Enum.with_index(@discusses)}><span :if={i > 0}>, </span><.link
+          navigate={@subject_paths[member.object_id]}
+          class="text-mist-950 underline decoration-mist-950/20 underline-offset-4 hover:decoration-mist-950 dark:text-white dark:decoration-white/25 dark:hover:decoration-white"
+        >{member.label}</.link></span>
+      </p>
+
+      <p
+        :if={@as == :choice and @associated != []}
+        class="text-base/7 text-mist-600 sm:text-sm/6 dark:text-mist-400"
+      >
+        Associated, not the same thing:
+        <span :for={{member, i} <- Enum.with_index(@associated)}><span :if={i > 0}>, </span><.link
           navigate={@subject_paths[member.object_id]}
           class="text-mist-950 underline decoration-mist-950/20 underline-offset-4 hover:decoration-mist-950 dark:text-white dark:decoration-white/25 dark:hover:decoration-white"
         >{member.label}</.link></span>
@@ -175,16 +199,19 @@ defmodule DevilsDictionaryWeb.Subjects do
         &{&1.object_id, &1}
       )
 
+    # One card per identity: named twice (by itself and by its page), the
+    # first membership in stored order decides where it goes.
+    members =
+      assigns.members
+      |> Enum.filter(&(&1.kind == :subject and Map.has_key?(cards, &1.object_id)))
+      |> Enum.uniq_by(& &1.object_id)
+
     curated =
-      for %{kind: :subject, relationship: :discusses_subject, object_id: id} <- assigns.members,
-          card = cards[id],
-          do: card
+      for %{relationship: :discusses_subject, object_id: id} <- members, do: cards[id]
 
     associations =
-      for %{kind: :subject, relationship: :editorial_association, object_id: id} = member <-
-            assigns.members,
-          card = cards[id],
-          do: Map.put(card, :rationale, member.rationale)
+      for %{relationship: :editorial_association, object_id: id} = member <- members,
+          do: Map.put(cards[id], :rationale, member.rationale)
 
     withheld =
       Enum.count(assigns.subjects.curated, &match?({:withheld, _}, &1)) +
@@ -351,9 +378,9 @@ defmodule DevilsDictionaryWeb.Subjects do
     <span
       id={@id}
       title={@title}
-      class="rounded-full border border-dashed border-amber-600/60 px-2 py-0.5 text-sm/5 font-medium text-amber-800 dark:border-amber-400/50 dark:text-amber-200"
+      class="relative z-10 rounded-full border border-dashed border-amber-600/60 px-2 py-0.5 text-sm/5 font-medium text-amber-800 dark:border-amber-400/50 dark:text-amber-200"
     >
-      {if @kind == :draft, do: "Draft", else: "Fixture"}
+      {if @kind == :draft, do: "Draft", else: "Fixture"}<span :if={@title} class="sr-only">: {@title}</span>
     </span>
     """
   end

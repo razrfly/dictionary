@@ -281,16 +281,16 @@ defmodule DevilsDictionaryWeb.HomeLive do
                 </.link>
                 <%!-- Several lemmas under one slug: the row opens On, which
                      reads them together, and each lexeme opens itself. --%>
-                <div :if={result.kind == :word and result.lemmas > 1} class="py-3">
+                <div :if={result.kind == :word and result.lemmas > 1} class="py-1.5">
                   <.link
                     id={"result-#{result.slug}"}
                     navigate={~p"/on/#{result.slug}"}
-                    class="flex min-w-0 items-baseline justify-between gap-4 hover:bg-mist-950/2.5 dark:hover:bg-white/5"
+                    class="flex min-h-11 min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-1 hover:bg-mist-950/2.5 dark:hover:bg-white/5"
                   >
-                    <span class="min-w-0 font-medium text-mist-950 dark:text-white">
+                    <span class="min-w-0 font-medium break-words text-mist-950 dark:text-white">
                       On {result.lemma}
                     </span>
-                    <span class="shrink-0 text-mist-500">
+                    <span class="min-w-0 break-words text-mist-500">
                       {result.lemmas} words spelled “{result.slug}”
                     </span>
                   </.link>

@@ -89,7 +89,7 @@ defmodule DevilsDictionaryWeb.EntityLive do
          socket
          |> assign(:page, nil)
          |> assign(:unresolved, unresolved_outcome(resolution))
-         |> assign(:page_title, "Nothing at this address")}
+         |> assign(:page_title, unresolved_title(unresolved_outcome(resolution)))}
     end
   end
 
@@ -320,8 +320,13 @@ defmodule DevilsDictionaryWeb.EntityLive do
                   :if={@subject}
                   class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-base/7 sm:text-sm/6"
                 >
-                  <.a :if={@subject.on} id="subject-on" navigate={@subject.on}>
-                    On {@page.entity.label}
+                  <.a
+                    :if={@subject.on}
+                    id="subject-on"
+                    navigate={@subject.on}
+                    class="inline-flex min-h-11 items-center"
+                  >
+                    {@subject.on_label}
                   </.a>
                   <a
                     :if={@page.entity.qid}
@@ -329,7 +334,7 @@ defmodule DevilsDictionaryWeb.EntityLive do
                     href={"https://www.wikidata.org/wiki/#{@page.entity.qid}"}
                     target="_blank"
                     rel="noopener noreferrer"
-                    class="text-mist-500 underline underline-offset-4 hover:text-mist-950 dark:hover:text-white"
+                    class="inline-flex min-h-11 items-center text-mist-500 underline underline-offset-4 hover:text-mist-950 dark:hover:text-white"
                   >
                     {@page.entity.qid}<span aria-hidden="true">&nbsp;↗</span>
                   </a>
@@ -1176,10 +1181,14 @@ defmodule DevilsDictionaryWeb.EntityLive do
       decision && decision.reviewer_actor_id &&
         Repo.one(from a in Actor, where: a.id == ^decision.reviewer_actor_id, select: a.label)
 
-    on =
-      case Lexicon.lookup(entity_page.entity.label) do
-        %{lexemes: [lexeme | _]} -> ~p"/on/#{lexeme.slug}"
-        _none -> nil
+    # The words spelled like the subject, named as that page names itself
+    # ("On c" for C++): a way to the words, not a claim about identity.
+    {on, on_label} =
+      with %{lexemes: [lexeme | _]} <- Lexicon.lookup(entity_page.entity.label),
+           %{lexemes: [headword | _]} <- Lexicon.lookup(lexeme.slug) do
+        {~p"/on/#{lexeme.slug}", "On #{headword.lemma}"}
+      else
+        _none -> {nil, nil}
       end
 
     family = Address.family(URI.decode(base))
@@ -1199,6 +1208,7 @@ defmodule DevilsDictionaryWeb.EntityLive do
       draft?: page.publication_state == :draft,
       role: page.role,
       on: on,
+      on_label: on_label,
       decision: decision,
       reviewer: reviewer,
       allocation: allocation

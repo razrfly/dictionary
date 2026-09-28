@@ -175,7 +175,8 @@ defmodule DevilsDictionaryWeb.WordLive do
     socket =
       if base == socket.assigns.base and slug == socket.assigns.slug and
            trail == socket.assigns.trail and demo == socket.assigns.demo and
-           reader == socket.assigns.opening_reader do
+           reader == socket.assigns.opening_reader and
+           socket.assigns[:loaded_mode] == socket.assigns.reading_mode do
         socket
       else
         load(assign(socket, :base, base), slug, trail, demo, reader)
@@ -235,6 +236,7 @@ defmodule DevilsDictionaryWeb.WordLive do
       |> assign(:card_sources, card_sources)
       |> assign(:suggestions, suggestions(page, slug))
       |> assign(:choices, choices(slug, socket.assigns.object_id))
+      |> assign(:loaded_mode, socket.assigns.reading_mode)
       |> assign_on(page)
 
     socket
@@ -914,7 +916,7 @@ defmodule DevilsDictionaryWeb.WordLive do
             <%!-- An authored overview with no words behind it (#219 B2):
                  the page is the overview, and its chosen subjects. --%>
             <div class="flex max-w-4xl flex-col gap-8">
-              <Subjects.overview overview={@overview} />
+              <Subjects.overview overview={@overview} heading="h1" />
               <Subjects.section :if={@subjects} subjects={@subjects} members={@overview.members} />
             </div>
           <% @page.headword.lexemes == [] -> %>
@@ -1168,7 +1170,7 @@ defmodule DevilsDictionaryWeb.WordLive do
       states={@cultures}
       notes={@culture_notes}
       browsers={@browsers}
-      return_path={word_path(@page)}
+      return_path={@base || word_path(@page)}
       contributor={@contributor}
       mode={@mode}
     />
