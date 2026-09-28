@@ -31,6 +31,12 @@ alias DevilsDictionary.Sources.Actor
 
 {_host, _port, database} = Stage2.Guard.check!()
 
+# The guard accepts any rehearsal copy; these three are retained evidence
+# (the frozen capture, the caught-up baseline, the verified restore) and are
+# never written.
+if database in ~w(devils_dictionary_stage2r_c1 devils_dictionary_stage2r_caughtup devils_dictionary_stage2r_bfa2),
+  do: raise("#{database} is retained evidence: make the demonstration on a disposable copy")
+
 marker = "#219 demo fixture: made on the disposable copy #{database} only; not a corpus record"
 reason = "#219 On demonstration on an isolated copy: a rehearsal review, not an approval"
 
