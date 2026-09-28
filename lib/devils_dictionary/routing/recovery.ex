@@ -541,7 +541,9 @@ defmodule DevilsDictionary.Routing.Recovery do
   Runs `fun` with `Repo` pointed at `target` — a database name on the
   configured server, or an `ecto://` URL naming a database on any server —
   through a short-lived pool of its own. The configured database, and any
-  other process, is untouched.
+  other process, is untouched. A URL names its whole endpoint: what it leaves
+  out defaults as PostgreSQL defaults it (`PGHOST`, `PGPORT`, then
+  `localhost:5432`), never to the configured server's port or socket.
   """
   def with_database(target, fun) do
     config =
@@ -565,19 +567,69 @@ defmodule DevilsDictionary.Routing.Recovery do
     end
   end
 
-  # The configured connection with `target` applied. The URL is expanded,
-  # then removed: Ecto lets a configured `url:` override a `database:` passed
-  # to `start_link/1`, which would point the pool back at the configured
+  # The configured connection with `target` applied.
+  #
+  # A database name keeps the configured endpoint. A URL names its own, so
+  # every endpoint key the configuration or the environment supplied — a
+  # configured or PGHOST `socket_dir`, `socket`, `endpoints`, `hostname`, and
+  # the `port` that DD_DATABASE_PORT sets — is dropped before the URL is
+  # merged, and the result is resolved again: a URL without a port reaches
+  # PGPORT or 5432, never the scratch cluster the task is pointed at.
+  # Credentials the URL leaves out are still the configured ones.
+  #
+  # `start_link/1` merges its options over the configured ones, so an
+  # endpoint key the URL does not use is set to nil rather than dropped, or
+  # the configured value would come back. The configured URL is removed the
+  # same way: Ecto lets a configured `url:` override a `database:` passed to
+  # `start_link/1`, which would point the pool back at the configured
   # database and compare a database with itself.
+  @endpoint_keys [:socket_dir, :socket, :endpoints, :hostname, :port]
+
   defp target_config(target) do
     base = Repo.config() |> Snapshot.resolve() |> Keyword.put(:url, nil)
 
-    if url?(target),
-      do: Keyword.merge(base, Ecto.Repo.Supervisor.parse_url(target)),
-      else: Keyword.put(base, :database, target)
+    if url?(target) do
+      parsed = parse_url!(target)
+
+      # A `socket` or `endpoints` query option would be connected through by
+      # the pool but not by the identity probe, which follows host, port and
+      # socket directory only; the two could then name different servers.
+      with {:error, message} <- Snapshot.followable(parsed) do
+        raise ArgumentError, "baseline URL #{inspect(redact(target))}: " <> message
+      end
+
+      resolved =
+        base
+        |> Keyword.drop(@endpoint_keys)
+        |> Keyword.merge(parsed)
+        |> Snapshot.resolve()
+
+      Keyword.merge(Enum.map(@endpoint_keys, &{&1, nil}), resolved)
+    else
+      Keyword.put(base, :database, target)
+    end
   end
 
   defp url?(target), do: String.contains?(target, "://")
+
+  # A URL as an error may show it: without its password.
+  # Ecto's own message repeats the URL and its parsed userinfo, password
+  # included; only its reason is kept.
+  defp parse_url!(url) do
+    Ecto.Repo.Supervisor.parse_url(url)
+  rescue
+    error in Ecto.InvalidURLError ->
+      reason =
+        error.message
+        |> String.split(". The parsed URL is:")
+        |> hd()
+        |> String.replace_prefix("invalid URL #{error.url}, ", "")
+
+      raise ArgumentError, "baseline URL #{inspect(redact(url))}: #{redact(reason)}"
+  end
+
+  # Up to the authority's last `@`, so a raw `@` in a password is hidden too.
+  defp redact(url), do: String.replace(url, ~r{(://[^:/@]*):[^/]*@}, "\\1:…@")
 
   @doc """
   The server and database a Repo config, a snapshot's recorded source, or a
@@ -611,9 +663,7 @@ defmodule DevilsDictionary.Routing.Recovery do
 
     with {:ok, a} <- Snapshot.database_identity(config),
          {:ok, b} <- Snapshot.database_identity(target_config) do
-      a.system_identifier == b.system_identifier and
-        (a.database == b.database or
-           (is_integer(a.database_oid) and a.database_oid == b.database_oid))
+      Snapshot.same_database?(a, b)
     else
       {:error, reason} -> raise "cannot establish which database is which: #{reason}"
     end

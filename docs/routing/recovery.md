@@ -110,6 +110,8 @@ A restored copy carries the source's queued and scheduled jobs. Tasks that start
    DD_DATABASE=devils_dictionary_restore DD_DATABASE_PORT=5433 mix dd.routing.verify --baseline ecto://postgres:postgres@localhost:5432/devils_dictionary_v2
    ```
 
+   A URL names its whole endpoint. Nothing configured carries over to it: not `DD_DATABASE_PORT`, not a configured or `PGHOST` socket directory. A URL without a port means `PGPORT`, else 5432, as it would to `psql`. Credentials it leaves out are the configured ones. A URL names a host, or means the local default as `psql` would (`ecto:///db`); one with credentials and no host (`ecto://user@/db`) is refused, and a `socket` or `endpoints` query option is refused, because the identity check could not follow it.
+
    **A source that predates the routing migration** has none of the six routing tables, and no record of the routing migration (`20260926193256`) in `schema_migrations`. Verification then compares the corpus exactly and reports **routing: not applicable**. That proves the corpus was recovered, and nothing about routing. The following all fail:
    - routing tables on one side only, or only some of them on either side;
    - the routing migration recorded with its tables gone, or the tables present without the migration, even when both databases match;
@@ -123,7 +125,7 @@ A restored copy carries the source's queued and scheduled jobs. Tasks that start
 
       The expected additions are not a list. They are what the same migrations add to an empty reference database, migrated over the same range of versions. Pin the boundary with `mix ecto.migrate --to`:
       - `--to 20260926193256` reproduces the routing-only rehearsal;
-      - no `--to` checks current main, which adds #206's curation schema after routing.
+      - no `--to` checks current main, which adds #206's curation schema and #210's curation runtime after routing.
    3. Add a marked routing fixture (`fixtures.exs`), then snapshot and restore that copy into a second one, and verify the pair: routing is then present on both sides and compared.
 
 4. **Re-project the copy from its own records, in any provider order, and resolve.** `mix dd.materialize --all --resolve` re-projects every record of one source from the source records the copy holds. It then drains the pending edges that source wrote into assertions (the pass `mix dd.resolve` makes). Last, it asserts that nothing derived changed (scorecard M2) across every table the fingerprint covers, `pending_relations` included. Repeat it for each source, in whatever order:

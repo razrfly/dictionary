@@ -1,0 +1,33 @@
+Timing is off.
+           key           |       method       | active_links | current_links | revisions 
+-------------------------+--------------------+--------------+---------------+-----------
+ lexeme_entity_candidate | disambiguation     |        44502 |         44503 |     46203
+ lexeme_entity_candidate | title_match        |        15267 |         15267 |     29992
+ refers_to               | corroborated_gloss |         6230 |          6230 |      6230
+ refers_to               | wiktionary_qid     |         2268 |          2268 |      5953
+ refers_to               | wordnet_ili        |        10239 |         10239 |     46357
+ refers_to               | wordnet_wikidata   |        13969 |         13969 |     63130
+(6 rows)
+
+SELECT 31381
+SELECT 13884
+SELECT 1541669
+CREATE INDEX
+ANALYZE
+SELECT 20246
+ANALYZE
+ en_lexemes | en_pages | sense_lexemes | sense_pages | sense_lexemes_excl_promotion | sense_pages_excl_promotion | cand_lexemes | word_level_only_pages 
+------------+----------+---------------+-------------+------------------------------+----------------------------+--------------+-----------------------
+    1541669 |  1407971 |         20700 |       20246 |                        15010 |                      14676 |        13884 |                  2571
+(1 row)
+
+ same_entity | count 
+-------------+-------
+ f           |   267
+(1 row)
+
+ reviews | string_agg 
+---------+------------
+       2 | accepted
+(1 row)
+

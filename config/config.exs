@@ -374,6 +374,35 @@ config :devils_dictionary, :wikiquote,
   request_interval_ms: 200,
   enabled: true
 
+# The curation runtime (#195 stage A, `docs/curation/runtime-stage-a.md`). One
+# private Ollama service on loopback, with its model cache on the external
+# `LLM Models` volume and never on the internal disk.
+#
+# This is operational endpoint configuration only. What a model *is* (digests,
+# template, license, generation settings) lives in immutable
+# `local_model_configs` rows, and no persona owns an endpoint.
+#
+# The limits are #195's starting values, not measurements. `service_key` names
+# the physical runtime: every caller that shares it shares one inference slot.
+config :devils_dictionary, :curation_runtime,
+  service_key: "studio-ollama",
+  base_url: "http://127.0.0.1:11435",
+  mount_point: "/Volumes/LLM Models",
+  models_root: "/Volumes/LLM Models/dictionary/ollama",
+  run_dir: "/Volumes/LLM Models/dictionary/run",
+  binary: "/Volumes/LLM Models/dictionary/bin/ollama",
+  deadline_ms: 120_000,
+  reservation_margin_ms: 5_000,
+  daily_budget_ms: 30 * 60_000,
+  pending_cap_units: 30,
+  max_candidates: 12,
+  max_excerpt_chars: 1_200,
+  max_output_bytes: 16_384,
+  max_transport_retries: 2,
+  pause_after_failures: 3,
+  pause_swap_growth_bytes: 512 * 1024 * 1024,
+  pause_min_free_percent: 10
+
 # Import environment specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.
 import_config "#{config_env()}.exs"

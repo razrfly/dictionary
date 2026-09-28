@@ -62,6 +62,19 @@ defmodule DevilsDictionary.Curation.LeadRule do
     |> Enum.sort()
   end
 
+  @doc """
+  Every definition on this scope's page, as sorted content object ids: the
+  candidates a lead may come from, through the same visible `defines` claims.
+  """
+  def on_page(member_ids) do
+    member_ids
+    |> defining()
+    |> select([content: ci], ci.object_id)
+    |> distinct(true)
+    |> Repo.all()
+    |> Enum.sort()
+  end
+
   @doc "Whether content object `content_id` is a definition on this scope's page."
   def defines?(content_id, member_ids) do
     member_ids
