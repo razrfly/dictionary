@@ -33,7 +33,9 @@ defmodule DevilsDictionaryWeb.ArtworkLive do
        catalog_previous_page: catalog.previous_page,
        catalog_next_page: catalog.next_page
      )
-     |> stream(:artworks, catalog.items, dom_id: &"artwork-#{&1.object_id}")}
+     |> stream(:artworks, linked(catalog.items, socket.assigns.reading_mode),
+       dom_id: &"artwork-#{&1.object_id}"
+     )}
   end
 
   @impl true
@@ -50,7 +52,7 @@ defmodule DevilsDictionaryWeb.ArtworkLive do
        catalog_previous_page: catalog.previous_page,
        catalog_next_page: catalog.next_page
      )
-     |> stream(:artworks, catalog.items, reset: true)}
+     |> stream(:artworks, linked(catalog.items, socket.assigns.reading_mode), reset: true)}
   end
 
   def handle_event("catalog-page", %{"page" => page}, socket) do
@@ -65,7 +67,7 @@ defmodule DevilsDictionaryWeb.ArtworkLive do
        catalog_previous_page: catalog.previous_page,
        catalog_next_page: catalog.next_page
      )
-     |> stream(:artworks, catalog.items, reset: true)}
+     |> stream(:artworks, linked(catalog.items, socket.assigns.reading_mode), reset: true)}
   end
 
   @impl true
@@ -145,6 +147,16 @@ defmodule DevilsDictionaryWeb.ArtworkLive do
       </.container>
     </Layouts.app>
     """
+  end
+
+  # One resolver read for the whole page of cards, not three per card.
+  defp linked(items, mode) do
+    paths = Artwork.paths(items, mode)
+
+    Enum.map(items, fn artwork ->
+      ids = [artwork.object_id | Enum.map(artwork.creators, & &1.object_id)]
+      Map.put(artwork, :paths, Map.take(paths, ids))
+    end)
   end
 
   defp parse_page(value) when is_integer(value) and value > 0, do: value
