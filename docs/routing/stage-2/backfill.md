@@ -1,6 +1,6 @@
 # Routing Stage 2 backfill
 
-**Status:** implemented and rehearsed on isolated copies, 27 September 2026, for [routing issue #194](https://github.com/razrfly/dictionary/issues/194). **Not run on the development corpus.** A persistent run waits for the owner's decisions: the population, the reviewers, and the [corpus catch-up](corpus-catch-up.md).
+**Status:** implemented and rehearsed on isolated copies, 27 September 2026, for [routing issue #194](https://github.com/razrfly/dictionary/issues/194); corrected under [#219](https://github.com/razrfly/dictionary/issues/219) and [rehearsed again on the corrected code](#re-run-on-the-corrected-code-219) on 28 September. **Not run on the development corpus.** A persistent run waits for the owner's decisions: the population, the reviewers, and the [corpus catch-up](corpus-catch-up.md).
 
 `Routing.Backfill` (`mix dd.routing.backfill`) implements step 3 of ADR 0004 §8: decisions and durable pages in resumable batches, with checkpoints keyed by object identity and policy digest.
 
@@ -73,7 +73,8 @@ A batch is one transaction: its writes and its checkpoint rows commit together. 
 ## Limits
 
 - **Dependencies, not the whole graph.** A run checks the records the evaluation read or looked for, which is everything its result depends on. It does not re-read the rest of the graph, and it does not re-evaluate from the database: a change it detects defers the record rather than classifying it afresh. Collision groups are the population's, fixed at export: an entity that arrives later on the same bare path does not stop a confirmation made without a path, although the ledger still gives the path to one page only.
-- **Races.** The ledger's locks turn a concurrent writer into a refusal, which the savepoint rolls back. A writer that bypassed those locks loses to an address's unique index instead; inside the batch's transaction the ledger cannot retry that, so it raises, the batch rolls back and the run stops. Running it again resumes it, and the taken address is then refused before anything is written. A batch holds the ledger's locks (addresses, pages, paths) for its records until it commits, so it can deadlock with any concurrent ledger operation that takes them in another order — a second run, or a human allocation; PostgreSQL aborts one side, and a batch rolls back and resumes. Two runs confirming one record in different families serialise: the second refuses the address the first allocated (a regression).
+- **Races.** The ledger's locks turn a concurrent writer into a refusal, which the savepoint rolls back. A writer that bypassed those locks loses to an address's unique index instead; inside the batch's transaction the ledger cannot retry that, so it raises, the batch rolls back and the run stops. Running it again resumes it, and the taken address is then refused before anything is written. A batch holds the ledger's locks (addresses, pages, paths) for its records until it commits, so it can deadlock with any concurrent ledger operation that takes them in another order — a second run, or a human allocation; PostgreSQL aborts one side. An aborted batch rolls back and its run stops; running it again resumes it. Two runs confirming one record in different families serialise: the second refuses the address the first allocated (a regression).
+- **Run key and code.** The run key names the inputs, the policy data and the checkpoint format (`routing-backfill/2`), not the evaluator's code. A run begun on code older than `ba873db`, which stopped pinning matched anchors, and resumed on newer code finds its confirmations' fingerprints stale and defers them. That is safe, and only rehearsal copies hold such runs.
 - **Recovery.** The checkpoint is not part of the routing guard's digest. Losing it costs a re-run, and the re-run's writes are idempotent.
 - **Which database.** The export's `database` attestation is not compared with the database being written, because a copy has another name. The content checks decide.
 
@@ -114,10 +115,45 @@ On 27 September, at `495c118`, on copies of the development corpus as captured a
 **What the rehearsal and a review found.**
 - The first corpus run refused both editions in the population, *Project Gutenberg #972* and the LEME 1755 transcription: it asked for a subject page, which `Pages.ensure/3` rightly refuses for an edition. The backfill now takes the page role the evaluator gives.
 - An internal review found that reviews were not bound to the evidence reviewed, that pins were compared with the newest revision rather than the current one, and that an override could be written before a refusal. It also found gaps in the load checks and a checkpoint open to `TRUNCATE`, and that the repeat-run proof reused one run key. All are fixed in `495c118`. The regressions for binding, pin currency and refusal order fail without their fixes.
-- The [independent audit](https://github.com/razrfly/dictionary/issues/194#issuecomment-5860062126) reproduced two defects that remained at `4b4a64b` and `0415e5b`. **P1:** only the matched evidence was checked for currency, so a class the walk visited without a match could change after the export — gaining an ancestor that maps elsewhere — and an old confirmation still allocated. **P2:** the override was written before the page and the ledger were asked, so a later refusal (a retired page, in the audit's probe) left a permanent reviewer override behind. Both are fixed under [#219](https://github.com/razrfly/dictionary/issues/219): every dependency is checked, and a confirmation's writes share one savepoint. The audit's two probes are regressions in `backfill_test.exs`, with seven more: newly arrived ancestry, a contradicting unmatched branch, a page of another role, a path taken and a canonical given by a concurrent writer after the checks, a subject's kind changing mid-batch, and a writer that bypassed the ledger's locks. Eight of the nine fail on the unfixed code; the ninth records a raise that was already right and now also proves the resume. The runs above predate these fixes; the [re-run on the corrected code](#re-run-on-the-corrected-code-219) follows.
+- The [independent audit](https://github.com/razrfly/dictionary/issues/194#issuecomment-5860062126) reproduced two defects that remained at `4b4a64b` and `0415e5b`. **P1:** only the matched evidence was checked for currency, so a class the walk visited without a match could change after the export — gaining an ancestor that maps elsewhere — and an old confirmation still allocated. **P2:** the override was written before the page and the ledger were asked, so a later refusal (a retired page, in the audit's probe) left a permanent reviewer override behind. Both are fixed under [#219](https://github.com/razrfly/dictionary/issues/219): every dependency is checked, and a confirmation's writes share one savepoint. The audit's two probes are regressions in `backfill_test.exs`, with seven more: newly arrived ancestry, a contradicting unmatched branch, a page of another role, a path taken and a canonical given by a concurrent writer after the checks, a subject's kind changing mid-batch, and a writer that bypassed the ledger's locks. Eight of the nine fail on the unfixed code; the ninth records a raise that was already right and now also proves the resume. The independent re-review added three, at `ba873db`: a matched anchor's own record changing after the export defers nothing, whether the export held it or not (a policy anchor is matched by its id and never read, so it is not a dependency); and two concurrent runs confirming one record in different families leave one override and one address. The runs above predate these fixes; the [re-run on the corrected code](#re-run-on-the-corrected-code-219) follows.
 
 **Before a persistent run:**
 1. The owner decides on the corpus catch-up, the population and the reviewers.
 2. The population is re-derived from a fresh export of the corpus as it then is.
 3. The run: without reviews first. Its manifest is what the reviewers review.
 4. Then the run with the reviewers' own file, and the candidate launch manifest from it.
+
+## Re-run on the corrected code (#219)
+
+On 28 September, at `e47d749`: #216's `ba873db` merged with #208's `771f471`, the code both PRs merge. Every copy was fresh. Each was restored with the corrected tooling from the frozen 13:29 capture (`c1.dump`) and verified exact against `devils_dictionary_stage2r_c1` (69 sections). The export, audit, population and rehearsal reviews were all regenerated; nothing from the first rehearsal was reused.
+
+**Inputs.**
+- **Migration:** checked against a reference made from the capture's own schema. The 66 pre-existing tables were unchanged. Exactly one migration (`20260927200717`), two tables and 67 schema rows were added.
+- **Export**, with the committed SQL: 173,805 lines, SHA-256 `3a2528f7…`. Only line 1 differs from the first rehearsal's export, because it records the database and the time.
+- **Audit:** only `dependencies` and `evidence` differ from before, on 26,510 entities. The only change is dropped policy anchors (Q5, Q16521, Q11424, …). No outcome changed.
+- **Population:** the same 170 records, dispositions, families and paths (records digest `c493ba0e…`, as before). File SHA-256 `33ea8229…`.
+- **Rehearsal reviews**, made from this run's own manifest: 129 (105 confirm, 24 defer), each naming the fingerprint this run reported. SHA-256 `ff3ed353…`; the same reviews in other bytes are `60a1b025…`.
+
+**Runs on the first copy** (batches of 5):
+
+| Run | Records | Result | Time |
+|---|---:|---|---:|
+| Without reviews | 170 | 129 `awaiting_review` (108 draft pages), 41 `not_addressed` | 3.9 s |
+| The same again | 170 | nothing written (`pg_stat_user_tables`); ids and manifest identical | 2.8 s |
+| With rehearsal reviews | 170 | 105 `allocated`, 24 `deferred_by_review`, 41 `not_addressed` | 4.3 s |
+| The same again | 170 | nothing written; ids and manifest identical | 3.3 s |
+| The same reviews in other bytes: a new run key | 170 | the same outcomes; only 170 checkpoint rows and one run added | 4.0 s |
+
+No record was deferred as `evidence_changed` or `input_changed`, and none was refused.
+
+**Crash and resume.**
+- A second copy's run without reviews matched the first copy's manifest exactly.
+- Its reviewed run was killed with `SIGKILL`, by its exact process id, at 30 checkpoint rows, unfinished, and then resumed.
+- `Backfill.state/1` is byte-identical to the uninterrupted copy's (`732692e2…`), and so is the manifest.
+- Page, path, ledger and checkpoint ids are identical. One decision id differs: the sequence value the killed batch drew before it rolled back.
+
+**Recovery of backfilled state.** The first copy was snapshotted, restored into a third, and `mix dd.routing.verify` matched it exactly: 71 sections and every path and page resolution. The runs wrote 275 decisions, 108 pages, 105 paths, 210 ledger rows, 510 checkpoint rows and 3 runs. The capture's 12 earlier pages, 14 paths, 12 decisions and 42 ledger rows were untouched.
+
+**Against the first rehearsal, only fingerprints and ids changed.** Dispositions, reasons, families, addresses, proposed paths and page roles are the same for every object. The evidence fingerprint differs on 54 of the 170. Those are exactly the objects whose dependencies lost an anchor; Bierce's pins, for example, went from `[Q191050, Q5]` to `[Q191050]`.
+
+The evidence is local, under `data/audits/2026-09-28-219/a5-final/`, with `SHA256SUMS`. The backfilled dump is `219d-backfilled.dump` (SHA-256 `6335d6f2…`). The copies `devils_dictionary_stage2r_219d`, `_219e`, `_219f` and `_219ref2` stay on the scratch cluster for #219's database inventory.

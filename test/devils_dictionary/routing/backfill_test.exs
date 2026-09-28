@@ -992,6 +992,29 @@ defmodule DevilsDictionary.Routing.BackfillTest do
     assert Classifications.fingerprint(now) == Classifications.fingerprint(before)
   end
 
+  # The corpus's case: Q5 is in the export, then its record changes.
+  test "a matched anchor the export held, changing afterwards, defers nothing", ctx do
+    class!("Q5", [])
+    ctx = mapped_bierce!(ctx)
+    assert Map.has_key?(ctx.snapshot.graph, "Q5")
+    row = Enum.find(ctx.snapshot.entities, &(&1["object_id"] == ctx.world.bierce.object_id))
+    before = Policy.classify(row, ctx.snapshot.graph, Policy.load())
+    refute Enum.any?(before.dependencies, &(&1["qid"] == "Q5"))
+
+    reviews = reviews!(ctx, [{ctx.world.bierce, %{"action" => "confirm", "family" => "people"}}])
+    class!("Q5", ["Q215627"])
+
+    {plan, _} = run!(ctx, reviews)
+    assert item(plan, ctx.world.bierce).disposition == "allocated"
+
+    fresh = export!(Path.join(ctx.dir, "fresh") |> tap(&File.mkdir_p!/1))
+    refute fresh.graph["Q5"] == ctx.snapshot.graph["Q5"]
+    row = Enum.find(fresh.entities, &(&1["object_id"] == ctx.world.bierce.object_id))
+    now = Policy.classify(row, fresh.graph, Policy.load())
+
+    assert Classifications.fingerprint(now) == Classifications.fingerprint(before)
+  end
+
   # Two callers of the backfill at once (#219 A2's concurrency acceptance):
   # the second waits on the first's locks and then refuses what the first
   # allocated. One override and one address survive.
