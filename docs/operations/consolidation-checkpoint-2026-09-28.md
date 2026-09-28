@@ -84,7 +84,7 @@ The 27 September reclaim archived nineteen idle sessions. Their directories are 
 
 **An inventory, not an authorization: nothing here is dropped.** A drop needs the owner's authorization naming the exact database and server. Two clusters:
 - **5432**, `system_identifier` 7607810074859095446, PostgreSQL 18.2, shared with other projects. It holds 123 dictionary databases, 29.4 GB.
-- **5433**, `system_identifier` 7690164109148229279, the scratch cluster on `/Volumes/LLM Models/dictionary-stage2a/pgdata`. It holds 35 dictionary databases, 310.5 GB.
+- **5433**, `system_identifier` 7690164109148229279, the scratch cluster on `/Volumes/LLM Models/dictionary-stage2a/pgdata`. It holds 35 dictionary databases, 310.5 GB (`pg_database_size`, as are the rows below, which add up to it).
 
 | Server | Database | GB | Purpose, and what depends on it | Proposed disposition |
 |---|---|---:|---|---|
@@ -100,11 +100,11 @@ The 27 September reclaim archived nineteen idle sessions. Their directories are 
 | 5433 | `stage2r_caughtup` | 13.3 | the caught-up baseline | **keep** |
 | 5433 | `stage2r_bfa2` | 10.0 | verified restore of the first backfill rehearsal; retained audit evidence | **keep** |
 | 5433 | `stage2r_219final` | 10.0 | **the demonstration copy** for #219 and D5 | keep until CP4 (#224) starts |
-| 5433 | `stage2r_219d`, `_219e`, `_219f` | 30.0 | A5-final: backfilled, crash/resume, exact restore; `219d-backfilled.dump` keeps the state | drop after #219 closes, if authorized |
-| 5433 | `stage2r_219a`, `_219b`, `_219c`, `_219demo` | 40.0 | the first A5 run (superseded) and the earlier demo copy; `219a-backfilled.dump` kept | drop, if authorized |
-| 5433 | `stage2r_219ref`, `_219ref2`, `_219v2schema`, `_219v2m`, `_219freshrt`, `stage2r_bfref`, `stage2r_reference` | 0.0 | schema-only references for migration checks | drop, if authorized |
+| 5433 | `stage2r_219d`, `_219e`, `_219f` | 29.9 | A5-final: backfilled, crash/resume, exact restore; `219d-backfilled.dump` keeps the state | drop after #219 closes, if authorized |
+| 5433 | `stage2r_219a`, `_219b`, `_219c`, `_219demo` | 39.9 | the first A5 run (superseded) and the earlier demo copy; `219a-backfilled.dump` kept | drop, if authorized |
+| 5433 | `stage2r_219ref`, `_219ref2`, `_219v2schema`, `_219v2m`, `_219freshrt`, `stage2r_bfref`, `stage2r_reference` | 0.1 | schema-only references for migration checks | drop, if authorized |
 | 5433 | `stage2r_base` | 10.0 | B0, the frozen baseline of the recovery repair | keep until #211 completes |
-| 5433 | `stage2r_w1`, `_w1prefix_frozen`, `_p1`, `_p2`, `_p3`, `_from2a`, `_source`, `_bfa`, `_bfb` | 113.0 | recovery-repair and first-backfill working copies; their states are in the dumps and reports | drop after #211, if authorized |
+| 5433 | `stage2r_w1`, `_w1prefix_frozen`, `_p1`, `_p2`, `_p3`, `_from2a`, `_source`, `_bfa`, `_bfb` | 103.6 | recovery-repair and first-backfill working copies; their states are in the dumps and reports | drop after #211, if authorized |
 | 5433 | `stage2r_c1_899`, `_p1_899`, `_p2_899`, `_p3_899` | 50.6 | runs at `899aaaf`, superseded and kept as evidence | drop after #211, if authorized |
 | 5433 | `stage2a_baseline`, `_working`, `_ops` | 33.0 | the Stage 2A rehearsal ([record](../routing/stage-2/recovery-rehearsal.md)) | keep until #211 completes |
 
