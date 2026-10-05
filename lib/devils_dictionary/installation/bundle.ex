@@ -594,7 +594,12 @@ defmodule DevilsDictionary.Installation.Bundle do
     branch = git(root, ~w(rev-parse --abbrev-ref HEAD))
     dirty = git(root, ~w(status --porcelain --untracked-files=no))
 
-    %{"revision" => revision, "branch" => branch, "dirty" => dirty not in [nil, ""]}
+    # Unknown, not clean, when git cannot read the root.
+    %{
+      "revision" => revision,
+      "branch" => branch,
+      "dirty" => if(revision, do: dirty not in [nil, ""], else: nil)
+    }
   end
 
   defp git(root, args) do

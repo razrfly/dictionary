@@ -123,7 +123,7 @@ defmodule Mix.Tasks.Dd.Bootstrap do
     row("outcome", report.outcome)
     row("target", report.target)
     row("cluster", report.target_cluster)
-    row("database oid", report.database_oid)
+    row("database oid", to_string(report.database_oid))
     row("manifest sha256", report.manifest_sha256)
     row("elapsed", fmt_ms(report.elapsed_ms))
 

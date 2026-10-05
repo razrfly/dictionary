@@ -667,6 +667,75 @@ defmodule DevilsDictionary.Installation.BundleBootstrapTest do
     end
   end
 
+  test "settings that cannot be checked or would fight the task are refused before initdb",
+       %{names: names, dir: dir, probe: probe} do
+    %{path: bundle} = bundle!(names, dir, probe)
+    data = Path.join(dir, "refused/data")
+
+    for {settings, pattern} <- [
+          {[{"work_mem", "8MB"}, {"WORK_MEM", "16MB"}], "given more than once"},
+          {[{"port", "6000"}], "this task sets them itself"},
+          {[{"auto_explain.log_min_duration", "1s"}], "plain parameter name"},
+          {[{"work mem", "8MB"}], "plain parameter name"}
+        ] do
+      assert {:error, message} =
+               Cluster.init(
+                 bundle: bundle,
+                 data_dir: data,
+                 port: free_port(),
+                 volume: dir,
+                 probe: probe,
+                 settings: settings
+               )
+
+      assert message =~ pattern
+      refute File.exists?(data)
+    end
+  end
+
+  test "a restart the server cannot come back from is reported as such, and an unknown setting stops it",
+       %{names: names, dir: dir, probe: probe} do
+    %{path: bundle} = bundle!(names, dir, probe)
+
+    # Accepted by ALTER SYSTEM (no check), refused by the postmaster at start.
+    data = Path.join(dir, "no-library/data")
+    port = free_port()
+    stop_on_exit(data)
+
+    assert {:error, message} =
+             Cluster.init(
+               bundle: bundle,
+               data_dir: data,
+               port: port,
+               volume: dir,
+               probe: probe,
+               settings: [{"shared_preload_libraries", "dd_no_such_library"}]
+             )
+
+    assert message =~ "pg_ctl restart exited"
+    assert message =~ "is not running"
+    assert message =~ "remove it and run again"
+    assert Cluster.port_free?(port)
+
+    other = Path.join(dir, "unknown/data")
+    other_port = free_port()
+    stop_on_exit(other)
+
+    assert {:error, message} =
+             Cluster.init(
+               bundle: bundle,
+               data_dir: other,
+               port: other_port,
+               volume: dir,
+               probe: probe,
+               settings: [{"no_such_setting", "1"}]
+             )
+
+    assert message =~ "knows no setting no_such_setting"
+    assert message =~ "has been stopped"
+    assert Cluster.port_free?(other_port)
+  end
+
   test "restore mode builds onto a dedicated cluster: same name, roles, exact state",
        %{names: names, dir: dir, probe: probe} do
     %{digest: digest, path: bundle, manifest: manifest} = bundle!(names, dir, probe)
@@ -675,10 +744,14 @@ defmodule DevilsDictionary.Installation.BundleBootstrapTest do
     stop_on_exit(data)
 
     try do
+      # A list of quoted names (two libraries), a mixed-case name given in
+      # lower case, a restart-only setting and two reload ones.
       settings = [
         {"wal_sync_method", "fsync_writethrough"},
         {"shared_buffers", "64MB"},
-        {"work_mem", "8MB"}
+        {"work_mem", "8MB"},
+        {"shared_preload_libraries", "pg_stat_statements,auto_explain"},
+        {"timezone", "Etc/UTC"}
       ]
 
       assert {:ok, cluster} =
@@ -693,11 +766,14 @@ defmodule DevilsDictionary.Installation.BundleBootstrapTest do
 
       assert cluster.outcome == :created
 
-      # Each setting in effect: shared_buffers needed the restart.
+      # Each setting running, under the server's own name: shared_buffers
+      # and the libraries needed the restart, and the libraries are two.
       assert cluster.settings == %{
                "wal_sync_method" => "fsync_writethrough",
                "shared_buffers" => "64MB",
-               "work_mem" => "8MB"
+               "work_mem" => "8MB",
+               "shared_preload_libraries" => "pg_stat_statements, auto_explain",
+               "TimeZone" => "Etc/UTC"
              }
 
       refute cluster.system_identifier == manifest["source"]["system_identifier"]
@@ -760,6 +836,26 @@ defmodule DevilsDictionary.Installation.BundleBootstrapTest do
                )
 
       assert message =~ "not in effect as requested"
+
+      # Written by hand and not reloaded: in the file, not running, refused.
+      {:ok, _} =
+        DevilsDictionary.Snapshot.probe(
+          DevilsDictionary.Snapshot.maintenance(target_config(port, "postgres")),
+          &Postgrex.query!(&1, "ALTER SYSTEM SET work_mem = '32MB'", [])
+        )
+
+      assert {:error, message} =
+               Cluster.init(
+                 bundle: bundle,
+                 data_dir: data,
+                 port: port,
+                 volume: dir,
+                 probe: probe,
+                 settings: [{"work_mem", "32MB"}]
+               )
+
+      assert message =~ "written but not running"
+      assert message =~ "checked, never changed"
     after
       System.cmd("pg_ctl", ["-D", data, "-m", "immediate", "-w", "stop"], stderr_to_stdout: true)
     end

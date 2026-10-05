@@ -575,7 +575,11 @@ defmodule DevilsDictionary.Routing.Recovery do
       |> Keyword.merge(
         name: nil,
         pool: DBConnection.ConnectionPool,
-        pool_size: 2
+        pool_size: 2,
+        # Its queries are the whole database read in batches: tens of
+        # thousands of them at corpus scale. Logged, they bury what the task
+        # reports (a capture's log ran to half a megabyte).
+        log: false
       )
 
     {:ok, pid} = Repo.start_link(config)
