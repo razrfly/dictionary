@@ -298,7 +298,8 @@ defmodule DevilsDictionary.Snapshot do
 
   # The same endpoint the `pg_*` tools use (`connection_args/1`), pointed at
   # the maintenance database.
-  defp maintenance(config) do
+  @doc false
+  def maintenance(config) do
     config
     |> Keyword.take([
       :hostname,
@@ -316,8 +317,9 @@ defmodule DevilsDictionary.Snapshot do
 
   # Runs `fun` on a connection in a process of its own, so that a server that
   # cannot be reached is an error returned, not an exit that takes the caller
-  # down with it.
-  defp probe(connection, fun) do
+  # down with it. `Installation.Database` asks its catalog questions this way.
+  @doc false
+  def probe(connection, fun, timeout \\ 30_000) do
     {:ok, _apps} = Application.ensure_all_started(:postgrex)
     parent = self()
     ref = make_ref()
@@ -352,9 +354,9 @@ defmodule DevilsDictionary.Snapshot do
       {:DOWN, ^monitor, :process, _pid, reason} ->
         {:error, inspect(reason)}
     after
-      30_000 ->
+      timeout ->
         Process.exit(pid, :kill)
-        {:error, "no answer within 30 s"}
+        {:error, "no answer within #{div(timeout, 1000)} s"}
     end
   end
 
@@ -444,7 +446,8 @@ defmodule DevilsDictionary.Snapshot do
   # The endpoint Postgrex uses for the same config: a Unix socket directory
   # when one is configured, otherwise the host. `database_identity/1` checks
   # the server over exactly this endpoint before a restore.
-  defp connection_args(config) do
+  @doc false
+  def connection_args(config) do
     [
       "--host=#{config[:socket_dir] || config[:hostname]}",
       "--port=#{config[:port]}",

@@ -65,19 +65,28 @@ defmodule DevilsDictionary.Routing.Recovery do
       and `last_seen_run_id`, and the sequences, whose upserts may consume ids
       without writing rows (`sequences_behind/0` checks them instead).
     * `rows: true` — keeps every row, for exact differences in tests.
+    * `snapshot: id` — reads in the snapshot another transaction exported
+      with `pg_export_snapshot()`, so the manifest describes exactly what a
+      `pg_dump --snapshot=id` taken under the same snapshot contains
+      (`Installation.Bundle`).
+    * `queue: true` — keeps Oban's queue tables too. Recovery leaves them
+      out because a restored copy's jobs are operational state; moving a
+      whole installation preserves them like everything else.
   """
   def manifest(opts \\ []) do
     mode = Keyword.get(opts, :mode, :exact)
+    unmanifested = if Keyword.get(opts, :queue, false), do: [], else: @unmanifested
 
     {:ok, manifest} =
       Repo.transaction(
         fn ->
           query!("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
+          import_snapshot(opts[:snapshot])
           keys = primary_keys()
 
           sections =
             for {table, columns} <- columns(),
-                table not in @unmanifested,
+                table not in unmanifested,
                 mode == :exact or table not in @projection_tables,
                 into: %{} do
               kept = Enum.reject(columns, fn {name, _type} -> skipped?(name, mode) end)
@@ -94,6 +103,20 @@ defmodule DevilsDictionary.Routing.Recovery do
       )
 
     manifest
+  end
+
+  # Must be the transaction's first statement after its isolation level.
+  # The id is the server's own (`pg_export_snapshot()`), never user input,
+  # but it is still checked before it is spliced into SQL.
+  @doc false
+  def import_snapshot(nil), do: :ok
+
+  def import_snapshot(id) when is_binary(id) do
+    unless id =~ ~r/\A[0-9A-F]+-[0-9A-F]+-[0-9]+\z/,
+      do: raise(ArgumentError, "not an exported snapshot id: #{inspect(id)}")
+
+    query!("SET TRANSACTION SNAPSHOT '#{id}'")
+    :ok
   end
 
   defp skipped?(column, :projected), do: column in @projection_columns
@@ -585,7 +608,13 @@ defmodule DevilsDictionary.Routing.Recovery do
   # database and compare a database with itself.
   @endpoint_keys [:socket_dir, :socket, :endpoints, :hostname, :port]
 
-  defp target_config(target) do
+  @doc """
+  The configured Repo connection with `target` applied: a database name on
+  the configured server, or an `ecto://` URL naming its whole endpoint. What
+  `with_database/2` connects to, for callers that open their own connections
+  (`Installation.Database`).
+  """
+  def target_config(target) do
     base = Repo.config() |> Snapshot.resolve() |> Keyword.put(:url, nil)
 
     if url?(target) do

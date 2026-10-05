@@ -389,6 +389,12 @@ mix dd.snapshot --restore ~/dictionary.dump --database devils_dictionary_v2
 mix ecto.migrate                                           # in case the snapshot is older
 ```
 
+To move or copy a **whole installation** — the database with its settings and
+roles, the archived inputs and the replay archive, checked end to end — use
+`mix dd.bundle`, `mix dd.bootstrap` and the read-only `mix dd.doctor`
+([`docs/operations/installation.md`](docs/operations/installation.md)).
+`mix dd.doctor` answers whether a machine is ready.
+
 A 13 GB database dumps to about 1 GB in a minute and restores in proportion.
 `mix dd.rebuild` remains the reproducible path and the source of truth, but it is
 not the fast one, and the Wiktionary input is `url_is_rolling` in
