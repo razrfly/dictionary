@@ -625,11 +625,8 @@ defmodule DevilsDictionary.Installation.Database do
             do: ~s|ROLE "#{identifier(role)}" IN DATABASE "#{name}"|,
             else: ~s|DATABASE "#{name}"|
 
-        Postgrex.query!(
-          conn,
-          ~s|ALTER #{target} SET "#{identifier(key)}" TO '#{literal(value)}'|,
-          []
-        )
+        values = key |> setting_values(value) |> Enum.map_join(", ", &"'#{literal(&1)}'")
+        Postgrex.query!(conn, ~s|ALTER #{target} SET "#{identifier(key)}" TO #{values}|, [])
       end
 
       Postgrex.query!(
@@ -641,6 +638,64 @@ defmodule DevilsDictionary.Installation.Database do
       comment!(conn, name, properties["comment"])
       privileges!(conn, name, properties["acl"])
     end)
+  end
+
+  # The settings whose stored value is a list of quoted names, as pg_dump's
+  # `variable_is_guc_list_quote` lists them. `pg_db_role_setting` stores
+  # `search_path="$user", public`; given back as one literal that would be
+  # one schema named `"$user", public`. So, as pg_dump does, the value is
+  # split into its elements and each is given back as its own literal.
+  @list_quote ~w(local_preload_libraries search_path session_preload_libraries
+                 shared_preload_libraries temp_tablespaces unix_socket_directories)
+
+  @doc """
+  The literals that re-create a stored `key=value` setting: the value itself
+  for an ordinary setting, its elements for a list of quoted names. Raises
+  on a list it cannot parse, rather than guessing.
+  """
+  def setting_values(key, value) do
+    if String.downcase(key) in @list_quote do
+      case list_elements(value) do
+        {:ok, elements} -> elements
+        :error -> raise ArgumentError, "cannot parse the #{key} list #{inspect(value)}"
+      end
+    else
+      [value]
+    end
+  end
+
+  @doc """
+  Splits a stored list setting as PostgreSQL's `SplitGUCList` does: elements
+  separated by commas, surrounding whitespace ignored, a double-quoted
+  element taken literally with `""` standing for `"`. `{:ok, elements}` or
+  `:error`.
+  """
+  def list_elements(value), do: value |> String.trim_leading() |> element([])
+
+  defp element("\"" <> rest, acc), do: quoted(rest, "", acc)
+
+  defp element(rest, acc) do
+    # Unquoted: up to the next comma or whitespace, as SplitGUCList reads it.
+    case Regex.run(~r/\A([^,\s]+)(.*)\z/s, rest) do
+      [_, name, tail] -> after_element(tail, [name | acc])
+      _ -> :error
+    end
+  end
+
+  defp quoted("\"\"" <> rest, current, acc), do: quoted(rest, current <> "\"", acc)
+  defp quoted("\"" <> rest, current, acc), do: after_element(rest, [current | acc])
+
+  defp quoted(<<char::utf8, rest::binary>>, current, acc),
+    do: quoted(rest, <<current::binary, char::utf8>>, acc)
+
+  defp quoted("", _current, _acc), do: :error
+
+  defp after_element(rest, acc) do
+    case String.trim_leading(rest) do
+      "" -> {:ok, Enum.reverse(acc)}
+      "," <> next -> next |> String.trim_leading() |> element(acc)
+      _ -> :error
+    end
   end
 
   @doc "Sets or clears the database's comment."

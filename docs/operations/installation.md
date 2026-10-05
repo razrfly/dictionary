@@ -78,6 +78,8 @@ A difference is reported section by section, with rows for the schema and the se
 
 `mix dd.routing.verify` remains an independent second check. It compares the same tables, Oban's aside, in its own code.
 
+**List settings** (`search_path`, `temp_tablespaces` and the other quoted-name lists) are given back element by element, as `pg_dump` gives them back. A value stored in the canonical form `ALTER … SET … TO` writes comes back byte for byte. A value stored raw through `SET … FROM CURRENT` may not be canonical, and then cannot be recreated exactly. The comparison reports it and the restore refuses it; it is never silently changed. No `devils_dictionary*` database has such a setting.
+
 ## Before anything is written
 
 `dd.bootstrap` checks all of the following before its first write. A refusal leaves everything as it was.
@@ -113,7 +115,8 @@ A difference is reported section by section, with rows for the schema and the se
 2. `pg_restore --exit-on-error` restores into it, owners and privileges included.
 3. The database-level settings, connection limit and privileges are applied.
 4. Its state is captured and compared with the bundle's.
-5. Only when nothing differs (the marker standing in for the comment) is the comment set and the staging database **renamed** to the target. The rename keeps its oid.
+5. Only when nothing differs (the marker standing in for the comment) is the staging database **renamed** to the target, keeping its oid.
+6. Then the target is given the recorded comment, replacing the marker.
 
 The rename comes before the comment. So the target name only ever holds a verified database.
 
@@ -146,6 +149,8 @@ A directory at the mount path is not proof that the drive is mounted. Nothing is
 | target database | `--target NAME\|URL` | `dd.bootstrap`, `dd.doctor` |
 | target cluster | `--target-cluster ID`, `--expect-cluster ID` | `dd.bootstrap`, `dd.doctor` |
 | cluster data directory and port | `--data-dir DIR`, `--port N` | `dd.bootstrap.cluster` |
+| the installation's checkout | `--root DIR` | `dd.bundle`: its `data/` and `priv/replay` are bundled and its revision recorded, beside the task's own |
+| server settings | `--setting key=value`, repeatable | `dd.bootstrap.cluster`: written with `ALTER SYSTEM`, made effective (a restart when one is needed), read back; on a running cluster checked, never changed |
 | models | `--models-root DIR` | `dd.bundle` |
 | inputs into a checkout | `--place-inputs DIR`, `--inputs-from DIR` | `dd.bootstrap` |
 | report | `--report PATH` | `dd.bootstrap` |

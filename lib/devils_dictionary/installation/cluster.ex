@@ -37,11 +37,13 @@ defmodule DevilsDictionary.Installation.Cluster do
     data = Path.expand(Keyword.fetch!(opts, :data_dir))
     port = Keyword.fetch!(opts, :port)
     auth = Keyword.get(opts, :auth, "trust")
+    settings = Keyword.get(opts, :settings, [])
     log_file = Path.join(Path.dirname(data), "postgresql-#{port}.log")
 
     with {:ok, manifest} <- Manifest.read(bundle),
          :ok <- Bundle.digest_pinned(bundle, opts[:expect_manifest_sha256]),
          :ok <- role_names(manifest["cluster_roles"]),
+         :ok <- setting_names(settings),
          {:ok, tools} <- tools(),
          :ok <- same_major(tools, manifest),
          {:ok, _volume} <-
@@ -52,13 +54,24 @@ defmodule DevilsDictionary.Installation.Cluster do
            ) do
       try do
         case existing(data, port) do
-          :absent -> create(manifest, data, port, auth, log_file, tools, log)
-          :running -> present(manifest, data, port, log_file, log)
+          :absent -> create(manifest, data, port, auth, log_file, tools, settings, log)
+          :running -> present(manifest, data, port, log_file, settings, log)
           {:error, message} -> {:error, message}
         end
       rescue
         error -> {:error, "setting up the cluster at #{data} failed: #{Exception.message(error)}"}
       end
+    end
+  end
+
+  # Server settings as given (`--setting key=value`): plain names only, so
+  # one can never be anything but a setting name in `ALTER SYSTEM`.
+  defp setting_names(settings) do
+    case Enum.reject(settings, fn {key, value} ->
+           is_binary(key) and key =~ ~r/\A[a-z_][a-z0-9_.]*\z/ and is_binary(value)
+         end) do
+      [] -> :ok
+      bad -> {:error, "refusing settings #{inspect(bad)}: names are lowercase setting names"}
     end
   end
 
@@ -125,7 +138,7 @@ defmodule DevilsDictionary.Installation.Cluster do
     end
   end
 
-  defp create(manifest, data, port, auth, log_file, tools, log) do
+  defp create(manifest, data, port, auth, log_file, tools, settings, log) do
     db = manifest["database"]
     File.mkdir_p!(Path.dirname(data))
     log.("initdb #{data}")
@@ -167,32 +180,150 @@ defmodule DevilsDictionary.Installation.Cluster do
 
     if status != 0, do: raise("pg_ctl start exited with #{status}: #{out}")
 
-    config = endpoint(port)
+    # From here the server is running. Whatever fails before its setup is
+    # complete stops it again — the collation first, so a cluster that
+    # cannot hold the database exactly is stopped before anything is added
+    # to it — and says so: no server is left running that nobody asked for.
+    case started(manifest, db, endpoint(port), %{
+           port: port,
+           data: data,
+           log_file: log_file,
+           tools: tools,
+           settings: settings,
+           log: log
+         }) do
+      {:ok, result} -> {:ok, result}
+      {:error, message} -> stopped(tools, data, message)
+    end
+  end
 
-    # The collation first: a cluster that cannot hold the database exactly
-    # is stopped again before anything is added to it.
+  defp started(manifest, db, config, at) do
+    %{port: port, data: data, log_file: log_file, tools: tools, settings: settings, log: log} = at
+
     with {:ok, facts} <- Database.facts(config, icu_locale: db["locale"]),
-         :ok <- stop_unless(same_icu(facts, db), tools, data) do
-      complete!(config, port, manifest["cluster_roles"])
-
+         :ok <- same_icu(facts, db),
+         :ok <- complete(config, port, manifest["cluster_roles"]),
+         {:ok, applied} <- apply_settings(config, settings, tools, data, log_file, log) do
       {:ok,
        %{
          outcome: :created,
          system_identifier: facts.server.system_identifier,
          port: port,
          data_dir: data,
-         log_file: log_file
+         log_file: log_file,
+         settings: applied
        }}
     end
+  rescue
+    error -> {:error, Exception.message(error)}
   end
 
-  defp stop_unless(:ok, _tools, _data), do: :ok
+  # Each setting is written with ALTER SYSTEM (validated by the server as it
+  # is written), then made effective: a restart when any needs one, a reload
+  # otherwise. Then each is read back from the file it was written to,
+  # applied, and with no restart pending.
+  defp apply_settings(_config, [], _tools, _data, _log_file, _log), do: {:ok, %{}}
 
-  defp stop_unless({:error, message}, tools, data) do
-    System.cmd(tools["pg_ctl"], ["-D", data, "-m", "fast", "-w", "stop"], stderr_to_stdout: true)
+  defp apply_settings(config, settings, tools, data, log_file, log) do
+    run!(
+      config,
+      Enum.map(settings, fn {key, value} ->
+        ~s|ALTER SYSTEM SET "#{key}" = '#{literal(value)}'|
+      end)
+    )
 
-    {:error,
-     message <> " The new cluster has been stopped; its directory is left for inspection."}
+    # A reload first: only once the server has re-read its configuration
+    # does pg_settings say which settings wait for a restart.
+    run!(config, ["SELECT pg_reload_conf()"])
+    Process.sleep(300)
+
+    if pending_restart?(config) do
+      log.("restarting it for #{Enum.map_join(settings, ", ", &elem(&1, 0))}")
+
+      # With its log file again: without `-l` the restarted server would
+      # keep pg_ctl's output open, and this call would never return.
+      {out, status} =
+        System.cmd(tools["pg_ctl"], ["-D", data, "-l", log_file, "-m", "fast", "-w", "restart"],
+          stderr_to_stdout: true
+        )
+
+      if status != 0, do: raise("pg_ctl restart exited with #{status}: #{out}")
+    end
+
+    effective_settings(config, settings)
+  end
+
+  defp pending_restart?(config) do
+    {:ok, pending} =
+      DevilsDictionary.Snapshot.probe(DevilsDictionary.Snapshot.maintenance(config), fn conn ->
+        %{rows: [[n]]} =
+          Postgrex.query!(conn, "SELECT count(*) FROM pg_settings WHERE pending_restart", [])
+
+        n > 0
+      end)
+
+    pending
+  end
+
+  # `{:ok, %{name => current_setting}}` when every requested setting is the
+  # value written to postgresql.auto.conf, applied, with no restart pending.
+  defp effective_settings(config, settings) do
+    {:ok, rows} =
+      DevilsDictionary.Snapshot.probe(DevilsDictionary.Snapshot.maintenance(config), fn conn ->
+        for {key, value} <- settings do
+          %{rows: file} =
+            Postgrex.query!(
+              conn,
+              "SELECT setting, applied, error FROM pg_file_settings " <>
+                "WHERE name = $1 AND sourcefile LIKE '%postgresql.auto.conf' ORDER BY seqno DESC LIMIT 1",
+              [key]
+            )
+
+          %{rows: [[current, pending]]} =
+            Postgrex.query!(
+              conn,
+              "SELECT current_setting($1), pending_restart FROM pg_settings WHERE name = $1",
+              [key]
+            )
+
+          {key, value, file, current, pending}
+        end
+      end)
+
+    problems =
+      for {key, value, file, _current, pending} <- rows,
+          file != [[value, true, nil]] or pending,
+          do:
+            "#{key}: requested #{inspect(value)}, file #{inspect(file)}, restart pending #{pending}"
+
+    if problems == [],
+      do: {:ok, Map.new(rows, fn {key, _value, _file, current, _pending} -> {key, current} end)},
+      else: {:error, "settings are not in effect as requested: " <> Enum.join(problems, "; ")}
+  end
+
+  defp literal(value), do: String.replace(value, "'", "''")
+
+  defp stopped(tools, data, message) do
+    {out, status} =
+      System.cmd(tools["pg_ctl"], ["-D", data, "-m", "fast", "-w", "stop"],
+        stderr_to_stdout: true
+      )
+
+    note =
+      if status == 0,
+        do:
+          "The new cluster has been stopped. Its directory #{data} holds no dictionary data: " <>
+            "remove it and run again, or choose another --data-dir.",
+        else: "Stopping the new cluster failed too (#{String.trim(out)}): stop it by hand."
+
+    {:error, "#{message} #{note}"}
+  end
+
+  defp complete(config, port, roles) do
+    complete!(config, port, roles)
+    :ok
+  rescue
+    error -> {:error, "completing the cluster's setup failed: #{Exception.message(error)}"}
   end
 
   # What makes a started cluster the dictionary's: its port and addresses
@@ -226,24 +357,30 @@ defmodule DevilsDictionary.Installation.Cluster do
   defp locale_args(%{"locale_provider" => "b"} = db),
     do: ["--locale-provider=builtin", "--builtin-locale=#{db["locale"]}"]
 
+  # Neutral about whether the server is running: on creation the caller
+  # stops it and says so; for a running cluster the caller reports it.
   defp same_icu(facts, %{"locale_provider" => "i"} = db) do
     if facts.server.icu_version == db["actual_collation_version"],
       do: :ok,
       else:
         {:error,
-         "the new cluster's ICU collation version is #{inspect(facts.server.icu_version)}, the " <>
-           "source's #{db["actual_collation_version"]}. It is running at #{facts.server.data_directory}; " <>
-           "stop it and use the same PostgreSQL build"}
+         "the cluster at #{facts.server.data_directory} has ICU collation version " <>
+           "#{inspect(facts.server.icu_version)}; the source's is #{db["actual_collation_version"]}. " <>
+           "Use the same PostgreSQL build."}
   end
 
   defp same_icu(_facts, _db), do: :ok
 
-  defp present(manifest, data, port, log_file, log) do
+  # A running cluster is completed (port, addresses, roles) but its server
+  # settings are only checked: changing them on a running cluster is a
+  # deliberate act, not a side effect of a re-run.
+  defp present(manifest, data, port, log_file, settings, log) do
     config = endpoint(port)
 
     with {:ok, facts} <- Database.facts(config, icu_locale: manifest["database"]["locale"]),
          :ok <- same_directory(facts, data, port),
-         :ok <- same_icu(facts, manifest["database"]) do
+         :ok <- same_icu(facts, manifest["database"]),
+         {:ok, applied} <- effective_settings(config, settings) do
       log.("a cluster from #{data} is running on #{port}; making sure its setup is complete")
       complete!(config, port, manifest["cluster_roles"])
 
@@ -253,7 +390,8 @@ defmodule DevilsDictionary.Installation.Cluster do
          system_identifier: facts.server.system_identifier,
          port: port,
          data_dir: data,
-         log_file: log_file
+         log_file: log_file,
+         settings: applied
        }}
     else
       {:error, message} -> {:error, "a server is running on #{port}: #{message}"}

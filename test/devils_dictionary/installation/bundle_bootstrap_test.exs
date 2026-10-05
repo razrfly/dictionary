@@ -131,6 +131,8 @@ defmodule DevilsDictionary.Installation.BundleBootstrapTest do
     %{manifest: manifest, digest: digest, path: bundle} = bundle!(names, dir, probe)
 
     assert manifest["format"] == "dd.bundle/1"
+    assert manifest["tool"]["revision"] =~ ~r/\A[0-9a-f]{40}\z/
+    assert manifest["code"]["revision"] == manifest["tool"]["revision"]
     assert manifest["quiescence"]["quiet"]
     assert manifest["source"]["database"] == names["src"]
     assert manifest["schema"]["versions"] == [20_260_924_222_346]
@@ -588,17 +590,116 @@ defmodule DevilsDictionary.Installation.BundleBootstrapTest do
     assert :ok = Manifest.confined(%{"files" => [%{"path" => "db/x.dump"}]})
   end
 
+  test "list settings come back element by element, as pg_dump writes them",
+       %{names: names, dir: dir, probe: probe} do
+    {:ok, _} =
+      DevilsDictionary.Snapshot.probe(
+        DevilsDictionary.Snapshot.maintenance(config(names["src"])),
+        fn conn ->
+          # A list of quoted names, one of them needing the quotes, and a
+          # list setting that is not one (DateStyle reads its own string).
+          Postgrex.query!(
+            conn,
+            ~s|ALTER DATABASE "#{names["src"]}" SET search_path TO '$user', public, 'Odd "Schema"'|,
+            []
+          )
+
+          Postgrex.query!(
+            conn,
+            ~s|ALTER DATABASE "#{names["src"]}" SET DateStyle TO 'ISO, MDY'|,
+            []
+          )
+        end
+      )
+
+    %{digest: digest, path: bundle, manifest: manifest} = bundle!(names, dir, probe)
+    [%{"config" => recorded}] = manifest["database"]["settings"]
+    assert ~s|search_path="$user", public, "Odd ""Schema"""| in recorded
+
+    assert {:ok, %{outcome: :restored}} = init(names, bundle, digest)
+    assert exists?(names["dst"])["settings"] == manifest["database"]["settings"]
+
+    expected = Jason.decode!(File.read!(Path.join(bundle, "db/#{names["src"]}.state.json")))
+    assert State.diff(expected, State.capture(names["dst"]), ignore: [:name]) == []
+  end
+
+  test "a cluster whose role setup fails after it started is stopped again",
+       %{names: names, dir: dir, probe: probe} do
+    %{path: bundle} = bundle!(names, dir, probe)
+
+    # A recorded role the new cluster refuses: an expiry that is no time.
+    manifest_path = Manifest.path(bundle)
+    manifest = manifest_path |> File.read!() |> Jason.decode!()
+
+    bad = %{
+      "name" => "dd_bad_expiry",
+      "superuser" => false,
+      "inherit" => true,
+      "createrole" => false,
+      "createdb" => false,
+      "login" => true,
+      "replication" => false,
+      "bypassrls" => false,
+      "connection_limit" => -1,
+      "valid_until" => "not a time",
+      "member_of" => []
+    }
+
+    File.write!(
+      manifest_path,
+      Jason.encode!(Map.update!(manifest, "cluster_roles", &(&1 ++ [bad])))
+    )
+
+    data = Path.join(dir, "failing/data")
+    port = free_port()
+    stop_on_exit(data)
+
+    try do
+      assert {:error, message} =
+               Cluster.init(bundle: bundle, data_dir: data, port: port, volume: dir, probe: probe)
+
+      assert message =~ "completing the cluster's setup failed"
+      assert message =~ "has been stopped"
+      assert Cluster.port_free?(port)
+      assert {_out, 3} = System.cmd("pg_ctl", ["-D", data, "status"], stderr_to_stdout: true)
+    after
+      System.cmd("pg_ctl", ["-D", data, "-m", "immediate", "-w", "stop"], stderr_to_stdout: true)
+    end
+  end
+
   test "restore mode builds onto a dedicated cluster: same name, roles, exact state",
        %{names: names, dir: dir, probe: probe} do
     %{digest: digest, path: bundle, manifest: manifest} = bundle!(names, dir, probe)
     data = Path.join(dir, "cluster/data")
     port = free_port()
+    stop_on_exit(data)
 
     try do
+      settings = [
+        {"wal_sync_method", "fsync_writethrough"},
+        {"shared_buffers", "64MB"},
+        {"work_mem", "8MB"}
+      ]
+
       assert {:ok, cluster} =
-               Cluster.init(bundle: bundle, data_dir: data, port: port, volume: dir, probe: probe)
+               Cluster.init(
+                 bundle: bundle,
+                 data_dir: data,
+                 port: port,
+                 volume: dir,
+                 probe: probe,
+                 settings: settings
+               )
 
       assert cluster.outcome == :created
+
+      # Each setting in effect: shared_buffers needed the restart.
+      assert cluster.settings == %{
+               "wal_sync_method" => "fsync_writethrough",
+               "shared_buffers" => "64MB",
+               "work_mem" => "8MB"
+             }
+
       refute cluster.system_identifier == manifest["source"]["system_identifier"]
 
       # Its roles are the source cluster's, attributes and all.
@@ -634,14 +735,43 @@ defmodule DevilsDictionary.Installation.BundleBootstrapTest do
       expected = Jason.decode!(File.read!(Path.join(bundle, "db/#{names["src"]}.state.json")))
       assert State.diff(expected, State.capture(target)) == []
 
-      # Running the cluster setup again reports the running cluster.
+      # Running the cluster setup again reports the running cluster, and
+      # checks its settings without changing them.
       assert {:ok, %{outcome: :present, system_identifier: id}} =
-               Cluster.init(bundle: bundle, data_dir: data, port: port, volume: dir, probe: probe)
+               Cluster.init(
+                 bundle: bundle,
+                 data_dir: data,
+                 port: port,
+                 volume: dir,
+                 probe: probe,
+                 settings: settings
+               )
 
       assert id == cluster.system_identifier
+
+      assert {:error, message} =
+               Cluster.init(
+                 bundle: bundle,
+                 data_dir: data,
+                 port: port,
+                 volume: dir,
+                 probe: probe,
+                 settings: [{"work_mem", "16MB"}]
+               )
+
+      assert message =~ "not in effect as requested"
     after
       System.cmd("pg_ctl", ["-D", data, "-m", "immediate", "-w", "stop"], stderr_to_stdout: true)
     end
+  end
+
+  # `after` does not run when a test times out; on_exit does, so a
+  # throwaway cluster never outlives its test. It runs before the setup's
+  # own on_exit removes the directory.
+  defp stop_on_exit(data) do
+    on_exit(fn ->
+      System.cmd("pg_ctl", ["-D", data, "-m", "immediate", "-w", "stop"], stderr_to_stdout: true)
+    end)
   end
 
   defp target_config(port, database),
