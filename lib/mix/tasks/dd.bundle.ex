@@ -42,6 +42,9 @@ defmodule Mix.Tasks.Dd.Bundle do
 
     * `--source NAME|URL`, `--out DIR`, `--volume MOUNT` — capture
     * `--volume-uuid UUID` — the volume's expected UUID
+    * `--root DIR` — the checkout the installation runs from, whose `data/`
+      and `priv/replay` are bundled and whose revision is recorded (default:
+      the current directory). The task's own revision is recorded beside it
     * `--no-inputs` — leave out the archived inputs and the replay archive
     * `--models-root DIR` — inventory the pinned model artifacts there
     * `--allow-unquiet` — see above
@@ -70,7 +73,8 @@ defmodule Mix.Tasks.Dd.Bundle do
     verify: :string,
     quick: :boolean,
     transfer: :string,
-    expect_manifest_sha256: :string
+    expect_manifest_sha256: :string,
+    root: :string
   ]
 
   @impl Mix.Task
@@ -101,6 +105,7 @@ defmodule Mix.Tasks.Dd.Bundle do
         volume: opts[:volume],
         uuid: opts[:volume_uuid],
         inputs: Keyword.get(opts, :inputs, true),
+        root: opts[:root] || ".",
         models_root: opts[:models_root],
         require_quiet: not Keyword.get(opts, :allow_unquiet, false),
         log: &say("  " <> &1)

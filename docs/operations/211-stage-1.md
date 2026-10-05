@@ -281,7 +281,7 @@ mix dd.doctor
 **1. Capture.** Run it once the source is quiet and the owner has approved:
 
 ```bash
-mix dd.bundle --source devils_dictionary_v2 --out "/Volumes/LLM Models/dictionary/bundles/<date>-v2" --volume "/Volumes/LLM Models" --volume-uuid F7FDE75A-3FE9-43D9-AC1E-71FDDEDBAF31 --models-root "/Volumes/LLM Models/dictionary/ollama"
+mix dd.bundle --source devils_dictionary_v2 --root ~/Code/projects-2026/dictionary --out "/Volumes/LLM Models/dictionary/bundles/<date>-v2" --volume "/Volumes/LLM Models" --volume-uuid F7FDE75A-3FE9-43D9-AC1E-71FDDEDBAF31 --models-root "/Volumes/LLM Models/dictionary/ollama"
 ```
 
 ```bash
@@ -291,7 +291,7 @@ mix dd.bundle --verify "<bundle>"
 **2. The dedicated cluster:**
 
 ```bash
-mix dd.bootstrap.cluster --bundle "<bundle>" --expect-manifest-sha256 <digest> --data-dir "/Volumes/LLM Models/dictionary/postgres/18/data" --port 5434 --volume "/Volumes/LLM Models" --volume-uuid F7FDE75A-3FE9-43D9-AC1E-71FDDEDBAF31
+mix dd.bootstrap.cluster --bundle "<bundle>" --expect-manifest-sha256 <digest> --data-dir "/Volumes/LLM Models/dictionary/postgres/18/data" --port 5434 --volume "/Volumes/LLM Models" --volume-uuid F7FDE75A-3FE9-43D9-AC1E-71FDDEDBAF31 --setting wal_sync_method=fsync_writethrough …
 ```
 
 **3. Restore the installation:**

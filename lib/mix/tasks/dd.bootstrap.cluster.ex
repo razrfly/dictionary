@@ -30,6 +30,11 @@ defmodule Mix.Tasks.Dd.Bootstrap.Cluster do
     * `--bundle DIR`, `--data-dir DIR`, `--port N`, `--volume MOUNT` (required)
     * `--volume-uuid UUID`, `--expect-manifest-sha256 HEX`
     * `--auth METHOD` — `pg_hba` method for local connections (default `trust`)
+    * `--setting key=value` — a server setting, repeatable (for example
+      `--setting wal_sync_method=fsync_writethrough --setting shared_buffers=16GB`).
+      Written with `ALTER SYSTEM`, made effective (a restart when one is
+      needed), and read back. On a cluster already running they are checked,
+      never changed.
   """
 
   use Mix.Task
@@ -47,7 +52,8 @@ defmodule Mix.Tasks.Dd.Bootstrap.Cluster do
     volume: :string,
     volume_uuid: :string,
     expect_manifest_sha256: :string,
-    auth: :string
+    auth: :string,
+    setting: :keep
   ]
 
   @impl Mix.Task
@@ -74,6 +80,7 @@ defmodule Mix.Tasks.Dd.Bootstrap.Cluster do
            uuid: opts[:volume_uuid],
            expect_manifest_sha256: opts[:expect_manifest_sha256],
            auth: opts[:auth] || "trust",
+           settings: settings(Keyword.get_values(opts, :setting)),
            log: &say("  " <> &1)
          ) do
       {:ok, result} ->
@@ -84,8 +91,20 @@ defmodule Mix.Tasks.Dd.Bootstrap.Cluster do
         row("data directory", result.data_dir)
         row("log", result.log_file)
 
+        for {key, value} <- Enum.sort(result.settings),
+            do: row("setting #{key}", value)
+
       {:error, message} ->
         Mix.raise(message)
     end
+  end
+
+  defp settings(values) do
+    Enum.map(values, fn value ->
+      case String.split(value, "=", parts: 2) do
+        [key, setting] when key != "" -> {String.trim(key), setting}
+        _ -> Mix.raise("--setting takes key=value, not #{inspect(value)}")
+      end
+    end)
   end
 end

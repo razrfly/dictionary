@@ -563,6 +563,7 @@ defmodule DevilsDictionary.Installation.Bundle do
           "Credentials (.env) are not in it.",
       "created_at" => DateTime.utc_now() |> DateTime.truncate(:second) |> DateTime.to_iso8601(),
       "code" => code(root),
+      "tool" => code(File.cwd!()),
       "toolchain" =>
         Map.merge(tools, %{
           "elixir" => System.version(),

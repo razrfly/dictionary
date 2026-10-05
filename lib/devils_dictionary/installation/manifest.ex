@@ -17,7 +17,8 @@ defmodule DevilsDictionary.Installation.Manifest do
   Format `dd.bundle/1`:
 
       format, kind ("installation"), privacy, created_at,
-      code      — revision, dirty, branch
+      code      — the installation's checkout: revision, dirty, branch
+      tool      — the same for the code that took the capture
       toolchain — elixir, otp, pg_dump, pg_restore
       source    — system_identifier, database, database_oid, endpoint,
                   server_version, server_version_num, data_directory,
