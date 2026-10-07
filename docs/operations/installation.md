@@ -150,7 +150,7 @@ A directory at the mount path is not proof that the drive is mounted. Nothing is
 | target cluster | `--target-cluster ID`, `--expect-cluster ID` | `dd.bootstrap`, `dd.doctor` |
 | cluster data directory and port | `--data-dir DIR`, `--port N` | `dd.bootstrap.cluster` |
 | the installation's checkout | `--root DIR` | `dd.bundle`: its `data/` and `priv/replay` are bundled and its revision recorded, beside the task's own |
-| server settings | `--setting key=value`, repeatable | `dd.bootstrap.cluster`: written with `ALTER SYSTEM`, made effective (a restart when one is needed), read back; on a running cluster checked, never changed |
+| server settings | `--setting key=value`, repeatable | `dd.bootstrap.cluster`: written with `ALTER SYSTEM` (a list of names element by element), made effective (a reload, and a restart when one is needed), then proven running from `postgresql.auto.conf` as the server last loaded it. On a running cluster they are checked, never changed. Repeated names, an extension's `ext.name` and the settings the task manages are refused before `initdb` |
 | models | `--models-root DIR` | `dd.bundle` |
 | inputs into a checkout | `--place-inputs DIR`, `--inputs-from DIR` | `dd.bootstrap` |
 | report | `--report PATH` | `dd.bootstrap` |

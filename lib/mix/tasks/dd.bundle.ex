@@ -121,7 +121,7 @@ defmodule Mix.Tasks.Dd.Bundle do
           "#{manifest["source"]["endpoint"]} (cluster #{manifest["source"]["system_identifier"]})"
         )
 
-        row("schema head", manifest["schema"]["head"])
+        row("schema head", to_string(manifest["schema"]["head"]))
         row("files", length(manifest["files"]))
         row("bytes", fmt(Enum.sum(for f <- manifest["files"], do: f["bytes"])))
         row("window quiet", manifest["quiescence"]["quiet"])

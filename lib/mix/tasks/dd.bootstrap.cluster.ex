@@ -32,9 +32,17 @@ defmodule Mix.Tasks.Dd.Bootstrap.Cluster do
     * `--auth METHOD` — `pg_hba` method for local connections (default `trust`)
     * `--setting key=value` — a server setting, repeatable (for example
       `--setting wal_sync_method=fsync_writethrough --setting shared_buffers=16GB`).
-      Written with `ALTER SYSTEM`, made effective (a restart when one is
-      needed), and read back. On a cluster already running they are checked,
-      never changed.
+      The name may be given in any case (`timezone` is `TimeZone`); a list of
+      names (`shared_preload_libraries=a,b`) is written element by element.
+      Refused before `initdb`: a name given twice, an extension's own
+      `ext.name`, and the settings this task manages (`port`,
+      `listen_addresses`, `unix_socket_directories`, the file locations).
+      Each is written with `ALTER SYSTEM`, made effective (a reload, and a
+      restart when one is needed), and then proven running: the file holds
+      it, the server's value comes from that file, and the file has not
+      changed since the server loaded it. On a cluster already running they
+      are checked the same way and never changed; values are compared as
+      written, so a re-run repeats the spelling it was created with.
   """
 
   use Mix.Task
@@ -87,7 +95,7 @@ defmodule Mix.Tasks.Dd.Bootstrap.Cluster do
         say("")
         row("outcome", result.outcome)
         row("system_identifier", result.system_identifier)
-        row("port", result.port)
+        row("port", Integer.to_string(result.port))
         row("data directory", result.data_dir)
         row("log", result.log_file)
 
