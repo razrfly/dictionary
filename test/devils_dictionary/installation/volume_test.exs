@@ -69,4 +69,78 @@ defmodule DevilsDictionary.Installation.VolumeTest do
 
     assert message =~ "free; this needs"
   end
+
+  describe "the second copy, on an internal volume (#211 D14)" do
+    @internal %{mounted: true, external: false, device: "/dev/disk3s5", uuid: "UUID-I"}
+
+    setup %{mount: mount} do
+      bundle = Path.join(mount, "external-bundle")
+      File.mkdir_p!(bundle)
+      %{bundle: bundle}
+    end
+
+    test "is accepted apart from the bundle and outside every checkout, and nothing is created",
+         %{mount: mount, bundle: bundle} do
+      path = Path.join(mount, "backups/dictionary/2026-10-05-v2")
+
+      assert {:ok, facts} =
+               Volume.check_internal(path,
+                 apart_from: bundle,
+                 probe: probe(@internal),
+                 stat: apart(bundle),
+                 need_bytes: 1
+               )
+
+      refute facts.external
+      assert facts.free_bytes > 0
+      refute File.exists?(Path.join(mount, "backups"))
+    end
+
+    test "is refused on an external volume, beside the bundle, inside a checkout, or without room",
+         %{mount: mount, bundle: bundle} do
+      path = Path.join(mount, "backups/v2")
+      ok = [apart_from: bundle, probe: probe(@internal), stat: apart(bundle)]
+
+      assert {:error, message} =
+               Volume.check_internal(path, Keyword.put(ok, :probe, probe(@external)))
+
+      assert message =~ "is an external volume; name it with --volume"
+
+      unmounted = probe(%{@internal | mounted: false})
+      assert {:error, message} = Volume.check_internal(path, Keyword.put(ok, :probe, unmounted))
+      assert message =~ "not a mounted volume"
+
+      assert {:error, message} = Volume.check_internal(path, Keyword.delete(ok, :stat))
+      assert message =~ "on the same device as #{bundle}"
+
+      checkout = Path.join(mount, "checkout")
+      File.mkdir_p!(checkout)
+      {_, 0} = System.cmd("git", ["init", "-q", checkout])
+
+      for inside <- ["backups/v2", ".git/backups"] do
+        assert {:error, message} = Volume.check_internal(Path.join(checkout, inside), ok)
+        assert message =~ "inside the git repository"
+      end
+
+      assert {:error, message} =
+               Volume.check_internal(path, Keyword.put(ok, :need_bytes, 1 <<< 60))
+
+      assert message =~ "free; this needs"
+
+      refute File.exists?(Path.join(mount, "backups"))
+      refute File.exists?(Path.join(checkout, "backups"))
+    end
+  end
+
+  # The bundle being copied, on "another device": the suite has one disk, so
+  # the bundle's path is reported on a different one.
+  defp apart(bundle) do
+    fn path ->
+      with {:ok, stat} <- File.stat(path) do
+        if path == bundle,
+          do: {:ok, %{stat | major_device: stat.major_device + 1}},
+          else: {:ok, stat}
+      end
+    end
+  end
 end

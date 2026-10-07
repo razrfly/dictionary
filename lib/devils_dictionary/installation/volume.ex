@@ -63,6 +63,108 @@ defmodule DevilsDictionary.Installation.Volume do
     end
   end
 
+  @doc """
+  `{:ok, facts}` when `path` may hold the **second copy** of a bundle on an
+  internal volume (#211 D14): the copy that is still there when the
+  external drive is lost. So it is accepted only when:
+
+    * the volume holding the path (through its nearest existing ancestor)
+      reports itself mounted and **internal**. A second external drive is
+      an ordinary destination, and goes through `check/3`;
+    * that ancestor is on another device than `apart_from:`, the bundle
+      being copied. A second copy beside the first survives nothing the
+      first does not;
+    * it is outside every git work tree: a checkout is cleaned, re-cloned
+      and reclaimed, and a copy inside one would go with it;
+    * the volume has the room (`need_bytes:`).
+
+  Nothing is created. Options: `apart_from:` (required), `need_bytes:`, and
+  for the suite `probe:` (as in `check/3`) and `stat:` (`File.stat/1`).
+  """
+  def check_internal(path, opts) do
+    path = Path.expand(path)
+    apart_from = Path.expand(Keyword.fetch!(opts, :apart_from))
+    probe = Keyword.get(opts, :probe, &probe/1)
+    stat = Keyword.get(opts, :stat, &File.stat/1)
+
+    with {:ok, anchor} <- nearest_existing(path),
+         {:ok, mount_point} <- mount_point_of(anchor),
+         {:ok, volume} <- probe.(mount_point),
+         :ok <- internal(volume, mount_point),
+         :ok <- another_device(anchor, apart_from, stat),
+         :ok <- outside_work_trees(anchor, path),
+         {:ok, free} <- free_bytes(anchor),
+         :ok <- room(free, opts[:need_bytes], mount_point) do
+      {:ok,
+       %{
+         mount_point: mount_point,
+         device: volume[:device],
+         uuid: volume[:uuid],
+         external: false,
+         free_bytes: free
+       }}
+    end
+  end
+
+  # The mount point of the filesystem holding `path`: `df -P`'s last column,
+  # which may itself contain spaces.
+  defp mount_point_of(path) do
+    case System.cmd("df", ["-P", "-k", path], stderr_to_stdout: true) do
+      {out, 0} ->
+        with [_header, line | _] <- String.split(out, "\n", trim: true),
+             [_, mount_point] <- Regex.run(~r/^.+?\s+\d+\s+\d+\s+\d+\s+\d+%\s+(\/.*)$/, line) do
+          {:ok, mount_point}
+        else
+          _ -> {:error, "#{path}: its volume cannot be read"}
+        end
+
+      {out, _} ->
+        {:error, "#{path}: its volume cannot be read (#{String.trim(out)})"}
+    end
+  end
+
+  defp internal(%{mounted: true, external: false}, _mount_point), do: :ok
+
+  defp internal(%{mounted: true}, mount_point),
+    do:
+      {:error,
+       "#{mount_point} is an external volume; name it with --volume (and --volume-uuid) instead"}
+
+  defp internal(_volume, mount_point),
+    do: {:error, "#{mount_point} is not a mounted volume; nothing is written"}
+
+  defp another_device(anchor, apart_from, stat) do
+    with {:ok, %{major_device: a}} <- stat.(anchor),
+         {:ok, %{major_device: b}} <- stat.(apart_from) do
+      if a != b,
+        do: :ok,
+        else:
+          {:error,
+           "#{anchor} is on the same device as #{apart_from}: a second copy there " <>
+             "survives nothing the first does not"}
+    else
+      {:error, reason} -> {:error, "#{anchor} or #{apart_from}: cannot stat (#{inspect(reason)})"}
+    end
+  end
+
+  # Inside a work tree or inside a `.git` directory, `--absolute-git-dir`
+  # answers; anywhere else it fails.
+  defp outside_work_trees(anchor, path) do
+    case System.cmd("git", ["-C", anchor, "rev-parse", "--absolute-git-dir"],
+           stderr_to_stdout: true
+         ) do
+      {git_dir, 0} ->
+        {:error,
+         "#{path} is inside the git repository at #{String.trim(git_dir)}; " <>
+           "a second copy belongs outside every checkout"}
+
+      {_not_a_repository, _} ->
+        :ok
+    end
+  rescue
+    _ -> {:error, "#{path}: git is needed to check that it is outside every checkout"}
+  end
+
   @doc "The host's view of a mount point: mounted, external, device node and UUID."
   def probe(mount_point) do
     case Host.volume(mount_point) do

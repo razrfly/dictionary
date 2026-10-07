@@ -381,6 +381,43 @@ defmodule DevilsDictionary.Installation.BundleBootstrapTest do
     assert report.digest == digest
   end
 
+  test "the second copy goes to an internal volume only when asked, and never beside the bundle",
+       %{names: names, dir: dir, probe: probe} do
+    %{digest: digest, path: bundle} = bundle!(names, dir, probe)
+    internal = fn _ -> {:ok, %{external() | external: false}} end
+    copy = Path.join(dir, "second-copy")
+
+    # Without `internal: true`, an internal destination is refused as ever.
+    assert {:error, message} = Bundle.transfer(bundle, copy, volume: dir, probe: internal)
+    assert message =~ "internal volume"
+
+    # Asked for, but on the bundle's own device: it would survive nothing.
+    assert {:error, message} = Bundle.transfer(bundle, copy, internal: true, probe: internal)
+    assert message =~ "same device"
+    refute File.exists?(copy)
+
+    # On another device (the suite has one disk, so the bundle's is
+    # reported as another), it is copied and verified, manifest last.
+    apart = fn path ->
+      with {:ok, stat} <- File.stat(path) do
+        if path == bundle,
+          do: {:ok, %{stat | major_device: stat.major_device + 1}},
+          else: {:ok, stat}
+      end
+    end
+
+    assert {:ok, report} =
+             Bundle.transfer(bundle, copy,
+               internal: true,
+               probe: internal,
+               stat: apart,
+               expect_manifest_sha256: digest
+             )
+
+    assert report.digest == digest
+    assert {:ok, _} = Bundle.verify(copy)
+  end
+
   test "inputs are bundled by their pins, and a damaged input is refused", %{
     dir: dir,
     probe: probe,

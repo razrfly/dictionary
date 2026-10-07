@@ -15,6 +15,10 @@ defmodule Mix.Tasks.Dd.Bundle do
         --out /Volumes/Other/dictionary/bundles/2026-10-06-v2 --volume /Volumes/Other \\
         --expect-manifest-sha256 <digest>
 
+      mix dd.bundle --transfer "/Volumes/LLM Models/dictionary/bundles/2026-10-06-v2" \\
+        --out ~/Backups/dictionary/bundles/2026-10-06-v2 --internal \\
+        --expect-manifest-sha256 <digest>
+
   ## Capturing
 
   `--source` names the database: a name on the configured server
@@ -52,6 +56,11 @@ defmodule Mix.Tasks.Dd.Bundle do
     * `--quick` — with `--verify`, sizes only
     * `--transfer FROM` — copy a finished bundle to `--out`, resumably
     * `--expect-manifest-sha256 HEX` — with `--transfer`, the approved digest
+    * `--internal` — with `--transfer`, instead of `--volume`: the destination
+      is on the internal disk. This is for the second copy that is still there
+      when the external drive is lost (#211 D14), so the destination must be on
+      another device than the bundle, outside every git checkout, and have the
+      room. Without it, an internal destination is refused
   """
 
   use Mix.Task
@@ -74,7 +83,8 @@ defmodule Mix.Tasks.Dd.Bundle do
     quick: :boolean,
     transfer: :string,
     expect_manifest_sha256: :string,
-    root: :string
+    root: :string,
+    internal: :boolean
   ]
 
   @impl Mix.Task
@@ -155,13 +165,25 @@ defmodule Mix.Tasks.Dd.Bundle do
   end
 
   defp transfer(from, opts) do
-    for key <- [:out, :volume],
-        is_nil(opts[key]),
-        do: Mix.raise("--#{key} is required with --transfer")
+    internal = Keyword.get(opts, :internal, false)
+
+    if is_nil(opts[:out]), do: Mix.raise("--out is required with --transfer")
+
+    cond do
+      internal and (opts[:volume] || opts[:volume_uuid]) ->
+        Mix.raise("--internal names the internal disk; it cannot be given with --volume")
+
+      not internal and is_nil(opts[:volume]) ->
+        Mix.raise("--volume is required with --transfer (or --internal, for the second copy)")
+
+      true ->
+        :ok
+    end
 
     case Bundle.transfer(from, opts[:out],
            volume: opts[:volume],
            uuid: opts[:volume_uuid],
+           internal: internal,
            expect_manifest_sha256: opts[:expect_manifest_sha256],
            log: &say("  " <> &1)
          ) do

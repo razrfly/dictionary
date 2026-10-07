@@ -141,11 +141,21 @@ No bulk path has a default. Each command is told where to write, and checks that
 
 A directory at the mount path is not proof that the drive is mounted. Nothing is created until the check passes. `/Volumes` is not writable by an ordinary user, so a missing drive cannot be replaced by an internal directory by accident.
 
+**One exception: the second copy.** A bundle that exists only on the external drive is lost with the drive. `mix dd.bundle --transfer <bundle> --out <dir> --internal --expect-manifest-sha256 <digest>` copies it to the internal disk, and nowhere else is the internal disk accepted. The destination must:
+
+- be on a mounted volume that reports itself internal (a second external drive is an ordinary `--volume` destination);
+- sit on another device than the bundle being copied;
+- be outside every git repository, because a checkout is cleaned, re-cloned and reclaimed;
+- have the room.
+
+The copy is verified there like any transfer, with the manifest written last (#211 D14).
+
 | Input | Flag | Used by |
 |---|---|---|
 | source database | `--source NAME\|URL` | `dd.bundle` |
 | bundle directory | `--out DIR`, `--bundle DIR` | all |
 | external volume | `--volume MOUNT`, `--volume-uuid UUID` | all writers; `dd.doctor` |
+| the internal disk, for the second copy only | `--internal`, with `--transfer` | `dd.bundle` |
 | target database | `--target NAME\|URL` | `dd.bootstrap`, `dd.doctor` |
 | target cluster | `--target-cluster ID`, `--expect-cluster ID` | `dd.bootstrap`, `dd.doctor` |
 | cluster data directory and port | `--data-dir DIR`, `--port N` | `dd.bootstrap.cluster` |
@@ -227,6 +237,8 @@ It writes nothing:
 MIX_TEST_PARTITION=_b211 mix test test/devils_dictionary/installation
 ```
 
+`DD_DATABASE_PORT` picks the server the suite's databases live on, as it does for the development server. Unset, it is the server a connection without a port reaches: `PGPORT`, else 5432.
+
 The suite covers each of the following:
 
 - the binding between dump, state and manifest;
@@ -242,6 +254,7 @@ The suite covers each of the following:
 - a busy source, refused;
 - a finished bundle never overwritten;
 - a resumed transfer;
+- the second copy: an internal destination refused unless asked for, and refused beside the bundle, inside a checkout or without room;
 - inputs bundled by their pins, and a damaged one refused;
 - `restore` mode onto a cluster made by `dd.bootstrap.cluster`: same name, roles, exact state;
 - the volume guard;
