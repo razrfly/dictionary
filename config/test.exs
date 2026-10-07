@@ -26,7 +26,14 @@ config :devils_dictionary, DevilsDictionary.Repo,
   # when several suites share the machine (load average 29 was measured while
   # the suite failed this way). Nothing in the suite is faster for being
   # cancelled; it is simply slow that day.
-  timeout: 60_000
+  timeout: 60_000,
+  # Test databases are disposable, so their commits need not wait for the WAL
+  # to reach stable storage. On the dictionary's own cluster that wait is an
+  # F_FULLFSYNC, about 4 ms a commit (`fsync_writethrough`, #211 D3), and the
+  # suite ran 2.5 times slower for it. This is a parameter of the suite's own
+  # connections only: no database's settings change, and nothing outside this
+  # file sets it (SynchronousCommitTest).
+  parameters: [synchronous_commit: "off"]
 
 # We don't run a server during test. If one is required,
 # you can enable the server option below.
