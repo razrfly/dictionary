@@ -11,8 +11,10 @@ defmodule Stage2.Guard do
   @doc """
   The configured database's identity, after refusing unless:
   DD_STAGE2_REHEARSAL=1 (or Stage 2A's DD_STAGE2A_REHEARSAL=1) is set; the
-  database is named devils_dictionary_stage2*_*; it is not on the usual
-  server's port 5432 (the rehearsal copies live in a scratch cluster); and
+  database is named devils_dictionary_stage2*_*; it is on neither corpus
+  server, 5434 (the dictionary's own cluster since #211) or 5432 (the
+  pre-move copy, until the reclaim): rehearsal copies live in a scratch
+  cluster; and
   Oban runs no queues or plugins (DD_NO_OBAN=1).
   """
   def check!(opts \\ []) do
@@ -25,7 +27,8 @@ defmodule Stage2.Guard do
       do: refuse.("DD_STAGE2_REHEARSAL=1 is not set")
 
     if not Regex.match?(@copy, database), do: refuse.("not a devils_dictionary_stage2*_* copy")
-    if port == 5432, do: refuse.("the usual server holds the live corpus; use the scratch cluster")
+    if port in [5432, 5434],
+      do: refuse.("port #{port} holds the corpus; use the scratch cluster")
 
     if Keyword.get(opts, :oban, true) and (oban[:queues] != false or oban[:plugins] != false),
       do: refuse.("background jobs are on; set DD_NO_OBAN=1")

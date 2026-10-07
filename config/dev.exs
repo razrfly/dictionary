@@ -17,8 +17,10 @@ config :devils_dictionary, DevilsDictionary.Repo,
   database: System.get_env("DD_DATABASE") || "devils_dictionary_v2",
   # `DD_DATABASE_PORT` points the same tasks at another PostgreSQL server on
   # this machine — the scratch cluster a recovery rehearsal restores into
-  # (docs/routing/recovery.md). Unset, it is the usual server.
-  port: String.to_integer(System.get_env("DD_DATABASE_PORT") || "5432"),
+  # (docs/routing/recovery.md). Unset, it is the dictionary's own cluster on
+  # the external drive, 5434 (#211 D11; docs/operations/211-cutover.md). The
+  # internal 5432 keeps the pre-move copy until the reclaim, unchanged.
+  port: String.to_integer(System.get_env("DD_DATABASE_PORT") || "5434"),
   stacktrace: true,
   show_sensitive_data_on_connection_error: true,
   pool_size: 10

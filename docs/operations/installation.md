@@ -1,6 +1,6 @@
 # Moving and setting up an installation
 
-**Status:** the interface of [#211](https://github.com/razrfly/dictionary/issues/211) stage 2, built 5 October 2026. These commands exist and are tested. They have **not** been used on the working corpus yet: the capture, the restore and the cutover each wait for the owner's review. The stage 1 inventory and plan are in [`211-stage-1.md`](211-stage-1.md).
+**Status:** the interface of [#211](https://github.com/razrfly/dictionary/issues/211) stage 2, built 5 October 2026, and used on the working corpus on 7 October: the capture (stage 3), the dedicated cluster and the exact restores (stage 4), the repeatability and refusal drills (stage 5) and the cutover. Where the installation now lives, and how to roll it back, is [`211-cutover.md`](211-cutover.md). The stage 1 inventory and plan are in [`211-stage-1.md`](211-stage-1.md).
 
 The requirements come from [#130](https://github.com/razrfly/dictionary/issues/130) (a bundle, a doctor, one setup path) and [#209](https://github.com/razrfly/dictionary/issues/209) (moving storage to the external drive). The point of both: moving the dictionary uses the same reusable process a future machine will use, and that process is checked rather than trusted.
 
