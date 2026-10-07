@@ -214,10 +214,19 @@ defmodule DevilsDictionary.Examples.ProvenanceTest do
       assert item.claim.nominated_by.label == nil
       refute item.reason =~ "contributor"
 
-      provenance = Provenance.of(item, :public)
+      # Decision 1: a nomination nobody has accepted has no public provenance,
+      # whoever submitted it, and an unknown nominator is no exception.
+      assert Provenance.of(item, :public) == nil
+
+      provenance = Provenance.of(item, :internal)
       assert provenance.nomination == :unknown
       assert provenance.agent == :unknown
       assert provenance.review == :none
+
+      decide!(ctx, revision)
+      accepted = Provenance.of(item(ctx, revision, :public), :public)
+      assert accepted.nomination == :unknown
+      assert %{state: :accepted} = accepted.review
     end
 
     test "a persona's method is an agent's, whose model is unknown until #197", ctx do

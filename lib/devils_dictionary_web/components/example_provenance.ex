@@ -92,7 +92,7 @@ defmodule DevilsDictionaryWeb.ExampleProvenance do
   defp origin(%{origin: :manifest, manifest: %{slug: slug}}), do: "from manifest #{slug}"
 
   defp origin(%{origin: :form, shelf: %{name: name, result_id: id}}) when not is_nil(id),
-    do: "through the connect form, prefilled from a #{name} result on the page"
+    do: "through the connect form, prefilled from a result by #{name} on the page"
 
   defp origin(%{origin: :form, shelf: %{name: name}}),
     do: "through the connect form, prefilled from #{name}'s catalog on the page"

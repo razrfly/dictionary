@@ -48,10 +48,11 @@ defmodule DevilsDictionary.Examples.Provenance do
   A claim is read through `Claims.visible/2` for the viewer, and a claim the
   viewer may not see has no provenance at all (`nil`): no stage, no count, no
   label. For the public, a nomination whose latest review is not `accepted`
-  has none either, whatever its subject. Every attribution is an actor's
-  public label, never an account id or an email. `nomination.by` is the
-  nominating account, by the card's own rule (`nominator/2`); a claimant the
-  claim cites is `nomination.claimant`, never the nominator.
+  has none either, whatever its subject and whoever submitted it, a legacy
+  claim with no nominator included (#212 decision 1). Every attribution is
+  an actor's public label, never an account id or an email. `nomination.by`
+  is the nominating account, by the card's own rule (`nominator/2`); a
+  claimant the claim cites is `nomination.claimant`, never the nominator.
 
   Only a receipt's `committed_at` is a publication time; a row's update time
   never is.
@@ -148,7 +149,7 @@ defmodule DevilsDictionary.Examples.Provenance do
 
     claims = claims(ids)
     reviews = reviews(ids)
-    ids = Enum.filter(ids, &disclosed?(viewer, claims[&1], reviews[&1]))
+    ids = Enum.filter(ids, &disclosed?(viewer, reviews[&1]))
 
     %{
       visible: MapSet.new(ids),
@@ -177,17 +178,14 @@ defmodule DevilsDictionary.Examples.Provenance do
   end
 
   # The public sees no provenance for a nomination nobody has accepted yet,
-  # whatever its subject (#212 comment, item 1, option a). `Claims.visible/2`
-  # hides a pending *person* everywhere; a pending work or passage may still
-  # have its card (#190 owns that gate), but none of the new surfaces carries
-  # it. A claim no account submitted (an import, a legacy row) is not a
-  # nomination, and follows `Claims.visible/2` alone.
-  defp disclosed?(:internal, _claim, _review), do: true
-
-  defp disclosed?(:public, %{submitter: %{kind: kind}}, review) when kind in [:user, :bot],
-    do: match?(%{state: :accepted}, review)
-
-  defp disclosed?(:public, _claim, _review), do: true
+  # whatever its subject and whoever submitted it (#212 decision 1, option
+  # a). `Claims.visible/2` hides a pending *person* everywhere; a pending work
+  # or passage may still have its card (#190 owns that gate), but none of the
+  # new surfaces carries it. A claim no account submitted (an import, a
+  # legacy row) is a nomination whose nominator is unknown, and is held to
+  # the same rule: its record says so only once a reviewer has accepted it.
+  defp disclosed?(:internal, _review), do: true
+  defp disclosed?(:public, review), do: match?(%{state: :accepted}, review)
 
   defp claims([]), do: %{}
 
