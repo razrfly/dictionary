@@ -53,11 +53,17 @@ defmodule DevilsDictionary.Curation.ManualFixture do
   What it shows about the claim is `Examples.Provenance.of/2` for the public,
   the projection the examples card draws, with the fixture's selection in
   place of the card's ranking (`Provenance.in_fixture/2`).
+
+  A passage or quotation cited as an example is shown by its pinned words,
+  as a sourced quotation, with the credit and licence its source requires.
+  A definition, article or image cited as one would need its own register
+  and credits, which the opening does not draw yet: it is withheld as
+  `:unsupported_subject`.
   """
 
   @behaviour DevilsDictionary.Curation.OpeningReader
 
-  alias DevilsDictionary.{Artworks, Examples}
+  alias DevilsDictionary.{Artworks, Examples, Markdown}
 
   alias DevilsDictionary.Curation.{
     CompositionItem,
@@ -362,6 +368,7 @@ defmodule DevilsDictionary.Curation.ManualFixture do
   defp highlight(%{"item" => %{"exemplar" => ref}} = spec, position, ctx) when is_map(ref) do
     with {:ok, meaning} <- sense_meaning(spec["meaning"], ctx),
          {:ok, subject} <- References.subject(ref["subject"]),
+         :ok <- drawable(subject),
          {:ok, claim} <- References.exemplar_claim(subject.object_id, meaning.object_id),
          :ok <-
            Eligibility.check(exemplar_item(claim, subject, meaning, position), scope_ids(ctx)),
@@ -371,7 +378,7 @@ defmodule DevilsDictionary.Curation.ManualFixture do
        %Highlight{
          position: position,
          kind: :exemplar,
-         register: nil,
+         register: if(subject.kind == :content, do: :quotation),
          reference: %Reference{
            object_id: subject.object_id,
            object_kind: subject.kind,
@@ -382,12 +389,21 @@ defmodule DevilsDictionary.Curation.ManualFixture do
          subject: %{
            kind: subject.kind,
            entity_kind: item.subject.entity_kind,
+           content_kind: subject.content_kind,
            qid: item.subject.qid,
-           words: subject.words
+           words: subject.words,
+           html: subject.words && Markdown.to_html(subject.words, subject.body_format)
          },
-         claim: Map.take(item.claim, [:assertion_id, :rationale, :nominated_by]),
+         # The nominator by label only: an account id never reaches a page.
+         claim: %{
+           assertion_id: item.claim.assertion_id,
+           rationale: item.claim.rationale,
+           nominated_by: %{label: item.claim.nominated_by.label}
+         },
          meaning: meaning,
-         source: source_view(nil),
+         source: source_view(subject.source),
+         credits: passage_credits(subject),
+         links: %{source: subject.url},
          reasons: compact([note(spec, ctx)]),
          provenance:
            Provenance.in_fixture(provenance, %{
@@ -400,6 +416,25 @@ defmodule DevilsDictionary.Curation.ManualFixture do
   end
 
   defp highlight(_spec, _position, _ctx), do: {:error, :unsupported_item}
+
+  # What the tile can draw honestly: a thing by its name, or a quotation or
+  # passage by its words under the quotation register.
+  defp drawable(%{kind: :entity}), do: :ok
+
+  defp drawable(%{kind: :content, content_kind: kind}) when kind in [:quotation, :passage],
+    do: :ok
+
+  defp drawable(_subject), do: {:error, :unsupported_subject}
+
+  # A source's words are shown with the credit and licence its terms require.
+  defp passage_credits(%{kind: :content, source: source, url: url}) do
+    compact([
+      credit(:source, "Quoted in", source.attribution || source.name, url),
+      credit(:rights, "Rights", source.license, source.license_url)
+    ])
+  end
+
+  defp passage_credits(_subject), do: []
 
   # The item a saved composition would hold for this exemplar (Build 1's
   # `Compositions.create_version/3`): the claim's subject, its pinned words

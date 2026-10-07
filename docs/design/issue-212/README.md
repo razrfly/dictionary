@@ -57,7 +57,8 @@ The preview read a scratch database, `devils_dictionary_test_212shots` on 5434. 
 
 - *coward* with WordNet's sense, under the source identity the committed `coward` composition names;
 - **Pat Fixture** (`Q999999212`), nominated through `Contributions.propose/6` by Account #2 and accepted by Account #1;
-- **Fixture Adverse Person** (`Q999999213`), nominated and never reviewed.
+- **Fixture Adverse Person** (`Q999999213`), nominated and never reviewed;
+- **Fixture Pending Work** (`Q999999214`), nominated and never reviewed. Its examples card is public under #190's person-only gate; the opening is not.
 
 `devils_dictionary_v2` was not read for the captures, and was not written.
 
@@ -67,7 +68,9 @@ The preview read a scratch database, `devils_dictionary_test_212shots` on 5434. 
 - **Its "Why this is here"** holds the meaning, the reason given, and the six stages:
   - Source, Nominated, Model and Reviewed read exactly as on the examples card further down the page;
   - Shown here and Opening say a development fixture chose it and that it is not published.
-- **Highlight 2**, the nomination nobody accepted, is not there. *How this was chosen* lists it as "it is not an example a reviewer has accepted", which names no one. The adverse person's name appears nowhere in the page's HTML.
+- **Highlights 2 and 3**, the two nominations nobody accepted, are not there. *How this was chosen* lists each as "it is not an example a reviewer has accepted", which names no one.
+  - The adverse person's name appears nowhere in the page's HTML.
+  - The pending work's card is public further down the page, but nothing of it is in `#opening`.
 
 ## Method
 
@@ -83,8 +86,8 @@ The preview read a scratch database, `devils_dictionary_test_212shots` on 5434. 
 
 | Viewport | Page without the fixture → with it, closed | `#opening`, closed → open | "Why this is here" summary |
 |---|---|---|---|
-| 1280 × 900 | 2,954 → 3,233 px (+279) | 263 → 847 px | 28 px |
-| 375 × 812 | 4,460 → 4,891 px (+431) | 399 → 1,521 px | **44 px** |
+| 1280 × 900 | 3,181 → 3,460 px (+279) | 263 → 875 px | 28 px |
+| 375 × 812 | 4,848 → 5,279 px (+431) | 399 → 1,573 px | **44 px** |
 
 Light and dark measure the same. The opening renders only behind the development gate, so no public page pays for it.
 

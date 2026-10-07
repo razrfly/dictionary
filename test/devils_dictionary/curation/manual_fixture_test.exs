@@ -611,10 +611,15 @@ defmodule DevilsDictionary.Curation.ManualFixtureTest do
             # claim id: the claim is found by that pair, and shown only if a
             # reviewer accepted it (#212 Build 3).
             %{"exemplar" => %{"subject" => subject} = exemplar} ->
-              assert map_size(exemplar) == 1
+              assert map_size(exemplar) == 1 and map_size(subject) == 1
 
-              assert match?(%{"wikidata" => "Q" <> _}, subject) or
-                       Map.has_key?(subject, "content")
+              case subject do
+                %{"wikidata" => "Q" <> digits} ->
+                  assert digits =~ ~r/\A[1-9][0-9]*\z/
+
+                %{"content" => %{"source" => _, "record" => _, "revision_key" => key} = ref} ->
+                  assert map_size(ref) == 3 and byte_size(key) == 64
+              end
 
               assert %{"sense" => %{"revision_key" => key}} = highlight["meaning"]
               assert byte_size(key) == 64

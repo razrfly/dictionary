@@ -277,7 +277,7 @@ defmodule DevilsDictionaryWeb.Opening do
 
     ~H"""
     <li id={@id} class="flex min-w-0 flex-col gap-3">
-      <h3 class="sr-only">Example: {@highlight.title}</h3>
+      <h3 class="sr-only">Example: {@highlight.title}, {example_noun(@highlight.subject)}</h3>
       <div class="min-w-0">
         <p aria-hidden="true" class="text-base/6 text-mist-500 sm:text-sm/6">
           {example_kind(@highlight.subject)}
@@ -299,24 +299,37 @@ defmodule DevilsDictionaryWeb.Opening do
         </p>
       </div>
 
-      <%!-- A passage is shown by the words its claim was accepted on, which
-           are a source's, so they are quoted as the quotation tile quotes. --%>
+      <%!-- A quotation or passage is shown by the words its claim was
+           accepted on. They are a source's, so they are quoted under the
+           quotation register, with the credit and licence its terms
+           require, as the quotation tile quotes. --%>
       <figure
-        :if={@highlight.subject.words}
+        :if={@highlight.subject.html}
         class="flex flex-col gap-3 rounded-xl bg-mist-950/2.5 p-5 dark:bg-white/5"
       >
-        <blockquote class="font-display text-2xl/8 text-pretty text-mist-950 dark:text-white">
-          <p
-            id={"#{@id}-text"}
-            class="relative before:absolute before:-translate-x-full before:content-['\201C'] after:content-['\201D']"
-            phx-no-format
-          >{verse(@highlight.subject.words)}</p>
+        <p class="flex flex-wrap items-center gap-2">
+          <.register id={"#{@id}-register"} register={@highlight.register} />
+        </p>
+        <blockquote
+          id={"#{@id}-text"}
+          cite={@highlight.links[:source]}
+          class="flex flex-col gap-3 font-display text-2xl/8 text-pretty text-mist-950 dark:text-white"
+        >
+          {raw(@highlight.subject.html)}
         </blockquote>
       </figure>
 
+      <.credit_line id={"#{@id}-credits"} credits={@highlight.credits} />
+
       <.why id={"#{@id}-why"} summary="Why this is here" reasons={@highlight.reasons}>
         <div class="flex flex-col gap-3">
-          <.particulars id={@id} meaning={@highlight.meaning} reasons={@highlight.reasons} />
+          <.particulars
+            id={@id}
+            meaning={@highlight.meaning}
+            register={@highlight.register}
+            reasons={@highlight.reasons}
+            credits={@highlight.credits}
+          />
           <dl id={"#{@id}-stages"} class="flex flex-col gap-2 text-base/6 sm:text-sm/6">
             <div id={"#{@id}-rationale"}>
               <dt class="inline font-medium text-mist-950 dark:text-white">Reason given</dt>
@@ -784,6 +797,10 @@ defmodule DevilsDictionaryWeb.Opening do
     do: "its meaning is not one of the words it was selected for"
 
   defp withheld_reason(:object_retired), do: "it has left the registry"
+
+  defp withheld_reason(:unsupported_subject),
+    do: "the opening does not show that kind of example yet"
+
   defp withheld_reason(_reason), do: "it could not be resolved"
 
   # An exemplar names the claim it shows as well as the thing.
@@ -814,9 +831,17 @@ defmodule DevilsDictionaryWeb.Opening do
   defp inspect_label(:exemplar), do: "claim"
   defp inspect_label(_kind), do: "evidence"
 
-  defp example_kind(%{kind: :content}), do: "Example · passage"
-  defp example_kind(%{entity_kind: kind}) when not is_nil(kind), do: "Example · #{kind}"
-  defp example_kind(_subject), do: "Example"
+  defp example_kind(subject), do: "Example · #{example_noun(subject)}"
+
+  # What the example is, in words: a quotation or passage, or the entity's
+  # kind as the registry records it.
+  defp example_noun(%{kind: :content, content_kind: kind}) when not is_nil(kind),
+    do: humanize(kind)
+
+  defp example_noun(%{entity_kind: kind}) when kind not in [nil, :other], do: humanize(kind)
+  defp example_noun(_subject), do: "thing"
+
+  defp humanize(kind), do: kind |> to_string() |> String.replace("_", " ")
 
   defp evidence_path(%{object_kind: :content, content_revision_id: id}) when is_integer(id),
     do: ~p"/evidence/content/#{id}"

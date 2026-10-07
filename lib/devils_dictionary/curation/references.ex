@@ -319,8 +319,9 @@ defmodule DevilsDictionary.Curation.References do
   (`%{"wikidata" => qid}`), or a passage or quotation by its source record
   (`%{"content" => ref}`, as `content/1` reads it, whose words are then the
   ones pinned). `{:ok, %{object_id, kind: :entity | :content,
-  content_revision_id, words}}`, `content_revision_id` and `words` being
-  `nil` for an entity.
+  content_revision_id, words, content_kind, body_format, source, url}}`,
+  every field after `kind` being `nil` for an entity. `source` is the
+  passage's `sources` row, whose attribution and licence the page must carry.
   """
   def subject(%{"wikidata" => qid}) when is_binary(qid) do
     rows =
@@ -336,7 +337,17 @@ defmodule DevilsDictionary.Curation.References do
 
     with {:ok, row} <- one(rows),
          :ok <- active(row.object_state) do
-      {:ok, %{object_id: row.object_id, kind: :entity, content_revision_id: nil, words: nil}}
+      {:ok,
+       %{
+         object_id: row.object_id,
+         kind: :entity,
+         content_revision_id: nil,
+         words: nil,
+         content_kind: nil,
+         body_format: nil,
+         source: nil,
+         url: nil
+       }}
     end
   end
 
@@ -347,7 +358,11 @@ defmodule DevilsDictionary.Curation.References do
          object_id: row.object_id,
          kind: :content,
          content_revision_id: row.content_revision_id,
-         words: row.body
+         words: row.body,
+         content_kind: row.content_kind,
+         body_format: row.body_format,
+         source: row.source,
+         url: row.canonical_url
        }}
     end
   end
@@ -360,6 +375,11 @@ defmodule DevilsDictionary.Curation.References do
   no reviewer has rejected or withdrawn, the one `Contributions.propose/6`
   holds a second nomination against. `{:error, :claim_not_found}` when there
   is none.
+
+  `propose/6` keeps that claim unique, but a row written another way (a
+  legacy claim, an import) can stand beside it. An accepted claim is then
+  preferred, and the oldest among equals, so a pending duplicate never hides
+  an accepted one.
 
   Whether it may be shown is not decided here: an opening holds it to
   `Curation.Eligibility`'s exemplar rules, accepted review first.
@@ -381,7 +401,10 @@ defmodule DevilsDictionary.Curation.References do
       where: r.subject_object_id == ^subject_id and r.object_object_id == ^sense_id,
       where: r.is_current and r.lifecycle_state == :active,
       where: is_nil(decision.decision) or decision.decision not in ^Claims.hidden_decisions(),
-      order_by: [asc: r.assertion_id],
+      order_by: [
+        desc: fragment("coalesce(? = 'accepted', false)", decision.decision),
+        asc: r.assertion_id
+      ],
       limit: 1
     )
     |> Repo.one()

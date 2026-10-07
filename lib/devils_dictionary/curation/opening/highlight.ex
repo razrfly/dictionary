@@ -26,8 +26,11 @@ defmodule DevilsDictionary.Curation.Opening.Highlight do
   An exemplar also carries, and nothing else does:
 
     * `subject` — what the claim cites: `%{kind: :entity | :content,
-      entity_kind, qid, words}`, `words` being a passage's pinned words and
-      `nil` for an entity. `title` is its label.
+      entity_kind, content_kind, qid, words, html}`. For a quotation or
+      passage, `words` are its pinned words and `html` their rendering
+      (`DevilsDictionary.Markdown.to_html/2`); its `register` is
+      `:quotation` and its `credits` are its source's. Both are `nil` for an
+      entity. `title` is its label.
     * `claim` — `%{assertion_id, rationale, nominated_by: %{label}}`: the
       nominator's own reason, and who the record says nominated it (`label`
       `nil` when it names nobody).
@@ -79,8 +82,10 @@ defmodule DevilsDictionary.Curation.Opening.Highlight do
             %{
               kind: :entity | :content,
               entity_kind: atom() | nil,
+              content_kind: atom() | nil,
               qid: String.t() | nil,
-              words: String.t() | nil
+              words: String.t() | nil,
+              html: String.t() | nil
             }
             | nil,
           claim: %{assertion_id: pos_integer(), rationale: String.t(), nominated_by: map()} | nil,
