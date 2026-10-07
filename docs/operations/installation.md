@@ -147,7 +147,7 @@ A directory at the mount path is not proof that the drive is mounted. Nothing is
 - be on a mounted volume that diskutil reports internal (a second external drive is an ordinary `--volume` destination), and not a directory under `/Volumes` standing in for an absent drive;
 - sit on another device than the bundle being copied;
 - be outside every git repository, because a checkout is cleaned, re-cloned and reclaimed. Any `.git` on the way up counts, read from the filesystem rather than asked of git;
-- leave at least 10 GiB free after the copy, because the internal disk also holds the system, its swap and the old cluster.
+- leave at least 10 GiB free after the copy, because the internal disk also holds the system, its swap and the old cluster. `--reserve-gib N` names another floor, deliberately, on the command line.
 
 `--expect-manifest-sha256` is required: the second copy is of an approved bundle.
 

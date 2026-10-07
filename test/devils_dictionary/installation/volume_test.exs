@@ -134,15 +134,41 @@ defmodule DevilsDictionary.Installation.VolumeTest do
       end
     end
 
+    test "keeps 10 GiB free on the internal disk unless told otherwise", %{mount: mount, ok: ok} do
+      path = Path.join(mount, "backups/v2")
+      {:ok, free} = Volume.free_bytes(mount)
+      default = Keyword.delete(ok, :reserve_bytes)
+
+      # Room for the copy, but not for the copy and the default reserve.
+      need = max(free - 5 * 1_073_741_824, 1)
+
+      assert {:error, message} =
+               Volume.check_internal(path, Keyword.put(default, :need_bytes, need))
+
+      assert message =~ "10.0 GiB must stay free on the internal disk"
+
+      assert {:ok, _} =
+               Volume.check_internal(path, Keyword.merge(ok, need_bytes: need, reserve_bytes: 0))
+    end
+
     test "is refused in place of an absent drive, beside the bundle, or without its reserve",
          %{mount: mount, bundle: bundle, ok: ok} do
       path = Path.join(mount, "backups/v2")
 
       # /Volumes itself is on the internal disk: an unmounted drive's path
       # is answered by the internal volume, and refused.
-      absent = "/Volumes/dd-absent-#{System.unique_integer([:positive])}/backups"
-      assert {:error, message} = Volume.check_internal(absent, ok)
-      assert message =~ "no volume is mounted there"
+      absent = "dd-absent-#{System.unique_integer([:positive])}/backups"
+      link = Path.join(mount, "volumes-link")
+      File.ln_s!("/Volumes", link)
+
+      # Typed as is, in another case (the filesystem ignores case), or
+      # through a symlink to /Volumes.
+      lowercase = if File.dir?("/volumes"), do: ["/volumes/"], else: []
+
+      for spelled <- ["/Volumes/", link <> "/"] ++ lowercase do
+        assert {:error, message} = Volume.check_internal(spelled <> absent, ok)
+        assert message =~ "no volume is mounted there"
+      end
 
       assert {:error, message} = Volume.check_internal(path, Keyword.delete(ok, :stat))
       assert message =~ "on the same device as #{bundle}"
@@ -170,10 +196,20 @@ defmodule DevilsDictionary.Installation.VolumeTest do
       File.mkdir_p!(stale)
       File.write!(Path.join(stale, ".git"), "gitdir: #{mount}/gone/.git/worktrees/stale\n")
 
+      # A bare repository has no `.git` at all, and a dangling `.git` link
+      # does not exist as far as File.exists?/1 is concerned.
+      bare = Path.join(mount, "bare.git")
+      {_, 0} = System.cmd("git", ["init", "-q", "--bare", bare])
+      dangling = Path.join(mount, "dangling")
+      File.mkdir_p!(dangling)
+      File.ln_s!(Path.join(mount, "nowhere"), Path.join(dangling, ".git"))
+
       for inside <- [
             Path.join(checkout, "backups/v2"),
             Path.join(checkout, ".git/backups"),
-            Path.join(stale, "backups/v2")
+            Path.join(stale, "backups/v2"),
+            Path.join(bare, "backups/v2"),
+            Path.join(dangling, "backups/v2")
           ] do
         assert {:error, message} = Volume.check_internal(inside, ok)
         assert message =~ "inside the git repository"

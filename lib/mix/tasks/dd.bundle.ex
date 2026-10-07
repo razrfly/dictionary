@@ -63,6 +63,8 @@ defmodule Mix.Tasks.Dd.Bundle do
       on a volume diskutil reports internal (not a directory under `/Volumes`
       standing in for a drive), outside every git repository, leaving 10 GiB
       free after the copy. Without it, an internal destination is refused
+    * `--reserve-gib N` — with `--internal`: the free space the copy must
+      leave, when the operator decides on another floor than 10 GiB
   """
 
   use Mix.Task
@@ -86,7 +88,8 @@ defmodule Mix.Tasks.Dd.Bundle do
     transfer: :string,
     expect_manifest_sha256: :string,
     root: :string,
-    internal: :boolean
+    internal: :boolean,
+    reserve_gib: :integer
   ]
 
   @impl Mix.Task
@@ -178,6 +181,12 @@ defmodule Mix.Tasks.Dd.Bundle do
       internal and (opts[:volume] || opts[:volume_uuid]) ->
         Mix.raise("--internal names the internal disk; it cannot be given with --volume")
 
+      opts[:reserve_gib] && not internal ->
+        Mix.raise("--reserve-gib is for --internal only")
+
+      opts[:reserve_gib] && opts[:reserve_gib] < 0 ->
+        Mix.raise("--reserve-gib must not be negative")
+
       internal and is_nil(opts[:expect_manifest_sha256]) ->
         Mix.raise(
           "--internal needs --expect-manifest-sha256: the second copy is of an approved bundle"
@@ -194,11 +203,21 @@ defmodule Mix.Tasks.Dd.Bundle do
            volume: opts[:volume],
            uuid: opts[:volume_uuid],
            internal: internal,
+           reserve_bytes: reserve_bytes(opts),
            expect_manifest_sha256: opts[:expect_manifest_sha256],
            log: &say("  " <> &1)
          ) do
       {:ok, report} -> say("\n  copied and verified; MANIFEST.json sha256 #{report.digest}")
       {:error, message} -> Mix.raise(message)
+    end
+  end
+
+  # The internal disk's floor: Volume's default unless the operator names
+  # another, which the command line then records.
+  defp reserve_bytes(opts) do
+    case opts[:reserve_gib] do
+      nil -> nil
+      gib -> gib * 1_073_741_824
     end
   end
 end

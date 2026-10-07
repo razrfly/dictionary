@@ -727,7 +727,10 @@ defmodule DevilsDictionary.Installation.Bundle do
       Volume.check_internal(
         out,
         [apart_from: from, need_bytes: need, probe: probe] ++
-          Keyword.take(opts, [:source_probe, :stat, :reserve_bytes])
+          Enum.reject(
+            Keyword.take(opts, [:source_probe, :stat, :reserve_bytes]),
+            &is_nil(elem(&1, 1))
+          )
       )
     else
       Volume.check(out, Keyword.fetch!(opts, :volume),

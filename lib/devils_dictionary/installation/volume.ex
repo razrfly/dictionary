@@ -105,7 +105,7 @@ defmodule DevilsDictionary.Installation.Volume do
          :ok <- external_source(source, apart_from),
          {:ok, anchor} <- nearest_existing(path),
          {:ok, mount_point} <- mount_point_of(anchor),
-         :ok <- not_in_place_of_a_drive(path, mount_point),
+         :ok <- not_in_place_of_a_drive(path, anchor, mount_point),
          {:ok, volume} <- probe.(mount_point),
          :ok <- internal(volume, mount_point),
          :ok <- another_device(anchor, apart_from, stat),
@@ -132,14 +132,20 @@ defmodule DevilsDictionary.Installation.Volume do
 
   # `/Volumes` itself is on the internal disk: a path under it that the
   # internal volume answers for is a directory where a drive should be.
-  defp not_in_place_of_a_drive(path, mount_point) do
-    if String.starts_with?(path, "/Volumes/") and
-         not String.starts_with?(mount_point, "/Volumes/"),
-       do:
-         {:error,
-          "#{path} is under /Volumes, but no volume is mounted there; " <>
-            "nothing is written in its place"},
-       else: :ok
+  # Read from the anchor as the filesystem resolves it too, so neither a
+  # symlink to /Volumes nor another case of its name gets around it.
+  defp not_in_place_of_a_drive(path, anchor, mount_point) do
+    real = resolve(anchor)
+
+    under_volumes? =
+      Enum.any?([path, real], &(&1 == "/Volumes" or String.starts_with?(&1, "/Volumes/")))
+
+    if under_volumes? and not String.starts_with?(mount_point, "/Volumes/"),
+      do:
+        {:error,
+         "#{path} is under /Volumes, but no volume is mounted there; " <>
+           "nothing is written in its place"},
+      else: :ok
   end
 
   # The mount point of the filesystem holding `path`: `df -P`'s last column,
@@ -186,9 +192,17 @@ defmodule DevilsDictionary.Installation.Volume do
     end
   end
 
-  # Every directory from the anchor (symlinks resolved) up to `/`: one that
-  # holds a `.git` entry, or one that is itself a `.git` directory, is a
-  # repository.
+  # A `.git` directory, a directory holding any `.git` entry (a dangling
+  # link or a worktree's `.git` file included), or a bare repository.
+  defp repository?(dir) do
+    Path.basename(dir) == ".git" or
+      match?({:ok, _}, File.lstat(Path.join(dir, ".git"))) or
+      (File.regular?(Path.join(dir, "HEAD")) and File.dir?(Path.join(dir, "objects")) and
+         File.dir?(Path.join(dir, "refs")))
+  end
+
+  # Every directory from the anchor (symlinks resolved) up to `/`: any of
+  # them a repository puts the path inside one.
   defp outside_repositories(anchor, path) do
     found =
       anchor
@@ -196,7 +210,7 @@ defmodule DevilsDictionary.Installation.Volume do
       |> Path.split()
       |> Enum.scan(&Path.join(&2, &1))
       |> Enum.reverse()
-      |> Enum.find(&(Path.basename(&1) == ".git" or File.exists?(Path.join(&1, ".git"))))
+      |> Enum.find(&repository?/1)
 
     case found do
       nil ->
