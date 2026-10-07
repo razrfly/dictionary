@@ -180,6 +180,8 @@ gh repo clone razrfly/dictionary && cd dictionary
 mise install && mix deps.get && mix compile
 ```
 
+On a checkout outside your home directory (an external drive), run `mise trust` there first. mise trusts only the configuration files it has been told to, and `mise exec` waits on a prompt otherwise.
+
 ```bash
 mix dd.bundle --verify /path/to/bundle
 ```
