@@ -372,9 +372,9 @@ defmodule DevilsDictionary.Curation.References do
   @doc """
   The `illustrates` claim citing `subject_id` as an example of the sense
   `sense_id`: the current, active revision of the claim of that semantic key
-  no reviewer has rejected or withdrawn, the one `Contributions.propose/6`
-  holds a second nomination against. `{:error, :claim_not_found}` when there
-  is none.
+  whose latest review is not a rejection or a withdrawal, the one
+  `Contributions.propose/6` holds a second nomination against.
+  `{:error, :claim_not_found}` when there is none.
 
   `propose/6` keeps that claim unique, but a row written another way (a
   legacy claim, an import) can stand beside it. An accepted claim is then
