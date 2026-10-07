@@ -21,7 +21,8 @@ defmodule Mix.Tasks.Dd.Routing.Backfill do
 
   A review file marked `"rehearsal": true` is refused except on an isolated
   rehearsal copy (`DD_STAGE2_REHEARSAL=1`, a `devils_dictionary_stage2*_*`
-  database off port 5432).
+  database off the corpus's servers: 5434, the dictionary's own cluster since
+  #211, and 5432, which keeps the pre-move copy until the reclaim).
   """
 
   use Mix.Task
@@ -87,13 +88,14 @@ defmodule Mix.Tasks.Dd.Routing.Backfill do
 
   # Rule-made rehearsal reviews may drive a run only on an isolated
   # rehearsal copy: DD_STAGE2_REHEARSAL=1, a devils_dictionary_stage2*_*
-  # database, and not the usual server's port.
+  # database, and neither corpus server's port (5434 since #211; 5432 holds
+  # the pre-move copy until the reclaim).
   defp rehearsal_copy? do
     config = Repo.config()
 
     System.get_env("DD_STAGE2_REHEARSAL") == "1" and
       Regex.match?(~r/^devils_dictionary_stage2[a-z]?_/, config[:database] || "") and
-      (config[:port] || 5432) != 5432
+      (config[:port] || 5432) not in [5432, 5434]
   end
 
   # One import actor for the backfill, found by its label.
