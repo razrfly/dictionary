@@ -57,3 +57,6 @@ npm-debug.log
 /.env.*
 !/.env.example
 /config/dev.secret.exs
+
+# Agent worktrees and local agent state live beside the checkout, never in it (#211).
+/.claude/worktrees/
