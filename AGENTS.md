@@ -5,6 +5,13 @@ This is a web application written using the Phoenix web framework.
 - Use `mix precommit` alias when you are done with all changes and fix any pending issues
 - Use the already included and available `:req` (`Req`) library for HTTP requests, **avoid** `:httpoison`, `:tesla`, and `:httpc`. Req is included by default and is the preferred HTTP client for Phoenix apps
 
+### Where the installation lives (#211)
+
+- Work from the checkout on the external drive, `/Volumes/LLM Models/dictionary/src/dictionary`, and put worktrees under its `.claude/worktrees/`. Never create a checkout, a worktree or a database on the internal disk.
+- `config/dev.exs` and `config/test.exs` reach the dictionary's own cluster on port **5434** unless `DD_DATABASE_PORT` names another. 5432 is a cluster other projects share: never point dictionary work at it.
+- Run every `mix test` and `mix ecto.*` with `MIX_ENV=test` and a private `MIX_TEST_PARTITION`. `mix ecto.migrate` without `MIX_ENV=test` migrates the working database `devils_dictionary_v2`.
+- `mix dd.doctor --expect-cluster 7693849764459364596 --volume "/Volumes/LLM Models"` says whether the installation is ready. The runbook is `docs/operations/211-cutover.md`.
+
 ### Phoenix v1.8 guidelines
 
 - **Always** begin your LiveView templates with `<Layouts.app flash={@flash} ...>` which wraps all inner content

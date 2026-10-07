@@ -19,7 +19,8 @@ config :devils_dictionary, DevilsDictionary.Repo,
   # this machine — the scratch cluster a recovery rehearsal restores into
   # (docs/routing/recovery.md). Unset, it is the dictionary's own cluster on
   # the external drive, 5434 (#211 D11; docs/operations/211-cutover.md). The
-  # internal 5432 keeps the pre-move copy until the reclaim, unchanged.
+  # internal 5432 is a cluster other projects share; the dictionary's
+  # pre-move copy there was dropped in the reclaim on 7 October 2026.
   port: String.to_integer(System.get_env("DD_DATABASE_PORT") || "5434"),
   stacktrace: true,
   show_sensitive_data_on_connection_error: true,

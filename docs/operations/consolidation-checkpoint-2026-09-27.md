@@ -1,6 +1,8 @@
 # Consolidation checkpoint and migration handoff, 2026-09-27
 
 > **Superseded** by the [28 September checkpoint](consolidation-checkpoint-2026-09-28.md). This file is kept as the record of that date: everything its branch integrated (#208, #202, #210) is now on `main`, and the migration procedure below is carried forward there, with its changes.
+>
+> **The move it prepared is done** (7 October 2026, [#211](https://github.com/razrfly/dictionary/issues/211)): the dictionary runs from the external drive on cluster 7693849764459364596, port 5434 ([`211-cutover.md`](211-cutover.md)). Its source databases on 5432 were dropped in the reclaim.
 
 This branch, `codex/consolidation-2026-09-27`, is a **preservation and integration
 checkpoint**. It exists so the dictionary can be moved to the external drive (#209)

@@ -1,6 +1,6 @@
 # #211 cutover: run sheet and rollback, 7 October 2026
 
-**Status:** the installation runs from the external drive. The internal one stays as it was through the acceptance window. It is reclaimed only item by item, on the owner's word.
+**Status (7 October 2026):** the installation runs from the external drive. The owner closed the acceptance window at 16:40 (+02), and the internal installation was reclaimed by exact name that day: the dictionary's databases on 5432 except `devils_dictionary_ex212`, then the old checkout's idle worktrees, `data/`, `_build` and `deps`. There is no internal copy to roll back to any more: recovery is a restore from the bundle ([Rollback](#rollback)).
 
 The plan is [`211-stage-1.md`](211-stage-1.md), and the interface is [`installation.md`](installation.md). The records of stages 3–6 are on [#211](https://github.com/razrfly/dictionary/issues/211).
 
@@ -12,22 +12,24 @@ The plan is [`211-stage-1.md`](211-stage-1.md), and the interface is [`installat
 | Data directory | `/Volumes/LLM Models/dictionary/postgres/18/data`, on volume `F7FDE75A-3FE9-43D9-AC1E-71FDDEDBAF31` (`/dev/disk5s1`) |
 | Server log | `/Volumes/LLM Models/dictionary/postgres/18/postgresql-5434.log` |
 | Start at login (D2) | user LaunchAgent `com.razrfly.dictionary.postgres-5434` (`~/Library/LaunchAgents/`): Postgres.app's `pg_ctl`, `RunAtLoad`, `StartOnMount`. With the drive absent, it starts nothing |
-| Databases | `devils_dictionary_v2` (restored exactly, then migrated to `20260927220937`), `devils_dictionary_runtime_bench` and `_b` (restored exactly), and test partitions |
-| Settings | `wal_sync_method=fsync_writethrough` (D3); 5432's memory settings (D4) except `shared_buffers=8GB` while the old cluster still runs beside it (pre-authorisation 5; revisit after the reclaim); normal running: `max_wal_size=2GB`, default `checkpoint_timeout`. The suite's own connections commit with `synchronous_commit=off` (`config/test.exs`); no database carries it |
+| Databases | `devils_dictionary_v2` (restored exactly, then migrated to `20260927220937`; #212's `20260927204902` applied on 7 October, 27 migrations), `devils_dictionary_runtime_bench` and `_b` (restored exactly), and test partitions |
+| Settings | `wal_sync_method=fsync_writethrough` (D3); 5432's memory settings (D4) except `shared_buffers=8GB` while the 5432 cluster of other projects runs beside it (pre-authorisation 5; to revisit now that the reclaim is done); normal running: `max_wal_size=2GB`, default `checkpoint_timeout`. The suite's own connections commit with `synchronous_commit=off` (`config/test.exs`); no database carries it |
 | Checkout | `/Volumes/LLM Models/dictionary/src/dictionary`, with its `data/`, `priv/replay` and `.env`; its Claude memory is under `~/.claude/projects/-Volumes-LLM-Models-dictionary-src-dictionary` |
 | Defaults (D11) | `config/dev.exs` and `config/test.exs` reach 5434 when `DD_DATABASE_PORT` is unset |
 | Model service (D12) | bound to `devils_dictionary_runtime_bench` on 7693849764459364596 (`run/authority.json`) |
 | Baseline bundle | `/Volumes/LLM Models/dictionary/bundles/2026-10-05-v2`, `MANIFEST.json` `5d36203469089f05bee510eb35c6ef126fd5e8ca2adf7384b3674a5bc98e63ff` |
 | Second copy (D14) | `~/Backups/dictionary/bundles/2026-10-05-v2` on the internal disk, the same digest, verified there |
 
-**The old installation, unchanged until the reclaim:**
-- the internal cluster 7607810074859095446 on 5432, whose `devils_dictionary_v2` is still at `20260927131023` (24 migrations);
-- the old checkout `~/Code/projects-2026/dictionary` at `16e35ca`, with its worktrees;
-- the 5433 rehearsal cluster, stopped (pre-authorisation 4) with its 36 databases intact.
+**The old installation, reclaimed on 7 October 2026** (the record is on [#211](https://github.com/razrfly/dictionary/issues/211)):
+- **The internal cluster 7607810074859095446 on 5432** still runs, for other projects.
+  - Of the dictionary, it keeps only `devils_dictionary_ex212`, #212's evidence, kept by name.
+  - The other 123 dictionary databases were dropped by exact name, `devils_dictionary_v2` last. That was after both copies of its bundle were re-verified, and after its counters showed no write since the capture.
+- **The old checkout `~/Code/projects-2026/dictionary`** keeps only its `.git`, its tracked files and the worktrees of Claude sessions still open. Those go once the sessions are archived. Its `data/`, `_build` and `deps` are deleted.
+- **The 5433 rehearsal cluster** is stopped (pre-authorisation 4), with its 36 databases intact.
 
 ## Run sheet
 
-Each step's check comes before the next step.
+As run on 7 October. Each step's check came before the next step; the rollback path step 3 names was reclaimed after the window.
 
 1. **The new cluster answers as itself:**
 
@@ -54,7 +56,13 @@ Each step's check comes before the next step.
 
 ## Rollback
 
-**During the window,** the old installation is intact:
+**Since the reclaim (7 October 2026),** there is no internal copy to fall back to. Recovery is a restore from the bundle, or from its second copy, onto a new cluster, by [`installation.md`](installation.md):
+- the baseline bundle is `/Volumes/LLM Models/dictionary/bundles/2026-10-05-v2`, with `MANIFEST.json` `5d36203469089f05bee510eb35c6ef126fd5e8ca2adf7384b3674a5bc98e63ff`;
+- its second copy is `~/Backups/dictionary/bundles/2026-10-05-v2`.
+
+Anything written since that bundle was taken (2026-10-05 19:20Z) is lost unless a newer bundle exists. After significant writes, take a new bundle of the installation with the `mix dd.bundle --source …5434/devils_dictionary_v2` command in step 2 below.
+
+**During the window, now closed,** the old installation was intact, and the procedure below applied:
 - `v2` on 5432 has not been written or migrated;
 - the old checkout still defaults to 5432;
 - the bundle and its second copy are verified.
@@ -86,8 +94,6 @@ To roll back:
    ```
 
    Its data directory, the bundles and the second copy are deleted only on the owner's word.
-
-**After the reclaim** there is no internal copy to fall back to. Recovery is then a restore from the bundle (or from its second copy) onto a new cluster, by [`installation.md`](installation.md). Anything written since the bundle was taken is lost unless a newer bundle exists.
 
 ## Starting and stopping the cluster
 

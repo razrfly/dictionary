@@ -1,5 +1,7 @@
 # Consolidation checkpoint, 2026-09-28 (#219 D5)
 
+> **The move is done (7 October 2026, [#211](https://github.com/razrfly/dictionary/issues/211)).** The dictionary runs from the external drive on its own cluster, `system_identifier` 7693849764459364596 on port 5434 ([`211-cutover.md`](211-cutover.md)). The dictionary databases this record lists on 5432 were dropped by exact name in the reclaim, except `devils_dictionary_ex212`. The 5432 cluster keeps only other projects' databases. This file is kept as the record of its date.
+
 This re-cuts the [27 September checkpoint](consolidation-checkpoint-2026-09-27.md) against the new `main`, for [#211](https://github.com/razrfly/dictionary/issues/211)'s entry. That record's integration branch (`codex/consolidation-2026-09-27`) is superseded: everything it integrated is now on `main`. Its migration procedure still applies, with the changes below.
 
 ## `main`
