@@ -1038,12 +1038,12 @@ defmodule DevilsDictionary.Health.Score do
   # fact the router can be asked for, so it is measured rather than asserted in
   # prose, and the set grows when the product does.
   #
-  # `/words/:id/:slug` is the canonical word address and `/define/:slug` the
-  # resolver beside it — two rows because they are two contracts, not one route
-  # written twice (ADR decision 10).
+  # `/words/:id/:slug` is the canonical word address and `/on/:slug` the
+  # aggregate reader beside it — two rows because they are two contracts, not
+  # one route written twice (ADR decision 10; #219).
   @spec_pages [
     {"/", "home and search"},
-    {"/define/:slug", "the word page, by slug"},
+    {"/on/:slug", "On: every word a slug reaches"},
     {"/words/:id/:slug", "the word page, canonical"},
     {"/entities/:id/:slug", "the thing page"},
     {"/connections/:id", "one connection"},

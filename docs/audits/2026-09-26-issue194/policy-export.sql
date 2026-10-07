@@ -9,8 +9,7 @@ SELECT jsonb_build_object('record_type','class_evidence','qid',r.external_id,
   'claims',jsonb_build_object('P31',coalesce(v.payload->'claims'->'P31','[]'::jsonb),
                              'P279',coalesce(v.payload->'claims'->'P279','[]'::jsonb)))
 FROM source_records r JOIN sources s ON s.id=r.source_id
-JOIN LATERAL (SELECT id,checksum,payload FROM source_record_revisions
-              WHERE source_record_id=r.id ORDER BY id DESC LIMIT 1) v ON true
+JOIN source_record_revisions v ON v.source_record_id=r.id AND v.revision_key=r.content_hash
 WHERE s.slug='wikidata' AND r.external_id ~ '^Q[0-9]+$' ORDER BY r.external_id;
 SELECT jsonb_build_object('record_type','entity','object_id',e.object_id,
   'entity_kind',e.entity_kind,'label',e.preferred_label,'description',e.description,

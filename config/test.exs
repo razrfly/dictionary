@@ -13,6 +13,10 @@ config :devils_dictionary, DevilsDictionary.Repo,
   password: "postgres",
   hostname: "localhost",
   database: "devils_dictionary_test#{System.get_env("MIX_TEST_PARTITION")}",
+  # `DD_DATABASE_PORT` picks the PostgreSQL server, as it does in `dev.exs`.
+  # Unset, it is the dictionary's own cluster on the external drive, 5434
+  # (#211 D11), so test databases are never made on the internal disk.
+  port: String.to_integer(System.get_env("DD_DATABASE_PORT") || "5434"),
   pool: Ecto.Adapters.SQL.Sandbox,
   pool_size: System.schedulers_online() * 2,
   # DBConnection cancels a statement that runs past `timeout`, and Postgres
@@ -21,7 +25,14 @@ config :devils_dictionary, DevilsDictionary.Repo,
   # when several suites share the machine (load average 29 was measured while
   # the suite failed this way). Nothing in the suite is faster for being
   # cancelled; it is simply slow that day.
-  timeout: 60_000
+  timeout: 60_000,
+  # Test databases are disposable, so their commits need not wait for the WAL
+  # to reach stable storage. On the dictionary's own cluster that wait is an
+  # F_FULLFSYNC, about 4 ms a commit (`fsync_writethrough`, #211 D3), and the
+  # suite ran 2.5 times slower for it. This is a parameter of the suite's own
+  # connections only: no database's settings change, and nothing outside this
+  # file sets it (SynchronousCommitTest).
+  parameters: [synchronous_commit: "off"]
 
 # We don't run a server during test. If one is required,
 # you can enable the server option below.
@@ -126,6 +137,20 @@ config :devils_dictionary, dev_routes: true
 # never mention the key, which is the same gate `dev_routes` uses for `/kit`.
 # `demo_inert_test.exs` reads `prod.exs` back and fails if it ever grows one.
 config :devils_dictionary, demo_mode: true
+
+# Internal reading (#219): draft routing pages resolve and link, marked as
+# drafts, for every request. It publishes and approves nothing, and it is
+# refused in the production configuration (ReadingModeConfigTest). A server
+# with it on shows drafts to anyone who reaches it, so never expose one
+# through a tunnel. Without it, only an internal contributor reads internally.
+config :devils_dictionary, :internal_reading, true
+
+# The curated opening's manual fixtures (#156 Phase 1). `?opening=fixture`
+# renders `priv/curation/opening-fixtures.json` only where this is set — here
+# and in `dev.exs` — and `word_opening_live_test.exs` fails if `config.exs`,
+# `prod.exs` or `runtime.exs` ever mention it, so a public page never shows
+# a fixture.
+config :devils_dictionary, curated_opening_fixtures: true
 
 # The health page's scorecard cache would leak one test's rows into the next.
 config :devils_dictionary, cache_scorecard: false
@@ -256,3 +281,16 @@ config :devils_dictionary, :verification,
 
 config :devils_dictionary, :verification_req_options,
   plug: {Req.Test, DevilsDictionary.Quotations.Verifier}
+
+# The curation runtime (#195): every call goes through the `Req.Test` stub
+# named after the client, at a test host, and the host and volume checks read
+# a fake. The ordinary suite never reaches a model.
+config :devils_dictionary, :curation_runtime,
+  base_url: "http://ollama.test",
+  mount_point: "/Volumes/Test Models",
+  models_root: "/Volumes/Test Models/dictionary/ollama",
+  run_dir: "/Volumes/Test Models/dictionary/run",
+  system: DevilsDictionary.Curation.Runtime.FakeSystem
+
+config :devils_dictionary, :curation_runtime_req_options,
+  plug: {Req.Test, DevilsDictionary.Curation.Runtime.Ollama}

@@ -17,24 +17,17 @@ defmodule DevilsDictionaryWeb.Router do
     plug :accepts, ["json"]
   end
 
+  # The reader's addresses answer with the status their page deserves — a
+  # 301 to the canonical, a 404, a 410 — before the LiveView renders (#219).
+  pipeline :reading do
+    plug DevilsDictionaryWeb.ReadingStatus
+  end
+
   scope "/", DevilsDictionaryWeb do
     pipe_through :browser
 
     # The way in (#71 U2): search over the whole index, Surprise me, seed words.
     live "/", HomeLive, :show
-
-    # The word page (#71 U1a, U1b, U2): a page for every one of the 1.5 million
-    # index words, bare ones included, with the thing it names and the
-    # provenance of every card.
-    #
-    # **Two ways in, and only one of them is identity.** ADR decision 10:
-    # `/words/:id/:slug` is canonical and addressed by `object_id`, because a
-    # slug is a lossy label — 28,306 slug groups hold more than one distinct
-    # lemma, and searching for `C++` used to land on `/define/c` headed `-c-`.
-    # `/define/:slug` survives as a *resolver*: it renders the word when the
-    # slug is unambiguous and offers the choice when it is not.
-    live "/words/:id/:slug", WordLive, :canonical
-    live "/define/:slug", WordLive, :show
 
     # Saved, reusable works are local-first. The optional Artsy check on this
     # page is explicitly transient and never runs during a word-page render.
@@ -57,6 +50,40 @@ defmodule DevilsDictionaryWeb.Router do
     # this one stays public and stays put. Its *coverage* section is the part
     # that needs a population, and it now renders only when one is asked for.
     live "/sources/:slug", SourceLive, :show
+  end
+
+  scope "/", DevilsDictionaryWeb do
+    pipe_through [:browser, :reading]
+
+    # The reading entry (#219): **On** is the everyday lexical reader, and
+    # there are two ways into a word, only one of them identity.
+    #
+    #   * `/on/:slug` is the aggregate: every word the slug reaches (C++, C+
+    #     and c share `c`; Mars, mars and MARS share `mars`), under an
+    #     authored overview when one is allocated at that address and names
+    #     those words, with the subjects the page's sources and names reach.
+    #     It needs no page row: an overview is optional.
+    #   * `/words/:id/:slug` is the exact word, addressed by `object_id`
+    #     (ADR 0004 decision 10), because a slug is a lossy label. A selected
+    #     word goes here and survives a reload; a missing id is a 404, never
+    #     a word found by the slug.
+    #
+    # `/define/:slug` is gone: nothing has been public, so nothing redirects.
+    live "/on/:slug", WordLive, :on
+    live "/words/:id/:slug", WordLive, :canonical
+
+    # A subject's address (ADR 0004 §2, §6): eight explicit families, never a
+    # catch-all prefix, each answered only by `Routing.Resolver` — the ledger
+    # and nothing else. A subject with no address keeps
+    # `/entities/:id/:slug`, the exact-identity route.
+    live "/people/:slug", EntityLive, :subject
+    live "/organizations/:slug", EntityLive, :subject
+    live "/places/:slug", EntityLive, :subject
+    live "/events/:slug", EntityLive, :subject
+    live "/works/:slug", EntityLive, :subject
+    live "/concepts/:slug", EntityLive, :subject
+    live "/nature/:slug", EntityLive, :subject
+    live "/subjects/:slug", EntityLive, :subject
   end
 
   # The developer surfaces (#70 S4b), moved off the public paths they used to

@@ -15,6 +15,12 @@ config :devils_dictionary, DevilsDictionary.Repo,
   # it. Overriding it is deliberate and has to be typed, and `mix dd.reset` still
   # demands the name of whatever it is about to drop.
   database: System.get_env("DD_DATABASE") || "devils_dictionary_v2",
+  # `DD_DATABASE_PORT` points the same tasks at another PostgreSQL server on
+  # this machine — the scratch cluster a recovery rehearsal restores into
+  # (docs/routing/recovery.md). Unset, it is the dictionary's own cluster on
+  # the external drive, 5434 (#211 D11; docs/operations/211-cutover.md). The
+  # internal 5432 keeps the pre-move copy until the reclaim, unchanged.
+  port: String.to_integer(System.get_env("DD_DATABASE_PORT") || "5434"),
   stacktrace: true,
   show_sensitive_data_on_connection_error: true,
   pool_size: 10
@@ -70,6 +76,20 @@ config :devils_dictionary, dev_routes: true
 # never mention the key, which is the same gate `dev_routes` uses for `/kit`.
 # `demo_inert_test.exs` reads `prod.exs` back and fails if it ever grows one.
 config :devils_dictionary, demo_mode: true
+
+# Internal reading (#219): draft routing pages resolve and link, marked as
+# drafts, for every request. It publishes and approves nothing, and it is
+# refused in the production configuration (ReadingModeConfigTest). A server
+# with it on shows drafts to anyone who reaches it, so never expose one
+# through a tunnel. Without it, only an internal contributor reads internally.
+config :devils_dictionary, :internal_reading, true
+
+# The curated opening's manual fixtures (#156 Phase 1). `?opening=fixture`
+# renders `priv/curation/opening-fixtures.json` only where this is set — here
+# and in `test.exs` — and `word_opening_live_test.exs` fails if `config.exs`,
+# `prod.exs` or `runtime.exs` ever mention it, so a public page never shows
+# a fixture.
+config :devils_dictionary, curated_opening_fixtures: true
 
 # Absorbs run millions of statements; Ecto logs each one at :debug, which buries
 # the numbers a task prints. Raise the floor to :info and pass `--log-level debug`

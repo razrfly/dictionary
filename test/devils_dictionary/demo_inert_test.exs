@@ -40,7 +40,7 @@ defmodule DevilsDictionary.DemoInertTest do
       refute Demo.enabled?()
       refute Demo.on?(%{"demo" => "1"})
 
-      {:ok, _live, html} = live(ctx.conn, ~p"/define/oyster?demo=1")
+      {:ok, _live, html} = live(ctx.conn, ~p"/on/oyster?demo=1")
 
       refute html =~ ~s(id="demo-banner")
       refute html =~ ~s(id="card-sample-webster1913")
@@ -58,7 +58,7 @@ defmodule DevilsDictionary.DemoInertTest do
     relation!(ctx, oyster, :derived, word!(ctx, "oyster bed", ~w(wiktionary)))
 
     with_demo_off(fn ->
-      {:ok, _live, html} = live(ctx.conn, ~p"/define/oyster?demo=1")
+      {:ok, _live, html} = live(ctx.conn, ~p"/on/oyster?demo=1")
 
       refute html =~ "demo=1"
     end)

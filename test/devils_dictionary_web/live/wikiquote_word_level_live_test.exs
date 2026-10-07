@@ -1,6 +1,6 @@
 defmodule DevilsDictionaryWeb.WikiquoteWordLevelLiveTest do
   @moduledoc """
-  `/define/grief` through #172 build B. No sense of *grief* refers to
+  `/on/grief` through #172 build B. No sense of *grief* refers to
   anything; the ladder matched its Wikipedia title to Q1026040 and a gloss
   agreed, at 0.85. The page shows a Quotes shelf from *Grief*, the shelf and
   every reason saying it is the word's and not a particular sense's. One
@@ -93,7 +93,7 @@ defmodule DevilsDictionaryWeb.WikiquoteWordLevelLiveTest do
 
     assert [%{"qid" => @qid, "level" => "word"}] = mapping.parameters["entities"]
 
-    {:ok, live, _html} = live(ctx.conn, ~p"/define/grief")
+    {:ok, live, _html} = live(ctx.conn, ~p"/on/grief")
 
     assert has_element?(live, "#culture-filter-quote")
     assert has_element?(live, ~s([id^="culture-quote-"]))
@@ -128,7 +128,7 @@ defmodule DevilsDictionaryWeb.WikiquoteWordLevelLiveTest do
     refute promoted.id == before.id
     assert [%{"qid" => @qid, "level" => "sense"}] = promoted.parameters["entities"]
 
-    {:ok, live, _html} = live(ctx.conn, ~p"/define/grief")
+    {:ok, live, _html} = live(ctx.conn, ~p"/on/grief")
 
     assert has_element?(live, "#culture-filter-quote")
     assert has_element?(live, ~s([id^="culture-quote-"]))
@@ -148,7 +148,7 @@ defmodule DevilsDictionaryWeb.WikiquoteWordLevelLiveTest do
   test "a word neither tier reaches says why it has no Quotes shelf, and asks nothing", ctx do
     word!(ctx, "situationship", ~w(wordnet))
 
-    {:ok, live, _html} = live(ctx.conn, ~p"/define/situationship")
+    {:ok, live, _html} = live(ctx.conn, ~p"/on/situationship")
 
     refute has_element?(live, "#culture-filter-quote")
 
@@ -166,7 +166,7 @@ defmodule DevilsDictionaryWeb.WikiquoteWordLevelLiveTest do
     %{word: word} = grief!(ctx)
     run!(word)
 
-    {:ok, live, _html} = live(ctx.conn, ~p"/define/grief")
+    {:ok, live, _html} = live(ctx.conn, ~p"/on/grief")
 
     refute has_element?(live, "#culture-about-empty-quote")
   end

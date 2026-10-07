@@ -9,12 +9,12 @@ defmodule DevilsDictionary.Routing.Resolution do
   | `:choice` | a published split page; `successors` are its named successors | 200 |
   | `:missing` | no such address or page — never a name-based substitute | 404 |
   | `:gone` | a tombstone: deliberately removed, still reserved | 410 |
-  | `:unavailable` | a real page that is not published; indistinguishable from missing to the public | 404 |
+  | `:unavailable` | a real page not visible in the reading mode (a draft read publicly, or anything withdrawn); indistinguishable from missing to the public | 404 |
   | `:invalid` | a malformed request: bad encoding, encoded separator, NUL, dot segment | 400 |
   | `:corrupt` | inconsistent routing state; `diagnostics` says what | 500 |
 
   `location` is a stored path; `Routing.Address.encode/1` makes it a header or
-  link. Stage 3 serves these through Phoenix; nothing is routed yet.
+  link. `DevilsDictionaryWeb.ReadingStatus` serves these statuses (#219).
   """
 
   @enforce_keys [:outcome]

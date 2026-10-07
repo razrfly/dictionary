@@ -19,12 +19,21 @@ defmodule DevilsDictionaryWeb.HomeLive do
     * **Nothing slow in `mount/3`.** The index counts are three aggregates over
       1.5 million rows, so they arrive by `assign_async` through the same
       Cachex the health page uses.
+
+  Where a result goes (#219 B2): Enter opens **On** for the word it finds
+  (`/on/:slug`, the aggregate); a slug several words share is one row that
+  opens On, with each word beneath it opening that exact word
+  (`/words/:id/:slug`, which survives a reload); a word alone under its slug
+  opens the exact word; a subject opens its address in the reading mode, or
+  its exact identity.
   """
 
   use DevilsDictionaryWeb, :live_view
 
-  alias DevilsDictionary.Claims.Connection
+  on_mount DevilsDictionaryWeb.ReadingMode
+
   alias DevilsDictionary.{Encyclopedia, Health, Lexicon, Sources}
+  alias DevilsDictionary.Routing.Links
 
   @seeds ~w(cat dog oyster joy grief)
   @limit 10
@@ -43,10 +52,10 @@ defmodule DevilsDictionaryWeb.HomeLive do
   def handle_params(params, _uri, socket) do
     q = params["q"] || ""
 
-    {:noreply, assign(socket, q: q, results: results(q))}
+    {:noreply, assign(socket, q: q, results: results(q, socket.assigns.reading_mode))}
   end
 
-  defp results(""), do: []
+  defp results("", _mode), do: []
 
   # One word, one row. The trigram answers per lexeme, so *oyster* comes back
   # three times — noun, verb, adjective — and a list that repeats a word eight
@@ -54,7 +63,12 @@ defmodule DevilsDictionaryWeb.HomeLive do
   # the search ranked them in, and the parts of speech are joined rather than
   # picked from: showing *oyster · adj* because "adj" sorts first would be a
   # lie about the word.
-  defp results(q), do: word_results(q) ++ entity_results(q)
+  #
+  # Selecting is by identity (#219). A slug that reaches one lexeme opens it
+  # exactly. One lemma in several parts of speech opens On, which reads exactly
+  # those. Several lemmas (`Mars`, `mars`, `MARS`) get the On row and one row
+  # per lexeme, each opening the word it names.
+  defp results(q, mode), do: word_results(q) ++ entity_results(q, mode)
 
   defp word_results(q) do
     rows = Lexicon.search(q, limit: @limit * 3)
@@ -67,24 +81,39 @@ defmodule DevilsDictionaryWeb.HomeLive do
     |> Enum.map(fn slug ->
       group = by_slug[slug]
 
+      words =
+        group
+        |> Enum.uniq_by(& &1.lexeme_id)
+        |> Enum.map(fn row ->
+          %{
+            lemma: row.lemma,
+            lexeme_id: row.lexeme_id,
+            pos: row.pos,
+            enriched?: not is_nil(row.enriched_at)
+          }
+        end)
+
       %{
         kind: :word,
         slug: slug,
         lemma: group |> hd() |> Map.get(:lemma),
         pos: group |> Enum.map(& &1.pos) |> Enum.uniq() |> Enum.join(" · "),
-        enriched?: Enum.any?(group, &(not is_nil(&1.enriched_at)))
+        enriched?: Enum.any?(group, &(not is_nil(&1.enriched_at))),
+        words: words,
+        lemmas: words |> Enum.map(& &1.lemma) |> Enum.uniq() |> length()
       }
     end)
   end
 
-  defp entity_results(q) do
-    q
-    |> Encyclopedia.search_entities(limit: @entity_limit)
-    |> Enum.map(fn entity ->
+  defp entity_results(q, mode) do
+    entities = Encyclopedia.search_entities(q, limit: @entity_limit)
+    paths = Links.paths(Enum.map(entities, &{&1.object_id, &1.label}), mode)
+
+    Enum.map(entities, fn entity ->
       %{
         kind: :entity,
         object_id: entity.object_id,
-        slug: Connection.slugify(entity.label),
+        path: paths[entity.object_id],
         label: entity.label,
         description: entity.description,
         type_label: entity_type_label(entity.kind)
@@ -111,7 +140,7 @@ defmodule DevilsDictionaryWeb.HomeLive do
   def handle_event("go", %{"q" => q}, socket) do
     case Lexicon.lookup(String.trim(q)) do
       %{lexemes: [lexeme | _]} ->
-        {:noreply, push_navigate(socket, to: ~p"/define/#{lexeme.slug}")}
+        {:noreply, push_navigate(socket, to: ~p"/on/#{lexeme.slug}")}
 
       _ ->
         {:noreply, push_patch(socket, to: path(q))}
@@ -122,7 +151,7 @@ defmodule DevilsDictionaryWeb.HomeLive do
   def handle_event("surprise", _params, socket) do
     case Lexicon.random_word() do
       nil -> {:noreply, socket}
-      word -> {:noreply, push_navigate(socket, to: ~p"/define/#{word.slug}")}
+      word -> {:noreply, push_navigate(socket, to: ~p"/on/#{word.slug}")}
     end
   end
 
@@ -207,7 +236,7 @@ defmodule DevilsDictionaryWeb.HomeLive do
               <span :if={i > 0} aria-hidden="true">·</span>
               <.link
                 id={"seed-#{seed}"}
-                navigate={~p"/define/#{seed}"}
+                navigate={~p"/on/#{seed}"}
                 class="underline underline-offset-4 hover:text-mist-950 dark:hover:text-white"
               >
                 {seed}
@@ -226,10 +255,18 @@ defmodule DevilsDictionaryWeb.HomeLive do
               class="flex flex-col divide-y divide-mist-950/5 dark:divide-white/10"
             >
               <li :for={result <- @results}>
+                <%!-- One lemma under its slug: one lexeme opens itself, by
+                     identity; several parts of speech open On, which reads
+                     exactly them. --%>
                 <.link
-                  :if={result.kind == :word}
+                  :if={result.kind == :word and result.lemmas == 1}
                   id={"result-#{result.slug}"}
-                  navigate={~p"/define/#{result.slug}"}
+                  navigate={
+                    if(length(result.words) == 1,
+                      do: ~p"/words/#{hd(result.words).lexeme_id}/#{result.slug}",
+                      else: ~p"/on/#{result.slug}"
+                    )
+                  }
                   class="flex min-w-0 items-baseline justify-between gap-4 py-3 hover:bg-mist-950/2.5 dark:hover:bg-white/5"
                 >
                   <span class="min-w-0">
@@ -242,10 +279,44 @@ defmodule DevilsDictionaryWeb.HomeLive do
                   </span>
                   <span class="shrink-0 text-mist-500">Word · {result.pos}</span>
                 </.link>
+                <%!-- Several lemmas under one slug: the row opens On, which
+                     reads them together, and each lexeme opens itself. --%>
+                <div :if={result.kind == :word and result.lemmas > 1} class="py-1.5">
+                  <.link
+                    id={"result-#{result.slug}"}
+                    navigate={~p"/on/#{result.slug}"}
+                    class="flex min-h-11 min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-1 hover:bg-mist-950/2.5 dark:hover:bg-white/5"
+                  >
+                    <span class="min-w-0 font-medium break-words text-mist-950 dark:text-white">
+                      On {result.lemma}
+                    </span>
+                    <span class="min-w-0 break-words text-mist-500">
+                      {result.lemmas} words spelled “{result.slug}”
+                    </span>
+                  </.link>
+                  <ul role="list" class="mt-1 flex flex-col">
+                    <li :for={word <- result.words}>
+                      <.link
+                        id={"result-word-#{word.lexeme_id}"}
+                        navigate={~p"/words/#{word.lexeme_id}/#{result.slug}"}
+                        class="flex min-h-11 min-w-0 items-center justify-between gap-4 pl-4 hover:bg-mist-950/2.5 dark:hover:bg-white/5"
+                      >
+                        <span class={[
+                          "min-w-0",
+                          word.enriched? && "text-mist-950 dark:text-white",
+                          not word.enriched? && "text-mist-500"
+                        ]}>
+                          {word.lemma}
+                        </span>
+                        <span class="shrink-0 text-mist-500">{word.pos}</span>
+                      </.link>
+                    </li>
+                  </ul>
+                </div>
                 <.link
                   :if={result.kind == :entity}
                   id={"result-entity-#{result.object_id}"}
-                  navigate={~p"/entities/#{result.object_id}/#{result.slug}"}
+                  navigate={result.path}
                   class="flex min-w-0 items-start justify-between gap-4 py-3 hover:bg-mist-950/2.5 dark:hover:bg-white/5"
                 >
                   <span class="min-w-0">

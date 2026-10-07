@@ -37,7 +37,7 @@ defmodule DevilsDictionary.Absorb.Sources.Wikidata do
   alias DevilsDictionary.Repo
   alias DevilsDictionary.SourceIdentity.Entry
   alias DevilsDictionary.Sources
-  alias DevilsDictionary.Sources.{Source, SourceRecord}
+  alias DevilsDictionary.Sources.{CacheRecord, Source, SourceRecord}
 
   # A candidate the linker could still promote. `Linker.corroborate/1` lifts a
   # disambiguation candidate to 0.60 when a gloss agrees, so 0.60 is the line
@@ -539,13 +539,37 @@ defmodule DevilsDictionary.Absorb.Sources.Wikidata do
 
   # ── materialize ──────────────────────────────────────────────────────────
 
+  # A record of this source is one of three things, told apart explicitly:
+  #
+  #   * a quotation-verifier lookup cache (`Sources.CacheRecord`), which is
+  #     pinned evidence and never an entity — reported as `:verifier_cache`;
+  #   * an absent marker (`%{}`): a QID Wikidata did not know;
+  #   * an entity payload, which carries its `id` (a redirect's `id` is the
+  #     item it now points to, not the QID that was asked for).
+  #
+  # Anything else is refused: a malformed entity must not pass as nothing.
   @impl true
-  def materialize(%SourceRecord{raw: raw}) when map_size(raw) == 0, do: {:ok, %{}}
+  def materialize(%SourceRecord{external_id: external_id, raw: raw} = record) do
+    cond do
+      CacheRecord.cache?(slug(), external_id) ->
+        {:ok, %{dispositions: [%{kind: :verifier_cache, key: external_id}]}}
 
-  def materialize(%SourceRecord{} = record) do
+      map_size(raw) == 0 ->
+        {:ok, %{}}
+
+      is_binary(raw["id"]) ->
+        entity(record)
+
+      true ->
+        {:error, {:not_an_entity_payload, external_id}}
+    end
+  end
+
+  defp entity(%SourceRecord{} = record) do
     raw = record.raw
     qid = raw["id"]
     scientific_name = Client.string(raw, "P225")
+    label = clamp(label(raw, scientific_name))
 
     # The columns `concepts` carried are descriptive facts about a thing, not its
     # identity, and they move into `entities.metadata` under the same names.
@@ -554,7 +578,7 @@ defmodule DevilsDictionary.Absorb.Sources.Wikidata do
     concept = %{
       key: qid,
       qid: qid,
-      label: clamp(label(raw, scientific_name)),
+      label: label,
       description: get_in(raw, ["descriptions", "en", "value"]),
       kind: entity_kind(raw, scientific_name),
       work_kind: work_kind(raw),
@@ -571,10 +595,44 @@ defmodule DevilsDictionary.Absorb.Sources.Wikidata do
         |> put_if("taxon", taxon(raw, scientific_name))
     }
 
-    {:ok, %{concepts: [concept], concept_relations: relations(record, qid, raw)}}
+    # An item with no name in any language this source reads — no English or
+    # multilingual label and no scientific name — cannot name an entity. The
+    # registry keeps the name it already holds (the entity upsert never
+    # replaces a label with nothing), and the case is reported.
+    dispositions = if is_nil(label), do: [%{kind: :label_missing, key: qid}], else: []
+
+    {:ok,
+     %{
+       concepts: [concept],
+       concept_relations: relations(record, qid, raw),
+       dispositions: dispositions
+     }}
   end
 
   @impl DevilsDictionary.SourceIdentity.Adapter
+  # Without a label there is no eligible identity entry to resolve: the
+  # resolver records it as insufficient evidence, writes nothing, and leaves
+  # the established entity — and every attachment — exactly as it was. A
+  # source-identity output an earlier, named observation wrote is no longer
+  # emitted, so reconciliation retires that output; the entity stays.
+  def identity_record(%{label: nil, kind: kind} = row)
+      when kind == :person or (kind == :work and row.work_kind in ["film", "artwork"]) do
+    Entry.new(%{
+      source_slug: slug(),
+      object_kind: :entity,
+      entity_kind: kind,
+      work_kind: row[:work_kind],
+      stable_identifier: %{namespace: "wikidata", external_id: row.qid},
+      identifiers: row.external_identifiers,
+      label: nil,
+      description: row.description,
+      metadata: row.metadata,
+      eligibility: :insufficient_evidence,
+      eligibility_reason: "label_missing",
+      retention: :durable
+    })
+  end
+
   def identity_record(%{kind: :work, work_kind: work_kind} = row)
       when work_kind in ["film", "artwork"] do
     Entry.new(%{

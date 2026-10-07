@@ -1,0 +1,36 @@
+bunny: target 113854, covered by bing-news,cinegraph,commons,guardian,met,open-library,openverse,pexels,poetrydb,spotify,unsplash,wikiquote
+  bing-news: ran 368 (job rows removed: 1) -> :ok succeeded, 7 results
+  cinegraph: ran 369 (job rows removed: 1) -> :ok succeeded, 12 results
+  commons: ran 370 (job rows removed: 1) -> :ok succeeded, 12 results
+  guardian: ran 371 (job rows removed: 1) -> :ok succeeded, 12 results
+  met: ran 372 (job rows removed: 1) -> :ok succeeded, 12 results
+  open-library: ran 373 (job rows removed: 1) -> :ok succeeded, 11 results
+  openverse: ran 374 (job rows removed: 1) -> :ok succeeded, 12 results
+  pexels: ran 375 (job rows removed: 1) -> :ok succeeded, 12 results
+  poetrydb: ran 376 (job rows removed: 1) -> :ok succeeded, 0 results
+  spotify: ran 377 (job rows removed: 1) -> :ok succeeded, 12 results
+  unsplash: ran 378 (job rows removed: 1) -> :ok succeeded, 12 results
+  wikiquote: ran 379 (job rows removed: 1) -> :ok succeeded, 8 results
+grief: target 78062, covered by bing-news,cinegraph,commons,guardian,met,open-library,openverse,pexels,poetrydb,spotify,unsplash,wikiquote
+  bing-news: ran 380 (job rows removed: 1) -> :ok succeeded, 10 results
+  cinegraph: ran 381 (job rows removed: 1) -> :ok succeeded, 12 results
+  commons: ran 382 (job rows removed: 1) -> :ok succeeded, 12 results
+  guardian: ran 383 (job rows removed: 1) -> :ok succeeded, 12 results
+  met: ran 384 (job rows removed: 1) -> :ok succeeded, 0 results
+  open-library: ran 385 (job rows removed: 1) -> :ok succeeded, 12 results
+  openverse: ran 386 (job rows removed: 1) -> :ok succeeded, 11 results
+  pexels: ran 387 (job rows removed: 1) -> :ok succeeded, 12 results
+  poetrydb: ran 388 (job rows removed: 1) -> :ok succeeded, 12 results
+  spotify: ran 389 (job rows removed: 1) -> :ok succeeded, 12 results
+  unsplash: ran 390 (job rows removed: 1) -> :ok succeeded, 12 results
+  wikiquote: {:cached, run
+situationship: target 1161781, covered by bing-news,cinegraph,guardian,open-library,openverse,pexels,poetrydb,spotify,unsplash
+  bing-news: ran 391 (job rows removed: 1) -> :ok succeeded, 3 results
+  cinegraph: ran 392 (job rows removed: 1) -> :ok succeeded, 12 results
+  guardian: ran 393 (job rows removed: 1) -> :ok succeeded, 2 results
+  open-library: ran 394 (job rows removed: 1) -> :ok succeeded, 11 results
+  openverse: ran 395 (job rows removed: 1) -> :ok succeeded, 1 results
+  pexels: ran 396 (job rows removed: 1) -> :ok succeeded, 12 results
+  poetrydb: ran 397 (job rows removed: 1) -> :ok succeeded, 0 results
+  spotify: ran 398 (job rows removed: 1) -> :ok succeeded, 12 results
+  unsplash: ran 399 (job rows removed: 1) -> :ok succeeded, 12 results

@@ -1,6 +1,7 @@
 defmodule DevilsDictionaryWeb.WordLive do
   @moduledoc """
-  `/define/:slug` — a page for every word in the index (#71 §8a).
+  `/on/:slug` and `/words/:id/:slug` — a page for every word in the index
+  (#71 §8a), and the everyday reading entry (#219).
 
   The whole page is one round of queries in `handle_params/3`, well under the
   150 ms #71 §7 budgets and nowhere near the 2.5 s long-poll fallback the S4
@@ -13,29 +14,48 @@ defmodule DevilsDictionaryWeb.WordLive do
   `handle_params/3`; without the guard every ⓘ click would re-run ten queries
   to render the page it is already on.
 
-  Nothing here raises. `/define/zzzz` is a page that says *no such word* and
-  offers the nearest words the trigram can find; a bare index row is a page with
-  a headword and a promise. X1 renders 200 random index lexemes and most of the
+  Nothing here raises. `/on/zzzz` is a page that says *no such word* and
+  offers the nearest words the trigram can find (served as a 404 by
+  `DevilsDictionaryWeb.ReadingStatus`); a bare index row is a page with a
+  headword and a promise. X1 renders 200 random index lexemes and most of the
   index is bare.
 
   ## Two ways in, and only one of them is identity
 
   ADR decision 10. `/words/:id/:slug` is **canonical**: the id is the word's
-  `object_id`, and the slug is a readable tail nothing reads back. `/define/:slug`
-  is a **resolver**, kept because a slug is what a reader types and what an old
-  link holds — but a slug is lossy. 28,306 slug groups hold more than one
-  distinct lemma, which is how searching for `C++` came to land on `/define/c`
-  headed `-c-`. So when a slug resolves to several distinct lemmas this page
+  `object_id`, and the slug is a readable tail nothing reads back; a missing
+  id is a miss, never a word found by the slug. `/on/:slug` is the
+  **aggregate**, kept because a slug is what a reader types — but a slug is
+  lossy. 28,306 slug groups hold more than one distinct lemma (`C++`, `C+` and
+  `c` share `c`). So when a slug reaches several distinct lemmas this page
   offers the choice instead of silently picking one, and every word it lists
-  links to its canonical address.
+  links to its canonical address. An exact selection — from search, a card, a
+  drawer — keeps `/words/:id/:slug` through navigation and reload.
+
+  ## On (#219)
+
+  `/on/:slug` adds what an On page is to the words:
+
+    * the **authored overview** allocated at that very address, when the
+      resolver serves it in the reader's mode — above the words when its
+      lexical membership names them, as a separate choice when it does not
+      (`Routing.OnPage`: identity, never a shared spelling);
+    * the overviews elsewhere whose membership names these words, linked;
+    * the **Subjects** section (`Routing.Subjects`): the overview's curated
+      members in its order, then the subjects the sources and names reach,
+      each at its address or its exact identity.
+
+  The reading mode (`DevilsDictionaryWeb.ReadingMode`) decides what is
+  served; this page writes nothing.
   """
 
   use DevilsDictionaryWeb, :live_view
 
-  # Read-only: it tells the page whether the reader may carry an artwork
-  # candidate into the review composer. It grants nothing; `/connect` is still
-  # gated on the server by `:require_internal_contributor`.
-  on_mount {DevilsDictionaryWeb.UserAuth, :mount_current_scope}
+  # Read-only: the current scope, which tells the page whether the reader may
+  # carry an artwork candidate into the review composer (it grants nothing;
+  # `/connect` is still gated on the server by `:require_internal_contributor`),
+  # and the reading mode every link and address on the page is decided in.
+  on_mount DevilsDictionaryWeb.ReadingMode
 
   alias DevilsDictionary.Demo, as: Samples
   alias DevilsDictionary.Discovery
@@ -44,16 +64,21 @@ defmodule DevilsDictionaryWeb.WordLive do
   alias DevilsDictionary.Artworks
   alias DevilsDictionary.Artworks.Corpus
   alias DevilsDictionary.Claims.Contributions
+  alias DevilsDictionary.Curation.Opening, as: CuratedOpening
   alias DevilsDictionary.Lexicon
   alias DevilsDictionary.Lexicon.WordPage
+  alias DevilsDictionary.Routing.{Links, OnPage}
+  alias DevilsDictionary.Routing.Subjects, as: SubjectCards
 
   alias DevilsDictionaryWeb.{
     CrowdCard,
     Culture,
     Demo,
     Examples,
+    Opening,
     Provenance,
     SourceBadge,
+    Subjects,
     Thing,
     Word
   }
@@ -84,7 +109,19 @@ defmodule DevilsDictionaryWeb.WordLive do
        contributor: Contributions.internal_contributor?(socket.assigns[:current_scope]),
        discovery_target: nil,
        cultures: %{},
-       culture_notes: []
+       culture_notes: [],
+       opening: nil,
+       opening_reader: nil,
+       # The page's own path, as in the address bar: what its drawers patch
+       # to, so an exact word keeps its identity through a reload.
+       base: nil,
+       exact: nil,
+       overview: nil,
+       choice_overview: nil,
+       choice_paths: %{},
+       linked_overviews: [],
+       subjects: nil,
+       follow: nil
      )}
   end
 
@@ -98,32 +135,63 @@ defmodule DevilsDictionaryWeb.WordLive do
     # match this clause again, for ever.
     resolver = Map.delete(params, "id")
 
+    # A missing id is a miss, and never the word the slug would find: the
+    # slug is a readable tail, not an identity (ADR 0004 §4).
     case Lexicon.by_object_id(id) do
       nil ->
-        handle_params(resolver, uri, assign(socket, :object_id, nil))
+        handle_params(resolver, uri, assign(socket, object_id: nil, exact: :missing))
 
       lexeme ->
         if slug == lexeme.slug do
-          handle_params(resolver, uri, assign(socket, :object_id, lexeme.object_id))
+          handle_params(resolver, uri, assign(socket, object_id: lexeme.object_id, exact: :found))
         else
           {:noreply, push_navigate(socket, to: ~p"/words/#{id}/#{lexeme.slug}")}
         end
     end
   end
 
-  def handle_params(%{"slug" => slug} = params, _uri, socket) do
+  def handle_params(%{"slug" => slug} = params, uri, socket) do
+    socket =
+      if socket.assigns.live_action == :on,
+        do: assign(socket, object_id: nil, exact: nil),
+        else: socket
+
+    # Not text (bad UTF-8, a NUL): no word can have it, and no query may see
+    # it. The page says so, under the plug's 400.
+    {slug, socket} =
+      if DevilsDictionary.Routing.Input.text?(slug),
+        do: {slug, socket},
+        else: {"", assign(socket, object_id: nil, exact: :invalid)}
+
+    base = URI.parse(uri).path
     trail = parse_trail(params["trail"])
     demo = Samples.on?(params)
+    # `nil` everywhere a public page is rendered: Phase 1's only reader is the
+    # development fixture, gated by config and by `?opening=fixture` (#156).
+    reader = CuratedOpening.reader(params)
 
+    # The path is part of the guard: `/on/c` and `/words/<C++>/c` share a slug
+    # and are two pages.
     socket =
-      if slug == socket.assigns.slug and trail == socket.assigns.trail and
-           demo == socket.assigns.demo do
+      if base == socket.assigns.base and slug == socket.assigns.slug and
+           trail == socket.assigns.trail and demo == socket.assigns.demo and
+           reader == socket.assigns.opening_reader and
+           socket.assigns[:loaded_mode] == socket.assigns.reading_mode do
         socket
       else
-        load(socket, slug, trail, demo)
+        load(assign(socket, :base, base), slug, trail, demo, reader)
       end
 
-    {:noreply, assign(socket, :provenance, provenance(socket.assigns.page, params["provenance"]))}
+    case socket.assigns[:follow] do
+      nil ->
+        {:noreply,
+         assign(socket, :provenance, provenance(socket.assigns.page, params["provenance"]))}
+
+      # An equivalent spelling of an overview's address, followed as the
+      # plug answers a direct request: to the canonical, one hop.
+      location ->
+        {:noreply, push_navigate(assign(socket, :follow, nil), to: location, replace: true)}
+    end
   end
 
   # A sample card's drawer is invented too. Falling through to
@@ -134,17 +202,21 @@ defmodule DevilsDictionaryWeb.WordLive do
     Samples.provenance(page, ref || "") || WordPage.provenance(page, ref)
   end
 
-  defp load(socket, slug, trail, demo) do
+  defp load(socket, slug, trail, demo, reader) do
     # A contributor or reviewer reads the exemplars as `:internal`, so a
     # nomination still under review shows, marked; everyone else reads the
     # public view, where a person nominated here waits for acceptance.
     viewer = if socket.assigns.contributor, do: :internal, else: :public
 
-    page =
-      socket.assigns.object_id |> lookup(slug) |> WordPage.build(trail: trail, viewer: viewer)
+    page = socket.assigns |> lookup(slug) |> WordPage.build(trail: trail, viewer: viewer)
 
     samples =
       if demo, do: Samples.samples(page.headword.lemma || slug), else: %{cards: [], evidence: []}
+
+    # The curated opening (#156) reads the page as built, before any sample is
+    # merged: it quotes real entries by their exact revisions, and a sample
+    # card is neither. Database reads only — no provider, no model.
+    opening = CuratedOpening.for_page(page, reader)
 
     # Counted before the samples go in: the source line is a claim about what has
     # been absorbed, and "8 sources" on a page where three of them are invented
@@ -159,12 +231,100 @@ defmodule DevilsDictionaryWeb.WordLive do
       |> assign(:demo, demo)
       |> assign(:evidence, samples.evidence)
       |> assign(:page, page)
-      |> assign(:page_title, title(page, slug))
+      |> assign(:opening, opening)
+      |> assign(:opening_reader, reader)
       |> assign(:card_sources, card_sources)
       |> assign(:suggestions, suggestions(page, slug))
       |> assign(:choices, choices(slug, socket.assigns.object_id))
+      |> assign(:loaded_mode, socket.assigns.reading_mode)
+      |> assign_on(page)
 
-    prepare_discovery(socket, page, demo)
+    socket
+    |> assign(:page_title, title(page, slug, socket.assigns))
+    |> prepare_discovery(page, demo)
+  end
+
+  # What On adds to the words (#219): the overview at this address, the
+  # overviews elsewhere that name these words, and the Subjects section. One
+  # resolver read for the address, one query for the overviews that name the
+  # words, one bounded query for every card.
+  defp assign_on(socket, page) do
+    mode = socket.assigns.reading_mode
+    lexeme_ids = Enum.map(page.headword.lexemes, & &1.id)
+
+    at_address =
+      if socket.assigns.live_action == :on,
+        do: OnPage.overview(socket.assigns.base, lexeme_ids, mode)
+
+    # A moved overview's old address answers with it only where no word
+    # holds the slug: words are never redirected away (#219 B1).
+    {overview, follow} =
+      case at_address do
+        %{resolution: %{outcome: :redirect, location: location}} when lexeme_ids == [] ->
+          {nil, DevilsDictionary.Routing.Address.encode(location)}
+
+        %{resolution: %{outcome: :redirect}} ->
+          {nil, nil}
+
+        %{resolution: _gone_or_corrupt} ->
+          {nil, nil}
+
+        overview ->
+          {overview, nil}
+      end
+
+    # The overview belongs to these words only by its lexical membership; with
+    # no words on the page it is the page.
+    {treatment, choice} =
+      cond do
+        is_nil(overview) -> {nil, nil}
+        overview.associated? or lexeme_ids == [] -> {overview, nil}
+        true -> {nil, overview}
+      end
+
+    curated =
+      for %{kind: :subject, object_id: id, relationship: rel} <-
+            (treatment && treatment.members) || [],
+          rel in [:discusses_subject, :editorial_association],
+          do: id
+
+    lemmas = page.headword.lexemes |> Enum.map(& &1.lemma) |> Enum.uniq()
+
+    subjects =
+      if lexeme_ids != [] or treatment,
+        do: SubjectCards.cards(curated, discovered(page.thing), lemmas, mode)
+
+    choice_paths =
+      if choice,
+        do:
+          Links.paths(
+            for(
+              %{kind: :subject, object_id: id, label: label} <- choice.members,
+              do: {id, label}
+            ),
+            mode
+          ),
+        else: %{}
+
+    socket
+    |> assign(:overview, treatment)
+    |> assign(:choice_overview, choice)
+    |> assign(:choice_paths, choice_paths)
+    |> assign(:linked_overviews, OnPage.linked(lexeme_ids, mode, overview && overview.page.id))
+    |> assign(:subjects, subjects)
+    |> assign(:follow, follow)
+  end
+
+  # The identities the page's sources name: the thing, the disagreement and
+  # the `may_refer_to` candidates. Name matches are the query's own.
+  defp discovered(nil), do: []
+
+  defp discovered(thing) do
+    concept = if thing[:concept], do: [thing.concept.object_id], else: []
+
+    concept ++
+      Enum.map(thing[:disagreement] || [], & &1.object_id) ++
+      Enum.map(thing[:may_refer_to] || [], & &1.object_id)
   end
 
   defp prepare_discovery(socket, page, demo) do
@@ -647,19 +807,23 @@ defmodule DevilsDictionaryWeb.WordLive do
 
   # The canonical address names one word, so it renders that word — not
   # whatever else shares its slug. `/words/<C++>/c` is a page about `C++`;
-  # `/define/c` is a page about everything the slug reaches. That difference is
+  # `/on/c` is a page about everything the slug reaches. That difference is
   # the whole reason there are two routes.
-  defp lookup(nil, slug), do: Lexicon.lookup(slug)
+  defp lookup(%{exact: :missing}, _slug), do: %{lexemes: [], via: :none, matched: nil}
 
-  defp lookup(object_id, slug) do
+  defp lookup(%{object_id: object_id}, _slug) when is_integer(object_id) do
     case Lexicon.by_object_id(object_id) do
-      nil -> Lexicon.lookup(slug)
+      nil -> %{lexemes: [], via: :none, matched: nil}
       lexeme -> %{lexemes: [lexeme], via: :lemma, matched: lexeme.lemma}
     end
   end
 
+  defp lookup(_assigns, slug), do: Lexicon.lookup(slug)
+
   # Only a miss pays for suggestions: on every other page the trigram would be
   # answering a question nobody asked.
+  defp suggestions(_page, ""), do: []
+
   defp suggestions(%{headword: %{lexemes: []}}, slug) do
     slug
     |> Lexicon.search(limit: @suggestions)
@@ -683,8 +847,14 @@ defmodule DevilsDictionaryWeb.WordLive do
     |> Enum.take(-@trail_cap)
   end
 
-  defp title(%{headword: %{lemma: nil}}, slug), do: "#{slug} — no such word"
-  defp title(%{headword: %{lemma: lemma}}, _slug), do: lemma
+  # "On Mars" for the aggregate, the lemma for an exact word, the overview's
+  # own title for an overview with no words behind it.
+  defp title(%{headword: %{lemma: nil}}, _slug, %{overview: %{revision: revision}}),
+    do: revision.title
+
+  defp title(%{headword: %{lemma: nil}}, slug, _assigns), do: "#{slug} — no such word"
+  defp title(%{headword: %{lemma: lemma}}, _slug, %{live_action: :on}), do: "On #{lemma}"
+  defp title(%{headword: %{lemma: lemma}}, _slug, _assigns), do: lemma
 
   # "5 sources · 9 entries": a source that filed a noun and a verb is one
   # source, and the entries are counted as what they are.
@@ -741,14 +911,32 @@ defmodule DevilsDictionaryWeb.WordLive do
           demo={@demo}
         />
 
-        <%= if @page.headword.lexemes == [] do %>
-          <.miss slug={@slug} suggestions={@suggestions} demo={@demo} />
-        <% else %>
-          <%!-- #131 Phase 2. What the page knows the size of goes in the rail;
+        <%!-- The aggregate names itself (#219 B5): "On mars" over the words it
+             reads; the headword stays the page's h1. --%>
+        <p
+          :if={@live_action == :on and @page.headword.lexemes != []}
+          id="on-title"
+          class="mb-2 text-base/7 font-semibold text-mist-700 sm:text-sm/6 dark:text-mist-400"
+        >
+          On {@page.headword.lemma}
+        </p>
+
+        <%= cond do %>
+          <% @page.headword.lexemes == [] and @overview -> %>
+            <%!-- An authored overview with no words behind it (#219 B2):
+                 the page is the overview, and its chosen subjects. --%>
+            <div class="flex max-w-4xl flex-col gap-8">
+              <Subjects.overview overview={@overview} heading="h1" />
+              <Subjects.section :if={@subjects} subjects={@subjects} members={@overview.members} />
+            </div>
+          <% @page.headword.lexemes == [] -> %>
+            <.miss slug={@slug} suggestions={@suggestions} demo={@demo} exact={@exact} />
+          <% true -> %>
+            <%!-- #131 Phase 2. What the page knows the size of goes in the rail;
                what a source decides the size of goes in the column beside it.
                The rail is not sticky: it carries facts rather than navigation,
                and the field pins a rail only when the rail is navigation. --%>
-          <%!-- A grid, so the document order can be the reading order while the
+            <%!-- A grid, so the document order can be the reading order while the
                rail still sits beside the definitions.
                
                The related words belong *under* the rail on a desktop and
@@ -757,131 +945,136 @@ defmodule DevilsDictionaryWeb.WordLive do
                puts them back in the first column. Placement, not a second
                copy: two copies is two of every chip id, which LiveView
                refuses outright. --%>
-          <%!-- `grid-rows-[auto_1fr]` is load-bearing. The column beside the rail
+            <%!-- `grid-rows-[auto_1fr]` is load-bearing. The column beside the rail
                spans both rows, and a spanning item's height is shared *equally*
                between `auto` rows — so without it row one stretched to half the
                stream and the related words sat a screen below the rail. Row
                one is the rail's height; the rest is row two's. --%>
-          <div class="lg:grid lg:grid-cols-[22.5rem_minmax(0,1fr)] lg:grid-rows-[auto_1fr] lg:gap-x-12">
-            <Word.rail
-              page={@page}
-              sources={@card_sources}
-              choices={@choices}
-              thing_info={@page.thing && Word.info_path(@slug, @page.trail, "thing", @demo)}
-              class="lg:col-start-1 lg:row-start-1"
-              demo={@demo}
-            />
+            <%!-- The curated opening (#156) changes the reading order, so it
+               has its own layout, and only when there is one — without it the
+               grid below is exactly what it was.
 
-            <div class="min-w-0 max-lg:mt-8 lg:col-start-2 lg:row-span-2 lg:row-start-1">
-              <%!-- `phx-update="ignore"` because `open` is DOM state the reader
-                   owns: without it, a discovery result arriving would re-render
-                   these rows and snap the reader's open source shut. Nothing
-                   here changes after the first render *for this word in this
-                   mode*, which is exactly what the id says — so a different
-                   word, or the demo banner going up, replaces the element
-                   rather than patching it. The `object_id` is in the id because
-                   a slug is not an identity: `/define/c` and `/words/<C++>/c`
-                   are two words under one slug, and the id has to tell them
-                   apart or the ignored rows would outlive the word. `any` is
-                   what `/define/:slug` means — every word the slug reaches —
-                   and it is a segment rather than a gap so the id reads. --%>
-              <.slab
-                :if={@page.cards != []}
-                id={"definitions-#{@object_id || "any"}-#{@slug}-#{@demo}"}
-                phx-update="ignore"
-                title="Definitions"
-                class="mt-2"
-              >
-                <:meta>{count_label(@card_sources, @page.cards)} · one open at a time</:meta>
-                <div class="divide-y divide-mist-950/10 dark:divide-white/10">
-                  <Word.source_row
-                    :for={{card, i} <- Enum.with_index(@page.cards)}
-                    card={card}
-                    open={i == default_open(@page.cards)}
-                    continues={continues?(@page.cards, i)}
-                    trail={trail_here(@page)}
-                    info={Word.info_path(@slug, @page.trail, "card:" <> card.id, @demo)}
-                    demo={@demo}
-                  />
-                </div>
-              </.slab>
-
-              <Word.bare_row :if={@page.cards == []} lemma={@page.headword.lemma} />
-
-              <%!-- The named things the sources file under this word's
-                   meanings (#181): asserted, so after the definitions and
-                   before anything searched for. Absent when nothing names
-                   any — a section, not a shelf, so there is no empty state
-                   to hold open while something loads. --%>
-              <Examples.section
-                :if={@page.examples}
-                examples={@page.examples}
-                lemma={@page.headword.lemma}
-                trail={trail_here(@page)}
-                demo={@demo}
-              />
-
-              <%!-- The 📱 Crowd card (#136): after the real cards and before the
-                   culture shelves, which is exactly where the demo's sample sat
-                   from U3 until this replaced it. `nil` unless the environment
-                   switch and the source row both say yes, and then the hook
-                   removes the element on an empty answer or any failure — so
-                   the states are *card* and *absent*, never an empty card. The
-                   source line above counts server-known cards and does not know
-                   about this one, on purpose: it is a claim about what has been
-                   absorbed, and nothing here is. --%>
-              <CrowdCard.urban_dictionary :if={@urban_dictionary} config={@urban_dictionary} />
-
-              <%!-- One block for everything found rather than written, the GIFs
-                   among it (#111 L6 — the one piece of #109 K10 that never
-                   landed). The GIF shelf keeps its own hook and transport;
-                   what it loses is the second chrome 400 px below the first. --%>
-              <Culture.section
-                :if={@cultures != %{} or @browsers != [] or @culture_notes != []}
-                states={@cultures}
-                notes={@culture_notes}
-                browsers={@browsers}
-                return_path={word_path(@page)}
-                contributor={@contributor}
-              />
-
-              <Thing.thing_panel
-                :if={@page.thing}
+               On a phone the document order *is* the visual and keyboard
+               order: the headword, the opening, the rest of the rail, the
+               definitions, the way out. On a desktop the same order is placed
+               into two columns with floats rather than the grid, because a
+               grid couples its rows across columns: with the opening between
+               the headword and the rest of the rail in the source, row one
+               would be as tall as the opening and leave a gap under the
+               headword. Every block floats — left for the rail's three,
+               right for the opening and the definitions — and `clear` stacks
+               each column on itself, so neither column's height moves the
+               other. (An in-flow block would pin every later float below it.)
+               The way out can start no higher than the definitions do, so on
+               a word whose opening is taller than its rail it sits a little
+               lower under the rail than it does without an opening. No
+               `order`, no `display: contents`, no second copy of anything. --%>
+            <div :if={@opening} class="lg:flow-root">
+              <Word.headword
+                headword={@page.headword}
+                choices={@choices}
                 thing={@page.thing}
-                trail={trail_here(@page)}
-                info={Word.info_path(@slug, @page.trail, "thing", @demo)}
+                thing_info={@page.thing && Word.info_path(@base, @page.trail, "thing", @demo)}
                 demo={@demo}
+                class="lg:float-left lg:clear-left lg:w-[22.5rem]"
               />
 
-              <Demo.evidence_wall :if={@demo} evidence={@evidence} />
+              <%!-- Nothing in it is fetched and nothing in it changes after the
+                 first render for this word; `nil` on every public page in
+                 Phase 1 (the development fixture is the only reader). --%>
+              <Opening.section
+                opening={@opening}
+                mode={@reading_mode}
+                class="mt-8 lg:float-right lg:mt-0 lg:mb-4 lg:w-[calc(100%-25.5rem)]"
+              />
+
+              <Word.rail
+                page={@page}
+                sources={@card_sources}
+                choices={@choices}
+                headword={false}
+                class="lg:float-left lg:clear-left lg:w-[22.5rem]"
+                demo={@demo}
+                subjects={@subjects}
+              />
+
+              <div class="min-w-0 max-lg:mt-8 lg:float-right lg:clear-right lg:w-[calc(100%-25.5rem)]">
+                <.column
+                  page={@page}
+                  card_sources={@card_sources}
+                  object_id={@object_id}
+                  slug={@slug}
+                  demo={@demo}
+                  evidence={@evidence}
+                  urban_dictionary={@urban_dictionary}
+                  cultures={@cultures}
+                  culture_notes={@culture_notes}
+                  browsers={@browsers}
+                  contributor={@contributor}
+                  base={@base}
+                  mode={@reading_mode}
+                  overview={@overview}
+                  choice_overview={@choice_overview}
+                  choice_paths={@choice_paths}
+                  linked_overviews={@linked_overviews}
+                  subjects={@subjects}
+                />
+              </div>
+
+              <.way_out
+                :if={@page.related || @page_sources != []}
+                page={@page}
+                page_sources={@page_sources}
+                demo={@demo}
+                class="mt-8 lg:float-left lg:clear-left lg:mt-5 lg:w-[22.5rem] lg:border-t lg:border-mist-950/10 lg:pt-4 dark:lg:border-white/10"
+              />
             </div>
 
             <div
-              :if={@page.related || @page_sources != []}
-              class="mt-8 lg:col-start-1 lg:row-start-2 lg:mt-5 lg:border-t lg:border-mist-950/10 lg:pt-4 dark:lg:border-white/10"
+              :if={is_nil(@opening)}
+              class="lg:grid lg:grid-cols-[22.5rem_minmax(0,1fr)] lg:grid-rows-[auto_1fr] lg:gap-x-12"
             >
-              <Word.related_block
-                :if={@page.related}
-                related={@page.related}
-                trail={trail_here(@page)}
+              <Word.rail
+                page={@page}
+                sources={@card_sources}
+                choices={@choices}
+                thing_info={@page.thing && Word.info_path(@base, @page.trail, "thing", @demo)}
+                class="lg:col-start-1 lg:row-start-1"
                 demo={@demo}
+                subjects={@subjects}
               />
-              <%!-- The one place that lists every source on the page (#152
-                   rule 3), under the related words because both are the way
-                   out of the word. It is composed from assigns the page
-                   already holds and grows as a shelf's live results arrive;
-                   a source whose shelf is still loading is not on the page
-                   yet, and is not in the stack yet. --%>
-              <SourceBadge.stack
-                id="page-sources"
-                sources={@page_sources}
-                class={[
-                  "mt-8",
-                  @page.related && "border-t border-mist-950/10 pt-4 dark:border-white/10"
-                ]}
+
+              <div class="min-w-0 max-lg:mt-8 lg:col-start-2 lg:row-span-2 lg:row-start-1">
+                <.column
+                  page={@page}
+                  card_sources={@card_sources}
+                  object_id={@object_id}
+                  slug={@slug}
+                  demo={@demo}
+                  evidence={@evidence}
+                  urban_dictionary={@urban_dictionary}
+                  cultures={@cultures}
+                  culture_notes={@culture_notes}
+                  browsers={@browsers}
+                  contributor={@contributor}
+                  base={@base}
+                  mode={@reading_mode}
+                  overview={@overview}
+                  choice_overview={@choice_overview}
+                  choice_paths={@choice_paths}
+                  linked_overviews={@linked_overviews}
+                  subjects={@subjects}
+                />
+              </div>
+
+              <.way_out
+                :if={@page.related || @page_sources != []}
+                page={@page}
+                page_sources={@page_sources}
+                demo={@demo}
+                class="mt-8 lg:col-start-1 lg:row-start-2 lg:mt-5 lg:border-t lg:border-mist-950/10 lg:pt-4 dark:lg:border-white/10"
               />
             </div>
-          </div>
         <% end %>
       </.container>
     </Layouts.app>
@@ -895,21 +1088,174 @@ defmodule DevilsDictionaryWeb.WordLive do
     <Provenance.provenance
       :if={@provenance}
       provenance={@provenance}
-      close={Word.info_path(@slug, @page.trail, nil, @demo)}
-      record_path={&Word.info_path(@slug, @page.trail, "#{@provenance.ref}:#{&1}", @demo)}
+      close={Word.info_path(@base, @page.trail, nil, @demo)}
+      record_path={&Word.info_path(@base, @page.trail, "#{@provenance.ref}:#{&1}", @demo)}
     />
+    """
+  end
+
+  # Everything a source decides the size of, in the column beside the rail:
+  # one function so both layouts in `render/1` render the same elements.
+  defp column(assigns) do
+    ~H"""
+    <%!-- The authored overview this address holds, when it names these
+         words, heads them (#219 B1); one that names other words is shown
+         apart, as something else that shares the spelling. --%>
+    <Subjects.overview :if={@overview} overview={@overview} />
+    <Subjects.overview
+      :if={@choice_overview}
+      overview={@choice_overview}
+      as={:choice}
+      subject_paths={@choice_paths}
+    />
+    <Subjects.linked_overviews overviews={@linked_overviews} />
+
+    <%!-- `phx-update="ignore"` because `open` is DOM state the reader
+         owns: without it, a discovery result arriving would re-render
+         these rows and snap the reader's open source shut. Nothing
+         here changes after the first render *for this word in this
+         mode*, which is exactly what the id says — so a different
+         word, or the demo banner going up, replaces the element
+         rather than patching it. The `object_id` is in the id because
+         a slug is not an identity: `/on/c` and `/words/<C++>/c`
+         are two words under one slug, and the id has to tell them
+         apart or the ignored rows would outlive the word. `any` is
+         what `/on/:slug` means — every word the slug reaches —
+         and it is a segment rather than a gap so the id reads. --%>
+    <.slab
+      :if={@page.cards != []}
+      id={"definitions-#{@object_id || "any"}-#{@slug}-#{@demo}"}
+      phx-update="ignore"
+      title="Definitions"
+      class="mt-2"
+    >
+      <:meta>{count_label(@card_sources, @page.cards)} · one open at a time</:meta>
+      <div class="divide-y divide-mist-950/10 dark:divide-white/10">
+        <Word.source_row
+          :for={{card, i} <- Enum.with_index(@page.cards)}
+          card={card}
+          open={i == default_open(@page.cards)}
+          continues={continues?(@page.cards, i)}
+          trail={trail_here(@page)}
+          info={Word.info_path(@base, @page.trail, "card:" <> card.id, @demo)}
+          demo={@demo}
+          mode={@mode}
+        />
+      </div>
+    </.slab>
+
+    <Word.bare_row :if={@page.cards == []} lemma={@page.headword.lemma} />
+
+    <%!-- The named things the sources file under this word's
+         meanings (#181): asserted, so after the definitions and
+         before anything searched for. Absent when nothing names
+         any — a section, not a shelf, so there is no empty state
+         to hold open while something loads. --%>
+    <Examples.section
+      :if={@page.examples}
+      examples={@page.examples}
+      lemma={@page.headword.lemma}
+      trail={trail_here(@page)}
+      demo={@demo}
+      mode={@mode}
+    />
+
+    <%!-- The 📱 Crowd card (#136): after the real cards and before the
+         culture shelves, which is exactly where the demo's sample sat
+         from U3 until this replaced it. `nil` unless the environment
+         switch and the source row both say yes, and then the hook
+         removes the element on an empty answer or any failure — so
+         the states are *card* and *absent*, never an empty card. The
+         source line above counts server-known cards and does not know
+         about this one, on purpose: it is a claim about what has been
+         absorbed, and nothing here is. --%>
+    <CrowdCard.urban_dictionary :if={@urban_dictionary} config={@urban_dictionary} />
+
+    <%!-- One block for everything found rather than written, the GIFs
+         among it (#111 L6 — the one piece of #109 K10 that never
+         landed). The GIF shelf keeps its own hook and transport;
+         what it loses is the second chrome 400 px below the first. --%>
+    <Culture.section
+      :if={@cultures != %{} or @browsers != [] or @culture_notes != []}
+      states={@cultures}
+      notes={@culture_notes}
+      browsers={@browsers}
+      return_path={@base || word_path(@page)}
+      contributor={@contributor}
+      mode={@mode}
+    />
+
+    <%!-- The subjects this page reaches (#219 B3): the overview's chosen
+         ones in its order, then what the sources and names find, each at
+         its address in the reading mode or at its exact identity. --%>
+    <Subjects.section
+      :if={@subjects}
+      subjects={@subjects}
+      members={(@overview && @overview.members) || []}
+    />
+
+    <Thing.thing_panel
+      :if={@page.thing}
+      thing={@page.thing}
+      trail={trail_here(@page)}
+      info={Word.info_path(@base, @page.trail, "thing", @demo)}
+      demo={@demo}
+      mode={@mode}
+    />
+
+    <Demo.evidence_wall :if={@demo} evidence={@evidence} />
+    """
+  end
+
+  # The way out of the word: the related words, then every source on the page.
+  defp way_out(assigns) do
+    ~H"""
+    <div class={@class}>
+      <Word.related_block
+        :if={@page.related}
+        related={@page.related}
+        trail={trail_here(@page)}
+        demo={@demo}
+      />
+      <%!-- The one place that lists every source on the page (#152
+           rule 3), under the related words because both are the way
+           out of the word. It is composed from assigns the page
+           already holds and grows as a shelf's live results arrive;
+           a source whose shelf is still loading is not on the page
+           yet, and is not in the stack yet. --%>
+      <SourceBadge.stack
+        id="page-sources"
+        sources={@page_sources}
+        class={[
+          "mt-8",
+          @page.related && "border-t border-mist-950/10 pt-4 dark:border-white/10"
+        ]}
+      />
+    </div>
     """
   end
 
   attr :slug, :string, required: true
   attr :suggestions, :list, default: []
   attr :demo, :boolean, default: false
+  attr :exact, :atom, default: nil
 
   defp miss(assigns) do
     ~H"""
-    <div id="no-such-word" class="py-12">
-      <.heading>“{@slug}”</.heading>
+    <div :if={@exact == :invalid} id="not-an-address" class="py-12">
+      <.heading>Not an address</.heading>
       <.text class="mt-4">
+        This address is not readable text, so it names no word.
+      </.text>
+      <.a navigate={~p"/"} class="mt-6">Start somewhere else</.a>
+    </div>
+    <div :if={@exact != :invalid} id="no-such-word" class="py-12">
+      <.heading>“{@slug}”</.heading>
+      <.text :if={@exact == :missing} id="no-such-word-identity" class="mt-4">
+        No word with that identity. An exact address names one word by its id, and this id names
+        none — the words spelled “{@slug}” are not substituted for it.
+      </.text>
+      <.text :if={@exact != :missing} class="mt-4">
         No such word. Nothing in the index — not as a headword, not as a spelling, not as an
         inflected form of anything else.
       </.text>

@@ -8,6 +8,44 @@ defmodule DevilsDictionary.Snapshot do
   here take an explicit Repo config, so the supported recovery procedure and
   its tests (`docs/routing/recovery.md`) run exactly this code against
   isolated, disposable databases.
+
+  ## Where a snapshot came from
+
+  A restore drops its target first, so it must never land on the database the
+  snapshot was taken from. Names and endpoints cannot decide that: a Unix
+  socket and a TCP address can reach the same server, and two servers can
+  hold databases of the same name. So a snapshot's sidecar
+  (`PATH.routing.json`, written by `Routing.Recovery.snapshot!/2`) records
+  the source as the server itself reports it — the cluster's
+  `system_identifier` (`pg_control_system()`), the database's name and its
+  oid — together with the dump's size and SHA-256. `restore!/3` refuses,
+  before anything is dropped, unless:
+
+    * the sidecar exists, parses, and records a source identity (a sidecar
+      from before identities were recorded is refused, not guessed at);
+    * the dump is the one the sidecar describes — the same bytes, and the
+      database name its own header records;
+    * the target's server identity can be read, over the same endpoint
+      `pg_restore` will use;
+    * the target is not the source: the same cluster, with the same database
+      name or oid.
+
+  A restore to another server, or to another database on the same server, is
+  what recovery is for, and is allowed.
+
+  One exception: a dump whose sidecar is missing or predates identities may
+  still be restored into a database that does not exist yet, because nothing
+  is dropped. That keeps an older snapshot usable as a rollback point after
+  its source has changed. A malformed sidecar, or one that does not describe
+  its dump, is refused everywhere.
+
+  ## One endpoint
+
+  The identity probe, Ecto's drop and create, and the `pg_*` tools must reach
+  the same server. `resolve/1` settles the endpoint once, as Postgrex would:
+  a `socket_dir`, or else `hostname` (default `PGHOST`, then `localhost`) and
+  `port` (default `PGPORT`, then 5432). A `socket:` or `endpoints:` config,
+  which the `pg_*` tools cannot follow, is refused.
   """
 
   @doc """
@@ -16,9 +54,309 @@ defmodule DevilsDictionary.Snapshot do
   would connect to. A production config names its database only in the URL.
   """
   def resolve(config) do
-    case config[:url] do
-      nil -> config
-      url -> Keyword.merge(config, Ecto.Repo.Supervisor.parse_url(url))
+    config =
+      case config[:url] do
+        nil -> config
+        url -> Keyword.merge(config, Ecto.Repo.Supervisor.parse_url(url))
+      end
+
+    endpoint(config)
+  end
+
+  # The server Postgrex would reach, written into the config so that every
+  # caller reaches it too. A socket directory takes precedence over a host.
+  defp endpoint(config) do
+    pghost = System.get_env("PGHOST")
+
+    cond do
+      unfollowable(config) != [] ->
+        config
+
+      config[:socket_dir] ->
+        Keyword.delete(config, :hostname)
+
+      is_nil(config[:hostname]) and is_binary(pghost) and String.starts_with?(pghost, "/") ->
+        config |> Keyword.put(:socket_dir, pghost) |> Keyword.put_new(:port, pgport())
+
+      true ->
+        config
+        |> Keyword.put_new_lazy(:hostname, fn -> pghost || "localhost" end)
+        |> Keyword.put_new_lazy(:port, &pgport/0)
+    end
+  end
+
+  defp pgport do
+    case Integer.parse(System.get_env("PGPORT") || "") do
+      {port, ""} -> port
+      _ -> 5432
+    end
+  end
+
+  defp unfollowable(config), do: Enum.filter([:socket, :endpoints], &config[&1])
+
+  @doc """
+  `:ok`, or `{:error, message}` for a config whose endpoint the `pg_*` tools
+  cannot follow (`socket:` or `endpoints:`).
+  """
+  def followable(config) do
+    case unfollowable(config) do
+      [] ->
+        :ok
+
+      keys ->
+        {:error,
+         "refusing: pg_dump and pg_restore cannot follow a #{Enum.map_join(keys, " or ", &"`#{&1}:`")} " <>
+           "config, so they could reach another server than the one checked. Configure " <>
+           "`hostname:`/`port:` or `socket_dir:`."}
+    end
+  end
+
+  @doc "Where `snapshot!/2` writes, and `restore!/3` reads, a dump's sidecar."
+  def sidecar_path(path), do: path <> ".routing.json"
+
+  @doc """
+  The server and database `config` reaches, as the server reports them:
+  `%{system_identifier:, database:, database_oid:}` (the oid is nil if the
+  database does not exist yet). Connects to the maintenance database over the
+  same endpoint the `pg_*` tools use. `{:error, reason}` if the server cannot
+  be reached or will not say.
+  """
+  def database_identity(config) do
+    config = resolve(config)
+    database = config[:database]
+
+    probe(maintenance(config), fn conn ->
+      %{rows: [[system_identifier]]} =
+        Postgrex.query!(conn, "SELECT system_identifier::text FROM pg_control_system()", [])
+
+      oid =
+        case Postgrex.query!(conn, "SELECT oid::bigint FROM pg_database WHERE datname = $1", [
+               database
+             ]) do
+          %{rows: [[oid]]} -> oid
+          %{rows: []} -> nil
+        end
+
+      %{system_identifier: system_identifier, database: database, database_oid: oid}
+    end)
+  end
+
+  @doc """
+  The source a snapshot's sidecar records: `{:ok, %{system_identifier:,
+  database:, database_oid:}}`, or `{:error, :missing | :malformed | :legacy}`
+  — `:legacy` for a sidecar written before identities were recorded.
+  """
+  def source(path) do
+    with {:ok, recorded} <- sidecar(path) do
+      case recorded do
+        %{"source" => %{"system_identifier" => id, "database" => db, "database_oid" => oid}}
+        when is_binary(id) and id != "" and is_binary(db) and is_integer(oid) ->
+          {:ok, %{system_identifier: id, database: db, database_oid: oid}}
+
+        %{"source" => _} ->
+          {:error, :malformed}
+
+        _legacy ->
+          {:error, :legacy}
+      end
+    end
+  end
+
+  @doc "The sidecar's decoded JSON, or `{:error, :missing | :malformed}`."
+  def sidecar(path) do
+    case File.read(sidecar_path(path)) do
+      {:ok, json} ->
+        case Jason.decode(json) do
+          {:ok, %{} = recorded} -> {:ok, recorded}
+          _ -> {:error, :malformed}
+        end
+
+      {:error, _} ->
+        {:error, :missing}
+    end
+  end
+
+  @doc "A dump's size and SHA-256, as the sidecar records them."
+  def fingerprint(path) do
+    hash =
+      path
+      |> File.stream!(4 * 1024 * 1024)
+      |> Enum.reduce(:crypto.hash_init(:sha256), &:crypto.hash_update(&2, &1))
+
+    %{
+      "bytes" => File.stat!(path).size,
+      "sha256" => hash |> :crypto.hash_final() |> Base.encode16(case: :lower)
+    }
+  end
+
+  @doc "The database name a custom-format dump's own header records, or nil."
+  def archive_database(path) do
+    binary = System.find_executable("pg_restore") || raise "pg_restore is not on PATH"
+
+    case System.cmd(binary, ["--list", path], stderr_to_stdout: true) do
+      {output, 0} ->
+        case Regex.run(~r/^;\s+dbname: (.+)$/m, output) do
+          [_, name] -> String.trim(name)
+          nil -> nil
+        end
+
+      _ ->
+        nil
+    end
+  end
+
+  @doc """
+  Whether a recorded source and a target identity are the same database:
+  the same cluster, and the same name or the same oid.
+  """
+  def same_database?(%{system_identifier: id} = source, %{system_identifier: id} = target) do
+    source.database == target.database or
+      (is_integer(source.database_oid) and source.database_oid == target.database_oid)
+  end
+
+  def same_database?(_source, _target), do: false
+
+  @doc """
+  `:ok` if `path` may be restored over `config[:database]`, or `{:error,
+  message}`. Reads, never writes; `restore!/3` calls it before dropping
+  anything. See "Where a snapshot came from" above.
+  """
+  def check_restore(config, path) do
+    config = resolve(config)
+
+    with :ok <- followable(config),
+         :ok <- exists(path),
+         {:ok, target} <- target_identity(config) do
+      case source(path) do
+        {:ok, source} ->
+          with :ok <- bound(path, source), do: not_the_source(path, source, target)
+
+        # Nothing to drop, so nothing a wrong guess could destroy.
+        {:error, reason} when reason in [:missing, :legacy] and is_nil(target.database_oid) ->
+          :ok
+
+        {:error, reason} ->
+          {:error, untrusted(path, reason, target)}
+      end
+    end
+  end
+
+  defp not_the_source(path, source, target) do
+    if same_database?(source, target),
+      do:
+        {:error,
+         "refusing to restore #{path} over #{target.database}: it is the database this snapshot " <>
+           "was taken from (cluster #{target.system_identifier}). Restore into a separate database " <>
+           "(docs/routing/recovery.md), verify it, and switch over deliberately."},
+      else: :ok
+  end
+
+  defp untrusted(path, :malformed, _target),
+    do:
+      "refusing to restore #{path}: its sidecar is malformed, so where it was taken from " <>
+        "cannot be established. Take the snapshot again with `mix dd.snapshot`."
+
+  defp untrusted(path, reason, target),
+    do:
+      "refusing to restore #{path} over #{target.database}: its sidecar is #{reason}, so where " <>
+        "it was taken from cannot be established. Take the snapshot again with `mix dd.snapshot`, " <>
+        "or restore it into a database that does not exist yet."
+
+  defp exists(path) do
+    if File.regular?(path), do: :ok, else: {:error, "no such snapshot: #{path}"}
+  end
+
+  defp bound(path, source) do
+    {:ok, recorded} = sidecar(path)
+
+    cond do
+      recorded["dump"] != fingerprint(path) ->
+        {:error,
+         "refusing to restore #{path}: it is not the dump its sidecar describes (size or SHA-256 differ)"}
+
+      archive_database(path) != source.database ->
+        {:error,
+         "refusing to restore #{path}: its header names #{inspect(archive_database(path))}, " <>
+           "but its sidecar records #{source.database}"}
+
+      true ->
+        :ok
+    end
+  end
+
+  defp target_identity(config) do
+    case database_identity(config) do
+      {:ok, target} ->
+        {:ok, target}
+
+      {:error, reason} ->
+        {:error,
+         "refusing to restore over #{config[:database]}: the target server's identity cannot " <>
+           "be read (#{reason})"}
+    end
+  end
+
+  # The same endpoint the `pg_*` tools use (`connection_args/1`), pointed at
+  # the maintenance database.
+  @doc false
+  def maintenance(config) do
+    config
+    |> Keyword.take([
+      :hostname,
+      :port,
+      :username,
+      :password,
+      :socket_dir,
+      :ssl,
+      :ssl_opts,
+      :parameters,
+      :connect_timeout
+    ])
+    |> Keyword.put(:database, config[:maintenance_database] || "postgres")
+  end
+
+  # Runs `fun` on a connection in a process of its own, so that a server that
+  # cannot be reached is an error returned, not an exit that takes the caller
+  # down with it. `Installation.Database` asks its catalog questions this way.
+  @doc false
+  def probe(connection, fun, timeout \\ 30_000) do
+    {:ok, _apps} = Application.ensure_all_started(:postgrex)
+    parent = self()
+    ref = make_ref()
+
+    {pid, monitor} =
+      spawn_monitor(fn ->
+        Process.flag(:trap_exit, true)
+
+        result =
+          case Postgrex.start_link(connection ++ [backoff_type: :stop, sync_connect: true]) do
+            {:ok, conn} ->
+              try do
+                {:ok, fun.(conn)}
+              rescue
+                error -> {:error, Exception.message(error)}
+              after
+                GenServer.stop(conn)
+              end
+
+            {:error, error} ->
+              {:error, Exception.message(error)}
+          end
+
+        send(parent, {ref, result})
+      end)
+
+    receive do
+      {^ref, result} ->
+        Process.demonitor(monitor, [:flush])
+        result
+
+      {:DOWN, ^monitor, :process, _pid, reason} ->
+        {:error, inspect(reason)}
+    after
+      timeout ->
+        Process.exit(pid, :kill)
+        {:error, "no answer within #{div(timeout, 1000)} s"}
     end
   end
 
@@ -30,6 +368,9 @@ defmodule DevilsDictionary.Snapshot do
   """
   def dump!(config, path, opts \\ []) do
     config = resolve(config)
+
+    with {:error, message} <- followable(config), do: raise(ArgumentError, message)
+
     File.mkdir_p!(Path.dirname(path))
     snapshot = if opts[:snapshot], do: ["--snapshot=#{opts[:snapshot]}"], else: []
 
@@ -61,7 +402,12 @@ defmodule DevilsDictionary.Snapshot do
   """
   def restore!(config, path, jobs \\ 4) do
     config = resolve(config)
-    unless File.exists?(path), do: raise(ArgumentError, "no such snapshot: #{path}")
+
+    # Before anything is dropped.
+    case check_restore(config, path) do
+      :ok -> :ok
+      {:error, message} -> raise ArgumentError, message
+    end
 
     case Ecto.Adapters.Postgres.storage_down(config) do
       :ok -> :ok
@@ -97,10 +443,14 @@ defmodule DevilsDictionary.Snapshot do
     end
   end
 
-  defp connection_args(config) do
+  # The endpoint Postgrex uses for the same config: a Unix socket directory
+  # when one is configured, otherwise the host. `database_identity/1` checks
+  # the server over exactly this endpoint before a restore.
+  @doc false
+  def connection_args(config) do
     [
-      "--host=#{config[:hostname] || "localhost"}",
-      "--port=#{config[:port] || 5432}",
+      "--host=#{config[:socket_dir] || config[:hostname]}",
+      "--port=#{config[:port]}",
       "--username=#{config[:username] || "postgres"}"
     ]
   end

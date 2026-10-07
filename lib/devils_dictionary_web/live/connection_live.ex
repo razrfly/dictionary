@@ -37,8 +37,10 @@ defmodule DevilsDictionaryWeb.ConnectionLive do
   alias DevilsDictionary.Claims.{Connection, Contributions}
   alias DevilsDictionary.{Artworks, Encyclopedia, Lexicon, Markdown, Registry, Repo}
   alias DevilsDictionary.Discovery.{Mapping, Result, Run}
+  alias DevilsDictionary.Routing.Links
 
-  on_mount {DevilsDictionaryWeb.UserAuth, :mount_current_scope}
+  # The current scope, and the reading mode its subject links are made in.
+  on_mount DevilsDictionaryWeb.ReadingMode
 
   @results 8
 
@@ -979,9 +981,9 @@ defmodule DevilsDictionaryWeb.ConnectionLive do
           <header id="connection-header">
             <.eyebrow>connection</.eyebrow>
             <p class="mt-2 text-2xl/9">
-              <.endpoint_link endpoint={@connection.subject} />
+              <.endpoint_link endpoint={@connection.subject} mode={@reading_mode} />
               <span class="text-mist-500">— {@connection.predicate.forward_label} →</span>
-              <.endpoint_link endpoint={@connection.object} />
+              <.endpoint_link endpoint={@connection.object} mode={@reading_mode} />
             </p>
             <p class="mt-2 text-sm/7 text-mist-500">
               Claim #{@connection.assertion.id} · revision {@connection.revision.revision_number}
@@ -1299,12 +1301,21 @@ defmodule DevilsDictionaryWeb.ConnectionLive do
   defp target_label(%{source_record_revision_id: id}), do: "source record revision #{id}"
 
   attr :endpoint, :map, default: nil
+  attr :mode, :atom, default: :public
 
-  defp endpoint_link(assigns) do
+  # A subject end links through the one link helper, in the reading mode.
+  defp endpoint_link(%{endpoint: %{kind: :entity, object_id: id, label: label}} = assigns),
+    do: assigns |> assign(:path, Links.path(id, label, assigns.mode)) |> endpoint_link_html()
+
+  defp endpoint_link(assigns),
+    do:
+      assigns |> assign(:path, assigns.endpoint && assigns.endpoint.path) |> endpoint_link_html()
+
+  defp endpoint_link_html(assigns) do
     ~H"""
     <span :if={@endpoint == nil}>—</span>
-    <.a :if={@endpoint && @endpoint.path} navigate={@endpoint.path}>{@endpoint.label}</.a>
-    <span :if={@endpoint && is_nil(@endpoint.path)}>{@endpoint.label}</span>
+    <.a :if={@endpoint && @path} navigate={@path}>{@endpoint.label}</.a>
+    <span :if={@endpoint && is_nil(@path)}>{@endpoint.label}</span>
     """
   end
 

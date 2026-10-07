@@ -43,12 +43,13 @@ defmodule DevilsDictionaryWeb.Word do
   attr :thing, :map, default: nil
   attr :thing_info, :string, default: nil
   attr :demo, :boolean, default: false
+  attr :class, :string, default: nil
 
   def headword(assigns) do
     assigns = assign(assigns, :other, Map.new(assigns.choices, &{&1.object_id, &1}))
 
     ~H"""
-    <div id="headword">
+    <div id="headword" class={@class}>
       <h1 class="font-display text-5xl/none text-mist-950 sm:text-6xl/none dark:text-white">
         {@headword.lemma}
       </h1>
@@ -288,6 +289,7 @@ defmodule DevilsDictionaryWeb.Word do
   attr :trail, :list, default: []
   attr :info, :string, default: nil
   attr :demo, :boolean, default: false
+  attr :mode, :atom, default: :public, doc: "the reading mode, for subject links"
 
   def source_card(assigns) do
     assigns = assign(assigns, :sample?, Map.get(assigns.card, :sample?, false))
@@ -334,7 +336,7 @@ defmodule DevilsDictionaryWeb.Word do
           <.link
             :for={author <- Map.get(entry, :authors, [])}
             id={"#{@card.id}-author-#{author.id}"}
-            navigate={"/entities/#{author.id}/#{DevilsDictionary.Claims.Connection.slugify(author.label)}"}
+            navigate={DevilsDictionary.Routing.Links.path(author.id, author.label, @mode)}
             class="mr-2 underline underline-offset-4 hover:text-amber-700"
           >
             {author.label}
@@ -376,10 +378,20 @@ defmodule DevilsDictionaryWeb.Word do
   attr :class, :string, default: nil
   attr :demo, :boolean, default: false
 
+  attr :subjects, :map,
+    default: nil,
+    doc: "the Subjects section's cards (#219), counted here with a way down to them"
+
+  attr :headword, :boolean,
+    default: true,
+    doc:
+      "whether the rail opens with the headword; `WordLive` renders it on its own, before a curated opening, when there is one (#156)"
+
   def rail(assigns) do
     ~H"""
     <aside id="word-rail" class={@class}>
       <.headword
+        :if={@headword}
         headword={@page.headword}
         choices={@choices}
         thing={@page.thing}
@@ -387,6 +399,7 @@ defmodule DevilsDictionaryWeb.Word do
         demo={@demo}
       />
       <.stats page={@page} sources={@sources} />
+      <.subjects_link :if={@subjects} subjects={@subjects} />
 
       <%!-- On screen, not behind a summary (#133 R5). The Wikimedia A/B #131
            read says ~60% of readers never expand a collapsed section, and the
@@ -526,6 +539,43 @@ defmodule DevilsDictionaryWeb.Word do
     """
   end
 
+  attr :subjects, :map, required: true
+
+  # The Subjects section sits low on a long page, after the definitions and
+  # the culture; the rail says how many there are and takes the reader there.
+  defp subjects_link(assigns) do
+    cards =
+      Enum.reject(assigns.subjects.curated, &match?({:withheld, _}, &1)) ++
+        assigns.subjects.discovered
+
+    assigns =
+      assigns
+      |> assign(:count, length(cards))
+      |> assign(:addressed, Enum.count(cards, &(&1.state == :addressed)))
+
+    ~H"""
+    <a
+      :if={@count > 0}
+      id="rail-subjects"
+      href="#subjects"
+      class="mt-2 flex min-h-11 items-center justify-between gap-4 rounded-xl bg-mist-950/2.5 p-4 hover:bg-mist-950/5 dark:bg-white/5 dark:hover:bg-white/10"
+    >
+      <span class="flex items-baseline gap-2">
+        <span class="text-2xl/8 tracking-tight tabular-nums text-mist-950 dark:text-white">
+          {@count}
+        </span>
+        <span class="text-base/6 text-mist-700 sm:text-sm/6 dark:text-mist-400">
+          {if @count == 1, do: "subject", else: "subjects"}
+        </span>
+      </span>
+      <span class="flex items-center gap-1 text-base/6 text-mist-500 sm:text-sm/6">
+        <span class="tabular-nums">{@addressed}</span>
+        at their own address <.icon name="hero-arrow-down-mini" class="size-4 shrink-0" />
+      </span>
+    </a>
+    """
+  end
+
   @doc "The forms the headword shows inline, and the disclosure holding the rest."
   attr :forms, :list, default: []
 
@@ -647,6 +697,7 @@ defmodule DevilsDictionaryWeb.Word do
   attr :trail, :list, default: []
   attr :info, :string, default: nil
   attr :demo, :boolean, default: false
+  attr :mode, :atom, default: :public, doc: "the reading mode, for subject links"
 
   def source_row(assigns) do
     assigns = assign(assigns, :sample?, Map.get(assigns.card, :sample?, false))
@@ -719,6 +770,7 @@ defmodule DevilsDictionaryWeb.Word do
           :for={{entry, i} <- Enum.with_index(@card.entries)}
           id={"#{@card.id}-entry-#{i}"}
           entry={entry}
+          mode={@mode}
         />
 
         <.sense_group
@@ -800,6 +852,7 @@ defmodule DevilsDictionaryWeb.Word do
   @doc "One prose entry: its opening, and the disclosure holding the rest of the original."
   attr :id, :string, required: true
   attr :entry, :map, required: true
+  attr :mode, :atom, default: :public, doc: "the reading mode, for subject links"
 
   def entry(assigns) do
     ~H"""
@@ -823,7 +876,7 @@ defmodule DevilsDictionaryWeb.Word do
         <.link
           :for={author <- Map.get(@entry, :authors, [])}
           id={"#{@id}-author-#{author.id}"}
-          navigate={"/entities/#{author.id}/#{DevilsDictionary.Claims.Connection.slugify(author.label)}"}
+          navigate={DevilsDictionary.Routing.Links.path(author.id, author.label, @mode)}
           class="mr-2 underline underline-offset-4 hover:text-amber-700"
         >
           {author.label}
@@ -1290,15 +1343,20 @@ defmodule DevilsDictionaryWeb.Word do
   end
 
   @doc """
-  The path that opens the ⓘ drawer for `ref` — the same word, the same trail,
+  The path that opens the ⓘ drawer for `ref` — the same page, the same trail,
   one parameter more — or closes it when `ref` is `nil`.
 
-  The slug is the one in the address bar rather than the canonical one: a
-  reader who typed *oysters* stays on *oysters*, keeps the *redirected from*
-  line, and gets a URL that reproduces exactly what they are looking at.
+  `base` is the page's own path, as it is in the address bar: `/on/oysters`
+  for a reader who typed *oysters* (who keeps the *redirected from* line), and
+  `/words/:id/:slug` for an exact word, whose identity a drawer must keep
+  through a reload (ADR 0004 §4). The URL reproduces exactly what the reader
+  is looking at.
   """
-  def info_path(slug, trail, ref \\ nil, demo? \\ false) do
-    trail |> query(demo?, ref) |> to_path(slug)
+  def info_path(base, trail, ref \\ nil, demo? \\ false) do
+    case query(trail, demo?, ref) do
+      [] -> base
+      query -> base <> "?" <> URI.encode_query(query)
+    end
   end
 
   # `?demo=1` rides along with the trail rather than being dropped at the first
@@ -1313,6 +1371,6 @@ defmodule DevilsDictionaryWeb.Word do
     |> Enum.reject(fn {_k, v} -> v in [nil, false, ""] end)
   end
 
-  defp to_path([], slug), do: ~p"/define/#{slug}"
-  defp to_path(query, slug), do: ~p"/define/#{slug}?#{query}"
+  defp to_path([], slug), do: ~p"/on/#{slug}"
+  defp to_path(query, slug), do: ~p"/on/#{slug}?#{query}"
 end

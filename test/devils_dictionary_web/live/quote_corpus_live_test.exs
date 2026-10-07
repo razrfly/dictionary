@@ -39,7 +39,7 @@ defmodule DevilsDictionaryWeb.QuoteCorpusLiveTest do
 
   test "the corpus is on the page it was filed under, held locally and verified", ctx do
     voltaire_page!(ctx)
-    {:ok, live, _html} = live(ctx.conn, ~p"/define/voltaire")
+    {:ok, live, _html} = live(ctx.conn, ~p"/on/voltaire")
 
     assert has_element?(live, "#culture-filter-quote")
     assert has_element?(live, "#culture-band-quote-aristocracy", "Public domain")
@@ -76,7 +76,7 @@ defmodule DevilsDictionaryWeb.QuoteCorpusLiveTest do
 
   test "a page whose senses refer to nothing the corpus filed has no Quotes shelf", ctx do
     word!(ctx, "garden", ~w(wordnet))
-    {:ok, live, _html} = live(ctx.conn, ~p"/define/garden")
+    {:ok, live, _html} = live(ctx.conn, ~p"/on/garden")
 
     refute has_element?(live, "#culture-filter-quote")
     refute has_element?(live, ~s([id^="culture-held-"]))
@@ -87,7 +87,7 @@ defmodule DevilsDictionaryWeb.QuoteCorpusLiveTest do
     row = hd(@manifest["rows"])
     id = Registry.by_external_id("quotation_fingerprint", row["fingerprint"])
     {:ok, _} = Registry.retire(id, reason: "audit withdrawn content")
-    {:ok, view, _} = live(ctx.conn, ~p"/define/voltaire")
+    {:ok, view, _} = live(ctx.conn, ~p"/on/voltaire")
     refute has_element?(view, "#culture-quote-#{row["fingerprint"]}")
   end
 

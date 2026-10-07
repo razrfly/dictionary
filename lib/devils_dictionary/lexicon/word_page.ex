@@ -1,6 +1,7 @@
 defmodule DevilsDictionary.Lexicon.WordPage do
   @moduledoc """
-  Everything `/define/:slug` renders, assembled in one round of queries.
+  Everything a word page (`/on/:slug`, `/words/:id/:slug`) renders from the
+  lexicon, assembled in one round of queries.
 
   Issue #71 §7 and §8a.4: the templates do no logic. `build/2` takes what
   `Lexicon.lookup/2` resolved and returns a `%WordPage{}` whose every field is
@@ -257,7 +258,7 @@ defmodule DevilsDictionary.Lexicon.WordPage do
   which exemplars the examples section reads (#181 build 2).
 
   `opts[:trail]` is a list of slugs already walked. A lookup that found nothing
-  still returns a struct — `/define/zzzz` is a page that says *no such word*,
+  still returns a struct — `/on/zzzz` is a page that says *no such word*,
   never a raise, because X1 renders 200 random index rows and the index is
   mostly bare.
   """
@@ -384,6 +385,9 @@ defmodule DevilsDictionary.Lexicon.WordPage do
         |> Enum.map(fn l ->
           %{
             id: l.object_id,
+            # Each word's own spelling, which the On page's name matching reads
+            # (#219): the headword's lemma is only the first of them.
+            lemma: l.lemma,
             language: l.language_tag,
             pos: l.part_of_speech,
             etymology: l.etymology,
@@ -849,6 +853,7 @@ defmodule DevilsDictionary.Lexicon.WordPage do
           url: cr.canonical_url,
           thumbnail_url: fragment("? ->> 'thumbnail_url'", cr.metadata),
           year: cr.year,
+          revision_id: cr.id,
           record_id: rec.id,
           record_url: rec.url
         }
@@ -1022,7 +1027,12 @@ defmodule DevilsDictionary.Lexicon.WordPage do
                 marker: e.pos,
                 year: e.year,
                 url: link_out(e, source, nil, concept),
-                record_id: e.record_id
+                record_id: e.record_id,
+                # The durable identity and the exact revision the text came
+                # from, so a curated opening can say which entry on this page
+                # it quotes (#156) without matching on its words.
+                content_id: e.id,
+                content_revision_id: e.revision_id
               })
             end),
           groups: [],
@@ -1176,7 +1186,16 @@ defmodule DevilsDictionary.Lexicon.WordPage do
   # `provenance` is *plausible* for every line: one cited claim, unverified,
   # which is exactly what an absorbed example is until build 5's verifier has
   # checked it against a primary text. Derived here and stored nowhere.
-  defp quotations(examples) when is_list(examples) do
+  @doc """
+  A sense revision's `examples` as the quotations the page shows under it:
+  `%{shown, rest, total}`, each line carrying its `text`, `ref`, `citation`,
+  `fingerprint` and `provenance`.
+
+  Public so a curated opening (#156) that highlights one of these lines finds
+  it by the same rule and fingerprint the sense row uses, rather than by a
+  second reading of the column that could disagree with the first.
+  """
+  def quotations(examples) when is_list(examples) do
     lines =
       examples
       |> Enum.filter(&quotation?/1)
@@ -1196,7 +1215,7 @@ defmodule DevilsDictionary.Lexicon.WordPage do
     %{shown: shown, rest: rest, total: length(lines)}
   end
 
-  defp quotations(_examples), do: %{shown: [], rest: [], total: 0}
+  def quotations(_examples), do: %{shown: [], rest: [], total: 0}
 
   defp quotation?(%{"type" => "quotation", "text" => text, "ref" => ref})
        when is_binary(text) and is_binary(ref),

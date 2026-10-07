@@ -418,6 +418,55 @@ defmodule DevilsDictionary.Absorb.BatchTest do
       assert state("b") == :active
     end
 
+    test "a creator a mint recorded on the record is not the run's to retire", ctx do
+      publish(ctx.source, [{"a", "Money; profit."}])
+      Batch.run(FakeSource, ctx.source)
+
+      # `SourceIdentity.Creators` records a mint as the record's `entity`
+      # output under the bare QID, unstamped; beside it, an output of the
+      # materializer's own kind that the next run no longer emits.
+      record =
+        Repo.get_by!(Sources.SourceRecord, source_id: ctx.source.id, external_id: "bank/noun")
+
+      {:ok, creator} =
+        DevilsDictionary.Registry.create_person(%{preferred_label: "A minted creator"})
+
+      now = DateTime.utc_now()
+
+      output = fn key, run_id ->
+        %{
+          source_record_id: record.id,
+          output_role: "entity",
+          output_key: key,
+          output_object_id: creator.object_id,
+          last_seen_run_id: run_id,
+          inserted_at: now,
+          updated_at: now
+        }
+      end
+
+      earlier = Repo.one!(from r in ImportRun, where: r.task == "materialize", select: max(r.id))
+
+      Repo.insert_all("source_materialized_outputs", [
+        output.("Q424242", nil),
+        output.("source_identity:wikidata:Q424242", earlier)
+      ])
+
+      Batch.run(FakeSource, ctx.source, only_stale: false)
+
+      retired = fn key ->
+        Repo.one!(
+          from o in "source_materialized_outputs",
+            where: o.source_record_id == ^record.id and o.output_key == ^key,
+            select: not is_nil(o.retired_at)
+        )
+      end
+
+      refute retired.("Q424242")
+      assert retired.("source_identity:wikidata:Q424242")
+      assert state("a") == :active
+    end
+
     test "a withdrawn pending edge cannot be resurrected by a later resolver run", ctx do
       # The target deliberately does not exist on the first pass, so the edge
       # waits. A later observation of the same record removes the edge before

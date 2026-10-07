@@ -81,6 +81,9 @@ defmodule DevilsDictionary.Absorb.Materializer do
   # ~16 columns, so 2,000 leaves plenty of headroom.
   @chunk 2_000
 
+  # `dispositions` are not rows: they are what a source says about a record it
+  # deliberately wrote nothing for — `%{kind: :verifier_cache | :label_missing,
+  # key: external_id}` — counted per run so no record passes unreported.
   @empty %{
     lexemes: [],
     senses: [],
@@ -88,7 +91,8 @@ defmodule DevilsDictionary.Absorb.Materializer do
     relations: [],
     concepts: [],
     links: [],
-    concept_relations: []
+    concept_relations: [],
+    dispositions: []
   }
 
   @doc "The shape `materialize/1` may return. A source emits only the kinds it has."
@@ -1702,6 +1706,11 @@ defmodule DevilsDictionary.Absorb.Materializer do
 
   Scoped to the records the run actually visited: a scoped import that touched
   200 records must not retire the other 340,000.
+
+  And never another writer's output on those records. A creator minted from
+  its Wikidata record (`SourceIdentity.Creators.minted_output/0`) is recorded
+  there as that mint's own output, which no materializer emits; the first
+  materialization of the record leaves it as it is.
   """
   def reconcile(run_id, record_ids) when is_integer(run_id) do
     now = DateTime.utc_now()
@@ -1721,12 +1730,7 @@ defmodule DevilsDictionary.Absorb.Materializer do
       )
 
     stale_outputs =
-      from(o in "source_materialized_outputs",
-        where: o.source_record_id in ^record_ids,
-        where: is_nil(o.retired_at),
-        where: is_nil(o.last_seen_run_id) or o.last_seen_run_id != ^run_id,
-        select: {o.output_role, o.output_object_id}
-      )
+      from(o in stale_outputs(record_ids, run_id), select: {o.output_role, o.output_object_id})
       |> Repo.all()
 
     {senses, content} =
@@ -1745,14 +1749,7 @@ defmodule DevilsDictionary.Absorb.Materializer do
       Claims.withdraw(assertion_id, reason: "no longer emitted by its source")
     end
 
-    Repo.update_all(
-      from(o in "source_materialized_outputs",
-        where: o.source_record_id in ^record_ids,
-        where: is_nil(o.retired_at),
-        where: is_nil(o.last_seen_run_id) or o.last_seen_run_id != ^run_id
-      ),
-      set: [retired_at: now, updated_at: now]
-    )
+    Repo.update_all(stale_outputs(record_ids, run_id), set: [retired_at: now, updated_at: now])
 
     Repo.update_all(
       from(o in "source_assertion_outputs",
@@ -1777,6 +1774,21 @@ defmodule DevilsDictionary.Absorb.Materializer do
       assertions: length(stale_assertions),
       pending_relations: stale_pending
     }
+  end
+
+  # The visited records' live outputs this run did not re-stamp — except one
+  # another writer owns on the same records: the creator a mint recorded on
+  # its Wikidata record (`SourceIdentity.Creators.minted_output/0`). No
+  # materializer emits it, so its going unstamped withdraws nothing.
+  defp stale_outputs(record_ids, run_id) do
+    %{role: role, key_pattern: pattern} = SourceIdentity.Creators.minted_output()
+
+    from(o in "source_materialized_outputs",
+      where: o.source_record_id in ^record_ids,
+      where: is_nil(o.retired_at),
+      where: is_nil(o.last_seen_run_id) or o.last_seen_run_id != ^run_id,
+      where: not (o.output_role == ^role and fragment("? ~ ?", o.output_key, ^pattern))
+    )
   end
 
   # The objects among these that no unretired output still points at.
@@ -1910,7 +1922,10 @@ defmodule DevilsDictionary.Absorb.Materializer do
       concept_relations_skipped_parent_taxon: changes.concept_relations.skipped_parent_taxon,
       concept_relations_skipped_unchased: changes.concept_relations.skipped_unchased,
       relations_offered: changes.relations.offered,
-      concept_relations_offered: length(merged.concept_relations)
+      concept_relations_offered: length(merged.concept_relations),
+      dispositions:
+        merged.dispositions
+        |> Enum.frequencies_by(&to_string(&1.kind))
     }
   end
 end

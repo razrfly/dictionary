@@ -11,13 +11,22 @@ defmodule DevilsDictionaryWeb.Artwork do
 
   use DevilsDictionaryWeb, :html
 
-  alias DevilsDictionary.Claims.Connection
+  alias DevilsDictionary.Routing.Links
 
   attr :artwork, :map, required: true
   attr :connect, :boolean, default: false
   attr :id, :string, required: true
+  attr :mode, :atom, default: :public, doc: "the reading mode, for subject links"
 
   def card(assigns) do
+    # A page of cards batches its links (`paths/2`); a card alone asks once.
+    assigns =
+      assign(
+        assigns,
+        :paths,
+        Map.get(assigns.artwork, :paths) || paths([assigns.artwork], assigns.mode)
+      )
+
     ~H"""
     <article
       id={@id}
@@ -25,7 +34,7 @@ defmodule DevilsDictionaryWeb.Artwork do
     >
       <.link
         id={"#{@id}-image"}
-        navigate={entity_path(@artwork)}
+        navigate={@paths[@artwork.object_id]}
         phx-hook="ArtworkImage"
         phx-update="ignore"
         data-image-state={if(@artwork.image_url, do: "loading", else: "empty")}
@@ -52,7 +61,7 @@ defmodule DevilsDictionaryWeb.Artwork do
 
       <div class="min-w-0">
         <.link
-          navigate={entity_path(@artwork)}
+          navigate={@paths[@artwork.object_id]}
           class="font-display text-xl text-balance text-mist-950 underline-offset-4 group-hover:underline dark:text-white"
         >
           {@artwork.title}
@@ -61,7 +70,7 @@ defmodule DevilsDictionaryWeb.Artwork do
           by
           <span :for={{creator, index} <- Enum.with_index(@artwork.creators)}>
             <span :if={index > 0}>, </span><.link
-              navigate={creator_path(creator)}
+              navigate={@paths[creator.object_id]}
               class="hover:underline"
             >{creator.label}</.link>
           </span>
@@ -99,7 +108,10 @@ defmodule DevilsDictionaryWeb.Artwork do
         </p>
 
         <div class="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-sm/6">
-          <.link navigate={entity_path(@artwork)} class="font-medium underline underline-offset-4">Open work</.link>
+          <.link
+            navigate={@paths[@artwork.object_id]}
+            class="font-medium underline underline-offset-4"
+          >Open work</.link>
           <.link
             :if={@connect}
             navigate={~p"/connect?subject=#{@artwork.object_id}"}
@@ -120,9 +132,19 @@ defmodule DevilsDictionaryWeb.Artwork do
     """
   end
 
-  defp entity_path(artwork),
-    do: ~p"/entities/#{artwork.object_id}/#{Connection.slugify(artwork.title)}"
+  # Every subject link goes through the one helper (#219): the address in the
+  # reading mode, or the exact-identity route.
 
-  defp creator_path(creator),
-    do: ~p"/entities/#{creator.object_id}/#{Connection.slugify(creator.label)}"
+  @doc """
+  Every link a set of cards needs, the works and their creators, in one
+  resolver read: `%{object_id => path}`.
+  """
+  def paths(artworks, mode) do
+    artworks
+    |> Enum.flat_map(fn artwork ->
+      [{artwork.object_id, artwork.title} | Enum.map(artwork.creators, &{&1.object_id, &1.label})]
+    end)
+    |> Enum.uniq_by(&elem(&1, 0))
+    |> Links.paths(mode)
+  end
 end

@@ -102,12 +102,12 @@ These refine the ADR without changing it. Each is conservative and reversible by
 4. **One page per target and locale, ever.** A retired or merged page keeps its target. A new treatment of the same object in the same locale is a rollback or a new locale, not a second page.
 5. **Split pages keep their address.** The split page becomes a choice at its own canonical rather than a new page, and records its successors as a revision.
 6. **Nothing reserved is ever released.** An undone allocation or move leaves its path as an alias of its page. That alias is a redirect where the page keeps a canonical and unavailable where it has none, and the page can reclaim it.
-7. **A refusal never rolls back the caller.** This lets Stage 2 batch allocations inside one transaction and record per-record refusals.
+7. **A refusal never rolls back the caller.** This lets Stage 2 batch allocations inside one transaction and record per-record refusals. A caller that writes something before asking the ledger — the backfill writes a reviewer's override first — undoes it on a refusal with its own savepoint ([backfill](stage-2/backfill.md)); a nested `Repo.transaction/1` cannot, because its rollback aborts the caller's whole transaction.
 8. **A tombstone returns only by a human decision.** Allocation, including a batch's, can create a path or reclaim an owned alias. A tombstone records a deliberate removal, so it comes back only through `restore/3` or a rollback. Both are human operations, enforced in the database.
 
 ## Curation-composition binding (recorded; migration deferred)
 
-[Curation persistence (#196)](https://github.com/razrfly/dictionary/issues/196) owns `editorial_compositions`, their immutable versions and items, and human presentation approval. Those tables do **not** exist on main, so Stage 1 creates no binding table and no placeholder composition table. When #196 lands, one additive migration adds:
+[Curation persistence (#196)](https://github.com/razrfly/dictionary/issues/196) owns `editorial_compositions`, their immutable versions and items, and human presentation approval. Those tables did not exist when Stage 1 was built, so Stage 1 created no binding table and no placeholder composition table. [#206](https://github.com/razrfly/dictionary/pull/206) (merged 27 September 2026) has since created the composition schema. The binding itself is still unwritten: it belongs with curated On pages (Stage 4), as one additive migration with real foreign keys, adding:
 
 | Column | Rule |
 |---|---|
@@ -132,12 +132,12 @@ Registry ids exist only in the database, and a rebuild from sources renumbers ev
 1. Quiesce and snapshot the source.
 2. Restore into an isolated database.
 3. Verify with `mix dd.routing.verify`: every column of every table by exact id (Oban's queues apart), the schema's definitions, resolutions and sequences.
-4. Re-project the copy from its own records in any provider order (`mix dd.materialize --all`, and `mix dd.replay` from an archive exported from the copy), and verify again.
+4. Re-project the copy from its own records in any provider order (`mix dd.materialize --all --resolve`, and `mix dd.replay` from an archive exported from the copy), and verify again.
 5. Exercise the ledger and resolver.
 
 `RecoveryTest` runs these steps end to end against disposable databases, re-projecting with the providers reversed.
 
-`mix dd.reset`, `mix dd.snapshot --restore`, `mix dd.rebuild` and `mix ecto.drop` refuse a database holding routing state unless given a snapshot of that same database whose recorded routing digest still matches. `mix dd.snapshot` computes the digest inside the exported snapshot it dumps, so it describes exactly the dumped rows. It also records the dump's size and SHA-256, so the sidecar vouches only for that file. Rolling the routing migration back refuses while any routing row exists. The procedure has not yet been run on the development corpus; that is Stage 2's first gate.
+`mix dd.reset`, `mix dd.snapshot --restore`, `mix dd.rebuild` and `mix ecto.drop` refuse a database holding routing state unless given a snapshot of that same database whose recorded routing digest still matches. `mix dd.snapshot` computes the digest inside the exported snapshot it dumps, so it describes exactly the dumped rows. It also records the dump's size and SHA-256, so the sidecar vouches only for that file. Rolling the routing migration back refuses while any routing row exists. "The same database" is decided by server identity (`system_identifier`, then the database's name or oid), so a restore also refuses the snapshot's own source, even one that predates routing. The procedure has since been rehearsed on copies of the development corpus, with the corpus only read: in the [Stage 2A rehearsal](stage-2/recovery-rehearsal.md) and again, with routing and curation state, in the [recovery repair](stage-2/recovery-repair.md). Stage 2's first gate stays open until the owner decides the [corpus catch-up](stage-2/corpus-catch-up.md).
 
 ## Independent review
 
@@ -275,7 +275,7 @@ Additive preservation of existing readers is shown by the unchanged full suite. 
 
 ## Known limits
 
-- **Recovery on the real corpus.** The procedure is tested on disposable databases built by the test. It has not been run against `devils_dictionary_v2`, and the manifest's running time at corpus scale is unmeasured. `mix dd.rebuild` still cannot preserve routing identity, and is guarded rather than changed. The guards are conservative (any routing change refuses) but not transactional: a write between the check and the drop is lost, so the procedure quiesces first. See the [recovery limits](recovery.md#limits).
+- **Recovery on the real corpus.** The procedure is tested on disposable databases built by the test, and rehearsed on copies of `devils_dictionary_v2` in a scratch cluster (Stage 2A and the recovery repair), with the source only read. At corpus scale a manifest takes about 70 s, a snapshot 80–89 s, a restore 76–164 s and an exact verification 67–95 s. Identities, routing history and curation approvals come through exactly, and re-projection completes for every provider, but the stored corpus is not yet a fixed point of today's materializers: the measured catch-up awaits the owner. It has not been run *on* `devils_dictionary_v2` itself. `mix dd.rebuild` still cannot preserve routing identity, and is guarded rather than changed. The guards are conservative (any routing change refuses) but not transactional: a write between the check and the drop is lost, so the procedure quiesces first. See the [recovery limits](recovery.md#limits).
 - **The migration was amended in place** while the branch was unmerged. A database migrated at an earlier head has the same version and older constraints. The recovery manifest's schema section reports it; no real routing state exists yet, so rolling back and re-migrating is safe.
 - **"Human" is an actor check.** The ledger and the database require a `user` actor for human-only operations. Code holding the application's database role could still write a row naming a `user` actor; separate roles would close that.
 - **Publication** has a column and resolver outcomes, but no transition, gate or manifest.
@@ -284,7 +284,7 @@ Additive preservation of existing readers is shown by the unchanged full suite. 
 - **Database roles.** The TRUNCATE refusal guards against accidents, including cascades. A session that sets the opt-in deliberately can still truncate, so production should also withhold TRUNCATE and trigger control from the application role.
 - **Slug characters.** The database enforces the slug's ASCII rules; a non-ASCII punctuation character written by raw SQL is caught only by `Routing.Address`.
 - **Scale.** Path lookups by page are indexed. Stage 2 should still measure allocation throughput and the commit-time checks on the real candidate population.
-- **Composition binding** waits for #196.
+- **Composition binding.** #206 created the composition schema; the binding migration comes with Stage 4.
 - **Test isolation.** The database-backed routing tests are synchronous, because a sandboxed test holds its advisory path locks and uncommitted paths for its whole transaction. Run them on a private `MIX_TEST_PARTITION`; the concurrency and committed-integrity tests commit for real.
 
 ## Acceptance matrix

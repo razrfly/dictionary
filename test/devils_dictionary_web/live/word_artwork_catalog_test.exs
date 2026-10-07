@@ -57,7 +57,7 @@ defmodule DevilsDictionaryWeb.WordArtworkCatalogTest do
     assert %{newly_created: 1} = seed_met!([%{"term" => "Soldiers", "qid" => "Q198"}])
     assert %{newly_created: 1} = seed_famous!([%{"term" => "war", "qid" => "Q198"}])
 
-    {:ok, view, html} = live(ctx.conn, ~p"/define/war")
+    {:ok, view, html} = live(ctx.conn, ~p"/on/war")
 
     # One shelf, both sources inside it, on the one reader surface (K2 of #109).
     # Two artwork sections on one page is the thing this is not allowed to
@@ -148,7 +148,7 @@ defmodule DevilsDictionaryWeb.WordArtworkCatalogTest do
       ])
       |> Seeder.run()
 
-    {:ok, view, html} = live(ctx.conn, ~p"/define/war")
+    {:ok, view, html} = live(ctx.conn, ~p"/on/war")
 
     met = fn id -> DevilsDictionary.Registry.by_external_id("met_object_id", id) end
     famous = fn qid -> DevilsDictionary.Registry.by_external_id("wikidata", qid) end
@@ -188,7 +188,7 @@ defmodule DevilsDictionaryWeb.WordArtworkCatalogTest do
 
     assert %{newly_created: 1} = seed_famous!([%{"term" => "love", "qid" => "Q316"}])
 
-    {:ok, view, _html} = live(ctx.conn, ~p"/define/love")
+    {:ok, view, _html} = live(ctx.conn, ~p"/on/love")
 
     assert has_element?(view, "#culture-filter-artwork", "Artworks")
 
@@ -214,7 +214,7 @@ defmodule DevilsDictionaryWeb.WordArtworkCatalogTest do
 
     assert %{newly_created: 1} = seed_famous!([%{"term" => "love", "qid" => "Q316"}])
 
-    {:ok, view, _html} = live(ctx.conn, ~p"/define/love")
+    {:ok, view, _html} = live(ctx.conn, ~p"/on/love")
 
     refute has_element?(view, "#culture-filter-artwork")
   end
@@ -231,7 +231,7 @@ defmodule DevilsDictionaryWeb.WordArtworkCatalogTest do
                %{"term" => "love", "qid" => "Q316"}
              ])
 
-    {:ok, view, _html} = live(ctx.conn, ~p"/define/war")
+    {:ok, view, _html} = live(ctx.conn, ~p"/on/war")
 
     assert has_element?(view, "#culture-filter-artwork")
     refute has_element?(view, "#culture-word-level-artwork")
@@ -244,7 +244,7 @@ defmodule DevilsDictionaryWeb.WordArtworkCatalogTest do
 
     assert %{newly_created: 1} = seed_famous!([%{"term" => "family", "qid" => "Q8436"}])
 
-    {:ok, view, _html} = live(ctx.conn, ~p"/define/family")
+    {:ok, view, _html} = live(ctx.conn, ~p"/on/family")
 
     refute has_element?(view, "#culture-filter-artwork")
     refute has_element?(view, "#culture-about-artwork-catalog")

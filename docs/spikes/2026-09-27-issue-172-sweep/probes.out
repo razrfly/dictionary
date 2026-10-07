@@ -1,0 +1,17 @@
+       w       | run_id | inserted_at | tier  |          recipe          | result_count |                        page                        | word_level_results 
+---------------+--------+-------------+-------+--------------------------+--------------+----------------------------------------------------+--------------------
+ bank          |        |             | sense |                          |              |                                                    |                  0
+ coward        |    238 | 2026-09-24  | sense | Q104605901 coward        |           12 | Cowardice (Q1401607) via ["P1552"] from Q104605901 |                  0
+ family        |        |             | sense |                          |              |                                                    |                  0
+ grief         |    263 | 2026-09-24  | sense | Q1026040 grief           |           12 | Grief (Q1026040)                                   |                  0
+ justice       |        |             | sense |                          |              |                                                    |                  0
+ love          |    264 | 2026-09-24  | sense | Q316 love                |           12 | Love (Q316)                                        |                  0
+ narcissism    |        |             | sense |                          |              |                                                    |                  0
+ nepotism      |        |             | sense |                          |              |                                                    |                  0
+ pop art       |        |             | sense |                          |              |                                                    |                  0
+ power         |    367 | 2026-09-27  | sense | Q911554 business magnate |            3 | Business magnate (Q911554)                         |                  0
+ situationship |        |             | sense |                          |              |                                                    |                  0
+ solitude      |        |             | sense |                          |              |                                                    |                  0
+ war           |    366 | 2026-09-27  | sense | Q198 War                 |           12 | War (Q198)                                         |                  0
+(13 rows)
+

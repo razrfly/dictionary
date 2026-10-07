@@ -65,7 +65,7 @@ defmodule DevilsDictionaryWeb.WordQuotationsTest do
     test "the words first and the citation second, both text and neither a link", ctx do
       %{conflict: conflict} = war!(ctx, [@sherman])
 
-      {:ok, live, _html} = live(ctx.conn, ~p"/define/war")
+      {:ok, live, _html} = live(ctx.conn, ~p"/on/war")
 
       card = card_id(conflict, @sherman)
       assert has_element?(live, "##{sense_id(conflict)}-quotations")
@@ -87,7 +87,7 @@ defmodule DevilsDictionaryWeb.WordQuotationsTest do
          ctx do
       %{conflict: conflict} = war!(ctx, [@sherman, @kjv])
 
-      {:ok, live, _html} = live(ctx.conn, ~p"/define/war")
+      {:ok, live, _html} = live(ctx.conn, ~p"/on/war")
 
       for example <- [@sherman, @kjv] do
         card = card_id(conflict, example)
@@ -108,7 +108,7 @@ defmodule DevilsDictionaryWeb.WordQuotationsTest do
          ctx do
       %{campaign: campaign} = war!(ctx, [@sherman])
 
-      {:ok, live, html} = live(ctx.conn, ~p"/define/war")
+      {:ok, live, html} = live(ctx.conn, ~p"/on/war")
 
       refute has_element?(live, "##{sense_id(campaign)}-quotations")
       refute html =~ "culture-quote-"
@@ -119,7 +119,7 @@ defmodule DevilsDictionaryWeb.WordQuotationsTest do
     test "a few show and the rest wait behind one disclosure that counts them", ctx do
       %{conflict: conflict} = war!(ctx, [@sherman, @kjv, @daniel, @life])
 
-      {:ok, live, _html} = live(ctx.conn, ~p"/define/war")
+      {:ok, live, _html} = live(ctx.conn, ~p"/on/war")
 
       more = "##{sense_id(conflict)}-quotations-more"
       assert has_element?(live, "#{more} summary", "2 more quotations for this sense")
@@ -137,7 +137,7 @@ defmodule DevilsDictionaryWeb.WordQuotationsTest do
     test "one held back is one quotation, singular", ctx do
       %{conflict: conflict} = war!(ctx, [@sherman, @kjv, @daniel])
 
-      {:ok, live, _html} = live(ctx.conn, ~p"/define/war")
+      {:ok, live, _html} = live(ctx.conn, ~p"/on/war")
 
       assert has_element?(
                live,
@@ -150,7 +150,7 @@ defmodule DevilsDictionaryWeb.WordQuotationsTest do
       restyled = %{@sherman | "text" => "“War is cruelty — and you cannot refine it”"}
       %{conflict: conflict} = war!(ctx, [@sherman, @usage, restyled])
 
-      {:ok, live, _html} = live(ctx.conn, ~p"/define/war")
+      {:ok, live, _html} = live(ctx.conn, ~p"/on/war")
 
       html = live |> element("##{sense_id(conflict)}-quotations") |> render()
       doc = LazyHTML.from_fragment(html)

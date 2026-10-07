@@ -56,6 +56,9 @@ differences:
    `false`, and `resolve_default(purpose: :panel)` answers `{:unavailable, :panel_not_available}`.
    The migration that adds a real, validated model configuration adds the column and
    the panel check. No digest is invented to satisfy a foreign key.
+   *Since #195 stage A* ([runtime-stage-a.md](runtime-stage-a.md)), `local_model_configs`
+   exists as runtime provenance for inference attempts. Configuration versions still
+   have no model column, and panel readiness is still `false`.
 2. **Profiles exist as identities, not dossiers.** The five inspired-by identities are
    seeded as `proposed`, with no version, no bot actor and no subject entity. A profile
    becomes `admitted` only through `Profiles.admit/4`: a human reviewer, a version whose

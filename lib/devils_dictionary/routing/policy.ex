@@ -7,6 +7,9 @@ defmodule DevilsDictionary.Routing.Policy do
 
   @root Path.expand("../../../priv/routing", __DIR__)
 
+  @doc "Where the policy files are read from: the same files its digest covers."
+  def root, do: @root
+
   def load(root \\ @root) do
     rules = root |> Path.join("classification-rules.json") |> File.read!() |> Jason.decode!()
     registry = root |> Path.join("namespaces.json") |> File.read!() |> Jason.decode!()
@@ -70,6 +73,11 @@ defmodule DevilsDictionary.Routing.Policy do
     class_walk = walk(p279, graph, class_anchors(policy), policy.rules)
     self_family = if length(qids) == 1, do: policy.rules["self_rules"][hd(qids)]
 
+    # Every graph record the result was read from, found or not. A class rule
+    # decides a self-classified subject, so its walks are not dependencies.
+    source_lookup = if length(qids) == 1, do: [hd(qids)], else: []
+    walked = if self_family, do: [], else: walk.consulted ++ class_walk.consulted
+
     matches =
       cond do
         self_family -> [%{id: "class_subject", family: self_family, path: qids}]
@@ -124,7 +132,8 @@ defmodule DevilsDictionary.Routing.Policy do
       matches: matches,
       warnings: Enum.sort(Enum.uniq(warnings)),
       source_revision: source && Map.take(source, ["qid", "revision_id", "checksum"]),
-      evidence: evidence_for(matches, graph),
+      evidence: evidence_for(matches, graph, MapSet.new(source_lookup ++ walked)),
+      dependencies: dependencies(source_lookup ++ walked, graph),
       publishable: false,
       allocated: false
     }
@@ -166,7 +175,7 @@ defmodule DevilsDictionary.Routing.Policy do
 
   defp walk(starts, graph, anchors, rules) do
     queue = starts |> Enum.sort() |> Enum.map(&{&1, [&1], 0})
-    walk_queue(queue, graph, anchors, rules, %{matches: [], warnings: []}, 0)
+    walk_queue(queue, graph, anchors, rules, %{matches: [], warnings: [], consulted: []}, 0)
   end
 
   defp walk_queue([], _graph, _anchors, _rules, result, _count), do: result
@@ -199,12 +208,22 @@ defmodule DevilsDictionary.Routing.Policy do
             do: ["unmapped_class:#{qid}" | warnings],
             else: warnings
 
-        next = %{result | warnings: warnings ++ result.warnings}
+        next = %{
+          result
+          | warnings: warnings ++ result.warnings,
+            consulted: [qid | result.consulted]
+        }
+
         more = Enum.map(parents, &{&1, path ++ [&1], depth + 1})
         walk_queue(rest ++ more, graph, anchors, rules, next, count + 1)
 
       true ->
-        next = %{result | warnings: ["missing_class:#{qid}" | result.warnings]}
+        next = %{
+          result
+          | warnings: ["missing_class:#{qid}" | result.warnings],
+            consulted: [qid | result.consulted]
+        }
+
         walk_queue(rest, graph, anchors, rules, next, count + 1)
     end
   end
@@ -264,9 +283,37 @@ defmodule DevilsDictionary.Routing.Policy do
   defp warn(warnings, true, reason), do: [reason | warnings]
   defp warn(warnings, false, _reason), do: warnings
 
-  defp evidence_for(matches, graph) do
+  # The pins of everything the evaluation read: each record it looked up, at
+  # the revision it read, and each one it looked for and did not find. The
+  # result — outcome, evidence and fingerprint alike — is a function of the
+  # entity's input, the policy and exactly these records, so while every one
+  # of them is still what it was (present at the same revision, or still
+  # absent) a fresh evaluation reaches the same result. The matched paths
+  # alone are not enough: an unmatched class that gains an ancestor, or a
+  # missing one that arrives, changes the outcome.
+  #
+  # A policy anchor that ends a matched path is matched by its identifier and
+  # never read, so it is not a dependency: its record's edits (Q5's, which
+  # every person matches through) cannot change a result, and must not defer
+  # one (#219 A6).
+  defp dependencies(consulted, graph) do
+    consulted
+    |> Enum.uniq()
+    |> Enum.sort()
+    |> Enum.map(fn qid ->
+      case Map.get(graph, qid) do
+        nil -> %{"qid" => qid, "absent" => true}
+        record -> Map.merge(Map.take(record, ["revision_id", "checksum"]), %{"qid" => qid})
+      end
+    end)
+  end
+
+  # The records on matched paths that the evaluation read: a subset of the
+  # dependencies, for the same reason an anchor is not one.
+  defp evidence_for(matches, graph, consulted) do
     matches
     |> Enum.flat_map(& &1.path)
+    |> Enum.filter(&MapSet.member?(consulted, &1))
     |> Enum.uniq()
     |> Enum.sort()
     |> Enum.flat_map(fn qid ->

@@ -123,7 +123,7 @@ export function parseDefinition(body, term) {
 }
 
 // `[bracketed]` is Urban Dictionary's own cross-link syntax, and turning it
-// into a link to *our* `/define/<slug>` is the one thing this card can do that
+// into a link to *our* `/on/<slug>` is the one thing this card can do that
 // the site cannot. Returned as a list of parts rather than as HTML: nothing
 // below ever builds markup from a string, so a definition containing `<script>`
 // is a definition containing the eleven characters `<script>`.
@@ -198,11 +198,11 @@ export default {
 
   render(definition) {
     const body = this.el.querySelector('[data-body]')
-    const definePath = this.el.dataset.definePath
+    const wordPath = this.el.dataset.wordPath
 
-    body.append(this.prose(definition.definition, definePath, 'definition'))
+    body.append(this.prose(definition.definition, wordPath, 'definition'))
     if (definition.example.trim()) {
-      body.append(this.prose(definition.example, definePath, 'example'))
+      body.append(this.prose(definition.example, wordPath, 'example'))
     }
 
     const byline = document.createElement('p')
@@ -230,7 +230,7 @@ export default {
     this.el.querySelector('[data-status]')?.remove()
   },
 
-  prose(text, definePath, kind) {
+  prose(text, wordPath, kind) {
     const p = document.createElement('p')
     p.className = kind === 'example'
       ? 'mt-4 border-l-2 border-mist-950/10 pl-4 whitespace-pre-line text-mist-500 italic dark:border-white/10'
@@ -239,7 +239,7 @@ export default {
     for (const part of parseLinks(text)) {
       if (part.slug) {
         const link = document.createElement('a')
-        link.href = `${definePath}/${encodeURIComponent(part.slug)}`
+        link.href = `${wordPath}/${encodeURIComponent(part.slug)}`
         link.className = 'underline underline-offset-4 hover:text-amber-700'
         link.textContent = part.text
         p.append(link)

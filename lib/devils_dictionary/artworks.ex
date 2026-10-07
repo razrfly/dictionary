@@ -484,6 +484,15 @@ defmodule DevilsDictionary.Artworks do
     end
   end
 
+  @doc """
+  The sentence a catalog match gives for a work depicting `depicted` (one of
+  its `depicts` rows, `%{"qid", "term"}`) when a meaning refers to that QID —
+  the same words the shelf's match reason uses, for a surface that shows the
+  same work for the same reason (#156's curated opening).
+  """
+  def depiction_note(artwork, depicted, scope \\ :sense),
+    do: qid_note(%{qid: depicted["qid"], scope: scope}, depicted, artwork)
+
   defp qid_note(match, item, artwork) do
     "The catalog records this work as depicting #{item["qid"]}" <>
       if(item["term"], do: " (\u201C#{item["term"]}\u201D)", else: "") <>
