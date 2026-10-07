@@ -18,7 +18,8 @@ defmodule DevilsDictionary.Examples.Provenance do
                       evidence, at} | :none | :unknown,
         agent: :none | :unknown,
         review: %{state, by, decided_at, context_changed?} | :none,
-        selection: %{kind: :ranked, signals} | %{kind: :composed, ...},
+        selection: %{kind: :ranked, signals} | %{kind: :composed, ...}
+                 | %{kind: :fixture, composition, version, selected_by},
         publication: %{receipt_id, authority_kind, actor, committed_at,
                        superseded_at, withdrawn_at} | :none,
         featured: [%{composition_id, version, selected_by, published_at, scope,
@@ -31,7 +32,7 @@ defmodule DevilsDictionary.Examples.Provenance do
   | `nomination` | the submitting account (or a manifest's curator), the revision's `rationale`, `metadata` and `method`, `assertion_evidence`, `assertions.inserted_at` | not cited (an instance) | a claim no account submitted and no manifest wrote |
   | `agent` | the revision's `method` (and #197's records, once they exist) | human work (`curated`), or a source's (an instance) | any other method, or none recorded |
   | `review` | the latest `assertion_reviews` row, and its context against what is displayed | no review yet | never |
-  | `selection` | `Rank.order/1`'s signals, or the composition item and its version's author | — | never |
+  | `selection` | `Rank.order/1`'s signals, or the composition item and its version's author, or the development fixture that placed it in an opening (`in_fixture/2`) | — | never |
   | `publication` | the receipt that published the item's version | unpublished | never |
 
   `featured` is the reverse of selection (#212 decision 3): the published
@@ -127,6 +128,27 @@ defmodule DevilsDictionary.Examples.Provenance do
       %{layer: :exemplar, id: id} = item -> Map.put(item, :provenance, provenance[id])
       item -> item
     end)
+  end
+
+  @doc """
+  The provenance of an exemplar a development fixture placed in a word's
+  opening (#212 Build 3, behind `?opening=fixture`): `provenance` is the
+  claim's, as `of/2` reads it for the card, and every stage about the claim
+  stays exactly as the card has it. Only the two stages about this placement
+  change: `selection` is the fixture's (its key, version and who chose it),
+  and `publication` is `:none`, because a fixture is never published.
+  """
+  def in_fixture(%__MODULE__{} = provenance, %{composition: id, version: version} = fixture) do
+    %{
+      provenance
+      | selection: %{
+          kind: :fixture,
+          composition: id,
+          version: version,
+          selected_by: fixture[:selected_by] || @no_author
+        },
+        publication: :none
+    }
   end
 
   @doc """

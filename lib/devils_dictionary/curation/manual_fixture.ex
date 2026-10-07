@@ -35,12 +35,38 @@ defmodule DevilsDictionary.Curation.ManualFixture do
   them (`selected_by`, with a `kind` of `human` or `model`), and whether a
   person has reviewed them; the component prints both, and a fixture is never
   shown as a published, approved composition.
+
+  ## Exemplars (#212 Build 3)
+
+  A highlight may also be an **exemplar**: a person, work or passage someone
+  cited as an example of the meaning. The fixture names the subject (a
+  verified Wikidata QID, or a passage's source record) and the meaning's
+  sense, and the reader finds the `illustrates` claim of that pair
+  (`References.exemplar_claim/2`). It then holds the claim to exactly the
+  rules a saved composition's exemplar is held to, by asking
+  `Curation.Eligibility.check/3` about the item a composition would store:
+  the latest review accepted, the claim current and public, the meaning the
+  claim's, the accepting review still describing what is shown, the subject
+  active. A nomination nobody has accepted is withheld, whatever its subject,
+  and nothing about it is drawn. The fixture adds no approval of its own.
+
+  What it shows about the claim is `Examples.Provenance.of/2` for the public,
+  the projection the examples card draws, with the fixture's selection in
+  place of the card's ranking (`Provenance.in_fixture/2`).
   """
 
   @behaviour DevilsDictionary.Curation.OpeningReader
 
-  alias DevilsDictionary.Artworks
-  alias DevilsDictionary.Curation.{Excerpt, LeadPolicy, Opening, References}
+  alias DevilsDictionary.{Artworks, Examples}
+
+  alias DevilsDictionary.Curation.{
+    CompositionItem,
+    Eligibility,
+    Excerpt,
+    LeadPolicy,
+    Opening,
+    References
+  }
 
   alias DevilsDictionary.Curation.Opening.{
     Credit,
@@ -52,6 +78,7 @@ defmodule DevilsDictionary.Curation.ManualFixture do
     Review
   }
 
+  alias DevilsDictionary.Examples.Provenance
   alias DevilsDictionary.Lexicon.WordPage
 
   @path "curation/opening-fixtures.json"
@@ -328,7 +355,88 @@ defmodule DevilsDictionary.Curation.ManualFixture do
     end
   end
 
+  # An exemplar (#212): someone's accepted `illustrates` claim that the
+  # subject is an example of the meaning. The fixture chooses it; whether it
+  # may stand is the composition rules' (`Eligibility`), asked about the item
+  # a saved composition would hold, which is built here and never stored.
+  defp highlight(%{"item" => %{"exemplar" => ref}} = spec, position, ctx) when is_map(ref) do
+    with {:ok, meaning} <- sense_meaning(spec["meaning"], ctx),
+         {:ok, subject} <- References.subject(ref["subject"]),
+         {:ok, claim} <- References.exemplar_claim(subject.object_id, meaning.object_id),
+         :ok <-
+           Eligibility.check(exemplar_item(claim, subject, meaning, position), scope_ids(ctx)),
+         {:ok, item} <- examples_item(claim, meaning),
+         {:ok, provenance} <- public_provenance(item) do
+      {:ok,
+       %Highlight{
+         position: position,
+         kind: :exemplar,
+         register: nil,
+         reference: %Reference{
+           object_id: subject.object_id,
+           object_kind: subject.kind,
+           content_revision_id: subject.content_revision_id,
+           assertion_revision_id: claim.id
+         },
+         title: item.subject.label,
+         subject: %{
+           kind: subject.kind,
+           entity_kind: item.subject.entity_kind,
+           qid: item.subject.qid,
+           words: subject.words
+         },
+         claim: Map.take(item.claim, [:assertion_id, :rationale, :nominated_by]),
+         meaning: meaning,
+         source: source_view(nil),
+         reasons: compact([note(spec, ctx)]),
+         provenance:
+           Provenance.in_fixture(provenance, %{
+             composition: "fixture:#{ctx.composition["key"]}",
+             version: ctx.composition["version"] || 1,
+             selected_by: ctx.author
+           })
+       }}
+    end
+  end
+
   defp highlight(_spec, _position, _ctx), do: {:error, :unsupported_item}
+
+  # The item a saved composition would hold for this exemplar (Build 1's
+  # `Compositions.create_version/3`): the claim's subject, its pinned words
+  # for a passage, and the meaning's exact sense revision.
+  defp exemplar_item(claim, subject, meaning, position) do
+    %CompositionItem{
+      role: :highlight,
+      position: position,
+      item_kind: :exemplar,
+      item_object_id: subject.object_id,
+      content_revision_id: subject.content_revision_id,
+      assertion_revision_id: claim.id,
+      meaning_sense_revision_id: meaning.sense_revision_id,
+      selection_origin: :manual
+    }
+  end
+
+  # The composition's scope: the words its `scope` names, which a fixture's
+  # items are checked against as a saved composition's are its members.
+  defp scope_ids(ctx) do
+    for key <- scope_keys(ctx.composition), lexeme = ctx.lexemes[key], do: lexeme.object_id
+  end
+
+  # The claim as the examples card on this page reads it for the public.
+  defp examples_item(claim, %Meaning{lexeme_id: lexeme_id}) do
+    case Enum.find(Examples.exemplars([lexeme_id], :public), &(&1.claim.revision_id == claim.id)) do
+      nil -> {:error, :claim_not_visible}
+      item -> {:ok, item}
+    end
+  end
+
+  defp public_provenance(item) do
+    case Provenance.of(item, :public) do
+      nil -> {:error, :claim_not_visible}
+      provenance -> {:ok, provenance}
+    end
+  end
 
   # The line by its fingerprint, found by the rule the sense row itself uses —
   # so the highlight and the row can never disagree about what the line says.

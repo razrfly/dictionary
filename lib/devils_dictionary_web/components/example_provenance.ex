@@ -4,9 +4,10 @@ defmodule DevilsDictionaryWeb.ExampleProvenance do
   stage, in plain words.
 
   It draws `DevilsDictionary.Examples.Provenance` and decides nothing. So
-  the exemplar card, and later the opening (#156), say the same thing about
-  one claim. Where the record is silent a row says *unknown*. No model, run,
-  person or date is ever filled in for it.
+  the exemplar card and the opening (#156, `DevilsDictionaryWeb.Opening`)
+  say the same thing about one claim: the opening draws `rows/1` in its own
+  disclosure. Where the record is silent a row says *unknown*. No model,
+  run, person or date is ever filled in for it.
 
   Closed, it adds one line to a card. Open, each row is a label over its
   sentence on a phone and beside it from `sm` up.
@@ -52,7 +53,10 @@ defmodule DevilsDictionaryWeb.ExampleProvenance do
 
   @doc """
   The rows, `{key, label, sentence}`, one per stage, in reading order:
-  source, nomination, model, review, selection, publication.
+  source, nomination, model, review, selection, publication. The first four
+  are about the claim and read the same wherever it is shown; the last two
+  are about where it is shown (ranked in the examples, composed, or placed by
+  a development fixture).
   """
   def rows(%Provenance{} = p) do
     [
@@ -140,6 +144,19 @@ defmodule DevilsDictionaryWeb.ExampleProvenance do
 
   defp selection(%{kind: :composed} = s),
     do: "Selected by #{s.selected_by.label || "an unnamed author"} (version #{s.version})."
+
+  defp selection(%{kind: :fixture} = s),
+    do:
+      "Chosen for this opening by #{selector(s.selected_by)}, " <>
+        "in a development fixture (version #{s.version})."
+
+  defp selector(%{kind: :model, label: label}) when is_binary(label), do: "#{label}, an AI model"
+  defp selector(%{label: label}) when is_binary(label), do: label
+  defp selector(_author), do: "an unnamed author"
+
+  # A fixture is never published, and its opening is never public.
+  defp opening(%Provenance{selection: %{kind: :fixture}}),
+    do: "Not published. This opening is a development fixture, which the public never sees."
 
   defp opening(%Provenance{publication: %{committed_at: at} = pub, selection: %{kind: :composed}}) do
     state =

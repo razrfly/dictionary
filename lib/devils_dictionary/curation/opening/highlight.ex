@@ -3,9 +3,11 @@ defmodule DevilsDictionary.Curation.Opening.Highlight do
   One of an opening's zero to three highlights.
 
   `kind` is what the component draws: `:artwork` (a picture, with the credit
-  its catalog committed) or `:quotation` (a line, verbatim, with the citation
-  its source wrote). The component branches on the kind and never on which
-  provider supplied the item (#156, promise 9).
+  its catalog committed), `:quotation` (a line, verbatim, with the citation
+  its source wrote) or `:exemplar` (a person, work or passage someone cited
+  as an example of the meaning, through an accepted `illustrates` claim,
+  #212). The component branches on the kind and never on which provider
+  supplied the item (#156, promise 9).
 
     * `position` — 1 to 3, the order the selection gave.
     * `title`, `creator`, `date` — as the source records them.
@@ -20,6 +22,20 @@ defmodule DevilsDictionary.Curation.Opening.Highlight do
     * `reasons` — a `:source_match` reason when the registry records why the
       item fits the meaning, and an `:editorial` reason when the selector
       wrote one, each attributed.
+
+  An exemplar also carries, and nothing else does:
+
+    * `subject` — what the claim cites: `%{kind: :entity | :content,
+      entity_kind, qid, words}`, `words` being a passage's pinned words and
+      `nil` for an entity. `title` is its label.
+    * `claim` — `%{assertion_id, rationale, nominated_by: %{label}}`: the
+      nominator's own reason, and who the record says nominated it (`label`
+      `nil` when it names nobody).
+    * `provenance` — the claim's `DevilsDictionary.Examples.Provenance`, as
+      the examples card reads it for the public, with this opening's
+      selection in place of the card's ranking (`Provenance.in_fixture/2`).
+      The component draws it with `DevilsDictionaryWeb.ExampleProvenance`,
+      so the opening and the card say the same about one claim.
   """
 
   alias DevilsDictionary.Curation.Opening.{Credit, Meaning, Reason, Reference}
@@ -38,11 +54,14 @@ defmodule DevilsDictionary.Curation.Opening.Highlight do
             source: nil,
             credits: [],
             links: %{},
-            reasons: []
+            reasons: [],
+            subject: nil,
+            claim: nil,
+            provenance: nil
 
   @type t :: %__MODULE__{
           position: 1..3,
-          kind: :artwork | :quotation,
+          kind: :artwork | :quotation | :exemplar,
           register: :quotation | nil,
           reference: Reference.t(),
           title: String.t() | nil,
@@ -55,6 +74,16 @@ defmodule DevilsDictionary.Curation.Opening.Highlight do
           source: map(),
           credits: [Credit.t()],
           links: %{source: String.t() | nil},
-          reasons: [Reason.t()]
+          reasons: [Reason.t()],
+          subject:
+            %{
+              kind: :entity | :content,
+              entity_kind: atom() | nil,
+              qid: String.t() | nil,
+              words: String.t() | nil
+            }
+            | nil,
+          claim: %{assertion_id: pos_integer(), rationale: String.t(), nominated_by: map()} | nil,
+          provenance: DevilsDictionary.Examples.Provenance.t() | nil
         }
 end

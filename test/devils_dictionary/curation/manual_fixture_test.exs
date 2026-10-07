@@ -601,8 +601,23 @@ defmodule DevilsDictionary.Curation.ManualFixtureTest do
           assert Map.has_key?(highlight, "meaning")
 
           case highlight["item"] do
-            %{"work" => work} -> assert work["checksum"] == Manifest.checksum_of(work["catalog"])
-            %{"quotation" => q} -> assert byte_size(q["fingerprint"]) == 64
+            %{"work" => work} ->
+              assert work["checksum"] == Manifest.checksum_of(work["catalog"])
+
+            %{"quotation" => q} ->
+              assert byte_size(q["fingerprint"]) == 64
+
+            # An exemplar names its subject and the meaning's sense, never a
+            # claim id: the claim is found by that pair, and shown only if a
+            # reviewer accepted it (#212 Build 3).
+            %{"exemplar" => %{"subject" => subject} = exemplar} ->
+              assert map_size(exemplar) == 1
+
+              assert match?(%{"wikidata" => "Q" <> _}, subject) or
+                       Map.has_key?(subject, "content")
+
+              assert %{"sense" => %{"revision_key" => key}} = highlight["meaning"]
+              assert byte_size(key) == 64
           end
         end
       end
