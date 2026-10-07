@@ -8,7 +8,12 @@ defmodule DevilsDictionary.Curation.CompositionItem do
     * `:sense_quotation`: a sense revision, the `quotation:N` locator of one
       example, and the SHA-256 of its words;
     * `:work`: a source-record revision, or a committed catalog manifest
-      pinned by name, checksum and row identity.
+      pinned by name, checksum and row identity;
+    * `:exemplar` (#212, a highlight only): an accepted `illustrates` claim
+      (`assertion_revision_id`) and its subject (`item_object_id`), a person,
+      a work or a passage someone cited as an example of the meaning. A
+      content subject also pins the content revision whose words are shown;
+      an entity has none. The database ties the claim to the object shown.
 
   When a referenced source row is deleted, the database nulls the reference
   and the reader withholds the item. Nothing else about an item ever changes.
@@ -21,6 +26,10 @@ defmodule DevilsDictionary.Curation.CompositionItem do
   A note is attributed to `note_author_actor_id`, the actor who wrote it,
   under that actor's own label. The database checks both; a caller never
   supplies attribution.
+
+  `subject` is virtual: `Published.current/1` fills it for an exemplar it
+  shows, from the registry at read time (the label, the kind and, for a
+  content subject, the pinned words). It is never stored.
   """
   use Ecto.Schema
 
@@ -28,7 +37,7 @@ defmodule DevilsDictionary.Curation.CompositionItem do
     field :composition_version_id, :id
     field :role, Ecto.Enum, values: [:lead, :highlight]
     field :position, :integer
-    field :item_kind, Ecto.Enum, values: [:content, :sense_quotation, :work]
+    field :item_kind, Ecto.Enum, values: [:content, :sense_quotation, :work, :exemplar]
     field :item_object_id, :id
     field :content_revision_id, :id
     field :sense_revision_id, :id
@@ -47,6 +56,7 @@ defmodule DevilsDictionary.Curation.CompositionItem do
     field :note_author_label, :string
     field :note_author_actor_id, :id
     field :required_references, {:array, :string}, read_after_writes: true
+    field :subject, :map, virtual: true
 
     timestamps(type: :utc_datetime_usec, updated_at: false)
   end

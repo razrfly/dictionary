@@ -41,7 +41,7 @@ older one.
 |---|---|---|
 | #196 / #201 (this slice) | Configuration identities and versions, profile identities and versions, rosters, compositions, their versions, items, operator reviews and publication receipts | Creates them |
 | #194 / PR #205 | Pages, paths, page memberships, On bodies, classification, page publication and indexability, **and the page ↔ composition binding table** | Untouched. The binding migration follows this one, per #205's recorded contract (`page_composition_bindings.composition_id` → `editorial_compositions.id`; the language must equal the page locale; the scope must be compatible). |
-| #190 | Bot claim writes | None are made here. An item may reference an assertion revision only if it is already current, active and publicly visible (`Claims.visible/2`). |
+| #190 | Bot claim writes | None are made here. An item may reference an assertion revision only if it is already current, active and publicly visible (`Claims.visible/2`), and, since #212, about the object the item shows. The `exemplar` kind (#212) asks more: an **accepted** latest review ([exemplar items](exemplar-items.md)). |
 | #195 / #197 | Model runtime, panel execution, **and the panel-decision publication authority** | Absent. A configuration version is **manual-only** until a later migration adds a validated model configuration. |
 | #203 / #204 | History projection and the method page | Absent. The records here are what #203 will project. |
 
@@ -176,7 +176,10 @@ What does not change for either authority:
 
 The migrations are `20260926233642_create_curation_foundation` and
 `20260927094256_repair_curation_integrity`. The services live under
-`DevilsDictionary.Curation`. Test modules are under `test/devils_dictionary/curation/`:
+`DevilsDictionary.Curation`. Test modules are under `test/devils_dictionary/curation/`.
+The `exemplar` item kind (#212, `20260927204902_add_exemplar_composition_items`) has
+its own map, [exemplar items](exemplar-items.md), and its own test module,
+`ExemplarItemsTest`.
 
 | Module | Covers |
 |---|---|
@@ -248,7 +251,8 @@ triggers would never fire there. There are two answers:
   work, which may have no registry object.
 * **A claim reference must be publicly visible.** It must be current, active and
   visible under `Claims.visible(:public)`. The earlier wording, "accepted", would have
-  hidden every imported claim, which has no review.
+  hidden every imported claim, which has no review. (An `exemplar` item, #212, shows a
+  nomination rather than annotating an item, and does require an accepted review.)
 * **A lexeme is not deleted from under a scope** (memberships and `meaning_lexeme_id`
   are `RESTRICT`). Lexemes hold no source text, so R7 does not apply.
 

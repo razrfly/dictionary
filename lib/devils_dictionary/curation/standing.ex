@@ -32,7 +32,8 @@ defmodule DevilsDictionary.Curation.Standing do
 
   @doc """
   The version's items evaluated against its composition's current members,
-  under the configuration version it was made with.
+  under the configuration version it was made with, and against the claim
+  review contexts it recorded for its exemplars.
   """
   def evaluate(%CompositionVersion{} = version, %Composition{} = composition) do
     version.id
@@ -40,7 +41,8 @@ defmodule DevilsDictionary.Curation.Standing do
     |> Eligibility.evaluate(
       Compositions.member_ids(composition.id),
       version.scope_signature,
-      version.configuration_version_id
+      version.configuration_version_id,
+      claim_contexts: (version.resolution || %{})["claim_contexts"]
     )
   end
 
