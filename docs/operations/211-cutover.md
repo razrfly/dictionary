@@ -13,7 +13,7 @@ The plan is [`211-stage-1.md`](211-stage-1.md), and the interface is [`installat
 | Server log | `/Volumes/LLM Models/dictionary/postgres/18/postgresql-5434.log` |
 | Start at login (D2) | user LaunchAgent `com.razrfly.dictionary.postgres-5434` (`~/Library/LaunchAgents/`): Postgres.app's `pg_ctl`, `RunAtLoad`, `StartOnMount`. With the drive absent, it starts nothing |
 | Databases | `devils_dictionary_v2` (restored exactly, then migrated to `20260927220937`), `devils_dictionary_runtime_bench` and `_b` (restored exactly), and test partitions |
-| Settings | `wal_sync_method=fsync_writethrough` (D3); 5432's memory settings (D4); normal running: `max_wal_size=2GB`, default `checkpoint_timeout` |
+| Settings | `wal_sync_method=fsync_writethrough` (D3); 5432's memory settings (D4) except `shared_buffers=8GB` while the old cluster still runs beside it (pre-authorisation 5; revisit after the reclaim); normal running: `max_wal_size=2GB`, default `checkpoint_timeout`. The suite's own connections commit with `synchronous_commit=off` (`config/test.exs`); no database carries it |
 | Checkout | `/Volumes/LLM Models/dictionary/src/dictionary`, with its `data/`, `priv/replay` and `.env`; its Claude memory is under `~/.claude/projects/-Volumes-LLM-Models-dictionary-src-dictionary` |
 | Defaults (D11) | `config/dev.exs` and `config/test.exs` reach 5434 when `DD_DATABASE_PORT` is unset |
 | Model service (D12) | bound to `devils_dictionary_runtime_bench` on 7693849764459364596 (`run/authority.json`) |
@@ -23,7 +23,7 @@ The plan is [`211-stage-1.md`](211-stage-1.md), and the interface is [`installat
 **The old installation, unchanged until the reclaim:**
 - the internal cluster 7607810074859095446 on 5432, whose `devils_dictionary_v2` is still at `20260927131023` (24 migrations);
 - the old checkout `~/Code/projects-2026/dictionary` at `16e35ca`, with its worktrees;
-- the 5433 rehearsal cluster.
+- the 5433 rehearsal cluster, stopped (pre-authorisation 4) with its 36 databases intact.
 
 ## Run sheet
 
