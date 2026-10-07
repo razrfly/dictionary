@@ -8,6 +8,57 @@ This file is the **living record** of the project: what it is, what it is not, t
 
 Automatic cultural discovery is documented in [`docs/discovery/`](docs/discovery/README.md) — the architecture in [`README.md`](docs/discovery/README.md) and the checklist for adding a source in [`adding-a-provider.md`](docs/discovery/adding-a-provider.md). The direct-browser GIPHY integration is documented in [`docs/integrations/giphy.md`](docs/integrations/giphy.md). Durable cross-provider film identity and its adapter/backfill contract are documented in [`docs/integrations/source-identity.md`](docs/integrations/source-identity.md).
 
+## Quickstart on a new machine
+
+From a clean Mac to the full corpus. Every step checks before it writes; the details, refusals and recovery paths are in [`docs/operations/installation.md`](docs/operations/installation.md).
+
+1. **Install `mise` and PostgreSQL 18:** `brew install mise`, and [Postgres.app](https://postgresapp.com) or `brew install postgresql@18`.
+   - **Why 18:** the major version is pinned at **18** (18.2 today), because a bundle's dump restores only with a `pg_restore` at least as new as the `pg_dump` that wrote it. Older than 15 is refused outright by the curation migrations.
+   - **Role and extensions:** the app connects as role `postgres` with password `postgres`, and needs `citext` and `pg_trgm`. Both ship with Postgres.app.
+2. **Clone and build:**
+
+   ```bash
+   gh repo clone razrfly/dictionary && cd dictionary
+   mise trust               # only for a checkout outside your home directory, such as an external drive
+   mise install && mix deps.get && mix compile
+   ```
+
+3. **Restore the corpus from an approved bundle.** A bundle holds the database, its settings and roles, the archived inputs (`data/`) and the replay archive, all checked against its `MANIFEST.json`. Bundles live on the external drive; ask the owner for the path and the digest to expect.
+
+   ```bash
+   mix dd.bundle --verify /path/to/bundle
+   mix dd.bootstrap --mode init --bundle /path/to/bundle --expect-manifest-sha256 <digest> --target devils_dictionary_v2 --place-inputs .
+   DD_NO_OBAN=1 mix dd.doctor --bundle /path/to/bundle
+   mix ecto.migrate         # a recorded step: main may be newer than the bundle
+   ```
+
+   **Which server:** `config/dev.exs` and `config/test.exs` reach port **5434** unless `DD_DATABASE_PORT` names another.
+   - **On a new machine** whose only Postgres listens on the default 5432, `export DD_DATABASE_PORT=5432` first.
+   - **On the owner's Mac,** 5432 is a cluster other projects share, on the internal disk. Never point the dictionary at it: its cluster is 5434, on the external drive. `mix dd.bootstrap.cluster` creates such a cluster ([`installation.md`](docs/operations/installation.md)).
+
+   Every `mix test` and `mix ecto.*` for tests runs with `MIX_ENV=test` and a private `MIX_TEST_PARTITION`.
+4. **Copy `.env` privately.** It holds the provider keys, and it is never in a bundle or in git. `.env.example` lists the names, and `mix dd.doctor` reports which are missing, never their values. Then start the server:
+
+   ```bash
+   mix compile && mix phx.server     # http://localhost:4007
+   ```
+
+   - **Compile first:** `mix compile` must finish before the server starts, or Oban discards discovery jobs as *not a worker*.
+   - **Port:** the app listens on 4007; 4000–4005 belong to sibling projects.
+   - **Inputs:** with `--place-inputs`, the bundle's inputs land in `data/` and `priv/replay`, and `mix dd.manifest` verifies all five. After a bare `mix dd.snapshot` restore it reports `data/` absent, which is expected, not a failure.
+
+**The working installation** (since [#211](https://github.com/razrfly/dictionary/issues/211), 7 October 2026) lives on the external drive:
+
+| What | Where |
+|---|---|
+| Checkout | `/Volumes/LLM Models/dictionary/src/dictionary`. Open Claude Code and Codex sessions from this path |
+| Database | `devils_dictionary_v2` on the dictionary's own cluster: port **5434**, `system_identifier` 7693849764459364596, data directory on the drive |
+| Start at login | the user LaunchAgent `com.razrfly.dictionary.postgres-5434`. Stop the cluster before ejecting the drive |
+| Is it ready? | `mix dd.doctor --expect-cluster 7693849764459364596 --volume "/Volumes/LLM Models"` |
+| Backups and recovery | bundles under `/Volumes/LLM Models/dictionary/bundles/`, and a second copy of the baseline in `~/Backups/dictionary/bundles/`. Recovery is a restore from a bundle ([`211-cutover.md`](docs/operations/211-cutover.md)); the internal installation was reclaimed |
+
+The 16-stage absorb script under [Development](#development) rebuilds the corpus from its inputs. It is the slow path that proves reproducibility, not the setup path.
+
 ## Current delivery — 17 September 2026 (evening)
 
 Phase 1 and Phase 2 of the discovery triage ([#102](https://github.com/razrfly/dictionary/issues/102), now closed) landed the same day: the provider contract hardened ([PR #104](https://github.com/razrfly/dictionary/pull/104) — config-driven registry, GET transport, a content-type table, provider-classified retry statuses), **the Met through the pipeline matched by tag-QID identity** ([PR #107](https://github.com/razrfly/dictionary/pull/107) — `war` gets artworks through *World War I → world war → war*, and the 14,116 sense→concept links #82 had withdrawn are reinstated), and **the durable art corpus** ([PR #108](https://github.com/razrfly/dictionary/pull/108) — `met-highlights-v1`, 1,644 public-domain objects, and `wikidata-famous-v1`, 1,575 paintings at ten sitelinks, the Mona Lisa among them; 3,212 artworks in `work_details`, zero migrations). Three providers now run, and they share less than they should — one generic shelf, one tall-card catalog section, one browser widget — so the next tracker is [#109](https://github.com/razrfly/dictionary/issues/109): one reader surface, a conformance suite, a generator and the two documents, proved by building PoetryDB from the docs alone, then more sources by archetype. Durable measurements (the Met's 403 volume throttle, its non-filtering search parameters, the `VALUES`-bound sitelink query) are recorded in #109 so nobody re-measures them.
@@ -62,7 +113,7 @@ Patterns are borrowed from [Cinegraph](https://github.com/razrfly/cinegraph): ra
 
 **Status: accepted design; Stage 1 persistence, the Stage 2 backfill and the On reader implemented; nothing published.** [ADR 0004](docs/adr/0004-public-routing.md) defines the eight subject families — People, Organizations, Places, Events, Works, Concepts and Nature, plus Subjects for reviewed cases outside those families — and On pages. [Issue #194](https://github.com/razrfly/dictionary/issues/194) tracks routing; [#219](https://github.com/razrfly/dictionary/issues/219) made On the reading entry.
 
-**On is where a reader starts** ([ADR 0004 §4, §6](docs/adr/0004-public-routing.md#4-lexical-pages-and-on-pages)). `/on/:slug` reads every word a slug reaches (Enter in search lands here), with the Subjects those words and their sources reach; `/words/:id/:slug` is one exact word, where a selected word goes and stays through a reload; `/define/:slug` is gone. Each subject card opens the subject at its own address — `/nature/mars` for the planet, `/subjects/mars` for a deity — when the ledger has allocated one and the reading mode serves it, and at `/entities/:id/:slug`, its exact identity, otherwise, with its state said plainly (*not yet public*, *no public address yet*, *awaiting classification review*, *unclassified*). Two subjects that share a name are two cards and two addresses; a shared label or slug never joins two identities, and an authored overview belongs to words only through its `supplies_lexical_material` membership. Addresses are chosen by this site's families; schema.org and Wikidata supply the evidence for which family, not the URL scheme. The reader has two modes: **public** shows only published pages, **internal** also shows drafts, marked — on in development and test configuration and for an internal contributor, never through a request parameter, and never publishing or approving anything. A development server with drafts must not sit behind a public tunnel. The demonstration ran on a disposable copy of the corpus; the owner's working installation gets its reviewed addresses after the storage move (#211, then [CP4, #224](https://github.com/razrfly/dictionary/issues/224)).
+**On is where a reader starts** ([ADR 0004 §4, §6](docs/adr/0004-public-routing.md#4-lexical-pages-and-on-pages)). `/on/:slug` reads every word a slug reaches (Enter in search lands here), with the Subjects those words and their sources reach; `/words/:id/:slug` is one exact word, where a selected word goes and stays through a reload; `/define/:slug` is gone. Each subject card opens the subject at its own address — `/nature/mars` for the planet, `/subjects/mars` for a deity — when the ledger has allocated one and the reading mode serves it, and at `/entities/:id/:slug`, its exact identity, otherwise, with its state said plainly (*not yet public*, *no public address yet*, *awaiting classification review*, *unclassified*). Two subjects that share a name are two cards and two addresses; a shared label or slug never joins two identities, and an authored overview belongs to words only through its `supplies_lexical_material` membership. Addresses are chosen by this site's families; schema.org and Wikidata supply the evidence for which family, not the URL scheme. The reader has two modes: **public** shows only published pages, **internal** also shows drafts, marked — on in development and test configuration and for an internal contributor, never through a request parameter, and never publishing or approving anything. A development server with drafts must not sit behind a public tunnel. The demonstration ran on a disposable copy of the corpus; the owner's working installation, on the external drive since #211, gets its reviewed addresses in [CP4, #224](https://github.com/razrfly/dictionary/issues/224).
 
 | Where routing stands, 28 September ([#219](https://github.com/razrfly/dictionary/issues/219)) | |
 |---|---|
@@ -370,7 +421,7 @@ mix setup                                  # deps, empty db, assets
 ```
 
 The server must be **PostgreSQL 15 or newer**, in development, CI and production
-alike. The curation migration uses column-list referential actions
+alike; the pinned major for development is 18 (see the [quickstart](#quickstart-on-a-new-machine)). The curation migration uses column-list referential actions
 (`ON DELETE SET NULL (column)`), which older versions reject. On an older server it
 stops with an explicit error rather than failing partway through.
 
@@ -401,7 +452,9 @@ not the fast one, and the Wiktionary input is `url_is_rolling` in
 `priv/sources/MANIFEST.json` — re-downloading it gives different bytes than the
 pinned digest, so a rebuild produces a *similar* corpus, not the same one.
 
-Toolchain is pinned in `.tool-versions` (Elixir 1.19 on OTP 28; `mise` picks it up automatically). Phoenix 1.8.13, LiveView 1.2.11, Oban 2.24, Req 0.7. Dumps live in `data/` (ignored). The old dev database from the skeleton still exists: run `mix ecto.drop` once before the first `mix ecto.create`. After S0:
+### Rebuilding from inputs (slow; proves reproducibility)
+
+This is not the setup path; the [quickstart](#quickstart-on-a-new-machine) is. Toolchain is pinned in `.tool-versions` (Elixir 1.19 on OTP 28; `mise` picks it up automatically). Phoenix 1.8.13, LiveView 1.2.11, Oban 2.24, Req 0.7. Dumps live in `data/` (ignored). On the original machine only, an old skeleton dev database once had to be dropped before the first `mix ecto.create`; a new machine has nothing to drop, and `mix ecto.drop` refuses a database that holds routing state. After S0:
 
 ```bash
 mix setup                                  # deps, db, assets

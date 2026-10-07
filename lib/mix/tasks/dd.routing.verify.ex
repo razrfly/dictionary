@@ -13,7 +13,7 @@ defmodule Mix.Tasks.Dd.Routing.Verify do
   cluster (`DD_DATABASE_PORT`):
 
       DD_DATABASE=devils_dictionary_copy DD_DATABASE_PORT=5433 \\
-        mix dd.routing.verify --baseline ecto://postgres:postgres@localhost:5432/devils_dictionary_v2
+        mix dd.routing.verify --baseline ecto://postgres:postgres@localhost:5434/devils_dictionary_v2
 
   Compares, section by section, every column of every table — registry
   identities, references and routing rows alike, by exact id — plus the
