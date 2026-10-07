@@ -195,10 +195,20 @@ defmodule DevilsDictionary.Installation.Volume do
   # A `.git` directory, a directory holding any `.git` entry (a dangling
   # link or a worktree's `.git` file included), or a bare repository.
   defp repository?(dir) do
-    Path.basename(dir) == ".git" or
-      match?({:ok, _}, File.lstat(Path.join(dir, ".git"))) or
+    Path.basename(dir) == ".git" or git_entry?(Path.join(dir, ".git")) or
       (File.regular?(Path.join(dir, "HEAD")) and File.dir?(Path.join(dir, "objects")) and
          File.dir?(Path.join(dir, "refs")))
+  end
+
+  # Only "it does not exist" means no repository. A `.git` that cannot be
+  # read (a directory that cannot be searched, a link loop) refuses the
+  # destination rather than being assumed away.
+  defp git_entry?(path) do
+    case File.lstat(path) do
+      {:ok, _} -> true
+      {:error, reason} when reason in [:enoent, :enotdir] -> false
+      {:error, _unknown} -> true
+    end
   end
 
   # Every directory from the anchor (symlinks resolved) up to `/`: any of

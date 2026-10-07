@@ -204,7 +204,15 @@ defmodule DevilsDictionary.Installation.VolumeTest do
       File.mkdir_p!(dangling)
       File.ln_s!(Path.join(mount, "nowhere"), Path.join(dangling, ".git"))
 
+      # A directory that cannot be searched: whether it holds a `.git` is
+      # unknown, so the destination is refused rather than assumed clear.
+      sealed = Path.join(mount, "sealed")
+      File.mkdir_p!(Path.join(sealed, "inner"))
+      File.chmod!(sealed, 0o600)
+      on_exit(fn -> File.chmod(sealed, 0o700) end)
+
       for inside <- [
+            Path.join(sealed, "inner/backups/v2"),
             Path.join(checkout, "backups/v2"),
             Path.join(checkout, ".git/backups"),
             Path.join(stale, "backups/v2"),
