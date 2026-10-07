@@ -235,7 +235,15 @@ defmodule DevilsDictionary.Routing.RecoveryPreRoutingTest do
        %{db: db} do
     corpus!(db["a"])
     original = Application.get_env(:devils_dictionary, DevilsDictionary.Repo)
-    # Where a URL without a port goes: PGPORT, else 5432.
+    # Where a URL without a port goes: PGPORT, else 5432. The suite's server
+    # is the one DD_DATABASE_PORT names (#211 D11), so PGPORT names it here.
+    previous = System.get_env("PGPORT")
+    System.put_env("PGPORT", to_string(Repo.config()[:port]))
+
+    on_exit(fn ->
+      if previous, do: System.put_env("PGPORT", previous), else: System.delete_env("PGPORT")
+    end)
+
     {_host, usual, _db} = Recovery.identity(Repo.config())
     c = config(db["a"])
     no_port = "ecto://#{c[:username]}:#{c[:password]}@localhost/#{db["a"]}"

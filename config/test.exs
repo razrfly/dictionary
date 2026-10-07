@@ -13,6 +13,11 @@ config :devils_dictionary, DevilsDictionary.Repo,
   password: "postgres",
   hostname: "localhost",
   database: "devils_dictionary_test#{System.get_env("MIX_TEST_PARTITION")}",
+  # `DD_DATABASE_PORT` picks the PostgreSQL server, as it does in `dev.exs`, so
+  # the suite can run on the dictionary's own cluster (#211 D11). Unset, it is
+  # the server a connection without a port reaches: PGPORT, else 5432.
+  port:
+    String.to_integer(System.get_env("DD_DATABASE_PORT") || System.get_env("PGPORT") || "5432"),
   pool: Ecto.Adapters.SQL.Sandbox,
   pool_size: System.schedulers_online() * 2,
   # DBConnection cancels a statement that runs past `timeout`, and Postgres
