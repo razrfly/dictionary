@@ -71,64 +71,116 @@ defmodule DevilsDictionary.Installation.VolumeTest do
   end
 
   describe "the second copy, on an internal volume (#211 D14)" do
-    @internal %{mounted: true, external: false, device: "/dev/disk3s5", uuid: "UUID-I"}
+    @internal %{
+      mounted: true,
+      external: false,
+      internal: true,
+      device: "/dev/disk3s5",
+      uuid: "UUID-I"
+    }
 
     setup %{mount: mount} do
       bundle = Path.join(mount, "external-bundle")
       File.mkdir_p!(bundle)
-      %{bundle: bundle}
+
+      # The bundle on an external drive, the destination internal, apart
+      # from it, with no reserve to meet: the suite's one disk, described.
+      ok = [
+        apart_from: bundle,
+        probe: probe(@internal),
+        source_probe: probe(@external),
+        stat: apart(bundle),
+        reserve_bytes: 0
+      ]
+
+      %{bundle: bundle, ok: ok}
     end
 
-    test "is accepted apart from the bundle and outside every checkout, and nothing is created",
-         %{mount: mount, bundle: bundle} do
+    test "is accepted apart from the external bundle and outside every checkout, creating nothing",
+         %{mount: mount, ok: ok} do
       path = Path.join(mount, "backups/dictionary/2026-10-05-v2")
 
-      assert {:ok, facts} =
-               Volume.check_internal(path,
-                 apart_from: bundle,
-                 probe: probe(@internal),
-                 stat: apart(bundle),
-                 need_bytes: 1
-               )
-
+      assert {:ok, facts} = Volume.check_internal(path, Keyword.put(ok, :need_bytes, 1))
       refute facts.external
       assert facts.free_bytes > 0
       refute File.exists?(Path.join(mount, "backups"))
     end
 
-    test "is refused on an external volume, beside the bundle, inside a checkout, or without room",
-         %{mount: mount, bundle: bundle} do
+    test "is refused for a bundle that is not on an external volume", %{mount: mount, ok: ok} do
       path = Path.join(mount, "backups/v2")
-      ok = [apart_from: bundle, probe: probe(@internal), stat: apart(bundle)]
 
-      assert {:error, message} =
-               Volume.check_internal(path, Keyword.put(ok, :probe, probe(@external)))
+      for source <- [@internal, %{@external | mounted: false}] do
+        assert {:error, message} =
+                 Volume.check_internal(path, Keyword.put(ok, :source_probe, probe(source)))
 
-      assert message =~ "is an external volume; name it with --volume"
+        assert message =~ "is not on an external volume"
+      end
+    end
 
-      unmounted = probe(%{@internal | mounted: false})
-      assert {:error, message} = Volume.check_internal(path, Keyword.put(ok, :probe, unmounted))
-      assert message =~ "not a mounted volume"
+    test "is refused unless diskutil reports the destination mounted and internal",
+         %{mount: mount, ok: ok} do
+      path = Path.join(mount, "backups/v2")
+
+      for {volume, expected} <- [
+            {@external, "is an external volume; name it with --volume"},
+            {%{@internal | mounted: false}, "not a mounted volume"},
+            # No `Internal` key: neither external nor internal, so not accepted.
+            {%{@internal | internal: false}, "does not report itself internal"}
+          ] do
+        assert {:error, message} =
+                 Volume.check_internal(path, Keyword.put(ok, :probe, probe(volume)))
+
+        assert message =~ expected
+      end
+    end
+
+    test "is refused in place of an absent drive, beside the bundle, or without its reserve",
+         %{mount: mount, bundle: bundle, ok: ok} do
+      path = Path.join(mount, "backups/v2")
+
+      # /Volumes itself is on the internal disk: an unmounted drive's path
+      # is answered by the internal volume, and refused.
+      absent = "/Volumes/dd-absent-#{System.unique_integer([:positive])}/backups"
+      assert {:error, message} = Volume.check_internal(absent, ok)
+      assert message =~ "no volume is mounted there"
 
       assert {:error, message} = Volume.check_internal(path, Keyword.delete(ok, :stat))
       assert message =~ "on the same device as #{bundle}"
-
-      checkout = Path.join(mount, "checkout")
-      File.mkdir_p!(checkout)
-      {_, 0} = System.cmd("git", ["init", "-q", checkout])
-
-      for inside <- ["backups/v2", ".git/backups"] do
-        assert {:error, message} = Volume.check_internal(Path.join(checkout, inside), ok)
-        assert message =~ "inside the git repository"
-      end
 
       assert {:error, message} =
                Volume.check_internal(path, Keyword.put(ok, :need_bytes, 1 <<< 60))
 
       assert message =~ "free; this needs"
 
+      assert {:error, message} =
+               Volume.check_internal(path, Keyword.put(ok, :reserve_bytes, 1 <<< 60))
+
+      assert message =~ "must stay free on the internal disk"
       refute File.exists?(Path.join(mount, "backups"))
+    end
+
+    test "is refused inside any git repository, however git would answer", %{mount: mount, ok: ok} do
+      checkout = Path.join(mount, "checkout")
+      File.mkdir_p!(checkout)
+      {_, 0} = System.cmd("git", ["init", "-q", checkout])
+
+      # A linked worktree whose repository is gone: git itself fails there
+      # ("not a git repository"), and the `.git` file still marks a checkout.
+      stale = Path.join(mount, "stale-worktree")
+      File.mkdir_p!(stale)
+      File.write!(Path.join(stale, ".git"), "gitdir: #{mount}/gone/.git/worktrees/stale\n")
+
+      for inside <- [
+            Path.join(checkout, "backups/v2"),
+            Path.join(checkout, ".git/backups"),
+            Path.join(stale, "backups/v2")
+          ] do
+        assert {:error, message} = Volume.check_internal(inside, ok)
+        assert message =~ "inside the git repository"
+      end
+
       refute File.exists?(Path.join(checkout, "backups"))
+      refute File.exists?(Path.join(stale, "backups"))
     end
   end
 

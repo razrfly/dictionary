@@ -143,10 +143,13 @@ A directory at the mount path is not proof that the drive is mounted. Nothing is
 
 **One exception: the second copy.** A bundle that exists only on the external drive is lost with the drive. `mix dd.bundle --transfer <bundle> --out <dir> --internal --expect-manifest-sha256 <digest>` copies it to the internal disk, and nowhere else is the internal disk accepted. The destination must:
 
-- be on a mounted volume that reports itself internal (a second external drive is an ordinary `--volume` destination);
+- copy a bundle that is itself on a mounted external volume;
+- be on a mounted volume that diskutil reports internal (a second external drive is an ordinary `--volume` destination), and not a directory under `/Volumes` standing in for an absent drive;
 - sit on another device than the bundle being copied;
-- be outside every git repository, because a checkout is cleaned, re-cloned and reclaimed;
-- have the room.
+- be outside every git repository, because a checkout is cleaned, re-cloned and reclaimed. Any `.git` on the way up counts, read from the filesystem rather than asked of git;
+- leave at least 10 GiB free after the copy, because the internal disk also holds the system, its swap and the old cluster.
+
+`--expect-manifest-sha256` is required: the second copy is of an approved bundle.
 
 The copy is verified there like any transfer, with the manifest written last (#211 D14).
 
@@ -254,7 +257,7 @@ The suite covers each of the following:
 - a busy source, refused;
 - a finished bundle never overwritten;
 - a resumed transfer;
-- the second copy: an internal destination refused unless asked for, and refused beside the bundle, inside a checkout or without room;
+- the second copy: an internal destination refused unless asked for, and refused for a bundle not on an external volume, on an external or unreported volume, in place of an absent drive, beside the bundle, inside a work tree, a stale worktree or a `.git` directory, and without its reserve;
 - inputs bundled by their pins, and a damaged one refused;
 - `restore` mode onto a cluster made by `dd.bootstrap.cluster`: same name, roles, exact state;
 - the volume guard;

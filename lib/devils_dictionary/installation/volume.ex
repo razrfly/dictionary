@@ -63,38 +63,55 @@ defmodule DevilsDictionary.Installation.Volume do
     end
   end
 
+  @reserve_bytes 10 * 1_073_741_824
+
   @doc """
   `{:ok, facts}` when `path` may hold the **second copy** of a bundle on an
   internal volume (#211 D14): the copy that is still there when the
   external drive is lost. So it is accepted only when:
 
+    * the bundle being copied, `apart_from:`, is on a mounted **external**
+      volume: this is the copy of the external drive's bundle, not a third
+      copy on the same disk;
     * the volume holding the path (through its nearest existing ancestor)
-      reports itself mounted and **internal**. A second external drive is
-      an ordinary destination, and goes through `check/3`;
-    * that ancestor is on another device than `apart_from:`, the bundle
-      being copied. A second copy beside the first survives nothing the
-      first does not;
-    * it is outside every git work tree: a checkout is cleaned, re-cloned
-      and reclaimed, and a copy inside one would go with it;
-    * the volume has the room (`need_bytes:`).
+      is mounted and diskutil reports it **internal**. A second external
+      drive is an ordinary destination, and goes through `check/3`;
+    * a path under `/Volumes/` is on the volume mounted there. A directory
+      standing in for an absent drive is not a destination;
+    * that ancestor is on another device than the bundle;
+    * no directory on the way up from it holds a `.git` (a work tree, a
+      linked worktree's `.git` file, or a path inside a `.git` directory):
+      a checkout is cleaned, re-cloned and reclaimed, and a copy inside one
+      would go with it. This reads the filesystem, so it does not depend on
+      git, its environment, or a worktree that has lost its repository;
+    * the copy leaves `reserve_bytes:` free (default 10 GiB): the internal
+      disk also holds the operating system, its swap and the old cluster.
 
-  Nothing is created. Options: `apart_from:` (required), `need_bytes:`, and
-  for the suite `probe:` (as in `check/3`) and `stat:` (`File.stat/1`).
+  Nothing is created. Options: `apart_from:` (required), `need_bytes:`,
+  `reserve_bytes:`, and for the suite `probe:` (the destination's volume, as
+  in `check/3`), `source_probe:` (the bundle's; default `probe:`) and
+  `stat:` (`File.stat/1`).
   """
   def check_internal(path, opts) do
     path = Path.expand(path)
     apart_from = Path.expand(Keyword.fetch!(opts, :apart_from))
     probe = Keyword.get(opts, :probe, &probe/1)
+    source_probe = Keyword.get(opts, :source_probe, probe)
     stat = Keyword.get(opts, :stat, &File.stat/1)
+    reserve = Keyword.get(opts, :reserve_bytes, @reserve_bytes)
 
-    with {:ok, anchor} <- nearest_existing(path),
+    with {:ok, source_mount} <- mount_point_of(apart_from),
+         {:ok, source} <- source_probe.(source_mount),
+         :ok <- external_source(source, apart_from),
+         {:ok, anchor} <- nearest_existing(path),
          {:ok, mount_point} <- mount_point_of(anchor),
+         :ok <- not_in_place_of_a_drive(path, mount_point),
          {:ok, volume} <- probe.(mount_point),
          :ok <- internal(volume, mount_point),
          :ok <- another_device(anchor, apart_from, stat),
-         :ok <- outside_work_trees(anchor, path),
+         :ok <- outside_repositories(anchor, path),
          {:ok, free} <- free_bytes(anchor),
-         :ok <- room(free, opts[:need_bytes], mount_point) do
+         :ok <- room(free, (opts[:need_bytes] || 0) + reserve, mount_point, reserve) do
       {:ok,
        %{
          mount_point: mount_point,
@@ -104,6 +121,25 @@ defmodule DevilsDictionary.Installation.Volume do
          free_bytes: free
        }}
     end
+  end
+
+  defp external_source(%{mounted: true, external: true}, _bundle), do: :ok
+
+  defp external_source(_volume, bundle),
+    do:
+      {:error,
+       "#{bundle} is not on an external volume; the second copy is of the external drive's bundle"}
+
+  # `/Volumes` itself is on the internal disk: a path under it that the
+  # internal volume answers for is a directory where a drive should be.
+  defp not_in_place_of_a_drive(path, mount_point) do
+    if String.starts_with?(path, "/Volumes/") and
+         not String.starts_with?(mount_point, "/Volumes/"),
+       do:
+         {:error,
+          "#{path} is under /Volumes, but no volume is mounted there; " <>
+            "nothing is written in its place"},
+       else: :ok
   end
 
   # The mount point of the filesystem holding `path`: `df -P`'s last column,
@@ -123,12 +159,15 @@ defmodule DevilsDictionary.Installation.Volume do
     end
   end
 
-  defp internal(%{mounted: true, external: false}, _mount_point), do: :ok
+  defp internal(%{mounted: true, internal: true}, _mount_point), do: :ok
 
-  defp internal(%{mounted: true}, mount_point),
+  defp internal(%{mounted: true, external: true}, mount_point),
     do:
       {:error,
        "#{mount_point} is an external volume; name it with --volume (and --volume-uuid) instead"}
+
+  defp internal(%{mounted: true}, mount_point),
+    do: {:error, "#{mount_point} does not report itself internal; nothing is written"}
 
   defp internal(_volume, mount_point),
     do: {:error, "#{mount_point} is not a mounted volume; nothing is written"}
@@ -147,22 +186,27 @@ defmodule DevilsDictionary.Installation.Volume do
     end
   end
 
-  # Inside a work tree or inside a `.git` directory, `--absolute-git-dir`
-  # answers; anywhere else it fails.
-  defp outside_work_trees(anchor, path) do
-    case System.cmd("git", ["-C", anchor, "rev-parse", "--absolute-git-dir"],
-           stderr_to_stdout: true
-         ) do
-      {git_dir, 0} ->
-        {:error,
-         "#{path} is inside the git repository at #{String.trim(git_dir)}; " <>
-           "a second copy belongs outside every checkout"}
+  # Every directory from the anchor (symlinks resolved) up to `/`: one that
+  # holds a `.git` entry, or one that is itself a `.git` directory, is a
+  # repository.
+  defp outside_repositories(anchor, path) do
+    found =
+      anchor
+      |> resolve()
+      |> Path.split()
+      |> Enum.scan(&Path.join(&2, &1))
+      |> Enum.reverse()
+      |> Enum.find(&(Path.basename(&1) == ".git" or File.exists?(Path.join(&1, ".git"))))
 
-      {_not_a_repository, _} ->
+    case found do
+      nil ->
         :ok
+
+      root ->
+        {:error,
+         "#{path} is inside the git repository at #{root}; " <>
+           "a second copy belongs outside every checkout"}
     end
-  rescue
-    _ -> {:error, "#{path}: git is needed to check that it is outside every checkout"}
   end
 
   @doc "The host's view of a mount point: mounted, external, device node and UUID."
@@ -281,6 +325,15 @@ defmodule DevilsDictionary.Installation.Volume do
     do:
       {:error,
        "#{mount_point} has #{gib(free)} free; this needs #{gib(need)}. Nothing was written"}
+
+  # The internal disk keeps `reserve` free after the copy.
+  defp room(free, need, _mount_point, _reserve) when free >= need, do: :ok
+
+  defp room(free, need, mount_point, reserve),
+    do:
+      {:error,
+       "#{mount_point} has #{gib(free)} free; this needs #{gib(need)}, of which " <>
+         "#{gib(reserve)} must stay free on the internal disk. Nothing was written"}
 
   @doc false
   def gib(bytes), do: "#{Float.round(bytes / 1_073_741_824, 1)} GiB"

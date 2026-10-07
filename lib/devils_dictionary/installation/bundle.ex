@@ -724,11 +724,10 @@ defmodule DevilsDictionary.Installation.Bundle do
     probe = Keyword.get(opts, :probe, &Volume.probe/1)
 
     if opts[:internal] do
-      Volume.check_internal(out,
-        apart_from: from,
-        need_bytes: need,
-        probe: probe,
-        stat: Keyword.get(opts, :stat, &File.stat/1)
+      Volume.check_internal(
+        out,
+        [apart_from: from, need_bytes: need, probe: probe] ++
+          Keyword.take(opts, [:source_probe, :stat, :reserve_bytes])
       )
     else
       Volume.check(out, Keyword.fetch!(opts, :volume),

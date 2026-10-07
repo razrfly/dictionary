@@ -56,11 +56,13 @@ defmodule Mix.Tasks.Dd.Bundle do
     * `--quick` — with `--verify`, sizes only
     * `--transfer FROM` — copy a finished bundle to `--out`, resumably
     * `--expect-manifest-sha256 HEX` — with `--transfer`, the approved digest
-    * `--internal` — with `--transfer`, instead of `--volume`: the destination
-      is on the internal disk. This is for the second copy that is still there
-      when the external drive is lost (#211 D14), so the destination must be on
-      another device than the bundle, outside every git checkout, and have the
-      room. Without it, an internal destination is refused
+    * `--internal` — with `--transfer` and `--expect-manifest-sha256`, instead
+      of `--volume`: the destination is on the internal disk. This is for the
+      second copy that is still there when the external drive is lost (#211
+      D14). So the bundle must be on an external volume, and the destination
+      on a volume diskutil reports internal (not a directory under `/Volumes`
+      standing in for a drive), outside every git repository, leaving 10 GiB
+      free after the copy. Without it, an internal destination is refused
   """
 
   use Mix.Task
@@ -95,6 +97,9 @@ defmodule Mix.Tasks.Dd.Bundle do
       do: Mix.raise("unknown arguments: #{inspect(invalid ++ rest)}; see `mix help dd.bundle`")
 
     {:ok, _apps} = Application.ensure_all_started(:ecto_sql)
+
+    if opts[:internal] && is_nil(opts[:transfer]),
+      do: Mix.raise("--internal is for --transfer only: the second copy of a finished bundle")
 
     cond do
       opts[:verify] -> verify(opts[:verify], opts)
@@ -172,6 +177,11 @@ defmodule Mix.Tasks.Dd.Bundle do
     cond do
       internal and (opts[:volume] || opts[:volume_uuid]) ->
         Mix.raise("--internal names the internal disk; it cannot be given with --volume")
+
+      internal and is_nil(opts[:expect_manifest_sha256]) ->
+        Mix.raise(
+          "--internal needs --expect-manifest-sha256: the second copy is of an approved bundle"
+        )
 
       not internal and is_nil(opts[:volume]) ->
         Mix.raise("--volume is required with --transfer (or --internal, for the second copy)")
