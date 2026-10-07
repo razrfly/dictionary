@@ -45,7 +45,7 @@ defmodule DevilsDictionaryWeb.EntityLive do
   alias DevilsDictionary.Artworks
   alias DevilsDictionary.Encyclopedia.EntityPage
   alias DevilsDictionary.Markdown
-  alias DevilsDictionaryWeb.SourceBadge
+  alias DevilsDictionaryWeb.{ExampleProvenance, SourceBadge}
 
   @impl true
   def mount(_params, _session, socket),
@@ -439,7 +439,7 @@ defmodule DevilsDictionaryWeb.EntityLive do
                       </p>
                       <p class="text-mist-500">
                         <span class="tabular-nums">{item.claim.evidence_count}</span>
-                        evidence · nominated by {item.claim.nominated_by.label} · {cited_state(
+                        evidence · {cited_by(item.claim.nominated_by)} · {cited_state(
                           item.claim.review_state
                         )}
                         <.a
@@ -449,6 +449,20 @@ defmodule DevilsDictionaryWeb.EntityLive do
                         >
                           <.icon name="hero-information-circle" class="size-4 stroke-current" />
                         </.a>
+                      </p>
+                      <%!-- The reverse of selection (#212 decision 3): each
+                           published composition of the global default that
+                           selects this claim now, from the same provenance the
+                           word page's card reads. No page shows an opening
+                           yet, and the line says so. --%>
+                      <p
+                        :for={featured <- featured_in(item)}
+                        id={"cited-as-featured-#{item.claim.assertion_id}-#{featured.composition_id}"}
+                        class="text-mist-500"
+                      >
+                        selected for the opening of {Enum.map_join(featured.scope, ", ", & &1.lemma)} since {ExampleProvenance.date(
+                          featured.published_at
+                        )}<span :if={not featured.shown_on_page}> · not yet shown on its page</span>
                       </p>
                     </li>
                   </ul>
@@ -1139,6 +1153,15 @@ defmodule DevilsDictionaryWeb.EntityLive do
   defp review_label(:disputed), do: "Disputed connection"
   defp review_label(:changed_since_review), do: "Changed since review"
   defp review_label(_state), do: "Awaiting review"
+
+  # The record names the nominator, or the page says it does not.
+  defp cited_by(%{label: nil}), do: "nominator unknown"
+  defp cited_by(%{label: label}), do: "nominated by #{label}"
+
+  defp featured_in(%{provenance: %{featured: featured}}),
+    do: Enum.filter(featured, &(&1.scope != []))
+
+  defp featured_in(_item), do: []
 
   defp cited_state(:accepted), do: "selected by a reviewer"
   defp cited_state(:changed_since_review), do: "changed since review"

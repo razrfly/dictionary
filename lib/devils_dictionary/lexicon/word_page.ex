@@ -71,6 +71,7 @@ defmodule DevilsDictionary.Lexicon.WordPage do
   alias DevilsDictionary.Corpus.SourceRecordRevision
   alias DevilsDictionary.Encyclopedia
   alias DevilsDictionary.Examples
+  alias DevilsDictionary.Examples.Provenance
   alias DevilsDictionary.Markdown
   alias DevilsDictionary.Quotations.Fingerprint
 
@@ -322,11 +323,13 @@ defmodule DevilsDictionary.Lexicon.WordPage do
         |> related(by_lexeme, sources, hd(lexemes).lemma)
         |> sense_link(cards),
       examples:
-        Examples.for_page(ids, opts[:viewer] || :public,
+        ids
+        |> Examples.for_page(opts[:viewer] || :public,
           senses: senses,
           edges: instance_edges,
           sources: sources
-        ),
+        )
+        |> Provenance.attach(opts[:viewer] || :public),
       thing: entity |> thing(ids, sources) |> put_article(about, sources, concept),
       trail: trail(opts[:trail])
     }

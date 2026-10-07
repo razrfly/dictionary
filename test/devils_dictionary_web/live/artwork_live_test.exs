@@ -448,6 +448,16 @@ defmodule DevilsDictionaryWeb.ArtworkLiveTest do
              contributor,
              "#culture-connect-c#{ctx.work.object_id}[href*='object=#{sense.object_id}']"
            )
+
+    # And it names the catalog the work is shown from, which the composer
+    # checks against the registry before recording it (#212).
+    slug = Artworks.catalog_source_slug(ctx.work.object_id)
+    assert is_binary(slug)
+
+    assert has_element?(
+             contributor,
+             "#culture-connect-c#{ctx.work.object_id}[href*='provider=#{slug}']"
+           )
   end
 
   test "a malformed revision query parameter is rejected, not a crash", ctx do
