@@ -30,6 +30,11 @@ defmodule DevilsDictionaryWeb.Opening do
     * **Nothing is promised that is not there.** No heading on screen (the
       headword is the heading), no empty slots, no loading state. The
       highlights take one, two or three columns by how many there are.
+    * **An exemplar is someone's claim, accepted** (#212). Its tile names the
+      subject and the meaning it was cited for; its disclosure holds the
+      nominator's reason and the six stages the examples card shows
+      (`DevilsDictionaryWeb.ExampleProvenance.rows/1`), so the two cannot
+      disagree about one claim.
 
   Disclosures keep their `open` state across LiveView patches with
   `JS.ignore_attributes/1`. The section is placed by `WordLive`: in the column
@@ -40,7 +45,7 @@ defmodule DevilsDictionaryWeb.Opening do
   use DevilsDictionaryWeb, :html
 
   alias DevilsDictionary.Curation.Opening, as: Composition
-  alias DevilsDictionaryWeb.{Quotation, SourceBadge}
+  alias DevilsDictionaryWeb.{ExampleProvenance, Quotation, SourceBadge}
 
   attr :opening, Composition, required: true
   attr :class, :any, default: nil
@@ -263,6 +268,89 @@ defmodule DevilsDictionaryWeb.Opening do
     """
   end
 
+  # An exemplar (#212): the subject someone cited, and the meaning they cited
+  # it for. Everything said *about* it — the nominator's reason, who
+  # nominated and reviewed it, how it came to be here — is one step away,
+  # in the stages the examples card draws for the same claim.
+  defp highlight(%{highlight: %{kind: :exemplar}} = assigns) do
+    assigns = assign(assigns, :id, "opening-highlight-#{assigns.highlight.position}")
+
+    ~H"""
+    <li id={@id} class="flex min-w-0 flex-col gap-3">
+      <h3 class="sr-only">Example: {@highlight.title}, {example_noun(@highlight.subject)}</h3>
+      <div class="min-w-0">
+        <p aria-hidden="true" class="text-base/6 text-mist-500 sm:text-sm/6">
+          {example_kind(@highlight.subject)}
+        </p>
+        <p class="text-base/6 font-medium text-mist-950 sm:text-sm/6 dark:text-white">
+          <.link
+            id={"#{@id}-title"}
+            navigate={subject_path(@highlight, @mode)}
+            class="rounded-sm hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:focus-visible:outline-white"
+          >
+            {@highlight.title}
+          </.link>
+        </p>
+        <p
+          id={"#{@id}-cited"}
+          class="text-base/6 text-pretty text-mist-600 sm:text-sm/6 dark:text-mist-400"
+        >
+          cited as an example of <.meaning meaning={@highlight.meaning} />
+        </p>
+      </div>
+
+      <%!-- A quotation or passage is shown by the words its claim was
+           accepted on. They are a source's, so they are quoted under the
+           quotation register, with the credit and licence its terms
+           require, as the quotation tile quotes. --%>
+      <figure
+        :if={@highlight.subject.html}
+        class="flex flex-col gap-3 rounded-xl bg-mist-950/2.5 p-5 dark:bg-white/5"
+      >
+        <p class="flex flex-wrap items-center gap-2">
+          <.register id={"#{@id}-register"} register={@highlight.register} />
+        </p>
+        <blockquote
+          id={"#{@id}-text"}
+          cite={@highlight.links[:source]}
+          class="flex flex-col gap-3 font-display text-2xl/8 text-pretty text-mist-950 dark:text-white"
+        >
+          {raw(@highlight.subject.html)}
+        </blockquote>
+      </figure>
+
+      <.credit_line id={"#{@id}-credits"} credits={@highlight.credits} />
+
+      <.why id={"#{@id}-why"} summary="Why this is here" reasons={@highlight.reasons}>
+        <div class="flex flex-col gap-3">
+          <.particulars
+            id={@id}
+            meaning={@highlight.meaning}
+            register={@highlight.register}
+            reasons={@highlight.reasons}
+            credits={@highlight.credits}
+          />
+          <dl id={"#{@id}-stages"} class="flex flex-col gap-2 text-base/6 sm:text-sm/6">
+            <div id={"#{@id}-rationale"}>
+              <dt class="inline font-medium text-mist-950 dark:text-white">Reason given</dt>
+              <dd class="inline text-pretty text-mist-700 dark:text-mist-300">
+                “{@highlight.claim.rationale}”
+              </dd>
+            </div>
+            <div
+              :for={{key, label, text} <- ExampleProvenance.rows(@highlight.provenance)}
+              id={"#{@id}-stage-#{key}"}
+            >
+              <dt class="inline font-medium text-mist-950 dark:text-white">{label}</dt>
+              <dd class="inline text-pretty text-mist-700 dark:text-mist-300">{text}</dd>
+            </div>
+          </dl>
+        </div>
+      </.why>
+    </li>
+    """
+  end
+
   # ── credits, the disclosure, and what is in it ───────────────────────────
 
   attr :id, :string, required: true
@@ -314,13 +402,14 @@ defmodule DevilsDictionaryWeb.Opening do
   slot :inner_block, required: true
 
   # One disclosure per item, named for the question it answers. A reader who
-  # does not open it still learns that an AI-generated note is inside.
+  # does not open it still learns that an AI-generated note is inside. On a
+  # phone its summary is a 44 px tap target, as the examples card's is.
   defp why(assigns) do
     assigns = assign(assigns, :generated?, Enum.any?(assigns.reasons, &generated?/1))
 
     ~H"""
     <details id={@id} phx-mounted={JS.ignore_attributes(["open"])} class="group/why">
-      <summary class="flex w-fit cursor-pointer list-none flex-wrap items-center gap-x-2 rounded-sm text-base/7 text-mist-600 hover:text-mist-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 sm:text-sm/7 dark:text-mist-400 dark:hover:text-white dark:focus-visible:outline-white [&::-webkit-details-marker]:hidden">
+      <summary class="flex min-h-11 w-fit cursor-pointer list-none flex-wrap items-center gap-x-2 rounded-sm text-base/7 text-mist-600 hover:text-mist-950 sm:min-h-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 sm:text-sm/7 dark:text-mist-400 dark:hover:text-white dark:focus-visible:outline-white [&::-webkit-details-marker]:hidden">
         <span class="underline decoration-mist-950/20 underline-offset-4 dark:decoration-white/20">
           {@summary}
         </span>
@@ -544,7 +633,7 @@ defmodule DevilsDictionaryWeb.Opening do
                 navigate={inspect_path(highlight, @mode)}
                 class="rounded-sm underline underline-offset-4 hover:text-mist-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:hover:text-white dark:focus-visible:outline-white"
               >
-                {if highlight.kind == :artwork, do: "work", else: "evidence"}
+                {inspect_label(highlight.kind)}
               </.link>
             </li>
           </ul>
@@ -687,7 +776,38 @@ defmodule DevilsDictionaryWeb.Opening do
 
   defp withheld_reason(:quotation_not_found), do: "its line is no longer filed under that meaning"
   defp withheld_reason(:no_image), do: "its image is no longer available"
+
+  # An exemplar's claim (#212). One sentence for every way a claim falls
+  # short, so a withheld nomination is never described: not whom it names,
+  # not that it waits for review, not that a reviewer turned it down.
+  defp withheld_reason(reason)
+       when reason in [
+              :claim_not_found,
+              :claim_not_accepted,
+              :claim_not_visible,
+              :claim_not_current,
+              :claim_deleted
+            ],
+       do: "it is not an example a reviewer has accepted"
+
+  defp withheld_reason(:claim_context_changed),
+    do: "what it shows has changed since a reviewer accepted it"
+
+  defp withheld_reason(:meaning_off_scope),
+    do: "its meaning is not one of the words it was selected for"
+
+  defp withheld_reason(:object_retired), do: "it has left the registry"
+
+  defp withheld_reason(:unsupported_subject),
+    do: "the opening does not show that kind of example yet"
+
   defp withheld_reason(_reason), do: "it could not be resolved"
+
+  # An exemplar names the claim it shows as well as the thing.
+  defp reference(%{assertion_revision_id: claim} = ref) when is_integer(claim) do
+    words = if ref.content_revision_id, do: ", revision #{ref.content_revision_id}", else: ""
+    "#{ref.object_kind} #{ref.object_id}#{words}, claim revision #{claim}"
+  end
 
   defp reference(%{object_kind: :content} = ref),
     do: "content #{ref.object_id}, revision #{ref.content_revision_id}#{locator(ref.locator)}"
@@ -707,6 +827,22 @@ defmodule DevilsDictionaryWeb.Opening do
   defp locator(%{kind: :quotation, fingerprint: fp}), do: ", line #{String.slice(fp, 0, 12)}"
   defp locator(_locator), do: ""
 
+  defp inspect_label(:artwork), do: "work"
+  defp inspect_label(:exemplar), do: "claim"
+  defp inspect_label(_kind), do: "evidence"
+
+  defp example_kind(subject), do: "Example · #{example_noun(subject)}"
+
+  # What the example is, in words: a quotation or passage, or the entity's
+  # kind as the registry records it.
+  defp example_noun(%{kind: :content, content_kind: kind}) when not is_nil(kind),
+    do: humanize(kind)
+
+  defp example_noun(%{entity_kind: kind}) when kind not in [nil, :other], do: humanize(kind)
+  defp example_noun(_subject), do: "thing"
+
+  defp humanize(kind), do: kind |> to_string() |> String.replace("_", " ")
+
   defp evidence_path(%{object_kind: :content, content_revision_id: id}) when is_integer(id),
     do: ~p"/evidence/content/#{id}"
 
@@ -714,7 +850,16 @@ defmodule DevilsDictionaryWeb.Opening do
     do: ~p"/evidence/sense/#{id}"
 
   defp inspect_path(%{kind: :artwork} = highlight, mode), do: entity_path(highlight, mode)
+
+  defp inspect_path(%{kind: :exemplar, claim: %{assertion_id: id}}, _mode),
+    do: ~p"/connections/#{id}"
+
   defp inspect_path(highlight, _mode), do: evidence_path(highlight.reference)
+
+  # An exemplar's subject: an entity's page, or a passage's pinned words on
+  # their evidence page.
+  defp subject_path(%{subject: %{kind: :content}, reference: ref}, _mode), do: evidence_path(ref)
+  defp subject_path(highlight, mode), do: entity_path(highlight, mode)
 
   # A subject link goes through the one link helper (#219).
   defp entity_path(%{reference: %{object_id: id}, title: title}, mode),

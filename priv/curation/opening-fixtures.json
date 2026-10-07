@@ -144,6 +144,55 @@
       "reviewed_on": null,
       "lead": null,
       "highlights": []
+    },
+    {
+      "key": "coward",
+      "version": 1,
+      "about": "Exemplars (#212 Build 3): two people and a work someone cited as examples of this meaning, each through an illustrates claim. All three subjects are fictional, under QIDs no Wikidata item has, so they resolve only in a test or scratch database that made them; on a real corpus all are withheld and, with no lead, nothing renders. The fixture only names them: whether one may show is its claim's review, by the composition rules, so a nomination nobody has accepted never appears, whatever its subject.",
+      "scope": { "lexemes": ["en/coward/noun"] },
+      "selected_by": { "kind": "model", "label": "Claude Code (Opus 5.5)" },
+      "selected_on": "2026-10-07",
+      "reviewed_by": null,
+      "reviewed_on": null,
+      "lead": null,
+      "highlights": [
+        {
+          "item": { "exemplar": { "subject": { "wikidata": "Q999999212" } } },
+          "meaning": {
+            "sense": {
+              "lexeme": "en/coward/noun",
+              "source": "wordnet",
+              "record": "oewn-09637077-n",
+              "revision_key": "5646b1030517f49f0ea250fece9285405dcf0da711fb5b7d47c9c7e76322aad3",
+              "gloss": "a person who shows fear or timidity"
+            }
+          }
+        },
+        {
+          "item": { "exemplar": { "subject": { "wikidata": "Q999999213" } } },
+          "meaning": {
+            "sense": {
+              "lexeme": "en/coward/noun",
+              "source": "wordnet",
+              "record": "oewn-09637077-n",
+              "revision_key": "5646b1030517f49f0ea250fece9285405dcf0da711fb5b7d47c9c7e76322aad3",
+              "gloss": "a person who shows fear or timidity"
+            }
+          }
+        },
+        {
+          "item": { "exemplar": { "subject": { "wikidata": "Q999999214" } } },
+          "meaning": {
+            "sense": {
+              "lexeme": "en/coward/noun",
+              "source": "wordnet",
+              "record": "oewn-09637077-n",
+              "revision_key": "5646b1030517f49f0ea250fece9285405dcf0da711fb5b7d47c9c7e76322aad3",
+              "gloss": "a person who shows fear or timidity"
+            }
+          }
+        }
+      ]
     }
   ]
 }

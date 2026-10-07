@@ -15,7 +15,11 @@ defmodule DevilsDictionary.Curation.References do
       its gloss as printed — a sense's own `external_key` is a position, never
       identity (`DevilsDictionary.Registry.Sense`);
     * a **work** by its verified Wikidata QID and the committed catalog
-      manifest (name and checksum) it was seeded from.
+      manifest (name and checksum) it was seeded from;
+    * an **exemplar's subject** (#212) by its verified Wikidata QID, or, for
+      a passage, as a definition is named; the claim that cites it is found
+      by its semantic key, the subject and the meaning's sense, the way
+      `Claims.Contributions.propose/6` keeps that key to one claim.
 
   Every function answers `{:ok, row}` or `{:error, reason}`. The reasons are
   what a reader withholds an item for: `:not_found`, `:ambiguous`,
@@ -35,7 +39,7 @@ defmodule DevilsDictionary.Curation.References do
   alias DevilsDictionary.Artworks
   alias DevilsDictionary.Artworks.Corpus.Manifest
   alias DevilsDictionary.Claims
-  alias DevilsDictionary.Claims.{AssertionRevision, Predicate}
+  alias DevilsDictionary.Claims.{AssertionReview, AssertionRevision, Predicate}
   alias DevilsDictionary.Corpus.SourceRecordRevision
 
   alias DevilsDictionary.Registry.{
@@ -309,6 +313,106 @@ defmodule DevilsDictionary.Curation.References do
   end
 
   def work(_ref), do: {:error, :not_found}
+
+  @doc """
+  What an exemplar shows (#212): an entity by its verified Wikidata QID
+  (`%{"wikidata" => qid}`), or a passage or quotation by its source record
+  (`%{"content" => ref}`, as `content/1` reads it, whose words are then the
+  ones pinned). `{:ok, %{object_id, kind: :entity | :content,
+  content_revision_id, words, content_kind, body_format, source, url}}`,
+  every field after `kind` being `nil` for an entity. `source` is the
+  passage's `sources` row, whose attribution and licence the page must carry.
+  """
+  def subject(%{"wikidata" => qid}) when is_binary(qid) do
+    rows =
+      Repo.all(
+        from i in ExternalIdentifier,
+          join: e in Entity,
+          on: e.object_id == i.object_id,
+          join: o in Object,
+          on: o.id == e.object_id,
+          where: i.namespace == "wikidata" and i.external_id == ^qid and i.status == :verified,
+          select: %{object_id: e.object_id, object_state: o.lifecycle_state}
+      )
+
+    with {:ok, row} <- one(rows),
+         :ok <- active(row.object_state) do
+      {:ok,
+       %{
+         object_id: row.object_id,
+         kind: :entity,
+         content_revision_id: nil,
+         words: nil,
+         content_kind: nil,
+         body_format: nil,
+         source: nil,
+         url: nil
+       }}
+    end
+  end
+
+  def subject(%{"content" => ref}) do
+    with {:ok, row} <- content(ref) do
+      {:ok,
+       %{
+         object_id: row.object_id,
+         kind: :content,
+         content_revision_id: row.content_revision_id,
+         words: row.body,
+         content_kind: row.content_kind,
+         body_format: row.body_format,
+         source: row.source,
+         url: row.canonical_url
+       }}
+    end
+  end
+
+  def subject(_ref), do: {:error, :not_found}
+
+  @doc """
+  The `illustrates` claim citing `subject_id` as an example of the sense
+  `sense_id`: the current, active revision of the claim of that semantic key
+  whose latest review is not a rejection or a withdrawal, the one
+  `Contributions.propose/6` holds a second nomination against.
+  `{:error, :claim_not_found}` when there is none.
+
+  `propose/6` keeps that claim unique, but a row written another way (a
+  legacy claim, an import) can stand beside it. An accepted claim is then
+  preferred, and the oldest among equals, so a pending duplicate never hides
+  an accepted one.
+
+  Whether it may be shown is not decided here: an opening holds it to
+  `Curation.Eligibility`'s exemplar rules, accepted review first.
+  """
+  def exemplar_claim(subject_id, sense_id) do
+    latest =
+      from review in AssertionReview,
+        where: review.assertion_revision_id == parent_as(:claim).id,
+        order_by: [desc: review.inserted_at, desc: review.id],
+        limit: 1,
+        select: %{decision: review.decision}
+
+    from(r in AssertionRevision,
+      as: :claim,
+      join: p in Predicate,
+      on: p.id == r.predicate_id and p.key == "illustrates",
+      left_lateral_join: decision in subquery(latest),
+      on: true,
+      where: r.subject_object_id == ^subject_id and r.object_object_id == ^sense_id,
+      where: r.is_current and r.lifecycle_state == :active,
+      where: is_nil(decision.decision) or decision.decision not in ^Claims.hidden_decisions(),
+      order_by: [
+        desc: fragment("coalesce(? = 'accepted', false)", decision.decision),
+        asc: r.assertion_id
+      ],
+      limit: 1
+    )
+    |> Repo.one()
+    |> case do
+      nil -> {:error, :claim_not_found}
+      claim -> {:ok, claim}
+    end
+  end
 
   # ── eligibility ──────────────────────────────────────────────────────────
 

@@ -15,8 +15,10 @@ defmodule DevilsDictionary.Curation.Opening.Reference do
       for a lead clipped at its first `n` sentences, `%{kind: :quotation,
       fingerprint: fp}` for one line of a sense's quotations (ADR 0003).
     * `assertion_revision_id` — an accepted `illustrates` claim, when the item
-      relies on one. Always `nil` in Phase 1: highlighting is presentation, not
-      an implicit claim (#156).
+      relies on one: an exemplar's (#212), and `nil` for everything else.
+      Highlighting a work or a line is presentation, not an implicit claim
+      (#156); an exemplar *is* a claim, someone else's, and the opening shows
+      it only once a reviewer has accepted it.
   """
 
   @enforce_keys [:object_id, :object_kind]
