@@ -46,3 +46,51 @@ The person page's *cited as* panel gains the "selected for the opening of coward
 | `issue-212-build2-coward-{1280,375}-{light,dark}-after-closed.png` | the section after, disclosures closed |
 | `issue-212-build2-coward-{1280,375}-{light,dark}-why-open.png` | the section after, both disclosures open |
 | `issue-212-build2-person-{1280,375}-{light,dark}-{before,after}.png` | the person page's *cited as* panel, before and after |
+
+> The Build 2 captures above were taken on `/define/coward`, before #219 replaced that route; the same page is now `/on/coward`.
+
+# #212 Build 3: an exemplar in the curated opening
+
+These are captures of `/on/coward?opening=fixture`, the development gate #202 added. They came from a preview on port 4057 that ran from the Build 3 branch with `DD_NO_OBAN=1`, so it executed no jobs.
+
+The preview read a scratch database, `devils_dictionary_test_212shots` on 5434. It was migrated from empty and seeded only with fixtures:
+
+- *coward* with WordNet's sense, under the source identity the committed `coward` composition names;
+- **Pat Fixture** (`Q999999212`), nominated through `Contributions.propose/6` by Account #2 and accepted by Account #1;
+- **Fixture Adverse Person** (`Q999999213`), nominated and never reviewed.
+
+`devils_dictionary_v2` was not read for the captures, and was not written.
+
+## What they show
+
+- **Highlight 1** is Pat Fixture: "Example · person", the name, and "cited as an example of" the gloss.
+- **Its "Why this is here"** holds the meaning, the reason given, and the six stages:
+  - Source, Nominated, Model and Reviewed read exactly as on the examples card further down the page;
+  - Shown here and Opening say a development fixture chose it and that it is not published.
+- **Highlight 2**, the nomination nobody accepted, is not there. *How this was chosen* lists it as "it is not an example a reviewer has accepted", which names no one. The adverse person's name appears nowhere in the page's HTML.
+
+## Method
+
+- Playwright Chromium, with `prefers-color-scheme` light and dark, and the sticky header made static:
+  - 1280 × 900 at DPR 1;
+  - 375 × 812 at DPR 2, with mobile and touch emulation.
+- Each capture is a full-page clip of `#opening`. The phases:
+  - **closed**: every disclosure closed, the reader's default;
+  - **open**: the highlight's "Why this is here" and "How this was chosen" both open.
+- `document.documentElement.scrollWidth` equals the viewport width on every capture.
+
+## Size
+
+| Viewport | Page without the fixture → with it, closed | `#opening`, closed → open | "Why this is here" summary |
+|---|---|---|---|
+| 1280 × 900 | 2,954 → 3,233 px (+279) | 263 → 847 px | 28 px |
+| 375 × 812 | 4,460 → 4,891 px (+431) | 399 → 1,521 px | **44 px** |
+
+Light and dark measure the same. The opening renders only behind the development gate, so no public page pays for it.
+
+The 44 px summary on a phone is new in this build. It applies to every disclosure of the opening, the lead's included: #202's shared summary was a 28 px target, while the examples card's disclosure was already 44 px. Its desktop size is unchanged.
+
+| File | What |
+|---|---|
+| `issue-212-build3-coward-{1280,375}-{light,dark}-closed.png` | the opening with the exemplar tile, disclosures closed |
+| `issue-212-build3-coward-{1280,375}-{light,dark}-open.png` | the same, with "Why this is here" and "How this was chosen" open |

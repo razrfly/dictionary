@@ -389,13 +389,14 @@ defmodule DevilsDictionaryWeb.Opening do
   slot :inner_block, required: true
 
   # One disclosure per item, named for the question it answers. A reader who
-  # does not open it still learns that an AI-generated note is inside.
+  # does not open it still learns that an AI-generated note is inside. On a
+  # phone its summary is a 44 px tap target, as the examples card's is.
   defp why(assigns) do
     assigns = assign(assigns, :generated?, Enum.any?(assigns.reasons, &generated?/1))
 
     ~H"""
     <details id={@id} phx-mounted={JS.ignore_attributes(["open"])} class="group/why">
-      <summary class="flex w-fit cursor-pointer list-none flex-wrap items-center gap-x-2 rounded-sm text-base/7 text-mist-600 hover:text-mist-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 sm:text-sm/7 dark:text-mist-400 dark:hover:text-white dark:focus-visible:outline-white [&::-webkit-details-marker]:hidden">
+      <summary class="flex min-h-11 w-fit cursor-pointer list-none flex-wrap items-center gap-x-2 rounded-sm text-base/7 text-mist-600 hover:text-mist-950 sm:min-h-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 sm:text-sm/7 dark:text-mist-400 dark:hover:text-white dark:focus-visible:outline-white [&::-webkit-details-marker]:hidden">
         <span class="underline decoration-mist-950/20 underline-offset-4 dark:decoration-white/20">
           {@summary}
         </span>
