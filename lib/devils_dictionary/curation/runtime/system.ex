@@ -15,19 +15,26 @@ defmodule DevilsDictionary.Curation.Runtime.System do
   or starts anything.
   """
 
-  @doc "`{:ok, %{mounted, external, device}}` or `{:error, reason}`."
+  @doc """
+  `{:ok, %{mounted, external, internal, device}}` or `{:error, reason}`.
+  `external` and `internal` are each true only when diskutil says so;
+  without its `Internal` key, both are false.
+  """
   def volume(mount_point) do
     with {out, 0} <-
            System.cmd("diskutil", ["info", "-plist", mount_point], stderr_to_stdout: true),
          {:ok, mounted_at} <- plist_string(out, "MountPoint") do
+      internal = plist_bool(out, "Internal")
+
       {:ok,
        %{
          mounted: mounted_at == mount_point,
-         external: plist_bool(out, "Internal") == false,
+         external: internal == false,
+         internal: internal == true,
          device: plist_string(out, "DeviceNode") |> elem(1)
        }}
     else
-      _ -> {:ok, %{mounted: false, external: false, device: nil}}
+      _ -> {:ok, %{mounted: false, external: false, internal: false, device: nil}}
     end
   rescue
     _ -> {:error, :volume_unreadable}

@@ -688,7 +688,10 @@ defmodule DevilsDictionary.Installation.Bundle do
   @doc """
   Copies a finished bundle to `out`, resuming any partial file, and writes
   the manifest there last, so the copy is a bundle only once every file is
-  verified. `out` must be on the given volume.
+  verified. `out` must be on the external volume `volume:` names, or, with
+  `internal: true`, on an internal volume apart from the bundle and outside
+  every checkout (`Volume.check_internal/2`): the second copy that outlives
+  the external drive (#211 D14).
   """
   def transfer(from, out, opts) do
     from = Path.expand(from)
@@ -699,12 +702,7 @@ defmodule DevilsDictionary.Installation.Bundle do
          :ok <- digest_pinned(from, opts[:expect_manifest_sha256]),
          :ok <- Manifest.confined(manifest),
          :ok <- not_finished(out),
-         {:ok, _volume} <-
-           Volume.check(out, Keyword.fetch!(opts, :volume),
-             uuid: opts[:uuid],
-             need_bytes: remaining(manifest, out),
-             probe: Keyword.get(opts, :probe, &Volume.probe/1)
-           ),
+         {:ok, _volume} <- destination(from, out, manifest, opts),
          :ok <- copy_all(manifest, from, out, log),
          {:ok, _rows} <- copied(out, manifest) do
       # Last, and only once every file it lists is in place and verified.
@@ -718,6 +716,28 @@ defmodule DevilsDictionary.Installation.Bundle do
           {:error,
            "the copy at #{out} does not verify: #{inspect(report.problems ++ failed(report.rows))}"}
       end
+    end
+  end
+
+  defp destination(from, out, manifest, opts) do
+    need = remaining(manifest, out)
+    probe = Keyword.get(opts, :probe, &Volume.probe/1)
+
+    if opts[:internal] do
+      Volume.check_internal(
+        out,
+        [apart_from: from, need_bytes: need, probe: probe] ++
+          Enum.reject(
+            Keyword.take(opts, [:source_probe, :stat, :reserve_bytes]),
+            &is_nil(elem(&1, 1))
+          )
+      )
+    else
+      Volume.check(out, Keyword.fetch!(opts, :volume),
+        uuid: opts[:uuid],
+        need_bytes: need,
+        probe: probe
+      )
     end
   end
 
