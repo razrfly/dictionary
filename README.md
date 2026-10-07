@@ -32,7 +32,11 @@ From a clean Mac to the full corpus. Every step checks before it writes; the det
    mix ecto.migrate         # a recorded step: main may be newer than the bundle
    ```
 
-   **Which server:** `config/dev.exs` and `config/test.exs` reach port **5434** unless `DD_DATABASE_PORT` names another. A default Postgres on 5432 needs `export DD_DATABASE_PORT=5432` first. Every `mix test` and `mix ecto.*` for tests runs with `MIX_ENV=test` and a private `MIX_TEST_PARTITION`.
+   **Which server:** `config/dev.exs` and `config/test.exs` reach port **5434** unless `DD_DATABASE_PORT` names another.
+   - **On a new machine** whose only Postgres listens on the default 5432, `export DD_DATABASE_PORT=5432` first.
+   - **On the owner's Mac,** 5432 is a cluster other projects share, on the internal disk. Never point the dictionary at it: its cluster is 5434, on the external drive. `mix dd.bootstrap.cluster` creates such a cluster ([`installation.md`](docs/operations/installation.md)).
+
+   Every `mix test` and `mix ecto.*` for tests runs with `MIX_ENV=test` and a private `MIX_TEST_PARTITION`.
 4. **Copy `.env` privately.** It holds the provider keys, and it is never in a bundle or in git. `.env.example` lists the names, and `mix dd.doctor` reports which are missing, never their values. Then start the server:
 
    ```bash
