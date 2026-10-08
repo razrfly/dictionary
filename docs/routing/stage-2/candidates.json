@@ -1000,7 +1000,7 @@
     "collision_group_member"
    ],
    "status": "mapped",
-   "stored_kind": "concept"
+   "stored_kind": "work"
   },
   {
    "address_status": "collision_review",
@@ -1020,7 +1020,7 @@
     "named_edge_case"
    ],
    "status": "mapped",
-   "stored_kind": "concept"
+   "stored_kind": "work"
   },
   {
    "address_status": "collision_review",
@@ -1355,7 +1355,7 @@
     "collision_group_member"
    ],
    "status": "mapped",
-   "stored_kind": "concept"
+   "stored_kind": "work"
   },
   {
    "address_status": "collision_review",
@@ -1407,7 +1407,7 @@
     "stratified_sample"
    ],
    "status": "mapped",
-   "stored_kind": "concept"
+   "stored_kind": "event"
   },
   {
    "address_status": "classification_review",
@@ -1444,7 +1444,7 @@
     "collision_group_member"
    ],
    "status": "mapped",
-   "stored_kind": "concept"
+   "stored_kind": "work"
   },
   {
    "address_status": "candidate",
@@ -1478,7 +1478,7 @@
     "stratified_sample"
    ],
    "status": "mapped",
-   "stored_kind": "concept"
+   "stored_kind": "work"
   },
   {
    "address_status": "candidate",
@@ -1682,7 +1682,7 @@
     "collision_group_member"
    ],
    "status": "mapped",
-   "stored_kind": "concept"
+   "stored_kind": "work"
   },
   {
    "address_status": "collision_review",
@@ -1757,7 +1757,7 @@
     "collision_group_member"
    ],
    "status": "mapped",
-   "stored_kind": "concept"
+   "stored_kind": "work"
   },
   {
    "address_status": "collision_review",
@@ -1932,7 +1932,7 @@
     "named_edge_case"
    ],
    "status": "mapped",
-   "stored_kind": "concept"
+   "stored_kind": "work"
   },
   {
    "address_status": "collision_review",
@@ -1971,7 +1971,7 @@
     "collision_group_member"
    ],
    "status": "mapped",
-   "stored_kind": "concept"
+   "stored_kind": "work"
   },
   {
    "address_status": "not_proposed",
@@ -2063,7 +2063,7 @@
     "collision_group_member"
    ],
    "status": "mapped",
-   "stored_kind": "concept"
+   "stored_kind": "work"
   },
   {
    "address_status": "candidate",
@@ -2138,7 +2138,7 @@
     "stratified_sample"
    ],
    "status": "mapped",
-   "stored_kind": "concept"
+   "stored_kind": "work"
   },
   {
    "address_status": "collision_review",
@@ -2312,7 +2312,7 @@
     "collision_group_member"
    ],
    "status": "mapped",
-   "stored_kind": "concept"
+   "stored_kind": "work"
   },
   {
    "address_status": "not_proposed",
@@ -2666,7 +2666,7 @@
     "stratified_sample"
    ],
    "status": "mapped",
-   "stored_kind": "concept"
+   "stored_kind": "event"
   },
   {
    "address_status": "candidate",
@@ -3111,14 +3111,14 @@
    "19": 1
   },
   "collision_groups_touched": 11,
-  "deferred_outside_population": 100614,
+  "deferred_outside_population": 100749,
   "global_proposal_conflicts": 0,
   "inputs": {
-   "assignments": "data/audits/2026-09-27-stage2r/candidates-refresh/audit/assignments.jsonl",
-   "assignments_sha256": "00be652fd7e9a92b5d022dfcc9ecbc4074a0e69c6f9855998e0a143a5dc2d433",
-   "audit_summary": "data/audits/2026-09-27-stage2r/candidates-refresh/audit/summary.json",
-   "input": "data/audits/2026-09-27-stage2r/candidates-refresh/input.jsonl",
-   "input_sha256": "7524e9e3ad00e60f54448b4aaf95bb6ddcbf95970df0723df053e833473cad53",
+   "assignments": "/Volumes/LLM Models/dictionary/private/2026-10-08-224/routing-audit/assignments.jsonl",
+   "assignments_sha256": "ee31ddd0b52aab49362cefab9759c9db418a47c7d72afb7cd55b51b412f896e7",
+   "audit_summary": "/Volumes/LLM Models/dictionary/private/2026-10-08-224/routing-audit/summary.json",
+   "input": "/Volumes/LLM Models/dictionary/private/2026-10-08-224/routing-input.jsonl",
+   "input_sha256": "a33f1bc8c62b630be701d84b48f994fcfb6c127a8d4012bf492911cdb1b55fd0",
    "policy_sha256": "54695faa6e686d2b23f59f0f328d54e033b956e7dfb9d21fda7800a2082b7eac",
    "policy_version": "1.0.0"
   },
@@ -3146,7 +3146,7 @@
   "records": 170,
   "selection": "policy boundary examples (54) + stratified mapped sample (46) + named ADR edge cases present in the snapshot + every member of each candidate-path collision group touching those",
   "selection_missing_from_audit": [],
-  "sha256_of_records": "5abe2235ac1ea2145376ba019ab7bcedc8aa012bc0816b3c307eda0adf4bdcb4",
-  "source": "data/audits/2026-09-27-stage2r/candidates-refresh/audit/assignments.jsonl (policy 1.0.0, 100,784 entities, read-only)"
+  "sha256_of_records": "c493ba0e2f662d1bbc1f903c1a10df825d475113bcf117a058fbfecc502023d1",
+  "source": "/Volumes/LLM Models/dictionary/private/2026-10-08-224/routing-audit/assignments.jsonl (policy 1.0.0, 100,919 entities, read-only)"
  }
 }
