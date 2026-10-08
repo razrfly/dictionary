@@ -80,7 +80,7 @@ Every record has exactly one. Classification and collision approval are **not** 
 | Deferred: identity lifecycle review | 1 | "Issue 84 split artwork", a development fixture present in the corpus; never publish it. |
 | Excluded: source page | 2 | The Human and Polish disambiguation pages. Never subject addresses. They may inform a future choice or collection page, whose namespace is undefined. |
 
-The other **100,614** entities stay deferred with their audit dispositions. Stage 2 must keep them visible, not silently drop them.
+The other **100,749** entities stay deferred with their audit dispositions. Stage 2 must keep them visible, not silently drop them.
 
 ## Collision groups touching the population
 
