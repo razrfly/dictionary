@@ -660,10 +660,7 @@ defmodule DevilsDictionary.Routing.BackfillTest do
 
     page = Repo.get_by!(Page, target_object_id: ctx.world.bierce.object_id)
 
-    {1, _} =
-      Repo.update_all(from(p in Page, where: p.id == ^page.id),
-        set: [publication_state: :published]
-      )
+    DevilsDictionary.RoutingFixtures.published!(page)
 
     assert Backfill.manifest(plan.run_key)["publication_approved"] == 1
   end

@@ -31,11 +31,11 @@ defmodule DevilsDictionary.Routing.Recovery do
   # The migration that creates them.
   @routing_migration 20_260_926_193_256
 
-  # Durable routing state added since the foundation (#237): the standing
-  # review rule's recorded signings. Digested, and required in a snapshot,
-  # where the database has them; a database that predates them is judged
-  # on the six.
-  @later_tables ~w(review_rule_signatures)
+  # Durable routing state added since the foundation (#237): the publication
+  # receipts and the standing review rule's recorded signings. Digested, and
+  # required in a snapshot, where the database has them; a database that
+  # predates them is judged on the six.
+  @later_tables ~w(page_publications review_rule_signatures)
 
   # Operational queue state, not registry or routing: jobs and node heartbeats.
   @unmanifested ~w(oban_jobs oban_peers)
@@ -54,8 +54,8 @@ defmodule DevilsDictionary.Routing.Recovery do
 
   @doc """
   The tables whose rows are durable routing state in the current database:
-  the six routing tables, and the later ones (`review_rule_signatures`)
-  where they exist.
+  the six routing tables, and the later ones (`page_publications`,
+  `review_rule_signatures`) where they exist.
   """
   def durable_tables do
     %{rows: rows} =
@@ -796,11 +796,12 @@ defmodule DevilsDictionary.Routing.Recovery do
   end
 
   # Every routing row, whole, in id order: any committed routing change —
-  # a ledger write, a publication change, anything — changes it. Each row is
-  # hashed by the server and the hashes stream through a cursor, so neither a
-  # table nor a batch of long On bodies is ever one value in memory
-  # (PostgreSQL caps a value at 1 GB). Must run inside a repeatable-read
-  # transaction so the six tables are read at once.
+  # a ledger write, a publication change, a publication receipt, anything —
+  # changes it. Each row is hashed by the server and the hashes stream
+  # through a cursor, so neither a table nor a batch of long On bodies is
+  # ever one value in memory (PostgreSQL caps a value at 1 GB). Must run
+  # inside a repeatable-read transaction so the tables are read at once.
+  # `page_publications` is digested where it exists (#237).
   defp digest(conn) do
     %{rows: [[present?]]} =
       Postgrex.query!(conn, "SELECT to_regclass('public.route_changes') IS NOT NULL", [])
