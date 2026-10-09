@@ -102,7 +102,7 @@ defmodule DevilsDictionaryWeb.Word do
            per source, and carrying a QID — was the last thing on the page.
            A source's first gloss would be a choice of source; this is not. --%>
       <p
-        :if={@thing && @thing.concept.description}
+        :if={@thing && @thing.concept && @thing.concept.description}
         id="quick-definition"
         class="mt-3 max-w-[40ch] text-base/7 text-mist-950 text-pretty sm:text-sm/7 dark:text-white"
       >
