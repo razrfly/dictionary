@@ -13,7 +13,17 @@ defmodule DevilsDictionary.RoutingFixtures do
   import Ecto.Query
 
   alias DevilsDictionary.{Registry, Repo}
-  alias DevilsDictionary.Routing.{Classifications, Ledger, Page, Pages, Policy}
+
+  alias DevilsDictionary.Routing.{
+    Classifications,
+    Ledger,
+    Page,
+    PagePublication,
+    Pages,
+    Policy,
+    Publications
+  }
+
   alias DevilsDictionary.Sources.Actor
 
   # One policy anchor per family, from the policy's approved examples.
@@ -136,15 +146,99 @@ defmodule DevilsDictionary.RoutingFixtures do
   end
 
   @doc """
-  Marks a page published **directly**. Stage 1 has no publication path — that
-  is Stage 5's gated workflow — so tests stand in for it here. Nothing in the
+  Publishes a page **without its gates**, for tests of what a published page
+  does rather than of whether it may be published (`PublicationsTest` is
+  that). The database still requires a receipt for every publication state
+  change (#237), so this records one — a fixture's, saying so — exactly as
+  `Routing.Publications` would, and then changes the state. Nothing in the
   application calls this.
   """
   def published!(%Page{id: id}) do
-    {1, _} =
-      Repo.update_all(from(p in Page, where: p.id == ^id), set: [publication_state: :published])
-
+    page = Repo.get!(Page, id)
+    receipt!(page, :publish, page.publication_state, :published)
     Repo.get!(Page, id)
+  end
+
+  @doc """
+  Withdraws a page without `Routing.Publications.withdraw/3`, recording the
+  receipt the database requires; a page that was never published is
+  published first, since only a published page can be withdrawn.
+  """
+  def withdrawn!(%Page{id: id}) do
+    page = Repo.get!(Page, id)
+    page = if page.publication_state == :published, do: page, else: published!(page)
+    receipt!(page, :withdraw, :published, :withdrawn)
+    Repo.get!(Page, id)
+  end
+
+  # The receipt and the change in one transaction, as the database requires
+  # at commit.
+  defp receipt!(page, action, before, after_state) do
+    {:ok, _} = Repo.transaction(fn -> record!(page, action, before, after_state) end)
+  end
+
+  defp record!(page, action, before, after_state) do
+    Repo.insert!(%PagePublication{
+      page_id: page.id,
+      action: action,
+      before_state: before,
+      after_state: after_state,
+      manifest_sha256: if(action == :publish, do: String.duplicate("0", 64)),
+      gates:
+        if(action == :publish,
+          do:
+            Map.new(Publications.gates(), &{&1, %{"passed" => true, "detail" => "test fixture"}}),
+          else: %{}
+        ),
+      actor_id: publisher!().id,
+      reason: "test fixture: stands in for #{action}"
+    })
+
+    {1, _} =
+      Repo.update_all(from(p in Page, where: p.id == ^page.id),
+        set: [publication_state: after_state]
+      )
+  end
+
+  # One human actor for the fixture's receipts, made once per test.
+  defp publisher! do
+    with %Actor{id: id} = actor <- Process.get(:routing_fixture_publisher),
+         %Actor{} <- Repo.get(Actor, id) do
+      actor
+    else
+      _ ->
+        actor = human!()
+        Process.put(:routing_fixture_publisher, actor)
+        actor
+    end
+  end
+
+  @doc """
+  The SQL of a fixture's receipt for `page_id`, for tests that change a
+  publication state by raw SQL: `[sql, params]` for `Repo.query!/2`.
+  """
+  def receipt_sql(page_id, action, before, after_state, actor_id) do
+    gates =
+      if action == "publish",
+        do: Map.new(Publications.gates(), &{&1, %{"passed" => true, "detail" => "test fixture"}}),
+        else: %{}
+
+    [
+      """
+      INSERT INTO page_publications
+        (page_id, action, before_state, after_state, manifest_sha256, gates, actor_id, reason)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, 'test fixture: raw SQL')
+      """,
+      [
+        page_id,
+        action,
+        before,
+        after_state,
+        if(action == "publish", do: String.duplicate("0", 64)),
+        gates,
+        actor_id
+      ]
+    ]
   end
 
   @doc "An allocated, published subject page at `path`."

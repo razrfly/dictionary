@@ -261,8 +261,9 @@ defmodule DevilsDictionary.Routing.RecoveryTest do
     baseline_projected = Recovery.manifest(rows: true, mode: :projected)
     resolutions = Recovery.resolutions()
 
-    # The fixture reached every routing table and every operation.
-    for table <- Recovery.routing_tables(), do: assert(baseline[table].count > 0, table)
+    # The fixture reached every routing table and every operation, and the
+    # publication receipts (#237): each published page's.
+    for table <- Recovery.durable_tables(), do: assert(baseline[table].count > 0, table)
 
     assert baseline["route_changes"].rows
            |> Enum.map(&(Jason.decode!(&1) |> Enum.at(3)))
@@ -296,6 +297,7 @@ defmodule DevilsDictionary.Routing.RecoveryTest do
       assert Recovery.resolutions() == resolutions
       assert {:ok, report} = Recovery.verify(ctx.source)
       assert report.sections["objects"] == baseline["objects"].count
+      assert report.sections["page_publications"] == baseline["page_publications"].count
 
       # Sequences are compared by their own `last_value` and `is_called`, so
       # a changed next id is a difference even for a sequence never used,
@@ -514,8 +516,10 @@ defmodule DevilsDictionary.Routing.RecoveryTest do
              end) == [[ctx.target]]
     end)
 
-    # Rolling the routing migration back would drop every routing table; it
-    # refuses while they hold anything.
+    # Rolling the routing migrations back would drop the routing tables; each
+    # refuses while its tables hold anything. The publication receipts'
+    # migration is the newer, so it refuses first (#237); the foundation's,
+    # asked alone, refuses as well.
     Recovery.with_database(ctx.target, fn ->
       rollback =
         assert_raise Postgrex.Error, fn ->
@@ -526,8 +530,28 @@ defmodule DevilsDictionary.Routing.RecoveryTest do
           )
         end
 
+      assert rollback.postgres.message =~ "refusing to roll back page_publications"
+
+      [{foundation, _}] =
+        Repo
+        |> Ecto.Migrator.migrations_path()
+        |> Path.join("20260926193256_create_routing_foundation.exs")
+        |> Code.compile_file()
+
+      rollback =
+        assert_raise Postgrex.Error, fn ->
+          Ecto.Migrator.run(Repo, [{20_260_926_193_256, foundation}], :down,
+            all: true,
+            dynamic_repo: Repo.get_dynamic_repo(),
+            log: false
+          )
+        end
+
       assert rollback.postgres.message =~ "refusing to roll back the routing foundation"
       assert %{rows: [[true]]} = Repo.query!("SELECT to_regclass('route_changes') IS NOT NULL")
+
+      assert %{rows: [[true]]} =
+               Repo.query!("SELECT to_regclass('page_publications') IS NOT NULL")
     end)
 
     # The source's snapshot holds the same routing rows, but it is a snapshot
@@ -596,12 +620,21 @@ defmodule DevilsDictionary.Routing.RecoveryTest do
       end)
     end)
 
-    # A publication change writes no ledger row and no new id; it still counts.
+    # A publication change writes no ledger row; its receipt and the page's
+    # new state both count (#237).
     Recovery.with_database(ctx.target, fn ->
-      Repo.query!("""
-      UPDATE pages SET publication_state = 'withdrawn'
-       WHERE id = (SELECT min(id) FROM pages WHERE publication_state = 'published')
-      """)
+      %{rows: [[page_id]]} =
+        Repo.query!("SELECT min(id) FROM pages WHERE publication_state = 'published'")
+
+      %{rows: [[actor_id]]} =
+        Repo.query!("SELECT min(id) FROM actors WHERE actor_kind = 'user'")
+
+      {:ok, _} =
+        Repo.transaction(fn ->
+          [receipt, params] = receipt_sql(page_id, "withdraw", "published", "withdrawn", actor_id)
+          Repo.query!(receipt, params)
+          Repo.query!("UPDATE pages SET publication_state = 'withdrawn' WHERE id = $1", [page_id])
+        end)
     end)
 
     assert {:error, stale} = Recovery.guard(target_config, "reset", covering)

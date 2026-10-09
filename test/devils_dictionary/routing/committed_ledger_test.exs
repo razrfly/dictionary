@@ -48,6 +48,8 @@ defmodule DevilsDictionary.Routing.CommittedLedgerTest do
 
     {:ok, _} =
       Repo.transaction(fn ->
+        [receipt, params] = receipt_sql(page.id, "withdraw", "published", "withdrawn", human.id)
+        Repo.query!(receipt, params)
         Repo.query!("UPDATE pages SET publication_state = 'withdrawn' WHERE id = $1", [page.id])
 
         tombstoned =

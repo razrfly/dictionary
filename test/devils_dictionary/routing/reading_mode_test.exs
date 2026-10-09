@@ -20,13 +20,6 @@ defmodule DevilsDictionary.Routing.ReadingModeTest do
     %{human: human!(), importer: importer!()}
   end
 
-  defp withdrawn!(%Page{id: id}) do
-    {1, _} =
-      Repo.update_all(from(p in Page, where: p.id == ^id), set: [publication_state: :withdrawn])
-
-    Repo.get!(Page, id)
-  end
-
   test "public serves only published; internal also serves a draft, and neither writes", ctx do
     draft = subject_page!("nature", "Mars") |> allocated!("/nature/mars", ctx.importer)
 

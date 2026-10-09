@@ -189,10 +189,17 @@ defmodule DevilsDictionary.Routing.SchemaIntegrityTest do
   test "a published page has a canonical path", ctx do
     unrouted = subject_page!("people", "Unrouted", :person)
 
+    # Even with its receipt: the commit-time check refuses it.
+    [receipt, params] = receipt_sql(unrouted.id, "publish", "draft", "published", ctx.human.id)
+
     assert {:refused, message} =
-             attempt(
-               sql("UPDATE pages SET publication_state = 'published' WHERE id = $1", [unrouted.id])
-             )
+             attempt(fn ->
+               Repo.query!(receipt, params)
+
+               Repo.query!("UPDATE pages SET publication_state = 'published' WHERE id = $1", [
+                 unrouted.id
+               ])
+             end)
 
     assert message =~ "published page #{unrouted.id} has no canonical path"
     assert Repo.get!(Page, ctx.page.id).publication_state == :published
