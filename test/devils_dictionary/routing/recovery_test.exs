@@ -43,7 +43,9 @@ defmodule DevilsDictionary.Routing.RecoveryTest do
     PublicPath,
     Recovery,
     Resolution,
-    Resolver
+    Resolver,
+    ReviewRule,
+    ReviewRuleSignature
   }
 
   @moduletag :unboxed
@@ -104,6 +106,25 @@ defmodule DevilsDictionary.Routing.RecoveryTest do
   end
 
   # A routing history that touches every table and every operation.
+  # The standing review rule's recorded signing (#237 Part A′): durable
+  # routing state too, so the digest, the snapshot and the restore cover it.
+  defp signed_rule! do
+    reviewer =
+      DevilsDictionary.AccountsFixtures.unconfirmed_user_fixture()
+      |> Ecto.Changeset.change(reviewer: true)
+      |> Repo.update!()
+
+    {:ok, rule} = ReviewRule.read(ReviewRule.path())
+
+    Repo.insert!(%ReviewRuleSignature{
+      rule_sha256: rule.sha256,
+      user_id: reviewer.id,
+      signed_at: DateTime.utc_now() |> DateTime.truncate(:second),
+      method: "recovery test fixture",
+      attestation: "a signing recorded for the restore to carry"
+    })
+  end
+
   defp history!(ids, human) do
     cat = subject_on!(ids["cat"], "nature", "/nature/cat", human)
     dog = subject_on!(ids["dog"], "nature", "/nature/dog", human)
@@ -256,13 +277,15 @@ defmodule DevilsDictionary.Routing.RecoveryTest do
        ctx do
     ids = project!()
     pages = history!(ids, ctx.human)
+    signed_rule!()
     references = registry_references!()
     baseline = Recovery.manifest(rows: true)
     baseline_projected = Recovery.manifest(rows: true, mode: :projected)
     resolutions = Recovery.resolutions()
 
-    # The fixture reached every routing table and every operation, and the
-    # publication receipts (#237): each published page's.
+    # The fixture reached every routing table and every operation, the
+    # publication receipts (#237): each published page's, and the standing
+    # review rule's recorded signing.
     for table <- Recovery.durable_tables(), do: assert(baseline[table].count > 0, table)
 
     assert baseline["route_changes"].rows
