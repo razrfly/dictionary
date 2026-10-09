@@ -17,7 +17,6 @@ defmodule DevilsDictionary.OnFixtures do
   """
 
   import DevilsDictionary.RoutingFixtures
-  import Ecto.Query
 
   alias DevilsDictionary.{Registry, Repo}
   alias DevilsDictionary.Routing.{Classifications, Page, Pages}
@@ -138,13 +137,8 @@ defmodule DevilsDictionary.OnFixtures do
     if opts[:published], do: published!(page), else: page
   end
 
-  @doc "Marks a page withdrawn **directly**, standing in for Stage 5 as `published!/1` does."
-  def withdrawn!(%Page{id: id}) do
-    {1, _} =
-      Repo.update_all(from(p in Page, where: p.id == ^id), set: [publication_state: :withdrawn])
-
-    Repo.get!(Page, id)
-  end
+  @doc "Withdraws a page with a fixture's receipt (`RoutingFixtures.withdrawn!/1`)."
+  def withdrawn!(%Page{} = page), do: DevilsDictionary.RoutingFixtures.withdrawn!(page)
 
   @doc "Runs `fun` with internal reading configured `on` (or off), restoring it after."
   def reading(on?, fun) do

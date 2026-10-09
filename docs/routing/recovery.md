@@ -27,12 +27,14 @@ A covering snapshot has a `PATH.routing.json` sidecar that records:
 
 The dump must also contain every routing table (checked with `pg_restore --list`).
 
-Rolling the routing migration back would drop every routing table, so it refuses while any routing row exists (`mix ecto.rollback` raises). Emptying the tables first is a deliberate act: it needs `dictionary.allow_routing_truncate` set in the transaction that does it.
+**Publication receipts** (`page_publications`, [#237](https://github.com/razrfly/dictionary/issues/237)) are durable routing state too, in a database migrated that far: the digest covers them beside the six routing tables, a covering snapshot must contain them, and they refuse `TRUNCATE`, `UPDATE` and `DELETE` like the ledger. A database that predates them is judged on the six. `mix dd.routing.verify` compares them as it compares every table, row by row.
+
+Rolling the routing migration back would drop every routing table, so it refuses while any routing row exists (`mix ecto.rollback` raises); rolling back the receipts' migration refuses while any receipt exists and, being the newest, runs first; the standing review rule's signatures' migration refuses while any signing is recorded; so a rollback of the stacked schema drops nothing before it refuses. Emptying the tables first is a deliberate act: it needs `dictionary.allow_routing_truncate` set in the transaction that does it.
 
 `mix dd.snapshot` writes that sidecar, and makes it exact. A repeatable-read transaction exports its snapshot (`pg_export_snapshot()`), computes the digest by streaming each routing table through a cursor, and keeps the snapshot open while `pg_dump --snapshot` dumps under it. The digest therefore describes exactly the rows in the dump:
 
 - A write still in flight during the dump is in neither. Once it commits, the digests differ and the guard refuses.
-- Any committed routing change counts, including one that adds no id, such as a change of publication state.
+- Any committed routing change counts: a change of publication state, and the receipt that must record it.
 
 The dump and its sidecar are each written to a partial file and renamed into place only when complete, the dump first. A snapshot that fails leaves an earlier one at the same path as it was, still restorable. A sidecar never vouches for bytes it does not describe: it records the dump's SHA-256, and a restore refuses a mismatch. A dump without the sidecar does not count.
 

@@ -271,7 +271,7 @@ Main at `5713f8e` had 16 doctests and 2,088 tests. The commits after `553600a` c
 | C++, C+, c; Unicode; malformed requests | `address_test.exs`, `resolver_test.exs` |
 | Revisioned On bodies and typed membership | `pages_test.exs`: whole revisions with exact ordered membership; an association writes no names or identifiers; malformed membership is an error tuple |
 
-Additive preservation of existing readers is shown by the unchanged full suite. Tests stand in for Stage 5's publication gate by setting `publication_state` directly (`RoutingFixtures.published!/1`). No application code publishes, and no test result is a publication approval.
+Additive preservation of existing readers is shown by the unchanged full suite. Until Stage 5, tests stood in for the publication gate by setting `publication_state` directly; since [#237](https://github.com/razrfly/dictionary/issues/237) C1, `RoutingFixtures.published!/1` writes the receipt the database now requires and skips the eight gates, for tests of what a published page does rather than of whether it may be published (`PublicationsTest` is the gates' own). `Routing.Publications` is the application code that publishes; no test result is a publication approval.
 
 ## Known limits
 

@@ -140,11 +140,9 @@ defmodule DevilsDictionary.Routing.CommittedIntegrityTest do
 
     assert {:refused, message} =
              attempt(fn ->
-               merged = Repo.get!(Page, ctx.page.id)
-
-               Repo.query!("UPDATE pages SET publication_state = 'draft' WHERE id = $1", [
-                 merged.id
-               ])
+               # Withdrawn, so the un-merged page's missing canonical is not
+               # what refuses it: the repurposed address is.
+               merged = withdrawn!(Repo.get!(Page, ctx.page.id))
 
                repage!(
                  merged,

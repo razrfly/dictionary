@@ -12,19 +12,11 @@ defmodule DevilsDictionary.Routing.ReadingModeTest do
   use DevilsDictionary.DataCase, async: false
 
   import DevilsDictionary.RoutingFixtures
-  import Ecto.Query
 
   alias DevilsDictionary.Routing.{Ledger, Page, Resolution, Resolver}
 
   setup do
     %{human: human!(), importer: importer!()}
-  end
-
-  defp withdrawn!(%Page{id: id}) do
-    {1, _} =
-      Repo.update_all(from(p in Page, where: p.id == ^id), set: [publication_state: :withdrawn])
-
-    Repo.get!(Page, id)
   end
 
   test "public serves only published; internal also serves a draft, and neither writes", ctx do
