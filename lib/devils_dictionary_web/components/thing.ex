@@ -86,13 +86,13 @@ defmodule DevilsDictionaryWeb.Thing do
 
       <div class="min-w-0">
         <h2 class="font-display text-2xl/8 text-mist-950 dark:text-white">
-          <.link
+          <.subject_link
             id="concept-card-entity"
             navigate={DevilsDictionary.Routing.Links.path(@concept.object_id, @concept.label, @mode)}
             class="underline-offset-4 transition-colors hover:text-amber-700 hover:underline dark:hover:text-amber-300"
           >
             {@concept.label}
-          </.link>
+          </.subject_link>
         </h2>
         <p :if={@concept.description} class="mt-1 text-sm/7 text-mist-700 dark:text-mist-400">
           {@concept.description}

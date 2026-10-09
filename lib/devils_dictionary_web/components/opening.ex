@@ -185,13 +185,13 @@ defmodule DevilsDictionaryWeb.Opening do
         <div class="min-w-0">
           <p aria-hidden="true" class="text-base/6 text-mist-500 sm:text-sm/6">Artwork</p>
           <p class="text-base/6 font-medium text-mist-950 sm:text-sm/6 dark:text-white">
-            <.link
+            <.subject_link
               id={"#{@id}-title"}
               navigate={entity_path(@highlight, @mode)}
               class="rounded-sm hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:focus-visible:outline-white"
             >
               {@highlight.title}
-            </.link>
+            </.subject_link>
           </p>
           <p
             :if={@highlight.creator || @highlight.date}
@@ -283,13 +283,13 @@ defmodule DevilsDictionaryWeb.Opening do
           {example_kind(@highlight.subject)}
         </p>
         <p class="text-base/6 font-medium text-mist-950 sm:text-sm/6 dark:text-white">
-          <.link
+          <.subject_link
             id={"#{@id}-title"}
             navigate={subject_path(@highlight, @mode)}
             class="rounded-sm hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:focus-visible:outline-white"
           >
             {@highlight.title}
-          </.link>
+          </.subject_link>
         </p>
         <p
           id={"#{@id}-cited"}
@@ -629,12 +629,12 @@ defmodule DevilsDictionaryWeb.Opening do
               id={"opening-about-revision-#{highlight.position}"}
             >
               Highlight {highlight.position} · {reference(highlight.reference)} ·
-              <.link
+              <.subject_link
                 navigate={inspect_path(highlight, @mode)}
                 class="rounded-sm underline underline-offset-4 hover:text-mist-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:hover:text-white dark:focus-visible:outline-white"
               >
                 {inspect_label(highlight.kind)}
-              </.link>
+              </.subject_link>
             </li>
           </ul>
         </div>
@@ -861,7 +861,8 @@ defmodule DevilsDictionaryWeb.Opening do
   defp subject_path(%{subject: %{kind: :content}, reference: ref}, _mode), do: evidence_path(ref)
   defp subject_path(highlight, mode), do: entity_path(highlight, mode)
 
-  # A subject link goes through the one link helper (#219).
+  # A subject link goes through the one link helper (#219): nil where the
+  # reader may not link it (#237 D2), which `subject_link/1` shows as text.
   defp entity_path(%{reference: %{object_id: id}, title: title}, mode),
     do: DevilsDictionary.Routing.Links.path(id, title || "work", mode)
 

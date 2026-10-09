@@ -187,27 +187,81 @@ defmodule DevilsDictionaryWeb.Kit do
     """
   end
 
+  # What only a link carries: a `<span>` standing in for one drops them.
+  @link_attributes ~w(href navigate patch replace method download target rel)a
+
   @doc """
   An inline link in the kit's voice.
 
   Named `a/1` rather than `link/1` so it does not shadow `Phoenix.Component.link/1`,
   which it wraps — `navigate`, `patch` and `href` all pass straight through.
+
+  Given `navigate={nil}` and no `href` or `patch` — a subject the reader may
+  not link (`Routing.Links.fallback/3`, #237 D2) — it is its text in a
+  `<span>` in the same voice, never the `<a href="#">` that `link/1` makes of
+  a nil destination.
   """
   attr :class, :string, default: nil
   attr :rest, :global, include: ~w(href navigate patch replace method download target rel)
   slot :inner_block, required: true
 
   def a(assigns) do
+    if unlinked?(assigns.rest) do
+      assigns = assign(assigns, :rest, Map.drop(assigns.rest, @link_attributes))
+
+      ~H"""
+      <span
+        class={[
+          "inline-flex items-center gap-2 text-sm/7 font-medium text-mist-950 dark:text-white",
+          @class
+        ]}
+        {@rest}
+      >
+        {render_slot(@inner_block)}
+      </span>
+      """
+    else
+      ~H"""
+      <.link
+        class={[
+          "inline-flex items-center gap-2 text-sm/7 font-medium text-mist-950 hover:underline dark:text-white",
+          @class
+        ]}
+        {@rest}
+      >
+        {render_slot(@inner_block)}
+      </.link>
+      """
+    end
+  end
+
+  # A nil `navigate` with nowhere else to go.
+  defp unlinked?(rest),
+    do: Map.has_key?(rest, :navigate) and Enum.all?([:navigate, :href, :patch], &is_nil(rest[&1]))
+
+  @doc """
+  A subject named in a list or a sentence (#237 D2): `<.link navigate>` at its
+  path, and with no path — a subject the published host does not link
+  (`Routing.Links.fallback/3`) — a `<span>` with the same id, class and
+  attributes, so its label reads as plain text, never as `<a href="#">`.
+  Nothing is added inside or around it, so it sits in running text as a
+  `<.link>` did.
+  """
+  attr :navigate, :string, default: nil, doc: "the subject's path, or nil when it is not linked"
+  attr :id, :string, default: nil
+  attr :class, :any, default: nil
+  attr :rest, :global
+  slot :inner_block, required: true
+
+  def subject_link(%{navigate: nil} = assigns) do
     ~H"""
-    <.link
-      class={[
-        "inline-flex items-center gap-2 text-sm/7 font-medium text-mist-950 hover:underline dark:text-white",
-        @class
-      ]}
-      {@rest}
-    >
-      {render_slot(@inner_block)}
-    </.link>
+    <span id={@id} class={@class} phx-no-format {@rest}>{render_slot(@inner_block)}</span>
+    """
+  end
+
+  def subject_link(assigns) do
+    ~H"""
+    <.link navigate={@navigate} id={@id} class={@class} phx-no-format {@rest}>{render_slot(@inner_block)}</.link>
     """
   end
 

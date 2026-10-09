@@ -12,7 +12,8 @@ defmodule DevilsDictionaryWeb.HeadTest do
       (D1); a spelling, a trail, a drawer and the demo are noindex variants;
     * an exact word, the exact-identity route, evidence and the way in:
       noindex, each at its own canonical (the exact-identity route at the
-      subject's public address where one is served);
+      subject's public address where one is served, and 404 for a subject
+      whose page is not served, #237 D2);
     * live navigation sets the head again, and the hook element carries it;
     * a page that sets no head is noindex with no canonical.
 
@@ -298,12 +299,20 @@ defmodule DevilsDictionaryWeb.HeadTest do
     assert head.description == "French writer and philosopher."
     assert [%{"@type" => "WebPage"}] = head.json_ld["@graph"]
 
+    # A subject whose page the published host does not serve — every page
+    # while the switch is off, a draft — is 404 here as at its address (#237
+    # D2).
     switch(false, fn ->
-      assert head_of(ctx.conn, "/entities/#{id}/voltaire", 200).canonical ==
-               @origin <> "/entities/#{id}/voltaire"
+      head = head_of(ctx.conn, "/entities/#{id}/voltaire", 404)
+      assert head.robots == "noindex"
+      assert head.canonical == nil
     end)
 
-    album = subject!("Mars", "works", kind: :work, description: "2012 album")
+    draft = subject!("Venus", "works", kind: :work, description: "a draft")
+    assert head_of(ctx.conn, "/entities/#{draft.entity.object_id}/venus", 404).canonical == nil
+
+    # With no address served, the canonical is the route's own path.
+    album = subject!("Mars", "works", kind: :work, description: "2012 album", page: false)
     album_id = album.entity.object_id
     head = head_of(ctx.conn, "/entities/#{album_id}/mars", 200)
     assert head.canonical == @origin <> "/entities/#{album_id}/mars"

@@ -333,14 +333,14 @@ defmodule DevilsDictionaryWeb.Word do
         <.document>{Phoenix.HTML.raw(entry.body_html)}</.document>
         <p :if={Map.get(entry, :authors, []) != []} class="mt-3 text-sm text-mist-500">
           By
-          <.link
+          <.subject_link
             :for={author <- Map.get(entry, :authors, [])}
             id={"#{@card.id}-author-#{author.id}"}
             navigate={DevilsDictionary.Routing.Links.path(author.id, author.label, @mode)}
             class="mr-2 underline underline-offset-4 hover:text-amber-700"
           >
             {author.label}
-          </.link>
+          </.subject_link>
         </p>
       </div>
 
@@ -873,14 +873,14 @@ defmodule DevilsDictionaryWeb.Word do
            the last duplicate id on `/define/set` (#133 R4's acceptance). --%>
       <p :if={Map.get(@entry, :authors, []) != []} class="mt-3 text-base/7 text-mist-500 sm:text-sm">
         By
-        <.link
+        <.subject_link
           :for={author <- Map.get(@entry, :authors, [])}
           id={"#{@id}-author-#{author.id}"}
           navigate={DevilsDictionary.Routing.Links.path(author.id, author.label, @mode)}
           class="mr-2 underline underline-offset-4 hover:text-amber-700"
         >
           {author.label}
-        </.link>
+        </.subject_link>
       </p>
     </div>
     """

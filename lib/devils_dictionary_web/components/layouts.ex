@@ -65,7 +65,7 @@ defmodule DevilsDictionaryWeb.Layouts do
             {source.name}
           </.footer_link>
         </.footer_category>
-        <.footer_category :if={dev_routes?()} title="Operations">
+        <.footer_category :if={operations?()} title="Operations">
           <.footer_link navigate={~p"/ops/health"}>Health</.footer_link>
           <.footer_link navigate={~p"/ops/imports"}>Imports</.footer_link>
           <.footer_link navigate={~p"/ops/discovery"}>Discovery</.footer_link>
@@ -93,8 +93,12 @@ defmodule DevilsDictionaryWeb.Layouts do
   # and by URL everywhere. Not `/ops/scopes/:slug` — that route needs a slug,
   # and choosing one for the footer is how Animals got into the navbar in the
   # first place. It is reached from the population chooser on either console.
+  # Never on the published host (#237 D2): the public reaches it, and there
+  # the consoles do not exist to a visitor (`ProxyGuard`), so no page names
+  # them.
   @dev_routes Application.compile_env(:devils_dictionary, :dev_routes, false)
-  defp dev_routes?, do: @dev_routes
+  defp operations?,
+    do: @dev_routes and not DevilsDictionary.Routing.PublicRouting.published_host?()
 
   @doc """
   Shows the flash group with standard titles and content.

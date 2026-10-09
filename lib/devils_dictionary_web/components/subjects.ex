@@ -3,7 +3,8 @@ defmodule DevilsDictionaryWeb.Subjects do
   What an On page adds to a word page (#219 B3, B5): the authored overview,
   when one belongs to these words, and the Subjects section — one card per
   subject, each linking to its address when the reading mode serves one and
-  to its exact identity otherwise.
+  to its exact identity otherwise, or, on the published host read publicly,
+  to nothing (#237 D2).
 
   Curated and discovered subjects are kept visibly apart. Curated members
   come from an authored overview's current revision, in its order, and are
@@ -111,10 +112,10 @@ defmodule DevilsDictionaryWeb.Subjects do
         class="text-base/7 text-mist-600 sm:text-sm/6 dark:text-mist-400"
       >
         It discusses:
-        <span :for={{member, i} <- Enum.with_index(@discusses)}><span :if={i > 0}>, </span><.link
+        <span :for={{member, i} <- Enum.with_index(@discusses)}><span :if={i > 0}>, </span><.subject_link
           navigate={@subject_paths[member.object_id]}
           class="text-mist-950 underline decoration-mist-950/20 underline-offset-4 hover:decoration-mist-950 dark:text-white dark:decoration-white/25 dark:hover:decoration-white"
-        >{member.label}</.link></span>
+        >{member.label}</.subject_link></span>
       </p>
 
       <p
@@ -122,10 +123,10 @@ defmodule DevilsDictionaryWeb.Subjects do
         class="text-base/7 text-mist-600 sm:text-sm/6 dark:text-mist-400"
       >
         Associated, not the same thing:
-        <span :for={{member, i} <- Enum.with_index(@associated)}><span :if={i > 0}>, </span><.link
+        <span :for={{member, i} <- Enum.with_index(@associated)}><span :if={i > 0}>, </span><.subject_link
           navigate={@subject_paths[member.object_id]}
           class="text-mist-950 underline decoration-mist-950/20 underline-offset-4 hover:decoration-mist-950 dark:text-white dark:decoration-white/25 dark:hover:decoration-white"
-        >{member.label}</.link></span>
+        >{member.label}</.subject_link></span>
       </p>
 
       <p :if={@pages != []} class="text-base/7 text-mist-600 sm:text-sm/6 dark:text-mist-400">
@@ -285,7 +286,10 @@ defmodule DevilsDictionaryWeb.Subjects do
     """
   end
 
-  @doc "One subject: a card the reader opens, at its address or its identity."
+  @doc """
+  One subject: a card the reader opens, at its address or its identity, or
+  its label as text where the reader may not link it (#237 D2).
+  """
   attr :card, :map, required: true
   attr :group, :string, required: true
 
@@ -305,13 +309,13 @@ defmodule DevilsDictionaryWeb.Subjects do
       </div>
 
       <h3 class="text-base/7 font-medium text-mist-950 sm:text-sm/6 dark:text-white">
-        <.link
+        <.subject_link
           id={"subject-#{@group}-#{@card.object_id}-link"}
           navigate={@card.path}
           class="break-words underline decoration-mist-950/20 underline-offset-4 after:absolute after:inset-0 after:rounded-xl hover:decoration-mist-950 focus-visible:outline-none dark:decoration-white/25 dark:hover:decoration-white"
         >
           {@card.label}
-        </.link>
+        </.subject_link>
       </h3>
 
       <p

@@ -258,7 +258,8 @@ defmodule DevilsDictionaryWeb.PublicRoutingTest do
       assert PublicRouting.origin() == "https://wordhoard.test"
 
       assert ctx.conn |> get("/people/fran%C3%A7ois") |> html_response(404)
-      refute Links.path(draft.entity.object_id, "Arouet") =~ "/people/"
+      # Not linked at all: neither its address nor its exact identity (#237 D2).
+      assert Links.path(draft.entity.object_id, "Arouet") == nil
     end)
 
     assert ctx.conn |> get("/people/fran%C3%A7ois") |> html_response(200)
