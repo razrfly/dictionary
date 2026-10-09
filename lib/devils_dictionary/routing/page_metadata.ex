@@ -66,7 +66,7 @@ defmodule DevilsDictionary.Routing.PageMetadata do
   # Joe", "ft. Kimiko", "e.g. this".
   @abbreviations ~w(Dr Mr Mrs Ms Mx St Jr Sr Prof Mt Mts No Nos vs ft etc cf ca approx Inc Ltd Co Corp
                     Gen Lt Col Sgt Capt Rev Hon Fr Bros Dept Univ Jan Feb Mar Apr Jun Jul Aug Sep Sept
-                    Oct Nov Dec)
+                    Oct Nov Dec Adm Gov Sen Rep Pres Messrs Ave Fig Vol al)
 
   @doc """
   The first sentence of a text, as plain text: tags and Markdown marks

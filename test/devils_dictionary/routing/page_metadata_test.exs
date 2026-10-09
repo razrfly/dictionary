@@ -30,6 +30,23 @@ defmodule DevilsDictionary.Routing.PageMetadataTest do
     assert PageMetadata.first_sentence("Dr. Johnson wrote a dictionary. It sold.") ==
              "Dr. Johnson wrote a dictionary."
 
+    # Titles, plurals of address and reference marks (#243's final check).
+    for {text, first} <- [
+          {"Adm. Nelson won at Trafalgar. He died there.", "Adm. Nelson won at Trafalgar."},
+          {"Gov. Smith signed it. Later he resigned.", "Gov. Smith signed it."},
+          {"Sen. Jones and Rep. Brown voted. It passed.", "Sen. Jones and Rep. Brown voted."},
+          {"Pres. Lincoln spoke. The crowd listened.", "Pres. Lincoln spoke."},
+          {"Messrs. Gilbert and Sullivan wrote it. It ran.",
+           "Messrs. Gilbert and Sullivan wrote it."},
+          {"It stood on Fifth Ave. In 1900 it burned.",
+           "It stood on Fifth Ave. In 1900 it burned."},
+          {"See Fig. Three for the map. It is old.", "See Fig. Three for the map."},
+          {"Vol. Two continues the tale. It ends.", "Vol. Two continues the tale."},
+          {"Smith et al. Wrote the paper. It was cited.", "Smith et al. Wrote the paper."}
+        ] do
+      assert PageMetadata.first_sentence(text) == first, text
+    end
+
     assert PageMetadata.first_sentence("See e.g. the first edition. Then the second.") ==
              "See e.g. the first edition."
 
