@@ -31,7 +31,8 @@ defmodule Mix.Tasks.Dd.Routing.Route do
   the `route_changes` row proves only that someone with a shell and the
   database named that reviewer. A `--page`, `--from` or `--into` that is not
   an integer is refused as an unexpected argument before anything is read;
-  a bad `--successors` value is the ledger's `:invalid_page`.
+  a bad `--successors` value is the ledger's refusal (`:invalid_page`, or
+  `:successors_required` for a list with no ids).
 
   Before writing, the task prints the resolver's answer, in public and in
   internal mode, for every path the operation touches. After writing, it
