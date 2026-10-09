@@ -24,6 +24,11 @@ defmodule DevilsDictionary.Routing.Resolver do
       progress (`DevilsDictionaryWeb.ReadingMode` decides who). It changes no
       publication state, approval or ledger row.
 
+  Public mode also obeys the launch switch (`Routing.PublicRouting`, #237):
+  while it is off, nothing is served publicly at a ledger address — every
+  page is withheld and a tombstone is `:unavailable` too, so the family routes
+  answer 404 — and nothing in the ledger changes. Internal mode ignores it.
+
   `withdrawn` pages are withheld in both modes, and every lifecycle rule —
   merged, split, retired, tombstones — is the same in both. An alias or an
   equivalent spelling answers with its **destination's** outcome in the same
@@ -40,7 +45,7 @@ defmodule DevilsDictionary.Routing.Resolver do
   require Logger
 
   alias DevilsDictionary.Repo
-  alias DevilsDictionary.Routing.{Address, Page, Pages, PublicPath, Resolution}
+  alias DevilsDictionary.Routing.{Address, Page, Pages, PublicPath, PublicRouting, Resolution}
 
   @max_merge_hops 64
   @modes [:public, :internal]
@@ -107,9 +112,10 @@ defmodule DevilsDictionary.Routing.Resolver do
   end
 
   @doc """
-  The decision, given the loaded rows, in `mode` (`:public` by default). Pure,
-  so every state — including ones the database refuses to store — can be
-  examined.
+  The decision, given the loaded rows, in `mode` (`:public` by default). Pure
+  but for public mode's launch switch, which is configuration
+  (`Routing.PublicRouting`), so every state — including ones the database
+  refuses to store — can be examined.
   """
   def decide(%PublicPath{} = path, %Page{} = page, canonical, exact?, mode \\ :public)
       when mode in @modes do
@@ -119,8 +125,10 @@ defmodule DevilsDictionary.Routing.Resolver do
       page.lifecycle_state == :merged ->
         corrupt(base, :path_on_merged_page, %{})
 
-      # Gone is only news for a page the public has seen.
-      path.kind == :tombstone and page.publication_state in [:published, :withdrawn] ->
+      # Gone is only news for a page the public has seen, and only while the
+      # public is served at all.
+      path.kind == :tombstone and page.publication_state in [:published, :withdrawn] and
+          (mode == :internal or PublicRouting.enabled?()) ->
         %{base | outcome: :gone}
 
       path.kind == :tombstone ->
@@ -171,9 +179,11 @@ defmodule DevilsDictionary.Routing.Resolver do
   end
 
   @doc """
-  Whether a page may be served in `mode`: a published page always, a draft
-  only internally, a withdrawn page never.
+  Whether a page may be served in `mode`: a published page internally, and
+  publicly while public routing is on; a draft only internally; a withdrawn
+  page never.
   """
+  def visible?(%Page{publication_state: :published}, :public), do: PublicRouting.enabled?()
   def visible?(%Page{publication_state: :published}, _mode), do: true
   def visible?(%Page{publication_state: :draft}, :internal), do: true
   def visible?(%Page{}, _mode), do: false

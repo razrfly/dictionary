@@ -352,13 +352,15 @@ defmodule DevilsDictionary.Routing.Publications do
     named = entry["path"] && String.normalize(entry["path"], :nfc)
     found = Resolver.resolve(Address.encode(canonical.path), mode: :internal)
 
+    # In internal mode: the page as published, whatever the launch switch
+    # says, since publishing comes before the switch is turned on.
     published =
       Resolver.decide(
         canonical,
         %{page | publication_state: :published},
         canonical,
         true,
-        :public
+        :internal
       )
 
     cond do

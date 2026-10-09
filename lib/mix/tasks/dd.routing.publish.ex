@@ -6,9 +6,19 @@ defmodule Mix.Tasks.Dd.Routing.Publish do
   only through all eight publication gates (`Routing.Publications`), and
   prints every refusal with the gate and the reason.
 
+      DD_NO_OBAN=1 mix dd.routing.publish --rule priv/routing/review-rule.json \\
+        --from MANIFEST.json [--population candidates.json] --write-manifest priv/routing/launch-manifest.json
       DD_NO_OBAN=1 mix dd.routing.publish --manifest priv/routing/launch-manifest.json --dry-run
       DD_NO_OBAN=1 mix dd.routing.publish --manifest priv/routing/launch-manifest.json \\
         [--rule priv/routing/review-rule.json] [--receipts OUT.json]
+
+  **Making the launch manifest** (`--from` with `--write-manifest`): the
+  standing review rule generates it from a backfill run's candidate manifest
+  and the population that run was bound to (`--population`, default
+  `docs/routing/stage-2/candidates.json`), reading only
+  (`Routing.LaunchManifest.generate/3`): the pages the rule confirms at the
+  addresses they hold, the lexical entries of D1, and what it defers. It is
+  never written by hand. Nothing is published by this step.
 
   A manifest made under the owner's standing review rule is published under
   that rule: the rule is loaded and its signature checked
@@ -51,6 +61,9 @@ defmodule Mix.Tasks.Dd.Routing.Publish do
       OptionParser.parse(args,
         strict: [
           manifest: :string,
+          from: :string,
+          population: :string,
+          write_manifest: :string,
           rule: :string,
           reviewer: :string,
           override: :string,
@@ -59,13 +72,44 @@ defmodule Mix.Tasks.Dd.Routing.Publish do
         ]
       )
 
-    unless extra == [] and invalid == [] and opts[:manifest] do
-      Mix.raise(
-        "usage: mix dd.routing.publish --manifest MANIFEST " <>
-          "[--rule RULE | --reviewer EMAIL --override REASON] [--dry-run] [--receipts OUT]"
-      )
-    end
+    cond do
+      (extra == [] and invalid == [] and opts[:from]) && opts[:write_manifest] && !opts[:manifest] ->
+        write_manifest(opts)
 
+      (extra == [] and invalid == [] and opts[:manifest]) && !opts[:from] ->
+        publish(opts)
+
+      true ->
+        Mix.raise(
+          "usage: mix dd.routing.publish --manifest MANIFEST " <>
+            "[--rule RULE | --reviewer EMAIL --override REASON] [--dry-run] [--receipts OUT]\n" <>
+            "       mix dd.routing.publish --rule RULE --from BACKFILL_MANIFEST " <>
+            "[--population CANDIDATES] --write-manifest OUT"
+        )
+    end
+  end
+
+  # The rule makes the launch manifest; nothing is published.
+  defp write_manifest(opts) do
+    rule = ok!(ReviewRule.load(opts[:rule] || ReviewRule.path()))
+    population = opts[:population] || "docs/routing/stage-2/candidates.json"
+    doc = ok!(LaunchManifest.generate(opts[:from], population, rule))
+    File.write!(opts[:write_manifest], [Jason.encode!(doc, pretty: true), "\n"])
+    {:ok, manifest} = LaunchManifest.read(opts[:write_manifest])
+    counts = Jason.decode!(Jason.encode!(doc))["counts"]
+
+    Mix.shell().info("launch manifest #{opts[:write_manifest]} (#{manifest.sha256})")
+    Mix.shell().info("  from  #{opts[:from]}, population #{population}")
+    Mix.shell().info("  rule  #{rule.sha256}, signed by #{rule.signer.email}")
+
+    Mix.shell().info(
+      "  pages #{counts["pages"]}, lexical #{counts["lexical"]}, pending #{counts["pending"]}, deferred #{counts["deferred"]}"
+    )
+
+    for {clause, n} <- counts["by_clause"], do: Mix.shell().info("    #{clause}: #{n}")
+  end
+
+  defp publish(opts) do
     manifest = ok!(LaunchManifest.read(opts[:manifest]))
     rule = if manifest.rule_sha256, do: ok!(ReviewRule.load(opts[:rule] || ReviewRule.path()))
     actor = actor!(rule, opts[:reviewer])
