@@ -23,6 +23,15 @@ defmodule DevilsDictionaryWeb.Router do
     plug DevilsDictionaryWeb.ReadingStatus
   end
 
+  # What a crawler reads first (#237 C5): robots.txt from the switch, the
+  # registry and the launch manifest; the sitemap index and the sitemaps
+  # from the published canonical pages. No session, no layout.
+  scope "/", DevilsDictionaryWeb do
+    get "/robots.txt", RobotsController, :show
+    get "/sitemap.xml", SitemapController, :index
+    get "/sitemaps/:file", SitemapController, :show
+  end
+
   scope "/", DevilsDictionaryWeb do
     pipe_through :browser
 

@@ -44,15 +44,22 @@ defmodule DevilsDictionaryWeb.HomeLive do
   def mount(_params, _session, socket) do
     {:ok,
      socket
-     |> assign(q: "", results: [], seeds: @seeds)
+     |> assign(q: "", results: [], seeds: @seeds, head: nil)
      |> assign_async(:stats, fn -> {:ok, %{stats: stats()}} end)}
   end
 
+  # The head (#237 C4): the way in is the search, so it is noindex, with `/`
+  # as the canonical of every `?q=`.
   @impl true
   def handle_params(params, _uri, socket) do
     q = params["q"] || ""
 
-    {:noreply, assign(socket, q: q, results: results(q, socket.assigns.reading_mode))}
+    {:noreply,
+     assign(socket,
+       q: q,
+       results: results(q, socket.assigns.reading_mode),
+       head: DevilsDictionaryWeb.Head.search("Every word. Every source. One page.")
+     )}
   end
 
   defp results("", _mode), do: []
@@ -197,7 +204,7 @@ defmodule DevilsDictionaryWeb.HomeLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash}>
+    <Layouts.app flash={@flash} head={@head}>
       <section class="py-16">
         <.container class="flex flex-col items-center gap-6">
           <.heading class="max-w-5xl text-center">Every word. Every source. One page.</.heading>

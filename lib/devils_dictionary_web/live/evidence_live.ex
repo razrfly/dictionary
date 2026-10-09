@@ -13,21 +13,22 @@ defmodule DevilsDictionaryWeb.EvidenceLive do
 
   on_mount {DevilsDictionaryWeb.UserAuth, :mount_current_scope}
 
-  @impl true
-  def mount(_params, _session, socket), do: {:ok, assign(socket, evidence: nil)}
+  @kinds %{content: "content", sense: "sense", source_record: "source-record"}
 
+  @impl true
+  def mount(_params, _session, socket), do: {:ok, assign(socket, evidence: nil, head: nil)}
+
+  # The head (#237 C4): the revision as the title, its own canonical, and
+  # noindex, since raw evidence is never indexed (ADR 0004 §7).
   @impl true
   def handle_params(%{"id" => id}, _uri, socket) do
     visibility =
       if Contributions.reviewer?(socket.assigns.current_scope), do: :internal, else: :public
 
     evidence = load(socket.assigns.live_action, parse_id(id), visibility)
+    head = DevilsDictionaryWeb.Head.evidence(evidence, @kinds[socket.assigns.live_action], id)
 
-    {:noreply,
-     assign(socket,
-       evidence: evidence,
-       page_title: if(evidence, do: "cited #{evidence.kind} revision", else: "no such evidence")
-     )}
+    {:noreply, assign(socket, evidence: evidence, head: head, page_title: head.title)}
   end
 
   defp load(_kind, nil, _visibility), do: nil
@@ -148,7 +149,7 @@ defmodule DevilsDictionaryWeb.EvidenceLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_scope={@current_scope}>
+    <Layouts.app flash={@flash} current_scope={@current_scope} head={@head}>
       <.container class="py-10">
         <%= if @evidence do %>
           <header id="evidence-header" class="max-w-3xl">
