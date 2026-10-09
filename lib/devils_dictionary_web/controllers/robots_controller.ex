@@ -62,10 +62,16 @@ defmodule DevilsDictionaryWeb.RobotsController do
   end
 
   # The manifest's lexical entries whose subject pages include a published
-  # one: the same test the page's own head applies (`Indexing.lexical?/3`).
+  # one: the same test the page's own head applies (`Indexing.lexical?/3`),
+  # read for every entry in one query.
   defp lexical_paths do
-    Indexing.lexical_entries()
-    |> Enum.filter(fn {_path, page_ids} -> Indexing.published?(page_ids) end)
+    entries = Indexing.lexical_entries()
+    published = entries |> Map.values() |> List.flatten() |> Indexing.published_ids()
+
+    entries
+    |> Enum.filter(fn {_path, page_ids} ->
+      Enum.any?(List.wrap(page_ids), &MapSet.member?(published, &1))
+    end)
     |> Enum.map(fn {path, _page_ids} -> path end)
     |> Enum.sort()
     |> Enum.map(&Address.encode/1)
