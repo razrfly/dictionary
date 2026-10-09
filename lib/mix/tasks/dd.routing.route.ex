@@ -52,6 +52,8 @@ defmodule Mix.Tasks.Dd.Routing.Route do
 
   alias DevilsDictionary.Accounts.User
   alias DevilsDictionary.{Registry, Repo}
+  import DevilsDictionary.Routing.Input, only: [is_id: 1]
+
   alias DevilsDictionary.Routing.{Address, Ledger, Page, PageRevision, PublicPath, Resolution}
   alias DevilsDictionary.Routing.{Resolver, RouteChange}
   alias DevilsDictionary.Sources.Actor
@@ -144,10 +146,12 @@ defmodule Mix.Tasks.Dd.Routing.Route do
     print_state("before", before)
 
     newest = Repo.aggregate(RouteChange, :max, :id) || 0
+    newest_revision = Repo.aggregate(PageRevision, :max, :id) || 0
 
     case with_actor(user, fn actor -> call(operation, params, actor, reason) end) do
-      {:ok, result} ->
-        print_written(operation, result, newest)
+      {:ok, result, created} ->
+        print_written(operation, result, newest, newest_revision)
+        print_created(created, user)
         print_state("after", merge_touched(before, touched(operation, params)))
 
       {:error, refusal} ->
@@ -229,26 +233,48 @@ defmodule Mix.Tasks.Dd.Routing.Route do
   # account without one gets it in the operation's own transaction, so a
   # refusal leaves no actor row behind either. Inside that transaction the
   # ledger returns its refusal without rolling back, so the rollback is ours.
+  # Returns `{:ok, result, created}`, where `created` is the actor row this
+  # invocation wrote (nil when the account already had one), or the ledger's
+  # `{:error, refusal}`. The actor row is the one write outside the ledger:
+  # the ledger records a named human only through a `user` actor.
   defp with_actor(user, fun) do
     case Repo.get_by(Actor, actor_kind: :user, user_id: user.id) do
       %Actor{} = actor ->
-        fun.(actor)
+        case fun.(actor) do
+          {:ok, result} -> {:ok, result, nil}
+          {:error, refusal} -> {:error, refusal}
+        end
 
       nil ->
-        Repo.transaction(fn ->
-          actor =
-            Repo.insert!(%Actor{
-              actor_kind: :user,
-              user_id: user.id,
-              label: "Reviewer ##{user.id}"
-            })
+        result =
+          Repo.transaction(fn ->
+            actor =
+              Repo.insert!(%Actor{
+                actor_kind: :user,
+                user_id: user.id,
+                label: "Reviewer ##{user.id}"
+              })
 
-          case fun.(actor) do
-            {:ok, result} -> result
-            {:error, refusal} -> Repo.rollback(refusal)
-          end
-        end)
+            case fun.(actor) do
+              {:ok, result} -> {result, actor}
+              {:error, refusal} -> Repo.rollback(refusal)
+            end
+          end)
+
+        case result do
+          {:ok, {result, actor}} -> {:ok, result, actor}
+          {:error, refusal} -> {:error, refusal}
+        end
     end
+  end
+
+  defp print_created(nil, _user), do: :ok
+
+  defp print_created(%Actor{} = actor, user) do
+    Mix.shell().info(
+      "  actors\n    ##{actor.id}  user ##{user.id}  kind user  label #{inspect(actor.label)}  " <>
+        "(created with this operation: the ledger records a named human only through a user actor)"
+    )
   end
 
   # ── what the operation touches ───────────────────────────────────────────
@@ -256,7 +282,9 @@ defmodule Mix.Tasks.Dd.Routing.Route do
   # The pages whose state is shown and the stored paths whose answers are
   # shown, before and after. A path the operation names is shown even when
   # nothing serves it yet.
-  defp touched("move", p), do: %{pages: [p.page], paths: paths_of([p.page]) ++ [p.path]}
+  defp touched("move", p),
+    do: %{pages: [p.page], paths: Enum.uniq(paths_of([p.page]) ++ [p.path])}
+
   defp touched("merge", p), do: %{pages: [p.from, p.into], paths: paths_of([p.from, p.into])}
 
   defp touched("split", p) do
@@ -265,7 +293,9 @@ defmodule Mix.Tasks.Dd.Routing.Route do
   end
 
   defp touched("retire", p), do: %{pages: [p.page], paths: paths_of([p.page])}
-  defp touched("restore", p), do: %{pages: [p.page], paths: paths_of([p.page]) ++ [p.path]}
+
+  defp touched("restore", p),
+    do: %{pages: [p.page], paths: Enum.uniq(paths_of([p.page]) ++ [p.path])}
 
   defp touched("rollback", p) do
     rows = Ledger.operation(p.operation)
@@ -385,7 +415,9 @@ defmodule Mix.Tasks.Dd.Routing.Route do
     end
   end
 
-  defp page(id) when is_integer(id) and id > 0, do: Repo.get(Page, id)
+  # An id outside `bigint` names no page; asking the database would raise
+  # rather than let the ledger refuse it as `:invalid_page`.
+  defp page(id) when is_id(id), do: Repo.get(Page, id)
   defp page(_id), do: nil
 
   defp page_line(id) do
@@ -437,7 +469,7 @@ defmodule Mix.Tasks.Dd.Routing.Route do
 
   # ── printing what was written ────────────────────────────────────────────
 
-  defp print_written(operation, result, newest) do
+  defp print_written(operation, result, newest, newest_revision) do
     rows = rows_written(operation, result, newest)
 
     if rows == [] do
@@ -478,17 +510,28 @@ defmodule Mix.Tasks.Dd.Routing.Route do
         |> Enum.reject(&is_nil/1)
         |> Enum.uniq()
 
-      if revisions != [] do
-        Mix.shell().info("  page_revisions")
+      # A revision this operation inserted (a split's) is written; one a
+      # rollback points the page back to already existed, and says so.
+      {written, restored} =
+        Repo.all(
+          from r in PageRevision,
+            where: r.id in ^revisions,
+            order_by: r.id,
+            preload: :memberships
+        )
+        |> Enum.split_with(&(&1.id > newest_revision))
 
-        for revision <-
-              Repo.all(
-                from r in PageRevision,
-                  where: r.id in ^revisions,
-                  order_by: r.id,
-                  preload: :memberships
-              ),
-            do: Mix.shell().info("    " <> revision_row(revision))
+      if written != [] do
+        Mix.shell().info("  page_revisions")
+        for revision <- written, do: Mix.shell().info("    " <> revision_row(revision))
+      end
+
+      if restored != [] do
+        Mix.shell().info(
+          "  page_revisions the page returns to (not written: they already existed)"
+        )
+
+        for revision <- restored, do: Mix.shell().info("    " <> revision_row(revision))
       end
     end
   end

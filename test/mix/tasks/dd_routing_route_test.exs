@@ -15,7 +15,7 @@ defmodule Mix.Tasks.Dd.Routing.RouteTest do
   import DevilsDictionary.RoutingFixtures
 
   alias DevilsDictionary.{AccountsFixtures, Registry}
-  alias DevilsDictionary.Routing.{Ledger, Page, PublicPath, RouteChange}
+  alias DevilsDictionary.Routing.{Ledger, Page, Pages, PublicPath, RouteChange}
   alias DevilsDictionary.Sources.Actor
   alias Mix.Tasks.Dd.Routing.Route
 
@@ -370,6 +370,42 @@ defmodule Mix.Tasks.Dd.Routing.RouteTest do
     end
   end
 
+  describe "rolling back a split" do
+    test "lists the revision the page returns to as one it did not write", ctx do
+      mercury = live_page!("nature", "/nature/mercury", ctx.importer)
+      planet = live_page!("nature", "/nature/mercury-planet", ctx.importer)
+      element = live_page!("nature", "/nature/mercury-element", ctx.importer)
+      {:ok, earlier} = Pages.add_revision(mercury.id, %{title: "Mercury"}, [], ctx.actor.id)
+
+      {:ok, _} =
+        Registry.split(
+          mercury.target_object_id,
+          [planet.target_object_id, element.target_object_id],
+          reason: "planet and element"
+        )
+
+      run(
+        signed(
+          ["split", "--page", "#{mercury.id}", "--successors", "#{planet.id},#{element.id}"],
+          ctx.user
+        )
+      )
+
+      split = output()
+      assert split =~ "  page_revisions\n"
+      refute split =~ "they already existed"
+
+      run(signed(["rollback", "--operation", operation_of(mercury.id, :split)], ctx.user))
+      out = output()
+
+      # The page returns to its earlier revision, which the rollback did not
+      # write: it is listed apart, and no revision is listed as written.
+      assert out =~ "page_revisions the page returns to (not written: they already existed)"
+      assert out =~ ~r/#{earlier.id}  page #{mercury.id}  revision 1/
+      refute out =~ "  page_revisions\n"
+    end
+  end
+
   describe "refusals" do
     test "a refused operation prints the ledger's reason and leaves the ledger unchanged", ctx do
       page = live_page!("people", "/people/voltaire", ctx.importer, :person)
@@ -443,8 +479,17 @@ defmodule Mix.Tasks.Dd.Routing.RouteTest do
       )
 
       assert %Actor{actor_kind: :user, id: actor_id} = Repo.get_by(Actor, user_id: reviewer.id)
-      assert output() =~ ~r/\(move\), 3 route_changes rows, actor #{actor_id}/
+      out = output()
+      assert out =~ ~r/\(move\), 3 route_changes rows, actor #{actor_id}/
       assert ledger_size() == before + 3
+
+      # The one write outside the ledger is printed with what was written.
+      assert out =~ ~r/  actors\n    ##{actor_id}  user ##{reviewer.id}  kind user/
+      assert out =~ "created with this operation"
+
+      # A reviewer who already has the actor gets no such line.
+      run(signed(["retire", "--page", "#{page.id}"], reviewer))
+      refute output() =~ "  actors"
     end
 
     test "the task refuses to run without DD_NO_OBAN=1", ctx do
@@ -517,6 +562,20 @@ defmodule Mix.Tasks.Dd.Routing.RouteTest do
         end
 
       assert error.message =~ "refused: :invalid_operation"
+
+      # An id past bigint names no page: the ledger refuses it, nothing
+      # crashes on the way, for every option that takes a page id.
+      too_big = "9223372036854775808"
+
+      for args <- [
+            ["retire", "--page", too_big],
+            ["move", "--page", too_big, "--path", "/people/somebody"],
+            ["merge", "--from", too_big, "--into", "#{page.id}"],
+            ["split", "--page", "#{page.id}", "--successors", "#{too_big},#{page.id}"]
+          ] do
+        error = assert_raise Mix.Error, fn -> run(signed(args, ctx.user)) end
+        assert error.message =~ "refused: :invalid_page", inspect(args)
+      end
     end
   end
 
