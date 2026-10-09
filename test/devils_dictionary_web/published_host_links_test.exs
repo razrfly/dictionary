@@ -324,6 +324,56 @@ defmodule DevilsDictionaryWeb.PublishedHostLinksTest do
     end)
   end
 
+  test "an identity merged into a draft is 404 at its retired id too; one merged into a published subject reads",
+       ctx do
+    world = world!(ctx)
+
+    # A retired identity merged into the draft Candide, and one merged into
+    # the published Zadig: neither has a page of its own, and the route
+    # shows the survivor's content at the retired id.
+    {:ok, into_draft} = Registry.create_work(%{preferred_label: "Candide ou l'optimisme"})
+    {:ok, into_published} = Registry.create_work(%{preferred_label: "Zadig ou la destinee"})
+
+    {:ok, _} =
+      Registry.merge([into_draft.object_id], world.candide.object_id, reason: "duplicate")
+
+    {:ok, _} =
+      Registry.merge([into_published.object_id], world.zadig.object_id, reason: "duplicate")
+
+    retired_draft = "/entities/#{into_draft.object_id}/candide-ou-l-optimisme"
+    retired_published = "/entities/#{into_published.object_id}/zadig-ou-la-destinee"
+
+    published_host(fn ->
+      for path <- [retired_draft, "/entities/#{into_draft.object_id}/x"] do
+        html = ctx.conn |> get(path) |> html_response(404)
+        refute html =~ "1759 novella", path
+      end
+
+      assert Links.withheld?(into_draft.object_id, :public)
+      refute Links.withheld?(into_published.object_id, :public)
+
+      # Live navigation from a page the public reads, to the retired id.
+      {:ok, view, _html} = live(ctx.conn, "/entities/#{world.voltaire.object_id}/voltaire")
+      render_patch(view, retired_draft)
+      assert has_element?(view, "#no-such-entity")
+      refute render(view) =~ "1759 novella"
+
+      # Merged into a published subject: the survivor reads at the retired id.
+      conn = get(ctx.conn, retired_published)
+      assert conn.status in [200, 302]
+
+      if conn.status == 302,
+        do: assert(ctx.conn |> get(redirected_to(conn)) |> html_response(200) =~ "1747 novel"),
+        else: assert(html_response(conn, 200) =~ "1747 novel")
+    end)
+
+    # Not the published host: the retired id reads the survivor, as before.
+    reading(false, fn ->
+      conn = get(ctx.conn, retired_draft)
+      assert conn.status in [200, 302]
+    end)
+  end
+
   test "Links falls back to the exact identity off the published host, and internally on it",
        ctx do
     world = world!(ctx)

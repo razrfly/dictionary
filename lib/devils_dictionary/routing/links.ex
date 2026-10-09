@@ -89,17 +89,32 @@ defmodule DevilsDictionary.Routing.Links do
   answer is `served/3`'s, the resolver's own. An entity with no such page, or
   whose page is served, is not withheld, and nothing is withheld in internal
   reading or on any other server.
+
+  The pages asked about are those of every identity the route would show:
+  the object itself and, for a merged identity, the survivor whose content
+  `Encyclopedia.EntityPage.build/2` renders at the retired id. A draft survivor is
+  withheld at its own id and at every id merged into it.
   """
   @spec withheld?(integer(), mode()) :: boolean()
   def withheld?(object_id, mode) do
     published_public?(mode) and
-      case pages([object_id]) do
+      case object_id |> shown_identities() |> pages() do
         [] -> false
         rows -> Enum.all?(rows, fn {page, canonical} -> is_nil(served(page, canonical, mode)) end)
       end
   end
 
   defp published_public?(mode), do: mode == :public and PublicRouting.published_host?()
+
+  # The identities whose content the route shows for `object_id`: itself, and
+  # the survivor a merged identity resolves to. A split input shows its own
+  # entity, so its own pages are the ones asked about.
+  defp shown_identities(object_id) do
+    case DevilsDictionary.Registry.resolve(object_id) do
+      {:merged, survivor_id} -> [object_id, survivor_id]
+      _itself_split_or_missing -> [object_id]
+    end
+  end
 
   @doc """
   The address a page with its canonical row is served at in `mode`, or nil.

@@ -32,7 +32,11 @@ defmodule DevilsDictionaryWeb.Endpoint do
   # Code reloading can be explicitly enabled under the
   # :code_reloader configuration of your endpoint.
   if code_reloading? do
-    socket "/phoenix/live_reload/socket", Phoenix.LiveReloader.Socket
+    # The owner's machine only (#237 D2): `LiveReloadSocket` refuses a
+    # connection through a proxy or from elsewhere.
+    socket "/phoenix/live_reload/socket", DevilsDictionaryWeb.LiveReloadSocket,
+      websocket: [connect_info: [:peer_data, :x_headers]]
+
     plug Phoenix.LiveReloader
     plug Phoenix.CodeReloader
     plug Phoenix.Ecto.CheckRepoStatus, otp_app: :devils_dictionary

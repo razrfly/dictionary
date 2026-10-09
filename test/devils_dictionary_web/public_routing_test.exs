@@ -126,6 +126,16 @@ defmodule DevilsDictionaryWeb.PublicRoutingTest do
     # development one: without it, or with a short one, it does not boot.
     assert dev[DevilsDictionaryWeb.Endpoint][:secret_key_base] == String.duplicate("s", 64)
 
+    # Sockets only from its own pages or the owner's machine, and no live
+    # reload in the pages the public reads.
+    assert dev[DevilsDictionaryWeb.Endpoint][:check_origin] ==
+             ["//wordhoard.test", "//localhost", "//127.0.0.1"]
+
+    assert dev[DevilsDictionaryWeb.Endpoint][:live_reload] == [
+             patterns: [],
+             web_console_logger: false
+           ]
+
     assert_raise RuntimeError, ~r/needs DD_SECRET_KEY_BASE/, fn ->
       runtime(:dev, [{"DD_PUBLISHED_HOST", "wordhoard.test"}, {"DD_SECRET_KEY_BASE", nil}])
     end
@@ -150,6 +160,8 @@ defmodule DevilsDictionaryWeb.PublicRoutingTest do
     refute Keyword.has_key?(plain, :public_routing)
     refute Keyword.has_key?(plain, :published_host)
     refute get_in(plain, [DevilsDictionaryWeb.Endpoint, :secret_key_base])
+    refute get_in(plain, [DevilsDictionaryWeb.Endpoint, :check_origin])
+    assert [_ | _] = get_in(plain, [DevilsDictionaryWeb.Endpoint, :live_reload, :patterns])
   end
 
   # A published page with an alias (after a move) and a published page whose
@@ -358,6 +370,25 @@ defmodule DevilsDictionaryWeb.PublicRoutingTest do
 
       # The owner's own machine connects either way.
       assert {:ok, _} = DevilsDictionaryWeb.LiveSocket.connect(%{}, %Phoenix.Socket{}, local)
+
+      # The live-reload socket answers the owner's machine only, on every
+      # server: through a proxy it would stream log lines and file paths.
+      for proxied <- [
+            %{local | x_headers: [{"x-forwarded-for", "203.0.113.7"}]},
+            %{local | peer_data: %{address: {192, 168, 1, 20}}},
+            %{x_headers: []}
+          ] do
+        assert :error =
+                 DevilsDictionaryWeb.LiveReloadSocket.connect(%{}, %Phoenix.Socket{}, proxied)
+
+        with_env(:published_host, "wordhoard.test", fn ->
+          assert :error =
+                   DevilsDictionaryWeb.LiveReloadSocket.connect(%{}, %Phoenix.Socket{}, proxied)
+        end)
+      end
+
+      assert {:ok, _} =
+               DevilsDictionaryWeb.LiveReloadSocket.connect(%{}, %Phoenix.Socket{}, local)
     end
 
     test "on the published host, a reader page cannot live-navigate to an operator page, and a proxied socket is not mounted there",
