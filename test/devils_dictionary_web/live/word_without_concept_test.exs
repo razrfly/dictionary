@@ -6,8 +6,8 @@ defmodule DevilsDictionaryWeb.WordWithoutConceptTest do
   at or above the floor; and a concept with no Wikidata item. Its pages
   render without the one-line answer and open the thing's drawer, instead of
   failing; a query parameter shaped as a list or a map is ignored.
-  Found by #237's crawl of the published host, where 22 exact-word pages a
-  published subject links answered 500.
+  Found by #237's crawl of the published host, where exact-word and On
+  pages that published subject pages link answered 500.
   """
   use DevilsDictionaryWeb.ConnCase, async: true
 

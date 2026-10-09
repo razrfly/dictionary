@@ -52,7 +52,8 @@ defmodule DevilsDictionaryWeb.HomeLive do
   # as the canonical of every `?q=`.
   @impl true
   def handle_params(params, _uri, socket) do
-    q = params["q"] || ""
+    # `?q[]=x` arrives as a list: no search, not a crash.
+    q = if is_binary(params["q"]), do: params["q"], else: ""
 
     {:noreply,
      assign(socket,

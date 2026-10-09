@@ -42,7 +42,9 @@ defmodule DevilsDictionary.Routing.PageMetadataTest do
            "It stood on Fifth Ave. In 1900 it burned."},
           {"See Fig. Three for the map. It is old.", "See Fig. Three for the map."},
           {"Vol. Two continues the tale. It ends.", "Vol. Two continues the tale."},
-          {"Smith et al. Wrote the paper. It was cited.", "Smith et al. Wrote the paper."}
+          {"Smith et al. Wrote the paper. It was cited.", "Smith et al. Wrote the paper."},
+          {"Ébène était ünique. Then she left.", "Ébène était ünique."},
+          {"Zoë Brontë wrote Æsir sagas. Later more.", "Zoë Brontë wrote Æsir sagas."}
         ] do
       assert PageMetadata.first_sentence(text) == first, text
     end

@@ -4,7 +4,7 @@
 
 ## The owner's rule: no human decides a record
 
-On 8 October 2026 the owner set the rule this stage is built on: no human reviews rows again. The owner signs one **standing review rule** once (`priv/routing/review-rule.json`, digest `1564626c…e46883`, signed 2026-10-09T15:48:23Z, recorded in `review_rule_signatures` on the working database). Under it the backfill reproduces every decision the owner made in #224, confirms what the rule's clauses can decide, and defers the rest, visibly. The rule, its clauses and its readability floor are recorded with the backfill ([under the standing review rule](stage-2/backfill.md#under-the-standing-review-rule-237)). A human publishes only as an override, recorded as such on every receipt.
+On 8 October 2026 the owner set the rule this stage is built on: no human reviews rows again. The owner signs one **standing review rule** once (`priv/routing/review-rule.json`, digest `1564626c…e46883`, signed 2026-10-09T15:48:23Z, recorded in `review_rule_signatures` on the working database). Under it the backfill keeps every decision the owner made in #224 (124 confirmations and 5 deferrals, read back from the ledger), confirms what the rule's clauses can decide from the evidence, and defers the rest, visibly. From the evidence alone it reproduces 96 of the owner's confirmations and never one of the owner's deferrals. On a widened population of 571 records on a disposable copy of the corpus it allocated 420, deferred 109 and left 42 not addressed, with nobody touching a row ([the backfill under the rule](stage-2/backfill.md#under-the-standing-review-rule-237)). The rule, its clauses and its readability floor are recorded with the backfill ([under the standing review rule](stage-2/backfill.md#under-the-standing-review-rule-237)). A human publishes only as an override, recorded as such on every receipt.
 
 ## Publication: the record and the eight gates (C1)
 
@@ -56,7 +56,7 @@ DD_NO_OBAN=1 mix dd.routing.publish --rule priv/routing/review-rule.json \
 - it is compiled without the code reloader, the repository check and the debug error pages (`config/dev.exs`), so no stack trace, route table, compile error or "run migrations" action reaches the tunnel;
 - it injects no live reloader, and its sockets accept only its own pages' origin and the owner's machine.
 
-**What the tunnel reaches.** `DevilsDictionaryWeb.ProxyGuard` sits at the front of the endpoint. A request came through a proxy when it carries `X-Forwarded-For`, `Forwarded`, `X-Forwarded-Host` or `X-Forwarded-Proto`, or when its peer is not the loopback; ngrok always sets the first. On the published host such a request gets 404 for every operator surface: `/dev/*` (the mailbox and the dashboard), `/kit`, `/ops/*`, and the retired `/s/*`, `/health` and `/admin/*`. The owner still reaches all of them on the machine itself. A server that reads drafts and is not the published host answers every proxied request 503, so a server started without the variable while the tunnel runs shows the tunnel nothing. The endpoint dispatches its sockets before any plug, so the same rule is applied there:
+**What the tunnel reaches.** `DevilsDictionaryWeb.ProxyGuard` runs after the static files (public assets only), the request id and telemetry, and before the parsers, the session and the router. A request came through a proxy when it carries `X-Forwarded-For`, `Forwarded`, `X-Forwarded-Host` or `X-Forwarded-Proto`, or when its peer is not the loopback; ngrok always sets the first. On the published host such a request gets 404 for every operator surface: `/dev/*` (the mailbox and the dashboard), `/kit`, `/ops/*`, and the retired `/s/*`, `/health` and `/admin/*`. The owner still reaches all of them on the machine itself. A server that reads drafts and is not the published host answers 503 to every proxied request that reaches the guard. That server is the owner's ordinary development build, though, whose debug pages, code reloader and repository check answer before any plug: a pending migration or a compile error in the checkout would still show through the tunnel. Keep the tunnel off a server that is not the published host. The endpoint dispatches its sockets before any plug, so the guard's rule is applied there too:
 
 - `DevilsDictionaryWeb.LiveSocket` refuses a proxied socket on a draft-reading server that is not the published host;
 - the operator LiveViews mount in their own live sessions under `on_mount({ProxyGuard, :operator})`, so a reader page cannot live-navigate to them without a request, and a proxied socket that reaches one on the published host is not mounted;
@@ -113,7 +113,7 @@ The lexical On entries the manifest lists are indexable but not in a sitemap: C5
 
 ## The release on the working installation (C6)
 
-9 October 2026, from `main` at `5ffd551` (after #247), on `devils_dictionary_v2`, the owner's working corpus on port 5434. Every step is logged with request and response headers in the private evidence (`private/2026-10-09-stage5/`, which is `private/2026-10-09-237/`), by `release/s237-release.sh`.
+9 October 2026, from `main` at `5ffd551` (after #247), on `devils_dictionary_v2`, the owner's working corpus on port 5434. Every step is logged in the private evidence (`private/2026-10-09-stage5/`, which is `private/2026-10-09-237/`) by `release/s237-release.sh`. Every request of the HTTP table is kept with its response headers and body, and in its second run (`on4`, `off2`, `on5`) with the request's own headers too.
 
 **Publication.** The receipts are the only rows the release wrote.
 
@@ -138,9 +138,9 @@ The lexical On entries the manifest lists are indexable but not in a sitemap: C5
 | 229 | `/places/warsaw` | content |
 | 230 | `/organizations/wikimedia-foundation` | content |
 
-**The published host.** The server's launch script (`~/Library/Application Support/dictionary/phx-4007.sh`, outside the repository) now sets `DD_PUBLISHED_HOST=wordhoard.eu.ngrok.io`, `DD_PUBLIC_ROUTING=on`, `DD_SECRET_KEY_BASE` from a file only the owner can read, `DD_NO_OBAN=1` and `MIX_BUILD_ROOT` (the checkout's ignored `_build/published`). It refuses to start while a migration is pending. Its LaunchAgent was restarted, and the server answered 26 seconds later. The original script is kept beside it as `phx-4007.sh.before-237`. `DD_NO_OBAN=1` keeps the queues and cron off on the working database; the owner can remove it to run them again.
+**The published host.** The server's launch script (`~/Library/Application Support/dictionary/phx-4007.sh`, outside the repository) now sets `DD_PUBLISHED_HOST=wordhoard.eu.ngrok.io`, `DD_PUBLIC_ROUTING=on`, `DD_SECRET_KEY_BASE` from a file only the owner can read, `DD_NO_OBAN=1` and `MIX_BUILD_ROOT` (the checkout's ignored `_build/published`). It refuses to start while a migration is pending. Its LaunchAgent was restarted, and the server answered 24 seconds later. The original script is kept beside it as `phx-4007.sh.before-237`. `DD_NO_OBAN=1` keeps the queues and cron off on the working database; the owner can remove it to run them again.
 
-**The HTTP table**, through `https://wordhoard.eu.ngrok.io` with the switch on, and the same requests after the rollback turned it off. With the switch on again, every answer was identical to the first column.
+**The HTTP table**, through `https://wordhoard.eu.ngrok.io` with the switch on, and the same requests after the rollback turned it off. With the switch on again, every answer was identical to the first column. The sequence was run twice, with the same answers.
 
 | Request | Switch on | Switch off |
 |---|---|---|
@@ -152,16 +152,18 @@ The lexical On entries the manifest lists are indexable but not in a sitemap: C5
 | `GET /nature/Mars`, `/nature/mars/` | 301 to `/nature/mars` | 404 |
 | `GET /places/warsaw`, `/works/the-devils-dictionary` (drafts in the population) | 404, noindex | 404 |
 | `GET /people/nobody-at-all-237` (not in the population) | 404, noindex | 404 |
-| `GET /people/%zz`, `/people/a%2Fb` (malformed) | 400 | 400 |
+| `GET /people/a%2Fb` (malformed) | 400 | 400 |
 | `GET /on/love`, `/on/bierce` (listed lexical entries, D1) | 200, indexable | 200 |
 | `GET /on/the` (not listed) | 200, noindex | 200 |
 | `GET /entities/1/ambrose-bierce` | 200, noindex, canonical `/people/ambrose-bierce` | 404 |
 | `GET /dev/mailbox`, `/ops/health`, `/kit` | 404 | 404 |
 | `GET /sitemap.xml` | the index, naming `subjects-1.xml` | an empty index, `noindex` |
 
+`/people/%zz` never reaches the server: ngrok's edge answers it 400 itself over HTTP/1.1 and refuses it over HTTP/2. The application answers it 400 on the loopback.
+
 The same drafts read internally, through the same endpoint and database in the development configuration (dispatched in-process, so no session row was written): 200 with the draft mark and noindex.
 
-**Sitemaps and robots.** `/sitemap.xml` names one sitemap, which lists 114 URLs, exactly the published canonicals in the ledger. Both files are well-formed XML and carry `X-Robots-Tag: noindex`. robots.txt allows the eight families and 51 of the manifest's 56 On pages; the other five rest only on refused pages. It disallows every operator prefix as a path and everything under it, every family's query variants and `/*?`, and names the sitemap. With the switch off it disallows the families and names no sitemap.
+**Sitemaps and robots.** `/sitemap.xml` names one sitemap, which lists 114 URLs, exactly the published canonicals in the ledger. Both files are well-formed XML and carry `X-Robots-Tag: noindex`. robots.txt allows the eight families and 51 of the manifest's 56 On pages; the other five rest only on refused pages. Of the 51, 49 are indexable: `/on/everest` and `/on/humans` serve noindex, because their canonical is their headword's slug (`/on/mount-everest`, `/on/human`), not the listed spelling. It disallows every operator prefix as a path and everything under it, every family's query variants and `/*?`, and names the sitemap. With the switch off it disallows the families and names no sitemap.
 
 **JSON-LD.** On eight live pages (a person, a work, a concept, a nature subject, an event, a place, an organization and an On page) every block parses, names `https://schema.org`, and uses only properties schema.org defines for its type: `WebPage` with `about` the subject node, typed `Person`, `CreativeWork`, `Thing`, `Event`, `Place` or `Organization` by family. `json_ld_test.exs` holds the same rules offline. The Schema.org validator's own run (`https://validator.schema.org/#url=https%3A%2F%2Fwordhoard.eu.ngrok.io%2Fpeople%2Fambrose-bierce`) is one click for the owner.
 
@@ -171,19 +173,19 @@ The same drafts read internally, through the same endpoint and database in the d
 
 | Crawl | Published pages | Distinct links | Answers | `/entities/`, `#`, operator link or draft mark |
 |---|---|---|---|---|
-| First, on `5ffd551` | 114, all 200 | 527 | 496 × 200, 31 × 500 (24 exact words, 7 On pages) | none |
+| Paced, on `5ffd551` | 114, all 200 | 527 | 496 × 200, 31 × 500 (24 exact words, 7 On pages) | none (its file lists `/connections/` links, flagged by a crawler that matched `/connect` as a prefix, since corrected) |
 | Final, on `85e180b` | 114, all 200 | 524 | 524 × 200 | none |
 
-The 500s were an older defect the crawl reached: a word with candidate subjects but no primary concept crashed the exact-word and On page, and a concept with no Wikidata item crashed its provenance drawer. [#248](https://github.com/razrfly/dictionary/pull/248) fixed both, audited, and the server was restarted on it before the final crawl. A first unpaced crawl also met ngrok's edge rate limit, so the crawler fetches one address at a time with a pause and retries. Two published pages the final crawl could not fetch through the edge were fetched again: 200, with 67 links, all 200 and none of the four.
+The 500s were an older defect the crawl reached: a word with candidate subjects but no primary concept crashed its exact-word and On pages. [#248](https://github.com/razrfly/dictionary/pull/248) fixed it, and its audit found a concept with no Wikidata item crashing the provenance drawer, fixed there too; the server was restarted on it before the final crawl. An earlier unpaced crawl met ngrok's edge rate limit (390 of its fetches failed), so the crawler fetches one address at a time with a pause and retries. Two published pages the final crawl could not fetch through the edge were fetched again: 200, with 67 links, all 200 and none of the four.
 
-Every response through the tunnel carried `X-Robots-Tag: noindex, nofollow`, added by ngrok's edge: the application sends no such header with a page, as a request on the loopback shows. A crawler that obeys the header indexes nothing through this tunnel, whatever the pages say. Whether an ngrok setting or a domain of the owner's own lifts it is for the owner to decide.
+Every response the tunnel passed from the server carried `X-Robots-Tag: noindex, nofollow`, added by ngrok's edge: the application sends no such header with a page, as a request on the loopback shows. A crawler that obeys the header indexes nothing through this tunnel, whatever the pages say. Whether an ngrok setting or a domain of the owner's own lifts it is for the owner to decide.
 
 ## Rollback
 
 - **Turn the public routes off.** Set `DD_PUBLIC_ROUTING=off` in the server's launch script and restart its LaunchAgent. The families answer 404, the sitemap index is empty, the ledger is untouched. Set it back to `on` and the same answers return. The release proved both.
 - **Take one page down.** `Routing.Publications.withdraw/3`, a reviewer's act with a reason, recorded as a receipt: the page answers 404 publicly.
-- **Stop serving the public.** Boot the server's LaunchAgent out; the tunnel answers 502. A server restarted without `DD_PUBLISHED_HOST` while the tunnel runs answers it 503.
-- **Restore the corpus.** The step-0 bundle of 9 October 2026 (`c3a842e9…7f6029`) is the rollback point for the database, with `docs/routing/recovery.md`'s procedure. `page_publications` and `review_rule_signatures` are durable tables: a restore carries them, and the schema's down migrations refuse while they hold rows.
+- **Stop serving the public.** Boot the server's LaunchAgent out; the tunnel answers 502. Do not restart it without `DD_PUBLISHED_HOST` while the tunnel runs: its guard answers 503 to what reaches it, but that development build's debug pages answer first.
+- **Restore the corpus.** The bundle `2026-10-09-v2-released`, taken after the release and verified (MANIFEST `8247e0c98a50e2e43e11aacdd8a7ebbdc1aaba7ee968992171fc49ab5fbf1444`), is the restore point, with `docs/routing/recovery.md`'s procedure. It holds the owner's signing and the 114 receipts. The step-0 bundle (`c3a842e9…7f6029`) predates both and would drop them. `page_publications` and `review_rule_signatures` are durable tables: a restore carries them, and the schema's down migrations refuse while they hold rows.
 
 ## Known limits
 
@@ -192,4 +194,6 @@ Every response through the tunnel carried `X-Robots-Tag: noindex, nofollow`, add
 - **Unpublished subjects are named on public pages.** On the published host an unpublished subject appears as text, and an On page's Subjects card still says "Not yet public", names its decided family and shows its one-line registry description, as #219 designed. A source page lists its own entries, including an article about a subject whose page is a draft. Neither is a draft mark, a link or the draft page itself; whether either belongs on public pages is the owner's to decide.
 - **A registry merge after launch** can join a published identity to one whose page is a draft or withdrawn. The published host then withholds both, at their identities and at the retired page's address, but nothing refuses the registry merge itself, and the links and the sitemap still name the retired page's address, which then answers 404 until the ledger merges or retires the page (`mix dd.routing.route`).
 - **Event pages** are valid schema.org Events but carry no `startDate` or `location`, which Google's Event rich results require.
+- **Withdrawal has no task.** `Routing.Publications.withdraw/3` is a reviewer's act from `iex` or code; `mix dd.routing.publish` publishes only.
+- **Registration is open on the published host.** `/users/register` is reachable through the tunnel and creates an account on the working database, as it did before #237. The mailbox that would confirm it is not reachable there.
 - **A word's thing drawer** keys its link rows on the Wikidata QID, so two linked things with no QID share a row id, and two at the same confidence show as one (#248's final check, N-4). No page fails for it; the fix is to key on the object id where there is no QID.
