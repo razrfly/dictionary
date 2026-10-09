@@ -25,9 +25,11 @@ defmodule DevilsDictionary.Routing.Qualifier do
 
   **Readable means readable.** A path is made of words: a label or
   qualifier the slug would have to spell out — `#` as `sharp`, `.` as
-  `dot`, `+` as `plus`, so `Inc.` or `ver. 1.0` or `#972` — is not readable
-  (`readable?/1`), and `path/2` gives nil for it. The owner named such
-  addresses by hand in #224; the rule defers them for a human to name.
+  `dot`, `+` as `plus`, `&` as `and`, so `Inc.` or `ver. 1.0` or `#972` or
+  `Simon & Garfunkel` — is not readable (`readable?/1`), and `path/2` gives
+  nil for it. The owner named such addresses by hand in #224; the rule
+  defers them for a human to name (`simon-and-garfunkel` reads well, but
+  that is a human's spelling to approve, not the rule's to invent).
 
   **Where the port and `candidates.py` differ.** On the population's real
   text they agree on every proposal. On adversarial text they can differ:
@@ -80,10 +82,10 @@ defmodule DevilsDictionary.Routing.Qualifier do
 
   @doc """
   Whether a label or a qualifier makes a readable address: it holds no
-  character the slug would spell out as a word (`#`, `+`, `.`). Nil or
-  anything else is not readable.
+  character the slug would spell out as a word (`#` as `sharp`, `+` as
+  `plus`, `.` as `dot`, `&` as `and`). Nil or anything else is not readable.
   """
-  def readable?(text) when is_binary(text), do: not Regex.match?(~r/[#+.]/u, text)
+  def readable?(text) when is_binary(text), do: not Regex.match?(~r/[#+.&]/u, text)
   def readable?(_text), do: false
 
   defp by_family("works", desc, work_kind) do

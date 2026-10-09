@@ -78,6 +78,21 @@ defmodule DevilsDictionary.Repo.Migrations.CreateReviewRuleSignatures do
   end
 
   def down do
+    # A recorded signing is permanent: the rollback refuses while any exists,
+    # before anything is dropped, as the receipts' migration refuses while a
+    # receipt exists.
+    execute """
+    DO $$
+    DECLARE n bigint;
+    BEGIN
+      SELECT count(*) INTO n FROM review_rule_signatures;
+      IF n > 0 THEN
+        RAISE EXCEPTION 'refusing to roll back review_rule_signatures: % recorded signing(s) are permanent', n
+          USING ERRCODE = 'integrity_constraint_violation';
+      END IF;
+    END $$;
+    """
+
     drop constraint(:routing_backfill_runs, :routing_backfill_runs_rule)
 
     alter table(:routing_backfill_runs) do

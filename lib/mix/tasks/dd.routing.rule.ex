@@ -25,25 +25,31 @@ defmodule Mix.Tasks.Dd.Routing.Rule do
 
   Signing needs the account's password, which only its holder types; a
   signature written into the file by hand does not load, because no
-  signing was recorded (`Routing.ReviewRule`). The task refuses to run
-  without `DD_NO_OBAN=1`: it starts the application, and Oban must not run
-  against the working database.
+  signing was recorded (`Routing.ReviewRule`). A signed file whose signing
+  this installation does not hold (the row was never written, or the
+  signer's email has changed since) neither loads nor can be signed again:
+  change its content (its `name`, say) and sign that afresh. The task
+  refuses to run without `DD_NO_OBAN=1` before it starts the application,
+  so Oban never runs against the working database on its account.
   """
 
   use Mix.Task
 
   alias DevilsDictionary.Routing.ReviewRule
 
-  @requirements ["app.start"]
-
   @impl Mix.Task
   def run(args) do
+    # Checked before the application starts: with the variable unset, the
+    # development configuration would start Oban's queues against the
+    # working database.
     unless System.get_env("DD_NO_OBAN") == "1",
       do:
         Mix.raise(
           "run with DD_NO_OBAN=1: this task starts the application, and Oban must not run " <>
             "against the working database"
         )
+
+    Mix.Task.run("app.start")
 
     {opts, rest, invalid} =
       OptionParser.parse(args, strict: [sign: :boolean, reviewer: :string])

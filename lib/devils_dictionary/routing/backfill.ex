@@ -77,10 +77,11 @@ defmodule DevilsDictionary.Routing.Backfill do
   is written, its collision group (or the record alone) is decided again
   from the state the batch now sees, and the record is deferred if any
   member's decision moved — a human deferred it meanwhile, a page was
-  retired, an address was taken; otherwise the confirmation writes the
-  signer's override, recording the rule's digest in its `rule_ids`, then
-  the page and the address; an address a human or the rule already
-  allocated is kept and nothing is written; a deferral writes nothing.
+  retired, an address was taken; an address a human or the rule already
+  allocated, before the run or meanwhile, is kept and nothing is written
+  over it; otherwise the confirmation writes the signer's override,
+  recording the rule's digest in its `rule_ids`, then the page and the
+  address; a deferral writes nothing.
   Every checkpoint row's `review` names the rule's digest, and the clause
   that decided the record or `stale` for a record the batch deferred before
   the rule's decision could apply (evidence moved, input changed, missing).
@@ -934,7 +935,13 @@ defmodule DevilsDictionary.Routing.Backfill do
 
       %{action: :confirm} ->
         case moved(ctx, decision) do
-          nil ->
+          {:ok, %{standing: true} = now} ->
+            # Between the printed decision and this batch, a human (or the
+            # rule, earlier in this batch) allocated this very address: a
+            # standing decision now, kept, and nothing is written over it.
+            keep(ctx, now, rule_entry(rule, now))
+
+          {:ok, _same} ->
             review = %{
               object_id: ctx.record["object_id"],
               action: :confirm,
@@ -950,7 +957,7 @@ defmodule DevilsDictionary.Routing.Backfill do
 
             confirm(ctx, review, signer)
 
-          why ->
+          {:moved, why} ->
             %{
               disposition: "deferred_by_review",
               reason: "standing review rule: the state moved since the rule decided: " <> why,
@@ -984,24 +991,31 @@ defmodule DevilsDictionary.Routing.Backfill do
   end
 
   # Before a confirmation is written, the record's collision group (or the
-  # record alone) is decided again from what the batch now sees. A group
-  # mate this batch already allocated now stands at the same address, which
-  # is the same decision; anything else that moved — a human's deferral, a
-  # retired page, an address taken — defers this record, so a run executes
-  # the decisions it printed or defers, never something else. Nil when
-  # nothing moved, else why.
+  # record alone) is decided again from what the batch now sees. A member
+  # that now stands at the same address — a mate this batch already
+  # allocated, or the record itself, allocated by a human meanwhile — is the
+  # same decision, and the caller keeps it rather than writing; anything
+  # else that moved — a human's deferral, a retired page, an address taken —
+  # defers this record, so a run executes the decisions it printed or
+  # defers, never something else. Only the group is decided again: the
+  # population's own structure (two groups meeting at one path, another
+  # record's candidate path) cannot change within a run. Returns `{:ok,
+  # the record's decision now}` or `{:moved, why}`.
   defp moved(ctx, _decision) do
     id = ctx.record["object_id"]
     ids = Enum.sort(Map.get(ctx.plan.groups, decision_group(ctx), [id]))
     again = decisions(ctx.plan, ids)
 
-    Enum.find_value(ids, fn member ->
-      before = signature(ctx.plan.decided[member])
-      now = signature(again[member])
+    why =
+      Enum.find_value(ids, fn member ->
+        before = signature(ctx.plan.decided[member])
+        now = signature(again[member])
 
-      if before != now,
-        do: "object #{member} was #{describe(before)}, now #{describe(now)}"
-    end)
+        if before != now,
+          do: "object #{member} was #{describe(before)}, now #{describe(now)}"
+      end)
+
+    if why, do: {:moved, why}, else: {:ok, Map.fetch!(again, id)}
   end
 
   defp decision_group(ctx) do

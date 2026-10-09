@@ -1341,6 +1341,48 @@ defmodule DevilsDictionary.Routing.BackfillTest do
                MapSet.size(before[ClassificationDecision]) + 2
     end
 
+    test "a human's confirmation at the rule's own path, made between the printed decisions and the run, stands",
+         ctx do
+      {:ok, plan} = Backfill.load(ctx.snapshot.path, ctx.population, nil, rule: ctx.rule.path)
+      decided = Backfill.decisions(plan)
+      assert %{action: :confirm, standing: false} = decided[ctx.world.bierce.object_id]
+
+      # Another reviewer confirms Bierce in people, at the same address the
+      # rule chose, through a review-file run.
+      other = reviewer!()
+
+      {:ok, reviewed} =
+        Backfill.load(
+          ctx.snapshot.path,
+          ctx.population,
+          reviews!(ctx, [
+            {ctx.world.bierce,
+             %{"action" => "confirm", "family" => "people", "reviewer" => other.email}}
+          ])
+        )
+
+      {:ok, _} = Backfill.run(reviewed, ctx.importer.id)
+      human = Classifications.current(ctx.world.bierce.object_id)
+      assert human.origin == :override
+      assert Repo.get!(Actor, human.reviewer_actor_id).user_id == other.id
+
+      {:ok, summary} = Backfill.run(plan, ctx.importer.id, decided: decided)
+      assert summary.dispositions["allocated"] == 3
+
+      # Bierce's address is kept under the human's decision: the rule wrote
+      # no override of its own, and the human's stays current.
+      item = item(plan, ctx.world.bierce)
+      assert item.disposition == "allocated"
+      assert item.review["clause"] == "standing_decision"
+      assert Classifications.current(ctx.world.bierce.object_id).id == human.id
+
+      assert Repo.all(
+               from d in ClassificationDecision,
+                 where: d.origin == :override and d.object_id == ^ctx.world.bierce.object_id,
+                 select: d.id
+             ) == [human.id]
+    end
+
     test "a population whose groups are not its own is refused at load", ctx do
       broken = fn edit ->
         path = Path.join(ctx.dir, "broken-#{System.unique_integer([:positive])}.json")

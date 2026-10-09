@@ -114,7 +114,7 @@ Each record's proposal, evidence and disposition is in `candidates.json`.
 
 1. **Tested recovery.** Delivered in Stage 1: [recovery procedure](../recovery.md) and `RecoveryTest`. Rehearsed on the development corpus in [Stage 2A](recovery-rehearsal.md), and again, with routing and curation state, in the [recovery repair](recovery-repair.md).
    - **Passes:** snapshot, restore and exact verification. Every provider re-projects to completion, with identities, references, routing history and curation approvals exact, and normal operations work on the projected copy.
-   - **Open:** the corpus is not yet a fixed point of today's materializers. The measured [catch-up](corpus-catch-up.md) needs the owner's decision, and the checkpoint needs independent reassessment.
+   - **Closed on 8 October 2026:** the measured [catch-up](corpus-catch-up.md) was applied to `devils_dictionary_v2` under [CP4 (#224)](https://github.com/razrfly/dictionary/issues/224) block 1, audited independently, and the caught-up corpus is the accepted baseline `2026-10-08-v2`.
 
    This gate stays open until both are done.
 2. **Repeat-run identity preservation.** Running the backfill twice must leave page, path and decision ids unchanged, compared as sets. **Shown**, in `BackfillTest` and on copies of the corpus ([backfill](backfill.md#rehearsal)). A second run, with or without reviews, wrote nothing. A second full pass under a new run key left every page, path, decision and ledger id identical, adding only its own checkpoint.
