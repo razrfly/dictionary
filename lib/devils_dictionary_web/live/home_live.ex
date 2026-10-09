@@ -320,7 +320,9 @@ defmodule DevilsDictionaryWeb.HomeLive do
                     </li>
                   </ul>
                 </div>
-                <.link
+                <%!-- A thing the published host does not link is its name as
+                     text (#237 D2), never a way to its exact identity. --%>
+                <.subject_link
                   :if={result.kind == :entity}
                   id={"result-entity-#{result.object_id}"}
                   navigate={result.path}
@@ -333,7 +335,7 @@ defmodule DevilsDictionaryWeb.HomeLive do
                     </span>
                   </span>
                   <span class="shrink-0 text-mist-500">{result.type_label}</span>
-                </.link>
+                </.subject_link>
               </li>
             </ol>
           </div>

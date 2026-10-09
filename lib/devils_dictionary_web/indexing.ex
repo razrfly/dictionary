@@ -151,6 +151,24 @@ defmodule DevilsDictionaryWeb.Indexing do
 
   def lexical?(_slug, _mode, _query), do: false
 
+  @doc "Which of these page ids are published and active, as a set, in one query."
+  def published_ids(page_ids) when is_list(page_ids) do
+    case page_ids |> Enum.filter(&is_integer/1) |> Enum.uniq() do
+      [] ->
+        MapSet.new()
+
+      ids ->
+        from(p in Page,
+          where:
+            p.id in ^ids and p.publication_state == :published and
+              p.lifecycle_state == :active,
+          select: p.id
+        )
+        |> Repo.all()
+        |> MapSet.new()
+    end
+  end
+
   @doc """
   Whether any of a lexical entry's subject pages is published and active.
   """

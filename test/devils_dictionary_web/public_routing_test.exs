@@ -93,7 +93,8 @@ defmodule DevilsDictionaryWeb.PublicRoutingTest do
     merged = @root |> Path.join("config.exs") |> Config.Reader.read!(env: :prod, target: :host)
     assert get_in(merged, [:devils_dictionary, :public_routing]) == false
 
-    published = [{"DD_PUBLISHED_HOST", "wordhoard.test"}, {"DD_PUBLIC_ROUTING", nil}]
+    secret = {"DD_SECRET_KEY_BASE", String.duplicate("s", 64)}
+    published = [{"DD_PUBLISHED_HOST", "wordhoard.test"}, {"DD_PUBLIC_ROUTING", nil}, secret]
 
     # Production never reads the published host's variables.
     prod =
@@ -115,21 +116,84 @@ defmodule DevilsDictionaryWeb.PublicRoutingTest do
     assert dev[:published_host] == "wordhoard.test"
     assert dev[:public_routing] == true
 
-    assert runtime(:dev, [{"DD_PUBLISHED_HOST", "wordhoard.test"}, {"DD_PUBLIC_ROUTING", "off"}])[
-             :public_routing
-           ] == false
+    assert runtime(:dev, [
+             {"DD_PUBLISHED_HOST", "wordhoard.test"},
+             {"DD_PUBLIC_ROUTING", "off"},
+             secret
+           ])[:public_routing] == false
+
+    # The published host signs with its own secret, never the committed
+    # development one: without it, or with a short one, it does not boot.
+    assert dev[DevilsDictionaryWeb.Endpoint][:secret_key_base] == String.duplicate("s", 64)
+
+    # Sockets only from its own pages or the owner's machine, and no live
+    # reload in the pages the public reads.
+    assert dev[DevilsDictionaryWeb.Endpoint][:check_origin] ==
+             ["//wordhoard.test", "//localhost", "//127.0.0.1"]
+
+    assert dev[DevilsDictionaryWeb.Endpoint][:live_reload] == [
+             patterns: [],
+             web_console_logger: false
+           ]
+
+    assert_raise RuntimeError, ~r/needs DD_SECRET_KEY_BASE/, fn ->
+      runtime(:dev, [{"DD_PUBLISHED_HOST", "wordhoard.test"}, {"DD_SECRET_KEY_BASE", nil}])
+    end
+
+    assert_raise RuntimeError, ~r/at least 64 bytes/, fn ->
+      runtime(:dev, [{"DD_PUBLISHED_HOST", "wordhoard.test"}, {"DD_SECRET_KEY_BASE", "short"}])
+    end
 
     # Exactly on or off: a rollback typed another way raises at boot rather
     # than leave public routing on in silence.
     for typed <- ["OFF", "false", "0", "no", "disabled", ""] do
       assert_raise RuntimeError, ~r/DD_PUBLIC_ROUTING must be on or off/, fn ->
-        runtime(:dev, [{"DD_PUBLISHED_HOST", "wordhoard.test"}, {"DD_PUBLIC_ROUTING", typed}])
+        runtime(:dev, [
+          {"DD_PUBLISHED_HOST", "wordhoard.test"},
+          {"DD_PUBLIC_ROUTING", typed},
+          secret
+        ])
       end
     end
+
+    # The published host is compiled without the code reloader and the debug
+    # error pages, which answer before any plug; the owner's own runs are not.
+    dev_endpoint = fn vars ->
+      with_system_env(vars, fn ->
+        @root
+        |> Path.join("dev.exs")
+        |> Config.Reader.read!(env: :dev)
+        |> get_in([:devils_dictionary, DevilsDictionaryWeb.Endpoint])
+      end)
+    end
+
+    published_build = dev_endpoint.([{"DD_PUBLISHED_HOST", "wordhoard.test"}])
+    assert published_build[:code_reloader] == false
+    assert published_build[:debug_errors] == false
+
+    owner_build = dev_endpoint.([{"DD_PUBLISHED_HOST", nil}])
+    assert owner_build[:code_reloader] == true
+    assert owner_build[:debug_errors] == true
+
+    # Nor do its pages carry the templates' source paths.
+    live_view = fn vars ->
+      with_system_env(vars, fn ->
+        @root
+        |> Path.join("dev.exs")
+        |> Config.Reader.read!(env: :dev)
+        |> Keyword.get(:phoenix_live_view)
+      end)
+    end
+
+    assert live_view.([{"DD_PUBLISHED_HOST", "wordhoard.test"}])[:debug_heex_annotations] == false
+    assert live_view.([{"DD_PUBLISHED_HOST", nil}])[:debug_heex_annotations] == true
 
     plain = runtime(:dev, [{"DD_PUBLISHED_HOST", nil}])
     refute Keyword.has_key?(plain, :public_routing)
     refute Keyword.has_key?(plain, :published_host)
+    refute get_in(plain, [DevilsDictionaryWeb.Endpoint, :secret_key_base])
+    refute get_in(plain, [DevilsDictionaryWeb.Endpoint, :check_origin])
+    assert [_ | _] = get_in(plain, [DevilsDictionaryWeb.Endpoint, :live_reload, :patterns])
   end
 
   # A published page with an alias (after a move) and a published page whose
@@ -258,7 +322,8 @@ defmodule DevilsDictionaryWeb.PublicRoutingTest do
       assert PublicRouting.origin() == "https://wordhoard.test"
 
       assert ctx.conn |> get("/people/fran%C3%A7ois") |> html_response(404)
-      refute Links.path(draft.entity.object_id, "Arouet") =~ "/people/"
+      # Not linked at all: neither its address nor its exact identity (#237 D2).
+      assert Links.path(draft.entity.object_id, "Arouet") == nil
     end)
 
     assert ctx.conn |> get("/people/fran%C3%A7ois") |> html_response(200)
@@ -312,6 +377,95 @@ defmodule DevilsDictionaryWeb.PublicRoutingTest do
 
       # Locally, the owner reads the draft.
       assert ctx.conn |> get("/people/candide") |> html_response(200)
+    end
+
+    test "the LiveView socket, which no plug reaches, refuses a proxied connection where the plug would" do
+      local = %{x_headers: [], peer_data: %{address: {127, 0, 0, 1}}}
+
+      for proxied <- [
+            %{local | x_headers: [{"x-forwarded-for", "203.0.113.7"}]},
+            %{local | x_headers: [{"X-Forwarded-Proto", "https"}]},
+            %{local | x_headers: [{"x-forwarded-host", "wordhoard.test"}]},
+            %{local | peer_data: %{address: {192, 168, 1, 20}}},
+            %{x_headers: []}
+          ] do
+        # A server that reads drafts and is not the published host: refused.
+        assert DevilsDictionaryWeb.ReadingMode.configured?()
+        assert :error = DevilsDictionaryWeb.LiveSocket.connect(%{}, %Phoenix.Socket{}, proxied)
+
+        # The published host reads publicly: the socket connects.
+        with_env(:published_host, "wordhoard.test", fn ->
+          assert {:ok, _} =
+                   DevilsDictionaryWeb.LiveSocket.connect(%{}, %Phoenix.Socket{}, proxied)
+        end)
+      end
+
+      # The owner's own machine connects either way.
+      assert {:ok, _} = DevilsDictionaryWeb.LiveSocket.connect(%{}, %Phoenix.Socket{}, local)
+
+      # The live-reload socket answers the owner's machine only, on every
+      # server: through a proxy it would stream log lines and file paths.
+      for proxied <- [
+            %{local | x_headers: [{"x-forwarded-for", "203.0.113.7"}]},
+            %{local | peer_data: %{address: {192, 168, 1, 20}}},
+            %{x_headers: []}
+          ] do
+        assert :error =
+                 DevilsDictionaryWeb.LiveReloadSocket.connect(%{}, %Phoenix.Socket{}, proxied)
+
+        with_env(:published_host, "wordhoard.test", fn ->
+          assert :error =
+                   DevilsDictionaryWeb.LiveReloadSocket.connect(%{}, %Phoenix.Socket{}, proxied)
+        end)
+      end
+
+      assert {:ok, _} =
+               DevilsDictionaryWeb.LiveReloadSocket.connect(%{}, %Phoenix.Socket{}, local)
+    end
+
+    test "on the published host, a reader page cannot live-navigate to an operator page, and a proxied socket is not mounted there",
+         ctx do
+      with_env(:published_host, "wordhoard.test", fn ->
+        # Another live session: the navigation needs a request, which the
+        # plug answers 404 through the proxy. (A refused navigation ends the
+        # view, so each path starts from the reader page again.)
+        for path <- ~w(/ops/health /ops/imports /ops/discovery /kit) do
+          {:ok, view, _html} = ctx.conn |> proxied() |> live("/")
+          assert {:error, {:redirect, %{to: to}}} = live_redirect(view, to: path)
+          assert URI.parse(to).path == path
+          assert (ctx.conn |> proxied() |> get(path)).status == 404
+        end
+
+        # A socket that reaches an operator LiveView anyway is sent away
+        # before it mounts; the owner's own is mounted.
+        socket = fn info ->
+          %Phoenix.LiveView.Socket{private: %{connect_info: info, lifecycle: nil}}
+        end
+
+        proxied_info = %{
+          x_headers: [{"x-forwarded-for", "203.0.113.7"}],
+          peer_data: %{address: {127, 0, 0, 1}}
+        }
+
+        local_info = %{x_headers: [], peer_data: %{address: {127, 0, 0, 1}}}
+
+        assert {:halt, %{redirected: {:redirect, %{to: "/"}}}} =
+                 DevilsDictionaryWeb.ProxyGuard.on_mount(
+                   :operator,
+                   %{},
+                   %{},
+                   socket.(proxied_info)
+                 )
+
+        assert {:cont, _} =
+                 DevilsDictionaryWeb.ProxyGuard.on_mount(:operator, %{}, %{}, socket.(local_info))
+
+        # Locally, the operator pages mount as before.
+        assert {:ok, _view, _html} = live(ctx.conn, "/ops/health")
+      end)
+
+      # Not the published host: the hook leaves the operator pages alone.
+      assert {:ok, _view, _html} = live(ctx.conn, "/ops/health")
     end
   end
 end

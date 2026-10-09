@@ -97,11 +97,17 @@ defmodule DevilsDictionaryWeb.Head do
 
   @doc """
   The head of the exact-identity route, `/entities/:id/:slug`: noindex,
-  and canonical at the subject's address where the public is served one.
+  and canonical at the subject's address where the public is served one,
+  else at the route's own path. That is the page's own URL, not a link, so
+  it stays when the published host links no fallback (#237 D2).
   """
   def entity(%EntityPage{} = entity_page, object_id) do
     label = entity_page.entity.label
-    canonical = PublicRouting.origin() <> Links.path(object_id, label, :public)
+
+    canonical =
+      PublicRouting.origin() <>
+        (Links.path(object_id, label, :public) || Links.entity_path(object_id, label))
+
     description = PageMetadata.description(entity_page)
 
     build(

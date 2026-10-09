@@ -77,7 +77,11 @@ defmodule DevilsDictionaryWeb.EntityLive do
     %URI{path: base, query: query} = URI.parse(uri)
     socket = assign(socket, base: base, subject: nil, unresolved: nil, choice: nil)
 
-    case Resolver.resolve(base, mode: socket.assigns.reading_mode) do
+    mode = socket.assigns.reading_mode
+
+    # A page whose identity was merged into one the published host withholds
+    # is withheld with it (#237 D2, `Links.withhold/2`).
+    case base |> Resolver.resolve(mode: mode) |> Links.withhold(mode) do
       %{outcome: :canonical, page: %Page{role: role} = page} = resolution
       when role in [:subject, :edition] ->
         subject(socket, page, params, resolution, query)
@@ -151,7 +155,15 @@ defmodule DevilsDictionaryWeb.EntityLive do
     cursors = cursor_params(params)
     back_path = safe_back_path(params["from"])
 
-    case EntityPage.build(object_id, page_opts(cursors)) do
+    # On the published host, read publicly, an entity whose subject or
+    # edition page is not served there is not served here either (#237 D2):
+    # not found, as its page's own address is, and no slug is followed to
+    # its label. `ReadingStatus` gives a direct request the same 404.
+    page =
+      if not Links.withheld?(object_id, socket.assigns.reading_mode),
+        do: EntityPage.build(object_id, page_opts(cursors))
+
+    case page do
       nil ->
         {:noreply, missing(socket, object_id)}
 
@@ -241,7 +253,7 @@ defmodule DevilsDictionaryWeb.EntityLive do
                 <.icon name="hero-arrow-path" class="size-4 h-lh shrink-0 stroke-mist-500" />
                 <span class="min-w-0">
                   This identity was merged into <.a navigate={
-                    subject_path(@paths, @page.entity.object_id, @page.entity.label)
+                    subject_path(@paths, @page.entity.object_id, @page.entity.label, @reading_mode)
                   }>
                   {@page.entity.label}
                 </.a>. This old address remains meaningful, and its relationships and identity history are
@@ -261,7 +273,7 @@ defmodule DevilsDictionaryWeb.EntityLive do
               </p>
               <ul role="list" class="mt-2 flex flex-wrap gap-3 text-base/7 sm:text-sm/6">
                 <li :for={output <- @page.identity.outputs}>
-                  <.a navigate={subject_path(@paths, output.object_id, output.label)}>
+                  <.a navigate={subject_path(@paths, output.object_id, output.label, @reading_mode)}>
                     {output.label}
                   </.a>
                 </li>
@@ -387,7 +399,7 @@ defmodule DevilsDictionaryWeb.EntityLive do
                   <dd>
                     <span :for={{creator, index} <- Enum.with_index(@artwork.creators)}>
                       <span :if={index > 0}>, </span><.a navigate={
-                        subject_path(@paths, creator.object_id, creator.label)
+                        subject_path(@paths, creator.object_id, creator.label, @reading_mode)
                       }>
                         {creator.label}
                       </.a>
@@ -512,7 +524,7 @@ defmodule DevilsDictionaryWeb.EntityLive do
                   </.a>
                   <.a
                     :if={named.kind == :entity}
-                    navigate={subject_path(@paths, named.object_id, named.label)}
+                    navigate={subject_path(@paths, named.object_id, named.label, @reading_mode)}
                   >
                     {named.label}
                   </.a>
@@ -533,7 +545,11 @@ defmodule DevilsDictionaryWeb.EntityLive do
                   id={"connection-out-#{claim.assertion_id}"}
                   class="grid gap-1 py-3 sm:grid-cols-[minmax(0,10rem)_minmax(0,1fr)] sm:gap-5"
                 >
-                  <.a :if={claim.path} navigate={endpoint_path(@paths, claim)} class="font-medium">
+                  <.a
+                    :if={claim.path}
+                    navigate={endpoint_path(@paths, claim, @reading_mode)}
+                    class="font-medium"
+                  >
                     {claim.label}
                   </.a>
                   <span :if={is_nil(claim.path)} class="font-medium">{claim.label}</span>
@@ -587,7 +603,7 @@ defmodule DevilsDictionaryWeb.EntityLive do
                 >
                   <.a
                     :if={appearance.path}
-                    navigate={endpoint_path(@paths, appearance)}
+                    navigate={endpoint_path(@paths, appearance, @reading_mode)}
                     class="font-medium"
                   >
                     {appearance.label}
@@ -662,7 +678,7 @@ defmodule DevilsDictionaryWeb.EntityLive do
               <ul role="list" class="divide-y divide-mist-950/5 dark:divide-white/10">
                 <li :for={work <- @page.works} id={"work-#{work.object_id}"}>
                   <.a
-                    navigate={subject_path(@paths, work.object_id, work.label)}
+                    navigate={subject_path(@paths, work.object_id, work.label, @reading_mode)}
                     class="flex min-w-0 items-start justify-between gap-4 py-3"
                   >
                     <span class="min-w-0">
@@ -722,7 +738,8 @@ defmodule DevilsDictionaryWeb.EntityLive do
                         subject_path(
                           @paths,
                           definition.published_in.object_id,
-                          definition.published_in.label
+                          definition.published_in.label,
+                          @reading_mode
                         )
                       }>
                         {definition.published_in.label}
@@ -811,7 +828,7 @@ defmodule DevilsDictionaryWeb.EntityLive do
             >
               <ul role="list" class="space-y-1">
                 <li :for={edition <- @page.editions} id={"edition-#{edition.object_id}"}>
-                  <.a navigate={subject_path(@paths, edition.object_id, edition.label)}>
+                  <.a navigate={subject_path(@paths, edition.object_id, edition.label, @reading_mode)}>
                     {edition.label}
                   </.a>
                 </li>
@@ -877,7 +894,9 @@ defmodule DevilsDictionaryWeb.EntityLive do
                   id={"connection-in-#{claim.assertion_id}"}
                   class="flex flex-wrap items-baseline gap-x-2 py-3"
                 >
-                  <.a :if={claim.path} navigate={endpoint_path(@paths, claim)}>{claim.label}</.a>
+                  <.a :if={claim.path} navigate={endpoint_path(@paths, claim, @reading_mode)}>
+                    {claim.label}
+                  </.a>
                   <span :if={is_nil(claim.path)}>{claim.label}</span>
                   <span class="text-mist-500">{claim.predicate.forward_label} → this</span>
                   <.a
@@ -894,7 +913,9 @@ defmodule DevilsDictionaryWeb.EntityLive do
                   class="flex flex-wrap items-baseline gap-x-2 py-3"
                 >
                   <span class="text-mist-500">this → {claim.predicate.forward_label}</span>
-                  <.a :if={claim.path} navigate={endpoint_path(@paths, claim)}>{claim.label}</.a>
+                  <.a :if={claim.path} navigate={endpoint_path(@paths, claim, @reading_mode)}>
+                    {claim.label}
+                  </.a>
                   <span :if={is_nil(claim.path)}>{claim.label}</span>
                   <.a
                     navigate={~p"/connections/#{claim.assertion_id}"}
@@ -1191,7 +1212,8 @@ defmodule DevilsDictionaryWeb.EntityLive do
   defp cited_state(_state), do: "not yet reviewed"
 
   # Every identity the page links, through the one link helper in one query
-  # (#219): its address in the reading mode, or the exact-identity route.
+  # (#219): its address in the reading mode, or the exact-identity route, or
+  # nil where the reader may not link it (#237 D2).
   defp subject_paths(page, artwork, mode) do
     [
       [{page.entity.object_id, page.entity.label}],
@@ -1218,15 +1240,17 @@ defmodule DevilsDictionaryWeb.EntityLive do
     |> Links.paths(mode)
   end
 
-  defp subject_path(paths, object_id, label),
-    do: Map.get(paths, object_id) || Links.entity_path(object_id, label)
+  # Nil where the reader may not link the subject (#237 D2): `<.a>` then
+  # shows its label as text.
+  defp subject_path(paths, object_id, label, mode),
+    do: Map.get(paths, object_id) || Links.fallback(object_id, label, mode)
 
   # A connection's other end: a subject through the link helper, a word or
   # a content item at its own route.
-  defp endpoint_path(paths, %{subject_id: id, label: label}),
-    do: subject_path(paths, id, label)
+  defp endpoint_path(paths, %{subject_id: id, label: label}, mode),
+    do: subject_path(paths, id, label, mode)
 
-  defp endpoint_path(_paths, endpoint), do: endpoint.path
+  defp endpoint_path(_paths, endpoint, _mode), do: endpoint.path
 
   # The subject header's facts: the family (from the address), the draft
   # mark, the way back to On, and the provenance drawer's contents.

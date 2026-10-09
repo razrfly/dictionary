@@ -330,12 +330,33 @@ if config_env() == :dev do
 
       config :devils_dictionary, :public_routing, public_routing
 
+      # A host the public reaches does not sign its sessions and LiveView
+      # tokens with the secret committed in `config/dev.exs`, which anyone can
+      # read: the launch script gives it its own, kept outside the repository.
+      secret_key_base =
+        System.get_env("DD_SECRET_KEY_BASE") ||
+          raise "the published host needs DD_SECRET_KEY_BASE, its own secret " <>
+                  "(mix phx.gen.secret), never the development one"
+
+      if byte_size(secret_key_base) < 64,
+        do: raise("DD_SECRET_KEY_BASE must be at least 64 bytes")
+
+      # Sockets only from pages of this host or the owner's machine, and no
+      # live reload: its socket answers only the machine itself
+      # (`LiveReloadSocket`), so the reloader is not put in the pages the
+      # public reads, and no log line is streamed to a browser.
+      config :devils_dictionary, DevilsDictionaryWeb.Endpoint,
+        secret_key_base: secret_key_base,
+        check_origin: ["//#{host}", "//localhost", "//127.0.0.1"],
+        live_reload: [patterns: [], web_console_logger: false]
+
     _ ->
       :ok
   end
 end
 
-if config_env() == :dev do
+# Not on the published host (#237 D2), which configures none above.
+if config_env() == :dev and System.get_env("DD_PUBLISHED_HOST") in [nil, ""] do
   # Reload browser tabs when matching files change.
   config :devils_dictionary, DevilsDictionaryWeb.Endpoint,
     live_reload: [
