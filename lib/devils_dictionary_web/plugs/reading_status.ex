@@ -52,7 +52,7 @@ defmodule DevilsDictionaryWeb.ReadingStatus do
   end
 
   defp subject(conn, mode) do
-    case Resolver.resolve(conn.request_path, mode: mode) do
+    case conn.request_path |> Resolver.resolve(mode: mode) |> Links.withhold(mode) do
       %Resolution{outcome: :redirect, location: location} -> redirect(conn, location)
       %Resolution{outcome: outcome} when outcome in [:canonical, :choice] -> conn
       resolution -> put_status(conn, Resolution.http_status(resolution))

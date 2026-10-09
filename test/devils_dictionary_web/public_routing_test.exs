@@ -156,6 +156,25 @@ defmodule DevilsDictionaryWeb.PublicRoutingTest do
       end
     end
 
+    # The published host is compiled without the code reloader and the debug
+    # error pages, which answer before any plug; the owner's own runs are not.
+    dev_endpoint = fn vars ->
+      with_system_env(vars, fn ->
+        @root
+        |> Path.join("dev.exs")
+        |> Config.Reader.read!(env: :dev)
+        |> get_in([:devils_dictionary, DevilsDictionaryWeb.Endpoint])
+      end)
+    end
+
+    published_build = dev_endpoint.([{"DD_PUBLISHED_HOST", "wordhoard.test"}])
+    assert published_build[:code_reloader] == false
+    assert published_build[:debug_errors] == false
+
+    owner_build = dev_endpoint.([{"DD_PUBLISHED_HOST", nil}])
+    assert owner_build[:code_reloader] == true
+    assert owner_build[:debug_errors] == true
+
     plain = runtime(:dev, [{"DD_PUBLISHED_HOST", nil}])
     refute Keyword.has_key?(plain, :public_routing)
     refute Keyword.has_key?(plain, :published_host)

@@ -374,6 +374,49 @@ defmodule DevilsDictionaryWeb.PublishedHostLinksTest do
     end)
   end
 
+  test "a published page whose identity was merged into a draft is withheld with it, at its address and its identity",
+       ctx do
+    world = world!(ctx)
+
+    # A published work, later merged in the registry into the draft Candide:
+    # its own page is still served, but what it shows is the survivor's.
+    retired =
+      subject!("Candide (1759)", "works",
+        kind: :work,
+        work_kind: "book",
+        description: "a retired record",
+        path: "/works/candide-1759",
+        published: true,
+        actor: ctx.human
+      )
+
+    published_host(fn ->
+      assert ctx.conn |> get("/works/candide-1759") |> html_response(200)
+    end)
+
+    {:ok, _} =
+      Registry.merge([retired.entity.object_id], world.candide.object_id, reason: "duplicate")
+
+    published_host(fn ->
+      for path <- ["/works/candide-1759", "/entities/#{retired.entity.object_id}/candide-1759"] do
+        html = ctx.conn |> get(path) |> html_response(404)
+        refute html =~ "1759 novella", path
+      end
+
+      assert Links.withheld?(retired.entity.object_id, :public)
+
+      # In the LiveView too, by live navigation from a page the public reads.
+      {:ok, view, _html} = live(ctx.conn, "/people/voltaire")
+      assert {:ok, view, _html} = view |> live_redirect(to: "/works/candide-1759")
+      refute render(view) =~ "1759 novella"
+    end)
+
+    # A reviewer reads it internally, and another server publicly, as before.
+    reading(false, fn ->
+      assert ctx.conn |> get("/works/candide-1759") |> html_response(200) =~ "1759 novella"
+    end)
+  end
+
   test "Links falls back to the exact identity off the published host, and internally on it",
        ctx do
     world = world!(ctx)

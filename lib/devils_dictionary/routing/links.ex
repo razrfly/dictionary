@@ -90,10 +90,11 @@ defmodule DevilsDictionary.Routing.Links do
   whose page is served, is not withheld, and nothing is withheld in internal
   reading or on any other server.
 
-  The pages asked about are those of every identity the route would show:
-  the object itself and, for a merged identity, the survivor whose content
-  `Encyclopedia.EntityPage.build/2` renders at the retired id. A draft survivor is
-  withheld at its own id and at every id merged into it.
+  The pages asked about are those of the identity the route shows: the
+  object itself, or, for a merged identity, only the survivor whose content
+  `Encyclopedia.EntityPage.build/2` renders at the retired id, whatever page
+  the retired id held. A draft or withdrawn survivor is withheld at its own
+  id and at every id merged into it.
   """
   @spec withheld?(integer(), mode()) :: boolean()
   def withheld?(object_id, mode) do
@@ -106,15 +107,32 @@ defmodule DevilsDictionary.Routing.Links do
 
   defp published_public?(mode), do: mode == :public and PublicRouting.published_host?()
 
-  # The identities whose content the route shows for `object_id`: itself, and
-  # the survivor a merged identity resolves to. A split input shows its own
-  # entity, so its own pages are the ones asked about.
+  # The identity whose content the route shows for `object_id`: the survivor
+  # a merged identity resolves to, or the object itself. A split input shows
+  # its own entity, so its own pages are the ones asked about.
   defp shown_identities(object_id) do
     case DevilsDictionary.Registry.resolve(object_id) do
-      {:merged, survivor_id} -> [object_id, survivor_id]
+      {:merged, survivor_id} -> [survivor_id]
       _itself_split_or_missing -> [object_id]
     end
   end
+
+  @doc """
+  A family address's resolution as the published host answers it (#237 D2):
+  a page the resolver serves whose identity was merged into a survivor the
+  host withholds (`withheld?/2`) shows that survivor's content, so it is
+  `:unavailable` there, 404, as the survivor's own address is. Every other
+  resolution, and every resolution off the published host or in internal
+  reading, is returned as it is.
+  """
+  @spec withhold(Resolution.t(), mode()) :: Resolution.t()
+  def withhold(%Resolution{outcome: :canonical, page: %Page{} = page} = resolution, mode) do
+    if withheld?(page.target_object_id, mode),
+      do: %{resolution | outcome: :unavailable},
+      else: resolution
+  end
+
+  def withhold(resolution, _mode), do: resolution
 
   @doc """
   The address a page with its canonical row is served at in `mode`, or nil.

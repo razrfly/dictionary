@@ -32,14 +32,24 @@ config :devils_dictionary, DevilsDictionary.Repo,
 # The watchers configuration can be used to run external
 # watchers to your application. For example, we can use it
 # to bundle .js and .css sources.
+# The published host (#237 D2) is this development server reached by the
+# public through a tunnel. It is compiled without the code reloader, the
+# repository check and the debug error pages (`Phoenix.Endpoint` reads both
+# with `compile_env`): they answer before any plug, and would hand a visitor
+# the route table and stack traces, a compile error from the working
+# checkout, and during a pending migration a button that runs it. Its launch
+# script sets `DD_PUBLISHED_HOST` before `mix phx.server` compiles; the
+# owner's own runs, without it, are compiled with them again.
+published_host_build? = System.get_env("DD_PUBLISHED_HOST") not in [nil, ""]
+
 config :devils_dictionary, DevilsDictionaryWeb.Endpoint,
   # Binding to loopback ipv4 address prevents access from other machines.
   # Change to `ip: {0, 0, 0, 0}` to allow access from other machines.
   # Port 4007: 4000–4005 belong to the sibling projects in this directory.
   http: [ip: {127, 0, 0, 1}, port: 4007],
   check_origin: false,
-  code_reloader: true,
-  debug_errors: true,
+  code_reloader: not published_host_build?,
+  debug_errors: not published_host_build?,
   secret_key_base: "ECxygwHtDn8OFiRoCbhB5kvtsT2Np1WVR2ThlLPyIJZ7OrXGk/1pkbwum9lmyGF4",
   watchers: [
     esbuild: {Esbuild, :install_and_run, [:devils_dictionary, ~w(--sourcemap=inline --watch)]},

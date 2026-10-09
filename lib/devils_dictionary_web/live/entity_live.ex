@@ -77,7 +77,11 @@ defmodule DevilsDictionaryWeb.EntityLive do
     %URI{path: base, query: query} = URI.parse(uri)
     socket = assign(socket, base: base, subject: nil, unresolved: nil, choice: nil)
 
-    case Resolver.resolve(base, mode: socket.assigns.reading_mode) do
+    mode = socket.assigns.reading_mode
+
+    # A page whose identity was merged into one the published host withholds
+    # is withheld with it (#237 D2, `Links.withhold/2`).
+    case base |> Resolver.resolve(mode: mode) |> Links.withhold(mode) do
       %{outcome: :canonical, page: %Page{role: role} = page} = resolution
       when role in [:subject, :edition] ->
         subject(socket, page, params, resolution, query)
