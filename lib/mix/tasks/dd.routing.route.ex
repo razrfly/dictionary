@@ -4,9 +4,10 @@ defmodule Mix.Tasks.Dd.Routing.Route do
   @moduledoc """
   The reviewer's tool for the six address operations of `Routing.Ledger`
   (#237 Part B, C9): one operation per invocation, under a named human actor,
-  with a reason. Everything it does, the ledger does; this task only names the
-  actor, prints the resolver's answers before and after, and prints the rows
-  the ledger wrote.
+  with a reason. Every route change it makes, the ledger makes; this task
+  names the actor, prints the resolver's answers before and after, and
+  prints the rows the ledger wrote. Its one write outside the ledger is the
+  reviewer's `user` actor, when the account has none, which it prints.
 
       DD_NO_OBAN=1 mix dd.routing.route move     --page ID --path PATH          --actor EMAIL --reason TEXT
       DD_NO_OBAN=1 mix dd.routing.route merge    --from ID --into ID            --actor EMAIL --reason TEXT
@@ -26,13 +27,17 @@ defmodule Mix.Tasks.Dd.Routing.Route do
   `--actor` is an account that holds the reviewer role, resolved to its
   `user` actor the way `Routing.Backfill` resolves a reviewer. An account
   without that actor gets one, in the same transaction as the operation, so
-  a refusal leaves nothing behind.
+  a refusal leaves nothing behind. `--actor` is asserted, not authenticated:
+  the `route_changes` row proves only that someone with a shell and the
+  database named that reviewer. An id that is not an integer is refused as
+  an unexpected argument before anything is read.
 
   Before writing, the task prints the resolver's answer, in public and in
   internal mode, for every path the operation touches. After writing, it
   prints the `route_changes` rows the operation wrote, the `public_paths` and
-  `pages` rows they changed (and the `page_revisions` row a split writes),
-  and the resolver's answers again. A refusal is the ledger's: the task prints
+  `pages` rows they changed (and the `page_revisions` row a split writes; a
+  rollback's earlier revision is listed apart, as one it did not write), the
+  `actors` row when it created one, and the resolver's answers again. A refusal is the ledger's: the task prints
   the reason, writes nothing and exits non-zero. A registry merge or split
   must already exist for `merge` and `split`; the task reports what the
   registry holds and does not create one.
@@ -144,6 +149,11 @@ defmodule Mix.Tasks.Dd.Routing.Route do
 
         PublicRouting.enabled?() ->
           "switch     public routing on"
+
+        # The rollback (#237 D5): the published host itself, switched off.
+        PublicRouting.published_host?() ->
+          "switch     public routing off, as the published host #{PublicRouting.origin()} " <>
+            "has it (DD_PUBLIC_ROUTING=off): every family address answers 404 publicly"
 
         true ->
           "switch     public routing off here: every family address answers 404 publicly; " <>
@@ -502,7 +512,7 @@ defmodule Mix.Tasks.Dd.Routing.Route do
     rows = rows_written(operation, result, newest)
 
     if rows == [] do
-      Mix.shell().info("written    nothing: the ledger had nothing to change")
+      Mix.shell().info("written    nothing in the ledger: it had nothing to change")
     else
       [first | _] = rows
 

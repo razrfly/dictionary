@@ -116,7 +116,7 @@ defmodule Mix.Tasks.Dd.Routing.RouteTest do
 
       run(signed(["move", "--page", "#{page.id}", "--path", "/people/voltaire"], ctx.user))
 
-      assert output() =~ "written    nothing: the ledger had nothing to change"
+      assert output() =~ "written    nothing in the ledger: it had nothing to change"
       assert ledger_size() == before
     end
   end
@@ -640,8 +640,26 @@ defmodule Mix.Tasks.Dd.Routing.RouteTest do
         out = output()
         assert out =~ ~r{^switch     public routing off here: every family address answers 404}m
         assert out =~ ~r{^/people/voltaire\s+public 404 unavailable\s+internal 200 canonical$}m
+
+        # The published host itself, on and rolled back (D5): the line names
+        # it, and the rollback is not mistaken for a shell without the host.
+        Application.put_env(:devils_dictionary, :published_host, "wordhoard.test")
+        run(["resolve", "/people/voltaire"])
+        out = output()
+
+        assert out =~
+                 ~r{^switch     public routing off, as the published host https://wordhoard.test has it \(DD_PUBLIC_ROUTING=off\)}m
+
+        refute out =~ "set DD_PUBLISHED_HOST"
+
+        Application.put_env(:devils_dictionary, :public_routing, true)
+        run(["resolve", "/people/voltaire"])
+
+        assert output() =~
+                 ~r{^switch     public routing on, as the published host https://wordhoard.test has it$}m
       after
         Application.put_env(:devils_dictionary, :public_routing, previous)
+        Application.delete_env(:devils_dictionary, :published_host)
       end
     end
   end
