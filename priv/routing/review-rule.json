@@ -1,0 +1,67 @@
+{
+  "format": "dd.review-rule/1",
+  "implementation": 1,
+  "name": "Standing review rule",
+  "issue": "https://github.com/razrfly/dictionary/issues/237",
+  "statement": "No human decides a record, ever. This rule is the owner's standing decision for every record of a routing population and every page of a launch manifest that it decides: signed once, it stands in place of a reviewer's row-by-row review, and its signature is the editorial approval ADR 0004 §7 asks for. It never chooses a family, never qualifies a collision by import order, and never moves an address. What it cannot decide it defers; a deferred record stays visible, blocks no publication, and a human may still decide it individually.",
+  "clauses": [
+    {
+      "id": "standing_decision",
+      "action": "keep",
+      "text": "A decision a human reviewer has already made stands. An address already allocated to a record's page stays its address; a reviewer's override keeps its family; a record a reviewer deferred stays deferred until a human decides it. A page a human retired, merged or split, and an address a human retired (a tombstone), are a human's decisions too: the record is deferred, and its collision group with it. The rule decides only what no human has decided."
+    },
+    {
+      "id": "excluded_source_page",
+      "action": "defer",
+      "text": "A disambiguation, list, category or index page imported from a source is never a subject: deferred."
+    },
+    {
+      "id": "identity_lifecycle_review",
+      "action": "defer",
+      "text": "A record whose registry identity was merged, split or retired waits for identity review: deferred."
+    },
+    {
+      "id": "classification_review",
+      "action": "defer",
+      "text": "A record whose current decision is not mapped is deferred: a sole candidate family the policy holds for review, incompatible or missing families, a contradicted override. The rule never chooses a family."
+    },
+    {
+      "id": "duplicate_identity_review",
+      "action": "defer",
+      "text": "A record the population holds for duplicate-identity review (one name, too little evidence to tell its records apart) is deferred: whether two records are one subject is the registry's decision."
+    },
+    {
+      "id": "uncontested_mapping",
+      "action": "confirm",
+      "text": "A record whose current decision is mapped is confirmed in that family at its candidate path when the path is the policy's proposal for its label, the label is readable (nothing in it that the address would have to spell out as a word), no collision group shares the path, no other record proposes it, and no other page holds it."
+    },
+    {
+      "id": "qualified_collision",
+      "action": "confirm",
+      "text": "A collision group is decided together. When no member is a human's deferral or is held for review, every member no human has decided is mapped, and the evidence gives each one readable qualifier under the policy's proposal rules (year and form for works, the place for places, occupation and dates for people, the description's first and last words otherwise), and each qualified path is the population's own proposal for it, readable, distinct, and held by no other page, every such member is confirmed at its qualified path."
+    },
+    {
+      "id": "unqualified_collision",
+      "action": "defer",
+      "text": "Otherwise the whole group is deferred: a group with any member the rule cannot qualify, or that a human deferred, or that is held for review, is deferred whole, never qualified by import order; two groups whose qualifiers meet at one path are both deferred whole. So is a mapped record whose path is taken, is a collision group's shared path, is not readable, or for which the policy proposes none."
+    },
+    {
+      "id": "publish_confirmed",
+      "action": "publish",
+      "text": "Every page whose record this rule confirms may be published, under this rule's signature, when it passes all eight publication gates of ADR 0004 §7; a page that fails a gate stays unpublished, with the refusal recorded."
+    },
+    {
+      "id": "index_lexical",
+      "action": "list",
+      "text": "Lexical pages stay noindex, every /on/:slug and /words/:id/:slug, with one exception: the On page of each lexeme that a page published under this rule names, through the page's membership or a sense's refers_to link to its subject, is listed in the launch manifest as a lexical entry, indexable. Widening the lexical index is a later manifest under this rule, not a code change (D1 of #237)."
+    }
+  ],
+  "signature": {
+    "signer": "issue84-browser@local.test",
+    "user_id": 2,
+    "rule_sha256": "1564626c899c223a0d179ecb397d8b28856498dbe9afe0759d77e1926ae46883",
+    "signed_at": "2026-10-09T15:48:23Z",
+    "method": "mix dd.routing.rule --sign: the account's password checked on devils_dictionary_v2 on localhost:5434, the signing recorded in review_rule_signatures",
+    "attestation": "The holder of reviewer account issue84-browser@local.test signs this rule as the owner's standing decision for every record and page it decides (#237)."
+  }
+}

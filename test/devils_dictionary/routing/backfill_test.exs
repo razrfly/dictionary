@@ -43,6 +43,7 @@ defmodule DevilsDictionary.Routing.BackfillTest do
     Pages,
     Policy,
     PublicPath,
+    ReviewRule,
     RouteChange
   }
 
@@ -1060,12 +1061,503 @@ defmodule DevilsDictionary.Routing.BackfillTest do
              ["/concepts/polish"]
   end
 
+  # ── under the standing review rule (#237) ───────────────────────────────
+
+  describe "under the standing review rule" do
+    # Bierce and both Damans as the corpus would hold them: each stored type
+    # projection agreeing with its record, so the evaluator maps them. A
+    # fresh export, and the population with its collision group named.
+    setup ctx do
+      for {entity, type} <- [
+            {ctx.world.bierce, "Q5"},
+            {ctx.world.daman_af, "Q6256"},
+            {ctx.world.daman_in, "Q6256"}
+          ] do
+        Repo.query!(
+          "UPDATE entities SET metadata = metadata || jsonb_build_object('wikidata_instance_of', jsonb_build_array($2::text)) WHERE object_id = $1",
+          [entity.object_id, type]
+        )
+      end
+
+      snapshot = export!(ctx.dir)
+
+      for entity <- [ctx.world.bierce, ctx.world.daman_af, ctx.world.daman_in] do
+        row = Enum.find(snapshot.entities, &(&1["object_id"] == entity.object_id))
+        assert Policy.classify(row, snapshot.graph, Policy.load()).status == "mapped"
+      end
+
+      ctx = %{ctx | snapshot: snapshot, population: population!(ctx.dir, snapshot, ctx.world)}
+      %{snapshot: snapshot, population: with_groups!(ctx), rule: signed_rule!(ctx)}
+    end
+
+    test "every record is decided by a clause; a confirmation is the signer's override, naming the rule",
+         ctx do
+      {:ok, plan} = Backfill.load(ctx.snapshot.path, ctx.population, nil, rule: ctx.rule.path)
+      decisions = Backfill.decisions(plan)
+
+      assert %{action: :confirm, clause: "uncontested_mapping", path: "/people/ambrose-bierce"} =
+               decisions[ctx.world.bierce.object_id]
+
+      assert %{action: :confirm, clause: "qualified_collision", path: "/places/daman-afghanistan"} =
+               decisions[ctx.world.daman_af.object_id]
+
+      assert %{action: :confirm, clause: "qualified_collision", path: "/places/daman-india"} =
+               decisions[ctx.world.daman_in.object_id]
+
+      assert %{action: :defer, clause: "classification_review"} =
+               decisions[ctx.world.polish.object_id]
+
+      assert %{action: :not_addressed} = decisions[ctx.world.cat.object_id]
+
+      {:ok, summary} = Backfill.run(plan, ctx.importer.id, batch_size: 2)
+
+      assert summary.dispositions == %{
+               "allocated" => 3,
+               "deferred_by_review" => 1,
+               "not_addressed" => 1
+             }
+
+      paths = Repo.all(from p in PublicPath, select: p.path) |> Enum.sort()
+
+      assert paths == [
+               "/people/ambrose-bierce",
+               "/places/daman-afghanistan",
+               "/places/daman-india"
+             ]
+
+      # Each override is the signer's, and names the rule's digest.
+      for entity <- [ctx.world.bierce, ctx.world.daman_af, ctx.world.daman_in] do
+        decision = Classifications.current(entity.object_id)
+        assert decision.origin == :override
+        assert "review_rule:#{ctx.rule.sha256}" in decision.rule_ids
+        assert Classifications.rule_sha256(decision) == ctx.rule.sha256
+        assert decision.reason =~ ctx.rule.sha256
+        assert Repo.get!(Actor, decision.reviewer_actor_id).user_id == ctx.reviewer.id
+      end
+
+      # The deferred record and the record outside the population keep the
+      # evaluator's decision; no page for either.
+      refute override?(ctx.world.polish)
+      refute override?(ctx.world.cat)
+      refute Repo.get_by(Page, target_object_id: ctx.world.polish.object_id)
+
+      # Every checkpoint row names the rule and its clause.
+      for entity <- Map.values(ctx.world) do
+        review = item(plan, entity).review
+        assert review["rule_sha256"] == ctx.rule.sha256
+        assert review["signer"] == ctx.reviewer.email
+        assert is_binary(review["clause"])
+      end
+
+      # The run row itself says the rule decided it.
+      run = Repo.get_by!(BackfillRun, run_key: plan.run_key)
+      assert run.rule_sha256 == ctx.rule.sha256
+      assert is_nil(run.reviews_sha256)
+
+      manifest = Backfill.manifest(plan.run_key)
+      assert manifest["inputs"]["rule_sha256"] == ctx.rule.sha256
+      assert manifest["publication_approved"] == 0
+
+      clauses = Map.new(manifest["records"], &{&1.object_id, &1.rule_clause})
+      assert clauses[ctx.world.daman_in.object_id] == "qualified_collision"
+      assert Repo.all(from p in Page, where: p.publication_state != :draft) == []
+    end
+
+    test "the dry run writes nothing", ctx do
+      {:ok, plan} = Backfill.load(ctx.snapshot.path, ctx.population, nil, rule: ctx.rule.path)
+      before = identities()
+      decisions = Backfill.decisions(plan)
+
+      assert map_size(decisions) == 5
+      assert identities() == before
+      assert Repo.aggregate(BackfillRun, :count) == 0
+    end
+
+    test "a second run, and a new rule over the decided population, write nothing but a checkpoint",
+         ctx do
+      {:ok, plan} = Backfill.load(ctx.snapshot.path, ctx.population, nil, rule: ctx.rule.path)
+      {:ok, _} = Backfill.run(plan, ctx.importer.id, batch_size: 2)
+      before = identities()
+
+      {:ok, again} = Backfill.load(ctx.snapshot.path, ctx.population, nil, rule: ctx.rule.path)
+      {:ok, _} = Backfill.run(again, ctx.importer.id)
+      assert identities() == before
+
+      # Another signed rule: a new run key. Every address is the rule's
+      # earlier decision, kept; nothing but the checkpoint is written.
+      other = signed_rule!(ctx, &Map.put(&1, "name", "Standing review rule, again"))
+      refute other.sha256 == ctx.rule.sha256
+      {:ok, next} = Backfill.load(ctx.snapshot.path, ctx.population, nil, rule: other.path)
+      refute next.run_key == plan.run_key
+
+      decisions = Backfill.decisions(next)
+
+      assert %{action: :confirm, clause: "standing_decision", standing: true} =
+               decisions[ctx.world.daman_af.object_id]
+
+      {:ok, summary} = Backfill.run(next, ctx.importer.id)
+      assert summary.dispositions["allocated"] == 3
+      assert Map.delete(identities(), BackfillItem) == Map.delete(before, BackfillItem)
+    end
+
+    test "what a reviewer decided stands under the rule", ctx do
+      # A reviewer confirmed Bierce and Afghanistan's Daman, and deferred
+      # India's; the rule then runs over the same population.
+      {:ok, reviewed} = Backfill.load(ctx.snapshot.path, ctx.population, approvals(ctx))
+      {:ok, _} = Backfill.run(reviewed, ctx.importer.id)
+      overrides = Repo.all(from d in ClassificationDecision, where: d.origin == :override)
+      before = identities()
+
+      {:ok, plan} = Backfill.load(ctx.snapshot.path, ctx.population, nil, rule: ctx.rule.path)
+      decisions = Backfill.decisions(plan)
+
+      for entity <- [ctx.world.bierce, ctx.world.daman_af] do
+        assert %{action: :confirm, clause: "standing_decision", standing: true} =
+                 decisions[entity.object_id]
+      end
+
+      assert %{action: :defer, clause: "standing_decision", reason: reason} =
+               decisions[ctx.world.daman_in.object_id]
+
+      assert reason =~ "qualifier needs a better source"
+
+      {:ok, summary} = Backfill.run(plan, ctx.importer.id)
+      assert summary.dispositions["allocated"] == 2
+      assert summary.dispositions["deferred_by_review"] == 2
+
+      # The reviewer's overrides stay the decisions; the rule wrote none.
+      assert Repo.all(from d in ClassificationDecision, where: d.origin == :override) == overrides
+      assert Map.delete(identities(), BackfillItem) == Map.delete(before, BackfillItem)
+    end
+
+    test "a page a human retired is a standing decision: deferred, and its group with it", ctx do
+      # A reviewer confirmed Afghanistan's Daman alone; a human then retired
+      # that page. The rule must not confirm it again, nor allocate India's
+      # without it.
+      {:ok, reviewed} =
+        Backfill.load(
+          ctx.snapshot.path,
+          ctx.population,
+          reviews!(ctx, [
+            {ctx.world.daman_af,
+             %{"action" => "confirm", "family" => "places", "path" => "/places/daman-afghanistan"}}
+          ])
+        )
+
+      {:ok, _} = Backfill.run(reviewed, ctx.importer.id)
+      page = Repo.get_by!(Page, target_object_id: ctx.world.daman_af.object_id)
+      human = Repo.get_by(Actor, actor_kind: :user, user_id: ctx.reviewer.id) || human_actor!(ctx)
+      {:ok, _} = Ledger.retire(page.id, actor_id: human.id, reason: "retired by a human")
+
+      before = identities()
+
+      {:ok, plan} = Backfill.load(ctx.snapshot.path, ctx.population, nil, rule: ctx.rule.path)
+      decisions = Backfill.decisions(plan)
+
+      assert %{action: :defer, clause: "standing_decision", reason: reason} =
+               decisions[ctx.world.daman_af.object_id]
+
+      assert reason =~ "its page is retired"
+
+      assert %{action: :defer, clause: "unqualified_collision", reason: reason} =
+               decisions[ctx.world.daman_in.object_id]
+
+      assert reason =~ "#{ctx.world.daman_af.object_id} standing_decision"
+
+      {:ok, summary} = Backfill.run(plan, ctx.importer.id)
+      assert summary.dispositions["deferred_by_review"] == 3
+      assert summary.dispositions["allocated"] == 1
+
+      # The tombstone stands and nothing in the group was allocated: the
+      # only address written is Bierce's, outside the group.
+      assert Repo.all(from p in PublicPath, select: {p.path, p.kind}) |> Enum.sort() ==
+               [{"/people/ambrose-bierce", :canonical}, {"/places/daman-afghanistan", :tombstone}]
+
+      # India's draft page (every record awaiting review gets one) holds no
+      # address; Afghanistan's stays retired.
+      assert %Page{canonical_path_id: nil, lifecycle_state: :active} =
+               Repo.get_by!(Page, target_object_id: ctx.world.daman_in.object_id)
+
+      assert Repo.get!(Page, page.id).lifecycle_state == :retired
+      assert MapSet.size(identities()[RouteChange]) == MapSet.size(before[RouteChange]) + 2
+    end
+
+    test "a record the batch defers before the rule's decision applies still names the rule",
+         ctx do
+      {:ok, plan} = Backfill.load(ctx.snapshot.path, ctx.population, nil, rule: ctx.rule.path)
+
+      # Bierce's input moves between the export and the run.
+      Repo.query!(
+        "UPDATE entities SET preferred_label = 'Ambrose G. Bierce' WHERE object_id = $1",
+        [ctx.world.bierce.object_id]
+      )
+
+      {:ok, summary} = Backfill.run(plan, ctx.importer.id)
+      assert summary.dispositions["input_changed"] == 1
+
+      review = item(plan, ctx.world.bierce).review
+      assert review["rule_sha256"] == ctx.rule.sha256
+      assert review["action"] == "stale"
+      assert review["reason"] =~ "input_changed"
+
+      manifest = Backfill.manifest(plan.run_key)
+      assert manifest["inputs"]["rule_sha256"] == ctx.rule.sha256
+      clauses = Map.new(manifest["records"], &{&1.object_id, &1.rule_clause})
+      assert clauses[ctx.world.bierce.object_id] == "stale"
+    end
+
+    test "a run executes the decisions it printed, or defers what moved meanwhile", ctx do
+      {:ok, plan} = Backfill.load(ctx.snapshot.path, ctx.population, nil, rule: ctx.rule.path)
+      decided = Backfill.decisions(plan)
+      assert %{action: :confirm} = decided[ctx.world.bierce.object_id]
+
+      # Between the dry run and the run, a reviewer defers Bierce.
+      {:ok, reviewed} =
+        Backfill.load(
+          ctx.snapshot.path,
+          ctx.population,
+          reviews!(ctx, [{ctx.world.bierce, %{"action" => "defer", "reason" => "not yet"}}])
+        )
+
+      {:ok, _} = Backfill.run(reviewed, ctx.importer.id)
+      before = identities()
+
+      {:ok, summary} = Backfill.run(plan, ctx.importer.id, decided: decided)
+      assert summary.dispositions["allocated"] == 2
+      assert summary.dispositions["deferred_by_review"] == 2
+
+      bierce = item(plan, ctx.world.bierce)
+      assert bierce.disposition == "deferred_by_review"
+      assert bierce.reason =~ "the state moved since the rule decided"
+      assert bierce.reason =~ "object #{ctx.world.bierce.object_id} was confirmed"
+      refute override?(ctx.world.bierce)
+
+      # The Damans, whose state did not move, were allocated as printed;
+      # Bierce got nothing.
+      assert Repo.all(from p in PublicPath, select: p.path) |> Enum.sort() ==
+               ["/places/daman-afghanistan", "/places/daman-india"]
+
+      assert identities()[ClassificationDecision] |> MapSet.size() ==
+               MapSet.size(before[ClassificationDecision]) + 2
+    end
+
+    test "a human's confirmation at the rule's own path, made between the printed decisions and the run, stands",
+         ctx do
+      {:ok, plan} = Backfill.load(ctx.snapshot.path, ctx.population, nil, rule: ctx.rule.path)
+      decided = Backfill.decisions(plan)
+      assert %{action: :confirm, standing: false} = decided[ctx.world.bierce.object_id]
+
+      # Another reviewer confirms Bierce in people, at the same address the
+      # rule chose, through a review-file run.
+      other = reviewer!()
+
+      {:ok, reviewed} =
+        Backfill.load(
+          ctx.snapshot.path,
+          ctx.population,
+          reviews!(ctx, [
+            {ctx.world.bierce,
+             %{"action" => "confirm", "family" => "people", "reviewer" => other.email}}
+          ])
+        )
+
+      {:ok, _} = Backfill.run(reviewed, ctx.importer.id)
+      human = Classifications.current(ctx.world.bierce.object_id)
+      assert human.origin == :override
+      assert Repo.get!(Actor, human.reviewer_actor_id).user_id == other.id
+
+      {:ok, summary} = Backfill.run(plan, ctx.importer.id, decided: decided)
+      assert summary.dispositions["allocated"] == 3
+
+      # Bierce's address is kept under the human's decision: the rule wrote
+      # no override of its own, and the human's stays current.
+      item = item(plan, ctx.world.bierce)
+      assert item.disposition == "allocated"
+      assert item.review["clause"] == "standing_decision"
+      assert Classifications.current(ctx.world.bierce.object_id).id == human.id
+
+      assert Repo.all(
+               from d in ClassificationDecision,
+                 where: d.origin == :override and d.object_id == ^ctx.world.bierce.object_id,
+                 select: d.id
+             ) == [human.id]
+    end
+
+    test "a population whose groups are not its own is refused at load", ctx do
+      broken = fn edit ->
+        path = Path.join(ctx.dir, "broken-#{System.unique_integer([:positive])}.json")
+        doc = ctx.population |> File.read!() |> Jason.decode!()
+        File.write!(path, Jason.encode!(edit.(doc)))
+        path
+      end
+
+      unknown = broken.(&put_in(&1, ["groups", "/places/daman"], [999_999_999]))
+
+      assert {:error, message} =
+               Backfill.load(ctx.snapshot.path, unknown, nil, rule: ctx.rule.path)
+
+      assert message =~ "names 999999999, which the population does not"
+
+      astray = broken.(&put_in(&1, ["groups", "/places/daman"], [ctx.world.bierce.object_id]))
+
+      assert {:error, message} =
+               Backfill.load(ctx.snapshot.path, astray, nil, rule: ctx.rule.path)
+
+      assert message =~ "whose candidate path is not /places/daman"
+
+      # A second group over the same members cannot be theirs: their
+      # candidate path is the first group's.
+      twice = broken.(&put_in(&1, ["groups", "/places/daman-too"], &1["groups"]["/places/daman"]))
+      assert {:error, message} = Backfill.load(ctx.snapshot.path, twice, nil, rule: ctx.rule.path)
+      assert message =~ "candidate path is not /places/daman-too"
+
+      empty = broken.(&put_in(&1, ["groups", "/places/daman"], []))
+      assert {:error, message} = Backfill.load(ctx.snapshot.path, empty, nil, rule: ctx.rule.path)
+      assert message =~ "has no members"
+    end
+
+    test "a signature written into the rule file by hand does not decide a run", ctx do
+      before = identities()
+      {:ok, rule} = ReviewRule.read(ctx.rule.path)
+
+      forged = Path.join(ctx.dir, "forged.json")
+
+      File.write!(
+        forged,
+        ReviewRule.path()
+        |> File.read!()
+        |> Jason.decode!()
+        |> Map.put("name", "Standing review rule, forged")
+        |> then(fn doc ->
+          Map.put(doc, "signature", %{
+            "signer" => ctx.reviewer.email,
+            "user_id" => ctx.reviewer.id,
+            "rule_sha256" => ReviewRule.digest(doc),
+            "signed_at" => "2026-10-09T12:00:00Z",
+            "method" => "typed by hand",
+            "attestation" => "not the owner"
+          })
+        end)
+        |> Jason.encode!()
+      )
+
+      refute ReviewRule.digest(Jason.decode!(File.read!(forged))) == rule.sha256
+
+      assert {:error, message} =
+               Backfill.load(ctx.snapshot.path, ctx.population, nil, rule: forged)
+
+      assert message =~ "no signing of"
+      assert message =~ "review_rule_signatures"
+      assert identities() == before
+      assert Repo.aggregate(BackfillRun, :count) == 0
+    end
+
+    test "an unsigned, changed or unauthorised rule is refused before anything is written", ctx do
+      before = identities()
+
+      unsigned = Path.join(ctx.dir, "unsigned.json")
+
+      File.write!(
+        unsigned,
+        ctx.rule.path
+        |> File.read!()
+        |> Jason.decode!()
+        |> Map.put("signature", nil)
+        |> Jason.encode!()
+      )
+
+      assert {:error, message} =
+               Backfill.load(ctx.snapshot.path, ctx.population, nil, rule: unsigned)
+
+      assert message =~ "not signed"
+
+      changed = Path.join(ctx.dir, "changed.json")
+
+      File.write!(
+        changed,
+        ctx.rule.path
+        |> File.read!()
+        |> Jason.decode!()
+        |> update_in(["clauses", Access.at(5), "text"], &(&1 <> " And more."))
+        |> Jason.encode!()
+      )
+
+      assert {:error, message} =
+               Backfill.load(ctx.snapshot.path, ctx.population, nil, rule: changed)
+
+      assert message =~ "changed after it was signed"
+
+      # A rule and a review file never decide one run together.
+      assert {:error, message} =
+               Backfill.load(ctx.snapshot.path, ctx.population, approvals(ctx),
+                 rule: ctx.rule.path
+               )
+
+      assert message =~ "not both"
+
+      # The signer no longer a reviewer: refused at load, and at run.
+      {:ok, plan} = Backfill.load(ctx.snapshot.path, ctx.population, nil, rule: ctx.rule.path)
+      ctx.reviewer |> Ecto.Changeset.change(reviewer: false) |> Repo.update!()
+
+      assert {:error, message} =
+               Backfill.load(ctx.snapshot.path, ctx.population, nil, rule: ctx.rule.path)
+
+      assert message =~ "does not hold the reviewer role"
+      assert {:error, _} = Backfill.run(plan, ctx.importer.id)
+
+      assert identities() == before
+      assert Repo.aggregate(BackfillRun, :count) == 0
+    end
+  end
+
   # ── helpers used by the tests ────────────────────────────────────────────
 
   defp identities do
     for schema <- [Page, PublicPath, ClassificationDecision, RouteChange, BackfillItem],
         into: %{},
         do: {schema, ids(schema)}
+  end
+
+  # The population with its collision group named, as candidates.py writes
+  # one: the rule decides a group together.
+  defp with_groups!(ctx) do
+    groups = %{
+      "/places/daman" => Enum.sort([ctx.world.daman_af.object_id, ctx.world.daman_in.object_id])
+    }
+
+    path = Path.join(ctx.dir, "candidates-groups-#{System.unique_integer([:positive])}.json")
+
+    File.write!(
+      path,
+      ctx.population
+      |> File.read!()
+      |> Jason.decode!()
+      |> Map.put("groups", groups)
+      |> Jason.encode!()
+    )
+
+    path
+  end
+
+  # The committed rule, unsigned and edited by `edit`, signed in this test's
+  # directory by the test's reviewer with their password.
+  defp signed_rule!(ctx, edit \\ & &1) do
+    path = Path.join(ctx.dir, "review-rule-#{System.unique_integer([:positive])}.json")
+
+    doc =
+      ReviewRule.path()
+      |> File.read!()
+      |> Jason.decode!()
+      |> Map.put("signature", nil)
+      |> edit.()
+
+    File.write!(path, Jason.encode!(doc, pretty: true))
+    AccountsFixtures.set_password(ctx.reviewer)
+
+    {:ok, rule} =
+      ReviewRule.sign(path, ctx.reviewer.email, AccountsFixtures.valid_user_password())
+
+    rule
   end
 
   defp evaluator_decisions,

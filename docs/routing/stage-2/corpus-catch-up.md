@@ -84,7 +84,9 @@ Reversal: restore the step-1 snapshot into a new database, verify it against the
 
 **C. Leave the corpus and accept these differences as permitted.** Not open. The audit forbids broadening the permitted differences beyond bookkeeping.
 
-## Decisions for the owner
+## Decisions for the owner (historical: taken on 8 October 2026)
+
+*These were the open questions of the 27 September proposal. The owner approved option A, accepted Wikipedia's current images, and the catch-up was applied on 8 October 2026 with the server booted out, under [CP4 (#224)](https://github.com/razrfly/dictionary/issues/224) block 1. The text below is kept as the record of what was asked; nothing in it is pending.*
 
 1. **Approve option A for `devils_dictionary_v2`**, or choose otherwise.
 2. **The 6 artwork images.** Accept Wikipedia's current images, or hold them back. Holding them back needs a code change: an image the original build chose would have to outrank the page's current one.
@@ -93,4 +95,4 @@ Reversal: restore the step-1 snapshot into a new database, verify it against the
    - another session's preview on port 4017 held connections to the source;
    - the source carried two migrations from an unmerged branch ([#195](https://github.com/razrfly/dictionary/issues/195), applied at 13:11 UTC). They added four empty tables that nothing in this proposal touches.
 
-Nothing here is applied until the owner decides.
+Nothing here was applied until the owner decided; the owner decided on 8 October 2026, and option A was applied that day.

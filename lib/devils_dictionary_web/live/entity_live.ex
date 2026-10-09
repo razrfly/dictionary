@@ -36,6 +36,7 @@ defmodule DevilsDictionaryWeb.EntityLive do
   on_mount DevilsDictionaryWeb.ReadingMode
 
   import Ecto.Query
+  import DevilsDictionary.Routing.Input, only: [is_id: 1]
 
   alias DevilsDictionary.Claims.Connection
   alias DevilsDictionary.Lexicon
@@ -97,7 +98,7 @@ defmodule DevilsDictionaryWeb.EntityLive do
     socket = assign(socket, :base, URI.parse(uri).path)
 
     case Integer.parse(id) do
-      {object_id, ""} -> load(socket, object_id, slug, params)
+      {object_id, ""} when is_id(object_id) -> load(socket, object_id, slug, params)
       _ -> {:noreply, missing(socket, id)}
     end
   end

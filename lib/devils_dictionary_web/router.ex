@@ -33,11 +33,6 @@ defmodule DevilsDictionaryWeb.Router do
     # page is explicitly transient and never runs during a word-page render.
     live "/artworks", ArtworkLive, :index
 
-    # The thing page (#74 §F): one identity, asked different questions. Bierce's
-    # biography, his works and his definitions are three sections of the same
-    # object id, which is the whole of #74's goal 2.
-    live "/entities/:id/:slug", EntityLive, :show
-
     # One claim, from either endpoint, with its evidence, its review state and
     # its history (#74 §F's connection detail).
     live "/connections/:id", ConnectionLive, :show
@@ -71,6 +66,12 @@ defmodule DevilsDictionaryWeb.Router do
     # `/define/:slug` is gone: nothing has been public, so nothing redirects.
     live "/on/:slug", WordLive, :on
     live "/words/:id/:slug", WordLive, :canonical
+
+    # The thing page (#74 §F): one identity, asked different questions. Bierce's
+    # biography, his works and his definitions are three sections of the same
+    # object id, which is the whole of #74's goal 2. An id that names no
+    # entity is 404 before the page renders (ADR 0004 §6).
+    live "/entities/:id/:slug", EntityLive, :show
 
     # A subject's address (ADR 0004 §2, §6): eight explicit families, never a
     # catch-all prefix, each answered only by `Routing.Resolver` — the ledger
