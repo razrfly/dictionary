@@ -41,6 +41,13 @@ defmodule Mix.Tasks.Dd.Routing.Route do
   would spell it, so the before and after of an operation can be recorded by
   hand as well.
 
+  The public answers are the resolver's in this environment, under the launch
+  switch as it stands here (`Routing.PublicRouting`, #237 D5), and the task
+  says which first. A shell without `DD_PUBLISHED_HOST` has the switch off,
+  so every family address answers 404 publicly there whatever the ledger
+  holds; set the variable (and `DD_PUBLIC_ROUTING` as the published host has
+  it) to read the published host's answers.
+
   The task starts the application, so it refuses to run without
   `DD_NO_OBAN=1`: Oban's queues and cron must not run beside a reviewer's
   operation.
@@ -55,7 +62,7 @@ defmodule Mix.Tasks.Dd.Routing.Route do
   import DevilsDictionary.Routing.Input, only: [is_id: 1]
 
   alias DevilsDictionary.Routing.{Address, Ledger, Page, PageRevision, PublicPath, Resolution}
-  alias DevilsDictionary.Routing.{Resolver, RouteChange}
+  alias DevilsDictionary.Routing.{PublicRouting, Resolver, RouteChange}
   alias DevilsDictionary.Sources.Actor
 
   @requirements ["app.config"]
@@ -119,9 +126,30 @@ defmodule Mix.Tasks.Dd.Routing.Route do
   defp resolve([]), do: Mix.raise("resolve needs at least one path\n" <> @usage)
 
   defp resolve(paths) do
+    print_switch()
+
     for raw <- paths do
       Mix.shell().info(resolution_line(raw, raw))
     end
+  end
+
+  # The launch switch the public answers are read under: off in a shell that
+  # names no published host, where every family address is 404 publicly, so
+  # a reviewer never takes that for the operation's doing.
+  defp print_switch do
+    Mix.shell().info(
+      cond do
+        PublicRouting.enabled?() and PublicRouting.published_host?() ->
+          "switch     public routing on, as the published host #{PublicRouting.origin()} has it"
+
+        PublicRouting.enabled?() ->
+          "switch     public routing on"
+
+        true ->
+          "switch     public routing off here: every family address answers 404 publicly; " <>
+            "set DD_PUBLISHED_HOST to read the published host's answers"
+      end
+    )
   end
 
   # ── the six operations ───────────────────────────────────────────────────
@@ -140,6 +168,7 @@ defmodule Mix.Tasks.Dd.Routing.Route do
     Mix.shell().info("operation  #{describe(operation, params)}")
     Mix.shell().info("actor      #{email} (user ##{user.id}, reviewer)")
     Mix.shell().info("reason     #{reason}")
+    print_switch()
 
     before = touched(operation, params)
     report_registry(operation, params)

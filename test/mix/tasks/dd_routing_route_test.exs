@@ -621,5 +621,28 @@ defmodule Mix.Tasks.Dd.Routing.RouteTest do
 
       assert ledger_size() == before
     end
+
+    test "says the launch switch the public answers are read under", ctx do
+      live_page!("people", "/people/voltaire", ctx.importer, :person)
+      previous = Application.get_env(:devils_dictionary, :public_routing)
+
+      try do
+        Application.put_env(:devils_dictionary, :public_routing, true)
+        run(["resolve", "/people/voltaire"])
+        out = output()
+        assert out =~ ~r{^switch     public routing on$}m
+        assert out =~ ~r{^/people/voltaire\s+public 200 canonical}m
+
+        # Off, as in a shell that names no published host: the line says so,
+        # so a 404 is not read as the ledger's answer.
+        Application.put_env(:devils_dictionary, :public_routing, false)
+        run(["resolve", "/people/voltaire"])
+        out = output()
+        assert out =~ ~r{^switch     public routing off here: every family address answers 404}m
+        assert out =~ ~r{^/people/voltaire\s+public 404 unavailable\s+internal 200 canonical$}m
+      after
+        Application.put_env(:devils_dictionary, :public_routing, previous)
+      end
+    end
   end
 end
