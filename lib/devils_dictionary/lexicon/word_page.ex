@@ -1336,8 +1336,12 @@ defmodule DevilsDictionary.Lexicon.WordPage do
   defp thing_provenance(%{thing: %{concept: nil}}, _index), do: nil
 
   defp thing_provenance(%{thing: %{concept: concept}} = page, index) do
+    # A concept with no verified Wikidata item has no QID to key a record by:
+    # only its Wikipedia title, if any, is asked for.
+    qids = List.wrap(concept.qid)
+
     titles =
-      ["concept:" <> concept.qid] ++
+      Enum.map(qids, &("concept:" <> &1)) ++
         case concept.wikipedia_title do
           nil -> []
           title -> [title, String.downcase(title)]
@@ -1350,7 +1354,7 @@ defmodule DevilsDictionary.Lexicon.WordPage do
     # which is most of them.
     records =
       [
-        first_record("wikidata", [concept.qid]),
+        first_record("wikidata", qids),
         article_record(page.thing) || first_record("wikipedia", titles)
       ]
       |> Enum.reject(&is_nil/1)
