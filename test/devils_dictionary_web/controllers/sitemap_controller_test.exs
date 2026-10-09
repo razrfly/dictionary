@@ -2,8 +2,9 @@ defmodule DevilsDictionaryWeb.SitemapControllerTest do
   @moduledoc """
   The sitemap index and the sitemaps (#237 C5): valid XML listing exactly
   the published canonical pages, at the published host, with a `lastmod`
-  each; cached per publication receipt and per route change, so a publish,
-  a withdrawal, a move or a retirement changes them at once; with the switch
+  each; cached per publication receipt, per route change and per content
+  change, so a publish, a withdrawal, a move, a retirement or a changed
+  article changes them at once; with the switch
   off (D5), an empty index with `noindex`, and the same answers once it is
   on again. The split at Google's limits is unit-tested in `SitemapsTest`.
 
@@ -241,6 +242,40 @@ defmodule DevilsDictionaryWeb.SitemapControllerTest do
     assert index(ctx.conn) == []
     assert Sitemaps.names() == []
   end
+
+  test "a changed article moves the sitemap's lastmod at once, with no receipt or ledger row",
+       ctx do
+    voltaire =
+      subject!("Voltaire", "people",
+        kind: :person,
+        path: "/people/voltaire",
+        published: true,
+        actor: ctx.human
+      )
+
+    lastmods = fn ->
+      xml = get(ctx.conn, "/sitemaps/subjects-1.xml").resp_body
+      Regex.scan(~r|<lastmod>([^<]+)</lastmod>|, xml) |> Enum.map(fn [_, at] -> at end)
+    end
+
+    before = lastmods.()
+    assert before == [Sitemaps.lastmod(voltaire.page.id)]
+    generation = Sitemaps.generation()
+
+    # An article about the subject, dated an hour later than anything else:
+    # no receipt and no ledger row, only a content revision.
+    content = entry!(ctx, voltaire.entity, "wikipedia", body: "Voltaire was a writer.")
+    revision = DevilsDictionary.Registry.current_content_revision(content.object_id)
+    later = later(revision.inserted_at)
+    revision |> Ecto.Changeset.change(inserted_at: later) |> Repo.update!()
+
+    refute Sitemaps.generation() == generation
+    assert lastmods.() == [Sitemaps.lastmod(voltaire.page.id)]
+    refute lastmods.() == before
+  end
+
+  defp later(%NaiveDateTime{} = at), do: NaiveDateTime.add(at, 3600, :second)
+  defp later(%DateTime{} = at), do: DateTime.add(at, 3600, :second)
 
   test "off: an empty index with noindex and no sitemap; on again, the same answers", ctx do
     world!(ctx)

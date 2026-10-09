@@ -151,7 +151,10 @@ defmodule DevilsDictionaryWeb.Indexing do
 
   def lexical?(_slug, _mode, _query), do: false
 
-  defp published?(page_ids) when is_list(page_ids) do
+  @doc """
+  Whether any of a lexical entry's subject pages is published and active.
+  """
+  def published?(page_ids) when is_list(page_ids) do
     ids = Enum.filter(page_ids, &is_integer/1)
 
     ids != [] and
@@ -163,7 +166,7 @@ defmodule DevilsDictionaryWeb.Indexing do
       )
   end
 
-  defp published?(_page_ids), do: false
+  def published?(_page_ids), do: false
 
   @doc "Whether a request's query string (or nil) leaves the page its base."
   def no_query?(nil), do: true

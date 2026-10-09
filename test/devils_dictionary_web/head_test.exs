@@ -275,6 +275,16 @@ defmodule DevilsDictionaryWeb.HeadTest do
     head = head_of(ctx.conn, "/words/999999999/voltaire", 404)
     assert head.robots == "noindex"
     assert head.canonical == nil
+
+    # The canonical is the slug the route keeps, the stored lexeme's own, not
+    # one computed again from the lemma (which the route would redirect).
+    DevilsDictionary.Repo.update_all(
+      Ecto.Query.from(l in DevilsDictionary.Registry.Lexeme, where: l.object_id == ^id),
+      set: [slug: "voltaire-stored"]
+    )
+
+    head = head_of(ctx.conn, "/words/#{id}/voltaire-stored", 200)
+    assert head.canonical == @origin <> "/words/#{id}/voltaire-stored"
   end
 
   test "the exact-identity route: noindex, canonical at the subject's public address", ctx do

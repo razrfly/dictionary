@@ -166,10 +166,15 @@ defmodule DevilsDictionaryWeb.Head do
       |> Enum.reject(&(is_nil(&1) or &1 == ""))
       |> Enum.join(" · ")
 
-    canonical =
-      absolute(
-        "/words/#{lexeme_id}/#{DevilsDictionary.Registry.Lexeme.slug(page.headword.lemma)}"
-      )
+    # The slug the route keeps and redirects to: the stored lexeme's own
+    # (`WordLive.handle_params/3` reads it the same way).
+    slug =
+      case DevilsDictionary.Lexicon.by_object_id(lexeme_id) do
+        %{slug: slug} when is_binary(slug) and slug != "" -> slug
+        _ -> DevilsDictionary.Registry.Lexeme.slug(page.headword.lemma)
+      end
+
+    canonical = absolute("/words/#{lexeme_id}/#{slug}")
 
     description =
       first_sentence(page.cards |> Enum.map(& &1[:opening]) |> Enum.find(&is_binary/1))

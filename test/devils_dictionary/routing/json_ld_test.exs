@@ -61,6 +61,13 @@ defmodule DevilsDictionary.Routing.JsonLdTest do
     # A typed family claims no additional type.
     assert JsonLd.additional_type(id, "people") == []
 
+    # A page in another untyped family than the decision names (a
+    # reclassification not yet moved, ADR 0004 §8.4) claims none either: the
+    # class is the decision's family's, not the page's.
+    assert %{family: :nature} = Classifications.current(id)
+    assert JsonLd.additional_type(id, "concepts") == []
+    assert JsonLd.additional_type(id, "subjects") == []
+
     # A rule with one anchor is certain without a recorded class.
     jupiter = subject!("Jupiter", "nature", status: :none, page: false)
     {:ok, _, _} = jupiter.entity.object_id |> evaluate("Q3504248") |> Classifications.record()

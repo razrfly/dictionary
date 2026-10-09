@@ -12,11 +12,12 @@ defmodule DevilsDictionary.Routing.Sitemaps do
   the current revisions of the articles about its subject, or, where nothing
   dates its content, when it was published. Never an audit run's time.
 
-  The lists are cached per publication receipt and per route change: the
-  cache is keyed by the newest receipt (`Routing.Publications.generation/0`),
-  the newest ledger row, the switch and the origin, so a publish, a
-  withdrawal, a move or a retirement changes the sitemaps at the next
-  request.
+  The lists are cached per publication receipt, per route change and per
+  content change: the cache is keyed by the newest receipt
+  (`Routing.Publications.generation/0`), the newest ledger row, the newest
+  page, content and assertion revisions (what `lastmod` reads), the switch
+  and the origin, so a publish, a withdrawal, a move, a retirement or a
+  changed article changes the sitemaps at the next request.
   """
 
   import Ecto.Query
@@ -80,14 +81,28 @@ defmodule DevilsDictionary.Routing.Sitemaps do
 
   @doc """
   What the sitemaps are built from, and so what the cache is keyed by: the
-  newest receipt, the newest ledger row, the switch and the origin.
+  newest receipt, the newest ledger row, the newest revisions `lastmod`
+  reads, the switch and the origin.
   """
   def generation do
-    {Publications.generation(), ledger_generation(), PublicRouting.enabled?(),
-     PublicRouting.origin()}
+    {Publications.generation(), ledger_generation(), content_generation(),
+     PublicRouting.enabled?(), PublicRouting.origin()}
   end
 
   defp ledger_generation, do: Repo.one(from c in RouteChange, select: coalesce(max(c.id), 0))
+
+  # Each a primary key's maximum, an index lookup: a new page revision, a new
+  # revision of an article, or a new or changed `about` assertion moves it.
+  defp content_generation do
+    %{rows: [row]} =
+      Repo.query!("""
+      SELECT (SELECT coalesce(max(id), 0) FROM page_revisions),
+             (SELECT coalesce(max(id), 0) FROM content_revisions),
+             (SELECT coalesce(max(id), 0) FROM assertion_revisions)
+      """)
+
+    List.to_tuple(row)
+  end
 
   # ── the cache ────────────────────────────────────────────────────────────
 
@@ -99,7 +114,7 @@ defmodule DevilsDictionary.Routing.Sitemaps do
         chunks
 
       _stale ->
-        chunks = build(entries(), elem(key, 3))
+        chunks = build(entries(), elem(key, 4))
         :persistent_term.put(__MODULE__, {key, chunks})
         chunks
     end
@@ -133,29 +148,27 @@ defmodule DevilsDictionary.Routing.Sitemaps do
     max_urls = Keyword.get(limits, :urls, @max_urls)
     max_bytes = Keyword.get(limits, :bytes, @max_bytes)
     envelope = envelope()
-    split(urls, [], [], envelope, max_urls, max_bytes, envelope)
+    split(urls, {[], 0, envelope}, [], {max_urls, max_bytes, envelope})
   end
 
-  defp split([], [], done, _bytes, _max_urls, _max_bytes, _envelope), do: Enum.reverse(done)
+  # `current` is `{urls, count, bytes}`, the count carried beside the list.
+  defp split([], {[], _count, _bytes}, done, _limits), do: Enum.reverse(done)
 
-  defp split([], current, done, _bytes, _max_urls, _max_bytes, _envelope),
+  defp split([], {current, _count, _bytes}, done, _limits),
     do: Enum.reverse([Enum.reverse(current) | done])
 
-  defp split([{_entry, xml} = url | rest], current, done, bytes, max_urls, max_bytes, envelope) do
+  defp split(
+         [{_entry, xml} = url | rest],
+         {current, count, bytes},
+         done,
+         {max_urls, max_bytes, envelope} = limits
+       ) do
     size = byte_size(xml)
 
-    if current != [] and (length(current) >= max_urls or bytes + size > max_bytes) do
-      split(
-        [url | rest],
-        [],
-        [Enum.reverse(current) | done],
-        envelope,
-        max_urls,
-        max_bytes,
-        envelope
-      )
+    if current != [] and (count >= max_urls or bytes + size > max_bytes) do
+      split([url | rest], {[], 0, envelope}, [Enum.reverse(current) | done], limits)
     else
-      split(rest, [url | current], done, bytes + size, max_urls, max_bytes, envelope)
+      split(rest, {[url | current], count + 1, bytes + size}, done, limits)
     end
   end
 

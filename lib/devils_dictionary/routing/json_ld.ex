@@ -127,10 +127,15 @@ defmodule DevilsDictionary.Routing.JsonLd do
   The externally identified additional types of a `Thing` (Concepts, Nature
   and Subjects): the Wikidata classes the current decision's rules anchor on
   that the entity records as its own classes, or a rule's sole anchor. None
-  for a typed family, or where the record does not say which class matched.
+  for a typed family, where the record does not say which class matched, or
+  where the current decision maps the subject to another family than the
+  page's (a reclassification not yet moved, ADR 0004 §8.4): a class is
+  never asserted of a page whose family the decision does not name.
   """
   def additional_type(object_id, family) when family in ~w(concepts nature subjects) do
-    with %{status: :mapped, rule_ids: rule_ids} <- Classifications.current(object_id) do
+    with %{status: :mapped, family: decided, rule_ids: rule_ids} <-
+           Classifications.current(object_id),
+         true <- to_string(decided) == family do
       recorded =
         Repo.one(
           from e in Entity,
