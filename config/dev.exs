@@ -37,9 +37,12 @@ config :devils_dictionary, DevilsDictionary.Repo,
 # repository check and the debug error pages (`Phoenix.Endpoint` reads both
 # with `compile_env`): they answer before any plug, and would hand a visitor
 # the route table and stack traces, a compile error from the working
-# checkout, and during a pending migration a button that runs it. Its launch
-# script sets `DD_PUBLISHED_HOST` before `mix phx.server` compiles; the
-# owner's own runs, without it, are compiled with them again.
+# checkout, and during a pending migration a button that runs it. Nor does
+# its HTML carry the templates' source paths. Mix refuses to run a build
+# whose compile-time values differ from the configuration, so the published
+# host builds into its own `MIX_BUILD_ROOT`, which its launch script sets
+# with `DD_PUBLISHED_HOST` before the first mix command; the owner's runs
+# keep `_build`.
 published_host_build? = System.get_env("DD_PUBLISHED_HOST") not in [nil, ""]
 
 config :devils_dictionary, DevilsDictionaryWeb.Endpoint,
@@ -120,7 +123,7 @@ config :phoenix, :plug_init_mode, :runtime
 config :phoenix_live_view,
   # Include debug annotations and locations in rendered markup.
   # Changing this configuration will require mix clean and a full recompile.
-  debug_heex_annotations: true,
-  debug_attributes: true,
+  debug_heex_annotations: not published_host_build?,
+  debug_attributes: not published_host_build?,
   # Enable helpful, but potentially expensive runtime checks
   enable_expensive_runtime_checks: true

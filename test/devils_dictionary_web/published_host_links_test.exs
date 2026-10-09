@@ -411,7 +411,7 @@ defmodule DevilsDictionaryWeb.PublishedHostLinksTest do
       refute render(view) =~ "1759 novella"
     end)
 
-    # A reviewer reads it internally, and another server publicly, as before.
+    # Another server reads it publicly, as before.
     reading(false, fn ->
       assert ctx.conn |> get("/works/candide-1759") |> html_response(200) =~ "1759 novella"
     end)

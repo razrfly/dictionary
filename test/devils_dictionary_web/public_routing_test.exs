@@ -175,6 +175,19 @@ defmodule DevilsDictionaryWeb.PublicRoutingTest do
     assert owner_build[:code_reloader] == true
     assert owner_build[:debug_errors] == true
 
+    # Nor do its pages carry the templates' source paths.
+    live_view = fn vars ->
+      with_system_env(vars, fn ->
+        @root
+        |> Path.join("dev.exs")
+        |> Config.Reader.read!(env: :dev)
+        |> Keyword.get(:phoenix_live_view)
+      end)
+    end
+
+    assert live_view.([{"DD_PUBLISHED_HOST", "wordhoard.test"}])[:debug_heex_annotations] == false
+    assert live_view.([{"DD_PUBLISHED_HOST", nil}])[:debug_heex_annotations] == true
+
     plain = runtime(:dev, [{"DD_PUBLISHED_HOST", nil}])
     refute Keyword.has_key?(plain, :public_routing)
     refute Keyword.has_key?(plain, :published_host)
