@@ -17,12 +17,17 @@ defmodule Mix.Tasks.Dd.Routing.Rule do
   With `--sign`: the owner's one act. Asks for the reviewer account's
   password (read without echo on a terminal, or one line from a pipe),
   checks it and the reviewer role against this installation's database,
-  and only then writes the signature into the file: the signer's email and
-  id, the digest signed, the time and an attestation. Refuses a rule that is
-  already signed. Nothing is written to the database.
+  and only then records the signing in `review_rule_signatures` and writes
+  the same signature into the file: the signer's email and id, the digest
+  signed, the time, the method and an attestation. Refuses a rule that is
+  already signed, in the file or on this installation. That row is the only
+  write to the database, and it is the owner's own act.
 
-  Nobody may sign for the owner: the task needs the account's password,
-  which only its holder types.
+  Signing needs the account's password, which only its holder types; a
+  signature written into the file by hand does not load, because no
+  signing was recorded (`Routing.ReviewRule`). The task refuses to run
+  without `DD_NO_OBAN=1`: it starts the application, and Oban must not run
+  against the working database.
   """
 
   use Mix.Task
@@ -33,6 +38,13 @@ defmodule Mix.Tasks.Dd.Routing.Rule do
 
   @impl Mix.Task
   def run(args) do
+    unless System.get_env("DD_NO_OBAN") == "1",
+      do:
+        Mix.raise(
+          "run with DD_NO_OBAN=1: this task starts the application, and Oban must not run " <>
+            "against the working database"
+        )
+
     {opts, rest, invalid} =
       OptionParser.parse(args, strict: [sign: :boolean, reviewer: :string])
 
@@ -67,21 +79,28 @@ defmodule Mix.Tasks.Dd.Routing.Rule do
     end
   end
 
-  # The password, never echoed: from the terminal without echo, or one line
-  # from a pipe.
+  # The password, never echoed: on a terminal, read without echo and never
+  # retried through an echoing read; from a pipe, one line, which nothing
+  # echoes.
   defp password!(email) do
     Mix.shell().info("password for #{email}:")
+    io = :io.getopts()
+    terminal? = is_list(io) and Keyword.get(io, :terminal, false) == true
 
-    case :io.get_password() do
-      password when is_list(password) and password != [] ->
-        List.to_string(password)
-
-      _ ->
-        case IO.gets("") do
-          line when is_binary(line) and line != "" -> String.trim_trailing(line, "\n")
-          _ -> Mix.raise("no password given")
+    line =
+      if terminal? do
+        case :io.get_password() do
+          password when is_list(password) -> List.to_string(password)
+          _other -> ""
         end
-    end
+      else
+        case IO.gets("") do
+          line when is_binary(line) -> String.trim_trailing(line, "\n")
+          _other -> ""
+        end
+      end
+
+    if line == "", do: Mix.raise("no password given"), else: line
   end
 
   defp show(path) do

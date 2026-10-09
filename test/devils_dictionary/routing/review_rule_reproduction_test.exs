@@ -6,23 +6,30 @@ defmodule DevilsDictionary.Routing.ReviewRuleReproductionTest do
   reads, the owner's review worksheet and the owner's review file, as #224
   left them (`test/fixtures/routing/cp4-224/`, see its README).
 
-  What it proves:
+  What it proves (C10 as the owner amended it on 9 October 2026: the rule
+  reproduces every one of #224's decisions that Part A′ lets a rule make,
+  defers the rest, and keeps every decision the owner made):
 
     * the inputs are #224's: the export subset classifies every worksheet
       row to the fingerprint the owner reviewed;
-    * **from the state #224 left** — the owner's 124 confirmations standing
-      as overrides at their addresses, the 5 deferrals recorded — the rule
-      decides exactly the owner's 124 confirmations and 5 deferrals, family,
-      path and fingerprint, and writes nothing of its own;
-    * **from the evidence alone** — nobody's decision — it confirms 99 of
+    * **from the evidence alone** — nobody's decision — it confirms 96 of
       the 129, every one a record the owner confirmed, in the owner's family
-      and at the owner's path except the 3 whose path the owner renamed; it
-      never confirms a record the owner deferred; and it defers the 25
-      judgments its clauses forbid it — the 14 sole-candidate classifications,
-      the 3 blocked collision rows and the groups they block, and the 2
-      duplicate identities the owner told apart;
+      and at the owner's path; it never confirms a record the owner
+      deferred; and it defers the 28 judgments its clauses forbid it — the
+      14 sole-candidate classifications, the 3 blocked collision rows and
+      the groups they block, the 2 duplicate identities the owner told
+      apart, and the 3 addresses the policy would spell from punctuation,
+      which the owner named by hand;
+    * **from the state #224 left** — the owner's 124 confirmations standing
+      as overrides at their addresses, the 5 deferrals recorded — it keeps
+      exactly the owner's 124 confirmations and 5 deferrals, family, path
+      and fingerprint, and writes nothing of its own (a read-back, not a
+      reproduction: what it shows is that the rule never decides over a
+      human);
     * a collision group is qualified whole from its evidence or deferred
-      whole, and the order records arrive in decides nothing.
+      whole; a human's retirement, a tombstone, a group's shared path and
+      two groups meeting at one path all defer; and the order records
+      arrive in decides nothing.
 
   `ReviewRule.decide/2` is pure, so this needs no database.
   """
@@ -37,9 +44,10 @@ defmodule DevilsDictionary.Routing.ReviewRuleReproductionTest do
   @export_sha256 "a33f1bc8c62b630be701d84b48f994fcfb6c127a8d4012bf492911cdb1b55fd0"
   @reviews_sha256 "57e26405cce64fd8b05a1d79e3d811f85e91b0cd428a1862946cb07f7a987792"
 
-  # The owner renamed these three uncontested paths in #224; the rule keeps
-  # the policy's proposal.
-  @renamed [3, 6, 1_886_465]
+  # The owner renamed these three uncontested paths in #224, because the
+  # policy's proposal spells their punctuation (`sharp`, `dot`); the rule
+  # defers them for a human to name.
+  @unreadable [3, 6, 1_886_465]
 
   # The owner's confirmations the rule's own clauses defer, by clause.
   @classification_reviews [
@@ -198,7 +206,7 @@ defmodule DevilsDictionary.Routing.ReviewRuleReproductionTest do
     end
   end
 
-  test "from the state #224 left, it reproduces the owner's 124 confirmations and 5 deferrals",
+  test "from the state #224 left, it keeps the owner's 124 confirmations and 5 deferrals and writes nothing",
        ctx do
     {states, held} = as_224_left(ctx)
     decisions = ReviewRule.decide(states, held)
@@ -237,11 +245,11 @@ defmodule DevilsDictionary.Routing.ReviewRuleReproductionTest do
     decisions = ReviewRule.decide(from_evidence(ctx))
 
     assert counts(decisions) == %{
-             {:confirm, "uncontested_mapping"} => 50,
+             {:confirm, "uncontested_mapping"} => 47,
              {:confirm, "qualified_collision"} => 49,
              {:defer, "classification_review"} => 17,
              {:defer, "duplicate_identity_review"} => 7,
-             {:defer, "unqualified_collision"} => 6,
+             {:defer, "unqualified_collision"} => 9,
              {:not_addressed, "classification_review"} => 38,
              {:not_addressed, "excluded_source_page"} => 2,
              {:not_addressed, "identity_lifecycle_review"} => 1
@@ -256,13 +264,7 @@ defmodule DevilsDictionary.Routing.ReviewRuleReproductionTest do
       assert decision.family == review["family"]
       assert decision.fingerprint == review["evidence_fingerprint"]
 
-      if id in @renamed do
-        record = Enum.find(ctx.population["records"], &(&1["object_id"] == id))
-        assert decision.path == record["candidate_path"]
-        refute decision.path == review["path"]
-      else
-        assert decision.path == review["path"]
-      end
+      assert decision.path == review["path"]
     end
 
     # Nothing the owner deferred.
@@ -275,7 +277,8 @@ defmodule DevilsDictionary.Routing.ReviewRuleReproductionTest do
 
     assert deferred_confirmations ==
              Enum.sort(
-               @classification_reviews ++ @blocked ++ @blocked_groups ++ @duplicates_confirmed
+               @classification_reviews ++
+                 @blocked ++ @blocked_groups ++ @duplicates_confirmed ++ @unreadable
              )
 
     for id <- @classification_reviews ++ @blocked,
@@ -289,8 +292,17 @@ defmodule DevilsDictionary.Routing.ReviewRuleReproductionTest do
       assert reason =~ "cannot be qualified whole"
     end
 
-    assert length(confirmed) == 99
-    assert length(deferred_confirmations) == 25
+    # The three addresses the owner named by hand: the policy's proposal
+    # would spell their punctuation, so the rule leaves them to a human.
+    for id <- @unreadable do
+      assert %{action: :defer, clause: "unqualified_collision", reason: reason} = decisions[id]
+      assert reason =~ "spelt from punctuation"
+      record = Enum.find(ctx.population["records"], &(&1["object_id"] == id))
+      assert record["candidate_path"] =~ ~r/-(sharp|dot)-|-dot\z/
+    end
+
+    assert length(confirmed) == 96
+    assert length(deferred_confirmations) == 28
   end
 
   test "a collision group is qualified whole from its evidence, or deferred whole", ctx do
@@ -401,5 +413,116 @@ defmodule DevilsDictionary.Routing.ReviewRuleReproductionTest do
     # Stale evidence is the backfill's to defer; the rule decides nothing on it.
     stale = %{bierce | stale: "evidence_changed: not current: Q191050"}
     assert %{action: :stale} = ReviewRule.decide([stale])[1]
+
+    # A page a human retired, merged or split: a human's decision, deferred.
+    for lifecycle <- ["retired", "merged", "split"] do
+      gone = Map.put(bierce, :lifecycle, lifecycle)
+
+      assert %{action: :defer, clause: "standing_decision", reason: reason} =
+               ReviewRule.decide([gone])[1]
+
+      assert reason =~ "its page is #{lifecycle}"
+    end
+
+    assert %{action: :confirm} = ReviewRule.decide([Map.put(bierce, :lifecycle, "active")])[1]
+
+    # An address a human retired, whoever's page held it: a tombstone is not
+    # taken.
+    tomb = %{"/people/ambrose-bierce" => %{holder: 999_999_999, kind: :tombstone}}
+
+    assert %{action: :defer, clause: "standing_decision", reason: reason} =
+             ReviewRule.decide([bierce], tomb)[1]
+
+    assert reason =~ "tombstone"
+
+    # An alias or canonical another page holds: taken, so deferred.
+    held = %{"/people/ambrose-bierce" => %{holder: 999_999_999, kind: :alias}}
+
+    assert %{action: :defer, clause: "unqualified_collision", reason: reason} =
+             ReviewRule.decide([bierce], held)[1]
+
+    assert reason =~ "held by object 999999999"
+  end
+
+  test "a retired member defers its whole group; a group's shared path is nobody's; two groups meeting at one path both wait",
+       ctx do
+    states = from_evidence(ctx)
+    butterflies = ctx.population["groups"]["/works/butterfly"]
+    [first | others] = butterflies
+
+    # One member's page retired by a human: the group waits whole.
+    retired =
+      Enum.map(states, fn
+        %{object_id: ^first} = s -> Map.put(s, :lifecycle, "retired")
+        s -> s
+      end)
+
+    decisions = ReviewRule.decide(retired)
+    assert %{action: :defer, clause: "standing_decision"} = decisions[first]
+
+    for id <- others do
+      assert %{action: :defer, clause: "unqualified_collision", reason: reason} = decisions[id]
+      assert reason =~ "#{first} standing_decision"
+    end
+
+    # A record outside the group whose candidate path is the group's own:
+    # never confirmed there.
+    bierce = Enum.find(states, &(&1.object_id == 1))
+    bare = put_in(bierce, [:population, "candidate_path"], "/works/butterfly")
+    bare = %{bare | label: "Butterfly", decision: %{bare.decision | family: "works"}}
+
+    assert %{action: :defer, clause: "unqualified_collision", reason: reason} =
+             ReviewRule.decide([bare | Enum.reject(states, &(&1.object_id == 1))])[1]
+
+    assert reason =~ "collision group's shared path"
+
+    # Two groups whose qualifiers meet at one path: both deferred whole.
+    crash = fn id, group, description, proposed ->
+      %{
+        object_id: id,
+        label: "Crash",
+        role: :subject,
+        population: %{
+          "disposition" => "collision review: proposed readable qualifier",
+          "address_status" => "candidate",
+          "candidate_path" => group,
+          "proposed_path" => proposed,
+          "family" => "works",
+          "status" => "mapped",
+          "group" => group
+        },
+        entity: %{"description" => description, "work_kind" => nil},
+        decision: %{
+          status: "mapped",
+          family: "works",
+          origin: "evaluator",
+          fingerprint: String.duplicate("0", 64),
+          reasons: [],
+          rule_sha256: nil
+        },
+        canonical: nil,
+        earlier_review: nil,
+        stale: nil
+      }
+    end
+
+    film = crash.(901, "/works/crash-a", "2004 film", "/works/crash-2004-film")
+    novel = crash.(902, "/works/crash-a", "1996 novel", "/works/crash-1996-novel")
+    other = crash.(903, "/works/crash-b", "2004 film", "/works/crash-2004-film")
+
+    # Each group alone is qualified whole.
+    alone = ReviewRule.decide([film, novel])
+    assert %{action: :confirm, path: "/works/crash-2004-film"} = alone[901]
+    assert %{action: :confirm, path: "/works/crash-1996-novel"} = alone[902]
+    assert %{action: :confirm, path: "/works/crash-2004-film"} = ReviewRule.decide([other])[903]
+
+    # Together, the two that meet at one path go nowhere, and the novel
+    # decided with the film waits with it.
+    decisions = ReviewRule.decide([film, novel, other])
+
+    for id <- [901, 902, 903] do
+      assert %{action: :defer, clause: "unqualified_collision", reason: reason} = decisions[id]
+      assert reason =~ "/works/crash-2004-film would be confirmed twice (objects 901, 903)"
+    end
   end
 end

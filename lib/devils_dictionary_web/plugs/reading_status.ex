@@ -22,8 +22,8 @@ defmodule DevilsDictionaryWeb.ReadingStatus do
   | | no words; an equivalent spelling or alias of an overview served in the mode | 301 |
   | | malformed | 400 |
   | | neither | 404 (410 or 500 as its overview's outcome says) |
-  | `/words/:id/:slug` | no such lexeme, or not an id at all | 404, never a word found by the slug; 400 if the slug is not text |
-  | `/entities/:id/:slug` | no such entity, or not an id at all | 404 (ADR 0004 §6), never a page found by the slug; 400 if the slug is not text |
+  | `/words/:id/:slug` | no such lexeme, or not the exact text of an id | 404, never a word found by the slug; 400 if the slug is not text, whatever the id |
+  | `/entities/:id/:slug` | no such entity, or not the exact text of an id | 404 (ADR 0004 §6), never a page found by the slug; 400 if the slug is not text, whatever the id |
 
   Live navigation re-runs the same decision in the LiveView, which follows a
   redirect itself; the status only matters to a direct request.
@@ -83,33 +83,39 @@ defmodule DevilsDictionaryWeb.ReadingStatus do
     end
   end
 
-  # A found word with a wrong or unreadable slug is redirected to its own by
-  # the LiveView; a missing one is 404, or 400 if its slug is not text.
+  # A slug that is not text is 400 whatever the id names. A found word with
+  # a wrong slug is redirected to its own by the LiveView; a missing one is
+  # 404.
   defp word(conn) do
     cond do
-      Lexicon.by_object_id(conn.path_params["id"]) -> conn
-      Input.text?(conn.path_params["slug"]) -> put_status(conn, 404)
-      true -> put_status(conn, 400)
+      not Input.text?(conn.path_params["slug"]) -> put_status(conn, 400)
+      (id = exact_id(conn.path_params["id"])) && Lexicon.by_object_id(id) -> conn
+      true -> put_status(conn, 404)
     end
   end
 
   # An exact identity: the thing page for an entity, a merged identity or a
-  # split one; anything else is 404 (#194's follow-up from #224), or 400 if
-  # its slug is not text. A wrong slug on a real id is the LiveView's
-  # redirect to its own.
+  # split one; anything else is 404 (#194's follow-up from #224). A slug
+  # that is not text is 400 whatever the id names. A wrong slug on a real
+  # id is the LiveView's redirect to its own.
   defp entity(conn) do
-    found? =
-      case Integer.parse(conn.path_params["id"]) do
-        {id, ""} -> EntityPage.exists?(id)
-        _ -> false
-      end
-
     cond do
-      found? -> conn
-      Input.text?(conn.path_params["slug"]) -> put_status(conn, 404)
-      true -> put_status(conn, 400)
+      not Input.text?(conn.path_params["slug"]) -> put_status(conn, 400)
+      (id = exact_id(conn.path_params["id"])) && EntityPage.exists?(id) -> conn
+      true -> put_status(conn, 404)
     end
   end
+
+  # An id is the exact decimal text of a positive integer, never a spelling
+  # of one: `013` and `+13` name nothing, so an address has one form.
+  defp exact_id(text) when is_binary(text) do
+    case Integer.parse(text) do
+      {id, ""} when id > 0 -> if Integer.to_string(id) == text, do: id
+      _other -> nil
+    end
+  end
+
+  defp exact_id(_text), do: nil
 
   defp redirect(conn, location) do
     conn

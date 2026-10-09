@@ -389,11 +389,21 @@ defmodule DevilsDictionaryWeb.ConnectedFlowTest do
       assert ctx.conn |> get("/entities/0/nobody") |> html_response(404)
       assert ctx.conn |> get("/entities/12abc/nobody") |> html_response(404)
 
-      # A slug that is not text is not an address.
+      # A slug that is not text is not an address, whatever the id names.
       assert ctx.conn |> get("/entities/999999999/a%00b") |> html_response(400)
+      person = ctx.bierce.person
+      assert ctx.conn |> get("/entities/#{person.object_id}/a%00b") |> html_response(400)
+
+      # An id has one spelling: a leading zero or sign names nothing.
+      assert ctx.conn
+             |> get("/entities/0#{person.object_id}/ambrose-bierce")
+             |> html_response(404)
+
+      assert ctx.conn
+             |> get("/entities/+#{person.object_id}/ambrose-bierce")
+             |> html_response(404)
 
       # A real identity under a wrong slug still goes to its own.
-      person = ctx.bierce.person
 
       assert ctx.conn |> get("/entities/#{person.object_id}/not-his-name") |> redirected_to(302) ==
                "/entities/#{person.object_id}/ambrose-bierce"

@@ -22,6 +22,23 @@ defmodule DevilsDictionary.Routing.Qualifier do
   chooses for it. Whether a proposal is free of every other address is the
   caller's question. `test/devils_dictionary/routing/qualifier_test.exs`
   holds both implementations to the 55 proposals of #224's population.
+
+  **Readable means readable.** A path is made of words: a label or
+  qualifier the slug would have to spell out — `#` as `sharp`, `.` as
+  `dot`, `+` as `plus`, so `Inc.` or `ver. 1.0` or `#972` — is not readable
+  (`readable?/1`), and `path/2` gives nil for it. The owner named such
+  addresses by hand in #224; the rule defers them for a human to name.
+
+  **Where the port and `candidates.py` differ.** On the population's real
+  text they agree on every proposal. On adversarial text they can differ:
+  OTP's regex counts combining marks and connector punctuation as word
+  characters where Python's `re` does not, `String.trim/1` keeps the
+  information separators U+001C–U+001F that Python's `strip` removes (they
+  are stripped here too), and the two runtimes carry different Unicode
+  versions. Every such divergence makes a path the population did not
+  propose, and the rule defers a member whose generated path is not the
+  population's own proposal, so a divergence can only defer, never confirm
+  another address.
   """
 
   alias DevilsDictionary.Routing.Policy
@@ -53,13 +70,21 @@ defmodule DevilsDictionary.Routing.Qualifier do
   def qualifier(family, description, work_kind \\ nil)
 
   def qualifier(family, description, work_kind) when is_binary(description) do
-    case String.trim(description) do
+    case String.replace(description, ~r/\A[\s\x{1C}-\x{1F}]+|[\s\x{1C}-\x{1F}]+\z/u, "") do
       "" -> {nil, nil}
       desc -> by_family(family, desc, work_kind)
     end
   end
 
   def qualifier(_family, _description, _work_kind), do: {nil, nil}
+
+  @doc """
+  Whether a label or a qualifier makes a readable address: it holds no
+  character the slug would spell out as a word (`#`, `+`, `.`). Nil or
+  anything else is not readable.
+  """
+  def readable?(text) when is_binary(text), do: not Regex.match?(~r/[#+.]/u, text)
+  def readable?(_text), do: false
 
   defp by_family("works", desc, work_kind) do
     low = String.downcase(desc)
@@ -129,13 +154,15 @@ defmodule DevilsDictionary.Routing.Qualifier do
   @doc """
   The qualified path for a member, `%{label:, family:, description:,
   work_kind:}`, with or without its extra qualifier, or nil when the
-  evidence gives no base qualifier or the text makes no slug.
+  evidence gives no base qualifier, the text is not readable, or the text
+  makes no slug.
   """
   def path(member, extra?) do
     {base, extra} = qualifier(member.family, member.description, member[:work_kind])
 
     with base when is_binary(base) <- base,
          text = join([member.label, base, if(extra?, do: extra)]),
+         true <- readable?(text),
          slug when is_binary(slug) <- Policy.slug(text) do
       "/#{member.family}/#{slug}"
     else

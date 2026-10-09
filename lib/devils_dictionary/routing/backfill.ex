@@ -63,18 +63,28 @@ defmodule DevilsDictionary.Routing.Backfill do
 
   `load/4` with `rule:` takes the owner's signed standing review rule
   (`Routing.ReviewRule`) in place of a review file: the rule's digest is the
-  fourth input of the run key, and its signer is the reviewer. Before the
-  first batch, `decisions/1` decides every record at once, reading and
-  writing nothing it does not need — the evidence check, the decision
-  `record/1` would leave current (`Classifications.preview/1`), the page and
-  address each record holds, and the latest review a human made — so a
-  collision group is decided together and import order decides nothing.
-  Each record is then processed as a review would be: a confirmation writes
-  the signer's override, recording the rule's digest in its `rule_ids`,
-  then the page and the address; an address a human or the rule already
+  fourth input of the run key and is recorded on the run's row
+  (`rule_sha256`; `reviews_sha256` stays null), and its signer is the
+  reviewer. Before the first batch, `decisions/2` decides every record at
+  once, reading and writing nothing it does not need — the evidence check,
+  the decision `record/1` would leave current (`Classifications.preview/1`),
+  the page each record has with its lifecycle and canonical address, who
+  holds each address it might take and as what kind of path, and the latest
+  review a human made — so a collision group is decided together and import
+  order decides nothing. `run/3` executes exactly the decisions it was
+  given (`decided:`, what the dry run printed), or decides once itself.
+  Each record is then processed as a review would be: before a confirmation
+  is written, its collision group (or the record alone) is decided again
+  from the state the batch now sees, and the record is deferred if any
+  member's decision moved — a human deferred it meanwhile, a page was
+  retired, an address was taken; otherwise the confirmation writes the
+  signer's override, recording the rule's digest in its `rule_ids`, then
+  the page and the address; an address a human or the rule already
   allocated is kept and nothing is written; a deferral writes nothing.
-  Every checkpoint row's `review` names the rule's digest and the clause
-  that decided it. A run is decided by reviewers or by the rule, never both.
+  Every checkpoint row's `review` names the rule's digest, and the clause
+  that decided the record or `stale` for a record the batch deferred before
+  the rule's decision could apply (evidence moved, input changed, missing).
+  A run is decided by reviewers or by the rule, never both.
 
   Nothing here publishes: pages stay `draft`, and candidate status grants no
   publication approval.
@@ -159,8 +169,8 @@ defmodule DevilsDictionary.Routing.Backfill do
          policy_sha256: policy_sha256,
          policy: Policy.load(),
          population_sha256: population.sha256,
-         # A run the rule decides records the rule's digest here.
-         reviews_sha256: if(rule, do: rule.sha256, else: reviews_sha256),
+         reviews_sha256: reviews_sha256,
+         rule_sha256: rule && rule.sha256,
          records: Enum.sort_by(population.records, & &1["object_id"]),
          contested: population.contested,
          groups: population.groups,
@@ -183,7 +193,8 @@ defmodule DevilsDictionary.Routing.Backfill do
   defp population(path) do
     with {:ok, bytes} <- File.read(path),
          {:ok, %{"records" => records, "summary" => summary} = file} <- Jason.decode(bytes),
-         :ok <- population_records(path, records) do
+         :ok <- population_records(path, records),
+         :ok <- population_groups(path, records, Map.get(file, "groups", %{})) do
       {:ok,
        %{
          records: records,
@@ -227,6 +238,51 @@ defmodule DevilsDictionary.Routing.Backfill do
         :ok
     end
   end
+
+  # A collision group is the population's own structure: every member a
+  # record of it, no record in two groups, and each member proposing the
+  # group's path as its candidate path. The rule decides a group together,
+  # so a group it cannot see whole is refused before anything is decided.
+  defp population_groups(path, records, groups) when is_map(groups) do
+    by_id = Map.new(records, &{&1["object_id"], &1})
+
+    Enum.reduce_while(groups, :ok, fn {group, members}, :ok ->
+      cond do
+        not is_list(members) or members == [] ->
+          {:halt, {:error, "population #{path}: group #{group} has no members"}}
+
+        (missing = Enum.reject(members, &Map.has_key?(by_id, &1))) != [] ->
+          {:halt,
+           {:error,
+            "population #{path}: group #{group} names #{Enum.join(missing, ", ")}, " <>
+              "which the population does not"}}
+
+        (astray = Enum.reject(members, &(by_id[&1]["candidate_path"] == group))) != [] ->
+          {:halt,
+           {:error,
+            "population #{path}: group #{group} holds #{Enum.join(astray, ", ")}, " <>
+              "whose candidate path is not #{group}"}}
+
+        true ->
+          {:cont, :ok}
+      end
+    end)
+    |> case do
+      :ok ->
+        all = Enum.flat_map(groups, fn {_group, members} -> members end)
+
+        case all -- Enum.uniq(all) do
+          [] -> :ok
+          [id | _] -> {:error, "population #{path}: object #{id} is in two collision groups"}
+        end
+
+      error ->
+        error
+    end
+  end
+
+  defp population_groups(path, _records, _groups),
+    do: {:error, "population #{path}: groups is an object of path to members"}
 
   # The population was derived from this export under this policy, or it
   # proposes addresses for a different snapshot.
@@ -400,7 +456,15 @@ defmodule DevilsDictionary.Routing.Backfill do
   def run(plan, actor_id, opts \\ []) do
     with {:ok, users} <- deciders(plan) do
       reviewers = Map.new(users, fn {email, user} -> {email, user_actor!(user)} end)
-      plan = if plan[:rule], do: Map.put(plan, :decided, decisions(plan)), else: plan
+
+      # The decisions the dry run printed, when the caller passes them, so a
+      # run executes what it showed; otherwise decided once here.
+      plan =
+        if plan[:rule],
+          do:
+            Map.put(plan, :decided, Keyword.get_lazy(opts, :decided, fn -> decisions(plan) end)),
+          else: plan
+
       run = open!(plan, actor_id)
       done = done(run.id)
       crash_after = Keyword.get(opts, :crash_after)
@@ -430,7 +494,10 @@ defmodule DevilsDictionary.Routing.Backfill do
     Enum.reduce(batch, processed, fn {record, position}, processed ->
       if crash_after && processed >= crash_after, do: raise("crash injected by the test")
 
-      item = process(plan, reviewers, actor_id, record, Map.get(inputs, record["object_id"]))
+      item =
+        plan
+        |> process(reviewers, actor_id, record, Map.get(inputs, record["object_id"]))
+        |> under_rule(plan)
 
       Repo.insert!(
         struct(
@@ -442,6 +509,26 @@ defmodule DevilsDictionary.Routing.Backfill do
       processed + 1
     end)
   end
+
+  # In a rule run every checkpoint row names the rule: a record the batch
+  # deferred before the rule's decision could apply (missing, changed,
+  # refused by the classifier) is recorded as `stale` under the rule.
+  defp under_rule(%{review: _entry} = item, _plan), do: item
+
+  defp under_rule(item, %{rule: %{} = rule}) do
+    Map.put(
+      item,
+      :review,
+      rule_entry(rule, %{
+        action: :stale,
+        clause: nil,
+        reason:
+          "#{item.disposition}: #{item[:reason] || "deferred before the rule's decision could apply"}"
+      })
+    )
+  end
+
+  defp under_rule(item, _plan), do: item
 
   # The rule's signer, checked again as `load/4` checked it; or every
   # reviewer a review file names.
@@ -489,6 +576,7 @@ defmodule DevilsDictionary.Routing.Backfill do
           policy_version: plan.policy.rules["version"],
           population_sha256: plan.population_sha256,
           reviews_sha256: plan.reviews_sha256,
+          rule_sha256: plan[:rule_sha256],
           records: length(plan.records),
           actor_id: actor_id,
           started_at: DateTime.utc_now()
@@ -845,19 +933,37 @@ defmodule DevilsDictionary.Routing.Backfill do
         keep(ctx, decision, entry)
 
       %{action: :confirm} ->
-        review = %{
-          object_id: ctx.record["object_id"],
-          action: :confirm,
-          family: decision.family,
-          path: decision.path,
-          fingerprint: decision.fingerprint,
-          reviewer: rule.signer.email,
-          reason: "standing review rule #{rule.sha256} (#{decision.clause}): #{decision.reason}",
-          entry: entry,
-          rule_sha256: rule.sha256
-        }
+        case moved(ctx, decision) do
+          nil ->
+            review = %{
+              object_id: ctx.record["object_id"],
+              action: :confirm,
+              family: decision.family,
+              path: decision.path,
+              fingerprint: decision.fingerprint,
+              reviewer: rule.signer.email,
+              reason:
+                "standing review rule #{rule.sha256} (#{decision.clause}): #{decision.reason}",
+              entry: entry,
+              rule_sha256: rule.sha256
+            }
 
-        confirm(ctx, review, signer)
+            confirm(ctx, review, signer)
+
+          why ->
+            %{
+              disposition: "deferred_by_review",
+              reason: "standing review rule: the state moved since the rule decided: " <> why,
+              decision_id: ctx.decision.id,
+              proposed_path: ctx.proposed,
+              review:
+                rule_entry(rule, %{
+                  action: :defer,
+                  clause: decision.clause,
+                  reason: "the state moved since the rule decided: " <> why
+                })
+            }
+        end
 
       %{action: action} ->
         # A deferral; or evidence the rule saw move that has since settled,
@@ -876,6 +982,40 @@ defmodule DevilsDictionary.Routing.Backfill do
         }
     end
   end
+
+  # Before a confirmation is written, the record's collision group (or the
+  # record alone) is decided again from what the batch now sees. A group
+  # mate this batch already allocated now stands at the same address, which
+  # is the same decision; anything else that moved — a human's deferral, a
+  # retired page, an address taken — defers this record, so a run executes
+  # the decisions it printed or defers, never something else. Nil when
+  # nothing moved, else why.
+  defp moved(ctx, _decision) do
+    id = ctx.record["object_id"]
+    ids = Enum.sort(Map.get(ctx.plan.groups, decision_group(ctx), [id]))
+    again = decisions(ctx.plan, ids)
+
+    Enum.find_value(ids, fn member ->
+      before = signature(ctx.plan.decided[member])
+      now = signature(again[member])
+
+      if before != now,
+        do: "object #{member} was #{describe(before)}, now #{describe(now)}"
+    end)
+  end
+
+  defp decision_group(ctx) do
+    Enum.find_value(ctx.plan.groups, fn {group, members} ->
+      if ctx.record["object_id"] in members, do: group
+    end)
+  end
+
+  defp signature(nil), do: {:missing, nil, nil}
+  defp signature(%{action: :confirm} = d), do: {:confirm, d.family, d.path}
+  defp signature(%{action: action}), do: {action, nil, nil}
+
+  defp describe({:confirm, family, path}), do: "confirmed at #{path} (#{family})"
+  defp describe({action, _family, _path}), do: "#{action}"
 
   # An address a human or the rule already allocated: kept, nothing written.
   defp keep(ctx, decision, entry) do
@@ -921,20 +1061,28 @@ defmodule DevilsDictionary.Routing.Backfill do
 
   @doc """
   What the standing review rule decides for every record of a plan loaded
-  with `rule:`, before anything is written: `%{object_id => decision}`, as
+  with `rule:` — or for `ids`, a subset the caller decides again — before
+  anything is written: `%{object_id => decision}`, as
   `Routing.ReviewRule.decide/2` returns it. Reads only — the dry run.
   """
-  def decisions(%{rule: %{}} = plan) do
-    ids = Enum.map(plan.records, & &1["object_id"])
+  def decisions(plan, ids \\ nil)
+
+  def decisions(%{rule: %{}} = plan, ids) do
+    records =
+      if ids,
+        do: Enum.filter(plan.records, &(&1["object_id"] in ids)),
+        else: plan.records
+
+    ids = Enum.map(records, & &1["object_id"])
     inputs = current_inputs(ids)
     earlier = ReviewRule.earlier_reviews(ids)
-    canonicals = canonicals(ids)
+    pages = pages(ids)
 
     group_of =
       for {path, members} <- plan.groups, id <- members, into: %{}, do: {id, path}
 
     states =
-      Enum.map(plan.records, fn record ->
+      Enum.map(records, fn record ->
         id = record["object_id"]
 
         state = %{
@@ -945,22 +1093,23 @@ defmodule DevilsDictionary.Routing.Backfill do
           entity: Map.get(plan.entities, id),
           decision: nil,
           canonical: nil,
+          lifecycle: nil,
           earlier_review: earlier[id],
           stale: nil
         }
 
-        rule_state(plan, state, Map.get(inputs, id), canonicals)
+        rule_state(plan, state, Map.get(inputs, id), pages)
       end)
 
     ReviewRule.decide(states, held(states))
   end
 
-  defp rule_state(_plan, %{entity: nil} = state, _current, _canonicals),
+  defp rule_state(_plan, %{entity: nil} = state, _current, _pages),
     do: %{state | stale: "missing_from_export"}
 
-  defp rule_state(_plan, state, nil, _canonicals), do: %{state | stale: "missing_from_database"}
+  defp rule_state(_plan, state, nil, _pages), do: %{state | stale: "missing_from_database"}
 
-  defp rule_state(plan, state, current, canonicals) do
+  defp rule_state(plan, state, current, pages) do
     exported = state.entity
 
     if comparable(current) != comparable(exported) do
@@ -968,6 +1117,7 @@ defmodule DevilsDictionary.Routing.Backfill do
     else
       result = Policy.classify(exported, plan.graph, plan.policy)
       role = role(result)
+      page = Map.get(pages, {state.object_id, role}, %{canonical: nil, lifecycle: nil})
 
       with [] <- changed_dependencies(result),
            {:ok, _outcome, %Decision{} = decision} <- Classifications.preview(result) do
@@ -983,7 +1133,8 @@ defmodule DevilsDictionary.Routing.Backfill do
               reasons: decision.reasons,
               rule_sha256: Classifications.rule_sha256(decision)
             },
-            canonical: Map.get(canonicals, {state.object_id, role})
+            canonical: page.canonical,
+            lifecycle: page.lifecycle
         }
       else
         changed when is_list(changed) ->
@@ -995,20 +1146,25 @@ defmodule DevilsDictionary.Routing.Backfill do
     end
   end
 
-  # Each object's page and the canonical address it holds.
-  defp canonicals(ids) do
+  # Each object's page: its lifecycle and the canonical address it holds,
+  # if any. A retired, merged or split page holds no canonical, and is a
+  # human's decision the rule keeps.
+  defp pages(ids) do
     from(p in Page,
-      join: c in PublicPath,
+      left_join: c in PublicPath,
       on: c.id == p.canonical_path_id,
       where: p.target_object_id in ^ids and p.locale == "en" and p.role in [:subject, :edition],
-      select: {{p.target_object_id, p.role}, c.path}
+      select: {{p.target_object_id, p.role}, %{canonical: c.path, lifecycle: p.lifecycle_state}}
     )
     |> Repo.all()
-    |> Map.new()
+    |> Map.new(fn {key, page} ->
+      {key, %{page | lifecycle: page.lifecycle && Atom.to_string(page.lifecycle)}}
+    end)
   end
 
-  # Who holds each address a record might take: the target object of the
-  # page it serves, or the editorial page itself.
+  # Who holds each address a record might take — the target object of the
+  # page it serves, or the editorial page itself — and as what kind of path:
+  # a canonical, an alias, or a tombstone a human's retirement left.
   defp held(states) do
     paths =
       states
@@ -1021,10 +1177,12 @@ defmodule DevilsDictionary.Routing.Backfill do
       join: p in Page,
       on: p.id == pp.destination_page_id,
       where: pp.path in ^paths,
-      select: {pp.path, p.target_object_id, p.id}
+      select: {pp.path, pp.kind, p.target_object_id, p.id}
     )
     |> Repo.all()
-    |> Map.new(fn {path, object_id, page_id} -> {path, object_id || "page #{page_id}"} end)
+    |> Map.new(fn {path, kind, object_id, page_id} ->
+      {path, %{holder: object_id || "page #{page_id}", kind: kind}}
+    end)
   end
 
   defp deferral(disposition, reason, proposed),
@@ -1164,13 +1322,15 @@ defmodule DevilsDictionary.Routing.Backfill do
           }
       )
 
-    # A run the standing review rule decided names the rule, and each record
-    # the clause that decided it. Other runs' manifests are as they were.
-    rule_sha256 = Enum.find_value(items, &(&1.review && &1.review["rule_sha256"]))
+    # A run the standing review rule decided names the rule on its own row,
+    # and each record the clause that decided it (`stale` for a record the
+    # batch deferred before the rule's decision applied). Other runs'
+    # manifests are as they were.
+    rule_sha256 = run.rule_sha256
 
     items =
       Enum.map(items, fn item ->
-        clause = item.review && item.review["clause"]
+        clause = item.review && (item.review["clause"] || item.review["action"])
         item = Map.delete(item, :review)
 
         if rule_sha256, do: Map.put(item, :rule_clause, clause), else: item

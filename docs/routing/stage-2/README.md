@@ -127,7 +127,7 @@ Stage 2's exit evidence:
 - the deferred remainder visible with its dispositions;
 - `mix dd.routing.verify` passing after a restore of the backfilled database.
 
-On copies, all of it now exists: the manifest (`mix dd.routing.backfill --manifest`), and an exact restore of a backfilled copy. On the development corpus it waits for gate 1 and the owner's decisions below.
+On copies, all of it now exists: the manifest (`mix dd.routing.backfill --manifest`), and an exact restore of a backfilled copy. On the working corpus it ran on 8 October 2026 under [CP4 (#224)](https://github.com/razrfly/dictionary/issues/224), after the decisions below were taken; later populations are decided by the owner's [standing review rule](backfill.md#under-the-standing-review-rule-237), never by a human reading rows ([#237](https://github.com/razrfly/dictionary/issues/237)).
 
 ## Decisions the owner genuinely needs to make
 

@@ -15,6 +15,7 @@ defmodule DevilsDictionary.Routing.BackfillRun do
     field :policy_version, :string
     field :population_sha256, :string
     field :reviews_sha256, :string
+    field :rule_sha256, :string
     field :records, :integer
     belongs_to :actor, Actor
     field :started_at, :utc_datetime_usec

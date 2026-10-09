@@ -31,6 +31,12 @@ defmodule DevilsDictionary.Routing.Recovery do
   # The migration that creates them.
   @routing_migration 20_260_926_193_256
 
+  # Durable routing state added since the foundation (#237): the standing
+  # review rule's recorded signings. Digested, and required in a snapshot,
+  # where the database has them; a database that predates them is judged
+  # on the six.
+  @later_tables ~w(review_rule_signatures)
+
   # Operational queue state, not registry or routing: jobs and node heartbeats.
   @unmanifested ~w(oban_jobs oban_peers)
 
@@ -45,6 +51,21 @@ defmodule DevilsDictionary.Routing.Recovery do
   @hashed ~r/^(text|json|jsonb|bytea)(\[\])?$/
 
   def routing_tables, do: @routing_tables
+
+  @doc """
+  The tables whose rows are durable routing state in the current database:
+  the six routing tables, and the later ones (`review_rule_signatures`)
+  where they exist.
+  """
+  def durable_tables do
+    %{rows: rows} =
+      query!(
+        "SELECT t FROM unnest($1::text[]) AS t WHERE to_regclass('public.' || t) IS NOT NULL ORDER BY t",
+        [@later_tables]
+      )
+
+    @routing_tables ++ Enum.map(rows, &hd/1)
+  end
 
   # No timeout: at corpus scale a sort before the first batch, or one batch
   # of a wide table, can outlast the pool's default 15 seconds. Every query
@@ -784,8 +805,17 @@ defmodule DevilsDictionary.Routing.Recovery do
     %{rows: [[present?]]} =
       Postgrex.query!(conn, "SELECT to_regclass('public.route_changes') IS NOT NULL", [])
 
+    %{rows: later} =
+      Postgrex.query!(
+        conn,
+        "SELECT t FROM unnest($1::text[]) AS t WHERE to_regclass('public.' || t) IS NOT NULL ORDER BY t",
+        [@later_tables]
+      )
+
+    tables = @routing_tables ++ Enum.map(later, &hd/1)
+
     if present? do
-      Map.new(@routing_tables, fn table ->
+      Map.new(tables, fn table ->
         Postgrex.query!(
           conn,
           ~s|DECLARE routing_digest NO SCROLL CURSOR FOR SELECT md5(to_jsonb(r)::text) FROM "#{table}" AS r ORDER BY r.id|,
@@ -939,7 +969,7 @@ defmodule DevilsDictionary.Routing.Recovery do
         {:error,
          "#{action}: #{path} is not the dump its routing digest was taken with (size or SHA-256 differ)"}
 
-      (missing = missing_tables(path)) != [] ->
+      (missing = missing_tables(path, Map.keys(state.digest))) != [] ->
         {:error, "#{action}: #{path} does not contain #{Enum.join(missing, ", ")}"}
 
       (mismatch = source_mismatch(config, path)) != nil ->
@@ -978,8 +1008,10 @@ defmodule DevilsDictionary.Routing.Recovery do
     end
   end
 
-  defp missing_tables(path),
-    do: @routing_tables |> MapSet.new() |> MapSet.difference(Snapshot.tables(path)) |> Enum.sort()
+  # Every table the database's digest covers: the six, and the later ones
+  # where the database has them.
+  defp missing_tables(path, tables),
+    do: tables |> MapSet.new() |> MapSet.difference(Snapshot.tables(path)) |> Enum.sort()
 
   defp refusal(database, action, state) do
     rows = Enum.map_join(state.counts, ", ", fn {table, n} -> "#{table} #{n}" end)

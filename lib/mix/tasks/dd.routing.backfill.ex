@@ -79,24 +79,33 @@ defmodule Mix.Tasks.Dd.Routing.Backfill do
         {:error, message} -> Mix.raise(message)
       end
 
-    if plan.rule do
-      decisions = Backfill.decisions(plan)
-      report(plan, decisions)
+    decided =
+      if plan.rule do
+        decisions = Backfill.decisions(plan)
+        report(plan, decisions)
 
-      if path = opts[:decisions] do
-        File.write!(path, Jason.encode_to_iodata!(decisions_file(plan, decisions), pretty: true))
-        Mix.shell().info("decisions #{path}")
+        if path = opts[:decisions] do
+          File.write!(
+            path,
+            Jason.encode_to_iodata!(decisions_file(plan, decisions), pretty: true)
+          )
+
+          Mix.shell().info("decisions #{path}")
+        end
+
+        decisions
       end
-    end
 
-    unless opts[:dry_run], do: run(plan, opts)
+    unless opts[:dry_run], do: run(plan, opts, decided)
   end
 
-  defp run(plan, opts) do
+  # The run executes the decisions it printed, when the rule decided.
+  defp run(plan, opts, decided) do
     started = System.monotonic_time(:millisecond)
+    run_opts = [batch_size: opts[:batch] || 25] ++ if(decided, do: [decided: decided], else: [])
 
     summary =
-      case Backfill.run(plan, importer!().id, batch_size: opts[:batch] || 25) do
+      case Backfill.run(plan, importer!().id, run_opts) do
         {:ok, summary} -> summary
         {:error, message} -> Mix.raise(message)
       end

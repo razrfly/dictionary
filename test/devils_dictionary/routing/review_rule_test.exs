@@ -19,7 +19,7 @@ defmodule DevilsDictionary.Routing.ReviewRuleTest do
   use DevilsDictionary.DataCase, async: true
 
   alias DevilsDictionary.AccountsFixtures
-  alias DevilsDictionary.Routing.ReviewRule
+  alias DevilsDictionary.Routing.{ReviewRule, ReviewRuleSignature}
 
   setup do
     dir = Path.join(System.tmp_dir!(), "review-rule-#{System.unique_integer([:positive])}")
@@ -164,5 +164,118 @@ defmodule DevilsDictionary.Routing.ReviewRuleTest do
     assert {:error, _} = ReviewRule.read(Path.join(ctx.dir, "missing.json"))
     File.write!(Path.join(ctx.dir, "not-json.json"), "{")
     assert {:error, _} = ReviewRule.read(Path.join(ctx.dir, "not-json.json"))
+
+    # A key given twice would digest as its last value while a reader may
+    # see the first.
+    twice = Path.join(ctx.dir, "twice.json")
+    File.write!(twice, ~s({"format": "x", "format": "dd.review-rule/1", "clauses": []}))
+    assert {:error, message} = ReviewRule.read(twice)
+    assert message =~ ~s(the key "format" is given twice)
+
+    nested = Path.join(ctx.dir, "nested.json")
+
+    File.write!(
+      nested,
+      String.replace(
+        Jason.encode!(doc, pretty: true),
+        ~s("id": "standing_decision"),
+        ~s("id": "standing_decision", "id": "standing_decision")
+      )
+    )
+
+    assert {:error, message} = ReviewRule.read(nested)
+    assert message =~ ~s(the key "id" is given twice under clauses)
+
+    # A clause that is not an object is refused, not crashed on.
+    strings = write!(ctx, Map.put(doc, "clauses", ["standing_decision" | rest]), "strings.json")
+    assert {:error, message} = ReviewRule.read(strings)
+    assert message =~ "clauses is a list of objects"
+  end
+
+  test "the file names the implementation of decide/2 its clauses are signed for", ctx do
+    doc = Map.put(committed(), "signature", nil)
+    assert doc["implementation"] == ReviewRule.implementation()
+
+    for {name, bad} <- [
+          {"next", Map.put(doc, "implementation", ReviewRule.implementation() + 1)},
+          {"text", Map.put(doc, "implementation", "1")},
+          {"none", Map.delete(doc, "implementation")}
+        ] do
+      assert {:error, message} = ReviewRule.read(write!(ctx, bad, "#{name}.json")), name
+      assert message =~ "implementation", name
+    end
+
+    # The implementation is content: changing it changes the digest.
+    refute ReviewRule.digest(Map.put(doc, "implementation", 99)) == ReviewRule.digest(doc)
+  end
+
+  test "a signing is recorded on the installation, and a signature in the file alone does not load",
+       ctx do
+    path = unsigned!(ctx)
+    {:ok, rule} = ReviewRule.sign(path, ctx.reviewer.email, ctx.password)
+
+    # The row: the digest, the signer, the time the file says.
+    assert %ReviewRuleSignature{user_id: user_id, signed_at: signed_at, method: method} =
+             Repo.get_by(ReviewRuleSignature, rule_sha256: rule.sha256)
+
+    assert user_id == ctx.reviewer.id
+    assert DateTime.to_iso8601(signed_at) == rule.signature["signed_at"]
+    assert method =~ "review_rule_signatures"
+
+    # The same content, signed by hand into another file: the file says
+    # the reviewer signed it, and the installation says no such signing.
+    forged_doc = Map.put(committed(), "name", "Standing review rule, forged")
+
+    forged =
+      write!(
+        ctx,
+        Map.put(forged_doc, "signature", %{
+          "signer" => ctx.reviewer.email,
+          "user_id" => ctx.reviewer.id,
+          "rule_sha256" => ReviewRule.digest(forged_doc),
+          "signed_at" => "2026-10-09T12:00:00Z",
+          "method" => "typed by hand",
+          "attestation" => "not the owner"
+        }),
+        "forged.json"
+      )
+
+    assert {:error, message} = ReviewRule.load(forged)
+    assert message =~ "no signing of"
+    assert message =~ "a signature written into the file is not a signing"
+
+    # The signed file with its time altered: the row does not match.
+    later =
+      write!(
+        ctx,
+        put_in(rule.doc, ["signature", "signed_at"], "2030-01-01T00:00:00Z"),
+        "later.json"
+      )
+
+    assert {:error, message} = ReviewRule.load(later)
+    assert message =~ "this installation recorded #{ctx.reviewer.email} signing"
+
+    # The same content cannot be signed twice on one installation, even
+    # into another file.
+    again = unsigned!(ctx)
+    assert {:error, message} = ReviewRule.sign(again, ctx.reviewer.email, ctx.password)
+    assert message =~ "already signed on this installation"
+
+    # The row is permanent, and only a reviewer's.
+    assert_raise Postgrex.Error, ~r/permanent/, fn ->
+      Repo.query!("DELETE FROM review_rule_signatures WHERE rule_sha256 = $1", [rule.sha256])
+    end
+
+    plain = AccountsFixtures.user_fixture()
+
+    assert_raise Postgrex.Error, ~r/needs a reviewer account/, fn ->
+      Repo.insert!(%ReviewRuleSignature{
+        rule_sha256: String.duplicate("f", 64),
+        user_id: plain.id,
+        signed_at: DateTime.utc_now() |> DateTime.truncate(:second),
+        method: "test",
+        attestation: "test"
+      })
+    end
   end
 end

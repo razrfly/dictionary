@@ -1,13 +1,14 @@
 {
   "format": "dd.review-rule/1",
+  "implementation": 1,
   "name": "Standing review rule",
   "issue": "https://github.com/razrfly/dictionary/issues/237",
-  "statement": "No human decides a record, ever. This rule is the owner's standing decision for every record of a routing population and every page of a launch manifest that it decides: signed once, it stands in place of a reviewer's row-by-row review, and its signature is the editorial approval ADR 0004 §7 asks for. It never chooses a family, never qualifies a collision by import order, and never moves an address. What it cannot decide it defers; a deferred record stays visible, blocks nothing, and a human may still decide it individually.",
+  "statement": "No human decides a record, ever. This rule is the owner's standing decision for every record of a routing population and every page of a launch manifest that it decides: signed once, it stands in place of a reviewer's row-by-row review, and its signature is the editorial approval ADR 0004 §7 asks for. It never chooses a family, never qualifies a collision by import order, and never moves an address. What it cannot decide it defers; a deferred record stays visible, blocks no publication, and a human may still decide it individually.",
   "clauses": [
     {
       "id": "standing_decision",
       "action": "keep",
-      "text": "A decision a human reviewer has already made stands. An address already allocated to a record's page stays its address; a reviewer's override keeps its family; a record a reviewer deferred stays deferred until a human decides it. The rule decides only what no human has decided."
+      "text": "A decision a human reviewer has already made stands. An address already allocated to a record's page stays its address; a reviewer's override keeps its family; a record a reviewer deferred stays deferred until a human decides it. A page a human retired, merged or split, and an address a human retired (a tombstone), are a human's decisions too: the record is deferred, and its collision group with it. The rule decides only what no human has decided."
     },
     {
       "id": "excluded_source_page",
@@ -32,17 +33,17 @@
     {
       "id": "uncontested_mapping",
       "action": "confirm",
-      "text": "A record whose current decision is mapped is confirmed in that family at its candidate path when the path is the policy's proposal for its label, no collision group shares it, no other record proposes it, and no other page holds it."
+      "text": "A record whose current decision is mapped is confirmed in that family at its candidate path when the path is the policy's proposal for its label, the label is readable (nothing in it that the address would have to spell out as a word), no collision group shares the path, no other record proposes it, and no other page holds it."
     },
     {
       "id": "qualified_collision",
       "action": "confirm",
-      "text": "A collision group is decided together. When every member no human has decided is mapped, and the evidence gives each one readable qualifier under the policy's proposal rules (year and form for works, the place for places, occupation and dates for people, the description's first and last words otherwise), and each qualified path is the population's own proposal for it, distinct, and held by no other page, every such member is confirmed at its qualified path."
+      "text": "A collision group is decided together. When no member is a human's deferral or is held for review, every member no human has decided is mapped, and the evidence gives each one readable qualifier under the policy's proposal rules (year and form for works, the place for places, occupation and dates for people, the description's first and last words otherwise), and each qualified path is the population's own proposal for it, readable, distinct, and held by no other page, every such member is confirmed at its qualified path."
     },
     {
       "id": "unqualified_collision",
       "action": "defer",
-      "text": "Otherwise the whole group is deferred: a group with any member the rule cannot qualify is deferred whole, never qualified by import order. So is a mapped record whose path is taken, or for which the policy proposes none."
+      "text": "Otherwise the whole group is deferred: a group with any member the rule cannot qualify, or that a human deferred, or that is held for review, is deferred whole, never qualified by import order; two groups whose qualifiers meet at one path are both deferred whole. So is a mapped record whose path is taken, is a collision group's shared path, is not readable, or for which the policy proposes none."
     },
     {
       "id": "publish_confirmed",
