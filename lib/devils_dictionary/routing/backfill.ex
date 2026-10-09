@@ -59,6 +59,23 @@ defmodule DevilsDictionary.Routing.Backfill do
   other race into a refusal): the batch rolls back, the run stops, and
   running it again resumes it.
 
+  ## Under the standing review rule (#237)
+
+  `load/4` with `rule:` takes the owner's signed standing review rule
+  (`Routing.ReviewRule`) in place of a review file: the rule's digest is the
+  fourth input of the run key, and its signer is the reviewer. Before the
+  first batch, `decisions/1` decides every record at once, reading and
+  writing nothing it does not need — the evidence check, the decision
+  `record/1` would leave current (`Classifications.preview/1`), the page and
+  address each record holds, and the latest review a human made — so a
+  collision group is decided together and import order decides nothing.
+  Each record is then processed as a review would be: a confirmation writes
+  the signer's override, recording the rule's digest in its `rule_ids`,
+  then the page and the address; an address a human or the rule already
+  allocated is kept and nothing is written; a deferral writes nothing.
+  Every checkpoint row's `review` names the rule's digest and the clause
+  that decided it. A run is decided by reviewers or by the rule, never both.
+
   Nothing here publishes: pages stay `draft`, and candidate status grants no
   publication approval.
   """
@@ -80,6 +97,7 @@ defmodule DevilsDictionary.Routing.Backfill do
     Pages,
     Policy,
     PublicPath,
+    ReviewRule,
     RouteChange
   }
 
@@ -103,24 +121,33 @@ defmodule DevilsDictionary.Routing.Backfill do
 
   A review file marked `"rehearsal": true` — rule-made reviews for exercising
   allocation on an isolated copy — is refused unless `allow_rehearsal: true`.
+  A signed standing review rule is not a rehearsal: `rule: path` loads it
+  (`Routing.ReviewRule.load/1`) in place of a review file, and refuses one
+  that is unsigned, changed since it was signed, or signed by an account
+  without the reviewer role.
   """
   def load(snapshot_path, population_path, reviews_path \\ nil, opts \\ []) do
-    with {:ok, snapshot} <- AuditSnapshot.read(snapshot_path),
+    rule_path = Keyword.get(opts, :rule)
+
+    with :ok <- one_decider(reviews_path, rule_path),
+         {:ok, snapshot} <- AuditSnapshot.read(snapshot_path),
          {:ok, population} <- population(population_path),
          policy_sha256 = AuditSnapshot.policy_digest(),
          :ok <- bound(population, snapshot, policy_sha256),
          {:ok, reviews, reviews_sha256} <-
-           reviews(reviews_path, population, Keyword.get(opts, :allow_rehearsal, false)) do
+           reviews(reviews_path, population, Keyword.get(opts, :allow_rehearsal, false)),
+         {:ok, rule} <- rule(rule_path) do
+      decided_by =
+        cond do
+          rule -> "rule:" <> rule.sha256
+          reviews_sha256 -> reviews_sha256
+          true -> "none"
+        end
+
       key =
         AuditSnapshot.digest(
           Enum.join(
-            [
-              @version,
-              snapshot.sha256,
-              policy_sha256,
-              population.sha256,
-              reviews_sha256 || "none"
-            ],
+            [@version, snapshot.sha256, policy_sha256, population.sha256, decided_by],
             "\n"
           )
         )
@@ -132,15 +159,26 @@ defmodule DevilsDictionary.Routing.Backfill do
          policy_sha256: policy_sha256,
          policy: Policy.load(),
          population_sha256: population.sha256,
-         reviews_sha256: reviews_sha256,
+         # A run the rule decides records the rule's digest here.
+         reviews_sha256: if(rule, do: rule.sha256, else: reviews_sha256),
          records: Enum.sort_by(population.records, & &1["object_id"]),
          contested: population.contested,
+         groups: population.groups,
          entities: Map.new(snapshot.entities, &{&1["object_id"], &1}),
          graph: snapshot.graph,
-         reviews: reviews
+         reviews: reviews,
+         rule: rule
        }}
     end
   end
+
+  defp one_decider(reviews, rule) when is_binary(reviews) and is_binary(rule),
+    do: {:error, "a run is decided by a review file or by the standing review rule, not both"}
+
+  defp one_decider(_reviews, _rule), do: :ok
+
+  defp rule(nil), do: {:ok, nil}
+  defp rule(path), do: ReviewRule.load(path)
 
   defp population(path) do
     with {:ok, bytes} <- File.read(path),
@@ -153,6 +191,7 @@ defmodule DevilsDictionary.Routing.Backfill do
          # Every candidate path shared by a collision group the population
          # touches: never an uncontested address.
          contested: file |> Map.get("groups", %{}) |> Map.keys() |> MapSet.new(),
+         groups: Map.get(file, "groups", %{}),
          sha256: AuditSnapshot.digest(bytes)
        }}
     else
@@ -359,8 +398,9 @@ defmodule DevilsDictionary.Routing.Backfill do
   anything is written (an unknown reviewer, say).
   """
   def run(plan, actor_id, opts \\ []) do
-    with {:ok, users} <- reviewers(plan.reviews) do
+    with {:ok, users} <- deciders(plan) do
       reviewers = Map.new(users, fn {email, user} -> {email, user_actor!(user)} end)
+      plan = if plan[:rule], do: Map.put(plan, :decided, decisions(plan)), else: plan
       run = open!(plan, actor_id)
       done = done(run.id)
       crash_after = Keyword.get(opts, :crash_after)
@@ -402,6 +442,20 @@ defmodule DevilsDictionary.Routing.Backfill do
       processed + 1
     end)
   end
+
+  # The rule's signer, checked again as `load/4` checked it; or every
+  # reviewer a review file names.
+  defp deciders(%{rule: %{signer: signer}}) do
+    case Repo.get(User, signer.id) do
+      %User{reviewer: true, email: email} = user when email == signer.email ->
+        {:ok, %{email => user}}
+
+      _ ->
+        {:error, "the rule's signer #{signer.email} no longer holds the reviewer role"}
+    end
+  end
+
+  defp deciders(plan), do: reviewers(plan.reviews)
 
   # Every reviewer named is an account with the reviewer role — all of them
   # checked before anything is written.
@@ -511,6 +565,15 @@ defmodule DevilsDictionary.Routing.Backfill do
   # /works; every other entity a subject page (Stage 1, decision 1).
   defp role(%{page_role: "edition"}), do: :edition
   defp role(_result), do: :subject
+
+  defp act(%{plan: %{rule: %{} = rule}} = ctx, _review, reviewers) do
+    by_rule(
+      ctx,
+      Map.fetch!(ctx.plan.decided, ctx.record["object_id"]),
+      rule,
+      Map.fetch!(reviewers, rule.signer.email)
+    )
+  end
 
   defp act(ctx, review, reviewers) do
     kind = population_kind(ctx.record["disposition"])
@@ -746,7 +809,8 @@ defmodule DevilsDictionary.Routing.Backfill do
       status: :mapped,
       family: String.to_existing_atom(review.family),
       reason: review.reason,
-      evidence_fingerprint: review.fingerprint
+      evidence_fingerprint: review.fingerprint,
+      rule_sha256: review[:rule_sha256]
     }
 
     case Classifications.override(object_id, attrs, reviewer.id) do
@@ -760,6 +824,207 @@ defmodule DevilsDictionary.Routing.Backfill do
       {:ok, page} -> {:ok, page}
       {:error, reason} -> {:refused, "page: #{inspect(reason)}"}
     end
+  end
+
+  # ── under the standing review rule ──────────────────────────────────────
+
+  # What the rule decided for this record, done as a review would do it.
+  defp by_rule(ctx, decision, rule, signer) do
+    entry = rule_entry(rule, decision)
+
+    case decision do
+      %{action: :not_addressed} ->
+        %{
+          disposition: "not_addressed",
+          reason: ctx.record["disposition"],
+          decision_id: ctx.decision.id,
+          review: entry
+        }
+
+      %{action: :confirm, standing: true} ->
+        keep(ctx, decision, entry)
+
+      %{action: :confirm} ->
+        review = %{
+          object_id: ctx.record["object_id"],
+          action: :confirm,
+          family: decision.family,
+          path: decision.path,
+          fingerprint: decision.fingerprint,
+          reviewer: rule.signer.email,
+          reason: "standing review rule #{rule.sha256} (#{decision.clause}): #{decision.reason}",
+          entry: entry,
+          rule_sha256: rule.sha256
+        }
+
+        confirm(ctx, review, signer)
+
+      %{action: action} ->
+        # A deferral; or evidence the rule saw move that has since settled,
+        # which the rule did not decide on and so defers.
+        why =
+          if action == :stale,
+            do: "the evidence moved while the rule decided (#{decision.reason})",
+            else: "#{decision.clause}: #{decision.reason}"
+
+        %{
+          disposition: "deferred_by_review",
+          reason: "standing review rule: " <> why,
+          decision_id: ctx.decision.id,
+          proposed_path: ctx.proposed,
+          review: entry
+        }
+    end
+  end
+
+  # An address a human or the rule already allocated: kept, nothing written.
+  defp keep(ctx, decision, entry) do
+    page = existing_page(ctx)
+    canonical = page && page.canonical_path_id && Repo.get(PublicPath, page.canonical_path_id)
+
+    if (canonical && canonical.path == String.normalize(decision.path, :nfc)) and
+         ctx.decision.status == :mapped do
+      %{
+        disposition: "allocated",
+        decision_id: ctx.decision.id,
+        page_id: page.id,
+        path_id: canonical.id,
+        proposed_path: canonical.path,
+        review: entry
+      }
+    else
+      ctx
+      |> refused(
+        "the address #{decision.path} the rule kept is no longer the page's",
+        decision.path,
+        entry
+      )
+      |> Map.put(:page_id, page && page.id)
+    end
+  end
+
+  defp existing_page(ctx),
+    do: Repo.get_by(Page, target_object_id: ctx.record["object_id"], role: ctx.role, locale: "en")
+
+  defp rule_entry(rule, decision) do
+    %{
+      "rule_sha256" => rule.sha256,
+      "signer" => rule.signer.email,
+      "action" => Atom.to_string(decision.action),
+      "clause" => decision.clause,
+      "family" => decision[:family],
+      "path" => decision[:path],
+      "evidence_fingerprint" => decision[:fingerprint],
+      "reason" => decision.reason
+    }
+  end
+
+  @doc """
+  What the standing review rule decides for every record of a plan loaded
+  with `rule:`, before anything is written: `%{object_id => decision}`, as
+  `Routing.ReviewRule.decide/2` returns it. Reads only — the dry run.
+  """
+  def decisions(%{rule: %{}} = plan) do
+    ids = Enum.map(plan.records, & &1["object_id"])
+    inputs = current_inputs(ids)
+    earlier = ReviewRule.earlier_reviews(ids)
+    canonicals = canonicals(ids)
+
+    group_of =
+      for {path, members} <- plan.groups, id <- members, into: %{}, do: {id, path}
+
+    states =
+      Enum.map(plan.records, fn record ->
+        id = record["object_id"]
+
+        state = %{
+          object_id: id,
+          label: record["label"],
+          role: :subject,
+          population: Map.put(record, "group", group_of[id]),
+          entity: Map.get(plan.entities, id),
+          decision: nil,
+          canonical: nil,
+          earlier_review: earlier[id],
+          stale: nil
+        }
+
+        rule_state(plan, state, Map.get(inputs, id), canonicals)
+      end)
+
+    ReviewRule.decide(states, held(states))
+  end
+
+  defp rule_state(_plan, %{entity: nil} = state, _current, _canonicals),
+    do: %{state | stale: "missing_from_export"}
+
+  defp rule_state(_plan, state, nil, _canonicals), do: %{state | stale: "missing_from_database"}
+
+  defp rule_state(plan, state, current, canonicals) do
+    exported = state.entity
+
+    if comparable(current) != comparable(exported) do
+      %{state | stale: "input_changed"}
+    else
+      result = Policy.classify(exported, plan.graph, plan.policy)
+      role = role(result)
+
+      with [] <- changed_dependencies(result),
+           {:ok, _outcome, %Decision{} = decision} <- Classifications.preview(result) do
+        %{
+          state
+          | label: exported["label"] || state.label,
+            role: role,
+            decision: %{
+              status: Atom.to_string(decision.status),
+              family: decision.family && Atom.to_string(decision.family),
+              origin: Atom.to_string(decision.origin),
+              fingerprint: decision.evidence_fingerprint,
+              reasons: decision.reasons,
+              rule_sha256: Classifications.rule_sha256(decision)
+            },
+            canonical: Map.get(canonicals, {state.object_id, role})
+        }
+      else
+        changed when is_list(changed) ->
+          %{state | stale: "evidence_changed: not current: " <> Enum.join(changed, ", ")}
+
+        {:error, reason} ->
+          %{state | stale: "classification_refused: #{inspect(reason)}"}
+      end
+    end
+  end
+
+  # Each object's page and the canonical address it holds.
+  defp canonicals(ids) do
+    from(p in Page,
+      join: c in PublicPath,
+      on: c.id == p.canonical_path_id,
+      where: p.target_object_id in ^ids and p.locale == "en" and p.role in [:subject, :edition],
+      select: {{p.target_object_id, p.role}, c.path}
+    )
+    |> Repo.all()
+    |> Map.new()
+  end
+
+  # Who holds each address a record might take: the target object of the
+  # page it serves, or the editorial page itself.
+  defp held(states) do
+    paths =
+      states
+      |> Enum.flat_map(&[&1.population["candidate_path"], &1.population["proposed_path"]])
+      |> Enum.filter(&is_binary/1)
+      |> Enum.map(&String.normalize(&1, :nfc))
+      |> Enum.uniq()
+
+    from(pp in PublicPath,
+      join: p in Page,
+      on: p.id == pp.destination_page_id,
+      where: pp.path in ^paths,
+      select: {pp.path, p.target_object_id, p.id}
+    )
+    |> Repo.all()
+    |> Map.new(fn {path, object_id, page_id} -> {path, object_id || "page #{page_id}"} end)
   end
 
   defp deferral(disposition, reason, proposed),
@@ -894,19 +1159,36 @@ defmodule DevilsDictionary.Routing.Backfill do
             page_role: p.role,
             publication_state: p.publication_state,
             address: c.path,
-            proposed_path: i.proposed_path
+            proposed_path: i.proposed_path,
+            review: i.review
           }
       )
 
-    %{
-      "run_key" => run.run_key,
-      "inputs" => %{
+    # A run the standing review rule decided names the rule, and each record
+    # the clause that decided it. Other runs' manifests are as they were.
+    rule_sha256 = Enum.find_value(items, &(&1.review && &1.review["rule_sha256"]))
+
+    items =
+      Enum.map(items, fn item ->
+        clause = item.review && item.review["clause"]
+        item = Map.delete(item, :review)
+
+        if rule_sha256, do: Map.put(item, :rule_clause, clause), else: item
+      end)
+
+    inputs =
+      %{
         "input_sha256" => run.input_sha256,
         "policy_sha256" => run.policy_sha256,
         "policy_version" => run.policy_version,
         "population_sha256" => run.population_sha256,
         "reviews_sha256" => run.reviews_sha256
-      },
+      }
+      |> then(&if(rule_sha256, do: Map.put(&1, "rule_sha256", rule_sha256), else: &1))
+
+    %{
+      "run_key" => run.run_key,
+      "inputs" => inputs,
       "publication_approved" => Enum.count(items, &(&1.publication_state == :published)),
       "dispositions" => Enum.frequencies_by(items, & &1.disposition),
       "records" => items

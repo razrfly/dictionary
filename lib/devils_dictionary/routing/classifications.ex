@@ -92,6 +92,44 @@ defmodule DevilsDictionary.Routing.Classifications do
   defp canonical(value), do: value
 
   @doc """
+  What `record/1` would leave current for this result, without writing:
+  `{:ok, outcome, decision}` as `record/1` returns it, with an unsaved
+  `Decision` where it would write one. The standing review rule decides from
+  this before a run writes anything (#237).
+  """
+  def preview(%{object_id: object_id} = result) when is_id(object_id) do
+    with {:ok, attrs} <- attrs(result),
+         :ok <- storable(attrs) do
+      current = current(object_id)
+
+      case outcome(current, attrs) do
+        {:keep, outcome} ->
+          {:ok, outcome, current}
+
+        {:note, outcome} ->
+          {:ok, outcome, current}
+
+        {:write, outcome, attrs} ->
+          {:ok, outcome, struct(Decision, Map.put(attrs, :is_current, true))}
+      end
+    end
+  end
+
+  def preview(%{object_id: _object_id}), do: {:error, :invalid_object}
+
+  @doc """
+  The standing review rule's digest on an override it wrote (`rule_ids`
+  holds `review_rule:<sha256>`), or nil: an override a reviewer made
+  themselves, or an evaluator's decision.
+  """
+  def rule_sha256(%Decision{rule_ids: rule_ids}) do
+    Enum.find_value(rule_ids || [], fn
+      "review_rule:" <> sha256 -> sha256
+      _ -> nil
+    end)
+  end
+
+  @doc """
   Records an evaluator result for an entity.
 
   Returns `{:ok, outcome, decision}` where `outcome` is `:recorded`,
@@ -278,6 +316,10 @@ defmodule DevilsDictionary.Routing.Classifications do
   reviewer saw. If the evidence has changed since, the override is refused as
   `:stale_evidence`: an override describes exact evidence. Only a `user` actor
   may override; the database refuses any other.
+
+  `:rule_sha256`, when the reviewer's decision is the standing review rule's
+  (#237), is recorded on the override as `review_rule:<sha256>` in its
+  `rule_ids`, so every override a rule writes names the rule.
   """
   #
   # Refusals are returned from the transaction, not rolled back: a nested
@@ -286,7 +328,8 @@ defmodule DevilsDictionary.Routing.Classifications do
     with :ok <- object(object_id),
          :ok <- human(reviewer_actor_id),
          {:ok, status, family} <- verdict(attrs),
-         {:ok, reason} <- present(attrs[:reason]) do
+         {:ok, reason} <- present(attrs[:reason]),
+         {:ok, rule_ids, reasons} <- under_rule(attrs[:rule_sha256]) do
       seen = attrs[:evidence_fingerprint]
 
       Repo.transaction(fn ->
@@ -303,8 +346,8 @@ defmodule DevilsDictionary.Routing.Classifications do
               status: status,
               family: family,
               candidate_families: current.candidate_families,
-              rule_ids: ["editorial_override"],
-              reasons: ["editorial_override"],
+              rule_ids: rule_ids,
+              reasons: reasons,
               warnings: current.warnings,
               policy_version: current.policy_version,
               evidence_fingerprint: seen,
@@ -323,6 +366,18 @@ defmodule DevilsDictionary.Routing.Classifications do
       end
     end
   end
+
+  defp under_rule(nil), do: {:ok, ["editorial_override"], ["editorial_override"]}
+
+  defp under_rule(sha256) when is_binary(sha256) do
+    if sha256 =~ ~r/\A[0-9a-f]{64}\z/,
+      do:
+        {:ok, ["editorial_override", "review_rule:" <> sha256],
+         ["editorial_override", "standing_review_rule"]},
+      else: {:error, :invalid_rule}
+  end
+
+  defp under_rule(_sha256), do: {:error, :invalid_rule}
 
   defp object(object_id) when is_id(object_id), do: :ok
   defp object(_object_id), do: {:error, :invalid_object}

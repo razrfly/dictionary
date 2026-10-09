@@ -23,6 +23,7 @@ defmodule DevilsDictionaryWeb.ReadingStatus do
   | | malformed | 400 |
   | | neither | 404 (410 or 500 as its overview's outcome says) |
   | `/words/:id/:slug` | no such lexeme, or not an id at all | 404, never a word found by the slug; 400 if the slug is not text |
+  | `/entities/:id/:slug` | no such entity, or not an id at all | 404 (ADR 0004 §6), never a page found by the slug; 400 if the slug is not text |
 
   Live navigation re-runs the same decision in the LiveView, which follows a
   redirect itself; the status only matters to a direct request.
@@ -30,6 +31,7 @@ defmodule DevilsDictionaryWeb.ReadingStatus do
 
   import Plug.Conn
 
+  alias DevilsDictionary.Encyclopedia.EntityPage
   alias DevilsDictionary.Lexicon
   alias DevilsDictionary.Routing.{Address, Input, Resolution, Resolver}
   alias DevilsDictionaryWeb.ReadingMode
@@ -42,6 +44,7 @@ defmodule DevilsDictionaryWeb.ReadingStatus do
     case conn.path_info do
       ["on", _slug] -> on(conn, mode)
       ["words", _id, _slug] -> word(conn)
+      ["entities", _id, _slug] -> entity(conn)
       [family, _slug] -> if family in Address.families(), do: subject(conn, mode), else: conn
       _other -> conn
     end
@@ -85,6 +88,24 @@ defmodule DevilsDictionaryWeb.ReadingStatus do
   defp word(conn) do
     cond do
       Lexicon.by_object_id(conn.path_params["id"]) -> conn
+      Input.text?(conn.path_params["slug"]) -> put_status(conn, 404)
+      true -> put_status(conn, 400)
+    end
+  end
+
+  # An exact identity: the thing page for an entity, a merged identity or a
+  # split one; anything else is 404 (#194's follow-up from #224), or 400 if
+  # its slug is not text. A wrong slug on a real id is the LiveView's
+  # redirect to its own.
+  defp entity(conn) do
+    found? =
+      case Integer.parse(conn.path_params["id"]) do
+        {id, ""} -> EntityPage.exists?(id)
+        _ -> false
+      end
+
+    cond do
+      found? -> conn
       Input.text?(conn.path_params["slug"]) -> put_status(conn, 404)
       true -> put_status(conn, 400)
     end

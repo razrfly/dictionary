@@ -87,12 +87,14 @@ defmodule DevilsDictionary.Encyclopedia.EntityPage do
   # an article: the quotations population (#164 C5).
   @line_kinds ~w(quotation passage)
   @summary_limit 120
+  @max_id 9_223_372_036_854_775_807
 
   @doc """
   Builds the page for an object id, or nil when it is not an entity.
 
-  Nil rather than a raise: `/entities/999/x` is a page that says so, the same
-  way `/on/zzzz` is.
+  Nil rather than a raise: the LiveView says so, and
+  `DevilsDictionaryWeb.ReadingStatus` has already answered the request 404
+  (`exists?/1`), the same way `/on/zzzz` is.
   """
   def build(object_id, opts \\ [])
 
@@ -125,6 +127,25 @@ defmodule DevilsDictionary.Encyclopedia.EntityPage do
   end
 
   def build(_, _opts), do: nil
+
+  @doc """
+  Whether `build/2` finds a page for this object id, without building it:
+  an entity, or a merged identity whose survivor is one, or a split one. An
+  id past `bigint` names nothing (ADR 0004 §6: an unknown exact id is 404,
+  never a page found some other way).
+  """
+  def exists?(object_id) when is_integer(object_id) and object_id > 0 and object_id <= @max_id do
+    case Registry.resolve(object_id) do
+      nil -> false
+      {:cycle, _ids} -> false
+      {:merged, canonical_id} -> entity?(canonical_id)
+      _itself_or_split -> entity?(object_id)
+    end
+  end
+
+  def exists?(_object_id), do: false
+
+  defp entity?(object_id), do: Repo.exists?(from e in Entity, where: e.object_id == ^object_id)
 
   defp assemble(%Entity{} = entity, opts, identity_state, requested_id, outputs) do
     id = entity.object_id

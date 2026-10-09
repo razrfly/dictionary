@@ -378,9 +378,25 @@ defmodule DevilsDictionaryWeb.ConnectedFlowTest do
       assert to == "/entities/#{person.object_id}/ambrose-bierce"
     end
 
-    test "an identity that never existed is a page that says so", ctx do
-      {:ok, _live, html} = live(ctx.conn, ~p"/entities/999999999/nobody")
+    test "an identity that never existed is a 404 that says so", ctx do
+      # ADR 0004 §6: an unknown exact id is 404, never a page found by the
+      # slug (#194's follow-up from #224).
+      html = ctx.conn |> get(~p"/entities/999999999/nobody") |> html_response(404)
       assert html =~ ~s(id="no-such-entity")
+
+      # Past bigint, or not an id at all: still 404, never a crash.
+      assert ctx.conn |> get("/entities/99999999999999999999/nobody") |> html_response(404)
+      assert ctx.conn |> get("/entities/0/nobody") |> html_response(404)
+      assert ctx.conn |> get("/entities/12abc/nobody") |> html_response(404)
+
+      # A slug that is not text is not an address.
+      assert ctx.conn |> get("/entities/999999999/a%00b") |> html_response(400)
+
+      # A real identity under a wrong slug still goes to its own.
+      person = ctx.bierce.person
+
+      assert ctx.conn |> get("/entities/#{person.object_id}/not-his-name") |> redirected_to(302) ==
+               "/entities/#{person.object_id}/ambrose-bierce"
 
       {:ok, _live, html} = live(ctx.conn, ~p"/connections/999999999")
       assert html =~ ~s(id="no-such-connection")

@@ -55,16 +55,53 @@ A batch is one transaction: its writes and its checkpoint rows commit together. 
 - **Bound to the population.** The file names the population's digest. Each review names one record the population addresses, and each record gets at most one.
 - **Paths.** A path is in the confirmed family. No two reviews approve the same path, and no review takes another record's proposed qualifier.
 - **Reviewers.** Each is an account with the reviewer role. All are checked before anything is written.
-- **Refused at load:** a file marked `"rehearsal": true`, which comes from a rule rather than from reviewers, except on a rehearsal copy.
+- **Refused at load:** a file marked `"rehearsal": true`, which comes from a rule rather than from reviewers, except on a rehearsal copy. A signed standing review rule is not a rehearsal ([below](#under-the-standing-review-rule-237)).
 - A duplicate-identity outcome of "the same subject" is a registry merge, which is outside the backfill: `defer` the record until it is merged.
 - **No review may be written for someone.** The file records decisions people made.
 
 ## What it never does
 
 - Publish. Pages stay `draft`, and candidate status grants no publication approval.
-- Allocate without a named reviewer's confirmation, or qualify a collision by import order.
+- Allocate without a named reviewer's confirmation or the owner's signed standing rule, or qualify a collision by import order.
 - Allocate a collection or choice page. It creates subject pages, and edition pages for editions.
 - Touch a record outside the population. The rest of the corpus stays deferred, with the audit's dispositions.
+
+## Under the standing review rule (#237)
+
+The owner's rule of 8 October 2026: **no human decides a record, ever.** `priv/routing/review-rule.json` is the owner's standing decision, signed once by the owner's reviewer account; with it, `--rule` replaces a review file, and nobody reads a row.
+
+```bash
+DD_NO_OBAN=1 mix dd.routing.rule                        # the rule, its digest and its signature, checked
+DD_NO_OBAN=1 mix dd.routing.rule --sign --reviewer EMAIL # the owner's one act: asks for the account's password
+DD_NO_OBAN=1 mix dd.routing.backfill --snapshot EXPORT.jsonl --population candidates.json \
+  --rule priv/routing/review-rule.json --dry-run [--decisions OUT.json]
+DD_NO_OBAN=1 mix dd.routing.backfill --snapshot EXPORT.jsonl --population candidates.json \
+  --rule priv/routing/review-rule.json --manifest MANIFEST.json
+```
+
+**The rule.** Ten clauses, each with its owner-readable text in the file and its implementation in `Routing.ReviewRule`; the code refuses a file whose clauses are not exactly these, in this order:
+
+| Clause | Action |
+|---|---|
+| `standing_decision` | A decision a human made stands: an allocated address stays, an override keeps its family, a reviewer's deferral stays deferred. The rule decides only what no human has. |
+| `excluded_source_page`, `identity_lifecycle_review` | deferred (the population leaves them unaddressed) |
+| `classification_review` | anything whose current decision is not `mapped` is deferred: the rule never chooses a family |
+| `duplicate_identity_review` | deferred: one subject or two is the registry's decision |
+| `uncontested_mapping` | a mapped record is confirmed at its candidate path when that is the policy's proposal for its label, no group shares it, no record proposes it and no page holds it |
+| `qualified_collision` | a collision group is confirmed whole, each undecided member at the qualifier its own evidence gives (`Routing.Qualifier`), when every such path is the population's own proposal, distinct and free |
+| `unqualified_collision` | otherwise the group is deferred whole; so is a mapped record whose path is taken or unproposed |
+| `publish_confirmed` | Stage 5: a page the rule confirmed may be published when it passes the eight gates |
+| `index_lexical` | Stage 5 (D1): lexical pages stay noindex, except the On page of each lexeme a published page names, listed in the launch manifest as a lexical entry |
+
+**Its digest and signature.** The digest is the SHA-256 of the rule's canonical content without its signature. It is the fourth input of the run key (`rule:<sha256>` in place of a review file's digest; `routing_backfill_runs.reviews_sha256` then holds the rule's digest), it is on every override the rule writes (`rule_ids` holds `review_rule:<sha256>`, and the override's reason names it), and every checkpoint row's `review` names it with the clause that decided the record. `mix dd.routing.rule --sign` writes the signature only after checking the account's password and reviewer role; `load` refuses a rule that is unsigned, changed since it was signed, or signed by an account that is not (or no longer) a reviewer. It is an attestation, not cryptography.
+
+**How a run uses it.** Before the first batch, `Backfill.decisions/1` decides every record at once from what the run would see — the evidence check, the decision `Classifications.record/1` would leave current (`Classifications.preview/1`), the address each record's page holds, the latest review a human made — so a group is decided together and import order decides nothing. That is the dry run, and it writes nothing. Each record is then processed as a review would be: a confirmation writes the signer's override (once), the page and the address, atomically as before; a kept address writes nothing; a deferral is `deferred_by_review` with the clause, and gets no page. A run is decided by a review file or by the rule, never both.
+
+**What it reproduces** (`review_rule_reproduction_test.exs`, on #224's own population, the part of its export the evaluation reads, its worksheet and the owner's review file, `test/fixtures/routing/cp4-224/`):
+
+- From the state #224 left, the rule decides exactly the owner's **124 confirmations and 5 deferrals** — family, path and fingerprint — and writes nothing: every confirmation is an address the owner's review already allocated, which `standing_decision` keeps.
+- From the evidence alone, with nobody's decision, it confirms **99** (50 uncontested, 49 in qualified groups) and defers **30**. Every confirmation is one the owner made, in the owner's family; 96 at the owner's path and 3 at the policy's proposal where the owner named a readable path (`project-gutenberg-sharp-972-1911-text`, `leme-ver-dot-1-dot-0-…`, `martins-famous-pastry-shoppe-inc-dot`). It never confirms what the owner deferred. The 25 of the owner's confirmations it defers are exactly the judgments its clauses forbid a rule: the 14 sole-candidate classifications, the 3 blocked collision rows and the 6 members of the two groups they block (`/places/vik`, `/works/crocodile-tears`), and the 2 duplicate identities the owner told apart.
+- `Routing.Qualifier` regenerates all 55 of the population's proposed qualifiers from the export (`qualifier_test.exs`).
 
 ## Checkpoint integrity
 

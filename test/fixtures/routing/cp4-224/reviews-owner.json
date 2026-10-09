@@ -1,0 +1,1163 @@
+{
+ "population_sha256": "c2cbd2ef7703b7a01acbd9e3f63051097779ce75ebed874d83ce408ded553d51",
+ "reviewed_run_key": "7008c6f3ddbf434a1538b724cf043d6de250fa2444ed8e76b274c7e32f4305e5",
+ "reviewed_manifest_sha256": "77fa0849a3018d148def340f6c26f2f4dd8d9077698b0c96bf32aa756ca9392b",
+ "transcribed_from": {
+  "file": "review-decisions-owner-draft.csv",
+  "sha256": "9a65149f6e528428ecf36dbba1df38dea7a713009d50ca3fbb6e2fa44abaa025",
+  "approved": "https://github.com/razrfly/dictionary/issues/224#issuecomment-6063469379"
+ },
+ "reviews": [
+  {
+   "object_id": 1,
+   "action": "confirm",
+   "family": "people",
+   "path": "/people/ambrose-bierce",
+   "evidence_fingerprint": "d8ed6d083afb045f16cf32403e5e7eafc9c4220fa568f95b18ce58bb1d9be2f6",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "proposed"
+  },
+  {
+   "object_id": 3,
+   "action": "confirm",
+   "family": "works",
+   "path": "/works/the-devils-dictionary-gutenberg-972",
+   "evidence_fingerprint": "a11c24cd57b7373182375833b56b68438cddb2cc1185c5f406074a13ba53492f",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "owner path (proposed spelled # as sharp)"
+  },
+  {
+   "object_id": 6,
+   "action": "confirm",
+   "family": "works",
+   "path": "/works/johnsons-dictionary-1755-leme-transcription",
+   "evidence_fingerprint": "a11c24cd57b7373182375833b56b68438cddb2cc1185c5f406074a13ba53492f",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "owner path (proposed spelled . as dot)"
+  },
+  {
+   "object_id": 1829391,
+   "action": "confirm",
+   "family": "nature",
+   "path": "/nature/rissos-dolphin",
+   "evidence_fingerprint": "aff27e1e680564282e8e3bbe26b0e02b5952c62901be7ca455d80cb4532b4c97",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "proposed"
+  },
+  {
+   "object_id": 1830427,
+   "action": "confirm",
+   "family": "nature",
+   "path": "/nature/american-plaice",
+   "evidence_fingerprint": "513b4da21029af32b41d2ce85d9374bfd3b4c4d2740cc55dba5648470b2e0082",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "proposed"
+  },
+  {
+   "object_id": 1831003,
+   "action": "confirm",
+   "family": "nature",
+   "path": "/nature/human",
+   "evidence_fingerprint": "66b70afa51e0693cd37c4543ed8791e6532623ecf294f582f3dcc3e0491f4a08",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "proposed"
+  },
+  {
+   "object_id": 1832144,
+   "action": "confirm",
+   "family": "people",
+   "path": "/people/apar-gupta",
+   "evidence_fingerprint": "25a4268388de533c640f7f28fc63b70268c07fc39db4f0f0904081e4cce69ef2",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "proposed"
+  },
+  {
+   "object_id": 1838436,
+   "action": "confirm",
+   "family": "places",
+   "path": "/places/mount-everest",
+   "evidence_fingerprint": "cbb53506b11556d954f2f4b512a85b3aaf83d667426ea0e31cad5ff655109504",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "proposed"
+  },
+  {
+   "object_id": 1841393,
+   "action": "confirm",
+   "family": "subjects",
+   "path": "/subjects/serpentor",
+   "evidence_fingerprint": "214bf644265205d36add63f5ca97ce54317ea63cb4bd164ff429e58f2f24dc5e",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "proposed"
+  },
+  {
+   "object_id": 1841523,
+   "action": "confirm",
+   "family": "works",
+   "path": "/works/grand-serpent-rising",
+   "evidence_fingerprint": "04822f9c974a9f755ebc9f5e7a28d45903008391aedbe770e886b3892507740b",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "proposed"
+  },
+  {
+   "object_id": 1841806,
+   "action": "confirm",
+   "family": "works",
+   "path": "/works/apple",
+   "evidence_fingerprint": "66c987a7c8b531476fb1b99f960db78ae7fa2fdfa30406210ef5ed1119e7bc4c",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "proposed"
+  },
+  {
+   "object_id": 1842234,
+   "action": "confirm",
+   "family": "concepts",
+   "path": "/concepts/tom",
+   "evidence_fingerprint": "4a74ad77864febc483b659f20f45656a7d4b91537d6cf9a78e3474b9dabb9f02",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "proposed"
+  },
+  {
+   "object_id": 1845018,
+   "action": "confirm",
+   "family": "people",
+   "path": "/people/charles-bombardier",
+   "evidence_fingerprint": "fcb766b96c10f7ba41c0853e4d8198ca29cfe699d4a017afd435bbba647a8ba8",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "proposed"
+  },
+  {
+   "object_id": 1845556,
+   "action": "confirm",
+   "family": "people",
+   "path": "/people/aurelio-voltaire",
+   "evidence_fingerprint": "bb202c47a63cde1e1d32834927b2aa205cd68ef657e39c1b8c48906e1fd05bea",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "proposed"
+  },
+  {
+   "object_id": 1853183,
+   "action": "confirm",
+   "family": "nature",
+   "path": "/nature/yellow-naped-amazon",
+   "evidence_fingerprint": "c2372ef52895204fafdfeec1e82136acb17c18a00d4001b036f2988ec96dc299",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "proposed"
+  },
+  {
+   "object_id": 1854460,
+   "action": "confirm",
+   "family": "nature",
+   "path": "/nature/neafrapus",
+   "evidence_fingerprint": "77696c9b4c2d5d34e14542429db96b0875fcf49976d340da30bd36e6ddf4c72f",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "proposed"
+  },
+  {
+   "object_id": 1857160,
+   "action": "confirm",
+   "family": "nature",
+   "path": "/nature/zeus",
+   "evidence_fingerprint": "b50790a77b6ff70d0f41893a0bb0997563733aae5787e9401c824d689134eeec",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "proposed"
+  },
+  {
+   "object_id": 1860394,
+   "action": "confirm",
+   "family": "nature",
+   "path": "/nature/entosphenus",
+   "evidence_fingerprint": "ce33d334e30f1daa897577da49c574379efddeaac52b69bf34036ebbd176fe2b",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "proposed"
+  },
+  {
+   "object_id": 1860823,
+   "action": "confirm",
+   "family": "nature",
+   "path": "/nature/arca",
+   "evidence_fingerprint": "d79a921a1b6be5615eab85bbb350dfba84f40028cd71a938ae933bb421d37385",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "proposed"
+  },
+  {
+   "object_id": 1863579,
+   "action": "confirm",
+   "family": "subjects",
+   "path": "/subjects/hephaestus",
+   "evidence_fingerprint": "2071a2a7622442e8df2e5c36f77e5c21a7cf17a05918718cffbe419de324c6b2",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "proposed"
+  },
+  {
+   "object_id": 1863885,
+   "action": "confirm",
+   "family": "people",
+   "path": "/people/kaoru-ide",
+   "evidence_fingerprint": "8b0031dbe623c24d1f735233679c2af0620014998180bc346a0ab651c4ad9d3f",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "proposed"
+  },
+  {
+   "object_id": 1863895,
+   "action": "confirm",
+   "family": "subjects",
+   "path": "/subjects/moros",
+   "evidence_fingerprint": "51edf665134e420a87699fa3d85de3f4aa069f09b6a96f3f5d7b5891088d5419",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "proposed"
+  },
+  {
+   "object_id": 1864645,
+   "action": "confirm",
+   "family": "works",
+   "path": "/works/the-mandarins",
+   "evidence_fingerprint": "8a2462fdc3ad1004fa33905c2c1c97c85fe365c0024226c58202ee342c44c691",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "proposed"
+  },
+  {
+   "object_id": 1869705,
+   "action": "confirm",
+   "family": "concepts",
+   "path": "/concepts/draco",
+   "evidence_fingerprint": "abbdb438a41562cea76435f2e77b2425af98cab107c55df1ef79ec66b9ca10c5",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "proposed"
+  },
+  {
+   "object_id": 1870498,
+   "action": "confirm",
+   "family": "places",
+   "path": "/places/sumbar-river",
+   "evidence_fingerprint": "0a0ef7ab655e5fc5a2fb7c7b45d6e463bd7fc457278f82fe8a6b177702a928ed",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "proposed"
+  },
+  {
+   "object_id": 1871085,
+   "action": "confirm",
+   "family": "subjects",
+   "path": "/subjects/ora",
+   "evidence_fingerprint": "3aed039942fdb44bfb0c3450f63ed0042f9ff7bdba161c9f5734994146d38574",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "proposed"
+  },
+  {
+   "object_id": 1871190,
+   "action": "confirm",
+   "family": "subjects",
+   "path": "/subjects/planē",
+   "evidence_fingerprint": "fcdc053106fc1cea4a98d0c40acf2f3696ffd5c101c0d958167fd08608a128e0",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "proposed (non-ASCII kept by policy)"
+  },
+  {
+   "object_id": 1871286,
+   "action": "confirm",
+   "family": "organizations",
+   "path": "/organizations/shan-food-industries",
+   "evidence_fingerprint": "052f53a70407bd5d9b54c9f5f5109de831ce22b6d8359d6ee7110ac0cb885d3a",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "proposed"
+  },
+  {
+   "object_id": 1875719,
+   "action": "confirm",
+   "family": "works",
+   "path": "/works/cat",
+   "evidence_fingerprint": "42053b46446476d6059e3105bd3309ba58a40bd8d60390b5c8b8ac030a9696e0",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "proposed"
+  },
+  {
+   "object_id": 1876594,
+   "action": "confirm",
+   "family": "places",
+   "path": "/places/purity-mountain",
+   "evidence_fingerprint": "94fae375c836339d2d0908eb7d5cb717fd6f6f36c75a77b25ddc34aecdc08d6f",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "proposed"
+  },
+  {
+   "object_id": 1878047,
+   "action": "confirm",
+   "family": "concepts",
+   "path": "/concepts/secure-operations-language",
+   "evidence_fingerprint": "9655f485359b507d4ccce82f54f41014aefb1cddad50d854d22eb0b9ec987ade",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "proposed"
+  },
+  {
+   "object_id": 1878949,
+   "action": "confirm",
+   "family": "events",
+   "path": "/events/apollo-8",
+   "evidence_fingerprint": "9585c9cc1a780012cb713b2c623d7df77713b272927034c556bdadfd1ea94f9d",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "proposed"
+  },
+  {
+   "object_id": 1880893,
+   "action": "confirm",
+   "family": "organizations",
+   "path": "/organizations/but",
+   "evidence_fingerprint": "550058d2ce3c13eb7e5f7e1f3058ee49e9177086037fc01e89a06a2896874962",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "proposed; owner's judgment brand vs business"
+  },
+  {
+   "object_id": 1882172,
+   "action": "confirm",
+   "family": "works",
+   "path": "/works/wicked-for-good",
+   "evidence_fingerprint": "a4509fc4493850cc24a9e4ec80757a0bb01b6c0254234aaba427f80b6ecebd93",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "proposed"
+  },
+  {
+   "object_id": 1884171,
+   "action": "confirm",
+   "family": "places",
+   "path": "/places/maran-burma",
+   "evidence_fingerprint": "01942788bd410563ddbbadb28b654a27b650b8b2bc816ffebe6f88dae6246c62",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "proposed"
+  },
+  {
+   "object_id": 1885191,
+   "action": "confirm",
+   "family": "concepts",
+   "path": "/concepts/elan",
+   "evidence_fingerprint": "a0b1099a9bc12aaffc6ef004ceca4b48c8272a902a46402ee634e5ddfd03a830",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "proposed"
+  },
+  {
+   "object_id": 1886465,
+   "action": "confirm",
+   "family": "organizations",
+   "path": "/organizations/martins-famous-pastry-shoppe",
+   "evidence_fingerprint": "ee108fb455a5179fe294a47fb171da702ef0459c796f9fc84cb7fd90ede7d854",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "owner path (proposed ended -inc-dot)"
+  },
+  {
+   "object_id": 1887070,
+   "action": "confirm",
+   "family": "organizations",
+   "path": "/organizations/human",
+   "evidence_fingerprint": "ad3c65332e3cd662d0e92e3c59d328e77f78f36fbd0dd806157ae322fb98747d",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "proposed"
+  },
+  {
+   "object_id": 1888151,
+   "action": "confirm",
+   "family": "organizations",
+   "path": "/organizations/crain",
+   "evidence_fingerprint": "9b851ce1d3d26077569f80c9719bcc23d67fc4ee232ce9ff5966ff318536fb85",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "proposed"
+  },
+  {
+   "object_id": 1891546,
+   "action": "confirm",
+   "family": "people",
+   "path": "/people/éliane-basse",
+   "evidence_fingerprint": "e5b2948dfb3ef82f5746f03691c5395c368b76360e7310e3f8d19b60e793e143",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "proposed (non-ASCII kept by policy)"
+  },
+  {
+   "object_id": 1892805,
+   "action": "confirm",
+   "family": "works",
+   "path": "/works/yes",
+   "evidence_fingerprint": "709330cb4061554e565fd9530427016d6f9b5cc14fca0db008306fee3ce66f00",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "proposed"
+  },
+  {
+   "object_id": 1894155,
+   "action": "confirm",
+   "family": "organizations",
+   "path": "/organizations/base",
+   "evidence_fingerprint": "27e404a205247bc6ad70518f131887ccb7c76381b7d6d333971f281daf57913a",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "proposed"
+  },
+  {
+   "object_id": 1894438,
+   "action": "confirm",
+   "family": "concepts",
+   "path": "/concepts/lua",
+   "evidence_fingerprint": "c694aeb2b7b5b29a46408442aba628109f6d8e73730f5c777ac2899a026a810e",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "proposed"
+  },
+  {
+   "object_id": 1894934,
+   "action": "confirm",
+   "family": "subjects",
+   "path": "/subjects/sambara",
+   "evidence_fingerprint": "739823e5a54cde4e19e84cb5cd0175deecbd866370a620fb39590a08ed958044",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "proposed"
+  },
+  {
+   "object_id": 1895463,
+   "action": "confirm",
+   "family": "concepts",
+   "path": "/concepts/interlisp",
+   "evidence_fingerprint": "04f705e5a85fec537681ae6e03051bf9917056484f972341638c040b8ba7293f",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "proposed"
+  },
+  {
+   "object_id": 1896394,
+   "action": "confirm",
+   "family": "events",
+   "path": "/events/apollo-15",
+   "evidence_fingerprint": "7697f0c3e3a6b0c8d38d709221af691d168d5077a2d25f6f9d70130fd5488537",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "proposed"
+  },
+  {
+   "object_id": 1897871,
+   "action": "confirm",
+   "family": "events",
+   "path": "/events/1991-sierra-madre-earthquake",
+   "evidence_fingerprint": "0fd17413c2d56419c3354d8163151fa322c864904081b9283358e5af652a0f7c",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "proposed"
+  },
+  {
+   "object_id": 1898725,
+   "action": "confirm",
+   "family": "people",
+   "path": "/people/rick-link",
+   "evidence_fingerprint": "15218ef26bdeb6a8d5b89bb255545ab006ac983737565f2fbaf4ccae3f843147",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "proposed"
+  },
+  {
+   "object_id": 3733865,
+   "action": "confirm",
+   "family": "events",
+   "path": "/events/apollo-11",
+   "evidence_fingerprint": "ad4f86bf94052842e4675e1e18552d26c7d18651d22b89bbe0372436c6a3cbef",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "proposed"
+  },
+  {
+   "object_id": 3734629,
+   "action": "confirm",
+   "family": "works",
+   "path": "/works/the-parsonage-garden-at-nuenen",
+   "evidence_fingerprint": "7e83135c577b5cc4cdcb8a50df169c76a04b0ade7757ad780f0d28e17885fc91",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "proposed"
+  },
+  {
+   "object_id": 1829906,
+   "action": "confirm",
+   "family": "concepts",
+   "path": "/concepts/polish",
+   "evidence_fingerprint": "86c72238d77cbb5715cfaa61633e83f68645838be886984d9e4f032436c21318",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "classification review: sole candidate"
+  },
+  {
+   "object_id": 1830860,
+   "action": "confirm",
+   "family": "nature",
+   "path": "/nature/cat",
+   "evidence_fingerprint": "49ecf44cbcc54256879eb278cc647595ea65dc8bad7fde8576af5acd316a8c9b",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "classification review: sole candidate"
+  },
+  {
+   "object_id": 1831199,
+   "action": "confirm",
+   "family": "nature",
+   "path": "/nature/water",
+   "evidence_fingerprint": "c4b46902f6c54849d67eff95ec4c4913dde9de314282fe317b2a11e85d6e7924",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "classification review: sole candidate"
+  },
+  {
+   "object_id": 1831413,
+   "action": "confirm",
+   "family": "nature",
+   "path": "/nature/mars",
+   "evidence_fingerprint": "21f2dbd22a89e815836d2331528cbdc3c6cc444b16a4b08b5185ea11430a4ba1",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "classification review: sole candidate"
+  },
+  {
+   "object_id": 1852573,
+   "action": "confirm",
+   "family": "nature",
+   "path": "/nature/polish",
+   "evidence_fingerprint": "b366302c25e1f2d0efba785fffeef91b0cb8aa38117855e58e351684710c5ec0",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "classification review: sole candidate"
+  },
+  {
+   "object_id": 1857525,
+   "action": "confirm",
+   "family": "nature",
+   "path": "/nature/felis-catus",
+   "evidence_fingerprint": "19d5bc562121502c8d57592c10df198027f1613e0982e8e8a3a299afdd30065b",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "classification review: sole candidate"
+  },
+  {
+   "object_id": 1863456,
+   "action": "confirm",
+   "family": "subjects",
+   "path": "/subjects/zeus",
+   "evidence_fingerprint": "1779a8b06f5212478d20dea3ac82aa346df5e85250b04229c6d6f76599e0aab6",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "classification review: sole candidate"
+  },
+  {
+   "object_id": 1867856,
+   "action": "confirm",
+   "family": "concepts",
+   "path": "/concepts/love",
+   "evidence_fingerprint": "877ecc811072f61c48f74690a9f2d84e25a2ef09330c401fae5498f27acaba34",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "classification review: sole candidate"
+  },
+  {
+   "object_id": 1873905,
+   "action": "confirm",
+   "family": "places",
+   "path": "/places/united-states",
+   "evidence_fingerprint": "a361d501ea24d7eb51c1a7fdade3802bb1e37f8e9df64612e4f5cb1354caa8c3",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "classification review: sole candidate"
+  },
+  {
+   "object_id": 1876187,
+   "action": "confirm",
+   "family": "events",
+   "path": "/events/1948-ashgabat-earthquake",
+   "evidence_fingerprint": "e1bcea0f4d81472ab8f2a59b7beea3d02bad09ce53d8c6b2b2e4255a037d1bfe",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "classification review: sole candidate"
+  },
+  {
+   "object_id": 1877206,
+   "action": "confirm",
+   "family": "nature",
+   "path": "/nature/laris",
+   "evidence_fingerprint": "14b4f187170ecbbefea199e8f8bb29f249cd7880abcdb6bba72048ade952d361",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "classification review: sole candidate"
+  },
+  {
+   "object_id": 1879477,
+   "action": "confirm",
+   "family": "nature",
+   "path": "/nature/mercury",
+   "evidence_fingerprint": "9a7d767a139089048a5ddbf36a7452590e2d8b04e1d696e395f64febd9f9430b",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "classification review: sole candidate"
+  },
+  {
+   "object_id": 1968096,
+   "action": "confirm",
+   "family": "places",
+   "path": "/places/warsaw",
+   "evidence_fingerprint": "1691f4fa65a5487b2ccd9f552150a05c7f0e4911024cb2e7ff36a2ec3e4555de",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "classification review: sole candidate"
+  },
+  {
+   "object_id": 3733859,
+   "action": "confirm",
+   "family": "organizations",
+   "path": "/organizations/wikimedia-foundation",
+   "evidence_fingerprint": "97d5c5b1903e24899dd48b5476b4666a025811706445fb11df3b8522598cb33f",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "classification review: sole candidate"
+  },
+  {
+   "object_id": 1865800,
+   "action": "confirm",
+   "family": "organizations",
+   "path": "/organizations/the-creatures-australian-band",
+   "evidence_fingerprint": "584e1a3fb209bb1061de277eb3b89b974a0a49dc2175d1e6497e9e9b42c0ab62",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "collision: proposed qualifier"
+  },
+  {
+   "object_id": 1866188,
+   "action": "confirm",
+   "family": "organizations",
+   "path": "/organizations/the-creatures-british-group",
+   "evidence_fingerprint": "f8394423c3e17b77c2eb630db482132461db8ed82072317fa678a9a1a25389ab",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "collision: proposed qualifier"
+  },
+  {
+   "object_id": 1885537,
+   "action": "confirm",
+   "family": "people",
+   "path": "/people/billy-lee-irish-jockey",
+   "evidence_fingerprint": "cda74be07ae392814e4411f82682ba70382424b2c3cdd77b3b42293c30c7dbf8",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "collision: proposed qualifier"
+  },
+  {
+   "object_id": 1886848,
+   "action": "confirm",
+   "family": "people",
+   "path": "/people/billy-lee-footballer-manager",
+   "evidence_fingerprint": "2ad32c7036878166c2ee2c541e9f57f9ab11ae1b66934848c7daa8fbbbcf716d",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "collision: proposed qualifier"
+  },
+  {
+   "object_id": 1887309,
+   "action": "confirm",
+   "family": "people",
+   "path": "/people/billy-lee-actor",
+   "evidence_fingerprint": "6a0138313bd9a57a07a59b6d755d510ddc6887d8472c45253f16960ec7f5855a",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "collision: proposed qualifier"
+  },
+  {
+   "object_id": 1893398,
+   "action": "confirm",
+   "family": "people",
+   "path": "/people/billy-lee-baseball-player",
+   "evidence_fingerprint": "974206cc6958170456ae4075109664005d0948f255e71bf3e1e8db4c199b0dfb",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "collision: proposed qualifier"
+  },
+  {
+   "object_id": 1897961,
+   "action": "confirm",
+   "family": "people",
+   "path": "/people/billy-lee-english-footballer",
+   "evidence_fingerprint": "e854fd92d11319b97a737ff7af88d52971ba27b03194dd2b772fda573e4690fd",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "collision: proposed qualifier"
+  },
+  {
+   "object_id": 1846558,
+   "action": "confirm",
+   "family": "places",
+   "path": "/places/daman-afghanistan",
+   "evidence_fingerprint": "4288f0e769f52452259295b1b266e9eb39a1b706d0e39dccee612f9e8b332197",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "collision: proposed qualifier"
+  },
+  {
+   "object_id": 1846577,
+   "action": "confirm",
+   "family": "places",
+   "path": "/places/daman-india",
+   "evidence_fingerprint": "9fadf72d8cd0d2f3d46f97352cd096e6d3119ae7e4d8cbf0158adf8b8e6b043d",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "collision: proposed qualifier"
+  },
+  {
+   "object_id": 1875911,
+   "action": "confirm",
+   "family": "places",
+   "path": "/places/mount-tom-massachusetts",
+   "evidence_fingerprint": "8e4d0b0daffaee8e5e4bbea9217da53233028a0ccee67063faeeb14a562f8302",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "collision: proposed qualifier"
+  },
+  {
+   "object_id": 1877353,
+   "action": "confirm",
+   "family": "places",
+   "path": "/places/mount-tom-woodstock",
+   "evidence_fingerprint": "693e4bd6e6ba99965793bbb42583192c36fa929a16ec17ac8c8aeaf1b2d54bc3",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "collision: proposed qualifier"
+  },
+  {
+   "object_id": 1878577,
+   "action": "confirm",
+   "family": "places",
+   "path": "/places/mount-tom-new-hampshire",
+   "evidence_fingerprint": "587e318e4cc8a10032e4b0866021384925f3f08f31b31e659adfd153edd2fe4c",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "collision: proposed qualifier"
+  },
+  {
+   "object_id": 1889047,
+   "action": "confirm",
+   "family": "places",
+   "path": "/places/mount-tom-washington",
+   "evidence_fingerprint": "69ee65250d53393cf781f3cfa4eb6723f573ab5e21a75b05fdb0deddc6019ae1",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "collision: proposed qualifier"
+  },
+  {
+   "object_id": 1892917,
+   "action": "confirm",
+   "family": "places",
+   "path": "/places/mount-tom-herkimer-county",
+   "evidence_fingerprint": "509d60b12639815f5d9c4acfaefa215f7b992d64027986e5f01de8896af551f1",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "collision: proposed qualifier"
+  },
+  {
+   "object_id": 1894782,
+   "action": "confirm",
+   "family": "places",
+   "path": "/places/mount-tom-sierra-nevada-of-california",
+   "evidence_fingerprint": "0fe23c068667b7746190d06d6c8b311d80615a00794f38b630651a2d5578bbcf",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "collision: proposed qualifier"
+  },
+  {
+   "object_id": 1884890,
+   "action": "confirm",
+   "family": "places",
+   "path": "/places/vik-vestnes",
+   "evidence_fingerprint": "0dcf73e4b086dc9af9aaa7f2fa338a77da20961740e1a0c0e997f59b25c7a11a",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "collision: proposed qualifier"
+  },
+  {
+   "object_id": 1893365,
+   "action": "confirm",
+   "family": "places",
+   "path": "/places/vik-sortland",
+   "evidence_fingerprint": "f0171c5a089f265c09d90fd289002435f9de29a790903e4b0faced094bf49df9",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "collision: proposed qualifier"
+  },
+  {
+   "object_id": 1893414,
+   "action": "confirm",
+   "family": "places",
+   "path": "/places/vik-sunnfjord",
+   "evidence_fingerprint": "97233c2b5987b0fdc8733e0d024debc4efc581c26dc83cc81f9edf5c76dc45d4",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "collision: proposed qualifier"
+  },
+  {
+   "object_id": 1899000,
+   "action": "confirm",
+   "family": "places",
+   "path": "/places/vik-flatanger-municipality",
+   "evidence_fingerprint": "15335e102cb0de82d28fffb6b2bf331884df1a0d2762e37b2a4a2d9852c58fd1",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "collision: proposed qualifier"
+  },
+  {
+   "object_id": 1899664,
+   "action": "confirm",
+   "family": "places",
+   "path": "/places/vik-buskerud",
+   "evidence_fingerprint": "eb0463516c131c785da7077718d1fe61ca4e25ff43fbec72a1b1a4cf674d2b51",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "collision: proposed qualifier"
+  },
+  {
+   "object_id": 1885953,
+   "action": "confirm",
+   "family": "places",
+   "path": "/places/vik-sømna",
+   "evidence_fingerprint": "603348db29b4acfcd01e178cd25a814b8c558a8cce4a1aa0af9f98be8b78bdf9",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "collision blocked: owner family and path"
+  },
+  {
+   "object_id": 1893450,
+   "action": "confirm",
+   "family": "places",
+   "path": "/places/vik-grimstad",
+   "evidence_fingerprint": "99032c06961b0d8a6958312ce3f10d2d816e153978ae6ed9115dbfdb5f996616",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "collision blocked: owner family and path"
+  },
+  {
+   "object_id": 1874255,
+   "action": "confirm",
+   "family": "works",
+   "path": "/works/butterfly-2015-film",
+   "evidence_fingerprint": "91036e80c792bc082d0572074bd54d62d86ff19b2a0558a5694b702b27fb4c75",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "collision: proposed qualifier"
+  },
+  {
+   "object_id": 1874350,
+   "action": "confirm",
+   "family": "works",
+   "path": "/works/butterfly-1979-album",
+   "evidence_fingerprint": "f0def8234f15bcb8c2b22f0e82ad178af42face21dc8faa36e6a2a9333928601",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "collision: proposed qualifier"
+  },
+  {
+   "object_id": 1874536,
+   "action": "confirm",
+   "family": "works",
+   "path": "/works/butterfly-2009-album",
+   "evidence_fingerprint": "9586c5a7d771801f31dd2a55aa1f068b92196d7d125a6364bc581abbb5d82593",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "collision: proposed qualifier"
+  },
+  {
+   "object_id": 1880172,
+   "action": "confirm",
+   "family": "works",
+   "path": "/works/butterfly-2000-film",
+   "evidence_fingerprint": "d86112aee8aabb1540d7a58515064ee7cabb707319a3d4b35a58ce616bfe7094",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "collision: proposed qualifier"
+  },
+  {
+   "object_id": 1885293,
+   "action": "confirm",
+   "family": "works",
+   "path": "/works/butterfly-1997-album",
+   "evidence_fingerprint": "7d966167f90ff1453afa82524568de2537c37cecba91ee2865e095f728e992a2",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "collision: proposed qualifier"
+  },
+  {
+   "object_id": 1885315,
+   "action": "confirm",
+   "family": "works",
+   "path": "/works/butterfly-2012-album",
+   "evidence_fingerprint": "179ff5ecebbfe5802fcca7d94f3545ea32493cf9bd1fe43062a7c086675b4d09",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "collision: proposed qualifier"
+  },
+  {
+   "object_id": 1885840,
+   "action": "confirm",
+   "family": "works",
+   "path": "/works/butterfly-2023-film",
+   "evidence_fingerprint": "ed3c4f6e8b9e10d2d9e77575a136dcc802428db5a23efb998ebe876f8568a6c3",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "collision: proposed qualifier"
+  },
+  {
+   "object_id": 1886567,
+   "action": "confirm",
+   "family": "works",
+   "path": "/works/butterfly-2004-film",
+   "evidence_fingerprint": "daf8133ae536bf807af06928291b4a023b6820de816dfabaf4ebbbef9d7fb50e",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "collision: proposed qualifier"
+  },
+  {
+   "object_id": 1887631,
+   "action": "confirm",
+   "family": "works",
+   "path": "/works/butterfly-2022-film",
+   "evidence_fingerprint": "85094b0cba54ce6494b99b7f1cd08a8ac06a5a5e82c09b8f14b1c23e5ac57c2f",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "collision: proposed qualifier"
+  },
+  {
+   "object_id": 1887935,
+   "action": "confirm",
+   "family": "works",
+   "path": "/works/butterfly-2010-album",
+   "evidence_fingerprint": "84b4cff39ddf5c6187c6580dc30ac79e8d2648a2d402d12ce9091da8fb11a031",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "collision: proposed qualifier"
+  },
+  {
+   "object_id": 1888063,
+   "action": "confirm",
+   "family": "works",
+   "path": "/works/butterfly-2017-album",
+   "evidence_fingerprint": "9d066b99a2c51662f84b34f1d793ff7cd40b2a0f05c7834bec4026d18a56b1c1",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "collision: proposed qualifier"
+  },
+  {
+   "object_id": 1888104,
+   "action": "confirm",
+   "family": "works",
+   "path": "/works/butterfly-1982-film",
+   "evidence_fingerprint": "7dd97ab905d016fad057346dba46dbbc15fcfb5365ceddbaeec853d12e8dd4a2",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "collision: proposed qualifier"
+  },
+  {
+   "object_id": 1888474,
+   "action": "confirm",
+   "family": "works",
+   "path": "/works/butterfly-2016-album",
+   "evidence_fingerprint": "cdad0a3dc8130979824e8230b1f9e14570645312cf92b1a0131328b71d9c51e9",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "collision: proposed qualifier"
+  },
+  {
+   "object_id": 1888531,
+   "action": "confirm",
+   "family": "works",
+   "path": "/works/butterfly-novel",
+   "evidence_fingerprint": "4406152b2c2f7c18c10ee47c205b160077bfed7002825e2669b2b0bc6b8997d5",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "collision: proposed qualifier"
+  },
+  {
+   "object_id": 1888558,
+   "action": "confirm",
+   "family": "works",
+   "path": "/works/butterfly-2018-film",
+   "evidence_fingerprint": "04772b0cf2141b39ff8d1a79ea9bc329dd826d08605ca5637bc525917a6962f3",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "collision: proposed qualifier"
+  },
+  {
+   "object_id": 1888562,
+   "action": "confirm",
+   "family": "works",
+   "path": "/works/butterfly-2025-tv-series",
+   "evidence_fingerprint": "b1b62ad6ae8c0d8586e653cc5e22843871938419aafe83e002d9271ef1c5f97c",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "collision: proposed qualifier"
+  },
+  {
+   "object_id": 1888564,
+   "action": "confirm",
+   "family": "works",
+   "path": "/works/butterfly-1967-album",
+   "evidence_fingerprint": "84859531744c4b714b6b3e727782bfce7d8e8afd3730595e5b5aca85f795460a",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "collision: proposed qualifier"
+  },
+  {
+   "object_id": 1889163,
+   "action": "confirm",
+   "family": "works",
+   "path": "/works/butterfly-1974-album",
+   "evidence_fingerprint": "647fd263f0206b936d41e8660823b3a19b934f19dfae602bc9d15f9452642bf1",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "collision: proposed qualifier"
+  },
+  {
+   "object_id": 1890422,
+   "action": "confirm",
+   "family": "works",
+   "path": "/works/butterfly-1924-film",
+   "evidence_fingerprint": "ab691d0eb732235612eab7d4c8610817f721a9b6d9a43ab08cf95f329fa46ae6",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "collision: proposed qualifier"
+  },
+  {
+   "object_id": 1878370,
+   "action": "confirm",
+   "family": "works",
+   "path": "/works/crocodile-tears-2024-film",
+   "evidence_fingerprint": "1e30735095eab7c2ba686dd707a38d6eb8440d92513aa8849c3d710f9c2ba719",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "collision: proposed qualifier"
+  },
+  {
+   "object_id": 1846395,
+   "action": "confirm",
+   "family": "works",
+   "path": "/works/crocodile-tears-novel",
+   "evidence_fingerprint": "4d52aab146f9114578edf73d41e909e3aa0fdc457cbef955b73eda321c710482",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "collision blocked: owner family and path"
+  },
+  {
+   "object_id": 1873710,
+   "action": "confirm",
+   "family": "works",
+   "path": "/works/human-2006-album",
+   "evidence_fingerprint": "616a405bc440b028b7d43a3bad4f9f4cfd099de0dda775af140681a5c23152ae",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "collision: proposed qualifier"
+  },
+  {
+   "object_id": 1874309,
+   "action": "confirm",
+   "family": "works",
+   "path": "/works/human-2015-film",
+   "evidence_fingerprint": "f6bc5cc72d83072c7c2d4878036a205e6d98ae73ef50f1d0bd93d8cf74dec503",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "collision: proposed qualifier"
+  },
+  {
+   "object_id": 1875568,
+   "action": "confirm",
+   "family": "works",
+   "path": "/works/human-2014-album-masaharu-fukuyama",
+   "evidence_fingerprint": "9c7243858eea78d6d0276d96fb81c743e0815a96290a8616c99608a646c532f4",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "collision: proposed qualifier"
+  },
+  {
+   "object_id": 1886046,
+   "action": "confirm",
+   "family": "works",
+   "path": "/works/human-2014-album-max-cooper",
+   "evidence_fingerprint": "533e493b4dbe05cfd22aba08ec0966c38e03ffe49b57cb62dab69d6f3de37a90",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "collision: proposed qualifier"
+  },
+  {
+   "object_id": 1886916,
+   "action": "confirm",
+   "family": "works",
+   "path": "/works/human-2008-album",
+   "evidence_fingerprint": "1783a3fce8969a54a5c14f8bc877264142b4299ad1191b936a5f71b9e9f79eb9",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "collision: proposed qualifier"
+  },
+  {
+   "object_id": 1887382,
+   "action": "confirm",
+   "family": "works",
+   "path": "/works/human-2021-album-onerepublic",
+   "evidence_fingerprint": "827a60c35ec0c5e2e53ee54a544be348729e052655a753ddd55860a03f2987dc",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "collision: proposed qualifier"
+  },
+  {
+   "object_id": 1887405,
+   "action": "confirm",
+   "family": "works",
+   "path": "/works/human-1971-film",
+   "evidence_fingerprint": "e0ca0c5b15fe87458bca4f440636ccbe2c7c02b6445aa48c19813815f7bc7786",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "collision: proposed qualifier"
+  },
+  {
+   "object_id": 1887623,
+   "action": "confirm",
+   "family": "works",
+   "path": "/works/human-2021-album-the-veronicas",
+   "evidence_fingerprint": "491ebc695f9e86118d4e7c9652c4e61e40a0c382692f41deda68043b7b6607dd",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "collision: proposed qualifier"
+  },
+  {
+   "object_id": 1888085,
+   "action": "confirm",
+   "family": "works",
+   "path": "/works/human-2012-album",
+   "evidence_fingerprint": "dbff05875fdae2dd2f5dcb7d23564f4bdd2050e58a563c62cfdb1a3108e203ae",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "collision: proposed qualifier"
+  },
+  {
+   "object_id": 1888560,
+   "action": "confirm",
+   "family": "works",
+   "path": "/works/human-2001-album",
+   "evidence_fingerprint": "350dccc5dd37515e334afa27ace7bb67e8880f37395194a63550cddca644927c",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "collision: proposed qualifier"
+  },
+  {
+   "object_id": 1888664,
+   "action": "confirm",
+   "family": "works",
+   "path": "/works/human-anthology",
+   "evidence_fingerprint": "c93fcd1c9b63239d1e72d128fd9ee8fb9062f27d2807cad9037ec28532b88f39",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "collision: proposed qualifier"
+  },
+  {
+   "object_id": 1889379,
+   "action": "confirm",
+   "family": "works",
+   "path": "/works/human-2015-album-three-days-grace",
+   "evidence_fingerprint": "4c058e2de98484724801b44163374d0cd2a34af122706d9779240e41af98fd4e",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "collision: proposed qualifier"
+  },
+  {
+   "object_id": 1889738,
+   "action": "confirm",
+   "family": "works",
+   "path": "/works/human-1991-album",
+   "evidence_fingerprint": "1355c8fc4f4eb823132960c1ca14d9a8254daf13f6fa0619e15c67ec183cf636",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "collision: proposed qualifier"
+  },
+  {
+   "object_id": 1893917,
+   "action": "confirm",
+   "family": "works",
+   "path": "/works/human-2015-album-joell-ortiz",
+   "evidence_fingerprint": "a35b13fb99fdb99ad9a90c604b59bb09f80220ec743a2279527b55739468fbfb",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "collision: proposed qualifier"
+  },
+  {
+   "object_id": 1894469,
+   "action": "confirm",
+   "family": "works",
+   "path": "/works/human-2017-album",
+   "evidence_fingerprint": "97efbebea295eb239447b9933cb487242cc3a00a5546826428a0388a9dbe37af",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "collision: proposed qualifier"
+  },
+  {
+   "object_id": 2,
+   "action": "confirm",
+   "family": "works",
+   "path": "/works/the-devils-dictionary",
+   "evidence_fingerprint": "07be26afef35ed26dc3184d9ebafa9de7353d86d816161938d624852b569a939",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "duplicate identity: the seeded work Q1197843 takes the bare path"
+  },
+  {
+   "object_id": 3740879,
+   "action": "defer",
+   "evidence_fingerprint": "7a7f51060c79dc68ba5a80d5618dcaafaa49101400ddb0865fdba0172573e7b4",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "duplicate identity: Open Library OL7973273W with Q1147121; registry decides whether it is Bierce's work"
+  },
+  {
+   "object_id": 1894610,
+   "action": "confirm",
+   "family": "works",
+   "path": "/works/mona-lisa",
+   "evidence_fingerprint": "6ec187583294e9f85d3b9673161f90211c7ab755046a9e4617dee412b801a9dd",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "duplicate identity: the Louvre painting Q12418 takes the bare path"
+  },
+  {
+   "object_id": 3734402,
+   "action": "defer",
+   "evidence_fingerprint": "4955d8a20a8cc95ae8f4593ad1b6a0ffe509e12e2aeb8f9a4105da88098c1f74",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "duplicate identity: Q2126369 with no description; no evidence for a qualifier"
+  },
+  {
+   "object_id": 3737584,
+   "action": "defer",
+   "evidence_fingerprint": "3d8d9255d3b13a9ebc5b5e9722d5e130d623a01ca6d286af1af6106740c0361d",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "duplicate identity: PoetryDB poem Love; no author in the record for a qualifier"
+  },
+  {
+   "object_id": 3739174,
+   "action": "defer",
+   "evidence_fingerprint": "3d8d9255d3b13a9ebc5b5e9722d5e130d623a01ca6d286af1af6106740c0361d",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "duplicate identity: PoetryDB poem Love; no author in the record for a qualifier"
+  },
+  {
+   "object_id": 3742759,
+   "action": "defer",
+   "evidence_fingerprint": "3d8d9255d3b13a9ebc5b5e9722d5e130d623a01ca6d286af1af6106740c0361d",
+   "reviewer": "issue84-browser@local.test",
+   "reason": "duplicate identity: Open Library work Love; no author in the record for a qualifier"
+  }
+ ]
+}
