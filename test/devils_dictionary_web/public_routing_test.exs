@@ -186,7 +186,9 @@ defmodule DevilsDictionaryWeb.PublicRoutingTest do
     end
 
     assert live_view.([{"DD_PUBLISHED_HOST", "wordhoard.test"}])[:debug_heex_annotations] == false
+    assert live_view.([{"DD_PUBLISHED_HOST", "wordhoard.test"}])[:debug_attributes] == false
     assert live_view.([{"DD_PUBLISHED_HOST", nil}])[:debug_heex_annotations] == true
+    assert live_view.([{"DD_PUBLISHED_HOST", nil}])[:debug_attributes] == true
 
     plain = runtime(:dev, [{"DD_PUBLISHED_HOST", nil}])
     refute Keyword.has_key?(plain, :public_routing)
