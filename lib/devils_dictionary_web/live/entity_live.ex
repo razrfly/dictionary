@@ -46,7 +46,7 @@ defmodule DevilsDictionaryWeb.EntityLive do
   alias DevilsDictionary.Artworks
   alias DevilsDictionary.Encyclopedia.EntityPage
   alias DevilsDictionary.Markdown
-  alias DevilsDictionaryWeb.{ExampleProvenance, SourceBadge}
+  alias DevilsDictionaryWeb.{ExampleProvenance, Head, SourceBadge}
 
   @impl true
   def mount(_params, _session, socket),
@@ -63,34 +63,47 @@ defmodule DevilsDictionaryWeb.EntityLive do
          paths: %{},
          subject: nil,
          unresolved: nil,
-         choice: nil
+         choice: nil,
+         head: nil
        )}
 
+  # The head (#237 C4) is set here, on every navigation: the title, the
+  # canonical, whether the page may be indexed (a published subject at its
+  # canonical, served publicly, with no query string), the description and
+  # the JSON-LD. A section cursor or a trail is a query string, so a view
+  # variant is noindex with the base as its canonical.
   @impl true
   def handle_params(params, uri, %{assigns: %{live_action: :subject}} = socket) do
-    base = URI.parse(uri).path
+    %URI{path: base, query: query} = URI.parse(uri)
     socket = assign(socket, base: base, subject: nil, unresolved: nil, choice: nil)
 
     case Resolver.resolve(base, mode: socket.assigns.reading_mode) do
-      %{outcome: :canonical, page: %Page{role: role} = page} when role in [:subject, :edition] ->
-        subject(socket, page, params)
+      %{outcome: :canonical, page: %Page{role: role} = page} = resolution
+      when role in [:subject, :edition] ->
+        subject(socket, page, params, resolution, query)
 
       %{outcome: :redirect, location: location} ->
         {:noreply, push_navigate(socket, to: Address.encode(location), replace: true)}
 
-      %{outcome: :choice} = resolution ->
+      %{outcome: :choice, location: location} = resolution ->
+        head = Head.choice(location)
+
         {:noreply,
          socket
          |> assign(:page, nil)
          |> assign(:choice, successors(resolution, socket.assigns.reading_mode))
-         |> assign(:page_title, "Several subjects")}
+         |> assign(:head, head)
+         |> assign(:page_title, head.title)}
 
       resolution ->
+        title = unresolved_title(unresolved_outcome(resolution))
+
         {:noreply,
          socket
          |> assign(:page, nil)
          |> assign(:unresolved, unresolved_outcome(resolution))
-         |> assign(:page_title, unresolved_title(unresolved_outcome(resolution)))}
+         |> assign(:head, Head.unresolved(title))
+         |> assign(:page_title, title)}
     end
   end
 
@@ -105,7 +118,7 @@ defmodule DevilsDictionaryWeb.EntityLive do
 
   # The page an address serves, and the identity it is about. The address is
   # the ledger's; nothing here compares it with the label.
-  defp subject(socket, %Page{} = page, params) do
+  defp subject(socket, %Page{} = page, params, resolution, query) do
     cursors = cursor_params(params)
 
     case EntityPage.build(page.target_object_id, page_opts(cursors)) do
@@ -114,6 +127,10 @@ defmodule DevilsDictionaryWeb.EntityLive do
 
       entity_page ->
         artwork = Artworks.get(page.target_object_id)
+        mode = socket.assigns.reading_mode
+
+        head =
+          Head.subject(page, entity_page, resolution.location, resolution.outcome, mode, query)
 
         {:noreply,
          socket
@@ -123,9 +140,10 @@ defmodule DevilsDictionaryWeb.EntityLive do
          |> assign(:cursors, cursors)
          |> assign(:entity_slug, Connection.slugify(entity_page.entity.label))
          |> assign(:back_path, safe_back_path(params["from"]))
-         |> assign(:paths, subject_paths(entity_page, artwork, socket.assigns.reading_mode))
+         |> assign(:paths, subject_paths(entity_page, artwork, mode))
          |> assign(:subject, subject_header(page, entity_page, socket.assigns.base))
-         |> assign(:page_title, entity_page.entity.label)}
+         |> assign(:head, head)
+         |> assign(:page_title, head.title)}
     end
   end
 
@@ -142,6 +160,7 @@ defmodule DevilsDictionaryWeb.EntityLive do
 
         if slug == canonical do
           artwork = Artworks.get(object_id)
+          head = Head.entity(page, object_id)
 
           {:noreply,
            socket
@@ -152,7 +171,8 @@ defmodule DevilsDictionaryWeb.EntityLive do
            |> assign(:entity_slug, canonical)
            |> assign(:back_path, back_path)
            |> assign(:paths, subject_paths(page, artwork, socket.assigns.reading_mode))
-           |> assign(:page_title, page.entity.label)}
+           |> assign(:head, head)
+           |> assign(:page_title, head.title)}
         else
           # The slug is cosmetic, so a wrong one is not an error — it is a
           # redirect to the readable form of the identity that was asked for.
@@ -168,13 +188,14 @@ defmodule DevilsDictionaryWeb.EntityLive do
     |> assign(:page, nil)
     |> assign(:artwork, nil)
     |> assign(:id, id)
+    |> assign(:head, Head.unresolved("no such thing"))
     |> assign(:page_title, "no such thing")
   end
 
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash}>
+    <Layouts.app flash={@flash} head={@head}>
       <.container class="py-10">
         <%= cond do %>
           <% @unresolved -> %>

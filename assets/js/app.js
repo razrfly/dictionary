@@ -26,13 +26,14 @@ import {hooks as colocatedHooks} from "phoenix-colocated/devils_dictionary"
 import ArtworkImage from "./artwork_image.mjs"
 import GiphyShelf from "./giphy_shelf.mjs"
 import UrbanDictionary from "./urban_dictionary.mjs"
+import PageHead from "./page_head.mjs"
 import topbar from "../vendor/topbar"
 
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,
   params: {_csrf_token: csrfToken},
-  hooks: {...colocatedHooks, ArtworkImage, GiphyShelf, UrbanDictionary},
+  hooks: {...colocatedHooks, ArtworkImage, GiphyShelf, UrbanDictionary, PageHead},
 })
 
 // Show progress bar on live navigation and form submits

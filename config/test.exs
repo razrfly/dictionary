@@ -149,6 +149,11 @@ config :devils_dictionary, :internal_reading, true
 # `PublicRoutingTest` turns it off to prove what off means (#237 D5).
 config :devils_dictionary, :public_routing, true
 
+# No launch manifest is read in tests: the committed one, once there, would
+# make real On pages indexable under test (#237 D1). A test that needs a
+# lexical entry listed writes its own manifest and names it here.
+config :devils_dictionary, :launch_manifest, "priv/routing/no-launch-manifest-under-test.json"
+
 # The curated opening's manual fixtures (#156 Phase 1). `?opening=fixture`
 # renders `priv/curation/opening-fixtures.json` only where this is set — here
 # and in `dev.exs` — and `word_opening_live_test.exs` fails if `config.exs`,

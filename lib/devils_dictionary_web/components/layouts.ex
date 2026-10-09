@@ -31,10 +31,15 @@ defmodule DevilsDictionaryWeb.Layouts do
     default: nil,
     doc: "the current [scope](https://phoenix.hexdocs.pm/scopes.html)"
 
+  attr :head, :map,
+    default: nil,
+    doc: "the page's head (`DevilsDictionaryWeb.Head`), kept in step on live navigation"
+
   slot :inner_block, required: true
 
   def app(assigns) do
     ~H"""
+    <DevilsDictionaryWeb.Head.hook head={@head} />
     <.navbar>
       <:logo>
         <.link navigate={~p"/"} class="font-display text-2xl/8 text-mist-950 dark:text-white">

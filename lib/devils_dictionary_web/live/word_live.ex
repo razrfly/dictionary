@@ -121,7 +121,8 @@ defmodule DevilsDictionaryWeb.WordLive do
        choice_paths: %{},
        linked_overviews: [],
        subjects: nil,
-       follow: nil
+       follow: nil,
+       head: nil
      )}
   end
 
@@ -184,14 +185,42 @@ defmodule DevilsDictionaryWeb.WordLive do
 
     case socket.assigns[:follow] do
       nil ->
+        head = head(socket.assigns, slug, URI.parse(uri).query)
+
         {:noreply,
-         assign(socket, :provenance, provenance(socket.assigns.page, params["provenance"]))}
+         socket
+         |> assign(:provenance, provenance(socket.assigns.page, params["provenance"]))
+         |> assign(:head, head)
+         |> assign(:page_title, head.title)}
 
       # An equivalent spelling of an overview's address, followed as the
       # plug answers a direct request: to the canonical, one hop.
       location ->
         {:noreply, push_navigate(assign(socket, :follow, nil), to: location, replace: true)}
     end
+  end
+
+  # The head (#237 C4), set on every navigation, after the page is loaded or
+  # kept: an exact word is noindex at its own canonical; On's canonical is
+  # the headword's slug, and it is indexable only as a lexical entry of the
+  # launch manifest (D1), with no query string, so a drawer, a trail or the
+  # demo is a noindex variant of the same canonical; a miss names none.
+  defp head(%{exact: :found, object_id: id, page: page}, _slug, _query),
+    do: DevilsDictionaryWeb.Head.word(page, id)
+
+  defp head(%{exact: exact, page_title: title}, _slug, _query)
+       when exact in [:missing, :invalid],
+       do: DevilsDictionaryWeb.Head.unresolved(title)
+
+  defp head(assigns, slug, query) do
+    DevilsDictionaryWeb.Head.on(
+      assigns.page,
+      assigns.page_title,
+      slug,
+      assigns.overview,
+      assigns.reading_mode,
+      query
+    )
   end
 
   # A sample card's drawer is invented too. Falling through to
@@ -901,7 +930,7 @@ defmodule DevilsDictionaryWeb.WordLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash}>
+    <Layouts.app flash={@flash} head={@head}>
       <.container class="py-10">
         <Demo.demo_banner :if={@demo} />
 
