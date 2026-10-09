@@ -145,6 +145,10 @@ config :devils_dictionary, demo_mode: true
 # through a tunnel. Without it, only an internal contributor reads internally.
 config :devils_dictionary, :internal_reading, true
 
+# Public subject addresses on, so public-mode tests see published pages;
+# `PublicRoutingTest` turns it off to prove what off means (#237 D5).
+config :devils_dictionary, :public_routing, true
+
 # The curated opening's manual fixtures (#156 Phase 1). `?opening=fixture`
 # renders `priv/curation/opening-fixtures.json` only where this is set — here
 # and in `dev.exs` — and `word_opening_live_test.exs` fails if `config.exs`,

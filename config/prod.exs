@@ -23,5 +23,10 @@ config :devils_dictionary, DevilsDictionaryWeb.Endpoint,
 # Do not print debug messages in production
 config :logger, level: :info
 
+# Public subject addresses stay off in production (#237 D5): the published
+# host is the owner's development server, enabled in `config/runtime.exs`'s
+# development block only. `PublicRoutingTest` holds this pin.
+config :devils_dictionary, :public_routing, false
+
 # Runtime production configuration, including reading
 # of environment variables, is done on config/runtime.exs.

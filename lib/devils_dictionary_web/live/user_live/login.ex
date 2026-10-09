@@ -156,8 +156,11 @@ defmodule DevilsDictionaryWeb.UserLive.Login do
      |> push_navigate(to: ~p"/users/log-in")}
   end
 
+  # The local mailbox is the owner's, on the machine itself: the published
+  # host does not point its visitors at it (#237 D2), and through the tunnel
+  # it answers 404 (`DevilsDictionaryWeb.ProxyGuard`).
   defp local_mail_adapter? do
     Application.get_env(:devils_dictionary, DevilsDictionary.Mailer)[:adapter] ==
-      Swoosh.Adapters.Local
+      Swoosh.Adapters.Local and not DevilsDictionary.Routing.PublicRouting.published_host?()
   end
 end

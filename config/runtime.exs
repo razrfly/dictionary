@@ -300,6 +300,41 @@ config :devils_dictionary,
        :discovery,
        Keyword.put(discovery_config, :source_policies, source_policies)
 
+# The published host (#237 D2, D5): the development server the public
+# reaches through the tunnel. `DD_PUBLISHED_HOST` names it
+# (`wordhoard.eu.ngrok.io`), set only by the server's launch script. Then the
+# server reads publicly — development's configured internal reading does not
+# apply to it, so drafts are seen only by an authenticated reviewer or
+# contributor — its canonical URLs name that host, and public subject
+# addresses are on. `DD_PUBLIC_ROUTING=off` turns them off again: the
+# rollback, with the ledger untouched. Development only: production never
+# reads either variable, and `prod.exs` pins the switch off.
+if config_env() == :dev do
+  case System.get_env("DD_PUBLISHED_HOST") do
+    host when is_binary(host) and host != "" ->
+      config :devils_dictionary, :published_host, host
+
+      # Exactly `on` or `off`: a rollback typed another way (`OFF`, `false`,
+      # `0`) must not leave public routing on in silence.
+      public_routing =
+        case System.get_env("DD_PUBLIC_ROUTING", "on") do
+          "on" ->
+            true
+
+          "off" ->
+            false
+
+          other ->
+            raise "DD_PUBLIC_ROUTING must be on or off, not #{inspect(other)}"
+        end
+
+      config :devils_dictionary, :public_routing, public_routing
+
+    _ ->
+      :ok
+  end
+end
+
 if config_env() == :dev do
   # Reload browser tabs when matching files change.
   config :devils_dictionary, DevilsDictionaryWeb.Endpoint,

@@ -24,6 +24,12 @@ config :devils_dictionary, :scopes,
 # Production is deliberately not configured -- see DevilsDictionary.Mailer.
 config :devils_dictionary, DevilsDictionary.Mailer, adapter: Swoosh.Adapters.Local
 
+# The launch switch for public subject addresses (#237 D5,
+# `Routing.PublicRouting`): off, the family routes answer 404 to the public
+# and the sitemap is empty, with the ledger untouched. Only the published
+# host's block in `config/runtime.exs` turns it on; `prod.exs` pins it off.
+config :devils_dictionary, :public_routing, false
+
 # No API client: the Local and Test adapters never make an HTTP request, and
 # leaving this unset makes Swoosh demand hackney at boot. If a remote adapter is
 # ever configured, point this at Req rather than adding a second HTTP client --

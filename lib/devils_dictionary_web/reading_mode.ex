@@ -9,7 +9,9 @@ defmodule DevilsDictionaryWeb.ReadingMode do
 
     * configuration — `config :devils_dictionary, :internal_reading, true`,
       set in `config/dev.exs` and `config/test.exs` and refused in the
-      production configuration by `ReadingModeConfigTest`;
+      production configuration by `ReadingModeConfigTest` — except on the
+      published host (#237 D2, `Routing.PublicRouting`): the server the
+      public reaches reads publicly whatever development configures;
     * an authenticated internal contributor or reviewer
       (`Claims.Contributions.internal_contributor?/1`, read from the
       database, not from the session's copy of the account).
@@ -21,6 +23,7 @@ defmodule DevilsDictionaryWeb.ReadingMode do
   """
 
   alias DevilsDictionary.Claims.Contributions
+  alias DevilsDictionary.Routing.PublicRouting
 
   @doc "The reading mode for a scope (nil for an anonymous reader)."
   def mode(scope) do
@@ -29,8 +32,14 @@ defmodule DevilsDictionaryWeb.ReadingMode do
       else: :public
   end
 
-  @doc "Whether this installation's configuration turns internal reading on."
-  def configured?, do: Application.get_env(:devils_dictionary, :internal_reading, false) == true
+  @doc """
+  Whether this installation's configuration turns internal reading on: never
+  on the published host.
+  """
+  def configured? do
+    Application.get_env(:devils_dictionary, :internal_reading, false) == true and
+      not PublicRouting.published_host?()
+  end
 
   @doc """
   The `on_mount` for reader LiveViews: the current scope, as
