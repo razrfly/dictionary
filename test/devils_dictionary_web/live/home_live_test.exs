@@ -189,4 +189,10 @@ defmodule DevilsDictionaryWeb.HomeLiveTest do
       assert live |> element("#surprise") |> render_click() =~ ~s(id="search-q")
     end
   end
+
+  test "a search parameter shaped as a list or a map is no search, not a 500", ctx do
+    for query <- ["?q[]=x", "?q[a]=x"] do
+      assert ctx.conn |> get("/" <> query) |> html_response(200), query
+    end
+  end
 end

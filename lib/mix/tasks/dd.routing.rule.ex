@@ -122,11 +122,14 @@ defmodule Mix.Tasks.Dd.Routing.Rule do
 
   # `:none` when standard input is not a terminal (a pipe); `{:ok, device}`,
   # the terminal's device path, when it is and the device can be named;
-  # `:unknown` when it is a terminal the task cannot name.
+  # `:unknown` when it is a terminal the task cannot name. Standard input's
+  # own flag (`:stdin`), not `:terminal`, which follows standard output: a
+  # password typed at a terminal while the output is piped (`| tee log`) is
+  # still read with the echo off.
   defp terminal do
     io = :io.getopts()
 
-    if is_list(io) and Keyword.get(io, :terminal, false) == true do
+    if is_list(io) and Keyword.get(io, :stdin, false) == true do
       case System.cmd("ps", ["-o", "tty=", "-p", System.pid()], stderr_to_stdout: true) do
         {tty, 0} ->
           case String.trim(tty) do

@@ -1290,6 +1290,10 @@ defmodule DevilsDictionary.Lexicon.WordPage do
     end
   end
 
+  # A query parameter can arrive as a list or a map (`?provenance[]=thing`):
+  # no drawer, not a crash.
+  def provenance(_page, _ref), do: nil
+
   defp to_index(n) do
     case Integer.parse(n) do
       {i, ""} when i >= 0 -> i

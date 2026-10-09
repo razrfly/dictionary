@@ -17,11 +17,12 @@ defmodule DevilsDictionaryWeb.ProxyGuard do
       answer 404, as anything else that is not there. The owner still
       reaches them on the machine itself.
     * **A server that reads drafts for everyone and is not the published
-      host refuses every proxied request** (503), so a development server
-      started without `DD_PUBLISHED_HOST` while the tunnel runs shows the
-      tunnel nothing, instead of every draft. That is the failure the
-      published host's configuration cannot cover by itself: it exists only
-      when the launch script names it.
+      host refuses every proxied request that reaches this plug** (503),
+      instead of serving every draft. That is the failure the published
+      host's configuration cannot cover by itself: it exists only when the
+      launch script names it. Such a server is a development build, though,
+      whose debug pages, live reloader, code reloader and repository check
+      answer before this plug, so the tunnel is kept off it.
 
   A request cannot claim to be local: the proxy adds its headers whatever
   the visitor sends, and the remote address is the socket's.

@@ -867,6 +867,9 @@ defmodule DevilsDictionaryWeb.WordLive do
   # can be pasted to someone else.
   defp parse_trail(nil), do: []
 
+  # `?trail[]=cat` arrives as a list: no trail, not a crash.
+  defp parse_trail(param) when not is_binary(param), do: []
+
   defp parse_trail(param) do
     param
     |> String.split(",", trim: true)
