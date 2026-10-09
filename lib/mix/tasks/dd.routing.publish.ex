@@ -112,6 +112,23 @@ defmodule Mix.Tasks.Dd.Routing.Publish do
   defp publish(opts) do
     manifest = ok!(LaunchManifest.read(opts[:manifest]))
     rule = if manifest.rule_sha256, do: ok!(ReviewRule.load(opts[:rule] || ReviewRule.path()))
+
+    # A manifest made under the rule is the rule's, or nothing is published
+    # under it: every page entry an allocation of the run it names, and the
+    # lexical entries the rule's own derivation (#237: never by hand).
+    if rule do
+      case LaunchManifest.bound_to_rule(manifest) do
+        :ok ->
+          :ok
+
+        {:error, problems} ->
+          Mix.raise(
+            "the manifest names the standing review rule but is not the rule's; nothing published:\n  " <>
+              Enum.join(problems, "\n  ")
+          )
+      end
+    end
+
     actor = actor!(rule, opts[:reviewer])
     override = override!(rule, opts[:override])
 

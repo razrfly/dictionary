@@ -314,9 +314,21 @@ if config_env() == :dev do
     host when is_binary(host) and host != "" ->
       config :devils_dictionary, :published_host, host
 
-      config :devils_dictionary,
-             :public_routing,
-             System.get_env("DD_PUBLIC_ROUTING", "on") != "off"
+      # Exactly `on` or `off`: a rollback typed another way (`OFF`, `false`,
+      # `0`) must not leave public routing on in silence.
+      public_routing =
+        case System.get_env("DD_PUBLIC_ROUTING", "on") do
+          "on" ->
+            true
+
+          "off" ->
+            false
+
+          other ->
+            raise "DD_PUBLIC_ROUTING must be on or off, not #{inspect(other)}"
+        end
+
+      config :devils_dictionary, :public_routing, public_routing
 
     _ ->
       :ok

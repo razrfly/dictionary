@@ -122,6 +122,50 @@ defmodule DevilsDictionary.Routing.LaunchManifestTest do
     assert Enum.any?(problems, &(&1 =~ "#{plain.email} is not a reviewer account"))
   end
 
+  test "a manifest that names the rule is the rule's or nothing: allocations of its run, lexical entries derived",
+       ctx do
+    rule = %{"sha256" => String.duplicate("a", 64), "signer" => ctx.reviewer.email}
+    object_id = Repo.get!(Page, ctx.page.id).target_object_id
+
+    # A page entry no run of this database allocated, and an On entry nobody
+    # derived: written by hand under the rule's name.
+    {:ok, manifest} =
+      ctx
+      |> write!(%{
+        "rule" => rule,
+        "from" => %{"run_key" => "not-a-run"},
+        "entries" => [
+          entry(ctx, %{"object_id" => object_id, "clause" => "uncontested_mapping"}),
+          %{
+            "kind" => "lexical",
+            "locale" => "en",
+            "path" => "/on/voltaire",
+            "lexeme_ids" => [1],
+            "subject_page_ids" => [ctx.page.id],
+            "reviewer" => ctx.reviewer.email,
+            "clause" => "index_lexical"
+          }
+        ]
+      })
+      |> LaunchManifest.read()
+
+    assert {:error, problems} = LaunchManifest.bound_to_rule(manifest)
+    assert Enum.any?(problems, &(&1 =~ "run not-a-run allocated nothing in this database"))
+
+    assert Enum.any?(
+             problems,
+             &(&1 =~ "the lexical entries are not the rule's: 1 given, 0 derived")
+           )
+
+    # validate/2, which every publication runs, says the same.
+    assert {:error, validated} = LaunchManifest.validate(manifest)
+    assert Enum.any?(validated, &(&1 =~ "allocated nothing"))
+
+    # A manifest that names no rule is not the rule's to check.
+    {:ok, plain} = ctx |> write!(%{"entries" => [entry(ctx)]}) |> LaunchManifest.read()
+    assert LaunchManifest.bound_to_rule(plain) == :ok
+  end
+
   test "mix dd.routing.publish: a dry run writes nothing, and a second run is idempotent", ctx do
     {:ok, _} =
       DevilsDictionary.Registry.create_content(%{

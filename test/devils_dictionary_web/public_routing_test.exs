@@ -88,6 +88,11 @@ defmodule DevilsDictionaryWeb.PublicRoutingTest do
              "#{file} must pin public routing off"
     end
 
+    # The merged production configuration, as a release reads it, not a
+    # line in a file: a later `true` in prod.exs would be caught here.
+    merged = @root |> Path.join("config.exs") |> Config.Reader.read!(env: :prod, target: :host)
+    assert get_in(merged, [:devils_dictionary, :public_routing]) == false
+
     published = [{"DD_PUBLISHED_HOST", "wordhoard.test"}, {"DD_PUBLIC_ROUTING", nil}]
 
     # Production never reads the published host's variables.
@@ -113,6 +118,14 @@ defmodule DevilsDictionaryWeb.PublicRoutingTest do
     assert runtime(:dev, [{"DD_PUBLISHED_HOST", "wordhoard.test"}, {"DD_PUBLIC_ROUTING", "off"}])[
              :public_routing
            ] == false
+
+    # Exactly on or off: a rollback typed another way raises at boot rather
+    # than leave public routing on in silence.
+    for typed <- ["OFF", "false", "0", "no", "disabled", ""] do
+      assert_raise RuntimeError, ~r/DD_PUBLIC_ROUTING must be on or off/, fn ->
+        runtime(:dev, [{"DD_PUBLISHED_HOST", "wordhoard.test"}, {"DD_PUBLIC_ROUTING", typed}])
+      end
+    end
 
     plain = runtime(:dev, [{"DD_PUBLISHED_HOST", nil}])
     refute Keyword.has_key?(plain, :public_routing)
@@ -249,5 +262,56 @@ defmodule DevilsDictionaryWeb.PublicRoutingTest do
     end)
 
     assert ctx.conn |> get("/people/fran%C3%A7ois") |> html_response(200)
+  end
+
+  describe "through a proxy (the tunnel)" do
+    defp proxied(conn), do: put_req_header(conn, "x-forwarded-for", "203.0.113.7")
+
+    test "on the published host, the operator surfaces answer 404; the owner still reaches them locally",
+         ctx do
+      with_env(:published_host, "wordhoard.test", fn ->
+        for path <- ~w(/dev/mailbox /dev/mailbox/json /dev/dashboard /kit /ops/imports /ops/health
+                       /s/anything /health /admin/imports) do
+          conn = ctx.conn |> proxied() |> get(path)
+          assert conn.status == 404, "#{path} answered #{conn.status} through the proxy"
+        end
+
+        # The reader is served through the proxy as usual.
+        refute (ctx.conn |> proxied() |> get("/robots.txt")).status in [403, 503]
+
+        # On the machine itself, nothing is hidden.
+        assert ctx.conn |> get("/ops/health") |> html_response(200)
+
+        # And the login page does not send a visitor to the mailbox.
+        refute ctx.conn |> get("/users/log-in") |> html_response(200) =~ "local-mail-notice"
+      end)
+    end
+
+    test "a server that reads drafts and is not the published host refuses every proxied request",
+         ctx do
+      draft =
+        subject!("Candide", "people",
+          kind: :person,
+          description: "a draft",
+          path: "/people/candide"
+        )
+
+      assert DevilsDictionaryWeb.ReadingMode.configured?()
+
+      conn = ctx.conn |> proxied() |> get("/people/candide")
+      assert conn.status == 503
+      assert conn.resp_body =~ "not the published host"
+      refute conn.resp_body =~ draft.entity.preferred_label
+
+      for header <- ~w(forwarded x-forwarded-host x-forwarded-proto) do
+        assert (ctx.conn |> put_req_header(header, "x") |> get("/people/candide")).status == 503
+      end
+
+      # From another machine with no proxy headers: refused too.
+      assert (%{ctx.conn | remote_ip: {192, 168, 1, 20}} |> get("/people/candide")).status == 503
+
+      # Locally, the owner reads the draft.
+      assert ctx.conn |> get("/people/candide") |> html_response(200)
+    end
   end
 end

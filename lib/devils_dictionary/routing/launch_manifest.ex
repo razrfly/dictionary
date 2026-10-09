@@ -234,10 +234,91 @@ defmodule DevilsDictionary.Routing.LaunchManifest do
         reviewer_problem ++ page_problem(entry, pages)
       end)
 
-    case rule_problems ++ entry_problems do
+    case rule_problems ++ entry_problems ++ binding_problems(manifest) do
       [] -> :ok
       problems -> {:error, problems}
     end
+  end
+
+  @doc """
+  Whether a manifest that names a standing review rule is the rule's: every
+  page entry is an `allocated` item of the backfill run the manifest names
+  (`from.run_key`), for that object and that page, and the lexical entries
+  are exactly what the rule's query derives from the corpus for those
+  pages. A manifest that names no rule is not the rule's to check. Returns
+  `:ok` or `{:error, problems}`; `mix dd.routing.publish` publishes nothing
+  under a rule unless it holds, because the rule's signature is the
+  publication authority and the owner's rule is that a manifest is never
+  written by hand (#237).
+  """
+  def bound_to_rule(manifest) do
+    case binding_problems(manifest) do
+      [] -> :ok
+      problems -> {:error, problems}
+    end
+  end
+
+  defp binding_problems(%{rule_sha256: nil}), do: []
+
+  defp binding_problems(%{doc: doc} = manifest) do
+    run_key = get_in(doc, ["from", "run_key"])
+    pages = Enum.filter(manifest.entries, &(&1["kind"] in @page_kinds))
+
+    allocated =
+      if is_binary(run_key) do
+        Repo.all(
+          from i in "routing_backfill_items",
+            join: r in "routing_backfill_runs",
+            on: r.id == i.run_id,
+            where: r.run_key == ^run_key and i.disposition == "allocated",
+            select: {i.object_id, i.page_id}
+        )
+        |> MapSet.new()
+      else
+        MapSet.new()
+      end
+
+    page_problems =
+      cond do
+        not is_binary(run_key) ->
+          ["the manifest names a rule but no backfill run (from.run_key)"]
+
+        MapSet.size(allocated) == 0 ->
+          ["run #{run_key} allocated nothing in this database"]
+
+        true ->
+          for e <- pages, not MapSet.member?(allocated, {e["object_id"], e["page_id"]}) do
+            "#{e["path"]}: page #{e["page_id"]} of object #{e["object_id"]} is not an allocation of run #{run_key}"
+          end
+      end
+
+    signer = manifest.signer || get_in(doc, ["rule", "signer"])
+
+    derived =
+      pages
+      |> lexical_entries(signer)
+      |> Enum.map(&lexical_key/1)
+      |> Enum.sort()
+
+    given = manifest.lexical |> Enum.map(&lexical_key/1) |> Enum.sort()
+
+    lexical_problems =
+      if derived == given,
+        do: [],
+        else: [
+          "the lexical entries are not the rule's: #{length(given)} given, #{length(derived)} derived " <>
+            "from the corpus for these pages (#{length(given -- derived)} not derived, " <>
+            "#{length(derived -- given)} missing)"
+        ]
+
+    page_problems ++ lexical_problems
+  end
+
+  defp lexical_key(entry) do
+    entry = Map.new(entry)
+
+    {entry["path"], Enum.sort(entry["lexeme_ids"] || []),
+     Enum.sort(entry["subject_page_ids"] || [])}
   end
 
   defp page_problem(%{"kind" => "lexical"}, _pages), do: []
@@ -409,7 +490,10 @@ defmodule DevilsDictionary.Routing.LaunchManifest do
           {"path", d.path},
           {"family", d.family},
           {"reviewer", rule.signer},
-          {"clause", d.clause},
+          # The clause that confirmed it: a run under the rule names it on
+          # its checkpoint (`rule_clause`); an address kept from a human's
+          # review is the rule's standing_decision.
+          {"clause", confirming_clause(item) || d.clause},
           {"evidence_fingerprint", d.fingerprint}
         ])
       end
@@ -443,6 +527,9 @@ defmodule DevilsDictionary.Routing.LaunchManifest do
       counts: decisions |> Map.values() |> Enum.frequencies_by(&"#{&1.action} #{&1.clause}")
     }
   end
+
+  defp confirming_clause(%{"rule_clause" => clause}) when clause in @confirming, do: clause
+  defp confirming_clause(_item), do: nil
 
   defp decision(%{"status" => nil}, _under_rule), do: nil
 

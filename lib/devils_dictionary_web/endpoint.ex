@@ -43,6 +43,10 @@ defmodule DevilsDictionaryWeb.Endpoint do
   plug Plug.RequestId
   plug Plug.Telemetry, event_prefix: [:phoenix, :endpoint]
 
+  # Before anything that reads the request: what a proxied request may reach
+  # (#237 D2, C7).
+  plug DevilsDictionaryWeb.ProxyGuard
+
   plug Plug.Parsers,
     parsers: [:urlencoded, :multipart, :json],
     pass: ["*/*"],
