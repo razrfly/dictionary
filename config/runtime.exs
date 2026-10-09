@@ -330,6 +330,19 @@ if config_env() == :dev do
 
       config :devils_dictionary, :public_routing, public_routing
 
+      # A host the public reaches does not sign its sessions and LiveView
+      # tokens with the secret committed in `config/dev.exs`, which anyone can
+      # read: the launch script gives it its own, kept outside the repository.
+      secret_key_base =
+        System.get_env("DD_SECRET_KEY_BASE") ||
+          raise "the published host needs DD_SECRET_KEY_BASE, its own secret " <>
+                  "(mix phx.gen.secret), never the development one"
+
+      if byte_size(secret_key_base) < 64,
+        do: raise("DD_SECRET_KEY_BASE must be at least 64 bytes")
+
+      config :devils_dictionary, DevilsDictionaryWeb.Endpoint, secret_key_base: secret_key_base
+
     _ ->
       :ok
   end

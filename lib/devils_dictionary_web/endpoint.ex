@@ -11,9 +11,11 @@ defmodule DevilsDictionaryWeb.Endpoint do
     same_site: "Lax"
   ]
 
-  socket "/live", Phoenix.LiveView.Socket,
-    websocket: [connect_info: [session: @session_options]],
-    longpoll: [connect_info: [session: @session_options]]
+  # `LiveSocket` is `Phoenix.LiveView.Socket` with the proxy rule (#237 D2):
+  # the forwarding headers and the peer are what it reads.
+  socket "/live", DevilsDictionaryWeb.LiveSocket,
+    websocket: [connect_info: [:peer_data, :x_headers, session: @session_options]],
+    longpoll: [connect_info: [:peer_data, :x_headers, session: @session_options]]
 
   # Serve at "/" the static files from "priv/static" directory.
   #

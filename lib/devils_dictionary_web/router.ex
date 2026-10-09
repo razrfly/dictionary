@@ -105,13 +105,19 @@ defmodule DevilsDictionaryWeb.Router do
   # access-controlled and that the access policy is a separate decision; and
   # `/ops/health` is most wanted in exactly the environment a compile-time gate
   # would remove it from.
+  #
+  # Their own live session (#237 D2): a reader page cannot live-navigate to
+  # them without a request, which `ProxyGuard` answers, and a proxied socket
+  # that reaches one on the published host is not mounted.
   scope "/ops", DevilsDictionaryWeb do
     pipe_through :browser
 
-    live "/scopes/:slug", ScopeLive, :show
-    live "/health", HealthLive, :show
-    live "/imports", Admin.ImportsLive, :index
-    live "/discovery", DiscoveryLive, :index
+    live_session :operator, on_mount: [{DevilsDictionaryWeb.ProxyGuard, :operator}] do
+      live "/scopes/:slug", ScopeLive, :show
+      live "/health", HealthLive, :show
+      live "/imports", Admin.ImportsLive, :index
+      live "/discovery", DiscoveryLive, :index
+    end
   end
 
   # The retired paths, redirected rather than deleted. Declared after the public
@@ -141,7 +147,10 @@ defmodule DevilsDictionaryWeb.Router do
     scope "/dev" do
       pipe_through :browser
 
-      live_dashboard "/dashboard", metrics: DevilsDictionaryWeb.Telemetry
+      live_dashboard "/dashboard",
+        metrics: DevilsDictionaryWeb.Telemetry,
+        on_mount: [{DevilsDictionaryWeb.ProxyGuard, :operator}]
+
       forward "/mailbox", Plug.Swoosh.MailboxPreview
     end
 
@@ -150,7 +159,9 @@ defmodule DevilsDictionaryWeb.Router do
     scope "/", DevilsDictionaryWeb do
       pipe_through :browser
 
-      live "/kit", KitLive, :show
+      live_session :kit, on_mount: [{DevilsDictionaryWeb.ProxyGuard, :operator}] do
+        live "/kit", KitLive, :show
+      end
     end
   end
 
