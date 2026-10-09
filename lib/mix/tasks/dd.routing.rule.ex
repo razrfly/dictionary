@@ -37,6 +37,10 @@ defmodule Mix.Tasks.Dd.Routing.Rule do
 
   alias DevilsDictionary.Routing.ReviewRule
 
+  @no_echo_refusal "cannot turn off this terminal's echo, and a password is never read echoed: " <>
+                     "pipe it instead (for example `read -rs PW` in zsh, then " <>
+                     "`printf '%s\\n' \"$PW\" | DD_NO_OBAN=1 mix dd.routing.rule --sign ...`)"
+
   @impl Mix.Task
   def run(args) do
     # Checked before the application starts: with the variable unset, the
@@ -85,28 +89,76 @@ defmodule Mix.Tasks.Dd.Routing.Rule do
     end
   end
 
-  # The password, never echoed: on a terminal, read without echo and never
-  # retried through an echoing read; from a pipe, one line, which nothing
-  # echoes.
+  # The password, never echoed. From a pipe, one line, which nothing echoes.
+  # On a terminal, the terminal's echo is turned off by its device's name and
+  # one line is read, echo turned back on whatever happens. By name, because
+  # neither simpler way works under mix: `:io.get_password/0` answers
+  # `{:error, :enotsup}` in mix's -noshell mode even on a terminal, and a
+  # program the BEAM starts runs in its own session, with no controlling
+  # terminal, so `stty < /dev/tty` reaches nothing. Where echo cannot be
+  # turned off, the task refuses rather than read an echoed password.
   defp password!(email) do
     Mix.shell().info("password for #{email}:")
-    io = :io.getopts()
-    terminal? = is_list(io) and Keyword.get(io, :terminal, false) == true
 
     line =
-      if terminal? do
-        case :io.get_password() do
-          password when is_list(password) -> List.to_string(password)
-          _other -> ""
-        end
-      else
-        case IO.gets("") do
-          line when is_binary(line) -> String.trim_trailing(line, "\n")
-          _other -> ""
-        end
+      case terminal() do
+        :none -> read_line()
+        {:ok, device} -> without_echo(device, &read_line/0)
+        :unknown -> Mix.raise(@no_echo_refusal)
       end
 
     if line == "", do: Mix.raise("no password given"), else: line
+  end
+
+  defp read_line do
+    case IO.gets("") do
+      line when is_binary(line) ->
+        line |> String.trim_trailing("\n") |> String.trim_trailing("\r")
+
+      _eof_or_error ->
+        ""
+    end
+  end
+
+  # `:none` when standard input is not a terminal (a pipe); `{:ok, device}`,
+  # the terminal's device path, when it is and the device can be named;
+  # `:unknown` when it is a terminal the task cannot name.
+  defp terminal do
+    io = :io.getopts()
+
+    if is_list(io) and Keyword.get(io, :terminal, false) == true do
+      case System.cmd("ps", ["-o", "tty=", "-p", System.pid()], stderr_to_stdout: true) do
+        {tty, 0} ->
+          case String.trim(tty) do
+            name when name in ["", "?", "??"] -> :unknown
+            name -> {:ok, "/dev/" <> name}
+          end
+
+        _failed ->
+          :unknown
+      end
+    else
+      :none
+    end
+  end
+
+  # Runs `read` with the terminal's echo off, and turns it back on after,
+  # whatever happens. Refuses before reading if echo cannot be turned off.
+  defp without_echo(device, read) do
+    unless stty(device, "-echo"), do: Mix.raise(@no_echo_refusal)
+
+    try do
+      read.()
+    after
+      stty(device, "echo")
+      IO.write("\n")
+    end
+  end
+
+  # BSD stty names a device with -f, GNU stty with -F.
+  defp stty(device, setting) do
+    flag = if match?({:unix, :darwin}, :os.type()), do: "-f", else: "-F"
+    match?({_, 0}, System.cmd("stty", [flag, device, setting], stderr_to_stdout: true))
   end
 
   defp show(path) do
