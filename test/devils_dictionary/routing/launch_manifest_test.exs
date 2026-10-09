@@ -147,10 +147,17 @@ defmodule DevilsDictionary.Routing.LaunchManifestTest do
     Mix.shell(Mix.Shell.Process)
     on_exit(fn -> Mix.shell(Mix.Shell.IO) end)
 
+    # A manifest made without a rule publishes only as a human's override,
+    # with a reason (D3 as amended): refused without one.
+    assert_raise Mix.Error, ~r/only as a human's override/, fn ->
+      Mix.Task.rerun("dd.routing.publish", ["--manifest", path, "--reviewer", ctx.reviewer.email])
+    end
+
     run = fn args ->
       Mix.Task.rerun(
         "dd.routing.publish",
-        ["--manifest", path, "--reviewer", ctx.reviewer.email] ++ args
+        ["--manifest", path, "--reviewer", ctx.reviewer.email, "--override", "a test launch"] ++
+          args
       )
     end
 

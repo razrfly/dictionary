@@ -16,6 +16,18 @@ defmodule DevilsDictionary.Repo.Migrations.CreatePagePublications do
   applied (a deferred trigger). So the receipts are a verified chain, as the
   route ledger is: no gap, no phantom, no unrecorded change. A page is born
   a draft. Publication is not a route change; `route_changes` is untouched.
+
+  Two things the database checks loosely, by design: the actor must be a
+  human (`actor_kind = 'user'`), as route operations require, while the
+  reviewer role is the service's gate (`Routing.Publications`, approval);
+  and because the BEFORE trigger reads only the page's newest receipt, two
+  receipts for one page in one transaction must each be followed by their
+  page update before the next is written (the service writes one receipt
+  per transaction).
+
+  This migration is numbered above the standing review rule's signatures
+  migration so that a rollback of the stacked schema meets its refusal
+  first and drops nothing before refusing.
   """
 
   use Ecto.Migration

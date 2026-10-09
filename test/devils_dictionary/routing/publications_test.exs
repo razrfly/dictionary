@@ -2,11 +2,22 @@ defmodule DevilsDictionary.Routing.PublicationsTest do
   @moduledoc """
   Publication (#237 C1, ADR 0004 §7): `Routing.Publications.publish/3`
   publishes a launch manifest's pages only through all eight gates, and
-  refuses per page — one test per gate, each failing that gate on a page
-  that otherwise passes — without rolling back the rest; every publication
-  and withdrawal is a receipt, and the database refuses a publication state
+  refuses per page without rolling back the rest; every publication and
+  withdrawal is a receipt, and the database refuses a publication state
   change without one, a receipt that does not continue its page's history,
   and any edit or deletion of a receipt.
+
+  One test per gate. Six gates (identity for a merged object, decision,
+  canonical, content, approval, metadata) each fail alone on a page that
+  otherwise passes. Two cannot be isolated through `publish/3`: gate 5,
+  permitted display, is tested at `check_display/1`, because the reader
+  withholds a restricted body before the gate sees it, so through
+  `publish/3` it is the content gate that refuses such a page (asserted
+  here too); gate 8, integrity, is tested with a corrupt canonical pointer
+  that the canonical gate also refuses, because every corrupt state the
+  resolver can report fails identity or canonical as well, and a second
+  canonical is impossible by index. Gate 1's retired case likewise fails
+  identity among others.
 
   Voltaire, Arouet and the rest are CI fixtures in this test's sandbox.
   """
@@ -170,6 +181,37 @@ defmodule DevilsDictionary.Routing.PublicationsTest do
   end
 
   # ── one test per gate ────────────────────────────────────────────────────
+
+  test "a refusal the database makes is one page's too, reported in its words", ctx do
+    # Only `from_doc/3` can carry a digest the receipt's check constraint
+    # refuses; the gates pass, the insert fails, and the batch goes on.
+    other = publishable!(ctx, "Arouet", "/people/arouet")
+    doc = %{"format" => LaunchManifest.format(), "rule" => nil, "entries" => [entry(other, ctx)]}
+    bad = LaunchManifest.from_doc(doc, "not a digest")
+
+    {:ok, report} = Publications.publish(bad, ctx.actor.id)
+    assert [%{page_id: id, failed: ["database"], gates: gates}] = report.refused
+    assert id == other.id
+    assert gates["database"]["detail"] =~ "refused by the database"
+    assert state(other) == :draft
+    assert receipts() == 0
+  end
+
+  test "a manifest made without a rule publishes only as a human's override, recorded as such",
+       ctx do
+    # D3 as amended: the signed rule is the authority; a human publishes
+    # only as an override, with a reason every receipt carries.
+    assert {:error, :reason_required} =
+             Publications.publish(manifest([entry(ctx.page, ctx)]), ctx.actor.id, override: true)
+
+    report = publish(ctx, [entry(ctx.page, ctx)], override: true, reason: "a hand-named launch")
+    assert [%{receipt_id: receipt_id}] = report.published
+
+    assert Repo.get!(PagePublication, receipt_id).reason =~
+             "a human's override: a hand-named launch"
+
+    assert is_nil(Repo.get!(PagePublication, receipt_id).rule_sha256)
+  end
 
   test "gate 1, identity: a merged or retired identity is refused", ctx do
     # Merged into another person with content of their own, so the reader

@@ -504,6 +504,7 @@ defmodule DevilsDictionary.Routing.RecoveryTest do
        ctx do
     ids = project!()
     history!(ids, ctx.human)
+    signed_rule!()
     target_config = Keyword.put(Repo.config(), :database, ctx.target)
 
     # A database that does not exist, or holds no routing state, is not guarded.
@@ -541,8 +542,9 @@ defmodule DevilsDictionary.Routing.RecoveryTest do
 
     # Rolling the routing migrations back would drop the routing tables; each
     # refuses while its tables hold anything. The publication receipts'
-    # migration is the newer, so it refuses first (#237); the foundation's,
-    # asked alone, refuses as well.
+    # migration is the newest, so it refuses first (#237), before the
+    # signatures' and the foundation's get their turn; the foundation's,
+    # asked alone, refuses as well. Nothing is dropped on the way.
     Recovery.with_database(ctx.target, fn ->
       rollback =
         assert_raise Postgrex.Error, fn ->
@@ -554,6 +556,13 @@ defmodule DevilsDictionary.Routing.RecoveryTest do
         end
 
       assert rollback.postgres.message =~ "refusing to roll back page_publications"
+
+      for table <- Recovery.durable_tables() do
+        assert %{rows: [[true]]} = Repo.query!("SELECT to_regclass($1) IS NOT NULL", [table]),
+               table
+      end
+
+      assert %{rows: [[1]]} = Repo.query!("SELECT count(*)::int FROM review_rule_signatures")
 
       [{foundation, _}] =
         Repo

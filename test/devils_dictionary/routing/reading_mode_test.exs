@@ -12,7 +12,6 @@ defmodule DevilsDictionary.Routing.ReadingModeTest do
   use DevilsDictionary.DataCase, async: false
 
   import DevilsDictionary.RoutingFixtures
-  import Ecto.Query
 
   alias DevilsDictionary.Routing.{Ledger, Page, Resolution, Resolver}
 

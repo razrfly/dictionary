@@ -33,16 +33,27 @@ defmodule Mix.Tasks.Dd.Routing.Publish do
   alias DevilsDictionary.Routing.{LaunchManifest, Publications, ReviewRule}
   alias DevilsDictionary.Sources.Actor
 
-  @requirements ["app.start"]
-
   @impl Mix.Task
   def run(args) do
+    # Checked before the application starts: with the variable unset, the
+    # development configuration would start Oban's queues against the
+    # working database.
+    unless System.get_env("DD_NO_OBAN") == "1",
+      do:
+        Mix.raise(
+          "run with DD_NO_OBAN=1: this task starts the application, and Oban must not run " <>
+            "against the working database"
+        )
+
+    Mix.Task.run("app.start")
+
     {opts, extra, invalid} =
       OptionParser.parse(args,
         strict: [
           manifest: :string,
           rule: :string,
           reviewer: :string,
+          override: :string,
           dry_run: :boolean,
           receipts: :string
         ]
@@ -50,14 +61,15 @@ defmodule Mix.Tasks.Dd.Routing.Publish do
 
     unless extra == [] and invalid == [] and opts[:manifest] do
       Mix.raise(
-        "usage: mix dd.routing.publish --manifest MANIFEST [--rule RULE | --reviewer EMAIL] " <>
-          "[--dry-run] [--receipts OUT]"
+        "usage: mix dd.routing.publish --manifest MANIFEST " <>
+          "[--rule RULE | --reviewer EMAIL --override REASON] [--dry-run] [--receipts OUT]"
       )
     end
 
     manifest = ok!(LaunchManifest.read(opts[:manifest]))
     rule = if manifest.rule_sha256, do: ok!(ReviewRule.load(opts[:rule] || ReviewRule.path()))
     actor = actor!(rule, opts[:reviewer])
+    override = override!(rule, opts[:override])
 
     Mix.shell().info("manifest #{opts[:manifest]} (#{manifest.sha256})")
     Mix.shell().info("  pages #{map_size(manifest.pages)}, lexical #{length(manifest.lexical)}")
@@ -74,7 +86,12 @@ defmodule Mix.Tasks.Dd.Routing.Publish do
     end
 
     {:ok, report} =
-      Publications.publish(manifest, actor.id, rule: rule, dry_run: opts[:dry_run] == true)
+      Publications.publish(manifest, actor.id,
+        rule: rule,
+        dry_run: opts[:dry_run] == true,
+        override: override != nil,
+        reason: override
+      )
 
     print(report, opts[:dry_run])
 
@@ -86,6 +103,28 @@ defmodule Mix.Tasks.Dd.Routing.Publish do
 
   defp ok!({:ok, value}), do: value
   defp ok!({:error, message}), do: Mix.raise(message)
+
+  # D3 as amended (#237): the signed rule is the publication authority, and
+  # a human publishes only as an override, recorded as such. A manifest made
+  # without a rule therefore publishes only with `--override REASON`, which
+  # every receipt carries; a rule's manifest takes no override.
+  defp override!(nil, nil),
+    do:
+      Mix.raise(
+        "a manifest made without a rule publishes only as a human's override, recorded as " <>
+          "such (D3): give --override REASON"
+      )
+
+  defp override!(nil, reason) do
+    if String.trim(reason) == "",
+      do: Mix.raise("--override needs a reason"),
+      else: String.trim(reason)
+  end
+
+  defp override!(_rule, nil), do: nil
+
+  defp override!(_rule, _reason),
+    do: Mix.raise("a manifest made under the standing review rule takes no --override")
 
   # The rule's signer, or the named reviewer: an account holding the
   # reviewer role, with its actor. Nothing is created here.

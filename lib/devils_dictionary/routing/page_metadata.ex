@@ -52,35 +52,74 @@ defmodule DevilsDictionary.Routing.PageMetadata do
     biography = for b <- page.biography, not b[:display_restricted?], do: b[:body]
     definitions = for d <- page.definitions, not d[:display_restricted?], do: d[:body]
 
-    Enum.find_value([page.entity && page.entity.description | biography ++ definitions], fn
-      text when is_binary(text) -> first_sentence(text)
-      _ -> nil
-    end)
+    # A registry description is one phrase, used whole; a biography or a
+    # definition is prose, of which the first sentence.
+    (page.entity && phrase(page.entity.description)) ||
+      Enum.find_value(biography ++ definitions, fn
+        text when is_binary(text) -> first_sentence(text)
+        _ -> nil
+      end)
   end
+
+  # An abbreviation or an initial before a full stop is not the end of a
+  # sentence: "J. R. R. Tolkien was", "Dr. Johnson", "Jon M. Chu", "G.I.
+  # Joe", "ft. Kimiko", "e.g. this".
+  @abbreviations ~w(Dr Mr Mrs Ms Mx St Jr Sr Prof Mt Mts No Nos vs ft etc cf ca approx Inc Ltd Co Corp
+                    Gen Lt Col Sgt Capt Rev Hon Fr Bros Dept Univ Jan Feb Mar Apr Jun Jul Aug Sep Sept
+                    Oct Nov Dec)
 
   @doc """
   The first sentence of a text, as plain text: tags and Markdown marks
   removed, whitespace collapsed, at most #{@limit} characters, cut at a word.
+  A sentence ends at `.`, `!` or `?` followed by whitespace and a capital
+  letter (or the end of the text), never after an initial (`J.`, `M.`), a
+  known abbreviation (`Dr.`, `ft.`, `e.g.`) or a dotted acronym (`G.I.`).
   """
   def first_sentence(text) when is_binary(text) do
-    plain =
-      text
-      |> String.replace(~r/<[^>]*>/u, " ")
-      |> String.replace(~r/\[([^\]]*)\]\([^)]*\)/u, "\\1")
-      |> String.replace(~r/[*_`#>]+/u, "")
-      |> String.replace(~r/\s+/u, " ")
-      |> String.trim()
-
-    sentence =
-      case Regex.run(~r/\A.+?[.!?](?=\s|\z)/u, plain) do
-        [match] -> match
-        nil -> plain
-      end
-
-    present(cut(sentence))
+    plain = plain(text)
+    present(cut(sentence(plain, 0) || plain))
   end
 
   def first_sentence(_text), do: nil
+
+  @doc """
+  A short text used whole, as plain text, cut at a word: for a registry
+  description, which is one phrase (`2025 film directed by Jon M. Chu`), not
+  a paragraph to take the first sentence of.
+  """
+  def phrase(text) when is_binary(text), do: text |> plain() |> cut() |> present()
+  def phrase(_text), do: nil
+
+  defp plain(text) do
+    text
+    |> String.replace(~r/<[^>]*>/u, " ")
+    |> String.replace(~r/\[([^\]]*)\]\([^)]*\)/u, "\\1")
+    |> String.replace(~r/[*_`#>]+/u, "")
+    |> String.replace(~r/\s+/u, " ")
+    |> String.replace(~r/\s+([.,;:!?)\]])/u, "\\1")
+    |> String.trim()
+  end
+
+  # The first terminator from `from` that ends a sentence; nil when none.
+  defp sentence(plain, from) do
+    case Regex.run(~r/[.!?](?=\s+\p{Lu}|\z)/u, plain, offset: from, return: :index) do
+      [{at, len}] ->
+        head = String.slice(plain, 0, at + len)
+
+        if ends_in_abbreviation?(head),
+          do: sentence(plain, at + len),
+          else: head
+
+      nil ->
+        nil
+    end
+  end
+
+  defp ends_in_abbreviation?(head) do
+    Regex.match?(~r/(?:^|\s)\p{Lu}\.\z/u, head) or
+      Regex.match?(~r/(?:\p{L}\.)+\p{L}\.\z/u, head) or
+      Regex.match?(~r/(?:^|\s)(?:#{Enum.join(@abbreviations, "|")})\.\z/u, head)
+  end
 
   defp cut(text) do
     if String.length(text) <= @limit do

@@ -19,7 +19,11 @@ defmodule DevilsDictionary.Routing.Publications do
 
   A page that fails a gate is refused, alone: each page is its own
   transaction, so a refusal never rolls back the batch, and is reported with
-  every gate's finding. A page that passes gets a receipt
+  every gate's finding; a refusal the database makes at the receipt or at
+  commit is reported the same way, as `database`, in the database's words.
+  A manifest made without a rule publishes only as a human's override
+  (`override: true` with a `reason:`, D3 as amended), which every receipt
+  carries; a rule's manifest takes none. A page that passes gets a receipt
   (`Routing.PagePublication`) — the manifest's digest, the rule's digest, the
   eight gates as found, the human actor and the reason — and its
   `publication_state` becomes `published` in the same transaction; the
@@ -83,7 +87,8 @@ defmodule DevilsDictionary.Routing.Publications do
   """
   def publish(manifest, actor_id, opts \\ []) do
     with {:ok, actor} <- human(actor_id),
-         :ok <- republish_reason(opts) do
+         :ok <- republish_reason(opts),
+         :ok <- override_reason(manifest, opts) do
       ctx = %{
         manifest: manifest,
         actor: actor,
@@ -91,6 +96,7 @@ defmodule DevilsDictionary.Routing.Publications do
         rule: opts[:rule],
         dry_run: Keyword.get(opts, :dry_run) == true,
         republish: Keyword.get(opts, :republish) == true,
+        override: Keyword.get(opts, :override) == true,
         reason: opts[:reason],
         schema: Recovery.routing_schema()
       }
@@ -122,50 +128,80 @@ defmodule DevilsDictionary.Routing.Publications do
       else: :ok
   end
 
-  # One page, one transaction: a refusal is this page's alone.
+  # A human's override (D3 as amended): a manifest made without a rule
+  # publishes only as one, with a reason every receipt carries; a rule's
+  # manifest takes none.
+  defp override_reason(manifest, opts) do
+    cond do
+      Keyword.get(opts, :override, false) and not reason?(opts[:reason]) ->
+        {:error, :reason_required}
+
+      Keyword.get(opts, :override, false) and manifest.rule_sha256 ->
+        {:error, :override_under_rule}
+
+      true ->
+        :ok
+    end
+  end
+
+  # One page, one transaction: a refusal is this page's alone. A refusal the
+  # database makes at the receipt or at commit (a constraint, a trigger) is
+  # this page's too: reported as refused with the database's words, and the
+  # batch goes on.
   defp one(entry, ctx) do
     id = entry["page_id"]
     base = %{page_id: id, path: entry["path"], object_id: entry["object_id"]}
 
-    {:ok, result} =
-      Repo.transaction(
-        fn ->
-          case load(id, ctx.dry_run) do
-            nil ->
-              gates = Map.new(@gates, &{&1, fail("no page #{id}")})
-              {:refused, Map.merge(base, %{failed: @gates, gates: ordered(gates)})}
+    try do
+      {:ok, result} =
+        Repo.transaction(
+          fn ->
+            case load(id, ctx.dry_run) do
+              nil ->
+                gates = Map.new(@gates, &{&1, fail("no page #{id}")})
+                {:refused, Map.merge(base, %{failed: @gates, gates: ordered(gates)})}
 
-            %Page{publication_state: :published} = page ->
-              {:unchanged, Map.merge(base, %{state: page.publication_state})}
+              %Page{publication_state: :published} = page ->
+                {:unchanged, Map.merge(base, %{state: page.publication_state})}
 
-            %Page{publication_state: :withdrawn} when not ctx.republish ->
-              {:unchanged,
-               Map.merge(base, %{
-                 state: :withdrawn,
-                 note: "withdrawn by a reviewer; only a reviewer's own decision republishes it"
-               })}
+              %Page{publication_state: :withdrawn} when not ctx.republish ->
+                {:unchanged,
+                 Map.merge(base, %{
+                   state: :withdrawn,
+                   note: "withdrawn by a reviewer; only a reviewer's own decision republishes it"
+                 })}
 
-            %Page{} = page ->
-              gates = evaluate(page, entry, ctx)
-              failed = for g <- @gates, not gates[g]["passed"], do: g
+              %Page{} = page ->
+                gates = evaluate(page, entry, ctx)
+                failed = for g <- @gates, not gates[g]["passed"], do: g
 
-              cond do
-                failed != [] ->
-                  {:refused, Map.merge(base, %{failed: failed, gates: ordered(gates)})}
+                cond do
+                  failed != [] ->
+                    {:refused, Map.merge(base, %{failed: failed, gates: ordered(gates)})}
 
-                ctx.dry_run ->
-                  {:would_publish, Map.merge(base, %{gates: ordered(gates)})}
+                  ctx.dry_run ->
+                    {:would_publish, Map.merge(base, %{gates: ordered(gates)})}
 
-                true ->
-                  receipt = write!(page, gates, entry, ctx)
-                  {:published, Map.merge(base, %{receipt_id: receipt.id, gates: ordered(gates)})}
-              end
-          end
-        end,
-        timeout: :infinity
-      )
+                  true ->
+                    receipt = write!(page, gates, entry, ctx)
 
-    result
+                    {:published,
+                     Map.merge(base, %{receipt_id: receipt.id, gates: ordered(gates)})}
+                end
+            end
+          end,
+          timeout: :infinity
+        )
+
+      result
+    rescue
+      e in [Postgrex.Error, Ecto.ConstraintError] ->
+        {:refused,
+         Map.merge(base, %{
+           failed: ["database"],
+           gates: %{"database" => fail("refused by the database: " <> Exception.message(e))}
+         })}
+    end
   end
 
   defp load(id, _dry_run) when not is_id(id), do: nil
@@ -207,7 +243,12 @@ defmodule DevilsDictionary.Routing.Publications do
         else: "approved by #{entry["reviewer"]}"
 
     base = "launch manifest #{ctx.manifest.sha256}, #{approval}"
-    if ctx.republish, do: "#{base}; republished: #{ctx.reason}", else: base
+
+    cond do
+      ctx.republish -> "#{base}; republished: #{ctx.reason}"
+      ctx.override -> "#{base}; a human's override: #{ctx.reason}"
+      true -> base
+    end
   end
 
   # The gates, as found: each `%{"passed" => bool, "detail" => text}`.
@@ -347,12 +388,15 @@ defmodule DevilsDictionary.Routing.Publications do
     fixture =
       Repo.one(from e in Entity, where: e.object_id == ^target, select: e.metadata["fixture"])
 
+    # A body counts only where it may be shown (`shown/1`); a work or an
+    # edition is a label the entity actually has, as #237 step 1 allows
+    # ("a work, a biography paragraph, a quotation"), and counts as such.
     counts =
       [
         biography: shown(ep.biography),
         works: length(ep.works),
         definitions: shown(ep.definitions),
-        quotations: length(ep.quotations),
+        quotations: shown(ep.quotations),
         editions: length(ep.editions),
         contents: shown(ep.contents)
       ]
