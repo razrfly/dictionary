@@ -75,6 +75,38 @@ Every alias names a destination **page**, and the resolver reads that page's cur
 
 None of it moves an address.
 
+## The reviewer's tool
+
+`mix dd.routing.route` ([#237](https://github.com/razrfly/dictionary/issues/237) Part B, criterion C9) performs one of the six approved operations above from the command line, under a named reviewer with a reason, so that nobody has to do it in `iex`. It is a thin shell around `Routing.Ledger`: it names the actor, prints the resolver's answers before and after, prints the rows the ledger wrote, and refuses exactly as the ledger refuses. It has no rule of its own and records nothing but the ledger's rows.
+
+Every invocation starts the application, so it refuses to run without `DD_NO_OBAN=1`, which starts Oban with no queues and no plugins: a reviewer's operation must not run the queued jobs and cron beside it.
+
+| Invocation | Ledger call |
+|---|---|
+| `mix dd.routing.route move --page ID --path PATH --actor EMAIL --reason TEXT` | `move/3` |
+| `mix dd.routing.route merge --from ID --into ID --actor EMAIL --reason TEXT` | `merge/3` |
+| `mix dd.routing.route split --page ID --successors ID,ID --actor EMAIL --reason TEXT` | `split/3`, the successors in the order the choice will list them |
+| `mix dd.routing.route retire --page ID --actor EMAIL --reason TEXT` | `retire/2` |
+| `mix dd.routing.route restore --page ID --path PATH --actor EMAIL --reason TEXT` | `restore/3` |
+| `mix dd.routing.route rollback --operation UUID --actor EMAIL --reason TEXT` | `rollback/2` |
+| `mix dd.routing.route resolve PATH [PATH ...]` | none: read-only |
+
+The options are the ledger's arguments, named after them. A path is given in stored form (`/people/voltaire`), as the ledger stores it. `--actor` names an account that holds the reviewer role, resolved to the account's `user` actor the way `Routing.Backfill` resolves a reviewer's confirmation; an account without one gets it in the operation's own transaction, so a refusal leaves no actor row behind. An account without the role, or no account, is refused before anything else is read. `--reason` is recorded on every row the operation writes.
+
+What one invocation prints, in order:
+
+1. The operation, the actor (email and user id) and the reason.
+2. For `merge` and `split`, what the registry holds for the page's identity: that the merge into the survivor's identity exists, or that the object is still its own live identity (or merged elsewhere, or split) and no registry merge or split exists. A registry merge or split must already exist; the tool creates none and says so, and the ledger's refusal (`:identity_not_merged`, `:identity_not_split`) follows. For a split it also says, for each named successor, whether its object is a split output.
+3. `before`: one line per page the operation names (role, locale, lifecycle, publication state, canonical, target object, merge successor, current revision), then one line per path the operation touches, with the resolver's answer in public and in internal mode as the status and outcome ADR 0004 §6 assigns: `200 canonical`, `301 redirect -> /people/arouet`, `200 choice [page 12 200 canonical, page 13 200 canonical]`, `404 missing`, `404 unavailable`, `410 gone`, `400 invalid (reason)`, `500 corrupt (reason)`. The paths touched are every path serving the pages named, plus the path given on the command line; for a rollback, every path and page the operation's own rows name.
+4. `written`: the operation id and kind, the number of `route_changes` rows, the actor and, for a rollback, the operation it reverts; then each row (a path transition with its kind and destination before and after, or a page transition with its lifecycle, canonical pointer, merge successor and revision before and after, and the classification decision and policy version where the ledger recorded one); then the `public_paths` and `pages` rows those rows changed, as they now stand; and the `page_revisions` row a split writes, with its `split_successor` memberships in order. A move to the page's current canonical writes nothing, and the tool says so.
+5. `after`: the same pages and paths again.
+
+A refusal prints `refused: REASON (in words)` and `Nothing written.`, and exits non-zero. The reason is the ledger's own term (`:identity_not_merged`, `{:path_taken, %{path: ..., kind: ..., page_id: ...}}`, `{:stale, ...}`, `:already_rolled_back`), after the `before` section and with no `written` or `after`; the ledger refuses before it writes, so the ledger is as it was. A malformed path or id is the ledger's refusal too (`:unknown_namespace`, `:invalid_operation`), not a crash.
+
+`resolve` takes request paths as a browser would send them (percent-encoded) and prints both modes' answers for each, so the before and after of an operation can be recorded by hand as well, and so the answer for an address nobody is changing can be read. An equivalent spelling of a stored path (`/people/Voltaire/`) is answered `301 redirect` to the canonical; `/people/c%2B%2B` is `404 missing`, never C++. It writes nothing.
+
+The tests are `test/mix/tasks/dd_routing_route_test.exs`: each operation with its answers before and after (301 for a move, choice for a split, 410 for the retirement of a published page and 404 for a draft's, the way back by restore and by rollback) and the rows written; a refused move that leaves the ledger unchanged with the reason printed; a contributor account and an unknown account refused; a merge and a split without their registry merge or split, reported with nothing written; the refusal without `DD_NO_OBAN=1`; and `resolve`. C9's proof on the working installation, on a disposable page, is not the tool's to make: it is run and recorded on the issue when the operations are performed there.
+
 ## Resolver
 
 `Routing.Resolver.resolve/1` takes the raw request path, `resolve_page/1` an exact page id, and `link/1` returns the encoded canonical for an id. Each decision is made from rows read in **one statement**: the path, its page and that page's canonical together. A move or merge committing mid-request therefore never looks like corruption. Each call returns a `Routing.Resolution`:
