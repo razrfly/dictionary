@@ -56,5 +56,12 @@
       "text": "Lexical pages stay noindex, every /on/:slug and /words/:id/:slug, with one exception: the On page of each lexeme that a page published under this rule names, through the page's membership or a sense's refers_to link to its subject, is listed in the launch manifest as a lexical entry, indexable. Widening the lexical index is a later manifest under this rule, not a code change (D1 of #237)."
     }
   ],
-  "signature": null
+  "signature": {
+    "signer": "issue84-browser@local.test",
+    "user_id": 2,
+    "rule_sha256": "1564626c899c223a0d179ecb397d8b28856498dbe9afe0759d77e1926ae46883",
+    "signed_at": "2026-10-09T15:48:23Z",
+    "method": "mix dd.routing.rule --sign: the account's password checked on devils_dictionary_v2 on localhost:5434, the signing recorded in review_rule_signatures",
+    "attestation": "The holder of reviewer account issue84-browser@local.test signs this rule as the owner's standing decision for every record and page it decides (#237)."
+  }
 }
