@@ -10,9 +10,10 @@ defmodule DevilsDictionaryWeb.PublicRoutingTest do
       exact-identity route, while internal mode is unaffected and nothing in
       the ledger changes; **on again**, every answer is what it was;
     * nothing in a request turns it on;
-    * the published host reads publicly, whatever development configures:
-      a draft is 404 there, and only an authenticated reviewer or contributor
-      reads internally.
+    * on the published host a request from the machine itself reads as
+      development configures, drafts marked, and one through the proxy
+      reads publicly: a draft is 404 there, and only an authenticated
+      reviewer or contributor reads internally (#250).
 
   Voltaire and Arouet are CI fixtures in this test's sandbox.
   """
@@ -42,6 +43,8 @@ defmodule DevilsDictionaryWeb.PublicRoutingTest do
   end
 
   defp switch(on?, fun), do: with_env(:public_routing, on?, fun)
+
+  defp proxied(conn), do: put_req_header(conn, "x-forwarded-for", "203.0.113.7")
 
   defp with_env(key, value, fun) do
     previous = Application.get_env(:devils_dictionary, key)
@@ -126,15 +129,13 @@ defmodule DevilsDictionaryWeb.PublicRoutingTest do
     # development one: without it, or with a short one, it does not boot.
     assert dev[DevilsDictionaryWeb.Endpoint][:secret_key_base] == String.duplicate("s", 64)
 
-    # Sockets only from its own pages or the owner's machine, and no live
-    # reload in the pages the public reads.
+    # Sockets only from its own pages or the owner's machine. Live reload as
+    # on any development server: its reloader and its socket answer the
+    # owner's machine only (`LocalDevelopment`, `LiveReloadSocket`, #250).
     assert dev[DevilsDictionaryWeb.Endpoint][:check_origin] ==
              ["//wordhoard.test", "//localhost", "//127.0.0.1"]
 
-    assert dev[DevilsDictionaryWeb.Endpoint][:live_reload] == [
-             patterns: [],
-             web_console_logger: false
-           ]
+    assert [_ | _] = dev[DevilsDictionaryWeb.Endpoint][:live_reload][:patterns]
 
     assert_raise RuntimeError, ~r/needs DD_SECRET_KEY_BASE/, fn ->
       runtime(:dev, [{"DD_PUBLISHED_HOST", "wordhoard.test"}, {"DD_SECRET_KEY_BASE", nil}])
@@ -156,8 +157,9 @@ defmodule DevilsDictionaryWeb.PublicRoutingTest do
       end
     end
 
-    # The published host is compiled without the code reloader and the debug
-    # error pages, which answer before any plug; the owner's own runs are not.
+    # The published host is compiled without the debug error pages, which
+    # answer before any plug; it keeps the code reloader, whose tools skip a
+    # request through the tunnel (#250). The owner's own runs have both.
     dev_endpoint = fn vars ->
       with_system_env(vars, fn ->
         @root
@@ -168,7 +170,7 @@ defmodule DevilsDictionaryWeb.PublicRoutingTest do
     end
 
     published_build = dev_endpoint.([{"DD_PUBLISHED_HOST", "wordhoard.test"}])
-    assert published_build[:code_reloader] == false
+    assert published_build[:code_reloader] == true
     assert published_build[:debug_errors] == false
 
     owner_build = dev_endpoint.([{"DD_PUBLISHED_HOST", nil}])
@@ -303,7 +305,7 @@ defmodule DevilsDictionaryWeb.PublicRoutingTest do
     end)
   end
 
-  test "the published host reads publicly: a draft is 404 there, and only a reviewer reads internally",
+  test "on the published host the machine itself reads internally; through the proxy a draft is 404, and only a reviewer reads it",
        ctx do
     draft =
       subject!("Arouet", "people",
@@ -312,28 +314,64 @@ defmodule DevilsDictionaryWeb.PublicRoutingTest do
         path: "/people/françois"
       )
 
-    # Development configures internal reading; the published host refuses it.
+    identity = "/entities/#{draft.entity.object_id}/arouet"
+
+    # Development configures internal reading for everyone; the published
+    # host keeps it for its own machine (#250).
     assert Application.get_env(:devils_dictionary, :internal_reading) == true
     assert ReadingMode.configured?()
 
     with_env(:published_host, "wordhoard.test", fn ->
       refute ReadingMode.configured?()
-      assert ReadingMode.mode(nil) == :public
-      assert ReadingMode.mode(CurationFixtures.account([])) == :public
-      assert ReadingMode.mode(CurationFixtures.account([:reviewer])) == :internal
+      assert ReadingMode.mode(nil, false) == :internal
+      assert ReadingMode.mode(nil, true) == :public
+      assert ReadingMode.mode(CurationFixtures.account([]), true) == :public
+      assert ReadingMode.mode(CurationFixtures.account([:reviewer]), true) == :internal
       assert PublicRouting.origin() == "https://wordhoard.test"
 
-      assert ctx.conn |> get("/people/fran%C3%A7ois") |> html_response(404)
-      # Not linked at all: neither its address nor its exact identity (#237 D2).
-      assert Links.path(draft.entity.object_id, "Arouet") == nil
+      # A loopback request reads the draft, marked; a proxied one is 404.
+      assert ctx.conn |> get("/people/fran%C3%A7ois") |> html_response(200) =~
+               ~s(id="subject-draft")
+
+      for header <- ~w(x-forwarded-for forwarded x-forwarded-host x-forwarded-proto) do
+        conn = ctx.conn |> put_req_header(header, "x") |> get("/people/fran%C3%A7ois")
+        assert html_response(conn, 404), header
+        refute conn.resp_body =~ "a draft"
+      end
+
+      assert %{ctx.conn | remote_ip: {192, 168, 1, 20}}
+             |> get("/people/fran%C3%A7ois")
+             |> html_response(404)
+
+      # The LiveView socket decides the same at mount, and keeps it at each
+      # navigation.
+      {:ok, view, _html} = live(ctx.conn, identity)
+      render_patch(view, "/people/fran%C3%A7ois")
+      assert has_element?(view, "#subject-draft")
+
+      {:ok, view, _html} = ctx.conn |> proxied() |> live(identity)
+      render_patch(view, "/people/fran%C3%A7ois")
+      assert has_element?(view, "#subject-unresolved")
+      refute has_element?(view, "#subject-draft")
+
+      # A reviewer reads it through the proxy too.
+      reviewer = CurationFixtures.account([:reviewer])
+
+      assert ctx.conn
+             |> proxied()
+             |> log_in_user(reviewer.user)
+             |> get("/people/fran%C3%A7ois")
+             |> html_response(200)
+
+      # Publicly it is linked at its exact identity, which reads.
+      refute Links.path(draft.entity.object_id, "Arouet") =~ "/people/"
+      assert ctx.conn |> proxied() |> get(identity) |> html_response(200)
     end)
 
     assert ctx.conn |> get("/people/fran%C3%A7ois") |> html_response(200)
   end
 
   describe "through a proxy (the tunnel)" do
-    defp proxied(conn), do: put_req_header(conn, "x-forwarded-for", "203.0.113.7")
-
     test "on the published host, the operator surfaces answer 404; the owner still reaches them locally",
          ctx do
       with_env(:published_host, "wordhoard.test", fn ->
@@ -395,7 +433,7 @@ defmodule DevilsDictionaryWeb.PublicRoutingTest do
         assert DevilsDictionaryWeb.ReadingMode.configured?()
         assert :error = DevilsDictionaryWeb.LiveSocket.connect(%{}, %Phoenix.Socket{}, proxied)
 
-        # The published host reads publicly: the socket connects.
+        # The published host: the socket connects, and reads publicly.
         with_env(:published_host, "wordhoard.test", fn ->
           assert {:ok, _} =
                    DevilsDictionaryWeb.LiveSocket.connect(%{}, %Phoenix.Socket{}, proxied)

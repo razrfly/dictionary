@@ -37,9 +37,10 @@ defmodule DevilsDictionaryWeb.Endpoint do
     socket "/phoenix/live_reload/socket", DevilsDictionaryWeb.LiveReloadSocket,
       websocket: [connect_info: [:peer_data, :x_headers]]
 
-    plug Phoenix.LiveReloader
-    plug Phoenix.CodeReloader
-    plug Phoenix.Ecto.CheckRepoStatus, otp_app: :devils_dictionary
+    # The live reloader, the code reloader and the repository check, for
+    # the owner's machine only (#250): a request through the tunnel is never
+    # shown a compile error.
+    plug DevilsDictionaryWeb.LocalDevelopment
   end
 
   plug Phoenix.LiveDashboard.RequestLogger,

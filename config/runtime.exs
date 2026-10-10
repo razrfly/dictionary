@@ -302,13 +302,14 @@ config :devils_dictionary,
 
 # The published host (#237 D2, D5): the development server the public
 # reaches through the tunnel. `DD_PUBLISHED_HOST` names it
-# (`wordhoard.eu.ngrok.io`), set only by the server's launch script. Then the
-# server reads publicly — development's configured internal reading does not
-# apply to it, so drafts are seen only by an authenticated reviewer or
-# contributor — its canonical URLs name that host, and public subject
-# addresses are on. `DD_PUBLIC_ROUTING=off` turns them off again: the
-# rollback, with the ledger untouched. Development only: production never
-# reads either variable, and `prod.exs` pins the switch off.
+# (`wordhoard.eu.ngrok.io`), set only by the server's launch script. Then a
+# request through the tunnel reads publicly — development's configured
+# internal reading applies to the machine's own requests only (#250), so
+# there drafts are seen only by an authenticated reviewer or contributor —
+# its canonical URLs name that host, and public subject addresses are on.
+# `DD_PUBLIC_ROUTING=off` turns them off again: the rollback, with the
+# ledger untouched. Development only: production never reads either
+# variable, and `prod.exs` pins the switch off.
 if config_env() == :dev do
   case System.get_env("DD_PUBLISHED_HOST") do
     host when is_binary(host) and host != "" ->
@@ -341,23 +342,20 @@ if config_env() == :dev do
       if byte_size(secret_key_base) < 64,
         do: raise("DD_SECRET_KEY_BASE must be at least 64 bytes")
 
-      # Sockets only from pages of this host or the owner's machine, and no
-      # live reload: its socket answers only the machine itself
-      # (`LiveReloadSocket`), so the reloader is not put in the pages the
-      # public reads, and no log line is streamed to a browser.
+      # Sockets only from pages of this host or the owner's machine.
       config :devils_dictionary, DevilsDictionaryWeb.Endpoint,
         secret_key_base: secret_key_base,
-        check_origin: ["//#{host}", "//localhost", "//127.0.0.1"],
-        live_reload: [patterns: [], web_console_logger: false]
+        check_origin: ["//#{host}", "//localhost", "//127.0.0.1"]
 
     _ ->
       :ok
   end
 end
 
-# Not on the published host (#237 D2), which configures none above.
-if config_env() == :dev and System.get_env("DD_PUBLISHED_HOST") in [nil, ""] do
-  # Reload browser tabs when matching files change.
+if config_env() == :dev do
+  # Reload browser tabs when matching files change. The reloader is put in
+  # the owner's pages only, and its socket answers the owner's machine only
+  # (`LocalDevelopment`, `LiveReloadSocket`), on the published host too.
   config :devils_dictionary, DevilsDictionaryWeb.Endpoint,
     live_reload: [
       web_console_logger: true,
