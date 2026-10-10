@@ -4,7 +4,8 @@ defmodule DevilsDictionaryWeb.LocalDevelopmentTest do
   through the tunnel is never shown a compile error, never stopped by the
   pending-migration check, and its page carries no reloader; the owner's own
   request gets all three, as on any development server. The endpoint reaches
-  them only through `LocalDevelopment`. The published host is compiled
+  them only through `LocalDevelopment`, and no socket compiles the checkout
+  (each sets `code_reloader: false`). The published host is compiled
   without the debug pages (`PublicRoutingTest`), so no request there is
   shown a stack trace or the migration page's button.
   """
@@ -85,5 +86,20 @@ defmodule DevilsDictionaryWeb.LocalDevelopmentTest do
     for tool <- ~w(Phoenix.LiveReloader Phoenix.CodeReloader Phoenix.Ecto.CheckRepoStatus) do
       refute endpoint =~ "plug #{tool}", "the endpoint plugs #{tool} for every request"
     end
+  end
+
+  test "no socket compiles the checkout: a transport would, before any rule, for the tunnel too" do
+    sockets = DevilsDictionaryWeb.Endpoint.__sockets__()
+    assert {"/live", DevilsDictionaryWeb.LiveSocket, _opts} = List.keyfind(sockets, "/live", 0)
+
+    for {path, _socket, opts} <- sockets, transport <- [:websocket, :longpoll], opts[transport] do
+      assert opts[transport][:code_reloader] == false, "#{path} #{transport} runs the reloader"
+    end
+
+    # The live-reload socket, declared only in a build with the reloader.
+    endpoint = File.read!(Path.expand("../../lib/devils_dictionary_web/endpoint.ex", __DIR__))
+
+    assert endpoint =~
+             ~s(websocket: [connect_info: [:peer_data, :x_headers], code_reloader: false])
   end
 end

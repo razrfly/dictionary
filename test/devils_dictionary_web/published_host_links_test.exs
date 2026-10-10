@@ -259,7 +259,12 @@ defmodule DevilsDictionaryWeb.PublishedHostLinksTest do
       conn =
         ctx.conn |> tunnel() |> get("/entities/#{into_draft.object_id}/candide-ou-l-optimisme")
 
-      assert conn.status in [200, 302]
+      html =
+        if conn.status == 302,
+          do: ctx.conn |> tunnel() |> get(redirected_to(conn)) |> html_response(200),
+          else: html_response(conn, 200)
+
+      assert html =~ "1759 novella"
     end)
   end
 

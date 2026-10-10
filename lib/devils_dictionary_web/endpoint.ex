@@ -12,10 +12,19 @@ defmodule DevilsDictionaryWeb.Endpoint do
   ]
 
   # `LiveSocket` is `Phoenix.LiveView.Socket` with the proxy rule (#237 D2):
-  # the forwarding headers and the peer are what it reads.
+  # the forwarding headers and the peer are what it reads. No socket runs
+  # the code reloader, which it would before any rule, for a visitor through
+  # the tunnel too: the owner's own requests compile the checkout
+  # (`LocalDevelopment`, #250).
   socket "/live", DevilsDictionaryWeb.LiveSocket,
-    websocket: [connect_info: [:peer_data, :x_headers, session: @session_options]],
-    longpoll: [connect_info: [:peer_data, :x_headers, session: @session_options]]
+    websocket: [
+      connect_info: [:peer_data, :x_headers, session: @session_options],
+      code_reloader: false
+    ],
+    longpoll: [
+      connect_info: [:peer_data, :x_headers, session: @session_options],
+      code_reloader: false
+    ]
 
   # Serve at "/" the static files from "priv/static" directory.
   #
@@ -35,7 +44,7 @@ defmodule DevilsDictionaryWeb.Endpoint do
     # The owner's machine only (#237 D2): `LiveReloadSocket` refuses a
     # connection through a proxy or from elsewhere.
     socket "/phoenix/live_reload/socket", DevilsDictionaryWeb.LiveReloadSocket,
-      websocket: [connect_info: [:peer_data, :x_headers]]
+      websocket: [connect_info: [:peer_data, :x_headers], code_reloader: false]
 
     # The live reloader, the code reloader and the repository check, for
     # the owner's machine only (#250): a request through the tunnel is never

@@ -9,11 +9,15 @@ defmodule DevilsDictionaryWeb.LocalDevelopment do
   does not compile, and `Phoenix.LiveReloader` puts its reloader in every
   page. The published host is this development server reached through a
   tunnel (#237 D2), so a request that came through a proxy
-  (`ProxyGuard.proxied?/1`) skips all three: it is served by the code last
-  compiled, and its pages carry no reloader. The owner's own requests reload
-  as on any development server. Stack traces and the pending-migration page
-  are `debug_errors`'s, which the published host is compiled without
-  (`config/dev.exs`).
+  (`ProxyGuard.proxied?/1`) skips all three: it never compiles the checkout
+  and is never shown the compiler's output, and its pages carry no
+  reloader. Nor does a socket compile (the endpoint's `code_reloader: false`
+  on each). The owner's own requests reload as on any development server.
+  While the checkout does not compile, the modules Mix removed to recompile
+  are missing for every request, so a page that needs one answers 500
+  through the tunnel too, without the trace. Stack traces and the
+  pending-migration page are `debug_errors`'s, which the published host is
+  compiled without (`config/dev.exs`).
   """
 
   @behaviour Plug

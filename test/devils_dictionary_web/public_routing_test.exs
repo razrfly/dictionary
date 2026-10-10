@@ -433,7 +433,8 @@ defmodule DevilsDictionaryWeb.PublicRoutingTest do
         assert DevilsDictionaryWeb.ReadingMode.configured?()
         assert :error = DevilsDictionaryWeb.LiveSocket.connect(%{}, %Phoenix.Socket{}, proxied)
 
-        # The published host: the socket connects, and reads publicly.
+        # The published host: the socket connects (and reads publicly, as the
+        # published-host test above shows by live navigation).
         with_env(:published_host, "wordhoard.test", fn ->
           assert {:ok, _} =
                    DevilsDictionaryWeb.LiveSocket.connect(%{}, %Phoenix.Socket{}, proxied)
