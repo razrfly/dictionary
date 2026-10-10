@@ -9,8 +9,8 @@ defmodule DevilsDictionaryWeb.LiveReloadSocket do
   server's log lines and file paths. This socket is the same channel behind
   a `connect/3` that refuses a connection that came through a proxy or from
   another machine (`ProxyGuard.proxied_connect?/1`), on every server: live
-  reload is never anyone's but the owner's. The published host does not
-  inject the reloader into its pages either (`config/runtime.exs`).
+  reload is never anyone's but the owner's. Nor is the reloader put in a
+  proxied request's page (`LocalDevelopment`).
   """
 
   use Phoenix.Socket, log: false

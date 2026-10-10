@@ -12,11 +12,12 @@ defmodule DevilsDictionaryWeb.HeadTest do
       (D1); a spelling, a trail, a drawer and the demo are noindex variants;
     * an exact word, the exact-identity route, evidence and the way in:
       noindex, each at its own canonical (the exact-identity route at the
-      subject's public address where one is served, and 404 for a subject
-      whose page is not served, #237 D2);
+      subject's public address where one is served);
     * live navigation sets the head again, and the hook element carries it;
     * a page that sets no head is noindex with no canonical.
 
+  Requests are made as through the tunnel (`X-Forwarded-For`), as the public
+  reads the published host; the machine's own read internally (#250).
   Voltaire and the rest are CI fixtures made in this test's sandbox.
   """
   use DevilsDictionaryWeb.ConnCase, async: false
@@ -41,7 +42,8 @@ defmodule DevilsDictionaryWeb.HeadTest do
     previous = for key <- [:published_host, :launch_manifest], do: {key, env(key)}
     Application.put_env(:devils_dictionary, :published_host, @host)
     on_exit(fn -> Enum.each(previous, fn {key, value} -> restore(key, value) end) end)
-    %{conn: conn, sources: sources, human: human!()}
+    tunnel = put_req_header(conn, "x-forwarded-for", "203.0.113.7")
+    %{conn: tunnel, local: conn, sources: sources, human: human!()}
   end
 
   defp env(key), do: Application.get_env(:devils_dictionary, key)
@@ -200,15 +202,12 @@ defmodule DevilsDictionaryWeb.HeadTest do
     assert head.canonical == nil
     assert head.title == "Nothing at this address · wordhoard"
 
-    # Internally the draft reads at its address, marked, and still noindex.
-    with_env(:published_host, nil, fn ->
-      reading(true, fn ->
-        head = head_of(ctx.conn, "/people/arouet", 200)
-        assert head.robots == "noindex"
-        assert head.canonical =~ "/people/arouet"
-        assert head.title == "Arouet · People · wordhoard"
-      end)
-    end)
+    # Internally — on the machine itself — the draft reads at its address,
+    # marked, and still noindex.
+    head = head_of(ctx.local, "/people/arouet", 200)
+    assert head.robots == "noindex"
+    assert head.canonical =~ "/people/arouet"
+    assert head.title == "Arouet · People · wordhoard"
 
     switch(false, fn ->
       head = head_of(ctx.conn, "/people/voltaire", 404)
@@ -299,20 +298,12 @@ defmodule DevilsDictionaryWeb.HeadTest do
     assert head.description == "French writer and philosopher."
     assert [%{"@type" => "WebPage"}] = head.json_ld["@graph"]
 
-    # A subject whose page the published host does not serve — every page
-    # while the switch is off, a draft — is 404 here as at its address (#237
-    # D2).
     switch(false, fn ->
-      head = head_of(ctx.conn, "/entities/#{id}/voltaire", 404)
-      assert head.robots == "noindex"
-      assert head.canonical == nil
+      assert head_of(ctx.conn, "/entities/#{id}/voltaire", 200).canonical ==
+               @origin <> "/entities/#{id}/voltaire"
     end)
 
-    draft = subject!("Venus", "works", kind: :work, description: "a draft")
-    assert head_of(ctx.conn, "/entities/#{draft.entity.object_id}/venus", 404).canonical == nil
-
-    # With no address served, the canonical is the route's own path.
-    album = subject!("Mars", "works", kind: :work, description: "2012 album", page: false)
+    album = subject!("Mars", "works", kind: :work, description: "2012 album")
     album_id = album.entity.object_id
     head = head_of(ctx.conn, "/entities/#{album_id}/mars", 200)
     assert head.canonical == @origin <> "/entities/#{album_id}/mars"

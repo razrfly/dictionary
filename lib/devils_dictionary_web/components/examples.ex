@@ -89,7 +89,7 @@ defmodule DevilsDictionaryWeb.Examples do
           class={["flex flex-col gap-3", @shown != [] && "mb-5"]}
         >
           <li :for={item <- @exemplars} id={"examples-" <> dom_id(item.id)} class="min-w-0">
-            <.card item={item} paths={@paths} mode={@mode} />
+            <.card item={item} paths={@paths} />
           </li>
         </ul>
 
@@ -102,7 +102,6 @@ defmodule DevilsDictionaryWeb.Examples do
               trail={@trail}
               demo={@demo}
               paths={@paths}
-              mode={@mode}
             />
           </li>
         </ul>
@@ -129,7 +128,6 @@ defmodule DevilsDictionaryWeb.Examples do
                 trail={@trail}
                 demo={@demo}
                 paths={@paths}
-                mode={@mode}
               />
             </li>
           </ul>
@@ -159,19 +157,15 @@ defmodule DevilsDictionaryWeb.Examples do
   defp hidden_from_public?(_item), do: false
 
   # A thing's page, or — for a content subject (a GIF, a quotation), which has
-  # no entity page — the claim's own. Nil for a thing the reader may not link
-  # (#237 D2), whose name is then text.
-  defp subject_path(%{subject: %{kind: :content}, claim: claim}, _paths, _mode),
+  # no entity page — the claim's own.
+  defp subject_path(%{subject: %{kind: :content}, claim: claim}, _paths),
     do: "/connections/#{claim.assertion_id}"
 
-  defp subject_path(%{subject: subject}, paths, mode),
-    do:
-      Map.get(paths, subject.object_id) ||
-        Links.fallback(subject.object_id, subject.label, mode)
+  defp subject_path(%{subject: subject}, paths),
+    do: Map.get(paths, subject.object_id) || Links.entity_path(subject.object_id, subject.label)
 
   # Every entity the section links, through the one link helper in one query
-  # (#219): its address in the reading mode, or the exact-identity route, or
-  # nil where the reader may not link it (#237 D2).
+  # (#219): its address in the reading mode, or the exact-identity route.
   defp subject_paths(items, mode) do
     items
     |> Enum.flat_map(fn
@@ -195,7 +189,6 @@ defmodule DevilsDictionaryWeb.Examples do
 
   attr :item, :map, required: true
   attr :paths, :map, default: %{}
-  attr :mode, :atom, default: :public
 
   # One exemplar: a thing someone cites for a meaning. A card because it is
   # a different kind of content from the chips beneath — a claim with a why,
@@ -211,7 +204,7 @@ defmodule DevilsDictionaryWeb.Examples do
       |> assign(:signals, item.signals)
       |> assign(:pending?, pending?(item))
       |> assign(:hidden_from_public?, hidden_from_public?(item))
-      |> assign(:href, subject_path(item, assigns.paths, assigns.mode))
+      |> assign(:href, subject_path(item, assigns.paths))
 
     ~H"""
     <article class={[
@@ -223,12 +216,12 @@ defmodule DevilsDictionaryWeb.Examples do
     ]}>
       <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <h3 class="min-w-0 text-base/7 font-medium text-mist-950 sm:text-sm/6 dark:text-white">
-          <.subject_link
+          <.link
             navigate={@href}
             class="break-words underline decoration-mist-950/20 underline-offset-4 hover:decoration-mist-950 dark:decoration-white/25 dark:hover:decoration-white"
           >
             {@subject.label}
-          </.subject_link>
+          </.link>
         </h3>
         <p
           :if={@pending?}
@@ -355,7 +348,6 @@ defmodule DevilsDictionaryWeb.Examples do
   attr :trail, :list, default: []
   attr :demo, :boolean, default: false
   attr :paths, :map, default: %{}
-  attr :mode, :atom, default: :public
 
   defp chip(assigns) do
     subject = assigns.item.subject
@@ -363,12 +355,12 @@ defmodule DevilsDictionaryWeb.Examples do
     assigns =
       assigns
       |> assign(:subject, subject)
-      |> assign(:href, href(subject, assigns.trail, assigns.demo, assigns.paths, assigns.mode))
+      |> assign(:href, href(subject, assigns.trail, assigns.demo, assigns.paths))
       |> assign(:badge_sources, Enum.uniq_by(assigns.item.sources, & &1.slug))
       |> assign(:title, title(assigns.item))
 
     ~H"""
-    <.subject_link
+    <.link
       id={"examples-" <> dom_id(@item.id)}
       navigate={@href}
       title={@title}
@@ -398,7 +390,7 @@ defmodule DevilsDictionaryWeb.Examples do
       <span :if={@badges?} class="sr-only">
         — {Enum.map_join(@badge_sources, " and ", & &1.name)}
       </span>
-    </.subject_link>
+    </.link>
     """
   end
 
@@ -446,11 +438,10 @@ defmodule DevilsDictionaryWeb.Examples do
 
   defp words(_source), do: nil
 
-  defp href(%{kind: :lexeme, slug: slug}, trail, demo, _paths, _mode),
-    do: Word.hop(slug, trail, demo)
+  defp href(%{kind: :lexeme, slug: slug}, trail, demo, _paths), do: Word.hop(slug, trail, demo)
 
-  defp href(%{kind: :entity, object_id: id, label: label}, _trail, _demo, paths, mode),
-    do: Map.get(paths, id) || Links.fallback(id, label, mode)
+  defp href(%{kind: :entity, object_id: id, label: label}, _trail, _demo, paths),
+    do: Map.get(paths, id) || Links.entity_path(id, label)
 
   # The chip names the thing; the tooltip says what else WordNet calls it and
   # who filed it where — the item's own reason, never a new sentence.
