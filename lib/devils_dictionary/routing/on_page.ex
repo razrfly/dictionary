@@ -260,9 +260,6 @@ defmodule DevilsDictionary.Routing.OnPage do
     end
   end
 
-  @doc """
-  A subject member's link, through the one link helper: nil where the reader
-  may not link it (`Links.fallback/3`, on the published host read publicly).
-  """
+  @doc "A subject member's link, through the one link helper."
   def subject_path(object_id, label, mode), do: Links.path(object_id, label, mode)
 end

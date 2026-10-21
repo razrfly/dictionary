@@ -30,24 +30,24 @@ defmodule DevilsDictionaryWeb.ReadingModeTest do
 
   test "configuration decides for everyone; without it, only an internal contributor reads internally" do
     reading(true, fn ->
-      assert ReadingMode.mode(nil) == :internal
+      assert ReadingMode.mode(nil, false) == :internal
     end)
 
     reading(false, fn ->
-      assert ReadingMode.mode(nil) == :public
-      assert ReadingMode.mode(CurationFixtures.account([])) == :public
-      assert ReadingMode.mode(CurationFixtures.account([:contributor])) == :internal
-      assert ReadingMode.mode(CurationFixtures.account([:reviewer])) == :internal
+      assert ReadingMode.mode(nil, false) == :public
+      assert ReadingMode.mode(CurationFixtures.account([]), false) == :public
+      assert ReadingMode.mode(CurationFixtures.account([:contributor]), false) == :internal
+      assert ReadingMode.mode(CurationFixtures.account([:reviewer]), false) == :internal
     end)
   end
 
   test "a revoked role is read from the database, not from the session's copy" do
     reading(false, fn ->
       scope = CurationFixtures.account([:contributor])
-      assert ReadingMode.mode(scope) == :internal
+      assert ReadingMode.mode(scope, false) == :internal
 
       scope.user |> Ecto.Changeset.change(internal_contributor: false) |> Repo.update!()
-      assert ReadingMode.mode(scope) == :public
+      assert ReadingMode.mode(scope, false) == :public
     end)
   end
 end

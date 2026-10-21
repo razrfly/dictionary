@@ -32,10 +32,6 @@ defmodule DevilsDictionary.Routing.Subjects do
   | `:identity_review` | `identity_review` | `/entities/:id/:slug` |
   | `:source_page` | `excluded_source_page` | `/entities/:id/:slug` |
   | `:unclassified` | no decision | `/entities/:id/:slug` |
-
-  On the published host, read publicly (#237 D2), a card with no served
-  address has no link at all: `Routing.Links.fallback/3` gives it none, and
-  the card shows its label as text.
   """
 
   alias DevilsDictionary.Repo
@@ -217,7 +213,7 @@ defmodule DevilsDictionary.Routing.Subjects do
       page_id: page && page.id,
       address: served && canonical.path,
       draft?: state == :addressed and page.publication_state == :draft,
-      path: served || Links.fallback(row.object_id, row.label, mode)
+      path: served || Links.entity_path(row.object_id, row.label)
     }
   end
 

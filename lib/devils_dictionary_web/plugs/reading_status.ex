@@ -24,7 +24,6 @@ defmodule DevilsDictionaryWeb.ReadingStatus do
   | | neither | 404 (410 or 500 as its overview's outcome says) |
   | `/words/:id/:slug` | no such lexeme, or not the exact text of an id | 404, never a word found by the slug; 400 if the slug is not text, whatever the id |
   | `/entities/:id/:slug` | no such entity, or not the exact text of an id | 404 (ADR 0004 §6), never a page found by the slug; 400 if the slug is not text, whatever the id |
-  | | on the published host, read publicly: an entity whose subject or edition page is not served there (`Routing.Links.withheld?/2`, #237 D2) | 404, as the page's own address |
 
   Live navigation re-runs the same decision in the LiveView, which follows a
   redirect itself; the status only matters to a direct request.
@@ -34,25 +33,25 @@ defmodule DevilsDictionaryWeb.ReadingStatus do
 
   alias DevilsDictionary.Encyclopedia.EntityPage
   alias DevilsDictionary.Lexicon
-  alias DevilsDictionary.Routing.{Address, Input, Links, Resolution, Resolver}
-  alias DevilsDictionaryWeb.ReadingMode
+  alias DevilsDictionary.Routing.{Address, Input, Resolution, Resolver}
+  alias DevilsDictionaryWeb.{ProxyGuard, ReadingMode}
 
   def init(opts), do: opts
 
   def call(conn, _opts) do
-    mode = ReadingMode.mode(conn.assigns[:current_scope])
+    mode = ReadingMode.mode(conn.assigns[:current_scope], ProxyGuard.proxied?(conn))
 
     case conn.path_info do
       ["on", _slug] -> on(conn, mode)
       ["words", _id, _slug] -> word(conn)
-      ["entities", _id, _slug] -> entity(conn, mode)
+      ["entities", _id, _slug] -> entity(conn)
       [family, _slug] -> if family in Address.families(), do: subject(conn, mode), else: conn
       _other -> conn
     end
   end
 
   defp subject(conn, mode) do
-    case conn.request_path |> Resolver.resolve(mode: mode) |> Links.withhold(mode) do
+    case Resolver.resolve(conn.request_path, mode: mode) do
       %Resolution{outcome: :redirect, location: location} -> redirect(conn, location)
       %Resolution{outcome: outcome} when outcome in [:canonical, :choice] -> conn
       resolution -> put_status(conn, Resolution.http_status(resolution))
@@ -98,20 +97,12 @@ defmodule DevilsDictionaryWeb.ReadingStatus do
   # An exact identity: the thing page for an entity, a merged identity or a
   # split one; anything else is 404 (#194's follow-up from #224). A slug
   # that is not text is 400 whatever the id names. A wrong slug on a real
-  # id is the LiveView's redirect to its own. On the published host, read
-  # publicly, an entity whose page is not served there is 404 too, as that
-  # page's address is (#237 D2): the route never shows a draft's subject.
-  defp entity(conn, mode) do
+  # id is the LiveView's redirect to its own.
+  defp entity(conn) do
     cond do
-      not Input.text?(conn.path_params["slug"]) ->
-        put_status(conn, 400)
-
-      (id = exact_id(conn.path_params["id"])) && EntityPage.exists?(id) &&
-          not Links.withheld?(id, mode) ->
-        conn
-
-      true ->
-        put_status(conn, 404)
+      not Input.text?(conn.path_params["slug"]) -> put_status(conn, 400)
+      (id = exact_id(conn.path_params["id"])) && EntityPage.exists?(id) -> conn
+      true -> put_status(conn, 404)
     end
   end
 

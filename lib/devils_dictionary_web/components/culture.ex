@@ -70,7 +70,6 @@ defmodule DevilsDictionaryWeb.Culture do
       provider_count={@provider_count}
       return_path={@return_path}
       paths={@paths}
-      mode={@mode}
       contributor={@contributor}
     />
     """
@@ -269,7 +268,6 @@ defmodule DevilsDictionaryWeb.Culture do
   attr :provider_count, :integer, required: true
   attr :return_path, :string, default: nil
   attr :paths, :map, default: %{}
-  attr :mode, :atom, default: :public, doc: "the reading mode, for subject links"
   attr :contributor, :boolean, default: false
 
   # Every kind on screen at once, one chrome for the lot (#131 Phase 2, V3).
@@ -392,7 +390,6 @@ defmodule DevilsDictionaryWeb.Culture do
                     held={Map.get(entry.state, :archetype) == :corpus}
                     return_path={@return_path}
                     paths={@paths}
-                    mode={@mode}
                   />
                   <.culture_thumbnail
                     :if={shelf.type != :quote}
@@ -402,7 +399,6 @@ defmodule DevilsDictionaryWeb.Culture do
                     source_name={entry.item.preview_metadata["provider"] || entry.state.provider_name}
                     return_path={@return_path}
                     paths={@paths}
-                    mode={@mode}
                   />
                 </li>
                 <li
@@ -881,7 +877,6 @@ defmodule DevilsDictionaryWeb.Culture do
   attr :held, :boolean, default: false, doc: "a corpus line, held locally rather than fetched"
   attr :return_path, :string, default: nil
   attr :paths, :map, default: %{}
-  attr :mode, :atom, default: :public, doc: "the reading mode, for subject links"
 
   defp quote_card(assigns) do
     metadata = assigns.item.preview_metadata
@@ -889,18 +884,14 @@ defmodule DevilsDictionaryWeb.Culture do
     assigns =
       assigns
       |> assign(:text, metadata["title"])
-      |> assign(
-        :creators,
-        creator_links(assigns.item, assigns.return_path, assigns.paths, assigns.mode)
-      )
+      |> assign(:creators, creator_links(assigns.item, assigns.return_path, assigns.paths))
       |> assign(:author, metadata["artist"])
       # With no identified author, the source's own citation says who and
       # where, verbatim — a name is shown as the source wrote it, and is
       # never a link (#164).
       |> assign(
         :citation,
-        if(
-          is_nil(metadata["artist"]) and creator_links(assigns.item, nil, %{}, assigns.mode) == [],
+        if(is_nil(metadata["artist"]) and creator_links(assigns.item, nil, %{}) == [],
           do: metadata["citation"]
         )
       )
@@ -934,7 +925,7 @@ defmodule DevilsDictionaryWeb.Culture do
           :if={@creators != []}
           id={"culture-creator-#{@item.external_namespace}-#{@item.external_id}"}
           phx-no-format
-        ><%= for {creator, index} <- Enum.with_index(@creators) do %><span :if={index > 0}>, </span><.subject_link navigate={creator.path} class="rounded-sm underline decoration-mist-950/20 underline-offset-4 hover:text-mist-950 hover:decoration-current focus-visible:outline-2 focus-visible:outline-offset-2 dark:decoration-white/25 dark:hover:text-white">{creator.label}</.subject_link><% end %></span><span :if={
+        ><%= for {creator, index} <- Enum.with_index(@creators) do %><span :if={index > 0}>, </span><.link navigate={creator.path} class="rounded-sm underline decoration-mist-950/20 underline-offset-4 hover:text-mist-950 hover:decoration-current focus-visible:outline-2 focus-visible:outline-offset-2 dark:decoration-white/25 dark:hover:text-white">{creator.label}</.link><% end %></span><span :if={
           @creators == [] && @author
         }>{@author}</span><span
           :if={(@creators != [] || @author) && (@work || @year)}
@@ -985,7 +976,6 @@ defmodule DevilsDictionaryWeb.Culture do
   attr :type, :atom, required: true
   attr :return_path, :string, default: nil
   attr :paths, :map, default: %{}
-  attr :mode, :atom, default: :public, doc: "the reading mode, for subject links"
 
   attr :mark, :map,
     default: nil,
@@ -1003,10 +993,7 @@ defmodule DevilsDictionaryWeb.Culture do
     assigns =
       assigns
       |> assign(:image, ContentTypes.thumbnail_url(assigns.type, metadata))
-      |> assign(
-        :entry_path,
-        entry_path(assigns.item, assigns.return_path, assigns.paths, assigns.mode)
-      )
+      |> assign(:entry_path, entry_path(assigns.item, assigns.return_path, assigns.paths))
       |> assign(:evidence_path, evidence_path(assigns.item))
       # A required credit already names the creator (below), so the line is
       # not repeated there, linked or not.
@@ -1014,7 +1001,7 @@ defmodule DevilsDictionaryWeb.Culture do
         :creators,
         if(presentation.attribution == :required and attribution,
           do: [],
-          else: creator_links(assigns.item, assigns.return_path, assigns.paths, assigns.mode)
+          else: creator_links(assigns.item, assigns.return_path, assigns.paths)
         )
       )
       |> assign(:aspect, presentation.aspect)
@@ -1120,10 +1107,10 @@ defmodule DevilsDictionaryWeb.Culture do
           class="line-clamp-2 text-sm text-mist-500 text-pretty"
         >
           <%= for {creator, index} <- Enum.with_index(@creators) do %>
-            <span :if={index > 0}>, </span><.subject_link
+            <span :if={index > 0}>, </span><.link
               navigate={creator.path}
               class="rounded-sm underline decoration-mist-950/20 underline-offset-4 hover:text-mist-950 hover:decoration-current focus-visible:outline-2 focus-visible:outline-offset-2 dark:decoration-white/25 dark:hover:text-white"
-            >{creator.label}</.subject_link>
+            >{creator.label}</.link>
           <% end %>
         </p>
         <p :if={@creators == [] && @artist} class="line-clamp-2 text-sm text-mist-500 text-pretty">
@@ -1502,25 +1489,21 @@ defmodule DevilsDictionaryWeb.Culture do
   # never presented as one (#164 C5): it has no entry path, and
   # `evidence_path/1` is its way in. An item that does not say what kind its
   # object is (a catalog artwork) is an entity, which is all a corpus holds.
-  # An entity the reader may not link (#237 D2) has none either, and its
-  # title links out to the source as a content object's does.
-  defp entry_path(%{object_kind: kind}, _return_path, _paths, _mode)
-       when kind not in [nil, :entity],
-       do: nil
+  defp entry_path(%{object_kind: kind}, _return_path, _paths) when kind not in [nil, :entity],
+    do: nil
 
-  defp entry_path(%{object_id: object_id, preview_metadata: metadata}, return_path, paths, mode)
+  defp entry_path(%{object_id: object_id, preview_metadata: metadata}, return_path, paths)
        when is_integer(object_id) do
     paths
-    |> Map.get(object_id, Links.fallback(object_id, metadata["title"], mode))
+    |> Map.get(object_id, Links.entity_path(object_id, metadata["title"]))
     |> with_return(return_path)
   end
 
-  defp entry_path(_item, _return_path, _paths, _mode), do: nil
+  defp entry_path(_item, _return_path, _paths), do: nil
 
   # Every entity a shelf links — its entries and their creators — through the
   # one link helper in one query (#219): the address in the reading mode, or
-  # the exact-identity route, or nil where the reader may not link it (#237
-  # D2).
+  # the exact-identity route.
   defp subject_paths(shelves, mode) do
     shelves
     |> Enum.flat_map(& &1.entries)
@@ -1546,8 +1529,6 @@ defmodule DevilsDictionaryWeb.Culture do
     |> Links.paths(mode)
   end
 
-  # No path, no trail: a subject that is not linked stays unlinked.
-  defp with_return(nil, _return_path), do: nil
   defp with_return(path, nil), do: path
   defp with_return(path, return_path), do: path <> "?" <> URI.encode_query(%{from: return_path})
 
@@ -1556,12 +1537,12 @@ defmodule DevilsDictionaryWeb.Culture do
 
   defp evidence_path(_item), do: nil
 
-  defp creator_links(item, return_path, paths, mode) do
+  defp creator_links(item, return_path, paths) do
     item
     |> Map.get(:creator_links, [])
     |> List.wrap()
     |> Enum.map(fn %{object_id: id, label: label} ->
-      path = paths |> Map.get(id, Links.fallback(id, label, mode)) |> with_return(return_path)
+      path = paths |> Map.get(id, Links.entity_path(id, label)) |> with_return(return_path)
       %{label: label, path: path}
     end)
   end

@@ -1303,8 +1303,7 @@ defmodule DevilsDictionaryWeb.ConnectionLive do
   attr :endpoint, :map, default: nil
   attr :mode, :atom, default: :public
 
-  # A subject end links through the one link helper, in the reading mode, and
-  # is its label as text where the reader may not link it (#237 D2).
+  # A subject end links through the one link helper, in the reading mode.
   defp endpoint_link(%{endpoint: %{kind: :entity, object_id: id, label: label}} = assigns),
     do: assigns |> assign(:path, Links.path(id, label, assigns.mode)) |> endpoint_link_html()
 

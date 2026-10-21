@@ -21,8 +21,13 @@ defmodule DevilsDictionaryWeb.ProxyGuard do
       instead of serving every draft. That is the failure the published
       host's configuration cannot cover by itself: it exists only when the
       launch script names it. Such a server is a development build, though,
-      whose debug pages, live reloader, code reloader and repository check
-      answer before this plug, so the tunnel is kept off it.
+      whose debug pages answer before this plug, so the tunnel is kept off
+      it.
+
+  Every request is assigned `:proxied?`, which `ReadingMode` reads: on the
+  published host a proxied request reads publicly, and one from the
+  machine itself as development configures (#250). The development tools
+  skip a proxied request on every server (`LocalDevelopment`).
 
   A request cannot claim to be local: the proxy adds its headers whatever
   the visitor sends, and the remote address is the socket's.
@@ -55,8 +60,11 @@ defmodule DevilsDictionaryWeb.ProxyGuard do
   def init(opts), do: opts
 
   def call(conn, _opts) do
+    proxied? = proxied?(conn)
+    conn = assign(conn, :proxied?, proxied?)
+
     cond do
-      not proxied?(conn) ->
+      not proxied? ->
         conn
 
       PublicRouting.published_host?() and operator_surface?(conn.path_info) ->
@@ -112,7 +120,11 @@ defmodule DevilsDictionaryWeb.ProxyGuard do
       else: {:cont, socket}
   end
 
-  defp proxied_socket?(socket) do
+  @doc """
+  Whether a LiveView's connection came through a proxy or from another
+  machine (`proxied_connect?/1` on its connect info), at mount.
+  """
+  def proxied_socket?(socket) do
     proxied_connect?(%{
       x_headers: Phoenix.LiveView.get_connect_info(socket, :x_headers),
       peer_data: Phoenix.LiveView.get_connect_info(socket, :peer_data)

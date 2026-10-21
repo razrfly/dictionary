@@ -33,16 +33,16 @@ config :devils_dictionary, DevilsDictionary.Repo,
 # watchers to your application. For example, we can use it
 # to bundle .js and .css sources.
 # The published host (#237 D2) is this development server reached by the
-# public through a tunnel. It is compiled without the code reloader, the
-# repository check and the debug error pages (`Phoenix.Endpoint` reads both
-# with `compile_env`): they answer before any plug, and would hand a visitor
-# the route table and stack traces, a compile error from the working
-# checkout, and during a pending migration a button that runs it. Nor does
-# its HTML carry the templates' source paths. Mix refuses to run a build
-# whose compile-time values differ from the configuration, so the published
-# host builds into its own `MIX_BUILD_ROOT`, which its launch script sets
-# with `DD_PUBLISHED_HOST` before the first mix command; the owner's runs
-# keep `_build`.
+# public through a tunnel. It is compiled without the debug error pages
+# (`Phoenix.Endpoint` reads `debug_errors` with `compile_env`): they answer
+# before any plug, and would hand a visitor the route table and stack
+# traces, and during a pending migration a button that runs it. Nor does its
+# HTML carry the templates' source paths. It keeps the code reloader, whose
+# tools answer the owner's machine only (`LocalDevelopment`, #250). Mix
+# refuses to run a build whose compile-time values differ from the
+# configuration, so the published host builds into its own `MIX_BUILD_ROOT`,
+# which its launch script sets with `DD_PUBLISHED_HOST` before the first mix
+# command; the owner's runs keep `_build`.
 published_host_build? = System.get_env("DD_PUBLISHED_HOST") not in [nil, ""]
 
 config :devils_dictionary, DevilsDictionaryWeb.Endpoint,
@@ -51,7 +51,7 @@ config :devils_dictionary, DevilsDictionaryWeb.Endpoint,
   # Port 4007: 4000–4005 belong to the sibling projects in this directory.
   http: [ip: {127, 0, 0, 1}, port: 4007],
   check_origin: false,
-  code_reloader: not published_host_build?,
+  code_reloader: true,
   debug_errors: not published_host_build?,
   secret_key_base: "ECxygwHtDn8OFiRoCbhB5kvtsT2Np1WVR2ThlLPyIJZ7OrXGk/1pkbwum9lmyGF4",
   watchers: [

@@ -32,14 +32,14 @@ defmodule DevilsDictionaryWeb.Artwork do
       id={@id}
       class="group grid grid-cols-[4.5rem_minmax(0,1fr)] gap-4 border-t border-mist-950/10 py-5 first:border-t-0 dark:border-white/10 sm:grid-cols-[6rem_minmax(0,1fr)]"
     >
-      <.subject_link
+      <.link
         id={"#{@id}-image"}
         navigate={@paths[@artwork.object_id]}
         phx-hook="ArtworkImage"
         phx-update="ignore"
         data-image-state={if(@artwork.image_url, do: "loading", else: "empty")}
         class="aspect-[4/5] overflow-hidden rounded-sm bg-mist-950/5 transition-transform duration-200 group-hover:-translate-y-0.5 dark:bg-white/5"
-        aria-label={@paths[@artwork.object_id] && "Open #{@artwork.title}"}
+        aria-label={"Open #{@artwork.title}"}
       >
         <img
           :if={@artwork.image_url}
@@ -57,22 +57,22 @@ defmodule DevilsDictionaryWeb.Artwork do
         >
           <.icon name="hero-photo" class="size-6 stroke-current" />
         </span>
-      </.subject_link>
+      </.link>
 
       <div class="min-w-0">
-        <.subject_link
+        <.link
           navigate={@paths[@artwork.object_id]}
           class="font-display text-xl text-balance text-mist-950 underline-offset-4 group-hover:underline dark:text-white"
         >
           {@artwork.title}
-        </.subject_link>
+        </.link>
         <p :if={@artwork.creators != []} class="mt-1 text-sm/6 text-mist-500">
           by
           <span :for={{creator, index} <- Enum.with_index(@artwork.creators)}>
-            <span :if={index > 0}>, </span><.subject_link
+            <span :if={index > 0}>, </span><.link
               navigate={@paths[creator.object_id]}
               class="hover:underline"
-            >{creator.label}</.subject_link>
+            >{creator.label}</.link>
           </span>
         </p>
         <%!-- A catalog row names its artist without carrying a local identity
@@ -109,7 +109,6 @@ defmodule DevilsDictionaryWeb.Artwork do
 
         <div class="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-sm/6">
           <.link
-            :if={@paths[@artwork.object_id]}
             navigate={@paths[@artwork.object_id]}
             class="font-medium underline underline-offset-4"
           >Open work</.link>
@@ -134,8 +133,7 @@ defmodule DevilsDictionaryWeb.Artwork do
   end
 
   # Every subject link goes through the one helper (#219): the address in the
-  # reading mode, or the exact-identity route — or none on the published
-  # host, read publicly (#237 D2), where the work and its creators are text.
+  # reading mode, or the exact-identity route.
 
   @doc """
   Every link a set of cards needs, the works and their creators, in one
