@@ -123,8 +123,8 @@ defmodule DevilsDictionary.Curation.Opening do
     do: Application.get_env(:devils_dictionary, :curated_opening_fixtures, false) == true
 
   @doc """
-  The opening for a built `WordPage`, asked of `reader`; `nil` when there is no
-  reader, the page names no word, or the reader has nothing for it.
+  The opening for a built `WordPage`, asked of `reader`; `nil` when the page
+  names no word or the reader has nothing for it.
 
   Reads the database and the committed corpus manifests, nothing else. No
   provider is asked, no model is called and nothing is written.

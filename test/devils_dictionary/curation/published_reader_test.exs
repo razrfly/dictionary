@@ -9,12 +9,19 @@ defmodule DevilsDictionary.Curation.PublishedReaderTest do
   use DevilsDictionary.DataCase, async: false
 
   import DevilsDictionary.CurationFixtures,
-    only: [account: 1, content_spec: 2, enabled_default!: 1, key: 1, quotation_spec: 2]
+    only: [
+      account: 1,
+      content_spec: 2,
+      defines_claim!: 2,
+      enabled_default!: 1,
+      key: 1,
+      quotation_spec: 2
+    ]
 
   import DevilsDictionary.OpeningFixtures
   import DevilsDictionary.WordFixtures
 
-  alias DevilsDictionary.{Fixtures, Lexicon, Registry}
+  alias DevilsDictionary.{Claims, Fixtures, Lexicon, Registry}
 
   alias DevilsDictionary.Curation.{
     Compositions,
@@ -148,7 +155,24 @@ defmodule DevilsDictionary.Curation.PublishedReaderTest do
 
   describe "test 2: a published composition" do
     test "is the record's lead, highlights in order, signed notes, and who published it", ctx do
-      ctx = published_love!(ctx)
+      ctx = activate!(ctx)
+      composition = provision!(ctx)
+      version = love_version!(ctx, composition)
+      accept!(ctx, version)
+
+      # Another reviewer publishes what the first accepted, so the receipt's
+      # actor and the review's are told apart.
+      publisher = account([:reviewer])
+      receipt = publish!(%{ctx | reviewer: publisher}, version)
+      ctx = Map.merge(ctx, %{composition: composition, receipt: receipt})
+
+      # The author's label as stored with the notes, then a new one on the
+      # actor: notes keep what was recorded with them (K9).
+      author = label(ctx.author)
+
+      Repo.update_all(from(a in Actor, where: a.user_id == ^ctx.author.user.id),
+        set: [label: "Renamed author"]
+      )
 
       assert %Opening{origin: :published} = opening = PublishedReader.opening(on_page())
       assert opening.composition == %{id: ctx.composition.id, version: 1}
@@ -178,8 +202,6 @@ defmodule DevilsDictionary.Curation.PublishedReaderTest do
       assert milton.meaning.object_id == ctx.profound.object_id
 
       # Each reason is the stored note, signed with the label stored with it.
-      author = label(ctx.author)
-
       for {item, text} <- [
             {opening.lead, @lead_note},
             {johnson, @johnson_note},
@@ -189,10 +211,13 @@ defmodule DevilsDictionary.Curation.PublishedReaderTest do
                  Enum.filter(item.reasons, &(&1.kind == :editorial))
       end
 
+      # Who selected it is the version's author as the actor is named now;
+      # who published it is the receipt's actor; who reviewed it, the review's.
       assert opening.review.state == :published
-      assert opening.review.selected_by == %{kind: :human, label: author}
-      assert opening.review.published_by == %{kind: :human, label: label(ctx.reviewer)}
+      assert opening.review.selected_by == %{kind: :human, label: "Renamed author"}
+      assert opening.review.published_by == %{kind: :human, label: label(publisher)}
       assert opening.review.reviewed_by == label(ctx.reviewer)
+      refute label(publisher) == label(ctx.reviewer)
       assert opening.review.receipt_id == ctx.receipt.id
       assert opening.review.published_on == DateTime.to_date(ctx.receipt.committed_at)
     end
@@ -264,6 +289,36 @@ defmodule DevilsDictionary.Curation.PublishedReaderTest do
       assert opening.lead == nil
       assert opening.withheld == [%{role: :lead, position: 1, reason: :priority_source_available}]
       assert [%Highlight{position: 1}] = opening.highlights
+    end
+
+    test "a Bierce card whose defining claim was rejected neither leads nor withholds the lead",
+         ctx do
+      # The page still shows the entry (its card does not read claim
+      # reviews), but `LeadRule` does not count it, so Johnson may lead.
+      {:ok, _} =
+        Claims.review(defines_claim!(ctx.bierce, ctx.love).id, :rejected, %{
+          reason: "P1 #255 test"
+        })
+
+      ctx = activate!(ctx)
+      composition = provision!(ctx)
+
+      {:ok, version} =
+        Compositions.create_version(ctx.author, composition.id, %{
+          lead: content_spec(ctx.johnson, ctx.love),
+          reason: "P1 #255 test",
+          expected_parent: nil
+        })
+
+      accept!(ctx, version)
+      publish!(ctx, version)
+      page = on_page()
+      assert Enum.any?(page.cards, &(&1.id == "card-bierce"))
+
+      opening = PublishedReader.opening(page)
+      assert %Lead{policy: :manual_fallback, register: :definition} = opening.lead
+      assert opening.lead.reference.object_id == ctx.johnson.object_id
+      assert opening.withheld == []
     end
   end
 

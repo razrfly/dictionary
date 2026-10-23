@@ -14,7 +14,8 @@ defmodule DevilsDictionary.Curation.Opening.Highlight do
     * `title`, `creator`, `date` — as the source records them.
     * `image` — `%{url, alt}` for an artwork, or `nil`.
     * `register` — `:quotation` for a line (an exact sourced quotation; its
-      accuracy does not make what it says true), `nil` for a picture.
+      accuracy does not make what it says true), `:definition` for another
+      sourced definition, `nil` for a picture.
     * `quotation` — `%{text, citation, provenance}` for a line, or `nil`.
       `provenance` is the badge the page already derives for that line.
     * `excerpt` — for a definition, the opening of its exact revision as
@@ -70,7 +71,7 @@ defmodule DevilsDictionary.Curation.Opening.Highlight do
   @type t :: %__MODULE__{
           position: 1..3,
           kind: :artwork | :quotation | :definition | :exemplar,
-          register: :quotation | nil,
+          register: :quotation | :definition | nil,
           reference: Reference.t(),
           title: String.t() | nil,
           creator: String.t() | nil,

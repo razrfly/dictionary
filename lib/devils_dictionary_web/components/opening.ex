@@ -290,9 +290,6 @@ defmodule DevilsDictionaryWeb.Opening do
     <li id={@id} class="flex min-w-0 flex-col gap-3">
       <h3 class="sr-only">Definition: {@highlight.creator}, {@highlight.title}</h3>
       <figure class="flex flex-col gap-3 rounded-xl bg-mist-950/2.5 p-5 dark:bg-white/5">
-        <p class="flex flex-wrap items-center gap-2">
-          <.register id={"#{@id}-register"} register={@highlight.register} />
-        </p>
         <blockquote
           cite={@highlight.links[:source]}
           class="font-display text-2xl/8 text-pretty text-mist-950 dark:text-white"
@@ -307,6 +304,7 @@ defmodule DevilsDictionaryWeb.Opening do
           id={"#{@id}-citation"}
           class="flex flex-wrap items-center gap-x-3 gap-y-1 text-base/6 text-mist-600 sm:text-sm/6 dark:text-mist-400"
         >
+          <.register id={"#{@id}-register"} register={@highlight.register} />
           <span class={[
             "inline-flex items-center gap-2 font-medium",
             tier_text(@highlight.source.tier)
@@ -442,7 +440,7 @@ defmodule DevilsDictionaryWeb.Opening do
     <.dynamic_tag
       tag_name={@tag}
       id={@id}
-      class="min-w-0 rounded-xl border border-dashed border-mist-950/15 px-5 py-4 text-base/6 text-pretty text-mist-600 sm:text-sm/6 dark:border-white/15 dark:text-mist-400"
+      class="min-w-0 self-start rounded-xl border border-dashed border-mist-950/15 px-5 py-4 text-base/6 text-pretty text-mist-600 sm:text-sm/6 dark:border-white/15 dark:text-mist-400"
     >
       <span class="font-medium text-mist-950 dark:text-white">Withheld:</span>
       {withheld_reason(@item.reason)}. Nothing was put in its place.
@@ -653,10 +651,17 @@ defmodule DevilsDictionaryWeb.Opening do
       class="group/about border-t border-mist-950/10 pt-4 dark:border-white/10"
     >
       <summary class="flex cursor-pointer list-none items-start justify-between gap-4 rounded-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-mist-950 dark:focus-visible:outline-white [&::-webkit-details-marker]:hidden">
-        <span class="flex min-w-0 flex-col">
+        <%!-- A published summary shares the title's line (#255 §2.1), which
+             keeps the Definitions a line nearer. --%>
+        <span class={[
+          "flex min-w-0",
+          @opening.origin == :published && "flex-row flex-wrap items-baseline gap-x-2",
+          @opening.origin != :published && "flex-col"
+        ]}>
           <span class="text-base/7 font-medium text-mist-950 sm:text-sm/7 dark:text-white">
             {if @opening.origin == :published, do: "How this was curated", else: "How this was chosen"}
           </span>
+          <span :if={@opening.origin == :published} aria-hidden="true" class="text-mist-400">·</span>
           <span
             id="opening-about-summary"
             class="text-base/6 text-mist-600 sm:text-sm/6 dark:text-mist-400"

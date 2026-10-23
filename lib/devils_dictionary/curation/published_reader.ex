@@ -18,9 +18,13 @@ defmodule DevilsDictionary.Curation.PublishedReader do
   Nothing that answer settled is checked again here. What this module adds is
   only how a published item appears on this page:
 
-    * the lead's rule and register (`LeadPolicy`), and the card on this page
-      that holds the whole entry. A lead the page does not show is withheld
-      (`:not_on_page`) rather than quoted without its entry;
+    * the lead's rule, read from what was shown: `Published.current/1`
+      applied `Curation.LeadRule`, so a lead it shows from the priority
+      source leads under `:priority_source` and any other under
+      `:manual_fallback`. `LeadPolicy` words it and names its register, and
+      finds the card on this page that holds the whole entry; a lead the
+      page does not show is withheld (`:not_on_page`) rather than quoted
+      without its entry;
     * a definition highlight by its entry's opening block, and a quotation by
       its line as the sense row shows it (`WordPage.quotations/1`);
     * each note as an editorial reason, signed with the author label the
@@ -165,11 +169,11 @@ defmodule DevilsDictionary.Curation.PublishedReader do
 
   defp lead(%CompositionItem{} = item, ctx) do
     with {:ok, content} <- content(item),
-         {:ok, policy} <- LeadPolicy.check(ctx.page, item.item_object_id),
+         {:ok, card, entry} <- page_entry(ctx.page, item.item_object_id),
          {:ok, excerpt} <- Excerpt.sentences(content.body, content.body_format, @lead_sentences),
          {:ok, meaning} <- meaning(item, ctx) do
-      {card, entry} = LeadPolicy.page_entry(ctx.page, item.item_object_id)
       source = content.source
+      policy = lead_policy(source)
 
       lead = %Lead{
         reference: content_reference(content, %{kind: :sentences, count: @lead_sentences}),
@@ -196,6 +200,21 @@ defmodule DevilsDictionary.Curation.PublishedReader do
     else
       {:error, reason} -> {nil, [withheld(item, reason)]}
     end
+  end
+
+  # The card on this page that holds the entry, and the entry's row.
+  defp page_entry(page, content_id) do
+    case LeadPolicy.page_entry(page, content_id) do
+      {card, entry} -> {:ok, card, entry}
+      nil -> {:error, :not_on_page}
+    end
+  end
+
+  # The rule a shown lead stands under. `LeadRule` admitted it when
+  # `Published.current/1` read it, against the claims the public may see; it
+  # is not decided again here from the page's cards.
+  defp lead_policy(%{slug: slug}) do
+    if slug == LeadPolicy.priority_source(), do: :priority_source, else: :manual_fallback
   end
 
   # ── highlights ───────────────────────────────────────────────────────────

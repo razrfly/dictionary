@@ -16,7 +16,7 @@ defmodule DevilsDictionaryWeb.WordLiveOpeningTest do
   import Phoenix.LiveViewTest
 
   alias DevilsDictionary.Curation.{Compositions, Publications, Reviews}
-  alias DevilsDictionary.{Fixtures, Repo}
+  alias DevilsDictionary.{Fixtures, Registry, Repo}
   alias DevilsDictionary.Sources.Actor
 
   @johnson_note "Johnson's four senses map the word before Bierce turned it."
@@ -149,6 +149,67 @@ defmodule DevilsDictionaryWeb.WordLiveOpeningTest do
     # Below it, nothing moved.
     assert has_element?(view, "#card-bierce")
     assert has_element?(view, "[id^='definitions-'] h2", "Definitions")
+  end
+
+  describe "§2.3: an item withheld since publication" do
+    test "a highlight keeps its place, says why, and shows nothing of itself", ctx do
+      publish_love!(ctx)
+      current = Registry.current_sense_revision(ctx.profound.object_id)
+
+      {:ok, _newer} =
+        Registry.add_sense_revision(ctx.profound.object_id, %{
+          gloss: current.gloss,
+          position: current.position,
+          examples: current.examples,
+          url: current.url,
+          source_record_revision_id: current.source_record_revision_id
+        })
+
+      {:ok, view, _html} = live(ctx.conn, ~p"/on/love")
+
+      assert has_element?(view, "#opening-withheld-highlight-2", "superseded since selection")
+      assert has_element?(view, "#opening-withheld-highlight-2", "Nothing was put in its place")
+      refute has_element?(view, "#opening-highlight-2")
+      refute opening_html(view) =~ "cordial love"
+      assert has_element?(view, "#opening-highlight-1-text", "The passion between the sexes")
+      assert has_element?(view, "#opening-about-withheld", "Highlight 2: its source revision")
+    end
+
+    test "a lead withheld for a Bierce entry keeps its place, and is not replaced", ctx do
+      patience = word!(ctx, "patience", ~w(johnson wiktionary), scope: nil)
+      johnson = entry!(ctx, patience, "johnson", headword: "PATIENCE", pos: "n. s.")
+      wiktionary = entry!(ctx, patience, "wiktionary", body: "The quality of being patient.")
+      composition = provision!(ctx, :lexical_page, [patience])
+
+      {:ok, version} =
+        Compositions.create_version(ctx.author, composition.id, %{
+          lead: content_spec(johnson, patience),
+          highlights: [content_spec(wiktionary, patience)],
+          reason: "P1 #255 test",
+          expected_parent: nil
+        })
+
+      {:ok, _} =
+        Reviews.decide(ctx.reviewer, version.id, :accepted,
+          reason: "P1 #255 test",
+          idempotency_key: key("review")
+        )
+
+      {:ok, _} =
+        Publications.publish(ctx.reviewer, version.id,
+          reason: "P1 #255 test",
+          idempotency_key: key("publish"),
+          expected_pointer: nil
+        )
+
+      entry!(ctx, patience, "bierce", body: "fixture later bierce entry")
+      {:ok, view, _html} = live(ctx.conn, ~p"/on/patience")
+
+      assert has_element?(view, "#opening-withheld-lead", "only that entry may lead")
+      refute has_element?(view, "#opening-lead")
+      refute opening_html(view) =~ "fixture later bierce entry"
+      assert has_element?(view, "#opening-highlight-1-text", "The quality of being patient")
+    end
   end
 
   test "11: a withdrawal shows on the next request", ctx do
