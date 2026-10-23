@@ -4,10 +4,11 @@ defmodule DevilsDictionary.Curation.Opening.Highlight do
 
   `kind` is what the component draws: `:artwork` (a picture, with the credit
   its catalog committed), `:quotation` (a line, verbatim, with the citation
-  its source wrote) or `:exemplar` (a person, work or passage someone cited
-  as an example of the meaning, through an accepted `illustrates` claim,
-  #212). The component branches on the kind and never on which provider
-  supplied the item (#156, promise 9).
+  its source wrote), `:definition` (another sourced definition on the page,
+  quoted from its opening, #255) or `:exemplar` (a person, work or passage
+  someone cited as an example of the meaning, through an accepted
+  `illustrates` claim, #212). The component branches on the kind and never on
+  which provider supplied the item (#156, promise 9).
 
     * `position` — 1 to 3, the order the selection gave.
     * `title`, `creator`, `date` — as the source records them.
@@ -16,6 +17,9 @@ defmodule DevilsDictionary.Curation.Opening.Highlight do
       accuracy does not make what it says true), `nil` for a picture.
     * `quotation` — `%{text, citation, provenance}` for a line, or `nil`.
       `provenance` is the badge the page already derives for that line.
+    * `excerpt` — for a definition, the opening of its exact revision as
+      `DevilsDictionary.Curation.Excerpt` cuts it (`%{text, html, clipped?,
+      chars}`), or `nil`. `links.card_id` is then the card holding the rest.
     * `links` — `source` is the source's own page for the item. The durable
       page a reader inspects it on (the work's entity page, the sense
       revision's evidence page) is built by the component from `reference`.
@@ -53,6 +57,7 @@ defmodule DevilsDictionary.Curation.Opening.Highlight do
             date: nil,
             image: nil,
             quotation: nil,
+            excerpt: nil,
             meaning: nil,
             source: nil,
             credits: [],
@@ -64,7 +69,7 @@ defmodule DevilsDictionary.Curation.Opening.Highlight do
 
   @type t :: %__MODULE__{
           position: 1..3,
-          kind: :artwork | :quotation | :exemplar,
+          kind: :artwork | :quotation | :definition | :exemplar,
           register: :quotation | nil,
           reference: Reference.t(),
           title: String.t() | nil,
@@ -73,10 +78,15 @@ defmodule DevilsDictionary.Curation.Opening.Highlight do
           image: %{url: String.t(), alt: String.t()} | nil,
           quotation:
             %{text: String.t(), citation: String.t() | nil, provenance: String.t() | nil} | nil,
+          excerpt:
+            %{text: String.t(), html: String.t(), clipped?: boolean(), chars: integer()} | nil,
           meaning: Meaning.t(),
           source: map(),
           credits: [Credit.t()],
-          links: %{source: String.t() | nil},
+          links: %{
+            optional(:card_id) => String.t() | nil,
+            required(:source) => String.t() | nil
+          },
           reasons: [Reason.t()],
           subject:
             %{

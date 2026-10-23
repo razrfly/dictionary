@@ -52,6 +52,11 @@ defmodule DevilsDictionaryWeb.Opening do
   attr :mode, :atom, default: :public, doc: "the reading mode, for subject links"
 
   def section(assigns) do
+    assigns =
+      assigns
+      |> assign(:slots, slots(assigns.opening))
+      |> assign(:withheld_lead, withheld_lead(assigns.opening))
+
     ~H"""
     <section
       id="opening"
@@ -69,23 +74,31 @@ defmodule DevilsDictionaryWeb.Opening do
       </p>
 
       <.lead :if={@opening.lead} lead={@opening.lead} />
+      <.withheld :if={@withheld_lead} id="opening-withheld-lead" item={@withheld_lead} tag="div" />
 
-      <div :if={@opening.highlights != []} class="@container">
+      <div :if={@slots != []} class="@container">
         <ul
           id="opening-highlights"
           role="list"
           class={[
             "grid grid-cols-1 gap-8",
-            length(@opening.highlights) == 2 && "@xl:grid-cols-2 @xl:gap-6",
-            length(@opening.highlights) == 3 && "@2xl:grid-cols-3 @2xl:gap-6"
+            length(@slots) == 2 && "@xl:grid-cols-2 @xl:gap-6",
+            length(@slots) == 3 && "@2xl:grid-cols-3 @2xl:gap-6"
           ]}
         >
-          <.highlight
-            :for={highlight <- @opening.highlights}
-            highlight={highlight}
-            stacked={length(@opening.highlights) > 1}
-            mode={@mode}
-          />
+          <%= for slot <- @slots do %>
+            <.highlight
+              :if={slot.highlight}
+              highlight={slot.highlight}
+              stacked={length(@slots) > 1}
+              mode={@mode}
+            />
+            <.withheld
+              :if={slot.withheld}
+              id={"opening-withheld-highlight-#{slot.position}"}
+              item={slot.withheld}
+            />
+          <% end %>
         </ul>
       </div>
 
@@ -126,7 +139,7 @@ defmodule DevilsDictionaryWeb.Opening do
             id="opening-lead-entry"
             href={"#" <> @lead.links.card_id}
             phx-click={open_card(@lead.links.card_id)}
-            class="rounded-sm text-mist-600 underline underline-offset-4 hover:text-mist-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:text-mist-400 dark:hover:text-white dark:focus-visible:outline-white"
+            class="flex min-h-11 items-center gap-x-1.5 rounded-sm text-mist-600 underline underline-offset-4 hover:text-mist-950 sm:min-h-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:text-mist-400 dark:hover:text-white dark:focus-visible:outline-white"
           >
             <%= if @lead.excerpt.clipped? do %>
               Read the whole entry
@@ -268,6 +281,73 @@ defmodule DevilsDictionaryWeb.Opening do
     """
   end
 
+  # Another sourced definition on the page (#255): the opening of its exact
+  # revision, quoted as the lead is, and the card that holds the rest.
+  defp highlight(%{highlight: %{kind: :definition}} = assigns) do
+    assigns = assign(assigns, :id, "opening-highlight-#{assigns.highlight.position}")
+
+    ~H"""
+    <li id={@id} class="flex min-w-0 flex-col gap-3">
+      <h3 class="sr-only">Definition: {@highlight.creator}, {@highlight.title}</h3>
+      <figure class="flex flex-col gap-3 rounded-xl bg-mist-950/2.5 p-5 dark:bg-white/5">
+        <p class="flex flex-wrap items-center gap-2">
+          <.register id={"#{@id}-register"} register={@highlight.register} />
+        </p>
+        <blockquote
+          cite={@highlight.links[:source]}
+          class="font-display text-2xl/8 text-pretty text-mist-950 dark:text-white"
+        >
+          <p
+            id={"#{@id}-text"}
+            class="relative before:absolute before:-translate-x-full before:content-['\201C'] after:content-['\201D']"
+            phx-no-format
+          >{raw(@highlight.excerpt.html)}</p>
+        </blockquote>
+        <figcaption
+          id={"#{@id}-citation"}
+          class="flex flex-wrap items-center gap-x-3 gap-y-1 text-base/6 text-mist-600 sm:text-sm/6 dark:text-mist-400"
+        >
+          <span class={[
+            "inline-flex items-center gap-2 font-medium",
+            tier_text(@highlight.source.tier)
+          ]}>
+            <SourceBadge.badge source={@highlight.source} decorative />{@highlight.creator}
+          </span>
+          <span :if={@highlight.date} class="tabular-nums">{@highlight.date}</span>
+          <span :if={@highlight.title}>{@highlight.title}</span>
+          <.link
+            :if={@highlight.links[:card_id]}
+            id={"#{@id}-entry"}
+            href={"#" <> @highlight.links.card_id}
+            phx-click={open_card(@highlight.links.card_id)}
+            class="flex min-h-11 items-center gap-x-1.5 rounded-sm underline underline-offset-4 hover:text-mist-950 sm:min-h-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:hover:text-white dark:focus-visible:outline-white"
+          >
+            <%= if @highlight.excerpt.clipped? do %>
+              Read the whole entry
+              <span class="tabular-nums">· {number(@highlight.excerpt.chars)} characters</span>
+            <% else %>
+              The entry among the definitions
+            <% end %>
+            <span aria-hidden="true">↓</span>
+          </.link>
+        </figcaption>
+      </figure>
+
+      <.credit_line id={"#{@id}-credits"} credits={@highlight.credits} />
+
+      <.why id={"#{@id}-why"} summary="Why this is here" reasons={@highlight.reasons}>
+        <.particulars
+          id={@id}
+          meaning={@highlight.meaning}
+          register={@highlight.register}
+          reasons={@highlight.reasons}
+          credits={@highlight.credits}
+        />
+      </.why>
+    </li>
+    """
+  end
+
   # An exemplar (#212): the subject someone cited, and the meaning they cited
   # it for. Everything said *about* it — the nominator's reason, who
   # nominated and reviewed it, how it came to be here — is one step away,
@@ -348,6 +428,25 @@ defmodule DevilsDictionaryWeb.Opening do
         </div>
       </.why>
     </li>
+    """
+  end
+
+  attr :id, :string, required: true
+  attr :item, :map, required: true
+  attr :tag, :string, default: "li"
+
+  # A published item withheld at read time (#255 §2.3), in its own place: why,
+  # and that nothing took its place. Never what it showed.
+  defp withheld(assigns) do
+    ~H"""
+    <.dynamic_tag
+      tag_name={@tag}
+      id={@id}
+      class="min-w-0 rounded-xl border border-dashed border-mist-950/15 px-5 py-4 text-base/6 text-pretty text-mist-600 sm:text-sm/6 dark:border-white/15 dark:text-mist-400"
+    >
+      <span class="font-medium text-mist-950 dark:text-white">Withheld:</span>
+      {withheld_reason(@item.reason)}. Nothing was put in its place.
+    </.dynamic_tag>
     """
   end
 
@@ -556,7 +655,7 @@ defmodule DevilsDictionaryWeb.Opening do
       <summary class="flex cursor-pointer list-none items-start justify-between gap-4 rounded-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-mist-950 dark:focus-visible:outline-white [&::-webkit-details-marker]:hidden">
         <span class="flex min-w-0 flex-col">
           <span class="text-base/7 font-medium text-mist-950 sm:text-sm/7 dark:text-white">
-            How this was chosen
+            {if @opening.origin == :published, do: "How this was curated", else: "How this was chosen"}
           </span>
           <span
             id="opening-about-summary"
@@ -572,7 +671,31 @@ defmodule DevilsDictionaryWeb.Opening do
       </summary>
 
       <div class="mt-4 flex flex-col gap-6 pb-2 text-base/6 sm:text-sm/6">
-        <dl class="flex flex-col gap-3">
+        <%!-- A published composition's provenance is its records'
+             (#255 §2.2): the configuration it was published under, its
+             author, its receipt, and no panel. The assessment dates are
+             absent, not blank: #254 P5 adds them. --%>
+        <dl :if={@opening.origin == :published} class="flex flex-col gap-3">
+          <.about_row id="opening-about-configuration" label="Configuration">
+            {configuration(@opening.configuration)}
+          </.about_row>
+          <.about_row id="opening-about-selected" label="Selected by">
+            {operator(@opening.review.selected_by)}{if @opening.review.selected_on,
+              do: " · #{date(@opening.review.selected_on)}"}
+          </.about_row>
+          <.about_row id="opening-about-published" label="Published by">
+            {publication(@opening)}
+          </.about_row>
+          <.about_row id="opening-about-panel" label="Panel">
+            None: published by the operator.
+          </.about_row>
+          <.withheld_row withheld={@opening.withheld} />
+          <.about_row id="opening-about-composition" label="Composition">
+            {selection(@opening)}
+          </.about_row>
+        </dl>
+
+        <dl :if={@opening.origin != :published} class="flex flex-col gap-3">
           <.about_row id="opening-about-selection" label="Selection">
             {selection(@opening)}
           </.about_row>
@@ -595,17 +718,7 @@ defmodule DevilsDictionaryWeb.Opening do
               None. A development fixture resolves no curation configuration, so no persona panel ran and there are no votes or panel decisions to show.
             <% end %>
           </.about_row>
-          <.about_row id="opening-about-withheld" label="Withheld">
-            <%= if @opening.withheld == [] do %>
-              Nothing. Every selected item is still eligible.
-            <% else %>
-              <ul role="list" class="flex flex-col gap-1">
-                <li :for={item <- @opening.withheld}>
-                  {withheld_label(item)}: {withheld_reason(item.reason)}. Nothing was put in its place.
-                </li>
-              </ul>
-            <% end %>
-          </.about_row>
+          <.withheld_row withheld={@opening.withheld} />
         </dl>
 
         <div>
@@ -643,6 +756,24 @@ defmodule DevilsDictionaryWeb.Opening do
     """
   end
 
+  attr :withheld, :list, required: true
+
+  defp withheld_row(assigns) do
+    ~H"""
+    <.about_row id="opening-about-withheld" label="Withheld">
+      <%= if @withheld == [] do %>
+        Nothing. Every selected item is still eligible.
+      <% else %>
+        <ul role="list" class="flex flex-col gap-1">
+          <li :for={item <- @withheld}>
+            {withheld_label(item)}: {withheld_reason(item.reason)}. Nothing was put in its place.
+          </li>
+        </ul>
+      <% end %>
+    </.about_row>
+    """
+  end
+
   attr :id, :string, required: true
   attr :label, :string, required: true
   slot :inner_block, required: true
@@ -659,6 +790,27 @@ defmodule DevilsDictionaryWeb.Opening do
   end
 
   # ── helpers ──────────────────────────────────────────────────────────────
+
+  # The highlight places, in position order. A published item withheld at
+  # read time keeps its place and says why (#255 §2.3); a fixture's does not,
+  # as it never has.
+  defp slots(%{origin: :published} = opening) do
+    shown = Enum.map(opening.highlights, &%{position: &1.position, highlight: &1, withheld: nil})
+
+    held =
+      for %{role: :highlight} = item <- opening.withheld,
+          do: %{position: item.position, highlight: nil, withheld: item}
+
+    Enum.sort_by(shown ++ held, & &1.position)
+  end
+
+  defp slots(opening),
+    do: Enum.map(opening.highlights, &%{position: &1.position, highlight: &1, withheld: nil})
+
+  defp withheld_lead(%{origin: :published, lead: nil, withheld: withheld}),
+    do: Enum.find(withheld, &(&1.role == :lead))
+
+  defp withheld_lead(_opening), do: nil
 
   # The card's `open` is DOM state inside an ignored slab, so the page cannot
   # re-render it open; the continuation opens it where it stands, and the
@@ -717,6 +869,17 @@ defmodule DevilsDictionaryWeb.Opening do
 
   defp fixture_status(_review), do: "not reviewed by a person"
 
+  # The published summary is the record's: when, and under which
+  # configuration (#255 §2.1).
+  defp summary(%{origin: :published, review: review, configuration: configuration}) do
+    [
+      if(review.published_on, do: "Published #{date(review.published_on)}", else: "Published"),
+      configuration && "#{configuration.slug} v#{configuration.version}"
+    ]
+    |> Enum.reject(&(&1 in [nil, false]))
+    |> Enum.join(" · ")
+  end
+
   defp summary(%{review: review} = opening) do
     selected =
       if review.selected_by,
@@ -741,67 +904,145 @@ defmodule DevilsDictionaryWeb.Opening do
     do: "#{id}, version #{version}: a development fixture, not a published composition"
 
   defp selection(%{composition: %{id: id, version: version}}),
-    do: "Composition #{id}, version #{version}"
+    do: "##{id}, version #{version}"
+
+  # A published opening's configuration row: what it is and the lead rule it
+  # carries, as the configuration version records them.
+  defp configuration(%{slug: slug, version: version} = configuration) do
+    rule = configuration.lead_rule && " · lead rule #{configuration.lead_rule}"
+    "#{slug}, version #{version}#{rule}"
+  end
+
+  defp configuration(_none), do: "Not recorded"
+
+  # Who acted on the operator path: a person, published by hand. A model is
+  # named as one wherever it appears.
+  defp operator(%{kind: :model, label: label}), do: "#{label}, an AI model"
+  defp operator(%{label: label}), do: "#{label} (operator)"
+  defp operator(_none), do: "Not recorded"
+
+  defp publication(%{review: review, composition: composition}) do
+    [
+      operator(review.published_by),
+      review.published_on && date(review.published_on),
+      composition && "version #{composition.version}",
+      review.receipt_id && "receipt ##{review.receipt_id}"
+    ]
+    |> Enum.reject(&(&1 in [nil, false]))
+    |> Enum.join(" · ")
+  end
 
   defp withheld_label(%{role: :lead}), do: "The lead"
   defp withheld_label(%{role: :highlight, position: position}), do: "Highlight #{position}"
 
-  defp withheld_reason(:revision_not_current),
+  @doc """
+  Why an item was withheld, as the page says it: a clause that follows
+  "Withheld:" or "Highlight 2:". It covers every reason the fixture reader,
+  `Curation.Eligibility`, `Curation.LeadRule`, `Curation.Published` and
+  `Curation.PublishedReader` give, and answers a plain fallback for any
+  other, so an unmapped reason never raises on a public page.
+  """
+  def withheld_reason(:revision_not_current),
     do: "its exact source revision is no longer current"
 
-  defp withheld_reason(:revision_inactive), do: "its source revision was withdrawn"
-  defp withheld_reason(:excerpt_changed), do: "the words it quotes have changed since selection"
-  defp withheld_reason(:excerpt_unpinned), do: "the selection does not pin the words it quotes"
-  defp withheld_reason(:display_not_allowed), do: "its source may not be displayed"
-  defp withheld_reason(:source_inactive), do: "its source is switched off"
-  defp withheld_reason(:object_inactive), do: "it has left the registry"
-  defp withheld_reason(:catalog_changed), do: "its catalog has changed since it was selected"
+  def withheld_reason(:revision_inactive), do: "its source revision was withdrawn"
+  def withheld_reason(:excerpt_changed), do: "the words it quotes have changed since selection"
+  def withheld_reason(:excerpt_unpinned), do: "the selection does not pin the words it quotes"
+  def withheld_reason(:display_not_allowed), do: "its source may not be displayed"
+  def withheld_reason(:source_inactive), do: "its source is switched off"
+  def withheld_reason(:object_inactive), do: "it has left the registry"
+  def withheld_reason(:catalog_changed), do: "its catalog has changed since it was selected"
 
-  defp withheld_reason(:catalog_drift),
+  def withheld_reason(:catalog_drift),
     do: "what would be shown no longer matches the catalog row that was selected"
 
-  defp withheld_reason(:priority_source_available),
+  def withheld_reason(:priority_source_available),
     do: "a Devil’s Dictionary entry applies here, and only that entry may lead"
 
-  defp withheld_reason(:priority_source_missing),
+  def withheld_reason(:priority_source_missing),
     do: "a Devil’s Dictionary entry applies here, and the selection names no lead"
 
-  defp withheld_reason(:not_on_page), do: "it is not among this page’s definitions"
-  defp withheld_reason(:over_limit), do: "an opening shows at most three highlights"
-  defp withheld_reason(:duplicate), do: "it repeats an earlier highlight"
-  defp withheld_reason(:meaning_off_page), do: "its meaning is not on this page"
+  def withheld_reason(:not_on_page), do: "it is not among this page’s definitions"
+  def withheld_reason(:over_limit), do: "an opening shows at most three highlights"
+  def withheld_reason(:duplicate), do: "it repeats an earlier highlight"
+  def withheld_reason(:meaning_off_page), do: "its meaning is not on this page"
 
-  defp withheld_reason(:meaning_mismatch),
+  def withheld_reason(:meaning_mismatch),
     do: "it no longer publicly defines the meaning it was selected for"
 
-  defp withheld_reason(:quotation_not_found), do: "its line is no longer filed under that meaning"
-  defp withheld_reason(:no_image), do: "its image is no longer available"
+  def withheld_reason(:quotation_not_found), do: "its line is no longer filed under that meaning"
+  def withheld_reason(:no_image), do: "its image is no longer available"
 
   # An exemplar's claim (#212). One sentence for every way a claim falls
   # short, so a withheld nomination is never described: not whom it names,
   # not that it waits for review, not that a reviewer turned it down.
-  defp withheld_reason(reason)
-       when reason in [
-              :claim_not_found,
-              :claim_not_accepted,
-              :claim_not_visible,
-              :claim_not_current,
-              :claim_deleted
-            ],
-       do: "it is not an example a reviewer has accepted"
+  def withheld_reason(reason)
+      when reason in [
+             :claim_not_found,
+             :claim_not_accepted,
+             :claim_not_visible,
+             :claim_not_current,
+             :claim_deleted
+           ],
+      do: "it is not an example a reviewer has accepted"
 
-  defp withheld_reason(:claim_context_changed),
+  def withheld_reason(:claim_context_changed),
     do: "what it shows has changed since a reviewer accepted it"
 
-  defp withheld_reason(:meaning_off_scope),
+  def withheld_reason(:meaning_off_scope),
     do: "its meaning is not one of the words it was selected for"
 
-  defp withheld_reason(:object_retired), do: "it has left the registry"
+  def withheld_reason(:object_retired), do: "it has left the registry"
 
-  defp withheld_reason(:unsupported_subject),
+  def withheld_reason(:unsupported_subject),
     do: "the opening does not show that kind of example yet"
 
-  defp withheld_reason(_reason), do: "it could not be resolved"
+  # A published composition's items (#255), as `Curation.Eligibility` and
+  # `Curation.LeadRule` name them at read time.
+  def withheld_reason(:revision_superseded),
+    do: "its source revision was superseded since selection"
+
+  def withheld_reason(:revision_withdrawn), do: "its source revision was withdrawn"
+  def withheld_reason(:revision_deleted), do: "its source revision was deleted"
+  def withheld_reason(:object_deleted), do: "what it showed was deleted from the registry"
+  def withheld_reason(:object_missing), do: "what it showed is no longer recorded"
+
+  def withheld_reason(:meaning_deleted),
+    do: "the meaning it was selected for is no longer current"
+
+  def withheld_reason(:display_restricted), do: "its source may not be displayed"
+
+  def withheld_reason(:claim_not_about_object),
+    do: "the claim it relies on is not about what it shows"
+
+  def withheld_reason(:catalog_row_missing), do: "its catalog no longer lists it"
+
+  def withheld_reason(:work_identity_mismatch),
+    do: "its record no longer identifies the work it shows"
+
+  def withheld_reason(:words_changed),
+    do: "the words at its place in the source have changed since selection"
+
+  def withheld_reason(:lead_not_on_scope), do: "it is not among this page’s definitions"
+
+  def withheld_reason(:unsupported_item),
+    do: "the opening does not show that kind of item yet"
+
+  def withheld_reason(reason) when reason in [:empty, :no_prose_opening, :no_sentence_boundary],
+    do: "its entry has no opening sentence to quote"
+
+  # A version withheld as a whole (`Curation.Published`) draws no opening at
+  # all, so these are never on a page; they are named for completeness.
+  def withheld_reason(:composition_retired), do: "its composition was retired"
+
+  def withheld_reason(:configuration_changed),
+    do: "its curation configuration has changed since it was published"
+
+  def withheld_reason(:scope_changed), do: "the words it was made for have changed"
+  def withheld_reason(:approval_withdrawn), do: "its approval was withdrawn"
+  def withheld_reason(:stale_eligibility), do: "what it was approved on has changed"
+
+  def withheld_reason(_reason), do: "it could not be resolved"
 
   # An exemplar names the claim it shows as well as the thing.
   defp reference(%{assertion_revision_id: claim} = ref) when is_integer(claim) do

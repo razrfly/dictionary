@@ -304,9 +304,19 @@ These are later scoped slices, each owned by its issue:
   budget.
 - **#194:** the page ↔ composition binding, and the ADR 0004 default/alternate wording
   amendment.
-- **#156 Phase 2:** mapping `Published.current/1` onto the Phase 1 view model. PR #202
-  is not merged, so this slice does not depend on it. Production selection stays
-  disabled; no page reads compositions yet.
+- **#156 Phase 2 / #255:** the page reads `Published.current/1` through
+  `Curation.PublishedReader`, on every request and by default. A page's composition
+  is the active `:lexical_page` composition of the resolved global default whose
+  signature is the page's own lexemes (`Compositions.active/4` over
+  `page.headword.lexemes`, K2), so `/on/love` and `/words/:id/love` are different
+  scopes and no binding table is needed; while the On page's scope is active, the
+  exact word's overlapping `:lexical_page` scope cannot be provisioned beside it
+  (K3), and that page shows nothing. The reader re-checks nothing `Published`
+  settled: it maps the arrangement onto the opening (the lead's rule from
+  `LeadPolicy`, each note as a signed reason, the receipt as *Published by*) and
+  withholds a `work` or `exemplar` highlight as `:unsupported_item` until a later
+  part draws them. The development fixture still answers only behind
+  `:curated_opening_fixtures` and `?opening=fixture`.
 - **#203 / #204:** the history projection, profile pages and the method page.
 - Later stages of #201: domain defaults and personal views.
 

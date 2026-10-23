@@ -167,8 +167,9 @@ defmodule DevilsDictionaryWeb.WordLive do
     base = URI.parse(uri).path
     trail = parse_trail(params["trail"])
     demo = Samples.on?(params)
-    # `nil` everywhere a public page is rendered: Phase 1's only reader is the
-    # development fixture, gated by config and by `?opening=fixture` (#156).
+    # What a reviewer published for these words, on every request (#255); the
+    # development fixture only when config allows it and `?opening=fixture`
+    # asks (#156). No parameter names a configuration or a composition.
     reader = CuratedOpening.reader(params)
 
     # The path is part of the guard: `/on/c` and `/words/<C++>/c` share a slug
@@ -242,9 +243,10 @@ defmodule DevilsDictionaryWeb.WordLive do
     samples =
       if demo, do: Samples.samples(page.headword.lemma || slug), else: %{cards: [], evidence: []}
 
-    # The curated opening (#156) reads the page as built, before any sample is
-    # merged: it quotes real entries by their exact revisions, and a sample
-    # card is neither. Database reads only — no provider, no model.
+    # The curated opening (#156, #255) reads the page as built, before any
+    # sample is merged: it quotes real entries by their exact revisions, and a
+    # sample card is neither. Its scope is the page's words. Database reads
+    # only — no provider, no model, no write.
     opening = CuratedOpening.for_page(page, reader)
 
     # Counted before the samples go in: the source line is a claim about what has
@@ -1012,8 +1014,9 @@ defmodule DevilsDictionaryWeb.WordLive do
               />
 
               <%!-- Nothing in it is fetched and nothing in it changes after the
-                 first render for this word; `nil` on every public page in
-                 Phase 1 (the development fixture is the only reader). --%>
+                 first render for this word: a withdrawal shows on the next
+                 load, not on an open page (#255). `nil` wherever nothing is
+                 published for these words. --%>
               <Opening.section
                 opening={@opening}
                 mode={@reading_mode}

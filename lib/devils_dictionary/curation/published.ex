@@ -22,10 +22,10 @@ defmodule DevilsDictionary.Curation.Published do
   words. Nothing is copied into the composition, and nothing here calls a
   provider or a model (C7).
 
-  Nothing in the web layer calls this yet. Production selection stays
-  disabled: no page reads compositions, and binding one to a page is #194's
-  (#205). Mapping the answer onto the #156 opening view model waits for PR
-  #202, which is not merged.
+  The word page reads it through `DevilsDictionary.Curation.PublishedReader`
+  (#255), which finds a page's composition by the page's words and maps this
+  answer onto the #156 opening view model. No page ↔ composition binding is
+  involved (#194, #205).
   """
 
   import Ecto.Query
