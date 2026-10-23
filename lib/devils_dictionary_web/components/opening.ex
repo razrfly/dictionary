@@ -117,7 +117,7 @@ defmodule DevilsDictionaryWeb.Opening do
       <figure class="flex max-w-[44rem] flex-col gap-4">
         <blockquote
           cite={@lead.links[:source]}
-          class="font-display text-3xl/10 text-pretty text-mist-950 sm:text-4xl/12 dark:text-white"
+          class="font-display text-3xl/10 text-pretty text-mist-950 dark:text-white"
         >
           <p
             id="opening-lead-text"
