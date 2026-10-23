@@ -3,11 +3,15 @@ defmodule DevilsDictionary.Curation.Opening.Review do
   Who chose an opening's arrangement and whether a person has reviewed it.
 
     * `state` — `:unreviewed` (nobody has checked it), `:reviewed` (a person
-      checked a development fixture; it is still not published) or
-      `:approved` (a human accepted this exact version for publication, #196).
+      checked a development fixture; it is still not published),
+      `:approved` (a human accepted this exact version for publication, #196)
+      or `:published` (a reviewer published it, and the receipt says so).
     * `selected_by` / `selected_on` — who chose the arrangement, as
       `%{kind, label}`: `:human`, or `:model` for anything generated.
     * `reviewed_by` / `reviewed_on` — the human who reviewed it, or `nil`.
+    * `published_by` / `published_on` / `receipt_id` — for a published
+      composition, the actor and date of the publication receipt and its id
+      (#255). `nil` for a fixture, which nobody published.
 
   What this deliberately does not hold: panel rosters, per-profile votes,
   counts, objections and human override lineage. Those are #203's structured
@@ -21,13 +25,19 @@ defmodule DevilsDictionary.Curation.Opening.Review do
             selected_by: nil,
             selected_on: nil,
             reviewed_by: nil,
-            reviewed_on: nil
+            reviewed_on: nil,
+            published_by: nil,
+            published_on: nil,
+            receipt_id: nil
 
   @type t :: %__MODULE__{
-          state: :unreviewed | :reviewed | :approved,
+          state: :unreviewed | :reviewed | :approved | :published,
           selected_by: %{kind: :human | :model | :fixture, label: String.t()} | nil,
           selected_on: Date.t() | nil,
           reviewed_by: String.t() | nil,
-          reviewed_on: Date.t() | nil
+          reviewed_on: Date.t() | nil,
+          published_by: %{kind: :human | :model, label: String.t()} | nil,
+          published_on: Date.t() | nil,
+          receipt_id: pos_integer() | nil
         }
 end

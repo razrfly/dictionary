@@ -336,7 +336,7 @@ defmodule DevilsDictionaryWeb.OpeningTest do
     assert text(fixture, "#opening-fixture") =~ "Development fixture"
     assert text(fixture, "#opening-about-selection") =~ "not a published composition"
     assert count(published, "#opening-fixture") == 0
-    assert text(published, "#opening-about-selection") =~ "Composition 12, version 3"
+    assert text(published, "#opening-about-composition") =~ "#12, version 3"
   end
 
   test "the disclosure says who selected it, that nobody reviewed it, and that no panel took part" do
@@ -364,14 +364,16 @@ defmodule DevilsDictionaryWeb.OpeningTest do
       id: 1,
       slug: "global-default",
       version: 3,
+      lead_rule: :bierce_first_v1,
       resolution_reason: :global_default,
       resolution_policy_version: 1
     }
 
     doc = render_opening(lead: lead(), origin: :published, configuration: configuration)
 
-    assert text(doc, "#opening-about-configuration") =~ "global-default, version 3"
-    assert text(doc, "#opening-about-configuration") =~ "resolved as global_default"
+    assert text(doc, "#opening-about-configuration") =~
+             "global-default, version 3 · lead rule bierce_first_v1"
+
     refute text(doc, "#opening-about-configuration") =~ "no persona panel ran"
   end
 

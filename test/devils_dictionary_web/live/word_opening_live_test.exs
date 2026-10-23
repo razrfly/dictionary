@@ -12,7 +12,7 @@ defmodule DevilsDictionaryWeb.WordOpeningLiveTest do
   import DevilsDictionary.WordFixtures
   import Phoenix.LiveViewTest
 
-  alias DevilsDictionary.Curation.{ManualFixture, Opening}
+  alias DevilsDictionary.Curation.{ManualFixture, Opening, PublishedReader}
   alias DevilsDictionary.Fixtures
 
   setup ctx do
@@ -208,7 +208,7 @@ defmodule DevilsDictionaryWeb.WordOpeningLiveTest do
     test "with fixtures off, the parameter does nothing", ctx do
       Application.put_env(:devils_dictionary, :curated_opening_fixtures, false)
 
-      assert is_nil(Opening.reader(%{"opening" => "fixture"}))
+      assert Opening.reader(%{"opening" => "fixture"}) == PublishedReader
 
       {:ok, view, _html} = live(ctx.conn, ~p"/on/love?opening=fixture")
       refute has_element?(view, "#opening")
@@ -218,8 +218,8 @@ defmodule DevilsDictionaryWeb.WordOpeningLiveTest do
       Application.put_env(:devils_dictionary, :curated_opening_fixtures, true)
 
       assert Opening.reader(%{"opening" => "fixture"}) == ManualFixture
-      assert is_nil(Opening.reader(%{"opening" => "1"}))
-      assert is_nil(Opening.reader(%{}))
+      assert Opening.reader(%{"opening" => "1"}) == PublishedReader
+      assert Opening.reader(%{}) == PublishedReader
     end
 
     test "production never turns fixtures on" do
