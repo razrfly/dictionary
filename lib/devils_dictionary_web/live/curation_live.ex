@@ -341,7 +341,7 @@ defmodule DevilsDictionaryWeb.CurationLive do
           Reading the pilot pages…
         </p>
 
-        <div :if={@rows && @tab == "pilot"} id="curation-pilot">
+        <div :if={@rows && @tab == "pilot"} id="curation-pilot" class="mt-2">
           <div
             aria-hidden="true"
             class="hidden gap-x-6 pb-2 text-xs/5 font-semibold tracking-wide text-mist-500 uppercase sm:grid sm:grid-cols-[10rem_minmax(0,1fr)_auto]"
