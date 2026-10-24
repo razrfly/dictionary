@@ -451,10 +451,11 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
     %{current_scope: scope, selection: sel} = socket.assigns
 
     case write_version(socket.assigns, scope) do
+      # The new version signs every note as this reviewer's.
       {:ok, version} ->
         socket
         |> after_write("Saved version #{version.version} as a draft. Nothing was published.")
-        |> assign(:selection, %{sel | reason: ""})
+        |> assign(:selection, %{sel | reason: "", authors: %{}})
         |> preview()
 
       {:error, reason} ->
@@ -490,12 +491,14 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
       end)
 
     case result do
+      # A held version keeps its notes' authors; a new one signs them all as
+      # this reviewer's.
       {:ok, {version, receipt}} ->
         socket
         |> after_write(
           "Published version #{version.version} (receipt ##{receipt.id}). The page shows it on its next request."
         )
-        |> assign(:selection, %{sel | reason: ""})
+        |> assign(:selection, %{sel | reason: "", authors: if(held, do: sel.authors, else: %{})})
         |> preview()
 
       {:error, reason} ->

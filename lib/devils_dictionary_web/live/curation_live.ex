@@ -49,15 +49,33 @@ defmodule DevilsDictionaryWeb.CurationLive do
   # paints at once, and its rows arrive when ten page builds are done.
   @impl true
   def mount(_params, _session, socket) do
-    socket = assign(socket, page_title: "Curation", rows: nil, published: [], stats: nil)
+    socket =
+      assign(socket,
+        page_title: "Curation",
+        rows: nil,
+        published: [],
+        stats: nil,
+        load_error: nil
+      )
+
     {:ok, if(connected?(socket), do: start_async(socket, :load, &load/0), else: socket)}
   end
 
   @impl true
-  def handle_async(:load, {:ok, loaded}, socket), do: {:noreply, assign(socket, loaded)}
+  def handle_async(:load, {:ok, loaded}, socket),
+    do: {:noreply, assign(socket, Map.put(loaded, :load_error, nil))}
 
+  # A failed read says so and offers another, instead of reading for ever.
   def handle_async(:load, {:exit, reason}, socket) do
-    {:noreply, put_flash(socket, :error, "The pilot pages could not be read: #{inspect(reason)}")}
+    {:noreply,
+     socket
+     |> assign(:load_error, inspect(reason))
+     |> put_flash(:error, "The pilot pages could not be read.")}
+  end
+
+  @impl true
+  def handle_event("retry", _params, socket) do
+    {:noreply, socket |> assign(load_error: nil) |> start_async(:load, &load/0)}
   end
 
   @impl true
@@ -361,9 +379,24 @@ defmodule DevilsDictionaryWeb.CurationLive do
           </span>
         </nav>
 
-        <p :if={is_nil(@rows)} id="curation-loading" class="text-sm/7 text-mist-500">
+        <p
+          :if={is_nil(@rows) and is_nil(@load_error)}
+          id="curation-loading"
+          class="text-sm/7 text-mist-500"
+        >
           Reading the pilot pages…
         </p>
+        <div
+          :if={@load_error}
+          id="curation-load-error"
+          role="alert"
+          class="flex flex-col gap-3 rounded-lg bg-amber-50 px-4 py-3 text-sm/7 text-pretty text-amber-950 sm:flex-row sm:items-center sm:justify-between dark:bg-amber-400/10 dark:text-amber-100"
+        >
+          <p>The pilot pages could not be read: <code>{@load_error}</code></p>
+          <.button id="curation-retry" type="button" phx-click="retry" variant="soft" class="min-h-11">
+            Try again
+          </.button>
+        </div>
 
         <div :if={@rows && @tab == "pilot"} id="curation-pilot" class="mt-2">
           <div

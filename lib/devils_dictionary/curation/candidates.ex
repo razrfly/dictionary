@@ -238,7 +238,7 @@ defmodule DevilsDictionary.Curation.Candidates do
 
       lead =
         with :ok <- candidate.status,
-             {_card, _entry} <- LeadPolicy.page_entry(page, id) || {:error, :not_on_page},
+             {_card, _entry} <- LeadPolicy.page_entry(page, id) || :not_on_page,
              {:ok, rule} <- LeadRule.check(scope.ids, id, applicable),
              {:ok, _excerpt} <- candidate.first_sentence do
           {:ok, rule}

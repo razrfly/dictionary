@@ -175,6 +175,22 @@ defmodule DevilsDictionaryWeb.CurationLiveTest do
     assert CurationLive.pilot_pages() == ~w(war)
   end
 
+  @tag :capture_log
+  test "a queue whose pages cannot be read says so and offers another read", ctx do
+    Application.put_env(:devils_dictionary, :curation_pilot_pages, [:not_a_slug])
+    {:ok, view, _html} = live(as(ctx.conn, ctx.reviewer), ~p"/ops/curation")
+    render_async(view)
+
+    assert has_element?(view, "#curation-load-error", "could not be read")
+    refute has_element?(view, "#curation-loading")
+
+    Application.put_env(:devils_dictionary, :curation_pilot_pages, ~w(love))
+    view |> element("#curation-retry") |> render_click()
+    render_async(view)
+    assert has_element?(view, "#curation-page-love")
+    refute has_element?(view, "#curation-load-error")
+  end
+
   describe "test 7: the queue" do
     test "lists the configured pilot pages with their state and candidate marks", ctx do
       greed = word!(ctx, "greed", ~w(wiktionary johnson), scope: nil)
@@ -405,6 +421,16 @@ defmodule DevilsDictionaryWeb.CurationLiveTest do
 
       {:ok, page, _html} = live(ctx.conn, ~p"/on/love")
       assert has_element?(page, "#opening-highlight-1-note-0", @johnson_note)
+
+      # Another reviewer opening it is told whose note it carries; once they
+      # save a version of their own, the note is theirs.
+      other = editor(ctx, account([:reviewer]))
+      assert has_element?(other, "#note-#{johnson(ctx)}-carried", label(ctx.reviewer))
+      change(other, %{reason: "Saved again by another reviewer."})
+      change(other, %{notes: %{johnson(ctx) => @johnson_note <> " (Seen.)"}})
+      submit(other, "draft")
+      assert has_element?(other, "#curation-notice", "Saved version 3")
+      refute has_element?(other, "#note-#{johnson(ctx)}-carried")
     end
   end
 
