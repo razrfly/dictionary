@@ -10,7 +10,9 @@ defmodule DevilsDictionary.Curation.Opening.Reference do
       — the exact revisions, whichever apply. Immutable rows, so a reference
       keeps meaning what it meant.
     * `catalog` — `%{manifest, checksum}` for a work read from a committed
-      corpus manifest, which is that work's source revision.
+      corpus manifest, which is that work's source revision, and the row's
+      `identity` when the reference is the catalog row itself (#257). A
+      catalog-only work with no registry object has a `nil` `object_id`.
     * `locator` — where inside the revision: `%{kind: :sentences, count: n}`
       for a lead clipped at its first `n` sentences, `%{kind: :quotation,
       fingerprint: fp}` for one line of a sense's quotations (ADR 0003).
@@ -32,12 +34,18 @@ defmodule DevilsDictionary.Curation.Opening.Reference do
             assertion_revision_id: nil
 
   @type t :: %__MODULE__{
-          object_id: pos_integer(),
+          object_id: pos_integer() | nil,
           object_kind: :content | :entity | :sense,
           content_revision_id: pos_integer() | nil,
           sense_revision_id: pos_integer() | nil,
           source_record_revision_id: pos_integer() | nil,
-          catalog: %{manifest: String.t(), checksum: String.t()} | nil,
+          catalog:
+            %{
+              required(:manifest) => String.t(),
+              required(:checksum) => String.t(),
+              optional(:identity) => String.t()
+            }
+            | nil,
           locator: map() | nil,
           assertion_revision_id: pos_integer() | nil
         }

@@ -312,10 +312,54 @@ defmodule DevilsDictionary.Artworks.Corpus.Manifest do
                  into: %{},
                  do:
                    {manifest["manifest"],
-                    %{path: Path.relative_to(path, "priv"), source: manifest["source"]}}
+                    %{
+                      path: Path.relative_to(path, "priv"),
+                      source: manifest["source"],
+                      kind: manifest["kind"]
+                    }}
 
   @doc "The source slug the committed manifest `name` is a catalog of, or `nil`."
   def source_of(name) when is_binary(name), do: get_in(@committed, [name, :source])
+
+  @doc """
+  The kind of the committed manifest `name` (`"poetrydb"`), as the file
+  declares it, or `nil` when no committed manifest has that name.
+  """
+  def kind_of(name) when is_binary(name), do: get_in(@committed, [name, :kind])
+  def kind_of(_name), do: nil
+
+  @doc """
+  The committed manifest `name` as the file reads now, verified by `load/1`:
+  `{:ok, manifest}`, or `{:error, reason}` for a name nothing committed, a
+  missing, malformed or tampered file, or an unsupported one. Unlike
+  `committed_row/2` it does not require the file to be the one this module
+  was compiled with: a selection pins a checksum of its own, and
+  `Curation.Eligibility` compares the two.
+
+  Read from the same root as `committed_row/2`, and memoised the same way
+  (per root, manifest and compiled checksum): the files are megabytes, and
+  the curation screen asks about them on every change of its form (#257).
+  """
+  def committed(name) when is_binary(name) do
+    case Map.get(@committed, name) do
+      %{path: path} ->
+        root = committed_root()
+        key = {__MODULE__, :committed, root, name, checksum_of(name)}
+
+        case :persistent_term.get(key, nil) do
+          nil ->
+            result = load(Path.join(root, path))
+            :persistent_term.put(key, result)
+            result
+
+          result ->
+            result
+        end
+
+      nil ->
+        {:error, :not_committed}
+    end
+  end
 
   @doc """
   The row of the committed manifest `name` whose identity field is `value`, or

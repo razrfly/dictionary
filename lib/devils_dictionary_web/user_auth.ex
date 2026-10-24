@@ -318,6 +318,31 @@ defmodule DevilsDictionaryWeb.UserAuth do
     end
   end
 
+  @doc """
+  Plug for requests that require the reviewer role (#257): a visitor with no
+  account is sent to log in, and an account without the role is answered
+  `403`, read from the database as `:require_reviewer` reads it. The
+  LiveViews behind it also mount under `:require_reviewer`, for a socket
+  that arrives by live navigation and never makes this request.
+  """
+  def require_reviewer(conn, _opts) do
+    scope = conn.assigns.current_scope
+
+    cond do
+      is_nil(scope) or is_nil(scope.user) ->
+        require_authenticated_user(conn, [])
+
+      DevilsDictionary.Claims.Contributions.reviewer?(scope) ->
+        conn
+
+      true ->
+        conn
+        |> put_resp_content_type("text/plain")
+        |> send_resp(403, "Reviewer access is required.\n")
+        |> halt()
+    end
+  end
+
   defp maybe_store_return_to(%{method: "GET"} = conn) do
     put_session(conn, :user_return_to, current_path(conn))
   end

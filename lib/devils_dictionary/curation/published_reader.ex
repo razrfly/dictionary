@@ -32,8 +32,24 @@ defmodule DevilsDictionary.Curation.PublishedReader do
     * who selected, reviewed and published it: the version's author, the
       review the receipt cites, and the publication receipt.
 
-  A `work` or `exemplar` highlight is withheld as `:unsupported_item`: P1
-  shows definitions and quotations, and #254's later parts add the rest.
+  A `work` or `exemplar` highlight is drawn too (#257):
+
+    * a **catalog work** from the committed manifest row it pins, read
+      through `Manifest.committed_row/2`: an artwork (`met-highlights`,
+      `wikidata-famous`) with its image and the credit its catalog committed,
+      a poem (`poetrydb`) by its title, poet and length, a book
+      (`open-library`) by its title, authors, year and public-domain basis.
+      What is shown is the row that was selected, never the database's copy;
+      a poem's lines are not in its row, so none are quoted. A work pinned by
+      a source record rather than a catalog row is still `:unsupported_item`;
+    * an **exemplar** from `Published.current/1`'s `subject`: a thing by its
+      registry label, a passage by its pinned words under the quotation
+      register, with the claim's reason and its provenance as the examples
+      card reads it for the public (`Examples.Provenance`).
+
+  `arrangement/3` is the mapping itself, for any arrangement and record. The
+  operator screen's preview (`Curation.Preview`) draws an unsaved selection
+  through it, so what the owner previews is what the page will show.
 
   Reads only: no provider, no model, no write and no refresh admission.
   """
@@ -42,15 +58,21 @@ defmodule DevilsDictionary.Curation.PublishedReader do
 
   import Ecto.Query
 
+  alias DevilsDictionary.{Artworks, Examples, Markdown, Sources}
+  alias DevilsDictionary.Artworks.Corpus.Manifest
+
   alias DevilsDictionary.Curation.{
+    Candidates,
     CompositionItem,
     CompositionReview,
     Compositions,
     Configurations,
+    Eligibility,
     Excerpt,
     LeadPolicy,
     Opening,
-    Published
+    Published,
+    References
   }
 
   alias DevilsDictionary.Curation.Opening.{
@@ -64,6 +86,7 @@ defmodule DevilsDictionary.Curation.PublishedReader do
     Review
   }
 
+  alias DevilsDictionary.Examples.Provenance
   alias DevilsDictionary.Lexicon.WordPage
   alias DevilsDictionary.Registry.{ContentItem, ContentRevision, Lexeme, Sense, SenseRevision}
   alias DevilsDictionary.Repo
@@ -118,22 +141,61 @@ defmodule DevilsDictionary.Curation.PublishedReader do
     actors =
       actors([version.created_by_actor_id, receipt.actor_id, review && review.reviewer_actor_id])
 
+    arrangement(page, published, %{
+      composition: %{id: composition.id, version: version.version},
+      configuration: configuration,
+      configuration_version: configuration_version,
+      review: %Review{
+        state: :published,
+        selected_by: person(actors[version.created_by_actor_id]),
+        selected_on: date(version.inserted_at),
+        reviewed_by: review && label(actors[review.reviewer_actor_id]),
+        reviewed_on: review && date(review.inserted_at),
+        published_by: person(actors[receipt.actor_id]),
+        published_on: date(receipt.committed_at),
+        receipt_id: receipt.id
+      }
+    })
+  end
+
+  @doc """
+  An arrangement mapped onto this page's opening, under a record.
+
+  `arrangement` is `%{lead, highlights, withheld}` as `Published.current/1`
+  answers it: the eligible lead or `nil`, the eligible highlights (an
+  exemplar with its `subject`), and the items already withheld. `record` is
+  `%{composition, configuration, configuration_version, review}`, the
+  `%Opening{}` fields that say who selected, reviewed and published it, and
+  may carry `:provenance`, a function from an exemplar item to its
+  `Examples.Provenance` (by default the claim's as the public reads it, with
+  this item's selection and publication).
+
+  An item this page cannot draw is withheld here with its reason, beside the
+  ones the arrangement already withheld. Nothing takes its place.
+  """
+  def arrangement(page, arrangement, record) do
+    review = record.review
+
     ctx = %{
       page: page,
-      reviewed_by: review && label(actors[review.reviewer_actor_id]),
-      reviewed_on: review && date(review.inserted_at)
+      reviewed_by: review.reviewed_by,
+      reviewed_on: review.reviewed_on,
+      provenance: Map.get(record, :provenance, &Provenance.of(&1, :public))
     }
 
-    {lead, lead_withheld} = lead(published.lead, ctx)
+    {lead, lead_withheld} = lead(arrangement.lead, ctx)
 
     {highlights, highlight_withheld} =
-      published.highlights
+      arrangement.highlights
       |> Enum.sort_by(& &1.position)
       |> Enum.map(&highlight(&1, ctx))
       |> Enum.split_with(&match?(%Highlight{}, &1))
 
+    configuration = record.configuration
+    configuration_version = record.configuration_version
+
     %Opening{
-      composition: %{id: composition.id, version: version.version},
+      composition: record.composition,
       origin: :published,
       configuration: %Configuration{
         id: configuration.id,
@@ -145,19 +207,10 @@ defmodule DevilsDictionary.Curation.PublishedReader do
       },
       lead: lead,
       highlights: highlights,
-      review: %Review{
-        state: :published,
-        selected_by: person(actors[version.created_by_actor_id]),
-        selected_on: date(version.inserted_at),
-        reviewed_by: ctx.reviewed_by,
-        reviewed_on: ctx.reviewed_on,
-        published_by: person(actors[receipt.actor_id]),
-        published_on: date(receipt.committed_at),
-        receipt_id: receipt.id
-      },
+      review: review,
       withheld:
         Enum.sort_by(
-          published.withheld ++ lead_withheld ++ highlight_withheld,
+          arrangement.withheld ++ lead_withheld ++ highlight_withheld,
           &{&1.role != :lead, &1.position || 0}
         )
     }
@@ -292,7 +345,291 @@ defmodule DevilsDictionary.Curation.PublishedReader do
     end
   end
 
+  # A catalog work (#257): the committed row it pins, as its kind draws it.
+  defp highlight(%CompositionItem{item_kind: :work, catalog_manifest: name} = item, ctx)
+       when is_binary(name) do
+    with {:ok, kind} <- catalog_kind(name),
+         {:ok, row} <- catalog_row(name, item.catalog_identity),
+         {:ok, meaning} <- meaning(item, ctx) do
+      catalog = %{
+        name: name,
+        kind: kind,
+        row: row,
+        source: Sources.get_source_by_slug(Manifest.source_of(name)),
+        object_id:
+          item.item_object_id ||
+            Eligibility.catalog_object(name, item.catalog_checksum, item.catalog_identity)
+      }
+
+      work(Manifest.work_kind(kind), item, catalog, meaning, ctx)
+    else
+      {:error, reason} -> withheld(item, reason)
+    end
+  end
+
+  # An exemplar (#212, #257): the subject `Published.current/1` described,
+  # the claim's reason and nominator as the Examples section reads them for
+  # the public, and its provenance.
+  defp highlight(%CompositionItem{item_kind: :exemplar, subject: %{} = subject} = item, ctx) do
+    with {:ok, meaning} <- meaning(item, ctx),
+         {:ok, passage} <- passage(subject, item),
+         {:ok, example} <- example(item.assertion_revision_id, meaning),
+         {:ok, provenance} <- found(ctx.provenance.(item), :claim_not_visible) do
+      %Highlight{
+        position: item.position,
+        kind: :exemplar,
+        register: if(passage, do: :quotation),
+        reference: %Reference{
+          object_id: subject.object_id,
+          object_kind: subject.kind,
+          content_revision_id: item.content_revision_id,
+          assertion_revision_id: item.assertion_revision_id
+        },
+        title: subject.label,
+        subject: %{
+          kind: subject.kind,
+          entity_kind: if(subject.kind == :entity, do: subject.subkind),
+          content_kind: if(subject.kind == :content, do: subject.subkind),
+          qid: example.subject.qid,
+          words: passage && passage.body,
+          html: passage && Markdown.to_html(passage.body, passage.body_format)
+        },
+        # The nominator by label only: an account id never reaches a page.
+        claim: %{
+          assertion_id: example.claim.assertion_id,
+          rationale: example.claim.rationale,
+          nominated_by: %{label: example.claim.nominated_by && example.claim.nominated_by.label}
+        },
+        meaning: meaning,
+        source: source_view(passage && passage.source),
+        credits: if(passage, do: passage_credits(passage), else: []),
+        links: %{source: passage && passage.canonical_url},
+        reasons: compact([note(item, ctx)]),
+        provenance: provenance
+      }
+    else
+      {:error, reason} -> withheld(item, reason)
+    end
+  end
+
   defp highlight(%CompositionItem{} = item, _ctx), do: withheld(item, :unsupported_item)
+
+  # ── catalog works ────────────────────────────────────────────────────────
+
+  defp catalog_kind(name) do
+    case Candidates.manifest_kind(name) do
+      nil -> {:error, :catalog_changed}
+      kind -> {:ok, kind}
+    end
+  end
+
+  # The pinned row of the committed manifest. `Eligibility` has found the row
+  # in this build's manifest, so a manifest that answers none here is not the
+  # one the record checked: it has changed (`Manifest.committed_row/2`).
+  defp catalog_row(name, identity) do
+    case Manifest.committed_row(name, identity) do
+      %{} = row -> {:ok, row}
+      nil -> {:error, :catalog_changed}
+    end
+  end
+
+  defp work("artwork", item, catalog, meaning, ctx) do
+    row = catalog.row
+
+    case row["image_url"] do
+      url when is_binary(url) and url != "" ->
+        %Highlight{
+          position: item.position,
+          kind: :artwork,
+          reference: catalog_reference(item, catalog),
+          title: row["title"],
+          creator: creator_of(row),
+          date: row["date"] && to_string(row["date"]),
+          image: %{url: url, alt: ""},
+          meaning: meaning,
+          source: source_view(catalog.source),
+          credits:
+            compact([
+              credit(:image, "Image", row["credit_line"], commons_page(row)),
+              credit(
+                :catalog,
+                "Catalog record",
+                Enum.join(
+                  compact([catalog.source && catalog.source.attribution, item.catalog_identity]),
+                  " · "
+                ),
+                row["source_url"],
+                false
+              )
+            ]),
+          links: %{source: row["source_url"]},
+          reasons: compact([depiction_reason(catalog, meaning), note(item, ctx)])
+        }
+
+      _none ->
+        withheld(item, :no_image)
+    end
+  end
+
+  # A poem by its row: title, poet and length. The row pins the lines by
+  # their digest and does not hold them, so the tile quotes none and links to
+  # the source the row names.
+  defp work("poem", item, catalog, meaning, ctx) do
+    row = catalog.row
+    source = catalog.source
+
+    %Highlight{
+      position: item.position,
+      kind: :poem,
+      reference: catalog_reference(item, catalog),
+      title: row["title"],
+      creator: row["author"],
+      meaning: meaning,
+      source: source_view(source),
+      work: %{line_count: row["line_count"]},
+      credits:
+        compact([
+          credit(
+            :source,
+            "Source",
+            source && (source.attribution || source.name),
+            row["source_url"]
+          ),
+          credit(:rights, "Rights", source && source.license, source && source.license_url)
+        ]),
+      links: %{source: row["source_url"]},
+      reasons: compact([note(item, ctx)])
+    }
+  end
+
+  defp work("book", item, catalog, meaning, ctx) do
+    row = catalog.row
+    source = catalog.source
+
+    %Highlight{
+      position: item.position,
+      kind: :book,
+      reference: catalog_reference(item, catalog),
+      title: row["title"],
+      creator: row["authors"] |> List.wrap() |> Enum.map(& &1["name"]) |> compact() |> join(", "),
+      date: row["year"] && to_string(row["year"]),
+      meaning: meaning,
+      source: source_view(source),
+      work: %{public_domain: row["pd_basis"]},
+      credits:
+        compact([
+          credit(
+            :source,
+            "Source",
+            source && (source.attribution || source.name),
+            row["source_url"]
+          ),
+          credit(:rights, "Rights", public_domain(row["pd_basis"]), nil),
+          credit(
+            :catalog,
+            "Catalog record",
+            source && source.license,
+            source && source.license_url,
+            false
+          )
+        ]),
+      links: %{source: row["source_url"]},
+      reasons: compact([note(item, ctx)])
+    }
+  end
+
+  defp work(_work_kind, item, _catalog, _meaning, _ctx), do: withheld(item, :unsupported_item)
+
+  defp catalog_reference(item, catalog) do
+    %Reference{
+      object_id: catalog.object_id,
+      object_kind: :entity,
+      catalog: %{
+        manifest: catalog.name,
+        checksum: item.catalog_checksum,
+        identity: item.catalog_identity
+      }
+    }
+  end
+
+  # The basis the catalog recorded for a book being in the public domain, as
+  # its manifest's selection rule states it.
+  defp public_domain("publication"), do: "Public domain: published in or before 1929"
+
+  defp public_domain("author_death"),
+    do: "Public domain: every author died in or before 1955"
+
+  defp public_domain(_basis), do: nil
+
+  # The creators the row names: Wikidata's P170 terms, or the Met's artist.
+  defp creator_of(%{"creators" => [_ | _] = creators}),
+    do: creators |> Enum.map(& &1["term"]) |> compact() |> join(", ")
+
+  defp creator_of(%{"artist" => artist}) when is_binary(artist) and artist != "", do: artist
+  defp creator_of(_row), do: nil
+
+  defp join([], _separator), do: nil
+  defp join(list, separator), do: Enum.join(list, separator)
+
+  # The Commons file page, where an image's licence is stated, when the
+  # catalog committed the file name.
+  defp commons_page(%{"commons_file" => file}) when is_binary(file) and file != "" do
+    "https://commons.wikimedia.org/wiki/File:" <>
+      URI.encode(String.replace(file, " ", "_"), &URI.char_unreserved?/1)
+  end
+
+  defp commons_page(_row), do: nil
+
+  # Why the work fits the meaning, when the registry says so: a concept the
+  # meaning publicly `refers_to` is among the row's committed depictions.
+  defp depiction_reason(catalog, %Meaning{kind: :sense, object_id: sense_id}) do
+    qids = References.refers_to_qids(sense_id)
+
+    case Enum.find(References.pinned_depicts(catalog.row), &(&1["qid"] in qids)) do
+      nil ->
+        nil
+
+      depicted ->
+        %Reason{
+          kind: :source_match,
+          text:
+            Artworks.depiction_note(%{catalog_source: Manifest.source_of(catalog.name)}, depicted)
+        }
+    end
+  end
+
+  defp depiction_reason(_catalog, _meaning), do: nil
+
+  # ── exemplars ────────────────────────────────────────────────────────────
+
+  # What the tile can draw: a thing by its name, or a quotation or passage by
+  # its pinned words, with its source, under the quotation register.
+  defp passage(%{kind: :entity}, _item), do: {:ok, nil}
+
+  defp passage(%{kind: :content, subkind: kind}, item) when kind in [:quotation, :passage],
+    do: content(item)
+
+  defp passage(_subject, _item), do: {:error, :unsupported_subject}
+
+  # The claim as the Examples section reads it for the public.
+  defp example(revision_id, %Meaning{lexeme_id: lexeme_id}) do
+    case Enum.find(
+           Examples.exemplars([lexeme_id], :public),
+           &(&1.claim.revision_id == revision_id)
+         ) do
+      nil -> {:error, :claim_not_visible}
+      example -> {:ok, example}
+    end
+  end
+
+  defp passage_credits(passage) do
+    source = passage.source
+
+    compact([
+      credit(:source, "Quoted in", source.attribution || source.name, passage.canonical_url),
+      credit(:rights, "Rights", source.license, source.license_url)
+    ])
+  end
 
   # The line at the item's locator, as the sense row on this page reads it:
   # the same trimming, citation and fingerprint. Its words were checked
@@ -494,6 +831,8 @@ defmodule DevilsDictionary.Curation.PublishedReader do
         printed_headword(content)
     end
   end
+
+  defp source_view(nil), do: %{slug: nil, name: nil, tier: nil, logo: nil}
 
   defp source_view(source) do
     %{
