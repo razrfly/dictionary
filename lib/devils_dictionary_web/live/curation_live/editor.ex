@@ -100,8 +100,31 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
     )
     |> load_record()
     |> then(&assign(&1, :selection, initial_selection(&1.assigns)))
+    |> assign(:notice, nil)
+    |> uncarried()
     |> preview()
   end
+
+  # Items of the latest version this screen no longer offers (a revision
+  # since superseded, a work no seam lists): the form leaves them out, and
+  # says so, rather than drop them silently from the next version.
+  defp uncarried(%{assigns: %{record: %{latest: %{} = latest}, candidates: c}} = socket) do
+    case Enum.count(latest.items, &is_nil(item_key(&1, c))) do
+      0 ->
+        socket
+
+      n ->
+        assign(
+          socket,
+          :notice,
+          "Version #{latest.version.version} holds #{n} #{if n == 1, do: "item", else: "items"} " <>
+            "this screen does not offer now. A new version from this form leaves " <>
+            "#{if n == 1, do: "it", else: "them"} out."
+        )
+    end
+  end
+
+  defp uncarried(socket), do: socket
 
   # ── events ───────────────────────────────────────────────────────────────
 

@@ -592,6 +592,44 @@ defmodule DevilsDictionaryWeb.CurationLiveTest do
     {String.slice(a, max(n - 200, 0), 400), String.slice(b, max(n - 200, 0), 400)}
   end
 
+  test "a version's item the screen does not offer is named, not dropped silently", ctx do
+    {:ok, composition} =
+      Compositions.provision(ctx.reviewer, ctx.configuration.id, %{
+        scope_kind: :lexical_page,
+        lexeme_ids: [ctx.love.object_id, ctx.verb.object_id],
+        language_tag: "en",
+        reason: "A poem no seam offers."
+      })
+
+    poem =
+      "priv/artworks/manifests/poetrydb-v1.json"
+      |> DevilsDictionary.Artworks.Corpus.Manifest.load!()
+      |> Map.fetch!("rows")
+      |> Enum.find(&(&1["title"] == "Summum Bonum"))
+
+    {:ok, _version} =
+      Compositions.create_version(ctx.reviewer, composition.id, %{
+        lead: DevilsDictionary.CurationFixtures.content_spec(ctx.bierce, ctx.love),
+        highlights: [
+          %{
+            kind: :work,
+            catalog: %{
+              manifest: "poetrydb-v1",
+              checksum: DevilsDictionary.Artworks.Corpus.Manifest.checksum_of("poetrydb-v1"),
+              identity: poem["poem_id"]
+            },
+            meaning: {:lexeme, ctx.love.object_id}
+          }
+        ],
+        reason: "Written through the record.",
+        expected_parent: nil
+      })
+
+    view = editor(ctx)
+    assert has_element?(view, "#curation-notice", "holds 1 item this screen does not offer")
+    assert has_element?(view, "#lead-#{bierce(ctx)} input[checked]")
+  end
+
   test "the record is written only through the screen's services", ctx do
     # The arrangement a published version holds is the record's own:
     # provisioned for the page's words, versioned, reviewed and published.
