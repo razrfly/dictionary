@@ -3,12 +3,14 @@ defmodule DevilsDictionary.Curation.Opening.Highlight do
   One of an opening's zero to three highlights.
 
   `kind` is what the component draws: `:artwork` (a picture, with the credit
-  its catalog committed), `:quotation` (a line, verbatim, with the citation
-  its source wrote), `:definition` (another sourced definition on the page,
-  quoted from its opening, #255) or `:exemplar` (a person, work or passage
-  someone cited as an example of the meaning, through an accepted
-  `illustrates` claim, #212). The component branches on the kind and never on
-  which provider supplied the item (#156, promise 9).
+  its catalog committed), `:poem` and `:book` (a committed catalog row of a
+  text, by its title, author and what its row records, #257), `:quotation`
+  (a line, verbatim, with the citation its source wrote), `:definition`
+  (another sourced definition on the page, quoted from its opening, #255) or
+  `:exemplar` (a person, work or passage someone cited as an example of the
+  meaning, through an accepted `illustrates` claim, #212). The component
+  branches on the kind and never on which provider supplied the item (#156,
+  promise 9).
 
     * `position` — 1 to 3, the order the selection gave.
     * `title`, `creator`, `date` — as the source records them.
@@ -27,6 +29,9 @@ defmodule DevilsDictionary.Curation.Opening.Highlight do
     * `reasons` — a `:source_match` reason when the registry records why the
       item fits the meaning, and an `:editorial` reason when the selector
       wrote one, each attributed.
+    * `work` — for a poem or a book, what its catalog row records beyond its
+      title, author and year: `%{line_count}` for a poem, `%{public_domain}`
+      (the row's basis) for a book; `nil` for everything else.
 
   An exemplar also carries, and nothing else does:
 
@@ -64,13 +69,14 @@ defmodule DevilsDictionary.Curation.Opening.Highlight do
             credits: [],
             links: %{},
             reasons: [],
+            work: nil,
             subject: nil,
             claim: nil,
             provenance: nil
 
   @type t :: %__MODULE__{
           position: 1..3,
-          kind: :artwork | :quotation | :definition | :exemplar,
+          kind: :artwork | :poem | :book | :quotation | :definition | :exemplar,
           register: :quotation | :definition | nil,
           reference: Reference.t(),
           title: String.t() | nil,
@@ -89,6 +95,8 @@ defmodule DevilsDictionary.Curation.Opening.Highlight do
             required(:source) => String.t() | nil
           },
           reasons: [Reason.t()],
+          work:
+            %{optional(:line_count) => integer(), optional(:public_domain) => String.t()} | nil,
           subject:
             %{
               kind: :entity | :content,

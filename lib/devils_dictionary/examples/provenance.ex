@@ -152,6 +152,36 @@ defmodule DevilsDictionary.Examples.Provenance do
   end
 
   @doc """
+  The provenance of an exemplar a composition is about to select and
+  publish, before anything is written (#257, the operator screen's preview):
+  `provenance` is the claim's, as `of/2` reads it for the card, and every
+  stage about the claim stays as the card has it. `selection` is the
+  composed one the version will record (`selection` carries
+  `composition_id`, `version`, `role`, `position`, `selected_by` and
+  `note`), and `publication` is a receipt by `publication.actor`, committed
+  `publication.committed_at`, with no id yet.
+  """
+  def in_selection(%__MODULE__{} = provenance, %{} = selection, %{} = publication) do
+    %{
+      provenance
+      | selection:
+          Map.merge(
+            %{kind: :composed, selection_origin: :manual, selected_by: @no_author, note: nil},
+            selection
+          ),
+        publication: %{
+          receipt_id: nil,
+          authority_kind: :operator,
+          actor: publication.actor,
+          committed_at: publication.committed_at,
+          superseded_at: nil,
+          withdrawn_at: nil
+        },
+        featured: []
+    }
+  end
+
+  @doc """
   Who nominated a claim, as every surface names it: a manifest's curator,
   else the account that submitted it. A cited claimant is who *makes* the
   claim, not who nominated it here (the form's "Who makes this

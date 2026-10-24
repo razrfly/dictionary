@@ -314,9 +314,34 @@ These are later scoped slices, each owned by its issue:
   (K3), and that page shows nothing. The reader re-checks nothing `Published`
   settled: it maps the arrangement onto the opening (the lead's rule from
   `LeadPolicy`, each note as a signed reason, the receipt as *Published by*) and
-  withholds a `work` or `exemplar` highlight as `:unsupported_item` until a later
-  part draws them. The development fixture still answers only behind
+  withheld a `work` or `exemplar` highlight as `:unsupported_item` until #257
+  drew them. The development fixture still answers only behind
   `:curated_opening_fixtures` and `?opening=fixture`.
+- **#257 (P2):** the owner curates on a screen, without `iex`. `/ops/curation`
+  lists the pilot pages (`:curation_pilot_pages`, #253 D2) with their state and
+  candidate kinds, and `/ops/curation/on/:slug` edits one page's composition:
+  an operator surface (404 through the tunnel, `ProxyGuard`) and a reviewer's
+  (403 to any other account). Its candidates (`Curation.Candidates`) are the
+  page's entries under `LeadPolicy`, its current senses' quotations, exactly
+  the Saved catalog shelf's rows (`Artworks.shelf_items/1`) by manifest,
+  checksum and row identity, and the accepted `illustrates` claims of its
+  senses; who may lead is `LeadRule`'s. Its writes are this slice's services,
+  as the signed-in reviewer: `provision/3` and `create_version/3` for a draft;
+  for Publish the version (the latest, when the form holds its exact
+  references and it still stands), `Reviews.decide/4` and
+  `Publications.publish/3` in one transaction, so a moved version or pointer
+  writes nothing; `withdraw/3`. No schema changed. Its preview
+  (`Curation.Preview`) reads the selection through `Published.arrangement_of/2`
+  and `PublishedReader.arrangement/3`, the reader's own mapping, so the
+  preview is the page. `Eligibility` now reads committed manifests through
+  `Manifest.committed/1`, memoised, from the root the reader reads its rows
+  from. The reader now draws `exemplar` and catalog `work` items instead
+  of withholding them: an artwork with its committed image and credit, a poem
+  by its title, poet and length (its row pins the lines by digest and holds
+  none), a book by its title, authors, year and public-domain basis, and an
+  exemplar by its subject, nominator and acceptance. A work pinned by a source
+  record is still `:unsupported_item`. PoetryDB and Open Library rows match no
+  page (`evidence: :none`), so the screen offers no poem or book yet.
 - **#203 / #204:** the history projection, profile pages and the method page.
 - Later stages of #201: domain defaults and personal views.
 

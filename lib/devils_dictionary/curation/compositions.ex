@@ -474,12 +474,19 @@ defmodule DevilsDictionary.Curation.Compositions do
   defp pinned_words(%AssertionRevision{}, nil), do: {:ok, nil}
   defp pinned_words(%AssertionRevision{}, _id), do: {:error, :entity_has_no_words}
 
-  # C6: within one arrangement that includes an exemplar, no two items show
-  # the same thing. An item is identified by its object and, for words, by
-  # their digest: a passage's pinned revision, a quotation's hash, a
-  # definition's body. Only pairs with an exemplar are compared, so an
-  # arrangement of the other kinds is judged as slice 1 judged it.
-  defp one_display_identity(items) do
+  @doc """
+  C6: within one arrangement that includes an exemplar, no two items show
+  the same thing. `:ok`, or `{:error, {:duplicate_display_identity,
+  object_id}}` naming the exemplar's object. `create_version/3` refuses on
+  it; the operator screen (#257) asks it of an unsaved arrangement, so the
+  form says what the record would.
+
+  An item is identified by its object and, for words, by their digest: a
+  passage's pinned revision, a quotation's hash, a definition's body. Only
+  pairs with an exemplar are compared, so an arrangement of the other kinds
+  is judged as slice 1 judged it.
+  """
+  def one_display_identity(items) do
     identities = Enum.map(items, &{&1, display_identity(&1)})
     exemplars = Enum.filter(identities, fn {item, _keys} -> item.item_kind == :exemplar end)
 

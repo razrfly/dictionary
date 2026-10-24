@@ -69,6 +69,7 @@ defmodule DevilsDictionaryWeb.Layouts do
           <.footer_link navigate={~p"/ops/health"}>Health</.footer_link>
           <.footer_link navigate={~p"/ops/imports"}>Imports</.footer_link>
           <.footer_link navigate={~p"/ops/discovery"}>Discovery</.footer_link>
+          <.footer_link navigate={~p"/ops/curation"}>Curation</.footer_link>
         </.footer_category>
       </:links>
       <:fineprint>
