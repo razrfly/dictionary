@@ -47,7 +47,8 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
     Compositions,
     Preview,
     Publications,
-    Reviews
+    Reviews,
+    Standing
   }
 
   alias DevilsDictionary.Repo
@@ -64,46 +65,78 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
     exemplar: "Accepted exemplars"
   ]
 
+  # The page is built once the socket is up: the first paint is the header,
+  # not a page build, a candidate listing and a preview done twice.
   @impl true
   def mount(%{"slug" => slug}, _session, socket) do
-    page = CurationLive.page(slug)
-    candidates = Candidates.for_page(page)
-
     socket =
-      socket
-      |> assign(
+      assign(socket,
         slug: slug,
-        page: page,
-        candidates: candidates,
+        loaded?: false,
         reopened?: false,
+        stale: nil,
         refusal: nil,
         notice: nil,
         withdraw_reason: "",
-        page_title: "Curate · #{page.headword.lemma || slug}"
+        me: Preview.author(socket.assigns.current_scope),
+        page_title: "Curate · #{slug}"
       )
-      |> load_record()
 
-    {:ok, assign(socket, :selection, initial_selection(socket.assigns)) |> preview()}
+    {:ok, if(connected?(socket), do: load(socket), else: socket)}
+  end
+
+  # The page, its candidates and its record as they are now, and the form
+  # opened on the latest version.
+  defp load(socket) do
+    page = CurationLive.page(socket.assigns.slug)
+
+    socket
+    |> assign(
+      page: page,
+      candidates: Candidates.for_page(page),
+      loaded?: true,
+      stale: nil,
+      page_title: "Curate · #{page.headword.lemma || socket.assigns.slug}"
+    )
+    |> load_record()
+    |> then(&assign(&1, :selection, initial_selection(&1.assigns)))
+    |> preview()
   end
 
   # ── events ───────────────────────────────────────────────────────────────
 
   @impl true
-  def handle_event("change", %{"curation" => params}, socket) do
-    {:noreply, socket |> assign(:selection, selection(params, socket.assigns)) |> preview()}
+  def handle_event("change", params, socket) do
+    old = socket.assigns.selection
+    socket = assign(socket, :selection, selection(form_of(params), socket.assigns))
+
+    # A keystroke in the version's reason changes no item: the preview stands.
+    if drawn(socket.assigns.selection) == drawn(old),
+      do: {:noreply, refresh(socket)},
+      else: {:noreply, preview(socket)}
   end
 
-  def handle_event("submit", %{"curation" => params} = all, socket) do
-    socket = socket |> assign(:selection, selection(params, socket.assigns)) |> preview()
+  def handle_event("submit", params, socket) do
+    socket = socket |> assign(:selection, selection(form_of(params), socket.assigns)) |> preview()
 
-    case all["action"] do
+    case params["action"] do
       "publish" -> {:noreply, publish(socket)}
       _draft -> {:noreply, save_draft(socket)}
     end
   end
 
-  def handle_event("withdraw", %{"withdraw" => %{"reason" => reason}}, socket) do
+  def handle_event("withdraw", params, socket) do
+    reason =
+      case params do
+        %{"withdraw" => %{"reason" => reason}} when is_binary(reason) -> reason
+        _other -> ""
+      end
+
     {:noreply, withdraw(assign(socket, :withdraw_reason, reason))}
+  end
+
+  def handle_event("reload", _params, socket) do
+    {:noreply, socket |> assign(reopened?: false, refusal: nil, notice: nil) |> load()}
   end
 
   def handle_event("reopen", _params, socket) do
@@ -115,6 +148,13 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
   end
 
   # ── the selection ────────────────────────────────────────────────────────
+
+  defp form_of(%{"curation" => %{} = params}), do: params
+  defp form_of(_params), do: %{}
+
+  # What the preview is drawn from: the items and their words.
+  defp drawn(sel),
+    do: {sel.lead, sel.highlights, Map.take(sel.notes, sel.highlights), sel.lead_note}
 
   # What the form says, held to the screen's rules: a lead the rule admits,
   # the highlights in the order they were ticked, never more than the
@@ -147,6 +187,7 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
       lead: lead,
       highlights: highlights,
       notes: notes,
+      authors: old.authors,
       lead_note: text(params["lead_note"], old.lead_note),
       reason: text(params["reason"], old.reason)
     }
@@ -183,7 +224,7 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
         nil -> if candidates.no_lead == :ok, do: "none", else: nil
       end
 
-    %{lead: lead, highlights: [], notes: %{}, lead_note: "", reason: ""}
+    %{lead: lead, highlights: [], notes: %{}, authors: %{}, lead_note: "", reason: ""}
   end
 
   # A stored version as the form's selection: each item by its candidate's
@@ -207,6 +248,15 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
         ),
       notes:
         for({item, key} <- keyed, item.role == :highlight, into: %{}, do: {key, item.note || ""}),
+      # Who wrote each note carried from the version, by the label the record
+      # signed it with: a new version signs every note as its own author's.
+      authors:
+        for(
+          {item, key} <- keyed,
+          is_binary(item.note_author_label),
+          into: %{},
+          do: {if(item.role == :lead, do: :lead, else: key), item.note_author_label}
+        ),
       lead_note: (lead && elem(lead, 0).note) || "",
       reason: ""
     }
@@ -254,21 +304,56 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
           not is_nil(candidate),
           do: {candidate, sel.notes[key]}
 
+    selection = %{lead: lead, lead_note: sel.lead_note, highlights: highlights}
+    held = held(record, Preview.items(selection, socket.assigns.me))
+
     preview =
-      Preview.build(
-        page,
-        candidates,
-        %{lead: lead, lead_note: sel.lead_note, highlights: highlights},
-        socket.assigns.current_scope,
+      Preview.build(page, candidates, selection, socket.assigns.current_scope,
         composition: record.composition,
-        next_version: if(record.latest, do: record.latest.version.version + 1, else: 1)
+        next_version: if(record.latest, do: record.latest.version.version + 1, else: 1),
+        held: held && %{version: held.version, items: held.items, author: held.author}
       )
 
     socket
-    |> assign(:preview, preview)
+    |> assign(preview: preview, held: held)
     |> assign(:preview_key, :erlang.phash2({sel.lead, sel.highlights}))
-    |> assign(:blockers, blockers(socket.assigns, preview))
-    |> assign(:form, to_form(form_params(sel), as: :curation))
+    |> refresh()
+  end
+
+  # The blockers and the form, for a change that draws nothing new.
+  defp refresh(socket) do
+    socket
+    |> assign(:blockers, blockers(socket.assigns, socket.assigns.preview))
+    |> assign(:form, to_form(form_params(socket.assigns.selection), as: :curation))
+  end
+
+  # The fields that say what an item shows and why, and not who signed it:
+  # two arrangements equal on these are one selection.
+  @reference_fields ~w(role position item_kind item_object_id content_revision_id
+                       sense_revision_id source_record_revision_id catalog_manifest
+                       catalog_checksum catalog_identity locator words_sha256
+                       meaning_sense_revision_id meaning_lexeme_id assertion_revision_id
+                       note)a
+
+  # The latest version, when the form holds exactly its references and words
+  # and it still stands: Publish then publishes it, with its own notes and
+  # their authors, rather than writing a copy. Anything else is a new version.
+  defp held(%{latest: %{} = latest, composition: %{} = composition}, items) do
+    if references(latest.items) == references(items) and stands?(latest.version, composition),
+      do: latest
+  end
+
+  defp held(_record, _items), do: nil
+
+  defp references(items) do
+    items
+    |> Enum.map(&Map.take(&1, @reference_fields))
+    |> Enum.sort_by(&{to_string(&1.role), &1.position})
+  end
+
+  defp stands?(version, composition) do
+    Standing.scope(version, composition) == :ok and Standing.configuration(version) == :ok and
+      Standing.eligible(Standing.evaluate(version, composition), version) == :ok
   end
 
   defp form_params(sel),
@@ -289,6 +374,7 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
 
     common =
       List.flatten([
+        if(assigns.stale, do: [:not_current], else: []),
         read_only(assigns),
         Enum.map(preview.problems, &problem/1),
         if(String.trim(sel.reason) == "", do: [{:required, :reason}], else: []),
@@ -306,7 +392,12 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
           String.trim(sel.notes[key] || "") == "",
           do: {:reason_missing, n}
 
-    %{draft: common, publish: common ++ notes}
+    published =
+      if match?(%{version: %{id: id}} when id == assigns.record.published_id, assigns[:held]),
+        do: [:already_published],
+        else: []
+
+    %{draft: common, publish: common ++ notes ++ published}
   end
 
   # A problem the preview found, by its place when it has one.
@@ -344,34 +435,81 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
         |> preview()
 
       {:error, reason} ->
-        assign(socket, refusal: reason, notice: nil)
+        refused(socket, reason)
     end
   end
 
   defp publish(%{assigns: %{blockers: %{publish: [_ | _] = blockers}}} = socket),
     do: assign(socket, refusal: hd(blockers), notice: nil)
 
+  # The version, its acceptance and its publication, in one transaction: a
+  # version or a pointer that moved since this form was opened writes
+  # nothing at all.
   defp publish(socket) do
-    %{current_scope: scope, selection: sel, record: record} = socket.assigns
+    %{current_scope: scope, selection: sel, record: record, held: held} = socket.assigns
 
-    with {:ok, version} <- version_to_publish(socket.assigns, scope),
-         {:ok, receipt} <- review_and_publish(scope, version, sel.reason, record.published_id) do
-      socket
-      |> after_write(
-        "Published version #{version.version} (receipt ##{receipt.id}). The page shows it on its next request."
-      )
-      |> assign(:selection, %{sel | reason: ""})
-      |> preview()
-    else
-      {:error, reason} -> socket |> load_record() |> assign(refusal: reason, notice: nil)
+    result =
+      atomically(fn ->
+        with {:ok, version} <- publishable(socket.assigns, held, scope),
+             {:ok, _review} <-
+               Reviews.decide(scope, version.id, :accepted,
+                 reason: sel.reason,
+                 idempotency_key: key("review")
+               ),
+             {:ok, receipt} <-
+               Publications.publish(scope, version.id,
+                 reason: sel.reason,
+                 idempotency_key: key("publish"),
+                 expected_pointer: record.published_id
+               ) do
+          {:ok, {version, receipt}}
+        end
+      end)
+
+    case result do
+      {:ok, {version, receipt}} ->
+        socket
+        |> after_write(
+          "Published version #{version.version} (receipt ##{receipt.id}). The page shows it on its next request."
+        )
+        |> assign(:selection, %{sel | reason: ""})
+        |> preview()
+
+      {:error, reason} ->
+        refused(socket, reason)
     end
   end
+
+  # The held version, while it is still the newest; otherwise a new one,
+  # from the latest this form was opened on.
+  defp publishable(_assigns, %{version: version}, _scope) do
+    case Compositions.latest_version(version.composition_id) do
+      %{id: id} when id == version.id -> {:ok, version}
+      latest -> {:error, {:stale_parent, latest && latest.id}}
+    end
+  end
+
+  defp publishable(assigns, nil, scope), do: write_version(assigns, scope)
+
+  # A refusal is shown and nothing is reloaded. One that says another
+  # reviewer moved the page also blocks every write until the owner reloads
+  # and sees what they did.
+  defp refused(socket, reason) do
+    stale = if not_current?(reason), do: reason, else: socket.assigns.stale
+    socket |> assign(refusal: reason, notice: nil, stale: stale) |> refresh()
+  end
+
+  defp withdraw(%{assigns: %{stale: stale}} = socket) when not is_nil(stale),
+    do: assign(socket, refusal: :not_current, notice: nil)
 
   defp withdraw(socket) do
     %{current_scope: scope, record: record, withdraw_reason: reason} = socket.assigns
 
     result =
       case record do
+        _record when reason == "" ->
+          {:error, {:required, :withdraw_reason}}
+
         %{composition: %{id: id}, published_id: published} when is_integer(published) ->
           Publications.withdraw(scope, id,
             reason: reason,
@@ -393,34 +531,9 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
         |> preview()
 
       {:error, reason} ->
-        socket |> load_record() |> assign(refusal: reason, notice: nil)
+        refused(socket, reason)
     end
   end
-
-  # The version Publish publishes: the latest, when the form still holds
-  # exactly its arrangement and it is not already on the page; otherwise a
-  # new one, from the latest this form was opened on.
-  defp version_to_publish(
-         %{record: record, candidates: candidates, selection: sel} = assigns,
-         scope
-       ) do
-    latest = record.latest
-    held? = not is_nil(latest) and same?(version_selection(latest, candidates), sel)
-
-    cond do
-      held? and latest.version.id == record.published_id -> {:error, :already_published}
-      held? and length(latest.items) == count(sel) -> {:ok, latest.version}
-      true -> write_version(assigns, scope)
-    end
-  end
-
-  defp same?(a, b),
-    do:
-      a.lead == b.lead and a.highlights == b.highlights and
-        Enum.all?(b.highlights, &(blank(a.notes[&1]) == blank(b.notes[&1]))) and
-        blank(a.lead_note) == blank(b.lead_note)
-
-  defp count(sel), do: length(sel.highlights) + if(sel.lead in [nil, "none"], do: 0, else: 1)
 
   defp blank(nil), do: nil
 
@@ -464,24 +577,6 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
     })
   end
 
-  # Review and publication together: an acceptance that cannot be published
-  # from the pointer this form saw is not left behind.
-  defp review_and_publish(scope, version, reason, expected) do
-    atomically(fn ->
-      with {:ok, _review} <-
-             Reviews.decide(scope, version.id, :accepted,
-               reason: reason,
-               idempotency_key: key("review")
-             ) do
-        Publications.publish(scope, version.id,
-          reason: reason,
-          idempotency_key: key("publish"),
-          expected_pointer: expected
-        )
-      end
-    end)
-  end
-
   defp atomically(fun) do
     Repo.transaction(fn ->
       case fun.() do
@@ -519,6 +614,19 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
   # ── rendering ────────────────────────────────────────────────────────────
 
   @impl true
+  def render(%{loaded?: false} = assigns) do
+    ~H"""
+    <Layouts.app flash={@flash} current_scope={@current_scope}>
+      <.container>
+        <div id="curation-editor" class="flex flex-col gap-4 py-10 sm:py-14">
+          <h1 class="font-display text-4xl/12 text-mist-950 dark:text-white">On {@slug}</h1>
+          <p id="curation-loading" class="text-sm/7 text-mist-500">Reading the page…</p>
+        </div>
+      </.container>
+    </Layouts.app>
+    """
+  end
+
   def render(assigns) do
     assigns =
       assigns
@@ -676,6 +784,8 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
                   name="curation[lead_note]"
                   label="Why this leads (optional: the rule above is its reason)"
                   value={@selection.lead_note}
+                  author={@selection.authors[:lead]}
+                  me={@me.label}
                 />
               </fieldset>
 
@@ -720,6 +830,7 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
                     selection={@selection}
                     full?={length(@selection.highlights) >= @max}
                     position={position(@selection, c.key)}
+                    me={@me.label}
                   />
                   <details
                     :if={folded != []}
@@ -738,6 +849,7 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
                         selection={@selection}
                         full?={length(@selection.highlights) >= @max}
                         position={position(@selection, c.key)}
+                        me={@me.label}
                       />
                     </div>
                   </details>
@@ -756,6 +868,7 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
                   rows="2"
                   maxlength="500"
                   disabled={not @editable?}
+                  phx-debounce="300"
                   placeholder="What this version changes, and why"
                 />
                 <ul
@@ -817,7 +930,9 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
                   id="curation-preview-empty"
                   class="text-sm/7 text-mist-500"
                 >
-                  Nothing selected: the page shows no opening.
+                  {if @selection.lead in [nil, "none"] and @selection.highlights == [],
+                    do: "Nothing selected: the page shows no opening.",
+                    else: "Everything selected is withheld: the page would show no opening."}
                 </p>
               </div>
             </aside>
@@ -834,6 +949,7 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
   attr :selection, :map, required: true
   attr :full?, :boolean, required: true
   attr :position, :integer, default: nil
+  attr :me, :string, required: true
 
   defp candidate(assigns) do
     c = assigns.candidate
@@ -915,6 +1031,8 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
         name={"curation[notes][#{@candidate.key}]"}
         label="Why this is here"
         value={@selection.notes[@candidate.key] || ""}
+        author={@selection.authors[@candidate.key]}
+        me={@me}
       />
     </div>
     """
@@ -924,7 +1042,12 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
   attr :name, :string, required: true
   attr :label, :string, required: true
   attr :value, :string, default: ""
+  attr :author, :string, default: nil, doc: "who the record signed a carried note to"
+  attr :me, :string, default: nil
 
+  # A note carried from a version someone else wrote says so: the record
+  # signs every note of a new version as its author's (K9), so writing one
+  # puts this reviewer's name to those words.
   defp note_box(assigns) do
     assigns = assign(assigns, :count, String.length(assigns.value || ""))
 
@@ -950,6 +1073,14 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
       >
         {@count}/{note_max()}
       </p>
+      <p
+        :if={@author && @author != @me && @value != ""}
+        id={"#{@id}-carried"}
+        class="-mt-1 text-xs/5 text-pretty text-amber-800 dark:text-amber-200"
+      >
+        Written by {@author}. Publishing it unchanged keeps it theirs; a new version signs it as
+        yours.
+      </p>
     </div>
     """
   end
@@ -970,9 +1101,18 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
         <p class="font-medium">Not current (not_current).</p>
         <p>
           Another reviewer saved or published this page since you opened it, so nothing was
-          written. The record answered <code>{blocker_code(@refusal)}</code>. The history below
-          shows their version; reload to curate from it.
+          written. The record answered <code>{blocker_code(@refusal)}</code>. Nothing more can
+          be written from this form: reload to curate from what they left.
         </p>
+        <.button
+          id="curation-reload"
+          type="button"
+          phx-click="reload"
+          variant="soft"
+          class="mt-2 min-h-11"
+        >
+          Reload
+        </.button>
       <% else %>
         <p class="font-medium">
           The record refused this: <code>{blocker_code(@refusal)}</code>
@@ -1214,6 +1354,7 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
   defp status_text(:not_a_catalog_row), do: "not a committed catalog row"
   defp status_text(reason), do: "#{Opening.withheld_reason(reason)} (#{reason})"
 
+  defp not_current?(:not_current), do: true
   defp not_current?({:stale_parent, _}), do: true
   defp not_current?({:stale_pointer, _}), do: true
   defp not_current?(_reason), do: false
@@ -1226,6 +1367,12 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
 
   # Each refusal or blocker in plain words, after its code. Unknown ones say
   # what the record answered.
+  defp blocker_text(:not_current),
+    do: "Another reviewer changed this page since it was opened: reload to see it."
+
+  defp blocker_text({:required, :withdraw_reason}),
+    do: "Write a reason to withdraw: the record requires one."
+
   defp blocker_text({:required, :reason}),
     do: "Write a reason for this version: the record requires one."
 

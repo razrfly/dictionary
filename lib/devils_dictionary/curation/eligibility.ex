@@ -432,14 +432,13 @@ defmodule DevilsDictionary.Curation.Eligibility do
     ensure(Repo.exists?(query), :work_identity_mismatch)
   end
 
+  # The file as committed now (`Manifest.committed/1`, memoised, read from
+  # the root the reader reads its rows from), so the record and the page judge
+  # one file.
   defp committed_manifest(name) do
-    path = Application.app_dir(:devils_dictionary, "priv/artworks/manifests/#{name}.json")
-
-    try do
-      {:ok, Manifest.load!(path)}
-    rescue
-      _error in [File.Error, Jason.DecodeError, ArgumentError, KeyError] ->
-        {:error, :catalog_changed}
+    case Manifest.committed(name) do
+      {:ok, manifest} -> {:ok, manifest}
+      {:error, _reason} -> {:error, :catalog_changed}
     end
   end
 

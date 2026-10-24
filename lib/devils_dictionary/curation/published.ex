@@ -91,6 +91,27 @@ defmodule DevilsDictionary.Curation.Published do
   defp arrangement(version, composition) do
     items = Compositions.items(version.id)
     evaluation = Standing.evaluate(version, composition)
+
+    items
+    |> arrangement_of(evaluation)
+    |> Map.merge(%{
+      composition: composition,
+      version: version,
+      receipt: Publications.latest(composition.id)
+    })
+  end
+
+  @doc """
+  What may be shown of `items` under their `Eligibility.evaluate/5`
+  `evaluation`: `%{lead, highlights, withheld}`, the lead and highlights that
+  stand (an exemplar with its `subject`) and every other item withheld with
+  its reason. A broken lead rule withholds the lead, and a missing lead
+  where one applies is reported in its place. Nothing is substituted.
+
+  `current/1` reads a published version through it, and the operator
+  screen's preview (#257) an unsaved selection, so the two cannot differ.
+  """
+  def arrangement_of(items, evaluation) do
     statuses = Map.new(evaluation.results, fn {role, pos, status} -> {{role, pos}, status} end)
 
     status_of = fn item ->
@@ -102,17 +123,12 @@ defmodule DevilsDictionary.Curation.Published do
 
     {shown, held} = Enum.split_with(items, &(status_of.(&1) == :ok))
 
-    withheld =
-      Enum.map(held, &%{role: &1.role, position: &1.position, reason: status_of.(&1)}) ++
-        missing_lead(items, evaluation.lead_rule)
-
     %{
-      composition: composition,
-      version: version,
-      receipt: Publications.latest(composition.id),
       lead: Enum.find(shown, &(&1.role == :lead)),
       highlights: shown |> Enum.filter(&(&1.role == :highlight)) |> Enum.map(&with_subject/1),
-      withheld: withheld
+      withheld:
+        Enum.map(held, &%{role: &1.role, position: &1.position, reason: status_of.(&1)}) ++
+          missing_lead(items, evaluation.lead_rule)
     }
   end
 

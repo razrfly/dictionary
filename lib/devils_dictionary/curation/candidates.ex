@@ -12,10 +12,14 @@ defmodule DevilsDictionary.Curation.Candidates do
   **The four kinds**, each from the seam the record already uses:
 
     * **leads and definitions** (`:content`): every entry on the page's
-      cards. Who may lead is `Curation.LeadPolicy`'s, asked of the page
-      (`applicable/1`, `check/2`, `check_empty/1`), so a Bierce entry is the
-      only admissible lead where there is one, and "no lead" is admissible
-      only where there is none. A definition may also be a highlight;
+      cards (`LeadPolicy.page_entry/2` finds the card a lead opens). Who may
+      lead is the record's own rule, `Curation.LeadRule` (K10), which
+      counts a Bierce entry only where it may itself lead
+      (`Eligibility.leadable?/1`): an applicable Bierce entry is then the
+      only admissible lead, and "no lead" is admissible only where there is
+      none. A definition may also be a highlight. One whose `defines` claim
+      the public may not see means nothing on this page, and is listed and
+      not offered rather than given a guessed meaning;
     * **sense quotations** (`:sense_quotation`): the quotations of the
       scope's current senses, pinned by `locator` (`"quotation:N"`) and the
       SHA-256 of their words, as `Curation.ManualFixture` pins them, and only
@@ -44,7 +48,16 @@ defmodule DevilsDictionary.Curation.Candidates do
   alias DevilsDictionary.Artworks.Corpus.Manifest
   alias DevilsDictionary.Claims
   alias DevilsDictionary.Claims.AssertionRevision
-  alias DevilsDictionary.Curation.{CompositionItem, Digest, Eligibility, Excerpt, LeadPolicy}
+
+  alias DevilsDictionary.Curation.{
+    CompositionItem,
+    Digest,
+    Eligibility,
+    Excerpt,
+    LeadPolicy,
+    LeadRule
+  }
+
   alias DevilsDictionary.Curation.Runtime.Packet
   alias DevilsDictionary.Examples
   alias DevilsDictionary.Lexicon.WordPage
@@ -100,9 +113,9 @@ defmodule DevilsDictionary.Curation.Candidates do
 
       %{
         scope: scope,
-        bierce?: LeadPolicy.applicable(page) != [],
-        leads: leads(page, definitions),
-        no_lead: LeadPolicy.check_empty(page),
+        bierce?: LeadRule.applicable(scope.ids) != [],
+        leads: leads(page, scope, definitions),
+        no_lead: no_lead(scope),
         highlights:
           definitions ++
             quotations(scope) ++ works(scope) ++ Enum.filter(exemplars, & &1.accepted?),
@@ -179,16 +192,16 @@ defmodule DevilsDictionary.Curation.Candidates do
     for {card, entry} <- entries,
         revision = revisions[entry.content_id],
         not is_nil(revision) do
-      lexeme_id = defined[entry.content_id] || hd(scope.ids)
+      lexeme_id = defined[entry.content_id]
 
       spec = %{
         kind: :content,
         object_id: entry.content_id,
         content_revision_id: revision.id,
-        meaning: {:lexeme, lexeme_id}
+        meaning: lexeme_id && {:lexeme, lexeme_id}
       }
 
-      item = probe(spec)
+      item = lexeme_id && probe(spec)
       block = Excerpt.sentences(revision.body, revision.body_format, @block_sentences)
 
       candidate(%{
@@ -196,7 +209,11 @@ defmodule DevilsDictionary.Curation.Candidates do
         kind: :content,
         spec: spec,
         item: item,
-        status: drawable(Eligibility.check(item, scope.ids), block),
+        status:
+          if(item,
+            do: drawable(Eligibility.check(item, scope.ids), block),
+            else: :meaning_mismatch
+          ),
         source: source_of(card.source),
         label: Enum.join(compact([card.source.name, card.pos]), " · "),
         title: entry_label(entry),
@@ -208,17 +225,23 @@ defmodule DevilsDictionary.Curation.Candidates do
     end
   end
 
-  # Who may lead: the lead rule's verdict on the page, and the record's own
-  # standing of the entry. A lead must also have a first sentence to quote,
-  # since the page quotes a lead by its first sentence.
-  defp leads(page, definitions) do
+  # Who may lead: the record's lead rule (`LeadRule.check/3`, K10) over the
+  # page's words, an entry this page shows (`LeadPolicy.page_entry/2`), and
+  # the entry's own standing. A lead must also have a first sentence to
+  # quote, since the page quotes a lead by its first sentence.
+  defp leads(page, scope, definitions) do
+    applicable = LeadRule.applicable(scope.ids)
+
     definitions
     |> Enum.map(fn candidate ->
+      id = candidate.spec.object_id
+
       lead =
         with :ok <- candidate.status,
-             {:ok, policy} <- LeadPolicy.check(page, candidate.spec.object_id),
+             {_card, _entry} <- LeadPolicy.page_entry(page, id) || {:error, :not_on_page},
+             {:ok, rule} <- LeadRule.check(scope.ids, id, applicable),
              {:ok, _excerpt} <- candidate.first_sentence do
-          {:ok, policy}
+          {:ok, rule}
         else
           {:error, reason} -> {:error, reason}
           reason when is_atom(reason) -> {:error, reason}
@@ -227,6 +250,15 @@ defmodule DevilsDictionary.Curation.Candidates do
       %{candidate | lead: lead}
     end)
     |> Enum.sort_by(&(not match?({:ok, :priority_source}, &1.lead)))
+  end
+
+  # "No lead" as the record's rule answers it: admissible only where no
+  # applicable Bierce entry exists.
+  defp no_lead(scope) do
+    case LeadRule.check(scope.ids, nil) do
+      {:ok, _none} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
   end
 
   # The scope lexeme each definition defines, by the `defines` claims the
@@ -344,28 +376,32 @@ defmodule DevilsDictionary.Curation.Candidates do
       pin = pins[row.object_id]
       sense = senses[row.sense_id]
 
-      meaning =
-        if sense,
-          do: {:sense_revision, sense.id},
-          else: {:lexeme, hd(scope.ids)}
-
+      # The meaning the shelf matched the work for; a row with none means
+      # nothing here, and is not given one.
       spec =
-        pin &&
+        pin && sense &&
           %{
             kind: :work,
             object_id: row.object_id,
             catalog: Map.take(pin, [:manifest, :checksum, :identity]),
-            meaning: meaning
+            meaning: {:sense_revision, sense.id}
           }
 
       item = spec && probe(spec)
+
+      status =
+        cond do
+          is_nil(pin) -> :not_a_catalog_row
+          is_nil(sense) -> :meaning_mismatch
+          true -> Eligibility.check(item, scope.ids)
+        end
 
       candidate(%{
         key: "work-#{row.object_id}",
         kind: :work,
         spec: spec,
         item: item,
-        status: if(item, do: Eligibility.check(item, scope.ids), else: :not_a_catalog_row),
+        status: status,
         source: %{slug: row.source_slug, name: meta["provider"] || row.source_slug},
         label: meta["provider"],
         title: meta["title"],
@@ -373,11 +409,7 @@ defmodule DevilsDictionary.Curation.Candidates do
         date: meta["year"],
         work_kind: pin && pin.work_kind,
         image_url: meta["thumbnail_url"] || meta["image_url"],
-        meaning:
-          if(sense,
-            do: gloss_label(sense.gloss, lexeme_label(scope, sense.lexeme_id)),
-            else: lexeme_label(scope, hd(scope.ids))
-          ),
+        meaning: sense && gloss_label(sense.gloss, lexeme_label(scope, sense.lexeme_id)),
         detail: row.match_reasons |> List.wrap() |> Enum.map_join(" ", &reason_text/1)
       })
     end
@@ -399,6 +431,7 @@ defmodule DevilsDictionary.Curation.Candidates do
       Repo.all(
         from x in ExternalIdentifier,
           where: x.object_id in ^object_ids and x.status == :verified,
+          order_by: [x.object_id, x.namespace, x.external_id],
           select: {x.object_id, x.namespace, x.external_id}
       )
 
@@ -425,15 +458,8 @@ defmodule DevilsDictionary.Curation.Candidates do
     for {^object_id, ^namespace, id} <- identifiers, do: id
   end
 
-  @doc """
-  The kind of a committed manifest from its name: a manifest is named
-  `"<kind>-v<schema>"` (`Manifest.new/3`). `nil` for any other name.
-  """
-  def manifest_kind(name) when is_binary(name) do
-    Enum.find(Manifest.kinds(), &String.starts_with?(name, &1 <> "-v"))
-  end
-
-  def manifest_kind(_name), do: nil
+  @doc "The kind of the committed manifest `name`, as the file declares it, or `nil`."
+  def manifest_kind(name), do: Manifest.kind_of(name)
 
   defp reason_text(%{detail: detail}) when is_binary(detail), do: detail
   defp reason_text(%{"detail" => detail}) when is_binary(detail), do: detail

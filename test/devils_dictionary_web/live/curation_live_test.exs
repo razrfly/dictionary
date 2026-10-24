@@ -181,6 +181,7 @@ defmodule DevilsDictionaryWeb.CurationLiveTest do
       entry!(ctx, greed, "wiktionary", body: "A selfish desire for more than is needed.")
 
       {:ok, view, _html} = live(as(ctx.conn, ctx.reviewer), ~p"/ops/curation")
+      render_async(view)
 
       assert has_element?(view, "#curation-page-love")
       assert has_element?(view, "#curation-page-greed")
@@ -208,6 +209,7 @@ defmodule DevilsDictionaryWeb.CurationLiveTest do
       submit(view, "publish")
 
       {:ok, queue, _html} = live(as(ctx.conn, ctx.reviewer), ~p"/ops/curation")
+      render_async(queue)
       assert has_element?(queue, "#curation-page-love-state", "published")
       assert has_element?(queue, "#curation-page-love", "v1 · 0 highlights")
 
@@ -361,6 +363,11 @@ defmodule DevilsDictionaryWeb.CurationLiveTest do
       change(view, %{reason: "Bierce alone."})
       submit(view, "publish")
 
+      # A withdrawal needs its reason.
+      view |> form("#curation-withdraw-form", %{withdraw: %{reason: ""}}) |> render_submit()
+      assert has_element?(view, "#curation-refusal", "Write a reason to withdraw")
+      assert Repo.aggregate(CompositionPublication, :count) == 1
+
       view
       |> form("#curation-withdraw-form", %{withdraw: %{reason: "wording"}})
       |> render_submit()
@@ -379,6 +386,14 @@ defmodule DevilsDictionaryWeb.CurationLiveTest do
 
       change(view, %{highlights: [johnson(ctx)], reason: "Re-opened with Johnson."})
       change(view, %{notes: %{johnson(ctx) => @johnson_note}})
+      submit(view, "draft")
+
+      # Re-opened and saved, the page is a draft again, after a reload too.
+      reloaded = editor(ctx)
+      assert has_element?(reloaded, "#curation-state-label", "draft v2")
+      refute has_element?(reloaded, "#curation-reopen")
+
+      change(view, %{reason: "Publish it."})
       submit(view, "publish")
       assert has_element?(view, "#curation-notice", "Published version 2")
 
@@ -417,7 +432,116 @@ defmodule DevilsDictionaryWeb.CurationLiveTest do
     end
   end
 
+  describe "test 12: a pointer that moved" do
+    # A draft, then two reviewers: one publishes the draft as it stands, the
+    # other edits and publishes from the same pointer.
+    defp draft!(ctx, params) do
+      view = editor(ctx)
+      change(view, params)
+      submit(view, "draft")
+      assert has_element?(view, "#curation-notice", "Saved version")
+    end
+
+    test "the loser writes nothing at all, and cannot write again until it reloads", ctx do
+      draft!(ctx, %{reason: "Bierce alone, as a draft."})
+      other = account([:reviewer])
+      first = editor(ctx)
+      second = editor(ctx, other)
+
+      change(first, %{reason: "Publish the draft."})
+      submit(first, "publish")
+      assert has_element?(first, "#curation-notice", "Published version 1")
+
+      change(second, %{highlights: [johnson(ctx)], reason: "Johnson beside him."})
+      change(second, %{notes: %{johnson(ctx) => @johnson_note}})
+      submit(second, "publish")
+
+      assert has_element?(second, "#curation-not-current", "stale_pointer")
+      assert [%CompositionVersion{version: 1}] = Repo.all(CompositionVersion)
+      assert [%CompositionPublication{}] = Repo.all(CompositionPublication)
+      assert [%CompositionReview{}] = Repo.all(CompositionReview)
+
+      # A second click is refused by the form, and still writes nothing.
+      assert has_element?(second, "#curation-publish[disabled]")
+      assert has_element?(second, "#curation-save-draft[disabled]")
+      render_submit(second, "submit", %{"curation" => current(second), "action" => "publish"})
+      assert has_element?(second, "#curation-not-current")
+      assert Repo.aggregate(CompositionVersion, :count) == 1
+      assert Repo.aggregate(CompositionPublication, :count) == 1
+
+      # Reloaded, it sees what the other reviewer did.
+      second |> element("#curation-reload") |> render_click()
+      refute has_element?(second, "#curation-not-current")
+      assert has_element?(second, "#curation-state-label", "published")
+    end
+
+    test "a held draft that another reviewer replaced is not published over it", ctx do
+      draft!(ctx, %{reason: "Bierce alone, as a draft."})
+      other = account([:reviewer])
+      first = editor(ctx)
+      second = editor(ctx, other)
+
+      change(first, %{highlights: [johnson(ctx)], reason: "A second draft."})
+      change(first, %{notes: %{johnson(ctx) => @johnson_note}})
+      submit(first, "draft")
+      assert has_element?(first, "#curation-notice", "Saved version 2")
+
+      change(second, %{reason: "Publish the first draft."})
+      submit(second, "publish")
+
+      assert has_element?(second, "#curation-not-current", "stale_parent")
+      assert Repo.aggregate(CompositionPublication, :count) == 0
+      assert Repo.aggregate(CompositionReview, :count) == 0
+    end
+  end
+
   describe "test 13: the preview" do
+    test "of a held draft is what publishing it shows, and publishing it writes no copy",
+         ctx do
+      view = editor(ctx)
+      change(view, %{highlights: [milton(ctx)], reason: "A draft with Milton."})
+      change(view, %{notes: %{milton(ctx) => @milton_note}})
+      submit(view, "draft")
+
+      fresh = editor(ctx)
+      change(fresh, %{reason: "Publish the draft as it stands."})
+      preview = fresh |> element("#curation-preview-pane #opening") |> render()
+
+      submit(fresh, "publish")
+      assert has_element?(fresh, "#curation-notice", "Published version 1")
+      assert Repo.aggregate(CompositionVersion, :count) == 1
+
+      {:ok, page, _html} = live(ctx.conn, ~p"/on/love")
+      published = page |> element("#opening") |> render()
+
+      assert normalize(preview) == normalize(published),
+             inspect(first_difference(normalize(preview), normalize(published)), pretty: true)
+    end
+
+    test "a draft whose revision was superseded is published as a new version", ctx do
+      view = editor(ctx)
+      change(view, %{highlights: [johnson(ctx)], reason: "Johnson beside Bierce."})
+      change(view, %{notes: %{johnson(ctx) => @johnson_note}})
+      submit(view, "draft")
+
+      {:ok, _newer} =
+        DevilsDictionary.Registry.add_content_revision(ctx.johnson.object_id, %{
+          body: "1. The passion between the sexes. (A newer reading.)",
+          body_format: :markdown,
+          headword: "LOVE",
+          canonical_url: "https://example.test/entry"
+        })
+
+      fresh = editor(ctx)
+      change(fresh, %{reason: "Publish on the current revision."})
+      submit(fresh, "publish")
+
+      assert has_element?(fresh, "#curation-notice", "Published version 2")
+
+      {:ok, page, _html} = live(ctx.conn, ~p"/on/love")
+      assert has_element?(page, "#opening-highlight-1-text", "A newer reading")
+    end
+
     test "is the published rendering of the same selection, modulo ids", ctx do
       person = ExemplarFixtures.person!("Fixture Exemplar")
       claim = ExemplarFixtures.nominate!(ctx.contributor, person, ctx.benevolent)

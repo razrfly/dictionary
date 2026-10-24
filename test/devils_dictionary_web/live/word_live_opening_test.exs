@@ -420,19 +420,20 @@ defmodule DevilsDictionaryWeb.WordLiveOpeningTest do
       book = committed("open-library-v1", "olid", "OL100203W")
       artwork = committed("wikidata-famous-v1", "qid", "Q8777422")
 
-      publish_highlights!(ctx, [
-        %{
-          catalog_only("poetrydb-v1", poem["poem_id"], @poem_note)
-          | meaning: {:lexeme, ctx.love.object_id}
-        },
-        %{
-          catalog_only("open-library-v1", "OL100203W", @book_note)
-          | meaning: {:lexeme, ctx.love.object_id}
-        },
-        ctx.love |> catalog_spec() |> Map.put(:note, %{text: @artwork_note})
-      ])
+      composition =
+        publish_highlights!(ctx, [
+          %{
+            catalog_only("poetrydb-v1", poem["poem_id"], @poem_note)
+            | meaning: {:lexeme, ctx.love.object_id}
+          },
+          %{
+            catalog_only("open-library-v1", "OL100203W", @book_note)
+            | meaning: {:lexeme, ctx.love.object_id}
+          },
+          ctx.love |> catalog_spec() |> Map.put(:note, %{text: @artwork_note})
+        ])
 
-      %{poem: poem, book: book, artwork: artwork}
+      %{poem: poem, book: book, artwork: artwork, composition: composition}
     end
 
     test "a poem, a book and an artwork render with their credits and licence", ctx do
@@ -448,7 +449,7 @@ defmodule DevilsDictionaryWeb.WordLiveOpeningTest do
       assert has_element?(
                view,
                "#opening-highlight-1-source[href='#{poem["source_url"]}']",
-               "Read at PoetryDB"
+               "Find it at PoetryDB"
              )
 
       assert has_element?(
@@ -490,7 +491,7 @@ defmodule DevilsDictionaryWeb.WordLiveOpeningTest do
 
     test "a changed manifest checksum withholds the work as :catalog_changed",
          %{tmp_dir: root} = ctx do
-      works!(ctx)
+      %{composition: composition} = works!(ctx)
 
       # This build's manifests, as files under another root: the poem's and
       # the book's exactly, the artwork's catalog changed.
@@ -508,6 +509,10 @@ defmodule DevilsDictionaryWeb.WordLiveOpeningTest do
       Application.put_env(:devils_dictionary, :committed_manifest_root, root)
 
       {:ok, view, _html} = live(ctx.conn, ~p"/on/love")
+
+      # The record withholds it: Eligibility reads the file the page reads.
+      assert {:ok, %{withheld: [%{role: :highlight, position: 3, reason: :catalog_changed}]}} =
+               Published.current(composition.id)
 
       assert has_element?(view, "#opening-withheld-highlight-3", "its catalog has changed")
       refute has_element?(view, "#opening-highlight-3")

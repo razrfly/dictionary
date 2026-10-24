@@ -1,30 +1,33 @@
 defmodule DevilsDictionary.Curation.Preview do
   @moduledoc """
-  The opening an unsaved selection would publish (#257 §2.2), for the
-  owner's curation screen: the form mapped onto `%Curation.Opening{}`, drawn
-  by the public component.
+  The opening a selection would publish (#257 §2.2), for the owner's
+  curation screen: the form mapped onto `%Curation.Opening{}`, drawn by the
+  public component.
 
-  **One mapping.** The selection's items are the unsaved
-  `CompositionItem`s `Curation.Candidates` built for it, with the author's
-  notes attributed as `Compositions.create_version/3` would attribute them.
-  They are then read exactly as a published version is:
+  **One mapping.** The items are either the unsaved `CompositionItem`s
+  `Curation.Candidates` built for the selection, with the author's notes
+  attributed as `Compositions.create_version/3` would attribute them, or,
+  when Publish would publish the latest version as it stands (`:held`),
+  that version's stored items. They are then read exactly as a published
+  version is:
 
     * `Curation.Eligibility.evaluate/5` decides which may be shown and under
-      which lead rule, as `Published.current/1` does at read time; an item
-      that may not is withheld, never replaced;
-    * `Published.with_subject/1` describes an exemplar;
-    * `PublishedReader.arrangement/3` maps the rest onto the opening.
+      which lead rule, and `Published.arrangement_of/2` splits them as
+      `Published.current/1` does, describing each exemplar;
+    * `PublishedReader.arrangement/3` maps them onto the opening;
+    * an exemplar's provenance is the claim's, with this selection and a
+      publication now (`Examples.Provenance.in_selection/3`).
 
-  The record is what publishing it now would write: the reviewer selects,
-  reviews and publishes today, as the next version. Nothing here has an id
-  yet, so the preview names no receipt; otherwise it is the page's opening,
-  which is what makes it a preview (#257 test 13).
+  The record is what publishing it now would write: the version that would
+  be published (the held one, or the next), selected by its author, reviewed
+  and published today by the reviewer. Nothing has a receipt yet, so the
+  preview names none; otherwise it is the page's opening (#257 test 13).
 
   **What would stop it.** `problems` lists everything that would make the
-  record refuse the selection, or the page withhold part of it, in the
-  record's own words: an ineligible item, a broken lead rule, two items that
-  show one thing (`Compositions.one_display_identity/1`), more highlights
-  than the configuration allows, no enabled configuration.
+  record refuse the selection, or the page withhold part of it, in their
+  own words: an ineligible item, a broken lead rule, two items that show one
+  thing (`Compositions.one_display_identity/1`), more highlights than the
+  configuration allows, no enabled configuration.
 
   Reads only: no write, no provider, no model.
   """
@@ -43,6 +46,7 @@ defmodule DevilsDictionary.Curation.Preview do
   alias DevilsDictionary.Curation.Opening.Review
   alias DevilsDictionary.Examples
   alias DevilsDictionary.Examples.Provenance
+  alias DevilsDictionary.Registry.{Sense, SenseRevision}
   alias DevilsDictionary.Repo
   alias DevilsDictionary.Sources.Actor
 
@@ -51,45 +55,51 @@ defmodule DevilsDictionary.Curation.Preview do
 
   `selection` is `%{lead: candidate | nil, lead_note: text, highlights:
   [{candidate, note_text}]}`, the candidates from `Candidates.for_page/1`.
-  `opts`: `:composition` (the page's composition, if any) and
-  `:next_version` (the version number this would be).
+  `opts`:
+
+    * `:composition`: the page's composition, if it has one;
+    * `:next_version`: the number a new version would get;
+    * `:held`: `%{version, items, author}` when Publish would publish that
+      stored version as it stands, rather than write a new one.
 
   Returns `%{opening: %Opening{} | nil, problems: [%{role, position,
   reason}], lead_rule: {:ok, rule} | {:error, reason} | nil, items:
   [CompositionItem]}`.
   """
   def build(page, candidates, selection, scope, opts \\ []) do
-    author = author(scope)
-    items = items(selection, author)
+    me = author(scope)
+    held = opts[:held]
+    items = if held, do: held.items, else: items(selection, me)
 
     case Configurations.resolve_default() do
       {:ok, %{configuration: configuration, version: configuration_version}} ->
         ids = candidates.scope.ids
-        signature = Compositions.signature(ids)
-        evaluation = Eligibility.evaluate(items, ids, signature, configuration_version.id)
-        arrangement = arrangement(items, evaluation)
+
+        evaluation =
+          Eligibility.evaluate(
+            items,
+            ids,
+            Compositions.signature(ids),
+            configuration_version.id,
+            claim_contexts: held && (held.version.resolution || %{})["claim_contexts"]
+          )
+
+        selector = if held, do: held.author, else: me.label
+        number = if held, do: held.version.version, else: opts[:next_version] || 1
+        composition_id = opts[:composition] && opts[:composition].id
 
         opening =
-          PublishedReader.arrangement(page, arrangement, %{
-            composition: %{
-              id: opts[:composition] && opts[:composition].id,
-              version: opts[:next_version] || 1
-            },
+          PublishedReader.arrangement(page, Published.arrangement_of(items, evaluation), %{
+            composition: %{id: composition_id, version: number},
             configuration: configuration,
             configuration_version: configuration_version,
-            review: review(author),
-            provenance: &provenance(&1, author, opts)
+            review: review(me, selector, held && DateTime.to_date(held.version.inserted_at)),
+            provenance: &provenance(&1, %{id: composition_id, version: number}, selector, me)
           })
 
         %{
           opening: if(Opening.empty?(opening), do: nil, else: opening),
-          problems:
-            problems(
-              opening,
-              items,
-              configuration_version,
-              Enum.count(items, &(&1.role == :highlight))
-            ),
+          problems: problems(opening, items, configuration_version),
           lead_rule: evaluation.lead_rule,
           items: items
         }
@@ -106,7 +116,11 @@ defmodule DevilsDictionary.Curation.Preview do
 
   # ── the items ────────────────────────────────────────────────────────────
 
-  defp items(selection, author) do
+  @doc """
+  The unsaved items of `selection`, in place, each note attributed to
+  `author` (`author/1`) as `Compositions.create_version/3` attributes one.
+  """
+  def items(selection, author) do
     lead =
       case selection.lead do
         %{item: %{} = item} -> [place(item, :lead, 1, selection[:lead_note], author)]
@@ -123,16 +137,11 @@ defmodule DevilsDictionary.Curation.Preview do
     lead ++ highlights
   end
 
-  # The item where the selection puts it, with the note its author wrote,
-  # attributed to that author and nobody else (K9).
   defp place(item, role, position, note, author) do
     note =
       case note do
-        text when is_binary(text) ->
-          if String.trim(text) == "", do: nil, else: text
-
-        _none ->
-          nil
+        text when is_binary(text) -> if String.trim(text) == "", do: nil, else: text
+        _none -> nil
       end
 
     %{
@@ -146,58 +155,18 @@ defmodule DevilsDictionary.Curation.Preview do
     }
   end
 
-  # What `Published.current/1` would answer for these items: the eligible
-  # ones, an exemplar with its subject, and the rest withheld with the
-  # record's reason. A broken lead rule withholds the lead.
-  defp arrangement(items, evaluation) do
-    statuses = Map.new(evaluation.results, fn {role, pos, status} -> {{role, pos}, status} end)
-
-    status_of = fn item ->
-      case {item.role, evaluation.lead_rule} do
-        {:lead, {:error, reason}} -> reason
-        _ -> Map.fetch!(statuses, {item.role, item.position})
-      end
-    end
-
-    {shown, held} = Enum.split_with(items, &(status_of.(&1) == :ok))
-
-    missing_lead =
-      case evaluation.lead_rule do
-        {:error, reason} ->
-          if Enum.any?(items, &(&1.role == :lead)),
-            do: [],
-            else: [%{role: :lead, position: 1, reason: reason}]
-
-        _ok ->
-          []
-      end
-
-    %{
-      lead: Enum.find(shown, &(&1.role == :lead)),
-      highlights:
-        shown |> Enum.filter(&(&1.role == :highlight)) |> Enum.map(&Published.with_subject/1),
-      withheld:
-        Enum.map(held, &%{role: &1.role, position: &1.position, reason: status_of.(&1)}) ++
-          missing_lead
-    }
-  end
-
-  defp problems(opening, items, configuration_version, highlights) do
+  defp problems(opening, items, configuration_version) do
     display =
       case Compositions.one_display_identity(items) do
         :ok -> []
         {:error, reason} -> [%{role: :highlight, position: nil, reason: reason}]
       end
 
+    max = configuration_version.max_highlights
+
     over =
-      if highlights > configuration_version.max_highlights,
-        do: [
-          %{
-            role: :highlight,
-            position: nil,
-            reason: {:too_many_highlights, configuration_version.max_highlights}
-          }
-        ],
+      if Enum.count(items, &(&1.role == :highlight)) > max,
+        do: [%{role: :highlight, position: nil, reason: {:too_many_highlights, max}}],
         else: []
 
     opening.withheld ++ display ++ over
@@ -205,37 +174,37 @@ defmodule DevilsDictionary.Curation.Preview do
 
   # ── the record it would write ────────────────────────────────────────────
 
-  # Who is acting, read and never written: the account's actor and the label
-  # its notes go out under (`Compositions.author_label/1`). An account that
-  # has never acted has no actor yet, and its label is the one the first act
-  # gives it.
-  defp author(%{user: %{id: user_id}}) do
+  @doc """
+  Who is acting, read and never written: `%{actor_id, label}`, the account's
+  actor and the label its notes go out under (`Compositions.author_label/1`).
+  An account that has never acted has no actor yet, and its label is the one
+  its first act gives it.
+  """
+  def author(%{user: %{id: user_id}}) do
     case Repo.one(from a in Actor, where: a.user_id == ^user_id) do
       %Actor{} = actor -> %{actor_id: actor.id, label: Compositions.author_label(actor)}
       nil -> %{actor_id: nil, label: "Account ##{user_id}"}
     end
   end
 
-  defp review(author) do
+  defp review(me, selector, selected_on) do
     today = Date.utc_today()
-    person = %{kind: :human, label: author.label}
 
     %Review{
       state: :published,
-      selected_by: person,
-      selected_on: today,
-      reviewed_by: author.label,
+      selected_by: %{kind: :human, label: selector},
+      selected_on: selected_on || today,
+      reviewed_by: me.label,
       reviewed_on: today,
-      published_by: person,
+      published_by: %{kind: :human, label: me.label},
       published_on: today,
       receipt_id: nil
     }
   end
 
   # An exemplar's provenance as the page will read it once this is
-  # published: the claim's, as the public reads it, with this selection and
-  # a publication today in place of the card's ranking.
-  defp provenance(item, author, opts) do
+  # published: the claim's, as the public reads it, with this selection.
+  defp provenance(item, composition, selector, me) do
     with %{lexeme_id: lexeme_id} <- meaning_lexeme(item),
          %{} = example <-
            Enum.find(
@@ -243,28 +212,18 @@ defmodule DevilsDictionary.Curation.Preview do
              &(&1.claim.revision_id == item.assertion_revision_id)
            ),
          %Provenance{} = provenance <- Provenance.of(example, :public) do
-      %{
-        provenance
-        | selection: %{
-            kind: :composed,
-            composition_id: opts[:composition] && opts[:composition].id,
-            version: opts[:next_version] || 1,
-            role: item.role,
-            position: item.position,
-            selection_origin: :manual,
-            selected_by: %{kind: :user, label: author.label},
-            note: item.note && %{text: item.note, author: item.note_author_label}
-          },
-          publication: %{
-            receipt_id: nil,
-            authority_kind: :operator,
-            actor: %{label: author.label},
-            committed_at: DateTime.utc_now(),
-            superseded_at: nil,
-            withdrawn_at: nil
-          },
-          featured: []
-      }
+      Provenance.in_selection(
+        provenance,
+        %{
+          composition_id: composition.id,
+          version: composition.version,
+          role: item.role,
+          position: item.position,
+          selected_by: %{kind: :human, label: selector},
+          note: item.note && %{text: item.note, author: item.note_author_label}
+        },
+        %{actor: %{label: me.label}, committed_at: DateTime.utc_now()}
+      )
     else
       _ -> nil
     end
@@ -272,8 +231,8 @@ defmodule DevilsDictionary.Curation.Preview do
 
   defp meaning_lexeme(%{meaning_sense_revision_id: id}) when is_integer(id) do
     Repo.one(
-      from r in DevilsDictionary.Registry.SenseRevision,
-        join: s in DevilsDictionary.Registry.Sense,
+      from r in SenseRevision,
+        join: s in Sense,
         on: s.object_id == r.sense_id,
         where: r.id == ^id,
         select: %{lexeme_id: s.lexeme_id}

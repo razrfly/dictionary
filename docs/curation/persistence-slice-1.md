@@ -325,12 +325,17 @@ These are later scoped slices, each owned by its issue:
   page's entries under `LeadPolicy`, its current senses' quotations, exactly
   the Saved catalog shelf's rows (`Artworks.shelf_items/1`) by manifest,
   checksum and row identity, and the accepted `illustrates` claims of its
-  senses. Its writes are this slice's services, as the signed-in reviewer:
-  `provision/3`, `create_version/3`, `Reviews.decide/4` and
-  `Publications.publish/3` together, `withdraw/3`; no schema changed. Its
-  preview (`Curation.Preview`) maps the unsaved selection through
-  `PublishedReader.arrangement/3`, the reader's own mapping, so the preview is
-  the page. The reader now draws `exemplar` and catalog `work` items instead
+  senses; who may lead is `LeadRule`'s. Its writes are this slice's services,
+  as the signed-in reviewer: `provision/3` and `create_version/3` for a draft;
+  for Publish the version (the latest, when the form holds its exact
+  references and it still stands), `Reviews.decide/4` and
+  `Publications.publish/3` in one transaction, so a moved version or pointer
+  writes nothing; `withdraw/3`. No schema changed. Its preview
+  (`Curation.Preview`) reads the selection through `Published.arrangement_of/2`
+  and `PublishedReader.arrangement/3`, the reader's own mapping, so the
+  preview is the page. `Eligibility` now reads committed manifests through
+  `Manifest.committed/1`, memoised, from the root the reader reads its rows
+  from. The reader now draws `exemplar` and catalog `work` items instead
   of withholding them: an artwork with its committed image and credit, a poem
   by its title, poet and length (its row pins the lines by digest and holds
   none), a book by its title, authors, year and public-domain basis, and an

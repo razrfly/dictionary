@@ -31,8 +31,8 @@ defmodule DevilsDictionaryWeb.Opening do
       headword is the heading), no empty slots, no loading state. The
       highlights take one, two or three columns by how many there are.
     * **An exemplar is someone's claim, accepted** (#212). Its tile names the
-      subject, who nominated it and when it was accepted (or the sources
-      that name it), and the meaning it was cited for; its disclosure holds
+      subject, who nominated it and when it was accepted, and the meaning it
+      was cited for; its disclosure holds
       the nominator's reason and the six stages the examples card shows
       (`DevilsDictionaryWeb.ExampleProvenance.rows/1`), so the two cannot
       disagree about one claim.
@@ -95,7 +95,7 @@ defmodule DevilsDictionaryWeb.Opening do
             <.highlight
               :if={slot.highlight}
               highlight={slot.highlight}
-              stacked={length(@slots) > 1}
+              shares_row={length(@slots) > 1}
               mode={@mode}
             />
             <.withheld
@@ -177,7 +177,7 @@ defmodule DevilsDictionaryWeb.Opening do
   attr :highlight, :map, required: true
   attr :mode, :atom, default: :public
 
-  attr :stacked, :boolean,
+  attr :shares_row, :boolean,
     default: true,
     doc: "whether the tile shares its row with other highlights, and keeps its picture small"
 
@@ -193,7 +193,7 @@ defmodule DevilsDictionaryWeb.Opening do
       <div class="flex gap-4">
         <div class={[
           "w-24 shrink-0 self-start overflow-hidden rounded-lg bg-mist-950/5 outline-1 -outline-offset-1 outline-black/5 dark:bg-white/5 dark:outline-white/10",
-          not @stacked && "@xl:w-40"
+          not @shares_row && "@xl:w-40"
         ]}>
           <img
             src={@highlight.image.url}
@@ -832,18 +832,47 @@ defmodule DevilsDictionaryWeb.Opening do
               :for={highlight <- @opening.highlights}
               id={"opening-about-revision-#{highlight.position}"}
             >
-              Highlight {highlight.position} · {reference(highlight.reference)} ·
-              <.link
-                navigate={inspect_path(highlight, @mode)}
-                class="rounded-sm underline underline-offset-4 hover:text-mist-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:hover:text-white dark:focus-visible:outline-white"
-              >
-                {inspect_label(highlight.kind)}
-              </.link>
+              Highlight {highlight.position} · {reference(highlight.reference)}
+              <.inspect_link highlight={highlight} mode={@mode} />
             </li>
           </ul>
         </div>
       </div>
     </details>
+    """
+  end
+
+  attr :highlight, :map, required: true
+  attr :mode, :atom, default: :public
+
+  # Where a highlight is inspected: a registry page by live navigation, or,
+  # for a catalog work the registry does not hold, the catalog's own record
+  # in a new tab. Nothing when there is neither.
+  defp inspect_link(assigns) do
+    assigns = assign(assigns, :path, inspect_path(assigns.highlight, assigns.mode))
+
+    ~H"""
+    <%= cond do %>
+      <% is_nil(@path) -> %>
+      <% String.starts_with?(@path, "/") -> %>
+        ·
+        <.link
+          navigate={@path}
+          class="rounded-sm underline underline-offset-4 hover:text-mist-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:hover:text-white dark:focus-visible:outline-white"
+        >
+          {inspect_label(@highlight.kind)}
+        </.link>
+      <% true -> %>
+        ·
+        <a
+          href={@path}
+          target="_blank"
+          rel="noreferrer"
+          class="rounded-sm underline underline-offset-4 hover:text-mist-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:hover:text-white dark:focus-visible:outline-white"
+        >
+          {inspect_label(@highlight.kind)}<span class="sr-only"> (opens in a new tab)</span>
+        </a>
+    <% end %>
     """
   end
 
@@ -1181,20 +1210,20 @@ defmodule DevilsDictionaryWeb.Opening do
 
   defp work_facts(_highlight), do: []
 
+  # The row's locator is the PoetryDB query it came from (the poet's poems),
+  # not a page of its own: the link says it finds the poem there.
   defp work_link(%{kind: :poem, source: %{name: name}}) when is_binary(name),
-    do: "Read at #{name}"
+    do: "Find it at #{name}"
 
   defp work_link(%{kind: :book, source: %{name: name}}) when is_binary(name),
     do: "Open at #{name}"
 
   defp work_link(_highlight), do: "Source"
 
-  # Who put the example on the record, on the tile (#257 §5.2): the sources
-  # that name it, or who nominated it and when a reviewer accepted it. The
-  # stages in the disclosure say the rest.
-  defp exemplar_attribution(%{source: [_ | _] = sources}),
-    do: "Named by the record: #{sources |> Enum.map(& &1.name) |> Enum.uniq() |> Enum.join(", ")}"
-
+  # Who put the example on the record, on the tile (#257 §5.2): who
+  # nominated it and when a reviewer accepted it. An exemplar is always a
+  # nomination; a thing a source names under a meaning is an instance, which
+  # is not an exemplar. The stages in the disclosure say the rest.
   defp exemplar_attribution(%{nomination: %{by: %{label: label}}, review: review})
        when is_binary(label) do
     case review do
@@ -1230,9 +1259,9 @@ defmodule DevilsDictionaryWeb.Opening do
        when kind in [:artwork, :poem, :book] and is_integer(id),
        do: entity_path(highlight, mode)
 
-  defp inspect_path(%{kind: kind, links: %{source: url}}, _mode)
+  defp inspect_path(%{kind: kind, links: links}, _mode)
        when kind in [:artwork, :poem, :book],
-       do: url
+       do: links[:source]
 
   defp inspect_path(%{kind: :exemplar, claim: %{assertion_id: id}}, _mode),
     do: ~p"/connections/#{id}"

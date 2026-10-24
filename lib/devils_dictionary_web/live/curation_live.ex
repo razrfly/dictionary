@@ -45,10 +45,19 @@ defmodule DevilsDictionaryWeb.CurationLive do
   @marks ~w(B J Q W E)
   @tabs ~w(pilot published withheld)
 
+  # The pages are built off the socket's process once it is up: the queue
+  # paints at once, and its rows arrive when ten page builds are done.
   @impl true
   def mount(_params, _session, socket) do
     socket = assign(socket, page_title: "Curation", rows: nil, published: [], stats: nil)
-    {:ok, if(connected?(socket), do: load(socket), else: socket)}
+    {:ok, if(connected?(socket), do: start_async(socket, :load, &load/0), else: socket)}
+  end
+
+  @impl true
+  def handle_async(:load, {:ok, loaded}, socket), do: {:noreply, assign(socket, loaded)}
+
+  def handle_async(:load, {:exit, reason}, socket) do
+    {:noreply, put_flash(socket, :error, "The pilot pages could not be read: #{inspect(reason)}")}
   end
 
   @impl true
@@ -57,13 +66,11 @@ defmodule DevilsDictionaryWeb.CurationLive do
     {:noreply, assign(socket, :tab, tab)}
   end
 
-  # The pages are built once the socket is up, so the first paint is the
-  # chrome and the pilot list's skeleton, not ten page builds twice.
-  defp load(socket) do
+  defp load do
     rows = Enum.map(pilot_pages(), &row/1)
     published = published()
 
-    assign(socket,
+    %{
       rows: rows,
       published: published,
       stats: %{
@@ -71,7 +78,7 @@ defmodule DevilsDictionaryWeb.CurationLive do
         published: length(published),
         withheld: published |> Enum.map(&length(&1.withheld)) |> Enum.sum()
       }
-    )
+    }
   end
 
   # The pilot pages of #253 D2. Configuration may name others
@@ -149,9 +156,17 @@ defmodule DevilsDictionaryWeb.CurationLive do
     end
   end
 
+  # Withdrawn until a version is written after the withdrawal: re-opening and
+  # saving a draft makes the page a draft again.
   defp state([], _receipts, _published), do: :never
   defp state(_versions, _receipts, id) when is_integer(id), do: :published
-  defp state(_versions, [%{action: :withdraw} | _], nil), do: :withdrawn
+
+  defp state([latest | _], [%{action: :withdraw} = receipt | _], nil) do
+    if DateTime.compare(latest.version.inserted_at, receipt.committed_at) == :gt,
+      do: :draft,
+      else: :withdrawn
+  end
+
   defp state(_versions, _receipts, nil), do: :draft
 
   # Every version, newest first, with its items and its latest review.

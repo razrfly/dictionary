@@ -63,6 +63,19 @@ defmodule DevilsDictionary.Curation.CandidatesTest do
       assert candidates.no_lead == {:error, :priority_source_missing}
     end
 
+    test "a Bierce entry that may not be shown neither leads nor blocks another lead", ctx do
+      DevilsDictionary.CurationFixtures.disallow_record!(ctx.bierce)
+      candidates = Candidates.for_page(page("love"))
+
+      refute candidates.bierce?
+      bierce = Enum.find(candidates.leads, &(&1.spec.object_id == ctx.bierce.object_id))
+      johnson = Enum.find(candidates.leads, &(&1.spec.object_id == ctx.johnson.object_id))
+
+      assert bierce.lead == {:error, :display_restricted}
+      assert johnson.lead == {:ok, :manual_fallback}
+      assert candidates.no_lead == :ok
+    end
+
     test "without one, every definition is admissible and no lead is allowed", ctx do
       %{wiktionary: wiktionary, johnson_greed: johnson} = greed!(ctx)
       candidates = Candidates.for_page(page("greed"))
@@ -114,6 +127,25 @@ defmodule DevilsDictionary.Curation.CandidatesTest do
       milton = Enum.find(quotations, &String.starts_with?(&1.text, "He on his side"))
       assert milton.spec.object_id == ctx.profound.object_id
       assert milton.spec.locator == "quotation:1"
+
+      # A newer revision of the sense without the quotation: the superseded
+      # revision's line is not offered.
+      current = Registry.current_sense_revision(ctx.profound.object_id)
+
+      {:ok, _newer} =
+        Registry.add_sense_revision(ctx.profound.object_id, %{
+          gloss: current.gloss,
+          position: current.position,
+          examples: Enum.take(current.examples, 1),
+          url: current.url,
+          source_record_revision_id: current.source_record_revision_id
+        })
+
+      texts =
+        Candidates.for_page(page("love")) |> of_kind(:sense_quotation) |> Enum.map(& &1.text)
+
+      refute Enum.any?(texts, &String.starts_with?(&1, "He on his side"))
+      assert Enum.any?(texts, &String.starts_with?(&1, "Heav'n has no Rage"))
     end
   end
 
