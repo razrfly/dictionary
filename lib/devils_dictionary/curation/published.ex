@@ -116,12 +116,17 @@ defmodule DevilsDictionary.Curation.Published do
     }
   end
 
-  # Only an exemplar that is shown is described: a withheld one's words are
-  # not read.
-  defp with_subject(%CompositionItem{item_kind: :exemplar} = item),
+  @doc """
+  An item as the page shows it: an exemplar with its `subject` read from the
+  registry now, any other item unchanged. Only an exemplar that is shown is
+  described, so call it on an eligible item: a withheld one's words are not
+  read. The operator screen's preview (#257) describes its unsaved
+  exemplars with it, so the preview and the page say the same.
+  """
+  def with_subject(%CompositionItem{item_kind: :exemplar} = item),
     do: %{item | subject: subject(item)}
 
-  defp with_subject(item), do: item
+  def with_subject(item), do: item
 
   defp subject(%CompositionItem{item_object_id: id, content_revision_id: nil}) do
     {kind, label} =

@@ -9,14 +9,22 @@ defmodule DevilsDictionaryWeb.WordLiveOpeningTest do
   use DevilsDictionaryWeb.ConnCase, async: false
 
   import DevilsDictionary.CurationFixtures,
-    only: [account: 1, content_spec: 2, enabled_default!: 1, key: 1, quotation_spec: 2]
+    only: [
+      account: 1,
+      catalog_spec: 1,
+      content_spec: 2,
+      enabled_default!: 1,
+      key: 1,
+      quotation_spec: 2
+    ]
 
   import DevilsDictionary.OpeningFixtures
   import DevilsDictionary.WordFixtures
   import Phoenix.LiveViewTest
 
-  alias DevilsDictionary.Curation.{Compositions, Publications, Reviews}
-  alias DevilsDictionary.{Fixtures, Registry, Repo}
+  alias DevilsDictionary.Artworks.Corpus.Manifest
+  alias DevilsDictionary.Curation.{Compositions, Published, Publications, Reviews}
+  alias DevilsDictionary.{ExemplarFixtures, Fixtures, Registry, Repo}
   alias DevilsDictionary.Sources.Actor
 
   @johnson_note "Johnson's four senses map the word before Bierce turned it."
@@ -290,6 +298,223 @@ defmodule DevilsDictionaryWeb.WordLiveOpeningTest do
       live(ctx.conn, "/words/#{ctx.love.object_id}/love?composition=#{on.id}")
 
     refute has_element?(exact, "#opening")
+  end
+
+  # ── #257: the exemplar, poem, book and artwork tiles ─────────────────────
+
+  @exemplar_note "Benevolence named: someone the record cites for this sense."
+  @poem_note "A short poem whose last line turns on the word."
+  @book_note "A novel of wanting more than one has."
+  @artwork_note "Love personified, as the catalog says it depicts."
+
+  # Provision, version, review and publish `highlights` under Bierce's lead.
+  defp publish_highlights!(ctx, highlights) do
+    composition = provision!(ctx, :lexical_page, [ctx.love, ctx.verb])
+
+    {:ok, version} =
+      Compositions.create_version(ctx.author, composition.id, %{
+        lead: content_spec(ctx.bierce, ctx.love),
+        highlights: highlights,
+        reason: "P2 #257 test",
+        expected_parent: nil
+      })
+
+    {:ok, _review} =
+      Reviews.decide(ctx.reviewer, version.id, :accepted,
+        reason: "P2 #257 test",
+        idempotency_key: key("review")
+      )
+
+    {:ok, _receipt} =
+      Publications.publish(ctx.reviewer, version.id,
+        reason: "P2 #257 test",
+        idempotency_key: key("publish"),
+        expected_pointer: nil
+      )
+
+    composition
+  end
+
+  defp committed(name, field, value) do
+    "priv/artworks/manifests/#{name}.json"
+    |> Manifest.load!()
+    |> Map.fetch!("rows")
+    |> Enum.find(&(&1[field] == value))
+  end
+
+  defp catalog_only(name, identity, note) do
+    %{
+      kind: :work,
+      catalog: %{manifest: name, checksum: Manifest.checksum_of(name), identity: identity},
+      meaning: {:lexeme, nil},
+      note: %{text: note}
+    }
+  end
+
+  test "#257 test 14: an exemplar renders with its label, who named it, its sense and reason; a withdrawn claim withholds it",
+       ctx do
+    person = ExemplarFixtures.person!("Fixture Benefactor")
+    claim = ExemplarFixtures.nominate!(ctx.author, person, ctx.benevolent)
+    ExemplarFixtures.decide!(ctx.reviewer, claim)
+    sense = Registry.current_sense_revision(ctx.benevolent.object_id)
+
+    composition =
+      publish_highlights!(ctx, [
+        %{
+          kind: :exemplar,
+          assertion_revision_id: claim.id,
+          meaning: {:sense_revision, sense.id},
+          note: %{text: @exemplar_note}
+        }
+      ])
+
+    {:ok, view, _html} = live(ctx.conn, ~p"/on/love")
+
+    assert has_element?(view, "#opening-highlight-1-title", "Fixture Benefactor")
+    assert has_element?(view, "#opening-highlight-1-named", "Nominated by #{label(ctx.author)}")
+    assert has_element?(view, "#opening-highlight-1-named", "accepted")
+    assert has_element?(view, "#opening-highlight-1-cited", glosses().benevolent)
+    assert has_element?(view, "#opening-highlight-1-note-0", @exemplar_note)
+    assert has_element?(view, "#opening-highlight-1-rationale", "fixture rationale")
+    assert has_element?(view, "#opening-highlight-1-stage-reviewed", "Accepted")
+    assert has_element?(view, "#opening-highlight-1-stage-opening", "Published on")
+    assert has_element?(view, "#opening-about-revision-1", "claim revision #{claim.id}")
+    refute has_element?(view, "[id^='opening-withheld']")
+
+    # A reviewer takes the acceptance back (the claim workflow decides
+    # `accepted`, `disputed` or `rejected`): the example is withheld, says
+    # why, and nothing of it is drawn.
+    ExemplarFixtures.decide!(ctx.reviewer, claim, "rejected")
+    {:ok, view, _html} = live(ctx.conn, ~p"/on/love")
+
+    assert {:ok, %{withheld: [%{role: :highlight, position: 1, reason: :claim_not_accepted}]}} =
+             Published.current(composition.id)
+
+    assert has_element?(
+             view,
+             "#opening-withheld-highlight-1",
+             "not an example a reviewer has accepted"
+           )
+
+    refute has_element?(view, "#opening-highlight-1")
+    refute opening_html(view) =~ "Fixture Benefactor"
+    assert has_element?(view, "#opening-lead")
+  end
+
+  describe "#257 test 15: catalog works" do
+    @describetag :tmp_dir
+    @describetag :capture_log
+
+    setup do
+      previous = Application.get_env(:devils_dictionary, :committed_manifest_root)
+
+      on_exit(fn ->
+        if previous,
+          do: Application.put_env(:devils_dictionary, :committed_manifest_root, previous),
+          else: Application.delete_env(:devils_dictionary, :committed_manifest_root)
+      end)
+    end
+
+    defp works!(ctx) do
+      poem = committed("poetrydb-v1", "title", "Summum Bonum")
+      book = committed("open-library-v1", "olid", "OL100203W")
+      artwork = committed("wikidata-famous-v1", "qid", "Q8777422")
+
+      publish_highlights!(ctx, [
+        %{
+          catalog_only("poetrydb-v1", poem["poem_id"], @poem_note)
+          | meaning: {:lexeme, ctx.love.object_id}
+        },
+        %{
+          catalog_only("open-library-v1", "OL100203W", @book_note)
+          | meaning: {:lexeme, ctx.love.object_id}
+        },
+        ctx.love |> catalog_spec() |> Map.put(:note, %{text: @artwork_note})
+      ])
+
+      %{poem: poem, book: book, artwork: artwork}
+    end
+
+    test "a poem, a book and an artwork render with their credits and licence", ctx do
+      %{poem: poem, artwork: artwork} = works!(ctx)
+      {:ok, view, _html} = live(ctx.conn, ~p"/on/love")
+
+      # The poem: its row's title, poet and length, its source and licence.
+      assert has_element?(view, "#opening-highlight-1 h3", "Poem: Summum Bonum")
+      assert has_element?(view, "#opening-highlight-1-title", "Summum Bonum")
+      assert has_element?(view, "#opening-highlight-1-byline", "Robert Browning")
+      assert has_element?(view, "#opening-highlight-1-facts", "#{poem["line_count"]} lines")
+
+      assert has_element?(
+               view,
+               "#opening-highlight-1-source[href='#{poem["source_url"]}']",
+               "Read at PoetryDB"
+             )
+
+      assert has_element?(
+               view,
+               "#opening-highlight-1-credits",
+               "Public domain poetry; API under MIT"
+             )
+
+      assert has_element?(view, "#opening-highlight-1-note-0", @poem_note)
+
+      # The book: title, author and year, its public-domain basis, Open Library.
+      assert has_element?(view, "#opening-highlight-2-title", "Sister Carrie")
+      assert has_element?(view, "#opening-highlight-2-byline", "Theodore Dreiser · 1900")
+      assert has_element?(view, "#opening-highlight-2-facts", "Public domain")
+
+      assert has_element?(
+               view,
+               "#opening-highlight-2-source[href='https://openlibrary.org/works/OL100203W']",
+               "Open at Open Library"
+             )
+
+      assert has_element?(view, "#opening-highlight-2-credits", "published in or before 1929")
+
+      # The artwork: P1's tile, from the committed row.
+      assert view |> element("#opening-highlight-3 img") |> render() =~
+               Phoenix.HTML.html_escape(artwork["image_url"]) |> Phoenix.HTML.safe_to_string()
+
+      assert has_element?(view, "#opening-highlight-3-credits", artwork["credit_line"])
+      assert has_element?(view, "#opening-highlight-3-note-0", @artwork_note)
+
+      assert has_element?(
+               view,
+               "#opening-about-revision-1",
+               "catalog poetrydb-v1 row #{poem["poem_id"]}"
+             )
+
+      refute has_element?(view, "[id^='opening-withheld']")
+    end
+
+    test "a changed manifest checksum withholds the work as :catalog_changed",
+         %{tmp_dir: root} = ctx do
+      works!(ctx)
+
+      # This build's manifests, as files under another root: the poem's and
+      # the book's exactly, the artwork's catalog changed.
+      for name <- ~w(poetrydb-v1 open-library-v1) do
+        path = Path.join([root, "artworks/manifests", "#{name}.json"])
+        File.mkdir_p!(Path.dirname(path))
+
+        File.cp!(
+          Path.join(:code.priv_dir(:devils_dictionary), "artworks/manifests/#{name}.json"),
+          path
+        )
+      end
+
+      committed_manifest!(root, :not_compiled)
+      Application.put_env(:devils_dictionary, :committed_manifest_root, root)
+
+      {:ok, view, _html} = live(ctx.conn, ~p"/on/love")
+
+      assert has_element?(view, "#opening-withheld-highlight-3", "its catalog has changed")
+      refute has_element?(view, "#opening-highlight-3")
+      refute opening_html(view) =~ "Cupid"
+      assert has_element?(view, "#opening-highlight-1-title", "Summum Bonum")
+      assert has_element?(view, "#opening-highlight-2-title", "Sister Carrie")
+    end
   end
 
   test "14: the exact-word page is another scope and shows nothing", ctx do

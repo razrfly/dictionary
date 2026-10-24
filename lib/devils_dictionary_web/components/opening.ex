@@ -31,10 +31,15 @@ defmodule DevilsDictionaryWeb.Opening do
       headword is the heading), no empty slots, no loading state. The
       highlights take one, two or three columns by how many there are.
     * **An exemplar is someone's claim, accepted** (#212). Its tile names the
-      subject and the meaning it was cited for; its disclosure holds the
-      nominator's reason and the six stages the examples card shows
+      subject, who nominated it and when it was accepted (or the sources
+      that name it), and the meaning it was cited for; its disclosure holds
+      the nominator's reason and the six stages the examples card shows
       (`DevilsDictionaryWeb.ExampleProvenance.rows/1`), so the two cannot
       disagree about one claim.
+    * **A poem or a book is its catalog row** (#257): title, author, what the
+      row records (a poem's length, a book's year and public-domain basis),
+      the link the row names and the licence. A poem's row pins its lines by
+      digest and does not hold them, so the tile quotes none.
 
   Disclosures keep their `open` state across LiveView patches with
   `JS.ignore_attributes/1`. The section is placed by `WordLive`: in the column
@@ -174,37 +179,33 @@ defmodule DevilsDictionaryWeb.Opening do
 
   attr :stacked, :boolean,
     default: true,
-    doc: "whether the tile may stack its picture above its text when its column is wide"
+    doc: "whether the tile shares its row with other highlights, and keeps its picture small"
 
+  # The picture stays beside the text when the tile shares its row: stacked
+  # full width above it, a square artwork alone pushed the Definitions a
+  # quarter of a screen down (#257, measured on /on/war at 1280 × 900).
   defp highlight(%{highlight: %{kind: :artwork}} = assigns) do
     assigns = assign(assigns, :id, "opening-highlight-#{assigns.highlight.position}")
 
     ~H"""
     <li id={@id} class="flex min-w-0 flex-col gap-3">
       <h3 class="sr-only">Artwork: {@highlight.title}</h3>
-      <div class={["flex gap-4", @stacked && "@2xl:flex-col @2xl:gap-3"]}>
+      <div class="flex gap-4">
         <div class={[
           "w-24 shrink-0 self-start overflow-hidden rounded-lg bg-mist-950/5 outline-1 -outline-offset-1 outline-black/5 dark:bg-white/5 dark:outline-white/10",
-          @stacked && "@2xl:w-full",
           not @stacked && "@xl:w-40"
         ]}>
           <img
             src={@highlight.image.url}
             alt={@highlight.image.alt}
             decoding="async"
-            class={["aspect-4/5 w-full object-contain", @stacked && "@2xl:aspect-square"]}
+            class="aspect-4/5 w-full object-contain"
           />
         </div>
         <div class="min-w-0">
           <p aria-hidden="true" class="text-base/6 text-mist-500 sm:text-sm/6">Artwork</p>
           <p class="text-base/6 font-medium text-mist-950 sm:text-sm/6 dark:text-white">
-            <.link
-              id={"#{@id}-title"}
-              navigate={entity_path(@highlight, @mode)}
-              class="rounded-sm hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:focus-visible:outline-white"
-            >
-              {@highlight.title}
-            </.link>
+            <.work_title id={"#{@id}-title"} highlight={@highlight} mode={@mode} />
           </p>
           <p
             :if={@highlight.creator || @highlight.date}
@@ -265,6 +266,64 @@ defmodule DevilsDictionaryWeb.Opening do
           {@highlight.quotation.citation}
         </figcaption>
       </figure>
+
+      <.credit_line id={"#{@id}-credits"} credits={@highlight.credits} />
+
+      <.why id={"#{@id}-why"} summary="Why this is here" reasons={@highlight.reasons}>
+        <.particulars
+          id={@id}
+          meaning={@highlight.meaning}
+          register={@highlight.register}
+          reasons={@highlight.reasons}
+          credits={@highlight.credits}
+        />
+      </.why>
+    </li>
+    """
+  end
+
+  # A poem or a book from a committed catalog (#257): the row's title, its
+  # author, what the row records, and the link the row names. The text stays
+  # at the provider; a poem's lines are not in its row, so none are quoted.
+  defp highlight(%{highlight: %{kind: kind}} = assigns) when kind in [:poem, :book] do
+    assigns = assign(assigns, :id, "opening-highlight-#{assigns.highlight.position}")
+
+    ~H"""
+    <li id={@id} class="flex min-w-0 flex-col gap-3">
+      <h3 class="sr-only">{work_noun(@highlight.kind)}: {@highlight.title}</h3>
+      <div class="flex flex-col gap-1 rounded-xl bg-mist-950/2.5 p-5 dark:bg-white/5">
+        <p aria-hidden="true" class="text-base/6 text-mist-500 sm:text-sm/6">
+          {work_noun(@highlight.kind)}
+        </p>
+        <p class="font-display text-xl/7 text-pretty text-mist-950 dark:text-white">
+          <.work_title id={"#{@id}-title"} highlight={@highlight} mode={@mode} />
+        </p>
+        <p
+          :if={@highlight.creator || @highlight.date || work_facts(@highlight) != []}
+          id={"#{@id}-byline"}
+          class="text-base/6 text-mist-600 sm:text-sm/6 dark:text-mist-400"
+        >
+          {Enum.join(Enum.reject([@highlight.creator, @highlight.date], &is_nil/1), " · ")}<span
+            :if={work_facts(@highlight) != []}
+            id={"#{@id}-facts"}
+            class="tabular-nums"
+          ><span :if={@highlight.creator || @highlight.date}> · </span>{Enum.join(
+            work_facts(@highlight),
+            " · "
+          )}</span>
+        </p>
+        <a
+          :if={@highlight.links[:source]}
+          id={"#{@id}-source"}
+          href={@highlight.links.source}
+          target="_blank"
+          rel="noreferrer"
+          class="mt-1 flex min-h-11 w-fit items-center gap-x-1.5 rounded-sm text-base/6 text-mist-600 underline underline-offset-4 hover:text-mist-950 sm:min-h-0 sm:text-sm/6 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:text-mist-400 dark:hover:text-white dark:focus-visible:outline-white"
+        >
+          {work_link(@highlight)} <span aria-hidden="true">↗</span>
+          <span class="sr-only"> (opens in a new tab)</span>
+        </a>
+      </div>
 
       <.credit_line id={"#{@id}-credits"} credits={@highlight.credits} />
 
@@ -375,6 +434,13 @@ defmodule DevilsDictionaryWeb.Opening do
         >
           cited as an example of <.meaning meaning={@highlight.meaning} />
         </p>
+        <p
+          :if={named = exemplar_attribution(@highlight.provenance)}
+          id={"#{@id}-named"}
+          class="text-base/6 text-pretty text-mist-600 sm:text-sm/6 dark:text-mist-400"
+        >
+          {named}
+        </p>
       </div>
 
       <%!-- A quotation or passage is shown by the words its claim was
@@ -428,6 +494,26 @@ defmodule DevilsDictionaryWeb.Opening do
     </li>
     """
   end
+
+  attr :id, :string, required: true
+  attr :highlight, :map, required: true
+  attr :mode, :atom, default: :public
+
+  # A work's title, linked to its registry page when the registry holds it.
+  # A catalog-only work has no page of its own (#253 D5).
+  defp work_title(%{highlight: %{reference: %{object_id: id}}} = assigns) when is_integer(id) do
+    ~H"""
+    <.link
+      id={@id}
+      navigate={entity_path(@highlight, @mode)}
+      class="rounded-sm hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:focus-visible:outline-white"
+    >
+      {@highlight.title}
+    </.link>
+    """
+  end
+
+  defp work_title(assigns), do: ~H"<span id={@id}>{@highlight.title}</span>"
 
   attr :id, :string, required: true
   attr :item, :map, required: true
@@ -908,8 +994,10 @@ defmodule DevilsDictionaryWeb.Opening do
   defp selection(%{composition: %{id: id, version: version}, origin: :fixture}),
     do: "#{id}, version #{version}: a development fixture, not a published composition"
 
+  # A selection not yet saved (the operator screen's preview, #257) has no
+  # id, and says so.
   defp selection(%{composition: %{id: id, version: version}}),
-    do: "##{id}, version #{version}"
+    do: "##{id || "—"}, version #{version}"
 
   # A published opening's configuration row: what it is and the lead rule it
   # carries, as the configuration version records them.
@@ -1062,9 +1150,13 @@ defmodule DevilsDictionaryWeb.Opening do
     do: "sense #{ref.object_id}, revision #{ref.sense_revision_id}#{locator(ref.locator)}"
 
   defp reference(
-         %{object_kind: :entity, catalog: %{manifest: manifest, checksum: checksum}} = ref
-       ),
-       do: "work #{ref.object_id}, catalog #{manifest} @ #{String.slice(checksum, 0, 12)}"
+         %{object_kind: :entity, catalog: %{manifest: manifest, checksum: checksum} = catalog} =
+           ref
+       ) do
+    work = if ref.object_id, do: "work #{ref.object_id}, ", else: ""
+    row = if catalog[:identity], do: " row #{catalog.identity}", else: ""
+    "#{work}catalog #{manifest}#{row} @ #{String.slice(checksum, 0, 12)}"
+  end
 
   defp reference(ref), do: "#{ref.object_kind} #{ref.object_id}"
 
@@ -1073,9 +1165,48 @@ defmodule DevilsDictionaryWeb.Opening do
   defp locator(%{kind: :quotation, fingerprint: fp}), do: ", line #{String.slice(fp, 0, 12)}"
   defp locator(_locator), do: ""
 
-  defp inspect_label(:artwork), do: "work"
+  defp inspect_label(kind) when kind in [:artwork, :poem, :book], do: "work"
   defp inspect_label(:exemplar), do: "claim"
   defp inspect_label(_kind), do: "evidence"
+
+  defp work_noun(:poem), do: "Poem"
+  defp work_noun(:book), do: "Book"
+
+  # What a poem's or a book's row records beyond its title and byline.
+  defp work_facts(%{kind: :poem, work: %{line_count: n}}) when is_integer(n),
+    do: ["#{number(n)} #{if n == 1, do: "line", else: "lines"}"]
+
+  defp work_facts(%{kind: :book, work: %{public_domain: basis}}) when is_binary(basis),
+    do: ["Public domain"]
+
+  defp work_facts(_highlight), do: []
+
+  defp work_link(%{kind: :poem, source: %{name: name}}) when is_binary(name),
+    do: "Read at #{name}"
+
+  defp work_link(%{kind: :book, source: %{name: name}}) when is_binary(name),
+    do: "Open at #{name}"
+
+  defp work_link(_highlight), do: "Source"
+
+  # Who put the example on the record, on the tile (#257 §5.2): the sources
+  # that name it, or who nominated it and when a reviewer accepted it. The
+  # stages in the disclosure say the rest.
+  defp exemplar_attribution(%{source: [_ | _] = sources}),
+    do: "Named by the record: #{sources |> Enum.map(& &1.name) |> Enum.uniq() |> Enum.join(", ")}"
+
+  defp exemplar_attribution(%{nomination: %{by: %{label: label}}, review: review})
+       when is_binary(label) do
+    case review do
+      %{state: :accepted, decided_at: at} when not is_nil(at) ->
+        "Nominated by #{label} · accepted #{ExampleProvenance.date(at)}"
+
+      _review ->
+        "Nominated by #{label}"
+    end
+  end
+
+  defp exemplar_attribution(_provenance), do: nil
 
   defp example_kind(subject), do: "Example · #{example_noun(subject)}"
 
@@ -1095,7 +1226,13 @@ defmodule DevilsDictionaryWeb.Opening do
   defp evidence_path(%{object_kind: :sense, sense_revision_id: id}) when is_integer(id),
     do: ~p"/evidence/sense/#{id}"
 
-  defp inspect_path(%{kind: :artwork} = highlight, mode), do: entity_path(highlight, mode)
+  defp inspect_path(%{kind: kind, reference: %{object_id: id}} = highlight, mode)
+       when kind in [:artwork, :poem, :book] and is_integer(id),
+       do: entity_path(highlight, mode)
+
+  defp inspect_path(%{kind: kind, links: %{source: url}}, _mode)
+       when kind in [:artwork, :poem, :book],
+       do: url
 
   defp inspect_path(%{kind: :exemplar, claim: %{assertion_id: id}}, _mode),
     do: ~p"/connections/#{id}"
