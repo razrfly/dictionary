@@ -74,8 +74,17 @@ defmodule DevilsDictionaryWeb.CurationLive do
     )
   end
 
-  @doc "The configured pilot pages' slugs (#253 D2)."
-  def pilot_pages, do: Application.get_env(:devils_dictionary, :curation_pilot_pages, [])
+  # The pilot pages of #253 D2. Configuration may name others
+  # (`config :devils_dictionary, :curation_pilot_pages, [...]`); nothing here
+  # is a table. The list is the default here rather than a line in
+  # `config/config.exs` because the published host goes live without a
+  # restart (#250), and Phoenix's code reloader refuses to compile once a
+  # configuration file has changed since boot.
+  @pilot_pages ~w(nepotism greed war love coward patience justice truth hope bestiality)
+
+  @doc "The pilot pages' slugs: `:curation_pilot_pages`, by default #253 D2's ten."
+  def pilot_pages,
+    do: Application.get_env(:devils_dictionary, :curation_pilot_pages, @pilot_pages)
 
   @doc """
   The On page a slug addresses, built as the reader builds it, for the

@@ -41,9 +41,15 @@ defmodule DevilsDictionaryWeb.CurationLiveTest do
     reviewer = account([:reviewer])
     {configuration, _version} = enabled_default!(reviewer)
 
-    previous = Application.get_env(:devils_dictionary, :curation_pilot_pages)
+    previous = Application.fetch_env(:devils_dictionary, :curation_pilot_pages)
     Application.put_env(:devils_dictionary, :curation_pilot_pages, ~w(love greed))
-    on_exit(fn -> Application.put_env(:devils_dictionary, :curation_pilot_pages, previous) end)
+
+    on_exit(fn ->
+      case previous do
+        {:ok, pages} -> Application.put_env(:devils_dictionary, :curation_pilot_pages, pages)
+        :error -> Application.delete_env(:devils_dictionary, :curation_pilot_pages)
+      end
+    end)
 
     Map.merge(ctx, %{
       verb: verb,
@@ -157,6 +163,16 @@ defmodule DevilsDictionaryWeb.CurationLiveTest do
           else: Application.delete_env(:devils_dictionary, :published_host)
       end
     end
+  end
+
+  test "the pilot pages default to #253 D2's ten, and configuration may name others" do
+    Application.delete_env(:devils_dictionary, :curation_pilot_pages)
+
+    assert CurationLive.pilot_pages() ==
+             ~w(nepotism greed war love coward patience justice truth hope bestiality)
+
+    Application.put_env(:devils_dictionary, :curation_pilot_pages, ~w(war))
+    assert CurationLive.pilot_pages() == ~w(war)
   end
 
   describe "test 7: the queue" do

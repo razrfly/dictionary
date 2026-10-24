@@ -30,12 +30,6 @@ config :devils_dictionary, DevilsDictionary.Mailer, adapter: Swoosh.Adapters.Loc
 # host's block in `config/runtime.exs` turns it on; `prod.exs` pins it off.
 config :devils_dictionary, :public_routing, false
 
-# The curation pilot (#253 D2): the pages the owner's curation screen lists
-# first (#257). A list in configuration, not a table; the owner may swap any.
-config :devils_dictionary,
-       :curation_pilot_pages,
-       ~w(nepotism greed war love coward patience justice truth hope bestiality)
-
 # No API client: the Local and Test adapters never make an HTTP request, and
 # leaving this unset makes Swoosh demand hackney at boot. If a remote adapter is
 # ever configured, point this at Req rather than adding a second HTTP client --
