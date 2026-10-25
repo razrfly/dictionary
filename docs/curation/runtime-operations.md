@@ -47,13 +47,15 @@ The service does not need Ollama.app, and runs no system-wide agent.
 
 ```
 mix dd.runtime service start      # refuses if the volume is not mounted and external,
-                                  # the models root, binary or run directory is missing,
-                                  # or something already listens on the port
+                                  # a runner a dead server left is still alive (stop
+                                  # first), the models root, binary or run directory is
+                                  # missing, or something already listens on the port
 mix dd.runtime service status     # %{pid, alive, listening}
 mix dd.runtime service stop       # SIGTERM, then SIGKILL after 30 s; confirms the
                                   # process, every runner it started and any runner
-                                  # an earlier death left under launchd are gone, and
-                                  # the port is closed. A pid file whose pid no longer
+                                  # a dead server left under launchd are gone, and the
+                                  # port is closed. A server the pid file does not name
+                                  # is never signalled. A pid file whose pid no longer
                                   # runs bin/ollama (after a reboot) is stale: it is not
                                   # signalled, and the stop is recorded as "not_running"
 mix dd.runtime service restart

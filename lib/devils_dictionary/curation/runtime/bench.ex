@@ -475,7 +475,7 @@ defmodule DevilsDictionary.Curation.Runtime.Bench do
        %{
          calls: length(rs),
          answered: length(answered),
-         outcomes: Enum.frequencies_by(rs, &(&1.outcome || &1.refusal || &1.status)),
+         outcomes: Enum.frequencies_by(rs, &outcome/1),
          refusal_reasons:
            rs |> Enum.flat_map(& &1.refusal_reasons) |> Enum.frequencies_by(&Enum.at(&1, 1)),
          cold_wall_ms: quantiles(for(r <- measured, r.phase == "cold", do: r.wall_ms)),
@@ -546,7 +546,7 @@ defmodule DevilsDictionary.Curation.Runtime.Bench do
     base = %{
       samples: length(rs),
       valid: Enum.count(rs, &(&1.outcome in [:accepted, :abstained])),
-      outcomes: Enum.frequencies_by(rs, &(&1.outcome || &1.refusal || &1.status)),
+      outcomes: Enum.frequencies_by(rs, &outcome/1),
       decisions: Enum.frequencies_by(rs, & &1.decision),
       distinct_answers: rs |> Enum.map(&answer/1) |> Enum.uniq() |> length()
     }
@@ -637,6 +637,14 @@ defmodule DevilsDictionary.Curation.Runtime.Bench do
 
   defp count_seen([], _fun), do: nil
   defp count_seen(rs, fun), do: Enum.count(rs, fun)
+
+  # What became of a sample, as a key a report can encode: a refusal before
+  # admission can be a tuple (`{:packet_stale, reasons}`), and a JSON object
+  # key cannot.
+  defp outcome(%{outcome: outcome}) when not is_nil(outcome), do: outcome
+  defp outcome(%{refusal: refusal}) when is_tuple(refusal), do: elem(refusal, 0)
+  defp outcome(%{refusal: refusal}) when not is_nil(refusal), do: refusal
+  defp outcome(%{status: status}), do: status
 
   # One answer, as far as the record can tell answers apart.
   defp answer(r),

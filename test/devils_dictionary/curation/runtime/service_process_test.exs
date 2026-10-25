@@ -131,6 +131,57 @@ defmodule DevilsDictionary.Curation.Runtime.ServiceProcessTest do
       assert FakeSystem.signals() == [{424_257, :term}]
     end
 
+    test "a runner started after the first read is found once its killed server is gone", ctx do
+      File.write!(ctx.pid_file, "424263")
+      server = %{pid: 424_263, ppid: 1, command: Endpoint.get(:binary)}
+      late = %{pid: 424_264, ppid: 424_263, command: ctx.runner}
+
+      FakeSystem.put(
+        alive: MapSet.new([424_263, 424_264]),
+        survives: %{424_263 => [:term]},
+        processes: {:reads, [[server], [server, late]]}
+      )
+
+      assert {:ok, %{evidence: evidence}} = ServiceProcess.stop(ctx.opts)
+      assert evidence["runners"] == [%{"pid" => 424_264, "command" => "llama-server"}]
+      assert FakeSystem.signals() == [{424_263, :term}, {424_263, :kill}, {424_264, :term}]
+    end
+
+    test "a server the pid file does not name is never signalled", ctx do
+      File.write!(ctx.pid_file, "424265")
+
+      # A LaunchAgent's server and its runner, which this stop does not own.
+      FakeSystem.put(
+        alive: MapSet.new([424_266, 424_267]),
+        processes: [
+          %{pid: 424_266, ppid: 1, command: Endpoint.get(:binary)},
+          %{pid: 424_267, ppid: 424_266, command: ctx.runner}
+        ]
+      )
+
+      assert {:ok, %{evidence: %{"method" => "not_running", "runners" => []}}} =
+               ServiceProcess.stop(ctx.opts)
+
+      assert FakeSystem.signals() == []
+    end
+
+    # A binary that does not exist keeps this test from ever starting a real
+    # server: without the runner it stops at `runtime_binary_missing`.
+    test "start refuses beside a runner a dead server left behind", ctx do
+      bin = Path.join(ctx.tmp_dir, "bin")
+      opts = Keyword.put(ctx.opts, :binary, Path.join(bin, "ollama"))
+
+      assert {:error, :runtime_binary_missing} = ServiceProcess.start(opts)
+
+      FakeSystem.put(
+        alive: MapSet.new([424_268]),
+        processes: [%{pid: 424_268, ppid: 1, command: Path.join(bin, "llama-server")}]
+      )
+
+      assert {:error, {:runners_still_running, [424_268]}} = ServiceProcess.start(opts)
+      assert FakeSystem.signals() == []
+    end
+
     test "without the process table nothing is signalled and nothing is confirmed", ctx do
       server_with_runner(ctx, 424_259, 424_260)
       FakeSystem.put(processes: :unavailable)

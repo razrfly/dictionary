@@ -19,7 +19,8 @@ defmodule DevilsDictionary.Curation.Runtime.ServiceProcess do
   process also runs from `run_dir`, not from the caller's checkout.
 
   `start/1` refuses, and never falls back, when the volume is not mounted and
-  external, the cache directory is missing, or the binary is absent. It
+  external, a runner a dead server left behind is still alive, the cache
+  directory is missing, or the binary is absent. It
   downloads nothing. It binds the service to the connected database
   (`Runtime.Authority`), and refuses when the service is bound to another one
   unless `rebind: true`. `stop/1` is the only proof `Runtime.recover/1` accepts that
@@ -61,6 +62,7 @@ defmodule DevilsDictionary.Curation.Runtime.ServiceProcess do
     run_dir = Endpoint.get(:run_dir, opts)
 
     with {:ok, %{mounted: true, external: true}} <- normalize_volume(system.volume(mount)),
+         :ok <- no_leftover_runners(system, opts),
          :ok <- present(system.dir?(root), :models_root_missing),
          :ok <- present(File.regular?(binary), :runtime_binary_missing),
          :ok <- present(system.dir?(run_dir), :run_dir_missing),
@@ -104,9 +106,11 @@ defmodule DevilsDictionary.Curation.Runtime.ServiceProcess do
   parent keeps 6–8 GiB, and a restart would load a second copy (#221 S1). So
   the process table is read before anything is signalled, while the runners
   are still the parent's descendants: once the parent is gone they belong to
-  launchd (pid 1), and nothing else names them. A process from the runtime's
-  directory that launchd already owns is a runner an earlier death left
-  behind, and it is ended too.
+  launchd (pid 1), and nothing else names them. The table is read again
+  after the parent is gone, for a runner started after the first read. A
+  process from the runtime's directory that launchd owns, other than a server
+  (the configured binary), is a runner a dead server left behind, and it is
+  ended too. A server the pid file does not name is never signalled.
 
   The parent is asked first (SIGTERM, then SIGKILL after 30 s), since it
   shuts its own runners down. Any runner still alive after that is ended the
@@ -131,9 +135,18 @@ defmodule DevilsDictionary.Curation.Runtime.ServiceProcess do
       ours = running?(system, parent)
 
       children = if ours, do: descendants(table, pid), else: []
-      runners = Enum.uniq_by(children ++ left_behind(table, pid, opts), & &1.pid)
-
       if ours, do: end_all(system, [parent], opts)
+
+      # Read again once the parent is gone: a runner it started after the
+      # first read is now under launchd, and found there.
+      later =
+        case process_table(system) do
+          {:ok, now} -> left_behind(now, opts)
+          {:error, _} -> []
+        end
+
+      runners = Enum.uniq_by(children ++ left_behind(table, opts) ++ later, & &1.pid)
+
       end_all(system, Enum.filter(runners, &running?(system, &1)), opts)
 
       survivors = Enum.filter(runners, &running?(system, &1))
@@ -189,13 +202,30 @@ defmodule DevilsDictionary.Curation.Runtime.ServiceProcess do
     end
   end
 
-  # Runners an earlier death left behind: processes from the runtime's own
-  # directory that launchd now owns. The service itself is one too once its
-  # starting shell has exited, so the recorded pid is left to `stop/1`.
-  defp left_behind(table, pid, opts) do
-    dir = Path.dirname(Endpoint.get(:binary, opts))
+  # Runners a dead server left behind: processes from the runtime's own
+  # directory that launchd now owns. A server (the configured binary) is never
+  # one of them: launchd owns the recorded service too once its starting
+  # shell has exited, and a server the pid file does not name, such as one a
+  # LaunchAgent keeps, is not this stop's to end.
+  defp left_behind(table, opts) do
+    binary = Endpoint.get(:binary, opts)
+    dir = Path.dirname(binary)
 
-    Enum.filter(table, &(&1.ppid == 1 and &1.pid != pid and Path.dirname(&1.command) == dir))
+    Enum.filter(
+      table,
+      &(&1.ppid == 1 and &1.command != binary and Path.dirname(&1.command) == dir)
+    )
+  end
+
+  # A runner a dead server left behind still holds its weights. Starting
+  # beside it would load a second copy (#221 S1): stop first.
+  defp no_leftover_runners(system, opts) do
+    with {:ok, table} <- process_table(system) do
+      case left_behind(table, opts) do
+        [] -> :ok
+        runners -> {:error, {:runners_still_running, Enum.map(runners, & &1.pid)}}
+      end
+    end
   end
 
   defp process_table(system) do

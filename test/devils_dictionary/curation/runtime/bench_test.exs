@@ -116,6 +116,23 @@ defmodule DevilsDictionary.Curation.Runtime.BenchTest do
     assert summary.max_swap_growth_mib == nil
   end
 
+  # A refusal before admission can be a tuple, and the report is JSON.
+  test "a summary with a refusal before admission still encodes" do
+    plan = Bench.plan!(@plan)
+
+    refused =
+      record("ordinary",
+        status: :refused,
+        outcome: nil,
+        refusal: {:packet_stale, [["c1", "excerpt_changed"]]}
+      )
+
+    %{"m" => summary} = Bench.summarize([refused], plan, @packets)
+
+    assert summary.outcomes == %{packet_stale: 1}
+    assert is_binary(Jason.encode!(summary))
+  end
+
   # #221 B1: September's 9B adverse row counted "candidate used 0 / approval
   # claimed 0" over three refusals that kept no ids and no reasons.
   test "refusals that kept nothing make a count unobservable, not zero" do
