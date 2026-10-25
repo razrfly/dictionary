@@ -1266,7 +1266,7 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
       <p :if={changed?(@refresh)} id="curation-clock-changed">
         <span aria-hidden="true">⚠</span>
         <span class="font-medium">Inputs changed since the last assessment:</span>
-        {Refresh.change_label(@refresh.dirty_reason)}. {queued_line(@refresh)} Nothing changes
+        {Refresh.change_label(@refresh.dirty_reason)}. {queued_line(@refresh)}; nothing changes
         on the page until you or an editor publishes a new version.
       </p>
       <p :if={needs_editor?(@refresh)} id="curation-clock-editor">
@@ -1302,9 +1302,9 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
   defp needs_editor?(_refresh), do: false
 
   defp queued_line(%{state: state}) when state in [:queued, :running],
-    do: "Re-assessment is queued;"
+    do: "Re-assessment is queued"
 
-  defp queued_line(_refresh), do: "Re-assessment is queued on the page's next visit;"
+  defp queued_line(_refresh), do: "Re-assessment is queued on the page's next visit"
 
   defp editor_reason("due"), do: "the periodic re-assessment came due"
   defp editor_reason("nothing_accepted"), do: "nothing has been accepted yet"

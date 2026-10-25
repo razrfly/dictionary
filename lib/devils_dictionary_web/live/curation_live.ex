@@ -491,7 +491,7 @@ defmodule DevilsDictionaryWeb.CurationLive do
         <div :if={@rows && @tab == "stale"} id="curation-stale" class="mt-2">
           <div
             aria-hidden="true"
-            class="hidden gap-x-6 pb-2 text-xs/5 font-semibold tracking-wide text-mist-500 uppercase sm:grid sm:grid-cols-[8rem_10rem_10rem_minmax(0,1fr)_7rem]"
+            class="hidden gap-x-6 pb-2 text-xs/5 font-semibold tracking-wide text-mist-500 uppercase sm:grid sm:grid-cols-[8rem_10rem_11rem_minmax(0,1fr)_7rem]"
           >
             <span>Word</span><span>State</span><span>Last assessed</span><span>Why stale</span><span>Next</span>
           </div>
@@ -503,7 +503,7 @@ defmodule DevilsDictionaryWeb.CurationLive do
             <li
               :for={row <- @rows}
               id={"curation-stale-#{row.slug}"}
-              class="grid grid-cols-1 gap-x-6 gap-y-1 py-4 text-sm/6 sm:grid-cols-[8rem_10rem_10rem_minmax(0,1fr)_7rem] sm:items-baseline"
+              class="grid grid-cols-1 gap-x-6 gap-y-1 py-4 text-sm/6 sm:grid-cols-[8rem_10rem_11rem_minmax(0,1fr)_7rem] sm:items-baseline"
             >
               <.link
                 navigate={~p"/ops/curation/on/#{row.slug}"}

@@ -1179,7 +1179,7 @@ defmodule DevilsDictionary.Curation.Refresh do
         :telemetry.execute(
           [:curation, :refresh, event],
           %{count: 1},
-          Map.put(metadata, :outcome, outcome)
+          Map.put_new(metadata, :outcome, outcome)
         )
 
       :error ->
