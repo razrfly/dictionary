@@ -10,8 +10,8 @@ defmodule DevilsDictionary.Curation.Runtime.FakeSystem do
 
   **Processes.** `alive` is the set of running pids. `processes` is the
   process table's other rows, `%{pid, ppid, command}` (or `:unavailable`, or
-  `{:reads, [rows, ...]}` for a table that changes between reads, the last
-  repeating): only live ones are listed, and a row whose parent has died is listed under
+  `{:reads, [rows | :unavailable, ...]}` for a table that changes between
+  reads, the last repeating): only live ones are listed, and a row whose parent has died is listed under
   launchd (ppid 1), as macOS does. `signal/2` is recorded (`signals/0`) and
   ends the process unless the test said it survives that signal (`survives`,
   pid => signals). A row with `dies_with_parent: true` exits when its parent
@@ -118,7 +118,7 @@ defmodule DevilsDictionary.Curation.Runtime.FakeSystem do
   """
   def process_command(pid) do
     host = state()
-    row = Enum.find(rows(host), &(&1.pid == pid))
+    row = Enum.find(table(host), &(&1.pid == pid))
 
     cond do
       not process_alive?(pid) -> :error
@@ -133,22 +133,17 @@ defmodule DevilsDictionary.Curation.Runtime.FakeSystem do
   launchd (ppid 1). `{:reads, tables}` gives each read the next table.
   """
   def processes do
-    case state() do
-      %{processes: :unavailable} ->
-        {:error, :unavailable}
+    host = state()
 
-      %{processes: {:reads, [_rows, _next | _] = reads}} = host ->
-        put(processes: {:reads, tl(reads)})
-        listed(host)
+    with {:reads, [_rows, _next | _] = reads} <- host.processes,
+         do: put(processes: {:reads, tl(reads)})
 
-      host ->
-        listed(host)
-    end
+    if rows(host) == :unavailable, do: {:error, :unavailable}, else: listed(host)
   end
 
   defp listed(host) do
     {:ok,
-     for row <- rows(host), MapSet.member?(host.alive, row.pid) do
+     for row <- table(host), MapSet.member?(host.alive, row.pid) do
        orphaned = row.ppid > 1 and not MapSet.member?(host.alive, row.ppid)
        %{pid: row.pid, ppid: if(orphaned, do: 1, else: row.ppid), command: row.command}
      end}
@@ -173,7 +168,7 @@ defmodule DevilsDictionary.Curation.Runtime.FakeSystem do
 
       true ->
         gone =
-          for row <- rows(host), row.ppid == pid, Map.get(row, :dies_with_parent), do: row.pid
+          for row <- table(host), row.ppid == pid, Map.get(row, :dies_with_parent), do: row.pid
 
         put(
           signals: signals,
@@ -187,7 +182,14 @@ defmodule DevilsDictionary.Curation.Runtime.FakeSystem do
   @doc "Every signal sent so far, as `{pid, signal}`, in order."
   def signals, do: state().signals
 
-  defp rows(%{processes: :unavailable}), do: []
+  # The current table's rows, or `:unavailable`.
   defp rows(%{processes: {:reads, [rows | _]}}), do: rows
   defp rows(%{processes: rows}), do: rows
+
+  defp table(host) do
+    case rows(host) do
+      :unavailable -> []
+      rows -> rows
+    end
+  end
 end

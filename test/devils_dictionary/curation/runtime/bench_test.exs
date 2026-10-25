@@ -130,6 +130,11 @@ defmodule DevilsDictionary.Curation.Runtime.BenchTest do
     %{"m" => summary} = Bench.summarize([refused], plan, @packets)
 
     assert summary.outcomes == %{packet_stale: 1}
+
+    # The case counts it too: one attempt, no answer.
+    assert %{samples: 1, valid: 0, outcomes: %{packet_stale: 1}} =
+             summary.expectations["ordinary"]
+
     assert is_binary(Jason.encode!(summary))
   end
 

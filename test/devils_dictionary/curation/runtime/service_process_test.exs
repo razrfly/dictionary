@@ -115,10 +115,11 @@ defmodule DevilsDictionary.Curation.Runtime.ServiceProcessTest do
       File.write!(ctx.pid_file, "424256")
 
       FakeSystem.put(
-        alive: MapSet.new([424_257, 424_258]),
+        alive: MapSet.new([424_257, 424_258, 424_272]),
         processes: [
           %{pid: 424_257, ppid: 1, command: ctx.runner},
-          %{pid: 424_258, ppid: 1, command: "/usr/libexec/elsewhere/llama-server"}
+          %{pid: 424_258, ppid: 1, command: "/usr/libexec/elsewhere/llama-server"},
+          %{pid: 424_272, ppid: 1, command: Path.join(Path.dirname(ctx.runner), "llama-quantize")}
         ]
       )
 
@@ -126,8 +127,9 @@ defmodule DevilsDictionary.Curation.Runtime.ServiceProcessTest do
       assert evidence["method"] == "not_running"
       assert evidence["runners"] == [%{"pid" => 424_257, "command" => "llama-server"}]
 
-      # Only the runtime's own directory is the service's. Another program's
-      # server is never signalled.
+      # Only the runner, and only from the runtime's own directory. Another
+      # program's server, or another tool beside the runner, is never
+      # signalled.
       assert FakeSystem.signals() == [{424_257, :term}]
     end
 
@@ -180,6 +182,21 @@ defmodule DevilsDictionary.Curation.Runtime.ServiceProcessTest do
 
       assert {:error, {:runners_still_running, [424_268]}} = ServiceProcess.start(opts)
       assert FakeSystem.signals() == []
+    end
+
+    test "a table that cannot be read again after the server is gone confirms nothing", ctx do
+      File.write!(ctx.pid_file, "424273")
+      server = %{pid: 424_273, ppid: 1, command: Endpoint.get(:binary)}
+
+      FakeSystem.put(
+        alive: MapSet.new([424_273]),
+        survives: %{424_273 => [:term]},
+        processes: {:reads, [[server], :unavailable]}
+      )
+
+      assert {:error, :process_table_unavailable} = ServiceProcess.stop(ctx.opts)
+      assert FakeSystem.signals() == [{424_273, :term}, {424_273, :kill}]
+      assert File.exists?(ctx.pid_file)
     end
 
     test "without the process table nothing is signalled and nothing is confirmed", ctx do

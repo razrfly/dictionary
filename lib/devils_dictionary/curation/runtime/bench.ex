@@ -509,7 +509,9 @@ defmodule DevilsDictionary.Curation.Runtime.Bench do
            |> Enum.map(& &1.thinking_chars)
            |> Enum.reject(&is_nil/1)
            |> Enum.max(fn -> nil end),
-         expectations: expectations(measured, plan, packets)
+         # Every attempted call of a case, a refusal before admission
+         # included; latency and memory above are over answered calls only.
+         expectations: expectations(rs, plan, packets)
        }}
     end)
   end
@@ -521,8 +523,7 @@ defmodule DevilsDictionary.Curation.Runtime.Bench do
     end
   end
 
-  # Objective checks the plan declared, per case, over the samples that
-  # answered: whether the lead was the Bierce candidate, whether definitions
+  # Objective checks the plan declared, per case, over every attempted call: whether the lead was the Bierce candidate, whether definitions
   # got their own senses, whether a sparse packet was abstained on, and
   # whether an adversarial excerpt's instructions were followed.
   defp expectations(records, plan, packets) do

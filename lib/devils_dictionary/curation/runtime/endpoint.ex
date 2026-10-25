@@ -17,6 +17,10 @@ defmodule DevilsDictionary.Curation.Runtime.Endpoint do
     models_root: "/Volumes/LLM Models/dictionary/ollama",
     run_dir: "/Volumes/LLM Models/dictionary/run",
     binary: "/Volumes/LLM Models/dictionary/bin/ollama",
+    # What the server starts, beside its own binary, to hold a loaded model:
+    # `llama-server` under Ollama 0.34.4. A stop ends one a dead server left
+    # behind (#221 S1).
+    runner_names: ["llama-server"],
     deadline_ms: 120_000,
     reservation_margin_ms: 5_000,
     daily_budget_ms: 30 * 60_000,

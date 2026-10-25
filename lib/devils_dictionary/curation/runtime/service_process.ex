@@ -107,10 +107,11 @@ defmodule DevilsDictionary.Curation.Runtime.ServiceProcess do
   the process table is read before anything is signalled, while the runners
   are still the parent's descendants: once the parent is gone they belong to
   launchd (pid 1), and nothing else names them. The table is read again
-  after the parent is gone, for a runner started after the first read. A
-  process from the runtime's directory that launchd owns, other than a server
-  (the configured binary), is a runner a dead server left behind, and it is
-  ended too. A server the pid file does not name is never signalled.
+  after the parent is gone, for a runner started after the first read, and a
+  stop whose table cannot be read is not confirmed. A runner executable from
+  the runtime's directory (`llama-server`) that launchd owns is one a dead
+  server left behind, and it is ended too. A server the pid file does not
+  name, and any other program, is never signalled.
 
   The parent is asked first (SIGTERM, then SIGKILL after 30 s), since it
   shuts its own runners down. Any runner still alive after that is ended the
@@ -138,44 +139,45 @@ defmodule DevilsDictionary.Curation.Runtime.ServiceProcess do
       if ours, do: end_all(system, [parent], opts)
 
       # Read again once the parent is gone: a runner it started after the
-      # first read is now under launchd, and found there.
-      later =
-        case process_table(system) do
-          {:ok, now} -> left_behind(now, opts)
-          {:error, _} -> []
-        end
+      # first read is now under launchd, and found there. A table that cannot
+      # be read again proves nothing about such a runner: no confirmed stop.
+      with {:ok, now} <- process_table(system) do
+        runners =
+          Enum.uniq_by(children ++ left_behind(table, opts) ++ left_behind(now, opts), & &1.pid)
 
-      runners = Enum.uniq_by(children ++ left_behind(table, opts) ++ later, & &1.pid)
-
-      end_all(system, Enum.filter(runners, &running?(system, &1)), opts)
-
-      survivors = Enum.filter(runners, &running?(system, &1))
-
-      cond do
-        running?(system, parent) ->
-          {:error, :still_running}
-
-        survivors != [] ->
-          {:error, {:runners_still_running, Enum.map(survivors, & &1.pid)}}
-
-        listening(opts) != [] ->
-          {:error, {:port_still_open, listening(opts)}}
-
-        true ->
-          File.rm(pid_file(opts))
-
-          {:ok,
-           %{
-             stopped_at: DateTime.utc_now(),
-             evidence: %{
-               "stopped_pid" => pid,
-               "port" => Endpoint.port(opts),
-               "method" => if(ours, do: "sigterm", else: "not_running"),
-               "runners" =>
-                 Enum.map(runners, &%{"pid" => &1.pid, "command" => Path.basename(&1.command)})
-             }
-           }}
+        end_all(system, Enum.filter(runners, &running?(system, &1)), opts)
+        confirm(system, pid, parent, ours, runners, opts)
       end
+    end
+  end
+
+  defp confirm(system, pid, parent, ours, runners, opts) do
+    survivors = Enum.filter(runners, &running?(system, &1))
+
+    cond do
+      running?(system, parent) ->
+        {:error, :still_running}
+
+      survivors != [] ->
+        {:error, {:runners_still_running, Enum.map(survivors, & &1.pid)}}
+
+      listening(opts) != [] ->
+        {:error, {:port_still_open, listening(opts)}}
+
+      true ->
+        File.rm(pid_file(opts))
+
+        {:ok,
+         %{
+           stopped_at: DateTime.utc_now(),
+           evidence: %{
+             "stopped_pid" => pid,
+             "port" => Endpoint.port(opts),
+             "method" => if(ours, do: "sigterm", else: "not_running"),
+             "runners" =>
+               Enum.map(runners, &%{"pid" => &1.pid, "command" => Path.basename(&1.command)})
+           }
+         }}
     end
   end
 
@@ -202,18 +204,18 @@ defmodule DevilsDictionary.Curation.Runtime.ServiceProcess do
     end
   end
 
-  # Runners a dead server left behind: processes from the runtime's own
-  # directory that launchd now owns. A server (the configured binary) is never
-  # one of them: launchd owns the recorded service too once its starting
-  # shell has exited, and a server the pid file does not name, such as one a
-  # LaunchAgent keeps, is not this stop's to end.
+  # Runners a dead server left behind: a runner executable from the runtime's
+  # own directory (`Endpoint` `:runner_names`) that launchd now owns. A server
+  # (the configured binary) is never one of them: a server the pid file does
+  # not name, such as one a LaunchAgent keeps, is not this stop's to end, and
+  # neither is any other program in that directory.
   defp left_behind(table, opts) do
-    binary = Endpoint.get(:binary, opts)
-    dir = Path.dirname(binary)
+    dir = Path.dirname(Endpoint.get(:binary, opts))
+    names = Endpoint.get(:runner_names, opts)
 
     Enum.filter(
       table,
-      &(&1.ppid == 1 and &1.command != binary and Path.dirname(&1.command) == dir)
+      &(&1.ppid == 1 and Path.dirname(&1.command) == dir and Path.basename(&1.command) in names)
     )
   end
 
