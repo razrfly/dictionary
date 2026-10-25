@@ -850,6 +850,8 @@ defmodule DevilsDictionary.Curation.Refresh do
                 dirty_reason: ^reason,
                 inputs_last_changed_at: ^now,
                 inputs_last_changed_reason: ^reason,
+                # A queued run is no longer admitted only for its window.
+                run_periodic: false,
                 updated_at: ^now
               ],
               inc: [dirty_seq: 1]
@@ -870,6 +872,7 @@ defmodule DevilsDictionary.Curation.Refresh do
       dirty_seq: row.dirty_seq + 1,
       inputs_last_changed_at: now,
       inputs_last_changed_reason: reason,
+      run_periodic: false,
       updated_at: now
     )
     |> Repo.update!()
@@ -1054,6 +1057,7 @@ defmodule DevilsDictionary.Curation.Refresh do
             state:
               fragment("CASE WHEN ? = 'suppressed' THEN 'idle' ELSE ? END", r.state, r.state),
             input_fingerprint: nil,
+            run_periodic: false,
             dirty_at: fragment("COALESCE(?, ?)", r.dirty_at, ^now),
             # A real change already pending keeps its reason.
             dirty_reason:

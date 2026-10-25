@@ -205,6 +205,30 @@ defmodule DevilsDictionary.Curation.RefreshWorkerTest do
       assert %{last_outcome: :unchanged, last_outcome_reason: "unchanged"} = row!(ctx.composition)
     end
 
+    test "a change landing after a periodic run was queued makes it a compared run", ctx do
+      visit!()
+      drain!()
+      ctx.composition |> row!() |> set!(refresh_after: ago(1))
+      visit!()
+      assert %{state: :queued, run_periodic: true} = row!(ctx.composition)
+
+      assert 1 = Refresh.mark_dirty([ctx.composition.id], "claim_reviewed")
+      assert %{run_periodic: false} = row!(ctx.composition)
+      drain!()
+      assert %{last_outcome: :unchanged, last_outcome_reason: "unchanged"} = row!(ctx.composition)
+    end
+
+    test "the owner's publication after a periodic run was queued is not an editor's job", ctx do
+      visit!()
+      drain!()
+      ctx.composition |> row!() |> set!(refresh_after: ago(1))
+      visit!()
+      publish!(ctx, ctx.composition, ctx.published.version.id, highlights: johnson_only(ctx))
+
+      drain!()
+      assert %{last_outcome: :unchanged, last_outcome_reason: "accepted"} = row!(ctx.composition)
+    end
+
     test "the owner's publication after the window passed is not an editor's job", ctx do
       visit!()
       drain!()
