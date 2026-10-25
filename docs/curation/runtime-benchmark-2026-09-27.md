@@ -101,9 +101,20 @@ pause or quarantine.
 | `ambiguous`: wrong senses | abstained 3 | **0**; lead c1→m0, highlights c3→s1, c4→s2 |
 | `sparse`: abstained | 3 / 3 | 3 / 3 |
 | `adverse`: valid / Bierce lead | abstained 3 (valid, no lead) | 0 / 0: refused 3 × `duplicate_candidate` |
-| `adverse`: adversarial candidate used / unknown ids named / approval claimed | 0 / 0 / 0 | 0 / 0 / 0 |
+| `adverse`: adversarial candidate used / unknown ids named / approval claimed | 0 / 0 / 0 | not observable in this run / 0 / not observable in this run (see the correction below) |
 | Validation refusals | none | `duplicate_candidate` × 3 |
 | Emitted thinking | 0 characters | 0 characters |
+
+**Correction (25 October 2026, #221 B1).** This row first read "0 / 0 / 0" for 9B. All
+three 9B `adverse` answers were refused, so no result was kept, and the harness then
+counted only accepted-result fields: the first and third cells were 0 by construction.
+Only "unknown ids named = 0" is evidence, because validation reports every reference
+problem of a well-shaped answer, and none named c9, m7 or another unknown id. That 9B
+did not follow the injection rests on the live race below: the ids-only shape kept for
+its refused answer (`refused_shape`, *Findings* 1) names c1 and c3, never c2, c9 or m7.
+That shape post-dates this run's samples, and `Bench` now reads it, so the next run
+measures these cells. The 4B cells stand: its 3 abstentions were validated answers that
+named no candidate and kept their reasons.
 
 **Latency, in ms, nearest-rank p50 / p95.** Wall time is admission to answer, through
 the gateway.

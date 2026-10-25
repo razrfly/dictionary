@@ -23,8 +23,8 @@ defmodule DevilsDictionary.Curation.Runtime.ServiceProcess do
   downloads nothing. It binds the service to the connected database
   (`Runtime.Authority`), and refuses when the service is bound to another one
   unless `rebind: true`. `stop/1` is the only proof `Runtime.recover/1` accepts that
-  a generation ended: the recorded process is signalled, and it must be gone,
-  and its port closed, before the stop is confirmed.
+  a generation ended: the recorded process is signalled, and it, every runner
+  it started and its port must all be gone before the stop is confirmed.
 
   The process id, log and authority marker live in `run_dir` on the same
   volume. For a service that must survive a reboot,
@@ -35,6 +35,7 @@ defmodule DevilsDictionary.Curation.Runtime.ServiceProcess do
   alias DevilsDictionary.Curation.Runtime.{Authority, Endpoint}
 
   @stop_wait_ms 30_000
+  @kill_wait_ms 5_000
 
   @doc """
   `%{pid, alive, listening}` for the recorded service. `alive` means the
@@ -94,74 +95,150 @@ defmodule DevilsDictionary.Curation.Runtime.ServiceProcess do
   end
 
   @doc """
-  Stops the recorded service and confirms it: the process is gone and nothing
-  listens on the port. `{:ok, %{stopped_at, evidence}}` or `{:error, reason}`.
+  Stops the recorded service and confirms it: the process and every runner
+  it started are gone, and nothing listens on the port. `{:ok, %{stopped_at,
+  evidence}}` or `{:error, reason}`.
 
-  Only a recorded pid that runs the configured binary is signalled. A pid
+  `ollama serve` loads a model by starting a runner (`llama-server`, from the
+  runtime's own directory) that holds the weights. A runner that outlives its
+  parent keeps 6–8 GiB, and a restart would load a second copy (#221 S1). So
+  the process table is read before anything is signalled, while the runners
+  are still the parent's descendants: once the parent is gone they belong to
+  launchd (pid 1), and nothing else names them. A process from the runtime's
+  directory that launchd already owns is a runner an earlier death left
+  behind, and it is ended too.
+
+  The parent is asked first (SIGTERM, then SIGKILL after 30 s), since it
+  shuts its own runners down. Any runner still alive after that is ended the
+  same way. A pid is signalled only while it still runs what it ran when the
+  table was read, so a reused pid is never signalled.
+
+  Only a recorded pid that runs the configured binary is the service. A pid
   file whose process is gone, or now belongs to another program, is stale:
-  the service already ended, so nothing is signalled, and the stop is
-  confirmed as `"not_running"` once the port is closed.
+  the service already ended, so it is not signalled, its leftover runners
+  are, and the stop is confirmed as `"not_running"` once they are gone and
+  the port is closed.
+
+  `opts`: `:stop_wait_ms` and `:kill_wait_ms` shorten the waits, for the
+  suite.
   """
   def stop(opts \\ []) do
     system = Endpoint.system(opts)
 
-    case recorded_pid(opts) do
-      nil ->
-        {:error, :no_recorded_service}
+    with pid when is_integer(pid) <- recorded_pid(opts) || {:error, :no_recorded_service},
+         {:ok, table} <- process_table(system) do
+      parent = %{pid: pid, command: Endpoint.get(:binary, opts)}
+      ours = running?(system, parent)
 
-      pid ->
-        method =
-          if ours?(pid, opts) do
-            System.cmd("kill", ["-TERM", Integer.to_string(pid)], stderr_to_stdout: true)
+      children = if ours, do: descendants(table, pid), else: []
+      runners = Enum.uniq_by(children ++ left_behind(table, pid, opts), & &1.pid)
 
-            unless wait_gone(system, pid, @stop_wait_ms),
-              do: System.cmd("kill", ["-KILL", Integer.to_string(pid)])
+      if ours, do: end_all(system, [parent], opts)
+      end_all(system, Enum.filter(runners, &running?(system, &1)), opts)
 
-            wait_gone(system, pid, 5_000)
-            "sigterm"
-          else
-            "not_running"
-          end
+      survivors = Enum.filter(runners, &running?(system, &1))
 
-        cond do
-          ours?(pid, opts) ->
-            {:error, :still_running}
+      cond do
+        running?(system, parent) ->
+          {:error, :still_running}
 
-          listening(opts) != [] ->
-            {:error, {:port_still_open, listening(opts)}}
+        survivors != [] ->
+          {:error, {:runners_still_running, Enum.map(survivors, & &1.pid)}}
 
-          true ->
-            File.rm(pid_file(opts))
+        listening(opts) != [] ->
+          {:error, {:port_still_open, listening(opts)}}
 
-            {:ok,
-             %{
-               stopped_at: DateTime.utc_now(),
-               evidence: %{
-                 "stopped_pid" => pid,
-                 "port" => Endpoint.port(opts),
-                 "method" => method
-               }
-             }}
-        end
+        true ->
+          File.rm(pid_file(opts))
+
+          {:ok,
+           %{
+             stopped_at: DateTime.utc_now(),
+             evidence: %{
+               "stopped_pid" => pid,
+               "port" => Endpoint.port(opts),
+               "method" => if(ours, do: "sigterm", else: "not_running"),
+               "runners" =>
+                 Enum.map(runners, &%{"pid" => &1.pid, "command" => Path.basename(&1.command)})
+             }
+           }}
+      end
     end
+  end
+
+  @doc """
+  The descendants of `root` in a process table (`%{pid, ppid}` maps, any
+  other keys kept), at any depth, not including `root`. The walk that gates a
+  confirmed stop, and that `Bench.tree_rss/1` measures.
+  """
+  def descendants(table, root), do: walk(table, MapSet.new([root]), [])
+
+  defp walk(table, parents, found) do
+    children = Enum.filter(table, &(&1.ppid in parents and not MapSet.member?(parents, &1.pid)))
+
+    case children do
+      [] ->
+        Enum.reverse(found)
+
+      _ ->
+        walk(
+          table,
+          MapSet.union(parents, MapSet.new(children, & &1.pid)),
+          Enum.reverse(children) ++ found
+        )
+    end
+  end
+
+  # Runners an earlier death left behind: processes from the runtime's own
+  # directory that launchd now owns. The service itself is one too once its
+  # starting shell has exited, so the recorded pid is left to `stop/1`.
+  defp left_behind(table, pid, opts) do
+    dir = Path.dirname(Endpoint.get(:binary, opts))
+
+    Enum.filter(table, &(&1.ppid == 1 and &1.pid != pid and Path.dirname(&1.command) == dir))
+  end
+
+  defp process_table(system) do
+    case system.processes() do
+      {:ok, table} -> {:ok, table}
+      {:error, _} -> {:error, :process_table_unavailable}
+    end
+  end
+
+  # Still the process the table named: alive, and running the same program.
+  defp running?(system, %{pid: pid, command: command}) do
+    system.process_alive?(pid) and system.process_command(pid) == {:ok, command}
+  end
+
+  defp end_all(_system, [], _opts), do: :ok
+
+  defp end_all(system, procs, opts) do
+    Enum.each(procs, &system.signal(&1.pid, :term))
+
+    unless wait_gone(system, procs, Keyword.get(opts, :stop_wait_ms, @stop_wait_ms)) do
+      procs |> Enum.filter(&running?(system, &1)) |> Enum.each(&system.signal(&1.pid, :kill))
+      wait_gone(system, procs, Keyword.get(opts, :kill_wait_ms, @kill_wait_ms))
+    end
+
+    :ok
   end
 
   # The recorded pid is this service: alive, and running the configured binary.
   defp ours?(pid, opts) do
-    system = Endpoint.system(opts)
-
-    system.process_alive?(pid) and
-      system.process_command(pid) == {:ok, Endpoint.get(:binary, opts)}
+    running?(Endpoint.system(opts), %{pid: pid, command: Endpoint.get(:binary, opts)})
   end
 
-  defp wait_gone(system, pid, remaining) when remaining <= 0, do: not system.process_alive?(pid)
+  defp wait_gone(system, procs, remaining) do
+    cond do
+      not Enum.any?(procs, &running?(system, &1)) ->
+        true
 
-  defp wait_gone(system, pid, remaining) do
-    if system.process_alive?(pid) do
-      Process.sleep(250)
-      wait_gone(system, pid, remaining - 250)
-    else
-      true
+      remaining <= 0 ->
+        false
+
+      true ->
+        Process.sleep(250)
+        wait_gone(system, procs, remaining - 250)
     end
   end
 

@@ -200,7 +200,12 @@ defmodule DevilsDictionary.Curation.Runtime.Gateway do
     end)
   end
 
-  @doc "Records one confirmed pre-dispatch retry (connection refused) on a dispatched attempt."
+  @doc """
+  Records one confirmed pre-dispatch retry (connection refused) on a
+  dispatched attempt: `{:ok, attempt}`, or `{:error, :stale}` if it no longer
+  holds the slot under its fence. The database allows at most
+  `Attempt.max_transport_retries/0`; `Runtime.run/3` never asks for more.
+  """
   def note_retry(%Attempt{} = attempt, opts \\ []) do
     holding(attempt, opts, [:dispatched], fn _service, current ->
       {:ok,

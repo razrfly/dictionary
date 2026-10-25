@@ -73,6 +73,92 @@ defmodule DevilsDictionary.Curation.Runtime.GatewayRaceTest do
     counters
   end
 
+  # Holds a caller between admission and dispatch: once its admission has
+  # committed, it says so and waits to be told to dispatch. Only a process
+  # that asked (`:hold_after_admission` in its dictionary) is held.
+  defp hold_after_admission do
+    handler = "runtime-hold-#{System.unique_integer([:positive])}"
+
+    :telemetry.attach(
+      handler,
+      [:devils_dictionary, :repo, :query],
+      fn _event, _measurements, %{query: query}, _config ->
+        case Process.get(:hold_after_admission) do
+          nil ->
+            :ok
+
+          parent ->
+            cond do
+              query =~ ~s(INSERT INTO "inference_attempts") ->
+                Process.put(:admission_written, true)
+
+              query == "commit" and Process.get(:admission_written) ->
+                Process.delete(:hold_after_admission)
+                send(parent, {:admitted, self()})
+                receive do: (:dispatch -> :ok)
+
+              true ->
+                :ok
+            end
+        end
+      end,
+      nil
+    )
+
+    handler
+  end
+
+  # #221 A1: a slow caller whose lease runs out between admission and
+  # dispatch is released by another caller's sweep. Its dispatch is then
+  # stale, which is a refusal and not a `MatchError`, and nothing is sent.
+  test "a sweep between admission and dispatch: the caller is refused, nothing is sent", ctx do
+    calls = :counters.new(1, [])
+
+    stub_ollama!(ctx.config,
+      chat: fn _ ->
+        :counters.add(calls, 1, 1)
+        {:json, answer(abstain())}
+      end
+    )
+
+    handler = hold_after_admission()
+    on_exit(fn -> :telemetry.detach(handler) end)
+    parent = self()
+
+    slow =
+      caller(fn ->
+        Process.put(:hold_after_admission, parent)
+        Runtime.run(ctx.config, ctx.frozen, Keyword.put(ctx.opts, :request_key, "slow"))
+      end)
+
+    send(slow, :go)
+    assert_receive {:admitted, ^slow}, 10_000
+    assert %Attempt{state: :admitted} = Repo.get_by!(Attempt, request_key: "slow")
+
+    later = DateTime.add(DateTime.utc_now(), 3_600)
+    assert {:ok, :released} = Gateway.sweep(service_key: "race", now: later)
+
+    send(slow, :dispatch)
+    assert_receive {:done, ^slow, {:refused, :stale}}, 10_000
+
+    assert :counters.get(calls, 1) == 0
+    attempt = Repo.get_by!(Attempt, request_key: "slow")
+
+    assert {attempt.state, attempt.outcome, attempt.dispatched_at} ==
+             {:released, :never_sent, nil}
+
+    assert %Service{state: :available, holder_attempt_id: nil} =
+             Repo.get_by!(Service, key: "race")
+
+    assert [:release, :reserve] =
+             Repo.all(
+               from e in LedgerEntry,
+                 where: e.attempt_id == ^attempt.id,
+                 order_by: e.kind,
+                 select: e.kind
+             )
+  end
+
   test "two independent callers: one generation, one busy refusal, one settlement", ctx do
     counters = blocking_runtime(ctx.config)
 
