@@ -6,8 +6,10 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
   **The scope is the page's words**, shown and never typed: the On page the
   slug addresses, built as the reader builds it, and its
   `page.headword.lexemes` (`CurationLive.page/1`). A composition is
-  `:lexical_page` over them; the exact-word pages overlap it and share it
-  (K3), and the editor says so and offers nothing else.
+  `:lexical_page` over them. The exact-word pages overlap this scope and
+  cannot have a separate active lexical-page composition (K3); they do not
+  display this one either (the reader resolves exact signatures). The
+  editor says so and offers nothing else.
 
   **Left, the candidates** (`Curation.Candidates`): the lead, as the lead rule
   decides it, and up to three highlights from the four kinds the record
@@ -35,8 +37,14 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
       nothing;
     * *Withdraw*: `Publications.withdraw/3` from the pointer this form saw,
       with a reason. Withdrawal keeps the page empty (#253 §6a);
-    * *Re-open*: opens the form again on a withdrawn page. It writes
-      nothing: the refresh state it will clear is #254 P5's.
+    * *Re-open*: lifts the withdrawal's suppression of the refresh clock
+      (`Refresh.reopen/1`, #259 §5.5), so the page's next visit queues one
+      check, and opens the form again.
+
+  **The refresh clock** (#259 §2.3): the header says when the page was last
+  assessed, and a banner says when its inputs changed since, when the last
+  check found an editor is needed, or when a check failed. A check looks at
+  the inputs and does not judge them.
 
   No job is queued, nothing is fetched and no model is called.
   """
@@ -47,6 +55,7 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
     Compositions,
     Preview,
     Publications,
+    Refresh,
     Reviews,
     Standing
   }
@@ -74,6 +83,7 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
         slug: slug,
         loaded?: false,
         reopened?: false,
+        refresh: nil,
         stale: nil,
         refusal: nil,
         notice: nil,
@@ -163,10 +173,19 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
   end
 
   def handle_event("reopen", _params, socket) do
+    case socket.assigns.record do
+      %{composition: %{id: id}} -> Refresh.reopen(id)
+      _none -> 0
+    end
+
     {:noreply,
      socket
+     |> load_record()
      |> assign(reopened?: true, refusal: nil)
-     |> assign(:notice, "Re-opened. Nothing was written: curate again and publish a new version.")
+     |> assign(
+       :notice,
+       "Re-opened: the page's checks resume, and its next visit queues one. Curate again and publish a new version."
+     )
      |> preview()}
   end
 
@@ -634,8 +653,19 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
     socket |> load_record() |> assign(refusal: nil, notice: notice)
   end
 
-  defp load_record(socket),
-    do: assign(socket, :record, CurationLive.record(socket.assigns.candidates))
+  # The record and its refresh clock. A withdrawn page whose clock is no
+  # longer suppressed was re-opened, also after a reload.
+  defp load_record(socket) do
+    record = CurationLive.record(socket.assigns.candidates)
+    refresh = CurationLive.refresh(record)
+
+    socket
+    |> assign(record: record, refresh: refresh)
+    |> assign(
+      :reopened?,
+      record.state == :withdrawn and not is_nil(refresh) and refresh.state != :suppressed
+    )
+  end
 
   # ── rendering ────────────────────────────────────────────────────────────
 
@@ -686,12 +716,17 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
             <p id="curation-config" class="text-sm/7 text-mist-600 dark:text-mist-400">
               {config_line(@record)} ·
               <span id="curation-state-label">{CurationLive.state_label(@record)}</span>
+              <span :if={@record.composition} id="curation-clock-assessed">
+                · last assessed {CurationLive.assessed_label(@refresh)}
+              </span>
             </p>
             <p id="curation-shared" class="max-w-3xl text-sm/7 text-pretty text-mist-500">
-              Exact-word pages share this: their words overlap this page's, so they cannot
-              have a composition of their own beside it, and show none.
+              Exact-word pages overlap this editing scope and cannot have a separate active
+              lexical-page composition; they do not currently display this composition.
             </p>
           </header>
+
+          <.clock :if={@record.composition} refresh={@refresh} />
 
           <.refusal :if={@refusal} refusal={@refusal} />
           <p
@@ -1194,7 +1229,7 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
     >
       <p class="text-sm/7 text-pretty text-amber-950 dark:text-amber-100">
         <span class="font-medium">Withdrawn {withdrawal(@record)}:</span>
-        kept off the page until it is re-opened. Re-open to curate it again.
+        kept off the page and not assessed again until you Re-open. Re-open to curate it again.
       </p>
       <.button id="curation-reopen" type="button" phx-click="reopen" class="min-h-11">
         Re-open
@@ -1215,6 +1250,66 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
   end
 
   defp standing(assigns), do: ~H""
+
+  attr :refresh, :any, required: true
+
+  # What the refresh clock says that the owner should act on (#259 §2.3): an
+  # input changed since the last check, the last check found an editor is
+  # needed, or a check failed. A withdrawn page says so in its standing.
+  defp clock(assigns) do
+    ~H"""
+    <div
+      :if={clock_lines?(@refresh)}
+      id="curation-clock"
+      class="flex flex-col gap-2 rounded-xl bg-amber-50 px-5 py-4 text-sm/7 text-pretty text-amber-950 dark:bg-amber-400/10 dark:text-amber-100"
+    >
+      <p :if={changed?(@refresh)} id="curation-clock-changed">
+        <span aria-hidden="true">⚠</span>
+        <span class="font-medium">Inputs changed since the last assessment:</span>
+        {Refresh.change_label(@refresh.dirty_reason)}. {queued_line(@refresh)} Nothing changes
+        on the page until you or an editor publishes a new version.
+      </p>
+      <p :if={needs_editor?(@refresh)} id="curation-clock-editor">
+        <span class="font-medium">The last check found an editor is needed</span>
+        ({editor_reason(@refresh.last_outcome_reason)}). The inputs were checked, not judged:
+        an editor's proposal is #254 P6's.
+      </p>
+      <p :if={@refresh.state == :deferred} id="curation-clock-deferred">
+        <span class="font-medium">The last check failed</span>{if @refresh.last_error,
+          do: " (#{@refresh.last_error})"}; it is retried after {CurationLive.short_date(
+          @refresh.next_retry_at
+        )}.
+      </p>
+    </div>
+    """
+  end
+
+  defp clock_lines?(nil), do: false
+  defp clock_lines?(%{state: :suppressed}), do: false
+
+  defp clock_lines?(refresh),
+    do: changed?(refresh) or needs_editor?(refresh) or refresh.state == :deferred
+
+  # A publication makes the next check due without changing an input.
+  defp changed?(%{dirty_at: %DateTime{}, dirty_reason: reason, state: state}),
+    do: state != :suppressed and reason != "published"
+
+  defp changed?(_refresh), do: false
+
+  defp needs_editor?(%{last_outcome: :needs_editor, dirty_at: nil, state: state}),
+    do: state not in [:suppressed, :deferred]
+
+  defp needs_editor?(_refresh), do: false
+
+  defp queued_line(%{state: state}) when state in [:queued, :running],
+    do: "Re-assessment is queued;"
+
+  defp queued_line(_refresh), do: "Re-assessment is queued on the page's next visit;"
+
+  defp editor_reason("due"), do: "the periodic re-assessment came due"
+  defp editor_reason("nothing_accepted"), do: "nothing has been accepted yet"
+  defp editor_reason("fingerprint_version"), do: "the inputs are now identified differently"
+  defp editor_reason(_changed), do: "the inputs changed"
 
   attr :record, :map, required: true
 

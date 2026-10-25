@@ -764,8 +764,11 @@ defmodule DevilsDictionaryWeb.Opening do
       <div class="mt-4 flex flex-col gap-6 pb-2 text-base/6 sm:text-sm/6">
         <%!-- A published composition's provenance is its records'
              (#255 §2.2): the configuration it was published under, its
-             author, its receipt, and no panel. The assessment dates are
-             absent, not blank: #254 P5 adds them. --%>
+             author, its receipt, and no panel. Then its refresh clock
+             (#259 §2.1), five dates in five words: published (above), last
+             assessed, checked, inputs changed, next assessment. A P5 check
+             looks at the inputs and does not judge them, and says so. The
+             screen's preview of an unsaved selection has no clock. --%>
         <dl :if={@opening.origin == :published} class="flex flex-col gap-3">
           <.about_row id="opening-about-configuration" label="Configuration">
             {configuration(@opening.configuration)}
@@ -783,6 +786,34 @@ defmodule DevilsDictionaryWeb.Opening do
           <.withheld_row withheld={@opening.withheld} />
           <.about_row id="opening-about-composition" label="Composition">
             {selection(@opening)}
+          </.about_row>
+          <.about_row
+            :if={@opening.review.assessment != :preview}
+            id="opening-about-assessed"
+            label="Last assessed"
+          >
+            {assessed(@opening.review.assessment)}
+          </.about_row>
+          <.about_row
+            :if={@opening.review.assessment != :preview}
+            id="opening-about-checked"
+            label="Checked"
+          >
+            Just now, against the record.
+          </.about_row>
+          <.about_row
+            :if={@opening.review.assessment != :preview}
+            id="opening-about-changed"
+            label="Inputs changed"
+          >
+            {inputs_changed(@opening.review.assessment)}
+          </.about_row>
+          <.about_row
+            :if={@opening.review.assessment != :preview}
+            id="opening-about-next"
+            label="Next assessment"
+          >
+            {next_assessment(@opening.review.assessment)}
           </.about_row>
         </dl>
 
@@ -1301,4 +1332,75 @@ defmodule DevilsDictionaryWeb.Opening do
     do: "bg-mist-950/5 text-mist-700 dark:bg-white/10 dark:text-mist-300"
 
   defp date(%Date{} = date), do: Calendar.strftime(date, "%-d %B %Y")
+  defp date(%DateTime{} = datetime), do: datetime |> DateTime.to_date() |> date()
+
+  # ── the refresh clock (#259 §2.1) ─────────────────────────────────────────
+
+  # When the inputs were last checked, and what the check found. A check
+  # looks at the inputs; it does not judge them, and the row says so.
+  defp assessed(nil), do: "Never."
+
+  defp assessed(%{last_completed_at: nil, state: state}) when state in [:queued, :running],
+    do: "Never · queued on your visit."
+
+  defp assessed(%{last_completed_at: nil, state: :deferred}),
+    do: "Never · the first check failed and will be retried."
+
+  defp assessed(%{last_completed_at: nil}), do: "Never."
+
+  defp assessed(%{last_completed_at: at} = assessment) do
+    found =
+      case assessment do
+        %{last_outcome: :unchanged, last_outcome_reason: "accepted"} ->
+          "nothing has changed since this version was accepted"
+
+        %{last_outcome: :unchanged} ->
+          "nothing has changed since the last check"
+
+        %{last_outcome: :needs_editor, last_outcome_reason: reason} ->
+          "an editor is needed (#{editor_needed(reason)})"
+      end
+
+    queued = if assessment.state in [:queued, :running], do: " Another check is queued."
+    "#{date(at)} · the inputs were checked, not judged: #{found}.#{queued}"
+  end
+
+  defp editor_needed("due"), do: "the periodic re-assessment came due"
+  defp editor_needed("fingerprint_version"), do: "the inputs are now identified differently"
+  defp editor_needed("nothing_accepted"), do: "nothing has been accepted yet"
+  defp editor_needed(_changed), do: "the inputs changed"
+
+  # When an input last changed: history, kept after the check that saw it.
+  defp inputs_changed(nil), do: "Not recorded yet."
+
+  defp inputs_changed(%{inputs_last_changed_at: nil, last_completed_at: nil}),
+    do: "Not recorded yet."
+
+  defp inputs_changed(%{inputs_last_changed_at: nil, last_outcome_reason: reason})
+       when reason in ["accepted", "nothing_accepted"],
+       do: "Not since this version was accepted."
+
+  defp inputs_changed(%{inputs_last_changed_at: nil}), do: "Not since the last check."
+
+  defp inputs_changed(%{inputs_last_changed_at: at} = assessment) do
+    pending = if assessment.dirty_at, do: " Not checked yet."
+    reason = DevilsDictionary.Curation.Refresh.change_label(assessment.inputs_last_changed_reason)
+    "#{date(at)} (#{reason}).#{pending}"
+  end
+
+  # When the next check is due.
+  defp next_assessment(nil), do: "On the next visit."
+
+  defp next_assessment(%{state: state}) when state in [:queued, :running], do: "Queued now."
+
+  defp next_assessment(%{state: :deferred, next_retry_at: at}),
+    do: "After #{date(at)}: the last check failed and will be retried."
+
+  defp next_assessment(%{last_completed_at: nil}), do: "On the next visit."
+
+  defp next_assessment(%{dirty_at: %DateTime{}, dirty_reason: reason}),
+    do: "On the next visit: #{DevilsDictionary.Curation.Refresh.change_label(reason)}."
+
+  defp next_assessment(%{refresh_after: at}),
+    do: "After #{date(at)}, or sooner if an input changes."
 end

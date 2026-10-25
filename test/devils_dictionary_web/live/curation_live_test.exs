@@ -216,7 +216,8 @@ defmodule DevilsDictionaryWeb.CurationLiveTest do
              )
 
       assert has_element?(view, "#curation-page-greed-open", "Curate")
-      assert has_element?(view, "#tab-stale[aria-disabled='true']", "P5")
+      # The Stale tab is #259's (P5); Proposed stays P6's.
+      assert has_element?(view, "#tab-stale[href='/ops/curation?tab=stale']", "Stale")
       assert has_element?(view, "#tab-proposed[aria-disabled='true']", "P6")
 
       # Published by hand, the queue says so on its next read.
@@ -240,7 +241,13 @@ defmodule DevilsDictionaryWeb.CurationLiveTest do
 
       assert has_element?(view, "#curation-scope", "love (noun #{ctx.love.object_id}")
       assert has_element?(view, "#curation-scope", "love (verb #{ctx.verb.object_id}")
-      assert has_element?(view, "#curation-shared", "Exact-word pages share this")
+
+      assert has_element?(
+               view,
+               "#curation-shared",
+               "Exact-word pages overlap this editing scope and cannot have a separate active lexical-page composition; they do not currently display this composition."
+             )
+
       assert has_element?(view, "#curation-bierce", "Bierce leads")
 
       assert has_element?(view, "#lead-#{bierce(ctx)} input:not([disabled])[checked]")
@@ -605,8 +612,14 @@ defmodule DevilsDictionaryWeb.CurationLiveTest do
   # Ids are what a preview cannot know: the composition's, until it is
   # provisioned, and the receipt's, until it is written. The section's own
   # class is where the page places it, which the preview pane does not.
+  # The page's refresh-clock rows (#259 §2.1) are the composition's, not the
+  # selection's, so the preview has none: they are set aside before comparing.
   defp normalize(html) do
     html
+    |> String.replace(
+      ~r/<div[^>]*class="grid[^"]*">\s*<dt[^>]*>[^<]*<\/dt>\s*<dd id="opening-about-(assessed|checked|changed|next)"[^>]*>.*?<\/dd>\s*<\/div>/s,
+      ""
+    )
     |> String.replace(~r/^(<section[^>]*?) class="[^"]*"/, "\\1")
     |> String.replace(~r/ · receipt #\d+/, "")
     |> String.replace(~r/#(\d+|—), version/, "#ID, version")
@@ -674,5 +687,113 @@ defmodule DevilsDictionaryWeb.CurationLiveTest do
     submit(view, "publish")
     assert has_element?(view, "#curation-refusal[data-reason='already_published']")
     assert Repo.aggregate(CompositionPublication, :count) == 1
+  end
+
+  describe "#259: the refresh clock on the screen" do
+    alias DevilsDictionary.RefreshFixtures
+
+    defp stale_tab(ctx) do
+      {:ok, view, _html} = live(as(ctx.conn, ctx.reviewer), ~p"/ops/curation?tab=stale")
+      render_async(view)
+      view
+    end
+
+    defp public_visit!, do: live(build_conn(), ~p"/on/love")
+
+    test "25: the Stale tab lists each pilot page's clock, and re-open clears a withdrawal's suppression",
+         ctx do
+      view = editor(ctx)
+      change(view, %{reason: "Bierce alone."})
+      submit(view, "publish")
+
+      tab = stale_tab(ctx)
+      assert has_element?(tab, "#tab-stale[aria-current='page']", "Stale")
+      assert has_element?(tab, "#curation-stale-love-why", "never assessed")
+      assert has_element?(tab, "#curation-stale-love-assessed", "never")
+      assert has_element?(tab, "#curation-stale-love-next", "next visit")
+
+      assert has_element?(
+               tab,
+               "#curation-stale-greed-why",
+               "no composition yet: Curate to start its clock"
+             )
+
+      {:ok, _page, _html} = public_visit!()
+      RefreshFixtures.drain!()
+
+      tab = stale_tab(ctx)
+      assert has_element?(tab, "#curation-stale-love-why", "—")
+      assert has_element?(tab, "#curation-stale-love-assessed", "unchanged")
+      assert has_element?(tab, "#tab-stale", "0")
+
+      view
+      |> form("#curation-withdraw-form", %{withdraw: %{reason: "wording"}})
+      |> render_submit()
+
+      assert has_element?(view, "#curation-standing", "not assessed again until you Re-open")
+
+      tab = stale_tab(ctx)
+
+      assert has_element?(
+               tab,
+               "#curation-stale-love-why",
+               "withdrawn: not assessed until re-opened"
+             )
+
+      jobs = length(RefreshFixtures.curation_jobs())
+      {:ok, _page, _html} = public_visit!()
+      assert length(RefreshFixtures.curation_jobs()) == jobs
+
+      view |> element("#curation-reopen") |> render_click()
+      assert has_element?(view, "#curation-notice", "its next visit queues one")
+
+      tab = stale_tab(ctx)
+
+      assert has_element?(
+               tab,
+               "#curation-stale-love-why",
+               "input changed: re-opened by the operator"
+             )
+
+      {:ok, _page, _html} = public_visit!()
+      assert length(RefreshFixtures.curation_jobs()) == jobs + 1
+
+      # Re-opened is remembered: a reloaded editor offers no Re-open again.
+      refute has_element?(editor(ctx), "#curation-reopen")
+    end
+
+    test "26: after a claim review the editor says the inputs changed, and why", ctx do
+      view = editor(ctx)
+      change(view, %{reason: "Bierce alone."})
+      submit(view, "publish")
+      {:ok, _page, _html} = public_visit!()
+      RefreshFixtures.drain!()
+
+      fresh = editor(ctx)
+      assert has_element?(fresh, "#curation-clock-assessed", "last assessed")
+      assert has_element?(fresh, "#curation-clock-assessed", "unchanged")
+      refute has_element?(fresh, "#curation-clock-changed")
+
+      person = ExemplarFixtures.person!("Fixture Exemplar")
+      claim = ExemplarFixtures.nominate!(ctx.contributor, person, ctx.benevolent)
+      ExemplarFixtures.decide!(ctx.reviewer, claim)
+
+      changed = editor(ctx)
+
+      assert has_element?(
+               changed,
+               "#curation-clock-changed",
+               "Inputs changed since the last assessment:"
+             )
+
+      assert has_element?(changed, "#curation-clock-changed", "a claim was reviewed")
+      assert has_element?(changed, "#curation-clock-changed", "on the page's next visit")
+
+      assert has_element?(
+               changed,
+               "#curation-shared",
+               "they do not currently display this composition"
+             )
+    end
   end
 end

@@ -7,15 +7,17 @@ defmodule DevilsDictionaryWeb.CurationLive do
   other account 403; `:require_reviewer` guards a socket that live-navigates
   in). It lists the pilot pages (`:curation_pilot_pages`, #253 D2) with what
   each page's composition is now and which kinds of candidate its page
-  offers, and the published compositions and their withheld items. Stale
-  and Proposed are #254 P5's and P6's: drawn, disabled, with nothing behind
-  them.
+  offers, the published compositions and their withheld items, and (#259
+  §2.2) the Stale tab: each pilot page's refresh clock, when it was last
+  assessed and why it is stale. Proposed is #254 P6's: drawn, disabled,
+  with nothing behind it.
 
   Every figure is read: the page as `WordPage.build/2` builds it, its
   candidates (`Curation.Candidates`), its composition under the resolved
   global default (`Compositions.active/4` over the page's words, as the
-  reader finds it) and `Published.current/1`. Nothing is written, nothing is
-  fetched, and no job is queued: building a page here is not a visit.
+  reader finds it), `Published.current/1` and the refresh clock
+  (`Curation.Refresh`). Nothing is written, nothing is fetched, and no job is
+  queued: building a page here is not a visit.
 
   `page/1` and `record/2` are shared with the editor
   (`CurationLive.Editor`).
@@ -32,7 +34,9 @@ defmodule DevilsDictionaryWeb.CurationLive do
     CompositionVersion,
     Compositions,
     Configurations,
-    Published
+    Pilot,
+    Published,
+    Refresh
   }
 
   alias DevilsDictionary.Lexicon
@@ -43,7 +47,7 @@ defmodule DevilsDictionaryWeb.CurationLive do
   on_mount {DevilsDictionaryWeb.UserAuth, :require_reviewer}
 
   @marks ~w(B J Q W E)
-  @tabs ~w(pilot published withheld)
+  @tabs ~w(pilot published withheld stale)
 
   # The pages are built off the socket's process once it is up: the queue
   # paints at once, and its rows arrive when ten page builds are done.
@@ -94,22 +98,14 @@ defmodule DevilsDictionaryWeb.CurationLive do
       stats: %{
         pilot: length(rows),
         published: length(published),
-        withheld: published |> Enum.map(&length(&1.withheld)) |> Enum.sum()
+        withheld: published |> Enum.map(&length(&1.withheld)) |> Enum.sum(),
+        stale: Enum.count(rows, &stale?/1)
       }
     }
   end
 
-  # The pilot pages of #253 D2. Configuration may name others
-  # (`config :devils_dictionary, :curation_pilot_pages, [...]`); nothing here
-  # is a table. The list is the default here rather than a line in
-  # `config/config.exs` because the published host goes live without a
-  # restart (#250), and Phoenix's code reloader refuses to compile once a
-  # configuration file has changed since boot.
-  @pilot_pages ~w(nepotism greed war love coward patience justice truth hope bestiality)
-
-  @doc "The pilot pages' slugs: `:curation_pilot_pages`, by default #253 D2's ten."
-  def pilot_pages,
-    do: Application.get_env(:devils_dictionary, :curation_pilot_pages, @pilot_pages)
+  @doc "The pilot pages' slugs (`Curation.Pilot.pages/0`): by default #253 D2's ten."
+  defdelegate pilot_pages, to: Pilot, as: :pages
 
   @doc """
   The On page a slug addresses, built as the reader builds it, for the
@@ -258,15 +254,29 @@ defmodule DevilsDictionaryWeb.CurationLive do
     candidates = Candidates.for_page(page)
     record = record(candidates)
 
+    refresh = refresh(record)
+
     %{
       slug: slug,
       lemma: page.headword.lemma || slug,
       scope: parts(candidates.scope.lexemes),
       record: record,
       marks: Candidates.marks(candidates),
-      shown: shown(record)
+      shown: shown(record),
+      refresh: refresh,
+      stale: record.composition && Refresh.stale_reason(refresh)
     }
   end
+
+  @doc "A record's refresh clock under its configuration version, or `nil` (#259)."
+  def refresh(%{composition: %{id: id}, configuration_version: %{id: version_id}}),
+    do: Refresh.state_for(id, version_id)
+
+  def refresh(_record), do: nil
+
+  # Stale is what a check is owed: never assessed, an input changed, the
+  # window passed, or the last check failed. A withdrawn page is owed none.
+  defp stale?(%{stale: reason}), do: reason not in [nil, :suppressed]
 
   # What is on the page now: the published version and its highlight count.
   defp shown(%{published_id: id, versions: versions}) when is_integer(id) do
@@ -361,14 +371,9 @@ defmodule DevilsDictionaryWeb.CurationLive do
           <.tab id="tab-withheld" tab="withheld" current={@tab} count={@stats && @stats.withheld}>
             Withheld items
           </.tab>
-          <span
-            id="tab-stale"
-            aria-disabled="true"
-            title="Freshness is #254 P5's"
-            class="inline-flex min-h-11 items-center gap-2 rounded-full px-3 text-sm/7 text-mist-400 ring-1 ring-mist-950/10 ring-inset sm:min-h-9 dark:text-mist-500 dark:ring-white/10"
-          >
-            Stale <span class="tabular-nums">—</span> <span class="text-xs/5">P5</span>
-          </span>
+          <.tab id="tab-stale" tab="stale" current={@tab} count={@stats && @stats.stale}>
+            Stale
+          </.tab>
           <span
             id="tab-proposed"
             aria-disabled="true"
@@ -480,6 +485,61 @@ defmodule DevilsDictionaryWeb.CurationLive do
             sense quotation · <b class="font-mono">W</b>
             catalog work · <b class="font-mono">E</b>
             accepted exemplar.
+          </p>
+        </div>
+
+        <div :if={@rows && @tab == "stale"} id="curation-stale" class="mt-2">
+          <div
+            aria-hidden="true"
+            class="hidden gap-x-6 pb-2 text-xs/5 font-semibold tracking-wide text-mist-500 uppercase sm:grid sm:grid-cols-[8rem_10rem_10rem_minmax(0,1fr)_7rem]"
+          >
+            <span>Word</span><span>State</span><span>Last assessed</span><span>Why stale</span><span>Next</span>
+          </div>
+          <ul
+            id="curation-stale-pages"
+            role="list"
+            class="divide-y divide-mist-950/10 border-y border-mist-950/10 dark:divide-white/10 dark:border-white/10"
+          >
+            <li
+              :for={row <- @rows}
+              id={"curation-stale-#{row.slug}"}
+              class="grid grid-cols-1 gap-x-6 gap-y-1 py-4 text-sm/6 sm:grid-cols-[8rem_10rem_10rem_minmax(0,1fr)_7rem] sm:items-baseline"
+            >
+              <.link
+                navigate={~p"/ops/curation/on/#{row.slug}"}
+                class="w-fit rounded-sm font-display text-xl/7 text-mist-950 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:text-white dark:focus-visible:outline-white"
+              >
+                {row.lemma}
+              </.link>
+              <p class="text-mist-700 dark:text-mist-300">
+                <span class="text-mist-500 sm:hidden">State: </span>{state_label(row.record)}
+              </p>
+              <p id={"curation-stale-#{row.slug}-assessed"} class="text-mist-700 dark:text-mist-300">
+                <span class="text-mist-500 sm:hidden">Last assessed: </span>{assessed_label(
+                  row.refresh
+                )}
+              </p>
+              <p
+                id={"curation-stale-#{row.slug}-why"}
+                class={[
+                  "text-pretty",
+                  stale?(row) && "font-medium text-amber-800 dark:text-amber-300",
+                  !stale?(row) && "text-mist-600 dark:text-mist-400"
+                ]}
+              >
+                <span class="font-normal text-mist-500 sm:hidden">Why stale: </span>{why_stale(row)}
+              </p>
+              <p
+                id={"curation-stale-#{row.slug}-next"}
+                class="text-mist-600 tabular-nums dark:text-mist-400"
+              >
+                <span class="text-mist-500 sm:hidden">Next: </span>{next_label(row)}
+              </p>
+            </li>
+          </ul>
+          <p class="mt-4 max-w-3xl text-sm/7 text-pretty text-mist-600 dark:text-mist-400">
+            A check looks at a page's inputs and does not judge them: "needs editor" means
+            they changed or came due, and an editor's proposal is #254 P6's. Pilot pages only.
           </p>
         </div>
 
@@ -602,6 +662,45 @@ defmodule DevilsDictionaryWeb.CurationLive do
 
   @doc "A date as the queue writes one: *24 Oct*."
   def short_date(%DateTime{} = at), do: Calendar.strftime(at, "%-d %b")
+
+  # ── the Stale tab (#259 §2.2) ────────────────────────────────────────────
+
+  @doc "When a refresh clock last completed a check, and what it found: *25 Oct 09:14 · unchanged*."
+  def assessed_label(%{last_completed_at: %DateTime{} = at, last_outcome: outcome}),
+    do: "#{Calendar.strftime(at, "%-d %b %H:%M")} · #{outcome_label(outcome)}"
+
+  def assessed_label(_never), do: "never"
+
+  defp outcome_label(:unchanged), do: "unchanged"
+  defp outcome_label(:needs_editor), do: "needs editor"
+
+  defp why_stale(%{record: %{composition: nil}}),
+    do: "no composition yet: Curate to start its clock"
+
+  defp why_stale(%{stale: nil}), do: "—"
+  defp why_stale(%{stale: :never}), do: "never assessed"
+  defp why_stale(%{stale: :due}), do: "due: the window passed"
+  defp why_stale(%{stale: :suppressed}), do: "withdrawn: not assessed until re-opened"
+  defp why_stale(%{stale: {:changed, "published"}}), do: "a version was published: check due"
+
+  defp why_stale(%{stale: {:changed, reason}}),
+    do: "input changed: #{Refresh.change_label(reason)}"
+
+  defp why_stale(%{stale: {:deferred, error}}),
+    do: "the last check failed#{if error, do: ": #{error}"}"
+
+  defp next_label(%{record: %{composition: nil}}), do: "—"
+  defp next_label(%{refresh: %{state: :queued}}), do: "queued"
+  defp next_label(%{refresh: %{state: :running}}), do: "running"
+  defp next_label(%{refresh: %{state: :suppressed}}), do: "—"
+
+  defp next_label(%{refresh: %{state: :deferred, next_retry_at: at}}),
+    do: "retry #{short_date(at)}"
+
+  defp next_label(%{stale: reason}) when reason in [:never, :due], do: "next visit"
+  defp next_label(%{stale: {:changed, _}}), do: "next visit"
+  defp next_label(%{refresh: %{refresh_after: %DateTime{} = at}}), do: short_date(at)
+  defp next_label(_row), do: "next visit"
 
   defp withheld_label(%{role: :lead}), do: "The lead"
   defp withheld_label(%{role: :highlight, position: n}), do: "Highlight #{n}"

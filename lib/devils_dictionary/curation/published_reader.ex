@@ -51,6 +51,10 @@ defmodule DevilsDictionary.Curation.PublishedReader do
   operator screen's preview (`Curation.Preview`) draws an unsaved selection
   through it, so what the owner previews is what the page will show.
 
+  The disclosure's assessment rows come from the composition's refresh clock
+  (`Curation.Refresh.assessment/1`, #259 §2.1), read here, never admitted
+  here: the visit check is `WordLive`'s.
+
   Reads only: no provider, no model, no write and no refresh admission.
   """
 
@@ -72,7 +76,8 @@ defmodule DevilsDictionary.Curation.PublishedReader do
     LeadPolicy,
     Opening,
     Published,
-    References
+    References,
+    Refresh
   }
 
   alias DevilsDictionary.Curation.Opening.{
@@ -153,7 +158,11 @@ defmodule DevilsDictionary.Curation.PublishedReader do
         reviewed_on: review && date(review.inserted_at),
         published_by: person(actors[receipt.actor_id]),
         published_on: date(receipt.committed_at),
-        receipt_id: receipt.id
+        receipt_id: receipt.id,
+        assessment:
+          composition.id
+          |> Refresh.state_for(configuration_version.id)
+          |> Refresh.assessment()
       }
     })
   end

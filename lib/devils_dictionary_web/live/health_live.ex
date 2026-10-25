@@ -16,6 +16,7 @@ defmodule DevilsDictionaryWeb.HealthLive do
   import DevilsDictionaryWeb.Ops
 
   alias DevilsDictionary.{Health, Lexicon, Sources}
+  alias DevilsDictionary.Curation.Refresh
   alias DevilsDictionary.Health.Score
 
   # `:unset` rather than `nil`, because `nil` is now a meaningful scope value —
@@ -29,7 +30,8 @@ defmodule DevilsDictionaryWeb.HealthLive do
        scope_slug: :unset,
        scopes: Lexicon.list_scopes(),
        parity: %{},
-       sources: Sources.list_sources()
+       sources: Sources.list_sources(),
+       curation: Refresh.counts()
      )}
   end
 
@@ -397,9 +399,42 @@ defmodule DevilsDictionaryWeb.HealthLive do
           </div>
         </.section>
       </.async_result>
+
+      <%!-- The curation refresh clock (#259 §5.6): the counts the record
+           holds, whatever the population. Coalesced visits are telemetry
+           only. --%>
+      <.section
+        id="curation-refresh"
+        eyebrow="Curation"
+        headline="The refresh clock"
+        subheadline="Model-free checks of the pilot pages' inputs: a check looks at them and does not judge them."
+      >
+        <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          <.stat id="curation-refresh-age" value={age(@curation.queue_age_seconds)}>
+            oldest queued or running check
+          </.stat>
+          <.stat id="curation-refresh-admitted" value={number(@curation.admitted_today)}>
+            checks admitted today
+          </.stat>
+          <.stat
+            id="curation-refresh-completed"
+            value={"#{number(@curation.unchanged_today)} / #{number(@curation.needs_editor_today)}"}
+          >
+            pages last checked today: unchanged / needs editor
+          </.stat>
+          <.stat id="curation-refresh-deferred" value={number(@curation.deferred_now)}>
+            pages deferred after a failed check
+          </.stat>
+        </div>
+      </.section>
     </Layouts.app>
     """
   end
+
+  defp age(nil), do: "none"
+  defp age(seconds) when seconds < 120, do: "#{seconds} s"
+  defp age(seconds) when seconds < 7200, do: "#{div(seconds, 60)} min"
+  defp age(seconds), do: "#{div(seconds, 3600)} h"
 
   defp status_glyph(:pass), do: "PASS"
   defp status_glyph(:fail), do: "FAIL"

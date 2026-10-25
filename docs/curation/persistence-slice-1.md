@@ -301,7 +301,7 @@ These are later scoped slices, each owned by its issue:
 - **#195:** `local_model_configs`, a real validated model, and panel-mode configuration
   versions.
 - **#198:** refresh admission, freshness clocks, leases and the one global inference
-  budget.
+  budget. Its model-free part is #259's (below).
 - **#194:** the page ↔ composition binding, and the ADR 0004 default/alternate wording
   amendment.
 - **#156 Phase 2 / #255:** the page reads `Published.current/1` through
@@ -342,6 +342,23 @@ These are later scoped slices, each owned by its issue:
   exemplar by its subject, nominator and acceptance. A work pinned by a source
   record is still `:unsupported_item`. PoetryDB and Open Library rows match no
   page (`evidence: :none`), so the screen offers no poem or book yet.
+- **#259 (P5), the model-free part of #198:** `curation_refresh_states`, one row
+  per composition and configuration version, is each composition's refresh clock
+  (`Curation.Refresh`, `Curation.RefreshWorker` on the `curation` queue). Every
+  visit to a pilot On page, plain HTTP or LiveView, admits at most one check when
+  the composition was never checked, an input changed, the 48-hour window passed
+  or a failed check's backoff ran out; admission captures the published parent,
+  allocates the generation and inserts the job in one transaction under an
+  advisory lock on the composition. A check fingerprints the inputs
+  (`candidates-v1:` + the published version's eligibility now + the page's
+  candidate set) and completes `unchanged` or `needs_editor`: the inputs were
+  checked, not judged. It calls no model, reserves no review unit and never
+  moves the pointer. Every worker write is fenced by state, generation, token
+  and lease; a change during a run stays pending (`dirty_seq`);
+  `inputs_last_changed_at` is history. A withdrawal suppresses the clock in its
+  own transaction and Re-open lifts it; a publication resets the baseline. Still
+  #198's: crash recovery with proposals, prompt suppression on already-open
+  pages, and the proposal path (P6).
 - **#203 / #204:** the history projection, profile pages and the method page.
 - Later stages of #201: domain defaults and personal views.
 

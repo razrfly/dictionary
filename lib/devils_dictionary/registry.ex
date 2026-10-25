@@ -298,10 +298,17 @@ defmodule DevilsDictionary.Registry do
   def add_sense_revision(sense_id, attrs) do
     Repo.transaction(fn ->
       lock_sense(sense_id)
+      superseded = current_sense_revision(sense_id)
 
       case do_add_sense_revision(sense_id, attrs) do
-        {:ok, revision} -> revision
-        {:error, changeset} -> Repo.rollback(changeset)
+        {:ok, revision} ->
+          # A curated page that cites the old revision, or whose words this
+          # sense belongs to, has changed inputs (#259 §5.4).
+          DevilsDictionary.Curation.Refresh.sense_revised(sense_id, superseded && superseded.id)
+          revision
+
+        {:error, changeset} ->
+          Repo.rollback(changeset)
       end
     end)
   end
@@ -327,10 +334,16 @@ defmodule DevilsDictionary.Registry do
   def add_content_revision(content_id, attrs) do
     Repo.transaction(fn ->
       lock_content(content_id)
+      superseded = current_content_revision(content_id)
 
       case do_add_content_revision(content_id, attrs) do
-        {:ok, revision} -> revision
-        {:error, changeset} -> Repo.rollback(changeset)
+        {:ok, revision} ->
+          # A curated page citing the old revision has changed inputs (#259 §5.4).
+          DevilsDictionary.Curation.Refresh.content_revised(superseded && superseded.id)
+          revision
+
+        {:error, changeset} ->
+          Repo.rollback(changeset)
       end
     end)
   end
