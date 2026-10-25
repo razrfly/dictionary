@@ -164,6 +164,29 @@ defmodule DevilsDictionary.Curation.RefreshRaceTest do
     assert current.state == :queued
   end
 
+  test "a failure during a configuration change releases the run instead of deferring it", ctx do
+    visit!()
+    claim = claimed!(ctx.composition)
+
+    {:ok, newer} =
+      Configurations.create_version(ctx.reviewer, ctx.configuration.id, %{
+        reason: "#259 test: a second version",
+        max_highlights: 2
+      })
+
+    {:ok, _} =
+      Configurations.activate(ctx.reviewer, ctx.configuration.id, newer.id,
+        reason: "#259 test",
+        idempotency_key: key("activate"),
+        expected: ctx.configuration_version.id
+      )
+
+    assert {:error, :configuration_changed} = Refresh.fail(claim, "late failure")
+    old = Repo.get!(RefreshState, claim.row_id)
+    assert old.state == :idle
+    assert old.failures == 0
+  end
+
   test "a lost worker's late failure after a recovery is refused too", ctx do
     visit!()
     lost = claimed!(ctx.composition)

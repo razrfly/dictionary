@@ -22,6 +22,21 @@ defmodule DevilsDictionary.Curation.RefreshWorkerTest do
   defp pointer(composition), do: Repo.reload!(composition).current_published_version_id
   defp receipts, do: Repo.aggregate(CompositionPublication, :count)
 
+  defp johnson_only(ctx),
+    do: [ctx.johnson |> content_spec(ctx.love) |> Map.put(:note, %{text: "Johnson alone."})]
+
+  # A new quotation under a sense of the scope that no item cites.
+  defp add_quotation!(ctx) do
+    current = Registry.current_sense_revision(ctx.benevolent.object_id)
+
+    {:ok, _} =
+      Registry.add_sense_revision(ctx.benevolent.object_id, %{
+        gloss: current.gloss,
+        position: current.position,
+        examples: [%{"type" => "quotation", "text" => "a new fixture line", "ref" => "ref"}]
+      })
+  end
+
   defp claimed!(composition) do
     row = row!(composition)
     {:ok, claim} = Refresh.claim(row.id, row.refresh_generation)
@@ -153,6 +168,116 @@ defmodule DevilsDictionary.Curation.RefreshWorkerTest do
     # The cap is `backoff_seconds/2`'s, tested in `RefreshTest`.
   end
 
+  describe "the review's cases (PR #261)" do
+    test "a stored fingerprint and no real change completes as unchanged", ctx do
+      visit!()
+      drain!()
+      assert 1 = Refresh.mark_dirty([ctx.composition.id], "claim_reviewed")
+      visit!()
+      drain!()
+
+      assert %{last_outcome: :unchanged, last_outcome_reason: "unchanged", dirty_at: nil} =
+               row!(ctx.composition)
+    end
+
+    test "a real new candidate flips a stored fingerprint", ctx do
+      visit!()
+      drain!()
+      add_quotation!(ctx)
+      assert %{dirty_reason: "candidate_added"} = row!(ctx.composition)
+
+      visit!()
+      drain!()
+
+      assert %{last_outcome: :needs_editor, last_outcome_reason: "inputs_changed"} =
+               row!(ctx.composition)
+    end
+
+    test "a change pending after the window passed is compared, not called due", ctx do
+      visit!()
+      drain!()
+      ctx.composition |> row!() |> set!(refresh_after: ago(1))
+      assert 1 = Refresh.mark_dirty([ctx.composition.id], "claim_reviewed")
+
+      visit!()
+      assert %{run_periodic: false} = row!(ctx.composition)
+      drain!()
+      assert %{last_outcome: :unchanged, last_outcome_reason: "unchanged"} = row!(ctx.composition)
+    end
+
+    test "the owner's publication after the window passed is not an editor's job", ctx do
+      visit!()
+      drain!()
+      ctx.composition |> row!() |> set!(refresh_after: ago(1))
+      publish!(ctx, ctx.composition, ctx.published.version.id, highlights: johnson_only(ctx))
+
+      visit!()
+      drain!()
+      assert %{last_outcome: :unchanged, last_outcome_reason: "accepted"} = row!(ctx.composition)
+    end
+
+    test "a new candidate after a publication is a change, in either order", ctx do
+      visit!()
+      drain!()
+      publish!(ctx, ctx.composition, ctx.published.version.id, highlights: johnson_only(ctx))
+      add_quotation!(ctx)
+      assert %{dirty_reason: "candidate_added", input_fingerprint: nil} = row!(ctx.composition)
+
+      visit!()
+      drain!()
+
+      assert %{last_outcome: :needs_editor, last_outcome_reason: "inputs_changed"} =
+               row!(ctx.composition)
+    end
+
+    test "a publication after a pending change keeps the change's reason", ctx do
+      visit!()
+      drain!()
+      add_quotation!(ctx)
+      publish!(ctx, ctx.composition, ctx.published.version.id, highlights: johnson_only(ctx))
+      assert %{dirty_reason: "candidate_added"} = row!(ctx.composition)
+
+      visit!()
+      drain!()
+      assert %{last_outcome: :needs_editor} = row!(ctx.composition)
+    end
+
+    test "a run that read the new version after a publication keeps its fingerprint", ctx do
+      visit!()
+      claim = claimed!(ctx.composition)
+      publish!(ctx, ctx.composition, ctx.published.version.id, highlights: johnson_only(ctx))
+
+      {:ok, row} = Refresh.check(claim, "love")
+      assert row.superseded_on_arrival
+      assert is_binary(row.input_fingerprint)
+
+      visit!()
+      drain!()
+      assert %{last_outcome: :unchanged, last_outcome_reason: "unchanged"} = row!(ctx.composition)
+    end
+
+    test "the candidate digest does not depend on the lists' order" do
+      a = %{
+        key: "a",
+        spec: %{kind: :content, object_id: 1},
+        lead: {:ok, :priority_source},
+        status: :ok
+      }
+
+      b = %{
+        key: "b",
+        spec: %{kind: :work, catalog: %{manifest: "m"}},
+        lead: {:error, :x},
+        status: :ok
+      }
+
+      forward = %{leads: [a, b], highlights: [a, b], no_lead: :ok}
+      backward = %{leads: [b, a], highlights: [b, a], no_lead: :ok}
+
+      assert Refresh.candidate_identities(forward) == Refresh.candidate_identities(backward)
+    end
+  end
+
   describe "14: a lost fence writes nothing" do
     test "a job on a stale generation is cancelled", ctx do
       visit!()
@@ -182,12 +307,8 @@ defmodule DevilsDictionary.Curation.RefreshWorkerTest do
     visit!()
     claim = claimed!(ctx.composition)
 
-    johnson_only = [
-      ctx.johnson |> content_spec(ctx.love) |> Map.put(:note, %{text: "Johnson alone."})
-    ]
-
     %{version: newer} =
-      publish!(ctx, ctx.composition, ctx.published.version.id, highlights: johnson_only)
+      publish!(ctx, ctx.composition, ctx.published.version.id, highlights: johnson_only(ctx))
 
     {:ok, row} = Refresh.check(claim, "love")
 

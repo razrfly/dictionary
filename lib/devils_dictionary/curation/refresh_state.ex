@@ -20,7 +20,8 @@ defmodule DevilsDictionary.Curation.RefreshState do
   recovery keep it), and `lease_token` names who may write (every claim,
   recovery and suppression moves it). `admitted_parent_version_id` is the
   published version at admission, so a publication during the run shows as
-  `superseded_on_arrival`.
+  `superseded_on_arrival`, and `run_periodic` says whether the run was
+  admitted only because its window passed (decided at admission, not later).
 
   Written only by `Curation.Refresh`.
   """
@@ -38,6 +39,7 @@ defmodule DevilsDictionary.Curation.RefreshState do
     field :lease_token, :integer, default: 0
     field :lease_expires_at, :utc_datetime_usec
     field :lease_attempts, :integer, default: 0
+    field :run_periodic, :boolean, default: false
     field :admitted_parent_version_id, :id
     field :superseded_on_arrival, :boolean, default: false
     field :last_completed_at, :utc_datetime_usec

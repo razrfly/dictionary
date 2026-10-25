@@ -95,9 +95,10 @@ defmodule DevilsDictionary.Curation.Refresh do
   @doc """
   The visit check (#259 §5.6), for every visit to an On page: plain HTTP
   render and LiveView mount alike. `opening` is what the page's reader
-  answered; `opts`: `:slug` (required), `:withheld` (the reader's withheld
-  digest, or `:unknown` when this viewer's page is not the public one) and
-  `:now`.
+  answered; `opts`: `:slug` (required), `:public?` (whether this viewer's
+  page is the public one; only a public page's withheld set is compared,
+  default `true`), `:withheld` (a precomputed withheld digest, for tests)
+  and `:now`.
 
   **Bounded:** nothing for a page off the allowlist or without a
   composition; one indexed read when nothing is due; one short transaction
@@ -112,7 +113,12 @@ defmodule DevilsDictionary.Curation.Refresh do
     with true <- Pilot.page?(slug),
          {:ok, composition_id, version_id} <- composition_for(page) do
       now = now(opts)
-      withheld = Keyword.get_lazy(opts, :withheld, fn -> withheld_digest(opening) end)
+
+      withheld =
+        Keyword.get_lazy(opts, :withheld, fn ->
+          if Keyword.get(opts, :public?, true), do: withheld_digest(opening), else: :unknown
+        end)
+
       row = state_for(composition_id, version_id)
 
       case precheck(row, withheld, now) do
@@ -214,21 +220,32 @@ defmodule DevilsDictionary.Curation.Refresh do
     withheld = Keyword.get(opts, :withheld, :unknown)
 
     result =
-      Repo.transaction(fn ->
-        with :ok <- composition_lock(composition_id),
-             {:ok, composition} <- active_composition(composition_id),
-             {:ok, version_id} <- configuration_version(composition) do
-          row =
-            composition.id
-            |> ensure_row!(version_id, now)
-            |> maybe_withheld!(withheld, now)
+      try do
+        Repo.transaction(fn ->
+          # A visit never waits on another transaction for long: a row
+          # another admission, a withdrawal or a trigger holds is `:busy`.
+          Repo.query!("SET LOCAL lock_timeout = '1s'")
 
-          act(decision(row, now), row, composition, slug, now)
-        else
-          {:ok, :busy} -> :busy
-          {:error, reason} -> Repo.rollback(reason)
-        end
-      end)
+          with :ok <- composition_lock(composition_id),
+               {:ok, composition} <- active_composition(composition_id),
+               {:ok, version_id} <- configuration_version(composition) do
+            row =
+              composition.id
+              |> ensure_row!(version_id, now)
+              |> maybe_withheld!(withheld, now)
+
+            act(decision(row, now), row, composition, slug, now)
+          else
+            {:ok, :busy} -> :busy
+            {:error, reason} -> Repo.rollback(reason)
+          end
+        end)
+      rescue
+        error in Postgrex.Error ->
+          if error.postgres[:code] == :lock_not_available,
+            do: {:ok, :busy},
+            else: reraise(error, __STACKTRACE__)
+      end
 
     case result do
       {:ok, outcome} ->
@@ -291,13 +308,14 @@ defmodule DevilsDictionary.Curation.Refresh do
     Repo.one!(
       from r in RefreshState,
         where: r.composition_id == ^composition_id and r.configuration_version_id == ^version_id,
-        lock: "FOR UPDATE"
+        lock: "FOR UPDATE NOWAIT"
     )
   end
 
   # A withheld set the last completion did not see is an input change,
-  # noted once: again only while a run is running, so a withholding that
-  # lands after the worker read its inputs is kept for the next run.
+  # noted once: and once more while a run is running (only if nothing was
+  # marked since its claim), so a withholding that lands after the worker
+  # read its inputs is kept for the next run.
   defp maybe_withheld!(row, withheld, now) do
     if withheld_mark?(row, withheld) do
       mark_row!(row, "item_withheld", now)
@@ -312,7 +330,8 @@ defmodule DevilsDictionary.Curation.Refresh do
   defp withheld_mark?(%RefreshState{state: :suppressed}, _withheld), do: false
 
   defp withheld_mark?(%RefreshState{} = row, withheld) do
-    withheld != row.withheld_digest and (is_nil(row.dirty_at) or row.state == :running)
+    withheld != row.withheld_digest and
+      (is_nil(row.dirty_at) or (row.state == :running and row.dirty_seq == row.run_dirty_seq))
   end
 
   defp act(:admit, row, composition, slug, now) do
@@ -321,13 +340,17 @@ defmodule DevilsDictionary.Curation.Refresh do
         :in_flight
 
       :clear ->
-        generation =
-          if row.state == :deferred, do: row.refresh_generation, else: row.refresh_generation + 1
+        # A retry from `:deferred` keeps its generation and why it was admitted.
+        {generation, periodic?} =
+          if row.state == :deferred,
+            do: {row.refresh_generation, row.run_periodic},
+            else: {row.refresh_generation + 1, periodic?(row, now)}
 
         row
         |> Ecto.Changeset.change(
           state: :queued,
           refresh_generation: generation,
+          run_periodic: periodic?,
           lease_expires_at: shift(now, @queued_lease_seconds),
           lease_attempts: 1,
           admitted_parent_version_id: composition.current_published_version_id,
@@ -365,6 +388,12 @@ defmodule DevilsDictionary.Curation.Refresh do
 
   defp act(outcome, _row, _composition, _slug, _now), do: outcome
 
+  # Admitted only because the window passed: checked before, nothing pending.
+  defp periodic?(row, now),
+    do:
+      not is_nil(row.last_completed_at) and is_nil(row.dirty_at) and
+        reached?(now, row.refresh_after)
+
   # Another configuration version's row of this composition in flight: one
   # run per composition. An expired one is released, never resumed: its
   # configuration version is no longer the active one.
@@ -375,7 +404,7 @@ defmodule DevilsDictionary.Curation.Refresh do
           where:
             r.composition_id == ^row.composition_id and r.id != ^row.id and
               r.state in [:queued, :running],
-          lock: "FOR UPDATE"
+          lock: "FOR UPDATE NOWAIT"
       )
 
     cond do
@@ -411,9 +440,10 @@ defmodule DevilsDictionary.Curation.Refresh do
 
   Answers `{:ok, claim}` or `{:error, :missing | :not_queued |
   :stale_generation}`. A claim is `%{row_id, composition_id,
-  configuration_version_id, token, generation, periodic?}`; `periodic?` is a
-  run admitted after its window passed, an intentional re-assessment (#253
-  §7) that never completes as unchanged.
+  configuration_version_id, token, generation, periodic?, pending_reason}`:
+  `periodic?` is a run admitted only because its window passed (decided at
+  admission), an intentional re-assessment (#253 §7) that never completes as
+  unchanged; `pending_reason` is the change pending when the run started.
   """
   def claim(row_id, generation, opts \\ []) do
     now = now(opts)
@@ -449,7 +479,8 @@ defmodule DevilsDictionary.Curation.Refresh do
             configuration_version_id: row.configuration_version_id,
             token: row.lease_token,
             generation: row.refresh_generation,
-            periodic?: not is_nil(row.last_completed_at) and reached?(now, row.refresh_after)
+            periodic?: row.run_periodic,
+            pending_reason: row.dirty_reason
           }
       end
     end)
@@ -532,11 +563,19 @@ defmodule DevilsDictionary.Curation.Refresh do
   # What identifies a candidate set: each candidate's key, item spec,
   # standing and lead verdict, and whether "no lead" is admissible. Specs
   # hold ids, revisions, hashes and manifest checksums, never text.
-  defp candidate_identities(candidates) do
-    leads = Enum.map(candidates.leads, &[&1.key, canonical(&1.spec), canonical(&1.lead)])
+  # Sorted by key: the lists arrive in an order no query promises (exemplars
+  # unordered, works by sitelinks), and order is not an input.
+  @doc false
+  def candidate_identities(candidates) do
+    leads =
+      candidates.leads
+      |> Enum.sort_by(& &1.key)
+      |> Enum.map(&[&1.key, canonical(&1.spec), canonical(&1.lead)])
 
     highlights =
-      Enum.map(candidates.highlights, &[&1.key, canonical(&1.spec), canonical(&1.status)])
+      candidates.highlights
+      |> Enum.sort_by(& &1.key)
+      |> Enum.map(&[&1.key, canonical(&1.spec), canonical(&1.status)])
 
     %{"leads" => leads, "highlights" => highlights, "no_lead" => canonical(candidates.no_lead)}
   end
@@ -560,10 +599,12 @@ defmodule DevilsDictionary.Curation.Refresh do
     * the stored fingerprint equal → `{:unchanged, "unchanged"}`; different
       → `{:needs_editor, "inputs_changed"}`, or `"fingerprint_version"` when
       it was written by another fingerprint version;
-    * no stored fingerprint: a published version that still stands as a
-      whole and whose eligibility now is the one it was accepted with →
-      `{:unchanged, "accepted"}`; otherwise `{:needs_editor,
-      "inputs_changed"}`, or `"nothing_accepted"` when nothing is published.
+    * no stored fingerprint (never checked, or a publication reset the
+      baseline): a published version that still stands as a whole, whose
+      eligibility now is the one it was accepted with, and with no change
+      pending but its own publication → `{:unchanged, "accepted"}`;
+      otherwise `{:needs_editor, "inputs_changed"}`, or `"nothing_accepted"`
+      when nothing is published.
   """
   def outcome(%{periodic?: true}, _row, _inputs), do: {:needs_editor, "due"}
 
@@ -578,8 +619,13 @@ defmodule DevilsDictionary.Curation.Refresh do
 
   def outcome(_claim, _row, %{accepted: nil}), do: {:needs_editor, "nothing_accepted"}
 
-  def outcome(_claim, _row, %{accepted: accepted, eligibility: accepted, standing: []}),
-    do: {:unchanged, "accepted"}
+  def outcome(%{pending_reason: pending}, _row, %{
+        accepted: accepted,
+        eligibility: accepted,
+        standing: []
+      })
+      when pending in [nil, "published"],
+      do: {:unchanged, "accepted"}
 
   def outcome(_claim, _row, _inputs), do: {:needs_editor, "inputs_changed"}
 
@@ -611,6 +657,10 @@ defmodule DevilsDictionary.Curation.Refresh do
           {outcome, reason} = outcome(claim, row, inputs)
           clean? = row.dirty_seq == row.run_dirty_seq
           superseded? = composition.current_published_version_id != row.admitted_parent_version_id
+          # Inputs read from a version no longer published are not a baseline.
+          current_inputs? =
+            inputs.published_version_id == composition.current_published_version_id
+
           changed? = reason in ["inputs_changed", "fingerprint_version"]
 
           unreported? =
@@ -632,8 +682,9 @@ defmodule DevilsDictionary.Curation.Refresh do
               last_outcome: outcome,
               last_outcome_reason: reason,
               # A publication during the run reset the baseline (`published/2`):
-              # the next check measures against the version now accepted.
-              input_fingerprint: if(superseded?, do: nil, else: inputs.fingerprint),
+              # unless these inputs were read from it, the next check measures
+              # against the version now accepted.
+              input_fingerprint: if(current_inputs?, do: inputs.fingerprint, else: nil),
               withheld_digest: inputs.withheld_digest,
               superseded_on_arrival: superseded?,
               failures: 0,
@@ -686,9 +737,9 @@ defmodule DevilsDictionary.Curation.Refresh do
       Repo.transaction(fn ->
         row = lock_row(claim.row_id)
 
-        case fenced(row, claim, now) do
-          :ok -> {:ok, defer!(row, error, now, jitter)}
-          error -> error
+        with :ok <- fenced(row, claim, now),
+             {:ok, _composition} <- still_configured(row, now) do
+          {:ok, defer!(row, error, now, jitter)}
         end
       end)
 
@@ -1004,7 +1055,13 @@ defmodule DevilsDictionary.Curation.Refresh do
               fragment("CASE WHEN ? = 'suppressed' THEN 'idle' ELSE ? END", r.state, r.state),
             input_fingerprint: nil,
             dirty_at: fragment("COALESCE(?, ?)", r.dirty_at, ^now),
-            dirty_reason: "published",
+            # A real change already pending keeps its reason.
+            dirty_reason:
+              fragment(
+                "CASE WHEN ? IS NULL THEN 'published' ELSE ? END",
+                r.dirty_at,
+                r.dirty_reason
+              ),
             updated_at: ^now
           ],
           inc: [dirty_seq: 1]
@@ -1115,9 +1172,20 @@ defmodule DevilsDictionary.Curation.Refresh do
           select: min(j.inserted_at)
       )
 
+    # Only rows under their configuration's current version: a row left by
+    # an earlier version is history, not a page's clock.
+    current =
+      from r in RefreshState,
+        join: c in Composition,
+        on: c.id == r.composition_id,
+        join: cc in "curation_configurations",
+        on:
+          cc.id == c.curation_configuration_id and
+            cc.current_version_id == r.configuration_version_id
+
     outcomes =
       Repo.all(
-        from r in RefreshState,
+        from r in current,
           where: r.last_completed_at >= ^midnight,
           group_by: r.last_outcome,
           select: {r.last_outcome, count(r.id)}
@@ -1134,8 +1202,7 @@ defmodule DevilsDictionary.Curation.Refresh do
         ),
       unchanged_today: Map.get(outcomes, :unchanged, 0),
       needs_editor_today: Map.get(outcomes, :needs_editor, 0),
-      deferred_now:
-        Repo.one(from r in RefreshState, where: r.state == :deferred, select: count(r.id))
+      deferred_now: Repo.one(from r in current, where: r.state == :deferred, select: count(r.id))
     }
   end
 
@@ -1168,7 +1235,6 @@ defmodule DevilsDictionary.Curation.Refresh do
     recovered: :admitted,
     in_flight: :coalesced,
     deferred: :deferred,
-    backoff: :deferred,
     completed: :completed,
     refused: :refused
   }

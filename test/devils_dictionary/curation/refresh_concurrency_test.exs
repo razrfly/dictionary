@@ -85,6 +85,36 @@ defmodule DevilsDictionary.Curation.RefreshConcurrencyTest do
     assert length(curation_jobs()) == 1
   end
 
+  test "a visit never waits on a refresh row another transaction holds: it is busy", ctx do
+    {:ok, :admitted} = admit(ctx.composition)
+    drain!()
+    ctx.composition |> row!() |> set!(refresh_after: ago(1))
+    row_id = row!(ctx.composition).id
+    parent = self()
+
+    # A trigger in an operator's transaction holds the row.
+    holder =
+      Task.async(fn ->
+        Ecto.Adapters.SQL.Sandbox.checkout(Repo, sandbox: false)
+
+        Repo.transaction(fn ->
+          Repo.query!("SELECT id FROM curation_refresh_states WHERE id = $1 FOR UPDATE", [row_id])
+          send(parent, :held)
+          receive do: (:release -> :ok)
+        end)
+      end)
+
+    assert_receive :held
+    started = System.monotonic_time(:millisecond)
+    assert {:ok, :busy} = admit(ctx.composition)
+    assert System.monotonic_time(:millisecond) - started < 1_000
+    assert length(curation_jobs()) == 1
+
+    send(holder.pid, :release)
+    Task.await(holder)
+    assert {:ok, :admitted} = admit(ctx.composition)
+  end
+
   test "7: two admissions racing on an idle, due row queue one run", ctx do
     {:ok, :admitted} = admit(ctx.composition)
     drain!()

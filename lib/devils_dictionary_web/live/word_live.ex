@@ -287,10 +287,7 @@ defmodule DevilsDictionaryWeb.WordLive do
   # says a check was queued by this visit.
   defp refresh_visit(socket, page, opening, slug, reader, demo) do
     if socket.assigns.live_action == :on and reader == PublishedReader and not demo do
-      withheld =
-        if socket.assigns.contributor, do: :unknown, else: Refresh.withheld_digest(opening)
-
-      case Refresh.visit(page, opening, slug: slug, withheld: withheld) do
+      case Refresh.visit(page, opening, slug: slug, public?: not socket.assigns.contributor) do
         {:ok, outcome} when outcome in [:admitted, :recovered] -> queued(opening)
         _other -> opening
       end

@@ -308,6 +308,61 @@ defmodule DevilsDictionary.Curation.RefreshTest do
     assert curation_jobs() == []
   end
 
+  test "a withholding is marked once while a run is running, not on every visit", ctx do
+    visit!()
+    drain!()
+
+    current = Registry.current_sense_revision(ctx.profound.object_id)
+
+    {:ok, _} =
+      Registry.add_sense_revision(ctx.profound.object_id, %{
+        gloss: current.gloss,
+        position: current.position,
+        examples: current.examples
+      })
+
+    ctx.composition |> row!() |> set!(dirty_at: nil, dirty_reason: nil)
+    assert {:ok, :admitted} = visit!()
+    row = row!(ctx.composition)
+    {:ok, _claim} = Refresh.claim(row.id, row.refresh_generation)
+    seq = row!(ctx.composition).dirty_seq
+
+    for _ <- 1..3, do: assert({:ok, :in_flight} = visit!())
+    assert row!(ctx.composition).dirty_seq == seq + 1
+  end
+
+  test "a visit that raises is answered as failed and never reaches the page" do
+    page = %{headword: %{lexemes: [%{id: "not an id", language: "en"}]}}
+
+    log =
+      ExUnit.CaptureLog.capture_log(fn ->
+        assert {:error, :failed} = Refresh.visit(page, nil, slug: "love")
+      end)
+
+    assert log =~ "curation refresh: visit check failed"
+  end
+
+  test "the Health counts read only rows under the current configuration version", ctx do
+    visit!()
+    drain!()
+    assert %{unchanged_today: 1, deferred_now: 0} = Refresh.counts()
+
+    {:ok, newer} =
+      Configurations.create_version(ctx.reviewer, ctx.configuration.id, %{
+        reason: "#259 test: a second version",
+        max_highlights: 2
+      })
+
+    {:ok, _} =
+      Configurations.activate(ctx.reviewer, ctx.configuration.id, newer.id,
+        reason: "#259 test",
+        idempotency_key: key("activate"),
+        expected: ctx.configuration_version.id
+      )
+
+    assert %{unchanged_today: 0} = Refresh.counts()
+  end
+
   test "the backoff doubles from a minute and stops at six hours" do
     identity = & &1
     assert Refresh.backoff_seconds(1, identity) == 60

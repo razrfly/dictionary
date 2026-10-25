@@ -24,6 +24,8 @@ defmodule DevilsDictionary.Repo.Migrations.CreateCurationRefreshStates do
       add :lease_token, :bigint, null: false, default: 0
       add :lease_expires_at, :utc_datetime_usec
       add :lease_attempts, :integer, null: false, default: 0
+      # Decided at admission: admitted only because the window passed.
+      add :run_periodic, :boolean, null: false, default: false
 
       add :admitted_parent_version_id,
           references(:editorial_composition_versions, on_delete: :nilify_all)
