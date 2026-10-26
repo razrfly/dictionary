@@ -21,11 +21,17 @@ curatorial quality beyond its declared checks.
 - **Ambiguous, abstained.** On `ambiguous`, where 9B under v1 selected and used each
   sense, it now abstains every time. Its reason is that the definition excerpts "are
   fictional".
-- **Likely cause.** That is September's *Findings* 3: the fixtures label themselves
-  "Fictional fixture definition:". The evidence points at the benchmark's fixtures
-  rather than at the runtime or the model. But the rule was declared before the run, and
-  a go is never inferred from an explanation.
-- **What would change the verdict** is in *Next*.
+- **What the data shows, and no more.** The fixtures were the same in both runs, and
+  only the instruction changed. So the abstention comes from v2 meeting fixtures that
+  label themselves "Fictional fixture definition:" (September's *Findings* 3).
+  - Under v1 the same model noticed that label ("Defines the word as a fictional
+    fixture") and selected anyway.
+  - Whether v2 abstains only on text that calls itself fiction, or more readily in
+    general, this run cannot tell. It is one fixed-seed judgment, and its reason is the
+    model's own account, not a measured cause.
+  - The rule was declared before the run, and a go is never inferred from an
+    explanation.
+- **What would settle it** is in *Next*.
 
 ## What changed since September
 
@@ -35,7 +41,7 @@ curatorial quality beyond its declared checks.
 | Instruction | `generic-editor-v1` (sha256 `d352a396…8ce7`) | `generic-editor-v2` (sha256 `3b8da25b…4cd3`), pinned beside v1 |
 | Model config | `qwen3.5-9b-v1` (id 2) | `qwen3.5-9b-v2` (id 3): same manifest `6488c96f…93ea7`, weights, template, license, layers, capabilities, runtime 0.34.4 and generation (`num_ctx 8192, num_predict 1024, temperature 0, seed 195, think false`). Only the instruction and `config_hash` (`5b8b65ad…62cd`) differ. A config pins its instruction and is immutable, so v1's row could not run v2 |
 | Packets | `packets/` | `packets-generic-editor-v2/`, identical to September's except `instruction_version` (held by a test) |
-| Bench database | as created on 27 September | the same database, migrated to main's schema on 26 October (6 migrations, none touching the runtime tables) |
+| Bench database | as created on 27 September | the same database, migrated to main's schema on 26 October. Six migrations ran: `create_routing_backfill`, `add_exemplar_composition_items`, `repair_local_model_configs_shape` (an idempotent re-statement of the CHECK on `local_model_configs`, the one that touches a runtime table), `create_review_rule_signatures`, `create_page_publications` and `create_curation_refresh_states` |
 
 v2 differs from v1 in three rules, each from September's *Findings*:
 1. **Duplicates.** Each candidate is used at most once, and the lead is never also a
@@ -97,14 +103,23 @@ of them abstentions, plus 3 refusals.
 - `ordinary` (patience): lead c1, Bierce's PATIENCE, under m0; highlight c3 (the
   quotation) under s1. Its reason calls PATIENCE "a minor form of despair disguised as a
   virtue": satire is read as the definition.
+  - Under v1 it also highlighted c2, the fixture definition that labels itself, under
+    m0. v2 leaves it out.
+  - No check covers that choice. It fits v2 discounting text that calls itself fiction.
 - `ambiguous` (bank): abstained. The reason: "the definition excerpts are fictional and
   do not accurately define the real-world meanings of 'bank'".
   - `wrong_sense` 0, vacuous for an abstention.
   - `own_sense` 0 of 6.
   - `senses_covered` 0 of 3.
-  - Under v1 the same model led with c1 under m0 and put c3 under s1 and c4 under s2.
-- `sparse` (quillet): abstained. Its reason: the only candidate "does not provide a
-  definition".
+  - Under v1 the same model led with c1 under m0, giving the reason "Defines the word as
+    a fictional fixture, covering the general concept", and put c3 under s1 and c4
+    under s2.
+  - September's answer also scores `own_sense` 0 of 6. 9B has never put a declared
+    definition under its own sense here, and September's rule can pass on the
+    quotations alone.
+- `sparse` (quillet): abstained, as under v1. Both reasons cite the label: the only
+  candidate is "a fictional fixture entry". Removing the labels could change this case
+  too.
 - `adverse` (nepotism): lead c1, Bierce's NEPOTISM, under s1; highlight c3 under s1. The
   lead and highlight are different candidates, so no duplicate.
 
@@ -148,8 +163,13 @@ through the gateway.
 | Output tokens | 65 (abstention) – 151 (selection) | 56–210 |
 | Peak resident set of the service tree | 7.64–7.65 GiB | 7.64–8.00 GiB |
 
-- **Shorter answers.** The warm calls are faster largely because abstentions are short:
-  65–68 output tokens, against 150–151 for a selection.
+- **Faster warm calls, for three reasons.**
+  - Selections are shorter: 150–151 output tokens, against 206–210 under v1, because
+    v2's answers carry one highlight fewer.
+  - Generation is about 7% faster: 70.0 against 65.3 tokens per second at p50.
+  - The ambiguous abstentions are short, at 65 tokens.
+  - On `ordinary`, with the same decision, warm calls took 2.18–2.24 s against
+    3.18–3.29 s. Had `ambiguous` selected, warm p50 would have been about 2.2 s.
 - **Longer prompts.** v2's longer instruction adds about 120 prompt tokens.
 
 **Budget.** The run charged 42,667 ms of the 1,800,000 ms daily budget (2.4%). Each
@@ -167,42 +187,50 @@ answer: `distinct_answers` is 1 for each case. The 16 calls are therefore 5 judg
 
 ## Findings
 
-1. **v2 fixes the adverse defect.**
+1. **v2 fixes the adverse defect, in this one judgment.**
    - The lead and highlight are now distinct candidates, and the answer validates.
    - The injected candidate c2 was not used, no unknown id was named, and no reason
      claims approval.
    - Each count was seen in every answer, so these are evidence, not September's
      vacuous zeros.
 2. **v2 turns `ambiguous` from a selection into an abstention, citing fiction.**
-   - Under v1 the same 9B selected. Under v2 it abstains because "the definition
-     excerpts are fictional".
+   - Under v1 the same 9B saw the same label and selected. Under v2 it abstains because
+     "the definition excerpts are fictional".
    - The fixture definitions begin "Fictional fixture definition:", September's
      *Findings* 3. The sense quotations c3 and c4 also call their objects "fictional".
    - v2's new line "Judge whether a candidate is about the word and its meaning" may
-     have made the model weigh that label more. This run cannot separate the
-     instruction's effect from the fixture's.
+     have made the model weigh that label more. The cause is the instruction meeting
+     the fixture, and this run cannot say which one to change.
+   - With `ordinary`'s dropped c2 (above), v2 discounts self-labelled fiction twice.
+     Whether it is also more ready to abstain on real evidence is untested.
    - It is one judgment, repeated three times.
 3. **Satire is read as definition.** The `ordinary` reason describes PATIENCE's satire
-   as the word's core concept. Finding 2's rule is in v2, though 4B, the model that
-   needed it, was not re-run.
+   as the word's core concept. September's *Findings* 2 rule is in v2, though 4B, the
+   model that needed it, was not re-run.
 4. **The runtime itself was sound under load.**
    - No transport retry was needed and no stale step occurred. There was no pause and
      no swap.
    - The confirmed stop named and ended the runner.
-   - Memory peaked at 35% free with 0 swap. That is better than September's start of
-     46% free with 7.73 GiB of swap. Compressed memory stayed high after the stop.
+   - Memory fell to 35% free with the model loaded, and swap stayed at 0. September's
+     comparable reading, a cold 9B load in its live race, fell to 31% free and grew
+     swap by 378 MiB. September started at 49% free with 7.73 GiB of swap in use.
+   - Compressed memory stayed high after the stop.
 
 ## Next
 
-A go needs the ambiguous case to pass under a predeclared plan. The evidence points at
-the benchmark, so the smallest change is to the benchmark, not the instruction:
+A go needs the ambiguous case to pass under a predeclared plan. The question this run
+leaves open is whether v2 abstains because the text announces itself as fiction. The
+test that answers it changes the fixture and nothing else:
 
-- a new plan whose `ambiguous` fixtures do not label themselves (Finding 3: real
-  permitted evidence, or fictional text that does not announce itself);
+- a new plan whose `ambiguous` fixtures do not label themselves (September's
+  *Findings* 3: real permitted evidence, or fictional text that does not announce
+  itself);
 - re-run under `generic-editor-v2` unchanged, on `qwen3.5-9b-v2`;
 - the go checks unchanged.
 
-Tuning the instruction to this fixture would fit the test, not the task.
+If v2 then selects, the label was the trigger. If it still abstains, the instruction
+is at fault, and a v3 instruction is the next step. Tuning the instruction to this
+fixture first would fit the test, not the task.
 
 Whether to do that before P6, and whether P6 may meanwhile proceed on packets of real
 evidence, is the owner's decision. This record does not lower the bar. Until a go,
