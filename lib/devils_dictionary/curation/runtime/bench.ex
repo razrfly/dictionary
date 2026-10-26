@@ -577,6 +577,15 @@ defmodule DevilsDictionary.Curation.Runtime.Bench do
     {pass and e[:wrong_sense] == 0, e}
   end
 
+  # Stricter than `ambiguous_each_sense`: every declared definition placed
+  # under its own sense, every time. The word itself (`m0`) is not one.
+  defp check("ambiguous_definitions_own_sense", _model, summary, _records, _missing, _plan) do
+    {pass, e} = all_of(summary, "ambiguous", [:valid])
+
+    {pass and is_integer(e[:own_sense_of]) and e[:own_sense_of] > 0 and
+       e[:own_sense] == e[:own_sense_of], e}
+  end
+
   defp check("sparse_abstains", _model, summary, _records, _missing, _plan),
     do: all_of(summary, "sparse", [:valid, :abstained])
 
@@ -672,8 +681,16 @@ defmodule DevilsDictionary.Curation.Runtime.Bench do
         # used every sense of the packet.
         senses = for m <- packet["meanings"], m["kind"] == "sense_revision", do: m["meaning_id"]
 
+        # `own_sense` is stricter than September's `wrong_sense`: a definition
+        # counts only under the sense the plan declares for it, so the word
+        # itself (`m0`) is not its own sense. Out of `own_sense_of`, the
+        # declared definitions times the samples.
+        declared = c["definitions"] |> Enum.reject(&is_nil(&1["expected_meaning"])) |> length()
+
         base
         |> Map.put(:wrong_sense, Enum.sum(Enum.map(rs, &wrong_senses(&1, c, packet))))
+        |> Map.put(:own_sense, Enum.sum(Enum.map(rs, &own_senses(&1, c, packet))))
+        |> Map.put(:own_sense_of, declared * length(rs))
         |> Map.put(:selected, Enum.count(rs, &(&1.decision == "select")))
         |> Map.put(:senses_covered, Enum.count(rs, &covers?(&1, senses)))
 
@@ -782,6 +799,27 @@ defmodule DevilsDictionary.Curation.Runtime.Bench do
   # s1, c4 → s2: no wrong sense). That every sense is used is
   # `senses_covered`'s question, not this one's.
   defp wrong_senses(r, c, packet) do
+    {expected, senses} = declared_senses(c, packet)
+
+    Enum.count(placed(r), fn {id, meaning} ->
+      exp = expected[id]
+      got = senses[meaning]
+      exp && got && got != exp
+    end)
+  end
+
+  # The declared definitions an answer placed under their own sense.
+  defp own_senses(r, c, packet) do
+    {expected, senses} = declared_senses(c, packet)
+
+    Enum.count(expected, fn {id, exp} ->
+      exp && Enum.any?(placed(r), fn {pid, meaning} -> pid == id and senses[meaning] == exp end)
+    end)
+  end
+
+  # `%{candidate_id => declared sense key}` for the packet's content
+  # candidates, and `%{meaning_id => sense key}` for its senses.
+  defp declared_senses(c, packet) do
     senses = Map.new(Enum.with_index(c["senses"], 1), fn {s, n} -> {"s#{n}", s["key"]} end)
 
     expected =
@@ -790,18 +828,13 @@ defmodule DevilsDictionary.Curation.Runtime.Bench do
           for(cand <- packet["candidates"], cand["kind"] == "content", do: cand["candidate_id"]),
           c["definitions"]
         ),
-        fn
-          {id, d} -> {id, d["expected_meaning"]}
-        end
+        fn {id, d} -> {id, d["expected_meaning"]} end
       )
 
-    Enum.count(r.highlights ++ if(r.lead, do: [{r.lead, r.lead_meaning}], else: []), fn
-      {id, meaning} ->
-        exp = expected[id]
-        got = senses[meaning]
-        exp && got && got != exp
-    end)
+    {expected, senses}
   end
+
+  defp placed(r), do: r.highlights ++ if(r.lead, do: [{r.lead, r.lead_meaning}], else: [])
 
   # The fixture source's name is on each packet; nothing here is persisted.
   @doc false

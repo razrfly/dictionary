@@ -167,6 +167,74 @@ defmodule DevilsDictionary.Curation.Runtime.BenchTest do
     assert %{go: true} = verdict(september)
   end
 
+  # Beside September's `wrong_sense`, a stricter count: each declared
+  # definition under its own sense, where the word itself (`m0`) is not one.
+  test "own-sense counts a definition only under its declared sense" do
+    plan = Bench.plan!(@plan_v2)
+
+    answer = fn lead, highlights ->
+      %{"m" => %{expectations: %{"ambiguous" => e}}} =
+        Bench.summarize(
+          [
+            record("ambiguous",
+              lead: elem(lead, 0),
+              lead_meaning: elem(lead, 1),
+              highlights: highlights
+            )
+          ],
+          plan,
+          @packets
+        )
+
+      Map.take(e, [:wrong_sense, :own_sense, :own_sense_of])
+    end
+
+    assert answer.({"c1", "m0"}, [{"c2", "s2"}]) == %{
+             wrong_sense: 0,
+             own_sense: 1,
+             own_sense_of: 2
+           }
+
+    assert answer.({"c1", "s1"}, [{"c2", "s2"}]) == %{
+             wrong_sense: 0,
+             own_sense: 2,
+             own_sense_of: 2
+           }
+
+    assert answer.({"c1", "s2"}, [{"c2", "s1"}]) == %{
+             wrong_sense: 2,
+             own_sense: 0,
+             own_sense_of: 2
+           }
+
+    # September's 9B answer: no wrong sense, and no definition under its own.
+    assert answer.({"c1", "m0"}, [{"c3", "s1"}, {"c4", "s2"}]) ==
+             %{wrong_sense: 0, own_sense: 0, own_sense_of: 2}
+
+    # As a go check, the strict count fails that answer and passes 2 of 2.
+    strict = Map.update!(plan, "go_checks", &(&1 ++ ["ambiguous_definitions_own_sense"]))
+
+    run_with = fn lead, highlights ->
+      records =
+        Enum.map(v2_run(), fn
+          %{case: "ambiguous"} = r ->
+            %{r | lead: elem(lead, 0), lead_meaning: elem(lead, 1), highlights: highlights}
+
+          r ->
+            r
+        end)
+
+      summary = Bench.summarize(records, strict, @packets)["m"]
+      failed(Bench.verdict("m", summary, records, [], strict))
+    end
+
+    assert run_with.({"c1", "m0"}, [{"c3", "s1"}, {"c4", "s2"}]) == [
+             "ambiguous_definitions_own_sense"
+           ]
+
+    assert run_with.({"c1", "s1"}, [{"c2", "s2"}]) == []
+  end
+
   test "a gap, an unvalidated smoke call or unmeasured swap is a no-go" do
     gap = [%{model: "m", what: "3 planned calls", why: "budget_exhausted"}]
     assert "every_planned_call_measured" in failed(verdict(v2_run(), gap))
