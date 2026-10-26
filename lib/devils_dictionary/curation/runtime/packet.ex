@@ -10,7 +10,8 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
   definitions (`content`), its current senses' quotations
   (`sense_quotation`), its Saved catalog shelf (`work`) and its accepted
   exemplars (`exemplar`), each only while `Curation.Eligibility` lets it be
-  shown, under the meaning the screen gives it.
+  shown, held to the meaning the screen offers it under, and a definition as
+  the screen shows it (its entry's first block).
 
   **The cut** (`runtime-packet-v2`, #253 §5a), deterministic and recorded:
 
@@ -34,17 +35,20 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
 
   Every candidate the screen offers is in the packet or in its `omitted`
   list, by id and reason (`over_quota`, `meaning_out_of_bound`,
-  `meaning_unavailable`, `no_excerpt`), never by its text. A candidate that
-  becomes eligible outside the cut changes nothing until a new cut: the
-  refresh fingerprint (`digest/1`) covers the packet, not what it left out.
+  `meaning_unavailable`, `no_excerpt`), never by its text. The refresh
+  fingerprint (`digest/1`) covers what the packet sends, not what it left
+  out, so a candidate that becomes eligible outside the cut changes it only
+  where it changes what is sent (a quotation can raise its sense into a free
+  meaning place).
 
   **Frozen.** `freeze/2` gives the canonical JSON its sha256 identity.
   `verify/1` re-derives every candidate of every kind from the registry
   before dispatch: still eligible under its meaning, the same excerpt or
   label, and, for a v2 packet, still offered by the screen under the same
-  item spec (a work's catalog checksum, an exemplar's accepted claim and the
-  review context that accepted it). A packet that no longer matches is
-  refused (`:packet_stale`). The September benchmark's `runtime-packet-v1`
+  item spec on the same page (a work's catalog checksum, an exemplar's
+  accepted claim and the review context that accepted it), with the same
+  applicable Bierce entries. A packet that no longer matches is refused
+  (`:packet_stale`). The September benchmark's `runtime-packet-v1`
   packets still freeze and verify under their own rules.
 
   **Excerpts are untrusted data.** They reach the model as quoted JSON
@@ -301,6 +305,7 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
         {:ok,
          assemble(%{
            ids: ids,
+           page_ids: candidates.scope.ids,
            lexemes: lexemes,
            language: candidates.scope.language,
            instruction: instruction,
@@ -389,10 +394,10 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
     for m <- universe, MapSet.member?(required, m.id) or MapSet.member?(filled, m.id), do: m
   end
 
+  # Every candidate is held to the meaning the screen offers it under: the
+  # screen draws an item by its candidate's key and saves it under that
+  # candidate's spec, so another meaning could not survive an owner's Take.
   defp assemble(cut) do
-    kept_ids = Enum.map(cut.kept, & &1.id)
-    word_ids = for m <- cut.kept, m.meaning["kind"] == "lexeme", do: m.id
-
     candidates =
       cut.chosen
       |> Enum.with_index(1)
@@ -400,7 +405,7 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
         c.packet
         |> Map.put("candidate_id", "c#{n}")
         |> Map.put("required_meaning", c.meaning)
-        |> Map.put("allowed_meanings", allowed(c, kept_ids, word_ids))
+        |> Map.put("allowed_meanings", [c.meaning])
       end)
 
     %{
@@ -409,6 +414,10 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
       "target" => %{
         "language_tag" => cut.language,
         "lexeme_ids" => cut.ids,
+        # The words in the page's order, which decides the meaning the
+        # screen gives an entry defining two of them: `verify/1` builds
+        # the page again in this order.
+        "page_lexeme_ids" => cut.page_ids,
         "headwords" => Enum.map(cut.lexemes, & &1.lemma)
       },
       "lead_policy" => "bierce_first_v1",
@@ -433,16 +442,6 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
       }
     }
   end
-
-  # A definition may carry any meaning in the packet, a quotation its own
-  # sense or a word, as in v1; a work or an exemplar only the meaning the
-  # screen offers it under.
-  defp allowed(%{kind: "content"}, kept_ids, _word_ids), do: kept_ids
-
-  defp allowed(%{kind: "sense_quotation", meaning: own}, _kept_ids, word_ids),
-    do: [own | Enum.reject(word_ids, &(&1 == own))]
-
-  defp allowed(%{meaning: own}, _kept_ids, _word_ids), do: [own]
 
   # ── meanings ─────────────────────────────────────────────────────────────
 
@@ -559,14 +558,13 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
   defp object_id(c), do: c.spec[:object_id]
 
   # What the cut reads beyond the screen's candidates, each in one query:
-  # the definitions' revisions, the quotations' senses, every source's rank,
-  # and each exemplar's accepting review.
+  # the definitions' revisions, every source's rank, and each exemplar's
+  # accepting review.
   defp facts(offered, policy) do
     of = fn kind, field -> for c <- offered, c.kind == kind, do: Map.fetch!(c.spec, field) end
 
     %{
       contents: contents(of.(:content, :content_revision_id)),
-      senses: sense_revisions(of.(:sense_quotation, :sense_revision_id)),
       sources: sources(policy),
       reviews: reviews(of.(:exemplar, :assertion_revision_id))
     }
@@ -584,11 +582,6 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
     )
     |> Map.new()
   end
-
-  defp sense_revisions([]), do: %{}
-
-  defp sense_revisions(ids),
-    do: Repo.all(from r in SenseRevision, where: r.id in ^ids) |> Map.new(&{&1.id, &1})
 
   # A source's place: its index in the priority list (any other after), and
   # whether it is a verified corpus or a live one.
@@ -619,9 +612,11 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
     |> Enum.reduce(%{}, fn {id, at, context}, acc -> Map.put_new(acc, id, {at, context}) end)
   end
 
+  # A definition as the screen shows it, by its entry's first block, so a
+  # quote can only be of words the page shows; a quotation as its line.
   defp packet_candidate(%{kind: :content} = c, facts) do
     with {revision, kind} <- facts.contents[c.spec.content_revision_id],
-         excerpt when excerpt != "" <- excerpt(text_of(revision.body, revision.body_format)) do
+         excerpt when excerpt != "" <- excerpt(c.text || "") do
       Map.merge(base(c), %{
         "content_kind" => to_string(kind),
         "content_revision_id" => revision.id,
@@ -633,21 +628,19 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
     end
   end
 
-  defp packet_candidate(%{kind: :sense_quotation, spec: spec} = c, facts) do
-    "quotation:" <> n = spec.locator
+  defp packet_candidate(%{kind: :sense_quotation, spec: spec} = c, _facts) do
+    case excerpt(c.text || "") do
+      "" ->
+        nil
 
-    with %SenseRevision{examples: [_ | _] = examples} <- facts.senses[spec.sense_revision_id],
-         %{"text" => text} when is_binary(text) <- Enum.at(examples, String.to_integer(n)),
-         excerpt when excerpt != "" <- excerpt(clean(text)) do
-      Map.merge(base(c), %{
-        "sense_revision_id" => spec.sense_revision_id,
-        "locator" => spec.locator,
-        "words_sha256" => spec.words_sha256,
-        "excerpt" => excerpt,
-        "excerpt_sha256" => Digest.sha256(excerpt)
-      })
-    else
-      _nothing -> nil
+      excerpt ->
+        Map.merge(base(c), %{
+          "sense_revision_id" => spec.sense_revision_id,
+          "locator" => spec.locator,
+          "words_sha256" => spec.words_sha256,
+          "excerpt" => excerpt,
+          "excerpt_sha256" => Digest.sha256(excerpt)
+        })
     end
   end
 
@@ -899,7 +892,10 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
   def verify(packet) do
     ids = get_in(packet, ["target", "lexeme_ids"]) || []
     meanings = Map.new(packet["meanings"] || [], &{&1["meaning_id"], &1})
-    offered = if packet["packet_version"] == @version, do: offered_now(ids)
+
+    offered =
+      if packet["packet_version"] == @version,
+        do: offered_now(get_in(packet, ["target", "page_lexeme_ids"]) || ids)
 
     reasons =
       Enum.flat_map(packet["candidates"] || [], fn c ->
@@ -918,17 +914,33 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
           []
       end)
 
-    case reasons ++ meaning_reasons do
+    case reasons ++ meaning_reasons ++ priority_reasons(packet, ids, offered) do
       [] -> :ok
       all -> {:error, {:packet_stale, all}}
     end
   end
 
-  # The screen's offered candidates now for the packet's words, by key.
-  defp offered_now(ids) do
-    lexemes = Repo.all(from l in Lexeme, where: l.object_id in ^ids, order_by: l.object_id)
+  # A v2 packet's Bierce entries are the applicable ones still: one that
+  # appeared since the cut would refuse every selection the model could make.
+  defp priority_reasons(_packet, _ids, nil), do: []
 
-    if ids != [] and length(lexemes) == length(ids) do
+  defp priority_reasons(packet, ids, _offered) do
+    by_id = Map.new(packet["candidates"] || [], &{&1["candidate_id"], &1})
+    sent = for id <- packet["priority_candidates"] || [], do: by_id[id]["object_id"]
+
+    if Enum.sort(sent) == Enum.sort(LeadRule.applicable(ids)),
+      do: [],
+      else: [["priority_candidates", "priority_changed"]]
+  end
+
+  # The screen's offered candidates now for the packet's words, its page
+  # built again in the cut's order, by key.
+  defp offered_now(ids) do
+    lexemes =
+      Repo.all(from l in Lexeme, where: l.object_id in ^ids)
+      |> Enum.sort_by(fn l -> Enum.find_index(ids, &(&1 == l.object_id)) end)
+
+    if ids != [] and length(lexemes) == length(Enum.uniq(ids)) do
       lexemes
       |> page()
       |> Candidates.for_page()
@@ -946,7 +958,7 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
 
     with :ok <- known_meanings([meaning | allowed], meanings),
          :ok <- eligibility(c, meanings[meaning], ids),
-         :ok <- same_excerpt(c),
+         :ok <- same_excerpt(c, offered),
          :ok <- still_offered(c, meanings, offered) do
       hashes_match(c)
     end
@@ -962,10 +974,12 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
     end
   end
 
-  defp same_excerpt(%{"kind" => kind} = c) when kind in ["content", "sense_quotation"],
+  # A v1 packet's excerpt is re-read from the revision; a v2 packet's is what
+  # the screen shows now (`still_offered/3`).
+  defp same_excerpt(%{"kind" => kind} = c, nil) when kind in ["content", "sense_quotation"],
     do: if(current_excerpt(c) == c["excerpt"], do: :ok, else: :excerpt_changed)
 
-  defp same_excerpt(_c), do: :ok
+  defp same_excerpt(_c, _offered), do: :ok
 
   defp still_offered(_c, _meanings, nil), do: :ok
 
@@ -973,10 +987,20 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
     screen = offered[c["key"]]
 
     cond do
-      is_nil(screen) -> :not_offered
-      screen_spec(screen) != packet_spec(c, meanings) -> :not_offered
-      c["kind"] in ["work", "exemplar"] and label_of(screen) != c["label"] -> :label_changed
-      true -> :ok
+      is_nil(screen) ->
+        :not_offered
+
+      screen_spec(screen) != packet_spec(c, meanings) ->
+        :not_offered
+
+      c["kind"] in ["work", "exemplar"] and label_of(screen) != c["label"] ->
+        :label_changed
+
+      c["kind"] in ["content", "sense_quotation"] and excerpt(screen.text || "") != c["excerpt"] ->
+        :excerpt_changed
+
+      true ->
+        :ok
     end
   end
 
@@ -1121,19 +1145,33 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
   by itself make a page stale. Never text.
   """
   def digest(packet) do
+    # By what each meaning is, not its number: a sense added or retired
+    # elsewhere on the page renumbers the meanings and changes nothing sent.
+    named = Map.new(packet["meanings"], &{&1["meaning_id"], meaning_target(&1)})
+    name = fn id -> Map.get(named, id, id) end
+
+    candidates =
+      Enum.map(packet["candidates"], fn c ->
+        c
+        |> Map.drop(["excerpt", "label"])
+        |> Map.update("required_meaning", nil, name)
+        |> Map.update("allowed_meanings", [], &Enum.map(&1, name))
+      end)
+
     Digest.term(%{
       "packet_version" => packet["packet_version"],
       "policy" => packet["policy"],
       "target" => Map.take(packet["target"], ["language_tag", "lexeme_ids"]),
-      "meanings" =>
-        Enum.map(
-          packet["meanings"],
-          &Map.take(&1, ["meaning_id", "kind", "lexeme_id", "sense_revision_id"])
-        ),
-      "candidates" => Enum.map(packet["candidates"], &Map.drop(&1, ["excerpt", "label"])),
+      "meanings" => packet["meanings"] |> Enum.map(&meaning_target/1) |> Enum.sort(),
+      "candidates" => candidates,
       "priority_candidates" => packet["priority_candidates"]
     })
   end
+
+  defp meaning_target(%{"kind" => "lexeme", "lexeme_id" => id}), do: ["lexeme", id]
+
+  defp meaning_target(%{"kind" => "sense_revision", "sense_revision_id" => id}),
+    do: ["sense_revision", id]
 
   # ── rendering ─────────────────────────────────────────────────────────────
 

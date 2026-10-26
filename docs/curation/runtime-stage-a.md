@@ -127,9 +127,9 @@ packet meanings) could never be sent. v2:
 - **Offers what the screen offers.** `Packet.for_page/2` reads `Curation.Candidates.for_page/1`,
   the owner's curation screen's own seam, so the packet holds the page's definitions,
   current senses' quotations, Saved catalog shelf (`work`) and accepted exemplars
-  (`exemplar`), each only while it may be shown, under the meaning the screen gives it. A
-  candidate the screen lists but cannot offer never enters a packet. Poems and books are
-  not offered, because the screen offers none (#253 D6).
+  (`exemplar`), each only while it may be shown, and a definition as the screen shows it,
+  by its entry's first block. A candidate the screen lists but cannot offer never enters a
+  packet. Poems and books are not offered, because the screen offers none (#253 D6).
 - **Cuts deterministically.** Every applicable Bierce entry is in, counted against the
   `content` quota; more of them than that quota, the cap or the meaning bound admits
   refuses the packet (`{:priority_candidates_exceed_cap, n}`). Each kind is then filled
@@ -141,15 +141,19 @@ packet meanings) could never be sent. v2:
 - **Bounds meanings.** Every chosen candidate's meaning is kept; a candidate whose meaning
   no longer fits is omitted (`meaning_out_of_bound`) and its place goes to the next of its
   kind. The places left go to the other meanings by how many of the page's candidates
-  cite them, then by rank on the page (the words, then the senses), then by id. A
-  definition may be tied to any meaning in the packet and a quotation to its sense or a
-  word, as in v1; a work or an exemplar only to the meaning the screen offers it under.
+  cite them, then by rank on the page (the words, then the senses), then by id. Every
+  candidate may be tied only to the meaning the screen offers it under: the screen draws a
+  stored item by its candidate's key and saves it under that candidate's spec, so any other
+  meaning would not survive an owner's Take. The other meanings are context.
 - **Records its cut.** `omitted` lists every offered candidate not sent, by screen key,
   kind, object id and reason (`over_quota`, `meaning_out_of_bound`, `meaning_unavailable`,
   `no_excerpt`). `Packet.summary/1`, the attempt's `packet_summary`, keeps it with the
   instruction, the policy and the counts (#253 D9).
-- **Re-derives every kind before dispatch.** `Packet.verify/1` asks the screen again: a
-  candidate it no longer offers under the same item spec is `not_offered`; a work's
+- **Re-derives every kind before dispatch.** `Packet.verify/1` builds the page again in the
+  cut's order of words and asks the screen again: a candidate it no longer offers under the
+  same item spec is `not_offered`, a definition or quotation it shows differently is
+  `excerpt_changed`, and a changed set of applicable Bierce entries is `priority_changed`; a
+  work's
   catalog checksum (`catalog_changed`), an exemplar's acceptance (`claim_not_accepted`)
   and the review context that accepted it (`claim_context_changed`) are checked by
   `Curation.Eligibility`; a work's or an exemplar's label must be the same.
@@ -158,17 +162,21 @@ packet meanings) could never be sent. v2:
   (`quote_not_allowed`). A quotation's quote must still be an exact substring.
 - **Is what the refresh clock compares.** `Packet.digest/1`, the cut by ids, revisions and
   hashes without the instruction or the omitted list, is the candidate half of P5's
-  fingerprint under version `packet-v2/<cut policy>/<meaning policy>`. A stored
-  `candidates-v1` fingerprint, or one of another policy version, re-admits its page once
-  and then settles; a candidate eligible outside the cut does not by itself make a page
-  stale.
+  fingerprint under version `packet-v2/<cut policy>/<meaning policy>`, with meanings named
+  by what they are, so a sense added elsewhere on the page renumbers them without changing
+  it. A stored `candidates-v1` fingerprint, or one of another policy version, re-admits its
+  page once and then settles. A candidate eligible outside the cut changes the fingerprint
+  only where it changes what is sent (a new quotation can raise its sense into a free
+  meaning place).
 
 The quotas, bounds, source order and the two policy versions (`cut-v1`, `meanings-v2`)
 are code defaults in `Runtime.Endpoint`, configuration-overridable. A changed policy
 should name a new version, which is what re-admits the pilot pages. The September
 benchmark's packets are `runtime-packet-v1` and still freeze to their hashes and verify
-by v1's rules, so they were not re-frozen. `mix dd.runtime packet --scope SLUG --dry-run
---instruction V` prints the cut for an On page and writes nothing.
+by v1's rules, so they were not re-frozen; `bench seed` keeps a plan's packet that is
+already there while it verifies, and refuses to re-freeze one in its place.
+`mix dd.runtime packet --scope SLUG --dry-run --instruction V` prints the cut for an On page
+and writes nothing.
 
 ## Operating limits
 

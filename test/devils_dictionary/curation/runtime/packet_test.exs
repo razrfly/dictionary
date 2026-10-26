@@ -117,10 +117,10 @@ defmodule DevilsDictionary.Curation.Runtime.PacketTest do
            ] =
              packet["meanings"]
 
-    # A quotation illustrates its own sense (or the word); a definition may
-    # carry any meaning on the scope.
-    assert quotation["allowed_meanings"] == ["s1", "m0"]
-    assert definition["allowed_meanings"] == ["m0", "s1"]
+    # Each is held to the meaning the screen offers it under (#262): a
+    # quotation to its own sense, a definition to the word it defines.
+    assert {quotation["required_meaning"], quotation["allowed_meanings"]} == {"s1", ["s1"]}
+    assert {definition["required_meaning"], definition["allowed_meanings"]} == {"m0", ["m0"]}
 
     {:ok, frozen} = Packet.freeze(packet)
     {:ok, again} = Packet.freeze(packet)

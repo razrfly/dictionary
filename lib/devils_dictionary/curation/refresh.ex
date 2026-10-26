@@ -527,7 +527,8 @@ defmodule DevilsDictionary.Curation.Refresh do
   (`Published.current/1`'s reasons for withholding all of it: a withdrawn
   approval, a changed scope or configuration), which the item-level
   eligibility fingerprint does not carry. A candidate eligible outside the
-  cut changes nothing until a periodic run re-cuts (#253 §5a). `accepted` is
+  cut changes it only where it changes what the packet sends (#253 §5a).
+  `accepted` is
   the fingerprint the published version was accepted with, the baseline of
   a composition's first check. Reads only.
   """

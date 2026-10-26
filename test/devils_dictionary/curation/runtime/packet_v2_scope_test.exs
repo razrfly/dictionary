@@ -289,6 +289,85 @@ defmodule DevilsDictionary.Curation.Runtime.PacketV2ScopeTest do
     end
   end
 
+  describe "test 6, as the registry moves" do
+    test "a definition whose defines claim was withdrawn is no longer offered", ctx do
+      {made, page} = love!(ctx)
+      {:ok, packet} = v2(page)
+      [_bierce, _noun, verb_entry] = made.entries
+      sent = Enum.find(packet["candidates"], &(&1["object_id"] == verb_entry.object_id))
+
+      claim = DevilsDictionary.CurationFixtures.defines_claim!(verb_entry, Enum.at(made.words, 1))
+      {:ok, _} = Claims.withdraw(claim.assertion_id, reason: "no longer")
+
+      assert {:error, {:packet_stale, [[id, "not_offered"]]}} = Packet.verify(packet)
+      assert id == sent["candidate_id"]
+    end
+
+    test "a definition of two of the page's words verifies as the cut saw it", ctx do
+      # *LoVe* made before *Love*: the page puts *Love* first (by lemma), the
+      # ids put *LoVe* first, and an entry defining both means the first.
+      shape = PacketFixtures.shape("love")
+      [noun, verb, love_name, capital, lo_ve] = shape.words
+
+      %{words: words} =
+        PacketFixtures.pilot!(ctx, "love", %{
+          shape
+          | words: [noun, verb, lo_ve, capital, love_name]
+        })
+
+      [_noun, _verb, other_name, _capital, name] = words
+      assert other_name.object_id < name.object_id
+
+      shared =
+        DevilsDictionary.WordFixtures.entry!(ctx, name, "wiktionary", body: "A shared name.")
+
+      {:ok, _} =
+        Claims.assert(shared.object_id, "defines", other_name.object_id, %{
+          source_id: ctx.sources["wiktionary"].id
+        })
+
+      page = PacketFixtures.page("love")
+      order = Enum.map(page.headword.lexemes, & &1.id)
+      first = Enum.find(order, &(&1 in [name.object_id, other_name.object_id]))
+      assert first == name.object_id
+
+      {:ok, packet} = v2(page)
+      assert packet["target"]["page_lexeme_ids"] == order
+
+      c = Enum.find(packet["candidates"], &(&1["object_id"] == shared.object_id))
+      meaning = Enum.find(packet["meanings"], &(&1["meaning_id"] == c["required_meaning"]))
+      assert meaning["lexeme_id"] == first
+
+      assert {:ok, frozen} = Packet.freeze(packet)
+      assert :ok = Packet.verify(frozen)
+    end
+
+    test "a Bierce entry that appeared after the cut makes the packet stale", ctx do
+      %{words: [greed | _]} = PacketFixtures.pilot!(ctx, "greed")
+      {:ok, packet} = v2(PacketFixtures.page("greed"))
+      assert packet["priority_candidates"] == []
+
+      DevilsDictionary.WordFixtures.entry!(ctx, greed, "bierce", body: "A fixture Bierce entry.")
+
+      assert {:error, {:packet_stale, reasons}} = Packet.verify(packet)
+      assert ["priority_candidates", "priority_changed"] in reasons
+    end
+
+    test "a definition is offered as the screen shows it, by its first block", ctx do
+      %{words: [nepotism | _]} = PacketFixtures.pilot!(ctx, "nepotism")
+
+      entry =
+        DevilsDictionary.WordFixtures.entry!(ctx, nepotism, "johnson",
+          body: "The first block of a fixture entry.\n\nA second block the page folds away."
+        )
+
+      {:ok, packet} = v2(PacketFixtures.page("nepotism"))
+      c = Enum.find(packet["candidates"], &(&1["object_id"] == entry.object_id))
+      assert c["excerpt"] == "The first block of a fixture entry."
+      assert :ok = Packet.verify(packet)
+    end
+  end
+
   describe "test 9: the dry run" do
     setup do
       Mix.shell(Mix.Shell.Process)
@@ -466,6 +545,23 @@ defmodule DevilsDictionary.Curation.Runtime.PacketV2ScopeTest do
       {:ok, after_change} = v2(PacketFixtures.page("love"))
       assert Packet.digest(after_change) == Packet.digest(packet)
       assert length(after_change["omitted"]) == length(packet["omitted"]) + 1
+    end
+
+    test "a sense added elsewhere renumbers the meanings and leaves the digest as it was", ctx do
+      {made, page} = love!(ctx)
+      {:ok, packet} = v2(page)
+
+      # Uncited and first in WordNet's order: every sense meaning's number moves.
+      DevilsDictionary.WordFixtures.sense!(ctx, hd(made.words), "wordnet",
+        gloss: "An early fixture sense.",
+        position: 0,
+        group_key: "fixture-love-early"
+      )
+
+      {:ok, renumbered} = v2(PacketFixtures.page("love"))
+      ids = fn p -> Enum.map(p["meanings"], &{&1["meaning_id"], &1["sense_revision_id"]}) end
+      refute ids.(renumbered) == ids.(packet)
+      assert Packet.digest(renumbered) == Packet.digest(packet)
     end
   end
 end
