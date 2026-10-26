@@ -871,7 +871,9 @@ defmodule DevilsDictionary.Curation.Runtime.Bench do
     do:
       {r.outcome, r.decision, r.lead, r.lead_meaning, r.highlights, r.refused, r.refusal_reasons}
 
-  # Every sense of the packet has one of its quotations placed under it.
+  # Every sense of the packet has a quotation placed under it. Under packet v2
+  # a quotation is offered under its own sense only, and validation refuses any
+  # other, so on a validated answer that quotation is the sense's own.
   defp quotations_cover?(r, packet) do
     senses = for m <- packet["meanings"], m["kind"] == "sense_revision", do: m["meaning_id"]
 

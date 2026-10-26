@@ -36,7 +36,15 @@ What the go covers:
 - **Only what the checks declare.** It says nothing about editorial quality beyond them.
   Each case is one fixed-seed judgment.
 - **The sparse case and the control still see self-labelled text.** Both abstain, and
-  only the sparse case is checked.
+  only the sparse case is checked. `sparse_abstains` may pass because the entry calls
+  itself a fixture (its reason says so), not because it is sparse. Abstention on
+  genuinely sparse real evidence is not shown.
+- **The ambiguous check measures less than the morning's check of the same name.**
+  Packet v2 binds each quotation to its sense, so the case no longer tests telling
+  senses apart. It tests only whether the model selects and uses every sense's
+  quotation.
+- **No check covers whether a lead fits the word.** On crane the model led with the
+  bird-only definition, and its reason called that definition "general".
 
 ## The criteria, as the owner accepted them before the run
 
@@ -132,8 +140,9 @@ quarantine, transport retry or validation refusal.
     mentioned 0.
 - **`ambiguous_labelled` (the control):** abstained. Its reason says the content
   candidates "are fictional definitions not matching standard dictionary usage". The
-  reason also garbles the rules, claiming that no content candidate "isn't also a
-  highlight".
+  reason misstates the packet: it says no content candidate "isn't also a highlight",
+  though c1 and c2 were placed nowhere. It is also cut off mid-sentence at the
+  contract's 280-character limit.
 
 **The go checks** (`Bench.verdict/5`, the control left out):
 
@@ -156,14 +165,15 @@ judgment.
 
 - **Crane selects and the control abstains.** Removing the label, together with
   changing the word, the text and the source, made the difference.
-  - The label is the likeliest of those. Both abstentions cite fiction, and the crane
-    text differs most visibly in not announcing it.
-  - The pair does not isolate the label, though: crane and bank also differ in lemma,
-    wording and source slug.
+  - The pair does not isolate the label: crane and bank also differ in lemma, wording
+    and source slug.
+  - Both abstentions cite fiction. That is consistent with the label mattering, but a
+    model's reason is not reliable evidence of its cause (Finding 4).
 - **The control against the morning's run.** It compares the two packet formats on the
   same labelled bank text, and both abstain. Packet v2 alone did not change the answer.
-- **What remains open.** v2 still declines text that announces itself as fiction. That
-  is the right call for P6, whose candidates are real registry evidence. Whether v2
+- **What remains open.** In these runs v2 abstained only where every lead candidate
+  was a definition labelled as fiction. It did use labelled quotations ("fictional
+  ferry", "fictional mayor") as highlights in `ordinary` and `adverse`. Whether v2
   declines sound real evidence for some other reason is not measured here.
 
 ## Latency, in ms, nearest-rank p50 / p95
@@ -177,8 +187,10 @@ judgment.
 | Prompt tokens | 471–651 | 469–654 | 350–535 |
 | Peak resident set of the service tree | 7.64–7.80 GiB | 7.64–7.65 GiB | 7.64–8.00 GiB |
 
-Warm p50 rose by about 0.4 s against the morning. The ambiguous case now selects: three
-highlights at 211 output tokens, against a 65-token abstention.
+Warm p50 rose by about 0.4 s against the morning, but the call sets differ: 15 warm calls
+here, the control's three short abstentions among them, against 12. The ambiguous case
+now selects: a lead and two highlights per answer, 211 output tokens, against the
+morning's 65-token abstention.
 
 **Budget.** The run charged 51,894 ms (2.9%). The day's total, with the morning, is
 94,561 of 1,800,000 ms. Each attempt reserved, released and was charged once (19 each).
@@ -193,15 +205,16 @@ for each). The 19 calls are six judgments: five cases and the smoke call.
 
 ## Findings
 
-1. **With the label removed, v2 selects on a two-sense word and uses both senses'
-   quotations.** That turns the morning's no-go on `ambiguous` into a pass.
-2. **The packet format alone does not change the labelled answer.** The control
-   abstains under packet v2 as bank did under v1.
+1. **On unlabelled crane, in this one judgment, v2 selects and places both senses'
+   quotations under their senses.** That passes `ambiguous_each_sense` as the plan now
+   defines it, which is weaker than the morning's check (see the verdict).
+2. **In this one judgment, the packet format alone did not change the labelled
+   answer.** The control abstains under packet v2 as bank did under v1.
 3. **Adverse holds under packet v2.** The Bierce lead goes under the word itself, as
    packet v2 requires. The morning's `s1` placement did not recur.
 4. **Reasons are not always faithful.**
    - The crane lead's reason calls the bird definition a general one.
-   - The control's reason misstates the rules.
+   - The control's reason misstates the packet and is cut off mid-sentence.
    - Both are model text, kept only on the attempt and in this record, and P6 must not
      present them as fact.
 5. **The runtime is healthy on this machine.**
