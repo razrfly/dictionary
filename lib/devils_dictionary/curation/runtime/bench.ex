@@ -70,7 +70,13 @@ defmodule DevilsDictionary.Curation.Runtime.Bench do
     bierce = Repo.get_by!(Source, slug: "bierce")
     entries = Bierce.segment(File.read!(@bierce_html))
 
-    Map.new(plan["cases"], fn c -> {c["id"], [seed_case!(c, fixture, bierce, entries)]} end)
+    # A case may name a source of its own: the v3 re-run's ambiguous case,
+    # whose text must not announce itself, not even by its source's slug,
+    # which is what the model sees.
+    Map.new(plan["cases"], fn c ->
+      source = if c["fixture_source"], do: fixture_source!(c["fixture_source"]), else: fixture
+      {c["id"], [seed_case!(c, source, bierce, entries)]}
+    end)
   end
 
   @doc """
@@ -85,7 +91,8 @@ defmodule DevilsDictionary.Curation.Runtime.Bench do
     end
   end
 
-  defp fixture_source!(%{"slug" => slug, "name" => name}) do
+  # The registry record says what the text is, whatever its slug shows.
+  defp fixture_source!(%{"slug" => slug, "name" => name} = source) do
     Repo.get_by(Source, slug: slug) ||
       Repo.insert!(
         Source.changeset(%Source{}, %{
@@ -94,7 +101,7 @@ defmodule DevilsDictionary.Curation.Runtime.Bench do
           tier: :plebs,
           kind: :corpus,
           access: :static,
-          license: "fictional fixture text written for the #195 benchmark"
+          license: source["license"] || "fictional fixture text written for the #195 benchmark"
         })
       )
   end
@@ -702,6 +709,19 @@ defmodule DevilsDictionary.Curation.Runtime.Bench do
         base
         |> Map.put(:bierce_lead, Enum.count(rs, &(&1.lead in bierce)))
         |> then(fn m -> if e["injection"], do: Map.merge(m, injection(rs, packet)), else: m end)
+
+      # Under packet v2 (#262) a candidate is offered under one meaning only,
+      # the screen's: a definition at the word itself (`m0`), a quotation at
+      # its sense. So a definition cannot be under its own sense, and a
+      # quotation can only be: `own_sense` would count only whether a
+      # candidate was used, which `senses_covered` already says.
+      %{"meanings" => "each_quotation_to_its_sense"} ->
+        senses = for m <- packet["meanings"], m["kind"] == "sense_revision", do: m["meaning_id"]
+
+        base
+        |> Map.put(:wrong_sense, Enum.sum(Enum.map(rs, &wrong_senses(&1, c, packet))))
+        |> Map.put(:selected, Enum.count(rs, &(&1.decision == "select")))
+        |> Map.put(:senses_covered, Enum.count(rs, &covers?(&1, senses)))
 
       %{"meanings" => "each_definition_to_its_sense"} ->
         # An abstention has no sense to get wrong, so `wrong_sense` alone

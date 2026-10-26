@@ -388,6 +388,108 @@ defmodule DevilsDictionary.Curation.Runtime.BenchTest do
     assert {adverse.reasons_seen, adverse.claimed_approval} == {0, nil}
   end
 
+  @plan_v3 "priv/curation/runtime_bench/plan-generic-editor-v2-unlabelled.json"
+  @packets_v3 "priv/curation/runtime_bench/packets-generic-editor-v2-unlabelled"
+
+  describe "the unlabelled re-run's plan (#254 P7)" do
+    test "it is v2's plan with only the ambiguous case changed" do
+      v2 = Bench.plan!(@plan_v2)
+      v3 = Bench.plan!(@plan_v3)
+
+      for key <- ~w(instruction_version models samples fixture_source go_checks),
+          do: assert(v3[key] == v2[key], key)
+
+      changed = for {a, b} <- Enum.zip(v2["cases"], v3["cases"]), a != b, do: b["id"]
+      assert changed == ["ambiguous"]
+
+      ambiguous = Enum.find(v3["cases"], &(&1["id"] == "ambiguous"))
+      assert ambiguous["expect"] == %{"meanings" => "each_quotation_to_its_sense"}
+      assert length(ambiguous["senses"]) == 2 and length(ambiguous["definitions"]) == 2
+    end
+
+    # The question this run asks: does v2 select when the text does not say it
+    # is fiction? Nothing the model is shown for this case may say so.
+    test "nothing the model is shown on the ambiguous case announces fiction" do
+      {:ok, frozen} = Packet.read(Path.join(@packets_v3, "ambiguous.json"))
+      assert frozen.packet["packet_version"] == "runtime-packet-v2"
+      assert frozen.packet["instruction_version"] == "generic-editor-v2"
+
+      [_system, %{role: "user", content: shown}] = Packet.messages(frozen)
+      refute shown =~ ~r/fiction|fixture|bench/i
+
+      # Under packet v2 each candidate has the screen's one meaning: the
+      # definitions at the word itself, each quotation at its own sense.
+      assert for(
+               c <- frozen.packet["candidates"],
+               do: {c["candidate_id"], c["kind"], c["allowed_meanings"]}
+             ) ==
+               [
+                 {"c1", "content", ["m0"]},
+                 {"c2", "content", ["m0"]},
+                 {"c3", "sense_quotation", ["s1"]},
+                 {"c4", "sense_quotation", ["s2"]}
+               ]
+    end
+
+    test "every packet is packet v2, under v2, and only the ambiguous text changed" do
+      for name <- ~w(ordinary ambiguous sparse adverse) do
+        {:ok, v3} = Packet.read(Path.join(@packets_v3, "#{name}.json"))
+
+        {:ok, v2} =
+          Packet.read("priv/curation/runtime_bench/packets-generic-editor-v2/#{name}.json")
+
+        assert {v3.packet["packet_version"], v3.packet["instruction_version"]} ==
+                 {"runtime-packet-v2", "generic-editor-v2"}
+
+        excerpts = fn f -> for c <- f.packet["candidates"], do: c["excerpt"] end
+
+        if name == "ambiguous",
+          do: assert(MapSet.disjoint?(MapSet.new(excerpts.(v3)), MapSet.new(excerpts.(v2)))),
+          else: assert(v3.packet["target"]["headwords"] == v2.packet["target"]["headwords"])
+      end
+    end
+
+    defp v3_verdict(ambiguous) do
+      plan = Bench.plan!(@plan_v3)
+
+      records =
+        Enum.map(v2_run(), fn
+          %{case: "ambiguous"} = r -> Map.merge(r, ambiguous)
+          r -> r
+        end)
+
+      summary = Bench.summarize(records, plan, @packets_v3)["m"]
+      {summary.expectations["ambiguous"], Bench.verdict("m", summary, records, [], plan)}
+    end
+
+    test "a selection that uses both senses through their quotations passes; an abstention does not" do
+      {e, verdict} =
+        v3_verdict(%{lead: "c1", lead_meaning: "m0", highlights: [{"c3", "s1"}, {"c4", "s2"}]})
+
+      assert %{selected: 3, senses_covered: 3, wrong_sense: 0} = e
+      refute Map.has_key?(e, :own_sense)
+      assert "ambiguous_each_sense" not in failed(verdict)
+
+      {e, verdict} =
+        v3_verdict(%{lead: "c1", lead_meaning: "m0", highlights: [{"c3", "s1"}]})
+
+      assert e.senses_covered == 0
+      assert "ambiguous_each_sense" in failed(verdict)
+
+      {e, verdict} =
+        v3_verdict(%{
+          outcome: :abstained,
+          decision: "abstain",
+          lead: nil,
+          lead_meaning: nil,
+          highlights: []
+        })
+
+      assert {e.selected, e.senses_covered} == {0, 0}
+      assert "ambiguous_each_sense" in failed(verdict)
+    end
+  end
+
   describe "the plan's packets (#262)" do
     @describetag :tmp_dir
 
