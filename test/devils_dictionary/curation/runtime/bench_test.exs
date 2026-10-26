@@ -497,7 +497,9 @@ defmodule DevilsDictionary.Curation.Runtime.BenchTest do
       {summary.expectations, Bench.verdict("m", summary, records, [], plan)}
     end
 
-    test "a selection covering both senses is a go; one sense or an abstention is not" do
+    # The owner's rule: each sense's quotation, under its sense, every time.
+    # A definition, at the word itself, covers no sense.
+    test "both quotations under their senses is a go; definitions, one quotation or an abstention are not" do
       both = %{lead: "c1", lead_meaning: "m0", highlights: [{"c3", "s1"}, {"c4", "s2"}]}
       {e, verdict} = v3_verdict(v3_run(both))
       assert %{selected: 3, senses_covered: 3, wrong_sense: 0} = e["ambiguous"]
@@ -505,16 +507,16 @@ defmodule DevilsDictionary.Curation.Runtime.BenchTest do
       assert %{go: true} = verdict
       assert failed(verdict) == []
 
-      # The machine sense through its declared definition, not its quotation.
-      by_definition = %{lead: "c1", lead_meaning: "m0", highlights: [{"c2", "m0"}, {"c3", "s1"}]}
-      {e, verdict} = v3_verdict(v3_run(by_definition))
-      assert e["ambiguous"].senses_covered == 3
-      assert failed(verdict) == []
-
-      one = %{lead: "c1", lead_meaning: "m0", highlights: [{"c3", "s1"}]}
-      {e, verdict} = v3_verdict(v3_run(one))
-      assert e["ambiguous"].senses_covered == 0
-      assert failed(verdict) == ["ambiguous_each_sense"]
+      for highlights <- [
+            [{"c2", "m0"}],
+            [{"c2", "m0"}, {"c3", "s1"}],
+            [{"c3", "s1"}]
+          ] do
+        answer = %{lead: "c1", lead_meaning: "m0", highlights: highlights}
+        {e, verdict} = v3_verdict(v3_run(answer))
+        assert e["ambiguous"].senses_covered == 0, inspect(highlights)
+        assert failed(verdict) == ["ambiguous_each_sense"]
+      end
 
       abstain = %{
         outcome: :abstained,
@@ -527,6 +529,37 @@ defmodule DevilsDictionary.Curation.Runtime.BenchTest do
       {e, verdict} = v3_verdict(v3_run(abstain))
       assert {e["ambiguous"].selected, e["ambiguous"].senses_covered} == {0, 0}
       assert failed(verdict) == ["ambiguous_each_sense"]
+    end
+
+    test "the control is reported and decides nothing; a runtime halt still does" do
+      both = %{lead: "c1", lead_meaning: "m0", highlights: [{"c3", "s1"}, {"c4", "s2"}]}
+
+      refused_control =
+        Enum.map(v3_run(both), fn
+          %{case: "ambiguous_labelled"} = r ->
+            %{
+              r
+              | outcome: :refused,
+                decision: nil,
+                refusal_reasons: [["selection", "duplicate_candidate"]]
+            }
+
+          r ->
+            r
+        end)
+
+      {e, verdict} = v3_verdict(refused_control)
+      assert e["ambiguous_labelled"].outcomes == %{refused: 3}
+      assert %{go: true} = verdict
+
+      plan = Bench.plan!(@plan_v3)
+      records = v3_run(both)
+      summary = Bench.summarize(records, plan, @packets_v3)["m"]
+      gap = [%{model: "m", what: "3 planned calls", why: "paused"}]
+
+      assert "every_planned_call_measured" in failed(
+               Bench.verdict("m", summary, records, gap, plan)
+             )
     end
 
     # v2's actual adverse answer put Bierce under the sense. Packet v2 offers
