@@ -152,6 +152,19 @@ defmodule DevilsDictionary.Curation.Runtime.BenchTest do
       end)
 
     assert failed(verdict(one_sense)) == ["ambiguous_each_sense"]
+
+    # September's 9B answer: the river definition leads under the word itself,
+    # and the quotations take the senses. Not a wrong sense, and a go.
+    september =
+      Enum.map(v2_run(), fn
+        %{case: "ambiguous"} = r ->
+          %{r | lead: "c1", lead_meaning: "m0", highlights: [{"c3", "s1"}, {"c4", "s2"}]}
+
+        r ->
+          r
+      end)
+
+    assert %{go: true} = verdict(september)
   end
 
   test "a gap, an unvalidated smoke call or unmeasured swap is a no-go" do

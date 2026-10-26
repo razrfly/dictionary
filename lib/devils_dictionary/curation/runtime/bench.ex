@@ -776,7 +776,11 @@ defmodule DevilsDictionary.Curation.Runtime.Bench do
   end
 
   # A definition chosen under a sense other than the one the plan declares for
-  # it, as the lead or as a highlight.
+  # it, as the lead or as a highlight. The word itself (`m0`, the lexeme
+  # meaning every content candidate may take) is not another sense: it is
+  # where a lead usually goes, as September's 9B put c1 (lead c1 → m0, c3 →
+  # s1, c4 → s2: no wrong sense). That every sense is used is
+  # `senses_covered`'s question, not this one's.
   defp wrong_senses(r, c, packet) do
     senses = Map.new(Enum.with_index(c["senses"], 1), fn {s, n} -> {"s#{n}", s["key"]} end)
 
