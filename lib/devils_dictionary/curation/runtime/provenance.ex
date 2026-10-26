@@ -55,9 +55,16 @@ defmodule DevilsDictionary.Curation.Runtime.Provenance do
   @doc """
   Reads the served artifact and registers it under `slug`. Returns `{:ok,
   config}` (new or existing) or `{:error, reason}`.
+
+  `opts`: `:instruction_version` (required), one of
+  `Packet.instruction_versions/0`, which the row pins; `:generation`
+  overrides.
   """
   def register(model_name, slug, actor_id, opts \\ []) do
-    with {:ok, version} <- Ollama.version(opts),
+    instruction = Keyword.get(opts, :instruction_version)
+
+    with :ok <- known_instruction(instruction),
+         {:ok, version} <- Ollama.version(opts),
          {:ok, models} <- Ollama.tags(opts),
          {:ok, digest} <- served_digest(models, model_name),
          {:ok, manifest} <- manifest(model_name, digest, opts),
@@ -82,7 +89,7 @@ defmodule DevilsDictionary.Curation.Runtime.Provenance do
         runtime_version: version,
         capabilities: capabilities,
         generation: generation(capabilities, Keyword.get(opts, :generation, %{})),
-        instruction_version: Packet.instruction_version(),
+        instruction_version: instruction,
         output_contract_version: Contract.version()
       }
 
@@ -102,6 +109,14 @@ defmodule DevilsDictionary.Curation.Runtime.Provenance do
           |> Repo.insert()
       end
     end
+  end
+
+  # The instruction is chosen, never defaulted: it is part of what the row
+  # pins, and a new one is a new row.
+  defp known_instruction(version) do
+    if version in Packet.instruction_versions(),
+      do: :ok,
+      else: {:error, {:unsupported_instruction_version, version}}
   end
 
   defp served_digest(models, model_name) do

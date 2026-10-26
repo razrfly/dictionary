@@ -20,7 +20,10 @@ defmodule DevilsDictionary.Curation.Runtime.GatewayRaceTest do
   setup do
     world = world!()
     config = model_config!() |> ready!()
-    {:ok, packet} = Packet.build([world.love.object_id], "en")
+
+    {:ok, packet} =
+      Packet.build([world.love.object_id], "en", instruction_version: config.instruction_version)
+
     {:ok, frozen} = Packet.freeze(packet)
     actor = actor!(world.reviewer)
 

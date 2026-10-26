@@ -10,6 +10,8 @@ a personality panel improves judgment, and nothing here is production readiness.
 - Frozen packets: [`priv/curation/runtime_bench/packets/`](../../priv/curation/runtime_bench/packets/).
 - Raw results: [`priv/curation/runtime_bench/results/2026-09-27.json`](../../priv/curation/runtime_bench/results/2026-09-27.json),
   run `1790513117`.
+- Re-run under `generic-editor-v2`, as this record's conditions asked:
+  [runtime-benchmark-2026-10-26.md](runtime-benchmark-2026-10-26.md).
 
 ## Recommendation
 

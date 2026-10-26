@@ -17,21 +17,26 @@ defmodule Mix.Tasks.Dd.Runtime do
 
   **Setup.** This is explicit, and the only thing that ever downloads:
 
-      mix dd.runtime setup --model qwen3.5:4b --slug qwen3.5-4b-v1 [--pull] --accept-license
+      mix dd.runtime setup --model qwen3.5:9b --slug qwen3.5-9b-v2 [--pull] \
+        --instruction generic-editor-v2 --accept-license
 
   `setup` checks that the volume is mounted and external, that the service is
   up, and, before `--pull`, the free space. After a pull it prints the
   model's license. Only `--accept-license` records the pinned model config:
-  its digests, quantization, license digest, template digest, runtime version
-  and generation settings.
+  its digests, quantization, license digest, template digest, runtime version,
+  generation settings and the instruction it runs (`--instruction`, one of
+  `Packet.instruction_versions/0`, never a default). A new instruction for
+  the same model is a new config, under a new slug.
 
   **Work:**
 
       mix dd.runtime ready   --model-config SLUG [--smoke]
-      mix dd.runtime packet  --lexeme ID[,ID] [--language en] --out PATH
+      mix dd.runtime packet  --model-config SLUG --lexeme ID[,ID] [--language en] --out PATH
       mix dd.runtime request --model-config SLUG --packet PATH --key KEY [--deadline-ms MS]
 
-  `request` runs one frozen packet and prints its receipt. It writes an
+  `packet` builds for the config's pinned instruction, and `request` refuses a
+  packet built for another. `request` runs one frozen packet and prints its
+  receipt. It writes an
   attempt and its accounting, and never a composition, review, publication,
   claim or page. `--deadline-ms` shortens the call's deadline, and with it the
   reservation and the lease, for a recovery drill. It never lengthens them.
@@ -44,7 +49,9 @@ defmodule Mix.Tasks.Dd.Runtime do
       mix dd.runtime resume  --model-config SLUG    # readiness, then available
       mix dd.runtime pause   --reason TEXT
 
-  **The benchmark**, in a `*_bench` database only:
+  **The benchmark**, in a `*_bench` database only. `seed` freezes the packets
+  for the plan's `instruction_version`, and `run` writes the samples, the
+  summary and the plan's go or no-go per model:
 
       DD_DATABASE=devils_dictionary_runtime_bench mix dd.runtime bench seed --plan PLAN --packets DIR
       DD_DATABASE=devils_dictionary_runtime_bench mix dd.runtime bench run  --plan PLAN --packets DIR --out FILE
@@ -86,6 +93,7 @@ defmodule Mix.Tasks.Dd.Runtime do
     key: :string,
     day: :string,
     reason: :string,
+    instruction: :string,
     plan: :string,
     packets: :string,
     min_free_gib: :integer,
@@ -143,7 +151,9 @@ defmodule Mix.Tasks.Dd.Runtime do
       )
 
       if opts[:accept_license] do
-        print(Provenance.register(model, slug, operator!().id))
+        instruction = required(opts, :instruction)
+
+        print(Provenance.register(model, slug, operator!().id, instruction_version: instruction))
       else
         Mix.shell().info(
           "not recorded: re-run with --accept-license once the license is acceptable"
@@ -170,10 +180,13 @@ defmodule Mix.Tasks.Dd.Runtime do
   end
 
   defp command(["packet"], opts) do
+    config = config!(opts)
     ids = required(opts, :lexeme) |> String.split(",") |> Enum.map(&String.to_integer/1)
     out = required(opts, :out)
+    language = Keyword.get(opts, :language, "en")
 
-    with {:ok, packet} <- Packet.build(ids, Keyword.get(opts, :language, "en")),
+    with {:ok, packet} <-
+           Packet.build(ids, language, instruction_version: config.instruction_version),
          {:ok, frozen} <- Packet.freeze(packet) do
       hash = Packet.write!(frozen, out)
 
@@ -210,8 +223,12 @@ defmodule Mix.Tasks.Dd.Runtime do
   defp command(["bench", "seed"], opts) do
     plan = Bench.plan!(required(opts, :plan))
     dir = required(opts, :packets)
+
+    instruction =
+      plan["instruction_version"] || Mix.raise("the plan names no instruction_version")
+
     seeded = Bench.seed!(plan)
-    hashes = Bench.freeze_packets!(seeded, dir)
+    hashes = Bench.freeze_packets!(seeded, dir, instruction)
 
     Enum.each(hashes, fn {case_id, hash} ->
       Mix.shell().info("#{case_id}: #{Path.join(dir, case_id <> ".json")} #{hash}")
@@ -219,18 +236,27 @@ defmodule Mix.Tasks.Dd.Runtime do
   end
 
   defp command(["bench", "run"], opts) do
+    Bench.bench_database!("run the benchmark in")
     plan = Bench.plan!(required(opts, :plan))
     dir = required(opts, :packets)
     run_id = "#{System.os_time(:second)}"
 
     {records, missing} = Bench.run(plan, dir, run_id: run_id, actor_id: operator!().id)
+    summary = Bench.summarize(records, plan, dir)
 
     report = %{
       run_id: run_id,
+      database: Repo.config()[:database],
+      plan: plan["plan_version"],
+      instruction_version: plan["instruction_version"],
       finished_at: DateTime.utc_now(),
       service: Bench.service_facts(),
       budget: Gateway.budget(Date.utc_today()),
-      summary: Bench.summarize(records, plan, dir),
+      summary: summary,
+      verdict:
+        Map.new(plan["models"], fn m ->
+          {m, Bench.verdict(m, summary[m], records, missing, plan)}
+        end),
       not_measured: missing,
       samples: records
     }
