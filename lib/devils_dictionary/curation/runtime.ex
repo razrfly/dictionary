@@ -387,10 +387,14 @@ defmodule DevilsDictionary.Curation.Runtime do
     }
   end
 
-  @doc "The fixed, fictional packet of the smoke call, under a config's instruction."
+  @doc """
+  The fixed, fictional packet of the smoke call, under a config's
+  instruction. It stays a `runtime-packet-v1` packet, so its prompt never
+  moves with the packet builder.
+  """
   def smoke_packet(instruction_version) do
     %{
-      "packet_version" => Packet.version(),
+      "packet_version" => hd(Packet.versions()),
       "instruction_version" => instruction_version,
       "target" => %{"language_tag" => "en", "lexeme_ids" => [], "headwords" => ["smoke"]},
       "lead_policy" => "bierce_first_v1",

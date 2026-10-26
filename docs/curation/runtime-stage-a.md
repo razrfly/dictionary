@@ -105,8 +105,9 @@ proves what a single-process mutex could not.
 | G8 | Daily occupancy is bounded; occupancy crossing midnight is charged to both days; pending work is capped | admission checks charged plus open reservations; charge split by UTC day | "the budget refuses admission once today's occupancy is spent"; "occupancy crossing midnight is charged to both UTC days"; "the pending-work cap refuses admission"; `BenchTest` "an interval is charged to each UTC day it touches" |
 | G9 | Only a refused connection (never sent) is retried, at most twice, the database's bound | `Runtime.Ollama` `retry: false`; the retry loop in `Runtime.run/3`; `Attempt.max_transport_retries/0` and the `transport_retries` CHECK | `RuntimeTest` "a refused connection is retried twice, then fails before dispatch" and "configuration may retry less than the database allows, never more"; `GatewayTest` "the retry ceiling is the database's: up to it is recorded, one more is refused"; `ReadinessTest` "a refused connection was never sent; a timeout is uncertain; an error answer is an answer" |
 | G10 | Memory pressure, swap growth or repeated runtime failures pause the service until an operator resumes it | `Runtime.System` samples; pause rules | "memory pressure refuses and pauses; swap growth during a call pauses after it"; "three runtime failures in a row pause the service until an operator resumes it"; "a validation refusal is an answer, not a runtime failure" |
-| P1 | A packet is bounded: at most 12 candidates, bounded excerpts, an estimated prompt within context minus reserved output. Oversized packets are refused, never trimmed | `Packet.freeze/2`, `Packet.fits?/2` | `PacketTest` "limits refuse; they never trim the packet"; "excerpts are cut at a word boundary, never rewritten"; `RuntimeTest` "an oversized, stale or unready packet is refused before admission" |
-| P2 | Every candidate is an exact, current, eligible registry revision; restricted evidence never enters a packet; an entry Bierce-first applies to is in the packet, or there is no packet | `Packet.build/3` (`priority_candidate_unavailable`); `Packet.verify/1` re-checks with `Curation.Eligibility` before dispatch | "a packet is built from the registry, Bierce first, and frozen under one hash"; "restricted or withdrawn evidence never enters a packet"; "a Bierce entry that applies but cannot be a candidate refuses the packet"; "a packet that no longer matches the registry is refused before dispatch" |
+| P1 | A packet is bounded: at most 12 candidates and 12 meanings by the recorded cut (packet v2, below), bounded excerpts, an estimated prompt within context minus reserved output. An oversized excerpt or prompt is refused, never trimmed | `Packet.for_page/2`, `Packet.freeze/2`, `Packet.fits?/2` | `PacketTest` "limits that need no registry refuse at freeze"; "excerpts are cut at a word boundary, never rewritten"; `PacketV2ScopeTest` test 4; `RuntimeTest` "an oversized, stale or unready packet is refused before admission" |
+| P2 | Every candidate is one the curation screen offers, an exact, current, eligible registry revision; restricted evidence never enters a packet; an entry Bierce-first applies to is in the packet, or there is no packet | `Packet.for_page/2` through `Candidates.for_page/1` (`priority_candidate_unavailable`, `priority_candidates_exceed_cap`); `Packet.verify/1` re-derives every kind before dispatch | "a packet is built from the registry, Bierce first, and frozen under one hash"; "restricted or withdrawn evidence never enters a packet"; "a Bierce entry that applies but cannot be a candidate refuses the packet"; "a packet that no longer matches the registry is refused before dispatch"; `PacketV2ScopeTest` tests 1 and 6 |
+| P4 | The cut is deterministic and recorded: what it left out is on the packet and the attempt by id and reason, never by text | `Packet.for_page/2`'s `omitted`; `Packet.summary/1` | `PacketV2ScopeTest` tests 3 and 5; `PacketTest` test 2 |
 | I1 | The instruction a call is sent under is the one its model config pins, and a pinned text never changes | `Packet.build/3` takes the config's `instruction_version` (no default); `Packet.freeze/2` refuses an unpinned version; `Runtime.run/3` refuses a mismatch before admission; `Runtime.smoke/2` uses the config's | `PacketTest` "each instruction version is held to its text", "September's packets still render the prompts their attempts recorded"; `RuntimeTest` "a packet built for another instruction than the config's is refused before admission", "a config pinned to v2 sends v2, for a request and for its smoke call" |
 | P3 | Excerpts are untrusted data; attempts store hashes, ids and a text-free summary, never excerpt text or prompts | prompt rendering; attempt columns | "an attempt keeps ids and hashes, and never the excerpts"; `RuntimeTest` "instructions inside a source excerpt stay data: obeying them is refused" |
 | C1 | Output is bounded, parseable, exactly shaped, and free of tool calls; emitted reasoning is measured as a length and never kept | `Contract.validate/3` | `ContractTest` "malformed, oversized, truncated or tool-calling output is refused"; "extra keys, wrong types and more than three highlights are refused"; "emitted reasoning is measured as a length and never kept" |
@@ -115,6 +116,59 @@ proves what a single-process mutex could not.
 | R1 | Readiness refuses with a stable reason, and never downloads or creates directories | `Runtime.Readiness` | `ReadinessTest`: "a missing or internal drive refuses before anything is asked of the service"; "an unreachable service, another version or a missing model refuses"; "a quarantined or paused slot refuses" |
 | R2 | The served model is the pinned artifact on the external models root | `/api/tags` digest equals the pinned manifest digest, which equals the sha256 of the manifest file under the root | "a served tag that moved to another artifact refuses, and nothing is pulled"; "a served manifest that is not the one on the external root refuses" |
 | — | Nothing public is written | `Runtime.run/3` writes attempts and ledger entries only | `RuntimeTest` "a packet gets a validated result, a receipt and accounting, and nothing public" |
+
+## Packet v2
+
+`runtime-packet-v2` (#262, under #253 §5a) is what a P6 editor will be offered. A packet
+v1 offered Bierce's entries, the other definitions and the sense quotations, and refused
+more than 12 candidates or 12 meanings; love's whole On scope (five words, 43 senses, 48
+packet meanings) could never be sent. v2:
+
+- **Offers what the screen offers.** `Packet.for_page/2` reads `Curation.Candidates.for_page/1`,
+  the owner's curation screen's own seam, so the packet holds the page's definitions,
+  current senses' quotations, Saved catalog shelf (`work`) and accepted exemplars
+  (`exemplar`), each only while it may be shown, under the meaning the screen gives it. A
+  candidate the screen lists but cannot offer never enters a packet. Poems and books are
+  not offered, because the screen offers none (#253 D6).
+- **Cuts deterministically.** Every applicable Bierce entry is in, counted against the
+  `content` quota; more of them than that quota, the cap or the meaning bound admits
+  refuses the packet (`{:priority_candidates_exceed_cap, n}`). Each kind is then filled
+  up to its quota in source-priority order (Bierce, Johnson, WordNet, Wiktionary,
+  Wikipedia, any other; a verified corpus before a live one; exemplars by the date of
+  their acceptance), ties by object id. A kind's unused quota flows to the next kind in
+  `content, sense_quotation, work, exemplar` order and never back, so a page with no works
+  can leave places empty while a quotation is cut.
+- **Bounds meanings.** Every chosen candidate's meaning is kept; a candidate whose meaning
+  no longer fits is omitted (`meaning_out_of_bound`) and its place goes to the next of its
+  kind. The places left go to the other meanings by how many of the page's candidates
+  cite them, then by rank on the page (the words, then the senses), then by id. A
+  definition may be tied to any meaning in the packet and a quotation to its sense or a
+  word, as in v1; a work or an exemplar only to the meaning the screen offers it under.
+- **Records its cut.** `omitted` lists every offered candidate not sent, by screen key,
+  kind, object id and reason (`over_quota`, `meaning_out_of_bound`, `meaning_unavailable`,
+  `no_excerpt`). `Packet.summary/1`, the attempt's `packet_summary`, keeps it with the
+  instruction, the policy and the counts (#253 D9).
+- **Re-derives every kind before dispatch.** `Packet.verify/1` asks the screen again: a
+  candidate it no longer offers under the same item spec is `not_offered`; a work's
+  catalog checksum (`catalog_changed`), an exemplar's acceptance (`claim_not_accepted`)
+  and the review context that accepted it (`claim_context_changed`) are checked by
+  `Curation.Eligibility`; a work's or an exemplar's label must be the same.
+- **Has no quote for a work or an exemplar.** They carry a `label` (title, creator and
+  date; what the subject is and its name), and the contract refuses a quote on one
+  (`quote_not_allowed`). A quotation's quote must still be an exact substring.
+- **Is what the refresh clock compares.** `Packet.digest/1`, the cut by ids, revisions and
+  hashes without the instruction or the omitted list, is the candidate half of P5's
+  fingerprint under version `packet-v2/<cut policy>/<meaning policy>`. A stored
+  `candidates-v1` fingerprint, or one of another policy version, re-admits its page once
+  and then settles; a candidate eligible outside the cut does not by itself make a page
+  stale.
+
+The quotas, bounds, source order and the two policy versions (`cut-v1`, `meanings-v2`)
+are code defaults in `Runtime.Endpoint`, configuration-overridable. A changed policy
+should name a new version, which is what re-admits the pilot pages. The September
+benchmark's packets are `runtime-packet-v1` and still freeze to their hashes and verify
+by v1's rules, so they were not re-frozen. `mix dd.runtime packet --scope SLUG --dry-run
+--instruction V` prints the cut for an On page and writes nothing.
 
 ## Operating limits
 
@@ -127,7 +181,8 @@ limits, not measurements.
 | Reservation per call | deadline + 5 s | occupancy of one call cannot exceed it before a timeout |
 | Daily occupancy budget | 30 min, UTC | #195 |
 | Pending-work cap | 30 units, 1 per unsettled attempt | #195 (the panel reserves per composition and claim later) |
-| Candidates per packet | 12 | #195 |
+| Candidates per packet | 12, cut by quota: `content 4, sense_quotation 3, work 3, exemplar 2` | #195, #253 §5a |
+| Meanings per packet | 12; every chosen candidate's meaning kept | #253 §5a |
 | Excerpt | 1,200 characters, cut at a word boundary | keeps 12 candidates inside 8K context |
 | Context / output | `num_ctx` 8192, `num_predict` 1024 (thinking included) | #195 |
 | Transport retries | 2, connection refused only; configuration may lower it, never raise it (the CHECK's bound) | #195, #221 A1 |

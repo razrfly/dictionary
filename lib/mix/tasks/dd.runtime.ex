@@ -32,6 +32,7 @@ defmodule Mix.Tasks.Dd.Runtime do
 
       mix dd.runtime ready   --model-config SLUG [--smoke]
       mix dd.runtime packet  --model-config SLUG --lexeme ID[,ID] [--language en] --out PATH
+      mix dd.runtime packet  --scope SLUG --dry-run (--model-config SLUG | --instruction V) [--language en]
       mix dd.runtime request --model-config SLUG --packet PATH --key KEY [--deadline-ms MS]
 
   `packet` builds for the config's pinned instruction, and `request` refuses a
@@ -40,6 +41,13 @@ defmodule Mix.Tasks.Dd.Runtime do
   attempt and its accounting, and never a composition, review, publication,
   claim or page. `--deadline-ms` shortens the call's deadline, and with it the
   reservation and the lease, for a recovery drill. It never lengthens them.
+
+  `packet --dry-run` prints what an editor would be offered for the On page
+  SLUG (#262 §2.2): the cut and its counts, the Bierce entries always in,
+  what was left out and why, by id, and the hashes. It admits nothing and
+  writes nothing, not even a file. The instruction is a pinned config's
+  (`--model-config`) or one of `Packet.instruction_versions/0`
+  (`--instruction`), never a default.
 
   **The slot:**
 
@@ -62,6 +70,7 @@ defmodule Mix.Tasks.Dd.Runtime do
 
   use Mix.Task
 
+  alias DevilsDictionary.Curation.Candidates
   alias DevilsDictionary.Curation.Runtime
 
   alias DevilsDictionary.Curation.Runtime.{
@@ -76,6 +85,8 @@ defmodule Mix.Tasks.Dd.Runtime do
     ServiceProcess
   }
 
+  alias DevilsDictionary.Lexicon
+  alias DevilsDictionary.Lexicon.WordPage
   alias DevilsDictionary.Repo
   alias DevilsDictionary.Sources.Actor
 
@@ -87,6 +98,8 @@ defmodule Mix.Tasks.Dd.Runtime do
     model_config: :string,
     smoke: :boolean,
     lexeme: :string,
+    scope: :string,
+    dry_run: :boolean,
     language: :string,
     out: :string,
     packet: :string,
@@ -180,22 +193,7 @@ defmodule Mix.Tasks.Dd.Runtime do
   end
 
   defp command(["packet"], opts) do
-    config = config!(opts)
-    ids = required(opts, :lexeme) |> String.split(",") |> Enum.map(&String.to_integer/1)
-    out = required(opts, :out)
-    language = Keyword.get(opts, :language, "en")
-
-    with {:ok, packet} <-
-           Packet.build(ids, language, instruction_version: config.instruction_version),
-         {:ok, frozen} <- Packet.freeze(packet) do
-      hash = Packet.write!(frozen, out)
-
-      Mix.shell().info(
-        "#{out}: #{length(packet["candidates"])} candidates, #{frozen.bytes} bytes, sha256 #{hash}"
-      )
-    else
-      error -> print(error)
-    end
+    if opts[:dry_run], do: dry_run(opts), else: write_packet(opts)
   end
 
   defp command(["request"], opts) do
@@ -267,6 +265,142 @@ defmodule Mix.Tasks.Dd.Runtime do
 
   defp command(other, _opts),
     do: Mix.raise("unknown command #{inspect(other)}; see mix help dd.runtime")
+
+  # ── packets ───────────────────────────────────────────────────────────────
+
+  defp write_packet(opts) do
+    config = config!(opts)
+    ids = required(opts, :lexeme) |> String.split(",") |> Enum.map(&String.to_integer/1)
+    out = required(opts, :out)
+    language = Keyword.get(opts, :language, "en")
+
+    with {:ok, packet} <-
+           Packet.build(ids, language, instruction_version: config.instruction_version),
+         {:ok, frozen} <- Packet.freeze(packet) do
+      hash = Packet.write!(frozen, out)
+
+      Mix.shell().info(
+        "#{out}: #{length(packet["candidates"])} candidates, #{frozen.bytes} bytes, sha256 #{hash}"
+      )
+    else
+      error -> print(error)
+    end
+  end
+
+  defp dry_run(opts) do
+    slug = required(opts, :scope)
+    language = Keyword.get(opts, :language, "en")
+    instruction = dry_run_instruction(opts)
+    page = slug |> Lexicon.lookup(language) |> WordPage.build(viewer: :public)
+    candidates = Candidates.for_page(page)
+    result = Packet.for_page(page, instruction_version: instruction, candidates: candidates)
+
+    shell = Mix.shell()
+    Enum.each(dry_run_lines(slug, result, candidates), &shell.info/1)
+  end
+
+  defp dry_run_instruction(opts) do
+    versions = Packet.instruction_versions()
+
+    cond do
+      opts[:model_config] ->
+        config!(opts).instruction_version
+
+      opts[:instruction] in versions ->
+        opts[:instruction]
+
+      opts[:instruction] ->
+        Mix.raise("--instruction must be one of #{Enum.join(versions, ", ")}")
+
+      true ->
+        Mix.raise(
+          "--model-config or --instruction is required: an instruction is never defaulted"
+        )
+    end
+  end
+
+  defp dry_run_lines(slug, {:error, reason}, _candidates) do
+    [row("packet_version", Packet.version()), row("scope", slug), row("refused", inspect(reason))]
+  end
+
+  defp dry_run_lines(slug, {:ok, packet}, candidates) do
+    target = packet["target"]
+    policy = packet["policy"]
+    counts = packet["counts"]
+    chosen = packet["candidates"]
+    omitted = packet["omitted"]
+    kept = length(packet["meanings"])
+    required = counts["meanings_required"]
+    kinds = Enum.frequencies_by(chosen, & &1["kind"])
+    reasons = Enum.frequencies_by(omitted, & &1["reason"])
+
+    hash =
+      case Packet.freeze(packet) do
+        {:ok, frozen} -> frozen.hash
+        {:error, reason} -> "not frozen: #{inspect(reason)}"
+      end
+
+    [
+      row("packet_version", packet["packet_version"]),
+      row("instruction", packet["instruction_version"]),
+      row(
+        "scope",
+        "#{slug} · lexemes #{Enum.join(target["lexeme_ids"], " ")} · #{target["language_tag"]}"
+      ),
+      row(
+        "meanings",
+        "#{kept} of #{counts["meanings_total"]} (required #{required}, bounded #{kept - required})" <>
+          " · policy #{policy["meanings"]}"
+      ),
+      row(
+        "candidates",
+        "#{length(chosen)} of #{counts["offered"]} · " <>
+          Enum.map_join(Packet.kinds(), ", ", &"#{&1} #{Map.get(kinds, &1, 0)}") <>
+          " · policy #{policy["cut"]}"
+      ),
+      row("priority", priority_text(packet, candidates)),
+      row(
+        "omitted",
+        "#{length(omitted)}" <>
+          if(reasons == %{},
+            do: "",
+            else:
+              " · by id with reason: " <>
+                (reasons |> Enum.sort() |> Enum.map_join(", ", fn {r, n} -> "#{r} #{n}" end))
+          )
+      ),
+      row("hashes", "packet sha256 #{hash}, candidate set sha256 #{Packet.digest(packet)}"),
+      "chosen"
+    ] ++
+      Enum.map(chosen, fn c ->
+        "  " <>
+          Enum.map_join(
+            [{c["candidate_id"], 4}, {c["kind"], 16}, {c["source"] || "-", 12}, {c["key"], 30}],
+            "",
+            fn {text, width} -> String.pad_trailing(to_string(text), width) end
+          ) <> c["required_meaning"]
+      end) ++
+      ["omitted"] ++
+      Enum.map(omitted, fn o ->
+        "  " <>
+          String.pad_trailing(o["key"], 34) <> String.pad_trailing(o["kind"], 16) <> o["reason"]
+      end)
+  end
+
+  defp priority_text(%{"priority_candidates" => []}, _candidates),
+    do: "none (no applicable Bierce entry)"
+
+  defp priority_text(packet, candidates) do
+    by_id = Map.new(packet["candidates"], &{&1["candidate_id"], &1})
+
+    Enum.map_join(packet["priority_candidates"], "; ", fn id ->
+      c = by_id[id]
+      title = Candidates.find(candidates, c["key"])
+      "#{c["source"]} #{title && title.title} (#{c["key"]}, always in)"
+    end)
+  end
+
+  defp row(label, value), do: String.pad_trailing(label, 17) <> to_string(value)
 
   # ── helpers ───────────────────────────────────────────────────────────────
 

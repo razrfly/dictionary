@@ -47,7 +47,6 @@ defmodule DevilsDictionary.Curation.Refresh do
   alias DevilsDictionary.Claims.AssertionRevision
 
   alias DevilsDictionary.Curation.{
-    Candidates,
     Composition,
     CompositionItem,
     CompositionMembership,
@@ -64,6 +63,7 @@ defmodule DevilsDictionary.Curation.Refresh do
     Standing
   }
 
+  alias DevilsDictionary.Curation.Runtime.Packet
   alias DevilsDictionary.Lexicon
   alias DevilsDictionary.Lexicon.WordPage
   alias DevilsDictionary.Registry.Sense
@@ -77,18 +77,19 @@ defmodule DevilsDictionary.Curation.Refresh do
   @max_lease_attempts 3
   @backoff_base_seconds 60
   @backoff_cap_seconds 6 * 3600
-  # The fingerprint names its own version. P4's packet digest will be
-  # `packet-v2`; a stored fingerprint of another version never equals a new
-  # one, so the switch costs one `needs_editor` check and never a silent match.
-  @fingerprint_version "candidates-v1"
+  # The fingerprint names its own version: P5 wrote `candidates-v1`, P4's
+  # packet digest writes `Packet.fingerprint_version/1` (`packet-v2/` and the
+  # cut's policies). A stored fingerprint of another version never equals a
+  # new one, and a visit admits its page once for it (`decision/2`), so a
+  # switch costs one `needs_editor` check and never a silent match or a loop.
   # The advisory-lock class: a namespace for `pg_try_advisory_xact_lock/2`.
   @lock_class 259
 
   @doc "The periodic window, in seconds."
   def window_seconds, do: @window_seconds
 
-  @doc "The fingerprint version this build writes."
-  def fingerprint_version, do: @fingerprint_version
+  @doc "The fingerprint version this build writes (`Packet.fingerprint_version/1`)."
+  def fingerprint_version, do: Packet.fingerprint_version()
 
   # ── the visit ─────────────────────────────────────────────────────────────
 
@@ -173,9 +174,10 @@ defmodule DevilsDictionary.Curation.Refresh do
 
   @doc """
   What a row asks of a visit now, with no lock: `:admit` (never checked,
-  dirty, due, or a deferred run whose backoff has passed), `:recover` (a
-  queued or running run whose lease expired), `:in_flight`, `:suppressed`,
-  `:backoff` or `:fresh`. `nil` (no row) is never checked.
+  dirty, due, checked under another fingerprint version, or a deferred run
+  whose backoff has passed), `:recover` (a queued or running run whose
+  lease expired), `:in_flight`, `:suppressed`, `:backoff` or `:fresh`.
+  `nil` (no row) is never checked.
   """
   def decision(nil, _now), do: :admit
   def decision(%RefreshState{state: :suppressed}, _now), do: :suppressed
@@ -191,9 +193,15 @@ defmodule DevilsDictionary.Curation.Refresh do
       is_nil(row.last_completed_at) -> :admit
       not is_nil(row.dirty_at) -> :admit
       reached?(now, row.refresh_after) -> :admit
+      another_version?(row.input_fingerprint) -> :admit
       true -> :fresh
     end
   end
+
+  # A baseline written under another fingerprint version is re-checked once:
+  # the completion stores this build's version, and the next visit is fresh.
+  defp another_version?(nil), do: false
+  defp another_version?(fingerprint), do: version_of(fingerprint) != fingerprint_version()
 
   # ── admission ─────────────────────────────────────────────────────────────
 
@@ -511,19 +519,21 @@ defmodule DevilsDictionary.Curation.Refresh do
       %{fingerprint, eligibility, accepted, candidates, withheld_digest,
         published_version_id}
 
-  `fingerprint` is `candidates-v1:` + the published version's eligibility
-  fingerprint evaluated now (`unpublished` when none) + the digest of the
-  page's candidate set (ids, revisions, standing; never text) and of the
-  version's standing as a whole (`Published.current/1`'s reasons for
-  withholding all of it: a withdrawn approval, a changed scope or
-  configuration), which the item-level eligibility fingerprint does not
-  carry. `accepted` is the fingerprint the published version was accepted
-  with, the baseline of a composition's first check. Reads only.
+  `fingerprint` is the fingerprint version (`fingerprint_version/0`) + the
+  published version's eligibility fingerprint evaluated now (`unpublished`
+  when none) + the digest of the page's packet (`Packet.digest/1`: the cut
+  an editor would be offered, by ids, revisions and hashes, never text; or
+  the packet's refusal) and of the version's standing as a whole
+  (`Published.current/1`'s reasons for withholding all of it: a withdrawn
+  approval, a changed scope or configuration), which the item-level
+  eligibility fingerprint does not carry. A candidate eligible outside the
+  cut changes nothing until a periodic run re-cuts (#253 §5a). `accepted` is
+  the fingerprint the published version was accepted with, the baseline of
+  a composition's first check. Reads only.
   """
   def inputs(%{composition_id: composition_id}, slug) do
     composition = Repo.get!(Composition, composition_id)
     page = slug |> Lexicon.lookup() |> WordPage.build(viewer: :public)
-    candidates = Candidates.for_page(page)
 
     standing =
       case Published.current(composition.id) do
@@ -534,7 +544,7 @@ defmodule DevilsDictionary.Curation.Refresh do
     candidate_digest =
       Digest.term(%{
         "page" => Compositions.signature(Enum.map(page.headword.lexemes, & &1.id)),
-        "candidates" => candidate_identities(candidates),
+        "packet" => packet_identity(page),
         "standing" => standing
       })
 
@@ -550,7 +560,7 @@ defmodule DevilsDictionary.Curation.Refresh do
       end
 
     %{
-      fingerprint: Enum.join([@fingerprint_version, eligibility, candidate_digest], ":"),
+      fingerprint: Enum.join([fingerprint_version(), eligibility, candidate_digest], ":"),
       eligibility: eligibility,
       accepted: accepted,
       standing: standing,
@@ -560,24 +570,15 @@ defmodule DevilsDictionary.Curation.Refresh do
     }
   end
 
-  # What identifies a candidate set: each candidate's key, item spec,
-  # standing and lead verdict, and whether "no lead" is admissible. Specs
-  # hold ids, revisions, hashes and manifest checksums, never text.
-  # Sorted by key: the lists arrive in an order no query promises (exemplars
-  # unordered, works by sitelinks), and order is not an input.
-  @doc false
-  def candidate_identities(candidates) do
-    leads =
-      candidates.leads
-      |> Enum.sort_by(& &1.key)
-      |> Enum.map(&[&1.key, canonical(&1.spec), canonical(&1.lead)])
-
-    highlights =
-      candidates.highlights
-      |> Enum.sort_by(& &1.key)
-      |> Enum.map(&[&1.key, canonical(&1.spec), canonical(&1.status)])
-
-    %{"leads" => leads, "highlights" => highlights, "no_lead" => canonical(candidates.no_lead)}
+  # What identifies the page's packet: the digest of its cut, whose order is
+  # the cut's own and deterministic, or the reason it is refused (an
+  # applicable Bierce entry the screen cannot offer, too many of them, no
+  # candidates), which is an input as much as a candidate is.
+  defp packet_identity(page) do
+    case Packet.for_page(page) do
+      {:ok, packet} -> Packet.digest(packet)
+      {:error, reason} -> %{"refused" => canonical(reason)}
+    end
   end
 
   defp canonical(value) when is_tuple(value), do: value |> Tuple.to_list() |> canonical()
