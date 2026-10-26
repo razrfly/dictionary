@@ -14,7 +14,8 @@ defmodule DevilsDictionary.Curation.Runtime.Contract do
     * **References (C2).** Every `candidate_id` is in the packet and used
       once, every `meaning_id` is allowed for its candidate, there are at most
       three highlights, and every quote is an exact substring of its
-      candidate's excerpt.
+      candidate's excerpt. A `work` or an `exemplar` has no excerpt, only a
+      label, so a quote on one is refused (`quote_not_allowed`, #262).
     * **Evidence and policy now (C3).** Every selected item passes
       `Curation.Eligibility`, and the lead passes `Curation.LeadRule`: Bierce
       first, among definitions on the page.
@@ -24,7 +25,7 @@ defmodule DevilsDictionary.Curation.Runtime.Contract do
   never executed. Emitted reasoning is measured as a length and discarded.
   """
 
-  alias DevilsDictionary.Curation.{Digest, Eligibility, LeadRule}
+  alias DevilsDictionary.Curation.{Digest, LeadRule}
   alias DevilsDictionary.Curation.Runtime.{Endpoint, Packet}
 
   @version "selection-output-v1"
@@ -287,10 +288,15 @@ defmodule DevilsDictionary.Curation.Runtime.Contract do
 
   defp quote_problem(_where, %{"quote" => nil}, _candidate), do: []
 
+  defp quote_problem(where, %{"quote" => quote}, %{"kind" => kind})
+       when is_binary(quote) and kind in ["work", "exemplar"],
+       do: [[where, "quote_not_allowed"]]
+
   defp quote_problem(where, %{"quote" => quote}, candidate) when is_binary(quote) do
-    if quote != "" and String.contains?(candidate["excerpt"], quote),
-      do: [],
-      else: [[where, "fabricated_quote"]]
+    if quote != "" and is_binary(candidate["excerpt"]) and
+         String.contains?(candidate["excerpt"], quote),
+       do: [],
+       else: [[where, "fabricated_quote"]]
   end
 
   defp quote_problem(_where, _choice, _candidate), do: []
@@ -320,7 +326,7 @@ defmodule DevilsDictionary.Curation.Runtime.Contract do
 
     eligibility =
       Enum.flat_map(items, fn {where, candidate, meaning} ->
-        case Eligibility.check(Packet.probe(candidate, meaning), ids) do
+        case Packet.check(candidate, meaning, ids) do
           :ok -> []
           {:error, reason} -> [[where, to_string(reason)]]
         end

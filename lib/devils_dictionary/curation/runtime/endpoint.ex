@@ -26,6 +26,15 @@ defmodule DevilsDictionary.Curation.Runtime.Endpoint do
     daily_budget_ms: 30 * 60_000,
     pending_cap_units: 30,
     max_candidates: 12,
+    # Packet v2's cut (#253 §5a, #262): the quotas by kind, in the order
+    # unused quota flows down; the meaning bound; the source priority a kind
+    # is filled in. Each policy names its version, which the refresh
+    # fingerprint carries: a change of policy should name a new version.
+    candidate_quotas: [content: 4, sense_quotation: 3, work: 3, exemplar: 2],
+    max_meanings: 12,
+    source_priority: ~w(bierce johnson wordnet wiktionary wikipedia),
+    cut_policy: "cut-v1",
+    meaning_policy: "meanings-v2",
     max_excerpt_chars: 1_200,
     max_output_bytes: 16_384,
     max_transport_retries: 2,

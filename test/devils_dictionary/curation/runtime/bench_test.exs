@@ -388,6 +388,59 @@ defmodule DevilsDictionary.Curation.Runtime.BenchTest do
     assert {adverse.reasons_seen, adverse.claimed_approval} == {0, nil}
   end
 
+  describe "the plan's packets (#262)" do
+    @describetag :tmp_dir
+
+    test "a packet already there is kept while it verifies, and never re-frozen in place",
+         %{tmp_dir: dir} do
+      world = DevilsDictionary.CurationFixtures.world!()
+      seeded = %{"ordinary" => [world.love.object_id]}
+      path = Path.join(dir, "ordinary.json")
+
+      # September's packets are v1; this build writes v2. A v1 packet there
+      # is kept, byte for byte.
+      {:ok, packet} =
+        Packet.build([world.love.object_id], "en", instruction_version: "generic-editor-v1")
+
+      v1 =
+        packet
+        |> Map.drop(["policy", "omitted", "counts"])
+        |> Map.put("packet_version", "runtime-packet-v1")
+        |> Map.update!("candidates", fn cs ->
+          Enum.map(cs, &Map.drop(&1, ["key", "required_meaning"]))
+        end)
+
+      {:ok, frozen} = Packet.freeze(v1)
+      Packet.write!(frozen, path)
+
+      assert Bench.freeze_packets!(seeded, dir, "generic-editor-v1") == %{
+               "ordinary" => frozen.hash
+             }
+
+      assert File.read!(path) == frozen.json
+
+      # Kept for its own instruction only, and only while it verifies.
+      assert_raise ArgumentError, ~r/never re-frozen in place/, fn ->
+        Bench.freeze_packets!(seeded, dir, "generic-editor-v2")
+      end
+
+      {:ok, _} =
+        DevilsDictionary.Registry.add_content_revision(world.bierce.object_id, %{body: "Revised."})
+
+      assert_raise ArgumentError, ~r/never re-frozen in place/, fn ->
+        Bench.freeze_packets!(seeded, dir, "generic-editor-v1")
+      end
+
+      assert File.read!(path) == frozen.json
+
+      # Removed, a new packet is frozen in its place, under this build.
+      File.rm!(path)
+      %{"ordinary" => hash} = Bench.freeze_packets!(seeded, dir, "generic-editor-v1")
+      {:ok, fresh} = Packet.read(path)
+      assert {fresh.hash, fresh.packet["packet_version"]} == {hash, "runtime-packet-v2"}
+    end
+  end
+
   describe "cold samples" do
     @describetag :tmp_dir
 

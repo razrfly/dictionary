@@ -172,13 +172,41 @@ defmodule DevilsDictionary.Curation.Runtime.Bench do
   @doc """
   Freezes each case's packet, for the plan's pinned instruction, to
   `dir/<case>.json`, and returns `%{case_id => hash}`.
+
+  A packet already in `dir` is the plan's: it is kept while it still
+  verifies, and never re-frozen in its place, since every model must see the
+  same bytes. September's and P7's packets are `runtime-packet-v1`, and this
+  build writes v2 (#262). A kept packet that no longer verifies, or no longer
+  belongs to the plan's instruction, raises, and only removing the file lets
+  a new packet stand there.
   """
   def freeze_packets!(seeded, dir, instruction_version) do
     Map.new(seeded, fn {case_id, ids} ->
-      {:ok, packet} = Packet.build(ids, "en", instruction_version: instruction_version)
-      {:ok, frozen} = Packet.freeze(packet)
-      {case_id, Packet.write!(frozen, Path.join(dir, "#{case_id}.json"))}
+      path = Path.join(dir, "#{case_id}.json")
+
+      if File.exists?(path),
+        do: {case_id, kept!(path, instruction_version)},
+        else: {case_id, freeze!(ids, path, instruction_version)}
     end)
+  end
+
+  defp kept!(path, instruction_version) do
+    with {:ok, frozen} <- Packet.read(path),
+         ^instruction_version <- frozen.packet["instruction_version"],
+         :ok <- Packet.verify(frozen) do
+      frozen.hash
+    else
+      other ->
+        raise ArgumentError,
+              "#{path} is the plan's packet and #{inspect(other)}: " <>
+                "it is never re-frozen in place; remove it to freeze a new one"
+    end
+  end
+
+  defp freeze!(ids, path, instruction_version) do
+    {:ok, packet} = Packet.build(ids, "en", instruction_version: instruction_version)
+    {:ok, frozen} = Packet.freeze(packet)
+    Packet.write!(frozen, path)
   end
 
   # ── running ───────────────────────────────────────────────────────────────

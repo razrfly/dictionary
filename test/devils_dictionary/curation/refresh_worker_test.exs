@@ -9,7 +9,8 @@ defmodule DevilsDictionary.Curation.RefreshWorkerTest do
   import DevilsDictionary.RefreshFixtures
   import DevilsDictionary.CurationFixtures, only: [content_spec: 2]
 
-  alias DevilsDictionary.Curation.{Composition, CompositionPublication, Refresh}
+  alias DevilsDictionary.Curation.{Candidates, Composition, CompositionPublication, Refresh}
+  alias DevilsDictionary.Curation.Runtime.Packet
   alias DevilsDictionary.{Registry, Repo}
 
   setup ctx do
@@ -280,25 +281,14 @@ defmodule DevilsDictionary.Curation.RefreshWorkerTest do
       assert %{last_outcome: :unchanged, last_outcome_reason: "unchanged"} = row!(ctx.composition)
     end
 
-    test "the candidate digest does not depend on the lists' order" do
-      a = %{
-        key: "a",
-        spec: %{kind: :content, object_id: 1},
-        lead: {:ok, :priority_source},
-        status: :ok
-      }
+    test "the packet digest does not depend on the order the screen lists candidates" do
+      page = page("love")
+      candidates = Candidates.for_page(page)
+      backward = %{candidates | highlights: Enum.reverse(candidates.highlights)}
 
-      b = %{
-        key: "b",
-        spec: %{kind: :work, catalog: %{manifest: "m"}},
-        lead: {:error, :x},
-        status: :ok
-      }
-
-      forward = %{leads: [a, b], highlights: [a, b], no_lead: :ok}
-      backward = %{leads: [b, a], highlights: [b, a], no_lead: :ok}
-
-      assert Refresh.candidate_identities(forward) == Refresh.candidate_identities(backward)
+      {:ok, forward} = Packet.for_page(page, candidates: candidates)
+      {:ok, reversed} = Packet.for_page(page, candidates: backward)
+      assert Packet.digest(forward) == Packet.digest(reversed)
     end
   end
 

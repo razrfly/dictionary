@@ -3,6 +3,8 @@ defmodule DevilsDictionary.Curation.Runtime.ContractTest do
   C1–C3 of `docs/curation/runtime-stage-a.md`. Structured output is a claim,
   and each class of bad claim is refused with a stable reason. What is
   accepted keeps ids, meanings, reasons and quote hashes, never quoted text.
+  Packet v2's kinds (#262 §6, test 7): a work or an exemplar is chosen with
+  no quote, and a quotation's quote is still exact.
   """
   use DevilsDictionary.DataCase, async: true
 
@@ -11,9 +13,9 @@ defmodule DevilsDictionary.Curation.Runtime.ContractTest do
   import DevilsDictionary.CurationFixtures
   import DevilsDictionary.RuntimeFixtures, only: [answer: 2, abstain: 0, selection: 2]
 
+  alias DevilsDictionary.{Claims, PacketFixtures, WordFixtures}
   alias DevilsDictionary.Curation.Digest
   alias DevilsDictionary.Curation.Runtime.{Contract, Packet}
-  alias DevilsDictionary.WordFixtures
 
   setup do
     world = world!()
@@ -169,5 +171,71 @@ defmodule DevilsDictionary.Curation.Runtime.ContractTest do
              validate(ctx, abstain(), thinking)
 
     refute Jason.encode!(result) =~ "hmm"
+  end
+
+  describe "test 7: works and exemplars (#262)" do
+    setup ctx do
+      PacketFixtures.pilot!(ctx, "war")
+      page = PacketFixtures.page("war")
+      {:ok, packet} = Packet.for_page(page, instruction_version: "generic-editor-v2")
+      {:ok, war} = Packet.freeze(packet)
+
+      first = fn kind -> Enum.find(packet["candidates"], &(&1["kind"] == kind)) end
+
+      %{
+        war: war,
+        lead: first.("content"),
+        work: first.("work"),
+        exemplar: first.("exemplar"),
+        quotation: first.("sense_quotation")
+      }
+    end
+
+    defp war(ctx, lead, highlights),
+      do: Contract.validate(answer(selection(lead, highlights), %{}), ctx.war)
+
+    defp pick(c, quote \\ nil), do: {c["candidate_id"], c["required_meaning"], quote}
+
+    test "a work and an exemplar are chosen with no quote, and refused with one", ctx do
+      lead = {ctx.lead["candidate_id"], ctx.lead["required_meaning"]}
+
+      assert {:ok, %{outcome: :accepted, result: result}} =
+               war(ctx, lead, [pick(ctx.work), pick(ctx.exemplar), pick(ctx.quotation)])
+
+      assert Enum.map(result["highlights"], & &1["candidate_id"]) ==
+               Enum.map([ctx.work, ctx.exemplar, ctx.quotation], & &1["candidate_id"])
+
+      assert [["highlight_1", "quote_not_allowed"]] =
+               reasons(war(ctx, lead, [pick(ctx.work, ctx.work["label"])]))
+
+      assert [["highlight_1", "quote_not_allowed"]] =
+               reasons(war(ctx, lead, [pick(ctx.exemplar, "Fixture exemplar")]))
+    end
+
+    test "a quotation's quote must still be an exact substring", ctx do
+      lead = {ctx.lead["candidate_id"], ctx.lead["required_meaning"]}
+      words = ctx.quotation["excerpt"] |> String.split(" ") |> Enum.take(3) |> Enum.join(" ")
+
+      assert {:ok, %{outcome: :accepted}} = war(ctx, lead, [pick(ctx.quotation, words)])
+
+      assert [["highlight_1", "fabricated_quote"]] =
+               reasons(war(ctx, lead, [pick(ctx.quotation, "words never written")]))
+    end
+
+    test "a work or an exemplar is held to the meaning the screen offers it under", ctx do
+      lead = {ctx.lead["candidate_id"], ctx.lead["required_meaning"]}
+      assert ctx.work["allowed_meanings"] == [ctx.work["required_meaning"]]
+      assert ctx.exemplar["allowed_meanings"] == [ctx.exemplar["required_meaning"]]
+
+      assert [["highlight_1", "meaning_not_allowed"]] =
+               reasons(war(ctx, lead, [{ctx.work["candidate_id"], "m0", nil}]))
+
+      # And to its evidence now: a claim withdrawn after the cut is refused.
+      {:ok, _} =
+        Claims.review(ctx.exemplar["assertion_revision_id"], :withdrawn, %{reason: "withdrawn"})
+
+      assert [["highlight_1", "claim_not_accepted"]] =
+               reasons(war(ctx, lead, [pick(ctx.exemplar)]))
+    end
   end
 end

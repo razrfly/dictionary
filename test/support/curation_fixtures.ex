@@ -57,6 +57,9 @@ defmodule DevilsDictionary.CurationFixtures do
       sense with a quotation;
     * `oats` carries only a Wiktionary definition (no Bierce entry);
     * `amor` is another English word, for scope changes.
+
+  Each entry is one sentence, so the curation screen can quote it and a
+  packet, which offers what the screen offers (#262), carries it.
   """
   def world! do
     ctx = Fixtures.seed_catalog!()
@@ -67,9 +70,9 @@ defmodule DevilsDictionary.CurationFixtures do
     oats = WordFixtures.word!(ctx, "oats", ["wiktionary"], scope: nil)
     amor = WordFixtures.word!(ctx, "amor", ["wiktionary"], scope: nil)
 
-    bierce = WordFixtures.entry!(ctx, love, "bierce", body: "fixture bierce entry body")
-    definition = WordFixtures.entry!(ctx, love, "wiktionary", body: "fixture definition body")
-    oats_definition = WordFixtures.entry!(ctx, oats, "wiktionary", body: "fixture oats body")
+    bierce = WordFixtures.entry!(ctx, love, "bierce", body: "fixture bierce entry body.")
+    definition = WordFixtures.entry!(ctx, love, "wiktionary", body: "fixture definition body.")
+    oats_definition = WordFixtures.entry!(ctx, oats, "wiktionary", body: "fixture oats body.")
 
     sense =
       WordFixtures.sense!(ctx, love, "wiktionary",

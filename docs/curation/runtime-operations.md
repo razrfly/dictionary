@@ -226,7 +226,11 @@ A plan names its `instruction_version`: `bench seed` freezes the packets for it,
 summary and the plan's go or no-go per model. September's `plan.json` names no
 instruction: its committed packets can still be run, but not re-seeded.
 
-`bench seed` writes the frozen packets, and they are committed. Re-seeding a fresh
-database gives new ids, so new packets and hashes; compare models only on the same
-packet files. Every benchmark call goes through `Runtime.run/3`, and therefore counts
-against the same daily budget.
+`bench seed` writes the frozen packets, and they are committed. A packet file already in
+`--packets` is the plan's: `bench seed` keeps it while it still verifies against the
+database and names the plan's instruction, and otherwise raises ("never re-frozen in
+place") without touching it (#262). So re-seeding the database the packets came from
+changes nothing, and a fresh database, whose ids differ, cannot verify them: remove the
+files first to freeze new packets there, which this build writes as `runtime-packet-v2`,
+with new hashes. Compare models only on the same packet files. Every benchmark call goes
+through `Runtime.run/3`, and therefore counts against the same daily budget.
