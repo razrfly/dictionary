@@ -12,6 +12,11 @@ defmodule DevilsDictionary.Curation.Opening.Review do
     * `published_by` / `published_on` / `receipt_id` — for a published
       composition, the actor and date of the publication receipt and its id
       (#255). `nil` for a fixture, which nobody published.
+    * `assessment` — for a published composition, its refresh clock as
+      `Curation.Refresh.assessment/1` reads it (#259 §2.1): when its inputs
+      were last checked and with what outcome, when they last changed, when
+      the next check is due. `nil` when it has never been checked, and for a
+      fixture. A P5 check looks at the inputs; it does not judge them.
 
   What this deliberately does not hold: panel rosters, per-profile votes,
   counts, objections and human override lineage. Those are #203's structured
@@ -28,7 +33,8 @@ defmodule DevilsDictionary.Curation.Opening.Review do
             reviewed_on: nil,
             published_by: nil,
             published_on: nil,
-            receipt_id: nil
+            receipt_id: nil,
+            assessment: nil
 
   @type t :: %__MODULE__{
           state: :unreviewed | :reviewed | :approved | :published,
@@ -38,6 +44,7 @@ defmodule DevilsDictionary.Curation.Opening.Review do
           reviewed_on: Date.t() | nil,
           published_by: %{kind: :human | :model, label: String.t()} | nil,
           published_on: Date.t() | nil,
-          receipt_id: pos_integer() | nil
+          receipt_id: pos_integer() | nil,
+          assessment: map() | :preview | nil
         }
 end

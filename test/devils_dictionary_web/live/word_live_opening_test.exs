@@ -152,7 +152,12 @@ defmodule DevilsDictionaryWeb.WordLiveOpeningTest do
     refute has_element?(view, "#opening-fixture")
     refute has_element?(view, "#opening-about-reviewed")
     refute opening_html(view) =~ "development fixture"
-    refute opening_html(view) =~ ~r/assessed|next assessment|inputs last changed/i
+    # The refresh clock's rows (#259 §2.1): this first visit queued the
+    # page's first check.
+    assert has_element?(view, "#opening-about-assessed", "Never · queued on your visit.")
+    assert has_element?(view, "#opening-about-checked", "Just now, against the record.")
+    assert has_element?(view, "#opening-about-changed", "Not recorded yet.")
+    assert has_element?(view, "#opening-about-next", "Queued now.")
 
     # Below it, nothing moved.
     assert has_element?(view, "#card-bierce")
@@ -533,5 +538,90 @@ defmodule DevilsDictionaryWeb.WordLiveOpeningTest do
     refute has_element?(noun, "#opening")
     refute has_element?(verb, "#opening")
     assert has_element?(noun, "#card-bierce")
+  end
+
+  describe "#259: the refresh clock on the page" do
+    alias DevilsDictionary.Curation.{PublishedReader, RefreshState}
+    alias DevilsDictionary.RefreshFixtures
+
+    defp curation_jobs, do: RefreshFixtures.curation_jobs()
+
+    test "23: a plain HTTP visit admits one check; a mount and a burst after it admit none",
+         ctx do
+      %{composition: composition} = publish_love!(ctx)
+
+      conn = get(ctx.conn, ~p"/on/love")
+      assert html_response(conn, 200) =~ ~s(id="opening")
+      assert [%{args: %{"slug" => "love"}}] = curation_jobs()
+
+      assert %RefreshState{state: :queued, refresh_generation: 1} =
+               Repo.get_by!(RefreshState, composition_id: composition.id)
+
+      {:ok, _view, _html} = live(build_conn(), ~p"/on/love")
+      for _ <- 1..5, do: get(build_conn(), ~p"/on/love")
+
+      assert length(curation_jobs()) == 1
+    end
+
+    test "an exact-word page and a fixture request admit nothing", ctx do
+      publish_love!(ctx)
+
+      get(ctx.conn, ~p"/words/#{ctx.love.object_id}/love")
+      get(build_conn(), ~p"/on/love?demo=1")
+      assert curation_jobs() == []
+    end
+
+    test "24: the disclosure says never before a check, then checked and not judged, in five words",
+         ctx do
+      %{composition: composition, receipt: receipt} = publish_love!(ctx)
+
+      # Before any visit, the reader has no clock to read.
+      page = RefreshFixtures.page("love")
+      opening = PublishedReader.opening(page)
+      assert opening.review.assessment == nil
+
+      html = render_component(&DevilsDictionaryWeb.Opening.section/1, opening: opening)
+      assert html =~ ~r{id="opening-about-assessed"[^>]*>\s*Never\.}
+      assert html =~ ~r{id="opening-about-next"[^>]*>\s*On the next visit\.}
+
+      # A visit queues the first check; the worker completes it.
+      {:ok, _view, _html} = live(ctx.conn, ~p"/on/love")
+      RefreshFixtures.drain!()
+      row = Repo.get_by!(RefreshState, composition_id: composition.id)
+
+      {:ok, view, _html} = live(build_conn(), ~p"/on/love")
+      published_on = Calendar.strftime(receipt.committed_at, "%-d %B %Y")
+      assert has_element?(view, "#opening-about-summary", "Published #{published_on}")
+
+      assert has_element?(
+               view,
+               "#opening-about-assessed",
+               "the inputs were checked, not judged: nothing has changed since this version was accepted."
+             )
+
+      assert has_element?(view, "#opening-about-checked", "Just now, against the record.")
+      assert has_element?(view, "#opening-about-changed", "Not since this version was accepted.")
+
+      next = Calendar.strftime(row.refresh_after, "%-d %B %Y")
+
+      assert has_element?(
+               view,
+               "#opening-about-next",
+               "After #{next}, or sooner if an input changes."
+             )
+
+      # A periodic check is not a judgement either: it says an editor is needed.
+      RefreshFixtures.set!(row, refresh_after: RefreshFixtures.ago(1))
+      {:ok, _view, _html} = live(build_conn(), ~p"/on/love")
+      RefreshFixtures.drain!()
+
+      {:ok, view, _html} = live(build_conn(), ~p"/on/love")
+
+      assert has_element?(
+               view,
+               "#opening-about-assessed",
+               "the inputs were checked, not judged: an editor is needed (the periodic re-assessment came due)."
+             )
+    end
   end
 end

@@ -47,6 +47,12 @@ defmodule DevilsDictionary.Curation.Publications do
   `withdraw/3` moves the pointer to none, with a receipt of its own, as an
   operator. The reader withholds an ineligible item on its own, without any
   withdrawal.
+
+  **The refresh clock** (#259 §5.5), in the same transaction: a withdrawal
+  suppresses the composition's checks (`Refresh.suppress/1`), so no check or
+  proposal runs until the owner re-opens it; a publication resets the
+  baseline the next check measures against (`Refresh.published/1`) and
+  lifts a suppression.
   """
 
   import Ecto.Query
@@ -56,6 +62,7 @@ defmodule DevilsDictionary.Curation.Publications do
     Composition,
     CompositionPublication,
     CompositionVersion,
+    Refresh,
     Standing,
     Transaction
   }
@@ -136,6 +143,8 @@ defmodule DevilsDictionary.Curation.Publications do
         )
 
       move!(composition, version.id)
+      # The next check measures against this version (#259 §5.5).
+      Refresh.published(composition.id)
       {:ok, receipt}
     end
   end
@@ -172,6 +181,9 @@ defmodule DevilsDictionary.Curation.Publications do
           })
 
         move!(composition, nil)
+        # Withdrawal means keep this off the page: no check, no proposal,
+        # until the owner re-opens it (#253 §6a, #259 §5.5).
+        Refresh.suppress(composition.id)
         {:ok, receipt}
       else
         {:replay, receipt} -> {:ok, receipt}

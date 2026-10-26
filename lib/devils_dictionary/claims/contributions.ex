@@ -296,13 +296,19 @@ defmodule DevilsDictionary.Claims.Contributions do
         if context.fingerprint != current_input.fingerprint,
           do: Repo.rollback(:stale_context)
 
-        unwrap(
-          Claims.review(revision_id, decision, %{
-            reason: reason,
-            reviewer_actor_id: actor!(user).id,
-            review_context_id: context.id
-          })
-        )
+        review =
+          unwrap(
+            Claims.review(revision_id, decision, %{
+              reason: reason,
+              reviewer_actor_id: actor!(user).id,
+              review_context_id: context.id
+            })
+          )
+
+        # A curated page citing this claim, or about its sense, has changed
+        # inputs (#259 §5.4). In the review's transaction: no review, no mark.
+        DevilsDictionary.Curation.Refresh.claim_reviewed(assertion_id)
+        review
       end)
     else
       {:error, :unauthorized}

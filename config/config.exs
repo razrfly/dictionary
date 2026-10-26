@@ -259,9 +259,11 @@ config :devils_dictionary, :artsy, enabled: true
 # `Process.sleep(rate_limit_ms)`, so three concurrent jobs would triple the rate
 # against a single API — 15 req/s where #69 §2 promises 5. Raise it back to 3
 # once a limiter shared across the queue exists (or one queue per source).
+# `curation: 1` is the refresh clock's own queue (#259): one model-free check
+# at a time. Adding it is why #259's live activation needs one restart.
 config :devils_dictionary, Oban,
   repo: DevilsDictionary.Repo,
-  queues: [absorb: 1, enrich: 1, link: 2, discovery: 2, maintenance: 1],
+  queues: [absorb: 1, enrich: 1, link: 2, discovery: 2, maintenance: 1, curation: 1],
   plugins: [
     {Oban.Plugins.Pruner, max_age: 60 * 60 * 24 * 7},
     {Oban.Plugins.Lifeline, rescue_after: :timer.minutes(30)},

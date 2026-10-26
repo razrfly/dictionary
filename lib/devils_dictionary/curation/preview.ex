@@ -198,7 +198,9 @@ defmodule DevilsDictionary.Curation.Preview do
       reviewed_on: today,
       published_by: %{kind: :human, label: me.label},
       published_on: today,
-      receipt_id: nil
+      receipt_id: nil,
+      # An unsaved selection has no refresh clock (#259 §2.1).
+      assessment: :preview
     }
   end
 

@@ -65,6 +65,7 @@ defmodule DevilsDictionaryWeb.WordLive do
   alias DevilsDictionary.Artworks.Corpus
   alias DevilsDictionary.Claims.Contributions
   alias DevilsDictionary.Curation.Opening, as: CuratedOpening
+  alias DevilsDictionary.Curation.{PublishedReader, Refresh, RefreshState}
   alias DevilsDictionary.Lexicon
   alias DevilsDictionary.Lexicon.WordPage
   alias DevilsDictionary.Routing.{Links, OnPage}
@@ -248,6 +249,7 @@ defmodule DevilsDictionaryWeb.WordLive do
     # sample card is neither. Its scope is the page's words. Database reads
     # only — no provider, no model, no write.
     opening = CuratedOpening.for_page(page, reader)
+    opening = refresh_visit(socket, page, opening, slug, reader, demo)
 
     # Counted before the samples go in: the source line is a claim about what has
     # been absorbed, and "8 sources" on a page where three of them are invented
@@ -274,6 +276,33 @@ defmodule DevilsDictionaryWeb.WordLive do
     |> assign(:page_title, title(page, slug, socket.assigns))
     |> prepare_discovery(page, demo)
   end
+
+  # The refresh clock's visit check (#259 §5.6): every visit to a pilot On
+  # page, the plain HTTP render and the LiveView mount alike, asks whether
+  # its composition is due and admits one check if so. Bounded: one indexed
+  # read when nothing is due, one short transaction when something is, never
+  # a wait on another visit's lock; a failure is logged and never reaches the
+  # page. No model, no write to the composition. A contributor's page is not
+  # the public one, so its withheld set is not compared. The disclosure
+  # says a check was queued by this visit.
+  defp refresh_visit(socket, page, opening, slug, reader, demo) do
+    if socket.assigns.live_action == :on and reader == PublishedReader and not demo do
+      case Refresh.visit(page, opening, slug: slug, public?: not socket.assigns.contributor) do
+        {:ok, outcome} when outcome in [:admitted, :recovered] -> queued(opening)
+        _other -> opening
+      end
+    else
+      opening
+    end
+  end
+
+  defp queued(%CuratedOpening{review: %{assessment: assessment} = review} = opening)
+       when assessment != :preview do
+    queued = Map.put(assessment || Refresh.assessment(%RefreshState{}), :state, :queued)
+    %{opening | review: %{review | assessment: queued}}
+  end
+
+  defp queued(opening), do: opening
 
   # What On adds to the words (#219): the overview at this address, the
   # overviews elsewhere that name these words, and the Subjects section. One
