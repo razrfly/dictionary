@@ -34,7 +34,9 @@ process per persona.
 | Benchmark | `Runtime.Bench`, `priv/curation/runtime_bench/` | The predeclared plan, its frozen packets, and the runner. A cold sample runs only after a confirmed unload; otherwise that model's remaining calls are reported as not measured, since neither a cold nor a warm sample would mean what it says. The adverse counts each say how many answers they could be seen in, and are null, not 0, when none: a refused answer's ids are read from the ids-only shape the attempt keeps, and only a validated answer keeps its reasons (#221 B1). A plan names its instruction, and the go checks it declares are evaluated by `Bench.verdict/5`, failing on missing or unseen evidence |
 
 Operating the service is in [runtime-operations.md](runtime-operations.md). The measured
-benchmark is in [runtime-benchmark-2026-09-27.md](runtime-benchmark-2026-09-27.md).
+benchmarks are [runtime-benchmark-2026-09-27.md](runtime-benchmark-2026-09-27.md) and its
+re-run under `generic-editor-v2`, [runtime-benchmark-2026-10-26.md](runtime-benchmark-2026-10-26.md),
+whose verdict for P6 is a no-go.
 
 ## The slot protocol
 
