@@ -11,6 +11,9 @@ curatorial quality beyond its declared checks.
 - Frozen packets: [`priv/curation/runtime_bench/packets-generic-editor-v2/`](../../priv/curation/runtime_bench/packets-generic-editor-v2/).
 - Raw results: [`priv/curation/runtime_bench/results/2026-10-26.json`](../../priv/curation/runtime_bench/results/2026-10-26.json),
   run `1792976835`, attempts 36–51 in `devils_dictionary_runtime_bench`.
+- Followed the same day by the re-run its *Next* asked for, on unlabelled fixtures and
+  packet v2: [runtime-benchmark-2026-10-26-unlabelled.md](runtime-benchmark-2026-10-26-unlabelled.md),
+  whose verdict for P6 is a go.
 
 ## Verdict for P6: no-go
 
