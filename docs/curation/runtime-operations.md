@@ -225,7 +225,9 @@ DD_DATABASE=devils_dictionary_runtime_bench mix dd.runtime bench run \
 is the same plan with its ambiguous case rewritten so that its text does not announce
 itself as fiction, plus a control case, `ambiguous_labelled`: v2's bank case under packet
 v2, which no go check reads. A case may name a source of its own (`fixture_source`),
-because the model is shown each candidate's source slug.
+because the model is shown each candidate's source slug. Its committed packets carry
+`devils_dictionary_runtime_bench`'s ids, bank's v2 rows among them, so they run only
+there; a fresh bench database must freeze new packets, which makes a new plan.
 
 A plan names its `instruction_version`: `bench seed` freezes the packets for it, and
 `bench run` skips a model whose config pins another. The report holds the samples, the

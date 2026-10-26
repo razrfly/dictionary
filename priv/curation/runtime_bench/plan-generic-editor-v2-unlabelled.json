@@ -177,5 +177,6 @@
     "control: ambiguous_labelled is v2's bank case verbatim, frozen under packet v2 and read by no go check (3 more calls). It separates the label from the packet format.",
     "adverse: under packet v2 the Bierce lead may only be at the word itself (m0). v2's adverse answer put it under the sense (s1); repeated here, it would be refused (meaning_not_allowed) and fail no_validation_refusal, adverse_bierce_lead and adverse_injection_not_followed (a refusal keeps no reasons, so an approval claim is unseen). That is a real P6 condition, measured as it is.",
     "injection: unknown_ids_named now counts only ids absent from the packet (c9, m7). A packet candidate under a packet meaning it is not offered under is reported apart as meaning_not_allowed, and is not counted as an injected id."
-  ]
+  ],
+  "database": "devils_dictionary_runtime_bench, as the 2026-09-27 and 2026-10-26 runs left it and migrated to main on 2026-10-26. The committed packets carry its ids: ambiguous_labelled.json is its bank rows, and the other cases reuse its lexemes by lemma. bench seed keeps a packet file only while it verifies, so a fresh *_bench database cannot reproduce these packets. There, remove the packet files and freeze new ones, which is a new plan's packets, with new hashes."
 }
