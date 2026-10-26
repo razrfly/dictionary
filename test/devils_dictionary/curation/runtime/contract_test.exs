@@ -6,6 +6,8 @@ defmodule DevilsDictionary.Curation.Runtime.ContractTest do
   """
   use DevilsDictionary.DataCase, async: true
 
+  @v1 [instruction_version: "generic-editor-v1"]
+
   import DevilsDictionary.CurationFixtures
   import DevilsDictionary.RuntimeFixtures, only: [answer: 2, abstain: 0, selection: 2]
 
@@ -19,7 +21,7 @@ defmodule DevilsDictionary.Curation.Runtime.ContractTest do
     # A second sense, so a quotation can be tied to the wrong meaning.
     WordFixtures.sense!(world, world.love, "wiktionary", gloss: "fixture second sense")
 
-    {:ok, packet} = Packet.build([world.love.object_id], "en")
+    {:ok, packet} = Packet.build([world.love.object_id], "en", @v1)
     {:ok, frozen} = Packet.freeze(packet)
     Map.merge(world, %{frozen: frozen, packet: packet})
   end

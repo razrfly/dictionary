@@ -11,7 +11,8 @@ defmodule DevilsDictionary.Curation.Runtime do
     1. The packet fits the model config's context (`Packet.fits?/2`).
     2. Readiness passes (`Readiness.check/2`): the slot, the external volume,
        the version, the served digest and the manifest on the root.
-    3. The packet still matches the registry (`Packet.verify/1`).
+    3. The packet still matches the registry (`Packet.verify/1`), and was
+       built for the config's pinned instruction.
     4. Memory is not under pressure (`Runtime.System.memory/0`).
     5. It is admitted to the one slot (`Gateway.admit/3`).
     6. It is dispatched, which is committed before sending, then sent once.
@@ -61,6 +62,7 @@ defmodule DevilsDictionary.Curation.Runtime do
   def run(config_or_slug, packet, opts) do
     with {:ok, config} <- model_config(config_or_slug),
          {:ok, frozen} <- prepare(packet, opts),
+         :ok <- same_instruction(frozen, config),
          :ok <- refuse(Packet.fits?(frozen, config.generation)),
          {:ok, retries} <- retries(opts),
          :ok <- ready(config, opts),
@@ -77,7 +79,7 @@ defmodule DevilsDictionary.Curation.Runtime do
   """
   def smoke(config_or_slug, opts) do
     with {:ok, config} <- model_config(config_or_slug),
-         {:ok, frozen} <- Packet.freeze(smoke_packet()),
+         {:ok, frozen} <- Packet.freeze(smoke_packet(config.instruction_version)),
          {:ok, retries} <- retries(opts),
          :ok <- ready(config, opts),
          {:ok, before} <- memory_ok(opts) do
@@ -311,6 +313,18 @@ defmodule DevilsDictionary.Curation.Runtime do
 
   defp maybe_pause_for_memory(_before, _after, _opts), do: :ok
 
+  # The instruction is the pinned config's. A packet frozen for another one
+  # would be rendered under an instruction the config does not record.
+  defp same_instruction(%{packet: %{"instruction_version" => version}}, %{
+         instruction_version: version
+       }),
+       do: :ok
+
+  defp same_instruction(%{packet: packet}, config),
+    do:
+      {:refused,
+       {:instruction_version_mismatch, packet["instruction_version"], config.instruction_version}}
+
   defp refuse(:ok), do: :ok
   defp refuse({:error, reason}), do: {:refused, reason}
 
@@ -372,11 +386,11 @@ defmodule DevilsDictionary.Curation.Runtime do
     }
   end
 
-  @doc "The fixed, fictional packet of the smoke call."
-  def smoke_packet do
+  @doc "The fixed, fictional packet of the smoke call, under a config's instruction."
+  def smoke_packet(instruction_version) do
     %{
       "packet_version" => Packet.version(),
-      "instruction_version" => Packet.instruction_version(),
+      "instruction_version" => instruction_version,
       "target" => %{"language_tag" => "en", "lexeme_ids" => [], "headwords" => ["smoke"]},
       "lead_policy" => "bierce_first_v1",
       "meanings" => [%{"meaning_id" => "m0", "kind" => "lexeme", "label" => "smoke"}],

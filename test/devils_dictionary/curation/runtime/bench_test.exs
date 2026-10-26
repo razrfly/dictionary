@@ -10,6 +10,7 @@ defmodule DevilsDictionary.Curation.Runtime.BenchTest do
   alias DevilsDictionary.RuntimeFixtures
 
   @plan "priv/curation/runtime_bench/plan.json"
+  @packets "priv/curation/runtime_bench/packets"
 
   test "the plan predeclares its samples and covers the four required cases" do
     plan = Bench.plan!(@plan)
@@ -24,6 +25,116 @@ defmodule DevilsDictionary.Curation.Runtime.BenchTest do
              plan["samples"]["calls_per_model"] * length(plan["models"])
   end
 
+  @plan_v2 "priv/curation/runtime_bench/plan-generic-editor-v2.json"
+
+  test "the v2 plan re-runs September's cases on one model under the revised instruction" do
+    v1 = Bench.plan!(@plan)
+    v2 = Bench.plan!(@plan_v2)
+
+    assert v2["instruction_version"] == "generic-editor-v2"
+    assert v2["models"] == ["qwen3.5-9b-v2"]
+    assert v2["cases"] == v1["cases"]
+    assert v2["fixture_source"] == v1["fixture_source"]
+
+    assert Map.take(v2["samples"], ~w(cold_samples_per_model warm_samples_per_case)) ==
+             Map.take(v1["samples"], ~w(cold_samples_per_model warm_samples_per_case))
+
+    assert v2["samples"]["calls_total"] == v2["samples"]["calls_per_model"]
+
+    # Every declared check is one the verdict knows.
+    %{checks: checks} = Bench.verdict("m", nil, [], [], v2)
+    assert length(checks) == length(v2["go_checks"])
+    refute Enum.any?(checks, &match?(%{observed: %{unknown_check: _}}, &1))
+  end
+
+  # The re-run compares like with like: the same evidence, ids and hashes as
+  # September, and only the instruction changed.
+  test "the v2 packets are September's, under the v2 instruction" do
+    for name <- ~w(ordinary ambiguous sparse adverse) do
+      {:ok, v1} = Packet.read(Path.join(@packets, "#{name}.json"))
+
+      {:ok, v2} =
+        Packet.read("priv/curation/runtime_bench/packets-generic-editor-v2/#{name}.json")
+
+      assert v2.packet["instruction_version"] == "generic-editor-v2"
+
+      assert Map.delete(v2.packet, "instruction_version") ==
+               Map.delete(v1.packet, "instruction_version")
+    end
+  end
+
+  # A run of the v2 plan, against September's frozen packets (same cases):
+  # every answer as the plan hopes, unless `changes` says otherwise.
+  defp v2_run(changes \\ %{}) do
+    sample = fn case_id, phase, fields ->
+      Map.merge(record(case_id, [phase: phase, swap_before: 0, swap_after: 0] ++ fields), %{
+        model: "m"
+      })
+    end
+
+    adverse =
+      Map.get(changes, :adverse,
+        lead: "c1",
+        lead_meaning: "m0",
+        highlights: [{"c3", "s1"}],
+        reasons: ["It defines the word.", "It shows the word in use."]
+      )
+
+    [sample.(nil, "smoke", outcome: Map.get(changes, :smoke, :accepted))] ++
+      for(_ <- 1..3, do: sample.("ordinary", "cold", lead: "c1", lead_meaning: "m0")) ++
+      for(_ <- 1..3, do: sample.("ordinary", "warm", lead: "c1", lead_meaning: "m0")) ++
+      for(
+        _ <- 1..3,
+        do:
+          sample.("ambiguous", "warm", lead: "c1", lead_meaning: "s1", highlights: [{"c2", "s2"}])
+      ) ++
+      for(
+        _ <- 1..3,
+        do: sample.("sparse", "warm", outcome: :abstained, decision: "abstain")
+      ) ++
+      for(_ <- 1..3, do: sample.("adverse", "warm", adverse))
+  end
+
+  defp verdict(records, missing \\ []) do
+    plan = Bench.plan!(@plan_v2)
+    summary = Bench.summarize(records, plan, @packets)["m"]
+    Bench.verdict("m", summary, records, missing, plan)
+  end
+
+  defp failed(%{checks: checks}), do: for(c <- checks, not c.pass, do: c.check)
+
+  test "a run that passes every declared check is a go" do
+    assert %{go: true} = v = verdict(v2_run())
+    assert failed(v) == []
+  end
+
+  # September's 9B adverse answers under v1: refused, ids and reasons unseen.
+  test "refused adverse answers are a no-go, and unseen injection evidence is no evidence" do
+    september = [
+      outcome: :refused,
+      decision: nil,
+      refusal_reasons: [["selection", "duplicate_candidate"]]
+    ]
+
+    assert %{go: false} = v = verdict(v2_run(%{adverse: september}))
+
+    assert failed(v) == [
+             "no_validation_refusal",
+             "adverse_bierce_lead",
+             "adverse_injection_not_followed"
+           ]
+  end
+
+  test "a gap, an unvalidated smoke call or unmeasured swap is a no-go" do
+    gap = [%{model: "m", what: "3 planned calls", why: "budget_exhausted"}]
+    assert "every_planned_call_measured" in failed(verdict(v2_run(), gap))
+
+    assert "smoke_validated" in failed(verdict(v2_run(%{smoke: :refused})))
+
+    unmeasured = Enum.map(v2_run(), &%{&1 | swap_before: nil, swap_after: nil})
+    assert failed(verdict(unmeasured)) == ["swap_growth_below_pause"]
+  end
+
   test "fixtures are never seeded into a database that is not a benchmark database" do
     assert_raise ArgumentError, ~r/refusing to seed benchmark fixtures/, fn ->
       Bench.seed!(Bench.plan!(@plan))
@@ -34,8 +145,6 @@ defmodule DevilsDictionary.Curation.Runtime.BenchTest do
     assert Bench.quantiles([]) == %{n: 0, p50: nil, p95: nil}
     assert %{n: 4, p50: 20, p95: 40, min: 10, max: 40} = Bench.quantiles([40, 10, nil, 30, 20])
   end
-
-  @packets "priv/curation/runtime_bench/packets"
 
   defp record(case_id, fields) do
     Map.merge(
@@ -174,7 +283,11 @@ defmodule DevilsDictionary.Curation.Runtime.BenchTest do
       actor = DevilsDictionary.CurationFixtures.actor!(world.reviewer)
       key = "bench-#{System.unique_integer([:positive])}"
 
-      {:ok, packet} = Packet.build([world.love.object_id], "en")
+      {:ok, packet} =
+        Packet.build([world.love.object_id], "en",
+          instruction_version: config.instruction_version
+        )
+
       {:ok, frozen} = Packet.freeze(packet)
       Packet.write!(frozen, Path.join(ctx.tmp_dir, "ordinary.json"))
 
@@ -235,6 +348,16 @@ defmodule DevilsDictionary.Curation.Runtime.BenchTest do
                reasons_seen: 0,
                claimed_approval: nil
              } = e
+    end
+
+    test "a model pinned to another instruction than the plan's is not run", ctx do
+      RuntimeFixtures.stub_ollama!(ctx.config)
+      plan = Map.put(ctx.plan, "instruction_version", "generic-editor-v2")
+
+      assert {[], [%{model: slug, what: "all", why: "instruction_version_mismatch"}]} =
+               Bench.run(plan, ctx.tmp_dir, ctx.opts)
+
+      assert slug == ctx.config.slug
     end
 
     test "an unload that is not confirmed ends the model's run: no cold or warm sample lies",

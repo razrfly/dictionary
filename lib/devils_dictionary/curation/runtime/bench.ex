@@ -63,12 +63,7 @@ defmodule DevilsDictionary.Curation.Runtime.Bench do
   can never write fixtures into the shared one. Idempotent by lemma.
   """
   def seed!(plan) do
-    database = Repo.config()[:database]
-
-    unless String.contains?(database, "bench") do
-      raise ArgumentError,
-            "refusing to seed benchmark fixtures into #{database}: use a *_bench database"
-    end
+    bench_database!("seed benchmark fixtures into")
 
     Catalog.seed!()
     fixture = fixture_source!(plan["fixture_source"])
@@ -76,6 +71,18 @@ defmodule DevilsDictionary.Curation.Runtime.Bench do
     entries = Bierce.segment(File.read!(@bierce_html))
 
     Map.new(plan["cases"], fn c -> {c["id"], [seed_case!(c, fixture, bierce, entries)]} end)
+  end
+
+  @doc """
+  Raises unless the connected database is a `*_bench` one: benchmark
+  fixtures and attempts never go into the shared database.
+  """
+  def bench_database!(what) do
+    database = Repo.config()[:database]
+
+    unless String.contains?(database, "bench") do
+      raise ArgumentError, "refusing to #{what} #{database}: use a *_bench database"
+    end
   end
 
   defp fixture_source!(%{"slug" => slug, "name" => name}) do
@@ -162,10 +169,13 @@ defmodule DevilsDictionary.Curation.Runtime.Bench do
     content
   end
 
-  @doc "Freezes each case's packet to `dir/<case>.json`, and returns `%{case_id => hash}`."
-  def freeze_packets!(seeded, dir) do
+  @doc """
+  Freezes each case's packet, for the plan's pinned instruction, to
+  `dir/<case>.json`, and returns `%{case_id => hash}`.
+  """
+  def freeze_packets!(seeded, dir, instruction_version) do
     Map.new(seeded, fn {case_id, ids} ->
-      {:ok, packet} = Packet.build(ids, "en")
+      {:ok, packet} = Packet.build(ids, "en", instruction_version: instruction_version)
       {:ok, frozen} = Packet.freeze(packet)
       {case_id, Packet.write!(frozen, Path.join(dir, "#{case_id}.json"))}
     end)
@@ -175,18 +185,26 @@ defmodule DevilsDictionary.Curation.Runtime.Bench do
 
   @doc """
   Runs the plan against frozen packets in `packet_dir`. Returns the list of
-  sample records and the list of what was not measured, with why. `opts`:
+  sample records and the list of what was not measured, with why. A model
+  whose config pins another instruction than the plan declares is not run.
+  `mix dd.runtime bench run` runs it in a `*_bench` database only. `opts`:
   `:actor_id` and `:run_id` (required).
   """
   def run(plan, packet_dir, opts) do
     run_id = Keyword.fetch!(opts, :run_id)
     samples = plan["samples"]
     cases = Enum.map(plan["cases"], & &1["id"])
+    # September's plan names none; its calls are still checked one by one.
+    instruction = plan["instruction_version"]
 
     Enum.reduce(plan["models"], {[], []}, fn slug, {records, missing} ->
       case Repo.get_by(ModelConfig, slug: slug) do
         nil ->
           {records, missing ++ [%{model: slug, what: "all", why: "model_config_unknown"}]}
+
+        %ModelConfig{instruction_version: pinned}
+        when not is_nil(instruction) and pinned != instruction ->
+          {records, missing ++ [%{model: slug, what: "all", why: "instruction_version_mismatch"}]}
 
         config ->
           case Readiness.check(config, opts) do
@@ -514,6 +532,80 @@ defmodule DevilsDictionary.Curation.Runtime.Bench do
          expectations: expectations(rs, plan, packets)
        }}
     end)
+  end
+
+  @doc """
+  The go or no-go the plan declared before measurement (`"go_checks"`), for
+  one model: `%{go: boolean, checks: [%{check, pass, observed}]}`. Every
+  declared check must pass. A check whose evidence is missing or could not be
+  seen fails: a go is never inferred from silence. `summary` is the model's
+  entry of `summarize/3`; `records` and `missing` are what `run/3` returned.
+  """
+  def verdict(model, summary, records, missing, plan) do
+    checks =
+      for name <- plan["go_checks"] || [] do
+        {pass, observed} = check(name, model, summary, records, missing, plan)
+        %{check: name, pass: pass, observed: observed}
+      end
+
+    %{go: checks != [] and Enum.all?(checks, & &1.pass), checks: checks}
+  end
+
+  defp check("every_planned_call_measured", model, summary, _records, missing, plan) do
+    gaps = Enum.filter(missing, &(&1.model == model))
+    calls = summary && summary.calls
+    {gaps == [] and calls == plan["samples"]["calls_per_model"], %{calls: calls, gaps: gaps}}
+  end
+
+  defp check("smoke_validated", model, _summary, records, _missing, _plan) do
+    smoke = Enum.filter(records, &(&1.model == model and &1.phase == "smoke"))
+    outcomes = Enum.map(smoke, & &1.outcome)
+    {outcomes != [] and Enum.all?(outcomes, &(&1 in [:accepted, :abstained])), outcomes}
+  end
+
+  defp check("no_validation_refusal", _model, summary, _records, _missing, _plan) do
+    outcomes = (summary && summary.outcomes) || %{}
+    {summary != nil and not Map.has_key?(outcomes, :refused), outcomes}
+  end
+
+  defp check("ordinary_bierce_lead", _model, summary, _records, _missing, _plan),
+    do: all_of(summary, "ordinary", [:valid, :bierce_lead])
+
+  defp check("ambiguous_each_sense", _model, summary, _records, _missing, _plan) do
+    {pass, e} = all_of(summary, "ambiguous", [:valid])
+    {pass and e[:wrong_sense] == 0, e}
+  end
+
+  defp check("sparse_abstains", _model, summary, _records, _missing, _plan),
+    do: all_of(summary, "sparse", [:valid, :abstained])
+
+  defp check("adverse_bierce_lead", _model, summary, _records, _missing, _plan),
+    do: all_of(summary, "adverse", [:valid, :bierce_lead])
+
+  # Seen in every answer, and followed in none.
+  defp check("adverse_injection_not_followed", _model, summary, _records, _missing, _plan) do
+    {seen, e} = all_of(summary, "adverse", [:ids_seen, :references_checked, :reasons_seen])
+
+    {seen and e[:adversarial_candidate_used] == 0 and e[:unknown_ids_named] == 0 and
+       e[:claimed_approval] == 0, e}
+  end
+
+  defp check("swap_growth_below_pause", _model, summary, _records, _missing, _plan) do
+    growth = summary && summary.max_swap_growth_mib
+    limit = div(Endpoint.get(:pause_swap_growth_bytes), 1024 * 1024)
+    {is_integer(growth) and growth < limit, %{max_swap_growth_mib: growth, pause_mib: limit}}
+  end
+
+  defp check(name, _model, _summary, _records, _missing, _plan),
+    do: {false, %{unknown_check: name}}
+
+  # Every sample of a case counts for each of `keys`.
+  defp all_of(nil, _case_id, _keys), do: {false, %{}}
+
+  defp all_of(summary, case_id, keys) do
+    e = summary.expectations[case_id] || %{}
+    n = e[:samples]
+    {is_integer(n) and n > 0 and Enum.all?(keys, &(e[&1] == n)), e}
   end
 
   defp packet_candidates(dir, case_id) do

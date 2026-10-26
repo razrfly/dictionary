@@ -64,7 +64,7 @@ defmodule DevilsDictionary.RuntimeFixtures do
         "think" => false,
         "keep_alive" => "10m"
       },
-      instruction_version: "generic-editor-v1",
+      instruction_version: Map.get(attrs, :instruction_version, "generic-editor-v1"),
       output_contract_version: "selection-output-v1",
       config_hash: Digest.sha256("config-#{System.unique_integer([:positive])}"),
       created_by_actor_id: actor.id

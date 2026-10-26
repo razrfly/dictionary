@@ -107,8 +107,14 @@ agent must:
 
 ```
 mix dd.runtime setup --model qwen3.5:4b --slug qwen3.5-4b-v1 --pull
-mix dd.runtime setup --model qwen3.5:4b --slug qwen3.5-4b-v1 --accept-license
+mix dd.runtime setup --model qwen3.5:4b --slug qwen3.5-4b-v1 \
+  --instruction generic-editor-v2 --accept-license
 ```
+
+`--instruction` names the pinned instruction the config runs (`Packet.instruction_versions/0`):
+there is no default, because a config pins it and is immutable. The same model under a
+new instruction is a new config with a new slug; `qwen3.5-9b-v1` runs `generic-editor-v1`
+and `qwen3.5-9b-v2` runs `generic-editor-v2`.
 
 `setup` checks the volume and the service. Before `--pull` it also checks that at
 least `--min-free-gib` (default 20) is free on the volume. It prints the model's
@@ -149,11 +155,13 @@ fictional packet.
 ## A request
 
 ```
-mix dd.runtime packet  --lexeme 123 --out /path/packet.json
+mix dd.runtime packet  --model-config qwen3.5-4b-v1 --lexeme 123 --out /path/packet.json
 mix dd.runtime request --model-config qwen3.5-4b-v1 --packet /path/packet.json --key my-key-1
 ```
 
-`packet` freezes the current, eligible registry evidence for the lexeme. `request`
+`packet` freezes the current, eligible registry evidence for the lexeme, for the
+config's instruction; `request` refuses a packet built for another one
+(`instruction_version_mismatch`). `request`
 runs the frozen packet once and prints the receipt. The same key replays the same
 receipt. A request writes an attempt and its ledger entries. It never writes a
 composition, review, publication, claim or page row.
@@ -197,7 +205,9 @@ when no work is planned: `mix dd.runtime service stop`. The models stay on the v
 
 ## The benchmark
 
-Only in a database whose name contains `bench` (`Bench.seed!/1` refuses otherwise):
+Only in a database whose name contains `bench` (`bench seed` and `bench run` refuse
+otherwise). Every command below needs its `DD_DATABASE`: without it, a dev-env task
+reaches `devils_dictionary_v2`.
 
 ```
 DD_DATABASE=devils_dictionary_runtime_bench mix ecto.create
@@ -208,6 +218,11 @@ DD_DATABASE=devils_dictionary_runtime_bench mix dd.runtime bench run \
   --plan priv/curation/runtime_bench/plan.json --packets priv/curation/runtime_bench/packets \
   --out /path/bench.json
 ```
+
+The re-run of 2026-10-26 used `plan-generic-editor-v2.json` and
+`packets-generic-editor-v2/` the same way. A plan names its `instruction_version`:
+`bench seed` freezes the packets for it, and `bench run` skips a model whose config pins
+another. The report holds the samples, the summary and the plan's go or no-go per model.
 
 `bench seed` writes the frozen packets, and they are committed. Re-seeding a fresh
 database gives new ids, so new packets and hashes; compare models only on the same
