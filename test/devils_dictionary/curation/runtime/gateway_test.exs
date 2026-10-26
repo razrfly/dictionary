@@ -216,6 +216,29 @@ defmodule DevilsDictionary.Curation.Runtime.GatewayTest do
       assert Repo.get!(Attempt, second.id).state == :uncertain
       assert service(ctx).state == :quarantined
     end
+
+    # #221 A1: the code's retry ceiling is the CHECK's. Were the CHECK raised
+    # or lowered without the constant, one of these two would fail.
+    test "the retry ceiling is the database's: up to it is recorded, one more is refused",
+         ctx do
+      ceiling = Attempt.max_transport_retries()
+      {:ok, attempt} = admit(ctx)
+      {:ok, attempt} = Gateway.dispatch(attempt, ctx.opts)
+
+      attempt =
+        Enum.reduce(1..ceiling, attempt, fn _n, a ->
+          {:ok, a} = Gateway.note_retry(a, ctx.opts)
+          a
+        end)
+
+      settle!()
+      assert attempt.transport_retries == ceiling
+
+      assert {:refused, :check, "inference_attempts_shape"} =
+               refused(fn -> Gateway.note_retry(attempt, ctx.opts) end)
+
+      assert Repo.get!(Attempt, attempt.id).transport_retries == ceiling
+    end
   end
 
   describe "recovery (G6)" do

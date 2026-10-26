@@ -45,6 +45,13 @@ defmodule DevilsDictionary.Curation.Runtime.Attempt do
 
   @terminal [:completed, :failed_pre_dispatch, :ended_by_restart, :released]
 
+  # The `inference_attempts_shape` CHECK (migration 20260927114948) holds
+  # `transport_retries` between 0 and 2. This is that bound, and the one place
+  # the code reads it from (#221 A1). Configuration may ask for fewer retries,
+  # never more (`Endpoint.transport_retries/1`). A higher ceiling is a
+  # migration of the CHECK, and `GatewayTest` fails until both agree.
+  @max_transport_retries 2
+
   schema "inference_attempts" do
     field :service_id, :id
     field :model_config_id, :id
@@ -80,4 +87,10 @@ defmodule DevilsDictionary.Curation.Runtime.Attempt do
   def outcomes, do: @outcomes
   def terminal, do: @terminal
   def live, do: [:admitted, :dispatched, :uncertain]
+
+  @doc """
+  The most often one attempt may retry a refused connection: the database's
+  own bound on `transport_retries`.
+  """
+  def max_transport_retries, do: @max_transport_retries
 end

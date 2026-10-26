@@ -15,7 +15,9 @@ defmodule DevilsDictionary.Curation.Runtime do
     4. Memory is not under pressure (`Runtime.System.memory/0`).
     5. It is admitted to the one slot (`Gateway.admit/3`).
     6. It is dispatched, which is committed before sending, then sent once.
-       Only a refused connection is retried, at most twice.
+       Only a refused connection is retried, as often as configured and
+       never more than the database allows (`Attempt.max_transport_retries/0`,
+       2). A configuration above that is refused before admission.
     7. The answer is validated (`Contract.validate/3`) and recorded, and the
        slot is released and settled. A call that was sent and never answered
        leaves the service quarantined.
@@ -49,7 +51,10 @@ defmodule DevilsDictionary.Curation.Runtime do
     * `{:replay, receipt}`: this request key has run before;
     * `{:uncertain, receipt}`: sent and unanswered, so the service is
       quarantined;
-    * `{:refused, reason}`: nothing was admitted.
+    * `{:refused, :stale}`: admitted, but the attempt lost the slot before
+      this caller's next step (another caller's sweep released or
+      quarantined it, or a recovery ended it). Nothing more is sent;
+    * `{:refused, reason}`: otherwise, nothing was admitted.
 
   `opts`: `:request_key` and `:actor_id` (required), and `:purpose`.
   """
@@ -57,10 +62,11 @@ defmodule DevilsDictionary.Curation.Runtime do
     with {:ok, config} <- model_config(config_or_slug),
          {:ok, frozen} <- prepare(packet, opts),
          :ok <- refuse(Packet.fits?(frozen, config.generation)),
+         {:ok, retries} <- retries(opts),
          :ok <- ready(config, opts),
          :ok <- refuse(Packet.verify(frozen)),
          {:ok, before} <- memory_ok(opts) do
-      admit_and_call(config, frozen, before, opts)
+      admit_and_call(config, frozen, before, retries, opts)
     end
   end
 
@@ -72,6 +78,7 @@ defmodule DevilsDictionary.Curation.Runtime do
   def smoke(config_or_slug, opts) do
     with {:ok, config} <- model_config(config_or_slug),
          {:ok, frozen} <- Packet.freeze(smoke_packet()),
+         {:ok, retries} <- retries(opts),
          :ok <- ready(config, opts),
          {:ok, before} <- memory_ok(opts) do
       frozen = decorate(frozen)
@@ -80,6 +87,7 @@ defmodule DevilsDictionary.Curation.Runtime do
         config,
         frozen,
         before,
+        retries,
         Keyword.merge(opts, purpose: :readiness_smoke, registry: false)
       )
     end
@@ -95,9 +103,10 @@ defmodule DevilsDictionary.Curation.Runtime do
 
   @doc """
   Recovers a quarantined service. It stops the private service process and
-  confirms it is gone, which is the proof that any old generation ended. It
-  then settles the uncertain attempt and starts the service again. The
-  service stays paused until `resume/2`.
+  confirms that it, every runner it started and its port are gone, which is
+  the proof that any old generation ended (`ServiceProcess.stop/1`). It then
+  settles the uncertain attempt and starts the service again. The service
+  stays paused until `resume/2`.
 
   It stops nothing unless the caller's database is the one the service is
   bound to (`Runtime.Authority`) and that database's slot is quarantined.
@@ -130,11 +139,15 @@ defmodule DevilsDictionary.Curation.Runtime do
 
   # ── the call ──────────────────────────────────────────────────────────────
 
-  defp admit_and_call(config, frozen, before, opts) do
+  defp admit_and_call(config, frozen, before, retries, opts) do
     case Gateway.admit(config, frozen, opts) do
       {:ok, attempt} ->
-        {:ok, attempt} = Gateway.dispatch(attempt, opts)
-        call(attempt, config, frozen, before, opts)
+        # Another caller's sweep releases an admitted attempt whose lease ran
+        # out before it was dispatched. Nothing was sent (#221 A1).
+        case Gateway.dispatch(attempt, opts) do
+          {:ok, attempt} -> call(attempt, config, frozen, before, opts, retries)
+          {:error, :stale} -> {:refused, :stale}
+        end
 
       {:replay, attempt} ->
         {:replay, receipt(attempt)}
@@ -144,9 +157,10 @@ defmodule DevilsDictionary.Curation.Runtime do
     end
   end
 
-  defp call(attempt, config, frozen, before, opts, retries \\ 0) do
+  # `retries_left` was checked against the database's bound before admission,
+  # so recording a retry can never break the CHECK mid-call.
+  defp call(attempt, config, frozen, before, opts, retries_left) do
     started = System.monotonic_time(:millisecond)
-    max = Endpoint.get(:max_transport_retries, opts)
 
     case Ollama.chat(config, Packet.messages(frozen), Contract.schema(), opts) do
       {:ok, response} ->
@@ -159,9 +173,13 @@ defmodule DevilsDictionary.Curation.Runtime do
           opts
         )
 
-      {:error, {:not_sent, _reason}} when retries < max ->
-        {:ok, attempt} = Gateway.note_retry(attempt, opts)
-        call(attempt, config, frozen, before, opts, retries + 1)
+      {:error, {:not_sent, _reason}} when retries_left > 0 ->
+        # A sweep can quarantine a dispatched attempt past its lease while a
+        # refused connection is being retried.
+        case Gateway.note_retry(attempt, opts) do
+          {:ok, attempt} -> call(attempt, config, frozen, before, opts, retries_left - 1)
+          {:error, :stale} -> {:refused, :stale}
+        end
 
       {:error, {:not_sent, reason}} ->
         settled(Gateway.fail_pre_dispatch(attempt, reason, opts))
@@ -243,6 +261,8 @@ defmodule DevilsDictionary.Curation.Runtime do
 
   # ── guards ────────────────────────────────────────────────────────────────
 
+  defp retries(opts), do: refuse_with_value(Endpoint.transport_retries(opts))
+
   defp ready(config, opts) do
     case readiness(config, opts) do
       {:ok, _report} -> :ok
@@ -293,6 +313,9 @@ defmodule DevilsDictionary.Curation.Runtime do
 
   defp refuse(:ok), do: :ok
   defp refuse({:error, reason}), do: {:refused, reason}
+
+  defp refuse_with_value({:ok, value}), do: {:ok, value}
+  defp refuse_with_value({:error, reason}), do: {:refused, reason}
 
   # ── inputs and outputs ────────────────────────────────────────────────────
 

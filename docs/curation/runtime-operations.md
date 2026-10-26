@@ -47,14 +47,17 @@ The service does not need Ollama.app, and runs no system-wide agent.
 
 ```
 mix dd.runtime service start      # refuses if the volume is not mounted and external,
-                                  # the models root, binary or run directory is missing,
-                                  # or something already listens on the port
+                                  # a runner a dead server left is still alive (stop
+                                  # first), the models root, binary or run directory is
+                                  # missing, or something already listens on the port
 mix dd.runtime service status     # %{pid, alive, listening}
 mix dd.runtime service stop       # SIGTERM, then SIGKILL after 30 s; confirms the
-                                  # process is gone and the port is closed. A pid
-                                  # file whose pid no longer runs bin/ollama (after a
-                                  # reboot) is stale: nothing is signalled, and the
-                                  # stop is recorded as "not_running"
+                                  # process, every runner it started and any runner
+                                  # a dead server left under launchd are gone, and the
+                                  # port is closed. A server the pid file does not name
+                                  # is never signalled. A pid file whose pid no longer
+                                  # runs bin/ollama (after a reboot) is stale: it is not
+                                  # signalled, and the stop is recorded as "not_running"
 mix dd.runtime service restart
 ```
 
@@ -171,7 +174,11 @@ connection, a dead caller or an expired dispatched lease. None of these proves t
 generation stopped, so the slot stays held and nothing is refunded. `recover`:
 1. refuses, and stops nothing, unless this database is the bound one and its slot is
    quarantined (`foreign_authority`, `not_quarantined`);
-2. stops the service and confirms it: the process is gone and the port is closed;
+2. stops the service and confirms it: the process and its runners are gone and the
+   port is closed. The runner (`bin/llama-server`) holds the loaded weights, 6–8 GiB
+   for 9B. One that outlived its server would be loaded again beside it on restart, so
+   a runner that will not end is `runners_still_running`, and nothing is settled
+   (#221 S1);
 3. settles the uncertain attempt as `ended_by_restart`, charging its occupancy up to
    the confirmed stop, and bumps the service epoch;
 4. starts the service again.

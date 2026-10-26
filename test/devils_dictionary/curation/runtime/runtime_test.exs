@@ -192,6 +192,50 @@ defmodule DevilsDictionary.Curation.RuntimeTest do
     settle!()
   end
 
+  # #221 A1: the database bounds the retries, so configuration may lower the
+  # count but never raise it. Asking for more is refused before admission,
+  # rather than breaking the CHECK mid-call with the slot held.
+  test "configuration may retry less than the database allows, never more", ctx do
+    stub_ollama!(ctx.config, chat: fn _ -> {:transport, :econnrefused} end)
+    ceiling = Attempt.max_transport_retries()
+
+    assert {:refused, {:transport_retries_out_of_bounds, over, ^ceiling}} =
+             run(ctx, max_transport_retries: ceiling + 1)
+
+    assert over == ceiling + 1
+    assert Repo.aggregate(Attempt, :count) == 0
+
+    assert {:ok, receipt} = run(ctx, max_transport_retries: 0)
+    assert {receipt.state, receipt.transport_retries} == {:failed_pre_dispatch, 0}
+    settle!()
+  end
+
+  # #221 A1: a sweep from another caller can take the attempt while this one
+  # retries a refused connection. That is a refusal, not a `MatchError`.
+  test "a retry on an attempt a sweep has taken is refused as stale", ctx do
+    later = DateTime.add(DateTime.utc_now(), 3_600)
+    calls = :counters.new(1, [])
+
+    stub_ollama!(ctx.config,
+      chat: fn _ ->
+        :counters.add(calls, 1, 1)
+        # Past the lease, a dispatched attempt may still be generating, so the
+        # sweep quarantines the service.
+        assert {:ok, :quarantined} = Gateway.sweep(Keyword.put(ctx.opts, :now, later))
+        {:transport, :econnrefused}
+      end
+    )
+
+    assert {:refused, :stale} = run(ctx, request_key: "swept")
+    settle!()
+
+    assert :counters.get(calls, 1) == 1
+    attempt = Repo.get_by!(Attempt, request_key: "swept")
+    assert {attempt.state, attempt.transport_retries} == {:uncertain, 0}
+    assert %Service{state: :quarantined, holder_attempt_id: holder} = service(ctx)
+    assert holder == attempt.id
+  end
+
   test "a runtime error answer is recorded as one, and settled", ctx do
     stub_ollama!(ctx.config, chat: fn _ -> {:status, 500, %{"error" => "out of memory"}} end)
 

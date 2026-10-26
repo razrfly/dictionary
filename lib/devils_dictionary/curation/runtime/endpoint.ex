@@ -17,6 +17,10 @@ defmodule DevilsDictionary.Curation.Runtime.Endpoint do
     models_root: "/Volumes/LLM Models/dictionary/ollama",
     run_dir: "/Volumes/LLM Models/dictionary/run",
     binary: "/Volumes/LLM Models/dictionary/bin/ollama",
+    # What the server starts, beside its own binary, to hold a loaded model:
+    # `llama-server` under Ollama 0.34.4. A stop ends one a dead server left
+    # behind (#221 S1).
+    runner_names: ["llama-server"],
     deadline_ms: 120_000,
     reservation_margin_ms: 5_000,
     daily_budget_ms: 30 * 60_000,
@@ -44,6 +48,22 @@ defmodule DevilsDictionary.Curation.Runtime.Endpoint do
 
   @doc "The system inspector: the real host, or the suite's fake."
   def system(opts \\ []), do: get(:system, opts)
+
+  @doc """
+  How often a refused connection is retried: `{:ok, n}`, or `{:error,
+  {:transport_retries_out_of_bounds, n, ceiling}}` when the configuration
+  asks for more than the database allows
+  (`Runtime.Attempt.max_transport_retries/0`). The configuration may lower
+  the count, never raise it (#221 A1).
+  """
+  def transport_retries(opts \\ []) do
+    n = get(:max_transport_retries, opts)
+    ceiling = DevilsDictionary.Curation.Runtime.Attempt.max_transport_retries()
+
+    if is_integer(n) and n >= 0 and n <= ceiling,
+      do: {:ok, n},
+      else: {:error, {:transport_retries_out_of_bounds, n, ceiling}}
+  end
 
   @doc "What one call may occupy, and so what admission reserves."
   def reservation_ms(opts \\ []), do: get(:deadline_ms, opts) + get(:reservation_margin_ms, opts)

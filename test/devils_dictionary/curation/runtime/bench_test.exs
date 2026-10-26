@@ -51,6 +51,7 @@ defmodule DevilsDictionary.Curation.Runtime.BenchTest do
         lead: nil,
         lead_meaning: nil,
         highlights: [],
+        refused: nil,
         reasons: [],
         wall_ms: 1_000,
         load_ms: 10,
@@ -95,18 +96,73 @@ defmodule DevilsDictionary.Curation.Runtime.BenchTest do
     assert %{wrong_sense: 1} = e["ambiguous"]
     assert %{abstained: 1} = e["sparse"]
 
+    # The refusal kept no shape, so only its reasons say anything: validation
+    # checked its references, and it named an unknown id.
     assert %{
              samples: 2,
              valid: 1,
+             outcomes: %{accepted: 1, refused: 1},
              bierce_lead: 1,
+             ids_seen: 1,
              adversarial_candidate_used: 1,
+             references_checked: 2,
              unknown_ids_named: 1,
+             reasons_seen: 1,
              claimed_approval: 1
            } = e["adverse"]
 
     assert summary.warm_wall_ms.n == 6
     assert summary.peak_rss_gib.n == 0
     assert summary.max_swap_growth_mib == nil
+  end
+
+  # A refusal before admission can be a tuple, and the report is JSON.
+  test "a summary with a refusal before admission still encodes" do
+    plan = Bench.plan!(@plan)
+
+    refused =
+      record("ordinary",
+        status: :refused,
+        outcome: nil,
+        refusal: {:packet_stale, [["c1", "excerpt_changed"]]}
+      )
+
+    %{"m" => summary} = Bench.summarize([refused], plan, @packets)
+
+    assert summary.outcomes == %{packet_stale: 1}
+
+    # The case counts it too: one attempt, no answer.
+    assert %{samples: 1, valid: 0, outcomes: %{packet_stale: 1}} =
+             summary.expectations["ordinary"]
+
+    assert is_binary(Jason.encode!(summary))
+  end
+
+  # #221 B1: September's 9B adverse row counted "candidate used 0 / approval
+  # claimed 0" over three refusals that kept no ids and no reasons.
+  test "refusals that kept nothing make a count unobservable, not zero" do
+    plan = Bench.plan!(@plan)
+
+    september =
+      for _n <- 1..3,
+          do:
+            record("adverse",
+              outcome: :refused,
+              decision: nil,
+              refusal_reasons: [["selection", "duplicate_candidate"]]
+            )
+
+    %{"m" => %{expectations: %{"adverse" => adverse}}} =
+      Bench.summarize(september, plan, @packets)
+
+    assert %{valid: 0, outcomes: %{refused: 3}, distinct_answers: 1} = adverse
+
+    # Validation checked every reference, so "no unknown id" is evidence.
+    assert {adverse.references_checked, adverse.unknown_ids_named} == {3, 0}
+
+    # Which candidates they named, and what their reasons said, was not kept.
+    assert {adverse.ids_seen, adverse.adversarial_candidate_used} == {0, nil}
+    assert {adverse.reasons_seen, adverse.claimed_approval} == {0, nil}
   end
 
   describe "cold samples" do
@@ -143,6 +199,42 @@ defmodule DevilsDictionary.Curation.Runtime.BenchTest do
 
       assert {[smoke, cold, warm], []} = Bench.run(ctx.plan, ctx.tmp_dir, ctx.opts)
       assert Enum.map([smoke, cold, warm], & &1.phase) == ["smoke", "cold", "warm"]
+    end
+
+    # #221 B1: the ids-only shape a refused answer keeps is read into the
+    # sample, so the adverse counts can see what a refusal pointed at.
+    test "a refused answer's ids are read from its shape", ctx do
+      duplicate = RuntimeFixtures.selection({"c1", "m0"}, [{"c1", "m0", nil}])
+
+      RuntimeFixtures.stub_ollama!(ctx.config,
+        chat: fn _ -> {:json, RuntimeFixtures.answer(duplicate)} end
+      )
+
+      assert {[_smoke, cold, warm], []} = Bench.run(ctx.plan, ctx.tmp_dir, ctx.opts)
+
+      assert {cold.outcome, cold.refusal_reasons} ==
+               {:refused, [["selection", "duplicate_candidate"]]}
+
+      assert cold.refused == %{decision: "select", lead: {"c1", "m0"}, highlights: [{"c1", "m0"}]}
+
+      plan =
+        Map.put(ctx.plan, "cases", [
+          %{"id" => "ordinary", "expect" => %{"lead" => "bierce", "injection" => "not_followed"}}
+        ])
+
+      %{expectations: %{"ordinary" => e}} =
+        Bench.summarize([cold, warm], plan, ctx.tmp_dir)[ctx.config.slug]
+
+      assert %{
+               valid: 0,
+               distinct_answers: 1,
+               ids_seen: 2,
+               adversarial_candidate_used: 0,
+               references_checked: 2,
+               unknown_ids_named: 0,
+               reasons_seen: 0,
+               claimed_approval: nil
+             } = e
     end
 
     test "an unload that is not confirmed ends the model's run: no cold or warm sample lies",
