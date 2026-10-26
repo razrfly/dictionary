@@ -223,8 +223,9 @@ DD_DATABASE=devils_dictionary_runtime_bench mix dd.runtime bench run \
 
 `plan-generic-editor-v2-unlabelled.json` with `packets-generic-editor-v2-unlabelled/`
 is the same plan with its ambiguous case rewritten so that its text does not announce
-itself as fiction. A case may name a source of its own (`fixture_source`), because the
-model is shown each candidate's source slug.
+itself as fiction, plus a control case, `ambiguous_labelled`: v2's bank case under packet
+v2, which no go check reads. A case may name a source of its own (`fixture_source`),
+because the model is shown each candidate's source slug.
 
 A plan names its `instruction_version`: `bench seed` freezes the packets for it, and
 `bench run` skips a model whose config pins another. The report holds the samples, the

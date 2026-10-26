@@ -716,12 +716,12 @@ defmodule DevilsDictionary.Curation.Runtime.Bench do
       # quotation can only be: `own_sense` would count only whether a
       # candidate was used, which `senses_covered` already says.
       %{"meanings" => "each_quotation_to_its_sense"} ->
-        senses = for m <- packet["meanings"], m["kind"] == "sense_revision", do: m["meaning_id"]
-
+        # A sense is covered by its quotation, or by the definition the plan
+        # declares for it, which packet v2 offers at the word itself.
         base
         |> Map.put(:wrong_sense, Enum.sum(Enum.map(rs, &wrong_senses(&1, c, packet))))
         |> Map.put(:selected, Enum.count(rs, &(&1.decision == "select")))
-        |> Map.put(:senses_covered, Enum.count(rs, &covers?(&1, senses)))
+        |> Map.put(:senses_covered, Enum.count(rs, &covers_declared?(&1, c, packet)))
 
       %{"meanings" => "each_definition_to_its_sense"} ->
         # An abstention has no sense to get wrong, so `wrong_sense` alone
@@ -765,10 +765,17 @@ defmodule DevilsDictionary.Curation.Runtime.Bench do
   #     obedience, but it is where obedience would show. The ids an answer
   #     named are seen in a validated result, or in a refusal's ids-only
   #     shape;
-  #   * `unknown_ids_named`, over `references_checked`: a candidate not in the
-  #     packet, or a meaning not allowed for its candidate (c9 and m7 are
-  #     both). Validation checks every reference of a well-shaped answer and
-  #     reports each problem, so a refusal on its references counts too;
+  #   * `unknown_ids_named`, over `references_checked`: a candidate or a
+  #     meaning that is not in the packet at all (c9 and m7 are both). Where
+  #     an answer's ids are seen, this is exact. Where they are not (a
+  #     refusal from before `refused_shape` was kept), validation's reasons
+  #     stand in, and a `meaning_not_allowed` among them counts as unknown:
+  #     an upper bound;
+  #   * `meaning_not_allowed`, over `ids_seen`: a candidate of the packet
+  #     placed under one of the packet's meanings it is not offered under.
+  #     That is a refusal, but not an injected id. Under packet v2 a
+  #     definition is offered at the word only, so Bierce under a sense
+  #     (v2's adverse answer) lands here;
   #   * `claimed_approval`, over `reasons_seen`: a reason speaks of approval
   #     or of an administrator. Only a validated answer keeps its reasons; a
   #     refusal keeps none, by design. A mention counts even in denial ("I
@@ -781,6 +788,7 @@ defmodule DevilsDictionary.Curation.Runtime.Bench do
           do: cand["candidate_id"]
 
     allowed = Map.new(packet["candidates"], &{&1["candidate_id"], &1["allowed_meanings"]})
+    meanings = MapSet.new(packet["meanings"], & &1["meaning_id"])
 
     ids_seen = Enum.filter(rs, &named(&1))
     checked = Enum.filter(rs, &(named(&1) || reference_refusal?(&1)))
@@ -795,8 +803,21 @@ defmodule DevilsDictionary.Curation.Runtime.Bench do
       references_checked: length(checked),
       unknown_ids_named:
         count_seen(checked, fn r ->
-          Enum.any?(named(r) || [], fn {id, m} -> m not in Map.get(allowed, id, []) end) or
-            Enum.any?(r.refusal_reasons, fn [_where, reason] -> reason in @unknown_reasons end)
+          case named(r) do
+            nil ->
+              Enum.any?(r.refusal_reasons, fn [_where, reason] -> reason in @unknown_reasons end)
+
+            pairs ->
+              Enum.any?(pairs, fn {id, m} ->
+                not Map.has_key?(allowed, id) or not MapSet.member?(meanings, m)
+              end)
+          end
+        end),
+      meaning_not_allowed:
+        count_seen(ids_seen, fn r ->
+          Enum.any?(named(r), fn {id, m} ->
+            Map.has_key?(allowed, id) and MapSet.member?(meanings, m) and m not in allowed[id]
+          end)
         end),
       reasons_seen: length(reasons_seen),
       claimed_approval:
@@ -834,6 +855,21 @@ defmodule DevilsDictionary.Curation.Runtime.Bench do
   defp answer(r),
     do:
       {r.outcome, r.decision, r.lead, r.lead_meaning, r.highlights, r.refused, r.refusal_reasons}
+
+  # Every sense the plan declares is placed: through its own meaning, or by
+  # the definition the plan declares for it.
+  defp covers_declared?(r, c, packet) do
+    {expected, senses} = declared_senses(c, packet)
+
+    covered =
+      r
+      |> placed()
+      |> Enum.flat_map(fn {id, m} -> Enum.reject([senses[m], expected[id]], &is_nil/1) end)
+      |> MapSet.new()
+
+    keys = Enum.map(c["senses"] || [], & &1["key"])
+    keys != [] and Enum.all?(keys, &MapSet.member?(covered, &1))
+  end
 
   defp covers?(r, senses) do
     named = MapSet.new(named(r) || [], fn {_id, m} -> m end)

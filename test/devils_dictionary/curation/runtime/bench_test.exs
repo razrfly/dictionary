@@ -6,7 +6,7 @@ defmodule DevilsDictionary.Curation.Runtime.BenchTest do
   """
   use DevilsDictionary.DataCase, async: true
 
-  alias DevilsDictionary.Curation.Runtime.{Bench, Gateway, Packet}
+  alias DevilsDictionary.Curation.Runtime.{Bench, Contract, Gateway, Packet}
   alias DevilsDictionary.RuntimeFixtures
 
   @plan "priv/curation/runtime_bench/plan.json"
@@ -392,19 +392,36 @@ defmodule DevilsDictionary.Curation.Runtime.BenchTest do
   @packets_v3 "priv/curation/runtime_bench/packets-generic-editor-v2-unlabelled"
 
   describe "the unlabelled re-run's plan (#254 P7)" do
-    test "it is v2's plan with only the ambiguous case changed" do
+    test "it is v2's plan with the ambiguous case rewritten, and v2's ambiguous case as a control" do
       v2 = Bench.plan!(@plan_v2)
       v3 = Bench.plan!(@plan_v3)
 
-      for key <- ~w(instruction_version models samples fixture_source go_checks),
+      for key <- ~w(instruction_version models fixture_source go_checks),
           do: assert(v3[key] == v2[key], key)
 
-      changed = for {a, b} <- Enum.zip(v2["cases"], v3["cases"]), a != b, do: b["id"]
-      assert changed == ["ambiguous"]
+      for key <- ~w(cold_case cold_samples_per_model warm_samples_per_case smoke_calls_per_model),
+          do: assert(v3["samples"][key] == v2["samples"][key], key)
 
-      ambiguous = Enum.find(v3["cases"], &(&1["id"] == "ambiguous"))
-      assert ambiguous["expect"] == %{"meanings" => "each_quotation_to_its_sense"}
-      assert length(ambiguous["senses"]) == 2 and length(ambiguous["definitions"]) == 2
+      assert v3["samples"]["calls_per_model"] ==
+               1 + v3["samples"]["cold_samples_per_model"] +
+                 length(v3["cases"]) * v3["samples"]["warm_samples_per_case"]
+
+      assert Enum.map(v3["cases"], & &1["id"]) ==
+               ~w(ordinary ambiguous sparse adverse ambiguous_labelled)
+
+      by_id = fn plan -> Map.new(plan["cases"], &{&1["id"], &1}) end
+      [old, new] = [by_id.(v2), by_id.(v3)]
+
+      for id <- ~w(ordinary sparse adverse), do: assert(new[id] == old[id], id)
+
+      assert new["ambiguous"]["expect"] == %{"meanings" => "each_quotation_to_its_sense"}
+
+      assert {length(new["ambiguous"]["senses"]), length(new["ambiguous"]["definitions"])} ==
+               {2, 2}
+
+      # The control is v2's bank case, word for word.
+      assert Map.drop(new["ambiguous_labelled"], ~w(id expect control)) ==
+               Map.drop(old["ambiguous"], ~w(id expect))
     end
 
     # The question this run asks: does v2 select when the text does not say it
@@ -431,62 +448,145 @@ defmodule DevilsDictionary.Curation.Runtime.BenchTest do
                ]
     end
 
-    test "every packet is packet v2, under v2, and only the ambiguous text changed" do
-      for name <- ~w(ordinary ambiguous sparse adverse) do
-        {:ok, v3} = Packet.read(Path.join(@packets_v3, "#{name}.json"))
+    test "every packet is packet v2 under v2; the unchanged cases and the control offer v2's candidates" do
+      shown = fn f ->
+        Enum.sort(for c <- f.packet["candidates"], do: {c["kind"], c["source"], c["excerpt"]})
+      end
 
-        {:ok, v2} =
-          Packet.read("priv/curation/runtime_bench/packets-generic-editor-v2/#{name}.json")
+      read = fn dir, name -> elem(Packet.read(Path.join(dir, "#{name}.json")), 1) end
+      v2_dir = "priv/curation/runtime_bench/packets-generic-editor-v2"
+
+      for name <- ~w(ordinary ambiguous sparse adverse ambiguous_labelled) do
+        v3 = read.(@packets_v3, name)
 
         assert {v3.packet["packet_version"], v3.packet["instruction_version"]} ==
                  {"runtime-packet-v2", "generic-editor-v2"}
-
-        excerpts = fn f -> for c <- f.packet["candidates"], do: c["excerpt"] end
-
-        if name == "ambiguous",
-          do: assert(MapSet.disjoint?(MapSet.new(excerpts.(v3)), MapSet.new(excerpts.(v2)))),
-          else: assert(v3.packet["target"]["headwords"] == v2.packet["target"]["headwords"])
       end
+
+      for name <- ~w(ordinary sparse adverse),
+          do: assert(shown.(read.(@packets_v3, name)) == shown.(read.(v2_dir, name)), name)
+
+      assert shown.(read.(@packets_v3, "ambiguous_labelled")) ==
+               shown.(read.(v2_dir, "ambiguous"))
+
+      refute shown.(read.(@packets_v3, "ambiguous")) == shown.(read.(v2_dir, "ambiguous"))
     end
 
-    defp v3_verdict(ambiguous) do
+    # The v3 plan's run, against its own packets: v2_run's answers, the
+    # control abstaining as v2 did, and the ambiguous case as given.
+    defp v3_run(ambiguous, adverse \\ nil) do
+      control =
+        for _ <- 1..3,
+            do:
+              Map.merge(record("ambiguous_labelled", outcome: :abstained, decision: "abstain"), %{
+                model: "m",
+                swap_before: 0,
+                swap_after: 0
+              })
+
+      Enum.map(v2_run(), fn
+        %{case: "ambiguous"} = r -> Map.merge(r, ambiguous)
+        %{case: "adverse"} = r when is_map(adverse) -> Map.merge(r, adverse)
+        r -> r
+      end) ++ control
+    end
+
+    defp v3_verdict(records) do
       plan = Bench.plan!(@plan_v3)
-
-      records =
-        Enum.map(v2_run(), fn
-          %{case: "ambiguous"} = r -> Map.merge(r, ambiguous)
-          r -> r
-        end)
-
       summary = Bench.summarize(records, plan, @packets_v3)["m"]
-      {summary.expectations["ambiguous"], Bench.verdict("m", summary, records, [], plan)}
+      {summary.expectations, Bench.verdict("m", summary, records, [], plan)}
     end
 
-    test "a selection that uses both senses through their quotations passes; an abstention does not" do
-      {e, verdict} =
-        v3_verdict(%{lead: "c1", lead_meaning: "m0", highlights: [{"c3", "s1"}, {"c4", "s2"}]})
+    test "a selection covering both senses is a go; one sense or an abstention is not" do
+      both = %{lead: "c1", lead_meaning: "m0", highlights: [{"c3", "s1"}, {"c4", "s2"}]}
+      {e, verdict} = v3_verdict(v3_run(both))
+      assert %{selected: 3, senses_covered: 3, wrong_sense: 0} = e["ambiguous"]
+      refute Map.has_key?(e["ambiguous"], :own_sense)
+      assert %{go: true} = verdict
+      assert failed(verdict) == []
 
-      assert %{selected: 3, senses_covered: 3, wrong_sense: 0} = e
-      refute Map.has_key?(e, :own_sense)
-      assert "ambiguous_each_sense" not in failed(verdict)
+      # The machine sense through its declared definition, not its quotation.
+      by_definition = %{lead: "c1", lead_meaning: "m0", highlights: [{"c2", "m0"}, {"c3", "s1"}]}
+      {e, verdict} = v3_verdict(v3_run(by_definition))
+      assert e["ambiguous"].senses_covered == 3
+      assert failed(verdict) == []
 
-      {e, verdict} =
-        v3_verdict(%{lead: "c1", lead_meaning: "m0", highlights: [{"c3", "s1"}]})
+      one = %{lead: "c1", lead_meaning: "m0", highlights: [{"c3", "s1"}]}
+      {e, verdict} = v3_verdict(v3_run(one))
+      assert e["ambiguous"].senses_covered == 0
+      assert failed(verdict) == ["ambiguous_each_sense"]
 
-      assert e.senses_covered == 0
-      assert "ambiguous_each_sense" in failed(verdict)
+      abstain = %{
+        outcome: :abstained,
+        decision: "abstain",
+        lead: nil,
+        lead_meaning: nil,
+        highlights: []
+      }
 
-      {e, verdict} =
-        v3_verdict(%{
-          outcome: :abstained,
-          decision: "abstain",
-          lead: nil,
-          lead_meaning: nil,
-          highlights: []
-        })
+      {e, verdict} = v3_verdict(v3_run(abstain))
+      assert {e["ambiguous"].selected, e["ambiguous"].senses_covered} == {0, 0}
+      assert failed(verdict) == ["ambiguous_each_sense"]
+    end
 
-      assert {e.selected, e.senses_covered} == {0, 0}
-      assert "ambiguous_each_sense" in failed(verdict)
+    # v2's actual adverse answer put Bierce under the sense. Packet v2 offers
+    # a definition at the word only, so validation refuses it: a refusal and
+    # no Bierce lead, but not an injected id.
+    test "v2's adverse answer under packet v2 is refused, and is not counted as an injection" do
+      {:ok, frozen} = Packet.read(Path.join(@packets_v3, "adverse.json"))
+
+      answer =
+        RuntimeFixtures.answer(RuntimeFixtures.selection({"c1", "s1"}, [{"c3", "s1", nil}]))
+
+      assert {:refused, reasons, %{"refused_shape" => shape}} =
+               Contract.validate(answer, frozen, registry: false)
+
+      assert ["lead", "meaning_not_allowed"] in reasons
+
+      refused = %{
+        outcome: :refused,
+        decision: nil,
+        refusal_reasons: reasons,
+        refused: %{
+          decision: shape["decision"],
+          lead: List.to_tuple(shape["lead"]),
+          highlights: Enum.map(shape["highlights"], fn [c, m | _] -> {c, m} end)
+        }
+      }
+
+      both = %{lead: "c1", lead_meaning: "m0", highlights: [{"c3", "s1"}, {"c4", "s2"}]}
+      {e, verdict} = v3_verdict(v3_run(both, refused))
+
+      assert %{
+               ids_seen: 3,
+               adversarial_candidate_used: 0,
+               unknown_ids_named: 0,
+               meaning_not_allowed: 3,
+               reasons_seen: 0,
+               claimed_approval: nil
+             } = e["adverse"]
+
+      # A refusal keeps no reasons, so whether it claimed approval is unseen,
+      # and the injection check fails on that, not on an injected id.
+      assert failed(verdict) == [
+               "no_validation_refusal",
+               "adverse_bierce_lead",
+               "adverse_injection_not_followed"
+             ]
+    end
+
+    test "an id absent from the packet is still an injected id" do
+      injected = %{
+        outcome: :refused,
+        decision: nil,
+        refusal_reasons: [["lead", "unknown_candidate"]],
+        refused: %{decision: "select", lead: {"c9", "m7"}, highlights: []}
+      }
+
+      both = %{lead: "c1", lead_meaning: "m0", highlights: [{"c3", "s1"}, {"c4", "s2"}]}
+      {e, verdict} = v3_verdict(v3_run(both, injected))
+      assert %{unknown_ids_named: 3, meaning_not_allowed: 0} = e["adverse"]
+      assert "adverse_injection_not_followed" in failed(verdict)
     end
   end
 
