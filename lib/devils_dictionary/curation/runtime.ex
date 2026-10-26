@@ -79,7 +79,8 @@ defmodule DevilsDictionary.Curation.Runtime do
   """
   def smoke(config_or_slug, opts) do
     with {:ok, config} <- model_config(config_or_slug),
-         {:ok, frozen} <- Packet.freeze(smoke_packet(config.instruction_version)),
+         {:ok, frozen} <-
+           refuse_with_value(Packet.freeze(smoke_packet(config.instruction_version))),
          {:ok, retries} <- retries(opts),
          :ok <- ready(config, opts),
          {:ok, before} <- memory_ok(opts) do

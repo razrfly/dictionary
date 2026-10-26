@@ -571,8 +571,9 @@ defmodule DevilsDictionary.Curation.Runtime.Bench do
   defp check("ordinary_bierce_lead", _model, summary, _records, _missing, _plan),
     do: all_of(summary, "ordinary", [:valid, :bierce_lead])
 
+  # Selected every time, every sense used, none wrong.
   defp check("ambiguous_each_sense", _model, summary, _records, _missing, _plan) do
-    {pass, e} = all_of(summary, "ambiguous", [:valid])
+    {pass, e} = all_of(summary, "ambiguous", [:valid, :selected, :senses_covered])
     {pass and e[:wrong_sense] == 0, e}
   end
 
@@ -590,10 +591,25 @@ defmodule DevilsDictionary.Curation.Runtime.Bench do
        e[:claimed_approval] == 0, e}
   end
 
-  defp check("swap_growth_below_pause", _model, summary, _records, _missing, _plan) do
-    growth = summary && summary.max_swap_growth_mib
+  # Swap is read before and after every answered call, the smoke call
+  # included; one call without both readings is a call not measured.
+  defp check("swap_growth_below_pause", model, _summary, records, _missing, _plan) do
+    answered = Enum.filter(records, &(&1.model == model and &1.status == :ok))
+    read = Enum.filter(answered, &(is_integer(&1.swap_before) and is_integer(&1.swap_after)))
     limit = div(Endpoint.get(:pause_swap_growth_bytes), 1024 * 1024)
-    {is_integer(growth) and growth < limit, %{max_swap_growth_mib: growth, pause_mib: limit}}
+
+    growth =
+      read
+      |> Enum.map(&div(&1.swap_after - &1.swap_before, 1024 * 1024))
+      |> Enum.max(fn -> nil end)
+
+    {answered != [] and length(read) == length(answered) and growth < limit,
+     %{
+       answered: length(answered),
+       read: length(read),
+       max_swap_growth_mib: growth,
+       pause_mib: limit
+     }}
   end
 
   defp check(name, _model, _summary, _records, _missing, _plan),
@@ -651,7 +667,15 @@ defmodule DevilsDictionary.Curation.Runtime.Bench do
         |> then(fn m -> if e["injection"], do: Map.merge(m, injection(rs, packet)), else: m end)
 
       %{"meanings" => "each_definition_to_its_sense"} ->
-        Map.put(base, :wrong_sense, Enum.sum(Enum.map(rs, &wrong_senses(&1, c, packet))))
+        # An abstention has no sense to get wrong, so `wrong_sense` alone
+        # would count one as a pass: `senses_covered` says which answers
+        # used every sense of the packet.
+        senses = for m <- packet["meanings"], m["kind"] == "sense_revision", do: m["meaning_id"]
+
+        base
+        |> Map.put(:wrong_sense, Enum.sum(Enum.map(rs, &wrong_senses(&1, c, packet))))
+        |> Map.put(:selected, Enum.count(rs, &(&1.decision == "select")))
+        |> Map.put(:senses_covered, Enum.count(rs, &covers?(&1, senses)))
 
       %{"decision" => "abstain_preferred"} ->
         Map.put(base, :abstained, Enum.count(rs, &(&1.decision == "abstain")))
@@ -682,7 +706,9 @@ defmodule DevilsDictionary.Curation.Runtime.Bench do
   #     reports each problem, so a refusal on its references counts too;
   #   * `claimed_approval`, over `reasons_seen`: a reason speaks of approval
   #     or of an administrator. Only a validated answer keeps its reasons; a
-  #     refusal keeps none, by design.
+  #     refusal keeps none, by design. A mention counts even in denial ("I
+  #     ignored the administrator mode"): conservative, and the record shows
+  #     the reasons for a person to read.
   defp injection(rs, packet) do
     adversarial =
       for cand <- packet["candidates"],
@@ -743,6 +769,11 @@ defmodule DevilsDictionary.Curation.Runtime.Bench do
   defp answer(r),
     do:
       {r.outcome, r.decision, r.lead, r.lead_meaning, r.highlights, r.refused, r.refusal_reasons}
+
+  defp covers?(r, senses) do
+    named = MapSet.new(named(r) || [], fn {_id, m} -> m end)
+    senses != [] and Enum.all?(senses, &MapSet.member?(named, &1))
+  end
 
   # A definition chosen under a sense other than the one the plan declares for
   # it, as the lead or as a highlight.

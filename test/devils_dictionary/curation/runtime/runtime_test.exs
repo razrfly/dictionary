@@ -352,6 +352,20 @@ defmodule DevilsDictionary.Curation.RuntimeTest do
     settle!()
   end
 
+  test "a config pinned to an instruction that is not pinned here is refused, not a crash",
+       ctx do
+    config = model_config!(%{instruction_version: "generic-editor-v9"}) |> ready!()
+    stub_ollama!(config)
+
+    assert {:refused, :unsupported_instruction_version} =
+             Runtime.smoke(config, Keyword.put(ctx.opts, :request_key, key("v9")))
+
+    assert {:refused, {:instruction_version_mismatch, "generic-editor-v1", "generic-editor-v9"}} =
+             Runtime.run(config, ctx.frozen, Keyword.put(ctx.opts, :request_key, key("v9r")))
+
+    assert Repo.aggregate(Attempt, :count) == 0
+  end
+
   test "the readiness smoke call goes through the same slot and budget", ctx do
     stub_ollama!(ctx.config, chat: fn _ -> {:json, answer(selection({"c1", "m0"}, []))} end)
 

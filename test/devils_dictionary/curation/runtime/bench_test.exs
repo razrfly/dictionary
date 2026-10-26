@@ -125,6 +125,35 @@ defmodule DevilsDictionary.Curation.Runtime.BenchTest do
            ]
   end
 
+  # An abstention has no sense to get wrong; it is still not a selection.
+  test "abstaining on the ambiguous case is a no-go" do
+    abstained =
+      Enum.map(v2_run(), fn
+        %{case: "ambiguous"} = r ->
+          %{
+            r
+            | outcome: :abstained,
+              decision: "abstain",
+              lead: nil,
+              lead_meaning: nil,
+              highlights: []
+          }
+
+        r ->
+          r
+      end)
+
+    assert failed(verdict(abstained)) == ["ambiguous_each_sense"]
+
+    one_sense =
+      Enum.map(v2_run(), fn
+        %{case: "ambiguous"} = r -> %{r | highlights: []}
+        r -> r
+      end)
+
+    assert failed(verdict(one_sense)) == ["ambiguous_each_sense"]
+  end
+
   test "a gap, an unvalidated smoke call or unmeasured swap is a no-go" do
     gap = [%{model: "m", what: "3 planned calls", why: "budget_exhausted"}]
     assert "every_planned_call_measured" in failed(verdict(v2_run(), gap))
@@ -133,6 +162,10 @@ defmodule DevilsDictionary.Curation.Runtime.BenchTest do
 
     unmeasured = Enum.map(v2_run(), &%{&1 | swap_before: nil, swap_after: nil})
     assert failed(verdict(unmeasured)) == ["swap_growth_below_pause"]
+
+    # One reading missing, the smoke call's, is a call not measured.
+    [smoke | rest] = v2_run()
+    assert failed(verdict([%{smoke | swap_after: nil} | rest])) == ["swap_growth_below_pause"]
   end
 
   test "fixtures are never seeded into a database that is not a benchmark database" do

@@ -106,8 +106,8 @@ agent must:
 ## Models (explicit setup; the only step that downloads)
 
 ```
-mix dd.runtime setup --model qwen3.5:4b --slug qwen3.5-4b-v1 --pull
-mix dd.runtime setup --model qwen3.5:4b --slug qwen3.5-4b-v1 \
+mix dd.runtime setup --model qwen3.5:9b --slug qwen3.5-9b-v2 --pull
+mix dd.runtime setup --model qwen3.5:9b --slug qwen3.5-9b-v2 \
   --instruction generic-editor-v2 --accept-license
 ```
 
@@ -213,16 +213,18 @@ reaches `devils_dictionary_v2`.
 DD_DATABASE=devils_dictionary_runtime_bench mix ecto.create
 DD_DATABASE=devils_dictionary_runtime_bench mix ecto.migrate
 DD_DATABASE=devils_dictionary_runtime_bench mix dd.runtime bench seed \
-  --plan priv/curation/runtime_bench/plan.json --packets priv/curation/runtime_bench/packets
+  --plan priv/curation/runtime_bench/plan-generic-editor-v2.json \
+  --packets priv/curation/runtime_bench/packets-generic-editor-v2
 DD_DATABASE=devils_dictionary_runtime_bench mix dd.runtime bench run \
-  --plan priv/curation/runtime_bench/plan.json --packets priv/curation/runtime_bench/packets \
+  --plan priv/curation/runtime_bench/plan-generic-editor-v2.json \
+  --packets priv/curation/runtime_bench/packets-generic-editor-v2 \
   --out /path/bench.json
 ```
 
-The re-run of 2026-10-26 used `plan-generic-editor-v2.json` and
-`packets-generic-editor-v2/` the same way. A plan names its `instruction_version`:
-`bench seed` freezes the packets for it, and `bench run` skips a model whose config pins
-another. The report holds the samples, the summary and the plan's go or no-go per model.
+A plan names its `instruction_version`: `bench seed` freezes the packets for it, and
+`bench run` skips a model whose config pins another. The report holds the samples, the
+summary and the plan's go or no-go per model. September's `plan.json` names no
+instruction: its committed packets can still be run, but not re-seeded.
 
 `bench seed` writes the frozen packets, and they are committed. Re-seeding a fresh
 database gives new ids, so new packets and hashes; compare models only on the same

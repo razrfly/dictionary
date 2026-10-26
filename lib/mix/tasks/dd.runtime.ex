@@ -17,7 +17,7 @@ defmodule Mix.Tasks.Dd.Runtime do
 
   **Setup.** This is explicit, and the only thing that ever downloads:
 
-      mix dd.runtime setup --model qwen3.5:4b --slug qwen3.5-4b-v1 [--pull] \
+      mix dd.runtime setup --model qwen3.5:9b --slug qwen3.5-9b-v2 [--pull] \
         --instruction generic-editor-v2 --accept-license
 
   `setup` checks that the volume is mounted and external, that the service is
