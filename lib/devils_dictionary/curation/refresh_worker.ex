@@ -6,8 +6,18 @@ defmodule DevilsDictionary.Curation.RefreshWorker do
   cancelled, unless the row is queued on it), reads the composition's inputs
   for the On page that admitted it, and completes as `:unchanged` or
   `:needs_editor` under the fence `Curation.Refresh` keeps. A failure reading
-  the inputs defers the run with backoff. **No model is called and the
-  published pointer never moves.**
+  the inputs defers the run with backoff. **The published pointer never
+  moves.**
+
+  **The editor (#264 R3).** The worker still makes two calls, `claim` and
+  `check`. While the editor is enabled for the run's configuration version,
+  `Refresh.check/3` hands a run that needs an editor to
+  `Curation.Proposals.step/3` inside the same claim: the frozen packet goes
+  to the pinned model, within the running lease, and a validated answer
+  becomes a proposal. A service that is down defers the run with backoff,
+  never advancing freshness and never delaying a reader: the call is here,
+  in the worker, never in a request (#264 R6). While the editor is off, no
+  model is called.
 
   `unique` only coalesces a duplicate insert of the same row's job; the
   correctness boundary is the row lock, the generation and the token

@@ -216,9 +216,9 @@ defmodule DevilsDictionaryWeb.CurationLiveTest do
              )
 
       assert has_element?(view, "#curation-page-greed-open", "Curate")
-      # The Stale tab is #259's (P5); Proposed stays P6's.
+      # The Stale tab is #259's (P5); Proposed is #264's (P6), enabled now.
       assert has_element?(view, "#tab-stale[href='/ops/curation?tab=stale']", "Stale")
-      assert has_element?(view, "#tab-proposed[aria-disabled='true']", "P6")
+      assert has_element?(view, "#tab-proposed[href='/ops/curation?tab=proposed']", "Proposed")
 
       # Published by hand, the queue says so on its next read.
       view = editor(ctx)

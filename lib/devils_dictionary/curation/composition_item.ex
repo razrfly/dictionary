@@ -27,6 +27,14 @@ defmodule DevilsDictionary.Curation.CompositionItem do
   under that actor's own label. The database checks both; a caller never
   supplies attribution.
 
+  `selection_origin` is `:model` for an item the generic editor chose (#264
+  R9); such an item is written only in a model version, or copied from one.
+  `copied_from_item_id` names the item a verified copy was made from (a kept
+  item carried into a proposal, R8.2, or a proposal's item taken into a
+  manual version, R11): the database requires the copy to be identical in
+  reference, meaning, note and attribution, so a copy never relabels anyone's
+  words.
+
   `subject` is virtual: `Published.current/1` fills it for an exemplar it
   shows, from the registry at read time (the label, the kind and, for a
   content subject, the pinned words). It is never stored.
@@ -50,7 +58,8 @@ defmodule DevilsDictionary.Curation.CompositionItem do
     field :meaning_sense_revision_id, :id
     field :meaning_lexeme_id, :id
     field :assertion_revision_id, :id
-    field :selection_origin, Ecto.Enum, values: [:manual], default: :manual
+    field :selection_origin, Ecto.Enum, values: [:manual, :model], default: :manual
+    field :copied_from_item_id, :id
     field :note, :string
     field :note_author_kind, Ecto.Enum, values: [:human, :model]
     field :note_author_label, :string

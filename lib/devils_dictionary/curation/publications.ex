@@ -44,6 +44,10 @@ defmodule DevilsDictionary.Curation.Publications do
       decision to stand in for one. What the integration must add is set out
       in `docs/curation/persistence-slice-1.md`, "Publication authority".
 
+  **A proposal is never published** (#264 R13.1): only a manual version is
+  (`:proposal_not_publishable`; the database refuses it too). The owner
+  takes a proposal into a manual version first.
+
   `withdraw/3` moves the pointer to none, with a receipt of its own, as an
   operator. The reader withholds an ineligible item on its own, without any
   withdrawal.
@@ -113,7 +117,8 @@ defmodule DevilsDictionary.Curation.Publications do
   end
 
   defp commit(composition, version, expected, authority, reason, key) do
-    with :ok <- Transaction.check(composition.state == :active, :composition_retired),
+    with :ok <- Transaction.check(version.origin == :manual, :proposal_not_publishable),
+         :ok <- Transaction.check(composition.state == :active, :composition_retired),
          :ok <- pointer(composition, expected),
          :ok <-
            Transaction.check(

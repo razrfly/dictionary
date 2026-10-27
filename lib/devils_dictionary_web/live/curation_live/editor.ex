@@ -46,19 +46,50 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
   check found an editor is needed, or when a check failed. A check looks at
   the inputs and does not judge them.
 
-  No job is queued, nothing is fetched and no model is called.
+  **The editor's proposal (#264 §2.2–§2.4, R10–R15)**, at
+  `?proposal=<version id>`: a strip above the form says who proposed it
+  (read from its attempt's model config), from which attempt, what it was
+  offered, which of the owner's kept items it carried and which it could
+  not, what it chose with no place left, and whether the page moved since
+  it was admitted. Below it, the quality form (`quality-form-v1`, five
+  yes/no answers per item and a note) and the owner's three acts:
+
+    * *Take as is* (`Proposals.take/3`), offered only while the proposal is
+      the page's newest version;
+    * *Edit then publish*: the form is filled from the proposal, and
+      Publish publishes the edit (`Proposals.edit_publish/3`): items kept as
+      offered stay the editor's, rewritten or added ones are the owner's;
+    * *Dismiss*, with a reason (`Proposals.dismiss/3`).
+
+  **No bypass (R13.2).** The ordinary form opens on the newest *manual*
+  version and never loads a note the model wrote (its reason travels only
+  by Take); Save is parented to the newest version of any origin; Publish
+  publishes a held manual version even when a proposal is newer, and never
+  a proposal.
+
+  **The owner's marks (#253 D8)**: the page's mode (open to proposals, or
+  mine) and a keep mark on each published item. **Request a proposal**
+  (R18) while the editor is enabled.
+
+  No job is queued except by Request, nothing is fetched and no model is
+  called from this screen.
   """
   use DevilsDictionaryWeb, :live_view
 
   alias DevilsDictionary.Curation.{
     Candidates,
+    CompositionVersion,
     Compositions,
+    Configurations,
     Preview,
+    Proposals,
     Publications,
     Refresh,
     Reviews,
     Standing
   }
+
+  alias DevilsDictionary.Curation.Proposals.QualityForm
 
   alias DevilsDictionary.Repo
   alias DevilsDictionaryWeb.{CurationLive, Opening}
@@ -88,12 +119,55 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
         refusal: nil,
         notice: nil,
         withdraw_reason: "",
+        proposal_id: nil,
+        proposal: nil,
+        editing: nil,
+        quality: fresh_quality(),
+        editor_on?: false,
         me: Preview.author(socket.assigns.current_scope),
         page_title: "Curate · #{slug}"
       )
 
     {:ok, if(connected?(socket), do: load(socket), else: socket)}
   end
+
+  # `?proposal=<version id>` opens the editor's proposal (#264 §2.2).
+  @impl true
+  def handle_params(params, _uri, socket) do
+    id =
+      case Integer.parse(params["proposal"] || "") do
+        {n, ""} -> n
+        _none -> nil
+      end
+
+    socket = assign(socket, :proposal_id, id)
+
+    {:noreply,
+     if(socket.assigns.loaded?, do: socket |> load_proposal() |> preview(), else: socket)}
+  end
+
+  # The proposal open on this page, if the id names one of its versions.
+  defp load_proposal(socket) do
+    view =
+      with id when is_integer(id) <- socket.assigns.proposal_id,
+           %{} = view <- Proposals.view(id),
+           %{composition: %{id: composition_id}} <- socket.assigns.record,
+           true <- view.version.composition_id == composition_id do
+        view
+      else
+        _none -> nil
+      end
+
+    socket =
+      assign(socket,
+        proposal: view,
+        quality: fresh_quality()
+      )
+
+    if socket.assigns.editing && view == nil, do: stop_editing(socket), else: socket
+  end
+
+  defp fresh_quality, do: %{"answers" => %{}, "note" => "", "reason" => ""}
 
   # The page, its candidates and its record as they are now, and the form
   # opened on the latest version.
@@ -109,9 +183,11 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
       page_title: "Curate · #{page.headword.lemma || socket.assigns.slug}"
     )
     |> load_record()
+    |> assign(:editing, nil)
     |> then(&assign(&1, :selection, initial_selection(&1.assigns)))
     |> assign(:notice, nil)
     |> uncarried()
+    |> load_proposal()
     |> preview()
   end
 
@@ -166,6 +242,92 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
       end
 
     {:noreply, withdraw(assign(socket, :withdraw_reason, reason))}
+  end
+
+  # ── the proposal (#264 R10–R12) ──────────────────────────────────────────
+
+  def handle_event("quality", %{"quality" => params}, socket) do
+    {:noreply, assign(socket, :quality, quality_of(params, socket.assigns.quality))}
+  end
+
+  def handle_event("quality", _params, socket), do: {:noreply, socket}
+
+  def handle_event("proposal_action", %{"quality" => params} = all, socket) do
+    socket = assign(socket, :quality, quality_of(params, socket.assigns.quality))
+
+    case all["action"] do
+      "take" -> {:noreply, take(socket)}
+      "dismiss" -> {:noreply, dismiss(socket)}
+      _other -> {:noreply, socket}
+    end
+  end
+
+  def handle_event("edit_proposal", _params, %{assigns: %{proposal: %{} = view}} = socket) do
+    {:noreply,
+     socket
+     |> assign(:editing, view)
+     |> assign(:selection, edit_selection(view, socket.assigns.candidates))
+     |> assign(:notice, edit_notice(view, socket.assigns.candidates))
+     |> preview()}
+  end
+
+  def handle_event("edit_proposal", _params, socket), do: {:noreply, socket}
+
+  def handle_event("cancel_edit", _params, socket),
+    do: {:noreply, socket |> stop_editing() |> preview()}
+
+  # ── the owner's marks (#253 D8, #264 R15) and Request (R18) ─────────────
+
+  def handle_event("set_mode", %{"mode" => mode}, socket) when mode in ["open", "mine"] do
+    with %{composition: %{id: id}} <- socket.assigns.record,
+         {:ok, _composition} <-
+           Compositions.set_mode(
+             socket.assigns.current_scope,
+             id,
+             String.to_existing_atom(mode),
+             []
+           ) do
+      {:noreply,
+       socket
+       |> load_record()
+       |> assign(refusal: nil, notice: mode_notice(mode))}
+    else
+      {:error, reason} -> {:noreply, refused(socket, reason)}
+      _none -> {:noreply, socket}
+    end
+  end
+
+  def handle_event("set_mode", _params, socket), do: {:noreply, socket}
+
+  def handle_event("keep", %{"item" => item}, socket) do
+    marked(socket, fn id ->
+      Compositions.keep(socket.assigns.current_scope, id, String.to_integer(item), [])
+    end)
+  end
+
+  def handle_event("unkeep", %{"key" => key}, socket) do
+    marked(socket, fn id -> Compositions.unkeep(socket.assigns.current_scope, id, key, []) end)
+  end
+
+  def handle_event("request", _params, socket) do
+    with true <- socket.assigns.editor_on?,
+         %{composition: %{id: id}} <- socket.assigns.record do
+      case Refresh.request(
+             socket.assigns.current_scope,
+             id,
+             socket.assigns.slug,
+             "requested from the curation screen"
+           ) do
+        {:ok, outcome} ->
+          {:noreply,
+           socket |> load_record() |> assign(refusal: nil, notice: request_notice(outcome))}
+
+        {:error, reason} ->
+          {:noreply, refused(socket, reason)}
+      end
+    else
+      _off -> {:noreply, socket}
+    end
   end
 
   def handle_event("reload", _params, socket) do
@@ -272,8 +434,20 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
   # A stored version as the form's selection: each item by its candidate's
   # key. An item that is no longer a candidate is left out, and the form is
   # then a new arrangement.
-  defp version_selection(%{items: items}, candidates) do
-    keyed = for item <- items, key = item_key(item, candidates), do: {item, key}
+  #
+  # The ordinary form never loads a note the model wrote (#264 R13.2): the
+  # item comes with its reference and an empty reason, since Save signs
+  # every note as the reviewer and must never re-sign the editor's words.
+  # Edit then publish (`edit_selection/2`) does load them: what is kept as
+  # offered is copied, still the editor's.
+  defp version_selection(%{items: items}, candidates, model_notes \\ :blank) do
+    keyed =
+      for item <- items, key = item_key(item, candidates) do
+        if model_notes == :blank and item.note_author_kind == :model,
+          do: {%{item | note: nil, note_author_label: nil}, key},
+          else: {item, key}
+      end
+
     lead = Enum.find(keyed, fn {item, _key} -> item.role == :lead end)
 
     %{
@@ -303,6 +477,35 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
       reason: ""
     }
   end
+
+  # The proposal's arrangement in the form, its notes as offered.
+  defp edit_selection(view, candidates) do
+    version_selection(%{items: view.items}, candidates, :keep)
+  end
+
+  defp edit_notice(view, candidates) do
+    case Enum.count(view.items, &is_nil(item_key(&1, candidates))) do
+      0 ->
+        "Editing the proposal: items kept as offered stay the editor's; a reason you rewrite, or an item you add, is yours. Publish publishes the edit, with the quality form above."
+
+      n ->
+        "Editing the proposal: #{n} of its items this screen does not offer now, and the edit leaves #{if n == 1, do: "it", else: "them"} out."
+    end
+  end
+
+  defp stop_editing(socket) do
+    socket
+    |> assign(:editing, nil)
+    |> assign(:selection, initial_selection(socket.assigns))
+    |> assign(:notice, nil)
+  end
+
+  # Items of the newest manual version whose reason the editor wrote: the
+  # ordinary form left their reasons out (#264 R13.2).
+  defp model_noted(%{record: %{latest: %{items: items}}, editing: nil}),
+    do: Enum.count(items, &(&1.note_author_kind == :model))
+
+  defp model_noted(_assigns), do: 0
 
   defp item_key(%{item_kind: :content, item_object_id: id}, candidates),
     do: known("content-#{id}", candidates)
@@ -347,13 +550,25 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
           do: {candidate, sel.notes[key]}
 
     selection = %{lead: lead, lead_note: sel.lead_note, highlights: highlights}
-    held = held(record, Preview.items(selection, socket.assigns.me))
+    items = Preview.items(selection, socket.assigns.me)
+    held = if socket.assigns.editing, do: nil, else: held(record, items)
+    next = if record.newest, do: record.newest.version.version + 1, else: 1
 
     preview =
       Preview.build(page, candidates, selection, socket.assigns.current_scope,
         composition: record.composition,
-        next_version: if(record.latest, do: record.latest.version.version + 1, else: 1),
-        held: held && %{version: held.version, items: held.items, author: held.author}
+        next_version: next,
+        held:
+          cond do
+            held ->
+              %{version: held.version, items: held.items, author: held.author}
+
+            socket.assigns.editing ->
+              edited(socket.assigns.editing, items, next, socket.assigns.me)
+
+            true ->
+              nil
+          end
       )
 
     socket
@@ -387,6 +602,34 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
 
   defp held(_record, _items), do: nil
 
+  # What Edit then publish would publish, for the preview: an item kept as
+  # offered is the proposal's, still signed by whoever wrote it; any other
+  # is the reviewer's, as the form attributes it.
+  defp edited(view, items, next, me) do
+    taken =
+      Enum.map(items, fn item ->
+        case Enum.find(view.items, &as_offered?(&1, item)) do
+          nil -> item
+          offered -> %{offered | role: item.role, position: item.position}
+        end
+      end)
+
+    %{
+      version: %CompositionVersion{
+        version: next,
+        inserted_at: DateTime.utc_now(),
+        resolution: %{}
+      },
+      items: taken,
+      author: me.label
+    }
+  end
+
+  defp as_offered?(offered, item) do
+    Map.take(offered, @reference_fields -- [:role, :position]) ==
+      Map.take(item, @reference_fields -- [:role, :position])
+  end
+
   defp references(items) do
     items
     |> Enum.map(&Map.take(&1, @reference_fields))
@@ -417,6 +660,10 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
     common =
       List.flatten([
         if(assigns.stale, do: [:not_current], else: []),
+        if(assigns.editing && not QualityForm.complete?(quality_form(assigns)),
+          do: [:quality_form_incomplete],
+          else: []
+        ),
         read_only(assigns),
         Enum.map(preview.problems, &problem/1),
         if(String.trim(sel.reason) == "", do: [{:required, :reason}], else: []),
@@ -439,7 +686,8 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
         do: [:already_published],
         else: []
 
-    %{draft: common, publish: common ++ notes ++ published}
+    draft = if assigns.editing, do: common ++ [:editing_proposal], else: common
+    %{draft: draft, publish: common ++ notes ++ published}
   end
 
   # A problem the preview found, by its place when it has one.
@@ -485,6 +733,34 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
   defp publish(%{assigns: %{blockers: %{publish: [_ | _] = blockers}}} = socket),
     do: assign(socket, refusal: hd(blockers), notice: nil)
 
+  # Edit then publish (#264 R11.3): the edited arrangement, the quality form
+  # and the compare-and-switch, in one transaction.
+  defp publish(%{assigns: %{editing: %{} = view}} = socket) do
+    %{current_scope: scope, selection: sel, record: record, candidates: candidates} =
+      socket.assigns
+
+    result =
+      Proposals.edit_publish(scope, view.proposal.id,
+        lead: lead_spec(sel, candidates),
+        highlights: Enum.map(sel.highlights, &spec(candidates, &1, sel.notes[&1])),
+        reason: sel.reason,
+        expected_pointer: record.published_id,
+        answers: socket.assigns.quality["answers"],
+        note: socket.assigns.quality["note"]
+      )
+
+    case result do
+      {:ok, %{version: version, receipt: receipt}} ->
+        socket
+        |> after_proposal(
+          "Edited the proposal and published it as version #{version.version} (receipt ##{receipt.id})."
+        )
+
+      {:error, reason} ->
+        refused(socket, reason)
+    end
+  end
+
   # The version, its acceptance and its publication, in one transaction: a
   # version or a pointer that moved since this form was opened writes
   # nothing at all.
@@ -525,10 +801,12 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
     end
   end
 
-  # The held version, while it is still the newest; otherwise a new one,
-  # from the latest this form was opened on.
+  # The held version, while it is still the newest manual one; otherwise a
+  # new one, from the latest this form was opened on. A proposal, pending or
+  # resolved, never makes it stale (#264 R13.2): it is never held, and only
+  # a newer manual version moves it.
   defp publishable(_assigns, %{version: version}, _scope) do
-    case Compositions.latest_version(version.composition_id) do
+    case Compositions.latest_manual_version(version.composition_id) do
       %{id: id} when id == version.id -> {:ok, version}
       latest -> {:error, {:stale_parent, latest && latest.id}}
     end
@@ -597,11 +875,12 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
 
     atomically(fn ->
       with {:ok, composition} <- composition(record, candidates, scope, sel.reason) do
+        # Parented to the newest version of any origin (#264 R13.2).
         Compositions.create_version(scope, composition.id, %{
           lead: lead_spec(sel, candidates),
           highlights: Enum.map(sel.highlights, &spec(candidates, &1, sel.notes[&1])),
           reason: sel.reason,
-          expected_parent: record.latest && record.latest.version.id
+          expected_parent: record.newest && record.newest.version.id
         })
       end
     end)
@@ -653,14 +932,122 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
     socket |> load_record() |> assign(refusal: nil, notice: notice)
   end
 
+  # After Take, Edit-publish or Dismiss: the record as it is now, the
+  # ordinary form on the newest manual version, and the proposal closed.
+  defp after_proposal(socket, notice) do
+    socket
+    |> load_record()
+    |> assign(editing: nil, proposal: nil, proposal_id: nil, quality: fresh_quality())
+    |> then(&assign(&1, :selection, initial_selection(&1.assigns)))
+    |> assign(refusal: nil, notice: notice)
+    |> preview()
+    |> push_patch(to: ~p"/ops/curation/on/#{socket.assigns.slug}")
+  end
+
+  defp take(%{assigns: %{proposal: %{} = view}} = socket) do
+    q = socket.assigns.quality
+
+    case Proposals.take(socket.assigns.current_scope, view.proposal.id,
+           reason: q["reason"],
+           expected_pointer: socket.assigns.record.published_id,
+           answers: q["answers"],
+           note: q["note"]
+         ) do
+      {:ok, %{version: version, receipt: receipt}} ->
+        after_proposal(
+          socket,
+          "Took the proposal: published version #{version.version} (receipt ##{receipt.id}). Its items keep who wrote them."
+        )
+
+      {:error, reason} ->
+        refused(socket, reason)
+    end
+  end
+
+  defp take(socket), do: socket
+
+  defp dismiss(%{assigns: %{proposal: %{} = view}} = socket) do
+    q = socket.assigns.quality
+
+    case Proposals.dismiss(socket.assigns.current_scope, view.proposal.id,
+           reason: q["reason"],
+           answers: q["answers"],
+           note: q["note"]
+         ) do
+      {:ok, _proposal} ->
+        after_proposal(
+          socket,
+          "Dismissed the proposal with your reason. The same arrangement from the same packet is not proposed again."
+        )
+
+      {:error, reason} ->
+        refused(socket, reason)
+    end
+  end
+
+  defp dismiss(socket), do: socket
+
+  # The quality form as the strip holds it: answers by slot and question,
+  # the note, and the reason the act carries.
+  defp quality_of(params, old) do
+    %{
+      "answers" =>
+        case params["answers"] do
+          %{} = answers -> Map.merge(old["answers"], answers, fn _k, a, b -> Map.merge(a, b) end)
+          _none -> old["answers"]
+        end,
+      "note" => text(params["note"], old["note"]),
+      "reason" => text(params["reason"], old["reason"])
+    }
+  end
+
+  # The stored shape of the strip's form, to ask whether it is complete.
+  defp quality_form(%{proposal: %{items: items}, quality: q}) do
+    case QualityForm.build(items, q["answers"], q["note"], nil) do
+      {:ok, form} -> form
+      {:error, _incomplete} -> nil
+    end
+  end
+
+  defp quality_form(_assigns), do: nil
+
+  defp marked(socket, fun) do
+    with %{composition: %{id: id}} <- socket.assigns.record,
+         {:ok, _composition} <- fun.(id) do
+      {:noreply, socket |> load_record() |> assign(refusal: nil, notice: nil)}
+    else
+      {:error, reason} -> {:noreply, refused(socket, reason)}
+      _none -> {:noreply, socket}
+    end
+  end
+
+  defp mode_notice("mine"),
+    do: "This page is yours: proposals still arrive, flagged, and nothing takes one for you."
+
+  defp mode_notice("open"), do: "This page is open to proposals."
+
+  defp request_notice(:admitted),
+    do: "Requested: one run is queued. Its proposal appears on the Proposed tab when it lands."
+
+  defp request_notice(:in_flight),
+    do: "A run is already in flight for this page: nothing more was queued."
+
+  defp request_notice(:suppressed), do: "This page is withdrawn: re-open it before requesting."
+  defp request_notice(:busy), do: "The page is busy right now: try again in a moment."
+  defp request_notice(outcome), do: "Requested: #{outcome}."
+
   # The record and its refresh clock. A withdrawn page whose clock is no
   # longer suppressed was re-opened, also after a reload.
   defp load_record(socket) do
     record = CurationLive.record(socket.assigns.candidates)
     refresh = CurationLive.refresh(record)
 
+    editor_on? =
+      not is_nil(record.composition) and not is_nil(record.configuration_version) and
+        match?({:ok, _}, Configurations.editor_enabled(record.configuration_version.id))
+
     socket
-    |> assign(record: record, refresh: refresh)
+    |> assign(record: record, refresh: refresh, editor_on?: editor_on?)
     |> assign(
       :reopened?,
       record.state == :withdrawn and not is_nil(refresh) and refresh.state != :suppressed
@@ -739,6 +1126,22 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
           </p>
 
           <.standing record={@record} reopened?={@reopened?} withdraw_reason={@withdraw_reason} />
+
+          <.marks
+            :if={@record.composition}
+            record={@record}
+            candidates={@candidates}
+            editor_on?={@editor_on?}
+          />
+
+          <.proposal_strip
+            :if={@proposal}
+            view={@proposal}
+            candidates={@candidates}
+            quality={@quality}
+            editing={@editing}
+            record={@record}
+          />
 
           <p
             :if={not Candidates.any?(@candidates)}
@@ -917,6 +1320,24 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
                 </div>
               </fieldset>
 
+              <p
+                :if={model_noted(assigns) > 0}
+                id="curation-model-notes"
+                class="rounded-lg bg-mist-950/2.5 px-4 py-3 text-sm/7 text-pretty text-mist-700 dark:bg-white/5 dark:text-mist-300"
+              >
+                {model_noted(assigns)} {if model_noted(assigns) == 1,
+                  do: "reason in this version was",
+                  else: "reasons in this version were"} written by the editor. This form leaves {if model_noted(
+                                                                                                      assigns
+                                                                                                    ) ==
+                                                                                                      1,
+                                                                                                    do:
+                                                                                                      "it",
+                                                                                                    else:
+                                                                                                      "them"} empty, because a version
+                saved here signs every reason as yours: the editor's reasons travel only by Take.
+              </p>
+
               <div
                 id="curation-version"
                 class="flex flex-col gap-3 border-t border-mist-950/10 pt-6 dark:border-white/10"
@@ -963,7 +1384,7 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
                     disabled={@blockers.publish != []}
                     class="min-h-11"
                   >
-                    Publish
+                    {if @editing, do: "Publish the edited proposal", else: "Publish"}
                   </.button>
                 </div>
               </div>
@@ -1251,6 +1672,427 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
 
   defp standing(assigns), do: ~H""
 
+  attr :record, :map, required: true
+  attr :candidates, :map, required: true
+  attr :editor_on?, :boolean, required: true
+
+  # The owner's marks (#253 D8, #264 R15): the page's mode, and a keep mark
+  # on each published item. Marking writes no version. And, while the editor
+  # is enabled, Request (R18).
+  defp marks(assigns) do
+    assigns =
+      assigns
+      |> assign(:published, published_items(assigns.record, assigns.candidates))
+      |> assign(:kept, Map.new(assigns.record.composition.kept_items, &{&1["key"], &1}))
+      |> assign(:actors, mark_actors(assigns.record.composition))
+
+    ~H"""
+    <section
+      id="curation-marks"
+      class="flex flex-col gap-4 rounded-xl px-5 py-4 ring-1 ring-mist-950/10 ring-inset dark:ring-white/10"
+    >
+      <form id="curation-mode-form" phx-change="set_mode" class="flex flex-col gap-2">
+        <fieldset class="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-6">
+          <legend class="mb-1 text-sm/7 font-medium text-mist-950 dark:text-white">This page</legend>
+          <label id="mode-open" class="flex min-h-11 items-center gap-2 text-sm/6 sm:min-h-0">
+            <input
+              type="radio"
+              name="mode"
+              value="open"
+              checked={@record.composition.mode == :open}
+              class="size-4"
+            /> open to proposals
+          </label>
+          <label id="mode-mine" class="flex min-h-11 items-center gap-2 text-sm/6 sm:min-h-0">
+            <input
+              type="radio"
+              name="mode"
+              value="mine"
+              checked={@record.composition.mode == :mine}
+              class="size-4"
+            /> mine: proposals are shown, never taken for you
+          </label>
+        </fieldset>
+        <p
+          :if={@record.composition.mode_set_at}
+          id="curation-mode-set"
+          class="text-xs/5 text-mist-500"
+        >
+          Set by {@actors[@record.composition.mode_set_by_actor_id] || "a reviewer"} · {date(
+            @record.composition.mode_set_at
+          )}
+        </p>
+      </form>
+
+      <div :if={@published != []} id="curation-kept" class="flex flex-col gap-2">
+        <p class="text-sm/7 font-medium text-mist-950 dark:text-white">
+          Published items
+          <span class="font-normal text-mist-500">· a kept item is carried into every proposal</span>
+        </p>
+        <ul role="list" class="flex flex-col gap-1">
+          <li
+            :for={item <- @published}
+            id={"kept-#{item.key}"}
+            class="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-sm/6"
+          >
+            <span class="min-w-0 text-mist-700 dark:text-mist-300">
+              {if item.item.role == :lead, do: "Lead", else: "Highlight #{item.item.position}"} · {item.label}
+            </span>
+            <%= if mark = @kept[item.key] do %>
+              <span class="flex items-center gap-2">
+                <span class="text-xs/5 text-mist-600 dark:text-mist-400">
+                  ⚑ kept by {@actors[mark["marked_by_actor_id"]] || "a reviewer"} · {mark_date(mark)}
+                </span>
+                <.button
+                  id={"unkeep-#{item.key}"}
+                  type="button"
+                  phx-click="unkeep"
+                  phx-value-key={item.key}
+                  variant="soft"
+                  class="min-h-11 sm:min-h-0"
+                >
+                  Unkeep
+                </.button>
+              </span>
+            <% else %>
+              <.button
+                id={"keep-#{item.key}"}
+                type="button"
+                phx-click="keep"
+                phx-value-item={item.item.id}
+                variant="soft"
+                class="min-h-11 sm:min-h-0"
+              >
+                ⚑ Keep
+              </.button>
+            <% end %>
+          </li>
+        </ul>
+      </div>
+
+      <div
+        :if={@editor_on?}
+        id="curation-request"
+        class="flex flex-col gap-2 border-t border-mist-950/10 pt-3 sm:flex-row sm:items-center sm:justify-between dark:border-white/10"
+      >
+        <p class="text-sm/7 text-pretty text-mist-700 dark:text-mist-300">
+          The editor is on. Ask it to assess this page now, whatever its inputs.
+        </p>
+        <.button id="curation-request-button" type="button" phx-click="request" class="min-h-11">
+          Request a proposal
+        </.button>
+      </div>
+    </section>
+    """
+  end
+
+  attr :view, :map, required: true
+  attr :candidates, :map, required: true
+  attr :quality, :map, required: true
+  attr :editing, :any, default: nil
+  attr :record, :map, required: true
+
+  # The editor's proposal (#264 §2.2): who proposed it and from what, what
+  # it carried and could not, the quality form, and Take, Edit, Dismiss.
+  defp proposal_strip(assigns) do
+    view = assigns.view
+
+    assigns =
+      assigns
+      |> assign(:pending?, view.proposal.state == :pending)
+      |> assign(:carried, Enum.filter(view.proposal.carried, & &1["carried"]))
+      |> assign(:not_carried, Enum.reject(view.proposal.carried, & &1["carried"]))
+      |> assign(:labels, Map.new(view.items, &{&1.id, item_label(&1, assigns.candidates)}))
+      # A carried mark names the parent's item; the strip names the copy.
+      |> assign(
+        :copies,
+        for(%{copied_from_item_id: from} = i <- view.items, from, into: %{}, do: {from, i.id})
+      )
+
+    ~H"""
+    <section
+      id="proposal-strip"
+      aria-labelledby="proposal-heading"
+      class="flex flex-col gap-5 rounded-2xl bg-sky-50/60 px-5 py-5 ring-1 ring-sky-900/10 ring-inset sm:px-6 dark:bg-sky-400/5 dark:ring-sky-300/15"
+    >
+      <header class="flex flex-col gap-1">
+        <h2
+          id="proposal-heading"
+          class="text-sm/7 font-semibold tracking-wide text-mist-950 uppercase dark:text-white"
+        >
+          Proposal
+          <span class="ml-2 font-normal tracking-normal text-mist-700 normal-case dark:text-mist-300">
+            version {@view.version.version} · {@view.proposed_by} ·
+            <.link
+              id="proposal-attempt"
+              navigate={~p"/ops/curation/attempts/#{@view.version.attempt_id}"}
+              class="underline underline-offset-4"
+            >
+              attempt {"##{@view.version.attempt_id}"}
+            </.link>
+            · {Calendar.strftime(@view.version.inserted_at, "%-d %b %H:%M")}
+          </span>
+        </h2>
+        <p id="proposal-offered" class="text-sm/7 text-mist-700 dark:text-mist-300">
+          Offered {@view.offered} of {@view.candidates_total} candidates ({@view.omitted} omitted:
+          see the attempt) · reasons signed by the model
+        </p>
+        <p id="proposal-carried" class="text-sm/7 text-pretty text-mist-700 dark:text-mist-300">
+          Carried, yours: {if @carried == [],
+            do: "—",
+            else: Enum.map_join(@carried, ", ", &(@labels[@copies[&1["item_id"]]] || &1["key"]))} · Not carried: {if @not_carried ==
+                                                                                                                       [],
+                                                                                                                     do:
+                                                                                                                       "—",
+                                                                                                                     else:
+                                                                                                                       Enum.map_join(
+                                                                                                                         @not_carried,
+                                                                                                                         ", ",
+                                                                                                                         &"#{&1["key"]} (#{&1["reason"]})"
+                                                                                                                       )}
+          <span :if={@view.proposal.overflow != []}>
+            · Also chosen, no place left after your kept items: {Enum.join(
+              @view.proposal.overflow,
+              ", "
+            )}
+          </span>
+        </p>
+        <p
+          :if={@view.proposal.superseded_on_arrival}
+          id="proposal-superseded"
+          class="text-sm/7 font-medium text-amber-800 dark:text-amber-300"
+        >
+          <span aria-hidden="true">⚠</span>
+          The page changed since this run was admitted (superseded on arrival)
+        </p>
+        <p
+          :if={@record.composition.mode == :mine}
+          id="proposal-mine"
+          class="text-sm/7 text-mist-700 dark:text-mist-300"
+        >
+          This page is yours: nothing takes this proposal for you.
+        </p>
+        <p
+          :if={not @pending?}
+          id="proposal-resolved"
+          class="text-sm/7 font-medium text-mist-950 dark:text-white"
+        >
+          This proposal was {@view.proposal.state}{if @view.proposal.resolution_reason,
+            do: ": “#{@view.proposal.resolution_reason}”"}.
+        </p>
+        <p
+          :if={@pending? and not @view.newest?}
+          id="proposal-not-newest"
+          class="text-sm/7 text-pretty text-mist-700 dark:text-mist-300"
+        >
+          A newer version exists, so it cannot be taken: dismiss it, or edit it then publish.
+        </p>
+      </header>
+
+      <.form
+        :if={@pending?}
+        for={to_form(@quality, as: :quality)}
+        id="proposal-form"
+        phx-change="quality"
+        phx-submit="proposal_action"
+        class="flex flex-col gap-5"
+      >
+        <fieldset class="flex flex-col gap-4">
+          <legend class="mb-1 text-sm/7 font-medium text-mist-950 dark:text-white">
+            Quality form
+            <span class="font-normal text-mist-600 dark:text-mist-400">
+              (required for Take and Edit; counts toward the five only when complete)
+            </span>
+          </legend>
+          <div
+            :for={item <- @view.items}
+            id={"quality-#{slot_id(item)}"}
+            class="flex flex-col gap-2 border-t border-mist-950/10 pt-3 first:border-t-0 first:pt-0 dark:border-white/10"
+          >
+            <p class="text-sm/6 text-mist-950 dark:text-white">
+              <span class="font-medium">
+                {if item.role == :lead, do: "Lead", else: "Highlight #{item.position}"}
+              </span>
+              · {@labels[item.id]}
+              <span class="text-mist-600 dark:text-mist-400">
+                · {if item.selection_origin == :model, do: "the editor's", else: "carried, yours"}
+              </span>
+            </p>
+            <p :if={item.note} class="text-sm/6 text-pretty text-mist-700 dark:text-mist-300">
+              “{item.note}” <span class="text-mist-500">— {item.note_author_label}</span>
+            </p>
+            <div class="grid grid-cols-1 gap-x-6 gap-y-1 sm:grid-cols-2 lg:grid-cols-3">
+              <div
+                :for={q <- QualityForm.questions()}
+                class="flex min-h-11 items-center justify-between gap-3 text-sm/6 sm:min-h-9"
+              >
+                <span class="text-mist-700 dark:text-mist-300">{QualityForm.label(q)}</span>
+                <span class="flex gap-3">
+                  <label class="flex items-center gap-1">
+                    <input
+                      type="radio"
+                      id={"quality-#{slot_id(item)}-#{q}-yes"}
+                      name={"quality[answers][#{QualityForm.slot(item)}][#{q}]"}
+                      value="yes"
+                      checked={answer(@quality, item, q) == "yes"}
+                      class="size-4"
+                    /> yes
+                  </label>
+                  <label class="flex items-center gap-1">
+                    <input
+                      type="radio"
+                      id={"quality-#{slot_id(item)}-#{q}-no"}
+                      name={"quality[answers][#{QualityForm.slot(item)}][#{q}]"}
+                      value="no"
+                      checked={answer(@quality, item, q) == "no"}
+                      class="size-4"
+                    /> no
+                  </label>
+                </span>
+              </div>
+            </div>
+          </div>
+        </fieldset>
+
+        <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <.input
+            type="textarea"
+            id="proposal-note"
+            name="quality[note]"
+            value={@quality["note"]}
+            label="Note on this proposal"
+            rows="2"
+            phx-debounce="300"
+          />
+          <.input
+            type="textarea"
+            id="proposal-reason"
+            name="quality[reason]"
+            value={@quality["reason"]}
+            label="Your reason (for Take, or to Dismiss)"
+            rows="2"
+            phx-debounce="300"
+          />
+        </div>
+
+        <div class="flex flex-wrap items-center gap-3">
+          <.button
+            :if={@view.newest?}
+            id="proposal-take"
+            type="submit"
+            name="action"
+            value="take"
+            disabled={not complete?(@view, @quality) or blank?(@quality["reason"])}
+            class="min-h-11"
+          >
+            Take as is
+          </.button>
+          <.button
+            :if={is_nil(@editing)}
+            id="proposal-edit"
+            type="button"
+            phx-click="edit_proposal"
+            variant="soft"
+            class="min-h-11"
+          >
+            Edit then publish
+          </.button>
+          <.button
+            :if={@editing}
+            id="proposal-stop-edit"
+            type="button"
+            phx-click="cancel_edit"
+            variant="soft"
+            class="min-h-11"
+          >
+            Stop editing
+          </.button>
+          <.button
+            id="proposal-dismiss"
+            type="submit"
+            name="action"
+            value="dismiss"
+            variant="soft"
+            disabled={blank?(@quality["reason"])}
+            class="min-h-11"
+          >
+            Dismiss
+          </.button>
+          <span class="text-xs/5 text-pretty text-mist-600 dark:text-mist-400">
+            Take publishes it as your version, keeping who wrote each reason. Dismiss needs a
+            reason; the form is optional there.
+          </span>
+        </div>
+      </.form>
+    </section>
+    """
+  end
+
+  defp published_items(%{published_id: id, versions: versions}, candidates)
+       when is_integer(id) do
+    case Enum.find(versions, &(&1.version.id == id)) do
+      nil ->
+        []
+
+      v ->
+        for item <- Enum.sort_by(v.items, &{&1.role != :lead, &1.position}) do
+          %{
+            item: item,
+            key: Compositions.reference_key(Compositions.reference(item)),
+            label: item_label(item, candidates)
+          }
+        end
+    end
+  end
+
+  defp published_items(_record, _candidates), do: []
+
+  defp mark_actors(composition) do
+    ids =
+      [
+        composition.mode_set_by_actor_id
+        | Enum.map(composition.kept_items, & &1["marked_by_actor_id"])
+      ]
+      |> Enum.reject(&is_nil/1)
+      |> Enum.uniq()
+
+    Compositions.actor_labels(ids)
+  end
+
+  defp mark_date(%{"marked_at" => at}) when is_binary(at) do
+    case DateTime.from_iso8601(at) do
+      {:ok, dt, _offset} -> date(dt)
+      _bad -> at
+    end
+  end
+
+  defp mark_date(_mark), do: ""
+
+  # An item by what the screen calls its candidate, else by its reference.
+  defp item_label(item, candidates) do
+    key = candidates && item_key(item, candidates)
+    candidate = key && Candidates.find(candidates, key)
+
+    case candidate do
+      %{} = c -> headline(c)
+      nil -> "#{item.item_kind} #{item.item_object_id || item.catalog_identity}"
+    end
+  end
+
+  defp slot_id(item), do: item |> QualityForm.slot() |> String.replace(":", "-")
+
+  defp answer(quality, item, question),
+    do: get_in(quality, ["answers", QualityForm.slot(item), question])
+
+  defp complete?(view, quality) do
+    case QualityForm.build(view.items, quality["answers"], quality["note"], nil) do
+      {:ok, %{} = form} -> QualityForm.complete?(form)
+      _incomplete -> false
+    end
+  end
+
+  defp blank?(text), do: is_nil(text) or String.trim(text) == ""
+
   attr :refresh, :any, required: true
 
   # What the refresh clock says that the owner should act on (#259 §2.3): an
@@ -1272,7 +2114,7 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
       <p :if={needs_editor?(@refresh)} id="curation-clock-editor">
         <span class="font-medium">The last check found an editor is needed</span>
         ({editor_reason(@refresh.last_outcome_reason)}). The inputs were checked, not judged:
-        an editor's proposal is #254 P6's.
+        while the editor is enabled, such a check goes on to the editor.
       </p>
       <p :if={@refresh.state == :deferred} id="curation-clock-deferred">
         <span class="font-medium">The last check failed</span>{if @refresh.last_error,
@@ -1307,6 +2149,11 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
   defp queued_line(_refresh), do: "Re-assessment is queued on the page's next visit"
 
   defp editor_reason("due"), do: "the periodic re-assessment came due"
+  defp editor_reason("requested"), do: "a proposal was requested"
+
+  defp editor_reason("packet_refused:" <> reason),
+    do: "but no packet could be built: #{reason}"
+
   defp editor_reason("nothing_accepted"), do: "nothing has been accepted yet"
   defp editor_reason("fingerprint_version"), do: "the inputs are now identified differently"
   defp editor_reason(_changed), do: "the inputs changed"
@@ -1332,6 +2179,12 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
           class="text-sm/6 text-pretty text-mist-700 dark:text-mist-300"
         >
           <span class="font-medium text-mist-950 dark:text-white">Version {v.version.version}</span>
+          <span
+            :if={v.version.origin == :model}
+            class="ml-1 rounded-full bg-sky-100 px-2 py-0.5 text-xs/5 text-sky-900 dark:bg-sky-400/20 dark:text-sky-100"
+          >
+            proposal · attempt {"##{v.version.attempt_id}"}
+          </span>
           <span :if={parent = parent_number(@record, v)}> · from version {parent}</span>
           · by {v.author || "an unrecorded author"} · {date(v.version.inserted_at)} ·
           “{v.version.change_reason}” <span :if={v.review}> · review: {v.review.decision}</span>
@@ -1475,6 +2328,7 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
   defp status_text(:not_a_catalog_row), do: "not a committed catalog row"
   defp status_text(reason), do: "#{Opening.withheld_reason(reason)} (#{reason})"
 
+  defp not_current?({:stale, _}), do: true
   defp not_current?(:not_current), do: true
   defp not_current?({:stale_parent, _}), do: true
   defp not_current?({:stale_pointer, _}), do: true
@@ -1506,6 +2360,23 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
     do: "Highlight #{n}'s reason is over #{@note_max} characters."
 
   defp blocker_text(:nothing_selected), do: "Choose a lead or a highlight."
+
+  defp blocker_text(:quality_form_incomplete),
+    do: "Fill the quality form: a yes or a no for every question of every item."
+
+  defp blocker_text(:editing_proposal),
+    do: "Editing a proposal publishes it or stops; it is not saved as a draft."
+
+  defp blocker_text({:kept_item_missing, key}),
+    do: "The proposal leaves out #{key}, which you keep: Edit then publish instead."
+
+  defp blocker_text({:proposal_resolved, state}), do: "This proposal was already #{state}."
+  defp blocker_text(:proposal_needs_take), do: "A proposal is taken, never accepted as it is."
+
+  defp blocker_text(:proposal_not_publishable),
+    do: "A proposal is taken, never published as it is."
+
+  defp blocker_text(:not_a_proposal), do: "That version is not a proposal."
   defp blocker_text(:withdrawn), do: "This page was withdrawn: re-open it to curate again."
   defp blocker_text(:nothing_to_cite), do: "Nothing the record can cite yet."
   defp blocker_text(:unconfigured), do: "No curation configuration is enabled."

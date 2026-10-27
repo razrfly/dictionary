@@ -23,6 +23,19 @@ defmodule DevilsDictionary.Curation.Configurations do
       manual-only: the Bierce-first lead policy, three highlights, and an
       empty roster. Until a reviewer activates it, the default resolves as
       `{:unavailable, :no_active_version}`.
+
+  **The editor (#264 R1)** is three acts, never one:
+
+    * *binding*: a new immutable version whose manifest names the admitted
+      generic editor, its bot actor and its model config
+      (`create_version/3` with `:editor`). `"mode"` stays `"manual"`:
+      publication stays the owner's (#253 D4);
+    * *activation*: the existing `activate/4`, which also makes every
+      pending proposal of another configuration version obsolete;
+    * *enablement*: a separate switch on the configuration
+      (`enable_editor/3`, `disable_editor/3`), off by default and off again
+      after any activation, so the editor runs only when someone says so for
+      the version now current (`editor_enabled?/1`).
   """
 
   import Ecto.Query
@@ -36,9 +49,11 @@ defmodule DevilsDictionary.Curation.Configurations do
     Digest,
     Profile,
     Profiles,
+    ProfileVersion,
     Transaction
   }
 
+  alias DevilsDictionary.Curation.Runtime.{ModelConfig, Packet}
   alias DevilsDictionary.Repo
   alias DevilsDictionary.Sources.Actor
 
@@ -124,14 +139,25 @@ defmodule DevilsDictionary.Curation.Configurations do
   `:members`, a list of `%{profile_id, profile_version_id}`. Each member must
   be an admitted profile's admitted version. Slots follow list order. The
   version is not activated.
+
+  `:editor`, `%{profile_id, profile_version_id, model_config_id}`, binds the
+  generic editor (#264 R1.1). The server resolves it and writes the
+  manifest's `"editor"`: the profile and the version it is admitted at, its
+  bot actor, the model config and its hash, and the instruction. Refused
+  unless the profile is the admitted generic editor at that version
+  (`:editor_not_admitted`), the model config exists
+  (`:model_config_unknown`), its instruction is a pinned one
+  (`:unsupported_instruction_version`) and the bot actor is labelled
+  `"<instruction> · <model config slug>"` (`:editor_label_mismatch`).
   """
   def create_version(scope, configuration_id, attrs) do
     Transaction.run(fn ->
       with {:ok, actor} <- Authority.actor(scope, :reviewer),
            {:ok, configuration} <- lock(configuration_id),
            {:ok, _reason} <- Transaction.required(Map.to_list(attrs), :reason),
-           :ok <- admitted_members(Map.get(attrs, :members, [])) do
-        {members, manifest} = manifest(attrs)
+           :ok <- admitted_members(Map.get(attrs, :members, [])),
+           {:ok, editor} <- editor_binding(Map.get(attrs, :editor)) do
+        {members, manifest} = attrs |> Map.put(:editor, editor) |> manifest()
 
         case Repo.get_by(ConfigurationVersion,
                configuration_id: configuration.id,
@@ -156,6 +182,51 @@ defmodule DevilsDictionary.Curation.Configurations do
     Transaction.check(admitted, :profile_not_admitted)
   end
 
+  # The editor a version binds, resolved by the server: never the caller's
+  # word for a bot, a hash or an instruction.
+  defp editor_binding(nil), do: {:ok, nil}
+
+  defp editor_binding(%{profile_id: pid, profile_version_id: vid, model_config_id: mid}) do
+    with {:ok, profile} <-
+           Transaction.need(
+             Repo.one(
+               from p in Profile,
+                 where:
+                   p.id == ^pid and p.kind == :generic_editor and p.state == :admitted and
+                     p.current_version_id == ^vid
+             ),
+             :editor_not_admitted
+           ),
+         {:ok, config} <- Transaction.need(Repo.get(ModelConfig, mid), :model_config_unknown),
+         :ok <-
+           Transaction.check(
+             config.instruction_version in Packet.instruction_versions(),
+             :unsupported_instruction_version
+           ),
+         {:ok, bot} <- Transaction.need(Repo.get(Actor, profile.bot_actor_id), :bot_actor_missing),
+         :ok <- Transaction.check(bot.label == editor_label(config), :editor_label_mismatch) do
+      {:ok,
+       %{
+         "profile_id" => profile.id,
+         "profile_version_id" => vid,
+         "bot_actor_id" => bot.id,
+         "model_config_id" => config.id,
+         "model_config_hash" => config.config_hash,
+         "instruction_version" => config.instruction_version
+       }}
+    end
+  end
+
+  defp editor_binding(_editor), do: {:error, :editor_invalid}
+
+  @doc """
+  The label the generic editor's bot actor carries for a model config:
+  `"<instruction version> · <model config slug>"`, e.g.
+  `"generic-editor-v2 · qwen3.5-9b-v2"` (#264 R1.1, R2.3).
+  """
+  def editor_label(%ModelConfig{instruction_version: instruction, slug: slug}),
+    do: "#{instruction} · #{slug}"
+
   # What a version is: its roster seats and the manifest they are hashed into.
   defp manifest(attrs) do
     members =
@@ -177,6 +248,12 @@ defmodule DevilsDictionary.Curation.Configurations do
       "max_highlights" => Map.get(attrs, :max_highlights, 3),
       "roster" => Enum.map(members, &Map.new(&1, fn {k, v} -> {to_string(k), v} end))
     }
+
+    manifest =
+      case Map.get(attrs, :editor) do
+        %{} = editor -> Map.put(manifest, "editor", editor)
+        nil -> manifest
+      end
 
     {members, manifest}
   end
@@ -254,11 +331,151 @@ defmodule DevilsDictionary.Curation.Configurations do
     end
   end
 
-  @doc "Whether this build can compose under a configuration version: manual mode, a known lead policy."
-  def ready?(%ConfigurationVersion{manifest: manifest, lead_policy: :bierce_first_v1}),
-    do: manifest["mode"] == @mode
+  @doc """
+  Whether this build can compose under a configuration version: manual
+  mode, a known lead policy, and no editor or an editor binding of exactly
+  its six keys (#264 R1.2). Pure: it runs on every page read, so it asks
+  the database nothing. Whether the bound editor still stands is
+  `editor/1`'s question, and only the editor step asks it.
+  """
+  def ready?(%ConfigurationVersion{manifest: %{} = manifest, lead_policy: :bierce_first_v1}),
+    do: manifest["mode"] == @mode and editor_shape?(Map.get(manifest, "editor", :none))
 
   def ready?(_version), do: false
+
+  @editor_ids ~w(profile_id profile_version_id bot_actor_id model_config_id)
+  @editor_keys Enum.sort(@editor_ids ++ ~w(model_config_hash instruction_version))
+
+  defp editor_shape?(:none), do: true
+
+  defp editor_shape?(%{} = editor) do
+    Enum.sort(Map.keys(editor)) == @editor_keys and
+      Enum.all?(@editor_ids, &(is_integer(editor[&1]) and editor[&1] > 0)) and
+      is_binary(editor["model_config_hash"]) and is_binary(editor["instruction_version"])
+  end
+
+  defp editor_shape?(_editor), do: false
+
+  @doc """
+  The editor a configuration version binds, read again from the record
+  (#264 R1.3): `:none`, `{:ok, %{profile, profile_version, bot_actor,
+  model_config, instruction_version}}`, or `{:error, reason}` when the
+  binding no longer stands: the profile is not admitted at the bound version
+  (`:editor_not_admitted`), its bot or model config is not the one bound
+  (`:editor_binding_changed`), or the model config's hash moved
+  (`:model_config_changed`).
+  """
+  def editor(%ConfigurationVersion{manifest: %{"editor" => %{} = editor}}) do
+    profile = Repo.get(Profile, editor["profile_id"])
+    config = Repo.get(ModelConfig, editor["model_config_id"])
+
+    cond do
+      is_nil(profile) or profile.kind != :generic_editor or profile.state != :admitted or
+          profile.current_version_id != editor["profile_version_id"] ->
+        {:error, :editor_not_admitted}
+
+      profile.bot_actor_id != editor["bot_actor_id"] or is_nil(config) ->
+        {:error, :editor_binding_changed}
+
+      config.config_hash != editor["model_config_hash"] or
+          config.instruction_version != editor["instruction_version"] ->
+        {:error, :model_config_changed}
+
+      true ->
+        {:ok,
+         %{
+           profile: profile,
+           profile_version: Repo.get!(ProfileVersion, profile.current_version_id),
+           bot_actor: Repo.get!(Actor, profile.bot_actor_id),
+           model_config: config,
+           instruction_version: config.instruction_version
+         }}
+    end
+  end
+
+  def editor(%ConfigurationVersion{}), do: :none
+
+  def editor(version_id) when is_integer(version_id) do
+    case Repo.get(ConfigurationVersion, version_id) do
+      nil -> {:error, :version_not_found}
+      version -> editor(version)
+    end
+  end
+
+  @doc """
+  Whether the editor may run for a configuration version now (#264 R1.5):
+  its configuration is enabled, this is its current version, the switch is
+  on for exactly it, and the version binds an editor that still stands.
+  Answers `{:ok, editor}` (as `editor/1` gives it) or `:off`.
+  """
+  def editor_enabled(configuration_version_id) when is_integer(configuration_version_id) do
+    with %ConfigurationVersion{} = version <-
+           Repo.get(ConfigurationVersion, configuration_version_id),
+         %Configuration{state: :enabled} = c <- Repo.get(Configuration, version.configuration_id),
+         true <- c.current_version_id == version.id,
+         true <- c.editor_enabled_version_id == version.id,
+         {:ok, editor} <- editor(version) do
+      {:ok, editor}
+    else
+      _off -> :off
+    end
+  end
+
+  def editor_enabled(_id), do: :off
+
+  @doc """
+  Switches the editor on for a configuration's current version, as a
+  reviewer (#264 R1.5). `opts`: `:reason` and `:expected`, the current
+  version id the caller saw. Refused when the version binds no editor
+  (`:no_editor_binding`), when the binding no longer stands, when it is
+  already on (`:already_enabled`), or when the current version moved
+  (`{:stale, current}`). Marks nothing dirty.
+  """
+  def enable_editor(scope, configuration_id, opts) do
+    Transaction.run(fn ->
+      with {:ok, actor} <- Authority.actor(scope, :reviewer),
+           {:ok, reason} <- Transaction.required(opts, :reason),
+           {:ok, c} <- lock(configuration_id),
+           :ok <- Transaction.check(c.state == :enabled, :not_enabled),
+           :ok <- expected(c, Keyword.fetch!(opts, :expected)),
+           version = Repo.get!(ConfigurationVersion, c.current_version_id),
+           {:ok, _editor} <- bound(editor(version)),
+           :ok <-
+             Transaction.check(c.editor_enabled_version_id != version.id, :already_enabled) do
+        switch(c, version.id, actor, reason)
+      end
+    end)
+  end
+
+  @doc """
+  Switches the editor off, as a reviewer. `opts`: `:reason`. Refused when it
+  is off already (`:editor_not_enabled`).
+  """
+  def disable_editor(scope, configuration_id, opts) do
+    Transaction.run(fn ->
+      with {:ok, actor} <- Authority.actor(scope, :reviewer),
+           {:ok, reason} <- Transaction.required(opts, :reason),
+           {:ok, c} <- lock(configuration_id),
+           :ok <- Transaction.check(not is_nil(c.editor_enabled_version_id), :editor_not_enabled) do
+        switch(c, nil, actor, reason)
+      end
+    end)
+  end
+
+  defp bound({:ok, editor}), do: {:ok, editor}
+  defp bound(:none), do: {:error, :no_editor_binding}
+  defp bound({:error, reason}), do: {:error, reason}
+
+  defp switch(c, version_id, actor, reason) do
+    c
+    |> Ecto.Changeset.change(
+      editor_enabled_version_id: version_id,
+      editor_switched_by_actor_id: actor.id,
+      editor_switched_at: DateTime.utc_now(),
+      editor_switch_reason: reason
+    )
+    |> Repo.update()
+  end
 
   @doc """
   The configuration and its current version, if it is enabled and ready, as
@@ -314,7 +531,11 @@ defmodule DevilsDictionary.Curation.Configurations do
                :already_active
              ),
            :ok <- sole_default(c) do
-        receipt(c, :activate, version.id, actor, reason, key, :enabled)
+        result = receipt(c, :activate, version.id, actor, reason, key, :enabled)
+        # A proposal made under another configuration version no longer
+        # stands: it is not this configuration's any more (#264 R1.4).
+        DevilsDictionary.Curation.Proposals.obsolete_other_versions(c.id, version.id)
+        result
       else
         {:replay, row} -> {:ok, row}
         error -> error

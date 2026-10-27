@@ -127,6 +127,9 @@ defmodule DevilsDictionaryWeb.Router do
 
         live "/", CurationLive, :index
         live "/on/:slug", CurationLive.Editor, :edit
+        # An editor's attempt (#253 D9, #264 R16): what it was offered and
+        # what it answered, by ids and hashes.
+        live "/attempts/:id", CurationLive.Attempt, :show
       end
     end
   end

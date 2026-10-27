@@ -19,6 +19,11 @@ defmodule DevilsDictionaryWeb.CurationLive do
   (`Curation.Refresh`). Nothing is written, nothing is fetched, and no job is
   queued: building a page here is not a visit.
 
+  **Proposed** (#264 §2.1, R10): every pending proposal of the generic
+  editor, by page, with who proposed it (read from its attempt's model
+  config), when, the published version it was made against, and its flags
+  (`mine`, `superseded on arrival`). Review opens it on the editor.
+
   `page/1` and `record/2` are shared with the editor
   (`CurationLive.Editor`).
   """
@@ -35,6 +40,7 @@ defmodule DevilsDictionaryWeb.CurationLive do
     Compositions,
     Configurations,
     Pilot,
+    Proposals,
     Published,
     Refresh
   }
@@ -47,7 +53,7 @@ defmodule DevilsDictionaryWeb.CurationLive do
   on_mount {DevilsDictionaryWeb.UserAuth, :require_reviewer}
 
   @marks ~w(B J Q W E)
-  @tabs ~w(pilot published withheld stale)
+  @tabs ~w(pilot published withheld stale proposed)
 
   # The pages are built off the socket's process once it is up: the queue
   # paints at once, and its rows arrive when ten page builds are done.
@@ -58,6 +64,8 @@ defmodule DevilsDictionaryWeb.CurationLive do
         page_title: "Curation",
         rows: nil,
         published: [],
+        proposals: [],
+        editor_on?: false,
         stats: nil,
         load_error: nil
       )
@@ -82,6 +90,32 @@ defmodule DevilsDictionaryWeb.CurationLive do
     {:noreply, socket |> assign(load_error: nil) |> start_async(:load, &load/0)}
   end
 
+  # "Request a proposal" (#264 R18), shown only while the editor is enabled.
+  def handle_event("request", %{"slug" => slug}, socket) do
+    with true <- socket.assigns.editor_on?,
+         %{record: %{composition: %{id: id}}} <-
+           Enum.find(socket.assigns.rows || [], &(&1.slug == slug)) do
+      case Refresh.request(socket.assigns.current_scope, id, slug, "requested from the queue") do
+        {:ok, outcome} ->
+          {:noreply,
+           socket
+           |> put_flash(:info, "#{slug}: #{request_label(outcome)}")
+           |> start_async(:load, &load/0)}
+
+        {:error, reason} ->
+          {:noreply,
+           put_flash(socket, :error, "#{slug}: the request was refused (#{inspect(reason)})")}
+      end
+    else
+      _off -> {:noreply, socket}
+    end
+  end
+
+  defp request_label(:admitted), do: "one run is queued; its proposal appears here when it lands"
+  defp request_label(:in_flight), do: "a run is already in flight"
+  defp request_label(:suppressed), do: "withdrawn: re-open it first"
+  defp request_label(outcome), do: to_string(outcome)
+
   @impl true
   def handle_params(params, _uri, socket) do
     tab = if params["tab"] in @tabs, do: params["tab"], else: "pilot"
@@ -91,17 +125,40 @@ defmodule DevilsDictionaryWeb.CurationLive do
   defp load do
     rows = Enum.map(pilot_pages(), &row/1)
     published = published()
+    proposals = proposals(rows)
 
     %{
       rows: rows,
       published: published,
+      proposals: proposals,
+      editor_on?: editor_on?(),
       stats: %{
         pilot: length(rows),
         published: length(published),
         withheld: published |> Enum.map(&length(&1.withheld)) |> Enum.sum(),
-        stale: Enum.count(rows, &stale?/1)
+        stale: Enum.count(rows, &stale?/1),
+        proposed: length(proposals)
       }
     }
+  end
+
+  # Whether the editor runs for the global default's current version now.
+  defp editor_on? do
+    case Configurations.resolve_default() do
+      {:ok, %{version: version}} -> match?({:ok, _}, Configurations.editor_enabled(version.id))
+      _unavailable -> false
+    end
+  end
+
+  # Every pending proposal, with the page it is for: the pilot page whose
+  # composition it is, else the composition's first word.
+  defp proposals(rows) do
+    slugs =
+      for %{record: %{composition: %{id: id}}, slug: slug} <- rows, into: %{}, do: {id, slug}
+
+    for p <- Proposals.list_pending() do
+      Map.put(p, :slug, slugs[p.composition.id] || Proposals.page_slug(p.composition.id))
+    end
   end
 
   @doc "The pilot pages' slugs (`Curation.Pilot.pages/0`): by default #253 D2's ten."
@@ -117,7 +174,14 @@ defmodule DevilsDictionaryWeb.CurationLive do
   Where a page's curation stands, from the record:
 
       %{configuration, configuration_version, composition, versions,
-        receipts, latest, published_id, state, overlapping}
+        receipts, latest, newest, proposals, published_id, state,
+        overlapping}
+
+  `latest` is the newest **manual** version, the one the ordinary form
+  opens on; `newest` is the newest version of any origin, which a new
+  version is parented to; `proposals` are the composition's pending
+  proposals (#264 R13.3). `state` is computed from manual versions only, so
+  a proposal never makes a page a draft.
 
   `state` is `:unconfigured` (no enabled global default), `:no_scope` (no
   words, or words in several languages), `:never` (no version yet),
@@ -134,6 +198,8 @@ defmodule DevilsDictionaryWeb.CurationLive do
       versions: [],
       receipts: [],
       latest: nil,
+      newest: nil,
+      proposals: [],
       published_id: nil,
       state: :unconfigured,
       overlapping: []
@@ -146,8 +212,15 @@ defmodule DevilsDictionaryWeb.CurationLive do
           Compositions.active(c.id, :lexical_page, language, Compositions.signature(ids))
 
         versions = if composition, do: versions(composition.id), else: []
+        manual = Enum.filter(versions, &(&1.version.origin == :manual))
         receipts = if composition, do: receipts(composition.id), else: []
         published_id = composition && composition.current_published_version_id
+
+        proposals =
+          case composition && Proposals.pending(composition.id) do
+            nil -> []
+            proposal -> [proposal]
+          end
 
         %{
           base
@@ -156,9 +229,11 @@ defmodule DevilsDictionaryWeb.CurationLive do
             composition: composition,
             versions: versions,
             receipts: receipts,
-            latest: List.first(versions),
+            latest: List.first(manual),
+            newest: List.first(versions),
+            proposals: proposals,
             published_id: published_id,
-            state: state(versions, receipts, published_id),
+            state: state(manual, receipts, published_id),
             overlapping: if(composition, do: [], else: overlapping(c.id, language, ids))
         }
 
@@ -374,14 +449,9 @@ defmodule DevilsDictionaryWeb.CurationLive do
           <.tab id="tab-stale" tab="stale" current={@tab} count={@stats && @stats.stale}>
             Stale
           </.tab>
-          <span
-            id="tab-proposed"
-            aria-disabled="true"
-            title="Proposals are #254 P6's"
-            class="inline-flex min-h-11 items-center gap-2 rounded-full px-3 text-sm/7 text-mist-400 ring-1 ring-mist-950/10 ring-inset sm:min-h-9 dark:text-mist-500 dark:ring-white/10"
-          >
-            Proposed <span class="tabular-nums">—</span> <span class="text-xs/5">P6</span>
-          </span>
+          <.tab id="tab-proposed" tab="proposed" current={@tab} count={@stats && @stats.proposed}>
+            Proposed
+          </.tab>
         </nav>
 
         <p
@@ -531,15 +601,102 @@ defmodule DevilsDictionaryWeb.CurationLive do
               </p>
               <p
                 id={"curation-stale-#{row.slug}-next"}
-                class="text-mist-600 tabular-nums dark:text-mist-400"
+                class="flex flex-wrap items-center gap-2 text-mist-600 tabular-nums dark:text-mist-400"
               >
                 <span class="text-mist-500 sm:hidden">Next: </span>{next_label(row)}
+                <.button
+                  :if={(@editor_on? and row.record.composition) && row.stale != :suppressed}
+                  id={"curation-request-#{row.slug}"}
+                  type="button"
+                  phx-click="request"
+                  phx-value-slug={row.slug}
+                  variant="soft"
+                  class="min-h-11 sm:min-h-0"
+                >
+                  Request
+                </.button>
               </p>
             </li>
           </ul>
           <p class="mt-4 max-w-3xl text-sm/7 text-pretty text-mist-600 dark:text-mist-400">
             A check looks at a page's inputs and does not judge them: "needs editor" means
-            they changed or came due, and an editor's proposal is #254 P6's. Pilot pages only.
+            they changed or came due. While the editor is enabled, such a check goes on to the
+            editor, which judges them: proposed, abstained or no change. Pilot pages only.
+          </p>
+        </div>
+
+        <div :if={@rows && @tab == "proposed"} id="curation-proposed" class="mt-2">
+          <p :if={@proposals == []} id="curation-proposed-empty" class="text-sm/7 text-mist-500">
+            No proposal is waiting. While the editor is enabled, a page that needs an editor
+            gets one on its next check, or when you request it from its editor.
+          </p>
+          <div
+            :if={@proposals != []}
+            aria-hidden="true"
+            class="hidden gap-x-6 pb-2 text-xs/5 font-semibold tracking-wide text-mist-500 uppercase sm:grid sm:grid-cols-[8rem_minmax(0,1fr)_8rem_7rem_minmax(0,12rem)_auto]"
+          >
+            <span>Word</span><span>Proposed by</span><span>When</span><span>Against</span><span>Flags</span><span></span>
+          </div>
+          <ul
+            :if={@proposals != []}
+            id="curation-proposals"
+            role="list"
+            class="divide-y divide-mist-950/10 border-y border-mist-950/10 dark:divide-white/10 dark:border-white/10"
+          >
+            <li
+              :for={p <- @proposals}
+              id={"curation-proposal-#{p.proposal.id}"}
+              class="grid grid-cols-1 gap-x-6 gap-y-1 py-4 text-sm/6 sm:grid-cols-[8rem_minmax(0,1fr)_8rem_7rem_minmax(0,12rem)_auto] sm:items-center"
+            >
+              <p class="font-display text-xl/7 text-mist-950 dark:text-white">{p.slug || "—"}</p>
+              <p id={"curation-proposal-#{p.proposal.id}-by"} class="text-mist-700 dark:text-mist-300">
+                <span class="text-mist-500 sm:hidden">Proposed by: </span>{p.proposed_by}
+              </p>
+              <p class="text-mist-600 tabular-nums dark:text-mist-400">
+                <span class="text-mist-500 sm:hidden">When: </span>{Calendar.strftime(
+                  p.version.inserted_at,
+                  "%-d %b %H:%M"
+                )}
+              </p>
+              <p
+                id={"curation-proposal-#{p.proposal.id}-against"}
+                class="text-mist-600 tabular-nums dark:text-mist-400"
+              >
+                <span class="text-mist-500 sm:hidden">Against: </span>{against(p.against)}
+              </p>
+              <p
+                id={"curation-proposal-#{p.proposal.id}-flags"}
+                class="flex flex-wrap gap-1"
+              >
+                <span
+                  :if={p.composition.mode == :mine}
+                  data-flag="mine"
+                  class="rounded-full bg-mist-950/10 px-2 text-xs/6 text-mist-800 dark:bg-white/10 dark:text-mist-200"
+                >
+                  mine
+                </span>
+                <span
+                  :if={p.proposal.superseded_on_arrival}
+                  data-flag="superseded"
+                  class="rounded-full bg-amber-100 px-2 text-xs/6 text-amber-900 dark:bg-amber-400/20 dark:text-amber-100"
+                >
+                  superseded on arrival
+                </span>
+              </p>
+              <.button_link
+                :if={p.slug}
+                id={"curation-proposal-#{p.proposal.id}-review"}
+                navigate={~p"/ops/curation/on/#{p.slug}?#{%{proposal: p.version.id}}"}
+                class="min-h-11 justify-self-start sm:min-h-0"
+              >
+                Review
+              </.button_link>
+            </li>
+          </ul>
+          <p class="mt-4 max-w-3xl text-sm/7 text-pretty text-mist-600 dark:text-mist-400">
+            A proposal is the generic editor's: it never moves what a page shows. Take it, edit
+            it then publish, or dismiss it with a reason, on its page's editor, filling the
+            quality form.
           </p>
         </div>
 
@@ -673,6 +830,9 @@ defmodule DevilsDictionaryWeb.CurationLive do
 
   defp outcome_label(:unchanged), do: "unchanged"
   defp outcome_label(:needs_editor), do: "needs editor"
+  defp outcome_label(:proposed), do: "proposed"
+  defp outcome_label(:abstained), do: "editor abstained"
+  defp outcome_label(:no_change), do: "editor: no change"
 
   defp why_stale(%{record: %{composition: nil}}),
     do: "no composition yet: Curate to start its clock"
@@ -701,6 +861,10 @@ defmodule DevilsDictionaryWeb.CurationLive do
   defp next_label(%{stale: {:changed, _}}), do: "next visit"
   defp next_label(%{refresh: %{refresh_after: %DateTime{} = at}}), do: short_date(at)
   defp next_label(_row), do: "next visit"
+
+  # What a proposal was made against: the published version at admission.
+  defp against(%{version: n}), do: "v#{n} (yours)"
+  defp against(_nothing), do: "—"
 
   defp withheld_label(%{role: :lead}), do: "The lead"
   defp withheld_label(%{role: :highlight, position: n}), do: "Highlight #{n}"

@@ -5,12 +5,18 @@ defmodule DevilsDictionary.Curation.Refresh do
   owner's rules. It copies discovery's design (`Discovery.request/3`,
   `Discovery.RunWorker`) on its own queue, `:curation`.
 
-  **No model, no proposal, no publication.** A run builds the page's inputs
-  fingerprint and compares it with the last one. It completes as
-  `:unchanged`, or as `:needs_editor`, which means the inputs were
-  **checked, not judged** (P6 turns it into an editor's proposal). Nothing
-  here reserves a review unit or inference time: P5 writes no reviewable
-  work and calls no model (#259 §3).
+  **No publication, and no model unless the editor is on.** A run builds the
+  page's inputs fingerprint and compares it with the last one. It completes
+  as `:unchanged`, or as `:needs_editor`, which means the inputs were
+  **checked, not judged**. While the editor is enabled for the run's
+  configuration version (#264 R1.5), a check that finds an editor is needed
+  hands the same claim to the editor step (`Curation.Proposals.step/3`,
+  #264 R3) instead, inside this run and under this fence: it completes as
+  `:proposed`, `:abstained` or `:no_change` (judged), or is deferred, or
+  closes its generation. This module keeps the row's every move: the
+  review unit a run holds (`reserve/2`), its release by every exit, the
+  generation a retry keeps or opens (#264 R4.3), and the owner's request
+  (`request/4`, R18).
 
   **Scope.** Pilot allowlist only during the MVP; later expansion disabled
   (`Curation.Pilot`). A page without a composition has no refresh identity
@@ -47,20 +53,25 @@ defmodule DevilsDictionary.Curation.Refresh do
   alias DevilsDictionary.Claims.AssertionRevision
 
   alias DevilsDictionary.Curation.{
+    Authority,
     Composition,
     CompositionItem,
     CompositionMembership,
     CompositionVersion,
     Compositions,
+    Configuration,
+    ConfigurationVersion,
     Configurations,
     Digest,
     Opening,
     Pilot,
+    Proposals,
     Published,
     PublishedReader,
     RefreshState,
     RefreshWorker,
-    Standing
+    Standing,
+    Transaction
   }
 
   alias DevilsDictionary.Curation.Runtime.Packet
@@ -84,6 +95,9 @@ defmodule DevilsDictionary.Curation.Refresh do
   # switch costs one `needs_editor` check and never a silent match or a loop.
   # The advisory-lock class: a namespace for `pg_try_advisory_xact_lock/2`.
   @lock_class 259
+  # The review units' class (#264 R5.2): one lock serializes every
+  # reservation, whatever the composition.
+  @units_lock_class 264
 
   @doc "The periodic window, in seconds."
   def window_seconds, do: @window_seconds
@@ -348,11 +362,16 @@ defmodule DevilsDictionary.Curation.Refresh do
         :in_flight
 
       :clear ->
-        # A retry from `:deferred` keeps its generation and why it was admitted.
-        {generation, periodic?} =
-          if row.state == :deferred,
-            do: {row.refresh_generation, row.run_periodic},
-            else: {row.refresh_generation + 1, periodic?(row, now)}
+        # A retry from `:deferred` keeps its generation, its admitted parent
+        # and why it was admitted, while the generation can still answer
+        # (#264 R4.3); otherwise it opens the next one against the pointer
+        # now, as a fresh admission does.
+        {generation, periodic?, parent} =
+          if keeps_generation?(row, composition),
+            do: {row.refresh_generation, row.run_periodic, row.admitted_parent_version_id},
+            else:
+              {row.refresh_generation + 1, periodic?(row, now),
+               composition.current_published_version_id}
 
         row
         |> Ecto.Changeset.change(
@@ -361,7 +380,7 @@ defmodule DevilsDictionary.Curation.Refresh do
           run_periodic: periodic?,
           lease_expires_at: shift(now, @queued_lease_seconds),
           lease_attempts: 1,
-          admitted_parent_version_id: composition.current_published_version_id,
+          admitted_parent_version_id: parent,
           next_retry_at: nil,
           run_dirty_seq: nil,
           updated_at: now
@@ -395,6 +414,20 @@ defmodule DevilsDictionary.Curation.Refresh do
   end
 
   defp act(outcome, _row, _composition, _slug, _now), do: outcome
+
+  # A deferred run keeps its generation only while (a) the published pointer
+  # is the one it was admitted against, and (b) its key has no attempt, or
+  # an answered one (accepted or abstained) whose result is still to be
+  # written. An attempt that spent itself (no answer, a refused answer, an
+  # uncertain call) or a moved pointer opens the next generation (#264 R4.3,
+  # R4.5). Before #264 every deferred retry kept its generation; one that
+  # never reached the editor still does.
+  defp keeps_generation?(%RefreshState{state: :deferred} = row, composition) do
+    composition.current_published_version_id == row.admitted_parent_version_id and
+      Proposals.generation_open?(row)
+  end
+
+  defp keeps_generation?(_row, _composition), do: false
 
   # Admitted only because the window passed: checked before, nothing pending.
   defp periodic?(row, now),
@@ -498,6 +531,14 @@ defmodule DevilsDictionary.Curation.Refresh do
   A claimed run, from its inputs to its completion: `inputs/2`, then
   `complete/3`. Any failure reading the inputs defers the run under the
   same fence (`fail/3`). Answers what `complete/3` or `fail/3` answer.
+
+  **The hand-off (#264 R3).** When the check finds an editor is needed and
+  the editor is enabled for the claim's configuration version
+  (`Configurations.editor_enabled/1`), the same claim goes to
+  `Proposals.step/3`, which completes, defers or closes the run under this
+  fence. An unchanged check, and any check while the editor is off,
+  completes exactly as before. `opts` reach the step (`:runtime`, the
+  runtime's options, in tests).
   """
   def check(claim, slug, opts \\ []) do
     inputs =
@@ -508,8 +549,24 @@ defmodule DevilsDictionary.Curation.Refresh do
       end
 
     case inputs do
-      {:ok, inputs} -> complete(claim, inputs, opts)
+      {:ok, inputs} -> hand_off(claim, slug, inputs, opts)
       {:error, message} -> fail(claim, message, opts)
+    end
+  end
+
+  defp hand_off(claim, slug, inputs, opts) do
+    row = Repo.get(RefreshState, claim.row_id)
+
+    with true <- not is_nil(row),
+         {:needs_editor, _reason} = assessed <- outcome(claim, row, inputs),
+         {:ok, editor} <- Configurations.editor_enabled(claim.configuration_version_id) do
+      Proposals.step(
+        claim,
+        %{slug: slug, inputs: inputs, editor: editor, assessed: assessed},
+        opts
+      )
+    else
+      _checked_not_judged -> complete(claim, inputs, opts)
     end
   end
 
@@ -598,6 +655,8 @@ defmodule DevilsDictionary.Curation.Refresh do
   completion and the inputs: `{:unchanged | :needs_editor, reason}`.
 
     * a periodic run → `{:needs_editor, "due"}`;
+    * a run the owner requested (`request/4`) → `{:needs_editor,
+      "requested"}`;
     * the stored fingerprint equal → `{:unchanged, "unchanged"}`; different
       → `{:needs_editor, "inputs_changed"}`, or `"fingerprint_version"` when
       it was written by another fingerprint version;
@@ -609,6 +668,10 @@ defmodule DevilsDictionary.Curation.Refresh do
       when nothing is published.
   """
   def outcome(%{periodic?: true}, _row, _inputs), do: {:needs_editor, "due"}
+
+  # The owner asked (#264 R18): assessed, like a periodic run, whether or not
+  # the inputs moved.
+  def outcome(%{pending_reason: "requested"}, _row, _inputs), do: {:needs_editor, "requested"}
 
   def outcome(_claim, %RefreshState{input_fingerprint: old}, %{fingerprint: new})
       when is_binary(old) do
@@ -645,7 +708,12 @@ defmodule DevilsDictionary.Curation.Refresh do
   outcome and its reason, the new fingerprint and withheld digest; clears
   `dirty_at` only when no change arrived during the run; sets
   `inputs_last_changed_at` when the check found a change no trigger
-  reported; persists `superseded_on_arrival`. Answers `{:ok, row}`.
+  reported; persists `superseded_on_arrival`; releases a review unit the
+  row held (#264 R5.4). Answers `{:ok, row}`.
+
+  `opts[:outcome]`, `{outcome, reason}`, is the editor step's assessment
+  (#264 R6: `:proposed`, `:abstained`, `:no_change`, or `:needs_editor` when
+  no packet could be built), written in place of the check's own.
   """
   def complete(claim, inputs, opts \\ []) do
     now = now(opts)
@@ -656,54 +724,7 @@ defmodule DevilsDictionary.Curation.Refresh do
 
         with :ok <- fenced(row, claim, now),
              {:ok, composition} <- still_configured(row, now) do
-          {outcome, reason} = outcome(claim, row, inputs)
-          clean? = row.dirty_seq == row.run_dirty_seq
-          superseded? = composition.current_published_version_id != row.admitted_parent_version_id
-          # Inputs read from a version no longer published are not a baseline.
-          current_inputs? =
-            inputs.published_version_id == composition.current_published_version_id
-
-          changed? = reason in ["inputs_changed", "fingerprint_version"]
-
-          unreported? =
-            is_nil(row.inputs_last_changed_at) or
-              (not is_nil(row.last_completed_at) and
-                 DateTime.compare(row.inputs_last_changed_at, row.last_completed_at) != :gt)
-
-          {changed_at, changed_reason} =
-            if changed? and unreported?,
-              do: {now, "inputs_changed"},
-              else: {row.inputs_last_changed_at, row.inputs_last_changed_reason}
-
-          row =
-            row
-            |> Ecto.Changeset.change(
-              state: :idle,
-              last_completed_at: now,
-              refresh_after: shift(now, @window_seconds),
-              last_outcome: outcome,
-              last_outcome_reason: reason,
-              # A publication during the run reset the baseline (`published/2`):
-              # unless these inputs were read from it, the next check measures
-              # against the version now accepted.
-              input_fingerprint: if(current_inputs?, do: inputs.fingerprint, else: nil),
-              withheld_digest: inputs.withheld_digest,
-              superseded_on_arrival: superseded?,
-              failures: 0,
-              next_retry_at: nil,
-              last_error: nil,
-              lease_expires_at: nil,
-              lease_attempts: 0,
-              run_dirty_seq: nil,
-              dirty_at: if(clean?, do: nil, else: row.dirty_at),
-              dirty_reason: if(clean?, do: nil, else: row.dirty_reason),
-              inputs_last_changed_at: changed_at,
-              inputs_last_changed_reason: changed_reason,
-              updated_at: now
-            )
-            |> Repo.update!()
-
-          {:ok, row}
+          {:ok, complete_row!(row, claim, inputs, composition, Keyword.get(opts, :outcome), now)}
         end
       end)
 
@@ -722,6 +743,228 @@ defmodule DevilsDictionary.Curation.Refresh do
         emit(:refused, %{composition_id: claim.composition_id, reason: reason})
         {:error, reason}
     end
+  end
+
+  # The completion's one write, shared by `complete/3` and the editor's
+  # fenced write (`write/4`).
+  defp complete_row!(row, claim, inputs, composition, assessed, now) do
+    {outcome, reason} = assessed || outcome(claim, row, inputs)
+    clean? = row.dirty_seq == row.run_dirty_seq
+    superseded? = composition.current_published_version_id != row.admitted_parent_version_id
+    # Inputs read from a version no longer published are not a baseline.
+    current_inputs? =
+      inputs.published_version_id == composition.current_published_version_id
+
+    changed? = reason in ["inputs_changed", "fingerprint_version"]
+
+    unreported? =
+      is_nil(row.inputs_last_changed_at) or
+        (not is_nil(row.last_completed_at) and
+           DateTime.compare(row.inputs_last_changed_at, row.last_completed_at) != :gt)
+
+    {changed_at, changed_reason} =
+      if changed? and unreported?,
+        do: {now, "inputs_changed"},
+        else: {row.inputs_last_changed_at, row.inputs_last_changed_reason}
+
+    row =
+      row
+      |> Ecto.Changeset.change(
+        state: :idle,
+        last_completed_at: now,
+        refresh_after: shift(now, @window_seconds),
+        last_outcome: outcome,
+        last_outcome_reason: reason,
+        # A publication during the run reset the baseline (`published/2`):
+        # unless these inputs were read from it, the next check measures
+        # against the version now accepted.
+        input_fingerprint: if(current_inputs?, do: inputs.fingerprint, else: nil),
+        withheld_digest: inputs.withheld_digest,
+        superseded_on_arrival: superseded?,
+        failures: 0,
+        next_retry_at: nil,
+        last_error: nil,
+        lease_expires_at: nil,
+        lease_attempts: 0,
+        run_dirty_seq: nil,
+        dirty_at: if(clean?, do: nil, else: row.dirty_at),
+        dirty_reason: if(clean?, do: nil, else: row.dirty_reason),
+        inputs_last_changed_at: changed_at,
+        inputs_last_changed_reason: changed_reason,
+        review_unit_reserved_at: nil,
+        updated_at: now
+      )
+      |> Repo.update!()
+
+    row
+  end
+
+  # ── the editor's moves (#264 R4–R6) ───────────────────────────────────────
+
+  @doc """
+  Reserves the run's review unit before inference (#264 R5.2), in one fenced
+  transaction under the advisory lock that serializes every reservation:
+  pending proposals and reserved rows, over all compositions and
+  configuration versions, against `:curation_review_units` (30, read at
+  runtime). A row that holds one keeps it. At the cap the run is deferred
+  `review_capacity` and nothing is called.
+
+  Answers `{:ok, row}`, `{:deferred, row}`, or `{:error, :lease_lost |
+  :configuration_changed}`.
+  """
+  def reserve(claim, opts \\ []) do
+    now = now(opts)
+    jitter = Keyword.get(opts, :jitter, &jitter/1)
+
+    result =
+      Repo.transaction(fn ->
+        row = lock_row(claim.row_id)
+
+        with :ok <- fenced(row, claim, now),
+             {:ok, _composition} <- still_configured(row, now) do
+          Repo.query!("SELECT pg_advisory_xact_lock($1, 0)", [@units_lock_class])
+
+          cond do
+            not is_nil(row.review_unit_reserved_at) ->
+              {:ok, row}
+
+            Proposals.units_in_use() >= review_units() ->
+              {:deferred, defer!(row, "review_capacity", now, jitter)}
+
+            true ->
+              {:ok,
+               row
+               |> Ecto.Changeset.change(review_unit_reserved_at: now, updated_at: now)
+               |> Repo.update!()}
+          end
+        end
+      end)
+
+    case result do
+      {:ok, {:deferred, row}} ->
+        emit(:deferred, %{composition_id: row.composition_id, reason: :review_capacity})
+        {:deferred, row}
+
+      {:ok, other} ->
+        other
+    end
+  end
+
+  @doc "The cap on pending review work (#253 §7, #264 R5.1): `:curation_review_units`, 30."
+  def review_units, do: Application.get_env(:devils_dictionary, :curation_review_units, 30)
+
+  @doc """
+  Closes the run's generation on drift (#264 R4.4, R7.6): nothing is
+  proposed; the row returns to `:idle`, dirty with `inputs_changed`, its
+  unit released and `last_completed_at` untouched, so the next visit admits
+  the next generation against the inputs as they are. Under the fence;
+  answers `{:ok, row}` or `{:error, :lease_lost | :configuration_changed}`.
+  """
+  def close(claim, opts \\ []) do
+    now = now(opts)
+
+    result =
+      Repo.transaction(fn ->
+        row = lock_row(claim.row_id)
+
+        with :ok <- fenced(row, claim, now),
+             {:ok, _composition} <- still_configured(row, now) do
+          {:ok, close_row!(row, now)}
+        end
+      end)
+
+    case result do
+      {:ok, {:ok, row}} ->
+        emit(:refused, %{composition_id: row.composition_id, reason: :inputs_changed})
+        {:ok, row}
+
+      {:ok, error} ->
+        error
+    end
+  end
+
+  defp close_row!(row, now) do
+    row
+    |> release!(now)
+    |> mark_row!("inputs_changed", now)
+  end
+
+  @doc """
+  The editor's fenced write (#264 R9): one transaction that locks the
+  composition, then the refresh row (the order publications and
+  withdrawals take them, Stage 0 check recommendation 1), holds the
+  configuration row against an activation, checks the fence and the
+  configuration, and runs `fun.(row, composition)`. `fun` answers:
+
+    * `{:complete, {outcome, reason}, value}`: the row completes with that
+      assessment (its unit released, or committed to the proposal `fun`
+      wrote, which counts it from now on);
+    * `{:close, value}`: the generation closes (`close/2`);
+    * `{:error, reason}`: the transaction rolls back.
+
+  Answers `{:ok, {row, value}}`, `{:error, :lease_lost |
+  :configuration_changed}` (nothing `fun` would write is written), or `fun`'s
+  error.
+  """
+  def write(claim, inputs, opts, fun) do
+    now = now(opts)
+
+    result =
+      Repo.transaction(fn ->
+        with {:ok, _locked} <- Standing.lock_composition(claim.composition_id),
+             row = lock_row(claim.row_id),
+             :ok <- fenced(row, claim, now),
+             :ok <- hold_configuration(claim.configuration_version_id),
+             {:ok, composition} <- still_configured(row, now) do
+          case fun.(row, composition) do
+            {:complete, assessed, value} ->
+              {:ok, {complete_row!(row, claim, inputs, composition, assessed, now), value}}
+
+            {:close, value} ->
+              {:ok, {close_row!(row, now), value}}
+
+            {:error, reason} ->
+              Repo.rollback(reason)
+          end
+        end
+      end)
+
+    case result do
+      {:ok, {:ok, {row, value}}} ->
+        emit(:completed, %{
+          composition_id: row.composition_id,
+          outcome: row.last_outcome,
+          reason: row.last_outcome_reason,
+          superseded_on_arrival: row.superseded_on_arrival
+        })
+
+        {:ok, {row, value}}
+
+      {:ok, {:error, reason}} ->
+        emit(:refused, %{composition_id: claim.composition_id, reason: reason})
+        {:error, reason}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  # An activation that lands during the write waits for it, and one that
+  # landed first is seen by `still_configured/2`: a proposal is never left
+  # pending under a configuration version an activation has just retired.
+  defp hold_configuration(configuration_version_id) do
+    configuration_id =
+      Repo.one!(
+        from v in ConfigurationVersion,
+          where: v.id == ^configuration_version_id,
+          select: v.configuration_id
+      )
+
+    Repo.one!(
+      from c in Configuration, where: c.id == ^configuration_id, lock: "FOR SHARE", select: c.id
+    )
+
+    :ok
   end
 
   @doc """
@@ -780,6 +1023,9 @@ defmodule DevilsDictionary.Curation.Refresh do
     end
   end
 
+  # Every exit that moves a row off a run releases the review unit it held
+  # (#264 R5.4): here, in `defer!/4`, in `complete_row!/6` and in
+  # `suppress/2`, in the same statement.
   defp release!(row, now) do
     row
     |> Ecto.Changeset.change(
@@ -788,6 +1034,7 @@ defmodule DevilsDictionary.Curation.Refresh do
       lease_expires_at: nil,
       lease_attempts: 0,
       run_dirty_seq: nil,
+      review_unit_reserved_at: nil,
       updated_at: now
     )
     |> Repo.update!()
@@ -806,6 +1053,7 @@ defmodule DevilsDictionary.Curation.Refresh do
       lease_expires_at: nil,
       lease_attempts: 0,
       run_dirty_seq: nil,
+      review_unit_reserved_at: nil,
       updated_at: now
     )
     |> Repo.update!()
@@ -984,6 +1232,7 @@ defmodule DevilsDictionary.Curation.Refresh do
         lease_expires_at: nil,
         lease_attempts: 0,
         run_dirty_seq: nil,
+        review_unit_reserved_at: nil,
         updated_at: now
       ],
       inc: [lease_token: 1]
@@ -1039,6 +1288,68 @@ defmodule DevilsDictionary.Curation.Refresh do
       )
 
     count
+  end
+
+  @doc """
+  "Request a proposal" (#264 R18, OD-5), a reviewer's act: the composition's
+  row under its current configuration version is marked dirty `requested`,
+  a pending backoff is lifted, and a run is admitted as a visit would admit
+  one, every admission rule applying, in one transaction. `outcome/3`
+  assesses a requested run as needing an editor whatever its inputs, so it
+  reaches the editor when the editor is on. A request while a run is in
+  flight admits none and marks nothing.
+
+  Answers what `admit/2` answers, or `{:error, :unauthorized |
+  :no_composition | :configuration_unavailable}`.
+  """
+  def request(scope, composition_id, slug, reason, opts \\ []) do
+    now = now(opts)
+
+    result =
+      Repo.transaction(fn ->
+        Repo.query!("SET LOCAL lock_timeout = '1s'")
+
+        with {:ok, _actor} <- Authority.actor(scope, :reviewer),
+             {:ok, _reason} <- Transaction.required([reason: reason], :reason),
+             :ok <- composition_lock(composition_id),
+             {:ok, composition} <- active_composition(composition_id),
+             {:ok, version_id} <- configuration_version(composition) do
+          row = ensure_row!(composition.id, version_id, now)
+
+          case decision(row, now) do
+            outcome when outcome in [:in_flight, :suppressed] ->
+              outcome
+
+            _admissible ->
+              row =
+                row
+                |> mark_row!("requested", now)
+                |> Ecto.Changeset.change(
+                  next_retry_at: if(row.state == :deferred, do: now, else: row.next_retry_at)
+                )
+                |> Repo.update!()
+
+              act(decision(row, now), row, composition, slug, now)
+          end
+        else
+          {:ok, :busy} -> :busy
+          {:error, reason} -> Repo.rollback(reason)
+        end
+      end)
+
+    case result do
+      {:ok, outcome} ->
+        emit(outcome, %{composition_id: composition_id, source: :request})
+        {:ok, outcome}
+
+      error ->
+        error
+    end
+  rescue
+    error in Postgrex.Error ->
+      if error.postgres[:code] == :lock_not_available,
+        do: {:ok, :busy},
+        else: reraise(error, __STACKTRACE__)
   end
 
   @doc """
@@ -1159,14 +1470,16 @@ defmodule DevilsDictionary.Curation.Refresh do
   def change_label("reopened"), do: "re-opened by the operator"
   def change_label("published"), do: "a version was published"
   def change_label("pin_revised"), do: "a pinned work was revised"
+  def change_label("requested"), do: "a proposal was requested"
+  def change_label("inputs_changed"), do: "the inputs changed during an editor's run"
   def change_label(_found), do: "found by a check"
 
   @doc """
   The counts the Health page lists (#259 §5.6), all read from the record:
   the oldest queued or running run's age, runs admitted today (curation
   jobs inserted since UTC midnight), pages whose last check completed today
-  by outcome, and pages deferred now. "Coalesced" visits are telemetry
-  only.
+  by outcome (the checks' two and the editor's three, #264 R14), and pages
+  deferred now. "Coalesced" visits are telemetry only.
   """
   def counts(now \\ DateTime.utc_now()) do
     midnight = DateTime.new!(DateTime.to_date(now), ~T[00:00:00], "Etc/UTC")
@@ -1208,6 +1521,10 @@ defmodule DevilsDictionary.Curation.Refresh do
         ),
       unchanged_today: Map.get(outcomes, :unchanged, 0),
       needs_editor_today: Map.get(outcomes, :needs_editor, 0),
+      # The editor's assessments (#264 R14), judged rather than checked.
+      proposed_today: Map.get(outcomes, :proposed, 0),
+      abstained_today: Map.get(outcomes, :abstained, 0),
+      no_change_today: Map.get(outcomes, :no_change, 0),
       deferred_now: Repo.one(from r in current, where: r.state == :deferred, select: count(r.id))
     }
   end

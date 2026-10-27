@@ -13,6 +13,11 @@ defmodule DevilsDictionary.Curation.Profile do
 
   Seeding creates the five proposed identities and nothing else: no dossier,
   no evidence, no quotation.
+
+  `kind` is `:persona` (the five, and the rule above) or `:generic_editor`
+  (#264 R2): at most one, fixed at insert, admitted from a version with no
+  dossier, no sources and no deceased-status evidence that names the
+  instruction it runs (`Profiles.admit/4`).
   """
   use Ecto.Schema
 
@@ -23,6 +28,7 @@ defmodule DevilsDictionary.Curation.Profile do
     field :label, :string
     field :subject_label, :string
     field :state, Ecto.Enum, values: @states, default: :proposed
+    field :kind, Ecto.Enum, values: [:persona, :generic_editor], default: :persona
     field :bot_actor_id, :id
     field :admitted_by_actor_id, :id
     field :admitted_at, :utc_datetime_usec

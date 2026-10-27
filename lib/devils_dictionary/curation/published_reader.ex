@@ -30,7 +30,12 @@ defmodule DevilsDictionary.Curation.PublishedReader do
     * each note as an editorial reason, signed with the author label the
       database recorded for it, never one supplied by a caller;
     * who selected, reviewed and published it: the version's author, the
-      review the receipt cites, and the publication receipt.
+      review the receipt cites, and the publication receipt. A version the
+      owner took from the editor's proposal (#264 R14.4) is selected by the
+      editor, named as an AI model with its attempt, and taken (or edited
+      and published) by the owner; a note the model wrote names its attempt
+      too (D9), and a fallback lead the model chose says the editor chose it
+      (#253 D3, `LeadPolicy.statement/1`).
 
   A `work` or `exemplar` highlight is drawn too (#257):
 
@@ -69,6 +74,7 @@ defmodule DevilsDictionary.Curation.PublishedReader do
     Candidates,
     CompositionItem,
     CompositionReview,
+    CompositionVersion,
     Compositions,
     Configurations,
     Eligibility,
@@ -143,8 +149,15 @@ defmodule DevilsDictionary.Curation.PublishedReader do
     %{composition: composition, version: version, receipt: receipt} = published
     review = Repo.get(CompositionReview, receipt.authorizing_review_id)
 
+    proposal = proposal_of(version)
+
     actors =
-      actors([version.created_by_actor_id, receipt.actor_id, review && review.reviewer_actor_id])
+      actors([
+        version.created_by_actor_id,
+        receipt.actor_id,
+        review && review.reviewer_actor_id,
+        proposal && proposal.created_by_actor_id
+      ])
 
     arrangement(page, published, %{
       composition: %{id: composition.id, version: version.version},
@@ -152,8 +165,8 @@ defmodule DevilsDictionary.Curation.PublishedReader do
       configuration_version: configuration_version,
       review: %Review{
         state: :published,
-        selected_by: person(actors[version.created_by_actor_id]),
-        selected_on: date(version.inserted_at),
+        selected_by: selector(version, proposal, actors),
+        selected_on: date((proposal || version).inserted_at),
         reviewed_by: review && label(actors[review.reviewer_actor_id]),
         reviewed_on: review && date(review.inserted_at),
         published_by: person(actors[receipt.actor_id]),
@@ -165,6 +178,37 @@ defmodule DevilsDictionary.Curation.PublishedReader do
           |> Refresh.assessment()
       }
     })
+  end
+
+  # The proposal a manual version was taken from: its parent, when that is a
+  # model version (#253 §5a step 5).
+  defp proposal_of(%{parent_version_id: id}) when is_integer(id) do
+    case Repo.get(CompositionVersion, id) do
+      %CompositionVersion{origin: :model} = proposal -> proposal
+      _manual -> nil
+    end
+  end
+
+  defp proposal_of(_version), do: nil
+
+  # Who selected a published version: its author, or, for one taken from a
+  # proposal, the editor that proposed it and the owner who took it. An
+  # unchanged Take has the proposal's arrangement; anything else was edited.
+  defp selector(version, nil, actors), do: person(actors[version.created_by_actor_id])
+
+  defp selector(version, proposal, actors) do
+    case person(actors[proposal.created_by_actor_id]) do
+      nil ->
+        person(actors[version.created_by_actor_id])
+
+      editor ->
+        Map.merge(editor, %{
+          attempt_id: proposal.attempt_id,
+          taken_by: label(actors[version.created_by_actor_id]),
+          taken_on: date(version.inserted_at),
+          edited?: version.arrangement_hash != proposal.arrangement_hash
+        })
+    end
   end
 
   @doc """
@@ -189,7 +233,8 @@ defmodule DevilsDictionary.Curation.PublishedReader do
       page: page,
       reviewed_by: review.reviewed_by,
       reviewed_on: review.reviewed_on,
-      provenance: Map.get(record, :provenance, &Provenance.of(&1, :public))
+      provenance: Map.get(record, :provenance, &Provenance.of(&1, :public)),
+      attempts: attempts(List.wrap(arrangement.lead) ++ arrangement.highlights)
     }
 
     {lead, lead_withheld} = lead(arrangement.lead, ctx)
@@ -237,6 +282,11 @@ defmodule DevilsDictionary.Curation.PublishedReader do
       source = content.source
       policy = lead_policy(source)
 
+      statement =
+        if policy == :manual_fallback and item.selection_origin == :model,
+          do: LeadPolicy.statement(:editor_fallback),
+          else: LeadPolicy.statement(policy)
+
       lead = %Lead{
         reference: content_reference(content, %{kind: :sentences, count: @lead_sentences}),
         policy: policy,
@@ -254,8 +304,7 @@ defmodule DevilsDictionary.Curation.PublishedReader do
         meaning: %{meaning | anchor: "#" <> card.id},
         links: %{card_id: card.id, source: content.canonical_url},
         credits: content_credits(content),
-        reasons:
-          compact([%Reason{kind: :policy, text: LeadPolicy.statement(policy)}, note(item, ctx)])
+        reasons: compact([%Reason{kind: :policy, text: statement}, note(item, ctx)])
       }
 
       {lead, []}
@@ -791,13 +840,43 @@ defmodule DevilsDictionary.Curation.PublishedReader do
     %Reason{
       kind: :editorial,
       text: text,
-      author: %{kind: item.note_author_kind, label: item.note_author_label},
+      author: %{
+        kind: item.note_author_kind,
+        label: item.note_author_label,
+        attempt_id: Map.get(ctx[:attempts] || %{}, item.id)
+      },
       reviewed_by: ctx.reviewed_by,
       reviewed_on: ctx.reviewed_on
     }
   end
 
   defp note(_item, _ctx), do: nil
+
+  # The attempt behind each model-written note (#253 D9): its version's, for
+  # an item of a proposal, or the proposal item's it was copied from.
+  defp attempts(items) do
+    for %CompositionItem{id: id, note_author_kind: :model} <- items,
+        is_integer(id),
+        attempt = attempt_of(id, 4),
+        into: %{},
+        do: {id, attempt}
+  end
+
+  defp attempt_of(_id, 0), do: nil
+
+  defp attempt_of(id, hops) do
+    case Repo.one(
+           from i in CompositionItem,
+             join: v in CompositionVersion,
+             on: v.id == i.composition_version_id,
+             where: i.id == ^id,
+             select: {v.origin, v.attempt_id, i.copied_from_item_id}
+         ) do
+      {:model, attempt_id, _source} -> attempt_id
+      {_manual, _none, source} when is_integer(source) -> attempt_of(source, hops - 1)
+      _other -> nil
+    end
+  end
 
   defp actors(ids) do
     ids = ids |> Enum.reject(&is_nil/1) |> Enum.uniq()
