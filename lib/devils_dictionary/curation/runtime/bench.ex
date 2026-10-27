@@ -370,7 +370,12 @@ defmodule DevilsDictionary.Curation.Runtime.Bench do
 
   # ── memory ────────────────────────────────────────────────────────────────
 
-  defp with_peak_rss(fun, opts) do
+  @doc """
+  Runs `fun` while sampling the service tree's resident set (`tree_rss/1`)
+  every 250 ms, and returns `{fun's result, peak bytes}`, the peak `nil` when
+  nothing was read. A rehearsal takes the same reading (#267).
+  """
+  def with_peak_rss(fun, opts) do
     parent = self()
     sampler = spawn_link(fn -> sample_rss(parent, 0, opts) end)
     result = fun.()

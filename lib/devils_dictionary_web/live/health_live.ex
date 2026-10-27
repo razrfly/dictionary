@@ -18,6 +18,7 @@ defmodule DevilsDictionaryWeb.HealthLive do
   alias DevilsDictionary.{Health, Lexicon, Sources}
   alias DevilsDictionary.Curation.Refresh
   alias DevilsDictionary.Health.Score
+  alias DevilsDictionaryWeb.HealthLive.RuntimeCard
 
   # `:unset` rather than `nil`, because `nil` is now a meaningful scope value —
   # "no population selected" — and the first `handle_params` has to be able to
@@ -31,7 +32,8 @@ defmodule DevilsDictionaryWeb.HealthLive do
        scopes: Lexicon.list_scopes(),
        parity: %{},
        sources: Sources.list_sources(),
-       curation: Refresh.counts()
+       curation: Refresh.counts(),
+       runtime: DevilsDictionary.Curation.Runtime.Snapshot.read()
      )}
   end
 
@@ -427,6 +429,8 @@ defmodule DevilsDictionaryWeb.HealthLive do
           </.stat>
         </div>
       </.section>
+
+      <RuntimeCard.runtime_card snapshot={@runtime} />
     </Layouts.app>
     """
   end

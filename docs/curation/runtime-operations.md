@@ -1,8 +1,11 @@
 # Curation runtime: operating the private model service
 
-The runbook for stage A of [#195](https://github.com/razrfly/dictionary/issues/195). The
-design is in [runtime-stage-a.md](runtime-stage-a.md), and the measurements in
-[runtime-benchmark-2026-09-27.md](runtime-benchmark-2026-09-27.md).
+The runbook for stage A of [#195](https://github.com/razrfly/dictionary/issues/195), and
+for the operating window and rehearsals of
+[#267](https://github.com/razrfly/dictionary/issues/267). The design is in
+[runtime-stage-a.md](runtime-stage-a.md), and the measurements in
+[runtime-benchmark-2026-09-27.md](runtime-benchmark-2026-09-27.md) and
+[runtime-benchmark-2026-10-26-unlabelled.md](runtime-benchmark-2026-10-26-unlabelled.md).
 
 Every command below is `mix dd.runtime …`. A command starts the repository and an HTTP
 client, and nothing else: no Oban node, no endpoint. Point it at a database with
@@ -11,8 +14,9 @@ the operator decides otherwise.
 
 ## Layout
 
-Everything the runtime writes lives on the external volume. Source code and
-PostgreSQL stay internal.
+Everything the runtime writes lives on the external volume. Since #211 the source
+checkout and PostgreSQL (the cluster on port 5434) live there too; nothing of the
+dictionary stays on the internal disk.
 
 ```
 /Volumes/LLM Models/                  external volume (checked: mounted, Internal = false)
@@ -20,10 +24,12 @@ PostgreSQL stay internal.
     bin/ollama                        the runtime binary (and its libraries)
     downloads/                        the verified release archive
     ollama/                           OLLAMA_MODELS: manifests/ and blobs/
-    run/ollama.pid, run/ollama.log    the one service's process id and log
+    run/ollama.pid, run/ollama.log    the one service's process id and log, during a window
     run/authority.json                which database's slot governs the service
     run/home/.ollama/                 the service's HOME: its signing key and cache
     run/tmp/                          the service's TMPDIR
+    src/dictionary/                   the checkout (this runbook)
+    postgres/                         the 5434 cluster
 ```
 
 These paths are the `:curation_runtime` defaults in `config/config.exs`. They are
@@ -93,7 +99,17 @@ To move the binding, for example from a benchmark database to the real one:
 2. stop the service;
 3. run `mix dd.runtime service start --rebind` against the new database.
 
-The benchmark of 2026-09-27 left the service bound to `devils_dictionary_runtime_bench`.
+The benchmark of 2026-09-27 bound the service to `devils_dictionary_runtime_bench`, and it
+stays bound there until #267's Delivery B. That delivery's step 2 runs `service start
+--rebind` against `devils_dictionary_v2`, and records the marker's new contents (the
+database and the cluster's `system_identifier`) on #267. After it:
+- a benchmark opens a bench-bound window: it checks v2's slot is idle, stops the service,
+  starts it with `--rebind` against the bench database, and at its end does the same back
+  to v2;
+- every benchmark and rehearsal record says which database the service was bound to.
+
+To undo the rebind, stop the service and run `service start --rebind` against the bench
+database: the marker names it again. Nothing else changes.
 
 **Surviving a reboot.** `service start` does not survive a reboot or a logout. For
 that, an operator can install a user LaunchAgent with the same program, arguments and
@@ -165,6 +181,121 @@ config's instruction; `request` refuses a packet built for another one
 runs the frozen packet once and prints the receipt. The same key replays the same
 receipt. A request writes an attempt and its ledger entries. It never writes a
 composition, review, publication, claim or page row.
+
+## Rehearsal
+
+A rehearsal runs one real page's packet once through the runtime, as an attempt only.
+It is #267's "test against our actual database" before any proposal is written:
+
+```
+mix dd.runtime rehearse --model-config qwen3.5-9b-v2 --scope love --dry-run
+mix dd.runtime rehearse --model-config qwen3.5-9b-v2 --scope love \
+  --out priv/curation/runtime_bench/rehearsals/2026-11-03/love.json
+```
+
+`--dry-run` builds and freezes the packet the On page `love` offers, for the config's
+pinned instruction. It prints it as `packet --scope love --dry-run` does, plus the request
+key it would use. It calls nothing and writes nothing: no readiness, no row, no file.
+
+Without `--dry-run`, `rehearse`:
+1. refuses unless the service is bound to the connected database (`foreign_authority`,
+   `authority_unbound`, `authority_unreadable`), and then touches nothing else;
+2. builds and freezes the packet, as the dry run does;
+3. refuses unless readiness passes (`service_unreachable`, `digest_mismatch`, …);
+4. sends the frozen packet once through `Runtime.run/3`, as the operator's actor, under the
+   request key `rehearsal:<config slug>:<packet hash>`, with the benchmark's readings:
+   memory, swap and the loaded model before and after, and the service tree's peak
+   resident set during the call.
+
+It writes one JSON record, whether it ran, replayed or refused, and never over an existing
+one. The default path is `priv/curation/runtime_bench/rehearsals/<UTC date>/<scope>.json`.
+The record keeps:
+- the database and the authority marker;
+- the model config;
+- the packet by ids, hashes and counts, with what was omitted and why;
+- the readiness checks;
+- the receipt;
+- the validated answer: lead, highlights, reasons, refusals;
+- latency, prompt and output tokens, memory and swap.
+
+It keeps no excerpt or label text. It prints a summary:
+
+```
+database         devils_dictionary_v2
+packet           10 of 32 candidates, 12 of 48 meanings, omitted 22 (reasons recorded)
+attempt          2: accepted · lead c1 (bierce) · 2 highlights · 2.9 s · swap +0 MB
+record           priv/curation/runtime_bench/rehearsals/2026-11-03/love.json
+```
+
+A rehearsal writes the attempt, its ledger entries and the record. It writes no
+composition, review, publication, claim or refresh state, and it is not a page visit. The
+same scope with unchanged inputs gives the same packet hash, so a second rehearsal
+replays the first receipt: it sends nothing, and its record says `replay`. A changed
+packet is a new request key and a new attempt.
+
+## The operating window
+
+The service runs only in a window the owner opens by hand. There is no LaunchAgent and no
+schedule (#267 D-F). A window:
+1. **Idle check.** Against the database the service is bound to: `budget`, `sweep` and the
+   `inference_services` row show no holder and nothing live. Then `service status`: if it
+   is running, `service stop` and keep its confirmation; if it is already stopped,
+   `service stop` only confirms `not_running`.
+2. **Start** the service bound to the database the work is for (`service start`, or
+   `service start --rebind` when moving the binding).
+3. **Work:** `ready --smoke`, then rehearsals. Once #264 is deployed and its editor
+   enabled (#268 3c–3d), the editor runs on page visits during the window. Until then a
+   visit never reaches an editor: on `main` the refresh worker only checks inputs
+   (`Refresh.claim/3`, `Refresh.check/3`) and never calls the runtime.
+4. **Stop and confirm:** `service stop`, its confirmation (server, runners, port), and the
+   machine's memory and swap readings 30 s after.
+
+The ops Health page (`/ops/health`) has an "Editor runtime" card. It shows:
+- the slot's row;
+- the database the marker names;
+- the registered model configs;
+- today's inference minutes;
+- the last smoke and the last attempt.
+
+It reads these with SELECTs and a file read, and starts, stops and calls nothing. It shows
+current state only: a slot marked available is not proof that the process is running. A
+window's start and stop are in its record.
+
+### The first window on v2 (#267 Delivery B, #268 3a)
+
+Each step runs on the owner's named yes, in this order. Without `DD_DATABASE`, a dev-env
+task reaches `devils_dictionary_v2`:
+
+```
+$ DD_DATABASE=devils_dictionary_runtime_bench mix dd.runtime budget   # the old slot: no holder, nothing live
+$ DD_DATABASE=devils_dictionary_runtime_bench mix dd.runtime sweep
+$ mix dd.runtime service status                                # stopped: `service stop` then only confirms not_running
+$ mix dd.runtime service start --rebind                        # authority → devils_dictionary_v2; record the marker
+$ mix dd.runtime setup --model qwen3.5:9b --slug qwen3.5-9b-v2 \
+      --instruction generic-editor-v2 --accept-license       # needs the running service; prints the license; no pull
+$ mix dd.runtime ready --model-config qwen3.5-9b-v2 --smoke    # one attempt
+$ mix dd.runtime rehearse --model-config qwen3.5-9b-v2 --scope love --dry-run
+$ mix dd.runtime rehearse --model-config qwen3.5-9b-v2 --scope love
+$ mix dd.runtime service stop                                  # confirmed; readings 30 s after
+```
+
+Run `rehearse` for war and hope the same way, each with `--dry-run` first. The step's
+records:
+- the marker's new contents;
+- the config row's id and `config_hash`. It equals bench config 3's (`5b8b65ad…`) if the
+  inputs are identical, and the record says why if not;
+- the smoke receipt;
+- the three rehearsal records;
+- the confirmed stop and the readings after it.
+
+v2 then holds one model config, one service row, four attempts (the smoke and three
+rehearsals) and their ledger entries. It also holds one import actor, "Curation runtime
+operator (CLI)", which `setup --accept-license` inserts on first use. That actor approves
+nothing.
+
+**Rollback:** `service stop`, then `service start --rebind` against the bench database,
+which restores the previous marker. The v2 config row stays: it is immutable, harmless, and
+history for the attempts that name it.
 
 ## The slot, the budget and recovery
 
