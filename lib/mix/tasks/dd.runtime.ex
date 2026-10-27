@@ -1,5 +1,5 @@
 defmodule Mix.Tasks.Dd.Runtime do
-  @shortdoc "Operate the private curation runtime (#195): service, setup, readiness, requests, recovery, benchmark"
+  @shortdoc "Operate the private curation runtime (#195): service, setup, readiness, requests, rehearsals, recovery, benchmark"
 
   @moduledoc """
   The operator's harness for the curation runtime (#195 stage A). See
@@ -49,6 +49,23 @@ defmodule Mix.Tasks.Dd.Runtime do
   (`--model-config`) or one of `Packet.instruction_versions/0`
   (`--instruction`), never a default.
 
+  **A rehearsal** (#267) runs one real page's packet once, as an attempt
+  only (`Runtime.Rehearsal`):
+
+      mix dd.runtime rehearse --model-config SLUG --scope SLUG --dry-run [--language en]
+      mix dd.runtime rehearse --model-config SLUG --scope SLUG [--out PATH] [--language en]
+
+  `--dry-run` prints the packet as `packet --dry-run` does, with the request
+  key it would use, and calls and writes nothing. Without it, `rehearse`
+  refuses unless the service is bound to the connected database and
+  readiness passes, then sends the frozen packet once under the request key
+  `rehearsal:<config>:<packet hash>`, with the benchmark's memory, swap and
+  resident-set readings. It writes the attempt and its accounting, and one
+  JSON record (`--out`, by default
+  `priv/curation/runtime_bench/rehearsals/<UTC date>/<scope>.json`, never
+  overwritten), whether it ran, replayed or refused. The same scope and
+  packet replay the same receipt.
+
   **The slot:**
 
       mix dd.runtime budget [--day YYYY-MM-DD]
@@ -82,6 +99,7 @@ defmodule Mix.Tasks.Dd.Runtime do
     Packet,
     Provenance,
     Readiness,
+    Rehearsal,
     ServiceProcess
   }
 
@@ -114,12 +132,43 @@ defmodule Mix.Tasks.Dd.Runtime do
     rebind: :boolean
   ]
 
+  # Every command this task answers, as its positional words.
+  @commands [
+    ["service", "start"],
+    ["service", "stop"],
+    ["service", "restart"],
+    ["service", "status"],
+    ["setup"],
+    ["ready"],
+    ["packet"],
+    ["request"],
+    ["rehearse"],
+    ["budget"],
+    ["sweep"],
+    ["recover"],
+    ["resume"],
+    ["pause"],
+    ["bench", "seed"],
+    ["bench", "run"]
+  ]
+
   @impl Mix.Task
   def run(args) do
-    {opts, rest, invalid} = OptionParser.parse(args, strict: @switches)
-    if invalid != [], do: Mix.raise("unknown options: #{inspect(invalid)}")
+    {opts, rest} = parse!(args)
     start!()
     command(rest, opts)
+  end
+
+  @doc false
+  # The commands and their switches, without starting anything: what the
+  # runbook's commands are checked against (#267 §8 test 5).
+  def commands, do: @commands
+
+  @doc false
+  def parse!(args) do
+    {opts, rest, invalid} = OptionParser.parse(args, strict: @switches)
+    if invalid != [], do: Mix.raise("unknown options: #{inspect(invalid)}")
+    {opts, rest}
   end
 
   defp command(["service", action], opts) do
@@ -206,6 +255,16 @@ defmodule Mix.Tasks.Dd.Runtime do
         [request_key: required(opts, :key), actor_id: operator!().id] ++ deadline(opts)
       )
     )
+  end
+
+  defp command(["rehearse"], opts) do
+    config = config!(opts)
+    scope = required(opts, :scope)
+    language = Keyword.get(opts, :language, "en")
+
+    if opts[:dry_run],
+      do: rehearse_dry_run(scope, config, language),
+      else: rehearse(scope, config, opts)
   end
 
   defp command(["budget"], opts) do
@@ -298,6 +357,118 @@ defmodule Mix.Tasks.Dd.Runtime do
     shell = Mix.shell()
     Enum.each(dry_run_lines(slug, result, candidates), &shell.info/1)
   end
+
+  # ── rehearsals ────────────────────────────────────────────────────────────
+
+  # What the rehearsal would send, and under which key. No readiness, no
+  # call, no row, no file.
+  defp rehearse_dry_run(scope, config, language) do
+    lines =
+      case Rehearsal.dry_run(scope, config, language: language) do
+        {:ok, prepared} ->
+          [row("model_config", "#{config.slug} · config ##{config.id}")] ++
+            dry_run_lines(scope, {:ok, prepared.packet}, prepared.candidates) ++
+            ["request_key      #{prepared.request_key}"]
+
+        {:error, reason} ->
+          dry_run_lines(scope, {:error, reason}, nil)
+      end
+
+    shell = Mix.shell()
+    Enum.each(lines, &shell.info/1)
+  end
+
+  defp rehearse(scope, config, opts) do
+    rehearsal_opts =
+      [actor_id: fn -> operator!().id end, language: Keyword.get(opts, :language, "en")] ++
+        Keyword.take(opts, [:out])
+
+    case Rehearsal.run(scope, config, rehearsal_opts) do
+      {:error, {:record_exists, path}} ->
+        Mix.raise("#{path} exists: a rehearsal record is never overwritten; name another --out")
+
+      {_status, record} ->
+        shell = Mix.shell()
+        Enum.each(rehearsal_lines(record), &shell.info/1)
+    end
+  end
+
+  defp rehearsal_lines(record) do
+    packet = record["packet"]
+
+    packet_line =
+      packet &&
+        row(
+          "packet",
+          "#{packet["candidates"]} of #{packet["offered"]} candidates, " <>
+            "#{packet["meanings"]} of #{packet["meanings_total"]} meanings, " <>
+            "omitted #{packet["omitted"]} (reasons recorded)"
+        )
+
+    outcome_line =
+      case record["status"] do
+        "refused" ->
+          row(
+            "refused",
+            "at #{record["refused_at"]}: #{inspect(record["refusal"])}" <>
+              if(record["refusal_detail"],
+                do: " (#{inspect(record["refusal_detail"])})",
+                else: ""
+              )
+          )
+
+        status ->
+          attempt_line(status, record)
+      end
+
+    Enum.reject(
+      [
+        row("database", record["database"]),
+        packet_line,
+        outcome_line,
+        row("record", record["path"])
+      ],
+      &is_nil/1
+    )
+  end
+
+  defp attempt_line(status, record) do
+    attempt = record["attempt"]
+    answer = record["answer"]
+    lead = answer && answer["lead"]
+    wall = record["latency_ms"]["wall"]
+    memory = record["memory"]
+
+    swap =
+      case memory do
+        %{"before" => %{"swap_used_bytes" => a}, "after" => %{"swap_used_bytes" => b}} ->
+          "swap #{if b >= a, do: "+", else: "-"}#{div(abs(b - a), 1024 * 1024)} MB"
+
+        _ ->
+          "swap not read"
+      end
+
+    row(
+      "attempt",
+      Enum.join(
+        [
+          "#{attempt.attempt_id}: #{attempt.outcome || attempt.state}" <>
+            if(status == "ok", do: "", else: " (#{status})"),
+          if(lead,
+            do: "lead #{lead["candidate_id"]} (#{lead["source"] || lead["kind"]})",
+            else: "no lead"
+          ),
+          highlights((answer && answer["highlights"]) || []),
+          if(wall, do: "#{Float.round(wall / 1000, 1)} s", else: "no time"),
+          swap
+        ],
+        " · "
+      )
+    )
+  end
+
+  defp highlights([_one]), do: "1 highlight"
+  defp highlights(list), do: "#{length(list)} highlights"
 
   defp dry_run_instruction(opts) do
     versions = Packet.instruction_versions()
