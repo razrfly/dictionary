@@ -441,7 +441,8 @@ defmodule Mix.Tasks.Dd.Runtime do
 
     swap =
       case memory do
-        %{"before" => %{"swap_used_bytes" => a}, "after" => %{"swap_used_bytes" => b}} ->
+        %{"before" => %{"swap_used_bytes" => a}, "after" => %{"swap_used_bytes" => b}}
+        when is_integer(a) and is_integer(b) ->
           "swap #{if b >= a, do: "+", else: "-"}#{div(abs(b - a), 1024 * 1024)} MB"
 
         _ ->

@@ -29,7 +29,9 @@ defmodule DevilsDictionary.Curation.Runtime.Rehearsal do
   record says `replay`.
 
   A rehearsal writes the attempt and its ledger entries (`Runtime.run/3`)
-  and one JSON record, never over an existing one. It writes no composition,
+  and one JSON record, never over an existing one: it claims the record's
+  path by creating it exclusively before anything else, so two rehearsals
+  given the same path cannot both run. It writes no composition,
   review, publication, refresh state or page row, and visits nothing: the
   refresh clock is untouched. The record keeps ids, hashes, the validated
   answer (whose quotes are hashes and ranges) and the readings, never excerpt
@@ -46,6 +48,7 @@ defmodule DevilsDictionary.Curation.Runtime.Rehearsal do
     Authority,
     Bench,
     Endpoint,
+    Gateway,
     ModelConfig,
     Packet,
     Readiness
@@ -112,6 +115,11 @@ defmodule DevilsDictionary.Curation.Runtime.Rehearsal do
 
   `{:error, {:record_exists, path}}`, before the database or the service is
   touched, when a record is already there: a record is never overwritten.
+  The path is claimed atomically (created exclusively, holding a `running`
+  stub) before the rehearsal starts, so a concurrent rehearsal given the
+  same path gets this answer too. If the rehearsal raises, the claim is
+  removed. A process killed mid-run leaves its `running` stub, which says
+  what was being rehearsed and by whom.
 
   `opts`: `:actor_id`, the operator's actor id or a function returning it,
   called only once every check has passed, so a rehearsal refused at the
@@ -122,14 +130,50 @@ defmodule DevilsDictionary.Curation.Runtime.Rehearsal do
   def run(scope, %ModelConfig{} = config, opts) do
     path = Keyword.get_lazy(opts, :out, fn -> default_path(scope) end)
 
-    if File.exists?(path) do
-      {:error, {:record_exists, path}}
-    else
-      {status, record} = rehearse(scope, config, opts)
-      record = Map.merge(record, %{"path" => path, "finished_at" => now()})
-      File.mkdir_p!(Path.dirname(path))
-      File.write!(path, Jason.encode!(json(record), pretty: true))
-      {status, record}
+    case claim(path, scope, config) do
+      :ok -> rehearse_claimed(path, scope, config, opts)
+      :exists -> {:error, {:record_exists, path}}
+    end
+  end
+
+  # The claimed path holds a `running` stub until the record replaces it.
+  # A rehearsal that raises gives the path back.
+  defp rehearse_claimed(path, scope, config, opts) do
+    {status, record} = rehearse(scope, config, opts)
+    record = Map.merge(record, %{"path" => path, "finished_at" => now()})
+    File.write!(path, Jason.encode!(json(record), pretty: true))
+    {status, record}
+  catch
+    kind, reason ->
+      File.rm(path)
+      :erlang.raise(kind, reason, __STACKTRACE__)
+  end
+
+  # Exclusive creation is the atomic test: of two rehearsals given the same
+  # path, exactly one creates it.
+  defp claim(path, scope, config) do
+    File.mkdir_p!(Path.dirname(path))
+
+    case File.open(path, [:write, :exclusive]) do
+      {:ok, io} ->
+        stub = %{
+          "record_version" => @record_version,
+          "status" => "running",
+          "scope" => scope,
+          "model_config" => config.slug,
+          "claimed_at" => DateTime.to_iso8601(now()),
+          "owner" => Gateway.owner()
+        }
+
+        IO.binwrite(io, Jason.encode!(stub, pretty: true))
+        File.close(io)
+        :ok
+
+      {:error, :eexist} ->
+        :exists
+
+      {:error, reason} ->
+        raise File.Error, reason: reason, action: "claim the rehearsal record", path: path
     end
   end
 

@@ -352,6 +352,53 @@ defmodule DevilsDictionary.Curation.Runtime.RehearsalTest do
       assert File.read!(out) == "{}"
       refute_received {:called, _path}
     end
+
+    test "the path is claimed before the rehearsal runs: a concurrent one with the same path is refused",
+         ctx do
+      bind!(ctx.opts)
+      answer = selection_for(ctx)
+      out = path(ctx, "claimed.json")
+      test = self()
+
+      # While the first rehearsal's call is in flight, a second is started
+      # with the same path.
+      stub_ollama!(ctx.config,
+        chat: fn _request ->
+          send(test, {:stub, read_record(out)})
+
+          send(
+            test,
+            {:second, Rehearsal.run("patience", ctx.config, Keyword.put(ctx.opts, :out, out))}
+          )
+
+          {:json, answer(answer)}
+        end
+      )
+
+      assert {:ok, _record} =
+               Rehearsal.run("patience", ctx.config, Keyword.put(ctx.opts, :out, out))
+
+      assert_received {:stub, %{"status" => "running", "scope" => "patience"} = stub}
+      assert stub["model_config"] == ctx.config.slug
+      assert_received {:second, {:error, {:record_exists, ^out}}}
+      assert read_record(out)["status"] == "ok"
+      assert attempts(ctx) == 1
+    end
+
+    test "a rehearsal that raises gives the path back", ctx do
+      bind!(ctx.opts)
+      stub_ollama!(ctx.config)
+      out = path(ctx, "raised.json")
+
+      opts = Keyword.merge(ctx.opts, out: out, actor_id: fn -> raise "no operator" end)
+
+      assert_raise RuntimeError, "no operator", fn ->
+        Rehearsal.run("patience", ctx.config, opts)
+      end
+
+      refute File.exists?(out)
+      assert attempts(ctx) == 0
+    end
   end
 
   describe "the task, run for real against the fake service" do
@@ -411,6 +458,22 @@ defmodule DevilsDictionary.Curation.Runtime.RehearsalTest do
                operator.id
 
       assert_raise Mix.Error, ~r/never overwritten/, fn -> Mix.Tasks.Dd.Runtime.run(args) end
+    end
+
+    test "says so when memory could not be read", ctx do
+      bind!()
+      FakeSystem.put(memory: [{:error, :unavailable}])
+      answer = selection_for(ctx)
+      stub_counting!(ctx.config, fn _request -> {:json, answer(answer)} end)
+      out = path(ctx, "no-memory.json")
+
+      Mix.Tasks.Dd.Runtime.run(
+        ~w(rehearse --model-config #{ctx.config.slug} --scope patience --out) ++ [out]
+      )
+
+      assert [_database, _packet, attempt, _record] = printed()
+      assert attempt =~ ~r/ · swap not read$/
+      assert read_record(out)["memory"]["before"] == %{"unavailable" => true}
     end
 
     test "prints a refusal and where it is recorded", ctx do
