@@ -176,6 +176,26 @@ defmodule DevilsDictionary.Curation.Proposals.StepTest do
       assert row.inputs_last_changed_at == row.last_completed_at
     end
 
+    test "a requested run records an input change only its check found, and still reaches the step",
+         world do
+      visit!()
+      {:ok, checked} = work!(world)
+
+      set!(checked,
+        input_fingerprint: Refresh.fingerprint_version() <> ":something-else",
+        inputs_last_changed_at: nil,
+        inputs_last_changed_reason: nil
+      )
+
+      stub_answer!(world, lead_and_johnson(world))
+      assert {:ok, row} = run!(world)
+
+      assert_received :chat_called
+      assert {row.last_outcome, row.last_outcome_reason} == {:proposed, "written"}
+      assert row.inputs_last_changed_reason == "inputs_changed"
+      assert row.inputs_last_changed_at == row.last_completed_at
+    end
+
     test "an unchanged check calls nothing", world do
       stub_answer!(world, lead_and_johnson(world))
 

@@ -745,9 +745,15 @@ defmodule DevilsDictionary.Curation.Refresh do
   # fenced write (`write/4`).
   defp complete_row!(row, claim, inputs, composition, assessed, now) do
     # The check's own finding says whether the inputs changed; an editor's
-    # assessment, when there is one, is what is recorded as the outcome.
-    {_checked, check_reason} = checked = outcome(claim, row, inputs)
-    {outcome, reason} = assessed || checked
+    # assessment, when there is one, is what is recorded as the outcome. A
+    # request forces the editor (R18) but does not stop the check from
+    # seeing whether the inputs moved, so the change check reads the claim
+    # without it. A periodic run stays as P5 has it.
+    check_claim =
+      if claim.pending_reason == "requested", do: %{claim | pending_reason: nil}, else: claim
+
+    {_checked, check_reason} = outcome(check_claim, row, inputs)
+    {outcome, reason} = assessed || outcome(claim, row, inputs)
     clean? = row.dirty_seq == row.run_dirty_seq
     superseded? = composition.current_published_version_id != row.admitted_parent_version_id
     # Inputs read from a version no longer published are not a baseline.
