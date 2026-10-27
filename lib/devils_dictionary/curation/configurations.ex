@@ -35,7 +35,10 @@ defmodule DevilsDictionary.Curation.Configurations do
     * *enablement*: a separate switch on the configuration
       (`enable_editor/3`, `disable_editor/3`), off by default and off again
       after any activation, so the editor runs only when someone says so for
-      the version now current (`editor_enabled?/1`).
+      the version now current (`editor_enabled/1`). An activation leaves the
+      switch's id where it was (R1.5); a switch set before the latest
+      activation is stale (`editor_switch_live?/1`), so re-activating a
+      version the editor was once enabled for does not turn it back on.
   """
 
   import Ecto.Query
@@ -414,6 +417,7 @@ defmodule DevilsDictionary.Curation.Configurations do
          %Configuration{state: :enabled} = c <- Repo.get(Configuration, version.configuration_id),
          true <- c.current_version_id == version.id,
          true <- c.editor_enabled_version_id == version.id,
+         true <- editor_switch_live?(c),
          {:ok, editor} <- editor(version) do
       {:ok, editor}
     else
@@ -422,6 +426,28 @@ defmodule DevilsDictionary.Curation.Configurations do
   end
 
   def editor_enabled(_id), do: :off
+
+  @doc """
+  Whether a configuration's editor switch was set after its latest
+  activation. Every activation turns the editor off until a reviewer
+  enables it again for the version then current (R1.5): the switch's id is
+  left in place, and a switch older than the activation no longer counts,
+  even when the same version is activated again.
+  """
+  def editor_switch_live?(%Configuration{editor_switched_at: %DateTime{} = at, id: id}) do
+    case Repo.one(
+           from a in ConfigurationActivation,
+             where: a.configuration_id == ^id and a.action == :activate,
+             order_by: [desc: a.id],
+             limit: 1,
+             select: a.committed_at
+         ) do
+      nil -> true
+      activated -> DateTime.compare(at, activated) == :gt
+    end
+  end
+
+  def editor_switch_live?(_configuration), do: false
 
   @doc """
   Switches the editor on for a configuration's current version, as a
@@ -441,7 +467,10 @@ defmodule DevilsDictionary.Curation.Configurations do
            version = Repo.get!(ConfigurationVersion, c.current_version_id),
            {:ok, _editor} <- bound(editor(version)),
            :ok <-
-             Transaction.check(c.editor_enabled_version_id != version.id, :already_enabled) do
+             Transaction.check(
+               c.editor_enabled_version_id != version.id or not editor_switch_live?(c),
+               :already_enabled
+             ) do
         switch(c, version.id, actor, reason)
       end
     end)

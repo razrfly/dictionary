@@ -194,7 +194,11 @@ defmodule DevilsDictionary.Curation.Profiles do
 
   `opts`: `:reason`. Idempotent: what exists is kept and returned. Admits
   nothing: that is `admit/4`, a reviewer's separate act. Answers `{:ok,
-  %{source, bot_actor, profile, version}}`.
+  %{source, bot_actor, profile, version}}`, or `{:error,
+  {:editor_label_mismatch, label}}` when the editor's bot already exists
+  under another model config's label: there is one bot per source, and a
+  label is never changed (OD-4), so the seed says so here rather than let
+  the binding fail later.
   """
   def seed_generic_editor(scope, %ModelConfig{} = config, opts) do
     Transaction.run(fn ->
@@ -204,25 +208,29 @@ defmodule DevilsDictionary.Curation.Profiles do
              Transaction.check(
                config.instruction_version in Packet.instruction_versions(),
                :unsupported_instruction_version
-             ) do
-        source = editor_source!()
-        bot = editor_bot!(source, Configurations.editor_label(config))
-        profile = editor_profile!()
-
-        existing =
-          Repo.all(
-            from v in ProfileVersion,
-              where:
-                v.profile_id == ^profile.id and v.template_version == ^config.instruction_version,
-              order_by: [desc: v.version]
-          )
-          |> Enum.find(&empty_version?/1)
-
-        version = existing || editor_version!(profile, config.instruction_version, actor, reason)
-
-        {:ok, %{source: source, bot_actor: bot, profile: profile, version: version}}
+             ),
+           source = editor_source!(),
+           {:ok, bot} <- editor_bot(source, Configurations.editor_label(config)) do
+        seed_profile(bot, source, config, actor, reason)
       end
     end)
+  end
+
+  defp seed_profile(bot, source, config, actor, reason) do
+    profile = editor_profile!()
+
+    existing =
+      Repo.all(
+        from v in ProfileVersion,
+          where:
+            v.profile_id == ^profile.id and v.template_version == ^config.instruction_version,
+          order_by: [desc: v.version]
+      )
+      |> Enum.find(&empty_version?/1)
+
+    version = existing || editor_version!(profile, config.instruction_version, actor, reason)
+
+    {:ok, %{source: source, bot_actor: bot, profile: profile, version: version}}
   end
 
   defp empty_version?(version),
@@ -248,18 +256,22 @@ defmodule DevilsDictionary.Curation.Profiles do
     Repo.get_by!(Source, slug: @editor_slug)
   end
 
-  defp editor_bot!(source, label) do
+  defp editor_bot(source, label) do
     case Repo.get_by(Actor, actor_kind: :bot, bot_source_id: source.id) do
-      %Actor{} = bot ->
-        bot
+      %Actor{label: ^label} = bot ->
+        {:ok, bot}
+
+      %Actor{label: other} ->
+        {:error, {:editor_label_mismatch, other}}
 
       nil ->
-        Repo.insert!(%Actor{
-          actor_kind: :bot,
-          bot_source_id: source.id,
-          label: label,
-          metadata: %{"operation" => "generic_editor", "accountability" => "proposes only"}
-        })
+        {:ok,
+         Repo.insert!(%Actor{
+           actor_kind: :bot,
+           bot_source_id: source.id,
+           label: label,
+           metadata: %{"operation" => "generic_editor", "accountability" => "proposes only"}
+         })}
     end
   end
 

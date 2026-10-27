@@ -2020,7 +2020,7 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
           </.button>
           <span class="text-xs/5 text-pretty text-mist-600 dark:text-mist-400">
             Take publishes it as your version, keeping who wrote each reason. Dismiss needs a
-            reason; the form is optional there.
+            reason; leave the quality form empty there, or complete every answer.
           </span>
         </div>
       </.form>

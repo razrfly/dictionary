@@ -59,6 +59,15 @@ defmodule DevilsDictionary.Curation.Proposals.BindingTest do
       config = v2_config!()
       seed = seeded!(world, config)
 
+      # One bot per source, its label never changed: a second model config's
+      # seed is refused, not left to fail at the binding.
+      other_config = v2_config!()
+
+      assert {:error, {:editor_label_mismatch, label}} =
+               Profiles.seed_generic_editor(world.reviewer, other_config, reason: "again")
+
+      assert label == seed.bot_actor.label
+
       # Not admitted yet.
       assert {:error, :editor_not_admitted} =
                bind(world, %{
@@ -332,6 +341,27 @@ defmodule DevilsDictionary.Curation.Proposals.BindingTest do
                  reason: "x",
                  expected: manual.id
                )
+
+      # Activating the editor's version again does not turn the editor back
+      # on: a switch set before the latest activation is stale.
+      {:ok, _} =
+        Configurations.activate(world.reviewer, configuration.id, world.editor_version.id,
+          reason: "the editor's version again",
+          idempotency_key: key("activate"),
+          expected: manual.id
+        )
+
+      settle!()
+      assert Repo.reload!(configuration).editor_enabled_version_id == world.editor_version.id
+      assert Configurations.editor_enabled(world.editor_version.id) == :off
+
+      assert {:ok, _again} =
+               Configurations.enable_editor(world.reviewer, configuration.id,
+                 reason: "a new window",
+                 expected: world.editor_version.id
+               )
+
+      assert {:ok, _editor} = Configurations.editor_enabled(world.editor_version.id)
 
       assert {:ok, disabled} =
                Configurations.disable_editor(world.reviewer, configuration.id, reason: "end")

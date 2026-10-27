@@ -1121,17 +1121,21 @@ defmodule DevilsDictionary.Curation.Proposals do
         select: {c, v, a}
 
     case Repo.one(query) do
+      {c, v, actor} ->
+        if Configurations.editor_switch_live?(c), do: enabled_view(c, v, actor)
+
       nil ->
         nil
-
-      {c, v, actor} ->
-        %{
-          configuration: c.slug,
-          configuration_version: v.version,
-          at: c.editor_switched_at,
-          by: actor && Compositions.author_label(actor)
-        }
     end
+  end
+
+  defp enabled_view(c, v, actor) do
+    %{
+      configuration: c.slug,
+      configuration_version: v.version,
+      at: c.editor_switched_at,
+      by: actor && Compositions.author_label(actor)
+    }
   end
 
   # The most recent deferral under a configuration's current version.

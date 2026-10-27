@@ -558,13 +558,9 @@ defmodule DevilsDictionary.Curation.Refresh do
     row = Repo.get(RefreshState, claim.row_id)
 
     with true <- not is_nil(row),
-         {:needs_editor, _reason} = assessed <- outcome(claim, row, inputs),
+         {:needs_editor, _reason} <- outcome(claim, row, inputs),
          {:ok, editor} <- Configurations.editor_enabled(claim.configuration_version_id) do
-      Proposals.step(
-        claim,
-        %{slug: slug, inputs: inputs, editor: editor, assessed: assessed},
-        opts
-      )
+      Proposals.step(claim, %{slug: slug, inputs: inputs, editor: editor}, opts)
     else
       _checked_not_judged -> complete(claim, inputs, opts)
     end
@@ -748,14 +744,17 @@ defmodule DevilsDictionary.Curation.Refresh do
   # The completion's one write, shared by `complete/3` and the editor's
   # fenced write (`write/4`).
   defp complete_row!(row, claim, inputs, composition, assessed, now) do
-    {outcome, reason} = assessed || outcome(claim, row, inputs)
+    # The check's own finding says whether the inputs changed; an editor's
+    # assessment, when there is one, is what is recorded as the outcome.
+    {_checked, check_reason} = checked = outcome(claim, row, inputs)
+    {outcome, reason} = assessed || checked
     clean? = row.dirty_seq == row.run_dirty_seq
     superseded? = composition.current_published_version_id != row.admitted_parent_version_id
     # Inputs read from a version no longer published are not a baseline.
     current_inputs? =
       inputs.published_version_id == composition.current_published_version_id
 
-    changed? = reason in ["inputs_changed", "fingerprint_version"]
+    changed? = check_reason in ["inputs_changed", "fingerprint_version"]
 
     unreported? =
       is_nil(row.inputs_last_changed_at) or

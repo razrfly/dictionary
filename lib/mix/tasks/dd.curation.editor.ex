@@ -49,6 +49,7 @@ defmodule Mix.Tasks.Dd.Curation.Editor do
   alias DevilsDictionary.Accounts.{Scope, User}
 
   alias DevilsDictionary.Curation.{
+    Candidates,
     Compositions,
     Configuration,
     ConfigurationVersion,
@@ -197,10 +198,8 @@ defmodule Mix.Tasks.Dd.Curation.Editor do
   defp command(["provision"], opts) do
     scope = scope!(opts)
     reason = reason!(opts)
-    {slug, page} = page!(opts)
+    {slug, ids, language} = page!(opts)
     c = default!()
-    ids = Enum.map(page.headword.lexemes, & &1.id)
-    [language] = page.headword.lexemes |> Enum.map(& &1.language) |> Enum.uniq()
 
     if opts[:dry_run] do
       info("would provision #{slug} over #{inspect(ids)} (#{language}) under #{c.slug}")
@@ -219,10 +218,8 @@ defmodule Mix.Tasks.Dd.Curation.Editor do
   defp command(["request"], opts) do
     scope = scope!(opts)
     reason = reason!(opts)
-    {slug, page} = page!(opts)
+    {slug, ids, language} = page!(opts)
     c = default!()
-    ids = Enum.map(page.headword.lexemes, & &1.id)
-    [language] = page.headword.lexemes |> Enum.map(& &1.language) |> Enum.uniq()
 
     composition =
       Compositions.active(c.id, :lexical_page, language, Compositions.signature(ids)) ||
@@ -288,11 +285,16 @@ defmodule Mix.Tasks.Dd.Curation.Editor do
       Mix.raise("no bot actor for the generic-editor source")
   end
 
+  # The page's scope as the screen and the reader take it: its words, in one
+  # language (`Candidates.for_page/1`).
   defp page!(opts) do
     slug = opts[:slug] || Mix.raise("--slug SLUG: the On page")
     page = slug |> Lexicon.lookup() |> WordPage.build(viewer: :public)
-    if page.headword.lexemes in [nil, []], do: Mix.raise("#{slug} names no words")
-    {slug, page}
+
+    case Candidates.for_page(page).scope do
+      %{ids: [_ | _] = ids, language: language} when is_binary(language) -> {slug, ids, language}
+      _none -> Mix.raise("#{slug} has no words in a single language to curate")
+    end
   end
 
   defp key(action), do: "dd.curation.editor:#{action}:#{Ecto.UUID.generate()}"

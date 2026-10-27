@@ -155,6 +155,27 @@ defmodule DevilsDictionary.Curation.Proposals.StepTest do
       assert attempt.purpose == :request
     end
 
+    test "an input change only the check found is recorded, as with the editor off", world do
+      visit!()
+      {:ok, checked} = work!(world)
+
+      set!(checked,
+        input_fingerprint: Refresh.fingerprint_version() <> ":something-else",
+        dirty_at: DateTime.utc_now(),
+        dirty_reason: "item_withheld",
+        inputs_last_changed_at: nil,
+        inputs_last_changed_reason: nil
+      )
+
+      stub_answer!(world, lead_and_johnson(world))
+      visit!()
+      assert {:ok, row} = work!(world)
+
+      assert {row.last_outcome, row.last_outcome_reason} == {:proposed, "written"}
+      assert row.inputs_last_changed_reason == "inputs_changed"
+      assert row.inputs_last_changed_at == row.last_completed_at
+    end
+
     test "an unchanged check calls nothing", world do
       stub_answer!(world, lead_and_johnson(world))
 
