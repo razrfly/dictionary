@@ -1121,8 +1121,13 @@ defmodule DevilsDictionary.Curation.Proposals do
         select: {c, v, a}
 
     case Repo.one(query) do
+      # Enabled as the step sees it: the switch live and the binding still
+      # standing (`Configurations.editor_enabled/1`, SELECTs only).
       {c, v, actor} ->
-        if Configurations.editor_switch_live?(c), do: enabled_view(c, v, actor)
+        case Configurations.editor_enabled(v.id) do
+          {:ok, _editor} -> enabled_view(c, v, actor)
+          :off -> nil
+        end
 
       nil ->
         nil

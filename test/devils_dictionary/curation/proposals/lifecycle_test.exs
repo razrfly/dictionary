@@ -8,6 +8,7 @@ defmodule DevilsDictionary.Curation.Proposals.LifecycleTest do
 
   import DevilsDictionary.CurationFixtures
   import DevilsDictionary.ProposalFixtures
+  import DevilsDictionary.RefreshFixtures, only: [row!: 1]
 
   alias DevilsDictionary.Curation.{
     Composition,
@@ -16,6 +17,7 @@ defmodule DevilsDictionary.Curation.Proposals.LifecycleTest do
     CompositionReview,
     CompositionVersion,
     Compositions,
+    Configurations,
     Proposal,
     Proposals,
     Publications,
@@ -23,6 +25,9 @@ defmodule DevilsDictionary.Curation.Proposals.LifecycleTest do
   }
 
   alias DevilsDictionary.Curation.Proposals.QualityForm
+  alias DevilsDictionary.Curation.Runtime
+  alias DevilsDictionary.Curation.Runtime.Attempt
+  alias DevilsDictionary.Registry
 
   setup do
     world = editor_world!()
@@ -137,73 +142,177 @@ defmodule DevilsDictionary.Curation.Proposals.LifecycleTest do
   end
 
   describe "test 23 (R10): the lifecycle" do
-    test "one transition, identity fixed, no delete, one pending per page, a human reviewer to resolve",
-         world do
+    defp update_proposal(proposal, set),
+      do:
+        refused(fn ->
+          Repo.update_all(from(p in Proposal, where: p.id == ^proposal.id), set: set)
+        end)
+
+    test "identity is fixed and a proposal is never deleted", world do
       proposal = propose!(world)
-      contributor = actor!(world.author)
 
-      assert {:refused, _, _} =
-               refused(fn ->
-                 Repo.update_all(from(p in Proposal, where: p.id == ^proposal.id),
-                   set: [packet_hash: "another"]
-                 )
-               end)
+      assert {:refused, _code, message} = update_proposal(proposal, packet_hash: "another")
+      assert message =~ "curation_proposals.packet_hash is fixed when the proposal is written"
 
-      assert {:refused, _, _} =
+      # Another version of the same composition, so only the guard refuses.
+      assert {:refused, _code, message} =
+               update_proposal(proposal, version_id: world.published.version.id)
+
+      assert message =~ "curation_proposals.version_id is fixed when the proposal is written"
+
+      assert {:refused, _code, message} =
                refused(fn -> Repo.delete_all(from p in Proposal, where: p.id == ^proposal.id) end)
 
-      # A dismissal by someone who is no reviewer, or without a rejected
-      # review, or a Take without the manual version that took it.
+      assert message =~ "curation_proposals rows are never deleted"
+    end
+
+    test "taken needs a human reviewer, even with a valid Take version and a complete form",
+         world do
+      proposal = propose!(world)
+      offered = items(proposal)
+
+      # A valid resolution: a manual version parented to the proposal,
+      # written by the trusted Take path, and a complete form.
+      {:ok, take} =
+        Compositions.take_version(world.reviewer, proposal.version_id, %{
+          reason: "take",
+          items: Enum.map(offered, &{:copy, &1.id, &1.role, &1.position})
+        })
+
+      {:ok, form} = QualityForm.build(offered, all_yes(offered), nil, actor!(world.reviewer).id)
+      assert take.parent_version_id == proposal.version_id
+
+      taken = fn actor_id ->
+        update_proposal(proposal,
+          state: :taken,
+          resolved_at: DateTime.utc_now(),
+          resolved_by_actor_id: actor_id,
+          resolution_reason: "take",
+          resolution_version_id: take.id,
+          quality_form: form
+        )
+      end
+
+      for actor_id <- [world.bot.id, actor!(world.author).id] do
+        assert {:refused, _code, message} = taken.(actor_id)
+        assert message =~ "a proposal is taken or dismissed by a human reviewer"
+      end
+
+      # The same resolution by the reviewer passes every check.
+      assert :accepted = taken.(actor!(world.reviewer).id)
+    end
+
+    test "dismissed needs a rejected review of this proposal's version, by a human reviewer",
+         world do
+      proposal = propose!(world)
+      reviewer = actor!(world.reviewer).id
+
+      dismissed = fn review_id, actor_id ->
+        update_proposal(proposal,
+          state: :dismissed,
+          resolved_at: DateTime.utc_now(),
+          resolved_by_actor_id: actor_id,
+          resolution_reason: "no",
+          resolution_review_id: review_id
+        )
+      end
+
+      # An acceptance, and a rejection of another version.
+      accepted =
+        Repo.get_by!(CompositionReview, composition_version_id: world.published.version.id)
+
+      assert accepted.decision == :accepted
+
+      {:ok, other} =
+        Reviews.decide(world.reviewer, world.published.version.id, :rejected,
+          reason: "another version",
+          idempotency_key: key("reject-other")
+        )
+
+      for review <- [accepted, other] do
+        assert {:refused, _code, message} = dismissed.(review.id, reviewer)
+        assert message =~ "a dismissed proposal is rejected by a review of its version"
+      end
+
       {:ok, rejection} =
         Reviews.decide(world.reviewer, proposal.version_id, :rejected,
           reason: "no",
           idempotency_key: key("reject")
         )
 
-      for set <- [
-            [
-              state: :dismissed,
-              resolved_at: DateTime.utc_now(),
-              resolved_by_actor_id: contributor.id,
-              resolution_reason: "x",
-              resolution_review_id: rejection.id
-            ],
-            [
-              state: :taken,
-              resolved_at: DateTime.utc_now(),
-              resolved_by_actor_id: actor!(world.reviewer).id,
-              resolution_version_id: world.published.version.id,
-              quality_form: %{}
-            ]
-          ] do
-        assert {:refused, _, _} =
-                 refused(fn ->
-                   Repo.update_all(from(p in Proposal, where: p.id == ^proposal.id), set: set)
-                 end)
-      end
+      assert {:refused, _code, message} = dismissed.(rejection.id, actor!(world.author).id)
+      assert message =~ "a proposal is taken or dismissed by a human reviewer"
 
-      {:ok, dismissed} = Proposals.dismiss(world.reviewer, proposal.id, reason: "not this")
-      assert dismissed.state == :dismissed
+      {:ok, done} = Proposals.dismiss(world.reviewer, proposal.id, reason: "not this")
+      assert done.state == :dismissed
 
       # Once resolved, never again.
-      assert {:refused, _, _} =
-               refused(fn ->
-                 Repo.update_all(from(p in Proposal, where: p.id == ^proposal.id),
-                   set: [
-                     state: :obsolete,
-                     resolution_reason: "again",
-                     resolved_by_actor_id: nil,
-                     resolution_review_id: nil
-                   ]
-                 )
-               end)
-
-      assert %{rows: [[definition]]} =
-               Repo.query!(
-                 "SELECT indexdef FROM pg_indexes WHERE indexname = 'curation_proposals_one_pending_index'"
+      assert {:refused, _code, message} =
+               update_proposal(done,
+                 state: :obsolete,
+                 resolution_reason: "again",
+                 resolved_by_actor_id: nil,
+                 resolution_review_id: nil
                )
 
-      assert definition =~ "UNIQUE" and definition =~ "WHERE (state = 'pending'::text)"
+      assert message =~ "a proposal leaves pending once"
+    end
+
+    test "a second pending proposal for a page is refused by the one-pending index", world do
+      pending = propose!(world)
+      editor = Configurations.editor_enabled(world.editor_version.id) |> elem(1)
+      row = row!(world.composition)
+
+      # A second model version from an attempt of its own: everything the
+      # insert guard checks holds, and only the index can refuse.
+      key = Proposals.request_key(world.composition.id, world.editor_version.id, 99)
+      stub_answer!(world, answer_for(world.frozen, world.bierce.object_id, []))
+
+      {:ok, receipt} =
+        Runtime.run(
+          world.model_config,
+          world.frozen,
+          Keyword.merge(world.runtime,
+            request_key: key,
+            actor_id: world.bot.id,
+            purpose: :request
+          )
+        )
+
+      attempt = Repo.get!(Attempt, receipt.attempt_id)
+
+      lead = %CompositionItem{
+        role: :lead,
+        position: 1,
+        item_kind: :content,
+        item_object_id: world.bierce.object_id,
+        content_revision_id: Registry.current_content_revision(world.bierce.object_id).id,
+        meaning_lexeme_id: world.love.object_id,
+        note: "Bierce leads."
+      }
+
+      {:ok, version} =
+        Compositions.write_proposal(editor, %{
+          composition: Repo.reload!(world.composition),
+          configuration_version: world.editor_version,
+          attempt: attempt,
+          items: [{:model, lead}]
+        })
+
+      second = %{
+        pending
+        | id: nil,
+          version_id: version.id,
+          request_key: key,
+          refresh_generation: 99,
+          refresh_state_id: row.id,
+          packet_hash: attempt.packet_hash,
+          arrangement_hash: version.arrangement_hash,
+          inserted_at: DateTime.utc_now()
+      }
+
+      assert {:refused, :unique, "curation_proposals_one_pending_index"} =
+               refused(fn -> Repo.insert!(second) end)
     end
   end
 
@@ -506,7 +615,21 @@ defmodule DevilsDictionary.Curation.Proposals.LifecycleTest do
       {:ok, mine} = Compositions.set_mode(world.reviewer, world.composition.id, :mine, [])
       settle!()
 
-      assert [%{"key" => key, "marked_by_actor_id" => by}] = kept.kept_items
+      assert [%{"key" => key, "marked_by_actor_id" => by} = mark] = kept.kept_items
+
+      # A fragment of an existing mark is no mark: appended without its
+      # setter, it is refused like any new element (#273 review, rec. 10).
+      for fragment <- [%{}, %{"key" => mark["key"]}] do
+        assert {:refused, _code, message} =
+                 refused(fn ->
+                   Repo.update_all(from(c in Composition, where: c.id == ^world.composition.id),
+                     set: [kept_items: kept.kept_items ++ [fragment]]
+                   )
+                 end)
+
+        assert message =~ "an item is kept by a human reviewer"
+      end
+
       assert key == "content-#{world.johnson.object_id}"
       assert by == actor!(world.reviewer).id
       assert {mine.mode, mine.mode_set_by_actor_id} == {:mine, actor!(world.reviewer).id}

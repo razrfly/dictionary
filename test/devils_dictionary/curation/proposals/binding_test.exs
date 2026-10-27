@@ -363,6 +363,24 @@ defmodule DevilsDictionary.Curation.Proposals.BindingTest do
 
       assert {:ok, _editor} = Configurations.editor_enabled(world.editor_version.id)
 
+      # Disabling is a reviewer's act too, in code and by the database.
+      assert {:error, :unauthorized} =
+               Configurations.disable_editor(world.author, configuration.id, reason: "end")
+
+      assert {:refused, _code, message} =
+               refused(fn ->
+                 Repo.update_all(from(c in Configuration, where: c.id == ^configuration.id),
+                   set: [
+                     editor_enabled_version_id: nil,
+                     editor_switched_by_actor_id: contributor.id,
+                     editor_switched_at: DateTime.utc_now(),
+                     editor_switch_reason: "off by a contributor"
+                   ]
+                 )
+               end)
+
+      assert message =~ "the editor is switched by a human reviewer"
+
       assert {:ok, disabled} =
                Configurations.disable_editor(world.reviewer, configuration.id, reason: "end")
 
@@ -451,13 +469,22 @@ defmodule DevilsDictionary.Curation.Proposals.BindingTest do
       settle!()
       assert profile.state == :admitted
 
-      # Its kind is fixed, and there is one.
+      # Its kind is fixed, both ways, and there is one.
       assert {:refused, _, _} =
                refused(fn ->
                  Repo.update_all(from(p in Profile, where: p.id == ^persona.id),
                    set: [kind: :generic_editor]
                  )
                end)
+
+      assert {:refused, _code, message} =
+               refused(fn ->
+                 Repo.update_all(from(p in Profile, where: p.id == ^seed.profile.id),
+                   set: [kind: :persona]
+                 )
+               end)
+
+      assert message =~ "a profile's kind is fixed when it is created"
 
       assert {:refused, _, _} =
                refused(fn ->

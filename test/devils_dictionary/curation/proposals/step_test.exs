@@ -698,6 +698,178 @@ defmodule DevilsDictionary.Curation.Proposals.StepTest do
       assert is_nil(row.review_unit_reserved_at)
       assert proposals() == []
       assert versions() == before
+
+      # The generation is closed: the next admission opens the next one.
+      assert {:ok, :admitted} = Refresh.admit(world.composition.id, slug: "love")
+      assert row!(world.composition).refresh_generation == row.refresh_generation + 1
+    end
+  end
+
+  describe "R6 rows through Proposals.step/3" do
+    defp forty_eight?(row),
+      do: DateTime.diff(row.refresh_after, row.last_completed_at) == 48 * 3600
+
+    # A page of its own, provisioned under the editor's configuration
+    # version, and the worker's claim and check of a requested run.
+    defp page_composition!(world, lexemes) do
+      {:ok, composition} =
+        DevilsDictionary.Curation.Compositions.provision(world.author, world.configuration.id, %{
+          scope_kind: :lexical_page,
+          lexeme_ids: Enum.map(lexemes, & &1.object_id),
+          language_tag: "en",
+          reason: "#264 R6 test"
+        })
+
+      composition
+    end
+
+    defp requested_check!(world, composition, slug) do
+      {:ok, :admitted} = Refresh.request(world.reviewer, composition.id, slug, "R6 test")
+      row = row!(composition)
+      {:ok, claim} = Refresh.claim(row.id, row.refresh_generation)
+      Refresh.check(claim, slug, runtime: world.runtime)
+    end
+
+    test "a refused packet completes needs_editor / packet_refused, 48 hours, no call, no unit",
+         world do
+      quark = DevilsDictionary.WordFixtures.word!(world, "quark", ~w(wordnet), scope: nil)
+      composition = page_composition!(world, [quark])
+      stub_answer!(world, abstain())
+
+      assert {:ok, row} = requested_check!(world, composition, "quark")
+
+      assert {row.state, row.last_outcome, row.last_outcome_reason} ==
+               {:idle, :needs_editor, "packet_refused:no_candidates"}
+
+      assert forty_eight?(row)
+      assert is_nil(row.review_unit_reserved_at)
+      refute_received :chat_called
+      assert attempts() == []
+      assert Proposals.units_in_use() == 0
+    end
+
+    test "a pending proposal from the same packet, marks and parent completes proposed / pending, with no call",
+         world do
+      stub_answer!(world, lead_and_johnson(world))
+      {:ok, _row} = run!(world)
+      assert_received :chat_called
+      [pending] = proposals()
+
+      assert {:ok, row} = run!(world)
+      assert {row.last_outcome, row.last_outcome_reason} == {:proposed, "pending"}
+      assert forty_eight?(row)
+      assert is_nil(row.review_unit_reserved_at)
+      refute_received :chat_called
+      assert length(attempts()) == 1
+      assert [^pending] = proposals()
+      assert Proposals.units_in_use() == 1
+    end
+
+    test "a merged arrangement the lead rule refuses completes no_change / merge_refused",
+         world do
+      alias DevilsDictionary.{Curation, WordFixtures}
+
+      # A fallback-lead page: Johnson leads oats by hand, and the owner keeps it.
+      oats = WordFixtures.word!(world, "oats", ~w(johnson wiktionary bierce), scope: nil)
+
+      johnson =
+        WordFixtures.entry!(world, oats, "johnson",
+          headword: "OATS",
+          pos: "n. s.",
+          body: "A grain."
+        )
+
+      sense =
+        WordFixtures.sense!(world, oats, "wiktionary",
+          gloss: "A cereal grain.",
+          examples: [%{"type" => "quotation", "text" => "fixture oats line", "ref" => "r"}]
+        )
+
+      composition = page_composition!(world, [oats])
+
+      {:ok, v1} =
+        Curation.Compositions.create_version(world.author, composition.id, %{
+          lead: content_spec(johnson, oats),
+          highlights: [sense |> quotation_spec(0) |> Map.put(:note, %{text: "A line."})],
+          reason: "Johnson leads",
+          expected_parent: nil
+        })
+
+      {:ok, _} =
+        Curation.Reviews.decide(world.reviewer, v1.id, :accepted,
+          reason: "ok",
+          idempotency_key: key("r")
+        )
+
+      {:ok, _} =
+        Curation.Publications.publish(world.reviewer, v1.id,
+          reason: "ok",
+          idempotency_key: key("p"),
+          expected_pointer: nil
+        )
+
+      lead = Curation.Compositions.items(v1.id) |> Enum.find(&(&1.role == :lead))
+      {:ok, _} = Curation.Compositions.keep(world.reviewer, composition.id, lead.id, [])
+
+      # A Bierce entry for oats appears: only it may lead now. The kept
+      # Johnson lead is carried and takes the lead, the editor's Bierce lead
+      # overflows, and the lead rule refuses the merge, on every retry alike.
+      bierce =
+        WordFixtures.entry!(world, oats, "bierce",
+          headword: "OATS",
+          pos: "n",
+          body: "fixture bierce oats."
+        )
+
+      frozen = frozen!("oats")
+
+      stub_answer!(
+        world,
+        answer_for(frozen, bierce.object_id, [{sense.object_id, "quotation:0"}])
+      )
+
+      before = versions()
+
+      assert {:ok, row} = requested_check!(world, composition, "oats")
+      assert {row.last_outcome, row.last_outcome_reason} == {:no_change, "merge_refused"}
+      assert forty_eight?(row)
+      assert is_nil(row.review_unit_reserved_at)
+      assert_received :chat_called
+      assert [%{state: :completed, outcome: :accepted}] = attempts()
+      assert versions() == before
+      assert proposals() == []
+      assert Proposals.units_in_use() == 0
+    end
+
+    test "{:refused, :stale}: deferred stale, freshness kept, stamp cleared, the generation spent",
+         world do
+      visit!()
+      {:ok, before} = work!(world)
+
+      # The slot is lost while the model answers: a sweep past the lease
+      # quarantines the dispatched attempt, so its completion is stale.
+      stub_ollama!(world.model_config,
+        chat: fn _request ->
+          later = DateTime.add(DateTime.utc_now(), 3600)
+          {:ok, :quarantined} = Gateway.sweep(Keyword.put(world.runtime, :now, later))
+          {:json, answer(lead_and_johnson(world))}
+        end
+      )
+
+      assert {:ok, row} = run!(world)
+      assert {row.state, row.last_error} == {:deferred, "stale"}
+      assert row.last_completed_at == before.last_completed_at
+      assert is_nil(row.review_unit_reserved_at)
+      [spent] = attempts()
+      assert spent.request_key == key_of(row)
+      assert spent.state == :uncertain
+
+      due!(world.composition)
+      {:ok, :admitted} = Refresh.admit(world.composition.id, slug: "love")
+      retried = row!(world.composition)
+      assert retried.refresh_generation == row.refresh_generation + 1
+      refute key_of(retried) == spent.request_key
+      assert proposals() == []
     end
   end
 
@@ -743,11 +915,21 @@ defmodule DevilsDictionary.Curation.Proposals.StepTest do
 
       stub_answer!(world, lead_and_johnson(world))
 
+      history =
+        Map.take(row!(world.composition), [:inputs_last_changed_at, :inputs_last_changed_reason])
+
       assert {:ok, :admitted} =
                Refresh.request(world.reviewer, world.composition.id, "love", "please")
 
       assert {:ok, :in_flight} =
                Refresh.request(world.reviewer, world.composition.id, "love", "again")
+
+      # Dirty, but no input change in the history (#273 review, rec. 8).
+      requested = row!(world.composition)
+      assert requested.dirty_reason == "requested"
+
+      assert Map.take(requested, [:inputs_last_changed_at, :inputs_last_changed_reason]) ==
+               history
 
       assert {:ok, row} = work!(world)
       assert row.last_outcome == :proposed

@@ -200,6 +200,8 @@ defmodule DevilsDictionary.Curation.Proposals.MergeTest do
 
       assert {:ok, row} = run!(world)
       assert {row.last_outcome, row.last_outcome_reason} == {:no_change, "matches_published"}
+      assert is_nil(row.review_unit_reserved_at)
+      assert Proposals.units_in_use() == 0
       assert versions() == before
       assert proposals() == []
 

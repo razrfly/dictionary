@@ -1320,11 +1320,18 @@ defmodule DevilsDictionary.Curation.Refresh do
               outcome
 
             _admissible ->
+              # Dirty, not changed: a request is no input change, so the
+              # history `inputs_last_changed_at` keeps (#259 §5.1) is not
+              # touched (#273 review, recommendation 8).
               row =
                 row
-                |> mark_row!("requested", now)
                 |> Ecto.Changeset.change(
-                  next_retry_at: if(row.state == :deferred, do: now, else: row.next_retry_at)
+                  dirty_at: row.dirty_at || now,
+                  dirty_reason: "requested",
+                  dirty_seq: row.dirty_seq + 1,
+                  run_periodic: false,
+                  next_retry_at: if(row.state == :deferred, do: now, else: row.next_retry_at),
+                  updated_at: now
                 )
                 |> Repo.update!()
 

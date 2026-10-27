@@ -609,7 +609,9 @@ defmodule DevilsDictionary.Repo.Migrations.CreateCurationProposals do
 
       IF NEW.kept_items IS DISTINCT FROM OLD.kept_items THEN
         FOR element IN SELECT * FROM jsonb_array_elements(NEW.kept_items) LOOP
-          IF NOT OLD.kept_items @> jsonb_build_array(element) AND (
+          -- A new element is one not already in the array, compared whole:
+          -- jsonb containment would let a fragment of an old mark through.
+          IF NOT EXISTS (SELECT 1 FROM jsonb_array_elements(OLD.kept_items) o WHERE o = element) AND (
                jsonb_typeof(element) <> 'object'
                OR element ->> 'marked_at' IS NULL
                OR NOT curation_actor_is((element ->> 'marked_by_actor_id')::bigint, true)) THEN

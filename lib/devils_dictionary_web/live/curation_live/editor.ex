@@ -625,9 +625,21 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
     }
   end
 
+  # As `Proposals.edit_publish/3` decides it: the same reference and meaning,
+  # and the same note once trimmed (a blank note is none).
   defp as_offered?(offered, item) do
-    Map.take(offered, @reference_fields -- [:role, :position]) ==
-      Map.take(item, @reference_fields -- [:role, :position])
+    Map.take(offered, @reference_fields -- [:role, :position, :note]) ==
+      Map.take(item, @reference_fields -- [:role, :position, :note]) and
+      trimmed(offered.note) == trimmed(item.note)
+  end
+
+  defp trimmed(nil), do: nil
+
+  defp trimmed(text) do
+    case String.trim(text) do
+      "" -> nil
+      text -> text
+    end
   end
 
   defp references(items) do
