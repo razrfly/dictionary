@@ -256,7 +256,17 @@ defmodule DevilsDictionary.Curation.Refresh do
               |> ensure_row!(version_id, now)
               |> maybe_withheld!(withheld, now)
 
-            act(decision(row, now), row, composition, slug, now)
+            decision = decision(row, now)
+
+            row =
+              if decision == :admit and not keeps_generation?(row, composition) and
+                   not is_nil(row.shelf_focus) do
+                row |> Ecto.Changeset.change(shelf_focus: nil) |> Repo.update!()
+              else
+                row
+              end
+
+            act(decision, row, composition, slug, now)
           else
             {:ok, :busy} -> :busy
             {:error, reason} -> Repo.rollback(reason)

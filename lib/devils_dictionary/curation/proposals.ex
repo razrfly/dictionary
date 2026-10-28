@@ -1004,7 +1004,7 @@ defmodule DevilsDictionary.Curation.Proposals do
   defp as_offered?(%CompositionItem{} = item, spec) do
     probe = probe(spec)
 
-    probe != nil and Compositions.reference(probe) == Compositions.reference(item) and
+    probe != nil and Compositions.same_reference?(probe, item) and
       probe.meaning_lexeme_id == item.meaning_lexeme_id and
       probe.meaning_sense_revision_id == item.meaning_sense_revision_id and
       trimmed(get_in(spec, [:note, :text])) == trimmed(item.note)

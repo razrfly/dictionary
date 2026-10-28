@@ -1068,21 +1068,57 @@ defmodule DevilsDictionary.Discovery do
     )
   end
 
+  defp display_runs(root) do
+    Repo.all(
+      from r in Run,
+        where:
+          r.mapping_id == ^root.mapping_id and r.page_context == ^root.page_context and
+            r.status == :succeeded and r.display_allowed,
+        order_by: [asc: r.page, desc: r.started_at, desc: r.id]
+    )
+    |> Enum.uniq_by(& &1.page)
+    |> Enum.sort_by(& &1.page)
+  end
+
+  @doc false
+  def citation_results(target_id) do
+    for candidate <- Providers.all(),
+        candidate.slug() in DevilsDictionary.Curation.Shelf.providers(),
+        {:ok, provider} <- [provider(candidate.slug())],
+        %Mapping{} = mapping <- [enabled_mapping(target_id, provider.slug(), true)],
+        :ok <- [provider_eligible(provider, %{mapping.source | active: true})],
+        :ok <- [provider.validate_mapping(mapping.operation, mapping.parameters)],
+        :ok <- [validate_target(target_id)],
+        %Run{} = root <- [latest_display_root(mapping.id, provider.adapter_version())],
+        reduce: [] do
+      acc ->
+        runs = display_runs(root)
+        pages = Map.new(runs, &{&1.id, &1.page})
+        by_id = Map.new(runs, &{&1.id, &1})
+        ids = Map.keys(by_id)
+        shown = MapSet.new(display_items(runs), & &1.id)
+        rows = Repo.all(from r in Result, where: r.run_id in ^ids)
+
+        winners =
+          rows
+          |> Enum.sort_by(
+            &{if(MapSet.member?(shown, &1.id), do: 0, else: 1), pages[&1.run_id], &1.position,
+             &1.id}
+          )
+          |> Enum.uniq_by(&(&1.object_id || {&1.external_namespace, &1.external_id}))
+          |> Enum.sort_by(&{pages[&1.run_id], &1.position, &1.id})
+          |> Enum.map(&{&1, by_id[&1.run_id]})
+
+        acc ++ winners
+    end
+  end
+
   defp state_for_mapping(mapping, provider) do
     now = DateTime.utc_now()
 
     case latest_display_root(mapping.id, provider.adapter_version()) do
       %Run{} = root ->
-        runs =
-          Repo.all(
-            from r in Run,
-              where:
-                r.mapping_id == ^mapping.id and r.page_context == ^root.page_context and
-                  r.status == :succeeded and r.display_allowed,
-              order_by: [asc: r.page, desc: r.started_at, desc: r.id]
-          )
-          |> Enum.uniq_by(& &1.page)
-          |> Enum.sort_by(& &1.page)
+        runs = display_runs(root)
 
         items = display_items(runs)
         last = List.last(runs) || root
@@ -1617,7 +1653,7 @@ defmodule DevilsDictionary.Discovery do
     end
   end
 
-  defp enabled_mapping(target_id, provider_slug) do
+  defp enabled_mapping(target_id, provider_slug, include_inactive \\ false) do
     case Providers.get(provider_slug) do
       nil ->
         nil
@@ -1639,7 +1675,7 @@ defmodule DevilsDictionary.Discovery do
             join: source in assoc(m, :source),
             where:
               m.target_object_id == ^target_id and source.slug == ^provider_slug and m.enabled and
-                source.active and
+                (^include_inactive or source.active) and
                 (not like(m.mapping_key, ^automatic_prefix) or
                    m.mapping_key == ^current_automatic_key or
                    like(m.mapping_key, ^current_automatic_prefix)),

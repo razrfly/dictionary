@@ -744,6 +744,27 @@ defmodule DevilsDictionary.Curation.Compositions do
                    ~w(meaning_sense_revision_id meaning_lexeme_id note note_author_kind
                       note_author_label note_author_actor_id selection_origin basis)a
 
+  @doc false
+  def same_reference?(
+        %CompositionItem{shelf: %{} = shelf} = probe,
+        %CompositionItem{shelf_citation_id: id} = item
+      )
+      when is_integer(id) do
+    citation = DevilsDictionary.Curation.ShelfCitations.get(id)
+
+    not is_nil(citation) and citation.discovery_result_id == (shelf[:result] || shelf["result"]) and
+      Map.delete(reference(probe), :shelf_citation_id) ==
+        Map.delete(reference(item), :shelf_citation_id)
+  end
+
+  def same_reference?(
+        %CompositionItem{shelf_citation_id: id} = item,
+        %CompositionItem{shelf: %{} = _} = probe
+      )
+      when is_integer(id), do: same_reference?(probe, item)
+
+  def same_reference?(left, right), do: reference(left) == reference(right)
+
   @doc """
   An item's exact reference, as a map of its reference fields: what a kept
   mark names, and what "the same item" means across versions.
@@ -1043,7 +1064,7 @@ defmodule DevilsDictionary.Curation.Compositions do
             probe = DevilsDictionary.Curation.Candidates.probe(spec)
 
             Enum.find(Map.values(sources), fn source ->
-              reference(source) == reference(probe) and
+              same_reference?(probe, source) and
                 source.meaning_lexeme_id == probe.meaning_lexeme_id and
                 source.meaning_sense_revision_id == probe.meaning_sense_revision_id
             end)

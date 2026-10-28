@@ -1279,7 +1279,7 @@ defmodule DevilsDictionaryWeb.Opening do
     do: "the selected source payload was redacted under its retention policy"
 
   def withheld_reason(:revision_mismatch),
-    do: "The selected observation no longer matches its exact source revision."
+    do: "the selected observation no longer matches its exact source revision"
 
   def withheld_reason(:observation_unbound),
     do: "the exact observed revision cannot be established"

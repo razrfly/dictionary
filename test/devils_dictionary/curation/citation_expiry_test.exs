@@ -1,7 +1,7 @@
 defmodule DevilsDictionary.Curation.CitationExpiryTest do
   use DevilsDictionary.DataCase, async: false
   import DevilsDictionary.ProposalFixtures
-  import DevilsDictionary.CitationFixtures
+  import DevilsDictionary.ProviderCitationFixtures
   import DevilsDictionary.CurationFixtures, only: [content_spec: 2, key: 1]
 
   alias DevilsDictionary.Curation.{
@@ -16,25 +16,11 @@ defmodule DevilsDictionary.Curation.CitationExpiryTest do
   alias DevilsDictionary.Repo
   setup do: editor_world!()
 
-  @namespaces %{
-    "guardian" => "guardian_article",
-    "bing-news" => "news_article",
-    "spotify" => "spotify_track",
-    "pexels" => "pexels_photo",
-    "unsplash" => "unsplash_photo",
-    "openverse" => "openverse_media",
-    "commons" => "commons_file",
-    "met" => "met_object",
-    "cinegraph" => "tmdb_movie",
-    "open-library" => "olid",
-    "poetrydb" => "poetrydb_poem",
-    "wikiquote" => "wikiquote_item"
-  }
   for provider <- Shelf.providers() do
     test "#{provider}: expiry hides reader fields and actual retained rows contain only permitted payload",
          world do
       slug = unquote(provider)
-      o = observation!(world, slug, namespace: @namespaces[slug])
+      o = provider_observation!(world, slug)
 
       spec = %{
         kind: :work,
@@ -87,32 +73,52 @@ defmodule DevilsDictionary.Curation.CitationExpiryTest do
       hidden = Enum.find(expired.items, & &1.citation)
       assert hidden.status == :withheld and hidden.status_reason == :retention_expired
       assert hidden.provider_metadata == nil
-      assert %{expired_results: 1} = DevilsDictionary.Discovery.cleanup()
+      assert %{expired_results: expired_results} = DevilsDictionary.Discovery.cleanup()
+      assert expired_results >= 1
       assert {:ok, after_sweep} = Receipt.read("love", v.version)
       assert Enum.find(after_sweep.items, & &1.citation).status_reason == :retention_expired
       assert Repo.get!(ShelfCitation, item.citation.id).expires_at == original_expiry
+
+      %{rows: [[retained_payload]]} =
+        Repo.query!("SELECT payload FROM source_record_revisions WHERE id=$1", [o.revision.id])
+
+      case slug do
+        s when s in ~w(commons met poetrydb wikiquote) ->
+          assert retained_payload == o.raw
+
+        "open-library" ->
+          refute retained_payload["match_details"]
+
+          assert Map.keys(retained_payload["preview_metadata"]) --
+                   ~w(title year author author_keys olid ia source_url read_url cover_url) == []
+
+        _ ->
+          refute retained_payload["preview_metadata"]
+      end
 
       for table <-
             ~w(discovery_results source_record_revisions source_records curation_shelf_citations curation_item_bases inference_attempts editorial_composition_items editorial_composition_versions editorial_composition_reviews editorial_composition_publications) do
         %{rows: rows} = Repo.query!("SELECT row_to_json(t)::text FROM #{table} t")
 
-        if slug not in ~w(commons met open-library poetrydb wikiquote),
-          do:
-            refute(
-              Enum.any?(rows, fn [json] ->
-                String.contains?(json, o.raw["preview_metadata"]["title"])
-              end),
-              "#{slug} retained its headline in #{table}"
-            )
+        allowed =
+          if slug == "open-library",
+            do:
+              retained_strings(
+                Map.take(
+                  o.raw["preview_metadata"],
+                  ~w(title year author author_keys olid ia source_url read_url cover_url)
+                )
+              ),
+            else: []
 
-        if slug not in ~w(commons met poetrydb wikiquote),
-          do:
-            refute(
-              Enum.any?(rows, fn [json] ->
-                String.contains?(json, "A distinctive discovery snippet for this fixture.")
-              end),
-              "#{slug} retained its snippet in #{table}"
-            )
+        stored = Enum.flat_map(rows, fn [json] -> retained_strings(Jason.decode!(json)) end)
+
+        for %{value: value} <- Shelf.expiring_fields(slug, o.raw),
+            byte_size(value) >= 20,
+            not Enum.any?(allowed, &String.contains?(&1, value)) do
+          refute Enum.any?(stored, &String.contains?(&1, value)),
+                 "#{slug} retained an expiring adapter field in #{table}: #{inspect(value)}"
+        end
       end
 
       assert {:ok, _} =
@@ -123,4 +129,20 @@ defmodule DevilsDictionary.Curation.CitationExpiryTest do
                )
     end
   end
+
+  # Hash-typed identity fields are permitted digests, even if a provider's own
+  # shortened hash id is a substring of the full URL digest. Open Library's
+  # explicit bibliographic values likewise have independent retention permission.
+  defp retained_strings(value) when is_map(value),
+    do:
+      Enum.flat_map(value, fn {key, value} ->
+        if String.ends_with?(to_string(key), "sha256") or
+             key in ~w(checksum cited_checksum content_hash),
+           do: [],
+           else: retained_strings(value)
+      end)
+
+  defp retained_strings(value) when is_list(value), do: Enum.flat_map(value, &retained_strings/1)
+  defp retained_strings(value) when is_binary(value), do: [value]
+  defp retained_strings(_), do: []
 end

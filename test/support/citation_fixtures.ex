@@ -11,6 +11,16 @@ defmodule DevilsDictionary.CitationFixtures do
     token = System.unique_integer([:positive])
     provider = Enum.find(DevilsDictionary.Discovery.Providers.all(), &(&1.slug() == slug))
 
+    target = %{
+      object_id: world.love.object_id,
+      lexeme_ids: [world.love.object_id],
+      term: "love",
+      language: "en",
+      relevance: "term"
+    }
+
+    {operation, parameters} = provider.automatic_mapping(target)
+
     mapping =
       %Mapping{}
       |> Mapping.create_changeset(%{
@@ -18,8 +28,8 @@ defmodule DevilsDictionary.CitationFixtures do
         version: 1,
         target_object_id: world.love.object_id,
         source_id: source.id,
-        operation: "search",
-        parameters: %{},
+        operation: operation,
+        parameters: parameters,
         configured_by_actor_id: actor.id,
         enabled: true
       })
@@ -71,18 +81,21 @@ defmodule DevilsDictionary.CitationFixtures do
         "published_at" => DateTime.to_iso8601(DateTime.truncate(observed, :second))
       })
 
-    matches = %{
-      "kind" => "attestation",
-      "matches" => [%{"text" => "A distinctive discovery snippet for this fixture."}]
-    }
+    matches =
+      Keyword.get(opts, :matches, %{
+        "kind" => "attestation",
+        "evidence" => "attestation",
+        "matches" => [%{"text" => "A distinctive discovery snippet for this fixture."}]
+      })
 
-    raw = %{
-      "external_namespace" => namespace,
-      "external_id" => external_id,
-      "identifiers" => [],
-      "preview_metadata" => metadata,
-      "match_details" => matches
-    }
+    raw =
+      Keyword.get(opts, :raw, %{
+        "external_namespace" => namespace,
+        "external_id" => external_id,
+        "identifiers" => [],
+        "preview_metadata" => metadata,
+        "match_details" => matches
+      })
 
     {:ok, record} =
       Sources.upsert_record(source, %{

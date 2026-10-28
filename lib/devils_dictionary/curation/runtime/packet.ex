@@ -1286,7 +1286,7 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
       "priority_candidates" => packet["priority_candidates"]
     }
 
-    if packet["packet_version"] == @version do
+    if packet["packet_version"] in [@v2, @version] do
       packet
       |> Map.take([
         "instruction_version",

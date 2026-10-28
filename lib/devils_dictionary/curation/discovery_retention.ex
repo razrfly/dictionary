@@ -103,6 +103,16 @@ defmodule DevilsDictionary.Curation.DiscoveryRetention do
                   )
                   |> Enum.each(&capture_result/1)
 
+                  Repo.query!(
+                    """
+                    UPDATE source_records sr SET
+                      external_id=discovery_retained_record($2,to_jsonb(sr),$3)->>'external_id',
+                      url=discovery_retained_record($2,to_jsonb(sr),$3)->>'url'
+                    WHERE sr.id=$1 AND sr.content_hash=$4
+                    """,
+                    [record_id, slug, now, checksum]
+                  )
+
                   if held do
                     %{num_rows: n} =
                       Repo.query!(
@@ -122,16 +132,6 @@ defmodule DevilsDictionary.Curation.DiscoveryRetention do
                           )
                         ]
                       )
-
-                    Repo.query!(
-                      """
-                      UPDATE source_records sr SET
-                        external_id=discovery_retained_record($2,to_jsonb(sr),$3)->>'external_id',
-                        url=discovery_retained_record($2,to_jsonb(sr),$3)->>'url'
-                      WHERE sr.id=$1 AND sr.content_hash=$4
-                      """,
-                      [record_id, slug, now, checksum]
-                    )
 
                     %{deleted_revisions: 0, redacted_revisions: n, deleted_records: 0}
                   else

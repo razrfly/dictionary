@@ -201,14 +201,22 @@ defmodule DevilsDictionary.Curation.Eligibility do
 
   defp assess(%CompositionItem{shelf: shelf} = item, members, _recorded) when is_map(shelf) do
     result =
-      with %DevilsDictionary.Discovery.Result{} = row <-
+      with :ok <-
+             (case DevilsDictionary.Curation.ShelfCitations.spec_status(
+                     shelf,
+                     item.source_record_revision_id
+                   ) do
+                :ok -> :ok
+                reason -> {:error, reason}
+              end),
+           %DevilsDictionary.Discovery.Result{} = row <-
              Repo.get(DevilsDictionary.Discovery.Result, shelf[:result] || shelf["result"]),
            %DevilsDictionary.Discovery.Run{} = run <-
              Repo.get(DevilsDictionary.Discovery.Run, row.run_id),
            observation = DevilsDictionary.Curation.ShelfCitations.observation(row, run),
            :ok <- if(observation.status == :ok, do: :ok, else: {:error, observation.status}),
-           :ok <- meaning(item, members),
-           :ok <- shelf_object_status(item.item_object_id, item.source_record_revision_id) do
+           :ok <- shelf_object_status(item.item_object_id, item.source_record_revision_id),
+           :ok <- meaning(item, members) do
         ensure(observation.revision.id == item.source_record_revision_id, :observation_unbound)
       else
         nil -> {:error, :observation_unbound}

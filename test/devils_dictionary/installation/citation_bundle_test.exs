@@ -19,6 +19,16 @@ defmodule DevilsDictionary.Installation.CitationBundleTest do
                actor_id: o.actor.id
              })
 
+    deleted = observation!(world, "guardian", external_id: "deleted-cited-payload")
+
+    assert {:ok, deleted_citation} =
+             ShelfCitations.cite(deleted.spec, %{
+               composition_id: world.composition.id,
+               actor_id: deleted.actor.id
+             })
+
+    Repo.query!("DELETE FROM source_record_revisions WHERE id=$1", [deleted.revision.id])
+
     unreferenced = observation!(world, "guardian", external_id: "uncited-cache-only")
 
     native =
@@ -78,11 +88,19 @@ defmodule DevilsDictionary.Installation.CitationBundleTest do
 
     refute sql <> copies =~ o.raw["preview_metadata"]["title"]
     refute sql <> copies =~ "A distinctive discovery snippet for this fixture."
+    refute sql <> copies =~ deleted.record.url
+    refute copies =~ deleted.record.external_id
 
     assert {:ok, %{outcome: :restored}} =
              Bootstrap.run(:init, bundle: bundle, target: target, expect_manifest_sha256: digest)
 
     Recovery.with_database(target, fn ->
+      gone = Repo.get!(DevilsDictionary.Curation.ShelfCitation, deleted_citation.id)
+      assert gone.source_record_revision_id == nil
+      assert gone.cited_revision_id == deleted.revision.id
+      record = Repo.get!(DevilsDictionary.Sources.SourceRecord, gone.source_record_id)
+      assert record.url == nil and record.external_id == "redacted-discovery:" <> deleted.digest
+
       restored = Repo.get!(DevilsDictionary.Curation.ShelfCitation, c.id)
       assert restored.cited_revision_id == o.revision.id
       assert restored.source_record_revision_id == o.revision.id

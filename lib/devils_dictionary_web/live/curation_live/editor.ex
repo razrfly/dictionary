@@ -736,13 +736,23 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
           String.trim(sel.notes[key] || "") == "",
           do: {:reason_missing, n}
 
+    lead_reason =
+      with key when is_binary(key) and key != "none" <- sel.lead,
+           %{lead: {:ok, rule}} when rule != :priority_source <-
+             Candidates.find(assigns.candidates, key),
+           "" <- String.trim(sel.lead_note || "") do
+        [{:reason_missing, :lead}]
+      else
+        _ -> []
+      end
+
     published =
       if match?(%{version: %{id: id}} when id == assigns.record.published_id, assigns[:held]),
         do: [:already_published],
         else: []
 
     draft = if assigns.editing, do: common ++ [:editing_proposal], else: common
-    %{draft: draft, publish: common ++ notes ++ published}
+    %{draft: draft, publish: common ++ lead_reason ++ notes ++ published}
   end
 
   # A problem the preview found, by its place when it has one.
@@ -2432,6 +2442,9 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
   defp blocker_text({:required, :reason}),
     do: "Write a reason for this version: the record requires one."
 
+  defp blocker_text({:reason_missing, :lead}),
+    do: "The fallback lead needs a reason: why it leads."
+
   defp blocker_text({:reason_missing, n}), do: "Highlight #{n} needs a reason: why it is here."
 
   defp blocker_text({:note_too_long, :lead}),
@@ -2485,6 +2498,10 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
       end)
 
   defp blocker_text({:configuration, reason}), do: "No curation configuration: #{reason}."
+
+  defp blocker_text({:reason_required, role, position}),
+    do:
+      "#{if role == :lead, do: "The lead", else: "Highlight #{position}"} needs a reason before it is published."
 
   defp blocker_text({reason, role, position})
        when is_atom(reason) and role in [:lead, :highlight],

@@ -113,7 +113,7 @@ defmodule DevilsDictionary.Curation.ItemBasis do
   defp source(item, opts) do
     if version_id = opts[:review_source] do
       Compositions.items(version_id)
-      |> Enum.find(&(Compositions.reference(&1) == Compositions.reference(item)))
+      |> Enum.find(&Compositions.same_reference?(&1, item))
     end
   end
 

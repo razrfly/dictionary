@@ -33,3 +33,11 @@ Paths below are relative to `test/devils_dictionary/curation/` unless specified.
 | 27: screen groups and reader elements | `test/devils_dictionary_web/live/citation_receipt_live_test.exs` |
 
 All cleanup, policy aging, bundle capture/restore and model responses in these tests use disposable fixtures. Real daily reassessment, agent-chosen current news, proxy checks, expiry over real elapsed time and owner publication are not claimed here; #271 assigns those live acceptance steps after separate authorization.
+
+## Independent review regressions
+
+`citation_review_regression_test.exs` incorporates the five failing independent probes and counterexamples: deleted cited revision export, unprotected due revision beside native provenance, paginated display winner, frozen expiry after cache deletion, and redaction precedence. It also checks newer native record fields, provider/mapping gates, NULL record references and paired saved/frozen eligibility under a stricter current policy. `citation_bundle_test.exs` additionally inspects real COPY bytes and restores a cited record whose payload revision has been deleted.
+
+`ProviderCitationFixtures.provider_observation!/2` drives the twelve existing committed conformance response fixtures through the real discovery adapter and fixture transport. It reproduces the resulting complete payload, match and metadata shape on the test curation page under a valid manual mapping. This is deliberately a fixture selection test, not a semantic assessment of the fixture article against the test word. No source content is authored and no network request is made. The twelve owner expiry cases in `citation_expiry_test.exs` inspect actual retained rows and policy field paths; hash-typed digests and independently permitted Open Library bibliographic values are distinguished from prohibited payload copies.
+
+The twelve `citation_shaped_agent_test.exs` cases span all seven shelf kinds through packet → stubbed agent response → writer → owner publication → public receipt, preserving exact revision/checksum and model evidence. Guardian uses unchanged Edit-then-publish to test model attribution across that seam; the others use Take. The PoetryDB case also verifies unique legacy binding for both genuine adapter result shapes. The existing generic provider projection cases remain additional boundary tests.

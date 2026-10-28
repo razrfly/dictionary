@@ -2,7 +2,7 @@ defmodule DevilsDictionary.Curation.ShelfCitations do
   @moduledoc "Exact observation binding, immutable citations and expiry independent of cleanup."
   import Ecto.Query
   alias DevilsDictionary.Repo
-  alias DevilsDictionary.Discovery.{Result, Run, Mapping, Policy}
+  alias DevilsDictionary.Discovery.{Result, Run, Policy}
   alias DevilsDictionary.Sources.{Source, SourceRecord}
   alias DevilsDictionary.Corpus.SourceRecordRevision
   alias DevilsDictionary.Curation.{Digest, Shelf, ShelfCitation}
@@ -10,37 +10,8 @@ defmodule DevilsDictionary.Curation.ShelfCitations do
   def citable(%{object_id: id}), do: citable(id)
 
   def citable(id) when is_integer(id) do
-    runs =
-      Repo.all(
-        from r in Run,
-          join: m in Mapping,
-          on: m.id == r.mapping_id,
-          where:
-            m.target_object_id == ^id and m.enabled and r.status == :succeeded and
-              r.display_allowed,
-          order_by: [asc: r.page, desc: r.started_at, desc: r.id],
-          preload: [mapping: :source]
-      )
-
-    runs =
-      Enum.filter(runs, fn run ->
-        source = run.mapping.source
-
-        source.slug in Shelf.providers() and
-          Enum.any?(
-            DevilsDictionary.Discovery.Providers.all(),
-            &(&1.slug() == source.slug and &1.adapter_version() == run.adapter_version)
-          )
-      end)
-
-    roots = runs |> Enum.filter(&(&1.page == 0)) |> Enum.uniq_by(& &1.mapping_id)
-    runs = Enum.uniq_by(runs, &{&1.mapping_id, &1.page_context, &1.page})
-
-    for root <- roots,
-        run <- runs,
-        run.mapping_id == root.mapping_id and run.page_context == root.page_context,
-        result <- Repo.all(from d in Result, where: d.run_id == ^run.id, order_by: d.position),
-        do: observation(result, run)
+    DevilsDictionary.Discovery.citation_results(id)
+    |> Enum.map(fn {result, run} -> observation(result, run) end)
   end
 
   def citable(_), do: []
@@ -108,6 +79,8 @@ defmodule DevilsDictionary.Curation.ShelfCitations do
     }
   end
 
+  def bound_revision(%Result{source_record_id: nil}), do: nil
+
   def bound_revision(%Result{source_record_revision_id: id, source_record_id: record_id} = result) do
     query =
       from r in SourceRecordRevision,
@@ -172,8 +145,10 @@ defmodule DevilsDictionary.Curation.ShelfCitations do
         nil ->
           date = Shelf.date(o.source.slug, result.preview_metadata)
 
-          [match | _] =
-            DevilsDictionary.Discovery.MatchReason.from_result(result.match_details, nil)
+          match =
+            List.first(
+              DevilsDictionary.Discovery.MatchReason.from_result(result.match_details, nil)
+            )
 
           attrs = %{
             source_id: o.source.id,
@@ -207,10 +182,11 @@ defmodule DevilsDictionary.Curation.ShelfCitations do
             shelf_kind: o.kind,
             content_date_meaning: date.meaning,
             content_date_precision: date.precision,
-            match_kind: scalar(match.kind),
-            match_evidence: scalar(DevilsDictionary.Discovery.MatchReason.evidence(match)),
-            match_relation: scalar(match.relation),
-            match_level: scalar(match.level),
+            match_kind: scalar(match && match.kind),
+            match_evidence:
+              scalar(match && DevilsDictionary.Discovery.MatchReason.evidence(match)),
+            match_relation: scalar(match && match.relation),
+            match_level: scalar(match && match.level),
             link_sha256:
               result.preview_metadata["source_url"] &&
                 Digest.sha256(result.preview_metadata["source_url"]),
@@ -265,6 +241,46 @@ defmodule DevilsDictionary.Curation.ShelfCitations do
           is_nil(record) or not record.display_allowed -> :display_restricted
           true -> :ok
         end
+    end
+  end
+
+  @doc false
+  def spec_status(spec, revision_id) do
+    field = fn key -> spec[key] || spec[Atom.to_string(key)] end
+    run_id = field.(:run)
+
+    run =
+      (is_integer(run_id) && Repo.get(Run, run_id))
+      |> then(&(&1 && Repo.preload(&1, mapping: :source)))
+
+    revision =
+      revision_id &&
+        Repo.one(
+          from r in SourceRecordRevision,
+            where: r.id == ^revision_id,
+            select: %{r | payload: r.payload}
+        )
+
+    captured =
+      case DateTime.from_iso8601(field.(:expires_at) || "") do
+        {:ok, time, _} -> time
+        _ -> nil
+      end
+
+    deadline =
+      if run && captured,
+        do:
+          min_time(
+            captured,
+            DateTime.add(run.completed_at, Policy.retention_seconds(run.mapping.source.slug))
+          ),
+        else: captured
+
+    cond do
+      deadline && DateTime.compare(DateTime.utc_now(), deadline) != :lt -> :retention_expired
+      is_nil(revision) -> :revision_deleted
+      Map.has_key?(revision.payload, "_discovery_redaction") -> :payload_redacted
+      true -> :ok
     end
   end
 
