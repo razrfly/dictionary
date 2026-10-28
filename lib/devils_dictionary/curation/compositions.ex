@@ -24,6 +24,24 @@ defmodule DevilsDictionary.Curation.Compositions do
 
   A version gets no run, no participant and no ballot: it is manual work and
   says so. Writing a version publishes nothing.
+
+  **Beside the manual writer, two trusted ones (#264).** `create_version/3`
+  and its note rule are unchanged: a note is the signed-in author's words,
+  and attribution is never an input.
+
+    * `write_proposal/2` writes the generic editor's **model version** from
+      one completed attempt: its author the bound bot actor, its notes the
+      model's reasons signed under the bot's own label, the owner's kept
+      items carried as verified copies. It takes the binding and the frozen
+      attempt, never caller-supplied attribution, and publishes nothing;
+    * `take_version/3` writes the owner's **manual version from a
+      proposal** (Take, Edit-publish): parented to the proposal, every item
+      either a verified copy of a proposal item, keeping whoever wrote it, or
+      the reviewer's own.
+
+  **The owner's marks (#253 D8, #264 R15)**: `set_mode/4` (`:open` or
+  `:mine`), `keep/4` and `unkeep/4`, reviewer acts that write no version and
+  change no item.
   """
 
   import Ecto.Query
@@ -345,11 +363,25 @@ defmodule DevilsDictionary.Curation.Compositions do
     )
   end
 
-  @doc "The newest version of a composition, or `nil`."
+  @doc "The newest version of a composition, of any origin, or `nil`."
   def latest_version(composition_id) do
     Repo.one(
       from v in CompositionVersion,
         where: v.composition_id == ^composition_id,
+        order_by: [desc: v.version],
+        limit: 1
+    )
+  end
+
+  @doc """
+  The newest **manual** version of a composition, or `nil` (#264 R13.2): the
+  version the ordinary form opens on and Publish's held path compares with.
+  A proposal never makes it stale.
+  """
+  def latest_manual_version(composition_id) do
+    Repo.one(
+      from v in CompositionVersion,
+        where: v.composition_id == ^composition_id and v.origin == :manual,
         order_by: [desc: v.version],
         limit: 1
     )
@@ -366,12 +398,14 @@ defmodule DevilsDictionary.Curation.Compositions do
 
   # The same arrangement under the same configuration version is the same
   # version. Under a newer configuration version it is a new one, which needs
-  # its own review: approval never transfers.
+  # its own review: approval never transfers. Manual versions only (#264
+  # R11.4): a proposal is unique by its attempt, and taking one unchanged
+  # copies its arrangement exactly.
   defp not_duplicate(composition_id, configuration_version_id, arrangement, fingerprint) do
     case Repo.one(
            from v in CompositionVersion,
              where:
-               v.composition_id == ^composition_id and
+               v.composition_id == ^composition_id and v.origin == :manual and
                  v.configuration_version_id == ^configuration_version_id and
                  v.arrangement_hash == ^arrangement and v.eligibility_fingerprint == ^fingerprint,
              select: v.id
@@ -500,7 +534,12 @@ defmodule DevilsDictionary.Curation.Compositions do
     if duplicate, do: {:error, {:duplicate_display_identity, duplicate}}, else: :ok
   end
 
-  defp display_identity(%CompositionItem{} = item) do
+  @doc """
+  What an item shows, for C6: its object (a catalog work's registry work)
+  and, for words, their digest. Two items whose identities meet show the
+  same thing.
+  """
+  def display_identity(%CompositionItem{} = item) do
     words =
       case item do
         %{item_kind: :sense_quotation, words_sha256: sha} -> sha
@@ -564,6 +603,366 @@ defmodule DevilsDictionary.Curation.Compositions do
 
   defp note(%{text: _text}, _actor), do: {:error, :note_attribution_not_an_input}
   defp note(_note, _actor), do: {:error, :note_invalid}
+
+  # ── the trusted writers (#264 R9, R11) ────────────────────────────────────
+
+  # What an item shows, and nothing about why or where: the editor's
+  # `@reference_fields` without role, position, meaning and note (#264 R15.2).
+  @reference_fields ~w(item_kind item_object_id content_revision_id sense_revision_id
+                       source_record_revision_id catalog_manifest catalog_checksum
+                       catalog_identity locator words_sha256 assertion_revision_id)a
+
+  # Everything a verified copy repeats (the database checks the same).
+  @copied_fields @reference_fields ++
+                   ~w(meaning_sense_revision_id meaning_lexeme_id note note_author_kind
+                      note_author_label note_author_actor_id selection_origin)a
+
+  @doc """
+  An item's exact reference, as a map of its reference fields: what a kept
+  mark names, and what "the same item" means across versions.
+  """
+  def reference(%CompositionItem{} = item), do: Map.take(item, @reference_fields)
+
+  def reference(%{} = stored) do
+    Map.new(@reference_fields, fn field ->
+      value = Map.get(stored, to_string(field), Map.get(stored, field))
+
+      {field,
+       if(field == :item_kind and is_binary(value),
+         do: String.to_existing_atom(value),
+         else: value
+       )}
+    end)
+  end
+
+  @doc """
+  A readable key for an item's reference, as the screen keys candidates:
+  `content-<object>`, `quotation-<sense revision>-<n>`, `work-<object or
+  catalog row>`, `exemplar-<claim revision>`.
+  """
+  def reference_key(%{item_kind: :content, item_object_id: id}), do: "content-#{id}"
+
+  def reference_key(%{item_kind: :sense_quotation, locator: "quotation:" <> n} = ref),
+    do: "quotation-#{ref.sense_revision_id}-#{n}"
+
+  def reference_key(%{item_kind: :work, item_object_id: id}) when is_integer(id), do: "work-#{id}"
+
+  def reference_key(%{item_kind: :work} = ref),
+    do: "work-#{ref.catalog_manifest}-#{ref.catalog_identity}"
+
+  def reference_key(%{item_kind: :exemplar, assertion_revision_id: id}), do: "exemplar-#{id}"
+  def reference_key(ref), do: "item-#{inspect(ref)}"
+
+  @doc """
+  Writes the generic editor's model version (#264 R9.1–R9.2), inside the
+  caller's transaction, under the composition's row lock. The trusted
+  writer: `editor` is the binding as `Configurations.editor/1` resolved it,
+  and `plan` is
+
+      %{composition, configuration_version, attempt, items}
+
+  where each item is `{:model, %CompositionItem{}}` (an editor's choice,
+  its reference and meaning resolved through the frozen packet, its reason
+  in `note`) or `{:copy, %CompositionItem{}}` (a kept item of the parent,
+  carried with `role` and `position` set). The writer signs the model's
+  notes as the bot under its own label and copies the owner's exactly; it
+  takes no attribution from the caller.
+
+  The version's parent is the composition's newest version (version history
+  stays one line); scope, resolution, lead policy, arrangement hash and
+  eligibility fingerprint are computed as `create_version/3` computes them.
+  Refused unless the attempt is the binding's, completed and accepted, and
+  the arrangement is eligible now under its lead rule and bound.
+  """
+  def write_proposal(editor, plan) do
+    %{composition: c, configuration_version: cv, attempt: attempt} = plan
+    bot = editor.bot_actor
+
+    with :ok <- Transaction.check(c.state == :active, :composition_retired),
+         :ok <-
+           Transaction.check(
+             attempt.state == :completed and attempt.outcome == :accepted and
+               attempt.model_config_id == editor.model_config.id and
+               attempt.requested_by_actor_id == bot.id,
+             :attempt_not_the_binding
+           ),
+         items = proposal_arrangement(plan.items, bot),
+         :ok <-
+           Transaction.check(
+             Enum.count(items, &(&1.role == :highlight)) <= cv.max_highlights,
+             {:too_many_highlights, cv.max_highlights}
+           ),
+         :ok <- one_display_identity(items) do
+      members = member_ids(c.id)
+      evaluation = Eligibility.evaluate(items, members, c.scope_signature, cv.id)
+      latest = latest_version(c.id)
+
+      with {:ok, rule} <- evaluation.lead_rule,
+           :ok <- eligible(evaluation) do
+        version =
+          Repo.insert!(%CompositionVersion{
+            composition_id: c.id,
+            curation_configuration_id: c.curation_configuration_id,
+            configuration_version_id: cv.id,
+            version: if(latest, do: latest.version + 1, else: 1),
+            parent_version_id: latest && latest.id,
+            origin: :model,
+            attempt_id: attempt.id,
+            change_reason: "Proposed by #{author_label(bot)}, attempt ##{attempt.id}",
+            created_by_actor_id: bot.id,
+            scope_signature: c.scope_signature,
+            scope_members: Enum.map(members, &["lexeme", &1]),
+            resolution:
+              resolution(
+                %{
+                  "lead_rule" => to_string(rule),
+                  "priority_leads" => evaluation.applicable,
+                  "language_tag" => c.language_tag,
+                  "configuration_version" => cv.version
+                },
+                evaluation
+              ),
+            lead_policy: cv.lead_policy,
+            arrangement_hash: Digest.arrangement_hash(items),
+            eligibility_fingerprint: evaluation.fingerprint
+          })
+
+        for item <- items, do: Repo.insert!(%{item | composition_version_id: version.id})
+
+        {:ok, version}
+      end
+    end
+  end
+
+  @doc """
+  The items `write_proposal/2` would write for `plan_items`, unsaved: an
+  editor's choice signed by `bot` under its own label, a kept item copied.
+  What the proposal's arrangement hash is computed over before it is
+  written (#264 R8.4).
+  """
+  def proposal_arrangement(plan_items, bot), do: Enum.map(plan_items, &proposal_item(&1, bot))
+
+  # An editor's choice is the model's, signed by the bot under its own
+  # label; a carried item is the owner's, copied exactly.
+  defp proposal_item({:model, %CompositionItem{} = item}, bot) do
+    note =
+      case item.note && String.trim(item.note) do
+        text when is_binary(text) and text != "" ->
+          %{
+            note: text,
+            note_author_kind: :model,
+            note_author_label: author_label(bot),
+            note_author_actor_id: bot.id
+          }
+
+        _blank ->
+          %{note: nil, note_author_kind: nil, note_author_label: nil, note_author_actor_id: nil}
+      end
+
+    item
+    |> Map.merge(note)
+    |> Map.merge(%{selection_origin: :model, copied_from_item_id: nil, id: nil})
+  end
+
+  defp proposal_item({:copy, %CompositionItem{} = source}, _bot),
+    do: copy(source, source.role, source.position)
+
+  # A verified copy: every field the database compares, from the source, and
+  # the place it takes now.
+  defp copy(%CompositionItem{} = source, role, position) do
+    struct(
+      CompositionItem,
+      source
+      |> Map.take(@copied_fields)
+      |> Map.merge(%{role: role, position: position, copied_from_item_id: source.id})
+    )
+  end
+
+  @doc """
+  The owner's manual version from a proposal (#264 R11.2–R11.3, #253 §5a
+  step 5), as an author, inside the caller's transaction. `attrs`:
+
+    * `:reason`;
+    * `:items`: `{:copy, item_id, role, position}`, a verified copy of an
+      item of the proposal version (a model item keeps the bot's note,
+      signature and `selection_origin: :model`; a carried item keeps the
+      owner's), or `{:own, spec, role, position}`, an item spec as
+      `create_version/3` takes it, the reviewer's own (`selection_origin:
+      :manual`, a human note signed by the reviewer).
+
+  The version's parent is the proposal. Refused unless the proposal is
+  still the composition's newest version (`{:stale_parent, newest}`), its
+  configuration version is current and the composition active. An
+  arrangement equal to an earlier manual version under the same
+  configuration version and fingerprint is refused as `{:duplicate_version,
+  id}`, as `create_version/3` refuses one (Stage 0 check, recommendation 3):
+  Dismiss the proposal, or publish that version.
+  """
+  def take_version(scope, proposal_version_id, attrs) do
+    with {:ok, actor} <- Authority.actor(scope, :author),
+         {:ok, reason} <- Transaction.required(Map.to_list(attrs), :reason),
+         {:ok, proposal} <-
+           Transaction.need(Repo.get(CompositionVersion, proposal_version_id), :not_found),
+         :ok <- Transaction.check(proposal.origin == :model, :not_a_proposal),
+         {:ok, c} <- lock_active(proposal.composition_id),
+         {:ok, _configuration, cv} <- Configurations.current(c.curation_configuration_id),
+         :ok <-
+           Transaction.check(cv.id == proposal.configuration_version_id, :configuration_changed),
+         latest = latest_version(c.id),
+         :ok <- expected_parent(latest, proposal.id),
+         sources = Map.new(items(proposal.id), &{&1.id, &1}),
+         {:ok, items} <- taken_items(Map.fetch!(attrs, :items), sources, actor),
+         :ok <-
+           Transaction.check(
+             Enum.count(items, &(&1.role == :highlight)) <= cv.max_highlights,
+             {:too_many_highlights, cv.max_highlights}
+           ),
+         :ok <- one_display_identity(items) do
+      members = member_ids(c.id)
+      evaluation = Eligibility.evaluate(items, members, c.scope_signature, cv.id)
+      arrangement = Digest.arrangement_hash(items)
+
+      with {:ok, rule} <- evaluation.lead_rule,
+           :ok <- eligible(evaluation),
+           :ok <- not_duplicate(c.id, cv.id, arrangement, evaluation.fingerprint) do
+        version =
+          Repo.insert!(%CompositionVersion{
+            composition_id: c.id,
+            curation_configuration_id: c.curation_configuration_id,
+            configuration_version_id: cv.id,
+            version: latest.version + 1,
+            parent_version_id: proposal.id,
+            change_reason: reason,
+            created_by_actor_id: actor.id,
+            scope_signature: c.scope_signature,
+            scope_members: Enum.map(members, &["lexeme", &1]),
+            resolution:
+              resolution(
+                %{
+                  "lead_rule" => to_string(rule),
+                  "priority_leads" => evaluation.applicable,
+                  "language_tag" => c.language_tag,
+                  "configuration_version" => cv.version
+                },
+                evaluation
+              ),
+            lead_policy: cv.lead_policy,
+            arrangement_hash: arrangement,
+            eligibility_fingerprint: evaluation.fingerprint
+          })
+
+        for item <- items, do: Repo.insert!(%{item | composition_version_id: version.id})
+
+        {:ok, version}
+      end
+    end
+  end
+
+  defp taken_items(specs, sources, actor) do
+    Enum.reduce_while(specs, {:ok, []}, fn
+      {:copy, id, role, position}, {:ok, acc} ->
+        case sources[id] do
+          nil -> {:halt, {:error, {:not_a_proposal_item, id}}}
+          source -> {:cont, {:ok, acc ++ [copy(source, role, position)]}}
+        end
+
+      {:own, spec, role, position}, {:ok, acc} ->
+        case item(role, position, spec, actor) do
+          {:ok, item} -> {:cont, {:ok, acc ++ [item]}}
+          {:error, reason} -> {:halt, {:error, {reason, role, position}}}
+        end
+    end)
+  end
+
+  # ── the owner's marks (#253 D8, #264 R15) ─────────────────────────────────
+
+  @doc """
+  Sets a page's mode, as a reviewer: `:open` (proposals arrive as usual) or
+  `:mine` (proposals are shown, flagged, and never taken for the owner).
+  `opts`: none yet. Writes no version.
+  """
+  def set_mode(scope, composition_id, mode, _opts) when mode in [:open, :mine] do
+    Transaction.run(fn ->
+      with {:ok, actor} <- Authority.actor(scope, :reviewer),
+           {:ok, c} <- lock_active(composition_id) do
+        c
+        |> Ecto.Changeset.change(
+          mode: mode,
+          mode_set_by_actor_id: actor.id,
+          mode_set_at: DateTime.utc_now()
+        )
+        |> Repo.update()
+      end
+    end)
+  end
+
+  def set_mode(_scope, _composition_id, _mode, _opts), do: {:error, :unknown_mode}
+
+  @doc """
+  Marks an item of the composition's **published** version kept, as a
+  reviewer: every proposal carries it while it is marked and eligible
+  (#264 R8). The mark names the item's exact reference, a readable key, who
+  marked it and when. Writes no version and changes no item.
+  """
+  def keep(scope, composition_id, item_id, _opts) do
+    Transaction.run(fn ->
+      with {:ok, actor} <- Authority.actor(scope, :reviewer),
+           {:ok, c} <- lock_active(composition_id),
+           {:ok, item} <- published_item(c, item_id) do
+        ref = reference(item)
+        key = reference_key(ref)
+
+        if Enum.any?(c.kept_items, &(&1["key"] == key)) do
+          {:ok, c}
+        else
+          mark = %{
+            "key" => key,
+            "reference" => Map.new(ref, fn {k, v} -> {to_string(k), json(v)} end),
+            "marked_by_actor_id" => actor.id,
+            "marked_at" => DateTime.to_iso8601(DateTime.utc_now())
+          }
+
+          c |> Ecto.Changeset.change(kept_items: c.kept_items ++ [mark]) |> Repo.update()
+        end
+      end
+    end)
+  end
+
+  @doc "Removes a kept mark by its key, as a reviewer. Writes no version."
+  def unkeep(scope, composition_id, key, _opts) do
+    Transaction.run(fn ->
+      with {:ok, _actor} <- Authority.actor(scope, :reviewer),
+           {:ok, c} <- lock_active(composition_id),
+           :ok <- Transaction.check(Enum.any?(c.kept_items, &(&1["key"] == key)), :not_kept) do
+        c
+        |> Ecto.Changeset.change(kept_items: Enum.reject(c.kept_items, &(&1["key"] == key)))
+        |> Repo.update()
+      end
+    end)
+  end
+
+  defp published_item(%Composition{current_published_version_id: nil}, _id),
+    do: {:error, :unpublished}
+
+  defp published_item(%Composition{current_published_version_id: version_id}, id) do
+    Transaction.need(
+      Repo.one(
+        from i in CompositionItem, where: i.id == ^id and i.composition_version_id == ^version_id
+      ),
+      :not_a_published_item
+    )
+  end
+
+  defp json(value) when is_atom(value) and not is_nil(value), do: to_string(value)
+  defp json(value), do: value
+
+  @doc "The labels of actors by id, as notes are attributed under them."
+  def actor_labels(ids) do
+    ids = ids |> Enum.reject(&is_nil/1) |> Enum.uniq()
+
+    Repo.all(from a in DevilsDictionary.Sources.Actor, where: a.id in ^ids)
+    |> Map.new(&{&1.id, author_label(&1)})
+  end
 
   @doc "The label an actor's notes are attributed under: its own, or its account number."
   def author_label(actor), do: actor.label || "Account ##{actor.id}"

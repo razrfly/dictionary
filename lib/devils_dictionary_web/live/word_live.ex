@@ -108,6 +108,7 @@ defmodule DevilsDictionaryWeb.WordLive do
        # review flow with its exact sense and source-record evidence
        # preselected; everyone else sees the candidate and no write path.
        contributor: Contributions.internal_contributor?(socket.assigns[:current_scope]),
+       reviewer?: false,
        discovery_target: nil,
        cultures: %{},
        culture_notes: [],
@@ -153,6 +154,13 @@ defmodule DevilsDictionaryWeb.WordLive do
   end
 
   def handle_params(%{"slug" => slug} = params, uri, socket) do
+    socket =
+      assign(
+        socket,
+        :reviewer?,
+        not socket.assigns.proxied? and Contributions.reviewer?(socket.assigns[:current_scope])
+      )
+
     socket =
       if socket.assigns.live_action == :on,
         do: assign(socket, object_id: nil, exact: nil),
@@ -1049,6 +1057,7 @@ defmodule DevilsDictionaryWeb.WordLive do
               <Opening.section
                 opening={@opening}
                 mode={@reading_mode}
+                reviewer?={@reviewer?}
                 class="mt-8 lg:float-right lg:mt-0 lg:mb-4 lg:w-[calc(100%-25.5rem)]"
               />
 

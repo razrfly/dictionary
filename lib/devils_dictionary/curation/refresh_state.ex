@@ -23,6 +23,13 @@ defmodule DevilsDictionary.Curation.RefreshState do
   `superseded_on_arrival`, and `run_periodic` says whether the run was
   admitted only because its window passed (decided at admission, not later).
 
+  An editor's assessment (#264 R14) completes as `:proposed`, `:abstained`
+  or `:no_change`: those were judged. `:unchanged` and `:needs_editor` keep
+  their meaning: the inputs were checked, not judged.
+  `review_unit_reserved_at` is the review unit a run holds between its
+  frozen packet and its proposal (#264 R5): every exit that moves the row
+  clears it, so it is released exactly once.
+
   Written only by `Curation.Refresh`.
   """
   use Ecto.Schema
@@ -43,11 +50,17 @@ defmodule DevilsDictionary.Curation.RefreshState do
     field :admitted_parent_version_id, :id
     field :superseded_on_arrival, :boolean, default: false
     field :last_completed_at, :utc_datetime_usec
-    field :last_outcome, Ecto.Enum, values: [:unchanged, :needs_editor]
+
+    field :last_outcome, Ecto.Enum,
+      values: [:unchanged, :needs_editor, :proposed, :abstained, :no_change]
+
     field :last_outcome_reason, :string
     field :refresh_after, :utc_datetime_usec
     field :next_retry_at, :utc_datetime_usec
     field :failures, :integer, default: 0
+    # Set only by a deferral; dirty marking must not move its date. Legacy
+    # rows written before this column existed have an unknown deferral date.
+    field :last_deferred_at, :utc_datetime_usec
     field :last_error, :string
     field :input_fingerprint, :string
     field :withheld_digest, :string
@@ -57,6 +70,7 @@ defmodule DevilsDictionary.Curation.RefreshState do
     field :run_dirty_seq, :integer
     field :inputs_last_changed_at, :utc_datetime_usec
     field :inputs_last_changed_reason, :string
+    field :review_unit_reserved_at, :utc_datetime_usec
 
     timestamps(type: :utc_datetime_usec)
   end

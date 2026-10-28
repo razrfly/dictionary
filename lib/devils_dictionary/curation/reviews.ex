@@ -26,6 +26,10 @@ defmodule DevilsDictionary.Curation.Reviews do
       configuration, its scope and its eligibility must all be as it was
       made. What was accepted is recorded as the version's eligibility
       fingerprint.
+
+  **A proposal is never accepted** (#264 R13.1): a model version is taken
+  into a manual version, which is accepted (`:proposal_needs_take`; the
+  database refuses it too). Rejecting one is how it is dismissed.
   """
 
   alias DevilsDictionary.Curation.{
@@ -78,7 +82,8 @@ defmodule DevilsDictionary.Curation.Reviews do
   end
 
   defp acceptable(:accepted, version, composition, evaluation) do
-    with :ok <- Transaction.check(composition.state == :active, :composition_retired),
+    with :ok <- Transaction.check(version.origin == :manual, :proposal_needs_take),
+         :ok <- Transaction.check(composition.state == :active, :composition_retired),
          :ok <- Standing.scope(version, composition),
          :ok <- Standing.configuration(version) do
       Standing.eligible(evaluation, version)

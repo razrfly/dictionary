@@ -90,6 +90,12 @@ defmodule DevilsDictionary.Curation.LeadPolicy do
     do:
       "The Devil’s Dictionary has no entry for this word, so another sourced definition was selected by hand to lead."
 
+  # #253 D3: a fallback lead the generic editor chose says so (#264 R14.5, a
+  # clause of `statement/1`: Stage 0 check, recommendation 4).
+  def statement(:editor_fallback),
+    do:
+      "The Devil’s Dictionary has no entry for this word, so another sourced definition was selected by the editor to lead."
+
   @doc """
   What kind of text a lead admitted under `policy` is. The priority source
   is a satirical dictionary, so its lead is `:satire`; a fallback is a

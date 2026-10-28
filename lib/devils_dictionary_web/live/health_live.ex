@@ -19,12 +19,16 @@ defmodule DevilsDictionaryWeb.HealthLive do
   alias DevilsDictionary.Curation.Refresh
   alias DevilsDictionary.Health.Score
   alias DevilsDictionaryWeb.HealthLive.RuntimeCard
+  alias DevilsDictionaryWeb.HealthLive.ProposalsCard
 
   # `:unset` rather than `nil`, because `nil` is now a meaningful scope value —
   # "no population selected" — and the first `handle_params` has to be able to
   # tell it apart from "already showing that".
   @impl true
   def mount(_params, _session, socket) do
+    now = DateTime.utc_now()
+    counts = Refresh.counts(now)
+
     {:ok,
      assign(socket,
        page_title: "Health",
@@ -32,8 +36,9 @@ defmodule DevilsDictionaryWeb.HealthLive do
        scopes: Lexicon.list_scopes(),
        parity: %{},
        sources: Sources.list_sources(),
-       curation: Refresh.counts(),
-       runtime: DevilsDictionary.Curation.Runtime.Snapshot.read()
+       curation: counts,
+       runtime: DevilsDictionary.Curation.Runtime.Snapshot.read(),
+       proposals: DevilsDictionary.Curation.Proposals.health_snapshot(now, counts)
      )}
   end
 
@@ -431,6 +436,7 @@ defmodule DevilsDictionaryWeb.HealthLive do
       </.section>
 
       <RuntimeCard.runtime_card snapshot={@runtime} />
+      <ProposalsCard.card snapshot={@proposals} />
     </Layouts.app>
     """
   end

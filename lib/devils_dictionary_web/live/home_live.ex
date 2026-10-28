@@ -198,7 +198,9 @@ defmodule DevilsDictionaryWeb.HomeLive do
     %{
       words: index.total,
       enriched: index.enriched,
-      sources: length(Sources.list_sources())
+      # A bot's source (the generic editor's, #264 OD-2) is no source a
+      # reader reads.
+      sources: Sources.list_sources() |> Enum.reject(&(&1.kind == :bot)) |> length()
     }
   end
 

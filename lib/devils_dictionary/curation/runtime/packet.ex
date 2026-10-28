@@ -1094,6 +1094,10 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
   What an attempt keeps of a packet (#253 D9's audit): ids, revision ids and
   hashes, and for a v2 packet its instruction, policy, counts, omitted list
   and candidate-set hash (`digest/1`). Never text.
+
+  A sense quotation keeps its `words_sha256`, the hash of the whole
+  quotation its item stores, beside `excerpt_sha256` (#264 R7.3): the audit
+  record then holds the reference the proposal writer checks it against.
   """
   def summary(%{packet: packet, hash: hash}) do
     summary = %{
@@ -1116,6 +1120,7 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
             "content_revision_id",
             "sense_revision_id",
             "locator",
+            "words_sha256",
             "catalog",
             "assertion_revision_id",
             "excerpt_sha256",
