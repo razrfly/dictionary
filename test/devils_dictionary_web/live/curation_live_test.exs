@@ -621,6 +621,10 @@ defmodule DevilsDictionaryWeb.CurationLiveTest do
       ""
     )
     |> String.replace(~r/^(<section[^>]*?) class="[^"]*"/, "\\1")
+    |> String.replace(
+      ~r/<a[^>]*href="[^"]*\/receipt\/[^"]*"[^>]*>Exact choice, chooser and evidence<\/a>/s,
+      ""
+    )
     |> String.replace(~r/ · receipt #\d+/, "")
     |> String.replace(~r/#(\d+|—), version/, "#ID, version")
   end

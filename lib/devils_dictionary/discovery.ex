@@ -158,6 +158,8 @@ defmodule DevilsDictionary.Discovery do
   end
 
   @doc "Returns enabled provider states independently, preserving failure isolation."
+  def citable(target), do: DevilsDictionary.Curation.ShelfCitations.citable(target)
+
   def states(target_id) do
     Providers.all()
     |> Enum.map(fn provider -> {provider.slug(), state(target_id, provider.slug())} end)
@@ -448,13 +450,17 @@ defmodule DevilsDictionary.Discovery do
         do: {0, nil},
         else: Repo.delete_all(from(r in Run, where: r.id in ^sweepable_ids))
 
+    payloads = purge_expired_payloads(config[:cleanup_batch_size])
     pruned_attempts = prune_attempts(keep, config[:cleanup_batch_size])
+
+    retention = Map.update!(retention, :expired_source_records, &(&1 + payloads.deleted_records))
 
     Map.merge(retention, %{
       deleted: count,
       recovered: recovered,
       pruned_attempts: pruned_attempts,
-      swept_source_records: swept_records
+      swept_source_records: swept_records,
+      payloads: payloads
     })
   end
 
@@ -481,6 +487,9 @@ defmodule DevilsDictionary.Discovery do
   defp retention_due_query(now, limit) do
     held = from(result in Result, distinct: true, select: result.run_id)
 
+    seconds =
+      Map.new(Repo.all(from s in Source, select: s.slug), &{&1, Policy.retention_seconds(&1)})
+
     from(run in Run,
       join: mapping in Mapping,
       on: mapping.id == run.mapping_id,
@@ -488,7 +497,36 @@ defmodule DevilsDictionary.Discovery do
       on: source.id == mapping.source_id,
       where: run.status == :succeeded and not is_nil(run.completed_at),
       where: run.display_allowed or run.id in subquery(held),
-      order_by: [asc: run.completed_at, asc: run.id],
+      where:
+        fragment(
+          "CASE WHEN ? > ? THEN LEAST(?, ? + ((?::jsonb ->> ?)::bigint * interval '1 second')) ELSE ? + ((?::jsonb ->> ?)::bigint * interval '1 second') END <= ?",
+          run.expires_at,
+          run.completed_at,
+          run.expires_at,
+          run.completed_at,
+          ^seconds,
+          source.slug,
+          run.completed_at,
+          ^seconds,
+          source.slug,
+          ^now
+        ),
+      order_by: [
+        asc:
+          fragment(
+            "CASE WHEN ? > ? THEN LEAST(?, ? + ((?::jsonb ->> ?)::bigint * interval '1 second')) ELSE ? + ((?::jsonb ->> ?)::bigint * interval '1 second') END",
+            run.expires_at,
+            run.completed_at,
+            run.expires_at,
+            run.completed_at,
+            ^seconds,
+            source.slug,
+            run.completed_at,
+            ^seconds,
+            source.slug
+          ),
+        asc: run.id
+      ],
       limit: ^limit,
       select: %{
         id: run.id,
@@ -499,16 +537,19 @@ defmodule DevilsDictionary.Discovery do
       }
     )
     |> Repo.all()
-    |> Enum.filter(&expired?(&1, now))
   end
 
-  defp expired?(%{slug: slug, completed_at: completed_at, expires_at: expires_at}, now) do
+  @doc false
+  def expired?(%{slug: slug, completed_at: completed_at, expires_at: expires_at}, now) do
     deadline =
       if expires_at && DateTime.compare(expires_at, completed_at) == :gt,
         do: expires_at,
         else: DateTime.add(completed_at, Policy.retention_seconds(slug), :second)
 
-    DateTime.compare(deadline, now) != :gt
+    cap = DateTime.add(completed_at, Policy.retention_seconds(slug))
+
+    DateTime.compare(if(DateTime.compare(deadline, cap) == :gt, do: cap, else: deadline), now) !=
+      :gt
   end
 
   # Withdraw, purge, and say what it cost. Bounded by the same batch size the
@@ -543,70 +584,19 @@ defmodule DevilsDictionary.Discovery do
   end
 
   @doc """
-  Deletes these runs' results, and the source records they owned alone.
-
-  The second half is the one that was missing (#144 Phase 2): a
-  `discovery_results` row is the normalized item and the **payload** lives in
-  `source_records`, whose foreign key is `ON DELETE RESTRICT` — so deleting a
-  run cascaded to its results and left the provider's own response behind,
-  under a row nothing pointed at any more.
-
-  A source record is deleted only when nothing else in the encyclopedia is
-  standing on it: no other discovery result, and nothing referencing it or any
-  of its revisions. A record that a registry entity was built from — an
-  `external_identifiers` row, a `sense_revision`, a corpus row's provenance —
-  **survives**, because deleting it would cascade its revisions and silently
-  null the provenance of something durable. Retention takes the search cache;
-  it does not take the encyclopedia.
+  Deletes disposable cache results after capturing each exact legacy deadline.
+  Record/revision deletion is never cascaded here: the separate bounded payload
+  sweep checks the exact revision deadline, live observations and durable FKs.
   """
   def purge_results([]), do: {0, 0}
 
   def purge_results(run_ids) when is_list(run_ids) do
-    record_ids =
-      Repo.all(
-        from result in Result,
-          where: result.run_id in ^run_ids and not is_nil(result.source_record_id),
-          distinct: true,
-          select: result.source_record_id
-      )
-
-    {results, _} = Repo.delete_all(from(r in Result, where: r.run_id in ^run_ids))
-
-    records =
-      if record_ids == [] do
-        0
-      else
-        %{num_rows: deleted} =
-          Repo.query!(
-            """
-            DELETE FROM source_records AS sr
-             WHERE sr.id = ANY($1)
-               AND NOT EXISTS (SELECT 1 FROM discovery_results d WHERE d.source_record_id = sr.id)
-               AND NOT EXISTS (SELECT 1 FROM pending_relations p WHERE p.source_record_id = sr.id)
-               AND NOT EXISTS (SELECT 1 FROM reconciliation_cases c WHERE c.source_record_id = sr.id)
-               AND NOT EXISTS (SELECT 1 FROM source_assertion_outputs a WHERE a.source_record_id = sr.id)
-               AND NOT EXISTS (SELECT 1 FROM source_materialized_outputs m WHERE m.source_record_id = sr.id)
-               AND NOT EXISTS (
-                 SELECT 1 FROM source_record_revisions rev
-                  WHERE rev.source_record_id = sr.id
-                    AND (
-                      EXISTS (SELECT 1 FROM assertion_evidence x WHERE x.source_record_revision_id = rev.id) OR
-                      EXISTS (SELECT 1 FROM content_revisions x WHERE x.source_record_revision_id = rev.id) OR
-                      EXISTS (SELECT 1 FROM external_identifiers x WHERE x.source_record_revision_id = rev.id) OR
-                      EXISTS (SELECT 1 FROM lexeme_forms x WHERE x.source_record_revision_id = rev.id) OR
-                      EXISTS (SELECT 1 FROM object_names x WHERE x.source_record_revision_id = rev.id) OR
-                      EXISTS (SELECT 1 FROM sense_revisions x WHERE x.source_record_revision_id = rev.id)
-                    )
-                 )
-            """,
-            [record_ids]
-          )
-
-        deleted
-      end
-
-    {results, records}
+    DevilsDictionary.Curation.DiscoveryRetention.purge_results(run_ids)
   end
+
+  @doc "One bounded payload sweep, independent of result-cache deletion."
+  def purge_expired_payloads(limit \\ nil),
+    do: DevilsDictionary.Curation.DiscoveryRetention.sweep(limit || config()[:cleanup_batch_size])
 
   # The ledger's only path to a bound. `discovery_request_attempts.run_id` is
   # `ON DELETE CASCADE`, so an attempt row was deleted only when its run was —
@@ -1078,21 +1068,57 @@ defmodule DevilsDictionary.Discovery do
     )
   end
 
+  defp display_runs(root) do
+    Repo.all(
+      from r in Run,
+        where:
+          r.mapping_id == ^root.mapping_id and r.page_context == ^root.page_context and
+            r.status == :succeeded and r.display_allowed,
+        order_by: [asc: r.page, desc: r.started_at, desc: r.id]
+    )
+    |> Enum.uniq_by(& &1.page)
+    |> Enum.sort_by(& &1.page)
+  end
+
+  @doc false
+  def citation_results(target_id) do
+    for candidate <- Providers.all(),
+        candidate.slug() in DevilsDictionary.Curation.Shelf.providers(),
+        {:ok, provider} <- [provider(candidate.slug())],
+        %Mapping{} = mapping <- [enabled_mapping(target_id, provider.slug(), true)],
+        :ok <- [provider_eligible(provider, %{mapping.source | active: true})],
+        :ok <- [provider.validate_mapping(mapping.operation, mapping.parameters)],
+        :ok <- [validate_target(target_id)],
+        %Run{} = root <- [latest_display_root(mapping.id, provider.adapter_version())],
+        reduce: [] do
+      acc ->
+        runs = display_runs(root)
+        pages = Map.new(runs, &{&1.id, &1.page})
+        by_id = Map.new(runs, &{&1.id, &1})
+        ids = Map.keys(by_id)
+        shown = MapSet.new(display_items(runs), & &1.id)
+        rows = Repo.all(from r in Result, where: r.run_id in ^ids)
+
+        winners =
+          rows
+          |> Enum.sort_by(
+            &{if(MapSet.member?(shown, &1.id), do: 0, else: 1), pages[&1.run_id], &1.position,
+             &1.id}
+          )
+          |> Enum.uniq_by(&(&1.object_id || {&1.external_namespace, &1.external_id}))
+          |> Enum.sort_by(&{pages[&1.run_id], &1.position, &1.id})
+          |> Enum.map(&{&1, by_id[&1.run_id]})
+
+        acc ++ winners
+    end
+  end
+
   defp state_for_mapping(mapping, provider) do
     now = DateTime.utc_now()
 
     case latest_display_root(mapping.id, provider.adapter_version()) do
       %Run{} = root ->
-        runs =
-          Repo.all(
-            from r in Run,
-              where:
-                r.mapping_id == ^mapping.id and r.page_context == ^root.page_context and
-                  r.status == :succeeded and r.display_allowed,
-              order_by: [asc: r.page, desc: r.started_at, desc: r.id]
-          )
-          |> Enum.uniq_by(& &1.page)
-          |> Enum.sort_by(& &1.page)
+        runs = display_runs(root)
 
         items = display_items(runs)
         last = List.last(runs) || root
@@ -1292,18 +1318,30 @@ defmodule DevilsDictionary.Discovery do
 
   defp publish_success(run, provider, response, prepared) do
     now = DateTime.utc_now()
+    policy = Policy.for!(provider.slug())
+
+    observation = %{
+      run
+      | completed_at: now,
+        expires_at: DateTime.add(now, policy.retention_seconds),
+        retention_seconds: policy.retention_seconds,
+        retention_policy_sha256: DevilsDictionary.Curation.Shelf.policy_hash(policy)
+    }
+
     persistent? = provider.capabilities().persistence == :persistent
     items = Enum.uniq_by(response.items, &{&1.external_namespace, &1.external_id})
 
     result =
       Repo.transaction(fn ->
-        if persistent?, do: persist_results(run, provider, items, prepared)
+        if persistent?, do: persist_results(observation, provider, items, prepared)
 
         run
         |> Run.lifecycle_changeset(%{
           request_parameters: merge_transport_state(run.id, response.request_parameters),
           status: :succeeded,
           completed_at: now,
+          retention_seconds: observation.retention_seconds,
+          retention_policy_sha256: observation.retention_policy_sha256,
           refresh_after:
             DateTime.add(now, Policy.refresh_seconds(provider.slug(), length(items)), :second),
           # The hold deadline, and real since #144 Phase 2: `completed_at +` the
@@ -1315,7 +1353,7 @@ defmodule DevilsDictionary.Discovery do
           # completed run is immutable in the database — a policy change
           # applies to what runs after it, and the sweep falls back to the
           # policy for anything written before this existed.
-          expires_at: DateTime.add(now, Policy.retention_seconds(provider.slug()), :second),
+          expires_at: observation.expires_at,
           retry_at: nil,
           next_cursor: response.next_cursor,
           error_code: nil,
@@ -1416,6 +1454,11 @@ defmodule DevilsDictionary.Discovery do
     end)
     |> SourceIdentity.lock_entries(prepared)
 
+    proposed =
+      Enum.sort_by(proposed, fn {item, _} ->
+        DevilsDictionary.Curation.Digest.sha256("#{item.external_namespace}:#{item.external_id}")
+      end)
+
     Enum.each(proposed, fn {item, proposal} ->
       {:ok, record} =
         Sources.upsert_record(source, %{
@@ -1435,10 +1478,27 @@ defmodule DevilsDictionary.Discovery do
         |> Map.put(:run_id, run.id)
         |> Map.put(:object_id, resolution.object_id)
         |> Map.put(:source_record_id, record.id)
+        |> Map.put(:source_record_revision_id, record.current_revision.id)
         |> Map.put(:resolution_state, resolution.state)
         |> Map.update!(:preview_metadata, &put_creators(&1, resolution.relationships))
 
       %Result{} |> Result.changeset(attrs) |> Repo.insert!()
+
+      Repo.query!(
+        """
+        UPDATE source_record_revisions SET
+          discovery_retention_policy_sha256=CASE WHEN discovery_retain_until IS NULL OR discovery_retain_until < $2 THEN $3 ELSE discovery_retention_policy_sha256 END,
+          discovery_retain_until=GREATEST(discovery_retain_until,$2),
+          discovery_last_observed_at=GREATEST(discovery_last_observed_at,$4)
+        WHERE id=$1
+        """,
+        [
+          record.current_revision.id,
+          run.expires_at,
+          run.retention_policy_sha256,
+          run.completed_at
+        ]
+      )
     end)
   end
 
@@ -1593,7 +1653,7 @@ defmodule DevilsDictionary.Discovery do
     end
   end
 
-  defp enabled_mapping(target_id, provider_slug) do
+  defp enabled_mapping(target_id, provider_slug, include_inactive \\ false) do
     case Providers.get(provider_slug) do
       nil ->
         nil
@@ -1615,7 +1675,7 @@ defmodule DevilsDictionary.Discovery do
             join: source in assoc(m, :source),
             where:
               m.target_object_id == ^target_id and source.slug == ^provider_slug and m.enabled and
-                source.active and
+                (^include_inactive or source.active) and
                 (not like(m.mapping_key, ^automatic_prefix) or
                    m.mapping_key == ^current_automatic_key or
                    like(m.mapping_key, ^current_automatic_prefix)),

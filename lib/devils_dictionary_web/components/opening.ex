@@ -161,6 +161,7 @@ defmodule DevilsDictionaryWeb.Opening do
 
       <.credit_line id="opening-lead-credits" credits={@lead.credits} class="max-w-[44rem]" />
 
+      <.choice_receipt id="opening-lead" choice={@lead} />
       <.why id="opening-lead-why" summary="Why this leads" reasons={@lead.reasons}>
         <.particulars
           id="opening-lead"
@@ -186,6 +187,70 @@ defmodule DevilsDictionaryWeb.Opening do
   # The picture stays beside the text when the tile shares its row: stacked
   # full width above it, a square artwork alone pushed the Definitions a
   # quarter of a screen down (#257, measured on /on/war at 1280 × 900).
+  defp highlight(%{highlight: %{kind: kind}} = assigns) when kind in [:shelf, :linked_claim] do
+    assigns = assign(assigns, :id, "opening-highlight-#{assigns.highlight.position}")
+
+    ~H"""
+    <li id={@id} class="flex min-w-0 flex-col gap-3 rounded-xl bg-mist-950/2.5 p-5 dark:bg-white/5">
+      <p class="text-sm font-medium text-mist-600 dark:text-mist-400">
+        {if @highlight.kind == :shelf,
+          do: "Selected from provider metadata",
+          else: "Selected public linked claim"}
+      </p>
+      <img
+        :if={@highlight.image}
+        id={"#{@id}-image"}
+        src={@highlight.image.url}
+        alt={@highlight.image.alt}
+        class="max-h-80 w-full rounded-lg object-contain"
+        loading="lazy"
+      />
+      <h3 id={"#{@id}-title"} class="font-display text-2xl/8">{@highlight.title}</h3>
+      <p :if={@highlight.current_label} id={"#{@id}-now"}>Now: {@highlight.current_label}</p>
+      <p :if={@highlight.creator}>{@highlight.creator}</p>
+      <p
+        :if={@highlight.kind == :shelf && @highlight.work.credit_parts != []}
+        id={"#{@id}-attribution"}
+        class="text-sm/6 text-pretty"
+      >
+        <%= for part <- @highlight.work.credit_parts do %>
+          <a
+            :if={part.url}
+            href={part.url}
+            target="_blank"
+            rel="noreferrer"
+            class="underline underline-offset-4"
+          >{part.text}</a><span :if={is_nil(part.url)}>{part.text}</span>
+        <% end %>
+      </p>
+      <DevilsDictionaryWeb.Culture.attribution_mark
+        :if={@highlight.kind == :shelf && @highlight.work.mark}
+        id={"#{@id}-provider-mark"}
+        mark={@highlight.work.mark}
+        provider={@highlight.source.slug}
+      />
+      <.credit_line id={"#{@id}-credits"} credits={@highlight.credits} />
+      <.link
+        :if={@highlight.links[:source]}
+        href={@highlight.links.source}
+        target="_blank"
+        rel="noreferrer"
+        class="w-fit underline underline-offset-4"
+      >Source</.link>
+      <.choice_receipt id={@id} choice={@highlight} />
+      <.why id={"#{@id}-why"} summary="Why this is here" reasons={@highlight.reasons}>
+        <.particulars
+          id={@id}
+          meaning={@highlight.meaning}
+          register={@highlight.register}
+          reasons={@highlight.reasons}
+          credits={@highlight.credits}
+        />
+      </.why>
+    </li>
+    """
+  end
+
   defp highlight(%{highlight: %{kind: :artwork}} = assigns) do
     assigns = assign(assigns, :id, "opening-highlight-#{assigns.highlight.position}")
 
@@ -220,6 +285,7 @@ defmodule DevilsDictionaryWeb.Opening do
 
       <.credit_line id={"#{@id}-credits"} credits={@highlight.credits} />
 
+      <.choice_receipt id={@id} choice={@highlight} />
       <.why id={"#{@id}-why"} summary="Why this is here" reasons={@highlight.reasons}>
         <.particulars
           id={@id}
@@ -271,6 +337,7 @@ defmodule DevilsDictionaryWeb.Opening do
 
       <.credit_line id={"#{@id}-credits"} credits={@highlight.credits} />
 
+      <.choice_receipt id={@id} choice={@highlight} />
       <.why id={"#{@id}-why"} summary="Why this is here" reasons={@highlight.reasons}>
         <.particulars
           id={@id}
@@ -329,6 +396,7 @@ defmodule DevilsDictionaryWeb.Opening do
 
       <.credit_line id={"#{@id}-credits"} credits={@highlight.credits} />
 
+      <.choice_receipt id={@id} choice={@highlight} />
       <.why id={"#{@id}-why"} summary="Why this is here" reasons={@highlight.reasons}>
         <.particulars
           id={@id}
@@ -394,6 +462,7 @@ defmodule DevilsDictionaryWeb.Opening do
 
       <.credit_line id={"#{@id}-credits"} credits={@highlight.credits} />
 
+      <.choice_receipt id={@id} choice={@highlight} />
       <.why id={"#{@id}-why"} summary="Why this is here" reasons={@highlight.reasons}>
         <.particulars
           id={@id}
@@ -467,6 +536,7 @@ defmodule DevilsDictionaryWeb.Opening do
 
       <.credit_line id={"#{@id}-credits"} credits={@highlight.credits} />
 
+      <.choice_receipt id={@id} choice={@highlight} />
       <.why id={"#{@id}-why"} summary="Why this is here" reasons={@highlight.reasons}>
         <div class="flex flex-col gap-3">
           <.particulars
@@ -494,6 +564,36 @@ defmodule DevilsDictionaryWeb.Opening do
         </div>
       </.why>
     </li>
+    """
+  end
+
+  attr :id, :string, required: true
+  attr :choice, :map, required: true
+
+  defp choice_receipt(assigns) do
+    ~H"""
+    <div
+      :if={@choice.date_info}
+      id={"#{@id}-receipt"}
+      class="flex flex-col gap-1 text-sm/6 text-mist-600 dark:text-mist-400"
+    >
+      <p>Content date: {DevilsDictionary.Curation.ContentDate.text(@choice.date_info)}</p>
+      <p :if={@choice.source_edition}>Source edition: {@choice.source_edition}</p>
+      <p :if={@choice.basis && @choice.basis.origin == "model"}>
+        The editor was given only: {@choice.basis.evidence_kind} · {@choice.basis.fields_version}.
+      </p>
+      <p :if={@choice.basis && @choice.basis.origin == "owner"}>
+        Chosen on the curation screen, which lists {@choice.basis.evidence_kind} and links to the source.
+      </p>
+      <p :if={is_nil(@choice.basis) or @choice.basis.origin == "legacy_unknown"}>
+        Basis not recorded.
+      </p>
+      <.link
+        :if={@choice.receipt_path}
+        navigate={@choice.receipt_path}
+        class="w-fit underline underline-offset-4"
+      >Exact choice, chooser and evidence</.link>
+    </div>
     """
   end
 
@@ -1169,6 +1269,24 @@ defmodule DevilsDictionaryWeb.Opening do
   `Curation.PublishedReader` give, and answers a plain fallback for any
   other, so an unmapped reason never raises on a public page.
   """
+  def withheld_reason({:publication_withheld, reasons}) when is_list(reasons),
+    do: Enum.map_join(reasons, "; ", &withheld_reason/1)
+
+  def withheld_reason(:retention_expired),
+    do: "the selected observation's retention window has expired"
+
+  def withheld_reason(:payload_redacted),
+    do: "the selected source payload was redacted under its retention policy"
+
+  def withheld_reason(:revision_mismatch),
+    do: "the selected observation no longer matches its exact source revision"
+
+  def withheld_reason(:observation_unbound),
+    do: "the exact observed revision cannot be established"
+
+  def withheld_reason(:claim_not_current), do: "the selected claim is no longer current"
+  def withheld_reason(:claim_unlinked), do: "the claim's public scope link no longer stands"
+
   def withheld_reason(:revision_not_current),
     do: "its exact source revision is no longer current"
 
@@ -1272,6 +1390,9 @@ defmodule DevilsDictionaryWeb.Opening do
   def withheld_reason(_reason), do: "it could not be resolved"
 
   # An exemplar names the claim it shows as well as the thing.
+  defp reference(%{shelf_citation_id: id, source_record_revision_id: revision})
+       when is_integer(id), do: "shelf citation #{id}, source revision #{revision}"
+
   defp reference(%{assertion_revision_id: claim} = ref) when is_integer(claim) do
     words = if ref.content_revision_id, do: ", revision #{ref.content_revision_id}", else: ""
     "#{ref.object_kind} #{ref.object_id}#{words}, claim revision #{claim}"
@@ -1300,6 +1421,8 @@ defmodule DevilsDictionaryWeb.Opening do
   defp locator(_locator), do: ""
 
   defp inspect_label(kind) when kind in [:artwork, :poem, :book], do: "work"
+  defp inspect_label(:linked_claim), do: "claim"
+  defp inspect_label(:shelf), do: "exact choice"
   defp inspect_label(:exemplar), do: "claim"
   defp inspect_label(_kind), do: "evidence"
 
@@ -1359,6 +1482,12 @@ defmodule DevilsDictionaryWeb.Opening do
 
   defp evidence_path(%{object_kind: :sense, sense_revision_id: id}) when is_integer(id),
     do: ~p"/evidence/sense/#{id}"
+
+  defp inspect_path(%{kind: :linked_claim, links: %{connection: id}}, _mode),
+    do: ~p"/connections/#{id}"
+
+  defp inspect_path(%{kind: :shelf, receipt_path: path, links: links}, _mode),
+    do: path || links[:source]
 
   defp inspect_path(%{kind: kind, reference: %{object_id: id}} = highlight, mode)
        when kind in [:artwork, :poem, :book] and is_integer(id),

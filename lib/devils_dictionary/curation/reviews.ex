@@ -62,7 +62,13 @@ defmodule DevilsDictionary.Curation.Reviews do
              end) do
         evaluation = Standing.evaluate(version, composition)
 
-        with :ok <- acceptable(decision, version, composition, evaluation) do
+        with :ok <- acceptable(decision, version, composition, evaluation),
+             :ok <-
+               DevilsDictionary.Curation.ProviderText.validate(
+                 reason,
+                 DevilsDictionary.Curation.Compositions.items(version.id),
+                 fixed_reason: decision == :rejected and reason == "dismissed_by_owner"
+               ) do
           {:ok,
            Repo.insert!(%CompositionReview{
              composition_id: composition.id,

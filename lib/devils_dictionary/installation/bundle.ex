@@ -212,6 +212,7 @@ defmodule DevilsDictionary.Installation.Bundle do
   defp reusable(out, facts, config, require_quiet?) do
     with {:ok, json} <- File.read(Path.join(out, @capture)),
          {:ok, recorded} <- Jason.decode(json),
+         true <- reusable_projection?(out, recorded),
          true <- recorded["source"]["system_identifier"] == facts.server.system_identifier,
          true <- recorded["source"]["database_oid"] == facts.database["oid"],
          true <- recorded["quiescence"]["quiet"] == true or not require_quiet?,
@@ -224,6 +225,77 @@ defmodule DevilsDictionary.Installation.Bundle do
     else
       _ -> :none
     end
+  end
+
+  defp reusable_projection?(out, recorded) do
+    projection = get_in(recorded, ["state", "projection"])
+
+    case Enum.find(recorded["files"] || [], &(&1["role"] == "state")) do
+      nil ->
+        false
+
+      entry ->
+        try do
+          state = read_json!(Path.join(out, entry["path"]))
+
+          projection_problems(
+            %{
+              "format" => "dd.bundle/2",
+              "projection" => projection,
+              "files" => recorded["files"]
+            },
+            state
+          ) == []
+        rescue
+          _ -> false
+        end
+    end
+  end
+
+  defp projection_problems(%{"format" => "dd.bundle/1"}, _state), do: []
+
+  defp projection_problems(manifest, state) do
+    projection = manifest["projection"]
+
+    counts =
+      Map.new(DevilsDictionary.Installation.DiscoveryProjection.excluded(), fn table ->
+        {table, get_in(state, ["sections", table, "count"])}
+      end)
+      |> Enum.reject(fn {_, n} -> is_nil(n) end)
+      |> Map.new()
+
+    roles =
+      Enum.flat_map(~w(source_records source_record_revisions), fn table ->
+        entries = Manifest.files(manifest, "projected_" <> table)
+        expected = Map.get(counts, table)
+
+        cond do
+          is_nil(expected) and entries == [] ->
+            []
+
+          length(entries) == 1 and hd(entries)["table"] == table and
+              hd(entries)["rows"] == expected ->
+            []
+
+          true ->
+            ["missing, duplicate or inconsistent projected file for " <> table]
+        end
+      end)
+
+    metadata =
+      if is_map(projection) and projection["format"] == "dd.bundle/2" and
+           projection == state["projection"] and projection["row_counts"] == counts and
+           projection["excluded_cache_tables"] ==
+             ~w(discovery_results discovery_runs discovery_request_attempts),
+         do: [],
+         else: ["missing or inconsistent dd.bundle/2 projection metadata"]
+
+    cache =
+      for table <- ~w(discovery_results discovery_runs discovery_request_attempts),
+          Map.get(counts, table, 0) != 0,
+          do: "projected cache must be empty: " <> table
+
+    metadata ++ roles ++ cache
   end
 
   # What a quiet window leaves unchanged: the row counters, and the sequences
@@ -302,11 +374,30 @@ defmodule DevilsDictionary.Installation.Bundle do
           "counters_after" => after_window["counters"],
           "quiet" => quiet?
         },
-        "state" => %{"migrations" => state["migrations"], "database" => state["database"]},
-        "files" => [
-          entry(out, dump, "dump", %{"database" => facts.database["name"]}),
-          entry(out, state_path, "state", %{"database" => facts.database["name"]})
-        ]
+        "state" => %{
+          "migrations" => state["migrations"],
+          "database" => state["database"],
+          "projection" => state["projection"]
+        },
+        "files" =>
+          [
+            entry(out, dump, "dump", %{"database" => facts.database["name"]}),
+            entry(out, state_path, "state", %{"database" => facts.database["name"]})
+          ] ++
+            Enum.flat_map(~w(source_records source_record_revisions), fn table ->
+              if state["sections"][table] do
+                [
+                  entry(
+                    out,
+                    Path.join(Path.dirname(dump), table <> ".copy"),
+                    "projected_" <> table,
+                    %{"table" => table, "rows" => state["sections"][table]["count"]}
+                  )
+                ]
+              else
+                []
+              end
+            end)
       }
 
       if not quiet? and require_quiet? do
@@ -377,7 +468,33 @@ defmodule DevilsDictionary.Installation.Bundle do
 
               %{rows: [[id]]} = Postgrex.query!(conn, "SELECT pg_export_snapshot()", [])
               dump = Task.async(fn -> pg_dump!(config, id, partial) end)
-              state = State.capture(source, snapshot: id)
+
+              projection =
+                DevilsDictionary.Installation.DiscoveryProjection.plan(conn, DateTime.utc_now())
+
+              for table <- ~w(source_records source_record_revisions),
+                  Map.has_key?(projection, table) do
+                DevilsDictionary.Installation.DiscoveryProjection.copy_out!(
+                  config,
+                  id,
+                  projection[table],
+                  Path.join(Path.dirname(partial), table <> ".copy")
+                )
+              end
+
+              state = State.capture(source, snapshot: id, table_sources: projection)
+
+              state =
+                Map.put(state, "projection", %{
+                  "format" => "dd.bundle/2",
+                  "excluded_cache_tables" =>
+                    ~w(discovery_results discovery_runs discovery_request_attempts),
+                  "row_counts" =>
+                    Map.new(projection, fn {table, _} ->
+                      {table, state["sections"][table]["count"]}
+                    end)
+                })
+
               :ok = Task.await(dump, :infinity)
               {state, id}
             end,
@@ -399,6 +516,11 @@ defmodule DevilsDictionary.Installation.Bundle do
     args =
       Snapshot.connection_args(config) ++
         [
+          "--exclude-table-data=public.discovery_results",
+          "--exclude-table-data=public.discovery_runs",
+          "--exclude-table-data=public.discovery_request_attempts",
+          "--exclude-table-data=public.source_records",
+          "--exclude-table-data=public.source_record_revisions",
           "--format=custom",
           "--compress=6",
           "--snapshot=#{snapshot}",
@@ -571,6 +693,7 @@ defmodule DevilsDictionary.Installation.Bundle do
         }),
       "source" => capture["source"],
       "snapshot" => capture["snapshot"],
+      "projection" => capture["state"]["projection"],
       "database" => capture["state"]["database"],
       "schema" => %{
         "head" => List.last(capture["state"]["migrations"]),
@@ -667,9 +790,11 @@ defmodule DevilsDictionary.Installation.Bundle do
         for table <- expected,
             state["sections"][table]["count"] > 0,
             not MapSet.member?(tables, table),
+            not (manifest["format"] == "dd.bundle/2" and
+                   table in ~w(source_records source_record_revisions)),
             do: table
 
-      [] ++
+      projection_problems(manifest, state) ++
         if(header == manifest["source"]["database"],
           do: [],
           else: [

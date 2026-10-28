@@ -15,6 +15,7 @@ defmodule DevilsDictionary.Discovery.Result do
     field :external_id, :string
     belongs_to :object, Object
     belongs_to :source_record, SourceRecord
+    field :source_record_revision_id, :id
     field :position, :integer
     field :match_details, :map, default: %{}
     field :preview_metadata, :map, default: %{}
@@ -55,6 +56,7 @@ defmodule DevilsDictionary.Discovery.Result do
       :external_id,
       :object_id,
       :source_record_id,
+      :source_record_revision_id,
       :position,
       :match_details,
       :preview_metadata,

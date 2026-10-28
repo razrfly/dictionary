@@ -162,6 +162,20 @@ defmodule DevilsDictionary.Curation.Runtime do
 
   # `retries_left` was checked against the database's bound before admission,
   # so recording a retry can never break the CHECK mid-call.
+  defp safe_runtime_detail(detail, frozen) do
+    if Enum.any?(
+         frozen.packet["candidates"],
+         &((&1["expiring_text"] || []) != [] or
+             (&1["kind"] == "shelf" and
+                DevilsDictionary.Curation.Shelf.expiring_provider?(&1["source"])))
+       ),
+       do: %{
+         "class" => "http_error",
+         "detail_sha256" => DevilsDictionary.Curation.Digest.term(detail)
+       },
+       else: detail
+  end
+
   defp call(attempt, config, frozen, before, opts, retries_left) do
     started = System.monotonic_time(:millisecond)
 
@@ -200,7 +214,7 @@ defmodule DevilsDictionary.Curation.Runtime do
             %{
               outcome: :runtime_error,
               refusal_reasons: [["runtime", "http_#{status}"]],
-              metrics: %{"runtime_detail" => detail}
+              metrics: %{"runtime_detail" => safe_runtime_detail(detail, frozen)}
             },
             opts
           )

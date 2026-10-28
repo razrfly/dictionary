@@ -672,7 +672,7 @@ defmodule DevilsDictionary.Curation.Runtime.BenchTest do
       File.rm!(path)
       %{"ordinary" => hash} = Bench.freeze_packets!(seeded, dir, "generic-editor-v1")
       {:ok, fresh} = Packet.read(path)
-      assert {fresh.hash, fresh.packet["packet_version"]} == {hash, "runtime-packet-v2"}
+      assert {fresh.hash, fresh.packet["packet_version"]} == {hash, "runtime-packet-v3"}
     end
   end
 

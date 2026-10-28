@@ -1088,9 +1088,14 @@ defmodule DevilsDictionary.Discovery.Providers.GuardianTest do
 
     {:ok, record} =
       Sources.upsert_record(source, %{
-        external_id: "#{slug}:retention",
+        external_id: "#{slug}_article:#{slug}-retention",
         url: @kash_patel_url,
-        raw: %{"preview_metadata" => %{"title" => "Kash Patel defends FBI hiring policy"}}
+        raw: %{
+          "external_namespace" => "#{slug}_article",
+          "external_id" => "#{slug}-retention",
+          "match_details" => %{},
+          "preview_metadata" => %{"title" => "Kash Patel defends FBI hiring policy"}
+        }
       })
 
     # `fetched_at` is stamped now by `upsert_record/2`; age it, because that is
@@ -1108,7 +1113,7 @@ defmodule DevilsDictionary.Discovery.Providers.GuardianTest do
         source_record_id: record.id,
         position: 0,
         match_details: %{},
-        preview_metadata: %{},
+        preview_metadata: %{"title" => "Kash Patel defends FBI hiring policy"},
         resolution_state: :insufficient_evidence
       })
 

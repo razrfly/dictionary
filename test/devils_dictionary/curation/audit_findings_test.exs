@@ -38,6 +38,24 @@ defmodule DevilsDictionary.Curation.AuditFindingsTest do
 
   alias DevilsDictionary.WordFixtures
 
+  defp noted_content_spec(content, lexeme),
+    do:
+      Map.put(DevilsDictionary.CurationFixtures.content_spec(content, lexeme), :note, %{
+        text: "A fixture selection reason."
+      })
+
+  defp noted_quotation_spec(sense, index),
+    do:
+      Map.put(DevilsDictionary.CurationFixtures.quotation_spec(sense, index), :note, %{
+        text: "A fixture selection reason."
+      })
+
+  defp noted_catalog_spec(lexeme, overrides \\ %{}),
+    do:
+      Map.put(DevilsDictionary.CurationFixtures.catalog_spec(lexeme, overrides), :note, %{
+        text: "A fixture selection reason."
+      })
+
   setup do
     world = world!()
     {config, config_version} = enabled_test_configuration!(world.reviewer, "audit")
@@ -58,7 +76,7 @@ defmodule DevilsDictionary.Curation.AuditFindingsTest do
       ctx.contributor,
       (composition || ctx.composition).id,
       Map.merge(
-        %{lead: content_spec(ctx.bierce, ctx.love), reason: "audit", expected_parent: nil},
+        %{lead: noted_content_spec(ctx.bierce, ctx.love), reason: "audit", expected_parent: nil},
         attrs
       )
     )
@@ -120,12 +138,15 @@ defmodule DevilsDictionary.Curation.AuditFindingsTest do
   # published, and v2 (the same lead, a quotation added) is accepted and
   # waiting. Then the defining claim changes.
   defp published_and_waiting!(ctx) do
-    v1 = version!(ctx, %{highlights: [content_spec(ctx.definition, ctx.love)]})
+    v1 = version!(ctx, %{highlights: [noted_content_spec(ctx.definition, ctx.love)]})
     publish!(ctx, v1)
 
     v2 =
       version!(ctx, %{
-        highlights: [content_spec(ctx.definition, ctx.love), quotation_spec(ctx.sense, 1)],
+        highlights: [
+          noted_content_spec(ctx.definition, ctx.love),
+          noted_quotation_spec(ctx.sense, 1)
+        ],
         expected_parent: v1.id
       })
 
@@ -153,7 +174,7 @@ defmodule DevilsDictionary.Curation.AuditFindingsTest do
     # Another definition on the page may lead instead, as a new version with
     # its own review, never by substitution.
     fallback =
-      version!(ctx, %{lead: content_spec(ctx.definition, ctx.love), expected_parent: v2.id})
+      version!(ctx, %{lead: noted_content_spec(ctx.definition, ctx.love), expected_parent: v2.id})
 
     assert fallback.resolution["lead_rule"] == "manual_fallback"
     assert {:error, :not_approved} = publish(ctx, fallback, v1.id)
@@ -166,7 +187,7 @@ defmodule DevilsDictionary.Curation.AuditFindingsTest do
       claim = defines_claim!(ctx.definition, ctx.love)
 
       highlight =
-        Map.put(content_spec(ctx.definition, ctx.love), :assertion_revision_id, claim.id)
+        Map.put(noted_content_spec(ctx.definition, ctx.love), :assertion_revision_id, claim.id)
 
       v = version!(ctx, %{highlights: [highlight]})
       publish!(ctx, v)
@@ -205,7 +226,9 @@ defmodule DevilsDictionary.Curation.AuditFindingsTest do
       work = catalog_work!()
 
       v =
-        version!(ctx, %{highlights: [Map.put(catalog_spec(ctx.love), :object_id, work.object_id)]})
+        version!(ctx, %{
+          highlights: [Map.put(noted_catalog_spec(ctx.love), :object_id, work.object_id)]
+        })
 
       publish!(ctx, v)
       assert [%{item_object_id: id}] = current!(ctx).highlights
@@ -254,7 +277,7 @@ defmodule DevilsDictionary.Curation.AuditFindingsTest do
           reason: "oats"
         })
 
-      v = version!(ctx, %{lead: content_spec(ctx.oats_definition, ctx.oats)}, oats)
+      v = version!(ctx, %{lead: noted_content_spec(ctx.oats_definition, ctx.oats)}, oats)
       publish!(ctx, v)
 
       {:ok, _} =
@@ -268,7 +291,10 @@ defmodule DevilsDictionary.Curation.AuditFindingsTest do
       assert {:error, :lead_not_on_scope} =
                create(
                  ctx,
-                 %{lead: content_spec(ctx.oats_definition, ctx.oats), expected_parent: v.id},
+                 %{
+                   lead: noted_content_spec(ctx.oats_definition, ctx.oats),
+                   expected_parent: v.id
+                 },
                  oats
                )
     end
@@ -280,7 +306,7 @@ defmodule DevilsDictionary.Curation.AuditFindingsTest do
 
       assert {:error, {:ineligible, [{:lead, 1, :display_restricted}]}} = create(ctx, %{})
 
-      v = version!(ctx, %{lead: content_spec(ctx.definition, ctx.love)})
+      v = version!(ctx, %{lead: noted_content_spec(ctx.definition, ctx.love)})
       assert v.resolution["lead_rule"] == "manual_fallback"
     end
   end
@@ -345,13 +371,17 @@ defmodule DevilsDictionary.Curation.AuditFindingsTest do
 
       assert {:error, {:ineligible, [{:highlight, 1, :work_identity_mismatch}]}} =
                create(ctx, %{
-                 highlights: [Map.put(catalog_spec(ctx.love), :object_id, unrelated.object_id)]
+                 highlights: [
+                   Map.put(noted_catalog_spec(ctx.love), :object_id, unrelated.object_id)
+                 ]
                })
 
       work = catalog_work!()
 
       v =
-        version!(ctx, %{highlights: [Map.put(catalog_spec(ctx.love), :object_id, work.object_id)]})
+        version!(ctx, %{
+          highlights: [Map.put(noted_catalog_spec(ctx.love), :object_id, work.object_id)]
+        })
 
       publish!(ctx, v)
       assert [%{item_object_id: id}] = current!(ctx).highlights
@@ -370,7 +400,7 @@ defmodule DevilsDictionary.Curation.AuditFindingsTest do
     end
 
     test "a catalog pin without an object is still a catalog-only work", ctx do
-      v = version!(ctx, %{highlights: [catalog_spec(ctx.love)]})
+      v = version!(ctx, %{highlights: [noted_catalog_spec(ctx.love)]})
       publish!(ctx, v)
       assert [%{item_object_id: nil, catalog_identity: "Q8777422"}] = current!(ctx).highlights
     end
@@ -404,13 +434,15 @@ defmodule DevilsDictionary.Curation.AuditFindingsTest do
         note = Map.merge(%{text: "fixture note"}, extra)
 
         assert {:error, {:note_attribution_not_an_input, :lead, 1}} =
-                 create(ctx, %{lead: Map.put(content_spec(ctx.bierce, ctx.love), :note, note)})
+                 create(ctx, %{
+                   lead: Map.put(noted_content_spec(ctx.bierce, ctx.love), :note, note)
+                 })
       end
     end
 
     test "a note is its authenticated author's through creation, publication and reading", ctx do
       note = %{text: "fixture note"}
-      v = version!(ctx, %{lead: Map.put(content_spec(ctx.bierce, ctx.love), :note, note)})
+      v = version!(ctx, %{lead: Map.put(noted_content_spec(ctx.bierce, ctx.love), :note, note)})
       publish!(ctx, v)
 
       author = actor!(ctx.contributor)

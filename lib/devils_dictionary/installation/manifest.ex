@@ -1,5 +1,10 @@
 defmodule DevilsDictionary.Installation.Manifest do
   @moduledoc """
+  New captures use `dd.bundle/2`; legacy `dd.bundle/1` remains readable. The
+  v2 `projection` records the snapshot-local source table hashes/counts and
+  `projected_source_records` / `projected_source_record_revisions` file roles.
+  Those binary COPY files restore before post-data constraints are installed.
+
   A bundle's `MANIFEST.json`: what the bundle is, where it came from, and
   every file in it by size and SHA-256.
 
@@ -14,7 +19,7 @@ defmodule DevilsDictionary.Installation.Manifest do
   SHA-256 is printed when it is written: that digest is what an operator
   approves, and what `mix dd.bootstrap --expect-manifest-sha256` pins.
 
-  Format `dd.bundle/1`:
+  Formats `dd.bundle/1` and `dd.bundle/2`:
 
       format, kind ("installation"), privacy, created_at,
       code      — the installation's checkout: revision, dirty, branch
@@ -34,7 +39,7 @@ defmodule DevilsDictionary.Installation.Manifest do
 
   alias DevilsDictionary.Installation.Files
 
-  @format "dd.bundle/1"
+  @format "dd.bundle/2"
   @file_name "MANIFEST.json"
 
   def format, do: @format
@@ -72,12 +77,13 @@ defmodule DevilsDictionary.Installation.Manifest do
     end
   end
 
-  defp known_format(%{"format" => @format}, _bundle), do: :ok
+  defp known_format(%{"format" => format}, _bundle) when format in ["dd.bundle/1", "dd.bundle/2"],
+    do: :ok
 
   defp known_format(manifest, bundle),
     do:
       {:error,
-       "#{path(bundle)} is format #{inspect(manifest["format"])}; this code reads #{@format} only"}
+       "#{path(bundle)} is format #{inspect(manifest["format"])}; this code reads dd.bundle/1 and dd.bundle/2 only"}
 
   @doc "The manifest file's own SHA-256."
   def digest(bundle), do: Files.sha256(path(bundle))

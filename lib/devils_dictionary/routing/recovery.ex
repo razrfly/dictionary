@@ -111,7 +111,12 @@ defmodule DevilsDictionary.Routing.Recovery do
                 mode == :exact or table not in @projection_tables,
                 into: %{} do
               kept = Enum.reject(columns, fn {name, _type} -> skipped?(name, mode) end)
-              {table, capture(table_sql(table, kept, Map.get(keys, table, [])), opts)}
+
+              {table,
+               capture(
+                 table_sql(table, kept, Map.get(keys, table, []), opts[:table_sources]),
+                 opts
+               )}
             end
 
           sections = Map.put(sections, "schema", schema(opts))
@@ -173,7 +178,7 @@ defmodule DevilsDictionary.Routing.Recovery do
     Enum.group_by(rows, &Enum.at(&1, 0), &Enum.at(&1, 1))
   end
 
-  defp table_sql(table, columns, key) do
+  defp table_sql(table, columns, key, sources) do
     rendered =
       Enum.map_join(columns, ", ", fn {name, type} ->
         if Regex.match?(@hashed, type), do: ~s|md5("#{name}"::text)|, else: ~s|"#{name}"|
@@ -189,7 +194,12 @@ defmodule DevilsDictionary.Routing.Recovery do
         key -> Enum.map(key, &ordered(&1, Map.get(types, &1, "")))
       end
 
-    ~s|SELECT json_build_array(#{rendered})::text FROM "#{table}" ORDER BY #{Enum.join(order, ", ")}|
+    source =
+      if sources && sources[table],
+        do: "(" <> sources[table] <> ") projected",
+        else: ~s|"#{table}"|
+
+    ~s|SELECT json_build_array(#{rendered})::text FROM #{source} ORDER BY #{Enum.join(order, ", ")}|
   end
 
   defp ordered(column, type) do

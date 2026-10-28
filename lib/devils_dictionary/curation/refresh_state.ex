@@ -71,6 +71,7 @@ defmodule DevilsDictionary.Curation.RefreshState do
     field :inputs_last_changed_at, :utc_datetime_usec
     field :inputs_last_changed_reason, :string
     field :review_unit_reserved_at, :utc_datetime_usec
+    field :shelf_focus, :string
 
     timestamps(type: :utc_datetime_usec)
   end

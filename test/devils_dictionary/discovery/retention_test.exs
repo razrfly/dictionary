@@ -125,9 +125,18 @@ defmodule DevilsDictionary.Discovery.RetentionTest do
       "ALTER TABLE discovery_runs DISABLE TRIGGER discovery_runs_keep_completed_immutable"
     )
 
+    Repo.query!("ALTER TABLE discovery_runs DISABLE TRIGGER discovery_run_retention_guard")
+
     Repo.query!(
       "UPDATE discovery_runs SET completed_at = $1, expires_at = $2 WHERE id = $3",
       [then, DateTime.add(then, retention_of(run), :second), run.id]
+    )
+
+    Repo.query!("ALTER TABLE discovery_runs ENABLE TRIGGER discovery_run_retention_guard")
+
+    Repo.query!(
+      "UPDATE source_record_revisions SET discovery_last_observed_at=$1,discovery_retain_until=$2 WHERE id IN (SELECT source_record_revision_id FROM discovery_results WHERE run_id=$3)",
+      [then, DateTime.add(then, retention_of(run)), run.id]
     )
 
     Repo.query!(

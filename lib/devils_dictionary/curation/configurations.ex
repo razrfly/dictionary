@@ -154,10 +154,17 @@ defmodule DevilsDictionary.Curation.Configurations do
   `"<instruction> · <model config slug>"` (`:editor_label_mismatch`).
   """
   def create_version(scope, configuration_id, attrs) do
+    attrs = Map.put_new(attrs, :refresh_window, 172_800)
+
     Transaction.run(fn ->
       with {:ok, actor} <- Authority.actor(scope, :reviewer),
            {:ok, configuration} <- lock(configuration_id),
            {:ok, _reason} <- Transaction.required(Map.to_list(attrs), :reason),
+           :ok <-
+             Transaction.check(
+               attrs.refresh_window in [86_400, 172_800, 604_800],
+               :invalid_refresh_window
+             ),
            :ok <- admitted_members(Map.get(attrs, :members, [])),
            {:ok, editor} <- editor_binding(Map.get(attrs, :editor)) do
         {members, manifest} = attrs |> Map.put(:editor, editor) |> manifest()
@@ -258,6 +265,11 @@ defmodule DevilsDictionary.Curation.Configurations do
         nil -> manifest
       end
 
+    manifest =
+      if Map.has_key?(attrs, :refresh_window),
+        do: Map.put(manifest, "refresh_window_seconds", attrs.refresh_window),
+        else: manifest
+
     {members, manifest}
   end
 
@@ -342,9 +354,16 @@ defmodule DevilsDictionary.Curation.Configurations do
   `editor/1`'s question, and only the editor step asks it.
   """
   def ready?(%ConfigurationVersion{manifest: %{} = manifest, lead_policy: :bierce_first_v1}),
-    do: manifest["mode"] == @mode and editor_shape?(Map.get(manifest, "editor", :none))
+    do:
+      manifest["mode"] == @mode and
+        Map.get(manifest, "refresh_window_seconds", 172_800) in [86_400, 172_800, 604_800] and
+        editor_shape?(Map.get(manifest, "editor", :none))
 
   def ready?(_version), do: false
+
+  @doc "The assessment window of the exact configuration version; v1 defaults to 48h."
+  def refresh_window(%ConfigurationVersion{manifest: manifest}),
+    do: Map.get(manifest, "refresh_window_seconds", 172_800)
 
   @editor_ids ~w(profile_id profile_version_id bot_actor_id model_config_id)
   @editor_keys Enum.sort(@editor_ids ++ ~w(model_config_hash instruction_version))

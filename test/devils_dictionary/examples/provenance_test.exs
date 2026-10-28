@@ -63,6 +63,7 @@ defmodule DevilsDictionary.Examples.ProvenanceTest do
         highlights: [
           %{
             kind: :exemplar,
+            note: %{text: "A fixture selection reason."},
             assertion_revision_id: revision.id,
             meaning: {:sense_revision, Registry.current_sense_revision(ctx.sense.object_id).id}
           }

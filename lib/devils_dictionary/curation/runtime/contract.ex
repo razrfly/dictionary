@@ -102,8 +102,11 @@ defmodule DevilsDictionary.Curation.Runtime.Contract do
       evidence = if opts[:registry] == false, do: [], else: evidence(decoded, packet)
 
       case references(decoded, packet) ++ evidence do
-        [] -> {:ok, accepted(decoded, packet, observed)}
-        reasons -> {:refused, reasons, Map.put(observed, "refused_shape", refused_shape(decoded))}
+        [] ->
+          {:ok, accepted(decoded, packet, observed)}
+
+        reasons ->
+          {:refused, reasons, Map.put(observed, "refused_shape", refused_shape(decoded, packet))}
       end
     else
       {:refused, reasons} -> {:refused, reasons, observed}
@@ -112,17 +115,26 @@ defmodule DevilsDictionary.Curation.Runtime.Contract do
 
   defp observed(response, message) do
     %{
-      "done_reason" => response["done_reason"],
+      "done_reason" => safe_done_reason(response["done_reason"]),
       "thinking_chars" => String.length(message["thinking"] || ""),
       "output_bytes" => byte_size(message["content"] || "")
     }
   end
 
+  defp safe_done_reason(reason) when reason in [nil, "stop", "length", "load", "unload"],
+    do: reason
+
+  defp safe_done_reason(reason), do: "unknown:" <> Digest.term(reason)
+
   # What a well-shaped but refused answer pointed at, so the refusal can be
   # read: the decision and the ids it named, each id cut to 24 characters.
   # Never its reasons or quote text; only whether it gave a quote.
-  defp refused_shape(decoded) do
-    id = fn value -> String.slice(value, 0, 24) end
+  defp refused_shape(decoded, packet) do
+    known =
+      Enum.map(packet["candidates"], & &1["candidate_id"]) ++
+        Enum.map(packet["meanings"], & &1["meaning_id"])
+
+    id = fn value -> if value in known, do: value, else: "unknown-id:" <> Digest.sha256(value) end
     pair = fn choice -> [id.(choice["candidate_id"]), id.(choice["meaning_id"])] end
 
     %{
@@ -289,7 +301,7 @@ defmodule DevilsDictionary.Curation.Runtime.Contract do
   defp quote_problem(_where, %{"quote" => nil}, _candidate), do: []
 
   defp quote_problem(where, %{"quote" => quote}, %{"kind" => kind})
-       when is_binary(quote) and kind in ["work", "exemplar"],
+       when is_binary(quote) and kind in ["work", "exemplar", "claim", "shelf"],
        do: [[where, "quote_not_allowed"]]
 
   defp quote_problem(where, %{"quote" => quote}, candidate) when is_binary(quote) do
@@ -365,6 +377,13 @@ defmodule DevilsDictionary.Curation.Runtime.Contract do
 
     keep = fn choice ->
       base = Map.take(choice, ["candidate_id", "meaning_id", "reason"])
+      fields = Enum.flat_map(packet["candidates"], &(&1["expiring_text"] || []))
+      marker = DevilsDictionary.Curation.ProviderText.match(base["reason"], fields)
+
+      base =
+        if marker,
+          do: base |> Map.put("reason", nil) |> Map.put("reason_withheld", marker),
+          else: base
 
       case choice["quote"] do
         quote when is_binary(quote) ->
@@ -389,6 +408,15 @@ defmodule DevilsDictionary.Curation.Runtime.Contract do
       "highlights" => Enum.map(decoded["highlights"], keep),
       "abstain_reason" => decoded["abstain_reason"]
     }
+
+    fields = Enum.flat_map(packet["candidates"], &(&1["expiring_text"] || []))
+    marker = DevilsDictionary.Curation.ProviderText.match(result["abstain_reason"], fields)
+
+    result =
+      if marker,
+        do:
+          result |> Map.put("abstain_reason", nil) |> Map.put("abstain_reason_withheld", marker),
+        else: result
 
     outcome = if decoded["decision"] == "abstain", do: :abstained, else: :accepted
     %{outcome: outcome, result: result, observed: observed}

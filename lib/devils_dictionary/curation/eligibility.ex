@@ -174,6 +174,74 @@ defmodule DevilsDictionary.Curation.Eligibility do
 
   # `{result, claim}`, where `claim` is what an exemplar adds to the
   # fingerprint and `nil` for every other kind.
+  defp assess(%CompositionItem{shelf_citation_id: id} = item, members, _recorded)
+       when is_integer(id) do
+    citation = DevilsDictionary.Curation.ShelfCitations.get(id)
+
+    result =
+      with :ok <-
+             ensure(
+               is_nil(citation) or not DevilsDictionary.Curation.ShelfCitations.expired?(citation),
+               :retention_expired
+             ),
+           :ok <-
+             ensure(
+               not is_nil(citation) and not is_nil(item.source_record_revision_id) and
+                 not is_nil(citation.source_record_revision_id),
+               :revision_deleted
+             ),
+           :ok <- citation_status(citation),
+           :ok <- ensure(item.item_object_id == citation.cited_object_id, :object_deleted),
+           :ok <- shelf_object_status(item.item_object_id, item.source_record_revision_id),
+           :ok <- meaning(item, members),
+           do: :ok
+
+    {result, nil}
+  end
+
+  defp assess(%CompositionItem{shelf: shelf} = item, members, _recorded) when is_map(shelf) do
+    result =
+      with :ok <-
+             (case DevilsDictionary.Curation.ShelfCitations.spec_status(
+                     shelf,
+                     item.source_record_revision_id
+                   ) do
+                :ok -> :ok
+                reason -> {:error, reason}
+              end),
+           %DevilsDictionary.Discovery.Result{} = row <-
+             Repo.get(DevilsDictionary.Discovery.Result, shelf[:result] || shelf["result"]),
+           %DevilsDictionary.Discovery.Run{} = run <-
+             Repo.get(DevilsDictionary.Discovery.Run, row.run_id),
+           observation = DevilsDictionary.Curation.ShelfCitations.observation(row, run),
+           :ok <- if(observation.status == :ok, do: :ok, else: {:error, observation.status}),
+           :ok <- shelf_object_status(item.item_object_id, item.source_record_revision_id),
+           :ok <- meaning(item, members) do
+        ensure(observation.revision.id == item.source_record_revision_id, :observation_unbound)
+      else
+        nil -> {:error, :observation_unbound}
+        error -> error
+      end
+
+    {result, nil}
+  end
+
+  defp assess(%CompositionItem{item_kind: :claim} = item, members, _recorded) do
+    basis =
+      item.basis ||
+        DevilsDictionary.Curation.ItemBasis.virtual(
+          item.id && DevilsDictionary.Curation.ItemBasis.get(item.id)
+        )
+
+    context = %{
+      "claim_revision" => item.assertion_revision_id,
+      "witness" => basis && basis["witness_assertion_revision_id"],
+      "representation_sha256" => basis && Digest.term(basis["representation"])
+    }
+
+    {DevilsDictionary.Curation.LinkedClaims.check(item, members), context}
+  end
+
   defp assess(%CompositionItem{item_kind: :exemplar} = item, member_ids, recorded) do
     review = latest_review(item.assertion_revision_id)
     context = context_fingerprint(review)
@@ -192,6 +260,15 @@ defmodule DevilsDictionary.Curation.Eligibility do
       end
 
     {result, nil}
+  end
+
+  defp citation_status(nil), do: {:error, :revision_deleted}
+
+  defp citation_status(citation) do
+    case DevilsDictionary.Curation.ShelfCitations.check(citation) do
+      :ok -> :ok
+      reason -> {:error, reason}
+    end
   end
 
   defp slot(%CompositionItem{role: role, position: position}), do: "#{role}:#{position}"
@@ -227,6 +304,18 @@ defmodule DevilsDictionary.Curation.Eligibility do
   defp reference(%CompositionItem{item_kind: :content} = item) do
     with {:ok, object_id} <- need(item.item_object_id, :object_missing) do
       pinned_content(object_id, item.content_revision_id)
+    end
+  end
+
+  defp reference(%CompositionItem{item_kind: :sense_definition} = item) do
+    with {:ok, revision} <-
+           need(Repo.get(SenseRevision, item.sense_revision_id), :revision_deleted),
+         :ok <- current(revision),
+         :ok <- object_active(item.item_object_id),
+         :ok <- sense_source_active(item.item_object_id),
+         :ok <- record_displayable(revision.source_record_revision_id),
+         :ok <- ensure(revision.sense_id == item.item_object_id, :revision_mismatch) do
+      ensure(Digest.sha256(revision.gloss || "") == item.words_sha256, :words_changed)
     end
   end
 
@@ -295,6 +384,13 @@ defmodule DevilsDictionary.Curation.Eligibility do
   defp current(%{is_current: true, lifecycle_state: :active}), do: :ok
   defp current(%{is_current: true}), do: {:error, :revision_withdrawn}
   defp current(_revision), do: {:error, :revision_superseded}
+
+  @doc false
+  def shelf_object_status(nil, _revision), do: :ok
+
+  def shelf_object_status(id, revision) do
+    with :ok <- object_active(id), do: record_describes(revision, id)
+  end
 
   defp object_active(id) do
     ensure(

@@ -134,6 +134,7 @@ defmodule DevilsDictionary.CurationFixtures do
   def content_spec(content, lexeme) do
     %{
       kind: :content,
+      note: %{text: "A fixture selection reason."},
       object_id: content.object_id,
       content_revision_id: Registry.current_content_revision(content.object_id).id,
       meaning: {:lexeme, lexeme.object_id}
@@ -147,6 +148,7 @@ defmodule DevilsDictionary.CurationFixtures do
 
     %{
       kind: :sense_quotation,
+      note: %{text: "A fixture selection reason."},
       object_id: sense.object_id,
       sense_revision_id: revision.id,
       locator: "quotation:#{index}",
@@ -165,6 +167,7 @@ defmodule DevilsDictionary.CurationFixtures do
 
     %{
       kind: :work,
+      note: %{text: "A fixture selection reason."},
       catalog:
         Map.merge(%{manifest: @catalog, checksum: checksum, identity: @catalog_row}, overrides),
       meaning: {:lexeme, lexeme.object_id}
@@ -212,6 +215,7 @@ defmodule DevilsDictionary.CurationFixtures do
   def record_work_spec(object, revision_id, lexeme) do
     %{
       kind: :work,
+      note: %{text: "A fixture selection reason."},
       object_id: object.object_id,
       source_record_revision_id: revision_id,
       meaning: {:lexeme, lexeme.object_id}

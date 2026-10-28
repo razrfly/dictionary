@@ -100,6 +100,20 @@ defmodule DevilsDictionary.Curation.Publications do
     end)
   end
 
+  defp publication_reasons(version) do
+    items = DevilsDictionary.Curation.Compositions.items(version.id)
+
+    case Enum.find(items, fn item ->
+           blank = is_nil(item.note) or String.trim(item.note) == ""
+
+           blank and
+             not (item.role == :lead and version.resolution["lead_rule"] == "priority_source")
+         end) do
+      nil -> :ok
+      item -> {:error, {:reason_required, item.role, item.position}}
+    end
+  end
+
   # The operator authority: the reviewer acting, and the version's latest
   # review, which must be an acceptance. The acceptance may be another
   # reviewer's; the receipt names both.
@@ -128,7 +142,13 @@ defmodule DevilsDictionary.Curation.Publications do
          :ok <- Standing.scope(version, composition),
          :ok <- Standing.configuration(version),
          {:ok, authorization} <- authority.authorize.(version),
-         :ok <- Standing.eligible(Standing.evaluate(version, composition), version) do
+         :ok <- Standing.eligible(Standing.evaluate(version, composition), version),
+         :ok <- publication_reasons(version),
+         :ok <-
+           DevilsDictionary.Curation.ProviderText.validate(
+             reason,
+             DevilsDictionary.Curation.Compositions.items(version.id)
+           ) do
       receipt =
         Repo.insert!(
           struct(
@@ -171,6 +191,18 @@ defmodule DevilsDictionary.Curation.Publications do
                r.composition_id == composition.id and r.action == :withdraw and
                  r.previous_version_id == expected
              end),
+           published_items =
+             if(composition.current_published_version_id,
+               do:
+                 DevilsDictionary.Curation.Compositions.items(
+                   composition.current_published_version_id
+                 ),
+               else: []
+             ),
+           :ok <-
+             DevilsDictionary.Curation.ProviderText.validate(reason, published_items,
+               fixed_reason: reason == "withdrawn_by_owner"
+             ),
            :ok <- pointer(composition, expected),
            :ok <-
              Transaction.check(not is_nil(composition.current_published_version_id), :unpublished) do

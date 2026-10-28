@@ -278,11 +278,16 @@ defmodule DevilsDictionary.Curation.ConfigurationsTest do
                  expected: v.id
                )
 
-      # An identical version is the same version, not a second one.
+      # The first post-v1 version explicitly records the legacy 48-hour default.
+      assert {:ok, explicit_window} =
+               Configurations.create_version(reviewer, c.id, %{reason: "record window"})
+
+      assert explicit_window.manifest["refresh_window_seconds"] == 172_800
+
       assert {:error, {:duplicate_version, v_id}} =
                Configurations.create_version(reviewer, c.id, %{reason: "again"})
 
-      assert v_id == v.id
+      assert v_id == explicit_window.id
 
       # A stale screen cannot move the pointer.
       {:ok, v2} =

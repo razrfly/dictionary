@@ -23,6 +23,8 @@ defmodule DevilsDictionary.Discovery.Run do
     field :completed_at, :utc_datetime_usec
     field :refresh_after, :utc_datetime_usec
     field :expires_at, :utc_datetime_usec
+    field :retention_seconds, :integer
+    field :retention_policy_sha256, :string
     field :retry_at, :utc_datetime_usec
     field :next_cursor, :string
     field :error_code, :string
@@ -79,6 +81,8 @@ defmodule DevilsDictionary.Discovery.Run do
       :completed_at,
       :refresh_after,
       :expires_at,
+      :retention_seconds,
+      :retention_policy_sha256,
       :retry_at,
       :next_cursor,
       :error_code,

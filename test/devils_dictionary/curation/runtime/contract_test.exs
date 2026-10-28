@@ -136,7 +136,11 @@ defmodule DevilsDictionary.Curation.Runtime.ContractTest do
 
     long = selection({String.duplicate("x", 500), "m0"}, [])
     {:refused, _reasons, observed} = validate(ctx, long)
-    assert observed["refused_shape"]["lead"] == [String.duplicate("x", 24), "m0"]
+
+    assert observed["refused_shape"]["lead"] == [
+             "unknown-id:" <> Digest.sha256(String.duplicate("x", 500)),
+             "m0"
+           ]
   end
 
   test "Bierce first applies: another definition cannot lead where Bierce applies", ctx do
