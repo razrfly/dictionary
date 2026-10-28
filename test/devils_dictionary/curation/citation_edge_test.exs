@@ -45,10 +45,12 @@ defmodule DevilsDictionary.Curation.CitationEdgeTest do
     assert {:ok, v} = create(world, [note(gloss.spec)])
     item = Compositions.items(v.id) |> Enum.find(&(&1.item_kind == :sense_definition))
 
-    Repo.update_all(
+    query =
       from(revision in DevilsDictionary.Registry.SenseRevision,
         where: revision.id == ^item.sense_revision_id
-      ), set: [gloss: "Changed fixture definition words."])
+      )
+
+    Repo.update_all(query, set: [gloss: "Changed fixture definition words."])
 
     assert Eligibility.check(item, Compositions.member_ids(world.composition.id)) ==
              {:error, :words_changed}

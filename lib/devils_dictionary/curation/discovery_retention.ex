@@ -66,11 +66,11 @@ defmodule DevilsDictionary.Curation.DiscoveryRetention do
     policies = policies()
     %{rows: rows} = Repo.query!(plan_sql(columns(), installed, true), [now, policies, limit])
 
-    counts =
+    {counts, projected_ids, deleted_ids} =
       Enum.reduce(
         rows,
-        %{deleted_revisions: 0, redacted_revisions: 0, deleted_records: 0},
-        fn row, acc ->
+        {zero(), MapSet.new(), MapSet.new()},
+        fn row, {acc, projected_ids, deleted_ids} ->
           [revision_id, record_id, source_id, slug, digest, checksum, _held, _deadline] = row
 
           {:ok, delta} =
@@ -103,15 +103,17 @@ defmodule DevilsDictionary.Curation.DiscoveryRetention do
                   )
                   |> Enum.each(&capture_result/1)
 
-                  Repo.query!(
-                    """
-                    UPDATE source_records sr SET
-                      external_id=discovery_retained_record($2,to_jsonb(sr),$3)->>'external_id',
-                      url=discovery_retained_record($2,to_jsonb(sr),$3)->>'url'
-                    WHERE sr.id=$1 AND sr.content_hash=$4
-                    """,
-                    [record_id, slug, now, checksum]
-                  )
+                  %{num_rows: record_projections} =
+                    Repo.query!(
+                      """
+                      UPDATE source_records sr SET
+                        external_id=discovery_retained_record($2,to_jsonb(sr),$3)->>'external_id',
+                        url=discovery_retained_record($2,to_jsonb(sr),$3)->>'url'
+                      WHERE sr.id=$1 AND sr.content_hash=$4
+                        AND to_jsonb(sr) IS DISTINCT FROM discovery_retained_record($2,to_jsonb(sr),$3)
+                      """,
+                      [record_id, slug, now, checksum]
+                    )
 
                   if held do
                     %{num_rows: n} =
@@ -133,7 +135,12 @@ defmodule DevilsDictionary.Curation.DiscoveryRetention do
                         ]
                       )
 
-                    %{deleted_revisions: 0, redacted_revisions: n, deleted_records: 0}
+                    %{
+                      deleted_revisions: 0,
+                      redacted_revisions: n,
+                      deleted_records: 0,
+                      record_field_projections: record_projections
+                    }
                   else
                     %{num_rows: n} =
                       Repo.query!("DELETE FROM source_record_revisions WHERE id=$1", [revision_id])
@@ -141,13 +148,24 @@ defmodule DevilsDictionary.Curation.DiscoveryRetention do
                     %{
                       deleted_revisions: n,
                       redacted_revisions: 0,
-                      deleted_records: delete_orphan(record_id, true)
+                      deleted_records: delete_orphan(record_id, true),
+                      record_field_projections: record_projections
                     }
                   end
               end
             end)
 
-          Map.merge(acc, delta, fn _, a, b -> a + b end)
+          projected_ids =
+            if delta.record_field_projections > 0,
+              do: MapSet.put(projected_ids, record_id),
+              else: projected_ids
+
+          deleted_ids =
+            if delta.deleted_records > 0,
+              do: MapSet.put(deleted_ids, record_id),
+              else: deleted_ids
+
+          {Map.merge(acc, delta, fn _, a, b -> a + b end), projected_ids, deleted_ids}
         end
       )
 
@@ -155,22 +173,23 @@ defmodule DevilsDictionary.Curation.DiscoveryRetention do
     # purged on a later tick. Such records also make bounded progress.
     %{rows: orphans} = Repo.query!(orphan_sql() <> " ORDER BY rec.id LIMIT $1", [limit])
 
-    orphan_count =
-      Enum.reduce(orphans, 0, fn [id, source_id, digest], acc ->
+    {orphan_count, deleted_ids} =
+      Enum.reduce(orphans, {0, deleted_ids}, fn [id, source_id, digest], {acc, deleted_ids} ->
         {:ok, n} =
           Repo.transaction(fn ->
             canonical_lock(source_id, digest, id)
             delete_orphan(id)
           end)
 
-        acc + n
+        {acc + n, if(n > 0, do: MapSet.put(deleted_ids, id), else: deleted_ids)}
       end)
 
     %{rows: empty_protected} =
       Repo.query!(empty_record_projection_sql() <> " ORDER BY rec.id LIMIT $2", [now, limit])
 
-    projected =
-      Enum.reduce(empty_protected, 0, fn [id, source_id, slug, digest], acc ->
+    {projected, projected_ids} =
+      Enum.reduce(empty_protected, {0, projected_ids}, fn [id, source_id, slug, digest],
+                                                          {acc, projected_ids} ->
         {:ok, n} =
           Repo.transaction(fn ->
             canonical_lock(source_id, digest, id)
@@ -187,12 +206,17 @@ defmodule DevilsDictionary.Curation.DiscoveryRetention do
             end
           end)
 
-        acc + n
+        {acc + n, if(n > 0, do: MapSet.put(projected_ids, id), else: projected_ids)}
       end)
 
     counts
     |> Map.update!(:deleted_records, &(&1 + orphan_count))
     |> Map.put(:redacted_empty_records, projected)
+    |> Map.put(:record_field_projections, MapSet.size(projected_ids))
+    |> Map.put(
+      :record_projection_deletion_overlaps,
+      MapSet.size(MapSet.intersection(projected_ids, deleted_ids))
+    )
   end
 
   def dry_run(limit \\ 500) do
@@ -226,6 +250,33 @@ defmodule DevilsDictionary.Curation.DiscoveryRetention do
 
     %{rows: record_batch} =
       Repo.query!(record_deletions_sql(installed, true), [now, policy, limit])
+
+    %{rows: record_projection_totals} =
+      Repo.query!(
+        "SELECT slug,count(*) FROM (" <>
+          record_projections_sql(installed, false) <> ") projections GROUP BY slug ORDER BY slug",
+        [now, policy]
+      )
+
+    %{rows: record_projection_batch} =
+      Repo.query!(record_projections_sql(installed, true), [now, policy, limit])
+
+    %{rows: projected_total_ids} =
+      Repo.query!(record_projections_sql(installed, false), [now, policy])
+
+    %{rows: deleted_total_ids} =
+      Repo.query!(record_deletions_sql(installed, false, :ids), [now, policy])
+
+    %{rows: deleted_batch_ids} =
+      Repo.query!(record_deletions_sql(installed, true, :ids), [now, policy, limit])
+
+    deleted_total_ids = MapSet.new(deleted_total_ids, &hd/1)
+    deleted_batch_ids = MapSet.new(deleted_batch_ids, &hd/1)
+
+    overlap_totals =
+      projected_total_ids
+      |> Enum.filter(&MapSet.member?(deleted_total_ids, hd(&1)))
+      |> Enum.frequencies_by(&List.last/1)
 
     cache_runs = DevilsDictionary.Discovery.retention_due(limit)
     cache_ids = Enum.map(cache_runs, & &1.id)
@@ -265,6 +316,15 @@ defmodule DevilsDictionary.Curation.DiscoveryRetention do
         Enum.map(record_totals, fn [slug, n] -> %{provider: slug, count: n} end),
       next_record_deletions:
         Enum.map(record_batch, fn [slug, n] -> %{provider: slug, count: n} end),
+      total_record_field_projections_by_provider:
+        Enum.map(record_projection_totals, fn [slug, n] -> %{provider: slug, count: n} end),
+      total_record_projection_deletion_overlaps_by_provider:
+        Enum.map(Enum.sort(overlap_totals), fn {slug, n} -> %{provider: slug, count: n} end),
+      next_record_field_projections:
+        Enum.map(record_projection_batch, fn [id, slug] ->
+          %{record_id: id, provider: slug, also_deleted: MapSet.member?(deleted_batch_ids, id)}
+        end),
+      record_projection_counting: :field_updates_may_precede_record_deletion,
       next_result_pruning: cache_counts,
       empty_record_projection_batch:
         Repo.query!(empty_record_projection_sql() <> " ORDER BY rec.id LIMIT $2", [now, limit]).rows
@@ -276,13 +336,62 @@ defmodule DevilsDictionary.Curation.DiscoveryRetention do
     }
   end
 
+  # Same record-field projection in pre-migration dry runs: no new SQL function
+  # is required to disclose changes before approval of the additive migration.
+  defp projected_record_sql do
+    "CASE WHEN src.slug='cinegraph' THEN to_jsonb(rec)||jsonb_build_object('url',NULL) WHEN src.slug IN ('guardian','bing-news','spotify','pexels','unsplash','openverse') THEN to_jsonb(rec)||jsonb_build_object('url',NULL,'external_id',CASE WHEN rec.external_id LIKE 'redacted-discovery:%' THEN rec.external_id ELSE 'redacted-discovery:'||encode(sha256(convert_to(rec.external_id,'UTF8')),'hex') END) ELSE to_jsonb(rec) END"
+  end
+
+  defp cache_due_sql(limited) do
+    cache_limit = if limited, do: " LIMIT $3", else: ""
+
+    """
+    SELECT r.id FROM discovery_runs r JOIN discovery_mappings m ON m.id=r.mapping_id JOIN sources s ON s.id=m.source_id
+    WHERE r.status='succeeded' AND (r.display_allowed OR EXISTS(SELECT 1 FROM discovery_results d WHERE d.run_id=r.id))
+    AND CASE WHEN r.expires_at>r.completed_at THEN LEAST(r.expires_at,r.completed_at+(($2::jsonb->>s.slug)::bigint*interval '1 second')) ELSE r.completed_at+(($2::jsonb->>s.slug)::bigint*interval '1 second') END <= $1
+    ORDER BY CASE WHEN r.expires_at>r.completed_at THEN LEAST(r.expires_at,r.completed_at+(($2::jsonb->>s.slug)::bigint*interval '1 second')) ELSE r.completed_at+(($2::jsonb->>s.slug)::bigint*interval '1 second') END,r.id #{cache_limit}
+    """
+  end
+
+  defp record_projections_sql(installed, limited) do
+    selected =
+      plan_sql(
+        "SELECT rev.id,rec.id AS record_id,src.slug,protection.held,rec.content_hash=rev.checksum AND to_jsonb(rec) IS DISTINCT FROM (#{projected_record_sql()}) AS projects",
+        installed,
+        limited
+      )
+
+    empty =
+      empty_record_projection_sql()
+      |> String.replace(
+        "NOT EXISTS(SELECT 1 FROM source_record_revisions WHERE source_record_id=rec.id)",
+        "NOT EXISTS(SELECT 1 FROM source_record_revisions remaining WHERE remaining.source_record_id=rec.id AND remaining.id NOT IN (SELECT id FROM planned WHERE NOT held))"
+      )
+      |> String.replace(
+        "cached.source_record_id=rec.id)",
+        "cached.source_record_id=rec.id AND cached.run_id NOT IN (SELECT id FROM cache_due))"
+      )
+
+    empty =
+      empty <>
+        " AND rec.id NOT IN (SELECT record_id FROM planned WHERE projects)" <>
+        if(limited, do: " ORDER BY rec.id LIMIT $3", else: "")
+
+    "WITH planned AS (#{selected}), cache_due AS (#{cache_due_sql(limited)}) SELECT record_id,slug FROM planned WHERE projects UNION SELECT record_id,slug FROM (#{empty}) empty(record_id,source_id,slug,digest) ORDER BY record_id"
+  end
+
   # Count entire records only when every revision is in this deletion plan and
   # every remaining cache row is due. Native or referenced revisions prevent it.
-  defp record_deletions_sql(installed, limited) do
+  defp record_deletions_sql(installed, limited, result \\ :counts) do
     selected =
       plan_sql("SELECT rev.id,rec.id AS record_id,src.slug,protection.held", installed, limited)
 
     cache_limit = if limited, do: " LIMIT $3", else: ""
+
+    result =
+      if result == :ids,
+        do: "SELECT record_id,slug FROM deletable ORDER BY record_id",
+        else: "SELECT slug,count(*) FROM deletable GROUP BY slug ORDER BY slug"
 
     """
     WITH planned AS (#{selected}), cache_due AS (
@@ -294,11 +403,17 @@ defmodule DevilsDictionary.Curation.DiscoveryRetention do
       SELECT DISTINCT p.record_id,p.slug FROM planned p WHERE NOT p.held
       AND NOT EXISTS(SELECT 1 FROM source_record_revisions existing WHERE existing.source_record_id=p.record_id AND existing.id NOT IN (SELECT id FROM planned WHERE NOT held))
       AND NOT EXISTS(SELECT 1 FROM discovery_results d WHERE d.source_record_id=p.record_id AND d.run_id NOT IN (SELECT id FROM cache_due))
-    ) SELECT slug,count(*) FROM deletable GROUP BY slug ORDER BY slug
+    ) #{result}
     """
   end
 
-  defp zero, do: %{deleted_revisions: 0, redacted_revisions: 0, deleted_records: 0}
+  defp zero,
+    do: %{
+      deleted_revisions: 0,
+      redacted_revisions: 0,
+      deleted_records: 0,
+      record_field_projections: 0
+    }
 
   defp installed? do
     %{rows: [[present]]} =
@@ -349,12 +464,25 @@ defmodule DevilsDictionary.Curation.DiscoveryRetention do
   defp empty_record_projection_sql do
     # A deleted revision is no permission to keep its orphaned provider URL.
     # Scope stays restricted to recognized discovery keys, not native records.
+    guards =
+      Enum.map_join(
+        @record_guards,
+        " OR ",
+        &"EXISTS(SELECT 1 FROM #{&1} WHERE source_record_id=rec.id)"
+      )
+
+    citation =
+      if installed?(),
+        do: " OR EXISTS(SELECT 1 FROM curation_shelf_citations WHERE source_record_id=rec.id)",
+        else: ""
+
     """
     SELECT rec.id,src.id,src.slug,#{digest_sql()} FROM source_records rec JOIN sources src ON src.id=rec.source_id
     WHERE src.slug IN ('guardian','bing-news','spotify','pexels','unsplash','openverse','cinegraph')
     AND rec.external_id LIKE ANY(ARRAY['guardian_article:%','news_article:%','spotify_track:%','pexels_photo:%','unsplash_photo:%','openverse_media:%','tmdb_movie:%','redacted-discovery:%'])
     AND NOT EXISTS(SELECT 1 FROM source_record_revisions WHERE source_record_id=rec.id)
     AND to_jsonb(rec) IS DISTINCT FROM (CASE WHEN src.slug='cinegraph' THEN to_jsonb(rec)||jsonb_build_object('url',NULL) ELSE to_jsonb(rec)||jsonb_build_object('url',NULL,'external_id',CASE WHEN rec.external_id LIKE 'redacted-discovery:%' THEN rec.external_id ELSE 'redacted-discovery:'||encode(sha256(convert_to(rec.external_id,'UTF8')),'hex') END) END)
+    AND (EXISTS(SELECT 1 FROM discovery_results cached WHERE cached.source_record_id=rec.id) OR #{guards}#{citation})
     AND $1::timestamptz IS NOT NULL
     """
   end

@@ -29,6 +29,16 @@ defmodule DevilsDictionary.Installation.CitationBundleTest do
 
     Repo.query!("DELETE FROM source_record_revisions WHERE id=$1", [deleted.revision.id])
 
+    missing_current =
+      observation!(world, "guardian", external_id: "uncited-current-missing-native")
+
+    older_native =
+      DevilsDictionary.Sources.ensure_revision(missing_current.record, "native-older-bundle", %{
+        "native" => "durable older native fixture"
+      })
+
+    Repo.query!("DELETE FROM source_record_revisions WHERE id=$1", [missing_current.revision.id])
+
     unreferenced = observation!(world, "guardian", external_id: "uncited-cache-only")
 
     native =
@@ -90,11 +100,23 @@ defmodule DevilsDictionary.Installation.CitationBundleTest do
     refute sql <> copies =~ "A distinctive discovery snippet for this fixture."
     refute sql <> copies =~ deleted.record.url
     refute copies =~ deleted.record.external_id
+    refute copies =~ missing_current.record.external_id
+    refute copies =~ missing_current.record.url
 
     assert {:ok, %{outcome: :restored}} =
              Bootstrap.run(:init, bundle: bundle, target: target, expect_manifest_sha256: digest)
 
     Recovery.with_database(target, fn ->
+      native_record = Repo.get!(DevilsDictionary.Sources.SourceRecord, missing_current.record.id)
+
+      assert native_record.url == nil and
+               native_record.external_id == "redacted-discovery:" <> missing_current.digest
+
+      %{rows: [[native_payload]]} =
+        Repo.query!("SELECT payload FROM source_record_revisions WHERE id=$1", [older_native.id])
+
+      assert native_payload == %{"native" => "durable older native fixture"}
+
       gone = Repo.get!(DevilsDictionary.Curation.ShelfCitation, deleted_citation.id)
       assert gone.source_record_revision_id == nil
       assert gone.cited_revision_id == deleted.revision.id

@@ -408,6 +408,8 @@ defmodule DevilsDictionary.Curation.Candidates do
         revision: o.revision && o.revision.id,
         checksum: o.revision && o.revision.checksum,
         expires_at: DateTime.to_iso8601(o.expires_at),
+        observed_at: DateTime.to_iso8601(o.observed_at),
+        source_slug: o.source.slug,
         shelf_kind: o.kind
       }
 

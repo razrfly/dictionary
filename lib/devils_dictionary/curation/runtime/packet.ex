@@ -1144,6 +1144,8 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
       s.shelf.revision,
       s.shelf.checksum,
       s.shelf.expires_at,
+      s.shelf.observed_at,
+      s.shelf.source_slug,
       target(s.meaning)
     ]
 
@@ -1192,6 +1194,8 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
           c["shelf"]["revision"],
           c["shelf"]["checksum"],
           c["shelf"]["expires_at"],
+          c["shelf"]["observed_at"],
+          c["shelf"]["source_slug"],
           meaning
         ]
 

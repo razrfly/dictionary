@@ -261,19 +261,26 @@ defmodule DevilsDictionary.Curation.ShelfCitations do
             select: %{r | payload: r.payload}
         )
 
-    captured =
-      case DateTime.from_iso8601(field.(:expires_at) || "") do
-        {:ok, time, _} -> time
-        _ -> nil
-      end
+    captured = spec_time(field.(:expires_at))
+
+    citation =
+      if is_integer(field.(:result)),
+        do: Repo.get_by(ShelfCitation, discovery_result_id: field.(:result)),
+        else: nil
+
+    observed =
+      if run,
+        do: run.completed_at,
+        else: spec_time(field.(:observed_at)) || (citation && citation.observed_at)
+
+    slug =
+      if run,
+        do: run.mapping.source.slug,
+        else: field.(:source_slug) || (citation && Repo.get!(Source, citation.source_id).slug)
 
     deadline =
-      if run && captured,
-        do:
-          min_time(
-            captured,
-            DateTime.add(run.completed_at, Policy.retention_seconds(run.mapping.source.slug))
-          ),
+      if captured && observed && slug in Shelf.providers(),
+        do: min_time(captured, DateTime.add(observed, Policy.retention_seconds(slug))),
         else: captured
 
     cond do
@@ -283,6 +290,15 @@ defmodule DevilsDictionary.Curation.ShelfCitations do
       true -> :ok
     end
   end
+
+  defp spec_time(value) when is_binary(value) do
+    case DateTime.from_iso8601(value) do
+      {:ok, time, _} -> time
+      _ -> nil
+    end
+  end
+
+  defp spec_time(_), do: nil
 
   def get(id), do: Repo.get(ShelfCitation, id)
 
@@ -304,6 +320,8 @@ defmodule DevilsDictionary.Curation.ShelfCitations do
           {:revision, o.revision.id},
           {:checksum, o.revision.checksum},
           {:expires_at, DateTime.to_iso8601(o.expires_at)},
+          {:observed_at, DateTime.to_iso8601(o.observed_at)},
+          {:source_slug, o.source.slug},
           {:shelf_kind, o.kind}
         ],
         fn {key, value} -> (spec[key] || spec[Atom.to_string(key)]) == value end

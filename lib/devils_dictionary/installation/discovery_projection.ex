@@ -50,8 +50,11 @@ defmodule DevilsDictionary.Installation.DiscoveryProjection do
     provider =
       "src.slug IN ('guardian','bing-news','spotify','pexels','unsplash','openverse','commons','met','cinegraph','open-library','poetrydb','wikiquote')"
 
+    current_native =
+      "EXISTS(SELECT 1 FROM source_record_revisions current_native WHERE current_native.source_record_id=rec.id AND current_native.checksum=rec.content_hash AND NOT (#{shape.("current_native")}))"
+
     discovery =
-      "#{provider} AND (EXISTS(SELECT 1 FROM source_record_revisions shape WHERE shape.source_record_id=rec.id AND shape.checksum=rec.content_hash AND #{shape.("shape")}) OR EXISTS(SELECT 1 FROM curation_shelf_citations cited WHERE cited.cited_source_record_id=rec.id AND cited.cited_checksum=rec.content_hash AND cited.external_ref_sha256=CASE WHEN rec.external_id LIKE 'redacted-discovery:%' THEN substring(rec.external_id from 20) ELSE encode(sha256(convert_to(rec.external_id,'UTF8')),'hex') END) OR (NOT EXISTS(SELECT 1 FROM source_record_revisions remaining WHERE remaining.source_record_id=rec.id) AND rec.external_id LIKE ANY(ARRAY['guardian_article:%','news_article:%','spotify_track:%','pexels_photo:%','unsplash_photo:%','openverse_media:%','commons_file:%','met_object:%','tmdb_movie:%','olid:%','poetrydb_poem:%','wikiquote_item:%','redacted-discovery:%'])))"
+      "#{provider} AND NOT (#{current_native}) AND (rec.external_id LIKE ANY(ARRAY['guardian_article:%','news_article:%','spotify_track:%','pexels_photo:%','unsplash_photo:%','openverse_media:%','commons_file:%','met_object:%','tmdb_movie:%','olid:%','poetrydb_poem:%','wikiquote_item:%','redacted-discovery:%']) OR EXISTS(SELECT 1 FROM source_record_revisions shape WHERE shape.source_record_id=rec.id AND #{shape.("shape")}) OR EXISTS(SELECT 1 FROM curation_shelf_citations cited WHERE cited.cited_source_record_id=rec.id AND cited.external_ref_sha256=CASE WHEN rec.external_id LIKE 'redacted-discovery:%' THEN substring(rec.external_id from 20) ELSE encode(sha256(convert_to(rec.external_id,'UTF8')),'hex') END))"
 
     native =
       "EXISTS(SELECT 1 FROM source_record_revisions native WHERE native.source_record_id=rec.id AND NOT (#{provider} AND #{shape.("native")}))"

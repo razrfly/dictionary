@@ -136,6 +136,8 @@ defmodule DevilsDictionary.CitationFixtures do
       revision: revision.id,
       checksum: revision.checksum,
       expires_at: DateTime.to_iso8601(expiry),
+      observed_at: DateTime.to_iso8601(observed),
+      source_slug: source.slug,
       shelf_kind: Shelf.kind(slug)
     }
 
