@@ -19,7 +19,8 @@ defmodule DevilsDictionary.Repo.Migrations.CreateCurationProposals do
       version (R13);
     * compositions gain the D8 marks (`mode`, `kept_items`), set only by
       human reviewers;
-    * refresh rows gain `review_unit_reserved_at` and three outcomes;
+    * refresh rows gain `review_unit_reserved_at`, nullable `last_deferred_at`
+      and three outcomes;
     * configurations gain the editor switch, set only by a human reviewer
       with a reason, to null or the current version;
     * profiles gain `kind`, fixed at insert, with the generic editor's
@@ -665,6 +666,7 @@ defmodule DevilsDictionary.Repo.Migrations.CreateCurationProposals do
   defp refresh_states_up do
     alter table(:curation_refresh_states) do
       add :review_unit_reserved_at, :utc_datetime_usec
+      add :last_deferred_at, :utc_datetime_usec
     end
 
     execute("ALTER TABLE curation_refresh_states DROP CONSTRAINT curation_refresh_states_shape")
@@ -692,6 +694,7 @@ defmodule DevilsDictionary.Repo.Migrations.CreateCurationProposals do
 
     alter table(:curation_refresh_states) do
       remove :review_unit_reserved_at
+      remove :last_deferred_at
     end
   end
 

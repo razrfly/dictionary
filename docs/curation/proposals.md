@@ -96,9 +96,12 @@ other readers still see the model and attempt text. `word_live.ex` is the narrow
 manifest extension needed to pass that capability and refresh it on navigation.
 
 Health's Today numbers describe each page's latest recorded outcome. Today's
-deferrals count current deferred rows updated since UTC midnight, while
+deferrals count current deferred rows whose last_deferred_at is since UTC
+midnight (written only on deferral), while
 Deferred now labels the entire current backlog. The two cards reuse refresh
-counts from one timestamp. These are per-page counts, not a deferral event log.
+counts from one timestamp. These are per-page counts, not a deferral event log. Dirty marking never
+changes the deferral date. Legacy rows with an unknown date remain in the
+backlog but are not falsely assigned to Today.
 
 R6 tests drive all named refusal classes through the proposal step using the
 existing fake host and stub service. A never-sent attempt can replay as

@@ -23,6 +23,7 @@ defmodule DevilsDictionaryWeb.CurationProposalsLiveTest do
     Proposal,
     Proposals,
     PublishedReader,
+    Refresh,
     RefreshState
   }
 
@@ -634,16 +635,25 @@ defmodule DevilsDictionaryWeb.CurationProposalsLiveTest do
       assert {:ok, deferred} = run!(world)
       now = DateTime.utc_now()
       yesterday = DateTime.add(now, -86_400)
-      set!(deferred, updated_at: yesterday)
+      set!(deferred, last_deferred_at: yesterday, updated_at: yesterday)
       before = rows()
       snapshot = Proposals.health_snapshot(now)
       assert snapshot.today.deferred == 0
       assert snapshot.deferred_now == 1
+      # A newly changed input is not a new deferral. It advances updated_at
+      # while preserving the actual deferral date and the deferred state.
+      Refresh.mark_dirty([world.composition.id], "candidate_added")
+      dirty = Repo.reload!(deferred)
+      assert dirty.state == :deferred
+      assert DateTime.compare(dirty.updated_at, yesterday) == :gt
+      assert dirty.last_deferred_at == yesterday
+      assert Proposals.health_snapshot(now).today.deferred == 0
+      assert Proposals.health_snapshot(now).last_deferral.at == yesterday
       {:ok, view, _} = live(conn, ~p"/ops/health")
       assert has_element?(view, "#proposals-card-today", "0 deferred")
       assert has_element?(view, "#proposals-card-deferred-now", "1 pages")
       assert rows() == before
-      set!(Repo.reload!(deferred), updated_at: now)
+      set!(Repo.reload!(deferred), last_deferred_at: now, updated_at: now)
       assert Proposals.health_snapshot(now).today.deferred == 1
     end
 

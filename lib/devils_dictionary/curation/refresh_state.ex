@@ -58,6 +58,9 @@ defmodule DevilsDictionary.Curation.RefreshState do
     field :refresh_after, :utc_datetime_usec
     field :next_retry_at, :utc_datetime_usec
     field :failures, :integer, default: 0
+    # Set only by a deferral; dirty marking must not move its date. Legacy
+    # rows written before this column existed have an unknown deferral date.
+    field :last_deferred_at, :utc_datetime_usec
     field :last_error, :string
     field :input_fingerprint, :string
     field :withheld_digest, :string

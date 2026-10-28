@@ -1161,7 +1161,7 @@ defmodule DevilsDictionary.Curation.Proposals do
           cc.id == c.curation_configuration_id and
             cc.current_version_id == r.configuration_version_id,
         where: r.state == :deferred,
-        order_by: [desc: r.updated_at],
+        order_by: [desc_nulls_last: r.last_deferred_at, desc: r.id],
         limit: 1
 
     case Repo.one(query) do
@@ -1172,7 +1172,7 @@ defmodule DevilsDictionary.Curation.Proposals do
         %{
           page: page_slug(row.composition_id),
           error: row.last_error,
-          at: row.updated_at,
+          at: row.last_deferred_at,
           next_retry_at: row.next_retry_at
         }
     end

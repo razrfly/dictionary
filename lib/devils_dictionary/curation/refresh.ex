@@ -1054,6 +1054,7 @@ defmodule DevilsDictionary.Curation.Refresh do
       failures: failures,
       next_retry_at: shift(now, backoff_seconds(failures, jitter)),
       last_error: error |> to_string() |> String.slice(0, 500),
+      last_deferred_at: now,
       lease_token: row.lease_token + 1,
       lease_expires_at: nil,
       lease_attempts: 0,
@@ -1491,7 +1492,7 @@ defmodule DevilsDictionary.Curation.Refresh do
   the oldest queued or running run's age, runs admitted today (curation
   jobs inserted since UTC midnight), pages whose last check completed today
   by outcome (the checks' two and the editor's three, #264 R14), and pages
-  deferred now and currently deferred pages last updated today (not a ledger
+  deferred now and currently deferred pages last deferred today (not a ledger
   of deferral events). "Coalesced" visits are telemetry only.
   """
   def counts(now \\ DateTime.utc_now()) do
@@ -1538,11 +1539,11 @@ defmodule DevilsDictionary.Curation.Refresh do
       proposed_today: Map.get(outcomes, :proposed, 0),
       abstained_today: Map.get(outcomes, :abstained, 0),
       no_change_today: Map.get(outcomes, :no_change, 0),
-      # Current per-page deferrals last updated today, not an event counter.
+      # Current per-page deferrals dated by defer!, not row edits or an event counter.
       deferred_today:
         Repo.one(
           from r in current,
-            where: r.state == :deferred and r.updated_at >= ^midnight,
+            where: r.state == :deferred and r.last_deferred_at >= ^midnight,
             select: count(r.id)
         ),
       deferred_now: Repo.one(from r in current, where: r.state == :deferred, select: count(r.id))
