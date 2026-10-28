@@ -65,15 +65,16 @@ A deferral never delays a reader: the call is in the worker, never in a request.
 
 ## Rollback (R19.3)
 
-**Before the editor's configuration version is activated** (#268 3c), "revert the code"
-means moving the Studio checkout back to #267's recorded deployment SHA, the one it ran
-before this issue's, on the owner's yes. It does not mean a revert commit deployed by
-fast-forward (Stage 0 check, recommendation 6): deployment is pinned to recorded SHAs
-(#264 §11), and a revert commit would be a new, unchecked head. One request then
-recompiles; no restart. The migration stays: it is additive, and the earlier code reads
-every row it can write. Its `down` refuses to run once any model version, proposal or
-copied item exists.
+**Before the editor configuration is activated** (#268 3c), keep the additive
+migration and roll back code through a reviewed revert PR based on the current
+integrated main. Deploy its recorded merge SHA by fast-forward, after enumerating
+the intervening migrations and on the owner's named yes. Do not reset the serving
+checkout or deploy an unreviewed backwards checkout. This follows #271's deployment
+rule and replaces the earlier Stage 0 recommendation to move the checkout backwards.
 
-**After the first model row**, the rollback is `disable`: the editor stops proposing,
-pending proposals stay where they are for the owner, and the code stays. The earlier
-code cannot read `origin: :model`, `selection_origin: :model` or the new outcomes.
+**After model rows or new outcomes exist**, disable the editor and roll forward;
+earlier code cannot read those rows. Pending proposals remain available for the
+owner. The migration's `down` is a separately guarded operation, not part of this
+code rollback. Any different rollback procedure requires an explicit recorded
+exception to #271's deployment rule before it is used. Nothing here authorizes a
+live operation or a restart.
