@@ -186,6 +186,11 @@ defmodule DevilsDictionary.Curation.Publications do
            {:ok, key} <- Transaction.required(opts, :idempotency_key),
            expected = Keyword.fetch!(opts, :expected_pointer),
            {:ok, composition} <- Standing.lock_composition(composition_id),
+           :fresh <-
+             Transaction.replay(CompositionPublication, key, fn r ->
+               r.composition_id == composition.id and r.action == :withdraw and
+                 r.previous_version_id == expected
+             end),
            published_items =
              if(composition.current_published_version_id,
                do:
@@ -198,11 +203,6 @@ defmodule DevilsDictionary.Curation.Publications do
              DevilsDictionary.Curation.ProviderText.validate(reason, published_items,
                fixed_reason: reason == "withdrawn_by_owner"
              ),
-           :fresh <-
-             Transaction.replay(CompositionPublication, key, fn r ->
-               r.composition_id == composition.id and r.action == :withdraw and
-                 r.previous_version_id == expected
-             end),
            :ok <- pointer(composition, expected),
            :ok <-
              Transaction.check(not is_nil(composition.current_published_version_id), :unpublished) do
