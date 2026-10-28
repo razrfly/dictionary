@@ -46,6 +46,11 @@ defmodule DevilsDictionaryWeb.HealthLive.ProposalsCard do
           {@snapshot.today.proposed} proposed · {@snapshot.today.abstained} abstained · {@snapshot.today.no_change} no change · {@snapshot.today.deferred} deferred
         </dd>
 
+        <dt class="font-medium text-mist-950 dark:text-white">Deferred now</dt>
+        <dd id="proposals-card-deferred-now" class="text-mist-700 tabular-nums dark:text-mist-300">
+          {@snapshot.deferred_now} pages
+        </dd>
+
         <dt class="font-medium text-mist-950 dark:text-white">Last deferral</dt>
         <dd id="proposals-card-deferral" class="text-mist-700 dark:text-mist-300">
           {deferral(@snapshot.last_deferral)}

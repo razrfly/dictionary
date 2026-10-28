@@ -78,3 +78,31 @@ owner. The migration's `down` is a separately guarded operation, not part of thi
 code rollback. Any different rollback procedure requires an explicit recorded
 exception to #271's deployment rule before it is used. Nothing here authorizes a
 live operation or a restart.
+
+
+## Integrated review corrections
+
+Review capacity reads pending proposals and reservations in one database
+statement, so a reservation converted to a pending proposal cannot disappear
+between two snapshots. The advisory lock continues to serialize reservations.
+
+The reader calls a version taken or edit-published only when the taken
+proposal names that exact resolution version. Ordinary manual children of
+pending or dismissed proposals remain owner choices. Carried model notes
+follow their source-item ancestry to the original attempt without a hop cap;
+a repeated item is treated as invalid provenance rather than looping.
+Attempt links need a verified signed-in reviewer on a direct internal request;
+other readers still see the model and attempt text. `word_live.ex` is the narrow
+manifest extension needed to pass that capability and refresh it on navigation.
+
+Health's Today numbers describe each page's latest recorded outcome. Today's
+deferrals count current deferred rows updated since UTC midnight, while
+Deferred now labels the entire current backlog. The two cards reuse refresh
+counts from one timestamp. These are per-page counts, not a deferral event log.
+
+R6 tests drive all named refusal classes through the proposal step using the
+existing fake host and stub service. A never-sent attempt can replay as
+`failed_pre_dispatch`; recovery of an uncertain call replays as
+`ended_by_restart` with outcome `unknown`. Both are answerless spent attempts:
+they defer, keep freshness unchanged, release the review stamp, and require a
+new generation on retry. No new runtime outcome or service operation is added.

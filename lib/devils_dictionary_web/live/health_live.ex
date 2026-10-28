@@ -26,6 +26,9 @@ defmodule DevilsDictionaryWeb.HealthLive do
   # tell it apart from "already showing that".
   @impl true
   def mount(_params, _session, socket) do
+    now = DateTime.utc_now()
+    counts = Refresh.counts(now)
+
     {:ok,
      assign(socket,
        page_title: "Health",
@@ -33,9 +36,9 @@ defmodule DevilsDictionaryWeb.HealthLive do
        scopes: Lexicon.list_scopes(),
        parity: %{},
        sources: Sources.list_sources(),
-       curation: Refresh.counts(),
+       curation: counts,
        runtime: DevilsDictionary.Curation.Runtime.Snapshot.read(),
-       proposals: DevilsDictionary.Curation.Proposals.health_snapshot()
+       proposals: DevilsDictionary.Curation.Proposals.health_snapshot(now, counts)
      )}
   end
 

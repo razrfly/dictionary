@@ -631,11 +631,16 @@ defmodule DevilsDictionary.Curation.Proposals do
   holding a reservation, over every composition and configuration version.
   """
   def units_in_use do
-    Repo.aggregate(from(p in Proposal, where: p.state == :pending), :count) +
-      Repo.aggregate(
-        from(r in RefreshState, where: not is_nil(r.review_unit_reserved_at)),
-        :count
-      )
+    # A single statement sees the reservation-to-pending conversion in one
+    # snapshot. Two SELECTs can miss both sides of that atomic conversion.
+    %{rows: [[units]]} =
+      Repo.query!("""
+      SELECT (SELECT count(*) FROM curation_proposals WHERE state = 'pending') +
+             (SELECT count(*) FROM curation_refresh_states
+              WHERE review_unit_reserved_at IS NOT NULL)
+      """)
+
+    units
   end
 
   @doc """
@@ -1067,14 +1072,15 @@ defmodule DevilsDictionary.Curation.Proposals do
         review_units: %{pending, reserved, cap},
         proposals: %{pending, superseded_on_arrival, taken, dismissed, obsolete},
         today: %{proposed, abstained, no_change, deferred},
+        deferred_now: non_neg_integer,
         last_deferral: nil | %{page, error, at, next_retry_at}}
   """
-  def health_snapshot(now \\ DateTime.utc_now()) do
+  def health_snapshot(now \\ DateTime.utc_now(), counts \\ nil) do
     by_state =
       Repo.all(from p in Proposal, group_by: p.state, select: {p.state, count(p.id)})
       |> Map.new()
 
-    counts = Refresh.counts(now)
+    counts = counts || Refresh.counts(now)
 
     %{
       enabled: enabled(),
@@ -1102,8 +1108,9 @@ defmodule DevilsDictionary.Curation.Proposals do
         proposed: counts.proposed_today,
         abstained: counts.abstained_today,
         no_change: counts.no_change_today,
-        deferred: counts.deferred_now
+        deferred: counts.deferred_today
       },
+      deferred_now: counts.deferred_now,
       last_deferral: last_deferral()
     }
   end

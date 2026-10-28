@@ -567,6 +567,90 @@ defmodule DevilsDictionary.Curation.Proposals.StepTest do
       assert row!(world.composition).refresh_generation == row.refresh_generation
     end
 
+    for refusal <- [
+          :foreign_authority,
+          :artifact_not_on_models_root,
+          :slot_busy,
+          :quarantined,
+          :budget_exhausted,
+          :pending_cap_reached,
+          :memory_pressure
+        ] do
+      test "#{refusal} defers without spending this generation", world do
+        visit!()
+        {:ok, before} = work!(world)
+        stub_answer!(world, lead_and_johnson(world))
+        runtime = refuse_runtime!(world, unquote(refusal))
+        old_attempts = attempts()
+        assert {:ok, row} = run!(world, "love", runtime: runtime)
+        assert {row.state, row.last_error} == {:deferred, to_string(unquote(refusal))}
+        assert row.last_completed_at == before.last_completed_at
+        assert DateTime.compare(row.next_retry_at, DateTime.utc_now()) == :gt
+        assert is_nil(row.review_unit_reserved_at)
+        assert attempts() == old_attempts
+        refute Enum.any?(attempts(), &(&1.request_key == key_of(row)))
+        refute_received :chat_called
+        assert proposals() == []
+        due!(world.composition)
+        assert {:ok, :admitted} = Refresh.admit(world.composition.id, slug: "love")
+        assert row!(world.composition).refresh_generation == row.refresh_generation
+      end
+    end
+
+    test "never_sent is a spent answerless attempt, including on replay", world do
+      visit!()
+      {:ok, before} = work!(world)
+      stub_ollama!(world.model_config, chat: fn _ -> {:transport, :econnrefused} end)
+      {:ok, :admitted} = Refresh.request(world.reviewer, world.composition.id, "love", "test")
+      {_claim, receipt} = attempt_then_die!(world, world.frozen)
+      assert {receipt.state, receipt.outcome} == {:failed_pre_dispatch, :never_sent}
+      expire_and_recover!(world)
+      assert {:ok, row} = work!(world)
+      assert {row.state, row.last_error} == {:deferred, "failed_pre_dispatch"}
+      assert row.last_completed_at == before.last_completed_at
+      assert is_nil(row.review_unit_reserved_at)
+      assert DateTime.compare(row.next_retry_at, DateTime.utc_now()) == :gt
+      [attempt] = attempts()
+      assert {attempt.state, attempt.outcome} == {:failed_pre_dispatch, :never_sent}
+      assert attempt.request_key == key_of(row)
+      assert proposals() == []
+      due!(world.composition)
+      assert {:ok, :admitted} = Refresh.admit(world.composition.id, slug: "love")
+      assert row!(world.composition).refresh_generation == row.refresh_generation + 1
+    end
+
+    test "an unknown recovered attempt replays answerless and spends the generation", world do
+      visit!()
+      {:ok, before} = work!(world)
+      stub_answer!(world, lead_and_johnson(world))
+      {:ok, :admitted} = Refresh.request(world.reviewer, world.composition.id, "love", "test")
+      claim = claim!(world)
+      {:ok, reserved} = Refresh.reserve(claim)
+      opts = Keyword.merge(world.runtime, request_key: key_of(reserved), actor_id: world.bot.id)
+      {:ok, attempt} = Gateway.admit(world.model_config, world.frozen, opts)
+      {:ok, attempt} = Gateway.dispatch(attempt, opts)
+      {:ok, _} = Gateway.mark_uncertain(attempt, :timeout, opts)
+      # Gateway-only recovery is a database fixture, never a service operation.
+      {:ok, _} =
+        Gateway.recover(%{stopped_at: DateTime.utc_now(), evidence: %{fixture: true}}, opts)
+
+      {:ok, _} = Gateway.resume(opts)
+      expire_and_recover!(world)
+      assert {:ok, row} = work!(world)
+      assert {row.state, row.last_error} == {:deferred, "ended_by_restart"}
+      assert row.last_completed_at == before.last_completed_at
+      assert is_nil(row.review_unit_reserved_at)
+      assert DateTime.compare(row.next_retry_at, DateTime.utc_now()) == :gt
+      [ended] = attempts()
+      assert {ended.state, ended.outcome} == {:ended_by_restart, :unknown}
+      assert ended.request_key == key_of(row)
+      refute_received :chat_called
+      assert proposals() == []
+      due!(world.composition)
+      assert {:ok, :admitted} = Refresh.admit(world.composition.id, slug: "love")
+      assert row!(world.composition).refresh_generation == row.refresh_generation + 1
+    end
+
     for {name, chat, expected} <- [
           {"an uncertain call", quote(do: fn _ -> {:transport, :timeout} end), "uncertain"},
           {"a runtime error", quote(do: fn _ -> {:status, 500, %{}} end), "runtime_error"},
@@ -592,6 +676,48 @@ defmodule DevilsDictionary.Curation.Proposals.StepTest do
         refute key_of(retried) == spent.request_key
         assert proposals() == []
       end
+    end
+  end
+
+  defp refuse_runtime!(world, reason) do
+    alias DevilsDictionary.Curation.Runtime.{Authority, FakeSystem}
+    opts = world.runtime
+
+    case reason do
+      :foreign_authority ->
+        identity = Map.put(Authority.identity(opts), "database", "elsewhere")
+        FakeSystem.put_file(Authority.path(opts), Jason.encode!(identity))
+
+      :artifact_not_on_models_root ->
+        FakeSystem.put(files: %{})
+        bind!(opts)
+
+      :memory_pressure ->
+        FakeSystem.put(
+          memory: [{:ok, %{swap_used_bytes: 0, swap_total_bytes: 1, free_percent: 4}}]
+        )
+
+      r when r in [:slot_busy, :quarantined] ->
+        {:ok, attempt} =
+          Gateway.admit(
+            world.model_config,
+            world.frozen,
+            Keyword.merge(opts, request_key: key("other-slot"), actor_id: world.bot.id)
+          )
+
+        if r == :quarantined do
+          {:ok, attempt} = Gateway.dispatch(attempt, opts)
+          {:ok, _} = Gateway.mark_uncertain(attempt, :timeout, opts)
+        end
+
+      _ ->
+        :ok
+    end
+
+    case reason do
+      :budget_exhausted -> Keyword.put(opts, :daily_budget_ms, 0)
+      :pending_cap_reached -> Keyword.put(opts, :pending_cap_units, 0)
+      _ -> opts
     end
   end
 

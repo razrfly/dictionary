@@ -1491,7 +1491,8 @@ defmodule DevilsDictionary.Curation.Refresh do
   the oldest queued or running run's age, runs admitted today (curation
   jobs inserted since UTC midnight), pages whose last check completed today
   by outcome (the checks' two and the editor's three, #264 R14), and pages
-  deferred now. "Coalesced" visits are telemetry only.
+  deferred now and currently deferred pages last updated today (not a ledger
+  of deferral events). "Coalesced" visits are telemetry only.
   """
   def counts(now \\ DateTime.utc_now()) do
     midnight = DateTime.new!(DateTime.to_date(now), ~T[00:00:00], "Etc/UTC")
@@ -1537,6 +1538,13 @@ defmodule DevilsDictionary.Curation.Refresh do
       proposed_today: Map.get(outcomes, :proposed, 0),
       abstained_today: Map.get(outcomes, :abstained, 0),
       no_change_today: Map.get(outcomes, :no_change, 0),
+      # Current per-page deferrals last updated today, not an event counter.
+      deferred_today:
+        Repo.one(
+          from r in current,
+            where: r.state == :deferred and r.updated_at >= ^midnight,
+            select: count(r.id)
+        ),
       deferred_now: Repo.one(from r in current, where: r.state == :deferred, select: count(r.id))
     }
   end

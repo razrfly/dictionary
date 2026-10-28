@@ -56,6 +56,8 @@ defmodule DevilsDictionaryWeb.Opening do
   attr :class, :any, default: nil
   attr :mode, :atom, default: :public, doc: "the reading mode, for subject links"
 
+  attr :reviewer?, :boolean, default: false, doc: "verified signed-in reviewer capability"
+
   def section(assigns) do
     assigns =
       assigns
@@ -107,7 +109,7 @@ defmodule DevilsDictionaryWeb.Opening do
         </ul>
       </div>
 
-      <.about opening={@opening} mode={@mode} />
+      <.about opening={@opening} mode={@mode} reviewer?={@reviewer?} />
     </section>
     """
   end
@@ -729,6 +731,8 @@ defmodule DevilsDictionaryWeb.Opening do
   attr :opening, Composition, required: true
   attr :mode, :atom, default: :public
 
+  attr :reviewer?, :boolean, default: false
+
   defp about(assigns) do
     ~H"""
     <details
@@ -780,6 +784,7 @@ defmodule DevilsDictionaryWeb.Opening do
                 id="opening-about-selected-attempt"
                 attempt_id={taken.attempt_id}
                 mode={@mode}
+                reviewer?={@reviewer?}
               />
               · {if taken.edited?, do: "edited and published", else: "taken"} by {taken.taken_by}{if taken.taken_on,
                 do: " on #{date(taken.taken_on)}"}
@@ -875,6 +880,7 @@ defmodule DevilsDictionaryWeb.Opening do
                   id="opening-about-revision-lead-attempt"
                   attempt_id={attempt_id}
                   mode={@mode}
+                  reviewer?={@reviewer?}
                 />
               </span>
             </li>
@@ -890,6 +896,7 @@ defmodule DevilsDictionaryWeb.Opening do
                   id={"opening-about-revision-#{highlight.position}-attempt"}
                   attempt_id={attempt_id}
                   mode={@mode}
+                  reviewer?={@reviewer?}
                 />
               </span>
             </li>
@@ -938,13 +945,15 @@ defmodule DevilsDictionaryWeb.Opening do
   attr :attempt_id, :integer, required: true
   attr :mode, :atom, default: :public
 
+  attr :reviewer?, :boolean, default: false
+
   # The attempt an editor's choice came from (#253 D9): its text for every
   # reader, a link to the reviewer-only attempt page only where the reader
-  # reads internally (the reviewer's own machine; the page is 404 through
+  # is an authenticated reviewer reading internally (the page is 404 through
   # the tunnel like all of `/ops`).
   defp attempt(assigns) do
     ~H"""
-    <%= if @mode == :internal do %>
+    <%= if @mode == :internal and @reviewer? do %>
       <.link
         id={@id}
         navigate={~p"/ops/curation/attempts/#{@attempt_id}"}

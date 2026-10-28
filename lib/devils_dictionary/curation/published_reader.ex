@@ -78,6 +78,7 @@ defmodule DevilsDictionary.Curation.PublishedReader do
     Compositions,
     Configurations,
     Eligibility,
+    Proposal,
     Excerpt,
     LeadPolicy,
     Opening,
@@ -180,13 +181,16 @@ defmodule DevilsDictionary.Curation.PublishedReader do
     })
   end
 
-  # The proposal a manual version was taken from: its parent, when that is a
-  # model version (#253 §5a step 5).
-  defp proposal_of(%{parent_version_id: id}) when is_integer(id) do
-    case Repo.get(CompositionVersion, id) do
-      %CompositionVersion{origin: :model} = proposal -> proposal
-      _manual -> nil
-    end
+  # A parent edge alone is not a Take: ordinary manual saves also parent
+  # to the newest version, including a pending or dismissed proposal (R13).
+  defp proposal_of(%{id: id}) when is_integer(id) do
+    Repo.one(
+      from p in Proposal,
+        join: v in CompositionVersion,
+        on: v.id == p.version_id,
+        where: p.state == :taken and p.resolution_version_id == ^id,
+        select: v
+    )
   end
 
   defp proposal_of(_version), do: nil
@@ -852,29 +856,38 @@ defmodule DevilsDictionary.Curation.PublishedReader do
 
   defp note(_item, _ctx), do: nil
 
-  # The attempt behind each model-written note (#253 D9): its version's, for
-  # an item of a proposal, or the proposal item's it was copied from.
+  # The original attempt behind each model-written note (#253 D9), following
+  # every copy edge before considering the containing version.
   defp attempts(items) do
     for %CompositionItem{id: id, note_author_kind: :model} <- items,
         is_integer(id),
-        attempt = attempt_of(id, 4),
+        attempt = attempt_of(id, MapSet.new()),
         into: %{},
         do: {id, attempt}
   end
 
-  defp attempt_of(_id, 0), do: nil
+  defp attempt_of(id, visited) do
+    if MapSet.member?(visited, id) do
+      nil
+    else
+      case Repo.one(
+             from i in CompositionItem,
+               join: v in CompositionVersion,
+               on: v.id == i.composition_version_id,
+               where: i.id == ^id,
+               select: {v.origin, v.attempt_id, i.copied_from_item_id}
+           ) do
+        # A carried note belongs to its original author, even inside a newer
+        # model proposal. Follow provenance before the containing version.
+        {_origin, _attempt, source} when is_integer(source) ->
+          attempt_of(source, MapSet.put(visited, id))
 
-  defp attempt_of(id, hops) do
-    case Repo.one(
-           from i in CompositionItem,
-             join: v in CompositionVersion,
-             on: v.id == i.composition_version_id,
-             where: i.id == ^id,
-             select: {v.origin, v.attempt_id, i.copied_from_item_id}
-         ) do
-      {:model, attempt_id, _source} -> attempt_id
-      {_manual, _none, source} when is_integer(source) -> attempt_of(source, hops - 1)
-      _other -> nil
+        {:model, attempt_id, nil} ->
+          attempt_id
+
+        _other ->
+          nil
+      end
     end
   end
 
