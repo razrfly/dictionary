@@ -105,9 +105,11 @@ defmodule DevilsDictionary.Curation.Runtime.PacketV2ScopeTest do
       # to the quotations, which take four of fourteen.
       assert kinds(packet) == %{
                "content" => 3,
-               "sense_quotation" => 4,
-               "work" => 3,
-               "exemplar" => 2
+               "sense_quotation" => 3,
+               "work" => 1,
+               "exemplar" => 1,
+               "sense_definition" => 1,
+               "claim" => 1
              }
 
       # Bierce, then Johnson; within a source, by object id.
@@ -127,7 +129,7 @@ defmodule DevilsDictionary.Curation.Runtime.PacketV2ScopeTest do
       claims =
         for c <- packet["candidates"], c["kind"] == "exemplar", do: c["assertion_revision_id"]
 
-      assert claims == made.exemplars |> Enum.take(2) |> Enum.map(& &1.id)
+      assert claims == made.exemplars |> Enum.take(1) |> Enum.map(& &1.id)
 
       # The order the screen lists its candidates in is not an input.
       candidates = Candidates.for_page(page)
@@ -141,8 +143,12 @@ defmodule DevilsDictionary.Curation.Runtime.PacketV2ScopeTest do
 
       # One definition leaves three places to the quotations (3 + 3), and
       # nothing flows back from the works and exemplars greed does not have.
-      assert kinds(packet) == %{"content" => 1, "sense_quotation" => 6}
-      assert [%{"kind" => "sense_quotation", "reason" => "over_quota"}] = packet["omitted"]
+      assert kinds(packet) == %{"content" => 1, "sense_quotation" => 5, "sense_definition" => 3}
+
+      assert Enum.frequencies_by(packet["omitted"], &{&1["kind"], &1["reason"]}) == %{
+               {"sense_quotation", "over_quota"} => 2,
+               {"sense_definition", "over_quota"} => 1
+             }
     end
   end
 
@@ -183,15 +189,19 @@ defmodule DevilsDictionary.Curation.Runtime.PacketV2ScopeTest do
       assert kinds(tight) == %{
                "content" => 3,
                "sense_quotation" => 2,
-               "work" => 4,
-               "exemplar" => 1
+               "work" => 2,
+               "exemplar" => 1,
+               "sense_definition" => 1,
+               "claim" => 1
              }
 
       out = Enum.frequencies_by(tight["omitted"], &{&1["kind"], &1["reason"]})
 
       assert out == %{
                {"sense_quotation", "meaning_out_of_bound"} => 12,
-               {"exemplar", "meaning_out_of_bound"} => 2
+               {"exemplar", "over_quota"} => 2,
+               {"sense_definition", "over_quota"} => 42,
+               {"work", "over_quota"} => 2
              }
 
       assert {:ok, _} = Packet.freeze(tight, max_meanings: 4)
@@ -205,7 +215,7 @@ defmodule DevilsDictionary.Curation.Runtime.PacketV2ScopeTest do
       {:ok, packet} = v2(page)
       {:ok, frozen} = Packet.freeze(packet)
 
-      assert length(packet["omitted"]) == 12
+      assert length(packet["omitted"]) == 58
       assert Enum.all?(packet["omitted"], &(&1["reason"] == "over_quota"))
 
       for o <- packet["omitted"] do
@@ -216,9 +226,10 @@ defmodule DevilsDictionary.Curation.Runtime.PacketV2ScopeTest do
       assert summary["omitted"] == packet["omitted"]
 
       assert summary["counts"] == %{
-               "offered" => 24,
+               "offered" => 68,
                "meanings_total" => 48,
-               "meanings_required" => 6
+               "meanings_required" =>
+                 length(Enum.uniq_by(packet["candidates"], & &1["required_meaning"]))
              }
 
       assert summary["policy"]["meanings"] == "meanings-v2"
@@ -265,7 +276,7 @@ defmodule DevilsDictionary.Curation.Runtime.PacketV2ScopeTest do
 
       assert {:error, {:packet_stale, reasons}} = Packet.verify(frozen)
       works = for c <- packet["candidates"], c["kind"] == "work", do: c["candidate_id"]
-      assert length(works) == 3
+      assert length(works) == 1
       for id <- works, do: assert([id, "catalog_changed"] in reasons)
     end
 
@@ -416,29 +427,29 @@ defmodule DevilsDictionary.Curation.Runtime.PacketV2ScopeTest do
       ids = greed.headword.lexemes |> Enum.map(& &1.id) |> Enum.sort() |> Enum.join(" ")
 
       lines = dry_run!("greed")
-      assert row(lines, "packet_version") =~ "runtime-packet-v2"
+      assert row(lines, "packet_version") =~ "runtime-packet-v3"
       assert row(lines, "instruction") =~ "generic-editor-v2"
       assert row(lines, "scope") =~ "greed · lexemes #{ids} · en"
-      assert row(lines, "meanings") =~ "6 of 6 (required 4, bounded 2) · policy meanings-v2"
+      assert row(lines, "meanings") =~ "6 of 6 (required 5, bounded 1) · policy meanings-v2"
 
       assert row(lines, "candidates") =~
-               "7 of 8 · content 1, sense_quotation 6, work 0, exemplar 0 · policy cut-v1"
+               "9 of 12 · content 1, sense_quotation 5, work 0, exemplar 0, sense_definition 3, claim 0, shelf 0 · policy cut-v2"
 
       assert row(lines, "priority") =~ "none (no applicable Bierce entry)"
-      assert row(lines, "omitted") =~ "1 · by id with reason: over_quota 1"
+      assert row(lines, "omitted") =~ "3 · by id with reason: over_quota 3"
 
       assert row(lines, "hashes") =~
                ~r/packet sha256 [0-9a-f]{64}, candidate set sha256 [0-9a-f]{64}/
 
       {_made, _page} = love!(ctx)
       lines = dry_run!("love")
-      assert row(lines, "meanings") =~ "12 of 48 (required 6, bounded 6)"
+      assert row(lines, "meanings") =~ "12 of 48 (required 5, bounded 7)"
 
       assert row(lines, "candidates") =~
-               "12 of 24 · content 3, sense_quotation 4, work 3, exemplar 2"
+               "10 of 68 · content 3, sense_quotation 3, work 1, exemplar 1, sense_definition 1, claim 1, shelf 0"
 
       assert row(lines, "priority") =~ "bierce LOVE (n)"
-      assert row(lines, "omitted") =~ "12 · by id with reason: over_quota 12"
+      assert row(lines, "omitted") =~ "58 · by id with reason: over_quota 58"
 
       # Nothing a reader could quote: no excerpt or label text is printed.
       {:ok, packet} = v2(PacketFixtures.page("love"))
@@ -473,7 +484,7 @@ defmodule DevilsDictionary.Curation.Runtime.PacketV2ScopeTest do
       visit!()
       drain!()
       row = row!(ctx.composition)
-      assert version_of(row.input_fingerprint) == "packet-v2/cut-v1/meanings-v2"
+      assert version_of(row.input_fingerprint) == "packet-v3/cut-v2/meanings-v2"
 
       # The baseline P5 wrote on v2 before this build: another version.
       [_version, rest] = String.split(row.input_fingerprint, ":", parts: 2)
@@ -516,7 +527,7 @@ defmodule DevilsDictionary.Curation.Runtime.PacketV2ScopeTest do
 
       row = row!(ctx.composition)
       assert {row.last_outcome, row.last_outcome_reason} == {:needs_editor, "fingerprint_version"}
-      assert version_of(row.input_fingerprint) == "packet-v2/cut-v1/meanings-v3"
+      assert version_of(row.input_fingerprint) == "packet-v3/cut-v2/meanings-v3"
       assert {:ok, :fresh} = visit!()
     end
   end
@@ -561,7 +572,30 @@ defmodule DevilsDictionary.Curation.Runtime.PacketV2ScopeTest do
       {:ok, renumbered} = v2(PacketFixtures.page("love"))
       ids = fn p -> Enum.map(p["meanings"], &{&1["meaning_id"], &1["sense_revision_id"]}) end
       refute ids.(renumbered) == ids.(packet)
-      assert Packet.digest(renumbered) == Packet.digest(packet)
+      # A newly offered sense definition changes this v3 cut. Pure renumbering
+      # still leaves the chosen candidate/meaning identity unchanged.
+      refute Packet.digest(renumbered) == Packet.digest(packet)
+      rename = fn id -> "renumbered-" <> id end
+
+      same =
+        packet
+        |> Map.update!(
+          "meanings",
+          &Enum.map(&1, fn m -> Map.update!(m, "meaning_id", rename) end)
+        )
+
+      same =
+        Map.update!(
+          same,
+          "candidates",
+          &Enum.map(&1, fn c ->
+            c
+            |> Map.update!("required_meaning", rename)
+            |> Map.update!("allowed_meanings", fn ids -> Enum.map(ids, rename) end)
+          end)
+        )
+
+      assert Packet.digest(same) == Packet.digest(packet)
     end
   end
 end

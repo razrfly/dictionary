@@ -66,7 +66,12 @@ defmodule DevilsDictionary.Curation.ExemplarItemsTest do
     do: ExemplarFixtures.decide!(ctx.reviewer, revision, decision)
 
   defp exemplar(revision, meaning),
-    do: %{kind: :exemplar, assertion_revision_id: revision.id, meaning: meaning}
+    do: %{
+      kind: :exemplar,
+      assertion_revision_id: revision.id,
+      meaning: meaning,
+      note: %{text: "A fixture selection reason."}
+    }
 
   defp by_sense(ctx), do: {:sense_revision, ctx.sense_revision.id}
 

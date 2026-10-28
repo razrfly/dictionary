@@ -130,7 +130,7 @@ defmodule DevilsDictionary.Installation.BundleBootstrapTest do
        %{names: names, dir: dir, probe: probe} do
     %{manifest: manifest, digest: digest, path: bundle} = bundle!(names, dir, probe)
 
-    assert manifest["format"] == "dd.bundle/1"
+    assert manifest["format"] == "dd.bundle/2"
     assert manifest["tool"]["revision"] =~ ~r/\A[0-9a-f]{40}\z/
     assert manifest["code"]["revision"] == manifest["tool"]["revision"]
     assert manifest["quiescence"]["quiet"]
@@ -160,6 +160,16 @@ defmodule DevilsDictionary.Installation.BundleBootstrapTest do
     assert {:ok, again} = init(names, bundle, digest)
     assert again.outcome == :already_restored
     assert again.database_oid == report.database_oid
+  end
+
+  test "a legacy dd.bundle/1 archive still restores", %{names: names, dir: dir, probe: probe} do
+    %{manifest: manifest, path: bundle} = bundle!(names, dir, probe)
+    # This fixture contains none of the five projected tables, so its archive
+    # is the complete original-format data stream.
+    legacy = manifest |> Map.put("format", "dd.bundle/1") |> Map.delete("projection")
+    digest = Manifest.write!(bundle, legacy)
+    assert {:ok, %{"format" => "dd.bundle/1"}} = Manifest.read(bundle)
+    assert {:ok, %{outcome: :restored}} = init(names, bundle, digest)
   end
 
   test "a manifest reads only under a well-formed exported snapshot id", %{names: names} do

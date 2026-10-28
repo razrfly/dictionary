@@ -520,6 +520,7 @@ defmodule DevilsDictionary.Curation.Refresh do
             configuration_version_id: row.configuration_version_id,
             token: row.lease_token,
             generation: row.refresh_generation,
+            shelf_focus: row.shelf_focus,
             periodic?: row.run_periodic,
             pending_reason: row.dirty_reason
           }
@@ -777,7 +778,14 @@ defmodule DevilsDictionary.Curation.Refresh do
       |> Ecto.Changeset.change(
         state: :idle,
         last_completed_at: now,
-        refresh_after: shift(now, @window_seconds),
+        refresh_after:
+          shift(
+            now,
+            Configurations.refresh_window(
+              Repo.get!(ConfigurationVersion, row.configuration_version_id)
+            )
+          ),
+        shelf_focus: nil,
         last_outcome: outcome,
         last_outcome_reason: reason,
         # A publication during the run reset the baseline (`published/2`):
@@ -890,6 +898,8 @@ defmodule DevilsDictionary.Curation.Refresh do
 
   defp close_row!(row, now) do
     row
+    |> Ecto.Changeset.change(shelf_focus: nil)
+    |> Repo.update!()
     |> release!(now)
     |> mark_row!("inputs_changed", now)
   end
@@ -1310,6 +1320,10 @@ defmodule DevilsDictionary.Curation.Refresh do
   """
   def request(scope, composition_id, slug, reason, opts \\ []) do
     now = now(opts)
+    focus = Keyword.get(opts, :shelf)
+
+    if not is_nil(focus) and to_string(focus) not in DevilsDictionary.Curation.Shelf.kinds(),
+      do: raise(ArgumentError, "invalid shelf focus")
 
     result =
       Repo.transaction(fn ->
@@ -1330,11 +1344,21 @@ defmodule DevilsDictionary.Curation.Refresh do
               # Dirty, not changed: a request is no input change, so the
               # history `inputs_last_changed_at` keeps (#259 §5.1) is not
               # touched (#273 review, recommendation 8).
+              frozen_focus? = keeps_generation?(row, composition)
+
+              if frozen_focus? && focus && row.shelf_focus != to_string(focus),
+                do: Repo.rollback(:shelf_focus_frozen)
+
               row =
                 row
                 |> Ecto.Changeset.change(
                   dirty_at: row.dirty_at || now,
                   dirty_reason: "requested",
+                  shelf_focus:
+                    if(frozen_focus?,
+                      do: row.shelf_focus,
+                      else: if(focus, do: to_string(focus), else: nil)
+                    ),
                   dirty_seq: row.dirty_seq + 1,
                   run_periodic: false,
                   next_retry_at: if(row.state == :deferred, do: now, else: row.next_retry_at),

@@ -249,6 +249,22 @@ defmodule DevilsDictionary.Curation.PublishedReader do
       |> Enum.map(&highlight(&1, ctx))
       |> Enum.split_with(&match?(%Highlight{}, &1))
 
+    slug =
+      case ctx.page.headword.lexemes do
+        [lexeme | _] -> Repo.get!(Lexeme, lexeme.id).slug
+        _ -> nil
+      end
+
+    receipt_path = slug && "/on/" <> URI.encode(slug) <> "/receipt/#{record.composition.version}"
+    all_items = List.wrap(arrangement.lead) ++ arrangement.highlights
+
+    highlights =
+      Enum.map(highlights, fn tile ->
+        item = Enum.find(all_items, &(&1.role == :highlight and &1.position == tile.position))
+        enrich_choice(tile, item, receipt_path)
+      end)
+
+    lead = if lead, do: enrich_choice(lead, arrangement.lead, receipt_path)
     configuration = record.configuration
     configuration_version = record.configuration_version
 
@@ -271,6 +287,43 @@ defmodule DevilsDictionary.Curation.PublishedReader do
           arrangement.withheld ++ lead_withheld ++ highlight_withheld,
           &{&1.role != :lead, &1.position || 0}
         )
+    }
+  end
+
+  defp enrich_choice(tile, item, path) do
+    basis =
+      if item.id,
+        do: DevilsDictionary.Curation.ItemBasis.get(item.id),
+        else: %DevilsDictionary.Curation.ItemBasis{
+          origin: "owner",
+          evidence_kind: if(item.shelf, do: "shelf", else: to_string(item.item_kind)),
+          fields_version: "screen-fields-v1"
+        }
+
+    date =
+      if item.shelf_citation_id do
+        c = DevilsDictionary.Curation.ShelfCitations.get(item.shelf_citation_id)
+
+        case DevilsDictionary.Curation.ShelfCitations.payload(c) do
+          nil ->
+            %{value: nil, meaning: c.content_date_meaning, precision: c.content_date_precision}
+
+          payload ->
+            DevilsDictionary.Curation.Shelf.date(
+              Repo.get!(Source, c.source_id).slug,
+              payload["preview_metadata"] || %{}
+            )
+        end
+      else
+        DevilsDictionary.Curation.ContentDate.of(item)
+      end
+
+    %{
+      tile
+      | date_info: date,
+        basis: basis,
+        receipt_path: if(item.id, do: path <> "#receipt-item-#{item.role}-#{item.position}"),
+        source_edition: tile.source && tile.source[:edition_year]
     }
   end
 
@@ -408,6 +461,119 @@ defmodule DevilsDictionary.Curation.PublishedReader do
   end
 
   # A catalog work (#257): the committed row it pins, as its kind draws it.
+  defp highlight(%CompositionItem{item_kind: :sense_definition} = item, ctx) do
+    with {:ok, sense} <- sense(item.sense_revision_id), {:ok, meaning} <- meaning(item, ctx) do
+      text = sense.gloss
+
+      %Highlight{
+        position: item.position,
+        kind: :definition,
+        register: :definition,
+        reference: %Reference{
+          object_id: item.item_object_id,
+          object_kind: :sense,
+          sense_revision_id: item.sense_revision_id
+        },
+        title: "Sense definition",
+        creator: sense.source.name,
+        source: source_view(sense.source),
+        meaning: meaning,
+        excerpt: %{
+          text: text,
+          html: Phoenix.HTML.safe_to_string(Phoenix.HTML.html_escape(text)),
+          chars: String.length(text),
+          clipped?: false
+        },
+        links: %{source: sense.url},
+        reasons: compact([note(item, ctx)])
+      }
+    else
+      {:error, reason} -> withheld(item, reason)
+    end
+  end
+
+  defp highlight(%CompositionItem{item_kind: :claim} = item, ctx) do
+    basis = item.basis || (item.id && DevilsDictionary.Curation.ItemBasis.get(item.id))
+
+    representation =
+      if is_struct(basis), do: basis.representation, else: basis && basis["representation"]
+
+    with %{} <- representation, {:ok, meaning} <- meaning(item, ctx) do
+      label =
+        Enum.join(
+          [
+            representation["subject_label"],
+            representation["predicate_phrase"],
+            representation["object_label"]
+          ],
+          " "
+        )
+
+      claim = Repo.get!(DevilsDictionary.Claims.AssertionRevision, item.assertion_revision_id)
+
+      current =
+        Enum.join(
+          [
+            DevilsDictionary.Curation.LinkedClaims.label(claim.subject_object_id),
+            representation["predicate_phrase"],
+            DevilsDictionary.Curation.LinkedClaims.label(claim.object_object_id)
+          ],
+          " "
+        )
+
+      %Highlight{
+        position: item.position,
+        kind: :linked_claim,
+        title: label,
+        current_label: if(current != label, do: current),
+        reference: %Reference{
+          object_id: item.item_object_id,
+          object_kind: :entity,
+          assertion_revision_id: item.assertion_revision_id
+        },
+        source: source_view(nil),
+        links: %{connection: claim.assertion_id},
+        meaning: meaning,
+        reasons: compact([note(item, ctx)])
+      }
+    else
+      _ -> withheld(item, :claim_unlinked)
+    end
+  end
+
+  defp highlight(%CompositionItem{shelf_citation_id: id} = item, ctx) when is_integer(id) do
+    citation = DevilsDictionary.Curation.ShelfCitations.get(id)
+    draw_shelf(item, citation, ctx)
+  end
+
+  defp highlight(%CompositionItem{shelf: shelf} = item, ctx) when is_map(shelf) do
+    result = Repo.get(DevilsDictionary.Discovery.Result, shelf[:result] || shelf["result"])
+
+    if result do
+      run = Repo.get!(DevilsDictionary.Discovery.Run, result.run_id)
+      o = DevilsDictionary.Curation.ShelfCitations.observation(result, run)
+
+      if o.status == :ok do
+        c = %DevilsDictionary.Curation.ShelfCitation{
+          source_id: o.source.id,
+          source_record_id: o.record.id,
+          source_record_revision_id: o.revision.id,
+          cited_revision_id: o.revision.id,
+          cited_checksum: o.revision.checksum,
+          expires_at: o.expires_at,
+          observed_at: o.observed_at,
+          shelf_kind: o.kind
+        }
+
+        draw_shelf(item, c, ctx)
+      else
+        withheld(item, o.status)
+      end
+    else
+      withheld(item, :observation_unbound)
+    end
+  end
+
   defp highlight(%CompositionItem{item_kind: :work, catalog_manifest: name} = item, ctx)
        when is_binary(name) do
     with {:ok, kind} <- catalog_kind(name),
@@ -475,6 +641,74 @@ defmodule DevilsDictionary.Curation.PublishedReader do
   end
 
   defp highlight(%CompositionItem{} = item, _ctx), do: withheld(item, :unsupported_item)
+
+  defp draw_shelf(item, citation, ctx) do
+    with %{} = payload <- DevilsDictionary.Curation.ShelfCitations.payload(citation),
+         {:ok, meaning} <- meaning(item, ctx) do
+      source = Repo.get!(Source, citation.source_id)
+      metadata = payload["preview_metadata"] || %{}
+
+      provider = DevilsDictionary.Discovery.Providers.get(source.slug)
+      type = List.first(provider.capabilities().content_types)
+
+      mark =
+        if function_exported?(provider, :attribution_mark, 0),
+          do: DevilsDictionaryWeb.Culture.mark(provider.attribution_mark())
+
+      thumbnail = DevilsDictionary.Discovery.ContentTypes.thumbnail_url(type, metadata)
+      attribution = DevilsDictionary.Discovery.ContentTypes.attribution(type)
+
+      match =
+        DevilsDictionary.Discovery.MatchReason.from_result(payload["match_details"], nil)
+        |> Enum.map(
+          &%Reason{kind: :source_match, text: DevilsDictionary.Discovery.MatchReason.describe(&1)}
+        )
+
+      date = DevilsDictionary.Curation.Shelf.date(source.slug, metadata)
+
+      %Highlight{
+        position: item.position,
+        kind: :shelf,
+        title: metadata["title"] || "untitled",
+        creator: DevilsDictionary.Curation.Shelf.creator(metadata),
+        date: date.value && to_string(date.value),
+        source: source_view(source),
+        meaning: meaning,
+        reference: %Reference{
+          object_id: item.item_object_id,
+          object_kind: :entity,
+          source_record_revision_id: item.source_record_revision_id,
+          shelf_citation_id: citation.id
+        },
+        image: thumbnail && %{url: thumbnail, alt: ""},
+        links: %{source: metadata["source_url"]},
+        work: %{
+          kind: citation.shelf_kind,
+          attribution: attribution,
+          mark: mark,
+          credit_parts:
+            DevilsDictionaryWeb.Culture.credit_parts(
+              metadata["attribution"] || metadata["credit_line"],
+              metadata
+            )
+        },
+        credits:
+          compact([
+            credit(:source, "Source", source.name, metadata["source_url"]),
+            credit(
+              :creator,
+              "Creator",
+              DevilsDictionary.Curation.Shelf.creator(metadata),
+              metadata["creator_url"]
+            ),
+            credit(:rights, "Rights", metadata["license"], metadata["license_url"])
+          ]),
+        reasons: match ++ compact([note(item, ctx)])
+      }
+    else
+      _ -> withheld(item, DevilsDictionary.Curation.ShelfCitations.check(citation))
+    end
+  end
 
   # ── catalog works ────────────────────────────────────────────────────────
 
@@ -944,7 +1178,9 @@ defmodule DevilsDictionary.Curation.PublishedReader do
       attribution: source.attribution,
       license: source.license,
       license_url: source.license_url,
-      homepage: source.homepage
+      homepage: source.homepage,
+      era_year: source.era_year,
+      edition_year: if(source.access in [:static, :dump], do: source.era_year)
     }
   end
 

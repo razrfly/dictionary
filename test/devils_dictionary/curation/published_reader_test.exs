@@ -11,11 +11,9 @@ defmodule DevilsDictionary.Curation.PublishedReaderTest do
   import DevilsDictionary.CurationFixtures,
     only: [
       account: 1,
-      content_spec: 2,
       defines_claim!: 2,
       enabled_default!: 1,
-      key: 1,
-      quotation_spec: 2
+      key: 1
     ]
 
   import DevilsDictionary.OpeningFixtures
@@ -79,6 +77,18 @@ defmodule DevilsDictionary.Curation.PublishedReaderTest do
 
     composition
   end
+
+  defp content_spec(content, lexeme),
+    do:
+      Map.put(DevilsDictionary.CurationFixtures.content_spec(content, lexeme), :note, %{
+        text: "A fixture selection reason."
+      })
+
+  defp quotation_spec(sense, index),
+    do:
+      Map.put(DevilsDictionary.CurationFixtures.quotation_spec(sense, index), :note, %{
+        text: "A fixture selection reason."
+      })
 
   defp with_note(spec, text), do: Map.put(spec, :note, %{text: text})
 
@@ -409,7 +419,7 @@ defmodule DevilsDictionary.Curation.PublishedReaderTest do
       claim_deleted claim_not_current claim_not_accepted claim_not_visible claim_not_about_object
       claim_context_changed priority_source_available priority_source_missing lead_not_on_scope
       composition_retired configuration_changed scope_changed approval_withdrawn
-      not_on_page meaning_off_page quotation_not_found unsupported_item
+      not_on_page meaning_off_page quotation_not_found unsupported_item observation_unbound revision_mismatch retention_expired payload_redacted claim_unlinked
       empty no_prose_opening no_sentence_boundary
     )a
 

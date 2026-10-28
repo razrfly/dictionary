@@ -102,7 +102,10 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
     content: "Definitions",
     sense_quotation: "Sense quotations",
     work: "Catalog works",
-    exemplar: "Accepted exemplars"
+    exemplar: "Accepted exemplars",
+    sense_definition: "Sense definitions",
+    claim: "Linked claims",
+    shelf: "Shelves"
   ]
 
   # The page is built once the socket is up: the first paint is the header,
@@ -234,6 +237,10 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
     end
   end
 
+  def handle_event("withdraw_fixed", _params, socket) do
+    {:noreply, withdraw(assign(socket, :withdraw_reason, "withdrawn_by_owner"))}
+  end
+
   def handle_event("withdraw", params, socket) do
     reason =
       case params do
@@ -256,9 +263,24 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
     socket = assign(socket, :quality, quality_of(params, socket.assigns.quality))
 
     case all["action"] do
-      "take" -> {:noreply, take(socket)}
-      "dismiss" -> {:noreply, dismiss(socket)}
-      _other -> {:noreply, socket}
+      "take" ->
+        {:noreply, take(socket)}
+
+      "dismiss-fixed" ->
+        socket =
+          assign(socket, :quality, %{
+            "reason" => "dismissed_by_owner",
+            "note" => "",
+            "answers" => %{}
+          })
+
+        {:noreply, dismiss(socket)}
+
+      "dismiss" ->
+        {:noreply, dismiss(socket)}
+
+      _other ->
+        {:noreply, socket}
     end
   end
 
@@ -514,6 +536,27 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
     "quotation:" <> n = item.locator || "quotation:"
     known("quotation-#{item.sense_revision_id}-#{n}", candidates)
   end
+
+  defp item_key(%{item_kind: :sense_definition, sense_revision_id: id}, candidates),
+    do: known("sense-#{id}", candidates)
+
+  defp item_key(%{item_kind: :claim} = item, candidates) do
+    basis = item.id && DevilsDictionary.Curation.ItemBasis.get(item.id)
+
+    witness =
+      if basis,
+        do: basis.witness_assertion_revision_id,
+        else: item.basis && item.basis["witness_assertion_revision_id"]
+
+    known("claim-#{item.assertion_revision_id}-#{witness || 0}", candidates)
+  end
+
+  defp item_key(%{shelf_citation_id: id}, candidates) when is_integer(id),
+    do:
+      known(
+        "shelf-#{DevilsDictionary.Curation.ShelfCitations.get(id).discovery_result_id}",
+        candidates
+      )
 
   defp item_key(%{item_kind: :work} = item, candidates) do
     Enum.find_value(candidates.highlights, fn
@@ -1258,7 +1301,7 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
                   :if={@selection.lead not in [nil, "none"]}
                   id="lead-note"
                   name="curation[lead_note]"
-                  label="Why this leads (optional: the rule above is its reason)"
+                  label="Why this leads (required for a fallback lead)"
                   value={@selection.lead_note}
                   author={@selection.authors[:lead]}
                   me={@me.label}
@@ -1649,6 +1692,15 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
         <.button id="curation-withdraw" type="submit" variant="soft" class="mb-3 min-h-11">
           Withdraw
         </.button>
+        <.button
+          id="curation-withdraw-fixed"
+          type="button"
+          phx-click="withdraw_fixed"
+          variant="soft"
+          class="mb-3 min-h-11"
+        >
+          Withdraw without a new annotation
+        </.button>
       </.form>
     </section>
     """
@@ -2030,6 +2082,15 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
           >
             Dismiss
           </.button>
+          <.button
+            id="proposal-dismiss-fixed"
+            type="submit"
+            name="action"
+            value="dismiss-fixed"
+            variant="soft"
+            class="min-h-11"
+          >Dismiss without a new text reason</.button>
+
           <span class="text-xs/5 text-pretty text-mist-600 dark:text-mist-400">
             Take publishes it as your version, keeping who wrote each reason. Dismiss needs a
             reason; leave the quality form empty there, or complete every answer.
@@ -2250,6 +2311,10 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
   defp empty_group(:content, _candidates), do: "No entry on this page."
   defp empty_group(:sense_quotation, _candidates), do: "None under these senses."
 
+  defp empty_group(:sense_definition, _), do: "No current sense definition on this page."
+  defp empty_group(:claim, _), do: "No public linked claim on this page."
+  defp empty_group(:shelf, _), do: "No stored provider observation for this page."
+
   defp empty_group(:work, _candidates),
     do:
       "None on this page’s Saved catalog shelf. Poems and books are not offered here: their catalogs record nothing a page can be matched on."
@@ -2259,6 +2324,9 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
 
   defp chip(%{kind: :content}), do: "Definition"
   defp chip(%{kind: :sense_quotation}), do: "Quotation"
+  defp chip(%{kind: :sense_definition}), do: "Sense definition"
+  defp chip(%{kind: :claim}), do: "Linked claim"
+  defp chip(%{kind: :shelf, work_kind: kind}), do: kind
   defp chip(%{kind: :work, work_kind: kind}) when is_binary(kind), do: kind
   defp chip(%{kind: :work}), do: "Work"
   defp chip(%{kind: :exemplar, label: label}), do: label
@@ -2337,6 +2405,7 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
   defp lead_verdict({:error, reason}), do: "Cannot lead: #{status_text(reason)}"
   defp lead_verdict(_ok), do: nil
 
+  defp status_text({:error, reason}), do: status_text(reason)
   defp status_text(:not_a_catalog_row), do: "not a committed catalog row"
   defp status_text(reason), do: "#{Opening.withheld_reason(reason)} (#{reason})"
 

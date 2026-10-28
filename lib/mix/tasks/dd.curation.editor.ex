@@ -74,7 +74,9 @@ defmodule Mix.Tasks.Dd.Curation.Editor do
     model_config: :string,
     version: :integer,
     slug: :string,
-    counted_only: :boolean
+    counted_only: :boolean,
+    refresh_window: :string,
+    shelf: :string
   ]
 
   @impl Mix.Task
@@ -142,7 +144,21 @@ defmodule Mix.Tasks.Dd.Curation.Editor do
         "would bind #{inspect(editor)} in a new version of #{c.slug} (current ##{c.current_version_id})"
       )
     else
-      print(Configurations.create_version(scope, c.id, %{reason: reason, editor: editor}))
+      window =
+        case Keyword.get(opts, :refresh_window, "48h") do
+          "24h" -> 86_400
+          "48h" -> 172_800
+          "7d" -> 604_800
+          _ -> Mix.raise("--refresh-window must be 24h, 48h or 7d")
+        end
+
+      print(
+        Configurations.create_version(scope, c.id, %{
+          reason: reason,
+          editor: editor,
+          refresh_window: window
+        })
+      )
     end
   end
 
@@ -232,7 +248,7 @@ defmodule Mix.Tasks.Dd.Curation.Editor do
         "would request a run for #{slug} (composition ##{composition.id}); the editor is #{if match?({:ok, _}, editor), do: "on", else: "off"}"
       )
     else
-      print(Refresh.request(scope, composition.id, slug, reason))
+      print(Refresh.request(scope, composition.id, slug, reason, shelf: opts[:shelf]))
     end
   end
 

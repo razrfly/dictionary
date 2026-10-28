@@ -162,7 +162,7 @@ defmodule DevilsDictionary.Curation.Runtime.RehearsalTest do
       lines = lines()
 
       assert row(lines, "model_config") =~ "#{ctx.config.slug} · config ##{ctx.config.id}"
-      assert row(lines, "packet_version") =~ "runtime-packet-v2"
+      assert row(lines, "packet_version") =~ "runtime-packet-v3"
       assert row(lines, "instruction") =~ "generic-editor-v2"
       assert row(lines, "priority") =~ "bierce PATIENCE (n)"
 

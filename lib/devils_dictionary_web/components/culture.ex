@@ -767,16 +767,17 @@ defmodule DevilsDictionaryWeb.Culture do
 
   attr :mark, :map, required: true
   attr :provider, :string, required: true
+  attr :id, :string, default: nil
 
   # A required mark is never clamped, hidden behind a pointer or collapsed into
   # a tooltip, for the same reason a `:required` credit is not (#116 Phase 3):
   # a condition of the licence that only some readers see is not met. Both
   # variants ship in the markup and CSS picks one, so the mark is correct in
   # either theme without JavaScript and without a filter over the wrong file.
-  defp attribution_mark(assigns) do
+  def attribution_mark(assigns) do
     ~H"""
     <a
-      id={"culture-mark-#{@provider}"}
+      id={@id || "culture-mark-#{@provider}"}
       href={@mark.href}
       target="_blank"
       rel="noreferrer"

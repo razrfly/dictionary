@@ -135,6 +135,19 @@ defmodule DevilsDictionary.DiscoveryTest do
     assert completed.request_count == 2
     assert completed.status == :succeeded
     assert completed.result_count == 1
+    assert completed.retention_seconds == Policy.retention_seconds("cinegraph")
+
+    assert completed.retention_policy_sha256 ==
+             DevilsDictionary.Curation.Shelf.policy_hash(Policy.for!("cinegraph"))
+
+    [stored] = Repo.all(from d in Result, where: d.run_id == ^run.id)
+    assert is_integer(stored.source_record_revision_id)
+
+    revision =
+      Repo.get!(DevilsDictionary.Corpus.SourceRecordRevision, stored.source_record_revision_id)
+
+    assert revision.discovery_retain_until == completed.expires_at
+    assert revision.discovery_last_observed_at == completed.completed_at
     assert state.status == :ready
     assert [%Result{external_id: "10"} = item] = state.items
     assert item.match_details["keywords"] == [%{"id" => 273_967, "name" => "war"}]

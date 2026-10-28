@@ -493,7 +493,26 @@ defmodule DevilsDictionary.Installation.Bootstrap do
       Database.create!(config, staging, manifest["database"], marker)
       dump = Path.join(bundle, Manifest.file(manifest, "dump")["path"])
       log.("pg_restore into #{staging}")
-      :ok = pg_restore!(Keyword.put(config, :database, staging), dump, opts[:jobs] || 4)
+      restore_config = Keyword.put(config, :database, staging)
+
+      if manifest["format"] == "dd.bundle/2" do
+        for section <- ~w(pre-data data),
+            do: pg_restore!(restore_config, dump, opts[:jobs] || 4, section)
+
+        for table <- ~w(source_records source_record_revisions) do
+          if file = Manifest.file(manifest, "projected_" <> table) do
+            DevilsDictionary.Installation.DiscoveryProjection.copy_in!(
+              restore_config,
+              table,
+              Path.join(bundle, file["path"])
+            )
+          end
+        end
+
+        pg_restore!(restore_config, dump, opts[:jobs] || 4, "post-data")
+      else
+        pg_restore!(restore_config, dump, opts[:jobs] || 4)
+      end
 
       Database.apply_properties!(
         config,
@@ -580,12 +599,14 @@ defmodule DevilsDictionary.Installation.Bootstrap do
     end
   end
 
-  defp pg_restore!(config, dump, jobs) do
+  defp pg_restore!(config, dump, jobs, section \\ nil) do
     binary = System.find_executable("pg_restore") || raise "pg_restore is not on PATH"
 
     args =
       Snapshot.connection_args(config) ++
-        ["--exit-on-error", "--jobs=#{jobs}", "--dbname=#{config[:database]}", dump]
+        ["--exit-on-error", "--jobs=#{jobs}"] ++
+        if(section, do: ["--section=#{section}"], else: []) ++
+        ["--dbname=#{config[:database]}", dump]
 
     env = [{"PGPASSWORD", to_string(config[:password] || "")}]
 

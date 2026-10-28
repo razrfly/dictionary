@@ -45,11 +45,17 @@ defmodule DevilsDictionary.Curation.CompositionItem do
     field :composition_version_id, :id
     field :role, Ecto.Enum, values: [:lead, :highlight]
     field :position, :integer
-    field :item_kind, Ecto.Enum, values: [:content, :sense_quotation, :work, :exemplar]
+
+    field :item_kind, Ecto.Enum,
+      values: [:content, :sense_quotation, :sense_definition, :work, :exemplar, :claim]
+
     field :item_object_id, :id
     field :content_revision_id, :id
     field :sense_revision_id, :id
     field :source_record_revision_id, :id
+    field :shelf_citation_id, :id
+    field :shelf, :map, virtual: true
+    field :basis, :map, virtual: true
     field :catalog_manifest, :string
     field :catalog_checksum, :string
     field :catalog_identity, :string

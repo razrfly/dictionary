@@ -26,6 +26,9 @@ defmodule DevilsDictionary.Corpus.SourceRecordRevision do
     field :revision_key, :string
     field :payload, :map, load_in_query: false, default: %{}
     field :checksum, :string
+    field :discovery_retain_until, :utc_datetime_usec
+    field :discovery_retention_policy_sha256, :string
+    field :discovery_last_observed_at, :utc_datetime_usec
     field :observed_at, :utc_datetime_usec
     belongs_to :import_run, ImportRun
 

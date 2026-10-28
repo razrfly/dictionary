@@ -60,7 +60,12 @@ defmodule DevilsDictionary.Installation.State do
     in_database =
       Recovery.with_database(target, fn ->
         manifest =
-          Recovery.manifest(mode: :exact, queue: true, snapshot: opts[:snapshot])
+          Recovery.manifest(
+            mode: :exact,
+            queue: true,
+            snapshot: opts[:snapshot],
+            table_sources: opts[:table_sources]
+          )
 
         {routing, resolutions, migrations} = routing(opts[:snapshot])
 

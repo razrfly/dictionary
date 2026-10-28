@@ -69,13 +69,14 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
   alias DevilsDictionary.Repo
   alias DevilsDictionary.Sources.Source
 
-  @version "runtime-packet-v2"
+  @version "runtime-packet-v3"
+  @v2 "runtime-packet-v2"
   # The September benchmark's packets (#195), which freeze and verify still.
   @v1 "runtime-packet-v1"
   @max_gloss_chars 300
   # The kinds, in the order unused quota flows down.
-  @kinds ~w(content sense_quotation work exemplar)
-  @omission_reasons ~w(over_quota meaning_out_of_bound meaning_unavailable no_excerpt)
+  @kinds ~w(content sense_quotation work exemplar sense_definition claim shelf)
+  @omission_reasons ~w(over_quota meaning_out_of_bound meaning_unavailable no_excerpt outside_shelf_focus)
   @omitted_keys ~w(key kind object_id reason)
   # A verified corpus, read from a dump or a static file, before a live API.
   @corpus_access [:dump, :static]
@@ -84,7 +85,7 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
   def version, do: @version
 
   @doc "The packet versions `freeze/2` and `verify/1` accept, oldest first."
-  def versions, do: [@v1, @version]
+  def versions, do: [@v1, @v2, @version]
 
   @doc "The candidate kinds, in the order unused quota flows down."
   def kinds, do: @kinds
@@ -254,7 +255,9 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
       quotas: Endpoint.get(:candidate_quotas, opts),
       max_candidates: Endpoint.get(:max_candidates, opts),
       max_meanings: Endpoint.get(:max_meanings, opts),
-      source_priority: Endpoint.get(:source_priority, opts)
+      source_priority: Endpoint.get(:source_priority, opts),
+      generation: Keyword.get(opts, :generation, 0),
+      shelf_focus: Keyword.get(opts, :shelf)
     }
   end
 
@@ -265,7 +268,7 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
   """
   def fingerprint_version(opts \\ []) do
     policy = policy(opts)
-    Enum.join(["packet-v2", policy.cut, policy.meanings], "/")
+    Enum.join(["packet-v3", policy.cut, policy.meanings], "/")
   end
 
   defp cut(page, candidates, instruction, policy) do
@@ -312,6 +315,7 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
            policy: policy,
            priority: priority,
            chosen: selection.chosen,
+           shelf: selection.shelf,
            kept: kept,
            required: selection.kept,
            omitted: selection.omitted ++ Enum.sort_by(unusable, & &1["key"]),
@@ -332,7 +336,8 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
       count: length(priority),
       kept: MapSet.new(priority, & &1.meaning),
       omitted: [],
-      carry: 0
+      carry: 0,
+      shelf: nil
     }
 
     final =
@@ -340,6 +345,24 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
         room = Keyword.get(policy.quotas, String.to_existing_atom(kind), 0) + acc.carry
         taken = if kind == "content", do: length(priority), else: 0
         queue = by_kind |> Map.get(kind, []) |> Enum.sort_by(& &1.sort)
+
+        {queue, acc} =
+          if kind == "shelf" and queue != [] do
+            slots = max(min(room, policy.max_candidates - acc.count), 0)
+
+            {ordered, excluded, focus} =
+              DevilsDictionary.Curation.ShelfFocus.order(
+                queue,
+                policy.generation,
+                policy.shelf_focus,
+                slots
+              )
+
+            {ordered,
+             Enum.reduce(excluded, %{acc | shelf: focus}, &omit(&2, &1, "outside_shelf_focus"))}
+          else
+            {queue, acc}
+          end
 
         {acc, taken} =
           Enum.reduce(queue, {acc, taken}, fn c, {acc, taken} ->
@@ -367,7 +390,8 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
     %{
       chosen: Enum.reverse(final.chosen),
       kept: final.kept,
-      omitted: Enum.reverse(final.omitted)
+      omitted: Enum.reverse(final.omitted),
+      shelf: final.shelf
     }
   end
 
@@ -410,6 +434,8 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
 
     %{
       "packet_version" => @version,
+      "fields_version" => "packet-fields-v1",
+      "shelf" => cut.shelf,
       "instruction_version" => cut.instruction,
       "target" => %{
         "language_tag" => cut.language,
@@ -644,6 +670,39 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
     end
   end
 
+  defp packet_candidate(%{kind: :sense_definition, spec: spec} = c, _facts) do
+    text = excerpt(c.text || "")
+
+    Map.merge(base(c), %{
+      "sense_revision_id" => spec.sense_revision_id,
+      "words_sha256" => spec.words_sha256,
+      "excerpt" => text,
+      "excerpt_sha256" => Digest.sha256(text)
+    })
+  end
+
+  defp packet_candidate(%{kind: :claim, spec: spec} = c, _facts) do
+    label = c.label
+
+    Map.merge(base(c), %{
+      "assertion_revision_id" => spec.assertion_revision_id,
+      "basis" => spec.basis,
+      "representation_sha256" => Digest.term(spec.basis["representation"]),
+      "witness_assertion_revision_id" => spec.basis["witness_assertion_revision_id"],
+      "label" => label,
+      "label_sha256" => Digest.sha256(label)
+    })
+  end
+
+  defp packet_candidate(%{kind: :shelf} = c, _facts) do
+    Map.merge(base(c), %{
+      "shelf" => Map.new(c.spec.shelf, fn {k, v} -> {to_string(k), v} end),
+      "label" => c.label,
+      "label_sha256" => Digest.sha256(c.label),
+      "expiring_text" => c.detail.expiring_text
+    })
+  end
+
   defp packet_candidate(%{kind: :work, spec: spec} = c, _facts) do
     label = work_label(c)
 
@@ -698,6 +757,27 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
   # A kind's order: source priority, a verified corpus before a live one,
   # then object id; an exemplar by the date it was accepted, then its
   # subject's id. Each key is total, so the cut is deterministic.
+  defp sort(%{kind: :shelf} = c, _facts) do
+    o =
+      DevilsDictionary.Curation.ShelfCitations.observation(
+        Repo.get!(DevilsDictionary.Discovery.Result, c.spec.shelf.result),
+        Repo.get!(DevilsDictionary.Discovery.Run, c.spec.shelf.run)
+      )
+
+    date = c.date.value
+
+    {if(is_nil(date), do: 1, else: 0), if(date, do: invert_date(to_string(date)), else: ""),
+     -DateTime.to_unix(o.observed_at, :microsecond), o.result.id}
+  end
+
+  defp sort(%{kind: :claim} = c, _facts), do: c.spec.basis["rank"]
+
+  defp sort(%{kind: :sense_definition} = c, facts) do
+    {rank, corpus} = source_rank(c, facts)
+    revision = Repo.get!(SenseRevision, c.spec.sense_revision_id)
+    {rank, corpus, revision.position, revision.id}
+  end
+
   defp sort(%{kind: :exemplar} = c, facts) do
     {at, _context} = Map.get(facts.reviews, c.spec.assertion_revision_id, {nil, nil})
     {instant(at), c.subject_object_id, c.spec.assertion_revision_id}
@@ -713,6 +793,8 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
     {rank, corpus} = source_rank(c, facts)
     {rank, corpus, c.spec.object_id}
   end
+
+  defp invert_date(text), do: for(<<n <- text>>, into: "", do: <<255 - n>>)
 
   defp source_rank(%{source: %{slug: slug}}, facts),
     do: Map.get(facts.sources, slug, {map_size(facts.sources), 1})
@@ -742,6 +824,27 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
       case candidate do
         %{"kind" => "content"} ->
           %{item_kind: :content, content_revision_id: candidate["content_revision_id"]}
+
+        %{"kind" => "sense_definition"} ->
+          %{
+            item_kind: :sense_definition,
+            sense_revision_id: candidate["sense_revision_id"],
+            words_sha256: candidate["words_sha256"]
+          }
+
+        %{"kind" => "claim"} ->
+          %{
+            item_kind: :claim,
+            assertion_revision_id: candidate["assertion_revision_id"],
+            basis: candidate["basis"]
+          }
+
+        %{"kind" => "shelf"} ->
+          %{
+            item_kind: :work,
+            source_record_revision_id: candidate["shelf"]["revision"],
+            shelf: candidate["shelf"]
+          }
 
         %{"kind" => "sense_quotation"} ->
           %{
@@ -894,7 +997,7 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
     meanings = Map.new(packet["meanings"] || [], &{&1["meaning_id"], &1})
 
     offered =
-      if packet["packet_version"] == @version,
+      if packet["packet_version"] in [@v2, @version],
         do: offered_now(get_in(packet, ["target", "page_lexeme_ids"]) || ids)
 
     reasons =
@@ -993,10 +1096,11 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
       screen_spec(screen) != packet_spec(c, meanings) ->
         :not_offered
 
-      c["kind"] in ["work", "exemplar"] and label_of(screen) != c["label"] ->
+      c["kind"] in ["work", "exemplar", "claim", "shelf"] and label_of(screen) != c["label"] ->
         :label_changed
 
-      c["kind"] in ["content", "sense_quotation"] and excerpt(screen.text || "") != c["excerpt"] ->
+      c["kind"] in ["content", "sense_quotation", "sense_definition"] and
+          excerpt(screen.text || "") != c["excerpt"] ->
         :excerpt_changed
 
       true ->
@@ -1019,6 +1123,29 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
 
   defp screen_spec(%{kind: :sense_quotation, spec: s}),
     do: ["sense_quotation", s.sense_revision_id, s.locator, s.words_sha256, target(s.meaning)]
+
+  defp screen_spec(%{kind: :sense_definition, spec: s}),
+    do: ["sense_definition", s.sense_revision_id, s.words_sha256, target(s.meaning)]
+
+  defp screen_spec(%{kind: :claim, spec: s}),
+    do: [
+      "claim",
+      s.assertion_revision_id,
+      s.basis["witness_assertion_revision_id"],
+      Digest.term(s.basis["representation"]),
+      target(s.meaning)
+    ]
+
+  defp screen_spec(%{kind: :shelf, spec: s}),
+    do: [
+      "shelf",
+      s.shelf.result,
+      s.shelf.run,
+      s.shelf.revision,
+      s.shelf.checksum,
+      s.shelf.expires_at,
+      target(s.meaning)
+    ]
 
   defp screen_spec(%{kind: :work, spec: s}) do
     ["work", s.object_id, s.catalog.manifest, s.catalog.checksum, to_string(s.catalog.identity)] ++
@@ -1045,6 +1172,29 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
       "sense_quotation" ->
         ["sense_quotation", c["sense_revision_id"], c["locator"], c["words_sha256"], meaning]
 
+      "sense_definition" ->
+        ["sense_definition", c["sense_revision_id"], c["words_sha256"], meaning]
+
+      "claim" ->
+        [
+          "claim",
+          c["assertion_revision_id"],
+          c["witness_assertion_revision_id"],
+          c["representation_sha256"],
+          meaning
+        ]
+
+      "shelf" ->
+        [
+          "shelf",
+          c["shelf"]["result"],
+          c["shelf"]["run"],
+          c["shelf"]["revision"],
+          c["shelf"]["checksum"],
+          c["shelf"]["expires_at"],
+          meaning
+        ]
+
       "work" ->
         catalog = c["catalog"] || %{}
 
@@ -1058,6 +1208,7 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
 
   defp target({kind, id}), do: [to_string(kind), id]
 
+  defp label_of(%{kind: kind} = screen) when kind in [:claim, :shelf], do: screen.label
   defp label_of(%{kind: :work} = screen), do: work_label(screen)
   defp label_of(%{kind: :exemplar} = screen), do: exemplar_label(screen)
 
@@ -1123,6 +1274,9 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
             "words_sha256",
             "catalog",
             "assertion_revision_id",
+            "representation_sha256",
+            "witness_assertion_revision_id",
+            "shelf",
             "excerpt_sha256",
             "label_sha256",
             "required_meaning",
@@ -1134,7 +1288,14 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
 
     if packet["packet_version"] == @version do
       packet
-      |> Map.take(["instruction_version", "policy", "counts", "omitted"])
+      |> Map.take([
+        "instruction_version",
+        "policy",
+        "counts",
+        "omitted",
+        "fields_version",
+        "shelf"
+      ])
       |> Map.put("candidate_set_sha256", digest(packet))
       |> Map.merge(summary)
     else

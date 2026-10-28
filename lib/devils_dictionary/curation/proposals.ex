@@ -98,7 +98,12 @@ defmodule DevilsDictionary.Curation.Proposals do
   def step(claim, %{slug: slug, inputs: inputs, editor: editor} = ctx, opts) do
     page = slug |> Lexicon.lookup() |> WordPage.build(viewer: :public)
 
-    with {:ok, packet} <- Packet.for_page(page, instruction_version: editor.instruction_version),
+    with {:ok, packet} <-
+           Packet.for_page(page,
+             instruction_version: editor.instruction_version,
+             generation: claim.generation,
+             shelf: Map.get(claim, :shelf_focus)
+           ),
          {:ok, frozen} <- Packet.freeze(packet) do
       frozen_step(claim, ctx, frozen, opts)
     else
@@ -360,6 +365,25 @@ defmodule DevilsDictionary.Curation.Proposals do
       case candidate do
         %{"kind" => "content"} ->
           {:ok, %{item_kind: :content, content_revision_id: candidate["content_revision_id"]}}
+
+        %{"kind" => "sense_definition"} ->
+          {:ok,
+           %{
+             item_kind: :sense_definition,
+             sense_revision_id: candidate["sense_revision_id"],
+             words_sha256: candidate["words_sha256"]
+           }}
+
+        %{"kind" => "claim"} ->
+          {:ok,
+           %{
+             item_kind: :claim,
+             assertion_revision_id: candidate["assertion_revision_id"],
+             basis: candidate["basis"]
+           }}
+
+        %{"kind" => "shelf", "shelf" => %{} = shelf} ->
+          {:ok, %{item_kind: :work, source_record_revision_id: shelf["revision"], shelf: shelf}}
 
         %{"kind" => "sense_quotation"} ->
           {:ok,
@@ -825,11 +849,26 @@ defmodule DevilsDictionary.Curation.Proposals do
            {:ok, proposal} <- lock_pending(proposal_id),
            :ok <- newest(proposal),
            items = Compositions.items(proposal.version_id),
+           :ok <-
+             DevilsDictionary.Curation.ProviderText.validate(
+               [
+                 reason,
+                 opts[:note],
+                 get_in(opts[:lead] || %{}, [:note, :text]),
+                 Enum.map(opts[:highlights] || [], &get_in(&1, [:note, :text]))
+               ],
+               items,
+               fixed_reason: reason == "dismissed_by_owner"
+             ),
            {:ok, form} <- form(items, opts, actor, :required),
            composition = Repo.get!(Composition, proposal.composition_id),
            {:ok, specs} <- arrange.(proposal, items, composition),
            {:ok, version} <-
-             Compositions.take_version(scope, proposal.version_id, %{reason: reason, items: specs}),
+             Compositions.take_version(scope, proposal.version_id, %{
+               reason: reason,
+               items: specs,
+               quality_note: opts[:note]
+             }),
            {:ok, _review} <-
              Reviews.decide(scope, version.id, :accepted,
                reason: reason,
@@ -873,6 +912,17 @@ defmodule DevilsDictionary.Curation.Proposals do
            {:ok, reason} <- Transaction.required(opts, :reason),
            {:ok, proposal} <- lock_pending(proposal_id),
            items = Compositions.items(proposal.version_id),
+           :ok <-
+             DevilsDictionary.Curation.ProviderText.validate(
+               [
+                 reason,
+                 opts[:note],
+                 get_in(opts[:lead] || %{}, [:note, :text]),
+                 Enum.map(opts[:highlights] || [], &get_in(&1, [:note, :text]))
+               ],
+               items,
+               fixed_reason: reason == "dismissed_by_owner"
+             ),
            {:ok, form} <- form(items, opts, actor, :optional),
            {:ok, review} <-
              Reviews.decide(scope, proposal.version_id, :rejected,

@@ -54,7 +54,8 @@ defmodule DevilsDictionary.Curation.Digest do
     items
     |> Enum.sort_by(&{to_string(&1.role), &1.position})
     |> Enum.map_join(fn %CompositionItem{} = item ->
-      Enum.map_join(@arrangement_fields, &field(Map.fetch!(item, &1)))
+      Enum.map_join(@arrangement_fields, &field(Map.fetch!(item, &1))) <>
+        if(is_nil(item.shelf_citation_id), do: "", else: field(item.shelf_citation_id))
     end)
     |> sha256()
   end

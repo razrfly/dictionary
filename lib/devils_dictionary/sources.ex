@@ -59,6 +59,41 @@ defmodule DevilsDictionary.Sources do
       |> Map.put_new(:absent_until, nil)
 
     Repo.transaction(fn ->
+      if Enum.all?(
+           ~w(external_namespace external_id preview_metadata match_details),
+           &Map.has_key?(raw, &1)
+         ) do
+        digest = DevilsDictionary.Curation.Digest.sha256(record_attrs.external_id)
+
+        Repo.query!("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [
+          "discovery:#{source.id}:#{digest}"
+        ])
+
+        redacted = "redacted-discovery:" <> digest
+
+        matches =
+          Repo.all(
+            from r in SourceRecord,
+              where:
+                r.source_id == ^source.id and
+                  r.external_id in ^[record_attrs.external_id, redacted],
+              lock: "FOR UPDATE"
+          )
+
+        case matches do
+          [record] when record.external_id == redacted ->
+            Repo.update_all(from(r in SourceRecord, where: r.id == ^record.id),
+              set: [external_id: record_attrs.external_id]
+            )
+
+          [_, _] ->
+            Repo.rollback(:discovery_identity_conflict)
+
+          _ ->
+            :ok
+        end
+      end
+
       {:ok, record} =
         %SourceRecord{}
         |> SourceRecord.changeset(record_attrs)

@@ -24,6 +24,18 @@ defmodule DevilsDictionary.Curation.PublicationsTest do
 
   alias DevilsDictionary.{Registry, WordFixtures}
 
+  defp noted_content_spec(content, lexeme),
+    do:
+      Map.put(DevilsDictionary.CurationFixtures.content_spec(content, lexeme), :note, %{
+        text: "A fixture selection reason."
+      })
+
+  defp noted_quotation_spec(sense, index),
+    do:
+      Map.put(DevilsDictionary.CurationFixtures.quotation_spec(sense, index), :note, %{
+        text: "A fixture selection reason."
+      })
+
   setup do
     world = world!()
     {config, config_version} = enabled_test_configuration!(world.reviewer, "test-a")
@@ -38,8 +50,11 @@ defmodule DevilsDictionary.Curation.PublicationsTest do
 
     {:ok, version} =
       Compositions.create_version(world.contributor, composition.id, %{
-        lead: content_spec(world.bierce, world.love),
-        highlights: [quotation_spec(world.sense, 1), content_spec(world.definition, world.love)],
+        lead: noted_content_spec(world.bierce, world.love),
+        highlights: [
+          noted_quotation_spec(world.sense, 1),
+          noted_content_spec(world.definition, world.love)
+        ],
         reason: "first arrangement",
         expected_parent: nil
       })
@@ -237,7 +252,7 @@ defmodule DevilsDictionary.Curation.PublicationsTest do
 
       {:ok, v2} =
         Compositions.create_version(ctx.contributor, ctx.composition.id, %{
-          lead: content_spec(ctx.bierce, ctx.love),
+          lead: noted_content_spec(ctx.bierce, ctx.love),
           reason: "lead only",
           expected_parent: ctx.version.id
         })
@@ -393,7 +408,7 @@ defmodule DevilsDictionary.Curation.PublicationsTest do
 
       {:ok, v} =
         Compositions.create_version(ctx.contributor, page.id, %{
-          lead: content_spec(ctx.bierce, ctx.love),
+          lead: noted_content_spec(ctx.bierce, ctx.love),
           reason: "page arrangement",
           expected_parent: nil
         })
@@ -425,7 +440,7 @@ defmodule DevilsDictionary.Curation.PublicationsTest do
 
       {:ok, v} =
         Compositions.create_version(ctx.contributor, c.id, %{
-          lead: content_spec(ctx.oats_definition, ctx.oats),
+          lead: noted_content_spec(ctx.oats_definition, ctx.oats),
           reason: "no Bierce entry for oats",
           expected_parent: nil
         })
@@ -469,10 +484,10 @@ defmodule DevilsDictionary.Curation.PublicationsTest do
 
       {:ok, v2} =
         Compositions.create_version(ctx.contributor, ctx.composition.id, %{
-          lead: content_spec(ctx.bierce, ctx.love),
+          lead: noted_content_spec(ctx.bierce, ctx.love),
           highlights: [
-            quotation_spec(ctx.sense, 1),
-            content_spec(ctx.definition, ctx.love),
+            noted_quotation_spec(ctx.sense, 1),
+            noted_content_spec(ctx.definition, ctx.love),
             record_work_spec(work, record_revision, ctx.love)
           ],
           reason: "with a work",

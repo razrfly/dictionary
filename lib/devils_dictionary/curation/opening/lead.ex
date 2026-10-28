@@ -38,7 +38,12 @@ defmodule DevilsDictionary.Curation.Opening.Lead do
             meaning: nil,
             links: %{},
             credits: [],
-            reasons: []
+            reasons: [],
+            date_info: nil,
+            basis: nil,
+            receipt_path: nil,
+            current_label: nil,
+            source_edition: nil
 
   @type t :: %__MODULE__{
           reference: Reference.t(),

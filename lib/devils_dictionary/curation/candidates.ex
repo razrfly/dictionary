@@ -9,7 +9,7 @@ defmodule DevilsDictionary.Curation.Candidates do
   them. Nothing is read from an address or a parameter: the screen hands
   over a built page and gets back what that page's composition may hold.
 
-  **The four kinds**, each from the seam the record already uses:
+  **The original four kinds**, each from the seam the record already uses:
 
     * **leads and definitions** (`:content`): every entry on the page's
       cards (`LeadPolicy.page_entry/2` finds the card a lead opens). Who may
@@ -33,6 +33,11 @@ defmodule DevilsDictionary.Curation.Candidates do
       section lists for the page's senses (`Examples.exemplars/3`) whose
       latest review is an acceptance. A nomination still waiting is counted,
       never offered.
+
+  The additional kinds are current nonempty sense definitions, public linked
+  claims with frozen registry representations, and exact observations from all
+  persistent discovery shelves. Their adapters list unavailable candidates with
+  a reason; expired provider fields are never rendered as candidate metadata.
 
   Every candidate carries the item spec `Compositions.create_version/3`
   takes (without its note, which is the author's to write) and its standing
@@ -74,7 +79,7 @@ defmodule DevilsDictionary.Curation.Candidates do
   alias DevilsDictionary.Repo
   alias DevilsDictionary.Sources.Source
 
-  @kinds [:content, :sense_quotation, :work, :exemplar]
+  @kinds [:content, :sense_quotation, :sense_definition, :work, :exemplar, :claim, :shelf]
 
   # A definition is quoted by its entry's whole first block (`PublishedReader`).
   @block_sentences 1_000
@@ -105,7 +110,13 @@ defmodule DevilsDictionary.Curation.Candidates do
   whose words span languages, has no scope and no candidates.
   """
   def for_page(%{headword: %{lexemes: lexemes}} = page) do
-    scope = scope(lexemes)
+    order =
+      for(card <- page.cards, group <- card.groups, sense <- group.senses, do: sense.id)
+      |> Enum.uniq()
+      |> Enum.with_index()
+      |> Map.new()
+
+    scope = scope(lexemes) |> Map.put(:sense_order, order)
 
     if scope.language do
       definitions = definitions(page, scope)
@@ -118,7 +129,10 @@ defmodule DevilsDictionary.Curation.Candidates do
         no_lead: no_lead(scope),
         highlights:
           definitions ++
-            quotations(scope) ++ works(scope) ++ Enum.filter(exemplars, & &1.accepted?),
+            quotations(scope) ++
+            works(scope) ++
+            Enum.filter(exemplars, & &1.accepted?) ++
+            sense_definitions(scope) ++ linked_claims(scope) ++ shelves(scope),
         nominations: Enum.count(exemplars, &(not &1.accepted?))
       }
     else
@@ -309,6 +323,131 @@ defmodule DevilsDictionary.Curation.Candidates do
     case entry[:marker] do
       marker when is_binary(marker) and marker != "" -> "#{entry[:headword]} (#{marker})"
       _none -> entry[:headword]
+    end
+  end
+
+  defp sense_definitions(scope) do
+    rows =
+      Repo.all(
+        from r in SenseRevision,
+          join: sense in Sense,
+          on: sense.object_id == r.sense_id,
+          join: source in Source,
+          on: source.id == sense.source_id,
+          where:
+            sense.lexeme_id in ^scope.ids and r.is_current and r.lifecycle_state == :active and
+              sense.identity_state == :active and source.active,
+          order_by: [source.slug, r.position, r.id],
+          select: {r, source}
+      )
+
+    for {revision, source} <- rows,
+        is_binary(revision.gloss) and String.trim(revision.gloss) != "" do
+      spec = %{
+        kind: :sense_definition,
+        object_id: revision.sense_id,
+        sense_revision_id: revision.id,
+        words_sha256: Digest.sha256(revision.gloss),
+        meaning: {:sense_revision, revision.id}
+      }
+
+      item = probe(spec)
+
+      candidate(%{
+        key: "sense-#{revision.id}",
+        kind: :sense_definition,
+        spec: spec,
+        item: item,
+        status: Eligibility.check(item, scope.ids),
+        source: source_of(source),
+        text: revision.gloss,
+        label: source.name,
+        meaning: revision.gloss
+      })
+    end
+  end
+
+  defp linked_claims(scope) do
+    for choice <- DevilsDictionary.Curation.LinkedClaims.for_scope(scope.ids, scope.sense_order) do
+      spec = %{
+        kind: :claim,
+        object_id: choice.claim.subject_object_id,
+        assertion_revision_id: choice.claim.id,
+        meaning: choice.meaning,
+        basis: choice.basis
+      }
+
+      item = probe(spec)
+      source = choice.claim.assertion.source
+
+      candidate(%{
+        key: choice.key,
+        kind: :claim,
+        spec: spec,
+        item: item,
+        source: source_of(source),
+        status: Eligibility.check(item, scope.ids),
+        label: choice.label,
+        title: choice.label,
+        meaning: "public linked claim",
+        subject_object_id: choice.basis["shown_object_id"]
+      })
+    end
+  end
+
+  defp shelves(scope) do
+    observations =
+      scope.ids
+      |> Enum.flat_map(&DevilsDictionary.Discovery.citable/1)
+      |> Enum.uniq_by(& &1.result.id)
+
+    for o <- observations do
+      shelf = %{
+        result: o.result.id,
+        run: o.run.id,
+        revision: o.revision && o.revision.id,
+        checksum: o.revision && o.revision.checksum,
+        expires_at: DateTime.to_iso8601(o.expires_at),
+        shelf_kind: o.kind
+      }
+
+      spec = %{
+        kind: :work,
+        object_id: o.result.object_id,
+        source_record_revision_id: o.revision && o.revision.id,
+        shelf: shelf,
+        meaning: {:lexeme, o.mapping.target_object_id}
+      }
+
+      item = probe(spec)
+      metadata = if o.status == :ok, do: o.result.preview_metadata, else: %{}
+
+      label =
+        if o.status == :ok,
+          do: DevilsDictionary.Curation.Shelf.label(o.source.slug, metadata),
+          else: "#{o.kind} observation ##{o.result.id} · unavailable"
+
+      candidate(%{
+        key: "shelf-#{o.result.id}",
+        kind: :shelf,
+        spec: spec,
+        item: item,
+        source: source_of(o.source),
+        status: o.status,
+        label: label,
+        title: label,
+        meaning: "provider metadata",
+        work_kind: o.kind,
+        date: DevilsDictionary.Curation.Shelf.date(o.source.slug, metadata),
+        detail: %{
+          shelf: shelf,
+          expiring_text:
+            DevilsDictionary.Curation.Shelf.expiring_text(
+              o.source.slug,
+              metadata
+            )
+        }
+      })
     end
   end
 
@@ -567,7 +706,8 @@ defmodule DevilsDictionary.Curation.Candidates do
   # The item a spec would make, for `Eligibility.check/3`: the same fields
   # `Compositions.create_version/3` stores, unsaved and without a note.
   @doc false
-  def probe(%{kind: kind} = spec) when kind in [:content, :sense_quotation, :work] do
+  def probe(%{kind: kind} = spec)
+      when kind in [:content, :sense_quotation, :sense_definition, :work, :claim] do
     catalog = spec[:catalog] || %{}
 
     struct(
@@ -577,6 +717,9 @@ defmodule DevilsDictionary.Curation.Candidates do
           role: :highlight,
           position: 1,
           item_kind: kind,
+          assertion_revision_id: spec[:assertion_revision_id],
+          basis: spec[:basis],
+          shelf: spec[:shelf],
           item_object_id: spec[:object_id],
           content_revision_id: spec[:content_revision_id],
           sense_revision_id: spec[:sense_revision_id],
@@ -613,6 +756,7 @@ defmodule DevilsDictionary.Curation.Candidates do
     end
   end
 
+  defp source_of(nil), do: %{slug: "registry", name: "Registry"}
   defp source_of(%{slug: slug, name: name}), do: %{slug: slug, name: name}
 
   defp lexeme_label(scope, lexeme_id) do

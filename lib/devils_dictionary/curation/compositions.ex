@@ -303,6 +303,12 @@ defmodule DevilsDictionary.Curation.Compositions do
                {:too_many_highlights, cv.max_highlights}
              ),
            {:ok, items} <- build_items(Map.get(attrs, :lead), highlights, actor),
+           {:ok, items} <- cite_items(items, c.id, actor.id),
+           :ok <-
+             DevilsDictionary.Curation.ProviderText.validate(
+               [reason, Enum.map(items, & &1.note)],
+               items
+             ),
            :ok <- one_display_identity(items) do
         members = member_ids(c.id)
         evaluation = Eligibility.evaluate(items, members, c.scope_signature, cv.id)
@@ -337,7 +343,7 @@ defmodule DevilsDictionary.Curation.Compositions do
               eligibility_fingerprint: evaluation.fingerprint
             })
 
-          for item <- items, do: Repo.insert!(%{item | composition_version_id: version.id})
+          insert_items!(items, version)
 
           {:ok, version}
         end
@@ -361,6 +367,15 @@ defmodule DevilsDictionary.Curation.Compositions do
         where: i.composition_version_id == ^version_id,
         order_by: [i.role, i.position]
     )
+    |> Enum.map(fn item ->
+      %{
+        item
+        | basis:
+            DevilsDictionary.Curation.ItemBasis.virtual(
+              DevilsDictionary.Curation.ItemBasis.get(item.id)
+            )
+      }
+    end)
   end
 
   @doc "The newest version of a composition, of any origin, or `nil`."
@@ -415,6 +430,29 @@ defmodule DevilsDictionary.Curation.Compositions do
     end
   end
 
+  defp cite_items(items, composition_id, actor_id) do
+    Enum.reduce_while(items, {:ok, []}, fn item, {:ok, acc} ->
+      if item.shelf && is_nil(item.shelf_citation_id) do
+        case DevilsDictionary.Curation.ShelfCitations.cite(item.shelf, %{
+               composition_id: composition_id,
+               actor_id: actor_id
+             }) do
+          {:ok, citation} -> {:cont, {:ok, acc ++ [%{item | shelf_citation_id: citation.id}]}}
+          error -> {:halt, error}
+        end
+      else
+        {:cont, {:ok, acc ++ [item]}}
+      end
+    end)
+  end
+
+  defp insert_items!(items, version, opts \\ []) do
+    for item <- items do
+      inserted = Repo.insert!(%{item | composition_version_id: version.id})
+      DevilsDictionary.Curation.ItemBasis.record!(%{inserted | basis: item.basis}, version, opts)
+    end
+  end
+
   defp build_items(lead, highlights, actor) do
     specs =
       if(lead, do: [{:lead, 1, lead}], else: []) ++
@@ -428,8 +466,55 @@ defmodule DevilsDictionary.Curation.Compositions do
     end)
   end
 
-  defp item(role, position, %{kind: kind} = spec, actor)
-       when kind in [:content, :sense_quotation, :work] do
+  defp item(role, position, spec, actor) do
+    with {:ok, canonical} <- owner_claim_spec(spec),
+         do: build_item(role, position, canonical, actor)
+  end
+
+  defp owner_claim_spec(%{kind: :claim} = spec) do
+    ids =
+      case spec[:meaning] do
+        {:lexeme, id} ->
+          [id]
+
+        {:sense_revision, id} ->
+          case Repo.get(DevilsDictionary.Registry.SenseRevision, id) do
+            nil -> []
+            revision -> [Repo.get!(DevilsDictionary.Registry.Sense, revision.sense_id).lexeme_id]
+          end
+
+        _ ->
+          []
+      end
+
+    basis = spec[:basis] || %{}
+
+    choice =
+      DevilsDictionary.Curation.LinkedClaims.for_scope(ids)
+      |> Enum.find(fn c ->
+        c.claim.id == spec[:assertion_revision_id] and c.meaning == spec[:meaning] and
+          c.basis["witness_assertion_revision_id"] == basis["witness_assertion_revision_id"]
+      end)
+
+    if choice &&
+         (not Map.has_key?(spec, :object_id) or choice.claim.subject_object_id == spec[:object_id]) &&
+         Enum.all?(
+           ~w(representation shown_object_id witness_assertion_revision_id),
+           &(not Map.has_key?(basis, &1) or basis[&1] == choice.basis[&1])
+         ) do
+      {:ok,
+       spec
+       |> Map.put(:basis, choice.basis)
+       |> Map.put(:object_id, choice.claim.subject_object_id)}
+    else
+      {:error, :claim_basis_mismatch}
+    end
+  end
+
+  defp owner_claim_spec(spec), do: {:ok, spec}
+
+  defp build_item(role, position, %{kind: kind} = spec, actor)
+       when kind in [:content, :sense_quotation, :sense_definition, :work, :claim] do
     with {:ok, meaning} <- meaning(spec[:meaning]),
          {:ok, note} <- note(spec[:note], actor) do
       catalog = spec[:catalog] || %{}
@@ -445,6 +530,9 @@ defmodule DevilsDictionary.Curation.Compositions do
            content_revision_id: spec[:content_revision_id],
            sense_revision_id: spec[:sense_revision_id],
            source_record_revision_id: spec[:source_record_revision_id],
+           shelf_citation_id: spec[:shelf_citation_id],
+           shelf: spec[:shelf],
+           basis: spec[:basis],
            catalog_manifest: catalog[:manifest],
            catalog_checksum: catalog[:checksum],
            catalog_identity: catalog[:identity] && to_string(catalog[:identity]),
@@ -461,7 +549,7 @@ defmodule DevilsDictionary.Curation.Compositions do
 
   # An exemplar shows a claim's subject, so the claim names the object, and
   # a passage's words are pinned when the version is made.
-  defp item(:highlight, position, %{kind: :exemplar} = spec, actor) do
+  defp build_item(:highlight, position, %{kind: :exemplar} = spec, actor) do
     with :ok <- Transaction.check(not Map.has_key?(spec, :object_id), :subject_not_an_input),
          {:ok, claim} <- claim(spec[:assertion_revision_id]),
          {:ok, words} <- pinned_words(claim, spec[:content_revision_id]),
@@ -485,9 +573,10 @@ defmodule DevilsDictionary.Curation.Compositions do
     end
   end
 
-  defp item(_role, _position, %{kind: :exemplar}, _actor), do: {:error, :exemplar_is_a_highlight}
+  defp build_item(_role, _position, %{kind: :exemplar}, _actor),
+    do: {:error, :exemplar_is_a_highlight}
 
-  defp item(_role, _position, _spec, _actor), do: {:error, :unknown_item_kind}
+  defp build_item(_role, _position, _spec, _actor), do: {:error, :unknown_item_kind}
 
   defp claim(id) when is_integer(id) do
     Transaction.need(Repo.get(AssertionRevision, id), :claim_not_found)
@@ -522,13 +611,18 @@ defmodule DevilsDictionary.Curation.Compositions do
   """
   def one_display_identity(items) do
     identities = Enum.map(items, &{&1, display_identity(&1)})
-    exemplars = Enum.filter(identities, fn {item, _keys} -> item.item_kind == :exemplar end)
+
+    exemplars =
+      Enum.filter(identities, fn {item, _keys} ->
+        item.item_kind in [:exemplar, :claim, :sense_definition] or
+          not is_nil(item.shelf_citation_id) or not is_nil(item.shelf)
+      end)
 
     duplicate =
       Enum.find_value(exemplars, fn {exemplar, keys} ->
         Enum.any?(identities, fn {other, other_keys} ->
           other != exemplar and not MapSet.disjoint?(keys, other_keys)
-        end) && exemplar.item_object_id
+        end) && (exemplar.item_object_id || {:reference, Enum.sort(MapSet.to_list(keys))})
       end)
 
     if duplicate, do: {:error, {:duplicate_display_identity, duplicate}}, else: :ok
@@ -542,14 +636,47 @@ defmodule DevilsDictionary.Curation.Compositions do
   def display_identity(%CompositionItem{} = item) do
     words =
       case item do
+        %{item_kind: :sense_definition, words_sha256: sha} -> sha
         %{item_kind: :sense_quotation, words_sha256: sha} -> sha
         %{content_revision_id: id} when is_integer(id) -> words_digest(id)
         _other -> nil
       end
 
-    object = item.item_object_id || catalog_object(item)
+    object =
+      cond do
+        item.item_kind == :sense_definition ->
+          nil
 
-    [object && {:object, object}, words && {:words, words}]
+        item.item_kind == :claim ->
+          (item.basis && item.basis["shown_object_id"]) || item.item_object_id
+
+        true ->
+          item.item_object_id || catalog_object(item)
+      end
+
+    provider =
+      cond do
+        item.shelf_citation_id ->
+          c = DevilsDictionary.Curation.ShelfCitations.get(item.shelf_citation_id)
+          {:provider, c.source_id, c.external_ref_sha256}
+
+        item.shelf ->
+          row =
+            Repo.get(
+              DevilsDictionary.Discovery.Result,
+              item.shelf[:result] || item.shelf["result"]
+            )
+
+          run = Repo.get!(DevilsDictionary.Discovery.Run, row.run_id) |> Repo.preload(:mapping)
+
+          {:provider, run.mapping.source_id,
+           Digest.sha256(row.external_namespace <> ":" <> row.external_id)}
+
+        true ->
+          nil
+      end
+
+    [object && {:object, object}, words && {:words, words}, provider]
     |> Enum.reject(&is_nil/1)
     |> MapSet.new()
   end
@@ -609,30 +736,59 @@ defmodule DevilsDictionary.Curation.Compositions do
   # What an item shows, and nothing about why or where: the editor's
   # `@reference_fields` without role, position, meaning and note (#264 R15.2).
   @reference_fields ~w(item_kind item_object_id content_revision_id sense_revision_id
-                       source_record_revision_id catalog_manifest catalog_checksum
+                       source_record_revision_id shelf_citation_id catalog_manifest catalog_checksum
                        catalog_identity locator words_sha256 assertion_revision_id)a
 
   # Everything a verified copy repeats (the database checks the same).
   @copied_fields @reference_fields ++
                    ~w(meaning_sense_revision_id meaning_lexeme_id note note_author_kind
-                      note_author_label note_author_actor_id selection_origin)a
+                      note_author_label note_author_actor_id selection_origin basis)a
 
   @doc """
   An item's exact reference, as a map of its reference fields: what a kept
   mark names, and what "the same item" means across versions.
   """
-  def reference(%CompositionItem{} = item), do: Map.take(item, @reference_fields)
+  def reference(%CompositionItem{} = item) do
+    ref = Map.take(item, @reference_fields)
+
+    if item.item_kind == :claim do
+      basis = item.basis || (item.id && DevilsDictionary.Curation.ItemBasis.get(item.id))
+
+      witness =
+        if is_struct(basis),
+          do: basis.witness_assertion_revision_id,
+          else: basis && basis["witness_assertion_revision_id"]
+
+      Map.put(ref, :witness_assertion_revision_id, witness)
+    else
+      ref
+    end
+  end
 
   def reference(%{} = stored) do
-    Map.new(@reference_fields, fn field ->
-      value = Map.get(stored, to_string(field), Map.get(stored, field))
+    reference =
+      Map.new(@reference_fields, fn field ->
+        value = Map.get(stored, to_string(field), Map.get(stored, field))
 
-      {field,
-       if(field == :item_kind and is_binary(value),
-         do: String.to_existing_atom(value),
-         else: value
-       )}
-    end)
+        {field,
+         if(field == :item_kind and is_binary(value),
+           do: String.to_existing_atom(value),
+           else: value
+         )}
+      end)
+
+    if reference.item_kind == :claim,
+      do:
+        Map.put(
+          reference,
+          :witness_assertion_revision_id,
+          Map.get(
+            stored,
+            "witness_assertion_revision_id",
+            Map.get(stored, :witness_assertion_revision_id)
+          )
+        ),
+      else: reference
   end
 
   @doc """
@@ -644,6 +800,14 @@ defmodule DevilsDictionary.Curation.Compositions do
 
   def reference_key(%{item_kind: :sense_quotation, locator: "quotation:" <> n} = ref),
     do: "quotation-#{ref.sense_revision_id}-#{n}"
+
+  def reference_key(%{item_kind: :sense_definition, sense_revision_id: id}), do: "sense-#{id}"
+
+  def reference_key(%{item_kind: :claim, assertion_revision_id: id} = ref),
+    do: "claim-#{id}-#{Map.get(ref, :witness_assertion_revision_id) || 0}"
+
+  def reference_key(%{shelf_citation_id: id}) when is_integer(id),
+    do: "shelf-#{DevilsDictionary.Curation.ShelfCitations.get(id).discovery_result_id}"
 
   def reference_key(%{item_kind: :work, item_object_id: id}) when is_integer(id), do: "work-#{id}"
 
@@ -687,6 +851,7 @@ defmodule DevilsDictionary.Curation.Compositions do
              :attempt_not_the_binding
            ),
          items = proposal_arrangement(plan.items, bot),
+         {:ok, items} <- cite_items(items, c.id, bot.id),
          :ok <-
            Transaction.check(
              Enum.count(items, &(&1.role == :highlight)) <= cv.max_highlights,
@@ -727,7 +892,7 @@ defmodule DevilsDictionary.Curation.Compositions do
             eligibility_fingerprint: evaluation.fingerprint
           })
 
-        for item <- items, do: Repo.insert!(%{item | composition_version_id: version.id})
+        insert_items!(items, version)
 
         {:ok, version}
       end
@@ -812,6 +977,12 @@ defmodule DevilsDictionary.Curation.Compositions do
          :ok <- expected_parent(latest, proposal.id),
          sources = Map.new(items(proposal.id), &{&1.id, &1}),
          {:ok, items} <- taken_items(Map.fetch!(attrs, :items), sources, actor),
+         {:ok, items} <- cite_items(items, c.id, actor.id),
+         :ok <-
+           DevilsDictionary.Curation.ProviderText.validate(
+             [reason, attrs[:quality_note], Enum.map(items, & &1.note)],
+             items ++ Map.values(sources)
+           ),
          :ok <-
            Transaction.check(
              Enum.count(items, &(&1.role == :highlight)) <= cv.max_highlights,
@@ -851,7 +1022,7 @@ defmodule DevilsDictionary.Curation.Compositions do
             eligibility_fingerprint: evaluation.fingerprint
           })
 
-        for item <- items, do: Repo.insert!(%{item | composition_version_id: version.id})
+        insert_items!(items, version, review_source: proposal_version_id)
 
         {:ok, version}
       end
@@ -867,7 +1038,23 @@ defmodule DevilsDictionary.Curation.Compositions do
         end
 
       {:own, spec, role, position}, {:ok, acc} ->
-        case item(role, position, spec, actor) do
+        source =
+          if spec[:kind] == :claim do
+            probe = DevilsDictionary.Curation.Candidates.probe(spec)
+
+            Enum.find(Map.values(sources), fn source ->
+              reference(source) == reference(probe) and
+                source.meaning_lexeme_id == probe.meaning_lexeme_id and
+                source.meaning_sense_revision_id == probe.meaning_sense_revision_id
+            end)
+          end
+
+        result =
+          if source,
+            do: build_item(role, position, Map.put(spec, :basis, source.basis), actor),
+            else: item(role, position, spec, actor)
+
+        case result do
           {:ok, item} -> {:cont, {:ok, acc ++ [item]}}
           {:error, reason} -> {:halt, {:error, {reason, role, position}}}
         end

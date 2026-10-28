@@ -30,10 +30,18 @@ defmodule DevilsDictionary.Curation.Runtime.Endpoint do
     # unused quota flows down; the meaning bound; the source priority a kind
     # is filled in. Each policy names its version, which the refresh
     # fingerprint carries: a change of policy should name a new version.
-    candidate_quotas: [content: 4, sense_quotation: 3, work: 3, exemplar: 2],
+    candidate_quotas: [
+      content: 4,
+      sense_quotation: 2,
+      work: 1,
+      exemplar: 1,
+      sense_definition: 1,
+      claim: 1,
+      shelf: 2
+    ],
     max_meanings: 12,
     source_priority: ~w(bierce johnson wordnet wiktionary wikipedia),
-    cut_policy: "cut-v1",
+    cut_policy: "cut-v2",
     meaning_policy: "meanings-v2",
     max_excerpt_chars: 1_200,
     max_output_bytes: 16_384,

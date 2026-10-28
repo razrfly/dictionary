@@ -30,6 +30,7 @@ defmodule DevilsDictionary.Curation.Opening.Reference do
             sense_revision_id: nil,
             source_record_revision_id: nil,
             catalog: nil,
+            shelf_citation_id: nil,
             locator: nil,
             assertion_revision_id: nil
 

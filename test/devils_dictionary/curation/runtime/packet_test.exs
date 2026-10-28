@@ -101,7 +101,8 @@ defmodule DevilsDictionary.Curation.Runtime.PacketTest do
   test "a packet is built from the registry, Bierce first, and frozen under one hash", ctx do
     {:ok, packet} = Packet.build([ctx.love.object_id], "en", @v1)
 
-    assert [bierce, definition, quotation] = packet["candidates"]
+    assert [bierce, definition, quotation, sense_definition] = packet["candidates"]
+    assert sense_definition["kind"] == "sense_definition"
 
     assert {bierce["candidate_id"], bierce["object_id"], bierce["source"]} ==
              {"c1", ctx.bierce.object_id, "bierce"}

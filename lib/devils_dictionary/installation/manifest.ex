@@ -34,7 +34,7 @@ defmodule DevilsDictionary.Installation.Manifest do
 
   alias DevilsDictionary.Installation.Files
 
-  @format "dd.bundle/1"
+  @format "dd.bundle/2"
   @file_name "MANIFEST.json"
 
   def format, do: @format
@@ -72,7 +72,8 @@ defmodule DevilsDictionary.Installation.Manifest do
     end
   end
 
-  defp known_format(%{"format" => @format}, _bundle), do: :ok
+  defp known_format(%{"format" => format}, _bundle) when format in ["dd.bundle/1", "dd.bundle/2"],
+    do: :ok
 
   defp known_format(manifest, bundle),
     do:
