@@ -48,7 +48,7 @@ Fixture recovery tests create disposable databases and use stub volume probes. T
 
 ## Daily reassessment
 
-`bind --refresh-window 24h|48h|7d` creates a keyed configuration version. An unkeyed v1 reads as 48 hours; no existing version is rewritten. Every completion uses its claim's configuration version. Failed/offline/deferred work does not advance assessment time. Only proposed/abstained/no-change are editor assessments; unchanged/needs-editor retain the model-free wording. A qualifying visit drives reassessment; owner publication remains explicit.
+`bind --refresh-window 24h|48h|7d` creates a keyed configuration version. An unkeyed v1 reads as 48 hours; no existing version is rewritten. Every completion uses its claim's configuration version. Failed/offline/deferred work does not advance assessment time. Only proposed/abstained/no-change are editor assessments; unchanged/needs-editor retain the model-free wording. A qualifying visit drives reassessment; owner publication remains explicit. A focused request rejected as in-flight is not accepted or stored as a pending request: it leaves dirty state, focus, retry time and generation unchanged, including when another configuration owns the work. A fresh request can be made after that work exits.
 
 ## Delivery evidence
 

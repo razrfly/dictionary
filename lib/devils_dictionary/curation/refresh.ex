@@ -1346,11 +1346,21 @@ defmodule DevilsDictionary.Curation.Refresh do
              {:ok, version_id} <- configuration_version(composition) do
           row = ensure_row!(composition.id, version_id, now)
 
-          case decision(row, now) do
-            outcome when outcome in [:in_flight, :suppressed] ->
+          outcome = decision(row, now)
+
+          elsewhere =
+            if outcome in [:in_flight, :suppressed],
+              do: :clear,
+              else: in_flight_elsewhere(row, now)
+
+          case {outcome, elsewhere} do
+            {outcome, _} when outcome in [:in_flight, :suppressed] ->
               outcome
 
-            _admissible ->
+            {_, :in_flight} ->
+              :in_flight
+
+            {_admissible, :clear} ->
               # Dirty, not changed: a request is no input change, so the
               # history `inputs_last_changed_at` keeps (#259 §5.1) is not
               # touched (#273 review, recommendation 8).
