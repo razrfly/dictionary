@@ -17,7 +17,10 @@ defmodule DevilsDictionaryWeb.LocalCurator do
   def init(opts), do: opts
 
   def call(conn, _opts) do
-    conn = delete_session(conn, :local_curator_user_id)
+    conn =
+      if get_session(conn, :local_curator_user_id),
+        do: delete_session(conn, :local_curator_user_id),
+        else: conn
 
     if enabled?() and curation?(conn.path_info) and
          conn.host in ["localhost", "127.0.0.1", "::1"] and

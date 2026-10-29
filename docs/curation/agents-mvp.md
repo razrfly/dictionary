@@ -108,7 +108,9 @@ with the existing reviewer identity, pinned model-config and reason arguments.
 `--dry-run` prints the proposed policy/window/binding without writing or calling
 a model. Binding is not activation; activation resets the run switch. Deliberate
 `enable` starts one bounded due-dispatch chain for that version. Every five minutes
-it feeds provisioned open pilot pages into existing Refresh admission. It does not
+it feeds provisioned open pilot pages into existing Refresh admission.
+A runtime pilot override can restrict that scan but cannot expand the fixed ten-page
+autonomous set; changing enrollment needs a reviewed database/policy amendment. It does not
 call a model itself or create a second inference queue. Visits coalesce with it;
 backoff, leases, one inference slot and daily budgets still apply. No guarantees
 that all pages fit the day's budget; offline/budget failures defer honestly.

@@ -497,4 +497,37 @@ defmodule DevilsDictionary.Curation.AutonomousCuratorTest do
     assert {:ok, prior} = Receipt.read("love", first_version.version)
     assert Enum.all?(prior.items, &(&1.status == :replaced))
   end
+
+  test "runtime pilot override cannot widen the database-enforced autonomous set", w do
+    previous = Application.fetch_env(:devils_dictionary, :curation_pilot_pages)
+    Application.put_env(:devils_dictionary, :curation_pilot_pages, ["outside-pilot", "love"])
+
+    on_exit(fn ->
+      case previous do
+        {:ok, pages} -> Application.put_env(:devils_dictionary, :curation_pilot_pages, pages)
+        :error -> Application.delete_env(:devils_dictionary, :curation_pilot_pages)
+      end
+    end)
+
+    read = fn
+      "outside-pilot" -> flunk("outside pilot must never be read or admitted")
+      "love" -> page("love")
+    end
+
+    assert [{"love", {:ok, :admitted}}] = DueDispatcher.dispatch(w.editor_version, read)
+  end
+
+  test "fixed autonomous/default pilot agrees with the publication migration" do
+    sql =
+      File.read!(
+        Application.app_dir(
+          :devils_dictionary,
+          "priv/repo/migrations/20261029142135_allow_single_editor_publication.exs"
+        )
+      )
+
+    [_, list] = Regex.run(~r/l\.slug IN \(([^)]+)\)/, sql)
+    slugs = list |> String.replace("'", "") |> String.split(",") |> Enum.map(&String.trim/1)
+    assert Enum.sort(slugs) == Enum.sort(DevilsDictionary.Curation.Pilot.autonomous_pages())
+  end
 end

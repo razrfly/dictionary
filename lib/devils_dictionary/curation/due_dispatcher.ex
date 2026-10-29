@@ -46,7 +46,7 @@ defmodule DevilsDictionary.Curation.DueDispatcher do
 
   @doc "Read the bounded pilot inventory and feed due work through existing admission."
   def dispatch(version, read_page \\ &page/1) do
-    for slug <- Pilot.pages() do
+    for slug <- Pilot.pages(), slug in Pilot.autonomous_pages() do
       {slug, safely_dispatch(version, slug, read_page)}
     end
   end

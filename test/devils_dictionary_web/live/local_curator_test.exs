@@ -110,4 +110,16 @@ defmodule DevilsDictionaryWeb.LocalCuratorTest do
 
     assert socket.assigns.current_scope == nil
   end
+
+  test "anonymous non-curation requests do not dirty the session", w do
+    conn =
+      w.conn
+      |> init_test_session(%{})
+      |> assign(:current_scope, nil)
+      |> put_private(:plug_session_info, :fetch)
+
+    conn = DevilsDictionaryWeb.LocalCurator.call(conn, [])
+    assert conn.private.plug_session_info == :fetch
+    assert get_session(conn, :local_curator_user_id) == nil
+  end
 end
