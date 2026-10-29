@@ -51,7 +51,7 @@ defmodule DevilsDictionary.Curation.Proposals.LifecycleTest do
   end
 
   describe "test 22 (R9.6, R13.1): no bypass" do
-    test "the step writes no review or receipt; a model version is never accepted or published",
+    test "manual policy writes no review or receipt; model choices cannot use operator publication",
          world do
       counts = fn ->
         {Repo.aggregate(CompositionReview, :count),
@@ -130,7 +130,7 @@ defmodule DevilsDictionary.Curation.Proposals.LifecycleTest do
                  })
                end)
 
-      assert message =~ "model version is never published"
+      assert message =~ "operator publication requires a manual version"
 
       # A rejection stays allowed: it is how a proposal is dismissed.
       assert {:ok, %CompositionReview{decision: :rejected}} =
