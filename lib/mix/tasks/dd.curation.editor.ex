@@ -16,6 +16,7 @@ defmodule Mix.Tasks.Dd.Curation.Editor do
       DD_NO_OBAN=1 mix dd.curation.editor forms     [--counted-only]
 
   Phase A (#275): `seed`, `admit` and `bind` accept `--profile voltaire`.
+  To admit a newly prepared persona version, pass --version N explicitly; omission preserves the current version.
   Use a separately registered model config pinned to `voltaire-selector-v1`.
   Seed prepares an inactive source, model-specific bot and sourced dossier;
   admission and binding are still distinct reviewer acts. Generic defaults are unchanged.
@@ -115,7 +116,8 @@ defmodule Mix.Tasks.Dd.Curation.Editor do
          config.instruction_version not in [
            "voltaire-selector-v1",
            "voltaire-whole-entry-v1",
-           "voltaire-whole-entry-v2"
+           "voltaire-whole-entry-v2",
+           "voltaire-whole-entry-v3"
          ],
        do: Mix.raise("the persona requires a config pinned to voltaire-selector-v1")
 
@@ -146,7 +148,13 @@ defmodule Mix.Tasks.Dd.Curation.Editor do
     scope = scope!(opts)
     reason = reason!(opts)
     profile = selected_profile!(opts)
-    version = Repo.get(ProfileVersion, profile.current_version_id) || Mix.raise("no version")
+
+    version =
+      if opts[:version],
+        do:
+          Repo.get_by(ProfileVersion, profile_id: profile.id, version: opts[:version]) ||
+            Mix.raise("no such profile version"),
+        else: Repo.get(ProfileVersion, profile.current_version_id) || Mix.raise("no version")
 
     bot =
       if opts[:profile] do

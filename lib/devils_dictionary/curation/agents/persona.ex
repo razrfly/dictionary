@@ -47,9 +47,20 @@ defmodule DevilsDictionary.Curation.Agents.Persona do
                   @revised_manifest,
                   ~w(dossier source_refs deceased_evidence_refs template_version)
                 )
+  @sections_path Path.expand(
+                   "../../../../priv/curation/agents/personas/voltaire/v4/profile.json",
+                   __DIR__
+                 )
+  @external_resource @sections_path
+  @sections_manifest @sections_path |> File.read!() |> Jason.decode!()
+  @sections_body Map.take(
+                   @sections_manifest,
+                   ~w(dossier source_refs deceased_evidence_refs template_version)
+                 )
   @whole_bodies %{
     "voltaire-whole-entry-v1" => @whole_body,
-    "voltaire-whole-entry-v2" => @revised_body
+    "voltaire-whole-entry-v2" => @revised_body,
+    "voltaire-whole-entry-v3" => @sections_body
   }
 
   def manifest, do: @manifest
@@ -67,6 +78,11 @@ defmodule DevilsDictionary.Curation.Agents.Persona do
     do:
       @revised_manifest["dossier"]["disclosure"] <>
         "\n" <> @revised_manifest["dossier"]["selection"]
+
+  def selection_instruction("voltaire-whole-entry-v3"),
+    do:
+      @sections_manifest["dossier"]["disclosure"] <>
+        "\n" <> @sections_manifest["dossier"]["selection"]
 
   def valid_version?(%Profile{slug: "voltaire", kind: :persona}, %ProfileVersion{} = version) do
     body = %{
@@ -101,7 +117,8 @@ defmodule DevilsDictionary.Curation.Agents.Persona do
                config.instruction_version in [
                  @instruction,
                  "voltaire-whole-entry-v1",
-                 "voltaire-whole-entry-v2"
+                 "voltaire-whole-entry-v2",
+                 "voltaire-whole-entry-v3"
                ],
                :persona_instruction_mismatch
              ) do
@@ -132,7 +149,8 @@ defmodule DevilsDictionary.Curation.Agents.Persona do
                   if(
                     config.instruction_version in [
                       "voltaire-whole-entry-v1",
-                      "voltaire-whole-entry-v2"
+                      "voltaire-whole-entry-v2",
+                      "voltaire-whole-entry-v3"
                     ],
                     do: "single_editor_v1",
                     else: "proposes only"

@@ -33,13 +33,15 @@ defmodule DevilsDictionary.Curation.WholeEntryTest do
     "poetrydb" => "poetrydb_poem",
     "wikiquote" => "wikiquote_item"
   }
-  setup do
+  @legacy_instruction "voltaire-whole-entry-v2"
+  setup ctx do
     w = love_world!()
 
     config =
       model_config!(%{
-        instruction_version: WholeEntry.instruction(),
-        output_contract_version: "selection-output-v3",
+        instruction_version: Map.get(ctx, :instruction, @legacy_instruction),
+        output_contract_version:
+          Contract.version(Map.get(ctx, :instruction, @legacy_instruction)),
         tag: "9b"
       })
       |> ready!()
@@ -90,10 +92,214 @@ defmodule DevilsDictionary.Curation.WholeEntryTest do
     w
   end
 
-  defp packet do
-    {:ok, packet} = Packet.for_page(page("love"), instruction_version: WholeEntry.instruction())
+  defp packet(instruction \\ @legacy_instruction) do
+    {:ok, packet} = Packet.for_page(page("love"), instruction_version: instruction)
     {:ok, frozen} = Packet.freeze(packet)
     frozen
+  end
+
+  test "the operator can explicitly admit a prepared newer profile version", w do
+    model =
+      model_config!(%{
+        instruction_version: "voltaire-whole-entry-v3",
+        output_contract_version: "selection-output-v4"
+      })
+      |> ready!()
+
+    {:ok, prepared} = Persona.prepare(w.reviewer, model, reason: "prepare explicit upgrade")
+    assert Repo.reload!(prepared.profile).current_version_id == w.profile_version.id
+
+    args = [
+      "admit",
+      "--profile",
+      "voltaire",
+      "--as",
+      w.reviewer.user.email,
+      "--model-config",
+      model.slug,
+      "--version",
+      Integer.to_string(prepared.version.version),
+      "--reason",
+      "explicit sourced version upgrade"
+    ]
+
+    preview =
+      ExUnit.CaptureIO.capture_io(fn ->
+        Mix.Tasks.Dd.Curation.Editor.run(args ++ ["--dry-run"])
+      end)
+
+    assert preview =~ "version ##{prepared.version.id}"
+    assert Repo.reload!(prepared.profile).current_version_id == w.profile_version.id
+    ExUnit.CaptureIO.capture_io(fn -> Mix.Tasks.Dd.Curation.Editor.run(args) end)
+    assert Repo.reload!(prepared.profile).current_version_id == prepared.version.id
+    assert Repo.reload!(prepared.profile).bot_actor_id == prepared.bot_actor.id
+  end
+
+  defp section_answer(frozen) do
+    candidates = frozen.packet["candidates"]
+    priority = frozen.packet["priority_candidates"]
+    lead = Enum.find(candidates, &(&1["candidate_id"] in priority))
+
+    choice = fn c ->
+      %{
+        "candidate_id" => c["candidate_id"],
+        "meaning_id" => c["required_meaning"],
+        "reason" => "Illuminates a distinct aspect of the word.",
+        "quote" => nil
+      }
+    end
+
+    sections =
+      Map.new(WholeEntry.sections(), fn section ->
+        rows =
+          Enum.filter(
+            candidates,
+            &(WholeEntry.section(&1) == section and &1["candidate_id"] not in priority)
+          )
+
+        values = Enum.map(Enum.take(rows, WholeEntry.limit(section)), choice)
+        {section, if(section in ["examples", "quotes"], do: values, else: List.first(values))}
+      end)
+
+    %{
+      "decision" => "select",
+      "lead" => lead && Map.delete(choice.(lead), "quote"),
+      "selections" => sections,
+      "abstain_reason" => nil
+    }
+  end
+
+  @tag instruction: "voltaire-whole-entry-v3"
+  test "typed sections publish through the common writer and refuse malformed raw choices", w do
+    for provider <- DevilsDictionary.Curation.Shelf.providers(),
+        do:
+          DevilsDictionary.CitationFixtures.observation!(w, provider,
+            namespace: @namespaces[provider]
+          )
+
+    frozen = packet("voltaire-whole-entry-v3")
+    wire = section_answer(frozen)
+    schema = Contract.schema(frozen.packet)
+    assert schema["properties"]["selections"]["properties"]["quotes"]["maxItems"] == 2
+    assert schema["properties"]["selections"]["properties"]["definitions"]["anyOf"] != []
+
+    assert {:ok, %{result: %{"contract" => "selection-output-v4"}}} =
+             Contract.validate(answer(wire), frozen)
+
+    for altered <- [
+          put_in(wire, ["selections", "rogue"], nil),
+          update_in(wire["selections"], &Map.delete(&1, "news")),
+          put_in(wire, ["selections", "definitions"], []),
+          put_in(wire, ["selections", "images"], wire["selections"]["books"]),
+          put_in(wire, ["selections", "definitions"], Map.put(wire["lead"], "quote", nil))
+        ] do
+      assert {:refused, _, _} = Contract.validate(answer(altered), frozen)
+    end
+
+    for altered <- [
+          put_in(wire, ["lead", "reason"], String.duplicate("x", 101)),
+          update_in(wire, ["selections", "quotes"], fn [first | rest] ->
+            [Map.put(first, "reason", String.duplicate("x", 101)) | rest]
+          end),
+          %{
+            "decision" => "abstain",
+            "lead" => nil,
+            "abstain_reason" => String.duplicate("x", 101),
+            "selections" =>
+              Map.new(
+                WholeEntry.sections(),
+                &{&1, if(&1 in ["examples", "quotes"], do: [], else: nil)}
+              )
+          }
+        ] do
+      assert {:refused, errors, _} = Contract.validate(answer(altered), frozen)
+      assert Enum.any?(errors, &(List.last(&1) == "reason_too_long"))
+    end
+
+    legacy = packet()
+    legacy_lead = hd(legacy.packet["priority_candidates"])
+
+    legacy_candidate =
+      Enum.find(legacy.packet["candidates"], &(&1["candidate_id"] == legacy_lead))
+
+    legacy_answer =
+      selection({legacy_lead, legacy_candidate["required_meaning"]}, [])
+      |> put_in(["lead", "reason"], String.duplicate("x", 101))
+
+    assert {:ok, _} = Contract.validate(answer(legacy_answer), legacy)
+
+    first_quote = hd(wire["selections"]["quotes"])
+
+    repeated =
+      put_in(wire, ["selections", "quotes"], [
+        first_quote,
+        Map.put(first_quote, "reason", "A different reason does not make a different record.")
+      ])
+
+    assert {:refused, errors, _} = Contract.validate(answer(repeated), frozen)
+    assert ["selection", "duplicate_candidate"] in errors
+
+    quoted =
+      put_in(wire, ["selections", "quotes"], [Map.put(first_quote, "quote", "not allowed")])
+
+    assert {:refused, errors, _} = Contract.validate(answer(quoted), frozen)
+
+    assert ["highlight_4", "quote_not_allowed"] in errors or
+             Enum.any?(errors, &(List.last(&1) == "quote_not_allowed"))
+
+    stub_answer!(w, wire)
+    assert {:ok, %{last_outcome_reason: "published_automatically"}} = run!(w)
+    settle!()
+    receipt = Repo.one!(CompositionPublication)
+    version = Repo.get!(CompositionVersion, receipt.published_version_id)
+
+    assert Repo.get!(DevilsDictionary.Curation.Runtime.Attempt, version.attempt_id).result[
+             "contract"
+           ] == "selection-output-v4"
+
+    assert {:ok, history} = Receipt.read("love", version.version)
+    assert length(history.items) > 4
+    html = build_conn() |> get("/on/love") |> html_response(200)
+    assert html =~ "Selected definition"
+    assert html =~ "curated-news"
+    assert html =~ "Voltaire"
+  end
+
+  @tag instruction: "voltaire-whole-entry-v3"
+  test "typed fallback does not invent a fixed lead or permit lead duplication", _w do
+    source = DevilsDictionary.Sources.get_source_by_slug("bierce")
+    source |> Ecto.Changeset.change(active: false) |> Repo.update!()
+    frozen = packet("voltaire-whole-entry-v3")
+    assert frozen.packet["priority_candidates"] == []
+
+    candidates =
+      Enum.filter(frozen.packet["candidates"], &(&1["kind"] in ["content", "sense_definition"]))
+
+    assert length(candidates) > 1
+    c = hd(candidates)
+
+    choice = %{
+      "candidate_id" => c["candidate_id"],
+      "meaning_id" => c["required_meaning"],
+      "reason" => "A sourced fallback definition.",
+      "quote" => nil
+    }
+
+    sections =
+      Map.new(WholeEntry.sections(), &{&1, if(&1 in ["examples", "quotes"], do: [], else: nil)})
+
+    wire = %{
+      "decision" => "select",
+      "lead" => Map.delete(choice, "quote"),
+      "selections" => Map.put(sections, "definitions", choice),
+      "abstain_reason" => nil
+    }
+
+    assert {:refused, errors, _} = Contract.validate(answer(wire), frozen)
+    assert ["selection", "duplicate_candidate"] in errors
+
+    assert {:ok, _} =
+             Contract.validate(answer(put_in(wire, ["selections", "definitions"], nil)), frozen)
   end
 
   defp answer_all(frozen) do

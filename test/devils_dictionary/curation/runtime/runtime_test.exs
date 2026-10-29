@@ -368,7 +368,8 @@ defmodule DevilsDictionary.Curation.RuntimeTest do
 
   for {instruction, output} <- [
         {"voltaire-whole-entry-v1", "selection-output-v2"},
-        {"voltaire-whole-entry-v2", "selection-output-v3"}
+        {"voltaire-whole-entry-v2", "selection-output-v3"},
+        {"voltaire-whole-entry-v3", "selection-output-v4"}
       ] do
     test "whole-entry readiness smoke records its v4 identity through the real gateway #{instruction}",
          ctx do
@@ -385,7 +386,25 @@ defmodule DevilsDictionary.Curation.RuntimeTest do
       stub_ollama!(config,
         chat: fn request ->
           send(test_pid, {:whole_instruction, hd(request["messages"])["content"]})
-          {:json, answer(selection({"c1", "m0"}, []))}
+          result = selection({"c1", "m0"}, [])
+
+          result =
+            if unquote(instruction) == "voltaire-whole-entry-v3" do
+              %{
+                "decision" => result["decision"],
+                "lead" => result["lead"],
+                "abstain_reason" => result["abstain_reason"],
+                "selections" =>
+                  Map.new(
+                    DevilsDictionary.Curation.WholeEntry.sections(),
+                    &{&1, if(&1 in ["examples", "quotes"], do: [], else: nil)}
+                  )
+              }
+            else
+              result
+            end
+
+          {:json, answer(result)}
         end
       )
 

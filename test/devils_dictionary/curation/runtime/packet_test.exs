@@ -28,9 +28,17 @@ defmodule DevilsDictionary.Curation.Runtime.PacketTest do
                "generic-editor-v2",
                "voltaire-selector-v1",
                "voltaire-whole-entry-v1",
-               "voltaire-whole-entry-v2"
+               "voltaire-whole-entry-v2",
+               "voltaire-whole-entry-v3"
              ]
 
+      sections = Packet.instruction!("voltaire-whole-entry-v3")
+
+      assert Digest.sha256(sections) ==
+               "fd53e297f67e840164bd492af9edc79c1fecd20957093c0d9f5ad56e1dcbf96b"
+
+      assert sections =~ "selections object"
+      refute sections =~ "most twelve highlights"
       revised = Packet.instruction!("voltaire-whole-entry-v2")
 
       assert Digest.sha256(revised) ==

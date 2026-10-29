@@ -1,3 +1,26 @@
+# Typed-section correction — 29 October 2026
+
+Love tuning attempt9 (v2) still repeated the lead and exceeded definitions. It was
+refused; the editor/model stopped. New voltaire-whole-entry-v3 / sourced manifest v4 /
+selection-output-v4 uses one clean section-shaped response, not more prompt repairs.
+The schema offers per-candidate IDs/allowed meanings in each fixed section; the
+priority lead is excluded from additional definitions. One-item sections are nullable
+choices; examples/quotes are arrays of at most two. All quote fields remain null.
+
+The raw envelope must contain exactly decision/lead/selections/abstain_reason and all
+nine known sections. Wrong sections, unknown/missing fields and bad types refuse.
+Only then flatten in definitions/examples/quotes/images/films/music/books/poems/news
+order through the existing validator/writer. Candidate uniqueness remains enforced,
+including repeated IDs with different reasons and no-Bierce fallback overlap. No
+invalid choice is repaired or dropped. Old wire versions and instruction hashes remain.
+
+The same source identity, receipts, publication fences, 24 candidates/12 meanings,
+one generation, context/output/deadline/daily budget and ten-page enrollment remain.
+Migration 20261029194235 admits only the additional immutable template with the same
+source dossier; down refuses after its history exists. Register a new model config,
+seed the sourced persona and admit its explicit prepared version with --version N
+(the current version remains the default). Dry-run before admission/binding.
+
 # Recorded instruction iteration — 29 October 2026
 
 The first whole-entry instruction is retained unchanged. Live love attempts 6 and 7

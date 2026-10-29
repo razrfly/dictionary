@@ -26,19 +26,24 @@ defmodule DevilsDictionary.Curation.Runtime.Contract do
   """
 
   alias DevilsDictionary.Curation.{Digest, LeadRule}
-  alias DevilsDictionary.Curation.Runtime.{Endpoint, Packet}
+  alias DevilsDictionary.Curation.Runtime.{Endpoint, Packet, SectionOutput}
 
   @version "selection-output-v1"
   @max_reason_chars 280
   @max_quote_chars 400
 
   def version, do: @version
+  def version("voltaire-whole-entry-v3"), do: "selection-output-v4"
   def version("voltaire-whole-entry-v2"), do: "selection-output-v3"
   def version("voltaire-whole-entry-v1"), do: "selection-output-v2"
   def version(_), do: @version
 
   @doc "The JSON schema for Ollama's `format`."
   def schema(packet \\ %{}) do
+    if SectionOutput.enabled?(packet), do: SectionOutput.schema(packet), else: flat_schema(packet)
+  end
+
+  defp flat_schema(packet) do
     max = if DevilsDictionary.Curation.WholeEntry.packet?(packet), do: 12, else: 3
     reason = %{"type" => "string", "maxLength" => @max_reason_chars}
 
@@ -104,6 +109,7 @@ defmodule DevilsDictionary.Curation.Runtime.Contract do
          :ok <- not_truncated(response),
          :ok <- bounded(content, opts),
          {:ok, decoded} <- decode(content),
+         {:ok, decoded} <- SectionOutput.normalize(decoded, packet),
          :ok <- shape(decoded, packet) do
       # `registry: false` is the smoke call's fixed packet, which names no
       # registry rows: shape and references only.
@@ -311,9 +317,10 @@ defmodule DevilsDictionary.Curation.Runtime.Contract do
   end
 
   defp quote_for_version(where, choice, candidate, packet) do
-    if packet["instruction_version"] == "voltaire-whole-entry-v2" and not is_nil(choice["quote"]),
-      do: [[where, "quote_not_allowed"]],
-      else: quote_problem(where, choice, candidate)
+    if packet["instruction_version"] in ["voltaire-whole-entry-v2", "voltaire-whole-entry-v3"] and
+         not is_nil(choice["quote"]),
+       do: [[where, "quote_not_allowed"]],
+       else: quote_problem(where, choice, candidate)
   end
 
   defp quote_problem(_where, %{"quote" => nil}, _candidate), do: []
