@@ -232,11 +232,21 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
                      Never fill a section to reach a quota. Preserve the exact source content and give concise, grounded original reasons.
                      """
 
+  @whole_selection @whole_relevance <>
+                     """
+                     Publication semantics: every choice object is an instruction to SHOW that record to readers. It is never a rejection, review, or list of candidates considered.
+                     First decide whether a section has a useful, evidenced choice. If not, emit null for a single section or [] for examples/quotes. Do not put a rejected candidate into any section merely to explain why it is unsuitable.
+                     Counterexample: a news candidate whose only connection is an incidental search-word match must produce "news": null. Returning that candidate with reason "Incidental match lacks semantic connection" would publish irrelevant news and is wrong.
+                     A selection reason must explain positive supplied evidence of relevance, not missing evidence, irrelevance, or why the record should be rejected. Never invent a positive connection to avoid null.
+                     Before returning, remove every choice whose own reason describes a rejection; represent it as null/[] instead. Preserve other useful choices.
+                     """
+
   @instructions %{
     "voltaire-whole-entry-v1" => @whole_entry,
     "voltaire-whole-entry-v2" => @whole_entry_v2,
     "voltaire-whole-entry-v3" => @whole_sections,
     "voltaire-whole-entry-v4" => @whole_relevance,
+    "voltaire-whole-entry-v5" => @whole_selection,
     "generic-editor-v1" => @generic_editor_v1,
     "generic-editor-v2" => @generic_editor_v2,
     "voltaire-selector-v1" =>

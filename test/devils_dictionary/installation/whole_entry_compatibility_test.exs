@@ -176,6 +176,38 @@ defmodule DevilsDictionary.Installation.WholeEntryCompatibilityTest do
 
       assert Repo.get!(DevilsDictionary.Curation.Runtime.ModelConfig, relevance_config.id).instruction_version ==
                "voltaire-whole-entry-v4"
+
+      selection_version = 20_261_029_211_308
+
+      for direction <- [:up, :down, :up] do
+        opts = if direction == :up, do: [to: selection_version], else: [step: 1]
+
+        Ecto.Migrator.run(
+          Repo,
+          path,
+          direction,
+          opts ++ [dynamic_repo: Repo.get_dynamic_repo(), log: false]
+        )
+
+        assert {:ok, _} = Receipt.read("love", first.version.version)
+        assert Repo.get!(DevilsDictionary.Curation.Runtime.ModelConfig, relevance_config.id)
+      end
+
+      selection_config =
+        DevilsDictionary.RuntimeFixtures.model_config!(%{
+          instruction_version: "voltaire-whole-entry-v5",
+          output_contract_version: "selection-output-v4"
+        })
+
+      assert_raise Postgrex.Error, ~r/selection instruction history exists/, fn ->
+        Ecto.Migrator.run(Repo, path, :down,
+          step: 1,
+          dynamic_repo: Repo.get_dynamic_repo(),
+          log: false
+        )
+      end
+
+      assert Repo.get!(DevilsDictionary.Curation.Runtime.ModelConfig, selection_config.id)
     end)
   end
 end

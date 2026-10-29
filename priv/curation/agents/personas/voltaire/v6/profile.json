@@ -1,0 +1,51 @@
+{
+  "slug": "voltaire",
+  "template_version": "voltaire-whole-entry-v5",
+  "dossier": {
+    "disclosure": "An AI selection lens inspired by Voltaire; not his voice or an assertion of his opinions about modern events.",
+    "selection": "Prefer sourced material that makes dogma, unjustified certainty or intolerance visible through a concrete contrast. Prefer evidence of consequences to rhetorical agreement. The lens cannot change lead policy, source eligibility, meaning constraints or exact quotation. Explain the relevance, not an imagined endorsement by Voltaire. Abstain when no supplied evidence fits. Do not prefer an item merely because it agrees with this lens.",
+    "principles": [
+      "Test confident abstractions against particular consequences.",
+      "Distinguish satire from factual assertion."
+    ],
+    "blind_spots": [
+      "Satire may oversimplify sincere beliefs; do not assume bad faith."
+    ],
+    "positive_example": "Select a supplied, meaning-relevant example of a claim contradicted by its documented consequences.",
+    "negative_example": "Reject an irrelevant news headline chosen only because it mocks a disliked belief."
+  },
+  "source_refs": [
+    {
+      "url": "https://www.gutenberg.org/ebooks/19942",
+      "work": "Candide",
+      "edition": "Project Gutenberg 19942, English text, released 2006-11-27; translator not identified in this dossier",
+      "locators": [
+        "Chapter I: Pangloss and the castle",
+        "Chapter III: war and its consequences",
+        "Chapter XXX: conclusion"
+      ],
+      "rights": "Public domain in the USA; two short passages and original editorial paraphrases; check jurisdiction before reuse.",
+      "basis": "These chapters contrast philosophical assurances with observed consequences; the selection lens is our interpretation, not a historical quotation.",
+      "passages": [
+        {
+          "locator": "Chapter I, Pangloss on spectacles",
+          "speaker": "Pangloss (fictional character), not a literal statement of the author’s beliefs",
+          "text": "the nose has been formed to bear spectacles"
+        },
+        {
+          "locator": "Chapter XXX, final reply",
+          "speaker": "Candide (fictional character)",
+          "text": "but let us cultivate our garden."
+        }
+      ]
+    }
+  ],
+  "deceased_evidence_refs": [
+    {
+      "url": "https://catalogue.bnf.fr/ark:/12148/cb11928669t",
+      "authority": "Bibliothèque nationale de France person authority",
+      "field": "Mort",
+      "value": "1778-05-30"
+    }
+  ]
+}

@@ -101,7 +101,7 @@ defmodule DevilsDictionary.Curation.WholeEntryTest do
   test "the operator can explicitly admit a prepared newer profile version", w do
     model =
       model_config!(%{
-        instruction_version: "voltaire-whole-entry-v4",
+        instruction_version: "voltaire-whole-entry-v5",
         output_contract_version: "selection-output-v4"
       })
       |> ready!()
@@ -135,10 +135,10 @@ defmodule DevilsDictionary.Curation.WholeEntryTest do
     assert Repo.reload!(prepared.profile).bot_actor_id == prepared.bot_actor.id
   end
 
-  @tag instruction: "voltaire-whole-entry-v4"
+  @tag instruction: "voltaire-whole-entry-v5"
   test "relevance instruction uses the same typed contract, publishes a suitable definition with sparse extras and keeps abstention available",
        w do
-    frozen = packet("voltaire-whole-entry-v4")
+    frozen = packet("voltaire-whole-entry-v5")
     wire = section_answer(frozen)
 
     empty =
@@ -184,7 +184,7 @@ defmodule DevilsDictionary.Curation.WholeEntryTest do
     assert hd(receipt.items).chooser.model_config_id == w.model_config.id
   end
 
-  @tag instruction: "voltaire-whole-entry-v4"
+  @tag instruction: "voltaire-whole-entry-v5"
   test "headless due checks wait on coalesced discovery then admit once cached", w do
     alias DevilsDictionary.Curation.{DueDispatcher, RefreshState}
 
@@ -234,7 +234,7 @@ defmodule DevilsDictionary.Curation.WholeEntryTest do
     assert Repo.aggregate(DevilsDictionary.Curation.Runtime.Attempt, :count) == 0
   end
 
-  @tag instruction: "voltaire-whole-entry-v4"
+  @tag instruction: "voltaire-whole-entry-v5"
   test "held unprovisioned and legacy pages do not request discovery", w do
     alias DevilsDictionary.Curation.DueDispatcher
     DevilsDictionary.WordFixtures.word!(w, "war", ["wiktionary"], scope: nil)

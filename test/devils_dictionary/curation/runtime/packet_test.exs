@@ -30,8 +30,14 @@ defmodule DevilsDictionary.Curation.Runtime.PacketTest do
                "voltaire-whole-entry-v1",
                "voltaire-whole-entry-v2",
                "voltaire-whole-entry-v3",
-               "voltaire-whole-entry-v4"
+               "voltaire-whole-entry-v4",
+               "voltaire-whole-entry-v5"
              ]
+
+      selection = Packet.instruction!("voltaire-whole-entry-v5")
+      assert selection =~ "every choice object is an instruction to SHOW"
+      assert selection =~ ~s("news": null)
+      assert selection =~ "Never invent a positive connection"
 
       relevance = Packet.instruction!("voltaire-whole-entry-v4")
 

@@ -1,7 +1,7 @@
 defmodule DevilsDictionary.Curation.Runtime.SectionOutput do
   @moduledoc "Versioned wire shape for one-call whole-entry selections; no separate storage or approval."
   alias DevilsDictionary.Curation.WholeEntry
-  @instructions ["voltaire-whole-entry-v3", "voltaire-whole-entry-v4"]
+  @instructions ["voltaire-whole-entry-v3", "voltaire-whole-entry-v4", "voltaire-whole-entry-v5"]
   @top ~w(decision lead selections abstain_reason)
   @choice ~w(candidate_id meaning_id reason quote)
   def enabled?(packet), do: packet["instruction_version"] in @instructions

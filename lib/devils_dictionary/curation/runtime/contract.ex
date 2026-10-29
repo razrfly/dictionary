@@ -33,6 +33,7 @@ defmodule DevilsDictionary.Curation.Runtime.Contract do
   @max_quote_chars 400
 
   def version, do: @version
+  def version("voltaire-whole-entry-v5"), do: "selection-output-v4"
   def version("voltaire-whole-entry-v4"), do: "selection-output-v4"
   def version("voltaire-whole-entry-v3"), do: "selection-output-v4"
   def version("voltaire-whole-entry-v2"), do: "selection-output-v3"
@@ -321,7 +322,8 @@ defmodule DevilsDictionary.Curation.Runtime.Contract do
     if packet["instruction_version"] in [
          "voltaire-whole-entry-v2",
          "voltaire-whole-entry-v3",
-         "voltaire-whole-entry-v4"
+         "voltaire-whole-entry-v4",
+         "voltaire-whole-entry-v5"
        ] and
          not is_nil(choice["quote"]),
        do: [[where, "quote_not_allowed"]],
