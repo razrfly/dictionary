@@ -94,6 +94,15 @@ defmodule DevilsDictionary.Curation.Opening do
   highlights draws nothing at all — no heading, no skeleton, no empty slots.
   """
   def empty?(nil), do: true
+
+  def empty?(%__MODULE__{
+        lead: nil,
+        highlights: [],
+        configuration: %{selection_scope: "whole_entry_v1"},
+        withheld: [_ | _]
+      }),
+      do: false
+
   def empty?(%__MODULE__{lead: nil, highlights: []}), do: true
   def empty?(%__MODULE__{}), do: false
 

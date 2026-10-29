@@ -125,7 +125,7 @@ defmodule DevilsDictionary.Curation.Candidates do
       %{
         scope: scope,
         bierce?: LeadRule.applicable(scope.ids) != [],
-        leads: leads(page, scope, definitions),
+        leads: leads(page, scope, definitions) ++ whole_entry_leads(scope),
         no_lead: no_lead(scope),
         highlights:
           definitions ++
@@ -243,6 +243,25 @@ defmodule DevilsDictionary.Curation.Candidates do
   # page's words, an entry this page shows (`LeadPolicy.page_entry/2`), and
   # the entry's own standing. A lead must also have a first sentence to
   # quote, since the page quotes a lead by its first sentence.
+  defp whole_entry_leads(scope) do
+    case DevilsDictionary.Curation.Configurations.resolve_default() do
+      {:ok, %{version: version}} ->
+        if DevilsDictionary.Curation.WholeEntry.enabled?(version),
+          do:
+            Enum.map(sense_definitions(scope), fn c ->
+              Map.put(
+                c,
+                :lead,
+                LeadRule.check(scope.ids, {:sense_definition, c.spec.sense_revision_id})
+              )
+            end),
+          else: []
+
+      _ ->
+        []
+    end
+  end
+
   defp leads(page, scope, definitions) do
     applicable = LeadRule.applicable(scope.ids)
 

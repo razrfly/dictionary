@@ -274,6 +274,7 @@ defmodule DevilsDictionary.Curation.PublishedReader do
       composition: record.composition,
       origin: :published,
       configuration: %Configuration{
+        selection_scope: configuration_version.manifest["selection_scope"],
         id: configuration.id,
         slug: configuration.slug,
         version: configuration_version.version,
@@ -332,6 +333,41 @@ defmodule DevilsDictionary.Curation.PublishedReader do
   # ── the lead ─────────────────────────────────────────────────────────────
 
   defp lead(nil, _ctx), do: {nil, []}
+
+  defp lead(%CompositionItem{item_kind: :sense_definition} = item, ctx) do
+    case highlight(item, ctx) do
+      %Highlight{} = tile ->
+        {%Lead{
+           reference: tile.reference,
+           policy: :manual_fallback,
+           register: :definition,
+           source: tile.source,
+           author: tile.creator,
+           work: nil,
+           entry: %{headword: "Selected definition", marker: nil, year: nil},
+           excerpt: tile.excerpt,
+           meaning: tile.meaning,
+           links:
+             Map.put(
+               tile.links,
+               :card_id,
+               String.trim_leading(tile.meaning.anchor || "", "#")
+             ),
+           credits: tile.credits,
+           reasons: [
+             %Reason{
+               kind: :policy,
+               text:
+                 "A sourced sense definition selected to lead where Bierce has no eligible entry."
+             }
+             | tile.reasons
+           ]
+         }, []}
+
+      held ->
+        {nil, [held]}
+    end
+  end
 
   defp lead(%CompositionItem{} = item, ctx) do
     with {:ok, content} <- content(item),

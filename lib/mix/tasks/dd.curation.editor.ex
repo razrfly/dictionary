@@ -111,8 +111,9 @@ defmodule Mix.Tasks.Dd.Curation.Editor do
     config = model_config!(opts)
     reason = reason!(opts)
 
-    if opts[:profile] && config.instruction_version != "voltaire-selector-v1",
-      do: Mix.raise("the persona requires a config pinned to voltaire-selector-v1")
+    if opts[:profile] &&
+         config.instruction_version not in ["voltaire-selector-v1", "voltaire-whole-entry-v1"],
+       do: Mix.raise("the persona requires a config pinned to voltaire-selector-v1")
 
     label =
       if opts[:profile],
@@ -205,7 +206,12 @@ defmodule Mix.Tasks.Dd.Curation.Editor do
           reason: reason,
           editor: editor,
           refresh_window: window,
-          editor_publication: policy
+          editor_publication: policy,
+          selection_scope:
+            if(config.instruction_version == "voltaire-whole-entry-v1",
+              do: "whole_entry_v1",
+              else: nil
+            )
         })
       )
     end

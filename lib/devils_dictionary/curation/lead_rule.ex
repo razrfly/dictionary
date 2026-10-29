@@ -87,7 +87,27 @@ defmodule DevilsDictionary.Curation.LeadRule do
   The rule a lead (a content object id, or `nil`) is admitted under:
   `{:ok, :priority_source | :manual_fallback | :none}`, or `{:error, reason}`.
   """
-  def check(member_ids, lead_id, applicable \\ nil) do
+  def check(member_ids, lead_id, applicable \\ nil)
+
+  def check(member_ids, {:sense_definition, revision_id}, applicable) do
+    applicable = applicable || applicable(member_ids)
+    revision = Repo.get(DevilsDictionary.Registry.SenseRevision, revision_id)
+    sense = revision && Repo.get(Sense, revision.sense_id)
+
+    cond do
+      applicable != [] ->
+        {:error, :priority_source_available}
+
+      revision && revision.is_current && revision.lifecycle_state == :active && sense &&
+          sense.lexeme_id in member_ids ->
+        {:ok, :manual_fallback}
+
+      true ->
+        {:error, :lead_not_on_scope}
+    end
+  end
+
+  def check(member_ids, lead_id, applicable) do
     applicable = applicable || applicable(member_ids)
 
     cond do

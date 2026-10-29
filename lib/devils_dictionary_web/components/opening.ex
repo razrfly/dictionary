@@ -63,6 +63,12 @@ defmodule DevilsDictionaryWeb.Opening do
       assigns
       |> assign(:slots, slots(assigns.opening))
       |> assign(:withheld_lead, withheld_lead(assigns.opening))
+      |> assign(
+        :whole_entry?,
+        assigns.opening.configuration &&
+          Map.get(assigns.opening.configuration, :selection_scope) == "whole_entry_v1"
+      )
+      |> assign(:groups, DevilsDictionary.Curation.WholeEntry.groups(assigns.opening.highlights))
 
     ~H"""
     <section
@@ -80,10 +86,24 @@ defmodule DevilsDictionaryWeb.Opening do
         Development fixture · {fixture_status(@opening.review)} · not published
       </p>
 
+      <div :if={@whole_entry?} id="curation-summary" class="flex min-w-0 flex-col gap-2">
+        <h2 class="font-display text-3xl tracking-tight text-balance">Curated for this entry</h2>
+        <p class="text-base/7 text-pretty text-mist-600 sm:text-sm/6 dark:text-mist-400">
+          Selected by {selector(@opening.review.selected_by)} · published {date(
+            @opening.review.published_on
+          )}. Source records remain available below.
+        </p>
+      </div>
+      <h3
+        :if={@whole_entry? && @opening.lead}
+        class="font-display text-2xl tracking-tight text-balance"
+      >
+        Selected definition
+      </h3>
       <.lead :if={@opening.lead} lead={@opening.lead} />
       <.withheld :if={@withheld_lead} id="opening-withheld-lead" item={@withheld_lead} tag="div" />
 
-      <div :if={@slots != []} class="@container">
+      <div :if={@slots != [] && !@whole_entry?} class="@container">
         <ul
           id="opening-highlights"
           role="list"
@@ -109,6 +129,48 @@ defmodule DevilsDictionaryWeb.Opening do
         </ul>
       </div>
 
+      <div :if={@whole_entry?} id="curated-sections" class="flex min-w-0 flex-col gap-10">
+        <section
+          :for={group <- @groups}
+          id={"curated-" <> group.key}
+          class="@container flex min-w-0 flex-col gap-4"
+        >
+          <h3 class="font-display text-2xl tracking-tight text-balance">{group.title}</h3>
+          <p
+            :if={group.items == []}
+            class="text-base/7 text-pretty text-mist-600 sm:text-sm/6 dark:text-mist-400"
+          >
+            No eligible selection is currently shown in this section. The complete source inventory and selection history remain available.
+          </p>
+          <ul
+            :if={group.items != []}
+            role="list"
+            class="grid min-w-0 grid-cols-1 gap-6 @xl:grid-cols-2"
+          >
+            <.highlight
+              :for={item <- group.items}
+              highlight={item}
+              shares_row={length(group.items) > 1}
+              mode={@mode}
+            />
+          </ul>
+        </section>
+      </div>
+      <div
+        :if={@whole_entry? && Enum.any?(@slots, & &1.withheld)}
+        id="curated-unavailable"
+        class="flex flex-col gap-3"
+      >
+        <h3 class="font-display text-2xl tracking-tight text-balance">Unavailable selections</h3>
+        <ul role="list" class="flex flex-col gap-4">
+          <.withheld
+            :for={slot <- @slots}
+            :if={slot.withheld}
+            id={"curated-withheld-#{slot.position}"}
+            item={slot.withheld}
+          />
+        </ul>
+      </div>
       <.about opening={@opening} mode={@mode} reviewer?={@reviewer?} />
     </section>
     """
@@ -1308,6 +1370,10 @@ defmodule DevilsDictionaryWeb.Opening do
     do: "a Devil’s Dictionary entry applies here, and the selection names no lead"
 
   def withheld_reason(:not_on_page), do: "it is not among this page’s definitions"
+
+  def withheld_reason(:section_over_limit),
+    do: "the selection exceeds its section’s configured limit"
+
   def withheld_reason(:over_limit), do: "an opening shows at most three highlights"
   def withheld_reason(:duplicate), do: "it repeats an earlier highlight"
   def withheld_reason(:meaning_off_page), do: "its meaning is not on this page"

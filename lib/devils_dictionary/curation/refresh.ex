@@ -609,7 +609,7 @@ defmodule DevilsDictionary.Curation.Refresh do
     candidate_digest =
       Digest.term(%{
         "page" => Compositions.signature(Enum.map(page.headword.lexemes, & &1.id)),
-        "packet" => packet_identity(page),
+        "packet" => packet_identity(page, composition),
         "standing" => standing
       })
 
@@ -639,8 +639,19 @@ defmodule DevilsDictionary.Curation.Refresh do
   # the cut's own and deterministic, or the reason it is refused (an
   # applicable Bierce entry the screen cannot offer, too many of them, no
   # candidates), which is an input as much as a candidate is.
-  defp packet_identity(page) do
-    case Packet.for_page(page) do
+  defp packet_identity(page, composition) do
+    configuration =
+      Repo.get!(DevilsDictionary.Curation.Configuration, composition.curation_configuration_id)
+
+    version =
+      Repo.get(DevilsDictionary.Curation.ConfigurationVersion, configuration.current_version_id)
+
+    opts =
+      if version && DevilsDictionary.Curation.WholeEntry.enabled?(version),
+        do: [instruction_version: get_in(version.manifest, ["editor", "instruction_version"])],
+        else: []
+
+    case Packet.for_page(page, opts) do
       {:ok, packet} -> Packet.digest(packet)
       {:error, reason} -> %{"refused" => canonical(reason)}
     end

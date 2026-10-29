@@ -117,12 +117,46 @@ defmodule DevilsDictionary.Curation.Eligibility do
     recorded = Keyword.get(opts, :claim_contexts) || %{}
     applicable = LeadRule.applicable(member_ids)
     lead = Enum.find(items, &(&1.role == :lead))
-    lead_rule = LeadRule.check(member_ids, lead && lead.item_object_id, applicable)
+
+    cv = Repo.get!(DevilsDictionary.Curation.ConfigurationVersion, configuration_version_id)
+    whole? = DevilsDictionary.Curation.WholeEntry.enabled?(cv)
+
+    lead_ref =
+      if lead && lead.item_kind == :sense_definition,
+        do: {:sense_definition, lead.sense_revision_id},
+        else: lead && lead.item_object_id
+
+    lead_rule =
+      if lead && lead.item_kind == :sense_definition && !whole?,
+        do: {:error, :lead_not_on_scope},
+        else: LeadRule.check(member_ids, lead_ref, applicable)
+
+    over =
+      if whole? do
+        items
+        |> Enum.filter(&(&1.role == :highlight))
+        |> Enum.group_by(&DevilsDictionary.Curation.WholeEntry.item_section/1)
+        |> Enum.flat_map(fn {section, rows} ->
+          rows
+          |> Enum.sort_by(& &1.position)
+          |> Enum.drop(DevilsDictionary.Curation.WholeEntry.limit(section))
+        end)
+        |> MapSet.new(& &1.position)
+      else
+        MapSet.new()
+      end
 
     assessed =
       items
       |> Enum.sort_by(&{to_string(&1.role), &1.position})
-      |> Enum.map(&{&1, assess(&1, member_ids, recorded)})
+      |> Enum.map(fn item ->
+        result =
+          if item.role == :highlight && MapSet.member?(over, item.position),
+            do: {{:error, :section_over_limit}, nil},
+            else: assess(item, member_ids, recorded)
+
+        {item, result}
+      end)
 
     results =
       Enum.map(assessed, fn {item, {result, _claim}} ->

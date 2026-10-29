@@ -16,8 +16,22 @@ defmodule DevilsDictionary.Curation.Opening.Configuration do
   are #203's structured records, which join the contract when they exist.
   """
 
-  @enforce_keys [:id, :slug, :version, :resolution_reason, :resolution_policy_version]
-  defstruct [:id, :slug, :version, :lead_rule, :resolution_reason, :resolution_policy_version]
+  @enforce_keys [
+    :id,
+    :slug,
+    :version,
+    :resolution_reason,
+    :resolution_policy_version
+  ]
+  defstruct [
+    :id,
+    :slug,
+    :version,
+    :lead_rule,
+    :resolution_reason,
+    :resolution_policy_version,
+    :selection_scope
+  ]
 
   @type t :: %__MODULE__{
           id: pos_integer(),

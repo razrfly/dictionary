@@ -26,7 +26,8 @@ defmodule DevilsDictionary.Curation.Runtime.PacketTest do
       assert Packet.instruction_versions() == [
                "generic-editor-v1",
                "generic-editor-v2",
-               "voltaire-selector-v1"
+               "voltaire-selector-v1",
+               "voltaire-whole-entry-v1"
              ]
 
       assert Digest.sha256(Packet.instruction!("voltaire-selector-v1")) ==

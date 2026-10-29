@@ -168,6 +168,16 @@ defmodule DevilsDictionary.Curation.Configurations do
                attrs.refresh_window in [86_400, 172_800, 604_800],
                :invalid_refresh_window
              ),
+           :ok <-
+             Transaction.check(
+               Map.get(attrs, :selection_scope) in [nil, "whole_entry_v1"] and
+                 Map.get(
+                   attrs,
+                   :max_highlights,
+                   if(Map.get(attrs, :selection_scope) == "whole_entry_v1", do: 12, else: 3)
+                 ) in 0..if(Map.get(attrs, :selection_scope) == "whole_entry_v1", do: 12, else: 3),
+               :invalid_highlight_limit
+             ),
            :ok <- admitted_members(Map.get(attrs, :members, [])),
            {:ok, editor} <- editor_binding(Map.get(attrs, :editor)),
            :ok <-
@@ -177,6 +187,9 @@ defmodule DevilsDictionary.Curation.Configurations do
                :invalid_publication_policy
              ) do
         {members, manifest} = attrs |> Map.put(:editor, editor) |> manifest()
+
+        unless DevilsDictionary.Curation.WholeEntry.coherent?(manifest),
+          do: Repo.rollback(:incoherent_whole_entry_configuration)
 
         case Repo.get_by(ConfigurationVersion,
                configuration_id: configuration.id,
@@ -286,7 +299,12 @@ defmodule DevilsDictionary.Curation.Configurations do
     manifest = %{
       "mode" => @mode,
       "lead_policy" => "bierce_first_v1",
-      "max_highlights" => Map.get(attrs, :max_highlights, 3),
+      "max_highlights" =>
+        Map.get(
+          attrs,
+          :max_highlights,
+          if(Map.get(attrs, :selection_scope) == "whole_entry_v1", do: 12, else: 3)
+        ),
       "roster" => Enum.map(members, &Map.new(&1, fn {k, v} -> {to_string(k), v} end))
     }
 
@@ -306,6 +324,11 @@ defmodule DevilsDictionary.Curation.Configurations do
         "manual" -> manifest
         policy -> Map.put(manifest, "editor_publication", policy)
       end
+
+    manifest =
+      if Map.get(attrs, :selection_scope) == "whole_entry_v1",
+        do: Map.put(manifest, "selection_scope", "whole_entry_v1"),
+        else: manifest
 
     {members, manifest}
   end
@@ -392,7 +415,7 @@ defmodule DevilsDictionary.Curation.Configurations do
   """
   def ready?(%ConfigurationVersion{manifest: %{} = manifest, lead_policy: :bierce_first_v1}),
     do:
-      manifest["mode"] == @mode and
+      DevilsDictionary.Curation.WholeEntry.coherent?(manifest) and manifest["mode"] == @mode and
         Map.get(manifest, "editor_publication", "manual") in ["manual", "single_editor_v1"] and
         (Map.get(manifest, "editor_publication", "manual") == "manual" or
            is_map(manifest["editor"])) and
