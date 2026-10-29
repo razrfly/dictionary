@@ -1,3 +1,20 @@
+# Recorded instruction iteration — 29 October 2026
+
+The first whole-entry instruction is retained unchanged. Live love attempts 6 and 7
+were refused for shared section overflows and quoted metadata; no page was published.
+The editor/model were stopped rather than retrying until a lucky answer.
+
+New voltaire-whole-entry-v2 / sourced profile manifest v3 / selection-output-v3
+states combined section limits explicitly and makes every highlight quote null in
+both schema and validator. Selected quotation records still display exact source
+text through their reference. No invalid choice is silently repaired or dropped.
+The model artifact, 24-candidate/12-meaning bounds, single call, budgets, publication,
+citation and eligibility checks are unchanged. The original instruction/output v2
+remain readable and valid. Each instruction requires its own immutable model config
+and profile version. Migration 20261029192744 admits only the new pinned template and
+preserves the exact dossier guard; down refuses after revised-version history exists.
+Use a new model-config slug; do not mutate the already-used config or profile.
+
 # Whole-entry curation: visible ten-page experiment
 
 Owner correction, 29 October 2026 (#275): a successful deliverable is actual interesting,

@@ -366,36 +366,42 @@ defmodule DevilsDictionary.Curation.RuntimeTest do
     assert Repo.aggregate(Attempt, :count) == 0
   end
 
-  test "whole-entry readiness smoke records its v4 identity through the real gateway", ctx do
-    config =
-      model_config!(%{
-        instruction_version: "voltaire-whole-entry-v1",
-        output_contract_version: "selection-output-v2"
-      })
-      |> ready!()
+  for {instruction, output} <- [
+        {"voltaire-whole-entry-v1", "selection-output-v2"},
+        {"voltaire-whole-entry-v2", "selection-output-v3"}
+      ] do
+    test "whole-entry readiness smoke records its v4 identity through the real gateway #{instruction}",
+         ctx do
+      config =
+        model_config!(%{
+          instruction_version: unquote(instruction),
+          output_contract_version: unquote(output)
+        })
+        |> ready!()
 
-    before = public_rows()
-    test_pid = self()
+      before = public_rows()
+      test_pid = self()
 
-    stub_ollama!(config,
-      chat: fn request ->
-        send(test_pid, {:whole_instruction, hd(request["messages"])["content"]})
-        {:json, answer(selection({"c1", "m0"}, []))}
-      end
-    )
+      stub_ollama!(config,
+        chat: fn request ->
+          send(test_pid, {:whole_instruction, hd(request["messages"])["content"]})
+          {:json, answer(selection({"c1", "m0"}, []))}
+        end
+      )
 
-    assert {:ok, receipt} =
-             Runtime.smoke(config, Keyword.put(ctx.opts, :request_key, key("whole-smoke")))
+      assert {:ok, receipt} =
+               Runtime.smoke(config, Keyword.put(ctx.opts, :request_key, key("whole-smoke")))
 
-    assert {receipt.purpose, receipt.outcome} == {:readiness_smoke, :accepted}
-    assert receipt.result["contract"] == "selection-output-v2"
-    stored = Repo.get!(Attempt, receipt.attempt_id)
-    assert stored.packet_summary["packet_version"] == "runtime-packet-v4"
-    assert is_binary(stored.packet_summary["candidate_set_sha256"])
-    assert_received {:whole_instruction, instruction}
-    assert instruction == Packet.instruction!("voltaire-whole-entry-v1")
-    assert public_rows() == before
-    settle!()
+      assert {receipt.purpose, receipt.outcome} == {:readiness_smoke, :accepted}
+      assert receipt.result["contract"] == unquote(output)
+      stored = Repo.get!(Attempt, receipt.attempt_id)
+      assert stored.packet_summary["packet_version"] == "runtime-packet-v4"
+      assert is_binary(stored.packet_summary["candidate_set_sha256"])
+      assert_received {:whole_instruction, instruction}
+      assert instruction == Packet.instruction!(unquote(instruction))
+      assert public_rows() == before
+      settle!()
+    end
   end
 
   test "the readiness smoke call goes through the same slot and budget", ctx do

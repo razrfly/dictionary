@@ -53,6 +53,47 @@ defmodule DevilsDictionary.Installation.WholeEntryCompatibilityTest do
       )
 
       assert {:ok, _} = Receipt.read("love", first.version.version)
+      # New instruction admission is additive to the already-deployed v35 schema.
+      latest = 20_261_029_192_744
+
+      Ecto.Migrator.run(Repo, path, :up,
+        to: latest,
+        dynamic_repo: Repo.get_dynamic_repo(),
+        log: false
+      )
+
+      assert {:ok, _} = Receipt.read("love", first.version.version)
+
+      Ecto.Migrator.run(Repo, path, :down,
+        step: 1,
+        dynamic_repo: Repo.get_dynamic_repo(),
+        log: false
+      )
+
+      assert {:ok, _} = Receipt.read("love", first.version.version)
+
+      Ecto.Migrator.run(Repo, path, :up,
+        to: latest,
+        dynamic_repo: Repo.get_dynamic_repo(),
+        log: false
+      )
+
+      config =
+        DevilsDictionary.RuntimeFixtures.model_config!(%{
+          instruction_version: "voltaire-whole-entry-v2",
+          output_contract_version: "selection-output-v3"
+        })
+
+      assert_raise Postgrex.Error, ~r/revised instruction history exists/, fn ->
+        Ecto.Migrator.run(Repo, path, :down,
+          step: 1,
+          dynamic_repo: Repo.get_dynamic_repo(),
+          log: false
+        )
+      end
+
+      assert Repo.get!(DevilsDictionary.Curation.Runtime.ModelConfig, config.id).instruction_version ==
+               "voltaire-whole-entry-v2"
     end)
   end
 end

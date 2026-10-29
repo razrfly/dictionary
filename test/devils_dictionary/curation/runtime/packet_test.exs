@@ -27,9 +27,18 @@ defmodule DevilsDictionary.Curation.Runtime.PacketTest do
                "generic-editor-v1",
                "generic-editor-v2",
                "voltaire-selector-v1",
-               "voltaire-whole-entry-v1"
+               "voltaire-whole-entry-v1",
+               "voltaire-whole-entry-v2"
              ]
 
+      revised = Packet.instruction!("voltaire-whole-entry-v2")
+
+      assert Digest.sha256(revised) ==
+               "a8494988449ef4257f60699f9f5025ad159a4562bb20cdedc9b8fb848b6f601d"
+
+      refute revised =~ "A quote, if you give one"
+      assert revised =~ "definitions 1 TOTAL"
+      assert revised =~ "quotes 2 TOTAL"
       whole = Packet.instruction!("voltaire-whole-entry-v1")
 
       assert Digest.sha256(whole) ==

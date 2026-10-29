@@ -429,7 +429,7 @@ defmodule DevilsDictionary.Curation.Runtime do
       "priority_candidates" => []
     }
 
-    if instruction_version == "voltaire-whole-entry-v1" do
+    if instruction_version in DevilsDictionary.Curation.WholeEntry.instructions() do
       packet
       |> Map.put("packet_version", "runtime-packet-v4")
       # Synthetic readiness identity only; smoke never resolves or writes registry records.

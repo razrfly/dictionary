@@ -112,7 +112,11 @@ defmodule Mix.Tasks.Dd.Curation.Editor do
     reason = reason!(opts)
 
     if opts[:profile] &&
-         config.instruction_version not in ["voltaire-selector-v1", "voltaire-whole-entry-v1"],
+         config.instruction_version not in [
+           "voltaire-selector-v1",
+           "voltaire-whole-entry-v1",
+           "voltaire-whole-entry-v2"
+         ],
        do: Mix.raise("the persona requires a config pinned to voltaire-selector-v1")
 
     label =
@@ -208,7 +212,7 @@ defmodule Mix.Tasks.Dd.Curation.Editor do
           refresh_window: window,
           editor_publication: policy,
           selection_scope:
-            if(config.instruction_version == "voltaire-whole-entry-v1",
+            if(config.instruction_version in DevilsDictionary.Curation.WholeEntry.instructions(),
               do: "whole_entry_v1",
               else: nil
             )
