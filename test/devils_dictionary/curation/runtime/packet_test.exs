@@ -30,6 +30,14 @@ defmodule DevilsDictionary.Curation.Runtime.PacketTest do
                "voltaire-whole-entry-v1"
              ]
 
+      whole = Packet.instruction!("voltaire-whole-entry-v1")
+
+      assert Digest.sha256(whole) ==
+               "9883836ba271b155e524c19ab2f64fb2fdeda382e73b80c2f9d3409af801a13e"
+
+      assert whole =~ ~s(The lead must be a candidate of kind "content" or "sense_definition".)
+      refute whole =~ ~s(The lead must be a candidate of kind "content".)
+
       assert Digest.sha256(Packet.instruction!("voltaire-selector-v1")) ==
                "0aac44006f6bb733f2fe0eec812c5ee2c7c220feb505b014e7614fd387b80fc7"
 

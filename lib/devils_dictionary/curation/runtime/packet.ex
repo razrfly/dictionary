@@ -170,6 +170,10 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
                   "curating an entire encyclopedia entry"
                 )
                 |> String.replace("most three highlights", "most twelve highlights")
+                |> String.replace(
+                  ~s(The lead must be a candidate of kind "content".),
+                  ~s(The lead must be a candidate of kind "content" or "sense_definition".)
+                )
                 |> String.replace("under 200 characters", "under 100 characters")) <>
                  "\nCurate across the available sections, not a three-item opening. Choose one useful item from each represented section when relevant; at most two examples and two quotations, one of each other section. Do not fill weak slots. Prefer concrete, varied material that illuminates the word over generic mentions. Shelf labels are metadata only: do not claim to have read articles or inspected unseen works. Keep reasons concise (about 8 words), quote:null unless indispensable. Always select a supplied eligible definition to lead; where Bierce has no entry a supplied sense_definition may lead. Never duplicate the lead as a highlight.\nSelection lens:\n" <>
                  DevilsDictionary.Curation.Agents.Persona.selection_instruction(

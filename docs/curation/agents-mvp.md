@@ -1,6 +1,6 @@
 # Whole-entry curation: visible ten-page experiment
 
-Owner correction,29 October 2026 (#275): a successful deliverable is actual interesting,
+Owner correction, 29 October 2026 (#275): a successful deliverable is actual interesting,
 usable curated entries, not only a small opening or a passing infrastructure suite.
 
 The versioned whole_entry_v1 policy selects one sourced lead and up to 12 highlights,
@@ -10,7 +10,7 @@ leads as satire where eligible; a current sourced sense definition may lead else
 Source records and the complete source inventory remain unchanged.
 
 A new voltaire-whole-entry-v1 instruction and sourced profile version reuse the
-installed 9B artifact. Packetv4 fairly interleaves available shelf sections within 24
+installed 9B artifact. Packet v4 fairly interleaves available shelf sections within 24
 candidates / 12 meanings. It retains omitted identities and rotation. One model call
 per page uses the same 8K context, 1,024 output tokens, deadline, gateway slot and daily
 budget. Shelf labels are provider metadata, not evidence the model read unseen articles.

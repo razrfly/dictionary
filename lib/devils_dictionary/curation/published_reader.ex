@@ -351,7 +351,7 @@ defmodule DevilsDictionary.Curation.PublishedReader do
              Map.put(
                tile.links,
                :card_id,
-               String.trim_leading(tile.meaning.anchor || "", "#")
+               tile.meaning.anchor && String.trim_leading(tile.meaning.anchor, "#")
              ),
            credits: tile.credits,
            reasons: [
