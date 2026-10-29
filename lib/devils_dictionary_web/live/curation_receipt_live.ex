@@ -29,9 +29,15 @@ defmodule DevilsDictionaryWeb.CurationReceiptLive do
             Version {@receipt.version.version} · published {stamp(@receipt.publication.committed_at)}
           </p>
           <p id="receipt-owner-actions">
-            Published by {@receipt.publication_actor.label} · actor #{@receipt.publication_actor.id}; reviewed by {@receipt.review_actor.label} · actor #{@receipt.review_actor.id}.
+            Published by {@receipt.publication_actor.label} · actor #{@receipt.publication_actor.id}.
+            <span :if={@receipt.review_actor}>Reviewed by {@receipt.review_actor &&
+              @receipt.review_actor.label}.</span>
+            <span
+              :if={@receipt.publication.authority_kind == :single_editor}
+              id="receipt-agent-authority"
+            >Automatically published under single-editor policy; no human approval.</span>
           </p>
-          <p id="receipt-window">Assessment window: {div(@receipt.window, 3600)} hours, on visits.</p>
+          <p id="receipt-window">Assessment window: {div(@receipt.window, 3600)} hours.</p>
           <nav id="receipt-versions" aria-label="Published versions" class="flex flex-wrap gap-3">
             <.link
               :for={number <- @receipt.published_versions}

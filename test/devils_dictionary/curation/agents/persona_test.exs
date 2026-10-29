@@ -22,7 +22,7 @@ defmodule DevilsDictionary.Curation.Agents.PersonaTest do
     model_config!(%{instruction_version: Persona.instruction_version(), tag: "9b"}) |> ready!()
   end
 
-  defp persona_world! do
+  defp persona_world!(publication \\ "manual") do
     world = love_world!()
     config = config!()
     {:ok, seed} = Persona.prepare(world.reviewer, config, reason: "test sourced lens")
@@ -37,6 +37,7 @@ defmodule DevilsDictionary.Curation.Agents.PersonaTest do
       Configurations.create_version(world.reviewer, world.configuration.id, %{
         reason: "test persona binding",
         refresh_window: 86_400,
+        editor_publication: publication,
         editor: %{
           profile_id: profile.id,
           profile_version_id: seed.version.id,
@@ -188,5 +189,31 @@ defmodule DevilsDictionary.Curation.Agents.PersonaTest do
     assert Repo.aggregate(Proposal, :count) == 0
     assert Repo.reload!(world.composition).current_published_version_id == parent
     assert Repo.aggregate(Attempt, :count) == 1
+  end
+
+  test "explicit autonomous persona publishes with its exact profile/model/attempt and no owner Take" do
+    world = persona_world!("single_editor_v1")
+
+    {:ok, packet} =
+      Packet.for_page(page("love"), instruction_version: Persona.instruction_version())
+
+    {:ok, frozen} = Packet.freeze(packet)
+    stub_answer!(world, answer_for(frozen, world.bierce.object_id, [world.johnson.object_id]))
+    assert {:ok, %{last_outcome_reason: "published_automatically"}} = run!(world)
+    settle!()
+    id = Repo.reload!(world.composition).current_published_version_id
+    version = Repo.get!(DevilsDictionary.Curation.CompositionVersion, id)
+    assert version.origin == :model
+    assert {:ok, receipt} = Receipt.read("love", version.version)
+    assert receipt.publication.authority_kind == :single_editor
+    assert receipt.review_actor == nil
+
+    assert Enum.all?(receipt.items, fn item ->
+             item.chooser.model_config_id == world.model_config.id and
+               item.chooser.profile["profile_version_id"] == world.profile_version.id and
+               item.chooser.attempt_id == version.attempt_id
+           end)
+
+    assert Proposals.pending(world.composition.id) == nil
   end
 end

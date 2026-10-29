@@ -942,6 +942,35 @@ defmodule DevilsDictionary.Curation.Refresh do
              :ok <- hold_configuration(claim.configuration_version_id),
              {:ok, composition} <- still_configured(row, now) do
           case fun.(row, composition) do
+            {:published, slug, value} ->
+              published = Repo.reload!(composition)
+              baseline = inputs(claim, slug)
+
+              adjusted = %{
+                row
+                | admitted_parent_version_id: published.current_published_version_id
+              }
+
+              completed =
+                complete_row!(
+                  adjusted,
+                  claim,
+                  baseline,
+                  published,
+                  {:proposed, "published_automatically"},
+                  now
+                )
+
+              # Keep the actual admission parent as history; self-publication is not a race.
+              completed =
+                completed
+                |> Ecto.Changeset.change(
+                  admitted_parent_version_id: row.admitted_parent_version_id
+                )
+                |> Repo.update!()
+
+              {:ok, {completed, value}}
+
             {:complete, assessed, value} ->
               {:ok, {complete_row!(row, claim, inputs, composition, assessed, now), value}}
 

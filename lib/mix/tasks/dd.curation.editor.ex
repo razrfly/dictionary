@@ -82,7 +82,8 @@ defmodule Mix.Tasks.Dd.Curation.Editor do
     counted_only: :boolean,
     refresh_window: :string,
     shelf: :string,
-    profile: :string
+    profile: :string,
+    publication: :string
   ]
 
   @impl Mix.Task
@@ -179,24 +180,32 @@ defmodule Mix.Tasks.Dd.Curation.Editor do
       model_config_id: config.id
     }
 
+    policy = Keyword.get(opts, :publication, "manual")
+
+    unless policy in ["manual", "single_editor_v1"],
+      do: Mix.raise("--publication must be manual or single_editor_v1")
+
+    window =
+      case Keyword.get(opts, :refresh_window, "48h") do
+        "24h" -> 86_400
+        "48h" -> 172_800
+        "7d" -> 604_800
+        _ -> Mix.raise("--refresh-window must be 24h, 48h or 7d")
+      end
+
     if opts[:dry_run] do
+      info("publication policy: #{policy}; refresh window: #{window} seconds; no activation")
+
       info(
         "would bind #{inspect(editor)} in a new version of #{c.slug} (current ##{c.current_version_id})"
       )
     else
-      window =
-        case Keyword.get(opts, :refresh_window, "48h") do
-          "24h" -> 86_400
-          "48h" -> 172_800
-          "7d" -> 604_800
-          _ -> Mix.raise("--refresh-window must be 24h, 48h or 7d")
-        end
-
       print(
         Configurations.create_version(scope, c.id, %{
           reason: reason,
           editor: editor,
-          refresh_window: window
+          refresh_window: window,
+          editor_publication: policy
         })
       )
     end

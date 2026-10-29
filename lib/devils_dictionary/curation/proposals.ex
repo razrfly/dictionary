@@ -1,6 +1,12 @@
 defmodule DevilsDictionary.Curation.Proposals do
   @moduledoc """
-  The proposal path (#264): the generic editor proposes into the owner's
+  The shared editor selection writer (#264, #275 owner amendment).
+  Under explicit single_editor_v1 policy it publishes a validated model version
+  through Publications inside Refresh's fence, with no proposal or human review.
+  Mine/input/pointer conflicts veto it. The following proposal lifecycle applies
+  only to the backward-compatible manual policy.
+
+  The manual proposal path (#264): the generic editor proposes into the owner's
   screen through the same record the owner uses, and the owner takes,
   edits or dismisses what it proposed. **No bot operation moves the
   published pointer; an explicit human Take or Edit-publish may**, with the
@@ -39,8 +45,9 @@ defmodule DevilsDictionary.Curation.Proposals do
   drift: a proposal holds its unit while pending, a row while its stamp is
   set.
 
-  Nothing here calls `Reviews` or `Publications` on the editor's behalf:
-  only `take/3` and `edit_publish/3` do, as the signed-in reviewer.
+  Under manual policy only `take/3` and `edit_publish/3` authorize publication
+  as the owner. Under single_editor_v1 the accepted attempt authorizes publication
+  honestly as the editor; no human review is fabricated.
   """
 
   import Ecto.Query
@@ -95,7 +102,22 @@ defmodule DevilsDictionary.Curation.Proposals do
   row}` (completed, deferred or closed), or `{:error, :lease_lost |
   :configuration_changed}` when the fence was lost and nothing was written.
   """
-  def step(claim, %{slug: slug, inputs: inputs, editor: editor} = ctx, opts) do
+  def step(claim, ctx, opts) do
+    composition = Repo.get!(Composition, claim.composition_id)
+    cv = Repo.get!(ConfigurationVersion, claim.configuration_version_id)
+
+    if Configurations.autonomous?(cv) and composition.mode == :mine do
+      Refresh.complete(
+        claim,
+        ctx.inputs,
+        Keyword.put(opts, :outcome, {:needs_editor, "owner_hold"})
+      )
+    else
+      selection_step(claim, ctx, opts)
+    end
+  end
+
+  defp selection_step(claim, %{slug: slug, inputs: inputs, editor: editor} = ctx, opts) do
     page = slug |> Lexicon.lookup() |> WordPage.build(viewer: :public)
 
     with {:ok, packet} <-
@@ -129,7 +151,12 @@ defmodule DevilsDictionary.Curation.Proposals do
         Refresh.close(claim, opts)
 
       true ->
-        case Refresh.reserve(claim, opts) do
+        reservation =
+          if Configurations.autonomous?(
+               Repo.get!(ConfigurationVersion, claim.configuration_version_id)
+             ), do: {:ok, row}, else: Refresh.reserve(claim, opts)
+
+        case reservation do
           {:ok, _row} -> call(claim, ctx, frozen, key, opts)
           {:deferred, row} -> {:ok, row}
           {:error, reason} -> {:error, reason}
@@ -232,7 +259,8 @@ defmodule DevilsDictionary.Curation.Proposals do
     %{ctx: %{editor: editor}, frozen: frozen, attempt: attempt} = run
     members = Compositions.member_ids(composition.id)
 
-    with :ok <- binding_holds(cv, editor, attempt, run.key),
+    with :ok <- automatic_preconditions(run, row, composition, cv),
+         :ok <- binding_holds(cv, editor, attempt, run.key),
          :ok <- same_scope(composition, frozen),
          {:ok, choices} <- resolve(attempt, frozen),
          :ok <- choices_eligible(choices, frozen, members),
@@ -252,6 +280,49 @@ defmodule DevilsDictionary.Curation.Proposals do
              attempt: attempt,
              items: placed
            }) do
+      finish_selection(run, row, composition, cv, version, marks, merged.overflow)
+    end
+  end
+
+  defp automatic_preconditions(_run, row, composition, cv) do
+    if Configurations.autonomous?(cv) do
+      cond do
+        composition.mode == :mine ->
+          {:complete, {:needs_editor, "owner_hold"}, nil}
+
+        composition.current_published_version_id != row.admitted_parent_version_id ->
+          {:close, :superseded_on_arrival}
+
+        row.dirty_seq != row.run_dirty_seq ->
+          {:close, :inputs_changed}
+
+        true ->
+          :ok
+      end
+    else
+      :ok
+    end
+  end
+
+  defp finish_selection(run, row, composition, cv, version, marks, overflow) do
+    if Configurations.autonomous?(cv) do
+      cond do
+        composition.mode == :mine ->
+          {:complete, {:no_change, "owner_hold"}, nil}
+
+        row.dirty_seq != row.run_dirty_seq ->
+          {:close, :inputs_changed}
+
+        true ->
+          claim = Map.put(run.claim, :admitted_parent_version_id, row.admitted_parent_version_id)
+
+          case Publications.publish_editor(version, claim) do
+            {:ok, receipt} -> {:published, run.ctx.slug, receipt}
+            {:error, {:stale_pointer, _}} -> {:close, :superseded_on_arrival}
+            error -> error
+          end
+      end
+    else
       proposal =
         insert!(%{
           run: run,
@@ -259,7 +330,7 @@ defmodule DevilsDictionary.Curation.Proposals do
           composition: composition,
           version: version,
           marks: marks,
-          overflow: merged.overflow
+          overflow: overflow
         })
 
       reason = if proposal.superseded_on_arrival, do: "superseded_on_arrival", else: "written"

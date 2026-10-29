@@ -79,10 +79,16 @@ defmodule DevilsDictionary.Curation.Published do
       composition.state != :active && :composition_retired,
       reason(Standing.configuration(version)),
       reason(Standing.scope(version, composition)),
-      not match?(%{decision: :accepted}, Standing.latest_review(version.id)) &&
-        :approval_withdrawn
+      not publication_authorized?(version, composition) && :approval_withdrawn
     ]
     |> Enum.filter(& &1)
+  end
+
+  defp publication_authorized?(version, composition) do
+    case Publications.latest(composition.id) do
+      %{authority_kind: :single_editor, published_version_id: id} when id == version.id -> true
+      _ -> match?(%{decision: :accepted}, Standing.latest_review(version.id))
+    end
   end
 
   defp reason(:ok), do: false

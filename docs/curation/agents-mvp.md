@@ -1,9 +1,11 @@
 # One curator: Phase A of #275
 
-Status: implementation and isolated automated tests only. No deployed persona,
-model registration, admission, activation or quality comparison is claimed.
-The live acceptance of #271 still precedes live use. Phase B panels, scheduling
-and automatic publication are not implemented here.
+Status: implementation and isolated tests only; no autonomous live activation
+or real-model quality result is claimed. Owner amendment, 29 October 2026 (#275):
+human review is development evaluation, never the routine publication queue.
+One explicitly enabled curator can publish through the common record and receive
+due assessments without visits. Multiple-agent consensus remains Phase B.
+Existing live policy/switches are unchanged until separately approved rollout.
 
 ## Reuse, not a new agent system
 
@@ -31,47 +33,50 @@ older binding rather than silently reassigning in-flight work.
 
 ## Operating sequence (future owner-approved window only)
 
-Do not run these against v2 until #271 is accepted and the owner approves the
-migration/deployment and each live operation. Read `runtime-operations.md` and
-`proposals.md` first. Never start/restart the public server on 4007. All editor
-commands require `DD_NO_OBAN=1`. Below, EMAIL and MODEL-CONFIG are placeholders
-resolved by the owner/operator, not defaults.
+Live use is the amended #271/#275 acceptance exercise, not something waiting
+for a completed manual-review ceremony. It still requires named migration,
+deployment, model and activation approval. Read `runtime-operations.md` first.
+Never start/restart or reconfigure the public server on 4007. All editor commands
+require `DD_NO_OBAN=1` and explicit v2 targeting. EMAIL and MODEL-CONFIG below
+mean the existing operator identity and pinned config, not a new account/password.
 
-1. Enumerate intervening migrations. Apply this additive persona-author-guard
-   migration before deploying this code, after approval. It adds no table or
-   configuration row and changes no existing record. It preserves the deployed
-   generic/manual writer path. A test-partition up/down/up is checked; down
-   reinstates the old future-insert guard, retaining histories. Before a code
-   rollback, disable the persona binding and explicitly restore an approved
-   manual/generic configuration; this is not an automatic rollback or activation.
-2. In an approved model window, register the **already installed** 9B artifact
-   under a **new slug**, pinned to `voltaire-selector-v1`, using the existing
-   `dd.runtime setup --model <installed tag> --slug <new slug>
-   --instruction voltaire-selector-v1 --accept-license` path. Do not use `--pull`.
-   Registration talks to the runtime and records provenance; it is not done by
-   seeding the persona. Verify license, artifact and generation limits and smoke
-   readiness. The old `qwen3.5-9b-v2` row and instruction stay unchanged.
-3. Preview, then run approved `dd.curation.editor seed --profile voltaire
-   --as EMAIL --model-config MODEL-CONFIG --reason TEXT`. It prepares only an
-   inactive bot source, model-labelled bot and unadmitted dossier. Repeat returns
-   existing records, not duplicate versions. No model call, binding or activation.
-4. Review the dossier. `dd.curation.editor admit --profile voltaire --as EMAIL
-   --model-config MODEL-CONFIG --reason TEXT` is a separate reviewer's act.
-5. `dd.curation.editor bind --profile voltaire --as EMAIL --model-config
-   MODEL-CONFIG --refresh-window 24h --reason TEXT` creates an immutable default
-   configuration version only. Activation, enablement and affected-page
-   republication follow the existing #271 runbook and remain separate approved
-   acts. Seeding/admission/binding never enable the editor.
-6. Provision a permitted pilot page if needed, enable only for the approved model
-   window, and request through the existing `dd.curation.editor request` path.
-   The shared Refresh → Packet → Runtime → Proposals pipeline records the
-   actual persona/profile version, model config, attempt, prompt and dates.
-7. Review in `/ops/curation`: Take, Edit or Dismiss with the existing quality
-   form. A model never publishes. Take/Edit keep original chooser/model lineage
-   in the shared reader receipt and record the owner's publication separately.
-   Disable the editor and stop the runtime at the end of the approved window.
-8. Show a real public receipt and next-day assessment only after approved live
-   use. A fixture or fake response is not evidence of editorial quality.
+1. Check the deployed SHA/cluster and enumerate every intervening migration.
+   Persona guard `20261029020011` is already live at the current c426c8a pin;
+   `20261029142135` adds the single-editor authority. Apply only approved pending
+   migrations before deploying the exact reviewed merge. Verify old manual code
+   still reads/publishes before deployment. No activation or model start follows
+   implicitly from DDL or code deployment.
+2. Reuse the admitted generic editor and existing `qwen3.5-9b-v2` config for the
+   first autonomous demonstration. Its artifact/instruction/hash stay pinned.
+   To compare the already implemented Voltaire lens later, separately register
+   the installed artifact under a new `voltaire-selector-v1` model-config slug,
+   then seed/admit it using `--profile voltaire`; do not pull another model or
+   rewrite the generic config. Dossier admission is setup, not per-entry review.
+3. Freeze the ten-page scorecard and permitted evidence, and dry-run binding:
+   `dd.curation.editor bind --as EMAIL --model-config MODEL-CONFIG
+   --publication single_editor_v1 --refresh-window 24h --reason TEXT --dry-run`.
+   Inspect packet dry runs through the existing `dd.runtime packet` command.
+   No model answer or publication is fabricated by this preparation.
+4. On named approval create that immutable binding without `--dry-run`, then
+   activate its exact configuration version. Activation invalidates old-version
+   publications and leaves the editor off; it does not republish pages for the
+   owner. Provision missing compositions only for the ten approved pilot pages.
+   Choose Mine on any page that must remain under owner control.
+5. Start/verify the pinned model through the approved runtime window, then
+   deliberately enable the editor for the current version. Enable schedules the
+   bounded due scan; no browser visit or owner request is needed. Existing Refresh
+   workers perform actual assessments sequentially within the shared budget.
+6. Inspect the published page and its public receipt. Valid choices publish as
+   the actual agent without Take, Edit, acceptance row or quality form. Invalid,
+   abstained, stale or offline results are recorded honestly; never publish weak
+   or invented output just to obtain a screenshot. Owner editing is optional.
+7. Record real publication/expiry/cleanup, the next-due assessment without visits,
+   zero unnecessary fresh inference and a hold preventing overwrite, as #271/#275
+   require. Developer inspection produces a dated benchmark report, not a runtime
+   human approval gate or a general accuracy claim.
+8. At the approved window's end, disable the editor and stop the runtime through
+   its existing operations. Verify the switch/port and record attempts, receipts,
+   costs, dates, deployed SHA and remaining obligations. No automatic expansion.
 
 Every command supports `--dry-run`; it starts the application but performs no
 command writes. It is not permission to start background work on another host.
@@ -81,14 +86,104 @@ Generic seed/admit/bind commands without `--profile` keep their existing behavio
 
 `agents/persona_test.exs` exercises sourced/idempotent preparation, no activation,
 role refusal, profile/model mismatch, immutable old dossiers, stale admission,
-the actual packet/proposal/owner-Take/reader-receipt path with a controlled model
+the optional manual packet/proposal/owner-Take/reader-receipt path with a controlled model
 fake, and abstention without publication. Existing proposal lifecycle, expiry,
 wrong-ID/injection, review and refresh tests remain the shared protections.
 
 The ten-page quality benchmark is **NOT RUN**: real calls, owner ratings and a
 real daily assessment are excluded from this no-activation implementation.
 Before calls, freeze #275's five tuning/five held-out packets and scorecard,
-respect provider retention, and approve numerical usefulness/review-time gates.
+respect provider retention, and freeze numerical usefulness gates and record development inspection cost.
 Compare the generic control and persona on identical lawful evidence; include
 failures, abstentions, latency, memory and reviewer time. Do not call this lens
 better than the generic editor until the dated report supports it.
+
+
+## Single-curator authority (29 October owner amendment)
+
+`Configurations.create_version/3` accepts `editor_publication: "single_editor_v1"`
+only with a valid bound editor. Absence means the historical `manual` policy.
+CLI: `dd.curation.editor bind --publication single_editor_v1 --refresh-window 24h`
+with the existing reviewer identity, pinned model-config and reason arguments.
+`--dry-run` prints the proposed policy/window/binding without writing or calling
+a model. Binding is not activation; activation resets the run switch. Deliberate
+`enable` starts one bounded due-dispatch chain for that version. Every five minutes
+it feeds provisioned open pilot pages into existing Refresh admission. It does not
+call a model itself or create a second inference queue. Visits coalesce with it;
+backoff, leases, one inference slot and daily budgets still apply. No guarantees
+that all pages fit the day's budget; offline/budget failures defer honestly.
+
+An accepted choice goes through the existing packet, exact-reference/eligibility
+validation, owner-kept merge, model-version writer and common publication commit
+inside Refresh's fenced write. Its receipt says `single_editor`, names the bot
+and immutable model/profile/instruction/attempt, and has **no human acceptance
+row**. This is not consensus or independent factual corroboration. All item kinds
+share the same citation/basis record and read-time eligibility. Public receipts
+say automatic publication without human approval; expiry still withholds payloads
+without losing permitted citation/provenance. No source content is authored.
+
+Configuration/binding changes, input dirtying, lost lease, owner publication during
+a call, ineligible/expired choices or disabled switch veto publication. An unchanged
+arrangement completes `no_change`; no duplicate publication. Abstention advances
+assessment without a publication; failed/offline calls do not. Automatic publication
+records its new baseline, avoiding a self-triggered second inference.
+
+Optional owner controls remain. **Mine** is the persistent page hold: dispatch skips
+it and an in-flight answer cannot publish after it is set. **Open** explicitly
+releases it. **Keep** protects exact eligible items when later choices are merged;
+expiry/rights veto still wins. **Withdraw** suppresses the page until explicit
+Re-open and cannot be undone by dispatch. A manual edit alone does not set Mine:
+choose Mine if you want a durable freeze. An owner publication during an in-flight
+call wins the pointer race. Old versions/receipts and actual contributors survive
+replacement. Existing Take/Edit/Dismiss/forms are optional manual-policy tools,
+not a prerequisite to running single-editor policy.
+
+Stop: `dd.curation.editor disable` with the normal owner identity/reason arguments,
+then separately stop the model through the runtime task. Disabled dispatcher jobs
+exit without scheduling successors; a queued/in-flight worker rechecks the switch
+and cannot publish afterward. Deliberate enable restarts dispatch. Starting/stopping
+the runtime is still an explicit operation, not a side effect of page access.
+
+## Owner editing without a website password
+
+On the Studio, open `http://localhost:4007/ops/curation`. From the MacBook, privately
+forward the existing loopback server, then open the forwarded address:
+
+```sh
+ssh -N -L 4008:127.0.0.1:4007 holden@192.168.1.15
+```
+
+Open `http://localhost:4008/ops/curation`. SSH uses the existing machine access;
+the website asks for no password. Keep that Terminal connection open. This does not
+restart/reconfigure the server or expose a new network listener on the Studio.
+
+Only exact curation routes on a localhost/loopback request without proxy headers
+may use the enabled global configuration's latest activator's existing reviewer identity.
+It fails closed if that account no longer has the role. It creates no account,
+password, role grant or login token. Signed-in account identities are not replaced.
+The connected socket rechecks the private connection and database identity. Other
+operator tools acquire no owner capability. Public ngrok cannot obtain this local
+identity; its optional authenticated reviewer path remains, and other ops/mailbox
+stay blocked. Never remove the public boundary to avoid a local login prompt.
+
+## Rollout and developer experiment
+
+Migration `20261029142135` replaces only publication authority/shape constraints
+and the authority trigger. It creates no policy, jobs, accounts, activations or
+publications. Existing operator/manual code and receipts remain compatible until
+the new policy is activated. After single-editor receipts exist, old readers cannot
+decode that enum: disable the editor and roll forward with a reviewed fix. Migration
+down refuses while single-editor history exists; never delete that history to undo
+an application release. Deploy only the exact reviewed merge, after all intervening
+migrations and explicit approval. No server restart/configuration change is needed.
+
+Before real model calls freeze ten pilot cases (five tuning/five held-out), packet
+and instruction/model/profile versions, scorecard and budget. Dry-run binding and
+packets first. Then separately approve the bounded model/publishing window. Inspect
+results as developers, not runtime approvers. Report zero invented quotations or
+unauthorized source writes, meaning/relevance/usefulness with denominators and
+abstentions, latency/memory/inference cost, and dates/artifact hashes. Proposed gates
+are #275's; freeze them before calls and do not fit them to results. Real publication,
+public receipt, actual news expiry/cleanup, next-due unattended assessment, fresh
+zero-inference repeat and hold behavior are live acceptance, not claimed by tests.
+A failed experiment is a dated NO-GO. Keep the model stopped until that window.

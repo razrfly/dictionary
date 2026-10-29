@@ -2,10 +2,11 @@ defmodule DevilsDictionary.Curation.ConfigurationVersion do
   @moduledoc """
   One immutable version of a configuration (#201).
 
-  In this slice every version is **manual-only**. It carries a lead policy
-  and a highlight limit, and no model configuration, because none has been
-  validated (#195). `roster_hash` is the digest of its members, which the
-  database checks at commit, so a roster cannot be extended later (C4).
+  Carries immutable lead/highlight policy, roster and optional pinned editor
+  binding. Publication defaults to manual; explicit single_editor_v1 permits
+  agent authority only while that editor is enabled (#275 owner amendment).
+  `roster_hash` is the digest of its members, checked at commit, so a roster
+  cannot be extended later. Binding, activation and enablement stay separate.
   """
   use Ecto.Schema
 

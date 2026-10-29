@@ -44,9 +44,12 @@ defmodule DevilsDictionary.Curation.Publications do
       decision to stand in for one. What the integration must add is set out
       in `docs/curation/persistence-slice-1.md`, "Publication authority".
 
-  **A proposal is never published** (#264 R13.1): only a manual version is
-  (`:proposal_not_publishable`; the database refuses it too). The owner
-  takes a proposal into a manual version first.
+  **Single-editor authority** (#275, owner amendment 29 October): an explicitly
+  enabled single_editor_v1 policy publishes its validated accepted model version
+  inside the refresh fence, without any human acceptance. The database checks
+  policy, binding, accepted attempt, pilot, running lease, unchanged inputs and
+  expected parent. This is not panel consensus. Manual policy retains its old
+  proposal-not-publishable rule and optional owner Take path.
 
   `withdraw/3` moves the pointer to none, with a receipt of its own, as an
   operator. The reader withholds an ineligible item on its own, without any
@@ -100,6 +103,74 @@ defmodule DevilsDictionary.Curation.Publications do
     end)
   end
 
+  @doc """
+  Publish an accepted editor choice inside Refresh.write/4's fenced transaction.
+  No human review is created. The database binds the receipt to the accepted
+  attempt, enabled immutable policy, running lease, pilot scope and exact parent.
+  """
+  def publish_editor(version, claim) do
+    Transaction.run(fn ->
+      version = Repo.get!(CompositionVersion, version.id)
+
+      with {:ok, composition} <- Standing.lock_composition(version.composition_id),
+           :ok <- editor_fence(version, claim),
+           :ok <- Transaction.check(composition.mode == :open, :owner_hold),
+           cv =
+             Repo.get!(
+               DevilsDictionary.Curation.ConfigurationVersion,
+               version.configuration_version_id
+             ),
+           :ok <-
+             Transaction.check(
+               DevilsDictionary.Curation.Configurations.autonomous?(cv),
+               :manual_policy
+             ),
+           {:ok, editor} <- DevilsDictionary.Curation.Configurations.editor_enabled(cv.id),
+           :ok <-
+             Transaction.check(
+               version.created_by_actor_id == editor.bot_actor.id,
+               :editor_binding_changed
+             ) do
+        authority = %{
+          kind: :single_editor,
+          actor: editor.bot_actor,
+          authorize: fn v ->
+            Transaction.check(v.origin == :model and not is_nil(v.attempt_id), :not_model_choice)
+            |> case do
+              :ok -> {:ok, %{authorizing_review_id: nil}}
+              error -> error
+            end
+          end
+        }
+
+        commit(
+          composition,
+          version,
+          claim.admitted_parent_version_id,
+          authority,
+          "Validated single-editor selection; no human approval required.",
+          "single-editor:#{version.id}"
+        )
+      else
+        :off -> {:error, :editor_disabled}
+        error -> error
+      end
+    end)
+  end
+
+  defp editor_fence(version, claim) do
+    row = Repo.get(DevilsDictionary.Curation.RefreshState, claim.row_id)
+
+    Transaction.check(
+      (row && row.composition_id == version.composition_id) and
+        row.configuration_version_id == version.configuration_version_id and
+        row.state == :running and row.lease_token == claim.token and
+        row.refresh_generation == claim.generation and row.run_dirty_seq == row.dirty_seq and
+        DateTime.compare(row.lease_expires_at, DateTime.utc_now()) == :gt,
+      :lease_lost
+    )
+  end
+
   defp publication_reasons(version) do
     items = DevilsDictionary.Curation.Compositions.items(version.id)
 
@@ -131,7 +202,11 @@ defmodule DevilsDictionary.Curation.Publications do
   end
 
   defp commit(composition, version, expected, authority, reason, key) do
-    with :ok <- Transaction.check(version.origin == :manual, :proposal_not_publishable),
+    with :ok <-
+           Transaction.check(
+             version.origin == :manual or authority.kind == :single_editor,
+             :proposal_not_publishable
+           ),
          :ok <- Transaction.check(composition.state == :active, :composition_retired),
          :ok <- pointer(composition, expected),
          :ok <-
@@ -169,7 +244,7 @@ defmodule DevilsDictionary.Curation.Publications do
 
       move!(composition, version.id)
       # The next check measures against this version (#259 §5.5).
-      Refresh.published(composition.id)
+      if authority.kind == :operator, do: Refresh.published(composition.id)
       {:ok, receipt}
     end
   end

@@ -70,14 +70,7 @@ defmodule DevilsDictionary.Curation.Receipt do
          version: version,
          publication: publication,
          publication_actor: Repo.get(Actor, publication.actor_id),
-         review_actor:
-           Repo.get(
-             Actor,
-             Repo.get!(
-               DevilsDictionary.Curation.CompositionReview,
-               publication.authorizing_review_id
-             ).reviewer_actor_id
-           ),
+         review_actor: review_actor(publication),
          composition: composition,
          published_versions: published,
          window:
@@ -99,6 +92,15 @@ defmodule DevilsDictionary.Curation.Receipt do
   end
 
   def read(_, _), do: {:error, :not_found}
+
+  defp review_actor(%{authorizing_review_id: nil}), do: nil
+
+  defp review_actor(publication) do
+    review =
+      Repo.get!(DevilsDictionary.Curation.CompositionReview, publication.authorizing_review_id)
+
+    Repo.get(Actor, review.reviewer_actor_id)
+  end
 
   defp publication_eligibility(item, version, composition, eligibility) do
     if version.id == composition.current_published_version_id,

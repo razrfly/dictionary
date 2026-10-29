@@ -4,10 +4,11 @@ defmodule DevilsDictionary.Curation.CompositionVersion do
   three highlights, frozen against a configuration version and a scope.
 
   `origin` is `manual` (K9: the author is a human account, and there is no
-  run, participant or ballot) or `model` (#264 R9): a proposal, written by the
-  bound generic editor's bot actor from one completed attempt
-  (`attempt_id`), which is never accepted or published itself, only taken
-  into a manual version (R11, R13). The database checks both, and
+  run, participant or ballot) or `model`: a selection written by the bound
+  editor's bot from one accepted completed attempt (`attempt_id`). Manual policy
+  offers it as a proposal; explicit single_editor_v1 policy may publish it with
+  agent authority and no human review (#275 owner amendment). The database checks
+  the authorship and publication authorities, and
   `arrangement_hash` against the items at commit (K5).
 
   `eligibility_fingerprint` records the items' eligibility when the version
