@@ -1,3 +1,62 @@
+# Whole-entry curation: visible ten-page experiment
+
+Owner correction, 29 October 2026 (#275): a successful deliverable is actual interesting,
+usable curated entries, not only a small opening or a passing infrastructure suite.
+
+The versioned whole_entry_v1 policy selects one sourced lead and up to 12 highlights,
+grouped as definitions, examples, quotations, images, films, music, books, poems and
+news. Examples/quotations allow 2 each; other sections 1. Nothing is padded. Bierce
+leads as satire where eligible; a current sourced sense definition may lead elsewhere.
+Source records and the complete source inventory remain unchanged.
+
+A new voltaire-whole-entry-v1 instruction and sourced profile version reuse the
+installed 9B artifact. Packet v4 fairly interleaves available shelf sections within 24
+candidates / 12 meanings. It retains omitted identities and rotation. One model call
+per page uses the same 8K context, 1,024 output tokens, deadline, gateway slot and daily
+budget. Shelf labels are provider metadata, not evidence the model read unseen articles.
+Legacy packets/instructions and three-highlight configurations retain their bounds.
+
+Publication still uses single_editor_v1 with the existing source/expiry/binding/lease/
+expected-pointer checks. Owner Mine/Keep/withdrawal remain optional interventions.
+Final merged section limits apply after owner-kept precedence and at database commit;
+a kept-only result does not publish a replacement. Exact chooser/model/profile/
+instruction/attempt, reason/basis and dates flow through the same receipts/history.
+The page visibly groups choices and retains named withheld notices after expiry.
+
+## Implementation and live acceptance
+
+Apply every intervening reviewed migration before pinned code deployment. Migration
+20261029180802 adds opt-in bounds and a version-aware item/section guard, enables a
+current sense-definition lead only under whole-entry configuration, and permits the
+new source-backed Voltaire template. It creates no live choices or activation. Old
+manual records are tested through up/down/up; after whole-entry histories/configs
+exist, down refuses. Disable automation and roll forward instead of deleting history.
+
+Register the already installed model under a new immutable slug/instruction and
+output-contract v2; no pull or new weights. Use the existing seed/admit/bind commands
+with --profile voltaire, --publication single_editor_v1 and --refresh-window 24h.
+The new instruction automatically binds selection_scope whole_entry_v1 / max 12. Preview
+with --dry-run first. Activation and enablement remain explicit recorded operations.
+
+Stage the ten-page experiment with existing owner holds: keep the other pages held
+while love is proved, then release them. Holds are setup actions, not human review of
+agent choices. Provision missing pilot compositions. Each page must get an actual
+model assessment and an honest published/abstained/failed result. Never manufacture
+an owner selection or model answer to pass. Freeze the ten-page scorecard before calls;
+record IDs, exact versions, source sections, context/latency/budget, reasons and visible
+receipts, then judge usefulness as developers. All-abstain or uninteresting output fails.
+Confirm love's selected definition/example/cultural material on the page first, then
+assess the other nine. Stop/disable the model/editor after the approved window.
+Real expiry and scheduled next-day evidence remain separate observable obligations.
+
+Private owner editing is http://localhost:4007/ops/curation on Studio, or an SSH
+forward to localhost:4008 from MacBook. It needs no website password. Public ngrok
+cannot obtain the local owner identity. Existing account/role history is unchanged.
+
+---
+Historical single-curator operating notes follow; where they refer to an opening,
+whole_entry_v1 above is the current target.
+
 # One curator: Phase A of #275
 
 Status: implementation and isolated tests only; no autonomous live activation

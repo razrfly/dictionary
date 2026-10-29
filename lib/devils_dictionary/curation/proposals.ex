@@ -268,6 +268,16 @@ defmodule DevilsDictionary.Curation.Proposals do
          merged = Merge.arrange(carried, choices, cv.max_highlights),
          :ok <- model_placed(merged),
          placed = placed(merged),
+         placed =
+           if(DevilsDictionary.Curation.WholeEntry.enabled?(cv),
+             do: DevilsDictionary.Curation.WholeEntry.limit_plan(placed),
+             else: placed
+           ),
+         :ok <-
+           if(Enum.any?(placed, fn {origin, _} -> origin == :model end),
+             do: :ok,
+             else: {:complete, {:no_change, "kept_only"}, nil}
+           ),
          items = Compositions.proposal_arrangement(placed, editor.bot_actor),
          :ok <- merge_holds(items, members, composition, cv),
          :ok <- not_published(items, composition),

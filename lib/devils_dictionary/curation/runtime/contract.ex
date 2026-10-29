@@ -33,9 +33,12 @@ defmodule DevilsDictionary.Curation.Runtime.Contract do
   @max_quote_chars 400
 
   def version, do: @version
+  def version("voltaire-whole-entry-v1"), do: "selection-output-v2"
+  def version(_), do: @version
 
   @doc "The JSON schema for Ollama's `format`."
-  def schema do
+  def schema(packet \\ %{}) do
+    max = if DevilsDictionary.Curation.WholeEntry.packet?(packet), do: 12, else: 3
     reason = %{"type" => "string", "maxLength" => @max_reason_chars}
 
     choice = fn extra ->
@@ -62,7 +65,7 @@ defmodule DevilsDictionary.Curation.Runtime.Contract do
         "lead" => %{"anyOf" => [%{"type" => "null"}, choice.(%{})]},
         "highlights" => %{
           "type" => "array",
-          "maxItems" => 3,
+          "maxItems" => max,
           "items" =>
             choice.(%{
               "quote" => %{
@@ -96,7 +99,7 @@ defmodule DevilsDictionary.Curation.Runtime.Contract do
          :ok <- not_truncated(response),
          :ok <- bounded(content, opts),
          {:ok, decoded} <- decode(content),
-         :ok <- shape(decoded) do
+         :ok <- shape(decoded, packet) do
       # `registry: false` is the smoke call's fixed packet, which names no
       # registry rows: shape and references only.
       evidence = if opts[:registry] == false, do: [], else: evidence(decoded, packet)
@@ -173,7 +176,9 @@ defmodule DevilsDictionary.Curation.Runtime.Contract do
   @choice ~w(candidate_id meaning_id reason)
   @highlight ~w(candidate_id meaning_id quote reason)
 
-  defp shape(decoded) do
+  defp shape(decoded, packet) do
+    max = if DevilsDictionary.Curation.WholeEntry.packet?(packet), do: 12, else: 3
+
     decision =
       if decoded["decision"] in ["select", "abstain"], do: [], else: [["decision", "wrong_shape"]]
 
@@ -181,7 +186,7 @@ defmodule DevilsDictionary.Curation.Runtime.Contract do
       exact_keys(decoded, @top, "response") ++
         decision ++
         lead_shape(decoded["lead"]) ++
-        highlights_shape(decoded["highlights"]) ++
+        highlights_shape(decoded["highlights"], max) ++
         nullable_text(decoded["abstain_reason"], "abstain_reason") ++
         consistent(decoded)
 
@@ -198,8 +203,8 @@ defmodule DevilsDictionary.Curation.Runtime.Contract do
   defp lead_shape(%{} = lead), do: exact_keys(lead, @choice, "lead") ++ choice_types(lead, "lead")
   defp lead_shape(_lead), do: [["lead", "wrong_shape"]]
 
-  defp highlights_shape(list) when is_list(list) do
-    over = if length(list) > 3, do: [["highlights", "too_many_highlights"]], else: []
+  defp highlights_shape(list, max) when is_list(list) do
+    over = if length(list) > max, do: [["highlights", "too_many_highlights"]], else: []
 
     over ++
       Enum.flat_map(Enum.with_index(list, 1), fn {h, n} ->
@@ -210,7 +215,7 @@ defmodule DevilsDictionary.Curation.Runtime.Contract do
       end)
   end
 
-  defp highlights_shape(_value), do: [["highlights", "wrong_shape"]]
+  defp highlights_shape(_value, _max), do: [["highlights", "wrong_shape"]]
 
   defp choice_types(%{} = choice, where) do
     ids =
@@ -279,7 +284,8 @@ defmodule DevilsDictionary.Curation.Runtime.Contract do
         do: [],
         else: [["selection", "duplicate_candidate"]]
 
-    duplicates ++
+    DevilsDictionary.Curation.WholeEntry.validate(decoded, packet) ++
+      duplicates ++
       Enum.flat_map(chosen, fn {where, choice} ->
         case candidates[choice["candidate_id"]] do
           nil ->
@@ -287,7 +293,7 @@ defmodule DevilsDictionary.Curation.Runtime.Contract do
 
           candidate ->
             meaning(where, choice, candidate) ++
-              quote_problem(where, choice, candidate) ++ lead_kind(where, candidate)
+              quote_problem(where, choice, candidate) ++ lead_kind(where, candidate, packet)
         end
       end)
   end
@@ -313,9 +319,15 @@ defmodule DevilsDictionary.Curation.Runtime.Contract do
 
   defp quote_problem(_where, _choice, _candidate), do: []
 
-  defp lead_kind("lead", %{"kind" => "content"}), do: []
-  defp lead_kind("lead", _candidate), do: [["lead", "lead_not_a_definition"]]
-  defp lead_kind(_where, _candidate), do: []
+  defp lead_kind("lead", %{"kind" => "content"}, _packet), do: []
+
+  defp lead_kind("lead", %{"kind" => "sense_definition"}, %{
+         "packet_version" => "runtime-packet-v4"
+       }),
+       do: []
+
+  defp lead_kind("lead", _candidate, _packet), do: [["lead", "lead_not_a_definition"]]
+  defp lead_kind(_where, _candidate, _packet), do: []
 
   # ── C3: the evidence, and the lead rule, now ──────────────────────────────
 
@@ -354,8 +366,17 @@ defmodule DevilsDictionary.Curation.Runtime.Contract do
   defp lead_rule(decoded, candidates, ids) do
     lead_object =
       case decoded["lead"] do
-        %{"candidate_id" => id} -> candidates[id] && candidates[id]["object_id"]
-        _ -> nil
+        %{"candidate_id" => id} ->
+          case candidates[id] do
+            %{"kind" => "sense_definition", "sense_revision_id" => rid} ->
+              {:sense_definition, rid}
+
+            candidate ->
+              candidate && candidate["object_id"]
+          end
+
+        _ ->
+          nil
       end
 
     unknown_lead? = match?(%{"candidate_id" => _}, decoded["lead"]) and is_nil(lead_object)
@@ -402,7 +423,7 @@ defmodule DevilsDictionary.Curation.Runtime.Contract do
     end
 
     result = %{
-      "contract" => @version,
+      "contract" => version(packet["instruction_version"]),
       "decision" => decoded["decision"],
       "lead" => decoded["lead"] && keep.(decoded["lead"]),
       "highlights" => Enum.map(decoded["highlights"], keep),

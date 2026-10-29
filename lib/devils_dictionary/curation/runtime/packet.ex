@@ -85,7 +85,7 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
   def version, do: @version
 
   @doc "The packet versions `freeze/2` and `verify/1` accept, oldest first."
-  def versions, do: [@v1, @v2, @version]
+  def versions, do: [@v1, @v2, @version, "runtime-packet-v4"]
 
   @doc "The candidate kinds, in the order unused quota flows down."
   def kinds, do: @kinds
@@ -164,7 +164,24 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
   Answer with JSON only, matching the provided schema.
   """
 
+  @whole_entry (@generic_editor_v2
+                |> String.replace(
+                  "choosing what opens a dictionary entry",
+                  "curating an entire encyclopedia entry"
+                )
+                |> String.replace("most three highlights", "most twelve highlights")
+                |> String.replace(
+                  ~s(The lead must be a candidate of kind "content".),
+                  ~s(The lead must be a candidate of kind "content" or "sense_definition".)
+                )
+                |> String.replace("under 200 characters", "under 100 characters")) <>
+                 "\nCurate across the available sections, not a three-item opening. Choose one useful item from each represented section when relevant; at most two examples and two quotations, one of each other section. Do not fill weak slots. Prefer concrete, varied material that illuminates the word over generic mentions. Shelf labels are metadata only: do not claim to have read articles or inspected unseen works. Keep reasons concise (about 8 words), quote:null unless indispensable. Always select a supplied eligible definition to lead; where Bierce has no entry a supplied sense_definition may lead. Never duplicate the lead as a highlight.\nSelection lens:\n" <>
+                 DevilsDictionary.Curation.Agents.Persona.selection_instruction(
+                   "voltaire-whole-entry-v1"
+                 )
+
   @instructions %{
+    "voltaire-whole-entry-v1" => @whole_entry,
     "generic-editor-v1" => @generic_editor_v1,
     "generic-editor-v2" => @generic_editor_v2,
     "voltaire-selector-v1" =>
@@ -229,6 +246,25 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
   when the caller already has it. The cut's limits may be overridden.
   """
   def for_page(page, opts \\ []) do
+    opts =
+      if opts[:instruction_version] == "voltaire-whole-entry-v1",
+        do:
+          Keyword.merge(opts,
+            whole_entry: true,
+            max_candidates: 24,
+            max_meanings: 12,
+            candidate_quotas: [
+              content: 3,
+              sense_quotation: 3,
+              work: 1,
+              exemplar: 2,
+              sense_definition: 2,
+              claim: 2,
+              shelf: 11
+            ]
+          ),
+        else: opts
+
     instruction = Keyword.get(opts, :instruction_version)
     candidates = Keyword.get_lazy(opts, :candidates, fn -> Candidates.for_page(page) end)
 
@@ -253,14 +289,19 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
   """
   def policy(opts \\ []) do
     %{
-      cut: Endpoint.get(:cut_policy, opts),
+      cut:
+        if(Keyword.get(opts, :whole_entry, false),
+          do: "whole-entry-cut-v1",
+          else: Endpoint.get(:cut_policy, opts)
+        ),
       meanings: Endpoint.get(:meaning_policy, opts),
       quotas: Endpoint.get(:candidate_quotas, opts),
       max_candidates: Endpoint.get(:max_candidates, opts),
       max_meanings: Endpoint.get(:max_meanings, opts),
       source_priority: Endpoint.get(:source_priority, opts),
       generation: Keyword.get(opts, :generation, 0),
-      shelf_focus: Keyword.get(opts, :shelf)
+      shelf_focus: Keyword.get(opts, :shelf),
+      whole_entry: Keyword.get(opts, :whole_entry, false)
     }
   end
 
@@ -337,7 +378,15 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
     start = %{
       chosen: Enum.reverse(priority),
       count: length(priority),
-      kept: MapSet.new(priority, & &1.meaning),
+      kept:
+        Enum.reduce(
+          if(policy.whole_entry,
+            do: Enum.take(Enum.filter(rest, &(&1.kind == "shelf")), 1),
+            else: []
+          ),
+          MapSet.new(priority, & &1.meaning),
+          fn c, acc -> MapSet.put(acc, c.meaning) end
+        ),
       omitted: [],
       carry: 0,
       shelf: nil
@@ -354,12 +403,21 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
             slots = max(min(room, policy.max_candidates - acc.count), 0)
 
             {ordered, excluded, focus} =
-              DevilsDictionary.Curation.ShelfFocus.order(
-                queue,
-                policy.generation,
-                policy.shelf_focus,
-                slots
-              )
+              if policy.whole_entry do
+                {DevilsDictionary.Curation.WholeEntry.shelf_order(queue, policy.generation), [],
+                 %{
+                   "focus" => "all-sections",
+                   "source" => "whole_entry_v1",
+                   "generation" => policy.generation
+                 }}
+              else
+                DevilsDictionary.Curation.ShelfFocus.order(
+                  queue,
+                  policy.generation,
+                  policy.shelf_focus,
+                  slots
+                )
+              end
 
             {ordered,
              Enum.reduce(excluded, %{acc | shelf: focus}, &omit(&2, &1, "outside_shelf_focus"))}
@@ -436,7 +494,7 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
       end)
 
     %{
-      "packet_version" => @version,
+      "packet_version" => if(cut.policy.whole_entry, do: "runtime-packet-v4", else: @version),
       "fields_version" => "packet-fields-v1",
       "shelf" => cut.shelf,
       "instruction_version" => cut.instruction,
@@ -912,11 +970,19 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
   (`:omitted_malformed`).
   """
   def freeze(packet, opts \\ []) do
-    max = Endpoint.get(:max_candidates, opts)
+    max =
+      if packet["packet_version"] == "runtime-packet-v4",
+        do: 24,
+        else: Endpoint.get(:max_candidates, opts)
+
     max_excerpt = Endpoint.get(:max_excerpt_chars, opts)
     candidates = packet["candidates"] || []
 
     cond do
+      packet["packet_version"] == "runtime-packet-v4" !=
+          (packet["instruction_version"] == "voltaire-whole-entry-v1") ->
+        {:error, :packet_instruction_mismatch}
+
       packet["packet_version"] not in versions() ->
         {:error, :unsupported_packet_version}
 
@@ -947,7 +1013,11 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
     meanings = packet["meanings"] || []
     ids = MapSet.new(meanings, & &1["meaning_id"])
     candidates = packet["candidates"]
-    max_meanings = Endpoint.get(:max_meanings, opts)
+
+    max_meanings =
+      if packet["packet_version"] == "runtime-packet-v4",
+        do: 12,
+        else: Endpoint.get(:max_meanings, opts)
 
     cond do
       length(meanings) > max_meanings -> {:error, {:too_many_meanings, length(meanings)}}
@@ -1000,7 +1070,7 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
     meanings = Map.new(packet["meanings"] || [], &{&1["meaning_id"], &1})
 
     offered =
-      if packet["packet_version"] in [@v2, @version],
+      if packet["packet_version"] in [@v2, @version, "runtime-packet-v4"],
         do: offered_now(get_in(packet, ["target", "page_lexeme_ids"]) || ids)
 
     reasons =
@@ -1293,7 +1363,7 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
       "priority_candidates" => packet["priority_candidates"]
     }
 
-    if packet["packet_version"] in [@v2, @version] do
+    if packet["packet_version"] in [@v2, @version, "runtime-packet-v4"] do
       packet
       |> Map.take([
         "instruction_version",
@@ -1363,7 +1433,26 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
       "candidates" =>
         Enum.map(
           packet["candidates"],
-          &Map.take(&1, ["candidate_id", "kind", "source", "excerpt", "label", "allowed_meanings"])
+          fn candidate ->
+            visible =
+              Map.take(candidate, [
+                "candidate_id",
+                "kind",
+                "source",
+                "excerpt",
+                "label",
+                "allowed_meanings"
+              ])
+
+            if packet["packet_version"] == "runtime-packet-v4",
+              do:
+                Map.put(
+                  visible,
+                  "section",
+                  DevilsDictionary.Curation.WholeEntry.section(candidate)
+                ),
+              else: visible
+          end
         )
     }
 

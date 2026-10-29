@@ -26,6 +26,16 @@ defmodule DevilsDictionary.Curation.Agents.Persona do
   @manifest @path |> File.read!() |> Jason.decode!()
   @body Map.take(@manifest, ~w(dossier source_refs deceased_evidence_refs template_version))
   @instruction @manifest["template_version"]
+  @whole_path Path.expand(
+                "../../../../priv/curation/agents/personas/voltaire/v2/profile.json",
+                __DIR__
+              )
+  @external_resource @whole_path
+  @whole_manifest @whole_path |> File.read!() |> Jason.decode!()
+  @whole_body Map.take(
+                @whole_manifest,
+                ~w(dossier source_refs deceased_evidence_refs template_version)
+              )
 
   def manifest, do: @manifest
   def instruction_version, do: @instruction
@@ -33,6 +43,10 @@ defmodule DevilsDictionary.Curation.Agents.Persona do
   def selection_instruction do
     @manifest["dossier"]["disclosure"] <> "\n" <> @manifest["dossier"]["selection"]
   end
+
+  def selection_instruction("voltaire-whole-entry-v1"),
+    do:
+      @whole_manifest["dossier"]["disclosure"] <> "\n" <> @whole_manifest["dossier"]["selection"]
 
   def valid_version?(%Profile{slug: "voltaire", kind: :persona}, %ProfileVersion{} = version) do
     body = %{
@@ -42,13 +56,18 @@ defmodule DevilsDictionary.Curation.Agents.Persona do
       "template_version" => version.template_version
     }
 
-    body == @body and version.manifest_hash == Digest.term(@body)
+    expected =
+      if version.template_version == "voltaire-whole-entry-v1",
+        do: @whole_body,
+        else: @body
+
+    body == expected and version.manifest_hash == Digest.term(expected)
   end
 
   def valid_version?(_, _), do: false
 
   def compatible?(profile, version, config) do
-    valid_version?(profile, version) and config.instruction_version == @instruction
+    valid_version?(profile, version) and config.instruction_version == version.template_version
   end
 
   def label(profile, config), do: profile.label <> " · " <> Configurations.editor_label(config)
@@ -56,11 +75,14 @@ defmodule DevilsDictionary.Curation.Agents.Persona do
   @doc "Prepare inactive source/bot and an unadmitted dossier, idempotently; never bind or activate."
   def prepare(scope, %ModelConfig{} = config, opts) do
     Transaction.run(fn ->
+      body =
+        if config.instruction_version == "voltaire-whole-entry-v1", do: @whole_body, else: @body
+
       with {:ok, _actor} <- Authority.actor(scope, :reviewer),
            {:ok, reason} <- Transaction.required(opts, :reason),
            :ok <-
              Transaction.check(
-               config.instruction_version == @instruction,
+               config.instruction_version in [@instruction, "voltaire-whole-entry-v1"],
                :persona_instruction_mismatch
              ) do
         profile = Enum.find(Profiles.seed_proposed!(), &(&1.slug == "voltaire"))
@@ -84,21 +106,28 @@ defmodule DevilsDictionary.Curation.Agents.Persona do
               actor_kind: :bot,
               bot_source_id: source.id,
               label: label(profile, config),
-              metadata: %{"operation" => "persona_selection", "accountability" => "proposes only"}
+              metadata: %{
+                "operation" => "persona_selection",
+                "accountability" =>
+                  if(config.instruction_version == "voltaire-whole-entry-v1",
+                    do: "single_editor_v1",
+                    else: "proposes only"
+                  )
+              }
             })
 
         attrs = %{
-          dossier: @body["dossier"],
-          source_refs: @body["source_refs"],
-          deceased_evidence_refs: @body["deceased_evidence_refs"],
-          template_version: @instruction,
+          dossier: body["dossier"],
+          source_refs: body["source_refs"],
+          deceased_evidence_refs: body["deceased_evidence_refs"],
+          template_version: config.instruction_version,
           reason: reason
         }
 
         profile = Repo.one!(from p in Profile, where: p.id == ^profile.id, lock: "FOR UPDATE")
 
         version =
-          Repo.get_by(ProfileVersion, profile_id: profile.id, manifest_hash: Digest.term(@body))
+          Repo.get_by(ProfileVersion, profile_id: profile.id, manifest_hash: Digest.term(body))
 
         version =
           version ||

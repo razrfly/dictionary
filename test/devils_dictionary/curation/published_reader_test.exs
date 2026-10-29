@@ -420,7 +420,7 @@ defmodule DevilsDictionary.Curation.PublishedReaderTest do
       claim_context_changed priority_source_available priority_source_missing lead_not_on_scope
       composition_retired configuration_changed scope_changed approval_withdrawn
       not_on_page meaning_off_page quotation_not_found unsupported_item observation_unbound revision_mismatch retention_expired payload_redacted claim_unlinked
-      empty no_prose_opening no_sentence_boundary
+      empty no_prose_opening no_sentence_boundary section_over_limit
     )a
 
     @fallback DevilsDictionaryWeb.Opening.withheld_reason(:no_such_reason)

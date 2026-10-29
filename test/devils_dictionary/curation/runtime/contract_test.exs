@@ -37,6 +37,8 @@ defmodule DevilsDictionary.Curation.Runtime.ContractTest do
     assert {:ok, %{outcome: :accepted, result: result, observed: observed}} =
              validate(ctx, selection({"c1", "m0"}, [{"c3", "s1", "quotation words"}]))
 
+    assert result["contract"] == "selection-output-v1"
+
     assert result["lead"] == %{
              "candidate_id" => "c1",
              "meaning_id" => "m0",

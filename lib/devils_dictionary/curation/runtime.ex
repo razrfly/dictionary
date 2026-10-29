@@ -179,7 +179,7 @@ defmodule DevilsDictionary.Curation.Runtime do
   defp call(attempt, config, frozen, before, opts, retries_left) do
     started = System.monotonic_time(:millisecond)
 
-    case Ollama.chat(config, Packet.messages(frozen), Contract.schema(), opts) do
+    case Ollama.chat(config, Packet.messages(frozen), Contract.schema(frozen.packet), opts) do
       {:ok, response} ->
         finish(
           attempt,
@@ -407,7 +407,7 @@ defmodule DevilsDictionary.Curation.Runtime do
   moves with the packet builder.
   """
   def smoke_packet(instruction_version) do
-    %{
+    packet = %{
       "packet_version" => hd(Packet.versions()),
       "instruction_version" => instruction_version,
       "target" => %{"language_tag" => "en", "lexeme_ids" => [], "headwords" => ["smoke"]},
@@ -428,5 +428,15 @@ defmodule DevilsDictionary.Curation.Runtime do
       ],
       "priority_candidates" => []
     }
+
+    if instruction_version == "voltaire-whole-entry-v1" do
+      packet
+      |> Map.put("packet_version", "runtime-packet-v4")
+      |> Map.update!("candidates", fn rows ->
+        Enum.map(rows, &Map.put(&1, "required_meaning", "m0"))
+      end)
+    else
+      packet
+    end
   end
 end

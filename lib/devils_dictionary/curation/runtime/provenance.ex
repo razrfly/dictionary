@@ -90,7 +90,7 @@ defmodule DevilsDictionary.Curation.Runtime.Provenance do
         capabilities: capabilities,
         generation: generation(capabilities, Keyword.get(opts, :generation, %{})),
         instruction_version: instruction,
-        output_contract_version: Contract.version()
+        output_contract_version: Contract.version(instruction)
       }
 
       hash = Digest.term(Map.new(attrs, fn {k, v} -> {to_string(k), v} end))
