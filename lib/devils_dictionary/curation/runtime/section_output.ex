@@ -127,6 +127,24 @@ defmodule DevilsDictionary.Curation.Runtime.SectionOutput do
           end
         end)
 
+      reason_errors =
+        ([{"lead", decoded["lead"]}] ++ Enum.with_index(highlights, 1))
+        |> Enum.map(fn
+          {label, choice} when is_binary(label) -> {label, choice}
+          {choice, index} -> {"highlight_#{index}", choice}
+        end)
+        |> Enum.flat_map(fn {label, choice} ->
+          if is_map(choice) and is_binary(choice["reason"]) and
+               String.length(choice["reason"]) > 100, do: [[label, "reason_too_long"]], else: []
+        end)
+
+      abstain_errors =
+        if is_binary(decoded["abstain_reason"]) and String.length(decoded["abstain_reason"]) > 100,
+          do: [["abstain_reason", "reason_too_long"]],
+          else: []
+
+      errors = errors ++ reason_errors ++ abstain_errors
+
       if errors == [],
         do:
           {:ok,

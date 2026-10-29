@@ -196,6 +196,38 @@ defmodule DevilsDictionary.Curation.WholeEntryTest do
       assert {:refused, _, _} = Contract.validate(answer(altered), frozen)
     end
 
+    for altered <- [
+          put_in(wire, ["lead", "reason"], String.duplicate("x", 101)),
+          update_in(wire, ["selections", "quotes"], fn [first | rest] ->
+            [Map.put(first, "reason", String.duplicate("x", 101)) | rest]
+          end),
+          %{
+            "decision" => "abstain",
+            "lead" => nil,
+            "abstain_reason" => String.duplicate("x", 101),
+            "selections" =>
+              Map.new(
+                WholeEntry.sections(),
+                &{&1, if(&1 in ["examples", "quotes"], do: [], else: nil)}
+              )
+          }
+        ] do
+      assert {:refused, errors, _} = Contract.validate(answer(altered), frozen)
+      assert Enum.any?(errors, &(List.last(&1) == "reason_too_long"))
+    end
+
+    legacy = packet()
+    legacy_lead = hd(legacy.packet["priority_candidates"])
+
+    legacy_candidate =
+      Enum.find(legacy.packet["candidates"], &(&1["candidate_id"] == legacy_lead))
+
+    legacy_answer =
+      selection({legacy_lead, legacy_candidate["required_meaning"]}, [])
+      |> put_in(["lead", "reason"], String.duplicate("x", 101))
+
+    assert {:ok, _} = Contract.validate(answer(legacy_answer), legacy)
+
     first_quote = hd(wire["selections"]["quotes"])
 
     repeated =
