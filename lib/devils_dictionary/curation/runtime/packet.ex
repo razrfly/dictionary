@@ -219,10 +219,24 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
                       "voltaire-whole-entry-v3"
                     )
 
+  @whole_relevance @whole_sections <>
+                     """
+                     Editorial priority, governing how the personality lens is used:
+                     1. The entry's actual meaning and the evidence supplied for it.
+                     2. A useful, varied sourced entry.
+                     3. Personality as a tie-breaker, never an eligibility requirement.
+                     A neutral sourced definition is useful. Select a suitable eligible supplied lead when it clearly defines this entry, respecting the source and injection restrictions. Do not abstain merely because a word does not fit the Voltaire lens or because optional materials are sparse. Leave weak optional sections null or empty instead. Retain whole-page abstention when no sufficiently supported relevant choice is available.
+                     Every additional item needs a clear connection to a meaning of this word, evidenced by the supplied fields. Affinity with the personality's favorite topics is not word relevance.
+                     News is optional. Select it only when its supplied label or excerpt evidences that meaning connection. An incidental query-word match or the article's age is insufficient; unrelated political or cultural news stays null.
+                     For metadata-only choices, explain only the supplied title, creator, type, date or documented link to the meaning. Do not infer unseen contents, messages, plot or lyrics. Name the exact supplied record type: a track is not an album. A title match may justify a modest bibliographic example, never a claim about the unseen work.
+                     Never fill a section to reach a quota. Preserve the exact source content and give concise, grounded original reasons.
+                     """
+
   @instructions %{
     "voltaire-whole-entry-v1" => @whole_entry,
     "voltaire-whole-entry-v2" => @whole_entry_v2,
     "voltaire-whole-entry-v3" => @whole_sections,
+    "voltaire-whole-entry-v4" => @whole_relevance,
     "generic-editor-v1" => @generic_editor_v1,
     "generic-editor-v2" => @generic_editor_v2,
     "voltaire-selector-v1" =>

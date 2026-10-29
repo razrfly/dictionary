@@ -1,3 +1,25 @@
+# Editorial relevance iteration — 29 October 2026
+
+The v3 cohort completed ten real assessments: seven publications and three abstentions.
+It is not a quality pass merely because every answer was syntactically valid. The
+love tuning page selected off-topic news; coward abstained because evidence did not
+fit the persona lens. Those results remain recorded, alongside earlier refusals.
+
+New voltaire-whole-entry-v4 / sourced manifest v5 keeps output-v4 and the same typed
+sections. Core meaning/evidence comes first, useful sourced breadth second, personality
+only as tie-breaker. Select a suitable eligible definition when available; sparse
+extras remain empty, with justified whole-page abstention still possible. News needs
+a meaning connection in supplied fields; persona affinity or incidental query matches
+are insufficient. Metadata-only reasons cannot infer unseen contents or mislabel types.
+
+This is an iterative ten-page pilot. Earlier held-out technical outcomes were observed;
+do not present the final repeated cohort as a pristine blind generalization benchmark.
+Keep the original groups/thresholds, report each version and failures, and separately
+judge actual editorial relevance. No new retrieval, verification model, larger budget,
+extra generation, enrollment or consensus. Register a new immutable model config and
+explicit profile version; migration 20261029203115 admits only this extra template with
+the same sourced dossier and preserves all old histories.
+
 # Typed-section correction — 29 October 2026
 
 Love tuning attempt9 (v2) still repeated the lead and exceeded definitions. It was

@@ -15,9 +15,14 @@ defmodule DevilsDictionary.Curation.WholeEntry do
   def limit(section), do: Map.get(Map.new(@limits), section, 1)
 
   def instructions,
-    do: ["voltaire-whole-entry-v1", "voltaire-whole-entry-v2", "voltaire-whole-entry-v3"]
+    do: [
+      "voltaire-whole-entry-v1",
+      "voltaire-whole-entry-v2",
+      "voltaire-whole-entry-v3",
+      "voltaire-whole-entry-v4"
+    ]
 
-  def instruction, do: "voltaire-whole-entry-v3"
+  def instruction, do: "voltaire-whole-entry-v4"
   def enabled?(%{manifest: m}), do: m["selection_scope"] == "whole_entry_v1"
   def packet?(%{"packet_version" => "runtime-packet-v4"}), do: true
   def packet?(_), do: false

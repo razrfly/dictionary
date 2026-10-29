@@ -101,7 +101,7 @@ defmodule DevilsDictionary.Curation.WholeEntryTest do
   test "the operator can explicitly admit a prepared newer profile version", w do
     model =
       model_config!(%{
-        instruction_version: "voltaire-whole-entry-v3",
+        instruction_version: "voltaire-whole-entry-v4",
         output_contract_version: "selection-output-v4"
       })
       |> ready!()
@@ -133,6 +133,55 @@ defmodule DevilsDictionary.Curation.WholeEntryTest do
     ExUnit.CaptureIO.capture_io(fn -> Mix.Tasks.Dd.Curation.Editor.run(args) end)
     assert Repo.reload!(prepared.profile).current_version_id == prepared.version.id
     assert Repo.reload!(prepared.profile).bot_actor_id == prepared.bot_actor.id
+  end
+
+  @tag instruction: "voltaire-whole-entry-v4"
+  test "relevance instruction uses the same typed contract, publishes a suitable definition with sparse extras and keeps abstention available",
+       w do
+    frozen = packet("voltaire-whole-entry-v4")
+    wire = section_answer(frozen)
+
+    empty =
+      Map.new(WholeEntry.sections(), &{&1, if(&1 in ["examples", "quotes"], do: [], else: nil)})
+
+    wire = Map.put(wire, "selections", empty)
+    assert Contract.schema(frozen.packet)["properties"]["selections"]
+
+    assert {:ok, %{result: %{"contract" => "selection-output-v4"}}} =
+             Contract.validate(answer(wire), frozen)
+
+    abstention = %{
+      "decision" => "abstain",
+      "lead" => nil,
+      "selections" => empty,
+      "abstain_reason" => "No sufficiently supported choice in the supplied evidence."
+    }
+
+    assert {:ok, %{outcome: :abstained}} = Contract.validate(answer(abstention), frozen)
+    quotation = Enum.find(frozen.packet["candidates"], &(&1["kind"] == "sense_quotation"))
+
+    bad_quote = %{
+      "candidate_id" => quotation["candidate_id"],
+      "meaning_id" => quotation["required_meaning"],
+      "reason" => "A supplied quotation.",
+      "quote" => quotation["excerpt"]
+    }
+
+    assert {:refused, errors, _} =
+             Contract.validate(
+               answer(put_in(wire, ["selections", "quotes"], [bad_quote])),
+               frozen
+             )
+
+    assert Enum.any?(errors, &(List.last(&1) == "quote_not_allowed"))
+    stub_answer!(w, wire)
+    assert {:ok, %{last_outcome_reason: "published_automatically"}} = run!(w)
+    settle!()
+    publication = Repo.one!(CompositionPublication)
+    version = Repo.get!(CompositionVersion, publication.published_version_id)
+    assert [%{role: :lead}] = Compositions.items(version.id)
+    assert {:ok, receipt} = Receipt.read("love", version.version)
+    assert hd(receipt.items).chooser.model_config_id == w.model_config.id
   end
 
   defp section_answer(frozen) do
