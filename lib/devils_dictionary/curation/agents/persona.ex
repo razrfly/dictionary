@@ -37,6 +37,21 @@ defmodule DevilsDictionary.Curation.Agents.Persona do
                 ~w(dossier source_refs deceased_evidence_refs template_version)
               )
 
+  @revised_path Path.expand(
+                  "../../../../priv/curation/agents/personas/voltaire/v3/profile.json",
+                  __DIR__
+                )
+  @external_resource @revised_path
+  @revised_manifest @revised_path |> File.read!() |> Jason.decode!()
+  @revised_body Map.take(
+                  @revised_manifest,
+                  ~w(dossier source_refs deceased_evidence_refs template_version)
+                )
+  @whole_bodies %{
+    "voltaire-whole-entry-v1" => @whole_body,
+    "voltaire-whole-entry-v2" => @revised_body
+  }
+
   def manifest, do: @manifest
   def instruction_version, do: @instruction
 
@@ -48,6 +63,11 @@ defmodule DevilsDictionary.Curation.Agents.Persona do
     do:
       @whole_manifest["dossier"]["disclosure"] <> "\n" <> @whole_manifest["dossier"]["selection"]
 
+  def selection_instruction("voltaire-whole-entry-v2"),
+    do:
+      @revised_manifest["dossier"]["disclosure"] <>
+        "\n" <> @revised_manifest["dossier"]["selection"]
+
   def valid_version?(%Profile{slug: "voltaire", kind: :persona}, %ProfileVersion{} = version) do
     body = %{
       "dossier" => version.dossier,
@@ -56,10 +76,7 @@ defmodule DevilsDictionary.Curation.Agents.Persona do
       "template_version" => version.template_version
     }
 
-    expected =
-      if version.template_version == "voltaire-whole-entry-v1",
-        do: @whole_body,
-        else: @body
+    expected = Map.get(@whole_bodies, version.template_version, @body)
 
     body == expected and version.manifest_hash == Digest.term(expected)
   end
@@ -75,14 +92,17 @@ defmodule DevilsDictionary.Curation.Agents.Persona do
   @doc "Prepare inactive source/bot and an unadmitted dossier, idempotently; never bind or activate."
   def prepare(scope, %ModelConfig{} = config, opts) do
     Transaction.run(fn ->
-      body =
-        if config.instruction_version == "voltaire-whole-entry-v1", do: @whole_body, else: @body
+      body = Map.get(@whole_bodies, config.instruction_version, @body)
 
       with {:ok, _actor} <- Authority.actor(scope, :reviewer),
            {:ok, reason} <- Transaction.required(opts, :reason),
            :ok <-
              Transaction.check(
-               config.instruction_version in [@instruction, "voltaire-whole-entry-v1"],
+               config.instruction_version in [
+                 @instruction,
+                 "voltaire-whole-entry-v1",
+                 "voltaire-whole-entry-v2"
+               ],
                :persona_instruction_mismatch
              ) do
         profile = Enum.find(Profiles.seed_proposed!(), &(&1.slug == "voltaire"))
@@ -109,7 +129,11 @@ defmodule DevilsDictionary.Curation.Agents.Persona do
               metadata: %{
                 "operation" => "persona_selection",
                 "accountability" =>
-                  if(config.instruction_version == "voltaire-whole-entry-v1",
+                  if(
+                    config.instruction_version in [
+                      "voltaire-whole-entry-v1",
+                      "voltaire-whole-entry-v2"
+                    ],
                     do: "single_editor_v1",
                     else: "proposes only"
                   )

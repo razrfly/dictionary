@@ -33,6 +33,7 @@ defmodule DevilsDictionary.Curation.Runtime.Contract do
   @max_quote_chars 400
 
   def version, do: @version
+  def version("voltaire-whole-entry-v2"), do: "selection-output-v3"
   def version("voltaire-whole-entry-v1"), do: "selection-output-v2"
   def version(_), do: @version
 
@@ -68,12 +69,16 @@ defmodule DevilsDictionary.Curation.Runtime.Contract do
           "maxItems" => max,
           "items" =>
             choice.(%{
-              "quote" => %{
-                "anyOf" => [
-                  %{"type" => "null"},
-                  %{"type" => "string", "maxLength" => @max_quote_chars}
-                ]
-              }
+              "quote" =>
+                if(packet["instruction_version"] == "voltaire-whole-entry-v2",
+                  do: %{"type" => "null"},
+                  else: %{
+                    "anyOf" => [
+                      %{"type" => "null"},
+                      %{"type" => "string", "maxLength" => @max_quote_chars}
+                    ]
+                  }
+                )
             })
         },
         "abstain_reason" => %{"anyOf" => [%{"type" => "null"}, reason]}
@@ -293,7 +298,8 @@ defmodule DevilsDictionary.Curation.Runtime.Contract do
 
           candidate ->
             meaning(where, choice, candidate) ++
-              quote_problem(where, choice, candidate) ++ lead_kind(where, candidate, packet)
+              quote_for_version(where, choice, candidate, packet) ++
+              lead_kind(where, candidate, packet)
         end
       end)
   end
@@ -302,6 +308,12 @@ defmodule DevilsDictionary.Curation.Runtime.Contract do
     if choice["meaning_id"] in candidate["allowed_meanings"],
       do: [],
       else: [[where, "meaning_not_allowed"]]
+  end
+
+  defp quote_for_version(where, choice, candidate, packet) do
+    if packet["instruction_version"] == "voltaire-whole-entry-v2" and not is_nil(choice["quote"]),
+      do: [[where, "quote_not_allowed"]],
+      else: quote_problem(where, choice, candidate)
   end
 
   defp quote_problem(_where, %{"quote" => nil}, _candidate), do: []

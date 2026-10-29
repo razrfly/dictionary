@@ -39,7 +39,7 @@ defmodule DevilsDictionary.Curation.WholeEntryTest do
     config =
       model_config!(%{
         instruction_version: WholeEntry.instruction(),
-        output_contract_version: "selection-output-v2",
+        output_contract_version: "selection-output-v3",
         tag: "9b"
       })
       |> ready!()
@@ -143,9 +143,9 @@ defmodule DevilsDictionary.Curation.WholeEntryTest do
     v = Repo.get!(CompositionVersion, receipt.published_version_id)
 
     assert Repo.get!(DevilsDictionary.Curation.Runtime.Attempt, v.attempt_id).result["contract"] ==
-             "selection-output-v2"
+             "selection-output-v3"
 
-    assert {:ok, %{result: %{"contract" => "selection-output-v2"}}} =
+    assert {:ok, %{result: %{"contract" => "selection-output-v3"}}} =
              Contract.validate(answer(abstain()), frozen)
 
     assert length(Compositions.items(v.id)) > 4
@@ -159,6 +159,50 @@ defmodule DevilsDictionary.Curation.WholeEntryTest do
     assert html =~ "curated-images"
     assert html =~ "curated-quotes"
     assert html =~ "Voltaire"
+  end
+
+  test "revised instruction refuses quoted fields and combined definition overflow while old instruction stays valid",
+       _w do
+    frozen = packet()
+
+    assert Contract.schema(frozen.packet)["properties"]["highlights"]["items"]["properties"][
+             "quote"
+           ] == %{"type" => "null"}
+
+    choices = frozen.packet["candidates"]
+    lead = Enum.find(choices, &(&1["candidate_id"] in frozen.packet["priority_candidates"]))
+    quote = Enum.find(choices, &(&1["kind"] == "sense_quotation"))
+
+    selection =
+      selection({lead["candidate_id"], lead["required_meaning"]}, [
+        {quote["candidate_id"], quote["required_meaning"], quote["excerpt"]}
+      ])
+
+    assert {:refused, errors, _} = Contract.validate(answer(selection), frozen)
+    assert ["highlight_1", "quote_not_allowed"] in errors
+
+    definitions =
+      Enum.filter(choices, &(&1 != lead and WholeEntry.section(&1) == "definitions"))
+      |> Enum.take(2)
+
+    assert length(definitions) == 2
+
+    overflow =
+      selection(
+        {lead["candidate_id"], lead["required_meaning"]},
+        Enum.map(definitions, &{&1["candidate_id"], &1["required_meaning"], nil})
+      )
+
+    assert {:refused, errors, _} = Contract.validate(answer(overflow), frozen)
+    assert ["section", "definitions_over_limit"] in errors
+
+    {:ok, old_packet} =
+      Packet.for_page(page("love"), instruction_version: "voltaire-whole-entry-v1")
+
+    {:ok, old_frozen} = Packet.freeze(old_packet)
+
+    assert {:ok, %{result: %{"contract" => "selection-output-v2"}}} =
+             Contract.validate(answer(selection), old_frozen)
   end
 
   test "packet and output contract cannot mix whole-entry and legacy versions", _w do

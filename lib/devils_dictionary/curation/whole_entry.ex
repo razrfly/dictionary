@@ -13,7 +13,8 @@ defmodule DevilsDictionary.Curation.WholeEntry do
   ]
   def sections, do: Enum.map(@limits, &elem(&1, 0))
   def limit(section), do: Map.get(Map.new(@limits), section, 1)
-  def instruction, do: "voltaire-whole-entry-v1"
+  def instructions, do: ["voltaire-whole-entry-v1", "voltaire-whole-entry-v2"]
+  def instruction, do: "voltaire-whole-entry-v2"
   def enabled?(%{manifest: m}), do: m["selection_scope"] == "whole_entry_v1"
   def packet?(%{"packet_version" => "runtime-packet-v4"}), do: true
   def packet?(_), do: false
@@ -128,7 +129,7 @@ defmodule DevilsDictionary.Curation.WholeEntry do
       end
 
     if whole,
-      do: instruction == instruction() and manifest["max_highlights"] == 12,
-      else: instruction != instruction() and manifest["max_highlights"] in 0..3
+      do: instruction in instructions() and manifest["max_highlights"] == 12,
+      else: instruction not in instructions() and manifest["max_highlights"] in 0..3
   end
 end

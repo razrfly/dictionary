@@ -180,8 +180,27 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
                    "voltaire-whole-entry-v1"
                  )
 
+  @whole_entry_v2 String.replace(
+                    @whole_entry,
+                    "quote:null unless indispensable.",
+                    "Every highlight must have quote:null, including native quotations; exact source text is displayed from the selected record."
+                  ) <>
+                    """
+                    Count highlights by their section field, not their kind. The lead is separate and does not count against these limits.
+                    Maximum highlights per section: definitions 1 TOTAL (content and sense_definition combined); examples 2 TOTAL (claim and exemplar combined); quotes 2 TOTAL (sense_quotation and shelf quotes combined); images 1; films 1; music 1; books 1; poems 1; news 1.
+                    Do not select two additional definitions or three quotations. Do not quote a label, title, headline or excerpt in the quote field: it must always be null. Reasons are concise original editorial explanations.
+                    Before answering, check the section counts and return only the bounded JSON selection. Never fill a section just because a candidate exists.
+                    """
+
+  @whole_entry_v2 String.replace(
+                    @whole_entry_v2,
+                    "- A quote, if you give one, must be copied exactly, character for character,\n  from that candidate's excerpt. Otherwise set quote to null.",
+                    "- Set every highlight quote field to null. Selected source text is displayed through the exact record reference."
+                  )
+
   @instructions %{
     "voltaire-whole-entry-v1" => @whole_entry,
+    "voltaire-whole-entry-v2" => @whole_entry_v2,
     "generic-editor-v1" => @generic_editor_v1,
     "generic-editor-v2" => @generic_editor_v2,
     "voltaire-selector-v1" =>
@@ -247,7 +266,7 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
   """
   def for_page(page, opts \\ []) do
     opts =
-      if opts[:instruction_version] == "voltaire-whole-entry-v1",
+      if opts[:instruction_version] in DevilsDictionary.Curation.WholeEntry.instructions(),
         do:
           Keyword.merge(opts,
             whole_entry: true,
@@ -980,7 +999,7 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
 
     cond do
       packet["packet_version"] == "runtime-packet-v4" !=
-          (packet["instruction_version"] == "voltaire-whole-entry-v1") ->
+          packet["instruction_version"] in DevilsDictionary.Curation.WholeEntry.instructions() ->
         {:error, :packet_instruction_mismatch}
 
       packet["packet_version"] not in versions() ->
