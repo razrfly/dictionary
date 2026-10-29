@@ -32,6 +32,54 @@ defmodule DevilsDictionary.Curation.ItemBasis do
 
   def get(id), do: Repo.get(__MODULE__, id)
 
+  @doc "Whether an immutable accepted model choice has a policy-withheld explanation."
+  def reason_withheld?(item) do
+    with %{origin: "model", reason_rewritten: false} = basis <- get(item.id),
+         %{"field" => field, "policy" => policy, "sha256" => sha} = marker <-
+           basis.original_reference["reason_withheld"],
+         true <- is_binary(field) and field != "" and is_binary(policy) and policy != "",
+         true <- is_binary(sha) and String.match?(sha, ~r/\A[0-9a-f]{64}\z/),
+         %{state: :completed, outcome: :accepted} = attempt <- Repo.get(Attempt, basis.attempt_id),
+         %CompositionItem{} = original <- Repo.get(CompositionItem, basis.origin_item_id),
+         %{origin: :model, attempt_id: attempt_id, created_by_actor_id: actor_id} <-
+           Repo.get(DevilsDictionary.Curation.CompositionVersion, original.composition_version_id),
+         true <- attempt_id == attempt.id and original.selection_origin == :model,
+         true <-
+           is_nil(original.note) and
+             actor_id == attempt.requested_by_actor_id,
+         true <- Compositions.same_reference?(item, original),
+         %{} = candidate <-
+           Enum.find(
+             attempt.packet_summary["candidates"] || [],
+             &(&1["candidate_id"] == basis.original_reference["packet_candidate_id"])
+           ),
+         %{} = choice <-
+           Enum.find(
+             List.wrap(attempt.result["lead"]) ++
+               (attempt.result["highlights"] || []),
+             &(&1["candidate_id"] == candidate["candidate_id"])
+           ),
+         true <- is_nil(choice["reason"]) and choice["reason_withheld"] == marker,
+         %{} = meaning <-
+           Enum.find(
+             attempt.packet_summary["meanings"] || [],
+             &(&1["meaning_id"] == choice["meaning_id"])
+           ) do
+      case meaning do
+        %{"kind" => "lexeme", "lexeme_id" => id} ->
+          item.meaning_lexeme_id == id and original.meaning_lexeme_id == id
+
+        %{"kind" => "sense_revision", "sense_revision_id" => id} ->
+          item.meaning_sense_revision_id == id and original.meaning_sense_revision_id == id
+
+        _ ->
+          false
+      end
+    else
+      _ -> false
+    end
+  end
+
   def virtual(nil), do: nil
 
   def virtual(basis),
