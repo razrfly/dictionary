@@ -166,7 +166,10 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
 
   @instructions %{
     "generic-editor-v1" => @generic_editor_v1,
-    "generic-editor-v2" => @generic_editor_v2
+    "generic-editor-v2" => @generic_editor_v2,
+    "voltaire-selector-v1" =>
+      @generic_editor_v2 <>
+        "\nSelection lens:\n" <> DevilsDictionary.Curation.Agents.Persona.selection_instruction()
   }
 
   @doc "The pinned instruction versions, oldest first."

@@ -27,7 +27,7 @@ defmodule DevilsDictionary.Curation.Configurations do
   **The editor (#264 R1)** is three acts, never one:
 
     * *binding*: a new immutable version whose manifest names the admitted
-      generic editor, its bot actor and its model config
+      editor, its bot actor and its model config
       (`create_version/3` with `:editor`). `"mode"` stays `"manual"`:
       publication stays the owner's (#253 D4);
     * *activation*: the existing `activate/4`, which also makes every
@@ -143,11 +143,11 @@ defmodule DevilsDictionary.Curation.Configurations do
   be an admitted profile's admitted version. Slots follow list order. The
   version is not activated.
 
-  `:editor`, `%{profile_id, profile_version_id, model_config_id}`, binds the
-  generic editor (#264 R1.1). The server resolves it and writes the
+  `:editor`, `%{profile_id, profile_version_id, model_config_id}`, binds an
+  admitted editor (#264 R1.1, #275 Phase A). The server resolves it and writes the
   manifest's `"editor"`: the profile and the version it is admitted at, its
   bot actor, the model config and its hash, and the instruction. Refused
-  unless the profile is the admitted generic editor at that version
+  unless the profile is admitted at that version and its pinned lens matches
   (`:editor_not_admitted`), the model config exists
   (`:model_config_unknown`), its instruction is a pinned one
   (`:unsupported_instruction_version`) and the bot actor is labelled
@@ -202,7 +202,7 @@ defmodule DevilsDictionary.Curation.Configurations do
              Repo.one(
                from p in Profile,
                  where:
-                   p.id == ^pid and p.kind == :generic_editor and p.state == :admitted and
+                   p.id == ^pid and p.state == :admitted and
                      p.current_version_id == ^vid
              ),
              :editor_not_admitted
@@ -213,8 +213,10 @@ defmodule DevilsDictionary.Curation.Configurations do
              config.instruction_version in Packet.instruction_versions(),
              :unsupported_instruction_version
            ),
+         :ok <- editor_profile_check(profile, Repo.get!(ProfileVersion, vid), config),
          {:ok, bot} <- Transaction.need(Repo.get(Actor, profile.bot_actor_id), :bot_actor_missing),
-         :ok <- Transaction.check(bot.label == editor_label(config), :editor_label_mismatch) do
+         :ok <-
+           Transaction.check(bot.label == editor_label(profile, config), :editor_label_mismatch) do
       {:ok,
        %{
          "profile_id" => profile.id,
@@ -236,6 +238,26 @@ defmodule DevilsDictionary.Curation.Configurations do
   """
   def editor_label(%ModelConfig{instruction_version: instruction, slug: slug}),
     do: "#{instruction} · #{slug}"
+
+  def editor_label(%Profile{kind: :generic_editor}, config), do: editor_label(config)
+
+  def editor_label(profile, config),
+    do: DevilsDictionary.Curation.Agents.Persona.label(profile, config)
+
+  defp editor_profile_check(%Profile{kind: :generic_editor}, version, config) do
+    Transaction.check(
+      version.template_version == config.instruction_version and
+        config.instruction_version in ["generic-editor-v1", "generic-editor-v2"],
+      :editor_profile_mismatch
+    )
+  end
+
+  defp editor_profile_check(profile, version, config) do
+    Transaction.check(
+      DevilsDictionary.Curation.Agents.Persona.compatible?(profile, version, config),
+      :editor_profile_mismatch
+    )
+  end
 
   # What a version is: its roster seats and the manifest they are hashed into.
   defp manifest(attrs) do
@@ -392,7 +414,7 @@ defmodule DevilsDictionary.Curation.Configurations do
     config = Repo.get(ModelConfig, editor["model_config_id"])
 
     cond do
-      is_nil(profile) or profile.kind != :generic_editor or profile.state != :admitted or
+      is_nil(profile) or profile.state != :admitted or
           profile.current_version_id != editor["profile_version_id"] ->
         {:error, :editor_not_admitted}
 
@@ -402,6 +424,10 @@ defmodule DevilsDictionary.Curation.Configurations do
       config.config_hash != editor["model_config_hash"] or
           config.instruction_version != editor["instruction_version"] ->
         {:error, :model_config_changed}
+
+      editor_profile_check(profile, Repo.get!(ProfileVersion, profile.current_version_id), config) !=
+          :ok ->
+        {:error, :editor_profile_mismatch}
 
       true ->
         {:ok,

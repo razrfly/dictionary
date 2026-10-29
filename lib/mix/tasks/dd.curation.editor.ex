@@ -15,6 +15,11 @@ defmodule Mix.Tasks.Dd.Curation.Editor do
       DD_NO_OBAN=1 mix dd.curation.editor request   --as EMAIL --slug SLUG --reason TEXT
       DD_NO_OBAN=1 mix dd.curation.editor forms     [--counted-only]
 
+  Phase A (#275): `seed`, `admit` and `bind` accept `--profile voltaire`.
+  Use a separately registered model config pinned to `voltaire-selector-v1`.
+  Seed prepares an inactive source, model-specific bot and sourced dossier;
+  admission and binding are still distinct reviewer acts. Generic defaults are unchanged.
+
   Every command takes `--dry-run`, which resolves and prints what it would
   do and writes nothing. `--as` names the reviewer account by email: the
   acts are that reviewer's, as on the screen.
@@ -76,7 +81,8 @@ defmodule Mix.Tasks.Dd.Curation.Editor do
     slug: :string,
     counted_only: :boolean,
     refresh_window: :string,
-    shelf: :string
+    shelf: :string,
+    profile: :string
   ]
 
   @impl Mix.Task
@@ -91,6 +97,10 @@ defmodule Mix.Tasks.Dd.Curation.Editor do
     {opts, rest, invalid} = OptionParser.parse(args, strict: @switches)
     if invalid != [], do: Mix.raise("unknown options: #{inspect(invalid)}")
 
+    if opts[:profile] &&
+         (opts[:profile] != "voltaire" || rest not in [["seed"], ["admit"], ["bind"]]),
+       do: Mix.raise("--profile voltaire is supported only by seed, admit and bind")
+
     Mix.Task.run("app.start")
     command(rest, opts)
   end
@@ -99,23 +109,53 @@ defmodule Mix.Tasks.Dd.Curation.Editor do
     scope = scope!(opts)
     config = model_config!(opts)
     reason = reason!(opts)
-    label = Configurations.editor_label(config)
+
+    if opts[:profile] && config.instruction_version != "voltaire-selector-v1",
+      do: Mix.raise("the persona requires a config pinned to voltaire-selector-v1")
+
+    label =
+      if opts[:profile],
+        do: "Inspired by Voltaire · " <> Configurations.editor_label(config),
+        else: Configurations.editor_label(config)
 
     if opts[:dry_run] do
       info(
-        "would seed the generic editor for #{config.slug} (config ##{config.id}), bot label #{inspect(label)}"
+        "would prepare #{opts[:profile] || "generic-editor"} (admission/activation unchanged) for #{config.slug} (config ##{config.id}), bot label #{inspect(label)}"
       )
     else
-      print(Profiles.seed_generic_editor(scope, config, reason: reason))
+      case opts[:profile] do
+        nil ->
+          print(Profiles.seed_generic_editor(scope, config, reason: reason))
+
+        "voltaire" ->
+          print(DevilsDictionary.Curation.Agents.Persona.prepare(scope, config, reason: reason))
+
+        _ ->
+          Mix.raise("--profile supports only voltaire")
+      end
     end
   end
 
   defp command(["admit"], opts) do
     scope = scope!(opts)
     reason = reason!(opts)
-    profile = Profiles.generic_editor() || Mix.raise("no generic editor: run seed first")
+    profile = selected_profile!(opts)
     version = Repo.get(ProfileVersion, profile.current_version_id) || Mix.raise("no version")
-    bot = editor_bot!()
+
+    bot =
+      if opts[:profile] do
+        config = model_config!(opts)
+
+        unless DevilsDictionary.Curation.Agents.Persona.compatible?(profile, version, config),
+          do: Mix.raise("persona dossier/model instruction mismatch")
+
+        source =
+          Repo.get_by!(DevilsDictionary.Sources.Source, slug: "curator-voltaire-" <> config.slug)
+
+        Repo.get_by!(Actor, actor_kind: :bot, bot_source_id: source.id)
+      else
+        editor_bot!()
+      end
 
     if opts[:dry_run] do
       info(
@@ -131,7 +171,7 @@ defmodule Mix.Tasks.Dd.Curation.Editor do
     reason = reason!(opts)
     config = model_config!(opts)
     c = default!()
-    profile = admitted_editor!()
+    profile = if opts[:profile], do: selected_profile!(opts), else: admitted_editor!()
 
     editor = %{
       profile_id: profile.id,
@@ -326,4 +366,17 @@ defmodule Mix.Tasks.Dd.Curation.Editor do
     do: Enum.map_join(map, ", ", fn {k, v} -> "#{k}: #{describe(v)}" end)
 
   defp describe(value), do: inspect(value)
+
+  defp selected_profile!(opts) do
+    case opts[:profile] do
+      nil ->
+        Profiles.generic_editor() || Mix.raise("no generic editor: run seed first")
+
+      "voltaire" ->
+        Repo.get_by(Profile, slug: "voltaire") || Mix.raise("run seed --profile voltaire first")
+
+      _ ->
+        Mix.raise("--profile supports only voltaire")
+    end
+  end
 end
