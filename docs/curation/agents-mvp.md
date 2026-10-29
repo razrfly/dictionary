@@ -326,3 +326,7 @@ are #275's; freeze them before calls and do not fit them to results. Real public
 public receipt, actual news expiry/cleanup, next-due unattended assessment, fresh
 zero-inference repeat and hold behavior are live acceptance, not claimed by tests.
 A failed experiment is a dated NO-GO. Keep the model stopped until that window.
+
+
+### Whole-entry selection semantics, 29 October 2026
+Real attempt 23 identified an irrelevant news match but put its rejection reason inside a selected object. The nullable schema was passed unchanged and permitted omission. Immutable instruction v5 makes choice objects publication instructions, with null/[] for rejection and an explicit counterexample. No schema expansion, lexical rejection filter, hidden repair, extra model pass, or source eligibility change. Versions v1–v4 remain pinned. Real output must pass the love gate before expansion.

@@ -67,11 +67,22 @@ defmodule DevilsDictionary.Curation.Agents.Persona do
                     @relevance_manifest,
                     ~w(dossier source_refs deceased_evidence_refs template_version)
                   )
+  @selection_path Path.expand(
+                    "../../../../priv/curation/agents/personas/voltaire/v6/profile.json",
+                    __DIR__
+                  )
+  @external_resource @selection_path
+  @selection_manifest @selection_path |> File.read!() |> Jason.decode!()
+  @selection_body Map.take(
+                    @selection_manifest,
+                    ~w(dossier source_refs deceased_evidence_refs template_version)
+                  )
   @whole_bodies %{
     "voltaire-whole-entry-v1" => @whole_body,
     "voltaire-whole-entry-v2" => @revised_body,
     "voltaire-whole-entry-v3" => @sections_body,
-    "voltaire-whole-entry-v4" => @relevance_body
+    "voltaire-whole-entry-v4" => @relevance_body,
+    "voltaire-whole-entry-v5" => @selection_body
   }
 
   def manifest, do: @manifest
@@ -94,6 +105,9 @@ defmodule DevilsDictionary.Curation.Agents.Persona do
     do:
       @sections_manifest["dossier"]["disclosure"] <>
         "\n" <> @sections_manifest["dossier"]["selection"]
+
+  def selection_instruction("voltaire-whole-entry-v5"),
+    do: selection_instruction("voltaire-whole-entry-v4")
 
   def selection_instruction("voltaire-whole-entry-v4"),
     do:
@@ -135,7 +149,8 @@ defmodule DevilsDictionary.Curation.Agents.Persona do
                  "voltaire-whole-entry-v1",
                  "voltaire-whole-entry-v2",
                  "voltaire-whole-entry-v3",
-                 "voltaire-whole-entry-v4"
+                 "voltaire-whole-entry-v4",
+                 "voltaire-whole-entry-v5"
                ],
                :persona_instruction_mismatch
              ) do
@@ -168,7 +183,8 @@ defmodule DevilsDictionary.Curation.Agents.Persona do
                       "voltaire-whole-entry-v1",
                       "voltaire-whole-entry-v2",
                       "voltaire-whole-entry-v3",
-                      "voltaire-whole-entry-v4"
+                      "voltaire-whole-entry-v4",
+                      "voltaire-whole-entry-v5"
                     ],
                     do: "single_editor_v1",
                     else: "proposes only"
