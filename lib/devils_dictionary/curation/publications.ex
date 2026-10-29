@@ -177,7 +177,11 @@ defmodule DevilsDictionary.Curation.Publications do
     case Enum.find(items, fn item ->
            blank = is_nil(item.note) or String.trim(item.note) == ""
 
-           blank and
+           withheld =
+             version.origin == :model and
+               DevilsDictionary.Curation.ItemBasis.reason_withheld?(item)
+
+           blank and not withheld and
              not (item.role == :lead and version.resolution["lead_rule"] == "priority_source")
          end) do
       nil -> :ok

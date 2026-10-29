@@ -309,6 +309,56 @@ defmodule DevilsDictionary.Curation.AutonomousCuratorTest do
     end
   end
 
+  test "policy-withheld model explanation publishes with authentic basis, never invented text",
+       w do
+    o = DevilsDictionary.ProviderCitationFixtures.provider_observation!(w, "guardian")
+    frozen = frozen!()
+    lead = Enum.find(frozen.packet["candidates"], &(&1["object_id"] == w.bierce.object_id))
+
+    shelf =
+      Enum.find(
+        frozen.packet["candidates"],
+        &(&1["kind"] == "shelf" and &1["shelf"]["result"] == o.result.id)
+      )
+
+    raw =
+      DevilsDictionary.RuntimeFixtures.selection(
+        {lead["candidate_id"], lead["required_meaning"]},
+        [{shelf["candidate_id"], shelf["required_meaning"], nil}]
+      )
+
+    field = hd(shelf["expiring_text"])
+    reason = field[:value] || field["value"]
+    assert is_binary(reason) and String.length(reason) > 12
+    raw = put_in(raw, ["highlights"], [hd(raw["highlights"]) |> Map.put("reason", reason)])
+    stub_answer!(w, raw)
+    assert {:ok, row} = assess(w)
+    assert row.last_outcome_reason == "published_automatically", inspect(row)
+
+    version =
+      Repo.get!(CompositionVersion, Repo.one!(CompositionPublication).published_version_id)
+
+    item = Enum.find(Compositions.items(version.id), & &1.shelf_citation_id)
+    assert item.note == nil
+    assert DevilsDictionary.Curation.ItemBasis.reason_withheld?(item)
+    refute DevilsDictionary.Curation.ItemBasis.reason_withheld?(%{item | id: -1})
+    refute DevilsDictionary.Curation.ItemBasis.reason_withheld?(%{item | meaning_lexeme_id: -1})
+    assert {:ok, receipt} = Receipt.read("love", version.version)
+    choice = Enum.find(receipt.items, & &1.citation)
+    assert choice.basis.original_reference["reason_withheld"]["sha256"]
+    html = build_conn() |> get("/on/love/receipt/#{version.version}") |> html_response(200)
+    assert html =~ "Reason withheld under"
+    assert html =~ "sha256"
+
+    reason_text =
+      html
+      |> LazyHTML.from_fragment()
+      |> LazyHTML.filter("#receipt-reason-#{item.id}")
+      |> LazyHTML.text()
+
+    refute reason_text =~ reason
+  end
+
   test "native sense and linked claim use the same automatic publication receipt", w do
     entity = DevilsDictionary.WordFixtures.concept!("Q270905", "Autonomous fixture entity")
     DevilsDictionary.WordFixtures.link!(w.love, entity, sense: w.profound)
@@ -328,7 +378,7 @@ defmodule DevilsDictionary.Curation.AutonomousCuratorTest do
     )
 
     assert {:ok, row} = assess(w)
-    assert row.last_outcome_reason == "published_automatically"
+    assert row.last_outcome_reason == "published_automatically", inspect(row)
 
     version =
       Repo.get!(CompositionVersion, Repo.one!(CompositionPublication).published_version_id)
