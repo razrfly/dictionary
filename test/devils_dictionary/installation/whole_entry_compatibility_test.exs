@@ -94,6 +94,47 @@ defmodule DevilsDictionary.Installation.WholeEntryCompatibilityTest do
 
       assert Repo.get!(DevilsDictionary.Curation.Runtime.ModelConfig, config.id).instruction_version ==
                "voltaire-whole-entry-v2"
+
+      section_version = 20_261_029_194_235
+
+      Ecto.Migrator.run(Repo, path, :up,
+        to: section_version,
+        dynamic_repo: Repo.get_dynamic_repo(),
+        log: false
+      )
+
+      assert {:ok, _} = Receipt.read("love", first.version.version)
+
+      Ecto.Migrator.run(Repo, path, :down,
+        step: 1,
+        dynamic_repo: Repo.get_dynamic_repo(),
+        log: false
+      )
+
+      assert {:ok, _} = Receipt.read("love", first.version.version)
+
+      Ecto.Migrator.run(Repo, path, :up,
+        to: section_version,
+        dynamic_repo: Repo.get_dynamic_repo(),
+        log: false
+      )
+
+      new_config =
+        DevilsDictionary.RuntimeFixtures.model_config!(%{
+          instruction_version: "voltaire-whole-entry-v3",
+          output_contract_version: "selection-output-v4"
+        })
+
+      assert_raise Postgrex.Error, ~r/section contract history exists/, fn ->
+        Ecto.Migrator.run(Repo, path, :down,
+          step: 1,
+          dynamic_repo: Repo.get_dynamic_repo(),
+          log: false
+        )
+      end
+
+      assert Repo.get!(DevilsDictionary.Curation.Runtime.ModelConfig, new_config.id).instruction_version ==
+               "voltaire-whole-entry-v3"
     end)
   end
 end
