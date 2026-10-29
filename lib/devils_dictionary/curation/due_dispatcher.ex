@@ -45,15 +45,31 @@ defmodule DevilsDictionary.Curation.DueDispatcher do
   end
 
   @doc "Read the bounded pilot inventory and feed due work through existing admission."
-  def dispatch(version, read_page \\ &page/1) do
+  def dispatch(version, read_page \\ &page/1, prepare \\ &prepare_sources/1) do
     for slug <- Pilot.pages(), slug in Pilot.autonomous_pages() do
-      {slug, safely_dispatch(version, slug, read_page)}
+      {slug, safely_dispatch(version, slug, read_page, prepare)}
+    end
+  end
+
+  @doc false
+  # Same On-page target and admission as WordLive. Calls enqueue/reuse the
+  # existing provider jobs; they never call a provider from the model.
+  def prepare_sources(page, request \\ &DevilsDictionary.Discovery.request_all/1) do
+    case DevilsDictionary.Discovery.target_for_page(page, nil, false) do
+      nil ->
+        :ready
+
+      target ->
+        if Enum.any?(request.(target), fn
+             {_provider, {:queued, _run}} -> true
+             _ -> false
+           end), do: :pending, else: :ready
     end
   end
 
   defp page(slug), do: slug |> Lexicon.lookup() |> WordPage.build(viewer: :public)
 
-  defp safely_dispatch(version, slug, read_page) do
+  defp safely_dispatch(version, slug, read_page, prepare) do
     try do
       page = read_page.(slug)
       lexemes = page.headword.lexemes
@@ -66,8 +82,21 @@ defmodule DevilsDictionary.Curation.DueDispatcher do
                  first.language,
                  Compositions.signature(Enum.map(lexemes, & &1.id))
                ) do
-            %{mode: :open} = composition -> Refresh.admit(composition.id, slug: slug)
-            _ -> :held_or_unprovisioned
+            %{mode: :open} = composition ->
+              preparation =
+                if Configurations.autonomous?(version) and
+                     DevilsDictionary.Curation.WholeEntry.enabled?(version),
+                   do: prepare.(page),
+                   else: :ready
+
+              case preparation do
+                :ready -> Refresh.admit(composition.id, slug: slug)
+                :pending -> :discovery_pending
+                _ -> {:error, :discovery_unavailable}
+              end
+
+            _ ->
+              :held_or_unprovisioned
           end
 
         _ ->

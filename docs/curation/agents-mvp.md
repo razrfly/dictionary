@@ -1,3 +1,19 @@
+# Headless source preparation
+
+The first cohort exposed an input gap: only love had discovery candidates. The other
+nine had never had their connected public pages initialize the API shelves. A plain
+HTTP fetch does not execute WordLive's connected discovery admission.
+
+For an open whole-entry page in the explicitly enabled ten-page autonomous pilot,
+DueDispatcher now uses the same On-page target and existing Discovery.request_all
+admission as the UI. Cache, coverage, backoff, budgets and existing provider workers
+remain in charge. It makes no model-side API call and forces no refresh. A queued
+source run returns discovery_pending before curation admission; the already-scheduled
+300-second successor checks again. Cached completed/empty results permit assessment;
+provider errors/backoff do not indefinitely block the usable sources. Held,
+unprovisioned and legacy configurations are unaffected. This is the missing handoff,
+not a new crawler, scheduler, source store or model round.
+
 # Editorial relevance iteration — 29 October 2026
 
 The v3 cohort completed ten real assessments: seven publications and three abstentions.
