@@ -369,7 +369,8 @@ defmodule DevilsDictionary.Curation.RuntimeTest do
   for {instruction, output} <- [
         {"voltaire-whole-entry-v1", "selection-output-v2"},
         {"voltaire-whole-entry-v2", "selection-output-v3"},
-        {"voltaire-whole-entry-v3", "selection-output-v4"}
+        {"voltaire-whole-entry-v3", "selection-output-v4"},
+        {"voltaire-whole-entry-v4", "selection-output-v4"}
       ] do
     test "whole-entry readiness smoke records its v4 identity through the real gateway #{instruction}",
          ctx do
@@ -389,7 +390,7 @@ defmodule DevilsDictionary.Curation.RuntimeTest do
           result = selection({"c1", "m0"}, [])
 
           result =
-            if unquote(instruction) == "voltaire-whole-entry-v3" do
+            if unquote(instruction) in ["voltaire-whole-entry-v3", "voltaire-whole-entry-v4"] do
               %{
                 "decision" => result["decision"],
                 "lead" => result["lead"],

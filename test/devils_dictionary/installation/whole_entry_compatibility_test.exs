@@ -135,6 +135,47 @@ defmodule DevilsDictionary.Installation.WholeEntryCompatibilityTest do
 
       assert Repo.get!(DevilsDictionary.Curation.Runtime.ModelConfig, new_config.id).instruction_version ==
                "voltaire-whole-entry-v3"
+
+      relevance_version = 20_261_029_203_115
+
+      Ecto.Migrator.run(Repo, path, :up,
+        to: relevance_version,
+        dynamic_repo: Repo.get_dynamic_repo(),
+        log: false
+      )
+
+      assert {:ok, _} = Receipt.read("love", first.version.version)
+
+      Ecto.Migrator.run(Repo, path, :down,
+        step: 1,
+        dynamic_repo: Repo.get_dynamic_repo(),
+        log: false
+      )
+
+      assert {:ok, _} = Receipt.read("love", first.version.version)
+
+      Ecto.Migrator.run(Repo, path, :up,
+        to: relevance_version,
+        dynamic_repo: Repo.get_dynamic_repo(),
+        log: false
+      )
+
+      relevance_config =
+        DevilsDictionary.RuntimeFixtures.model_config!(%{
+          instruction_version: "voltaire-whole-entry-v4",
+          output_contract_version: "selection-output-v4"
+        })
+
+      assert_raise Postgrex.Error, ~r/relevance instruction history exists/, fn ->
+        Ecto.Migrator.run(Repo, path, :down,
+          step: 1,
+          dynamic_repo: Repo.get_dynamic_repo(),
+          log: false
+        )
+      end
+
+      assert Repo.get!(DevilsDictionary.Curation.Runtime.ModelConfig, relevance_config.id).instruction_version ==
+               "voltaire-whole-entry-v4"
     end)
   end
 end

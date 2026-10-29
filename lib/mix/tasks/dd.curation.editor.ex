@@ -117,7 +117,8 @@ defmodule Mix.Tasks.Dd.Curation.Editor do
            "voltaire-selector-v1",
            "voltaire-whole-entry-v1",
            "voltaire-whole-entry-v2",
-           "voltaire-whole-entry-v3"
+           "voltaire-whole-entry-v3",
+           "voltaire-whole-entry-v4"
          ],
        do: Mix.raise("the persona requires a config pinned to voltaire-selector-v1")
 

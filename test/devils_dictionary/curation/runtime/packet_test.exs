@@ -29,9 +29,18 @@ defmodule DevilsDictionary.Curation.Runtime.PacketTest do
                "voltaire-selector-v1",
                "voltaire-whole-entry-v1",
                "voltaire-whole-entry-v2",
-               "voltaire-whole-entry-v3"
+               "voltaire-whole-entry-v3",
+               "voltaire-whole-entry-v4"
              ]
 
+      relevance = Packet.instruction!("voltaire-whole-entry-v4")
+
+      assert Digest.sha256(relevance) ==
+               "bba7b390b2033a43038435df7f0e20f15f4f26b107c7e513e8c8ca0e6f9f6983"
+
+      assert relevance =~ "Personality as a tie-breaker"
+      assert relevance =~ "News is optional"
+      assert relevance =~ "no sufficiently supported relevant choice"
       sections = Packet.instruction!("voltaire-whole-entry-v3")
 
       assert Digest.sha256(sections) ==

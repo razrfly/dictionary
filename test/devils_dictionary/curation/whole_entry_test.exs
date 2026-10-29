@@ -101,7 +101,7 @@ defmodule DevilsDictionary.Curation.WholeEntryTest do
   test "the operator can explicitly admit a prepared newer profile version", w do
     model =
       model_config!(%{
-        instruction_version: "voltaire-whole-entry-v3",
+        instruction_version: "voltaire-whole-entry-v4",
         output_contract_version: "selection-output-v4"
       })
       |> ready!()
@@ -133,6 +133,156 @@ defmodule DevilsDictionary.Curation.WholeEntryTest do
     ExUnit.CaptureIO.capture_io(fn -> Mix.Tasks.Dd.Curation.Editor.run(args) end)
     assert Repo.reload!(prepared.profile).current_version_id == prepared.version.id
     assert Repo.reload!(prepared.profile).bot_actor_id == prepared.bot_actor.id
+  end
+
+  @tag instruction: "voltaire-whole-entry-v4"
+  test "relevance instruction uses the same typed contract, publishes a suitable definition with sparse extras and keeps abstention available",
+       w do
+    frozen = packet("voltaire-whole-entry-v4")
+    wire = section_answer(frozen)
+
+    empty =
+      Map.new(WholeEntry.sections(), &{&1, if(&1 in ["examples", "quotes"], do: [], else: nil)})
+
+    wire = Map.put(wire, "selections", empty)
+    assert Contract.schema(frozen.packet)["properties"]["selections"]
+
+    assert {:ok, %{result: %{"contract" => "selection-output-v4"}}} =
+             Contract.validate(answer(wire), frozen)
+
+    abstention = %{
+      "decision" => "abstain",
+      "lead" => nil,
+      "selections" => empty,
+      "abstain_reason" => "No sufficiently supported choice in the supplied evidence."
+    }
+
+    assert {:ok, %{outcome: :abstained}} = Contract.validate(answer(abstention), frozen)
+    quotation = Enum.find(frozen.packet["candidates"], &(&1["kind"] == "sense_quotation"))
+
+    bad_quote = %{
+      "candidate_id" => quotation["candidate_id"],
+      "meaning_id" => quotation["required_meaning"],
+      "reason" => "A supplied quotation.",
+      "quote" => quotation["excerpt"]
+    }
+
+    assert {:refused, errors, _} =
+             Contract.validate(
+               answer(put_in(wire, ["selections", "quotes"], [bad_quote])),
+               frozen
+             )
+
+    assert Enum.any?(errors, &(List.last(&1) == "quote_not_allowed"))
+    stub_answer!(w, wire)
+    assert {:ok, %{last_outcome_reason: "published_automatically"}} = run!(w)
+    settle!()
+    publication = Repo.one!(CompositionPublication)
+    version = Repo.get!(CompositionVersion, publication.published_version_id)
+    assert [%{role: :lead}] = Compositions.items(version.id)
+    assert {:ok, receipt} = Receipt.read("love", version.version)
+    assert hd(receipt.items).chooser.model_config_id == w.model_config.id
+  end
+
+  @tag instruction: "voltaire-whole-entry-v4"
+  test "headless due checks wait on coalesced discovery then admit once cached", w do
+    alias DevilsDictionary.Curation.{DueDispatcher, RefreshState}
+
+    read = fn
+      "love" -> page("love")
+      _ -> %{headword: %{lexemes: []}}
+    end
+
+    parent = self()
+    target = DevilsDictionary.Discovery.target_for_page(page("love"), nil, false)
+
+    queued = fn page ->
+      DueDispatcher.prepare_sources(page, fn actual ->
+        send(parent, {:source_target, actual})
+        [{"open-library", {:queued, %{id: 42}}}]
+      end)
+    end
+
+    before_rows = Repo.aggregate(RefreshState, :count)
+
+    for _ <- 1..2 do
+      assert {"love", :discovery_pending} in DueDispatcher.dispatch(
+               w.editor_version,
+               read,
+               queued
+             )
+
+      assert_receive {:source_target, ^target}
+      assert Repo.aggregate(RefreshState, :count) == before_rows
+      assert Repo.aggregate(DevilsDictionary.Curation.Runtime.Attempt, :count) == 0
+    end
+
+    ready = fn page ->
+      DueDispatcher.prepare_sources(page, fn _ ->
+        [
+          {"open-library", {:cached, %{id: 42}}},
+          {"guardian", {:deferred, :backoff}},
+          {"met", {:error, :target_not_covered}}
+        ]
+      end)
+    end
+
+    assert {"love", {:ok, :admitted}} in DueDispatcher.dispatch(w.editor_version, read, ready)
+    count = Repo.aggregate(Oban.Job, :count)
+    assert {"love", {:ok, :in_flight}} in DueDispatcher.dispatch(w.editor_version, read, ready)
+    assert Repo.aggregate(Oban.Job, :count) == count
+    assert Repo.aggregate(DevilsDictionary.Curation.Runtime.Attempt, :count) == 0
+  end
+
+  @tag instruction: "voltaire-whole-entry-v4"
+  test "held unprovisioned and legacy pages do not request discovery", w do
+    alias DevilsDictionary.Curation.DueDispatcher
+    DevilsDictionary.WordFixtures.word!(w, "war", ["wiktionary"], scope: nil)
+
+    read = fn
+      slug when slug in ["love", "war"] -> page(slug)
+      _ -> %{headword: %{lexemes: []}}
+    end
+
+    parent = self()
+
+    prepare = fn _ ->
+      send(parent, :unexpected_preparation)
+      :pending
+    end
+
+    {:ok, _} = Compositions.set_mode(w.reviewer, w.composition.id, :mine, [])
+    results = DueDispatcher.dispatch(w.editor_version, read, prepare)
+    assert {"love", :held_or_unprovisioned} in results
+    assert {"war", :held_or_unprovisioned} in results
+    refute_received :unexpected_preparation
+    legacy = legacy!(w)
+    {:ok, _} = Compositions.set_mode(w.reviewer, w.composition.id, :open, [])
+    DueDispatcher.dispatch(legacy, read, prepare)
+    refute_received :unexpected_preparation
+  end
+
+  test "source preparation isolates deferred failed and unsupported providers" do
+    alias DevilsDictionary.Curation.DueDispatcher
+    p = page("love")
+
+    assert :ready =
+             DueDispatcher.prepare_sources(p, fn _ ->
+               [
+                 {"guardian", {:deferred, :backoff}},
+                 {"spotify", {:error, :provider_disabled}},
+                 {"met", {:error, :target_not_covered}},
+                 {"open-library", {:cached, %{result_count: 0}}}
+               ]
+             end)
+
+    assert :pending =
+             DueDispatcher.prepare_sources(p, fn _ ->
+               [
+                 {"guardian", {:deferred, :backoff}},
+                 {"open-library", {:queued, %{id: 42}}}
+               ]
+             end)
   end
 
   defp section_answer(frozen) do
