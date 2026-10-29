@@ -2,8 +2,8 @@ defmodule DevilsDictionaryWeb.CurationLive do
   @moduledoc """
   The owner's curation queue, `/ops/curation` (#257 §2.1, #253 §6).
 
-  An operator surface: 404 through the tunnel like every `/ops` page
-  (`ProxyGuard`), and a reviewer's (`UserAuth.require_reviewer/2` answers any
+  The owner-authorized tunnel exception: only authenticated reviewers may
+  reach this curation surface (`UserAuth.require_reviewer/2` answers any
   other account 403; `:require_reviewer` guards a socket that live-navigates
   in). It lists the pilot pages (`:curation_pilot_pages`, #253 D2) with what
   each page's composition is now and which kinds of candidate its page

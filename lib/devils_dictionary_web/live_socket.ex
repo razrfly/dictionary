@@ -11,8 +11,9 @@ defmodule DevilsDictionaryWeb.LiveSocket do
   with 503: otherwise a client with a session token (the development
   secret is in the repository) could mount a reader LiveView over the
   socket and read drafts the page itself would not show. On the published
-  host every socket connects, and the operator LiveViews refuse a proxied
-  one when they mount (`ProxyGuard.on_mount/4`).
+  host every socket connects. Local-only operator LiveViews refuse proxied
+  mounts (`ProxyGuard.on_mount/4`); the separate curation session instead
+  requires the existing database-backed reviewer role.
   """
 
   use Phoenix.LiveView.Socket

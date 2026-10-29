@@ -118,18 +118,18 @@ defmodule DevilsDictionaryWeb.Router do
       live "/health", HealthLive, :show
       live "/imports", Admin.ImportsLive, :index
       live "/discovery", DiscoveryLive, :index
+    end
 
-      # The owner's curation screen (#257): an operator surface, so 404
-      # through the tunnel like the rest, and a reviewer's: any other account
-      # is answered 403 here, and the LiveViews mount under
-      # `:require_reviewer` for a socket that live-navigates in.
-      scope "/curation" do
-        pipe_through :require_reviewer
+    # Only curation is available through the published tunnel, behind reviewer
+    # authentication on both HTTP and connected LiveView mounts. Keep it out of
+    # the local-only operator session; imports/health/mailbox remain hidden.
+    scope "/curation" do
+      pipe_through :require_reviewer
 
+      live_session :curation_reviewer,
+        on_mount: [{DevilsDictionaryWeb.UserAuth, :require_reviewer}] do
         live "/", CurationLive, :index
         live "/on/:slug", CurationLive.Editor, :edit
-        # An editor's attempt (#253 D9, #264 R16): what it was offered and
-        # what it answered, by ids and hashes.
         live "/attempts/:id", CurationLive.Attempt, :show
       end
     end

@@ -381,6 +381,21 @@ defmodule DevilsDictionaryWeb.PublicRoutingTest do
           assert conn.status == 404, "#{path} answered #{conn.status} through the proxy"
         end
 
+        # The exception is exact-route curation, not an /ops prefix bypass.
+        reviewer = CurationFixtures.account([:reviewer])
+
+        for path <- ~w(/dev/mailbox /dev/dashboard /ops/imports /ops/health /ops/discovery
+                       /ops/curation-other /ops/curation/imports /ops/curation/on/love/extra
+                       /ops/curation/attempts/1/export /kit /admin/imports) do
+          assert ctx.conn |> log_in_user(reviewer.user) |> proxied() |> get(path) |> response(404)
+        end
+
+        assert ctx.conn
+               |> log_in_user(reviewer.user)
+               |> proxied()
+               |> post("/ops/imports", %{"action" => "start"})
+               |> response(404)
+
         # The reader is served through the proxy as usual.
         refute (ctx.conn |> proxied() |> get("/robots.txt")).status in [403, 503]
 
