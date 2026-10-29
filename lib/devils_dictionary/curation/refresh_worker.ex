@@ -7,7 +7,8 @@ defmodule DevilsDictionary.Curation.RefreshWorker do
   for the On page that admitted it, and completes as `:unchanged` or
   `:needs_editor` under the fence `Curation.Refresh` keeps. A failure reading
   the inputs defers the run with backoff. **The published pointer never
-  moves.**
+  moves under manual policy; explicit single_editor_v1 policy may publish a
+  validated accepted choice through the same fenced record.**
 
   **The editor (#264 R3).** The worker still makes two calls, `claim` and
   `check`. While the editor is enabled for the run's configuration version,

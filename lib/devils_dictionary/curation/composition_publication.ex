@@ -5,8 +5,10 @@ defmodule DevilsDictionary.Curation.CompositionPublication do
   with the review that authorized it and the fingerprint it published.
   Append-only.
 
-  `authority_kind` names what authorized it. In this slice that is always
-  `:operator`: a reviewer, and for a publication the version's latest review,
+  `authority_kind` names what authorized it. It is
+  `:operator` for an owner action, or `:single_editor` for an accepted model
+  choice under the explicit enabled single-editor policy, with no review.
+  For an operator publication the version's latest review,
   an acceptance. The panel-decision authority
   (`docs/curation/persistence-slice-1.md`, "Publication authority") needs
   decision records that do not exist yet, and the database refuses it.
@@ -16,7 +18,7 @@ defmodule DevilsDictionary.Curation.CompositionPublication do
   schema "editorial_composition_publications" do
     field :composition_id, :id
     field :action, Ecto.Enum, values: [:publish, :withdraw]
-    field :authority_kind, Ecto.Enum, values: [:operator]
+    field :authority_kind, Ecto.Enum, values: [:operator, :single_editor]
     field :previous_version_id, :id
     field :published_version_id, :id
     field :authorizing_review_id, :id

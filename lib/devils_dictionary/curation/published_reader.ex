@@ -148,7 +148,9 @@ defmodule DevilsDictionary.Curation.PublishedReader do
 
   defp build(page, published, configuration, configuration_version) do
     %{composition: composition, version: version, receipt: receipt} = published
-    review = Repo.get(CompositionReview, receipt.authorizing_review_id)
+
+    review =
+      receipt.authorizing_review_id && Repo.get(CompositionReview, receipt.authorizing_review_id)
 
     proposal = proposal_of(version)
 

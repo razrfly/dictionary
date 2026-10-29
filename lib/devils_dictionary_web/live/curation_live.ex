@@ -247,8 +247,8 @@ defmodule DevilsDictionaryWeb.CurationLive do
 
   # Withdrawn until a version is written after the withdrawal: re-opening and
   # saving a draft makes the page a draft again.
-  defp state([], _receipts, _published), do: :never
   defp state(_versions, _receipts, id) when is_integer(id), do: :published
+  defp state([], _receipts, _published), do: :never
 
   defp state([latest | _], [%{action: :withdraw} = receipt | _], nil) do
     if DateTime.compare(latest.version.inserted_at, receipt.committed_at) == :gt,

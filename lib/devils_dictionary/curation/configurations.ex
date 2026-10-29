@@ -29,7 +29,8 @@ defmodule DevilsDictionary.Curation.Configurations do
     * *binding*: a new immutable version whose manifest names the admitted
       editor, its bot actor and its model config
       (`create_version/3` with `:editor`). `"mode"` stays `"manual"`:
-      publication stays the owner's (#253 D4);
+      publication defaults to the owner's; explicit single_editor_v1 is the
+      owner-amended #275 autonomous path;
     * *activation*: the existing `activate/4`, which also makes every
       pending proposal of another configuration version obsolete;
     * *enablement*: a separate switch on the configuration
@@ -136,7 +137,9 @@ defmodule DevilsDictionary.Curation.Configurations do
   end
 
   @doc """
-  Adds an immutable, manual-only version to a configuration, as a reviewer.
+  Adds an immutable configuration version, as an operator.
+  Optional :editor_publication is manual (default) or single_editor_v1,
+  which requires a bound editor; activation and enablement stay separate.
 
   `attrs`: `:reason`, and optionally `:max_highlights` (0–3, default 3) and
   `:members`, a list of `%{profile_id, profile_version_id}`. Each member must
@@ -166,7 +169,13 @@ defmodule DevilsDictionary.Curation.Configurations do
                :invalid_refresh_window
              ),
            :ok <- admitted_members(Map.get(attrs, :members, [])),
-           {:ok, editor} <- editor_binding(Map.get(attrs, :editor)) do
+           {:ok, editor} <- editor_binding(Map.get(attrs, :editor)),
+           :ok <-
+             Transaction.check(
+               Map.get(attrs, :editor_publication, "manual") in ["manual", "single_editor_v1"] and
+                 (Map.get(attrs, :editor_publication, "manual") == "manual" or not is_nil(editor)),
+               :invalid_publication_policy
+             ) do
         {members, manifest} = attrs |> Map.put(:editor, editor) |> manifest()
 
         case Repo.get_by(ConfigurationVersion,
@@ -292,6 +301,12 @@ defmodule DevilsDictionary.Curation.Configurations do
         do: Map.put(manifest, "refresh_window_seconds", attrs.refresh_window),
         else: manifest
 
+    manifest =
+      case Map.get(attrs, :editor_publication, "manual") do
+        "manual" -> manifest
+        policy -> Map.put(manifest, "editor_publication", policy)
+      end
+
     {members, manifest}
   end
 
@@ -378,6 +393,9 @@ defmodule DevilsDictionary.Curation.Configurations do
   def ready?(%ConfigurationVersion{manifest: %{} = manifest, lead_policy: :bierce_first_v1}),
     do:
       manifest["mode"] == @mode and
+        Map.get(manifest, "editor_publication", "manual") in ["manual", "single_editor_v1"] and
+        (Map.get(manifest, "editor_publication", "manual") == "manual" or
+           is_map(manifest["editor"])) and
         Map.get(manifest, "refresh_window_seconds", 172_800) in [86_400, 172_800, 604_800] and
         editor_shape?(Map.get(manifest, "editor", :none))
 
@@ -386,6 +404,10 @@ defmodule DevilsDictionary.Curation.Configurations do
   @doc "The assessment window of the exact configuration version; v1 defaults to 48h."
   def refresh_window(%ConfigurationVersion{manifest: manifest}),
     do: Map.get(manifest, "refresh_window_seconds", 172_800)
+
+  @doc "Whether the immutable configuration explicitly permits single-editor publication."
+  def autonomous?(%ConfigurationVersion{manifest: manifest}),
+    do: manifest["editor_publication"] == "single_editor_v1"
 
   @editor_ids ~w(profile_id profile_version_id bot_actor_id model_config_id)
   @editor_keys Enum.sort(@editor_ids ++ ~w(model_config_hash instruction_version))
@@ -516,7 +538,12 @@ defmodule DevilsDictionary.Curation.Configurations do
                c.editor_enabled_version_id != version.id or not editor_switch_live?(c),
                :already_enabled
              ) do
-        switch(c, version.id, actor, reason)
+        with {:ok, updated} <- switch(c, version.id, actor, reason) do
+          if autonomous?(version),
+            do: DevilsDictionary.Curation.DueDispatcher.schedule(version.id)
+
+          {:ok, updated}
+        end
       end
     end)
   end

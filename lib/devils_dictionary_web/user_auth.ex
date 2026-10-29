@@ -255,6 +255,7 @@ defmodule DevilsDictionaryWeb.UserAuth do
 
   def on_mount(:require_reviewer, _params, session, socket) do
     socket = mount_current_scope(socket, session)
+    socket = DevilsDictionaryWeb.LocalCurator.mount(socket, session)
     user = socket.assigns.current_scope && socket.assigns.current_scope.user
 
     if user && DevilsDictionary.Claims.Contributions.reviewer?(socket.assigns.current_scope) do

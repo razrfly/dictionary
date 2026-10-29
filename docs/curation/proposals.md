@@ -7,7 +7,12 @@ back. The rules are #264 §4 (R1–R19); this page says how to operate them. The
 service itself is [runtime-operations.md](runtime-operations.md)'s, run with
 `mix dd.runtime`.
 
-**No bot operation moves the published pointer.** The editor writes a proposal: a model
+**This document describes optional manual policy.** Under #275's 29 October
+owner amendment, explicit `single_editor_v1` policy publishes accepted choices
+without human review through the common record; see [agents-mvp.md](agents-mvp.md).
+Human Take/Edit/quality forms below are not routine autonomous acceptance.
+
+**Under manual policy no bot operation moves the published pointer.** The editor writes a proposal: a model
 version with its attempt, never accepted and never published (the code and the database
 refuse both). Only the owner's Take or Edit-publish, with the quality form and the
 compare-and-switch, publishes anything.

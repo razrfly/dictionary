@@ -18,6 +18,9 @@ defmodule DevilsDictionary.Curation.Pilot do
   @doc "The pilot pages' slugs: `:curation_pilot_pages`, by default #253 D2's ten."
   def pages, do: Application.get_env(:devils_dictionary, :curation_pilot_pages, @pages)
 
+  @doc "Fixed autonomous pilot; a runtime override may restrict, never expand this set."
+  def autonomous_pages, do: @pages
+
   @doc "Whether `slug` is a pilot page."
   def page?(slug) when is_binary(slug), do: slug in pages()
   def page?(_slug), do: false
