@@ -120,7 +120,12 @@ defmodule DevilsDictionary.Curation.WholeEntry do
 
   def coherent?(manifest) do
     whole = manifest["selection_scope"] == "whole_entry_v1"
-    instruction = get_in(manifest, ["editor", "instruction_version"])
+
+    instruction =
+      case manifest["editor"] do
+        editor when is_map(editor) -> editor["instruction_version"]
+        _ -> nil
+      end
 
     if whole,
       do: instruction == instruction() and manifest["max_highlights"] == 12,

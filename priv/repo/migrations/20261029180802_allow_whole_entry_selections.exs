@@ -8,7 +8,7 @@ defmodule DevilsDictionary.Repo.Migrations.AllowWholeEntrySelections do
     ALTER TABLE editorial_composition_items ADD CONSTRAINT editorial_composition_items_shape CHECK (
     role IN ('lead', 'highlight')
     AND item_kind IN ('content', 'sense_quotation', 'work', 'exemplar', 'sense_definition', 'claim')
-    AND selection_origin IN ('manual','model') 
+    AND selection_origin IN ('manual','model')
     AND (role <> 'lead' OR (position = 1 AND item_kind IN ('content','sense_definition')))
     AND (role <> 'highlight' OR (position >= 1 AND position <= 12))
     AND (item_kind <> 'exemplar' OR role = 'highlight')
@@ -155,7 +155,7 @@ defmodule DevilsDictionary.Repo.Migrations.AllowWholeEntrySelections do
     ALTER TABLE editorial_composition_items ADD CONSTRAINT editorial_composition_items_shape CHECK (
     role IN ('lead', 'highlight')
     AND item_kind IN ('content', 'sense_quotation', 'work', 'exemplar', 'sense_definition', 'claim')
-    AND selection_origin IN ('manual','model') 
+    AND selection_origin IN ('manual','model')
     AND (role <> 'lead' OR (position = 1 AND item_kind = 'content'))
     AND (role <> 'highlight' OR (position >= 1 AND position <= 3))
     AND (item_kind <> 'exemplar' OR role = 'highlight')
