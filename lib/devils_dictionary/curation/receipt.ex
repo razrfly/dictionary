@@ -70,8 +70,10 @@ defmodule DevilsDictionary.Curation.Receipt do
          version: version,
          publication: publication,
          publication_actor: Repo.get(Actor, publication.actor_id),
+         selection_actor: Repo.get(Actor, version.created_by_actor_id),
          review_actor: review_actor(publication),
          composition: composition,
+         omitted_model_choices: (version.resolution || %{})["omitted_model_choices"] || [],
          published_versions: published,
          window:
            Configurations.refresh_window(

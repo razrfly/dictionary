@@ -46,6 +46,41 @@ defmodule DevilsDictionaryWeb.CurationReceiptLive do
             >Version {number}</.link>
           </nav>
         </header>
+        <section
+          :if={@receipt.omitted_model_choices != []}
+          id="receipt-omitted-choices"
+          class="flex flex-col gap-4"
+        >
+          <h2 class="font-display text-2xl">Recommendations not placed</h2>
+          <p>
+            Recommended in attempt {@receipt.version.attempt_id}
+            <span :if={@receipt.selection_actor}>by {@receipt.selection_actor.label}</span>
+            on {stamp(@receipt.version.inserted_at)}.
+          </p>
+          <article :for={choice <- @receipt.omitted_model_choices} class="flex min-w-0 flex-col gap-2">
+            <p>
+              Choice {choice["candidate_id"]} was not placed because another selection already shows the same content.
+              <span :if={choice["kept_candidate_id"]}>Retained choice: {choice["kept_candidate_id"]}.</span>
+              <span :if={choice["kept_item_id"]}>Retained item: {choice["kept_item_id"]} from version record {choice[
+                "kept_version_id"
+              ]}.</span>
+            </p>
+            <p>
+              Original selection reason: {choice["selection_reason"] ||
+                "unavailable under source rules"}.
+            </p>
+            <details class="min-w-0">
+              <summary class="cursor-pointer underline underline-offset-4">
+                Exact omitted and retained records
+              </summary>
+              <dl class="mt-3 flex min-w-0 flex-col gap-2 break-all text-sm">
+                <dt>Omitted record</dt><dd>{value_text(choice["reference"])}</dd>
+                <dt>Retained record</dt><dd>{value_text(choice["kept_reference"])}</dd>
+                <dt>Reason</dt><dd>{choice["reason"]}</dd>
+              </dl>
+            </details>
+          </article>
+        </section>
         <article
           :for={item <- @receipt.items}
           id={"receipt-item-#{item.role}-#{item.position}"}

@@ -9,7 +9,7 @@ defmodule DevilsDictionary.Curation.Proposals.Merge do
 
     * `:ref`, the item's exact reference (what it shows, not why);
     * `:identity`, its display identity (`Compositions.display_identity/1`,
-      C6) and `:exemplar?`;
+      C6) and the legacy-named exemplar? flag, meaning any item guarded by the shared C6 predicate (exemplar, claim, sense definition or shelf);
     * `:candidate_id` for an editor's choice, `nil` for a kept item.
 
   The rules, in order:
@@ -20,7 +20,7 @@ defmodule DevilsDictionary.Curation.Proposals.Merge do
     3. the editor's highlights fill the remaining places, up to
        `max_highlights`, in the editor's order, skipping any that shows the
        same thing as an item already placed (the same reference, or the C6
-       display identity where an exemplar is involved); the rest go to
+       display identity where the shared C6 predicate applies); the rest go to
        `overflow`, by candidate id;
     4. an editor's choice equal to a kept item becomes the kept item: it is
        placed once, as the owner's;
@@ -39,15 +39,37 @@ defmodule DevilsDictionary.Curation.Proposals.Merge do
 
     placed_highlights = Enum.take(carried.highlights, max_highlights)
 
-    {highlights, overflow} =
-      Enum.reduce(choices.highlights, {placed_highlights, overflow}, fn choice, {acc, over} ->
+    {highlights, overflow, omitted} =
+      Enum.reduce(choices.highlights, {placed_highlights, overflow, []}, fn choice,
+                                                                            {acc, over, omitted} ->
         placed = List.wrap(lead) ++ acc
 
         cond do
-          Enum.any?(kept ++ placed, &same?(&1, choice)) -> {acc, over}
-          Enum.any?(placed, &shows_same?(&1, choice)) -> {acc, over}
-          length(acc) < max_highlights -> {acc ++ [choice], over}
-          true -> {acc, over ++ [choice.candidate_id]}
+          Enum.any?(kept ++ placed, &same?(&1, choice)) ->
+            {acc, over, omitted}
+
+          retained = Enum.find(placed, &shows_same?(&1, choice)) ->
+            retained_item = Map.get(retained, :item)
+            recommended_item = Map.get(choice, :item)
+
+            record = %{
+              "candidate_id" => choice.candidate_id,
+              "reference" => choice.ref,
+              "selection_reason" => recommended_item && recommended_item.note,
+              "kept_candidate_id" => retained.candidate_id,
+              "kept_reference" => retained.ref,
+              "kept_item_id" => retained_item && retained_item.id,
+              "kept_version_id" => retained_item && retained_item.composition_version_id,
+              "reason" => "duplicate_display_identity"
+            }
+
+            {acc, over, omitted ++ [record]}
+
+          length(acc) < max_highlights ->
+            {acc ++ [choice], over, omitted}
+
+          true ->
+            {acc, over ++ [choice.candidate_id], omitted}
         end
       end)
 
@@ -55,6 +77,7 @@ defmodule DevilsDictionary.Curation.Proposals.Merge do
       lead: lead,
       highlights: highlights,
       overflow: overflow,
+      omitted: omitted,
       model?: Enum.any?(List.wrap(lead) ++ highlights, &model?/1)
     }
   end
@@ -75,7 +98,7 @@ defmodule DevilsDictionary.Curation.Proposals.Merge do
   @doc "Whether two entries reference the same thing."
   def same?(a, b), do: a.ref == b.ref
 
-  # C6: an exemplar never shares its object or words with another item.
+  # C6 applies only when the existing shared predicate guards either item.
   defp shows_same?(a, b),
     do: (a.exemplar? or b.exemplar?) and not MapSet.disjoint?(a.identity, b.identity)
 
