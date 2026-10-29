@@ -15,7 +15,10 @@ defmodule DevilsDictionaryWeb.ProxyGuard do
       `/kit`, `/ops/*` (whose imports page starts an import), and the retired
       paths that redirect to them (`/s/*`, `/health`, `/admin/*`). They
       answer 404, as anything else that is not there. The owner still
-      reaches them on the machine itself.
+      reaches them on the machine itself. The owner-authorized exception is
+      `/ops/curation`: its queue, editor and attempt audit pass through to the
+      router's reviewer gate and a separate reviewer-only LiveView session.
+      No anonymous or non-reviewer curation access is granted.
     * **A server that reads drafts for everyone and is not the published
       host refuses every proxied request that reaches this plug** (503),
       instead of serving every draft. That is the failure the published
@@ -67,7 +70,8 @@ defmodule DevilsDictionaryWeb.ProxyGuard do
       not proxied? ->
         conn
 
-      PublicRouting.published_host?() and operator_surface?(conn.path_info) ->
+      PublicRouting.published_host?() and operator_surface?(conn.path_info) and
+          not reviewer_curation_surface?(conn.path_info) ->
         conn |> put_resp_content_type("text/plain") |> send_resp(404, "Not Found\n") |> halt()
 
       ReadingMode.configured?() ->
@@ -134,6 +138,14 @@ defmodule DevilsDictionaryWeb.ProxyGuard do
   @doc "Whether a path is one of the operator surfaces a published host hides."
   def operator_surface?([first | _rest]), do: first in @operator_prefixes
   def operator_surface?(_path_info), do: false
+
+  # This exception only reaches the router: its HTTP pipeline and separate
+  # LiveView session both require the existing database-backed reviewer role.
+  # Other /ops paths, adjacent prefixes and all developer tools stay hidden.
+  defp reviewer_curation_surface?(["ops", "curation"]), do: true
+  defp reviewer_curation_surface?(["ops", "curation", "on", _slug]), do: true
+  defp reviewer_curation_surface?(["ops", "curation", "attempts", _id]), do: true
+  defp reviewer_curation_surface?(_), do: false
 
   defp loopback?({127, _, _, _}), do: true
   defp loopback?({0, 0, 0, 0, 0, 0, 0, 1}), do: true

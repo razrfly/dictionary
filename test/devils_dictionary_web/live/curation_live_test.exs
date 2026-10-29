@@ -1,8 +1,7 @@
 defmodule DevilsDictionaryWeb.CurationLiveTest do
   @moduledoc """
   The owner's curation screen through the real routes (#257 §6, tests
-  6–13): an operator surface a reviewer reaches locally and nobody reaches
-  through the tunnel; a queue of the pilot pages; an editor that holds the
+  6–13): a reviewer-only surface locally and through the tunnel; a queue of the pilot pages; an editor that holds the
   lead rule, the three-highlight cap and attribution as the form changes,
   writes through the record's own services, and previews exactly what the
   page will show.
@@ -61,6 +60,15 @@ defmodule DevilsDictionaryWeb.CurationLiveTest do
   end
 
   defp as(conn, %{user: user}), do: log_in_user(conn, user)
+
+  defp tunnel(conn) do
+    conn
+    |> put_req_header("x-forwarded-for", "203.0.113.7")
+    |> put_private(:live_view_connect_info, %{
+      x_headers: [{"x-forwarded-for", "203.0.113.7"}],
+      peer_data: %{address: {127, 0, 0, 1}}
+    })
+  end
 
   defp editor(ctx, scope \\ nil) do
     {:ok, view, _html} = live(as(ctx.conn, scope || ctx.reviewer), ~p"/ops/curation/on/love")
@@ -134,16 +142,50 @@ defmodule DevilsDictionaryWeb.CurationLiveTest do
       assert ctx.conn |> get(~p"/ops/curation") |> redirected_to() == ~p"/users/log-in"
     end
 
-    test "a socket that live-navigates in is held to the reviewer role", ctx do
-      # A contributor reaches another operator page in the same live
-      # session, and is turned away from the editor at mount.
-      {:ok, view, _html} = live(as(ctx.conn, ctx.contributor), ~p"/ops/health")
+    test "a revoked reviewer cannot live-navigate within the proxied curation session", ctx do
+      previous = Application.get_env(:devils_dictionary, :published_host)
+      Application.put_env(:devils_dictionary, :published_host, "wordhoard.test")
 
-      assert {:error, {:redirect, %{to: "/"}}} =
-               live_redirect(view, to: ~p"/ops/curation/on/love")
+      try do
+        {:ok, view, _html} = live(as(ctx.conn, ctx.reviewer) |> tunnel(), ~p"/ops/curation")
+        Repo.update!(Ecto.Changeset.change(ctx.reviewer.user, reviewer: false))
+
+        assert {:error, {:redirect, %{to: "/"}}} =
+                 live_redirect(view, to: ~p"/ops/curation/on/love")
+      after
+        if previous,
+          do: Application.put_env(:devils_dictionary, :published_host, previous),
+          else: Application.delete_env(:devils_dictionary, :published_host)
+      end
     end
 
-    test "through the tunnel both are 404, even to a reviewer", ctx do
+    test "a proxied reviewer can publish with the existing attributed services", ctx do
+      previous = Application.get_env(:devils_dictionary, :published_host)
+      Application.put_env(:devils_dictionary, :published_host, "wordhoard.test")
+
+      try do
+        {:ok, view, _html} =
+          live(as(ctx.conn, ctx.reviewer) |> tunnel(), ~p"/ops/curation/on/love")
+
+        render_async(view)
+        change(view, %{highlights: [johnson(ctx)], reason: "Fixture remote review."})
+        change(view, %{notes: %{johnson(ctx) => @johnson_note}})
+        submit(view, "publish")
+        assert has_element?(view, "#curation-notice", "Published version 1")
+        assert [version] = Repo.all(CompositionVersion)
+        assert [%CompositionReview{decision: :accepted}] = Repo.all(CompositionReview)
+        assert [%CompositionPublication{action: :publish}] = Repo.all(CompositionPublication)
+
+        assert version.created_by_actor_id ==
+                 Repo.get_by!(Actor, user_id: ctx.reviewer.user.id).id
+      after
+        if previous,
+          do: Application.put_env(:devils_dictionary, :published_host, previous),
+          else: Application.delete_env(:devils_dictionary, :published_host)
+      end
+    end
+
+    test "through the tunnel HTTP and connected mounts require the reviewer role", ctx do
       previous = Application.get_env(:devils_dictionary, :published_host)
       Application.put_env(:devils_dictionary, :published_host, "wordhoard.test")
 
@@ -152,10 +194,32 @@ defmodule DevilsDictionaryWeb.CurationLiveTest do
           conn =
             ctx.conn
             |> as(ctx.reviewer)
-            |> put_req_header("x-forwarded-for", "203.0.113.7")
+            |> tunnel()
             |> get(path)
 
-          assert response(conn, 404) =~ "Not Found"
+          assert conn.status == 200
+
+          {:ok, view, _} =
+            live(
+              ctx.conn |> as(ctx.reviewer) |> tunnel(),
+              path
+            )
+
+          render_async(view)
+          assert has_element?(view, "main")
+
+          assert ctx.conn
+                 |> tunnel()
+                 |> get(path)
+                 |> redirected_to() == ~p"/users/log-in"
+
+          for scope <- [ctx.contributor, account([])] do
+            assert ctx.conn
+                   |> as(scope)
+                   |> tunnel()
+                   |> get(path)
+                   |> response(403) =~ "Reviewer access"
+          end
         end
       after
         if previous,

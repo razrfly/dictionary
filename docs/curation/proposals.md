@@ -22,8 +22,26 @@ compare-and-switch, publishes anything.
 | The step | inside a claimed refresh run: a check that finds an editor is needed, while the editor is on, freezes the page's packet, reserves a review unit and calls the runtime as the bot (R3–R5) |
 | The proposal | `curation_proposals`, one pending per page: `taken`, `dismissed` or `obsolete`, once (R10) |
 | The owner's screen | the queue's Proposed tab, the proposal strip on the page's editor (Take, Edit then publish, Dismiss, the quality form), the D8 marks, Request (R11–R15, R18) |
-| The audit | `/ops/curation/attempts/:id`, reviewer-only and 404 through the tunnel: what the editor was offered and what it answered, by ids and hashes (R16) |
+| The audit | `/ops/curation/attempts/:id`, reviewer-only locally and through the published tunnel: what the editor was offered and what it answered, by ids and hashes (R16) |
 | The Health card | "Proposals" on `/ops/health`, below the runtime card: the switch, review units, proposals by state, today's assessments and the last deferral (R17) |
+
+## Owner access through the published tunnel
+
+Owner-authorized exception during #271 sitting 4: `/ops/curation`,
+`/ops/curation/on/:slug` and `/ops/curation/attempts/:id` are available through
+ngrok **only to an authenticated reviewer**. HTTP requires the current database
+reviewer role; the separate curation LiveView session checks that role at mount
+and navigation. Mutations still use the existing reviewer-authorized services,
+CSRF protection, publication guards and receipts. No account or role is granted
+by visiting the URL, and no authentication token is placed in a query parameter
+by this feature.
+
+Other operator paths remain blocked through the published tunnel, even for a
+reviewer: Health, imports, discovery tools, developer dashboard and mailbox.
+The mailbox is never exposed to solve login. Use the existing sign-in flow and
+reviewer account; local test-email accounts may require the owner to retrieve
+their login message on the Studio. This change does not alter account email,
+passwords, roles, mail delivery or model/editor enablement.
 
 ## The live steps
 

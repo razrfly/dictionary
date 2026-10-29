@@ -2,8 +2,8 @@ defmodule DevilsDictionaryWeb.CurationLive.Attempt do
   @moduledoc """
   One editor attempt, `/ops/curation/attempts/:id` (#253 D9, #264 R16, §2.5).
 
-  Reviewer-only, inside the curation `live_session`: 404 through the tunnel
-  like every `/ops` page (`ProxyGuard`), and refused to any other account.
+  Reviewer-only, inside the separate curation `live_session`, including over
+  the published tunnel. Other operator surfaces remain local-only.
   Every model-selected item reaches its attempt here, through its version's
   `attempt_id`, or after a Take through the copy it was taken from.
 

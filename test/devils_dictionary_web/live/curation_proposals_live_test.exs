@@ -46,6 +46,15 @@ defmodule DevilsDictionaryWeb.CurationProposalsLiveTest do
 
   defp as(conn, %{user: user}), do: log_in_user(conn, user)
 
+  defp tunnel(conn) do
+    conn
+    |> put_req_header("x-forwarded-for", "203.0.113.7")
+    |> put_private(:live_view_connect_info, %{
+      x_headers: [{"x-forwarded-for", "203.0.113.7"}],
+      peer_data: %{address: {127, 0, 0, 1}}
+    })
+  end
+
   defp propose!(world, highlights \\ nil) do
     highlights = highlights || [world.johnson.object_id]
     stub_answer!(world, answer_for(frozen!(), world.bierce.object_id, highlights))
@@ -538,7 +547,7 @@ defmodule DevilsDictionaryWeb.CurationProposalsLiveTest do
              |> response(403) =~ "Reviewer access"
     end
 
-    test "is 404 through the tunnel, even to a reviewer", %{conn: conn} do
+    test "is reviewer-only through the tunnel, including the connected audit page", %{conn: conn} do
       world = editor_world!()
       proposal = propose!(world)
       attempt_id = Repo.get!(CompositionVersion, proposal.version_id).attempt_id
@@ -549,10 +558,27 @@ defmodule DevilsDictionaryWeb.CurationProposalsLiveTest do
         conn =
           conn
           |> as(world.reviewer)
-          |> put_req_header("x-forwarded-for", "203.0.113.7")
+          |> tunnel()
           |> get(~p"/ops/curation/attempts/#{attempt_id}")
 
-        assert response(conn, 404) =~ "Not Found"
+        assert html_response(conn, 200) =~ "Attempt"
+
+        proxied =
+          build_conn() |> as(world.reviewer) |> tunnel()
+
+        {:ok, view, _} = live(proxied, ~p"/ops/curation/attempts/#{attempt_id}")
+        assert has_element?(view, "#attempt-key")
+
+        assert build_conn()
+               |> tunnel()
+               |> get(~p"/ops/curation/attempts/#{attempt_id}")
+               |> redirected_to() == ~p"/users/log-in"
+
+        assert build_conn()
+               |> as(world.author)
+               |> tunnel()
+               |> get(~p"/ops/curation/attempts/#{attempt_id}")
+               |> response(403) =~ "Reviewer access"
       after
         if previous,
           do: Application.put_env(:devils_dictionary, :published_host, previous),
