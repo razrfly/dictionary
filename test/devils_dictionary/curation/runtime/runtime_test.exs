@@ -366,6 +366,38 @@ defmodule DevilsDictionary.Curation.RuntimeTest do
     assert Repo.aggregate(Attempt, :count) == 0
   end
 
+  test "whole-entry readiness smoke records its v4 identity through the real gateway", ctx do
+    config =
+      model_config!(%{
+        instruction_version: "voltaire-whole-entry-v1",
+        output_contract_version: "selection-output-v2"
+      })
+      |> ready!()
+
+    before = public_rows()
+    test_pid = self()
+
+    stub_ollama!(config,
+      chat: fn request ->
+        send(test_pid, {:whole_instruction, hd(request["messages"])["content"]})
+        {:json, answer(selection({"c1", "m0"}, []))}
+      end
+    )
+
+    assert {:ok, receipt} =
+             Runtime.smoke(config, Keyword.put(ctx.opts, :request_key, key("whole-smoke")))
+
+    assert {receipt.purpose, receipt.outcome} == {:readiness_smoke, :accepted}
+    assert receipt.result["contract"] == "selection-output-v2"
+    stored = Repo.get!(Attempt, receipt.attempt_id)
+    assert stored.packet_summary["packet_version"] == "runtime-packet-v4"
+    assert is_binary(stored.packet_summary["candidate_set_sha256"])
+    assert_received {:whole_instruction, instruction}
+    assert instruction == Packet.instruction!("voltaire-whole-entry-v1")
+    assert public_rows() == before
+    settle!()
+  end
+
   test "the readiness smoke call goes through the same slot and budget", ctx do
     stub_ollama!(ctx.config, chat: fn _ -> {:json, answer(selection({"c1", "m0"}, []))} end)
 
