@@ -605,18 +605,15 @@ defmodule DevilsDictionary.Curation.Compositions do
   form says what the record would.
 
   An item is identified by its object and, for words, by their digest: a
-  passage's pinned revision, a quotation's hash, a definition's body. Only
-  pairs with an exemplar are compared, so an arrangement of the other kinds
-  is judged as slice 1 judged it.
+  passage's pinned revision, a quotation's hash, a definition's body. A pair
+  is compared when either item meets the shared C6 predicate: exemplars,
+  claims, sense definitions and shelf references. The remaining kinds keep
+  the original slice-1 behavior.
   """
   def one_display_identity(items) do
     identities = Enum.map(items, &{&1, display_identity(&1)})
 
-    exemplars =
-      Enum.filter(identities, fn {item, _keys} ->
-        item.item_kind in [:exemplar, :claim, :sense_definition] or
-          not is_nil(item.shelf_citation_id) or not is_nil(item.shelf)
-      end)
+    exemplars = Enum.filter(identities, fn {item, _keys} -> display_identity_guarded?(item) end)
 
     duplicate =
       Enum.find_value(exemplars, fn {exemplar, keys} ->
@@ -627,6 +624,12 @@ defmodule DevilsDictionary.Curation.Compositions do
 
     if duplicate, do: {:error, {:duplicate_display_identity, duplicate}}, else: :ok
   end
+
+  @doc "Whether the existing C6 display-overlap rule applies to this item."
+  def display_identity_guarded?(item),
+    do:
+      item.item_kind in [:exemplar, :claim, :sense_definition] or
+        not is_nil(item.shelf_citation_id) or not is_nil(item.shelf)
 
   @doc """
   What an item shows, for C6: its object (a catalog work's registry work)
@@ -904,7 +907,8 @@ defmodule DevilsDictionary.Curation.Compositions do
                   "lead_rule" => to_string(rule),
                   "priority_leads" => evaluation.applicable,
                   "language_tag" => c.language_tag,
-                  "configuration_version" => cv.version
+                  "configuration_version" => cv.version,
+                  "omitted_model_choices" => Map.get(plan, :omitted_model_choices, [])
                 },
                 evaluation
               ),

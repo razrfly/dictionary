@@ -288,7 +288,8 @@ defmodule DevilsDictionary.Curation.Proposals do
              composition: composition,
              configuration_version: cv,
              attempt: attempt,
-             items: placed
+             items: placed,
+             omitted_model_choices: merged.omitted
            }) do
       finish_selection(run, row, composition, cv, version, marks, merged.overflow)
     end
@@ -503,7 +504,7 @@ defmodule DevilsDictionary.Curation.Proposals do
     %{
       ref: Compositions.reference(item),
       identity: Compositions.display_identity(item),
-      exemplar?: item.item_kind == :exemplar,
+      exemplar?: Compositions.display_identity_guarded?(item),
       candidate_id: candidate_id,
       item: item
     }

@@ -302,6 +302,144 @@ defmodule DevilsDictionary.Curation.WholeEntryTest do
              Contract.validate(answer(put_in(wire, ["selections", "definitions"], nil)), frozen)
   end
 
+  defp claim_choice(candidate),
+    do: %{
+      "candidate_id" => candidate["candidate_id"],
+      "meaning_id" => candidate["required_meaning"],
+      "reason" => "A sourced meaning context.",
+      "quote" => nil
+    }
+
+  defp linked_claims(w, same?) do
+    entity = DevilsDictionary.WordFixtures.concept!("Q270991", "Fixture affection concept")
+
+    other =
+      if same?,
+        do: entity,
+        else: DevilsDictionary.WordFixtures.concept!("Q270992", "Fixture second concept")
+
+    DevilsDictionary.WordFixtures.link!(w.love, entity, sense: w.profound)
+    DevilsDictionary.WordFixtures.link!(w.love, other, sense: w.benevolent)
+    {entity, other}
+  end
+
+  @tag instruction: "voltaire-whole-entry-v3"
+  test "distinct claims showing one entity publish once with a visible exact omission record",
+       w do
+    {entity, _} = linked_claims(w, true)
+    frozen = packet("voltaire-whole-entry-v3")
+
+    claims =
+      Enum.filter(
+        frozen.packet["candidates"],
+        &(&1["kind"] == "claim" and get_in(&1, ["basis", "shown_object_id"]) == entity.object_id)
+      )
+
+    assert length(claims) == 2
+
+    wire =
+      section_answer(frozen)
+      |> put_in(["selections", "examples"], Enum.map(claims, &claim_choice/1))
+
+    assert length(wire["selections"]["examples"]) == 2
+    stub_answer!(w, wire)
+    assert {:ok, %{last_outcome_reason: "published_automatically"}} = run!(w)
+    settle!()
+    publication = Repo.one!(CompositionPublication)
+    version = Repo.get!(CompositionVersion, publication.published_version_id)
+    items = Compositions.items(version.id)
+    assert Enum.count(items, &(&1.item_kind == :claim)) == 1
+    assert :ok == Compositions.one_display_identity(items)
+    assert {:ok, receipt} = Receipt.read("love", version.version)
+    assert [omitted] = receipt.omitted_model_choices
+    assert omitted["reason"] == "duplicate_display_identity"
+    assert omitted["selection_reason"] == "A sourced meaning context."
+    assert omitted["candidate_id"] == Enum.at(wire["selections"]["examples"], 1)["candidate_id"]
+    assert omitted["kept_candidate_id"] == hd(wire["selections"]["examples"])["candidate_id"]
+    assert is_map(omitted["reference"]) and is_map(omitted["kept_reference"])
+    html = build_conn() |> get("/on/love/receipt/#{version.version}") |> html_response(200)
+    assert html =~ "Recommendations not placed"
+    assert html =~ "duplicate_display_identity"
+
+    assert Repo.get!(DevilsDictionary.Curation.Runtime.Attempt, version.attempt_id).result[
+             "highlights"
+           ]
+           |> Enum.count(fn c -> c["candidate_id"] in Enum.map(claims, & &1["candidate_id"]) end) ==
+             2
+  end
+
+  @tag instruction: "voltaire-whole-entry-v3"
+  test "claims showing different entities are both published", w do
+    {first, second} = linked_claims(w, false)
+    frozen = packet("voltaire-whole-entry-v3")
+
+    claims =
+      Enum.filter(
+        frozen.packet["candidates"],
+        &(&1["kind"] == "claim" and
+            get_in(&1, ["basis", "shown_object_id"]) in [first.object_id, second.object_id])
+      )
+
+    assert length(claims) == 2
+
+    wire =
+      section_answer(frozen)
+      |> put_in(["selections", "examples"], Enum.map(claims, &claim_choice/1))
+
+    assert length(wire["selections"]["examples"]) == 2
+    stub_answer!(w, wire)
+    assert {:ok, %{last_outcome_reason: "published_automatically"}} = run!(w)
+    settle!()
+    publication = Repo.one!(CompositionPublication)
+    version = Repo.get!(CompositionVersion, publication.published_version_id)
+    assert Enum.count(Compositions.items(version.id), &(&1.item_kind == :claim)) == 2
+    assert {:ok, %{omitted_model_choices: []}} = Receipt.read("love", version.version)
+  end
+
+  @tag instruction: "voltaire-whole-entry-v3"
+  test "an owner-kept display wins and the omitted recommendation names its immutable item", w do
+    {entity, _} = linked_claims(w, true)
+
+    candidates =
+      DevilsDictionary.Curation.Candidates.for_page(page("love")).highlights
+      |> Enum.filter(
+        &(&1.kind == :claim and &1.spec.basis["shown_object_id"] == entity.object_id)
+      )
+
+    assert length(candidates) == 2
+    [owner_choice, _] = candidates
+    spec = Map.put(owner_choice.spec, :note, %{text: "The owner kept this context."})
+    published = publish!(w, w.composition, nil, highlights: [spec])
+    kept = Enum.find(Compositions.items(published.version.id), &(&1.item_kind == :claim))
+    {:ok, _} = Compositions.keep(w.reviewer, w.composition.id, kept.id, [])
+    frozen = packet("voltaire-whole-entry-v3")
+    wire = section_answer(frozen)
+
+    recommended_candidate =
+      Enum.find(frozen.packet["candidates"], fn candidate ->
+        candidate["kind"] == "claim" and
+          get_in(candidate, ["basis", "shown_object_id"]) == entity.object_id and
+          candidate["assertion_revision_id"] != kept.assertion_revision_id
+      end)
+
+    assert recommended_candidate
+    recommendation = claim_choice(recommended_candidate)
+    wire = put_in(wire, ["selections", "examples"], [recommendation])
+    stub_answer!(w, wire)
+    assert {:ok, %{last_outcome_reason: "published_automatically"}} = run!(w)
+    settle!()
+    current = Repo.reload!(w.composition).current_published_version_id
+    version = Repo.get!(CompositionVersion, current)
+    assert :ok == Compositions.one_display_identity(Compositions.items(current))
+    copied = Enum.find(Compositions.items(current), &(&1.item_kind == :claim))
+    assert copied.copied_from_item_id == kept.id
+    assert {:ok, receipt} = Receipt.read("love", version.version)
+    assert [omitted] = receipt.omitted_model_choices
+    assert omitted["kept_item_id"] == kept.id
+    assert omitted["kept_version_id"] == published.version.id
+    assert omitted["reason"] == "duplicate_display_identity"
+  end
+
   defp answer_all(frozen) do
     lead =
       Enum.find(
