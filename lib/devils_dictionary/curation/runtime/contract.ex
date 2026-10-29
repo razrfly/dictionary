@@ -423,7 +423,7 @@ defmodule DevilsDictionary.Curation.Runtime.Contract do
     end
 
     result = %{
-      "contract" => @version,
+      "contract" => version(packet["instruction_version"]),
       "decision" => decoded["decision"],
       "lead" => decoded["lead"] && keep.(decoded["lead"]),
       "highlights" => Enum.map(decoded["highlights"], keep),

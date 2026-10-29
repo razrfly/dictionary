@@ -141,6 +141,13 @@ defmodule DevilsDictionary.Curation.WholeEntryTest do
     settle!()
     receipt = Repo.one!(CompositionPublication)
     v = Repo.get!(CompositionVersion, receipt.published_version_id)
+
+    assert Repo.get!(DevilsDictionary.Curation.Runtime.Attempt, v.attempt_id).result["contract"] ==
+             "selection-output-v2"
+
+    assert {:ok, %{result: %{"contract" => "selection-output-v2"}}} =
+             Contract.validate(answer(abstain()), frozen)
+
     assert length(Compositions.items(v.id)) > 4
     assert {:ok, history} = Receipt.read("love", v.version)
     assert Enum.all?(history.items, &(&1.chooser.attempt_id == v.attempt_id))
