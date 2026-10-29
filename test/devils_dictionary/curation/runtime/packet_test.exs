@@ -23,7 +23,14 @@ defmodule DevilsDictionary.Curation.Runtime.PacketTest do
   describe "pinned instructions (#254 P7)" do
     # A pinned text never changes: an attempt's `prompt_sha256` depends on it.
     test "each instruction version is held to its text" do
-      assert Packet.instruction_versions() == ["generic-editor-v1", "generic-editor-v2"]
+      assert Packet.instruction_versions() == [
+               "generic-editor-v1",
+               "generic-editor-v2",
+               "voltaire-selector-v1"
+             ]
+
+      assert Digest.sha256(Packet.instruction!("voltaire-selector-v1")) ==
+               "0aac44006f6bb733f2fe0eec812c5ee2c7c220feb505b014e7614fd387b80fc7"
 
       assert Digest.sha256(Packet.instruction!("generic-editor-v1")) ==
                "d352a3964b056380f8bca9d33558db859f0dea4e07e3d85acd9af1516c178ce7"
