@@ -34,37 +34,44 @@ defmodule DevilsDictionaryWeb.CultureMoreLiveTest do
     Map.merge(catalog, %{conn: conn})
   end
 
-  test "one click on the shelf's Load more fetches the next page and puts it on the rail", ctx do
-    stub_pages()
-    word = word!(ctx, "elegy", ~w(wordnet))
-    sense!(ctx, word, "wordnet", gloss: "a lament for the dead")
+  for layout <- [:current, :reference] do
+    test "#{layout}: one click on the shelf's Load more fetches the next page and puts it on the rail",
+         ctx do
+      stub_pages()
+      word = word!(ctx, "elegy", ~w(wordnet))
+      sense!(ctx, word, "wordnet", gloss: "a lament for the dead")
 
-    {:ok, live, _html} = live(ctx.conn, ~p"/on/elegy")
+      {:ok, live, _html} =
+        live(
+          ctx.conn,
+          "/on/elegy" <> unquote(if layout == :reference, do: "?layout=reference", else: "")
+        )
 
-    run_all!()
-    _ = render(live)
+      run_all!()
+      _ = render(live)
 
-    # Page one: three rows, the whole of a `result_limit` page.
-    for id <- 1..3, do: assert(has_element?(live, "#culture-result-fixture_text-#{id}"))
-    refute has_element?(live, "#culture-result-fixture_text-4")
+      # Page one: three rows, the whole of a `result_limit` page.
+      for id <- 1..3, do: assert(has_element?(live, "#culture-result-fixture_text-#{id}"))
+      refute has_element?(live, "#culture-result-fixture_text-4")
 
-    # One control for the shelf, naming the states it advances (D3).
-    assert has_element?(
-             live,
-             ~s(#culture-more-text[phx-value-providers="offset-fixture"])
-           )
+      # One control for the shelf, naming the states it advances (D3).
+      assert has_element?(
+               live,
+               ~s(#culture-more-text[phx-value-providers="offset-fixture"])
+             )
 
-    live |> element("#culture-more-text") |> render_click()
-    run_all!()
-    _ = render(live)
+      live |> element("#culture-more-text") |> render_click()
+      run_all!()
+      _ = render(live)
 
-    # The second page's ids are on the rail beside the first page's, which is
-    # the whole point of the control: a *Load more* that cannot move a count
-    # is the defect Openverse had on the Images shelf (#126 Phase 2, #128).
-    for id <- 1..5, do: assert(has_element?(live, "#culture-result-fixture_text-#{id}"))
+      # The second page's ids are on the rail beside the first page's, which is
+      # the whole point of the control: a *Load more* that cannot move a count
+      # is the defect Openverse had on the Images shelf (#126 Phase 2, #128).
+      for id <- 1..5, do: assert(has_element?(live, "#culture-result-fixture_text-#{id}"))
 
-    assert Repo.aggregate(Run, :count) == 2
-    assert [0, 1] == Run |> Repo.all() |> Enum.map(& &1.page) |> Enum.sort()
+      assert Repo.aggregate(Run, :count) == 2
+      assert [0, 1] == Run |> Repo.all() |> Enum.map(& &1.page) |> Enum.sort()
+    end
   end
 
   test "the control is gone once the source has no page left", ctx do

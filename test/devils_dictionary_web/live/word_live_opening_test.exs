@@ -94,6 +94,21 @@ defmodule DevilsDictionaryWeb.WordLiveOpeningTest do
 
   defp opening_html(view), do: view |> element("#opening") |> render()
 
+  test "reference layout preserves the published version, required credits and compact exact-record receipt",
+       ctx do
+    publish_love!(ctx)
+    {:ok, view, _} = live(ctx.conn, "/on/love?layout=reference")
+    assert has_element?(view, "#reference-article")
+    assert has_element?(view, "#opening-lead-text", "temporary insanity")
+    assert has_element?(view, "#opening-lead-credits")
+    assert has_element?(view, "#opening-lead-record-details summary")
+    assert has_element?(view, "#opening-lead-record-details", "1911")
+    assert has_element?(view, "#opening-lead-receipt a[href*='/on/love/receipt/']")
+    assert has_element?(view, "#opening-highlight-1-record-details")
+    assert has_element?(view, "#reference-record #card-johnson")
+    assert has_element?(view, "#opening-about")
+  end
+
   test "9: with nothing published the page begins at the Definitions", ctx do
     {:ok, view, _html} = live(ctx.conn, ~p"/on/love")
 
