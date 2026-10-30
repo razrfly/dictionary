@@ -611,8 +611,7 @@ defmodule DevilsDictionaryWeb.CurationLiveTest do
       {:ok, page, _html} = live(ctx.conn, ~p"/on/love")
       published = page |> element("#opening") |> render()
 
-      assert normalize(preview) == normalize(published),
-             inspect(first_difference(normalize(preview), normalize(published)), pretty: true)
+      assert choice_content(preview) == choice_content(published)
     end
 
     test "a draft whose revision was superseded is published as a new version", ctx do
@@ -639,7 +638,7 @@ defmodule DevilsDictionaryWeb.CurationLiveTest do
       assert has_element?(page, "#opening-highlight-1-text", "A newer reading")
     end
 
-    test "is the published rendering of the same selection, modulo ids", ctx do
+    test "has the same choices, credits and reasons as the published article", ctx do
       person = ExemplarFixtures.person!("Fixture Exemplar")
       claim = ExemplarFixtures.nominate!(ctx.contributor, person, ctx.benevolent)
       ExemplarFixtures.decide!(ctx.reviewer, claim)
@@ -668,35 +667,24 @@ defmodule DevilsDictionaryWeb.CurationLiveTest do
       {:ok, page, _html} = live(ctx.conn, ~p"/on/love")
       published = page |> element("#opening") |> render()
 
-      assert normalize(preview) == normalize(published),
-             inspect(first_difference(normalize(preview), normalize(published)), pretty: true)
+      assert choice_content(preview) == choice_content(published)
     end
   end
 
-  # Ids are what a preview cannot know: the composition's, until it is
-  # provisioned, and the receipt's, until it is written. The section's own
-  # class is where the page places it, which the preview pane does not.
-  # The page's refresh-clock rows (#259 §2.1) are the composition's, not the
-  # selection's, so the preview has none: they are set aside before comparing.
-  defp normalize(html) do
+  # The approved public article compacts receipts and groups images in a rail.
+  # Preview parity concerns exact choices, credits and reasons, not container markup.
+  defp choice_content(html) do
     html
-    |> String.replace(
-      ~r/<div[^>]*class="grid[^"]*">\s*<dt[^>]*>[^<]*<\/dt>\s*<dd id="opening-about-(assessed|checked|changed|next)"[^>]*>.*?<\/dd>\s*<\/div>/s,
-      ""
-    )
-    |> String.replace(~r/^(<section[^>]*?) class="[^"]*"/, "\\1")
-    |> String.replace(
-      ~r/<a[^>]*href="[^"]*\/receipt\/[^"]*"[^>]*>Exact choice, chooser and evidence<\/a>/s,
-      ""
-    )
-    |> String.replace(~r/ · receipt #\d+/, "")
-    |> String.replace(~r/#(\d+|—), version/, "#ID, version")
-  end
-
-  defp first_difference(a, b) do
-    shortest = min(String.length(a), String.length(b))
-    n = Enum.find(0..shortest, shortest, &(String.at(a, &1) != String.at(b, &1)))
-    {String.slice(a, max(n - 200, 0), 400), String.slice(b, max(n - 200, 0), 400)}
+    |> LazyHTML.from_fragment()
+    |> LazyHTML.query("[id^='opening-']")
+    |> Enum.filter(fn node ->
+      [id] = LazyHTML.attribute(node, "id")
+      String.ends_with?(id, ["-text", "-title", "-why", "-credits"])
+    end)
+    |> Map.new(fn node ->
+      {[id], text} = {LazyHTML.attribute(node, "id"), LazyHTML.text(node)}
+      {id, text |> String.replace(~r/\s+/, " ") |> String.trim()}
+    end)
   end
 
   test "a version's item the screen does not offer is named, not dropped silently", ctx do

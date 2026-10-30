@@ -96,7 +96,7 @@ defmodule DevilsDictionaryWeb.WordLive do
   def mount(_params, _session, socket) do
     {:ok,
      assign(socket,
-       reference?: false,
+       reference?: true,
        slug: nil,
        trail: [],
        page: nil,
@@ -155,7 +155,7 @@ defmodule DevilsDictionaryWeb.WordLive do
   end
 
   def handle_params(%{"slug" => slug} = params, uri, socket) do
-    socket = assign(socket, :reference?, params["layout"] == "reference")
+    socket = assign(socket, :reference?, params["layout"] != "current")
 
     socket =
       assign(
@@ -985,29 +985,6 @@ defmodule DevilsDictionaryWeb.WordLive do
           demo={@demo}
         />
 
-        <nav
-          :if={@page.headword.lexemes != []}
-          id="entry-layout-switch"
-          aria-label="Entry layout"
-          class="mb-8 flex flex-wrap items-center justify-between gap-3 border-b border-mist-950/10 pb-4 text-base/7 sm:text-sm/6 dark:border-white/10"
-        >
-          <p class="text-mist-600 dark:text-mist-400">Compare the same live entry</p>
-          <div class="flex flex-wrap gap-6">
-            <.link
-              id="entry-layout-current"
-              patch={drawer_path(@base, @page.trail, nil, @demo, false)}
-              aria-current={if !@reference?, do: "page"}
-              class={["underline-offset-4 hover:underline", !@reference? && "underline"]}
-            >Current layout</.link>
-            <.link
-              id="entry-layout-reference"
-              patch={drawer_path(@base, @page.trail, nil, @demo, true)}
-              aria-current={if @reference?, do: "page"}
-              class={["underline-offset-4 hover:underline", @reference? && "underline"]}
-            >Reference article</.link>
-          </div>
-        </nav>
-
         <%!-- The aggregate names itself (#219 B5): "On mars" over the words it
              reads; the headword stays the page's h1. --%>
         <p
@@ -1298,9 +1275,9 @@ defmodule DevilsDictionaryWeb.WordLive do
   defp drawer_path(base, trail, ref, demo, reference?) do
     path = Word.info_path(base, trail, ref, demo)
 
-    if reference? do
+    if !reference? do
       uri = URI.parse(path)
-      query = URI.decode_query(uri.query || "") |> Map.put("layout", "reference")
+      query = URI.decode_query(uri.query || "") |> Map.put("layout", "current")
       URI.to_string(%{uri | query: URI.encode_query(query)})
     else
       path
