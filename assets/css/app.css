@@ -72,3 +72,38 @@
 [data-phx-session], [data-phx-teleported-src] { display: contents }
 
 /* This file is for your main application CSS */
+
+/* Opt-in reference article: presentation over the same live readers and shelves. */
+.reference-article { --reference-gap: 2.5rem; }
+.reference-head #headword h1 { font-size: clamp(3.5rem, 7vw, 7rem); }
+.reference-frame { display: grid; grid-template-columns: 10rem minmax(0, 1fr); gap: var(--reference-gap); padding-top: 2.5rem; }
+.reference-contents { display: flex; flex-direction: column; gap: 1rem; align-self: start; position: sticky; top: 7rem; font-size: .875rem; color: var(--color-mist-600); }
+.reference-contents a:hover { text-decoration: underline; text-underline-offset: .25rem; }
+.reference-content { display: flex; flex-direction: column; gap: 3rem; }
+.reference-mobile-contents { display: none; }
+.reference-opening { display: flex; flex-direction: column; gap: 2rem; }
+.reference-reading-grid { display: grid; grid-template-columns: minmax(0, 1fr) 17rem; gap: var(--reference-gap); align-items: start; }
+.reference-selected-reading, .reference-reading-rail { display: flex; flex-direction: column; gap: 2.5rem; }
+.reference-selected-reading #opening-lead blockquote { font-size: 2.5rem; line-height: 1.2; }
+.reference-opening [id^="opening-highlight-"] { background: transparent; border-radius: 0; padding: 0; }
+.reference-opening [id^="opening-highlight-"] > figure { background: transparent; border-radius: 0; padding: 0; }
+.reference-reading-rail #curated-images li > div:first-of-type { flex-direction: column; }
+.reference-reading-rail #curated-images li > div:first-of-type > div:first-child { width: 100%; }
+.reference-reading-rail #curated-images img { max-height: 22rem; aspect-ratio: auto; object-fit: contain; }
+.reference-record #in-culture { margin-top: 2.5rem; }
+.reference-way-out { display: grid; grid-template-columns: 1fr; gap: 2rem; }
+@media (max-width: 1199px) {
+  .reference-frame { grid-template-columns: 8rem minmax(0, 1fr); --reference-gap: 2rem; }
+  .reference-reading-grid { grid-template-columns: minmax(0, 1fr) 14rem; }
+}
+@media (max-width: 999px) {
+  .reference-frame { grid-template-columns: minmax(0, 1fr); }
+  .reference-contents { display: none; }
+  .reference-mobile-contents { display: block; }
+}
+@media (max-width: 699px) {
+  .reference-reading-grid { grid-template-columns: minmax(0, 1fr); }
+  .reference-selected-reading #opening-lead blockquote { font-size: 2rem; line-height: 1.3; }
+  .reference-reading-rail { border-top: 1px solid color-mix(in oklab, var(--color-mist-950) 10%, transparent); padding-top: 2rem; }
+}
+.reference-article:where([data-theme=dark] *) .reference-contents { color: var(--color-mist-400); }

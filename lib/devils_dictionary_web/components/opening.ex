@@ -176,9 +176,121 @@ defmodule DevilsDictionaryWeb.Opening do
     """
   end
 
+  attr :opening, Composition, required: true
+  attr :mode, :atom, default: :public
+  attr :reviewer?, :boolean, default: false
+  slot :facts
+
+  def reference_section(assigns) do
+    groups = DevilsDictionary.Curation.WholeEntry.groups(assigns.opening.highlights)
+
+    assigns =
+      assigns
+      |> assign(:reading_groups, Enum.filter(groups, &(&1.key != "images" and &1.items != [])))
+      |> assign(:image_groups, Enum.filter(groups, &(&1.key == "images" and &1.items != [])))
+      |> assign(:unavailable, Enum.filter(slots(assigns.opening), & &1.withheld))
+      |> assign(:withheld_lead, withheld_lead(assigns.opening))
+
+    ~H"""
+    <section id="opening" aria-labelledby="opening-heading" class="reference-opening">
+      <header class="reference-selection-header flex flex-col gap-3">
+        <h2 id="opening-heading" class="font-display text-3xl tracking-tight text-pretty">
+          Selected reading
+        </h2>
+        <p
+          id="curation-summary"
+          class="text-base/7 text-pretty text-mist-600 sm:text-sm/6 dark:text-mist-400"
+        >
+          Selected by {reference_selector(@opening.review.selected_by)} · {if @opening.origin ==
+                                                                                :published,
+                                                                              do: "published",
+                                                                              else: "not published"}
+          {if @opening.review.published_on, do: date(@opening.review.published_on)}.
+        </p>
+        <p :if={@opening.origin == :fixture} id="opening-fixture">
+          Development fixture · {fixture_status(@opening.review)} · not published
+        </p>
+      </header>
+      <div class="reference-reading-grid">
+        <div class="reference-selected-reading min-w-0">
+          <.lead :if={@opening.lead} lead={@opening.lead} compact />
+          <.withheld :if={@withheld_lead} id="opening-withheld-lead" item={@withheld_lead} tag="div" />
+          <div id="curated-sections" class="flex min-w-0 flex-col gap-10">
+            <section
+              :for={group <- @reading_groups}
+              id={"curated-" <> group.key}
+              class="flex min-w-0 flex-col gap-5"
+            >
+              <h3 class="font-display text-2xl tracking-tight text-pretty">
+                {reference_title(group.key)}
+              </h3>
+              <ul role="list" class="flex min-w-0 flex-col gap-8">
+                <.highlight
+                  :for={item <- group.items}
+                  highlight={item}
+                  shares_row={false}
+                  mode={@mode}
+                  compact
+                />
+              </ul>
+            </section>
+          </div>
+          <section :if={@unavailable != []} id="curated-unavailable" class="flex flex-col gap-4">
+            <h3 class="font-display text-2xl tracking-tight text-pretty">Unavailable selections</h3>
+            <ul role="list" class="flex flex-col gap-4">
+              <.withheld
+                :for={slot <- @unavailable}
+                id={"curated-withheld-#{slot.position}"}
+                item={slot.withheld}
+              />
+            </ul>
+          </section>
+          <.about opening={@opening} mode={@mode} reviewer?={@reviewer?} />
+        </div>
+        <aside
+          class="reference-reading-rail min-w-0"
+          aria-label="Selected images and word information"
+        >
+          <section
+            :for={group <- @image_groups}
+            id="curated-images"
+            class="flex min-w-0 flex-col gap-5"
+          >
+            <h3 class="font-display text-2xl tracking-tight text-pretty">A visual reference</h3>
+            <ul role="list" class="flex min-w-0 flex-col gap-8">
+              <.highlight
+                :for={item <- group.items}
+                highlight={item}
+                shares_row={false}
+                mode={@mode}
+                compact
+              />
+            </ul>
+          </section>
+          {render_slot(@facts)}
+        </aside>
+      </div>
+    </section>
+    """
+  end
+
+  defp reference_selector(%{kind: :model, label: label}) do
+    (label |> String.split(" · ", parts: 2) |> hd()) <> ", an AI curator"
+  end
+
+  defp reference_selector(actor), do: selector(actor)
+
+  defp reference_title("definitions"), do: "Another definition"
+  defp reference_title("examples"), do: "Meaning & examples"
+  defp reference_title("quotes"), do: "In language"
+  defp reference_title("books"), do: "Selected books"
+  defp reference_title("poems"), do: "Selected poetry"
+  defp reference_title(section), do: DevilsDictionary.Curation.WholeEntry.title(section)
+
   # ── the lead ─────────────────────────────────────────────────────────────
 
   attr :lead, :map, required: true
+  attr :compact, :boolean, default: false
 
   defp lead(assigns) do
     ~H"""
@@ -223,7 +335,7 @@ defmodule DevilsDictionaryWeb.Opening do
 
       <.credit_line id="opening-lead-credits" credits={@lead.credits} class="max-w-[44rem]" />
 
-      <.choice_receipt id="opening-lead" choice={@lead} />
+      <.choice_receipt id="opening-lead" choice={@lead} compact={@compact} />
       <.why id="opening-lead-why" summary="Why this leads" reasons={@lead.reasons}>
         <.particulars
           id="opening-lead"
@@ -241,6 +353,7 @@ defmodule DevilsDictionaryWeb.Opening do
 
   attr :highlight, :map, required: true
   attr :mode, :atom, default: :public
+  attr :compact, :boolean, default: false
 
   attr :shares_row, :boolean,
     default: true,
@@ -299,7 +412,7 @@ defmodule DevilsDictionaryWeb.Opening do
         rel="noreferrer"
         class="w-fit underline underline-offset-4"
       >Source</.link>
-      <.choice_receipt id={@id} choice={@highlight} />
+      <.choice_receipt id={@id} choice={@highlight} compact={@compact} />
       <.why id={"#{@id}-why"} summary="Why this is here" reasons={@highlight.reasons}>
         <.particulars
           id={@id}
@@ -347,7 +460,7 @@ defmodule DevilsDictionaryWeb.Opening do
 
       <.credit_line id={"#{@id}-credits"} credits={@highlight.credits} />
 
-      <.choice_receipt id={@id} choice={@highlight} />
+      <.choice_receipt id={@id} choice={@highlight} compact={@compact} />
       <.why id={"#{@id}-why"} summary="Why this is here" reasons={@highlight.reasons}>
         <.particulars
           id={@id}
@@ -399,7 +512,7 @@ defmodule DevilsDictionaryWeb.Opening do
 
       <.credit_line id={"#{@id}-credits"} credits={@highlight.credits} />
 
-      <.choice_receipt id={@id} choice={@highlight} />
+      <.choice_receipt id={@id} choice={@highlight} compact={@compact} />
       <.why id={"#{@id}-why"} summary="Why this is here" reasons={@highlight.reasons}>
         <.particulars
           id={@id}
@@ -458,7 +571,7 @@ defmodule DevilsDictionaryWeb.Opening do
 
       <.credit_line id={"#{@id}-credits"} credits={@highlight.credits} />
 
-      <.choice_receipt id={@id} choice={@highlight} />
+      <.choice_receipt id={@id} choice={@highlight} compact={@compact} />
       <.why id={"#{@id}-why"} summary="Why this is here" reasons={@highlight.reasons}>
         <.particulars
           id={@id}
@@ -524,7 +637,7 @@ defmodule DevilsDictionaryWeb.Opening do
 
       <.credit_line id={"#{@id}-credits"} credits={@highlight.credits} />
 
-      <.choice_receipt id={@id} choice={@highlight} />
+      <.choice_receipt id={@id} choice={@highlight} compact={@compact} />
       <.why id={"#{@id}-why"} summary="Why this is here" reasons={@highlight.reasons}>
         <.particulars
           id={@id}
@@ -598,7 +711,7 @@ defmodule DevilsDictionaryWeb.Opening do
 
       <.credit_line id={"#{@id}-credits"} credits={@highlight.credits} />
 
-      <.choice_receipt id={@id} choice={@highlight} />
+      <.choice_receipt id={@id} choice={@highlight} compact={@compact} />
       <.why id={"#{@id}-why"} summary="Why this is here" reasons={@highlight.reasons}>
         <div class="flex flex-col gap-3">
           <.particulars
@@ -631,31 +744,50 @@ defmodule DevilsDictionaryWeb.Opening do
 
   attr :id, :string, required: true
   attr :choice, :map, required: true
+  attr :compact, :boolean, default: false
 
   defp choice_receipt(assigns) do
     ~H"""
     <div
       :if={@choice.date_info}
       id={"#{@id}-receipt"}
-      class="flex flex-col gap-1 text-sm/6 text-mist-600 dark:text-mist-400"
+      class="flex flex-col gap-1 text-base/7 text-mist-600 sm:text-sm/6 dark:text-mist-400"
     >
-      <p>Content date: {DevilsDictionary.Curation.ContentDate.text(@choice.date_info)}</p>
-      <p :if={@choice.source_edition}>Source edition: {@choice.source_edition}</p>
-      <p :if={@choice.basis && @choice.basis.origin == "model"}>
-        The editor was given only: {@choice.basis.evidence_kind} · {@choice.basis.fields_version}.
-      </p>
-      <p :if={@choice.basis && @choice.basis.origin == "owner"}>
-        Chosen on the curation screen, which lists {@choice.basis.evidence_kind} and links to the source.
-      </p>
-      <p :if={is_nil(@choice.basis) or @choice.basis.origin == "legacy_unknown"}>
-        Basis not recorded.
-      </p>
-      <.link
-        :if={@choice.receipt_path}
-        navigate={@choice.receipt_path}
-        class="w-fit underline underline-offset-4"
-      >Exact choice, chooser and evidence</.link>
+      <details
+        :if={@compact}
+        id={"#{@id}-record-details"}
+        phx-mounted={JS.ignore_attributes(["open"])}
+      >
+        <summary class="w-fit cursor-pointer py-1 underline underline-offset-4">
+          Dates, evidence & exact record
+        </summary>
+        <div class="flex flex-col gap-2 py-3"><.choice_facts choice={@choice} /></div>
+      </details>
+      <.choice_facts :if={!@compact} choice={@choice} />
     </div>
+    """
+  end
+
+  attr :choice, :map, required: true
+
+  defp choice_facts(assigns) do
+    ~H"""
+    <p>Content date: {DevilsDictionary.Curation.ContentDate.text(@choice.date_info)}</p>
+    <p :if={@choice.source_edition}>Source edition: {@choice.source_edition}</p>
+    <p :if={@choice.basis && @choice.basis.origin == "model"}>
+      The editor was given only: {@choice.basis.evidence_kind} · {@choice.basis.fields_version}.
+    </p>
+    <p :if={@choice.basis && @choice.basis.origin == "owner"}>
+      Chosen on the curation screen, which lists {@choice.basis.evidence_kind} and links to the source.
+    </p>
+    <p :if={is_nil(@choice.basis) or @choice.basis.origin == "legacy_unknown"}>
+      Basis not recorded.
+    </p>
+    <.link
+      :if={@choice.receipt_path}
+      navigate={@choice.receipt_path}
+      class="w-fit underline underline-offset-4"
+    >Exact choice, chooser and evidence</.link>
     """
   end
 

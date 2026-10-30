@@ -45,30 +45,36 @@ defmodule DevilsDictionaryWeb.CultureDiscoveryLiveTest do
     refute has_element?(view, "[data-api-key='cinegraph-test-key']")
   end
 
-  test "definitions render while discovery is queued, then cards arrive without a page reload",
-       ctx do
-    only([CineGraph])
-    word = word!(ctx, "war", ~w(bierce))
-    entry!(ctx, word, "bierce", body: "A public definition that must not wait.")
-    stub_success("war", 273_967, [movie(301, "Title-independent match")])
+  for layout <- [:current, :reference] do
+    test "#{layout}: definitions render while discovery is queued, then cards arrive without a page reload",
+         ctx do
+      only([CineGraph])
+      word = word!(ctx, "war", ~w(bierce))
+      entry!(ctx, word, "bierce", body: "A public definition that must not wait.")
+      stub_success("war", 273_967, [movie(301, "Title-independent match")])
 
-    {:ok, live, _html} = live(ctx.conn, ~p"/on/war")
+      {:ok, live, _html} =
+        live(
+          ctx.conn,
+          "/on/war" <> unquote(if layout == :reference, do: "?layout=reference", else: "")
+        )
 
-    assert has_element?(live, "#card-bierce")
-    assert has_element?(live, "#culture-loading")
-    refute has_element?(live, "#culture-results")
+      assert has_element?(live, "#card-bierce")
+      assert has_element?(live, "#culture-loading")
+      refute has_element?(live, "#culture-results")
 
-    run = Repo.one!(Run)
-    assert :ok = Discovery.execute_run(run.id)
-    _ = render(live)
+      run = Repo.one!(Run)
+      assert :ok = Discovery.execute_run(run.id)
+      _ = render(live)
 
-    assert has_element?(live, "#culture-results")
-    assert has_element?(live, "#culture-result-tmdb_movie-301")
-    assert has_element?(live, "#culture-entry-image-301[href^='/entities/']")
-    assert has_element?(live, "#culture-entry-title-301[href^='/entities/']")
-    assert has_element?(live, "#culture-source-301[href^='https://cinegraph.org/']")
-    assert has_element?(live, "#culture-about-film-cinegraph")
-    refute has_element?(live, "#culture-failed")
+      assert has_element?(live, "#culture-results")
+      assert has_element?(live, "#culture-result-tmdb_movie-301")
+      assert has_element?(live, "#culture-entry-image-301[href^='/entities/']")
+      assert has_element?(live, "#culture-entry-title-301[href^='/entities/']")
+      assert has_element?(live, "#culture-source-301[href^='https://cinegraph.org/']")
+      assert has_element?(live, "#culture-about-film-cinegraph")
+      refute has_element?(live, "#culture-failed")
+    end
   end
 
   test "missing posters use an intentional text treatment", ctx do

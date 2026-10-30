@@ -96,6 +96,7 @@ defmodule DevilsDictionaryWeb.WordLive do
   def mount(_params, _session, socket) do
     {:ok,
      assign(socket,
+       reference?: false,
        slug: nil,
        trail: [],
        page: nil,
@@ -154,6 +155,8 @@ defmodule DevilsDictionaryWeb.WordLive do
   end
 
   def handle_params(%{"slug" => slug} = params, uri, socket) do
+    socket = assign(socket, :reference?, params["layout"] == "reference")
+
     socket =
       assign(
         socket,
@@ -982,6 +985,29 @@ defmodule DevilsDictionaryWeb.WordLive do
           demo={@demo}
         />
 
+        <nav
+          :if={@page.headword.lexemes != []}
+          id="entry-layout-switch"
+          aria-label="Entry layout"
+          class="mb-8 flex flex-wrap items-center justify-between gap-3 border-b border-mist-950/10 pb-4 text-base/7 sm:text-sm/6 dark:border-white/10"
+        >
+          <p class="text-mist-600 dark:text-mist-400">Compare the same live entry</p>
+          <div class="flex flex-wrap gap-6">
+            <.link
+              id="entry-layout-current"
+              patch={drawer_path(@base, @page.trail, nil, @demo, false)}
+              aria-current={if !@reference?, do: "page"}
+              class={["underline-offset-4 hover:underline", !@reference? && "underline"]}
+            >Current layout</.link>
+            <.link
+              id="entry-layout-reference"
+              patch={drawer_path(@base, @page.trail, nil, @demo, true)}
+              aria-current={if @reference?, do: "page"}
+              class={["underline-offset-4 hover:underline", @reference? && "underline"]}
+            >Reference article</.link>
+          </div>
+        </nav>
+
         <%!-- The aggregate names itself (#219 B5): "On mars" over the words it
              reads; the headword stays the page's h1. --%>
         <p
@@ -1002,6 +1028,8 @@ defmodule DevilsDictionaryWeb.WordLive do
             </div>
           <% @page.headword.lexemes == [] -> %>
             <.miss slug={@slug} suggestions={@suggestions} demo={@demo} exact={@exact} />
+          <% @reference? -> %>
+            <.reference_article {assigns} />
           <% true -> %>
             <%!-- #131 Phase 2. What the page knows the size of goes in the rail;
                what a source decides the size of goes in the column beside it.
@@ -1045,7 +1073,9 @@ defmodule DevilsDictionaryWeb.WordLive do
                 headword={@page.headword}
                 choices={@choices}
                 thing={@page.thing}
-                thing_info={@page.thing && Word.info_path(@base, @page.trail, "thing", @demo)}
+                thing_info={
+                  @page.thing && drawer_path(@base, @page.trail, "thing", @demo, @reference?)
+                }
                 demo={@demo}
                 class="lg:float-left lg:clear-left lg:w-[22.5rem]"
               />
@@ -1111,7 +1141,9 @@ defmodule DevilsDictionaryWeb.WordLive do
                 page={@page}
                 sources={@card_sources}
                 choices={@choices}
-                thing_info={@page.thing && Word.info_path(@base, @page.trail, "thing", @demo)}
+                thing_info={
+                  @page.thing && drawer_path(@base, @page.trail, "thing", @demo, @reference?)
+                }
                 class="lg:col-start-1 lg:row-start-1"
                 demo={@demo}
                 subjects={@subjects}
@@ -1161,15 +1193,123 @@ defmodule DevilsDictionaryWeb.WordLive do
     <Provenance.provenance
       :if={@provenance}
       provenance={@provenance}
-      close={Word.info_path(@base, @page.trail, nil, @demo)}
-      record_path={&Word.info_path(@base, @page.trail, "#{@provenance.ref}:#{&1}", @demo)}
+      close={drawer_path(@base, @page.trail, nil, @demo, @reference?)}
+      record_path={&drawer_path(@base, @page.trail, "#{@provenance.ref}:#{&1}", @demo, @reference?)}
     />
     """
+  end
+
+  # The same assigns, readers, providers and components: presentation only.
+  defp reference_article(assigns) do
+    ~H"""
+    <article id="reference-article" class="reference-article min-w-0">
+      <header class="reference-head border-b border-mist-950/10 pb-8 dark:border-white/10">
+        <Word.headword
+          headword={@page.headword}
+          choices={@choices}
+          thing={@page.thing}
+          thing_info={@page.thing && drawer_path(@base, @page.trail, "thing", @demo, true)}
+          demo={@demo}
+        />
+      </header>
+      <div class="reference-frame">
+        <nav class="reference-contents" aria-label="In this entry">
+          <p class="font-medium">In this entry</p>
+          <a :if={@opening} href="#opening">Selected reading</a>
+          <a href="#reference-record">Complete source record</a>
+          <a :if={@page.cards != []} href={"#" <> definitions_id(@object_id, @slug, @demo, true)}>All definitions</a>
+          <a :if={@page.examples} href="#examples">Examples</a>
+          <a :if={@cultures != %{} or @browsers != [] or @culture_notes != []} href="#in-culture">API discoveries</a>
+          <a :if={@subjects} href="#subjects">Subjects</a>
+          <a :if={@page.thing} href="#thing">The concept</a>
+          <a :if={@page.related} href="#related">Related words</a>
+          <a href="#page-sources">Source index</a>
+        </nav>
+        <div class="reference-content min-w-0">
+          <details class="reference-mobile-contents border-b border-mist-950/10 pb-4 dark:border-white/10">
+            <summary class="cursor-pointer py-2">In this entry</summary>
+            <nav aria-label="Mobile entry contents" class="flex flex-col gap-3 py-4">
+              <a :if={@opening} href="#opening">Selected reading</a>
+              <a href="#reference-record">Complete source record</a>
+              <a :if={@cultures != %{} or @browsers != []} href="#in-culture">API discoveries</a>
+              <a :if={@page.thing} href="#thing">The concept</a>
+              <a href="#page-sources">Source index</a>
+            </nav>
+          </details>
+          <Opening.reference_section
+            :if={@opening}
+            opening={@opening}
+            mode={@reading_mode}
+            reviewer?={@reviewer?}
+          >
+            <:facts>
+              <Word.rail
+                page={@page}
+                sources={@card_sources}
+                choices={@choices}
+                headword={false}
+                subjects={@subjects}
+                demo={@demo}
+                class="reference-word-facts"
+              />
+            </:facts>
+          </Opening.reference_section>
+          <Word.rail
+            :if={is_nil(@opening)}
+            page={@page}
+            sources={@card_sources}
+            choices={@choices}
+            headword={false}
+            subjects={@subjects}
+            demo={@demo}
+            class="reference-bare-facts"
+          />
+          <section
+            id="reference-record"
+            class="reference-record border-t border-mist-950/10 pt-10 dark:border-white/10"
+          >
+            <header class="flex flex-col gap-3 pb-6">
+              <h2 class="font-display text-4xl tracking-tight text-pretty">
+                The complete source record
+              </h2>
+              <p class="max-w-[65ch] text-base/7 text-pretty text-mist-600 dark:text-mist-400">
+                Every original definition, example and discovery remains here. Search matches are distinct from the selections above.
+              </p>
+            </header>
+            <.column {assigns} mode={@reading_mode} reference?={true} />
+          </section>
+          <.way_out
+            {assigns}
+            class="reference-way-out border-t border-mist-950/10 pt-8 dark:border-white/10"
+          />
+        </div>
+      </div>
+    </article>
+    """
+  end
+
+  defp definitions_id(object_id, slug, demo, reference?) do
+    "definitions-#{object_id || "any"}-#{slug}-#{demo}" <>
+      if(reference?, do: "-reference", else: "")
+  end
+
+  defp drawer_path(base, trail, ref, demo, reference?) do
+    path = Word.info_path(base, trail, ref, demo)
+
+    if reference? do
+      uri = URI.parse(path)
+      query = URI.decode_query(uri.query || "") |> Map.put("layout", "reference")
+      URI.to_string(%{uri | query: URI.encode_query(query)})
+    else
+      path
+    end
   end
 
   # Everything a source decides the size of, in the column beside the rail:
   # one function so both layouts in `render/1` render the same elements.
   defp column(assigns) do
+    assigns = assign_new(assigns, :reference?, fn -> false end)
+
     ~H"""
     <%!-- The authored overview this address holds, when it names these
          words, heads them (#219 B1); one that names other words is shown
@@ -1194,10 +1334,12 @@ defmodule DevilsDictionaryWeb.WordLive do
          are two words under one slug, and the id has to tell them
          apart or the ignored rows would outlive the word. `any` is
          what `/on/:slug` means — every word the slug reaches —
-         and it is a segment rather than a gap so the id reads. --%>
+         and it is a segment rather than a gap so the id reads. The reference
+         presentation is also identity here: its drawer URLs differ, so an
+         ignored current-layout subtree must not survive a layout switch. --%>
     <.slab
       :if={@page.cards != []}
-      id={"definitions-#{@object_id || "any"}-#{@slug}-#{@demo}"}
+      id={definitions_id(@object_id, @slug, @demo, @reference?)}
       phx-update="ignore"
       title="Definitions"
       class="mt-2"
@@ -1210,7 +1352,7 @@ defmodule DevilsDictionaryWeb.WordLive do
           open={i == default_open(@page.cards)}
           continues={continues?(@page.cards, i)}
           trail={trail_here(@page)}
-          info={Word.info_path(@base, @page.trail, "card:" <> card.id, @demo)}
+          info={drawer_path(@base, @page.trail, "card:" <> card.id, @demo, @reference?)}
           demo={@demo}
           mode={@mode}
         />
@@ -1271,7 +1413,7 @@ defmodule DevilsDictionaryWeb.WordLive do
       :if={@page.thing}
       thing={@page.thing}
       trail={trail_here(@page)}
-      info={Word.info_path(@base, @page.trail, "thing", @demo)}
+      info={drawer_path(@base, @page.trail, "thing", @demo, @reference?)}
       demo={@demo}
       mode={@mode}
     />
