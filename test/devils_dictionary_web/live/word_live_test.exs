@@ -770,11 +770,11 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
     test "every lexeme's rows land in one block, one heading, one id per group", ctx do
       two_lexemes!(ctx)
 
-      {:ok, _live, html} = live(ctx.conn, ~p"/on/set")
+      {:ok, live, html} = live(ctx.conn, ~p"/on/set")
 
       # One section, one heading, and no `· verb` beside it.
       assert length(ids(html, ~r/^related$/)) == 1
-      assert length(String.split(html, "Related words")) == 2
+      assert has_element?(live, "#related h2", "Related words")
       assert length(ids(html, ~r/^related-similar$/)) == 1
       assert length(ids(html, ~r/^related-family$/)) == 1
 

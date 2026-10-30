@@ -10,7 +10,7 @@ defmodule DevilsDictionaryWeb.WordReferenceLiveTest do
   end
 
   test "reference view keeps every source card, concept, subject and related record once", ctx do
-    {:ok, current, _} = live(ctx.conn, "/on/love?opening=fixture")
+    {:ok, current, _} = live(ctx.conn, "/on/love?opening=fixture&layout=current")
     {:ok, reference, _} = live(ctx.conn, "/on/love?opening=fixture&layout=reference")
     assert has_element?(reference, "#reference-article")
 
@@ -34,41 +34,55 @@ defmodule DevilsDictionaryWeb.WordReferenceLiveTest do
 
   test "the reference drawer opens and closes without losing the presentation or data", ctx do
     {:ok, view, _} = live(ctx.conn, "/on/love?layout=reference")
-    assert has_element?(view, "#card-bierce-info[href*='layout=reference']")
+    assert has_element?(view, "#card-bierce-info")
     view |> element("#card-bierce-info") |> render_click()
     assert has_element?(view, "#provenance")
     assert has_element?(view, "#reference-article #card-wordnet")
-    assert has_element?(view, "#provenance-close[href*='layout=reference']")
+    assert has_element?(view, "#provenance-close")
     view |> element("#provenance-close") |> render_click()
     refute has_element?(view, "#provenance")
     assert has_element?(view, "#reference-article")
   end
 
-  test "the layout switch preserves trail and current layout remains the default", ctx do
+  test "reference article is the default without comparison controls and preserves trail", ctx do
     {:ok, view, _} = live(ctx.conn, "/on/love?trail=war")
-    refute has_element?(view, "#reference-article")
-    assert has_element?(view, "#entry-layout-current[aria-current='page']")
-    view |> element("#entry-layout-reference") |> render_click()
     assert has_element?(view, "#reference-article")
+    refute has_element?(view, "#entry-layout-switch")
     assert has_element?(view, "#definitions-any-love-false-reference")
-    refute has_element?(view, "#definitions-any-love-false")
-    assert has_element?(view, "#entry-layout-current[href*='trail=war']")
-    assert has_element?(view, "#card-bierce-info[href*='layout=reference']")
+    assert has_element?(view, "#card-bierce-info[href*='trail=war']")
     view |> element("#card-bierce-info") |> render_click()
     assert has_element?(view, "#provenance")
     view |> element("#provenance-close") |> render_click()
+    refute has_element?(view, "#provenance")
     assert has_element?(view, "#reference-article")
-    view |> element("#entry-layout-current") |> render_click()
+
+    render_patch(view, "/on/love?trail=war&layout=current")
     refute has_element?(view, "#reference-article")
     assert has_element?(view, "#definitions-any-love-false")
-    refute has_element?(view, "#definitions-any-love-false-reference")
-    refute has_element?(view, "#card-bierce-info[href*='layout=reference']")
-    assert has_element?(view, "#card-bierce")
+    assert has_element?(view, "#card-bierce-info[href*='layout=current']")
+    view |> element("#card-bierce-info") |> render_click()
+    view |> element("#provenance-close") |> render_click()
+    refute has_element?(view, "#reference-article")
+
+    render_patch(view, "/on/love?trail=war")
+    assert has_element?(view, "#reference-article")
+    assert has_element?(view, "#definitions-any-love-false-reference")
+  end
+
+  test "canonical slug correction preserves presentation and navigation parameters", ctx do
+    query = "layout=current&trail=war&opening=fixture"
+
+    assert {:error, {:live_redirect, %{to: target}}} =
+             live(ctx.conn, "/words/#{ctx.love.object_id}/old-name?" <> query)
+
+    uri = URI.parse(target)
+    assert uri.path == "/words/#{ctx.love.object_id}/love"
+    assert URI.decode_query(uri.query) == URI.decode_query(query)
   end
 
   test "unknown presentation values cannot change the reader or hide source content", ctx do
     {:ok, view, _} = live(ctx.conn, "/on/love?layout=unrecognised")
-    refute has_element?(view, "#reference-article")
+    assert has_element?(view, "#reference-article")
     assert has_element?(view, "#card-bierce")
     refute has_element?(view, "#opening")
   end

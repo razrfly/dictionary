@@ -410,7 +410,7 @@ defmodule DevilsDictionary.Curation.WholeEntryTest do
     assert {:ok, history} = Receipt.read("love", version.version)
     assert length(history.items) > 4
     html = build_conn() |> get("/on/love") |> html_response(200)
-    assert html =~ "Selected definition"
+    assert html =~ "Selected reading"
     assert html =~ "curated-news"
     assert html =~ "Voltaire"
   end
@@ -648,7 +648,7 @@ defmodule DevilsDictionary.Curation.WholeEntryTest do
     conn = build_conn() |> get("/on/love")
     html = html_response(conn, 200)
     assert html =~ "curation-summary"
-    assert html =~ "Selected definition"
+    assert html =~ "Selected reading"
     assert html =~ "curated-news"
     assert html =~ "curated-images"
     assert html =~ "curated-quotes"
@@ -790,7 +790,7 @@ defmodule DevilsDictionary.Curation.WholeEntryTest do
     html = build_conn() |> get("/on/love") |> html_response(200)
     assert html =~ ~s(id="#{opening.lead.links.card_id}")
     assert html =~ ~s(href="##{opening.lead.links.card_id}")
-    assert html =~ "Selected definition"
+    assert html =~ "Selected reading"
   end
 
   defp legacy!(w) do

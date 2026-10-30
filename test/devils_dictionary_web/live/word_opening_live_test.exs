@@ -37,7 +37,7 @@ defmodule DevilsDictionaryWeb.WordOpeningLiveTest do
     {:ok, view, _html} = live(ctx.conn, ~p"/on/love")
 
     refute has_element?(view, "#opening")
-    assert has_element?(view, "#word-rail[class='lg:col-start-1 lg:row-start-1']")
+    assert has_element?(view, "#reference-article #word-rail")
   end
 
   test "the definitions are untouched: the same cards, the same ids, the same open row", ctx do
@@ -92,11 +92,11 @@ defmodule DevilsDictionaryWeb.WordOpeningLiveTest do
     refute html =~ "max-lg:contents"
   end
 
-  test "without an opening the page keeps its own layout, headword inside the rail", ctx do
+  test "without an opening the reference article keeps its headword and source rail", ctx do
     {:ok, view, _html} = live(ctx.conn, ~p"/on/love")
 
-    assert has_element?(view, "#word-rail #headword")
-    assert has_element?(view, "#word-rail[class='lg:col-start-1 lg:row-start-1']")
+    assert has_element?(view, "#reference-article > header #headword")
+    assert has_element?(view, "#reference-article #word-rail")
   end
 
   test "moving between words never carries one word's selection onto another", ctx do
@@ -107,7 +107,7 @@ defmodule DevilsDictionaryWeb.WordOpeningLiveTest do
 
     render_patch(view, ~p"/on/rizz?opening=fixture")
     refute has_element?(view, "#opening")
-    assert has_element?(view, "#word-rail #headword")
+    assert has_element?(view, "#reference-article > header #headword")
 
     render_patch(view, ~p"/on/love?opening=fixture")
     assert has_element?(view, "#opening-lead-text", "temporary insanity")
@@ -133,7 +133,7 @@ defmodule DevilsDictionaryWeb.WordOpeningLiveTest do
     {:ok, view, _html} = live(ctx.conn, ~p"/on/rizz?opening=fixture")
 
     refute has_element?(view, "#opening")
-    assert has_element?(view, "#word-rail[class='lg:col-start-1 lg:row-start-1']")
+    assert has_element?(view, "#reference-article #word-rail")
   end
 
   test "an explicitly empty composition draws no section, heading or skeleton", ctx do

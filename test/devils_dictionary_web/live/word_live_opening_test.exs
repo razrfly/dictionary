@@ -114,7 +114,7 @@ defmodule DevilsDictionaryWeb.WordLiveOpeningTest do
 
     refute has_element?(view, "#opening")
     assert has_element?(view, "[id^='definitions-'] h2", "Definitions")
-    assert has_element?(view, "#word-rail[class='lg:col-start-1 lg:row-start-1']")
+    assert has_element?(view, "#reference-article #word-rail")
   end
 
   test "10: a published composition is the opening, in order, signed, with its record", ctx do
@@ -195,8 +195,8 @@ defmodule DevilsDictionaryWeb.WordLiveOpeningTest do
 
       {:ok, view, _html} = live(ctx.conn, ~p"/on/love")
 
-      assert has_element?(view, "#opening-withheld-highlight-2", "superseded since selection")
-      assert has_element?(view, "#opening-withheld-highlight-2", "Nothing was put in its place")
+      assert has_element?(view, "#curated-withheld-2", "superseded since selection")
+      assert has_element?(view, "#curated-withheld-2", "Nothing was put in its place")
       refute has_element?(view, "#opening-highlight-2")
       refute opening_html(view) =~ "cordial love"
       assert has_element?(view, "#opening-highlight-1-text", "The passion between the sexes")
@@ -412,7 +412,7 @@ defmodule DevilsDictionaryWeb.WordLiveOpeningTest do
 
     assert has_element?(
              view,
-             "#opening-withheld-highlight-1",
+             "#curated-withheld-1",
              "not an example a reviewer has accepted"
            )
 
@@ -534,7 +534,7 @@ defmodule DevilsDictionaryWeb.WordLiveOpeningTest do
       assert {:ok, %{withheld: [%{role: :highlight, position: 3, reason: :catalog_changed}]}} =
                Published.current(composition.id)
 
-      assert has_element?(view, "#opening-withheld-highlight-3", "its catalog has changed")
+      assert has_element?(view, "#curated-withheld-3", "its catalog has changed")
       refute has_element?(view, "#opening-highlight-3")
       refute opening_html(view) =~ "Cupid"
       assert has_element?(view, "#opening-highlight-1-title", "Summum Bonum")
