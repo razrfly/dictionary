@@ -659,6 +659,15 @@ defmodule DevilsDictionaryWeb.CurationLiveTest do
 
       assert has_element?(view, "#curation-preview-pane #opening-highlight-1", "Fixture Exemplar")
       assert has_element?(view, "#curation-preview-pane #opening-highlight-3", "Cupid and Psyche")
+
+      for citation <- ["1674", "John Milton", "Paradise Lost"] do
+        assert has_element?(
+                 view,
+                 "#curation-preview-pane #opening-highlight-2-citation",
+                 citation
+               )
+      end
+
       preview = view |> element("#curation-preview-pane #opening") |> render()
 
       submit(view, "publish")
@@ -666,6 +675,10 @@ defmodule DevilsDictionaryWeb.CurationLiveTest do
 
       {:ok, page, _html} = live(ctx.conn, ~p"/on/love")
       published = page |> element("#opening") |> render()
+
+      for citation <- ["1674", "John Milton", "Paradise Lost"] do
+        assert has_element?(page, "#opening-highlight-2-citation", citation)
+      end
 
       assert choice_content(preview) == choice_content(published)
     end
