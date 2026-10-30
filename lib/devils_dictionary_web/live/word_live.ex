@@ -149,7 +149,9 @@ defmodule DevilsDictionaryWeb.WordLive do
         if slug == lexeme.slug do
           handle_params(resolver, uri, assign(socket, object_id: lexeme.object_id, exact: :found))
         else
-          {:noreply, push_navigate(socket, to: ~p"/words/#{id}/#{lexeme.slug}")}
+          target = URI.parse(~p"/words/#{id}/#{lexeme.slug}")
+          target = URI.to_string(%{target | query: URI.parse(uri).query})
+          {:noreply, push_navigate(socket, to: target)}
         end
     end
   end

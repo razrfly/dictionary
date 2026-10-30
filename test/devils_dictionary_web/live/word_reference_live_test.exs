@@ -69,6 +69,17 @@ defmodule DevilsDictionaryWeb.WordReferenceLiveTest do
     assert has_element?(view, "#definitions-any-love-false-reference")
   end
 
+  test "canonical slug correction preserves presentation and navigation parameters", ctx do
+    query = "layout=current&trail=war&opening=fixture"
+
+    assert {:error, {:live_redirect, %{to: target}}} =
+             live(ctx.conn, "/words/#{ctx.love.object_id}/old-name?" <> query)
+
+    uri = URI.parse(target)
+    assert uri.path == "/words/#{ctx.love.object_id}/love"
+    assert URI.decode_query(uri.query) == URI.decode_query(query)
+  end
+
   test "unknown presentation values cannot change the reader or hide source content", ctx do
     {:ok, view, _} = live(ctx.conn, "/on/love?layout=unrecognised")
     assert has_element?(view, "#reference-article")
