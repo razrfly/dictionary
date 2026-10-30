@@ -251,6 +251,7 @@ defmodule DevilsDictionaryWeb.Opening do
           class="reference-reading-rail min-w-0"
           aria-label="Selected images and word information"
         >
+          {render_slot(@facts)}
           <section
             :for={group <- @image_groups}
             id="curated-images"
@@ -267,7 +268,6 @@ defmodule DevilsDictionaryWeb.Opening do
               />
             </ul>
           </section>
-          {render_slot(@facts)}
         </aside>
       </div>
     </section>
