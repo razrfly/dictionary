@@ -387,9 +387,12 @@ defmodule DevilsDictionaryWeb.Word do
     doc:
       "whether the rail opens with the headword; `WordLive` renders it on its own, before a curated opening, when there is one (#156)"
 
+  attr :sources_first, :boolean, default: false
+
   def rail(assigns) do
     ~H"""
     <aside id="word-rail" class={@class}>
+      <.rail_sources :if={@sources_first} page={@page} sources={@sources} />
       <.headword
         :if={@headword}
         headword={@page.headword}
@@ -439,58 +442,7 @@ defmodule DevilsDictionaryWeb.Word do
         </details>
       </div>
 
-      <nav
-        :if={@page.cards != []}
-        aria-label="Sources"
-        class="mt-5 border-t border-mist-950/10 pt-4 dark:border-white/10"
-      >
-        <.source_line sources={@sources} />
-        <%!-- One row per source, never one per entry (#133 R2). `build/2` did
-             the grouping; this list walks `source_groups` and links the name to
-             the source's first card and each part of speech to its own. Nine
-             entries on *love* stay one click away under five names. --%>
-        <ul role="list" class="mt-2 space-y-1 text-base/7 sm:text-sm/7">
-          <li
-            :for={group <- @page.source_groups}
-            id={"rail-#{group.slug}"}
-            class="flex flex-wrap items-baseline justify-between gap-x-2"
-          >
-            <%!-- No `min-w-0`: `truncate` makes the name unshrinkable, so a row
-                 that cannot hold both wraps its parts of speech onto a second
-                 line instead of cutting the name to "Wiktionary (Engli…". Five
-                 parts of speech and a 31-character source name is `set`. --%>
-            <a
-              href={"#" <> group.card_id}
-              class={[
-                "truncate hover:underline",
-                group.tier == :aristocracy && "text-amber-700 dark:text-amber-400",
-                group.tier != :aristocracy && "text-mist-600 dark:text-mist-400"
-              ]}
-            >
-              <SourceBadge.badge source={group.source} decorative class="mr-1.5 align-[-0.3em]" />{author(
-                group.source
-              )}
-            </a>
-            <%!-- The parts of speech are separate links, so the reader reaches
-                 Johnson's verb without first reaching his noun. Each carries
-                 the source in its accessible name: "verb" alone tells a screen
-                 reader whose verb it is not. --%>
-            <span class="shrink-0 text-mist-400">
-              <span :for={{part, i} <- Enum.with_index(group.parts)}>
-                <span :if={i > 0} aria-hidden="true">·</span>
-                <a
-                  id={"rail-#{part.card_id}"}
-                  href={"#" <> part.card_id}
-                  aria-label={"#{author(group.source)} · #{part.label}"}
-                  class="hover:text-mist-950 hover:underline dark:hover:text-white"
-                >
-                  {part.label}
-                </a>
-              </span>
-            </span>
-          </li>
-        </ul>
-      </nav>
+      <.rail_sources :if={!@sources_first} page={@page} sources={@sources} />
     </aside>
     """
   end
@@ -499,6 +451,66 @@ defmodule DevilsDictionaryWeb.Word do
   # and nothing else no longer grows an empty one.
   defp facts?(headword),
     do: headword.forms != [] or headword.etymologies != []
+
+  attr :page, :map, required: true
+  attr :sources, :list, required: true
+
+  defp rail_sources(assigns) do
+    ~H"""
+    <nav
+      :if={@page.cards != []}
+      aria-label="Sources"
+      class="mt-5 border-t border-mist-950/10 pt-4 dark:border-white/10"
+    >
+      <.source_line sources={@sources} />
+      <%!-- One row per source, never one per entry (#133 R2). `build/2` did
+             the grouping; this list walks `source_groups` and links the name to
+             the source's first card and each part of speech to its own. Nine
+             entries on *love* stay one click away under five names. --%>
+      <ul role="list" class="mt-2 space-y-1 text-base/7 sm:text-sm/7">
+        <li
+          :for={group <- @page.source_groups}
+          id={"rail-#{group.slug}"}
+          class="flex flex-wrap items-baseline justify-between gap-x-2"
+        >
+          <%!-- No `min-w-0`: `truncate` makes the name unshrinkable, so a row
+                 that cannot hold both wraps its parts of speech onto a second
+                 line instead of cutting the name to "Wiktionary (Engli…". Five
+                 parts of speech and a 31-character source name is `set`. --%>
+          <a
+            href={"#" <> group.card_id}
+            class={[
+              "truncate hover:underline",
+              group.tier == :aristocracy && "text-amber-700 dark:text-amber-400",
+              group.tier != :aristocracy && "text-mist-600 dark:text-mist-400"
+            ]}
+          >
+            <SourceBadge.badge source={group.source} decorative class="mr-1.5 align-[-0.3em]" />{author(
+              group.source
+            )}
+          </a>
+          <%!-- The parts of speech are separate links, so the reader reaches
+                 Johnson's verb without first reaching his noun. Each carries
+                 the source in its accessible name: "verb" alone tells a screen
+                 reader whose verb it is not. --%>
+          <span class="shrink-0 text-mist-400">
+            <span :for={{part, i} <- Enum.with_index(group.parts)}>
+              <span :if={i > 0} aria-hidden="true">·</span>
+              <a
+                id={"rail-#{part.card_id}"}
+                href={"#" <> part.card_id}
+                aria-label={"#{author(group.source)} · #{part.label}"}
+                class="hover:text-mist-950 hover:underline dark:hover:text-white"
+              >
+                {part.label}
+              </a>
+            </span>
+          </span>
+        </li>
+      </ul>
+    </nav>
+    """
+  end
 
   @doc """
   The things this page can count before it renders: how many dictionaries have

@@ -1244,6 +1244,7 @@ defmodule DevilsDictionaryWeb.WordLive do
           >
             <:facts>
               <Word.rail
+                sources_first
                 page={@page}
                 sources={@card_sources}
                 choices={@choices}
@@ -1256,6 +1257,7 @@ defmodule DevilsDictionaryWeb.WordLive do
           </Opening.reference_section>
           <Word.rail
             :if={is_nil(@opening)}
+            sources_first
             page={@page}
             sources={@card_sources}
             choices={@choices}
