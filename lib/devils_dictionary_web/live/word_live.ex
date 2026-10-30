@@ -1200,7 +1200,7 @@ defmodule DevilsDictionaryWeb.WordLive do
           <a :if={@subjects} href="#subjects">Subjects</a>
           <a :if={@page.thing} href="#thing">The concept</a>
           <a :if={@page.related} href="#related">Related words</a>
-          <a href="#page-sources">Source index</a>
+          <a :if={@page_sources != []} href="#page-sources">Source index</a>
         </nav>
         <div class="reference-content min-w-0">
           <details class="reference-mobile-contents border-b border-mist-950/10 pb-4 dark:border-white/10">
@@ -1210,7 +1210,7 @@ defmodule DevilsDictionaryWeb.WordLive do
               <a href="#reference-record">Complete source record</a>
               <a :if={@cultures != %{} or @browsers != []} href="#in-culture">API discoveries</a>
               <a :if={@page.thing} href="#thing">The concept</a>
-              <a href="#page-sources">Source index</a>
+              <a :if={@page_sources != []} href="#page-sources">Source index</a>
             </nav>
           </details>
           <Opening.reference_section
