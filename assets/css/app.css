@@ -107,3 +107,11 @@
   .reference-reading-rail { border-top: 1px solid color-mix(in oklab, var(--color-mist-950) 10%, transparent); padding-top: 2rem; }
 }
 .reference-article:where([data-theme=dark] *) .reference-contents { color: var(--color-mist-400); }
+
+/* Keep the full lexical header beside the title on desktop, in reading order. */
+@media (min-width: 700px) {
+  .reference-head #headword { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 3fr); gap: .5rem 3rem; align-items: baseline; }
+  .reference-head #headword > h1 { grid-column: 1; grid-row: 1 / span 3; align-self: center; overflow-wrap: anywhere; }
+  .reference-head #headword > :not(h1) { grid-column: 2; min-width: 0; margin-top: 0; }
+  .reference-head #quick-definition { max-width: 65ch; }
+}
