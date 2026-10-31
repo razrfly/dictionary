@@ -1422,10 +1422,12 @@ defmodule DevilsDictionaryWeb.WordLive do
   end
 
   defp entry_view_path(assigns, records?) do
-    query =
-      if records?,
-        do: Map.put(assigns.record_params, "view", "records"),
+    params =
+      if records? and assigns.records?,
+        do: Map.merge(assigns.record_params, assigns.record_filters),
         else: assigns.record_params
+
+    query = if records?, do: Map.put(params, "view", "records"), else: params
 
     assigns.base <> if(map_size(query) == 0, do: "", else: "?" <> URI.encode_query(query))
   end

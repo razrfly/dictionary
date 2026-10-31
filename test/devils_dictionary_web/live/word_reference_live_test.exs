@@ -76,6 +76,14 @@ defmodule DevilsDictionaryWeb.WordReferenceLiveTest do
     )
 
     assert has_element?(view, "#record-query[value='Milton']")
+
+    assert has_element?(
+             view,
+             "#entry-records[href*='q=Milton'][href*='type=quote'][href*='source=wiktionary']"
+           )
+
+    view |> element("#entry-records") |> render_click()
+    assert has_element?(view, "#record-query[value='Milton']")
     assert has_element?(view, "#record-search input[name='trail'][value='war']")
     assert has_element?(view, "#card-bierce-info[href*='view=records'][href*='q=Milton']")
     view |> element("#card-bierce-info") |> render_click()
@@ -117,6 +125,12 @@ defmodule DevilsDictionaryWeb.WordReferenceLiveTest do
 
     assert URI.parse(target).path == "/words/#{ctx.love.object_id}/love"
     assert URI.decode_query(URI.parse(target).query) == URI.decode_query(query)
+  end
+
+  test "inert filters on the curated article do not change its source navigation", ctx do
+    {:ok, view, _} = live(ctx.conn, "/on/love?q=Milton&type=quote&source=wiktionary")
+    assert has_element?(view, "#entry-records[href='/on/love?view=records']")
+    refute has_element?(view, "#record-query")
   end
 
   test "unknown view stays on the curated article", ctx do
