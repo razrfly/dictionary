@@ -11,6 +11,14 @@ export function filterURL(href, filters) {
   }
   return url.pathname + url.search + url.hash
 }
+// Keep provenance navigation on the current client search without a server patch per keystroke.
+export function provenanceURL(href, currentHref, filters) {
+  const current = new URL(currentHref)
+  const target = new URL(href, current)
+  if (target.origin !== current.origin || target.pathname !== current.pathname ||
+      !target.searchParams.has("provenance")) return href
+  return filterURL(target.href, filters)
+}
 export function matchesRecord(record, filters) {
   return (!filters.type || record.type === filters.type) &&
     (!filters.source || record.sources.some(source => source.id === filters.source)) &&
@@ -111,7 +119,8 @@ export function recordTargetId(node, dom) {
   node.id = id
   return id
 }
-function material(row, inventory, query) {
+function material(row, inventory, filters) {
+  const query = filters.q
   const article = element("article", null, "material-result")
   article.dataset.materialKind = row.type
   const image = ["artwork", "image", "film", "text", "news", "music", "gif"].includes(row.type) ? row.node.querySelector("img") : null
@@ -148,6 +157,7 @@ function material(row, inventory, query) {
     const identity = href + "|" + anchor.textContent.trim()
     if (!href || seen.has(identity) || !/^(https?:|\/|#)/i.test(href)) continue
     const copy = cleanClone(anchor)
+    copy.setAttribute("href", provenanceURL(href, window.location.href, filters))
     // Thumbnails already appear once above; keep source marks and text links.
     if (copy.querySelector("img") && !copy.textContent.trim()) continue
     seen.add(identity)
@@ -260,6 +270,13 @@ const RecordExplorer = {
       }
       if (event.target.closest("[data-record-more]")) { this.limit += 30; this.apply() }
     }
+    this.provenanceClick = event => {
+      const anchor = event.target.closest("a[href]")
+      if (!anchor || !this.inventory?.contains(anchor)) return
+      anchor.setAttribute("href", provenanceURL(anchor.getAttribute("href"), window.location.href,
+        {q: this.q.value, type: this.type.value, source: this.source.value}))
+    }
+    document.addEventListener("click", this.provenanceClick, true)
     this.submit = event => { event.preventDefault(); this.updateFilters() }
     this.el.querySelector("#record-search").addEventListener("submit", this.submit)
     this.el.addEventListener("input", this.updateFilters)
@@ -305,12 +322,13 @@ const RecordExplorer = {
     const counts = categoryCounts(rows, filters)
     this.categoryButtons = updateCategoryButtons(this.categories, this.categoryButtons || new Map(), counts, filters.type)
     const matches = interleave(applyFilters(rows, filters))
-    replaceResults(this.results, matches.slice(0, this.limit).map((row) => material(row, this.inventory, filters.q)), this.q)
+    replaceResults(this.results, matches.slice(0, this.limit).map((row) => material(row, this.inventory, filters)), this.q)
     this.more.hidden = matches.length <= this.limit
     const message = matches.length ? `${matches.length} ${filters.type ? label.toLocaleLowerCase() : "materials"}${filters.q || filters.source ? " matching" : ""} · ${Math.min(this.limit, matches.length)} shown` : "No matching materials. Clear filters or inspect provider status below."
     if (this.status.textContent !== message) this.status.textContent = message
   },
   destroyed() {
+    document.removeEventListener("click", this.provenanceClick, true)
     this.observer?.disconnect()
     window.removeEventListener("hashchange", this.revealFragment)
     if (this.frame) cancelAnimationFrame(this.frame)

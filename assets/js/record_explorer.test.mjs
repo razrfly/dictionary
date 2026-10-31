@@ -1,6 +1,6 @@
 import test from "node:test"
 import assert from "node:assert/strict"
-import {matchesRecord, applyFilters, records, openRecordTarget, recordText, categoryCounts, interleave, excerpt, recordTargetId, updateCategoryButtons, defaultLayout, selectedLayout, replaceResults, revealRecordFragment, filterURL, adoptExplorerState} from "./record_explorer.mjs"
+import {matchesRecord, applyFilters, records, openRecordTarget, recordText, categoryCounts, interleave, excerpt, recordTargetId, updateCategoryButtons, defaultLayout, selectedLayout, replaceResults, revealRecordFragment, filterURL, adoptExplorerState, provenanceURL} from "./record_explorer.mjs"
 
 const node = (children = []) => ({
   hidden: false,
@@ -236,4 +236,21 @@ test("the live hook adopts early category nodes without duplicates or losing lay
   const otherPage = {el: {}}
   adoptExplorerState(otherPage, early)
   assert.equal(otherPage.categoryButtons, undefined)
+})
+
+ test("provenance links preserve client filters and leave unrelated destinations unchanged", () => {
+  const current = "https://wordhoard.test/on/love/materials"
+  const filters = {q: "Bierce", type: "definition", source: "bierce"}
+  const destination = provenanceURL("/on/love/materials?provenance=card%3Acard-bierce&trail=love#receipt", current, filters)
+  const url = new URL(destination, current)
+  assert.equal(url.searchParams.get("q"), "Bierce")
+  assert.equal(url.searchParams.get("type"), "definition")
+  assert.equal(url.searchParams.get("source"), "bierce")
+  assert.equal(url.searchParams.get("provenance"), "card:card-bierce")
+  assert.equal(url.searchParams.get("trail"), "love")
+  assert.equal(url.hash, "#receipt")
+  assert.equal(provenanceURL(destination, current, {}).includes("q="), false)
+  for (const href of ["/on/love", "/on/love/materials", "#card-bierce", "https://other.test/on/love/materials?provenance=x", "/on/war/materials?provenance=x"]) {
+    assert.equal(provenanceURL(href, current, filters), href)
+  }
 })
