@@ -99,6 +99,7 @@ defmodule DevilsDictionaryWeb.WordLive do
      assign(socket,
        reference?: true,
        records?: false,
+       record_discovery_ready: false,
        record_claims: [],
        record_subjects: nil,
        record_claims_for: nil,
@@ -342,7 +343,8 @@ defmodule DevilsDictionaryWeb.WordLive do
   # the public one, so its withheld set is not compared. The disclosure
   # says a check was queued by this visit.
   defp refresh_visit(socket, page, opening, slug, reader, demo) do
-    if socket.assigns.live_action == :on and reader == PublishedReader and not demo do
+    if socket.assigns.live_action == :on and reader == PublishedReader and not demo and
+         not records_preview_read_only?() do
       case Refresh.visit(page, opening, slug: slug, public?: not socket.assigns.contributor) do
         {:ok, outcome} when outcome in [:admitted, :recovered] -> queued(opening)
         _other -> opening
@@ -359,6 +361,10 @@ defmodule DevilsDictionaryWeb.WordLive do
   end
 
   defp queued(opening), do: opening
+
+  # Private preview only: never controlled by a URL or a reader session.
+  defp records_preview_read_only?,
+    do: Application.get_env(:devils_dictionary, :source_records_preview_read_only, false)
 
   # What On adds to the words (#219): the overview at this address, the
   # overviews elsewhere that name these words, and the Subjects section. One
@@ -459,16 +465,28 @@ defmodule DevilsDictionaryWeb.WordLive do
       Discovery.unsubscribe(old_target.object_id)
     end
 
+    # Subscribe before deferring the inventory: the deferred pass already has
+    # a target, so subscribing there would miss every subsequent result update.
+    if connected?(socket) and not is_nil(target) and not records_preview_read_only?() and
+         (is_nil(old_target) or old_target.object_id != target.object_id) do
+      :ok = Discovery.subscribe(target.object_id)
+    end
+
+    defer_records? = socket.assigns.records? and not socket.assigns.record_discovery_ready
+    if defer_records? and connected?(socket), do: send(self(), :load_record_discovery)
+
     cultures =
       cond do
         is_nil(target) or culture_providers == [] ->
           %{}
 
-        connected?(socket) ->
-          if is_nil(old_target) or old_target.object_id != target.object_id do
-            :ok = Discovery.subscribe(target.object_id)
-          end
+        records_preview_read_only?() and not defer_records? ->
+          Map.new(culture_providers, fn provider ->
+            state = Discovery.state(target.object_id, provider.slug())
+            {provider.slug(), Map.merge(state, %{term: target.term, relevance: target.relevance})}
+          end)
 
+        connected?(socket) and not defer_records? ->
           culture_providers
           |> Enum.map(fn provider ->
             {provider.slug(), Discovery.request(target, provider.slug())}
@@ -785,6 +803,17 @@ defmodule DevilsDictionaryWeb.WordLive do
   defp state_for_outcome(state, _outcome), do: state
 
   @impl true
+  def handle_info(:load_record_discovery, socket) do
+    if socket.assigns.records? and socket.assigns.page do
+      {:noreply,
+       socket
+       |> assign(:record_discovery_ready, true)
+       |> prepare_discovery(socket.assigns.page, socket.assigns.demo)}
+    else
+      {:noreply, socket}
+    end
+  end
+
   def handle_info(
         {:discovery_updated, target_id, mapping_id, provider_slug, transient_items},
         %{assigns: %{discovery_target: %{object_id: target_id} = target}} = socket
@@ -838,7 +867,7 @@ defmodule DevilsDictionaryWeb.WordLive do
     culture = socket.assigns.cultures[provider_slug]
     target = socket.assigns.discovery_target
 
-    if target && culture && culture[:next_cursor] do
+    if target && culture && culture[:next_cursor] && not records_preview_read_only?() do
       result =
         Discovery.request_next(
           target.object_id,
@@ -1432,22 +1461,29 @@ defmodule DevilsDictionaryWeb.WordLive do
     assigns.base <> if(map_size(query) == 0, do: "", else: "?" <> URI.encode_query(query))
   end
 
+  defp record_provider_status(provider, cultures) do
+    case cultures[provider.slug()] do
+      %{status: status, items: items} ->
+        "#{status} · #{length(items)} loaded"
+
+      _ ->
+        cond do
+          not provider.enabled?() -> "disabled or not configured"
+          Providers.browser?(provider) -> "browser results · inspect complete records for status"
+          true -> "not loaded for this entry"
+        end
+    end
+  end
+
   defp record_view(assigns) do
     ~H"""
     <article id="source-record-view" class="min-w-0">
-      <Word.headword
-        headword={@page.headword}
-        choices={@choices}
-        thing={@page.thing}
-        thing_info={
-          @page.thing && drawer_path(@base, @page.trail, "thing", @demo, true, true, @record_filters)
-        }
-        demo={@demo}
-      />
       <header class="flex flex-col gap-3 border-t border-mist-950/10 py-6 dark:border-white/10">
-        <h2 class="font-display text-3xl tracking-tight text-balance">Source records</h2>
+        <h1 class="font-display text-4xl tracking-tight text-balance">
+          All materials · {@page.headword.lemma}
+        </h1>
         <p class="max-w-[70ch] text-base/7 text-pretty text-mist-600 dark:text-mist-400">
-          Uncurated records supplied by dictionaries and APIs. A search match is not a curated choice or a guarantee that a source is correct.
+          Search the dictionaries, texts, images and API records available for this entry. Source matches are not curated endorsements.
         </p>
         <.link
           href={entry_view_path(assigns, false) <> "#opening"}
@@ -1456,13 +1492,48 @@ defmodule DevilsDictionaryWeb.WordLive do
           Return to the curated choices, dates and selection history
         </.link>
       </header>
+      <p :if={records_preview_read_only?()} class="mb-4 text-sm text-mist-600">
+        Read-only preview of real records. Fetching more materials is disabled here.
+      </p>
       <RecordExplorer.controls
         id={"record-filters-" <> Base.url_encode64(@base <> "?" <> URI.encode_query(Map.merge(@record_params, @record_filters)), padding: false)}
         filters={@record_filters}
         params={@record_params}
         sources={@page_sources}
       />
-      <div id="record-inventory" class="min-w-0" data-record-inventory>
+      <details id="record-provider-coverage" class="border-t border-mist-950/10 py-5">
+        <summary class="cursor-pointer text-sm font-medium">
+          Source / API coverage for this entry
+        </summary>
+        <p class="my-3 text-sm text-mist-600">
+          Counts above cover loaded, permitted materials. Unavailable or not-yet-loaded sources are not evidence of an empty catalogue. Browser-only results remain on your device.
+        </p>
+        <ul role="list" class="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2 lg:grid-cols-3">
+          <li :for={provider <- Providers.all()}>
+            <span class="font-medium">{provider.source_attrs().name}</span>
+            <span class="text-mist-600"> · {record_provider_status(provider, @cultures)}</span>
+          </li>
+        </ul>
+      </details>
+      <details
+        id="record-inventory"
+        class="min-w-0 border-t border-mist-950/10 py-6"
+        data-record-inventory
+      >
+        <summary class="cursor-pointer text-base font-medium">
+          Inspect complete source records and provider status
+        </summary>
+        <Word.headword
+          heading="h2"
+          headword={@page.headword}
+          choices={@choices}
+          thing={@page.thing}
+          thing_info={
+            @page.thing &&
+              drawer_path(@base, @page.trail, "thing", @demo, true, true, @record_filters)
+          }
+          demo={@demo}
+        />
         <Word.rail
           page={@page}
           sources={@card_sources}
@@ -1511,8 +1582,11 @@ defmodule DevilsDictionaryWeb.WordLive do
           </ul>
         </section>
 
-        <.way_out {assigns} class="border-t border-mist-950/10 pt-8 dark:border-white/10" />
-      </div>
+        <.way_out
+          {assigns}
+          class="border-t border-mist-950/10 pt-8 dark:border-white/10"
+        />
+      </details>
     </article>
     """
   end

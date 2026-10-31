@@ -32,7 +32,8 @@ import topbar from "../vendor/topbar"
 
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 const liveSocket = new LiveSocket("/live", Socket, {
-  longPollFallbackMs: 2500,
+  // A full source inventory can be much larger than the curated article.
+  longPollFallbackMs: document.getElementById("source-record-view") ? 10000 : 2500,
   params: {_csrf_token: csrfToken},
   hooks: {...colocatedHooks, ArtworkImage, GiphyShelf, UrbanDictionary, PageHead, RecordExplorer},
 })

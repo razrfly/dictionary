@@ -45,14 +45,19 @@ defmodule DevilsDictionaryWeb.Word do
   attr :demo, :boolean, default: false
   attr :class, :string, default: nil
 
+  attr :heading, :string, default: "h1", values: ~w(h1 h2)
+
   def headword(assigns) do
     assigns = assign(assigns, :other, Map.new(assigns.choices, &{&1.object_id, &1}))
 
     ~H"""
     <div id="headword" class={@class}>
-      <h1 class="font-display text-5xl/none text-mist-950 sm:text-6xl/none dark:text-white">
+      <.dynamic_tag
+        tag_name={@heading}
+        class="font-display text-5xl/none text-mist-950 sm:text-6xl/none dark:text-white"
+      >
         {@headword.lemma}
-      </h1>
+      </.dynamic_tag>
 
       <%!-- One entrance to the pronunciations, not two (#133 R5). The headword
            showed three spellings and a `+9 variants` link, and the rail showed
@@ -413,7 +418,7 @@ defmodule DevilsDictionaryWeb.Word do
       <div
         :if={facts?(@page.headword)}
         id="word-facts"
-        data-record-kind="definition"
+        data-record-kind="word"
         data-record-sources={DevilsDictionaryWeb.RecordExplorer.sources([])}
         class="mt-5 border-t border-mist-950/10 pt-4 dark:border-white/10"
       >

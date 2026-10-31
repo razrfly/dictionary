@@ -96,6 +96,25 @@ defmodule DevilsDictionaryWeb.CultureChromeTest do
     {slug, state(slug, name, :image, Enum.map(1..count, &image_item(slug, &1)), extra)}
   end
 
+  test "All materials retains separate provider observations and unique presentation IDs" do
+    item = image_item("shared", 1)
+
+    states = %{
+      "first" => state("first", "First source", :image, [item]),
+      "second" => state("second", "Second source", :image, [item])
+    }
+
+    curated = render_component(&Culture.section/1, states: states)
+    all = render_component(&Culture.section/1, states: states, all_records: true)
+    assert count(curated, "culture-result-") == 1
+    assert count(all, "culture-result-") == 2
+    ids = ids(all, "")
+    assert length(ids) == length(Enum.uniq(ids))
+    assert all =~ "First source"
+    assert all =~ "Second source"
+    assert all =~ "Photographer 1"
+  end
+
   describe "a browser provider draws through its content-type row (#144 Phase 3)" do
     defp browser(extra \\ %{}) do
       Map.merge(

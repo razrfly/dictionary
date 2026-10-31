@@ -43,7 +43,7 @@ defmodule DevilsDictionaryWeb.RecordExplorer do
             id="record-query"
             name="q"
             type="search"
-            label="Search this entry’s records"
+            label="Search all materials"
             value={@filters["q"] || ""}
             placeholder="Words, titles, creators…"
           />
@@ -66,6 +66,7 @@ defmodule DevilsDictionaryWeb.RecordExplorer do
               {"Music", "music"},
               {"GIFs", "gif"},
               {"Entities and subjects", "entity"},
+              {"Word information", "word"},
               {"Related words", "related"}
             ]}
           />
@@ -94,7 +95,7 @@ defmodule DevilsDictionaryWeb.RecordExplorer do
             aria-live="polite"
             class="text-mist-600 dark:text-mist-400"
           >
-            All available records
+            Loading the materials index…
           </p>
         </div>
       </.form>
@@ -102,8 +103,41 @@ defmodule DevilsDictionaryWeb.RecordExplorer do
         Search covers the records already available for this entry, including fetched pages.
         “More” may acquire additional results within the existing provider limits.
         Browser-only results are filtered on your device and are not saved.
-        Definition cards retain their source context when a quotation matches.
+        Dictionary counts are entries, including their senses. Full texts, original links and provider status remain in the complete records below.
       </p>
+      <div
+        data-record-categories
+        class="mt-6 flex flex-wrap gap-2"
+        role="group"
+        aria-label="Material categories"
+      >
+      </div>
+      <div class="my-5 flex flex-wrap items-center justify-between gap-3">
+        <p class="text-sm text-mist-600">
+          Loaded materials · source matches, not curated endorsements
+        </p>
+        <div role="group" aria-label="Result layout" class="flex gap-3">
+          <button
+            type="button"
+            data-record-layout="list"
+            aria-pressed="true"
+            class="underline underline-offset-4"
+          >List</button>
+          <button
+            type="button"
+            data-record-layout="grid"
+            aria-pressed="false"
+            class="underline underline-offset-4"
+          >Grid</button>
+        </div>
+      </div>
+      <div data-record-results class="record-results" aria-label="Matching materials"></div>
+      <button
+        type="button"
+        data-record-more
+        class="my-6 rounded-md border border-mist-950/20 px-4 py-2"
+        hidden
+      >Show more loaded materials</button>
       <noscript><p>Filtering requires JavaScript. All source records remain readable below.</p></noscript>
     </div>
     """

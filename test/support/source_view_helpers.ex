@@ -5,7 +5,17 @@ defmodule DevilsDictionary.SourceViewHelpers do
   import Phoenix.LiveViewTest, only: [live: 2]
 
   def source_live(conn, path) do
-    live(conn, source_path(path))
+    source_path = source_path(path)
+
+    case live(conn, source_path) do
+      {:ok, view, html} ->
+        if URI.decode_query(URI.parse(source_path).query || "")["view"] == "records",
+          do: {:ok, view, Phoenix.LiveViewTest.render(view)},
+          else: {:ok, view, html}
+
+      other ->
+        other
+    end
   end
 
   def source_path(path) do

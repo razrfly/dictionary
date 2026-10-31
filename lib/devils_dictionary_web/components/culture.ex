@@ -86,6 +86,8 @@ defmodule DevilsDictionaryWeb.Culture do
   # identity and one per media URL, the better-tiered source's copy kept.
   # Before this the rail was one provider's items and then the next's, which
   # is the sectioned grid a many-source shelf exists to avoid.
+  defp display_id(item), do: Map.get(item, :record_ui_id) || item.external_id
+
   defp shelves(states, all_records) do
     for type <- ContentTypes.known(),
         group = Enum.filter(states, &(content_type(&1) == type)),
@@ -106,9 +108,29 @@ defmodule DevilsDictionaryWeb.Culture do
       also = folded_sources(candidates)
 
       entries =
-        candidates
-        |> Shelf.compose(&archetype_rank(&1.state), &source/1, &Shelf.keys(&1.item))
-        |> Enum.map(&Map.put(&1, :also, Map.get(also, entry_key(&1), [])))
+        if all_records do
+          # The objective browser keeps each observation, including another
+          # provider's copy. Only presentation IDs are disambiguated.
+          {entries, _seen} =
+            Enum.map_reduce(candidates, %{}, fn entry, seen ->
+              key = {entry.item.external_namespace, entry.item.external_id}
+              count = Map.get(seen, key, 0)
+
+              ui_id =
+                if count == 0,
+                  do: entry.item.external_id,
+                  else: "#{display_id(entry.item)}-observation-#{count}"
+
+              item = Map.put(entry.item, :record_ui_id, ui_id)
+              {%{entry | item: item} |> Map.put(:also, []), Map.put(seen, key, count + 1)}
+            end)
+
+          entries
+        else
+          candidates
+          |> Shelf.compose(&archetype_rank(&1.state), &source/1, &Shelf.keys(&1.item))
+          |> Enum.map(&Map.put(&1, :also, Map.get(also, entry_key(&1), [])))
+        end
 
       # D1 of #126. A shelf nothing identified and nothing attested is a
       # search's ranking and says so on every card; it still shows — M6's
@@ -383,8 +405,9 @@ defmodule DevilsDictionaryWeb.Culture do
               >
                 <li
                   :for={entry <- band.entries}
-                  id={"culture-result-#{entry.item.external_namespace}-#{entry.item.external_id}"}
+                  id={"culture-result-#{entry.item.external_namespace}-#{display_id(entry.item)}"}
                   data-record-kind={shelf.type}
+                  data-record-observed={entry.state[:fetched_at]}
                   data-record-sources={
                     DevilsDictionaryWeb.RecordExplorer.sources([
                       %{
@@ -435,7 +458,7 @@ defmodule DevilsDictionaryWeb.Culture do
               <ul role="list" class="space-y-2 pt-2">
                 <li
                   :for={entry <- shelf.register}
-                  id={"culture-register-row-#{entry.item.external_id}"}
+                  id={"culture-register-row-#{display_id(entry.item)}"}
                   class="max-w-prose text-base/6 text-mist-700 sm:text-sm/6 dark:text-mist-300"
                 >
                   <p class="text-pretty">“{entry.item.preview_metadata["title"]}”</p>
@@ -931,9 +954,9 @@ defmodule DevilsDictionaryWeb.Culture do
 
     ~H"""
     <Quotation.card
-      id={"culture-quote-#{@item.external_id}"}
+      id={"culture-quote-#{display_id(@item)}"}
       text={@text}
-      text_id={"culture-entry-title-#{@item.external_id}"}
+      text_id={"culture-entry-title-#{display_id(@item)}"}
       href={@source_url}
       sources={@sources}
       provenance={@provenance}
@@ -945,7 +968,7 @@ defmodule DevilsDictionaryWeb.Culture do
       <:citation :if={is_nil(@citation)}>
         <span
           :if={@creators != []}
-          id={"culture-creator-#{@item.external_namespace}-#{@item.external_id}"}
+          id={"culture-creator-#{@item.external_namespace}-#{display_id(@item)}"}
           phx-no-format
         ><%= for {creator, index} <- Enum.with_index(@creators) do %><span :if={index > 0}>, </span><.link navigate={creator.path} class="rounded-sm underline decoration-mist-950/20 underline-offset-4 hover:text-mist-950 hover:decoration-current focus-visible:outline-2 focus-visible:outline-offset-2 dark:decoration-white/25 dark:hover:text-white">{creator.label}</.link><% end %></span><span :if={
           @creators == [] && @author
@@ -961,11 +984,11 @@ defmodule DevilsDictionaryWeb.Culture do
         <span :if={@attribution}>{@attribution}</span>
         <%!-- #174: a corpus line was not fetched on this visit, and every card
              says so, the way the About note does for the shelf. --%>
-        <span :if={@held} id={"culture-held-#{@item.external_id}"}>held locally</span>
+        <span :if={@held} id={"culture-held-#{display_id(@item)}"}>held locally</span>
         <.link
           :if={@evidence_path}
           navigate={@evidence_path}
-          id={"culture-evidence-#{@item.external_id}"}
+          id={"culture-evidence-#{display_id(@item)}"}
           class="rounded-sm underline-offset-4 hover:text-mist-950 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 dark:hover:text-white"
         >
           Evidence
@@ -1063,7 +1086,7 @@ defmodule DevilsDictionaryWeb.Culture do
       <.link
         :if={@entry_path && @aspect}
         navigate={@entry_path}
-        id={"culture-entry-image-#{@item.external_id}"}
+        id={"culture-entry-image-#{display_id(@item)}"}
         aria-label={"Open #{@item.preview_metadata["title"]} in Dictionary"}
         class="rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2"
       >
@@ -1087,7 +1110,7 @@ defmodule DevilsDictionaryWeb.Culture do
           <.link
             :if={@entry_path}
             navigate={@entry_path}
-            id={"culture-entry-title-#{@item.external_id}"}
+            id={"culture-entry-title-#{display_id(@item)}"}
             class="rounded-sm group-hover:underline focus-visible:outline-2 focus-visible:outline-offset-2"
           >
             {@item.preview_metadata["title"]}
@@ -1125,7 +1148,7 @@ defmodule DevilsDictionaryWeb.Culture do
              where there is no hover to find out. --%>
         <p
           :if={@creators != []}
-          id={"culture-creator-#{@item.external_namespace}-#{@item.external_id}"}
+          id={"culture-creator-#{@item.external_namespace}-#{display_id(@item)}"}
           class="line-clamp-2 text-sm text-mist-500 text-pretty"
         >
           <%= for {creator, index} <- Enum.with_index(@creators) do %>
@@ -1177,7 +1200,7 @@ defmodule DevilsDictionaryWeb.Culture do
              solved by making the licence smaller still. --%>
         <p
           :if={@attribution}
-          id={"culture-attribution-#{@item.external_namespace}-#{@item.external_id}"}
+          id={"culture-attribution-#{@item.external_namespace}-#{display_id(@item)}"}
           class={["text-xs break-words text-mist-500 text-pretty", @credit_clamp]}
           phx-no-format
         >
@@ -1205,7 +1228,7 @@ defmodule DevilsDictionaryWeb.Culture do
              the light theme and the white one the dark. --%>
         <div
           :if={@mark && @mark.placement == :card}
-          id={"culture-mark-#{@item.external_namespace}-#{@item.external_id}"}
+          id={"culture-mark-#{@item.external_namespace}-#{display_id(@item)}"}
           class="-mx-2.5 p-2.5"
         >
           <.mark_images mark={@mark} />
@@ -1223,7 +1246,7 @@ defmodule DevilsDictionaryWeb.Culture do
         <.link
           :if={@evidence_path}
           navigate={@evidence_path}
-          id={"culture-evidence-#{@item.external_id}"}
+          id={"culture-evidence-#{display_id(@item)}"}
           class="mr-2 inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 hover:text-mist-950 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 dark:hover:text-white"
         >
           Evidence
@@ -1233,7 +1256,7 @@ defmodule DevilsDictionaryWeb.Culture do
           href={@source_url}
           target="_blank"
           rel="noreferrer"
-          id={"culture-source-#{@item.external_id}"}
+          id={"culture-source-#{display_id(@item)}"}
           title={(@mark && @mark.link_text) || "Open at #{@source_name || "the source"}"}
           class="inline-flex rounded-sm text-sm text-mist-500 underline-offset-4 transition-colors hover:text-mist-950 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 dark:hover:text-white"
         >
@@ -1275,7 +1298,7 @@ defmodule DevilsDictionaryWeb.Culture do
       />
       <div
         :if={!@image}
-        id={"culture-missing-poster-#{@item.external_id}"}
+        id={"culture-missing-poster-#{display_id(@item)}"}
         class="flex size-full items-center justify-center text-mist-400"
       >
         <.icon name={@icon} class="size-5" />

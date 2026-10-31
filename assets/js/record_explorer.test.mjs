@@ -1,6 +1,6 @@
 import test from "node:test"
 import assert from "node:assert/strict"
-import {matchesRecord, applyFilters, records, openRecordTarget, recordText} from "./record_explorer.mjs"
+import {matchesRecord, applyFilters, records, openRecordTarget, recordText, categoryCounts, interleave, excerpt} from "./record_explorer.mjs"
 
 const node = (children = []) => ({
   hidden: false,
@@ -16,7 +16,7 @@ test("search combines Unicode text, content type and exact source identity", () 
   assert.equal(matchesRecord(record, {type: "news"}), false)
   assert.equal(matchesRecord(record, {source: "met"}), false)
 })
-test("quotation matches preserve their source context; clearing restores every record", () => {
+test("filtering leaves complete source records untouched and clearing restores the index", () => {
   const quote = row("cordial love · Milton", "quote", "wiktionary")
   const definition = row("An affectionate feeling. cordial love · Milton", "definition", "wiktionary", [quote.node])
   const unrelated = row("A tennis score", "definition", "wordnet")
@@ -24,7 +24,7 @@ test("quotation matches preserve their source context; clearing restores every r
   assert.equal(applyFilters(rows, {type: "quote", q: "Milton"}).length, 1)
   assert.equal(definition.node.hidden, false)
   assert.equal(quote.node.hidden, false)
-  assert.equal(unrelated.node.hidden, true)
+  assert.equal(unrelated.node.hidden, false)
   applyFilters(rows, {})
   assert.ok(rows.every(record => !record.node.hidden))
 })
@@ -35,10 +35,10 @@ test("a later arriving result obeys the active filters without losing any row", 
   const news = row("New study of affection", "news", "guardian")
   rows.push(news)
   assert.deepEqual(applyFilters(rows, {type: "news"}), [news])
-  assert.equal(earlier.node.hidden, true)
+  assert.equal(earlier.node.hidden, false)
   assert.equal(news.node.hidden, false)
   applyFilters(rows, {q: "not-present"})
-  assert.ok(rows.every(record => record.node.hidden))
+  assert.equal(applyFilters(rows, {q: "not-present"}).length, 0)
   applyFilters(rows, {})
   assert.ok(rows.every(record => !record.node.hidden))
 })
@@ -81,4 +81,29 @@ test("definition search excludes quotation payload while quotation keeps source 
   assert.equal(recordText(definition).trim(), "Affection.")
   assert.equal(matchesRecord(row(recordText(definition), "definition", "wiktionary"),
     {q: "Milton", type: "definition"}), false)
+})
+
+test("category counts respect search and source, independently of the selected category", () => {
+ const rows = [row("love", "artwork", "met"), row("love", "news", "guardian"), row("war", "news", "guardian")]
+ assert.equal(categoryCounts(rows, {q:"love", type:"news"})[""], 2)
+ assert.equal(categoryCounts(rows, {q:"love", type:"news"}).artwork, 1)
+ assert.equal(categoryCounts(rows, {source:"guardian"}).news, 2)
+ assert.equal(categoryCounts(rows, {source:"missing"})[""], 0)
+})
+test("mixed results expose each category early without dropping observations", () => {
+ const rows = [row("one", "quote", "a"), row("two", "quote", "b"), row("image", "image", "c"), row("news", "news", "d")]
+ assert.deepEqual(interleave(rows).map(row => row.text), ["one", "image", "news", "two"])
+ assert.equal(rows.length, 4)
+})
+
+test("a long native record shows context around a search match, as plain text", () => {
+ const text = "prefix ".repeat(100) + "Milton <script>" + " suffix".repeat(100)
+ assert.ok(excerpt(text, "Milton").includes("Milton <script>"))
+ assert.ok(excerpt(text, "Milton").length <= 362)
+})
+
+test("search finds all words in any order across a material record", () => {
+ const record = row("Jacques-Louis David · Erasistratus · 1774", "artwork", "wikidata")
+ assert.ok(matchesRecord(record, {q: "1774 David"}))
+ assert.equal(matchesRecord(record, {q: "1774 Picasso"}), false)
 })

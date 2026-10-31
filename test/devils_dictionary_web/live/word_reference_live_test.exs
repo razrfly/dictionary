@@ -63,6 +63,33 @@ defmodule DevilsDictionaryWeb.WordReferenceLiveTest do
     assert has_element?(records, "#entry-records[aria-current='page']")
   end
 
+  test "All materials provides a compact search surface and complete record disclosure", ctx do
+    {:ok, view, _} = live(ctx.conn, "/on/love?view=records")
+    render(view)
+    assert has_element?(view, "#source-record-view h1", "All materials")
+    assert has_element?(view, "[data-record-categories][aria-label='Material categories']")
+    assert has_element?(view, "[data-record-layout='list'][aria-pressed='true']")
+    assert has_element?(view, "[data-record-layout='grid']")
+    assert has_element?(view, "[data-record-results]")
+    assert has_element?(view, "#record-inventory details#card-bierce")
+    assert has_element?(view, "#record-provider-coverage", "Source / API coverage")
+  end
+
+  test "private real-data preview mode admits no jobs on reading or requesting more", ctx do
+    Application.put_env(:devils_dictionary, :source_records_preview_read_only, true)
+
+    on_exit(fn ->
+      Application.delete_env(:devils_dictionary, :source_records_preview_read_only)
+    end)
+
+    before = DevilsDictionary.Repo.aggregate(Oban.Job, :count)
+    {:ok, view, _} = live(ctx.conn, "/on/love?view=records")
+    render(view)
+    render_hook(view, "discovery_more", %{"providers" => "cinegraph"})
+    assert DevilsDictionary.Repo.aggregate(Oban.Job, :count) == before
+    assert has_element?(view, "#card-bierce")
+  end
+
   test "switching and provenance preserve exact page identity, trail and filters", ctx do
     {:ok, view, _} = live(ctx.conn, "/words/#{ctx.love.object_id}/love?trail=war&opening=fixture")
     view |> element("#entry-records") |> render_click()

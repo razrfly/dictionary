@@ -119,3 +119,21 @@
 /* Source records are only filtered within their own view (#291). */
 [data-record-inventory] [hidden] { display: none !important; }
 .record-filters { margin-bottom: 2rem; }
+
+/* The materials browser is a compact search surface, not an editorial article. */
+.record-results { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0; }
+.material-result { display: flex; align-items: flex-start; gap: 1.25rem; min-width: 0; padding: 1.5rem 0; border-top: 1px solid color-mix(in srgb, currentColor 12%, transparent); }
+.material-thumbnail { width: 5rem; height: 5rem; object-fit: contain; flex: none; background: color-mix(in srgb, currentColor 4%, transparent); }
+.material-body { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.material-source { font-size: .75rem; line-height: 1.6; opacity: .65; }
+.material-title { font-size: 1.125rem; line-height: 1.5; font-weight: 500; margin: .25rem 0; }
+.material-description { font-size: .875rem; line-height: 1.7; white-space: normal; }
+.material-links { display: flex; flex-wrap: wrap; gap: .4rem 1rem; margin-top: .75rem; font-size: .75rem; line-height: 1.6; }
+.material-links a { text-decoration: underline; text-underline-offset: 3px; }
+.material-links svg, .material-links img { display: inline-block; max-height: 1.25rem; max-width: 5rem; }
+.material-category { border: 1px solid color-mix(in srgb, currentColor 18%, transparent); border-radius: .375rem; padding: .5rem .75rem; font-size: .875rem; }
+.material-category[aria-pressed=true] { background: color-mix(in srgb, currentColor 12%, transparent); font-weight: 600; }
+.record-results[data-layout=grid] { grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr)); gap: 1.5rem; }
+.record-results[data-layout=grid] .material-result { flex-direction: column; }
+.record-results[data-layout=grid] .material-thumbnail { width: 100%; height: 10rem; }
+@media (max-width: 480px) { .material-result { gap: .75rem; } .material-thumbnail { width: 3.5rem; height: 4rem; } }
