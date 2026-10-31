@@ -104,6 +104,7 @@ function material(row, inventory, query) {
   const title = fold(heading?.textContent) ? heading.textContent.trim() : row.text.trim().slice(0, 110)
   body.append(element("p", (categories.find(([kind]) => kind === row.type)?.[1] || row.type) + " · " + row.sources.map(source => source.label).join(" · "), "material-source"))
   const targetId = recordTargetId(row.node, document)
+  article.dataset.materialTarget = targetId
   const titleLink = element("a", title || "Source record")
   titleLink.href = "#" + encodeURIComponent(targetId)
   const titleHeading = element("h3", null, "material-title")
@@ -152,6 +153,27 @@ function material(row, inventory, query) {
   }
   article.append(body)
   return article
+}
+// Rebuild from the current eligible projection, preserving interaction state only.
+// Never retain an old payload node after a source withdraws or changes it.
+export function replaceResults(container, nodes, fallback) {
+  const active = container.ownerDocument.activeElement
+  const focused = active && container.contains(active) ? active : null
+  const target = focused?.closest(".material-result")?.dataset.materialTarget
+  const open = new Set([...container.querySelectorAll(".material-result")]
+    .filter(row => row.querySelector("details")?.open).map(row => row.dataset.materialTarget))
+  const key = focused && {tag: focused.tagName, href: focused.getAttribute("href"), text: focused.textContent}
+  container.replaceChildren(...nodes)
+  for (const row of nodes) {
+    const details = row.querySelector("details")
+    if (details && open.has(row.dataset.materialTarget)) details.open = true
+  }
+  if (focused) {
+    const row = nodes.find(row => row.dataset.materialTarget === target)
+    const replacement = row && [...row.querySelectorAll("a[href],button,summary")]
+      .find(node => node.tagName === key.tag && node.getAttribute("href") === key.href && node.textContent === key.text)
+    ;(replacement || fallback)?.focus({preventScroll: true})
+  }
 }
 export function updateCategoryButtons(container, buttons, counts, selected, create = element) {
   for (const [type, label] of categories) {
@@ -247,7 +269,7 @@ const RecordExplorer = {
     const counts = categoryCounts(rows, filters)
     this.categoryButtons = updateCategoryButtons(this.categories, this.categoryButtons || new Map(), counts, filters.type)
     const matches = interleave(applyFilters(rows, filters))
-    this.results.replaceChildren(...matches.slice(0, this.limit).map((row) => material(row, this.inventory, filters.q)))
+    replaceResults(this.results, matches.slice(0, this.limit).map((row) => material(row, this.inventory, filters.q)), this.q)
     this.more.hidden = matches.length <= this.limit
     const message = matches.length ? `${matches.length} ${filters.type ? label.toLocaleLowerCase() : "materials"}${filters.q || filters.source ? " matching" : ""} · ${Math.min(this.limit, matches.length)} shown` : "No matching materials. Clear filters or inspect provider status below."
     if (this.status.textContent !== message) this.status.textContent = message

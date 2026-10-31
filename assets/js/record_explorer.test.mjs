@@ -1,6 +1,6 @@
 import test from "node:test"
 import assert from "node:assert/strict"
-import {matchesRecord, applyFilters, records, openRecordTarget, recordText, categoryCounts, interleave, excerpt, recordTargetId, updateCategoryButtons, defaultLayout, selectedLayout} from "./record_explorer.mjs"
+import {matchesRecord, applyFilters, records, openRecordTarget, recordText, categoryCounts, interleave, excerpt, recordTargetId, updateCategoryButtons, defaultLayout, selectedLayout, replaceResults} from "./record_explorer.mjs"
 
 const node = (children = []) => ({
   hidden: false,
@@ -149,4 +149,40 @@ test("layout choice is remembered per category without changing other defaults",
   assert.equal(selectedLayout("definition", choices), "grid")
   assert.equal(selectedLayout("image", choices), "grid")
   assert.equal(selectedLayout("", choices), "list")
+})
+
+
+function focusFixture() {
+  const doc = {activeElement: null}
+  const makeRow = (target, open = false) => {
+    const details = {open}
+    const result = {dataset: {materialTarget: target}, querySelector: () => details}
+    const link = {tagName: "A", textContent: "Complete record", getAttribute: () => "#" + target,
+      closest: () => result, focus: () => {doc.activeElement = link}}
+    result.querySelectorAll = () => [link]
+    return {result, details, link}
+  }
+  const old = makeRow("first", true)
+  let rows = [old.result]
+  const container = {ownerDocument: doc, contains: el => el === old.link,
+    querySelectorAll: () => rows, replaceChildren: (...nodes) => {rows = nodes; doc.activeElement = null}}
+  return {doc, makeRow, old, container}
+}
+test("late results preserve focused links and open details using fresh eligible nodes", () => {
+  const {doc, makeRow, old, container} = focusFixture()
+  doc.activeElement = old.link
+  const updated = makeRow("first")
+  const arrived = makeRow("later")
+  replaceResults(container, [updated.result, arrived.result])
+  assert.equal(doc.activeElement, updated.link)
+  assert.equal(updated.details.open, true)
+  assert.equal(arrived.details.open, false)
+  assert.notEqual(updated.result, old.result)
+})
+test("withdrawn focused results move focus to search instead of retaining their payload", () => {
+  const {doc, makeRow, old, container} = focusFixture()
+  const search = {focus: () => {doc.activeElement = search}}
+  doc.activeElement = old.link
+  replaceResults(container, [makeRow("later").result], search)
+  assert.equal(doc.activeElement, search)
 })

@@ -102,6 +102,7 @@ defmodule DevilsDictionaryWeb.Examples do
         <ul :if={@shown != []} role="list" id="examples-instances" class="flex flex-wrap gap-2">
           <li
             :for={item <- @shown}
+            id={"record-instance-" <> dom_id(item.id)}
             class="max-w-full min-w-0 text-base/6 sm:text-sm/6"
             data-record-kind="example"
             data-record-sources={DevilsDictionaryWeb.RecordExplorer.sources(item.sources)}
@@ -133,6 +134,7 @@ defmodule DevilsDictionaryWeb.Examples do
           >
             <li
               :for={item <- @rest}
+              id={"record-instance-" <> dom_id(item.id)}
               class="max-w-full min-w-0 text-base/6 sm:text-sm/6"
               data-record-kind="example"
               data-record-sources={DevilsDictionaryWeb.RecordExplorer.sources(item.sources)}

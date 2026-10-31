@@ -99,6 +99,21 @@ defmodule DevilsDictionaryWeb.WordExamplesTest do
     assert live |> element("#examples-instances") |> render() |> count_chips() == 12
     assert has_element?(live, "#examples-more summary", "3")
     assert live |> element("#examples-rest") |> render() |> count_chips() == 3
+
+    record_ids = fn view ->
+      view
+      |> render()
+      |> LazyHTML.from_fragment()
+      |> LazyHTML.query("#examples li[data-record-kind='example']")
+      |> LazyHTML.attribute("id")
+    end
+
+    ids = record_ids.(live)
+    assert length(ids) == 15
+    assert length(Enum.uniq(ids)) == 15
+    assert Enum.all?(ids, &String.starts_with?(&1, "record-instance-inst-"))
+    {:ok, reloaded, _} = source_live(ctx.conn, ~p"/on/war")
+    assert record_ids.(reloaded) == ids
   end
 
   test "a word nothing names has no section", ctx do
