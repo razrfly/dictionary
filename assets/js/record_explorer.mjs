@@ -31,6 +31,13 @@ export function applyFilters(rows, filters) {
   }
   return matches
 }
+export function openRecordTarget(inventory, target) {
+  if (!target || !inventory.contains(target)) return false
+  for (let node = target; node && node !== inventory; node = node.parentElement) {
+    if (node.tagName === "DETAILS") node.open = true
+  }
+  return true
+}
 const RecordExplorer = {
   mounted() {
     this.q = this.el.querySelector("[name=q]")
@@ -56,7 +63,18 @@ const RecordExplorer = {
       subtree: true, childList: true, characterData: true, attributes: true,
       attributeFilter: ["hidden", "data-record-kind", "data-record-sources"]
     })
+    this.revealFragment = () => {
+      let id
+      try { id = decodeURIComponent(window.location.hash.slice(1)) } catch { return }
+      const target = id && document.getElementById(id)
+      if (!target || !this.inventory.contains(target)) return
+      // A dictionary-index link remains usable even after local filtering.
+      if (target.closest("[hidden]")) this.clear()
+      if (openRecordTarget(this.inventory, target)) target.scrollIntoView({block: "start"})
+    }
+    window.addEventListener("hashchange", this.revealFragment)
     this.apply()
+    this.revealFragment()
   },
   apply() {
     if (!this.inventory?.isConnected) return
@@ -96,6 +114,7 @@ const RecordExplorer = {
   },
   destroyed() {
     this.observer?.disconnect()
+    window.removeEventListener("hashchange", this.revealFragment)
     if (this.frame) cancelAnimationFrame(this.frame)
     this.el.removeEventListener("input", this.updateFilters)
     this.el.removeEventListener("change", this.updateFilters)

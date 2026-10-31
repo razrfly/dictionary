@@ -1,6 +1,6 @@
 import test from "node:test"
 import assert from "node:assert/strict"
-import {matchesRecord, applyFilters, records} from "./record_explorer.mjs"
+import {matchesRecord, applyFilters, records, openRecordTarget} from "./record_explorer.mjs"
 
 const node = (children = []) => ({
   hidden: false,
@@ -55,4 +55,17 @@ test("browser-only rows inherit the actual provider and type without being saved
   assert.equal(record.node, gif)
   assert.ok(matchesRecord(record, {q: "cat", source: "giphy", type: "gif"}))
   assert.equal(matchesRecord(record, {source: "guardian"}), false)
+})
+
+
+test("an exact source target opens its record and containing disclosures only", () => {
+  const inventory = {contains(target) { return target === quote }}
+  const card = {tagName: "DETAILS", open: false, parentElement: inventory}
+  const more = {tagName: "DETAILS", open: false, parentElement: card}
+  const quote = {tagName: "LI", parentElement: more}
+  assert.equal(openRecordTarget(inventory, quote), true)
+  assert.equal(card.open, true)
+  assert.equal(more.open, true)
+  assert.equal(openRecordTarget(inventory, {tagName: "DETAILS", open: false}), false)
+  assert.equal(openRecordTarget(inventory, null), false)
 })
