@@ -11,10 +11,17 @@ function sources(node) {
   try { return JSON.parse(node.dataset.recordSources || "[]") }
   catch { return [] }
 }
+export function recordText(node) {
+  return [...node.childNodes].map(child => {
+    if (child.nodeType === 3) return child.textContent
+    if (child.nodeType !== 1 || child.hasAttribute("data-record-kind")) return ""
+    return recordText(child)
+  }).join(" ")
+}
 export function records(inventory) {
   const native = [...inventory.querySelectorAll("[data-record-kind]")]
     .filter(node => !node.hasAttribute("data-record-browser"))
-    .map(node => ({node, type: node.dataset.recordKind, sources: sources(node), text: node.textContent}))
+    .map(node => ({node, type: node.dataset.recordKind, sources: sources(node), text: recordText(node)}))
   const browser = [...inventory.querySelectorAll("[data-record-browser]")].flatMap(shelf =>
     [...shelf.querySelectorAll("[data-results] > li")].map(node => ({
       node, type: shelf.dataset.recordKind, sources: sources(shelf), text: node.textContent

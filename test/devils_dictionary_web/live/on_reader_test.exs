@@ -238,8 +238,9 @@ defmodule DevilsDictionaryWeb.OnReaderTest do
       end)
 
       reading(true, fn ->
-        {:ok, view, _html} = source_live(ctx.conn, "/on/mars")
+        {:ok, view, _html} = live(ctx.conn, "/on/mars")
         assert has_element?(view, "#overview #overview-draft")
+        refute has_element?(view, "#curated-empty")
         assert has_element?(view, "#headword")
       end)
 
@@ -323,7 +324,7 @@ defmodule DevilsDictionaryWeb.OnReaderTest do
       )
 
       reading(false, fn ->
-        {:ok, view, _html} = source_live(ctx.conn, "/on/mars")
+        {:ok, view, _html} = live(ctx.conn, "/on/mars")
 
         assert has_element?(view, "#overview")
         # Stored order, and a member named otherwise than the page.
@@ -361,9 +362,11 @@ defmodule DevilsDictionaryWeb.OnReaderTest do
         refute has_element?(view, "#subjects", "Mars probe")
         refute has_element?(view, "#overview", "Mars probe")
 
-        # Curated once; discovered subjects never repeat a curated one.
-        refute has_element?(view, card(view, "discovered", world.planet.entity))
-        assert has_element?(view, card(view, "discovered", world.deity.entity))
+        # Authored choices stay in the article; original source subjects stay reachable.
+        {:ok, sources, _} = source_live(ctx.conn, "/on/mars")
+        refute has_element?(sources, "#overview")
+        refute has_element?(sources, card(sources, "discovered", world.planet.entity))
+        assert has_element?(sources, card(sources, "discovered", world.deity.entity))
       end)
     end
 
@@ -385,7 +388,7 @@ defmodule DevilsDictionaryWeb.OnReaderTest do
 
       reading(false, fn ->
         for _load <- 1..2 do
-          {:ok, view, _html} = source_live(ctx.conn, "/on/mars")
+          {:ok, view, _html} = live(ctx.conn, "/on/mars")
           assert has_element?(view, "#overview-choice")
           refute has_element?(view, "#overview")
           assert has_element?(view, "#headword")
@@ -396,7 +399,7 @@ defmodule DevilsDictionaryWeb.OnReaderTest do
         end
 
         # Reached by navigation, the same.
-        {:ok, home, _html} = source_live(ctx.conn, "/?q=mars")
+        {:ok, home, _html} = live(ctx.conn, "/?q=mars")
 
         {:ok, view, _html} =
           home |> element("#result-mars") |> render_click() |> follow_redirect(ctx.conn)
@@ -600,7 +603,7 @@ defmodule DevilsDictionaryWeb.OnReaderTest do
     reading(false, fn ->
       # The aggregate is every word the slug reaches, and says where On C++ is.
       assert get(ctx.conn, "/on/c").status == 200
-      {:ok, aggregate, _html} = source_live(ctx.conn, "/on/c")
+      {:ok, aggregate, _html} = live(ctx.conn, "/on/c")
 
       # Headed by `c`, the lemma spelled as the slug; the other two are named
       # and linked at their exact addresses, never merged into it.
@@ -626,12 +629,12 @@ defmodule DevilsDictionaryWeb.OnReaderTest do
           actor: ctx.human
         )
 
-      {:ok, subject, _html} = source_live(ctx.conn, "/concepts/c-plus-plus")
+      {:ok, subject, _html} = live(ctx.conn, "/concepts/c-plus-plus")
       assert has_element?(subject, "#subject-on[href='/on/c']", "On c")
       _ = language
 
       # The overview is its own page and links back to the exact word.
-      {:ok, on_cpp, _html} = source_live(ctx.conn, "/on/c-plus-plus")
+      {:ok, on_cpp, _html} = live(ctx.conn, "/on/c-plus-plus")
       assert has_element?(on_cpp, "#overview")
 
       assert has_element?(
@@ -640,7 +643,7 @@ defmodule DevilsDictionaryWeb.OnReaderTest do
              )
 
       # The exact word is C++ alone, and links its overview.
-      {:ok, exact, _html} = source_live(ctx.conn, "/words/#{cpp.object_id}/c")
+      {:ok, exact, _html} = live(ctx.conn, "/words/#{cpp.object_id}/c")
       assert exact |> element("#headword") |> render() =~ "C++"
       assert has_element?(exact, "#linked-overviews a[href='/on/c-plus-plus']")
     end)
@@ -737,9 +740,11 @@ defmodule DevilsDictionaryWeb.OnReaderTest do
       assert conn.status == 200
       assert get_resp_header(conn, "location") == []
 
-      {:ok, on, _html} = source_live(ctx.conn, "/on/mars")
+      {:ok, on, _html} = live(ctx.conn, "/on/mars")
       assert has_element?(on, "#headword")
       assert has_element?(on, "#linked-overviews a[href='/on/mars-in-culture']")
+      {:ok, records, _} = source_live(ctx.conn, "/on/mars")
+      refute has_element?(records, "#linked-overviews")
 
       # No word holds `zeta`: the alias is one hop to the overview.
       assert get(ctx.conn, "/on/zeta") |> redirected_to(301) == "/on/zeta-overview"

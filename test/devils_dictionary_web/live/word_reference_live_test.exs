@@ -19,6 +19,13 @@ defmodule DevilsDictionaryWeb.WordReferenceLiveTest do
     assert has_element?(view, "#opening-lead-entry[href*='view=records'][href$='#card-bierce']")
     assert has_element?(view, "#opening-lead-credits")
     assert has_element?(view, "#opening-about")
+
+    assert has_element?(
+             view,
+             "#opening-lead-meaning a[href*='view=records'][href$='#card-bierce']"
+           )
+
+    refute has_element?(view, "#opening-lead-meaning a[phx-click]")
     assert has_element?(view, "#opening-fixture", "not published")
     assert has_element?(view, "#entry-curated[aria-current='page']")
     assert has_element?(view, "#rail-card-bierce[href*='view=records'][href$='#card-bierce']")

@@ -1319,6 +1319,11 @@ defmodule DevilsDictionaryWeb.WordLive do
             subject_paths={@choice_paths}
           />
           <Subjects.linked_overviews overviews={@linked_overviews} />
+          <Subjects.section
+            :if={@overview && @subjects}
+            subjects={%{@subjects | discovered: [], discovered_total: 0}}
+            members={@overview.members}
+          />
           <Opening.reference_section
             :if={@opening}
             opening={@opening}
@@ -1353,7 +1358,10 @@ defmodule DevilsDictionaryWeb.WordLive do
             class="reference-bare-facts"
           />
           <p
-            :if={is_nil(@opening)}
+            :if={
+              is_nil(@opening) and is_nil(@overview) and is_nil(@choice_overview) and
+                @linked_overviews == []
+            }
             id="curated-empty"
             class="text-base/7 text-mist-600 dark:text-mist-400"
           >
@@ -1445,7 +1453,7 @@ defmodule DevilsDictionaryWeb.WordLive do
           class="mb-8"
         />
         <section id="reference-record">
-          <.column {assigns} mode={@reading_mode} reference?={true} />
+          <.column {assigns} mode={@reading_mode} reference?={true} editorial?={false} />
         </section>
         <section
           :if={@record_claims != []}
@@ -1459,7 +1467,7 @@ defmodule DevilsDictionaryWeb.WordLive do
           <ul role="list" class="flex flex-col gap-5">
             <li
               :for={choice <- @record_claims}
-              id={"record-claim-#{choice.claim.id}"}
+              id={"record-" <> choice.key}
               data-record-kind="example"
               data-record-sources={RecordExplorer.sources([choice.claim.assertion.source])}
             >
@@ -1489,22 +1497,38 @@ defmodule DevilsDictionaryWeb.WordLive do
       assigns
       |> assign_new(:reference?, fn -> false end)
       |> assign_new(:records?, fn -> false end)
+      |> assign_new(:editorial?, fn -> true end)
       |> assign_new(:record_filters, fn -> %{} end)
 
     ~H"""
     <%!-- The authored overview this address holds, when it names these
          words, heads them (#219 B1); one that names other words is shown
          apart, as something else that shares the spelling. --%>
-    <div :if={@overview} data-record-kind="overview" data-record-sources={RecordExplorer.sources([])}>
+    <div
+      :if={@editorial? and @overview}
+      data-record-kind="overview"
+      data-record-sources={RecordExplorer.sources([])}
+    >
       <Subjects.overview overview={@overview} />
     </div>
-    <Subjects.overview
-      :if={@choice_overview}
-      overview={@choice_overview}
-      as={:choice}
-      subject_paths={@choice_paths}
-    />
-    <Subjects.linked_overviews overviews={@linked_overviews} />
+    <div
+      :if={@editorial? and @choice_overview}
+      data-record-kind="overview"
+      data-record-sources={RecordExplorer.sources([])}
+    >
+      <Subjects.overview
+        overview={@choice_overview}
+        as={:choice}
+        subject_paths={@choice_paths}
+      />
+    </div>
+    <div
+      :if={@editorial? and @linked_overviews != []}
+      data-record-kind="overview"
+      data-record-sources={RecordExplorer.sources([])}
+    >
+      <Subjects.linked_overviews overviews={@linked_overviews} />
+    </div>
 
     <%!-- `phx-update="ignore"` because `open` is DOM state the reader
          owns: without it, a discovery result arriving would re-render

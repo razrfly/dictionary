@@ -66,8 +66,7 @@ defmodule DevilsDictionaryWeb.RecordExplorer do
               {"Music", "music"},
               {"GIFs", "gif"},
               {"Entities and subjects", "entity"},
-              {"Related words", "related"},
-              {"Linked overviews", "overview"}
+              {"Related words", "related"}
             ]}
           />
           <.input

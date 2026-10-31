@@ -1,6 +1,6 @@
 import test from "node:test"
 import assert from "node:assert/strict"
-import {matchesRecord, applyFilters, records, openRecordTarget} from "./record_explorer.mjs"
+import {matchesRecord, applyFilters, records, openRecordTarget, recordText} from "./record_explorer.mjs"
 
 const node = (children = []) => ({
   hidden: false,
@@ -68,4 +68,17 @@ test("an exact source target opens its record and containing disclosures only", 
   assert.equal(more.open, true)
   assert.equal(openRecordTarget(inventory, {tagName: "DETAILS", open: false}), false)
   assert.equal(openRecordTarget(inventory, null), false)
+})
+
+
+test("definition search excludes quotation payload while quotation keeps source context", () => {
+  const text = value => ({nodeType: 3, textContent: value})
+  const element = (children, nested = false) => ({
+    nodeType: 1, childNodes: children,
+    hasAttribute(name) { return nested && name === "data-record-kind" }
+  })
+  const definition = element([text("Affection."), element([text("cordial love · Milton")], true)])
+  assert.equal(recordText(definition).trim(), "Affection.")
+  assert.equal(matchesRecord(row(recordText(definition), "definition", "wiktionary"),
+    {q: "Milton", type: "definition"}), false)
 })

@@ -54,7 +54,7 @@ defmodule DevilsDictionaryWeb.WordOpeningLiveTest do
       view
       |> render()
       |> LazyHTML.from_fragment()
-      |> LazyHTML.query("details[name=sources]")
+      |> LazyHTML.query("details[data-record-kind=definition]")
       |> Enum.map(&{LazyHTML.attribute(&1, "id"), LazyHTML.attribute(&1, "open")})
     end
 

@@ -697,7 +697,8 @@ defmodule DevilsDictionaryWeb.Word do
   `name="sources"` makes these an **exclusive accordion** — the HTML
   attribute, no JavaScript — so opening one closes the last. Johnson files two
   entries for `set` totalling 39,955 characters, and before this each of them
-  could be open at once.
+  could be open at once. The searchable source-record view disables exclusivity
+  so a search can reveal matching text in several dictionaries together.
 
   What the row says closed is what it takes to choose it: who wrote it, when,
   how much there is, and the source's own opening words. Never *Show more*: a
