@@ -1,5 +1,6 @@
 defmodule DevilsDictionaryWeb.ArtworkLiveTest do
   use DevilsDictionaryWeb.ConnCase, async: false
+  import DevilsDictionary.SourceViewHelpers
 
   import DevilsDictionary.WordFixtures
 
@@ -73,7 +74,7 @@ defmodule DevilsDictionaryWeb.ArtworkLiveTest do
   end
 
   test "catalog search links both the work and its creator", ctx do
-    {:ok, view, _html} = live(ctx.conn, ~p"/artworks")
+    {:ok, view, _html} = source_live(ctx.conn, ~p"/artworks")
     assert has_element?(view, "#artwork-#{ctx.work.object_id}")
 
     assert has_element?(
@@ -130,7 +131,7 @@ defmodule DevilsDictionaryWeb.ArtworkLiveTest do
         })
     end
 
-    {:ok, view, _html} = live(ctx.conn, ~p"/artworks")
+    {:ok, view, _html} = source_live(ctx.conn, ~p"/artworks")
     assert has_element?(view, "#artwork-pagination")
     refute has_element?(view, "#artwork-#{ctx.work.object_id}")
 
@@ -142,7 +143,7 @@ defmodule DevilsDictionaryWeb.ArtworkLiveTest do
     %{conn: conn, user: user} = register_and_log_in_user(%{conn: ctx.conn})
     _user = Repo.update!(Ecto.Changeset.change(user, internal_contributor: true))
 
-    {:ok, view, _html} = live(conn, ~p"/connect?subject=#{ctx.work.object_id}")
+    {:ok, view, _html} = source_live(conn, ~p"/connect?subject=#{ctx.work.object_id}")
     assert has_element?(view, "#composer-subject-chosen")
     assert render(view) =~ "The Fixture of War"
     assert has_element?(view, "#predicate-illustrates")
@@ -160,7 +161,7 @@ defmodule DevilsDictionaryWeb.ArtworkLiveTest do
     assert %{installed: 1} = Artworks.install_meaning_mappings!()
     assertion_count = Repo.aggregate(Assertion, :count)
 
-    {:ok, view, _html} = live(ctx.conn, ~p"/on/war")
+    {:ok, view, _html} = source_live(ctx.conn, ~p"/on/war")
 
     # The one reader surface (K2 of #109): a gene candidate is a shelf item on
     # the artwork shelf, not a tall card of its own beside it.
@@ -209,7 +210,7 @@ defmodule DevilsDictionaryWeb.ArtworkLiveTest do
 
   test "artwork page exposes rich metadata and a working creator destination", ctx do
     {:ok, view, _html} =
-      live(
+      source_live(
         ctx.conn,
         ~p"/entities/#{ctx.work.object_id}/#{DevilsDictionary.Claims.Connection.slugify(ctx.work.preferred_label)}"
       )
@@ -238,7 +239,7 @@ defmodule DevilsDictionaryWeb.ArtworkLiveTest do
     path =
       ~p"/connect?#{%{subject: ctx.work.object_id, object: sense.object_id, predicate: "illustrates", rationale: "Related provider vocabulary; inspect the depicted event.", evidence_revision: ctx.record.current_revision.id, evidence_locator: "Artsy direct gene 4db9b645db68d133c600123e"}}"
 
-    {:ok, view, _html} = live(conn, path)
+    {:ok, view, _html} = source_live(conn, path)
     assert has_element?(view, "#composer-subject-chosen")
     assert has_element?(view, "#composer-object-chosen")
     assert has_element?(view, "#predicate-illustrates")
@@ -254,7 +255,7 @@ defmodule DevilsDictionaryWeb.ArtworkLiveTest do
     _user = Repo.update!(Ecto.Changeset.change(user, internal_contributor: true))
 
     {:ok, view, _html} =
-      live(
+      source_live(
         conn,
         "/connect?rationale[]=bad&evidence_locator[]=bad&evidence_revision[]=1"
       )
@@ -270,7 +271,7 @@ defmodule DevilsDictionaryWeb.ArtworkLiveTest do
     path =
       ~p"/connect?#{%{subject: ctx.work.object_id, evidence_revision: other_record.current_revision.id, evidence_locator: "unrelated"}}"
 
-    {:ok, view, _html} = live(conn, path)
+    {:ok, view, _html} = source_live(conn, path)
     refute has_element?(view, "#selected-evidence-source-#{other_record.current_revision.id}")
   end
 
@@ -328,7 +329,7 @@ defmodule DevilsDictionaryWeb.ArtworkLiveTest do
     assert artwork.object_id == target.object_id
     assert sense_id == sense.object_id
 
-    {:ok, view, _html} = live(ctx.conn, ~p"/on/love")
+    {:ok, view, _html} = source_live(ctx.conn, ~p"/on/love")
     assert has_element?(view, "#culture-about-artwork-catalog", "Related Artsy gene")
   end
 
@@ -365,7 +366,7 @@ defmodule DevilsDictionaryWeb.ArtworkLiveTest do
     assert work_id == ctx.work.object_id
 
     {:ok, view, _html} =
-      live(
+      source_live(
         ctx.conn,
         ~p"/entities/#{ctx.work.object_id}/#{DevilsDictionary.Claims.Connection.slugify(ctx.work.preferred_label)}"
       )
@@ -427,7 +428,7 @@ defmodule DevilsDictionaryWeb.ArtworkLiveTest do
 
     assert %{installed: 1} = Artworks.install_meaning_mappings!()
 
-    {:ok, anonymous, _html} = live(ctx.conn, ~p"/on/war")
+    {:ok, anonymous, _html} = source_live(ctx.conn, ~p"/on/war")
 
     assert has_element?(anonymous, "#culture-result-catalog_artwork-c#{ctx.work.object_id}")
     refute has_element?(anonymous, "#in-culture a[href^='/connect?']")
@@ -435,7 +436,7 @@ defmodule DevilsDictionaryWeb.ArtworkLiveTest do
     %{conn: conn, user: user} = register_and_log_in_user(%{conn: ctx.conn})
     Repo.update!(Ecto.Changeset.change(user, internal_contributor: true))
 
-    {:ok, contributor, _html} = live(conn, ~p"/on/war")
+    {:ok, contributor, _html} = source_live(conn, ~p"/on/war")
 
     # The composer link followed the candidate onto the shelf, with the exact
     # sense and the evidence locator still preselected.
@@ -462,18 +463,18 @@ defmodule DevilsDictionaryWeb.ArtworkLiveTest do
 
   test "a malformed revision query parameter is rejected, not a crash", ctx do
     # `?revision[]=1` arrives as a list rather than a binary.
-    {:ok, malformed, html} = live(ctx.conn, "/connections/#{ctx.claim.id}?revision[]=1")
+    {:ok, malformed, html} = source_live(ctx.conn, "/connections/#{ctx.claim.id}?revision[]=1")
     assert html =~ "no such connection"
     refute render(malformed) =~ "revision 1"
 
-    {:ok, view, _html} = live(ctx.conn, "/connections/#{ctx.claim.id}?revision=1")
+    {:ok, view, _html} = source_live(ctx.conn, "/connections/#{ctx.claim.id}?revision=1")
     assert render(view) =~ "revision 1"
   end
 
   test "with no provider client at all the catalog, search and word page work locally", ctx do
     # #109 Phase 3a retired the Artsy client and the page's live-search form
     # with it. The page is the local catalog and nothing else.
-    {:ok, view, _html} = live(ctx.conn, ~p"/artworks")
+    {:ok, view, _html} = source_live(ctx.conn, ~p"/artworks")
     refute has_element?(view, "#artsy-lookup")
     refute has_element?(view, "#artsy-search")
 
@@ -484,7 +485,7 @@ defmodule DevilsDictionaryWeb.ArtworkLiveTest do
     sense!(ctx, war, "wordnet", external_id: "oewn-00975181-n#war", gloss: "armed conflict")
     assert %{installed: 1} = Artworks.install_meaning_mappings!()
 
-    {:ok, word_view, _html} = live(ctx.conn, ~p"/on/war")
+    {:ok, word_view, _html} = source_live(ctx.conn, ~p"/on/war")
     assert has_element?(word_view, "#culture-filter-artwork", "Artworks")
   end
 
@@ -492,7 +493,7 @@ defmodule DevilsDictionaryWeb.ArtworkLiveTest do
     {:ok, bare} =
       Registry.create_work(%{preferred_label: "Bare Fixture", work_kind: "artwork"})
 
-    {:ok, view, _html} = live(ctx.conn, ~p"/artworks")
+    {:ok, view, _html} = source_live(ctx.conn, ~p"/artworks")
 
     assert has_element?(view, "#artwork-#{bare.object_id}-image[data-image-state='empty']")
 
@@ -505,7 +506,7 @@ defmodule DevilsDictionaryWeb.ArtworkLiveTest do
     assert render(view) =~ "Bare Fixture"
 
     {:ok, page, _html} =
-      live(
+      source_live(
         ctx.conn,
         ~p"/entities/#{bare.object_id}/#{DevilsDictionary.Claims.Connection.slugify("Bare Fixture")}"
       )

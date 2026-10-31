@@ -1,4 +1,6 @@
 defmodule DevilsDictionaryWeb.ConnectedFlowTest do
+  import DevilsDictionary.SourceViewHelpers
+
   @moduledoc """
   #74's milestone 3, driven end to end: **a working, inspectable example, not
   just tables or a diagram.**
@@ -95,7 +97,7 @@ defmodule DevilsDictionaryWeb.ConnectedFlowTest do
       person = ctx.bierce.person
 
       # 1. The word page has Bierce's definition on it.
-      {:ok, word_live, html} = live(ctx.conn, ~p"/on/nepotism")
+      {:ok, word_live, html} = source_live(ctx.conn, ~p"/on/nepotism")
       assert html =~ "Appointing your grandmother"
 
       # 2. Follow the actual definition's author link.
@@ -130,7 +132,7 @@ defmodule DevilsDictionaryWeb.ConnectedFlowTest do
       assert back == "/words/#{ctx.nepotism.object_id}/nepotism"
 
       # 6. Which is the canonical address of the word we started from.
-      {:ok, _live, html} = live(ctx.conn, back)
+      {:ok, _live, html} = source_live(ctx.conn, back)
       assert html =~ "Appointing your grandmother"
     end
 
@@ -156,7 +158,7 @@ defmodule DevilsDictionaryWeb.ConnectedFlowTest do
       work = ctx.bierce.work
 
       {:ok, _live, html} =
-        live(
+        source_live(
           ctx.conn,
           ~p"/entities/#{work.object_id}/#{Connection.slugify(work.preferred_label)}"
         )
@@ -167,7 +169,7 @@ defmodule DevilsDictionaryWeb.ConnectedFlowTest do
       # The work, the edition and the definition are three records, which is
       # what keeps "the 1911 text" from being a property of the poem.
       {:ok, _live, edition} =
-        live(
+        source_live(
           ctx.conn,
           ~p"/entities/#{ctx.bierce.edition.object_id}/#{Connection.slugify(ctx.bierce.edition.preferred_label)}"
         )
@@ -183,7 +185,7 @@ defmodule DevilsDictionaryWeb.ConnectedFlowTest do
       revision = Claims.current_revision(ctx.illustration.id)
 
       # From the claim's own page.
-      {:ok, _live, detail} = live(ctx.conn, ~p"/connections/#{ctx.illustration.id}")
+      {:ok, _live, detail} = source_live(ctx.conn, ~p"/connections/#{ctx.illustration.id}")
       assert detail =~ "an untitled illustrative meme"
       assert detail =~ "illustrates"
       assert detail =~ "the joke is the definition"
@@ -192,7 +194,7 @@ defmodule DevilsDictionaryWeb.ConnectedFlowTest do
 
       # From the artifact's page — the same claim, listed outgoing.
       {:ok, _live, from_meme} =
-        live(
+        source_live(
           ctx.conn,
           ~p"/entities/#{ctx.meme.object_id}/#{Connection.slugify("an untitled illustrative meme")}"
         )
@@ -211,7 +213,7 @@ defmodule DevilsDictionaryWeb.ConnectedFlowTest do
       Claims.review(revision.id, :rejected, reason: "the meme is about something else")
 
       {:ok, _live, from_meme} =
-        live(
+        source_live(
           ctx.conn,
           ~p"/entities/#{ctx.meme.object_id}/#{Connection.slugify("an untitled illustrative meme")}"
         )
@@ -241,7 +243,7 @@ defmodule DevilsDictionaryWeb.ConnectedFlowTest do
           }
         )
 
-      {:ok, _live, html} = live(ctx.conn, ~p"/on/nepotism")
+      {:ok, _live, html} = source_live(ctx.conn, ~p"/on/nepotism")
 
       # The panel shows the thing the *meaning* names, and offers the spelling's
       # possibilities separately.
@@ -254,7 +256,7 @@ defmodule DevilsDictionaryWeb.ConnectedFlowTest do
     test "a public registered account cannot reach the writable composer", ctx do
       %{conn: conn} = register_and_log_in_user(%{conn: ctx.conn})
 
-      assert {:error, {:redirect, %{to: "/", flash: flash}}} = live(conn, ~p"/connect")
+      assert {:error, {:redirect, %{to: "/", flash: flash}}} = source_live(conn, ~p"/connect")
       assert flash["error"] =~ "internal testing"
     end
   end
@@ -269,7 +271,7 @@ defmodule DevilsDictionaryWeb.ConnectedFlowTest do
     test "needs an account, offers only valid relations, and insists on a reason", ctx do
       ctx = anchor!(ctx)
 
-      {:ok, live, html} = live(ctx.conn, ~p"/connect")
+      {:ok, live, html} = source_live(ctx.conn, ~p"/connect")
       assert html =~ "Connect two things"
 
       # Names help discovery; the id is what the claim points at.
@@ -316,7 +318,7 @@ defmodule DevilsDictionaryWeb.ConnectedFlowTest do
       assert to =~ ~r"^/connections/\d+$"
 
       # And what landed is attributed, unreviewed, and reads from both ends.
-      {:ok, _live, detail} = live(ctx.conn, to)
+      {:ok, _live, detail} = source_live(ctx.conn, to)
       assert detail =~ "it is the same practice"
       assert detail =~ "needs_review"
       assert detail =~ ctx.user.email
@@ -325,7 +327,7 @@ defmodule DevilsDictionaryWeb.ConnectedFlowTest do
     test "refuses a pair the endpoint rules do not allow", ctx do
       ctx = anchor!(ctx)
 
-      {:ok, live, _html} = live(ctx.conn, ~p"/connect")
+      {:ok, live, _html} = source_live(ctx.conn, ~p"/connect")
 
       # A word cannot `illustrate` anything: the subject of `illustrates` is an
       # entity or a piece of content, never a lexeme. The composer will not even
@@ -344,7 +346,7 @@ defmodule DevilsDictionaryWeb.ConnectedFlowTest do
       word!(ctx, "C++", ~w(wiktionary), slug: "c", scope: nil)
       word!(ctx, "c", ~w(wiktionary), slug: "c", scope: nil)
 
-      {:ok, _live, html} = live(ctx.conn, ~p"/on/c")
+      {:ok, _live, html} = source_live(ctx.conn, ~p"/on/c")
 
       assert html =~ ~s(id="disambiguation")
       assert html =~ "C++"
@@ -354,7 +356,7 @@ defmodule DevilsDictionaryWeb.ConnectedFlowTest do
       plus = word!(ctx, "C++", ~w(wiktionary), slug: "c", scope: nil)
       word!(ctx, "c", ~w(wiktionary), slug: "c", scope: nil)
 
-      {:ok, _live, html} = live(ctx.conn, ~p"/words/#{plus.object_id}/c")
+      {:ok, _live, html} = source_live(ctx.conn, ~p"/words/#{plus.object_id}/c")
 
       refute html =~ ~s(id="disambiguation")
       assert html =~ "C++"
@@ -364,16 +366,16 @@ defmodule DevilsDictionaryWeb.ConnectedFlowTest do
       ctx = anchor!(ctx)
 
       assert {:error, {:live_redirect, %{to: to}}} =
-               live(ctx.conn, ~p"/words/#{ctx.nepotism.object_id}/wrong-slug")
+               source_live(ctx.conn, ~p"/words/#{ctx.nepotism.object_id}/wrong-slug")
 
-      assert to == "/words/#{ctx.nepotism.object_id}/nepotism"
+      assert to == "/words/#{ctx.nepotism.object_id}/nepotism/materials"
     end
 
     test "an entity's slug redirects the same way", ctx do
       person = ctx.bierce.person
 
       assert {:error, {:live_redirect, %{to: to}}} =
-               live(ctx.conn, ~p"/entities/#{person.object_id}/not-his-name")
+               source_live(ctx.conn, ~p"/entities/#{person.object_id}/not-his-name")
 
       assert to == "/entities/#{person.object_id}/ambrose-bierce"
     end
@@ -408,7 +410,7 @@ defmodule DevilsDictionaryWeb.ConnectedFlowTest do
       assert ctx.conn |> get("/entities/#{person.object_id}/not-his-name") |> redirected_to(302) ==
                "/entities/#{person.object_id}/ambrose-bierce"
 
-      {:ok, _live, html} = live(ctx.conn, ~p"/connections/999999999")
+      {:ok, _live, html} = source_live(ctx.conn, ~p"/connections/999999999")
       assert html =~ ~s(id="no-such-connection")
       _ = ctx
     end
@@ -442,7 +444,7 @@ defmodule DevilsDictionaryWeb.ConnectedFlowTest do
       Claims.review(current.id, :rejected, %{reason: "not applicable"})
 
       for suffix <- ["", "?revision=#{first.revision_number}", "?revision=garbage"] do
-        {:ok, view, _} = live(ctx.conn, "/connections/#{ctx.illustration.id}#{suffix}")
+        {:ok, view, _} = source_live(ctx.conn, "/connections/#{ctx.illustration.id}#{suffix}")
         assert has_element?(view, "#no-such-connection")
       end
     end
@@ -456,7 +458,7 @@ defmodule DevilsDictionaryWeb.ConnectedFlowTest do
       {:ok, _} = Claims.withdraw(ctx.illustration.id)
       %{conn: conn, user: user} = register_and_log_in_user(%{conn: ctx.conn})
       _user = Repo.update!(Ecto.Changeset.change(user, internal_contributor: true))
-      {:ok, view, _} = live(conn, "/connect")
+      {:ok, view, _} = source_live(conn, "/connect")
       view |> form("#composer-subject form", %{q: "untitled"}) |> render_change()
       view |> element("#composer-subject-hit-#{ctx.meme.object_id}") |> render_click()
       view |> element("#predicate-illustrates") |> render_click()
@@ -473,7 +475,7 @@ defmodule DevilsDictionaryWeb.ConnectedFlowTest do
         |> form("#composer-form", %{rationale: "a precise example", locator: "paragraph 1"})
         |> render_submit()
 
-      {:ok, detail, _} = live(conn, to)
+      {:ok, detail, _} = source_live(conn, to)
       assert has_element?(detail, "#connection-evidence", "paragraph 1")
       refute has_element?(detail, "#connection-review-form")
       id = to |> String.split("/") |> List.last() |> String.to_integer()
@@ -495,7 +497,7 @@ defmodule DevilsDictionaryWeb.ConnectedFlowTest do
                )
 
       reviewer = Repo.update!(Ecto.Changeset.change(user, reviewer: true))
-      {:ok, review_view, _} = live(log_in_user(build_conn(), reviewer), to)
+      {:ok, review_view, _} = source_live(log_in_user(build_conn(), reviewer), to)
       assert has_element?(review_view, "#connection-review-form")
 
       review_view

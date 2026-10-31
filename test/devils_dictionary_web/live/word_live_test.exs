@@ -11,6 +11,7 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
   use DevilsDictionaryWeb.ConnCase, async: true
 
   import DevilsDictionary.WordFixtures
+  import DevilsDictionary.SourceViewHelpers
   import Phoenix.LiveViewTest
 
   alias DevilsDictionary.{Claims, Fixtures, Registry}
@@ -52,7 +53,7 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
     test "renders the headword, a card per source in tier order, and the related block", ctx do
       oyster!(ctx)
 
-      {:ok, _live, html} = live(ctx.conn, ~p"/on/oyster")
+      {:ok, _live, html} = source_live(ctx.conn, ~p"/on/oyster")
 
       assert html =~ ~s(id="headword")
       assert html =~ ~s(id="card-bierce")
@@ -69,7 +70,7 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
     test "every card carries a link out (U6)", ctx do
       oyster!(ctx)
 
-      {:ok, live, _html} = live(ctx.conn, ~p"/on/oyster")
+      {:ok, live, _html} = source_live(ctx.conn, ~p"/on/oyster")
 
       for card <- ~w(card-bierce card-johnson) do
         assert live |> element("##{card}-out") |> render() =~ "↗"
@@ -79,7 +80,7 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
     test "a chain renders under the sense it belongs to", ctx do
       oyster!(ctx)
 
-      {:ok, _live, html} = live(ctx.conn, ~p"/on/oyster")
+      {:ok, _live, html} = source_live(ctx.conn, ~p"/on/oyster")
 
       assert html =~ ~s(id="card-wordnet-group-0-chain")
       assert html =~ "bivalve"
@@ -96,7 +97,7 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
       relation!(ctx, oyster, :synonym, mollusk, from_sense: shellfish)
       relation!(ctx, oyster, :synonym, colour, from_sense: paint)
 
-      {:ok, _live, html} = live(ctx.conn, ~p"/on/oyster")
+      {:ok, _live, html} = source_live(ctx.conn, ~p"/on/oyster")
 
       shellfish_chips = ~s(id="card-wiktionary-group-0-sense-#{shellfish.object_id}-similar")
       paint_chips = ~s(id="card-wiktionary-group-0-sense-#{paint.object_id}-similar")
@@ -116,7 +117,7 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
     test "no chip carries phx-value-value, the binding LiveView silently overwrites", ctx do
       oyster!(ctx)
 
-      {:ok, _live, html} = live(ctx.conn, ~p"/on/oyster")
+      {:ok, _live, html} = source_live(ctx.conn, ~p"/on/oyster")
 
       refute html =~ "phx-value-value"
     end
@@ -124,7 +125,7 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
     test "a bare index row renders its headword and says so", ctx do
       word!(ctx, "abrocome", [], enriched_at: nil)
 
-      {:ok, _live, html} = live(ctx.conn, ~p"/on/abrocome")
+      {:ok, _live, html} = source_live(ctx.conn, ~p"/on/abrocome")
 
       assert html =~ ~s(id="headword")
       assert html =~ ~s(id="bare-row")
@@ -144,7 +145,7 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
     test "a form lands on its word and says where it came from", ctx do
       oyster!(ctx)
 
-      {:ok, _live, html} = live(ctx.conn, ~p"/on/oysters")
+      {:ok, _live, html} = source_live(ctx.conn, ~p"/on/oysters")
 
       assert html =~ ~s(id="redirected-from")
       assert html =~ "oysters"
@@ -155,7 +156,7 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
       word!(ctx, "spat", ~w(wiktionary), enriched_at: nil)
       word!(ctx, "spit", ~w(wiktionary), forms: [%{"form" => "spat", "tags" => ["past"]}])
 
-      {:ok, live, _html} = live(ctx.conn, ~p"/on/spat")
+      {:ok, live, _html} = source_live(ctx.conn, ~p"/on/spat")
 
       assert has_element?(live, "#also-a-form-of a[href='/on/spit']")
     end
@@ -165,7 +166,7 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
     test "lists every definition source once, linked to its card, under the related words", ctx do
       oyster!(ctx)
 
-      {:ok, live, _html} = live(ctx.conn, ~p"/on/oyster")
+      {:ok, live, _html} = source_live(ctx.conn, ~p"/on/oyster")
 
       # Tier then slug: the two 👑 authors, then the institutions.
       assert has_element?(live, "#page-sources-bierce[href='#card-bierce']")
@@ -234,7 +235,7 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
     test "a word a population holds says nothing about the population", ctx do
       oyster!(ctx)
 
-      {:ok, _live, html} = live(ctx.conn, ~p"/on/oyster")
+      {:ok, _live, html} = source_live(ctx.conn, ~p"/on/oyster")
 
       refute html =~ ~s(id="scopes")
       refute html =~ ~s(id="scope-animals")
@@ -247,7 +248,7 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
       quark = word!(ctx, "quark", ~w(wordnet), scope: nil)
       sense!(ctx, quark, "wordnet", group_key: "oewn-quark-n", gloss: "an elementary particle")
 
-      {:ok, live, html} = live(ctx.conn, ~p"/on/quark")
+      {:ok, live, html} = source_live(ctx.conn, ~p"/on/quark")
 
       assert has_element?(live, "#one-source", "One dictionary so far")
       assert has_element?(live, "#one-source", "Open English WordNet")
@@ -259,7 +260,7 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
       sense!(ctx, cat, "wordnet", group_key: "oewn-cat-n", gloss: "a feline")
       entry!(ctx, cat, "bierce", headword: "CAT", pos: "n", body: "A soft automaton.", year: 1911)
 
-      {:ok, live, _html} = live(ctx.conn, ~p"/on/cat")
+      {:ok, live, _html} = source_live(ctx.conn, ~p"/on/cat")
 
       assert has_element?(live, "#sources", "Defined here by 2 dictionaries")
       refute has_element?(live, "#one-source")
@@ -268,7 +269,7 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
     test "a bare row has no source line to print and does not invent one", ctx do
       word!(ctx, "abrocome", [], enriched_at: nil, scope: nil)
 
-      {:ok, _live, html} = live(ctx.conn, ~p"/on/abrocome")
+      {:ok, _live, html} = source_live(ctx.conn, ~p"/on/abrocome")
 
       assert html =~ ~s(id="bare-row")
       refute html =~ ~s(id="sources")
@@ -279,7 +280,7 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
     test "every card carries an ⓘ, and it opens the record the card cites", ctx do
       oyster!(ctx)
 
-      {:ok, live, html} = live(ctx.conn, ~p"/on/oyster")
+      {:ok, live, html} = source_live(ctx.conn, ~p"/on/oyster")
 
       for card <- ~w(card-bierce card-johnson card-wiktionary card-wordnet) do
         assert html =~ ~s(id="#{card}-info")
@@ -291,7 +292,7 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
       assert html =~ ~s(id="provenance-records")
       assert html =~ "materialized"
       assert html =~ ~s(id="provenance-raw")
-      assert_patched(live, "/on/oyster?provenance=card%3Acard-wiktionary")
+      assert_patched(live, "/on/oyster/materials?provenance=card%3Acard-wiktionary")
     end
 
     test "the drawer shows the record's own id, url and the source's license", ctx do
@@ -307,7 +308,7 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
       sense!(ctx, oyster, "wiktionary", gloss: "A mollusk.", record: record)
 
       {:ok, _live, html} =
-        live(ctx.conn, ~p"/on/oyster?provenance=card:card-wiktionary")
+        source_live(ctx.conn, ~p"/on/oyster?provenance=card:card-wiktionary")
 
       assert html =~ "oyster/noun"
       assert html =~ "https://kaikki.org/oyster"
@@ -319,7 +320,7 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
       oyster!(ctx)
 
       {:ok, live, html} =
-        live(ctx.conn, ~p"/on/oyster?trail=cat&provenance=card:card-bierce")
+        source_live(ctx.conn, ~p"/on/oyster?trail=cat&provenance=card:card-bierce")
 
       assert html =~ ~s(id="provenance")
       assert html =~ ~s(id="trail")
@@ -327,7 +328,7 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
       html = live |> element("#provenance-close") |> render_click()
 
       refute html =~ ~s(id="provenance-panel")
-      assert_patched(live, "/on/oyster?trail=cat")
+      assert_patched(live, "/on/oyster/materials?trail=cat")
     end
 
     test "the thing panel opens its own drawer, keyed by the concept", ctx do
@@ -335,7 +336,7 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
       concept = concept!("Q107411", "oyster", description: "a bivalve")
       link!(oyster, concept, confidence: 0.95, method: :title_match)
 
-      {:ok, live, html} = live(ctx.conn, ~p"/on/oyster")
+      {:ok, live, html} = source_live(ctx.conn, ~p"/on/oyster")
 
       assert html =~ ~s(id="thing-info")
 
@@ -349,7 +350,7 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
     test "opening the drawer does not rebuild the page it is already on", ctx do
       oyster!(ctx)
 
-      {:ok, live, _html} = live(ctx.conn, ~p"/on/oyster")
+      {:ok, live, _html} = source_live(ctx.conn, ~p"/on/oyster")
 
       # The page is ten queries; the drawer is the records it cites plus their
       # raw. If the count comes back near ten, the `handle_params/3` guard has
@@ -362,7 +363,7 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
     test "a provenance parameter naming nothing on the page opens nothing", ctx do
       oyster!(ctx)
 
-      {:ok, _live, html} = live(ctx.conn, ~p"/on/oyster?provenance=card:card-nonsense")
+      {:ok, _live, html} = source_live(ctx.conn, ~p"/on/oyster?provenance=card:card-nonsense")
 
       assert html =~ ~s(id="headword")
       refute html =~ ~s(id="provenance-panel")
@@ -385,7 +386,7 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
           metadata: %{"wikidata_qid" => "Q424242424"}
         })
 
-      {:ok, live, _html} = live(ctx.conn, ~p"/words/#{name.object_id}/#{name.slug}")
+      {:ok, live, _html} = source_live(ctx.conn, ~p"/words/#{name.object_id}/#{name.slug}")
 
       assert has_element?(
                live,
@@ -428,7 +429,7 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
     test "the panel names the thing, shows its picture and links to both sources", ctx do
       catwith_thing!(ctx)
 
-      {:ok, _live, html} = live(ctx.conn, ~p"/on/cat")
+      {:ok, _live, html} = source_live(ctx.conn, ~p"/on/cat")
 
       assert html =~ ~s(id="thing")
       assert html =~ ~s(id="concept-card")
@@ -444,7 +445,7 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
     test "the chain and the kinds are hops, with the trail on them", ctx do
       %{felid: felid, kitten: kitten} = catwith_thing!(ctx)
 
-      {:ok, live, html} = live(ctx.conn, ~p"/on/cat")
+      {:ok, live, html} = source_live(ctx.conn, ~p"/on/cat")
 
       assert html =~ ~s(id="thing-chain")
       assert live |> element("#thing-chain-#{felid.slug}") |> render() =~ "trail=cat"
@@ -460,7 +461,7 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
       utility = concept!("Q300918", "cat", description: "a Unix utility")
       link!(cat, utility, confidence: 0.95, method: :wiktionary_qid)
 
-      {:ok, _live, html} = live(ctx.conn, ~p"/on/cat")
+      {:ok, _live, html} = source_live(ctx.conn, ~p"/on/cat")
 
       assert html =~ ~s(id="disagreement")
       assert html =~ ~s(id="disagreement-Q300918")
@@ -489,7 +490,7 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
     test "the encyclopedia article renders in the thing panel, not among the dictionaries", ctx do
       cat_article!(ctx)
 
-      {:ok, live, html} = live(ctx.conn, ~p"/on/cat")
+      {:ok, live, html} = source_live(ctx.conn, ~p"/on/cat")
 
       assert html =~ ~s(id="thing-article")
       assert html =~ "The cat is a small domesticated carnivorous mammal."
@@ -511,7 +512,7 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
     test "the article's fold says how much is behind it, never a character count", ctx do
       cat_article!(ctx)
 
-      {:ok, live, _html} = live(ctx.conn, ~p"/on/cat")
+      {:ok, live, _html} = source_live(ctx.conn, ~p"/on/cat")
 
       summary = live |> element("#thing-article-rest summary") |> render()
 
@@ -522,7 +523,7 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
     test "the article keeps the link out and the provenance the card carried", ctx do
       cat_article!(ctx)
 
-      {:ok, live, html} = live(ctx.conn, ~p"/on/cat")
+      {:ok, live, html} = source_live(ctx.conn, ~p"/on/cat")
 
       assert html =~ ~s(href="https://en.wikipedia.org/wiki/Cat")
 
@@ -552,7 +553,7 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
         record: mine
       )
 
-      {:ok, live, _html} = live(ctx.conn, ~p"/on/cat")
+      {:ok, live, _html} = source_live(ctx.conn, ~p"/on/cat")
 
       html = live |> element("#thing-article-info") |> render_click()
 
@@ -563,7 +564,7 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
     test "a word with a thing but no article has no article block", ctx do
       catwith_thing!(ctx)
 
-      {:ok, _live, html} = live(ctx.conn, ~p"/on/cat")
+      {:ok, _live, html} = source_live(ctx.conn, ~p"/on/cat")
 
       assert html =~ ~s(id="thing")
       refute html =~ ~s(id="thing-article")
@@ -572,7 +573,7 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
     test "a word that names nothing has no panel", ctx do
       oyster!(ctx)
 
-      {:ok, _live, html} = live(ctx.conn, ~p"/on/oyster")
+      {:ok, _live, html} = source_live(ctx.conn, ~p"/on/oyster")
 
       refute html =~ ~s(id="thing")
       refute html =~ ~s(id="thing-article")
@@ -581,7 +582,7 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
     test "a bare row has no panel and does not crash reaching for one", ctx do
       word!(ctx, "abrocome", [], enriched_at: nil)
 
-      {:ok, _live, html} = live(ctx.conn, ~p"/on/abrocome")
+      {:ok, _live, html} = source_live(ctx.conn, ~p"/on/abrocome")
 
       assert html =~ ~s(id="bare-row")
       refute html =~ ~s(id="thing")
@@ -592,7 +593,7 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
     test "a chip carries the word being left in its trail", ctx do
       %{bed: bed} = oyster!(ctx)
 
-      {:ok, live, _html} = live(ctx.conn, ~p"/on/oyster")
+      {:ok, live, _html} = source_live(ctx.conn, ~p"/on/oyster")
 
       assert live
              |> element(~s(#related-family-#{bed.slug}))
@@ -602,14 +603,14 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
     test "clicking a chip lands on the target with the trail in the URL", ctx do
       %{bed: bed} = oyster!(ctx)
 
-      {:ok, live, _html} = live(ctx.conn, ~p"/on/oyster")
+      {:ok, live, _html} = source_live(ctx.conn, ~p"/on/oyster")
 
       {:error, {:live_redirect, %{to: to}}} =
         live |> element(~s(#related-family-#{bed.slug})) |> render_click()
 
       assert to == "/on/oyster-bed?trail=oyster"
 
-      {:ok, _live, html} = live(ctx.conn, to)
+      {:ok, _live, html} = source_live(ctx.conn, to)
       assert html =~ ~s(id="trail")
       assert html =~ ~s(id="trail-oyster")
     end
@@ -648,7 +649,7 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
         relation!(ctx, oyster, type, target, source: source)
       end
 
-      {:ok, _live, html} = live(ctx.conn, ~p"/on/oyster")
+      {:ok, _live, html} = source_live(ctx.conn, ~p"/on/oyster")
 
       groups = [
         {"similar", :synonym},
@@ -676,7 +677,7 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
         assert html =~ ~s(id="related-#{group}-#{target.slug}"),
                "#{group} has no chip for #{target.lemma}"
 
-        {:ok, live, _} = live(ctx.conn, ~p"/on/oyster")
+        {:ok, live, _} = source_live(ctx.conn, ~p"/on/oyster")
 
         {:error, {:live_redirect, %{to: to}}} =
           live |> element("#related-#{group}-#{target.slug}") |> render_click()
@@ -685,7 +686,7 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
                "clicking the #{group} chip went to #{to}"
 
         # And the target is a page, not a dead end — the promise in §1.
-        {:ok, _live, landed} = live(ctx.conn, to)
+        {:ok, _live, landed} = source_live(ctx.conn, to)
         assert landed =~ ~s(id="headword")
         assert landed =~ ~s(id="trail-oyster")
       end
@@ -698,7 +699,7 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
 
       relation!(ctx, oyster, :synonym, mollusk, from_sense: sense)
 
-      {:ok, live, _html} = live(ctx.conn, ~p"/on/oyster")
+      {:ok, live, _html} = source_live(ctx.conn, ~p"/on/oyster")
 
       id = "#card-wiktionary-group-0-sense-#{sense.object_id}-similar-#{mollusk.slug}"
 
@@ -709,7 +710,7 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
     test "a chain step is a hop of its own", ctx do
       %{bivalve: bivalve} = oyster!(ctx)
 
-      {:ok, live, _html} = live(ctx.conn, ~p"/on/oyster")
+      {:ok, live, _html} = source_live(ctx.conn, ~p"/on/oyster")
 
       {:error, {:live_redirect, %{to: to}}} =
         live
@@ -723,7 +724,7 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
       oyster!(ctx)
       word!(ctx, "mollusk", ~w(wordnet))
 
-      {:ok, live, _html} = live(ctx.conn, ~p"/on/mollusk?trail=oyster,bivalve")
+      {:ok, live, _html} = source_live(ctx.conn, ~p"/on/mollusk?trail=oyster,bivalve")
 
       # The first entry truncates to nothing before it; the second keeps the first.
       assert has_element?(live, "#trail-oyster[href='/on/oyster']")
@@ -734,7 +735,7 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
       oyster!(ctx)
 
       {:ok, live, html} =
-        live(ctx.conn, ~p"/on/oyster?trail=#{"<script>alert(1)</script>,bivalve"}")
+        source_live(ctx.conn, ~p"/on/oyster?trail=#{"<script>alert(1)</script>,bivalve"}")
 
       assert html =~ ~s(id="trail-bivalve")
       refute html =~ ~s(id="trail-<script>)
@@ -770,7 +771,7 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
     test "every lexeme's rows land in one block, one heading, one id per group", ctx do
       two_lexemes!(ctx)
 
-      {:ok, live, html} = live(ctx.conn, ~p"/on/set")
+      {:ok, live, html} = source_live(ctx.conn, ~p"/on/set")
 
       # One section, one heading, and no `· verb` beside it.
       assert length(ids(html, ~r/^related$/)) == 1
@@ -788,7 +789,7 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
     test "every id on a multi-lexeme page is unique", ctx do
       two_lexemes!(ctx)
 
-      {:ok, _live, html} = live(ctx.conn, ~p"/on/set")
+      {:ok, _live, html} = source_live(ctx.conn, ~p"/on/set")
 
       all = ids(html, ~r/./)
       assert all -- Enum.uniq(all) == [], "duplicate ids: #{inspect(all -- Enum.uniq(all))}"
@@ -797,7 +798,7 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
     test "a name lexeme's rows fold into `names`, last, minus the case variants", ctx do
       two_lexemes!(ctx)
 
-      {:ok, _live, html} = live(ctx.conn, ~p"/on/set")
+      {:ok, _live, html} = source_live(ctx.conn, ~p"/on/set")
 
       assert html =~ ~s(id="related-names-setian")
       # `SET` is `set` in another case — a spelling of the same identity.
@@ -810,7 +811,7 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
     test "a chip names its part of speech only where the group holds more than one", ctx do
       two_lexemes!(ctx)
 
-      {:ok, live, _html} = live(ctx.conn, ~p"/on/set")
+      {:ok, live, _html} = source_live(ctx.conn, ~p"/on/set")
 
       # `similar` holds a noun and a verb, so both chips say which.
       assert live |> element("#related-similar-collection") |> render() =~ "(n)"
@@ -826,7 +827,7 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
         relation!(ctx, oyster, :derived, word!(ctx, "derived#{i}", ~w(wiktionary)))
       end
 
-      {:ok, live, _html} = live(ctx.conn, ~p"/on/oyster")
+      {:ok, live, _html} = source_live(ctx.conn, ~p"/on/oyster")
       row = live |> element("#related-family") |> render()
 
       assert row =~ "overflow-y-auto"
@@ -842,7 +843,7 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
       relation!(ctx, oyster, :derived, word!(ctx, "oyster bed", ~w(wiktionary)))
       relation!(ctx, oyster, :synonym, word!(ctx, "mollusk", ~w(wiktionary)), from_sense: sense)
 
-      {:ok, live, html} = live(ctx.conn, ~p"/on/oyster")
+      {:ok, live, html} = source_live(ctx.conn, ~p"/on/oyster")
 
       assert html =~ "Sense-by-sense relations are in each definition"
 
@@ -859,7 +860,7 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
 
       relation!(ctx, oyster, :synonym, word!(ctx, "mollusk", ~w(wiktionary)), from_sense: sense)
 
-      {:ok, live, html} = live(ctx.conn, ~p"/on/oyster")
+      {:ok, live, html} = source_live(ctx.conn, ~p"/on/oyster")
 
       assert html =~ ~s(id="related")
       assert html =~ "Related words"
@@ -875,7 +876,7 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
       word!(ctx, "oyster", ~w(wiktionary))
       sense!(ctx, word!(ctx, "abrocome", ~w(wiktionary)), "wiktionary", gloss: "A rat.")
 
-      {:ok, _live, html} = live(ctx.conn, ~p"/on/abrocome")
+      {:ok, _live, html} = source_live(ctx.conn, ~p"/on/abrocome")
 
       refute html =~ ~s(id="related")
       refute html =~ "Sense-by-sense relations are in each definition"
@@ -884,7 +885,7 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
     test "a block with two groups or more says nothing of the kind", ctx do
       oyster!(ctx)
 
-      {:ok, _live, html} = live(ctx.conn, ~p"/on/oyster")
+      {:ok, _live, html} = source_live(ctx.conn, ~p"/on/oyster")
 
       refute html =~ "Sense-by-sense relations are in each definition"
     end

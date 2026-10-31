@@ -28,6 +28,11 @@ defmodule DevilsDictionaryWeb.CrowdCard do
     ~H"""
     <section
       id={"urban-dictionary-#{Base.url_encode64(@config.term, padding: false)}"}
+      data-record-sources={
+        DevilsDictionaryWeb.RecordExplorer.sources([
+          %{slug: "urban-dictionary", name: "Urban Dictionary"}
+        ])
+      }
       phx-hook="UrbanDictionary"
       phx-update="ignore"
       data-term={@config.term}

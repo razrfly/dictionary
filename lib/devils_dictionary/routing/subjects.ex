@@ -151,6 +151,24 @@ defmodule DevilsDictionary.Routing.Subjects do
   end
 
   @doc """
+  Source-record subjects: every active source-derived identity, followed by a
+  bounded page of name-only matches. Editorial membership never controls this
+  projection. Reuse the existing visibility-aware reads, keeping their totals
+  separate so the name-match cap cannot discard a source identity.
+  """
+  def record_cards(source_ids, lemmas, mode, opts \\ []) do
+    source_ids = Enum.uniq(source_ids)
+    direct = cards([], source_ids, [], mode, limit: length(source_ids))
+    names = cards(source_ids, [], lemmas, mode, opts)
+
+    %{
+      curated: [],
+      discovered: direct.discovered ++ names.discovered,
+      discovered_total: direct.discovered_total + names.discovered_total
+    }
+  end
+
+  @doc """
   The patterns and folded names a lemma set matches: each lemma NFC- and
   NFD-normalized and lowercased, so a label stored in either form is found
   and a shared label never needs to be anything but equal.

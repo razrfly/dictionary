@@ -220,3 +220,18 @@ test('nothing is written to browser storage', () => {
   assert.ok(!/innerHTML|outerHTML|insertAdjacentHTML/.test(code),
     'the card is built from nodes and textContent, never from a markup string')
 })
+
+
+test('a browser definition becomes an indexed record only after its content is rendered', () => {
+  const old = globalThis.document
+  const body = {append() {}}
+  const plaque = {textContent: ''}
+  const ctx = {prose: Hook.prose, el: {dataset: {wordPath: '/on'}, querySelector: selector =>
+    selector === '[data-body]' ? body : selector === '[data-plaque]' ? plaque : null}}
+  globalThis.document = {createElement: () => ({dataset: {}, append() {}}), createTextNode: text => ({textContent: text})}
+  try {
+    assert.equal(ctx.el.dataset.recordKind, undefined)
+    Hook.render.call(ctx, parseDefinition(SAMPLE, 'cromulent'))
+    assert.equal(ctx.el.dataset.recordKind, 'definition')
+  } finally {globalThis.document = old}
+})

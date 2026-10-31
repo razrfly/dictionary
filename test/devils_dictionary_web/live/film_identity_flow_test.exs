@@ -1,4 +1,5 @@
 defmodule DevilsDictionaryWeb.FilmIdentityFlowTest do
+  import DevilsDictionary.SourceViewHelpers
   use DevilsDictionaryWeb.ConnCase, async: false
   use Oban.Testing, repo: DevilsDictionary.Repo
 
@@ -35,7 +36,7 @@ defmodule DevilsDictionaryWeb.FilmIdentityFlowTest do
     ship_sense = sense!(ctx, rejected, "wordnet", gloss: "a large seagoing vessel")
 
     stub_titanic("mountain")
-    {:ok, definition_live, _html} = live(ctx.conn, ~p"/on/mountain")
+    {:ok, definition_live, _html} = source_live(ctx.conn, ~p"/on/mountain")
     assert :ok = Discovery.execute_run(Repo.one!(Run).id)
     _ = render(definition_live)
 
@@ -46,7 +47,7 @@ defmodule DevilsDictionaryWeb.FilmIdentityFlowTest do
     assert Registry.by_external_id("imdb_title", "tt0120338") == result.object_id
 
     assert {:error, {:live_redirect, %{to: stable_path}}} =
-             live(ctx.conn, "/entities/#{result.object_id}/an-old-title")
+             source_live(ctx.conn, "/entities/#{result.object_id}/an-old-title")
 
     assert stable_path == "/entities/#{result.object_id}/titanic"
 
@@ -118,13 +119,16 @@ defmodule DevilsDictionaryWeb.FilmIdentityFlowTest do
     assert has_element?(returned_live, "#headword", "mountain")
 
     assert {:ok, _withdrawn} = Claims.withdraw(pending.id, reason: "connection removed")
-    {:ok, refreshed, _html} = live(ctx.conn, "/entities/#{result.object_id}/titanic")
+    {:ok, refreshed, _html} = source_live(ctx.conn, "/entities/#{result.object_id}/titanic")
     assert has_element?(refreshed, "#connection-out-#{accepted.id}")
     refute has_element?(refreshed, "#connection-out-#{pending.id}")
     assert Repo.get!(Registry.Entity, result.object_id).preferred_label == "Titanic"
 
     assert {:ok, %{active: false}} = Discovery.set_provider_active("cinegraph", false)
-    {:ok, withdrawn_source, _html} = live(ctx.conn, "/entities/#{result.object_id}/titanic")
+
+    {:ok, withdrawn_source, _html} =
+      source_live(ctx.conn, "/entities/#{result.object_id}/titanic")
+
     assert has_element?(withdrawn_source, "#connection-out-#{accepted.id}")
     refute has_element?(withdrawn_source, "#entity-source-cinegraph")
     refute has_element?(withdrawn_source, "#entity-discovery-appearances")
@@ -143,7 +147,7 @@ defmodule DevilsDictionaryWeb.FilmIdentityFlowTest do
     end
 
     {:ok, view, _} =
-      live(
+      source_live(
         ctx.conn,
         "/entities/#{film.object_id}/pagination-film?from=%2Fon%2Fpaging"
       )
@@ -223,7 +227,7 @@ defmodule DevilsDictionaryWeb.FilmIdentityFlowTest do
            )
 
     {:ok, view, _html} =
-      live(
+      source_live(
         ctx.conn,
         "/entities/#{film.object_id}/discovery-pages?from=%2Fon%2Fappearance-1"
       )

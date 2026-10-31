@@ -1,5 +1,6 @@
 defmodule DevilsDictionaryWeb.CultureDiscoveryLiveTest do
   use DevilsDictionaryWeb.ConnCase, async: false
+  import DevilsDictionary.SourceViewHelpers
 
   import DevilsDictionary.WordFixtures
   import Ecto.Query
@@ -38,14 +39,14 @@ defmodule DevilsDictionaryWeb.CultureDiscoveryLiveTest do
     on_exit(fn -> Application.put_env(:devils_dictionary, :giphy, original) end)
     word = word!(ctx, "mountain", ~w(wordnet))
     sense!(ctx, word, "wordnet", gloss: "a large hill")
-    {:ok, view, _} = live(ctx.conn, ~p"/on/mountain")
+    {:ok, view, _} = source_live(ctx.conn, ~p"/on/mountain/materials")
     assert has_element?(view, "[phx-hook=GiphyShelf][data-query=mountain]")
     assert has_element?(view, "[data-more][hidden]")
     refute has_element?(view, "button", "Find GIFs")
     refute has_element?(view, "[data-api-key='cinegraph-test-key']")
   end
 
-  for layout <- [:current, :reference] do
+  for layout <- [:legacy, :records] do
     test "#{layout}: definitions render while discovery is queued, then cards arrive without a page reload",
          ctx do
       only([CineGraph])
@@ -54,9 +55,10 @@ defmodule DevilsDictionaryWeb.CultureDiscoveryLiveTest do
       stub_success("war", 273_967, [movie(301, "Title-independent match")])
 
       {:ok, live, _html} =
-        live(
+        source_live(
           ctx.conn,
-          "/on/war" <> unquote(if layout == :reference, do: "?layout=reference", else: "")
+          "/on/war" <>
+            unquote(if layout == :records, do: "?view=records", else: "?layout=current")
         )
 
       assert has_element?(live, "#card-bierce")
@@ -77,13 +79,31 @@ defmodule DevilsDictionaryWeb.CultureDiscoveryLiveTest do
     end
   end
 
+  test "saved discoveries render in the first HTTP response without admitting provider jobs",
+       ctx do
+    only([CineGraph])
+    word = word!(ctx, "affection", ~w(bierce))
+    entry!(ctx, word, "bierce", body: "A saved definition.")
+    stub_success("affection", 273_968, [movie(331, "Already saved material")])
+    {:ok, live, _} = source_live(ctx.conn, "/on/affection/materials")
+    assert :ok = Discovery.execute_run(Repo.one!(Run).id)
+    _ = render(live)
+    before = Repo.aggregate(Oban.Job, :count)
+
+    document =
+      get(ctx.conn, "/on/affection/materials") |> html_response(200) |> LazyHTML.from_document()
+
+    assert Enum.count(LazyHTML.query(document, "#culture-result-tmdb_movie-331")) == 1
+    assert Repo.aggregate(Oban.Job, :count) == before
+  end
+
   test "missing posters use an intentional text treatment", ctx do
     only([CineGraph])
     word = word!(ctx, "grief", ~w(wordnet))
     sense!(ctx, word, "wordnet", gloss: "deep sorrow")
     stub_success("grief", 9_872, [movie(302, "Posterless", poster_path: nil)])
 
-    {:ok, live, _html} = live(ctx.conn, ~p"/on/grief")
+    {:ok, live, _html} = source_live(ctx.conn, ~p"/on/grief")
     assert :ok = Discovery.execute_run(Repo.one!(Run).id)
     _ = render(live)
 
@@ -100,7 +120,7 @@ defmodule DevilsDictionaryWeb.CultureDiscoveryLiveTest do
       json(conn, %{"data" => %{"searchMovieKeywords" => []}})
     end)
 
-    {:ok, empty_live, _html} = live(ctx.conn, ~p"/on/empty")
+    {:ok, empty_live, _html} = source_live(ctx.conn, ~p"/on/empty")
     assert :ok = Discovery.execute_run(Repo.one!(Run).id)
     _ = render(empty_live)
     assert has_element?(empty_live, "#culture-empty")
@@ -110,7 +130,7 @@ defmodule DevilsDictionaryWeb.CultureDiscoveryLiveTest do
     sense!(ctx, failure, "wordnet", gloss: "an unsuccessful attempt")
     Req.Test.stub(CineGraph, fn conn -> Plug.Conn.send_resp(conn, 503, "unavailable") end)
 
-    {:ok, failed_live, _html} = live(ctx.conn, ~p"/on/failure")
+    {:ok, failed_live, _html} = source_live(ctx.conn, ~p"/on/failure")
     run = Repo.one!(from r in Run, order_by: [desc: r.id], limit: 1)
     assert :ok = Discovery.execute_run(run.id)
     _ = render(failed_live)
@@ -129,7 +149,7 @@ defmodule DevilsDictionaryWeb.CultureDiscoveryLiveTest do
     assert Repo.aggregate(Run, :count) == 0
 
     word!(ctx, "audit", ~w(wordnet))
-    {:ok, demo, _html} = live(ctx.conn, ~p"/on/audit?demo=1")
+    {:ok, demo, _html} = source_live(ctx.conn, ~p"/on/audit?demo=1")
     refute has_element?(demo, "#in-culture")
     assert Repo.aggregate(Mapping, :count) == 0
     assert Repo.aggregate(Run, :count) == 0
@@ -142,7 +162,7 @@ defmodule DevilsDictionaryWeb.CultureDiscoveryLiveTest do
     sense!(ctx, noun, "wordnet", gloss: "a financial institution")
     stub_success("bank", 77, [movie(303, "Ambiguous match")])
 
-    {:ok, live, _html} = live(ctx.conn, ~p"/on/bank")
+    {:ok, live, _html} = source_live(ctx.conn, ~p"/on/bank")
     assert :ok = Discovery.execute_run(Repo.one!(Run).id)
     _ = render(live)
 
@@ -168,7 +188,7 @@ defmodule DevilsDictionaryWeb.CultureDiscoveryLiveTest do
     sense!(ctx, word, "wordnet", gloss: "a mixed-provider page")
     stub_success("fixture-failure-mixed", 700, [movie(700, "Still available")])
 
-    {:ok, live, _html} = live(ctx.conn, ~p"/on/fixture-failure-mixed")
+    {:ok, live, _html} = source_live(ctx.conn, ~p"/on/fixture-failure-mixed")
 
     assert [run] = Repo.all(Run)
     assert :ok = Discovery.execute_run(run.id)
@@ -187,7 +207,7 @@ defmodule DevilsDictionaryWeb.CultureDiscoveryLiveTest do
     sense!(ctx, word, "wordnet", gloss: "visible until policy changes")
     stub_success("deactivated-live", 701, [movie(701, "Policy preview")])
 
-    {:ok, live, _html} = live(ctx.conn, ~p"/on/deactivated-live")
+    {:ok, live, _html} = source_live(ctx.conn, ~p"/on/deactivated-live")
     assert :ok = Discovery.execute_run(Repo.one!(Run).id)
     _ = render(live)
     assert has_element?(live, "#culture-result-tmdb_movie-701")
@@ -212,7 +232,7 @@ defmodule DevilsDictionaryWeb.CultureDiscoveryLiveTest do
     word = word!(ctx, "stale-event", ~w(wordnet))
     sense!(ctx, word, "wordnet", gloss: "a current definition")
     stub_success("stale-event", 702, [movie(702, "Current film")])
-    {:ok, live, _html} = live(ctx.conn, ~p"/on/stale-event")
+    {:ok, live, _html} = source_live(ctx.conn, ~p"/on/stale-event")
 
     stale_item = %{
       external_namespace: "fixture_art",
@@ -253,7 +273,7 @@ defmodule DevilsDictionaryWeb.CultureDiscoveryLiveTest do
     sense!(ctx, word, "wordnet", gloss: "a lament for the dead")
     stub_films_and_texts("elegy", 900, [movie(900, "A filmed lament")])
 
-    {:ok, live, _html} = live(ctx.conn, ~p"/on/elegy")
+    {:ok, live, _html} = source_live(ctx.conn, ~p"/on/elegy")
 
     for run <- Repo.all(Run), do: assert(:ok = Discovery.execute_run(run.id))
     _ = render(live)
@@ -316,7 +336,7 @@ defmodule DevilsDictionaryWeb.CultureDiscoveryLiveTest do
       json(conn, %{"entities" => entities})
     end)
 
-    {:ok, live, _html} = live(ctx.conn, ~p"/on/soldier")
+    {:ok, live, _html} = source_live(ctx.conn, ~p"/on/soldier")
 
     for run <- Repo.all(Run), do: assert(:ok = Discovery.execute_run(run.id))
     _ = render(live)
@@ -393,7 +413,7 @@ defmodule DevilsDictionaryWeb.CultureDiscoveryLiveTest do
       json(conn, %{"entities" => entities})
     end)
 
-    {:ok, live, _html} = live(ctx.conn, ~p"/on/soldier")
+    {:ok, live, _html} = source_live(ctx.conn, ~p"/on/soldier")
     for run <- Repo.all(Run), do: assert(:ok = Discovery.execute_run(run.id))
     html = render(live)
 
@@ -464,11 +484,11 @@ defmodule DevilsDictionaryWeb.CultureDiscoveryLiveTest do
     # The very first, disconnected render is where a promise gets made: a
     # "Looking for matching artwork…" that resolves to nothing is worse than no
     # shelf, so the reader asks the same question the admission gate asks.
-    html = ctx.conn |> get(~p"/on/nepotism") |> html_response(200)
+    html = ctx.conn |> get(~p"/on/nepotism/materials") |> html_response(200)
     refute html =~ "In artwork"
-    assert html =~ "In film"
+    assert html =~ "Source / API coverage"
 
-    {:ok, live, _html} = live(ctx.conn, ~p"/on/nepotism")
+    {:ok, live, _html} = source_live(ctx.conn, ~p"/on/nepotism")
     for run <- Repo.all(Run), do: assert(:ok = Discovery.execute_run(run.id))
     _ = render(live)
 
@@ -525,7 +545,7 @@ defmodule DevilsDictionaryWeb.CultureDiscoveryLiveTest do
       end
     end)
 
-    {:ok, live, _html} = live(ctx.conn, ~p"/on/war")
+    {:ok, live, _html} = source_live(ctx.conn, ~p"/on/war")
     for run <- Repo.all(Run), do: assert(:ok = Discovery.execute_run(run.id))
     _ = render(live)
 

@@ -788,8 +788,9 @@ defmodule DevilsDictionary.Curation.WholeEntryTest do
              Repo.get!(DevilsDictionary.Registry.SenseRevision, definition["sense_revision_id"]).gloss
 
     html = build_conn() |> get("/on/love") |> html_response(200)
-    assert html =~ ~s(id="#{opening.lead.links.card_id}")
-    assert html =~ ~s(href="##{opening.lead.links.card_id}")
+    assert html =~ ~s(href="/on/love/materials##{opening.lead.links.card_id}")
+    sources = build_conn() |> get("/on/love/materials") |> html_response(200)
+    assert sources =~ ~s(id="#{opening.lead.links.card_id}")
     assert html =~ "Selected reading"
   end
 

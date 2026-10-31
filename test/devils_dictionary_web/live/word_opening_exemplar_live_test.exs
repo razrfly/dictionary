@@ -132,9 +132,10 @@ defmodule DevilsDictionaryWeb.WordOpeningExemplarLiveTest do
       # The four about the claim say, word for word, what the examples card
       # on the same page says about the same claim.
       card = "#examples-why-#{ctx.accepted.assertion_id}"
+      {:ok, source_view, _} = live(build_conn(), ~p"/on/coward/materials")
 
       for key <- ~w(source nominated model reviewed) do
-        assert text(view, "#{tile}-stage-#{key} dd") == text(view, "#{card}-#{key} dd"),
+        assert text(view, "#{tile}-stage-#{key} dd") == text(source_view, "#{card}-#{key} dd"),
                "the #{key} stage disagrees with the card"
       end
 
@@ -170,7 +171,8 @@ defmodule DevilsDictionaryWeb.WordOpeningExemplarLiveTest do
 
       # The pending work keeps its public card: #190's person-only gate is
       # the card's, unchanged. The opening's own gate keeps it out.
-      assert has_element?(view, card(ctx.pending_work), "Fixture Pending Work")
+      {:ok, source_view, _} = live(build_conn(), ~p"/on/coward/materials")
+      assert has_element?(source_view, card(ctx.pending_work), "Fixture Pending Work")
       refute has_element?(view, card(ctx.pending))
 
       refute has_element?(view, "#opening-highlight-2")
@@ -194,8 +196,9 @@ defmodule DevilsDictionaryWeb.WordOpeningExemplarLiveTest do
       conn = log_in_user(build_conn(), ctx.contributor.user)
       {:ok, view, _html} = live(conn, ~p"/on/coward?opening=fixture")
 
-      assert has_element?(view, card(ctx.pending))
-      assert has_element?(view, card(ctx.pending_work))
+      {:ok, contributor_sources, _} = live(conn, ~p"/on/coward/materials")
+      assert has_element?(contributor_sources, card(ctx.pending))
+      assert has_element?(source_view, card(ctx.pending_work))
       refute has_element?(view, "#opening-highlight-2")
       refute has_element?(view, "#opening-highlight-3")
     end

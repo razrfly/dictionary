@@ -1,4 +1,6 @@
 defmodule DevilsDictionaryWeb.ExemplarProvenanceLiveTest do
+  import DevilsDictionary.SourceViewHelpers
+
   @moduledoc """
   #212 build 2 on the page: the exemplar card's "Why this example is here",
   the person page's "featured in the opening of…" line, the connect form's
@@ -100,7 +102,7 @@ defmodule DevilsDictionaryWeb.ExemplarProvenanceLiveTest do
       nominated_on = ExampleProvenance.date(Repo.get!(Assertion, claim.assertion_id).inserted_at)
       id = claim.assertion_id
 
-      {:ok, live, _html} = live(build_conn(), ~p"/on/coward")
+      {:ok, live, _html} = source_live(build_conn(), ~p"/on/coward")
 
       assert has_element?(live, "#{card(id)} #{why(id)} summary", "Why this example is here")
       assert has_element?(live, "#{why(id)}-source", "Not listed by a source.")
@@ -126,7 +128,7 @@ defmodule DevilsDictionaryWeb.ExemplarProvenanceLiveTest do
       assert has_element?(live, card(id), "nominated by #{nominator}")
 
       receipt = publish!(ctx, claim)
-      {:ok, live, _html} = live(build_conn(), ~p"/on/coward")
+      {:ok, live, _html} = source_live(build_conn(), ~p"/on/coward")
 
       # Two histories, two actors (C5): nominated by the contributor, selected
       # by the reviewer. And no claim that a page shows it.
@@ -155,14 +157,14 @@ defmodule DevilsDictionaryWeb.ExemplarProvenanceLiveTest do
 
       # The card is #190's person-only gate's, so a work's stays public; the
       # disclosure is decision 1's, and nobody has accepted this nomination.
-      {:ok, live, _html} = live(build_conn(), ~p"/on/coward")
+      {:ok, live, _html} = source_live(build_conn(), ~p"/on/coward")
 
       assert has_element?(live, card(legacy.id), "nominator unknown")
       refute has_element?(live, card(legacy.id), "nominated by")
       refute has_element?(live, why(legacy.id))
 
       conn = log_in_user(build_conn(), ctx.contributor.user)
-      {:ok, live, _html} = live(conn, ~p"/on/coward")
+      {:ok, live, _html} = source_live(conn, ~p"/on/coward")
 
       assert has_element?(
                live,
@@ -174,7 +176,7 @@ defmodule DevilsDictionaryWeb.ExemplarProvenanceLiveTest do
       assert has_element?(live, "#{why(legacy.id)}-reviewed", "Not yet reviewed.")
 
       decide!(ctx, Claims.current_revision(legacy.id))
-      {:ok, live, _html} = live(build_conn(), ~p"/on/coward")
+      {:ok, live, _html} = source_live(build_conn(), ~p"/on/coward")
 
       assert has_element?(
                live,
@@ -190,13 +192,13 @@ defmodule DevilsDictionaryWeb.ExemplarProvenanceLiveTest do
     test "gains one line per published selection, and says no page shows it yet", ctx do
       claim = ExemplarFixtures.nominate!(ctx.contributor, ctx.person, ctx.sense)
       decide!(ctx, claim)
-      {:ok, live, _html} = live(build_conn(), person_path(ctx.person))
+      {:ok, live, _html} = source_live(build_conn(), person_path(ctx.person))
 
       assert has_element?(live, "#cited-as-claim-#{claim.assertion_id}")
       refute has_element?(live, "[id^='cited-as-featured-#{claim.assertion_id}-']")
 
       receipt = publish!(ctx, claim)
-      {:ok, live, _html} = live(build_conn(), person_path(ctx.person))
+      {:ok, live, _html} = source_live(build_conn(), person_path(ctx.person))
 
       line = "#cited-as-featured-#{claim.assertion_id}-#{ctx.composition.id}"
 
@@ -218,7 +220,7 @@ defmodule DevilsDictionaryWeb.ExemplarProvenanceLiveTest do
           expected_pointer: Repo.reload!(ctx.composition).current_published_version_id
         )
 
-      {:ok, live, _html} = live(build_conn(), person_path(ctx.person))
+      {:ok, live, _html} = source_live(build_conn(), person_path(ctx.person))
       refute has_element?(live, line)
     end
   end
@@ -232,7 +234,7 @@ defmodule DevilsDictionaryWeb.ExemplarProvenanceLiveTest do
 
     test "leaves no trace for the public: card, count, disclosure or person page", ctx do
       id = ctx.claim.assertion_id
-      {:ok, live, html} = live(build_conn(), ~p"/on/coward")
+      {:ok, live, html} = source_live(build_conn(), ~p"/on/coward")
 
       refute has_element?(live, card(id))
       refute has_element?(live, why(id))
@@ -240,7 +242,7 @@ defmodule DevilsDictionaryWeb.ExemplarProvenanceLiveTest do
       refute html =~ "Fixture Adverse Person"
       refute html =~ "fixture rationale"
 
-      {:ok, person, html} = live(build_conn(), person_path(ctx.adverse))
+      {:ok, person, html} = source_live(build_conn(), person_path(ctx.adverse))
       refute has_element?(person, "#entity-cited-as")
       refute html =~ "timidity"
     end
@@ -248,7 +250,7 @@ defmodule DevilsDictionaryWeb.ExemplarProvenanceLiveTest do
     test "is present and marked for a contributor, disclosure included", ctx do
       id = ctx.claim.assertion_id
       conn = log_in_user(build_conn(), ctx.contributor.user)
-      {:ok, live, _html} = live(conn, ~p"/on/coward")
+      {:ok, live, _html} = source_live(conn, ~p"/on/coward")
 
       assert has_element?(live, "#examples", "1 under review")
       assert has_element?(live, "#examples-state-#{id}", "needs review")
@@ -257,7 +259,7 @@ defmodule DevilsDictionaryWeb.ExemplarProvenanceLiveTest do
 
       # The person page is a public read whoever is looking (#212 comment,
       # item 2): a contributor sees there what the public sees.
-      {:ok, person, _html} = live(conn, person_path(ctx.adverse))
+      {:ok, person, _html} = source_live(conn, person_path(ctx.adverse))
       refute has_element?(person, "#entity-cited-as")
     end
   end
@@ -278,12 +280,12 @@ defmodule DevilsDictionaryWeb.ExemplarProvenanceLiveTest do
 
       for decision <- [nil, "disputed"] do
         if decision, do: decide!(ctx, ctx.claim, decision)
-        {:ok, live, _html} = live(build_conn(), ~p"/on/coward")
+        {:ok, live, _html} = source_live(build_conn(), ~p"/on/coward")
         assert has_element?(live, card(id))
         refute has_element?(live, why(id))
 
         conn = log_in_user(build_conn(), ctx.contributor.user)
-        {:ok, live, _html} = live(conn, ~p"/on/coward")
+        {:ok, live, _html} = source_live(conn, ~p"/on/coward")
         expected = if decision, do: "Disputed", else: "Not yet reviewed."
         assert has_element?(live, "#{why(id)}-reviewed", expected)
       end
@@ -294,14 +296,14 @@ defmodule DevilsDictionaryWeb.ExemplarProvenanceLiveTest do
       decide!(ctx, ctx.claim, "rejected")
 
       for conn <- [build_conn(), log_in_user(build_conn(), ctx.contributor.user)] do
-        {:ok, live, html} = live(conn, ~p"/on/coward")
+        {:ok, live, html} = source_live(conn, ~p"/on/coward")
         refute has_element?(live, card(id))
         refute has_element?(live, why(id))
         refute html =~ "Fixture Pending Work"
       end
 
       {:ok, _} = Claims.review(ctx.claim.id, :withdrawn, %{reason: "withdrawn"})
-      {:ok, _live, html} = live(build_conn(), ~p"/on/coward")
+      {:ok, _live, html} = source_live(build_conn(), ~p"/on/coward")
       refute html =~ "Fixture Pending Work"
     end
   end
@@ -324,7 +326,7 @@ defmodule DevilsDictionaryWeb.ExemplarProvenanceLiveTest do
           params
         )
 
-      {:ok, view, _html} = live(ctx.conn, ~p"/connect?#{query}")
+      {:ok, view, _html} = source_live(ctx.conn, ~p"/connect?#{query}")
 
       {:error, {:live_redirect, %{to: to}}} =
         view
@@ -372,7 +374,7 @@ defmodule DevilsDictionaryWeb.ExemplarProvenanceLiveTest do
         from_result: ctx.shelf.result.id
       }
 
-      {:ok, view, _html} = live(ctx.conn, ~p"/connect?#{query}")
+      {:ok, view, _html} = source_live(ctx.conn, ~p"/connect?#{query}")
       view |> form("#composer-subject form", %{q: "Fixture Work"}) |> render_change()
       view |> element("#composer-subject-hit-#{work.object_id}") |> render_click()
       view |> element("#predicate-illustrates") |> render_click()
@@ -428,7 +430,7 @@ defmodule DevilsDictionaryWeb.ExemplarProvenanceLiveTest do
       from_result: shelf.result.id
     }
 
-    {:ok, view, _html} = live(conn, ~p"/connect?#{query}")
+    {:ok, view, _html} = source_live(conn, ~p"/connect?#{query}")
 
     {:error, {:live_redirect, %{to: to}}} =
       view |> form("#composer-form", %{rationale: "found on the Quotes shelf"}) |> render_submit()
@@ -448,7 +450,7 @@ defmodule DevilsDictionaryWeb.ExemplarProvenanceLiveTest do
     assert shown.content_revision_id ==
              Registry.current_content_revision(shelf.quotation.object_id).id
 
-    {:ok, live, _html} = live(build_conn(), ~p"/on/coward")
+    {:ok, live, _html} = source_live(build_conn(), ~p"/on/coward")
 
     assert has_element?(
              live,

@@ -13,6 +13,7 @@ defmodule DevilsDictionaryWeb.OnReaderTest do
   by turning the development default off), and allocates addresses.
   """
   use DevilsDictionaryWeb.ConnCase, async: false
+  import DevilsDictionary.SourceViewHelpers
 
   @moduletag :capture_log
 
@@ -239,6 +240,7 @@ defmodule DevilsDictionaryWeb.OnReaderTest do
       reading(true, fn ->
         {:ok, view, _html} = live(ctx.conn, "/on/mars")
         assert has_element?(view, "#overview #overview-draft")
+        refute has_element?(view, "#curated-empty")
         assert has_element?(view, "#headword")
       end)
 
@@ -325,6 +327,7 @@ defmodule DevilsDictionaryWeb.OnReaderTest do
         {:ok, view, _html} = live(ctx.conn, "/on/mars")
 
         assert has_element?(view, "#overview")
+        assert has_element?(view, "nav[aria-label='In this entry'] a[href='#subjects']")
         # Stored order, and a member named otherwise than the page.
         curated =
           view
@@ -360,9 +363,52 @@ defmodule DevilsDictionaryWeb.OnReaderTest do
         refute has_element?(view, "#subjects", "Mars probe")
         refute has_element?(view, "#overview", "Mars probe")
 
-        # Curated once; discovered subjects never repeat a curated one.
-        refute has_element?(view, card(view, "discovered", world.planet.entity))
-        assert has_element?(view, card(view, "discovered", world.deity.entity))
+        # Authored choices stay in the article; original source subjects stay reachable.
+        {:ok, sources, _} = source_live(ctx.conn, "/on/mars")
+        refute has_element?(sources, "#overview")
+        # A selected identity is still a source match independently of its editorial selection.
+        assert has_element?(sources, card(sources, "discovered", world.planet.entity))
+        assert has_element?(sources, card(sources, "discovered", world.deity.entity))
+        refute has_element?(sources, "#subjects", "Ares")
+        refute has_element?(sources, "#subjects", "Mars, Incorporated")
+        refute has_element?(sources, "#subjects-curated")
+        refute has_element?(sources, "#subjects-associations")
+        sources |> element("#entry-curated") |> render_click()
+        assert has_element?(sources, "#subject-curated-#{ares.entity.object_id}")
+        assert has_element?(sources, "#subjects-associations", "Mars, Incorporated")
+      end)
+    end
+
+    test "withheld-only authored members retain local subject navigation", ctx do
+      world = mars!(ctx, published: true)
+
+      gone =
+        subject!("Mars probe", "works",
+          kind: :work,
+          path: "/works/withheld-probe",
+          published: true,
+          actor: ctx.human
+        )
+
+      withdrawn!(gone.page)
+
+      overview!(
+        "On Mars",
+        "/on/mars",
+        [
+          {:supplies_lexical_material, world.noun.object_id},
+          {:discusses_subject, {:page, gone.page.id}}
+        ],
+        author: ctx.human,
+        published: true
+      )
+
+      reading(false, fn ->
+        {:ok, view, _} = live(ctx.conn, "/on/mars")
+        assert has_element?(view, "#subjects-withheld")
+        assert has_element?(view, "nav[aria-label='In this entry'] a[href='#subjects']")
+        {:ok, records, _} = source_live(ctx.conn, "/on/mars")
+        refute has_element?(records, "#subjects-withheld")
       end)
     end
 
@@ -425,10 +471,10 @@ defmodule DevilsDictionaryWeb.OnReaderTest do
       )
 
     reading(false, fn ->
-      {:ok, view, _html} = live(ctx.conn, "/entities/#{world.album.entity.object_id}/mars")
+      {:ok, view, _html} = source_live(ctx.conn, "/entities/#{world.album.entity.object_id}/mars")
       assert has_element?(view, "#connection-out-#{claim.id} a[href='/people/bruno-mars']")
 
-      {:ok, detail, _html} = live(ctx.conn, "/connections/#{claim.id}")
+      {:ok, detail, _html} = source_live(ctx.conn, "/connections/#{claim.id}")
       assert has_element?(detail, "a[href='/people/bruno-mars']")
     end)
   end
@@ -439,7 +485,7 @@ defmodule DevilsDictionaryWeb.OnReaderTest do
     conn = log_in_user(ctx.conn, scope.user)
 
     reading(false, fn ->
-      {:ok, view, _html} = live(conn, "/nature/mars")
+      {:ok, view, _html} = source_live(conn, "/nature/mars")
       assert has_element?(view, "#subject-draft")
 
       DevilsDictionary.CurationFixtures.revoke!(scope)
@@ -455,11 +501,11 @@ defmodule DevilsDictionaryWeb.OnReaderTest do
     world = mars!(ctx)
 
     reading(true, fn ->
-      {:ok, home, _html} = live(ctx.conn, "/")
+      {:ok, home, _html} = source_live(ctx.conn, "/")
       home |> form("#search", %{"q" => "Mars"}) |> render_submit()
       assert_redirect(home, "/on/mars")
 
-      {:ok, on, _html} = live(ctx.conn, "/on/mars")
+      {:ok, on, _html} = source_live(ctx.conn, "/on/mars")
       assert page_title(on) =~ "On mars"
       assert has_element?(on, "#on-title", "On mars")
 
@@ -500,7 +546,7 @@ defmodule DevilsDictionaryWeb.OnReaderTest do
         |> render_click()
         |> follow_redirect(ctx.conn, "/on/mars")
 
-      {:ok, on, _html} = live(ctx.conn, "/on/mars")
+      {:ok, on, _html} = source_live(ctx.conn, "/on/mars")
 
       {:ok, subjects, html} =
         on
@@ -520,7 +566,7 @@ defmodule DevilsDictionaryWeb.OnReaderTest do
     world = mars!(ctx)
 
     reading(false, fn ->
-      {:ok, on, _html} = live(ctx.conn, "/on/mars")
+      {:ok, on, _html} = source_live(ctx.conn, "/on/mars")
       planet = card(on, "discovered", world.planet.entity)
 
       assert has_element?(on, "#{planet}[data-state='not_yet_public']")
@@ -539,14 +585,14 @@ defmodule DevilsDictionaryWeb.OnReaderTest do
     # One lemma in two parts of speech: the row opens On, which reads both.
     word!(ctx, "oyster", ~w(wiktionary), pos: "noun", scope: nil)
     word!(ctx, "oyster", ~w(wiktionary), pos: "verb", scope: nil)
-    {:ok, home, _html} = live(ctx.conn, "/?q=oyster")
+    {:ok, home, _html} = source_live(ctx.conn, "/?q=oyster")
     assert has_element?(home, "#result-oyster[href='/on/oyster']", "noun · verb")
 
     # Several lemmas: every lexeme has its own exact row, the lowercase noun
     # and verb included.
     world = mars!(ctx)
     lower_noun = word!(ctx, "mars", ~w(wiktionary), pos: "noun", scope: nil)
-    {:ok, home, _html} = live(ctx.conn, "/?q=mars")
+    {:ok, home, _html} = source_live(ctx.conn, "/?q=mars")
     assert has_element?(home, "#result-mars[href='/on/mars']")
 
     for lexeme <- [world.noun, world.verb, world.upper, lower_noun] do
@@ -561,7 +607,7 @@ defmodule DevilsDictionaryWeb.OnReaderTest do
     world = mars!(ctx, published: true)
     entry!(ctx, world.verb, "wiktionary", body: "to spoil")
 
-    {:ok, home, _html} = live(ctx.conn, "/?q=mars")
+    {:ok, home, _html} = source_live(ctx.conn, "/?q=mars")
     assert has_element?(home, "#result-word-#{world.verb.object_id}")
 
     {:ok, word, _html} =
@@ -579,7 +625,7 @@ defmodule DevilsDictionaryWeb.OnReaderTest do
     assert_patched(word, path)
 
     # Reloaded, it is still that one word.
-    {:ok, reloaded, _html} = live(ctx.conn, path)
+    {:ok, reloaded, _html} = source_live(ctx.conn, path)
     assert reloaded |> element("#headword") |> render() =~ "mars"
     refute has_element?(reloaded, "#disambiguation")
   end
@@ -660,7 +706,7 @@ defmodule DevilsDictionaryWeb.OnReaderTest do
     breed = subject!("Polish", "nature", description: "breed of chicken", fixture: @fixture)
 
     reading(false, fn ->
-      {:ok, on, _html} = live(ctx.conn, "/on/polish")
+      {:ok, on, _html} = source_live(ctx.conn, "/on/polish")
 
       assert has_element?(
                on,
@@ -697,7 +743,7 @@ defmodule DevilsDictionaryWeb.OnReaderTest do
       )
 
     reading(false, fn ->
-      {:ok, on, _html} = live(ctx.conn, "/on/butterfly")
+      {:ok, on, _html} = source_live(ctx.conn, "/on/butterfly")
 
       assert has_element?(
                on,
@@ -739,6 +785,8 @@ defmodule DevilsDictionaryWeb.OnReaderTest do
       {:ok, on, _html} = live(ctx.conn, "/on/mars")
       assert has_element?(on, "#headword")
       assert has_element?(on, "#linked-overviews a[href='/on/mars-in-culture']")
+      {:ok, records, _} = source_live(ctx.conn, "/on/mars")
+      refute has_element?(records, "#linked-overviews")
 
       # No word holds `zeta`: the alias is one hop to the overview.
       assert get(ctx.conn, "/on/zeta") |> redirected_to(301) == "/on/zeta-overview"
@@ -760,7 +808,7 @@ defmodule DevilsDictionaryWeb.OnReaderTest do
 
       assert ctx.conn |> get(canonical) |> html_response(200)
 
-      {:ok, on, _html} = live(ctx.conn, "/on/cafe")
+      {:ok, on, _html} = source_live(ctx.conn, "/on/cafe")
       assert has_element?(on, "#{card(on, "discovered", cafe.entity)}-link[href='#{canonical}']")
     end)
   end
@@ -781,7 +829,7 @@ defmodule DevilsDictionaryWeb.OnReaderTest do
       )
 
     reading(false, fn ->
-      {:ok, on, _html} = live(ctx.conn, "/on/mercury")
+      {:ok, on, _html} = source_live(ctx.conn, "/on/mercury")
 
       assert has_element?(on, "#{card(on, "discovered", planet.entity)}[data-state='addressed']")
 

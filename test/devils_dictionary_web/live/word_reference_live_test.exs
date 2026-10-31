@@ -9,81 +9,188 @@ defmodule DevilsDictionaryWeb.WordReferenceLiveTest do
     Map.merge(ctx, love!(ctx))
   end
 
-  test "reference view keeps every source card, concept, subject and related record once", ctx do
-    {:ok, current, _} = live(ctx.conn, "/on/love?opening=fixture&layout=current")
-    {:ok, reference, _} = live(ctx.conn, "/on/love?opening=fixture&layout=reference")
-    assert has_element?(reference, "#reference-article")
+  test "curated article is clean and preserves exact choice and dictionary navigation", ctx do
+    {:ok, view, _} = live(ctx.conn, "/on/love?opening=fixture")
+    assert has_element?(view, "#reference-article")
+    refute has_element?(view, "#reference-record")
+    refute has_element?(view, "#in-culture")
+    refute has_element?(view, "#card-bierce")
+    assert has_element?(view, "#opening-lead-text", "temporary insanity")
+    assert has_element?(view, "#opening-lead-entry[href*='/materials'][href$='#card-bierce']")
+    assert has_element?(view, "#opening-lead-credits")
+    assert has_element?(view, "#opening-about")
+
+    assert has_element?(
+             view,
+             "#opening-lead-meaning a[href*='/materials'][href$='#card-bierce']"
+           )
+
+    refute has_element?(view, "#opening-lead-meaning a[phx-click]")
+    assert has_element?(view, "#opening-fixture", "not published")
+    assert has_element?(view, "#entry-curated[aria-current='page']")
+    assert has_element?(view, "#rail-card-bierce[href*='/materials'][href$='#card-bierce']")
+    refute has_element?(view, "#entry-layout-switch")
+  end
+
+  test "source records retain every original card, source text, subject and related record once",
+       ctx do
+    {:ok, old, _} = live(ctx.conn, "/on/love?layout=current")
+    {:ok, records, _} = live(ctx.conn, "/on/love/materials")
+    assert has_element?(records, "#source-record-view")
+    refute has_element?(records, "#opening")
 
     for id <-
           ~w(headword word-rail word-stats card-bierce card-johnson card-wordnet card-wiktionary subjects thing related page-sources) do
-      if has_element?(current, "##{id}") do
-        assert has_element?(reference, "##{id}")
-        html = reference |> render() |> LazyHTML.from_fragment()
-        assert Enum.count(LazyHTML.query(html, "##{id}")) == 1
+      if has_element?(old, "##{id}") do
+        assert has_element?(records, "##{id}")
+        doc = records |> render() |> LazyHTML.from_fragment()
+        assert Enum.count(LazyHTML.query(doc, "##{id}")) == 1
       end
     end
 
-    assert has_element?(reference, "#reference-record #card-bierce")
-    assert has_element?(reference, "#reference-record #card-wordnet")
-    assert has_element?(reference, "#opening-lead-text", "temporary insanity")
-    assert has_element?(reference, "#opening-highlight-1-title", "Cupid and Psyche")
-    assert has_element?(reference, "#opening-lead-credits")
-    assert has_element?(reference, "#opening-about")
-    assert has_element?(reference, "#opening-fixture", "not published")
+    for id <- ~w(card-bierce card-johnson card-wordnet card-wiktionary) do
+      old_text = old |> element("##{id}") |> render() |> text()
+      record_text = records |> element("##{id}") |> render() |> text()
+      assert old_text == record_text
+    end
+
+    refute has_element?(records, "#reference-record details[name='sources']")
+    assert has_element?(records, "#record-search")
+    assert has_element?(records, "#record-type[type='hidden'][name='type']")
+    assert has_element?(records, "#record-source option[value='bierce']")
+    assert has_element?(records, "#record-query")
+    assert has_element?(records, "#record-clear")
+    assert has_element?(records, "#entry-records[aria-current='page']")
   end
 
-  test "the reference drawer opens and closes without losing the presentation or data", ctx do
-    {:ok, view, _} = live(ctx.conn, "/on/love?layout=reference")
-    assert has_element?(view, "#card-bierce-info")
+  test "All materials provides a compact search surface and complete record disclosure", ctx do
+    {:ok, view, _} = live(ctx.conn, "/on/love/materials")
+    render(view)
+    assert has_element?(view, "#source-record-view h1", "All materials")
+    assert has_element?(view, "[data-record-categories][aria-label='Material categories']")
+    assert has_element?(view, "[data-record-layout='list'][aria-pressed='true']")
+    assert has_element?(view, "[data-record-layout='grid']")
+    assert has_element?(view, "[data-record-results]")
+    assert has_element?(view, "#source-record-view > header a[href='/on/love']")
+    assert has_element?(view, "#record-inventory details#card-bierce")
+    assert has_element?(view, "#record-provider-coverage", "Source / API coverage")
+  end
+
+  test "private real-data preview mode admits no jobs on reading or requesting more", ctx do
+    Application.put_env(:devils_dictionary, :source_records_preview_read_only, true)
+
+    on_exit(fn ->
+      Application.delete_env(:devils_dictionary, :source_records_preview_read_only)
+    end)
+
+    before = DevilsDictionary.Repo.aggregate(Oban.Job, :count)
+    {:ok, view, _} = live(ctx.conn, "/on/love/materials")
+    render(view)
+    render_hook(view, "discovery_more", %{"providers" => "cinegraph"})
+    assert DevilsDictionary.Repo.aggregate(Oban.Job, :count) == before
+    assert has_element?(view, "#card-bierce")
+    refute has_element?(view, "#culture-loading")
+    assert has_element?(view, "#record-provider-coverage", "not loaded for this entry")
+  end
+
+  test "switching and provenance preserve exact page identity, trail and filters", ctx do
+    {:ok, view, _} = live(ctx.conn, "/words/#{ctx.love.object_id}/love?trail=war&opening=fixture")
+    view |> element("#entry-records") |> render_click()
+    assert has_element?(view, "#source-record-view")
+    assert has_element?(view, "#entry-curated[href*='trail=war']")
+    assert has_element?(view, "#entry-curated[href^='/words/#{ctx.love.object_id}/love']")
+
+    render_patch(
+      view,
+      "/words/#{ctx.love.object_id}/love/materials?trail=war&q=Milton&type=quote&source=wiktionary"
+    )
+
+    assert has_element?(view, "#record-query[value='Milton']")
+
+    assert has_element?(
+             view,
+             "#entry-records[href*='q=Milton'][href*='type=quote'][href*='source=wiktionary']"
+           )
+
+    view |> element("#entry-records") |> render_click()
+    assert has_element?(view, "#record-query[value='Milton']")
+    assert has_element?(view, "#record-search input[name='trail'][value='war']")
+    assert has_element?(view, "#card-bierce-info[href*='/materials'][href*='q=Milton']")
     view |> element("#card-bierce-info") |> render_click()
     assert has_element?(view, "#provenance")
-    assert has_element?(view, "#reference-article #card-wordnet")
-    assert has_element?(view, "#provenance-close")
+    assert has_element?(view, "#provenance-close[href*='/materials'][href*='q=Milton']")
     view |> element("#provenance-close") |> render_click()
     refute has_element?(view, "#provenance")
+    assert has_element?(view, "#source-record-view")
+    view |> element("#entry-curated") |> render_click()
     assert has_element?(view, "#reference-article")
+    refute has_element?(view, "#record-inventory")
   end
 
-  test "reference article is the default without comparison controls and preserves trail", ctx do
-    {:ok, view, _} = live(ctx.conn, "/on/love?trail=war")
-    assert has_element?(view, "#reference-article")
-    refute has_element?(view, "#entry-layout-switch")
-    assert has_element?(view, "#definitions-any-love-false-reference")
-    assert has_element?(view, "#card-bierce-info[href*='trail=war']")
-    view |> element("#card-bierce-info") |> render_click()
-    assert has_element?(view, "#provenance")
-    view |> element("#provenance-close") |> render_click()
-    refute has_element?(view, "#provenance")
-    assert has_element?(view, "#reference-article")
-
-    render_patch(view, "/on/love?trail=war&layout=current")
-    refute has_element?(view, "#reference-article")
-    assert has_element?(view, "#definitions-any-love-false")
-    assert has_element?(view, "#card-bierce-info[href*='layout=current']")
-    view |> element("#card-bierce-info") |> render_click()
-    view |> element("#provenance-close") |> render_click()
-    refute has_element?(view, "#reference-article")
-
-    render_patch(view, "/on/love?trail=war")
-    assert has_element?(view, "#reference-article")
-    assert has_element?(view, "#definitions-any-love-false-reference")
+  test "bare, unavailable and malformed filter values leave source records readable", ctx do
+    DevilsDictionary.WordFixtures.word!(ctx, "sparse", [], scope: nil)
+    {:ok, sparse, _} = live(ctx.conn, "/on/sparse/materials")
+    assert has_element?(sparse, "#source-record-view")
+    assert has_element?(sparse, "#record-search")
+    refute has_element?(sparse, "#opening")
+    {:ok, malformed, _} = live(ctx.conn, "/on/love/materials?q[a]=bad&type[a]=bad")
+    assert has_element?(malformed, "#record-query[value='']")
+    assert has_element?(malformed, "#reference-record #card-bierce")
+    refute has_element?(malformed, "#opening-fixture")
   end
 
-  test "canonical slug correction preserves presentation and navigation parameters", ctx do
-    query = "layout=current&trail=war&opening=fixture"
+  test "a shared source filter is retained before that provider's asynchronous rows arrive",
+       ctx do
+    {:ok, view, _} = live(ctx.conn, "/on/love/materials?source=not-yet-loaded")
+    assert has_element?(view, "#record-source option[value='not-yet-loaded'][selected]")
+    assert has_element?(view, "#card-bierce")
+    assert has_element?(view, "#record-clear[href='/on/love/materials']")
+  end
+
+  test "canonical slug correction retains view and filter parameters", ctx do
+    query = "source=bierce&q=insanity&trail=war"
 
     assert {:error, {:live_redirect, %{to: target}}} =
-             live(ctx.conn, "/words/#{ctx.love.object_id}/old-name?" <> query)
+             live(ctx.conn, "/words/#{ctx.love.object_id}/old-name/materials?" <> query)
 
-    uri = URI.parse(target)
-    assert uri.path == "/words/#{ctx.love.object_id}/love"
-    assert URI.decode_query(uri.query) == URI.decode_query(query)
+    assert URI.parse(target).path == "/words/#{ctx.love.object_id}/love/materials"
+    assert URI.decode_query(URI.parse(target).query) == URI.decode_query(query)
   end
 
-  test "unknown presentation values cannot change the reader or hide source content", ctx do
-    {:ok, view, _} = live(ctx.conn, "/on/love?layout=unrecognised")
+  test "inert filters on the curated article do not change its source navigation", ctx do
+    {:ok, view, _} = live(ctx.conn, "/on/love?q=Milton&type=quote&source=wiktionary")
+    assert has_element?(view, "#entry-records[href='/on/love/materials']")
+    refute has_element?(view, "#record-query")
+  end
+
+  test "unknown view stays on the curated article", ctx do
+    {:ok, view, _} = live(ctx.conn, "/on/love?view=unrecognised")
     assert has_element?(view, "#reference-article")
-    assert has_element?(view, "#card-bierce")
-    refute has_element?(view, "#opening")
+    refute has_element?(view, "#record-inventory")
   end
+
+  test "materials has a clean entry route and legacy source links redirect with their filters",
+       ctx do
+    {:ok, view, _} = live(ctx.conn, "/on/love/materials")
+    assert has_element?(view, "#source-record-view")
+    assert has_element?(view, "#entry-records[href='/on/love/materials']")
+    assert has_element?(view, "#record-search[action='/on/love/materials']")
+    refute has_element?(view, "#record-search input[name='view']")
+    assert has_element?(view, "#record-clear[href='/on/love/materials']")
+
+    response = get(ctx.conn, "/on/love?view=records&q=insanity&type=definition")
+    target = redirected_to(response, 301) |> URI.parse()
+    assert target.path == "/on/love/materials"
+    assert URI.decode_query(target.query) == %{"q" => "insanity", "type" => "definition"}
+    assert get(ctx.conn, "/on/not-a-real-word/materials").status == 404
+    assert get(ctx.conn, "/words/999999999/no-word/materials").status == 404
+  end
+
+  defp text(html),
+    do:
+      html
+      |> LazyHTML.from_fragment()
+      |> LazyHTML.text()
+      |> String.replace(~r/\s+/, " ")
+      |> String.trim()
 end

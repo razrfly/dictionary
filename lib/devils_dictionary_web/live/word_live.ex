@@ -78,6 +78,7 @@ defmodule DevilsDictionaryWeb.WordLive do
     Examples,
     Opening,
     Provenance,
+    RecordExplorer,
     SourceBadge,
     Subjects,
     Thing,
@@ -97,6 +98,13 @@ defmodule DevilsDictionaryWeb.WordLive do
     {:ok,
      assign(socket,
        reference?: true,
+       records?: false,
+       record_discovery_ready: false,
+       record_claims: [],
+       record_subjects: nil,
+       record_claims_for: nil,
+       record_params: %{},
+       record_filters: %{},
        slug: nil,
        trail: [],
        page: nil,
@@ -149,7 +157,12 @@ defmodule DevilsDictionaryWeb.WordLive do
         if slug == lexeme.slug do
           handle_params(resolver, uri, assign(socket, object_id: lexeme.object_id, exact: :found))
         else
-          target = URI.parse(~p"/words/#{id}/#{lexeme.slug}")
+          suffix =
+            if String.ends_with?(URI.parse(uri).path, "/materials") or params["view"] == "records",
+              do: "/materials",
+              else: ""
+
+          target = URI.parse(~p"/words/#{id}/#{lexeme.slug}" <> suffix)
           target = URI.to_string(%{target | query: URI.parse(uri).query})
           {:noreply, push_navigate(socket, to: target)}
         end
@@ -157,7 +170,26 @@ defmodule DevilsDictionaryWeb.WordLive do
   end
 
   def handle_params(%{"slug" => slug} = params, uri, socket) do
+    path = URI.parse(uri).path
+
+    materials? =
+      case String.split(path, "/", trim: true) do
+        ["on", _, "materials"] -> true
+        ["words", _, _, "materials"] -> true
+        _ -> false
+      end
+
     socket = assign(socket, :reference?, params["layout"] != "current")
+
+    socket =
+      socket
+      |> assign(:records?, materials? or params["view"] == "records")
+      |> assign(
+        :record_params,
+        Map.take(params, ["trail", "opening", "demo"])
+        |> Map.reject(fn {_key, value} -> not is_binary(value) end)
+      )
+      |> assign(:record_filters, RecordExplorer.filters(params))
 
     socket =
       assign(
@@ -178,13 +210,19 @@ defmodule DevilsDictionaryWeb.WordLive do
         do: {slug, socket},
         else: {"", assign(socket, object_id: nil, exact: :invalid)}
 
-    base = URI.parse(uri).path
+    base = if materials?, do: String.replace_suffix(path, "/materials", ""), else: path
     trail = parse_trail(params["trail"])
     demo = Samples.on?(params)
+    socket = if demo, do: socket, else: update(socket, :record_params, &Map.delete(&1, "demo"))
     # What a reviewer published for these words, on every request (#255); the
     # development fixture only when config allows it and `?opening=fixture`
     # asks (#156). No parameter names a configuration or a composition.
     reader = CuratedOpening.reader(params)
+
+    socket =
+      if reader == PublishedReader,
+        do: update(socket, :record_params, &Map.delete(&1, "opening")),
+        else: socket
 
     # The path is part of the guard: `/on/c` and `/words/<C++>/c` share a slug
     # and are two pages.
@@ -198,9 +236,34 @@ defmodule DevilsDictionaryWeb.WordLive do
         load(assign(socket, :base, base), slug, trail, demo, reader)
       end
 
+    # Reuse the existing public native-claim reader once per loaded source view.
+    claim_scope =
+      {base, Enum.map(socket.assigns.page.headword.lexemes, & &1.id), socket.assigns.reading_mode}
+
+    socket =
+      if socket.assigns.records? and socket.assigns.record_claims_for != claim_scope do
+        assign(socket,
+          record_claims: DevilsDictionary.Curation.LinkedClaims.for_scope(elem(claim_scope, 1)),
+          record_subjects:
+            SubjectCards.record_cards(
+              discovered(socket.assigns.page.thing),
+              socket.assigns.page.headword.lexemes |> Enum.map(& &1.lemma) |> Enum.uniq(),
+              socket.assigns.reading_mode
+            ),
+          record_claims_for: claim_scope
+        )
+      else
+        socket
+      end
+
     case socket.assigns[:follow] do
       nil ->
-        head = head(socket.assigns, slug, URI.parse(uri).query)
+        head =
+          head(
+            socket.assigns,
+            slug,
+            if(socket.assigns.records?, do: "materials", else: URI.parse(uri).query)
+          )
 
         {:noreply,
          socket
@@ -299,7 +362,8 @@ defmodule DevilsDictionaryWeb.WordLive do
   # the public one, so its withheld set is not compared. The disclosure
   # says a check was queued by this visit.
   defp refresh_visit(socket, page, opening, slug, reader, demo) do
-    if socket.assigns.live_action == :on and reader == PublishedReader and not demo do
+    if socket.assigns.live_action == :on and reader == PublishedReader and not demo and
+         not records_preview_read_only?() do
       case Refresh.visit(page, opening, slug: slug, public?: not socket.assigns.contributor) do
         {:ok, outcome} when outcome in [:admitted, :recovered] -> queued(opening)
         _other -> opening
@@ -316,6 +380,10 @@ defmodule DevilsDictionaryWeb.WordLive do
   end
 
   defp queued(opening), do: opening
+
+  # Private preview only: never controlled by a URL or a reader session.
+  defp records_preview_read_only?,
+    do: Application.get_env(:devils_dictionary, :source_records_preview_read_only, false)
 
   # What On adds to the words (#219): the overview at this address, the
   # overviews elsewhere that name these words, and the Subjects section. One
@@ -416,16 +484,33 @@ defmodule DevilsDictionaryWeb.WordLive do
       Discovery.unsubscribe(old_target.object_id)
     end
 
+    # Subscribe before deferring the inventory: the deferred pass already has
+    # a target, so subscribing there would miss every subsequent result update.
+    if connected?(socket) and not is_nil(target) and not records_preview_read_only?() and
+         (is_nil(old_target) or old_target.object_id != target.object_id) do
+      :ok = Discovery.subscribe(target.object_id)
+    end
+
+    defer_records? = socket.assigns.records? and not socket.assigns.record_discovery_ready
+    if defer_records? and connected?(socket), do: send(self(), :load_record_discovery)
+
     cultures =
       cond do
         is_nil(target) or culture_providers == [] ->
           %{}
 
-        connected?(socket) ->
-          if is_nil(old_target) or old_target.object_id != target.object_id do
-            :ok = Discovery.subscribe(target.object_id)
-          end
+        socket.assigns.records? and (defer_records? or records_preview_read_only?()) ->
+          Map.new(culture_providers, fn provider ->
+            state = Discovery.state(target.object_id, provider.slug())
 
+            {provider.slug(),
+             Map.merge(state, %{term: target.term, relevance: target.relevance, next_cursor: nil})}
+          end)
+          |> Map.filter(fn {_slug, state} ->
+            not is_nil(state.mapping_id) or state.status != :idle
+          end)
+
+        connected?(socket) and not defer_records? ->
           culture_providers
           |> Enum.map(fn provider ->
             {provider.slug(), Discovery.request(target, provider.slug())}
@@ -742,6 +827,17 @@ defmodule DevilsDictionaryWeb.WordLive do
   defp state_for_outcome(state, _outcome), do: state
 
   @impl true
+  def handle_info(:load_record_discovery, socket) do
+    if socket.assigns.records? and socket.assigns.page do
+      {:noreply,
+       socket
+       |> assign(:record_discovery_ready, true)
+       |> prepare_discovery(socket.assigns.page, socket.assigns.demo)}
+    else
+      {:noreply, socket}
+    end
+  end
+
   def handle_info(
         {:discovery_updated, target_id, mapping_id, provider_slug, transient_items},
         %{assigns: %{discovery_target: %{object_id: target_id} = target}} = socket
@@ -795,7 +891,7 @@ defmodule DevilsDictionaryWeb.WordLive do
     culture = socket.assigns.cultures[provider_slug]
     target = socket.assigns.discovery_target
 
-    if target && culture && culture[:next_cursor] do
+    if target && culture && culture[:next_cursor] && not records_preview_read_only?() do
       result =
         Discovery.request_next(
           target.object_id,
@@ -987,6 +1083,26 @@ defmodule DevilsDictionaryWeb.WordLive do
           demo={@demo}
         />
 
+        <nav
+          :if={@page.headword.lexemes != []}
+          id="entry-views"
+          aria-label="Entry views"
+          class="mb-8 flex flex-wrap gap-6 border-b border-mist-950/10 pb-4 text-base/7 dark:border-white/10"
+        >
+          <.link
+            id="entry-curated"
+            patch={entry_view_path(assigns, false)}
+            aria-current={if !@records?, do: "page"}
+            class={["underline-offset-4 hover:underline", !@records? && "underline"]}
+          >Curated article</.link>
+          <.link
+            id="entry-records"
+            patch={entry_view_path(assigns, true)}
+            aria-current={if @records?, do: "page"}
+            class={["underline-offset-4 hover:underline", @records? && "underline"]}
+          >Source records</.link>
+        </nav>
+
         <%!-- The aggregate names itself (#219 B5): "On mars" over the words it
              reads; the headword stays the page's h1. --%>
         <p
@@ -1007,6 +1123,8 @@ defmodule DevilsDictionaryWeb.WordLive do
             </div>
           <% @page.headword.lexemes == [] -> %>
             <.miss slug={@slug} suggestions={@suggestions} demo={@demo} exact={@exact} />
+          <% @records? -> %>
+            <.record_view {assigns} />
           <% @reference? -> %>
             <.reference_article {assigns} />
           <% true -> %>
@@ -1053,7 +1171,16 @@ defmodule DevilsDictionaryWeb.WordLive do
                 choices={@choices}
                 thing={@page.thing}
                 thing_info={
-                  @page.thing && drawer_path(@base, @page.trail, "thing", @demo, @reference?)
+                  @page.thing &&
+                    drawer_path(
+                      @base,
+                      @page.trail,
+                      "thing",
+                      @demo,
+                      @reference?,
+                      @records?,
+                      @record_filters
+                    )
                 }
                 demo={@demo}
                 class="lg:float-left lg:clear-left lg:w-[22.5rem]"
@@ -1121,7 +1248,16 @@ defmodule DevilsDictionaryWeb.WordLive do
                 sources={@card_sources}
                 choices={@choices}
                 thing_info={
-                  @page.thing && drawer_path(@base, @page.trail, "thing", @demo, @reference?)
+                  @page.thing &&
+                    drawer_path(
+                      @base,
+                      @page.trail,
+                      "thing",
+                      @demo,
+                      @reference?,
+                      @records?,
+                      @record_filters
+                    )
                 }
                 class="lg:col-start-1 lg:row-start-1"
                 demo={@demo}
@@ -1172,14 +1308,33 @@ defmodule DevilsDictionaryWeb.WordLive do
     <Provenance.provenance
       :if={@provenance}
       provenance={@provenance}
-      close={drawer_path(@base, @page.trail, nil, @demo, @reference?)}
-      record_path={&drawer_path(@base, @page.trail, "#{@provenance.ref}:#{&1}", @demo, @reference?)}
+      close={drawer_path(@base, @page.trail, nil, @demo, @reference?, @records?, @record_filters)}
+      record_path={
+        &drawer_path(
+          @base,
+          @page.trail,
+          "#{@provenance.ref}:#{&1}",
+          @demo,
+          @reference?,
+          @records?,
+          @record_filters
+        )
+      }
     />
     """
   end
 
   # The same assigns, readers, providers and components: presentation only.
   defp reference_article(assigns) do
+    assigns =
+      assigns
+      |> assign(:record_path, entry_view_path(assigns, true))
+      |> assign(
+        :editorial_subjects?,
+        assigns.overview &&
+          Subjects.editorial_present?(assigns.subjects, assigns.overview.members)
+      )
+
     ~H"""
     <article id="reference-article" class="reference-article min-w-0">
       <header class="reference-head border-b border-mist-950/10 pb-8 dark:border-white/10">
@@ -1187,7 +1342,10 @@ defmodule DevilsDictionaryWeb.WordLive do
           headword={@page.headword}
           choices={@choices}
           thing={@page.thing}
-          thing_info={@page.thing && drawer_path(@base, @page.trail, "thing", @demo, true)}
+          thing_info={
+            @page.thing &&
+              drawer_path(@base, @page.trail, "thing", @demo, true, @records?, @record_filters)
+          }
           demo={@demo}
         />
       </header>
@@ -1195,40 +1353,64 @@ defmodule DevilsDictionaryWeb.WordLive do
         <nav class="reference-contents" aria-label="In this entry">
           <p class="font-medium">In this entry</p>
           <a :if={@opening} href="#opening">Selected reading</a>
-          <a href="#reference-record">Complete source record</a>
-          <a :if={@page.cards != []} href={"#" <> definitions_id(@object_id, @slug, @demo, true)}>All definitions</a>
-          <a :if={@page.examples} href="#examples">Examples</a>
-          <a :if={@cultures != %{} or @browsers != [] or @culture_notes != []} href="#in-culture">API discoveries</a>
-          <a :if={@subjects} href="#subjects">Subjects</a>
-          <a :if={@page.thing} href="#thing">The concept</a>
-          <a :if={@page.related} href="#related">Related words</a>
-          <a :if={@page_sources != []} href="#page-sources">Source index</a>
+          <a href={@record_path}>Complete source record</a>
+          <a
+            :if={@page.cards != []}
+            href={@record_path <> "#" <> definitions_id(@object_id, @slug, @demo, true)}
+          >All definitions</a>
+          <a :if={@page.examples} href={@record_path <> "#examples"}>Examples</a>
+          <a
+            :if={@cultures != %{} or @browsers != [] or @culture_notes != []}
+            href={@record_path <> "#in-culture"}
+          >API discoveries</a>
+          <a
+            :if={@subjects}
+            href={if @editorial_subjects?, do: "#subjects", else: @record_path <> "#subjects"}
+          >Subjects</a>
+          <a :if={@page.thing} href={@record_path <> "#thing"}>The concept</a>
+          <a :if={@page.related} href={@record_path <> "#related"}>Related words</a>
+          <a :if={@page_sources != []} href={@record_path <> "#page-sources"}>Source index</a>
         </nav>
         <div class="reference-content min-w-0">
           <details class="reference-mobile-contents border-b border-mist-950/10 pb-4 dark:border-white/10">
             <summary class="cursor-pointer py-2">In this entry</summary>
             <nav aria-label="Mobile entry contents" class="flex flex-col gap-3 py-4">
               <a :if={@opening} href="#opening">Selected reading</a>
-              <a href="#reference-record">Complete source record</a>
-              <a :if={@cultures != %{} or @browsers != []} href="#in-culture">API discoveries</a>
-              <a :if={@page.thing} href="#thing">The concept</a>
-              <a :if={@page_sources != []} href="#page-sources">Source index</a>
+              <a href={@record_path}>Complete source record</a>
+              <a :if={@cultures != %{} or @browsers != []} href={@record_path <> "#in-culture"}>API discoveries</a>
+              <a :if={@page.thing} href={@record_path <> "#thing"}>The concept</a>
+              <a :if={@page_sources != []} href={@record_path <> "#page-sources"}>Source index</a>
             </nav>
           </details>
+          <Subjects.overview :if={@overview} overview={@overview} />
+          <Subjects.overview
+            :if={@choice_overview}
+            overview={@choice_overview}
+            as={:choice}
+            subject_paths={@choice_paths}
+          />
+          <Subjects.linked_overviews overviews={@linked_overviews} />
+          <Subjects.section
+            :if={@overview && @subjects}
+            subjects={%{@subjects | discovered: [], discovered_total: 0}}
+            members={@overview.members}
+          />
           <Opening.reference_section
             :if={@opening}
             opening={@opening}
             mode={@reading_mode}
             reviewer?={@reviewer?}
+            record_path={@record_path}
           >
             <:facts>
               <Word.rail
                 sources_first
+                record_path={@record_path}
                 page={@page}
                 sources={@card_sources}
                 choices={@choices}
                 headword={false}
-                subjects={@subjects}
+                subjects={if @editorial_subjects?, do: nil, else: @subjects}
                 demo={@demo}
                 class="reference-word-facts"
               />
@@ -1237,72 +1419,242 @@ defmodule DevilsDictionaryWeb.WordLive do
           <Word.rail
             :if={is_nil(@opening)}
             sources_first
+            record_path={@record_path}
             page={@page}
             sources={@card_sources}
             choices={@choices}
             headword={false}
-            subjects={@subjects}
+            subjects={if @editorial_subjects?, do: nil, else: @subjects}
             demo={@demo}
             class="reference-bare-facts"
           />
-          <section
-            id="reference-record"
-            class="reference-record border-t border-mist-950/10 pt-10 dark:border-white/10"
+          <p
+            :if={
+              is_nil(@opening) and is_nil(@overview) and is_nil(@choice_overview) and
+                @linked_overviews == []
+            }
+            id="curated-empty"
+            class="text-base/7 text-mist-600 dark:text-mist-400"
           >
-            <header class="flex flex-col gap-3 pb-6">
-              <h2 class="font-display text-4xl tracking-tight text-pretty">
-                The complete source record
-              </h2>
-              <p class="max-w-[65ch] text-base/7 text-pretty text-mist-600 dark:text-mist-400">
-                Every original definition, example and discovery remains here. Search matches are distinct from the selections above.
-              </p>
-            </header>
-            <.column {assigns} mode={@reading_mode} reference?={true} />
-          </section>
-          <.way_out
-            {assigns}
-            class="reference-way-out border-t border-mist-950/10 pt-8 dark:border-white/10"
-          />
+            No curated choices are currently published for this entry. Its source records remain available.
+          </p>
+          <div
+            id="record-inventory-link"
+            class="border-t border-mist-950/10 pt-6 dark:border-white/10"
+          >
+            <p class="text-base/7 text-pretty text-mist-600 dark:text-mist-400">
+              The full definitions, examples and API discoveries are available in the source record.
+            </p>
+            <.link patch={@record_path} class="underline underline-offset-4">Explore all source records</.link>
+          </div>
         </div>
       </div>
     </article>
     """
   end
 
-  defp definitions_id(object_id, slug, demo, reference?) do
+  defp definitions_id(object_id, slug, demo, reference?, filters \\ %{}) do
     "definitions-#{object_id || "any"}-#{slug}-#{demo}" <>
-      if(reference?, do: "-reference", else: "")
+      if(reference?, do: "-reference", else: "") <>
+      if(map_size(filters) == 0,
+        do: "",
+        else: "-filter-" <> Base.url_encode64(URI.encode_query(filters), padding: false)
+      )
   end
 
-  defp drawer_path(base, trail, ref, demo, reference?) do
-    path = Word.info_path(base, trail, ref, demo)
+  defp drawer_path(base, trail, ref, demo, reference?, records?, filters) do
+    uri = URI.parse(Word.info_path(base, trail, ref, demo))
+    query = URI.decode_query(uri.query || "")
+    query = if reference?, do: query, else: Map.put(query, "layout", "current")
+    query = if records?, do: Map.merge(query, filters), else: query
+    uri = if records?, do: %{uri | path: base <> "/materials"}, else: uri
 
-    if !reference? do
-      uri = URI.parse(path)
-      query = URI.decode_query(uri.query || "") |> Map.put("layout", "current")
-      URI.to_string(%{uri | query: URI.encode_query(query)})
-    else
-      path
+    URI.to_string(%{
+      uri
+      | query: if(map_size(query) == 0, do: nil, else: URI.encode_query(query))
+    })
+  end
+
+  defp entry_view_path(assigns, records?) do
+    params =
+      if records? and assigns.records?,
+        do: Map.merge(assigns.record_params, assigns.record_filters),
+        else: assigns.record_params
+
+    path = assigns.base <> if(records?, do: "/materials", else: "")
+    path <> if(map_size(params) == 0, do: "", else: "?" <> URI.encode_query(params))
+  end
+
+  defp record_provider_status(provider, cultures) do
+    case cultures[provider.slug()] do
+      %{status: status, items: items} ->
+        "#{status} · #{length(items)} loaded"
+
+      _ ->
+        cond do
+          not provider.enabled?() -> "disabled or not configured"
+          Providers.browser?(provider) -> "browser results · inspect complete records for status"
+          true -> "not loaded for this entry"
+        end
     end
+  end
+
+  defp record_view(assigns) do
+    ~H"""
+    <article id="source-record-view" class="min-w-0">
+      <header class="flex flex-col gap-3 border-t border-mist-950/10 py-6 dark:border-white/10">
+        <h1 class="font-display text-4xl tracking-tight text-balance">
+          All materials · {@page.headword.lemma}
+        </h1>
+        <p class="max-w-[70ch] text-base/7 text-pretty text-mist-600 dark:text-mist-400">
+          Search the dictionaries, texts, images and API records available for this entry. Source matches are not curated endorsements.
+        </p>
+        <.link
+          href={entry_view_path(assigns, false) <> if(@opening, do: "#opening", else: "")}
+          class="underline underline-offset-4"
+        >
+          Return to the curated article
+        </.link>
+      </header>
+      <p :if={records_preview_read_only?()} class="mb-4 text-sm text-mist-600">
+        Read-only preview of real records. Saved API shelves cannot fetch more here; browser-only sources keep their normal controls.
+      </p>
+      <RecordExplorer.controls
+        id={"record-filters-" <> Base.url_encode64(@base <> "?" <> URI.encode_query(Map.merge(@record_params, @record_filters)), padding: false)}
+        path={@base <> "/materials"}
+        filters={@record_filters}
+        params={@record_params}
+        sources={@page_sources}
+      />
+      <details id="record-provider-coverage" class="border-t border-mist-950/10 py-5">
+        <summary class="cursor-pointer text-sm font-medium">
+          Source / API coverage for this entry
+        </summary>
+        <p class="my-3 text-sm text-mist-600">
+          Counts above cover loaded, permitted materials. Unavailable or not-yet-loaded sources are not evidence of an empty catalogue. Browser-only results remain on your device.
+        </p>
+        <ul role="list" class="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2 lg:grid-cols-3">
+          <li :for={provider <- Providers.all()}>
+            <span class="font-medium">{provider.source_attrs().name}</span>
+            <span class="text-mist-600"> · {record_provider_status(provider, @cultures)}</span>
+          </li>
+        </ul>
+      </details>
+      <details
+        id="record-inventory"
+        class="min-w-0 border-t border-mist-950/10 py-6"
+        data-record-inventory
+      >
+        <summary class="cursor-pointer text-base font-medium">
+          Inspect complete source records and provider status
+        </summary>
+        <Word.headword
+          heading="h2"
+          headword={@page.headword}
+          choices={@choices}
+          thing={@page.thing}
+          thing_info={
+            @page.thing &&
+              drawer_path(@base, @page.trail, "thing", @demo, true, true, @record_filters)
+          }
+          demo={@demo}
+        />
+        <Word.rail
+          page={@page}
+          sources={@card_sources}
+          choices={@choices}
+          headword={false}
+          subjects={@record_subjects}
+          demo={@demo}
+          class="mb-8"
+        />
+        <section id="reference-record">
+          <.column
+            {assigns}
+            subjects={@record_subjects}
+            overview={nil}
+            mode={@reading_mode}
+            reference?={true}
+            editorial?={false}
+          />
+        </section>
+        <section
+          :if={@record_claims != []}
+          id="record-linked-claims"
+          class="border-t border-mist-950/10 py-8 dark:border-white/10"
+        >
+          <h2 class="font-display text-3xl tracking-tight text-balance">Public linked claims</h2>
+          <p class="py-3 text-base/7 text-pretty text-mist-600 dark:text-mist-400">
+            What the existing sources assert about these meanings. These are source claims, not curated endorsements.
+          </p>
+          <ul role="list" class="flex flex-col gap-5">
+            <li
+              :for={choice <- @record_claims}
+              id={"record-" <> choice.key}
+              data-record-kind="example"
+              data-record-sources={RecordExplorer.sources([choice.claim.assertion.source])}
+            >
+              <p class="text-base/7 text-pretty">{choice.label}</p>
+              <p class="text-base/7 text-mist-600 sm:text-sm/6 dark:text-mist-400">
+                {(choice.claim.assertion.source && choice.claim.assertion.source.name) ||
+                  "Local assertion"} · assertion revision {choice.claim.id}
+              </p>
+              <.link
+                navigate={~p"/connections/#{choice.claim.assertion_id}"}
+                class="underline underline-offset-4"
+              >Source, evidence and revision history</.link>
+            </li>
+          </ul>
+        </section>
+
+        <.way_out
+          {assigns}
+          class="border-t border-mist-950/10 pt-8 dark:border-white/10"
+        />
+      </details>
+    </article>
+    """
   end
 
   # Everything a source decides the size of, in the column beside the rail:
   # one function so both layouts in `render/1` render the same elements.
   defp column(assigns) do
-    assigns = assign_new(assigns, :reference?, fn -> false end)
+    assigns =
+      assigns
+      |> assign_new(:reference?, fn -> false end)
+      |> assign_new(:records?, fn -> false end)
+      |> assign_new(:editorial?, fn -> true end)
+      |> assign_new(:record_filters, fn -> %{} end)
 
     ~H"""
     <%!-- The authored overview this address holds, when it names these
          words, heads them (#219 B1); one that names other words is shown
          apart, as something else that shares the spelling. --%>
-    <Subjects.overview :if={@overview} overview={@overview} />
-    <Subjects.overview
-      :if={@choice_overview}
-      overview={@choice_overview}
-      as={:choice}
-      subject_paths={@choice_paths}
-    />
-    <Subjects.linked_overviews overviews={@linked_overviews} />
+    <div
+      :if={@editorial? and @overview}
+      data-record-kind="overview"
+      data-record-sources={RecordExplorer.sources([])}
+    >
+      <Subjects.overview overview={@overview} />
+    </div>
+    <div
+      :if={@editorial? and @choice_overview}
+      data-record-kind="overview"
+      data-record-sources={RecordExplorer.sources([])}
+    >
+      <Subjects.overview
+        overview={@choice_overview}
+        as={:choice}
+        subject_paths={@choice_paths}
+      />
+    </div>
+    <div
+      :if={@editorial? and @linked_overviews != []}
+      data-record-kind="overview"
+      data-record-sources={RecordExplorer.sources([])}
+    >
+      <Subjects.linked_overviews overviews={@linked_overviews} />
+    </div>
 
     <%!-- `phx-update="ignore"` because `open` is DOM state the reader
          owns: without it, a discovery result arriving would re-render
@@ -1320,20 +1672,41 @@ defmodule DevilsDictionaryWeb.WordLive do
          ignored current-layout subtree must not survive a layout switch. --%>
     <.slab
       :if={@page.cards != []}
-      id={definitions_id(@object_id, @slug, @demo, @reference?)}
+      id={
+        definitions_id(
+          @object_id,
+          @slug,
+          @demo,
+          @reference?,
+          if(@records?, do: @record_filters, else: %{})
+        )
+      }
       phx-update="ignore"
       title="Definitions"
       class="mt-2"
     >
-      <:meta>{count_label(@card_sources, @page.cards)} · one open at a time</:meta>
+      <:meta>
+        {count_label(@card_sources, @page.cards)}{if !@records?, do: " · one open at a time"}
+      </:meta>
       <div class="divide-y divide-mist-950/10 dark:divide-white/10">
         <Word.source_row
           :for={{card, i} <- Enum.with_index(@page.cards)}
           card={card}
+          exclusive?={!@records?}
           open={i == default_open(@page.cards)}
           continues={continues?(@page.cards, i)}
           trail={trail_here(@page)}
-          info={drawer_path(@base, @page.trail, "card:" <> card.id, @demo, @reference?)}
+          info={
+            drawer_path(
+              @base,
+              @page.trail,
+              "card:" <> card.id,
+              @demo,
+              @reference?,
+              @records?,
+              @record_filters
+            )
+          }
           demo={@demo}
           mode={@mode}
         />
@@ -1374,6 +1747,7 @@ defmodule DevilsDictionaryWeb.WordLive do
     <Culture.section
       :if={@cultures != %{} or @browsers != [] or @culture_notes != []}
       states={@cultures}
+      all_records={@records?}
       notes={@culture_notes}
       browsers={@browsers}
       return_path={@base || word_path(@page)}
@@ -1394,7 +1768,7 @@ defmodule DevilsDictionaryWeb.WordLive do
       :if={@page.thing}
       thing={@page.thing}
       trail={trail_here(@page)}
-      info={drawer_path(@base, @page.trail, "thing", @demo, @reference?)}
+      info={drawer_path(@base, @page.trail, "thing", @demo, @reference?, @records?, @record_filters)}
       demo={@demo}
       mode={@mode}
     />
@@ -1407,12 +1781,13 @@ defmodule DevilsDictionaryWeb.WordLive do
   defp way_out(assigns) do
     ~H"""
     <div class={@class}>
-      <Word.related_block
+      <div
         :if={@page.related}
-        related={@page.related}
-        trail={trail_here(@page)}
-        demo={@demo}
-      />
+        data-record-kind="related"
+        data-record-sources={RecordExplorer.sources([])}
+      >
+        <Word.related_block related={@page.related} trail={trail_here(@page)} demo={@demo} />
+      </div>
       <%!-- The one place that lists every source on the page (#152
            rule 3), under the related words because both are the way
            out of the word. It is composed from assigns the page

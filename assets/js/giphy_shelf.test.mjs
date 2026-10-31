@@ -170,3 +170,15 @@ test('a shelf with no presentation on it falls back to the GIF row', () => {
   assert.match(li.className, /^w-24 sm:w-28 /)
   assert.match(link.className, /^line-clamp-1 /)
 })
+
+
+test('GIF targets keep provider identity across visits and repeated pages cannot collide', () => {
+  const first = frame(false, {id: 'love-shelf'})
+  const again = frame(false, {id: 'love-shelf'})
+  const other = frame(false, {id: 'war-shelf'})
+  assert.equal(first.li.id, again.li.id)
+  assert.notEqual(first.li.id, other.li.id)
+  assert.equal(first.li.id, 'love-shelf-gif-g')
+  Hook.addItem.call(first.ctx, {id: 'g'})
+  assert.equal(first.ctx.list.items.length, 1)
+})

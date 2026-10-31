@@ -25,6 +25,32 @@ defmodule DevilsDictionary.Routing.SubjectsTest do
 
   defp by_id(cards), do: Map.new(cards, &{&1.object_id, &1})
 
+  test "record subjects preserve all source identities beyond the independent name cap" do
+    source = for _ <- 1..30, do: subject!("Mercury", "nature", page: false, status: :none)
+    for _ <- 1..30, do: subject!("Mercury", "nature", page: false, status: :none)
+    ids = Enum.map(source, & &1.entity.object_id)
+
+    records = Subjects.record_cards(ids ++ [hd(ids)], ["Mercury"], :public)
+    shown = Enum.map(records.discovered, & &1.object_id)
+
+    assert records.curated == []
+    assert Enum.all?(ids, &(&1 in shown))
+    assert length(shown) == 54
+    assert length(Enum.uniq(shown)) == 54
+    assert records.discovered_total == 60
+  end
+
+  test "source subjects keep a withdrawn page's identity without exposing its address", ctx do
+    source =
+      subject!("Mars", "nature", path: "/nature/source-mars", published: true, actor: ctx.human)
+
+    withdrawn!(source.page)
+    assert %{discovered: [card]} = Subjects.record_cards([source.entity.object_id], [], :public)
+    assert card.object_id == source.entity.object_id
+    assert card.state == :no_address
+    assert card.path == "/entities/#{source.entity.object_id}/mars"
+  end
+
   test "every card state, in both modes", ctx do
     published =
       subject!("Mercury", "nature", path: "/nature/mercury", published: true, actor: ctx.human)

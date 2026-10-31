@@ -10,6 +10,7 @@ defmodule DevilsDictionaryWeb.WordDemoTest do
   use DevilsDictionaryWeb.ConnCase, async: true
 
   import DevilsDictionary.WordFixtures
+  import DevilsDictionary.SourceViewHelpers
   import Phoenix.LiveViewTest
 
   alias DevilsDictionary.Fixtures
@@ -32,7 +33,7 @@ defmodule DevilsDictionaryWeb.WordDemoTest do
     test "the banner and one sample card per missing layer", ctx do
       oyster!(ctx)
 
-      {:ok, _live, html} = live(ctx.conn, ~p"/on/oyster?demo=1")
+      {:ok, _live, html} = source_live(ctx.conn, ~p"/on/oyster?demo=1")
 
       assert html =~ ~s(id="demo-banner")
       assert html =~ ~s(id="card-sample-webster1913")
@@ -44,7 +45,7 @@ defmodule DevilsDictionaryWeb.WordDemoTest do
     test "no sample can be mistaken for a source: every one is badged and says so", ctx do
       oyster!(ctx)
 
-      {:ok, live, html} = live(ctx.conn, ~p"/on/oyster?demo=1")
+      {:ok, live, html} = source_live(ctx.conn, ~p"/on/oyster?demo=1")
 
       assert html =~ "SAMPLE DATA is on"
       assert html =~ "invented for layout"
@@ -59,7 +60,7 @@ defmodule DevilsDictionaryWeb.WordDemoTest do
     test "the 📱 sample is gone, and the real card does not take its place", ctx do
       oyster!(ctx)
 
-      {:ok, _live, html} = live(ctx.conn, ~p"/on/oyster?demo=1")
+      {:ok, _live, html} = source_live(ctx.conn, ~p"/on/oyster?demo=1")
 
       # #136 retired the fake. The real Urban Dictionary card does not appear
       # here either, and not because it is suppressed: `?demo=1` has no
@@ -74,7 +75,7 @@ defmodule DevilsDictionaryWeb.WordDemoTest do
     test "the real cards are all still there, in their own order", ctx do
       oyster!(ctx)
 
-      {:ok, _live, html} = live(ctx.conn, ~p"/on/oyster?demo=1")
+      {:ok, _live, html} = source_live(ctx.conn, ~p"/on/oyster?demo=1")
 
       assert html =~ ~s(id="card-bierce")
       assert html =~ ~s(id="card-johnson")
@@ -84,8 +85,8 @@ defmodule DevilsDictionaryWeb.WordDemoTest do
     test "the source line counts real sources only", ctx do
       oyster!(ctx)
 
-      {:ok, plain, _} = live(ctx.conn, ~p"/on/oyster")
-      {:ok, demo, _} = live(ctx.conn, ~p"/on/oyster?demo=1")
+      {:ok, plain, _} = source_live(ctx.conn, ~p"/on/oyster")
+      {:ok, demo, _} = source_live(ctx.conn, ~p"/on/oyster?demo=1")
 
       # The banner says the samples are invented; the source line must not then
       # go and count them. The same count on both pages.
@@ -95,7 +96,7 @@ defmodule DevilsDictionaryWeb.WordDemoTest do
     test "a sample's ⓘ opens an invented drawer rather than the word's real links", ctx do
       oyster!(ctx)
 
-      {:ok, live, _html} = live(ctx.conn, ~p"/on/oyster?demo=1")
+      {:ok, live, _html} = source_live(ctx.conn, ~p"/on/oyster?demo=1")
 
       html = live |> element("#card-sample-eb1911-info") |> render_click()
 
@@ -109,7 +110,7 @@ defmodule DevilsDictionaryWeb.WordDemoTest do
     test "a real card's ⓘ is unaffected by the mode", ctx do
       oyster!(ctx)
 
-      {:ok, live, _html} = live(ctx.conn, ~p"/on/oyster?demo=1")
+      {:ok, live, _html} = source_live(ctx.conn, ~p"/on/oyster?demo=1")
 
       html = live |> element("#card-johnson-info") |> render_click()
 
@@ -122,21 +123,21 @@ defmodule DevilsDictionaryWeb.WordDemoTest do
     test "a chip carries ?demo=1 to the next word", ctx do
       %{bed: bed} = oyster!(ctx)
 
-      {:ok, live, _html} = live(ctx.conn, ~p"/on/oyster?demo=1")
+      {:ok, live, _html} = source_live(ctx.conn, ~p"/on/oyster?demo=1")
 
       {:error, {:live_redirect, %{to: to}}} =
         live |> element(~s(#related-family-#{bed.slug})) |> render_click()
 
       assert to == "/on/oyster-bed?demo=1&trail=oyster"
 
-      {:ok, _live, html} = live(ctx.conn, to)
+      {:ok, _live, html} = source_live(ctx.conn, to)
       assert html =~ ~s(id="demo-banner")
     end
 
     test "closing the drawer does not close the mode", ctx do
       oyster!(ctx)
 
-      {:ok, live, _html} = live(ctx.conn, ~p"/on/oyster?demo=1")
+      {:ok, live, _html} = source_live(ctx.conn, ~p"/on/oyster?demo=1")
       live |> element("#card-johnson-info") |> render_click()
 
       assert live |> element("#provenance-close") |> render() =~ "demo=1"
@@ -146,7 +147,7 @@ defmodule DevilsDictionaryWeb.WordDemoTest do
       oyster!(ctx)
       word!(ctx, "mollusk", ~w(wordnet))
 
-      {:ok, live, _html} = live(ctx.conn, ~p"/on/mollusk?demo=1&trail=oyster")
+      {:ok, live, _html} = source_live(ctx.conn, ~p"/on/mollusk?demo=1&trail=oyster")
 
       assert live |> element("#trail-oyster") |> render() =~ "demo=1"
     end

@@ -373,6 +373,8 @@ defmodule DevilsDictionaryWeb.HeadTest do
     refute has_element?(on, "#page-head[data-robots]")
     assert %{head: %{indexable?: true, canonical: @origin <> "/on/voltaire"}} = assigns(on)
 
+    on |> element("#entry-records") |> render_click()
+
     {:ok, subject, _html} =
       on
       |> element("#subject-discovered-#{world.entity.object_id}-link")

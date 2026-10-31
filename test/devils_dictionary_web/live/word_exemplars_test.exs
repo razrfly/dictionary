@@ -10,6 +10,7 @@ defmodule DevilsDictionaryWeb.WordExemplarsTest do
 
   import DevilsDictionary.AccountsFixtures
   import DevilsDictionary.WordFixtures
+  import DevilsDictionary.SourceViewHelpers
   import Phoenix.LiveViewTest
 
   alias DevilsDictionary.Accounts.Scope
@@ -94,7 +95,7 @@ defmodule DevilsDictionaryWeb.WordExemplarsTest do
   defp card(ctx), do: "#examples-ex-#{ctx.claim_id}"
 
   test "the public never sees a person nominated here before it is accepted", ctx do
-    {:ok, live, _html} = live(ctx.conn, ~p"/on/coward")
+    {:ok, live, _html} = source_live(ctx.conn, ~p"/on/coward")
 
     refute has_element?(live, card(ctx))
     refute has_element?(live, "#examples")
@@ -102,7 +103,7 @@ defmodule DevilsDictionaryWeb.WordExemplarsTest do
 
   test "a contributor sees the nomination, marked and linked to its review", ctx do
     conn = log_in_user(ctx.conn, ctx.contributor)
-    {:ok, live, _html} = live(conn, ~p"/on/coward")
+    {:ok, live, _html} = source_live(conn, ~p"/on/coward")
 
     assert has_element?(live, "#examples-exemplars #{card(ctx)}")
     assert has_element?(live, "#examples-state-#{ctx.claim_id}", "needs review")
@@ -118,7 +119,7 @@ defmodule DevilsDictionaryWeb.WordExemplarsTest do
   test "a reviewer's accept makes the card public; a reject removes it", ctx do
     accept!(ctx)
 
-    {:ok, live, _html} = live(ctx.conn, ~p"/on/coward")
+    {:ok, live, _html} = source_live(ctx.conn, ~p"/on/coward")
 
     assert has_element?(live, card(ctx), "Jeff Bezos")
     assert has_element?(live, card(ctx), "cited as an example of")
@@ -134,7 +135,7 @@ defmodule DevilsDictionaryWeb.WordExemplarsTest do
     assert has_element?(live, "#{card(ctx)} a[href='/entities/#{ctx.bezos}/#{slug}']")
 
     accept!(ctx, "rejected")
-    {:ok, live, _html} = live(ctx.conn, ~p"/on/coward")
+    {:ok, live, _html} = source_live(ctx.conn, ~p"/on/coward")
     refute has_element?(live, card(ctx))
   end
 
@@ -148,11 +149,11 @@ defmodule DevilsDictionaryWeb.WordExemplarsTest do
       to_sense: ctx.coward_sense
     )
 
-    {:ok, live, _html} = live(ctx.conn, ~p"/on/coward")
+    {:ok, live, _html} = source_live(ctx.conn, ~p"/on/coward")
     before = live |> element("#examples-instances") |> render()
 
     accept!(ctx)
-    {:ok, live, _html} = live(ctx.conn, ~p"/on/coward")
+    {:ok, live, _html} = source_live(ctx.conn, ~p"/on/coward")
 
     assert has_element?(live, "#examples-exemplars #{card(ctx)}")
     assert live |> element("#examples-instances") |> render() == before
@@ -163,11 +164,11 @@ defmodule DevilsDictionaryWeb.WordExemplarsTest do
 
   test "a contributor can open the pending nomination the Review link names", ctx do
     conn = log_in_user(ctx.conn, ctx.contributor)
-    {:ok, live, _html} = live(conn, ~p"/connections/#{ctx.claim_id}")
+    {:ok, live, _html} = source_live(conn, ~p"/connections/#{ctx.claim_id}")
 
     refute has_element?(live, "#no-such-connection")
 
-    {:ok, public, _html} = live(build_conn(), ~p"/connections/#{ctx.claim_id}")
+    {:ok, public, _html} = source_live(build_conn(), ~p"/connections/#{ctx.claim_id}")
     assert has_element?(public, "#no-such-connection")
   end
 
@@ -185,7 +186,7 @@ defmodule DevilsDictionaryWeb.WordExemplarsTest do
         []
       )
 
-    {:ok, live, _html} = live(ctx.conn, ~p"/on/coward")
+    {:ok, live, _html} = source_live(ctx.conn, ~p"/on/coward")
 
     assert has_element?(live, "#examples-ex-#{claim.id}", "Not yet reviewed.")
     refute has_element?(live, "#examples-ex-#{claim.id}", "Not public until")
@@ -206,7 +207,7 @@ defmodule DevilsDictionaryWeb.WordExemplarsTest do
         []
       )
 
-    {:ok, live, _html} = live(ctx.conn, ~p"/on/coward")
+    {:ok, live, _html} = source_live(ctx.conn, ~p"/on/coward")
 
     assert has_element?(
              live,
@@ -218,11 +219,11 @@ defmodule DevilsDictionaryWeb.WordExemplarsTest do
   test "the person page groups accepted claims by word", ctx do
     slug = Connection.slugify("Jeff Bezos")
 
-    {:ok, live, _html} = live(ctx.conn, ~p"/entities/#{ctx.bezos}/#{slug}")
+    {:ok, live, _html} = source_live(ctx.conn, ~p"/entities/#{ctx.bezos}/#{slug}")
     refute has_element?(live, "#entity-cited-as")
 
     accept!(ctx)
-    {:ok, live, _html} = live(ctx.conn, ~p"/entities/#{ctx.bezos}/#{slug}")
+    {:ok, live, _html} = source_live(ctx.conn, ~p"/entities/#{ctx.bezos}/#{slug}")
 
     assert has_element?(live, "#entity-cited-as #cited-as-#{ctx.coward.object_id}", "coward")
     assert has_element?(live, "#cited-as-claim-#{ctx.claim_id}", "▲ 0 ▽ 0")

@@ -179,6 +179,7 @@ defmodule DevilsDictionaryWeb.Opening do
   attr :opening, Composition, required: true
   attr :mode, :atom, default: :public
   attr :reviewer?, :boolean, default: false
+  attr :record_path, :string, default: ""
   slot :facts
 
   def reference_section(assigns) do
@@ -213,7 +214,7 @@ defmodule DevilsDictionaryWeb.Opening do
       </header>
       <div class="reference-reading-grid">
         <div class="reference-selected-reading min-w-0">
-          <.lead :if={@opening.lead} lead={@opening.lead} compact />
+          <.lead :if={@opening.lead} lead={@opening.lead} compact record_path={@record_path} />
           <.withheld :if={@withheld_lead} id="opening-withheld-lead" item={@withheld_lead} tag="div" />
           <div id="curated-sections" class="flex min-w-0 flex-col gap-10">
             <section
@@ -231,6 +232,7 @@ defmodule DevilsDictionaryWeb.Opening do
                   shares_row={false}
                   mode={@mode}
                   compact
+                  record_path={@record_path}
                 />
               </ul>
             </section>
@@ -289,6 +291,7 @@ defmodule DevilsDictionaryWeb.Opening do
 
   # ── the lead ─────────────────────────────────────────────────────────────
 
+  attr :record_path, :string, default: ""
   attr :lead, :map, required: true
   attr :compact, :boolean, default: false
 
@@ -318,8 +321,8 @@ defmodule DevilsDictionaryWeb.Opening do
           <.link
             :if={@lead.links[:card_id]}
             id="opening-lead-entry"
-            href={"#" <> @lead.links.card_id}
-            phx-click={open_card(@lead.links.card_id)}
+            href={@record_path <> "#" <> @lead.links.card_id}
+            phx-click={if @record_path == "", do: open_card(@lead.links.card_id)}
             class="flex min-h-11 items-center gap-x-1.5 rounded-sm text-mist-600 underline underline-offset-4 hover:text-mist-950 sm:min-h-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:text-mist-400 dark:hover:text-white dark:focus-visible:outline-white"
           >
             <%= if @lead.excerpt.clipped? do %>
@@ -338,6 +341,7 @@ defmodule DevilsDictionaryWeb.Opening do
       <.choice_receipt id="opening-lead" choice={@lead} compact={@compact} />
       <.why id="opening-lead-why" summary="Why this leads" reasons={@lead.reasons}>
         <.particulars
+          record_path={@record_path}
           id="opening-lead"
           meaning={@lead.meaning}
           register={@lead.register}
@@ -351,6 +355,7 @@ defmodule DevilsDictionaryWeb.Opening do
 
   # ── highlights ───────────────────────────────────────────────────────────
 
+  attr :record_path, :string, default: ""
   attr :highlight, :map, required: true
   attr :mode, :atom, default: :public
   attr :compact, :boolean, default: false
@@ -415,6 +420,7 @@ defmodule DevilsDictionaryWeb.Opening do
       <.choice_receipt id={@id} choice={@highlight} compact={@compact} />
       <.why id={"#{@id}-why"} summary="Why this is here" reasons={@highlight.reasons}>
         <.particulars
+          record_path={@record_path}
           id={@id}
           meaning={@highlight.meaning}
           register={@highlight.register}
@@ -463,6 +469,7 @@ defmodule DevilsDictionaryWeb.Opening do
       <.choice_receipt id={@id} choice={@highlight} compact={@compact} />
       <.why id={"#{@id}-why"} summary="Why this is here" reasons={@highlight.reasons}>
         <.particulars
+          record_path={@record_path}
           id={@id}
           meaning={@highlight.meaning}
           register={@highlight.register}
@@ -515,6 +522,7 @@ defmodule DevilsDictionaryWeb.Opening do
       <.choice_receipt id={@id} choice={@highlight} compact={@compact} />
       <.why id={"#{@id}-why"} summary="Why this is here" reasons={@highlight.reasons}>
         <.particulars
+          record_path={@record_path}
           id={@id}
           meaning={@highlight.meaning}
           register={@highlight.register}
@@ -574,6 +582,7 @@ defmodule DevilsDictionaryWeb.Opening do
       <.choice_receipt id={@id} choice={@highlight} compact={@compact} />
       <.why id={"#{@id}-why"} summary="Why this is here" reasons={@highlight.reasons}>
         <.particulars
+          record_path={@record_path}
           id={@id}
           meaning={@highlight.meaning}
           register={@highlight.register}
@@ -620,8 +629,8 @@ defmodule DevilsDictionaryWeb.Opening do
           <.link
             :if={@highlight.links[:card_id]}
             id={"#{@id}-entry"}
-            href={"#" <> @highlight.links.card_id}
-            phx-click={open_card(@highlight.links.card_id)}
+            href={@record_path <> "#" <> @highlight.links.card_id}
+            phx-click={if @record_path == "", do: open_card(@highlight.links.card_id)}
             class="flex min-h-11 items-center gap-x-1.5 rounded-sm underline underline-offset-4 hover:text-mist-950 sm:min-h-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:hover:text-white dark:focus-visible:outline-white"
           >
             <%= if @highlight.excerpt.clipped? do %>
@@ -640,6 +649,7 @@ defmodule DevilsDictionaryWeb.Opening do
       <.choice_receipt id={@id} choice={@highlight} compact={@compact} />
       <.why id={"#{@id}-why"} summary="Why this is here" reasons={@highlight.reasons}>
         <.particulars
+          record_path={@record_path}
           id={@id}
           meaning={@highlight.meaning}
           register={@highlight.register}
@@ -678,7 +688,7 @@ defmodule DevilsDictionaryWeb.Opening do
           id={"#{@id}-cited"}
           class="text-base/6 text-pretty text-mist-600 sm:text-sm/6 dark:text-mist-400"
         >
-          cited as an example of <.meaning meaning={@highlight.meaning} />
+          cited as an example of <.meaning record_path={@record_path} meaning={@highlight.meaning} />
         </p>
         <p
           :if={named = exemplar_attribution(@highlight.provenance)}
@@ -715,6 +725,7 @@ defmodule DevilsDictionaryWeb.Opening do
       <.why id={"#{@id}-why"} summary="Why this is here" reasons={@highlight.reasons}>
         <div class="flex flex-col gap-3">
           <.particulars
+            record_path={@record_path}
             id={@id}
             meaning={@highlight.meaning}
             register={@highlight.register}
@@ -911,6 +922,8 @@ defmodule DevilsDictionaryWeb.Opening do
   attr :reasons, :list, default: []
   attr :credits, :list, default: []
 
+  attr :record_path, :string, default: ""
+
   defp particulars(assigns) do
     assigns =
       assigns
@@ -924,7 +937,7 @@ defmodule DevilsDictionaryWeb.Opening do
         <div id={"#{@id}-meaning"}>
           <dt class="inline font-medium text-mist-950 dark:text-white">Meaning</dt>
           <dd class="inline text-mist-700 dark:text-mist-300">
-            <.meaning meaning={@meaning} />
+            <.meaning record_path={@record_path} meaning={@meaning} />
           </dd>
         </div>
         <div :if={@register} id={"#{@id}-register-note"}>
@@ -965,9 +978,11 @@ defmodule DevilsDictionaryWeb.Opening do
   # A sense's gloss is its source's words, so it is quoted; a word and part
   # of speech is ours, so it is not. Either links to where the page shows it,
   # and opens the card it is in.
+  attr :record_path, :string, default: ""
+
   defp meaning(%{meaning: %{kind: :sense}} = assigns) do
     ~H"""
-    <.meaning_link anchor={@meaning.anchor}>“{@meaning.label}”</.meaning_link><span :if={
+    <.meaning_link record_path={@record_path} anchor={@meaning.anchor}>“{@meaning.label}”</.meaning_link><span :if={
       @meaning.source
     }> · {@meaning.source.name}</span>
     """
@@ -975,13 +990,14 @@ defmodule DevilsDictionaryWeb.Opening do
 
   defp meaning(assigns) do
     ~H"""
-    <.meaning_link anchor={@meaning.anchor}><em>{@meaning.label}</em></.meaning_link><span :if={
+    <.meaning_link record_path={@record_path} anchor={@meaning.anchor}><em>{@meaning.label}</em></.meaning_link><span :if={
       @meaning.part_of_speech
     }>, {@meaning.part_of_speech}</span>
     """
   end
 
   attr :anchor, :string, default: nil
+  attr :record_path, :string, default: ""
   slot :inner_block, required: true
 
   defp meaning_link(%{anchor: "#" <> card_id} = assigns) do
@@ -989,8 +1005,8 @@ defmodule DevilsDictionaryWeb.Opening do
 
     ~H"""
     <a
-      href={@anchor}
-      phx-click={open_card(@card_id)}
+      href={@record_path <> @anchor}
+      phx-click={if @record_path == "", do: open_card(@card_id)}
       class="rounded-sm underline decoration-mist-950/20 underline-offset-4 hover:text-mist-950 hover:decoration-current focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:decoration-white/20 dark:hover:text-white dark:focus-visible:outline-white"
     >{render_slot(@inner_block)}</a>
     """

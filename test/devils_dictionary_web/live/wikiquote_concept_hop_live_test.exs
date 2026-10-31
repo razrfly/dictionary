@@ -1,4 +1,6 @@
 defmodule DevilsDictionaryWeb.WikiquoteConceptHopLiveTest do
+  import DevilsDictionary.SourceViewHelpers
+
   @moduledoc """
   `/on/coward` after #172 build A: its sense refers to a concept with no
   Wikiquote page, which has as its characteristic *cowardice*, whose page is
@@ -59,7 +61,7 @@ defmodule DevilsDictionaryWeb.WikiquoteConceptHopLiveTest do
 
   test "coward shows a Quotes shelf from Cowardice, the reason naming the hop", ctx do
     coward_page!(ctx)
-    {:ok, live, _html} = live(ctx.conn, ~p"/on/coward")
+    {:ok, live, _html} = source_live(ctx.conn, ~p"/on/coward")
 
     assert has_element?(live, "#culture-filter-quote")
     assert has_element?(live, "#culture-provider-wikiquote")
@@ -76,7 +78,7 @@ defmodule DevilsDictionaryWeb.WikiquoteConceptHopLiveTest do
 
   test "a page with no sense link still has no Quotes shelf", ctx do
     word!(ctx, "situationship", ~w(wordnet))
-    {:ok, live, _html} = live(ctx.conn, ~p"/on/situationship")
+    {:ok, live, _html} = source_live(ctx.conn, ~p"/on/situationship")
 
     refute has_element?(live, "#culture-filter-quote")
   end

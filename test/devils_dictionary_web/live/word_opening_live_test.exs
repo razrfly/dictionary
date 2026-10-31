@@ -26,7 +26,13 @@ defmodule DevilsDictionaryWeb.WordOpeningLiveTest do
 
     assert has_element?(view, "#opening-fixture", "Development fixture")
     assert has_element?(view, "#opening-lead-text", "A temporary insanity curable by marriage")
-    assert has_element?(view, "#opening-lead-entry[href='#card-bierce']", "Read the whole entry")
+
+    assert has_element?(
+             view,
+             "#opening-lead-entry[href*='/materials'][href$='#card-bierce']",
+             "Read the whole entry"
+           )
+
     assert has_element?(view, "#opening-highlight-1-title", "Cupid and Psyche")
     assert has_element?(view, "#opening-highlight-2-text", "cordial love")
     assert has_element?(view, "#opening-highlight-3-text", "Woman ſcorn'd")
@@ -41,14 +47,14 @@ defmodule DevilsDictionaryWeb.WordOpeningLiveTest do
   end
 
   test "the definitions are untouched: the same cards, the same ids, the same open row", ctx do
-    {:ok, plain, _} = live(ctx.conn, ~p"/on/love")
-    {:ok, curated, _} = live(ctx.conn, ~p"/on/love?opening=fixture")
+    {:ok, plain, _} = live(ctx.conn, ~p"/on/love/materials")
+    {:ok, curated, _} = live(ctx.conn, ~p"/on/love/materials?opening=fixture")
 
     cards = fn view ->
       view
       |> render()
       |> LazyHTML.from_fragment()
-      |> LazyHTML.query("details[name=sources]")
+      |> LazyHTML.query("details[data-record-kind=definition]")
       |> Enum.map(&{LazyHTML.attribute(&1, "id"), LazyHTML.attribute(&1, "open")})
     end
 
@@ -63,7 +69,7 @@ defmodule DevilsDictionaryWeb.WordOpeningLiveTest do
   # The #202 audit: CSS `order` put the opening after the headword on screen
   # while keyboard and screen-reader order still went through the whole rail
   # first. The document order is now the reading order.
-  test "the document order is the reading order: headword, opening, rail, definitions", ctx do
+  test "the document order is the reading order: headword, opening, source rail", ctx do
     {:ok, view, _html} = live(ctx.conn, ~p"/on/love?opening=fixture")
     html = render(view)
 
@@ -73,8 +79,7 @@ defmodule DevilsDictionaryWeb.WordOpeningLiveTest do
             ~s(id="opening"),
             ~s(id="word-rail"),
             ~s(id="word-stats"),
-            ~s(id="definitions-),
-            ~s(id="page-sources")
+            ~s(id="record-inventory-link")
           ],
           do: html |> :binary.match(marker) |> elem(0)
 
@@ -192,7 +197,7 @@ defmodule DevilsDictionaryWeb.WordOpeningLiveTest do
       assert has_element?(view, "#opening-about-withheld", "Highlight 1")
       assert has_element?(view, "#opening-about-withheld", "its catalog has changed")
       # The definitions below are untouched.
-      assert has_element?(view, "#card-bierce")
+      assert has_element?(view, "#rail-card-bierce[href*='/materials']")
     end
   end
 
