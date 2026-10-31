@@ -1,6 +1,6 @@
 import test from "node:test"
 import assert from "node:assert/strict"
-import {matchesRecord, applyFilters, records, openRecordTarget, recordText, categoryCounts, interleave, excerpt} from "./record_explorer.mjs"
+import {matchesRecord, applyFilters, records, openRecordTarget, recordText, categoryCounts, interleave, excerpt, recordTargetId} from "./record_explorer.mjs"
 
 const node = (children = []) => ({
   hidden: false,
@@ -106,4 +106,18 @@ test("search finds all words in any order across a material record", () => {
  const record = row("Jacques-Louis David · Erasistratus · 1774", "artwork", "wikidata")
  assert.ok(matchesRecord(record, {q: "1774 David"}))
  assert.equal(matchesRecord(record, {q: "1774 Picasso"}), false)
+})
+
+test("browser record targets stay unique after arrivals or withdrawals shift row positions", () => {
+ const occupied = new Set(["material-record-1"])
+ const dom = {getElementById: id => occupied.has(id)}
+ const first = {id: ""}
+ const firstId = recordTargetId(first, dom)
+ assert.equal(occupied.has(firstId), false)
+ occupied.add(firstId)
+ const later = {id: ""}
+ const laterId = recordTargetId(later, dom)
+ assert.notEqual(firstId, laterId)
+ assert.equal(recordTargetId(first, dom), firstId)
+ assert.equal(recordTargetId({id: "card-bierce"}, dom), "card-bierce")
 })

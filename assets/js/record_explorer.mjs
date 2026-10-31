@@ -81,7 +81,15 @@ function cleanClone(original) {
   }
   return copy
 }
-function material(row, inventory, index, query) {
+let nextTargetId = 0
+export function recordTargetId(node, dom) {
+  if (node.id) return node.id
+  let id
+  do { id = "material-record-" + (++nextTargetId) } while (dom.getElementById(id))
+  node.id = id
+  return id
+}
+function material(row, inventory, query) {
   const article = element("article", null, "material-result")
   article.dataset.materialKind = row.type
   const image = row.node.querySelector("img")
@@ -121,9 +129,9 @@ function material(row, inventory, index, query) {
     if (mark) links.append(cleanClone(mark))
   }
   // Use a stable local target without changing any source identity.
-  if (!row.node.id) row.node.id = "material-record-" + index
+  const targetId = recordTargetId(row.node, document)
   const inspect = element("a", "Complete record ↗")
-  inspect.href = "#" + encodeURIComponent(row.node.id)
+  inspect.href = "#" + encodeURIComponent(targetId)
   links.append(inspect)
   body.append(links)
   article.append(body)
@@ -195,7 +203,7 @@ const RecordExplorer = {
     })
     this.categories.replaceChildren(...categoryButtons)
     const matches = interleave(applyFilters(rows, filters))
-    this.results.replaceChildren(...matches.slice(0, this.limit).map((row) => material(row, this.inventory, rows.indexOf(row), filters.q)))
+    this.results.replaceChildren(...matches.slice(0, this.limit).map((row) => material(row, this.inventory, filters.q)))
     this.more.hidden = matches.length <= this.limit
     const message = matches.length ? `${matches.length} matching materials · showing ${Math.min(this.limit, matches.length)} of ${rows.length} loaded` : "No matching materials. Clear filters or inspect provider status below."
     if (this.status.textContent !== message) this.status.textContent = message
