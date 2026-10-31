@@ -485,6 +485,9 @@ defmodule DevilsDictionaryWeb.WordLive do
             state = Discovery.state(target.object_id, provider.slug())
             {provider.slug(), Map.merge(state, %{term: target.term, relevance: target.relevance})}
           end)
+          |> Map.filter(fn {_slug, state} ->
+            not is_nil(state.mapping_id) or state.status != :idle
+          end)
 
         connected?(socket) and not defer_records? ->
           culture_providers

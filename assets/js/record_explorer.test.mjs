@@ -1,6 +1,6 @@
 import test from "node:test"
 import assert from "node:assert/strict"
-import {matchesRecord, applyFilters, records, openRecordTarget, recordText, categoryCounts, interleave, excerpt, recordTargetId} from "./record_explorer.mjs"
+import {matchesRecord, applyFilters, records, openRecordTarget, recordText, categoryCounts, interleave, excerpt, recordTargetId, updateCategoryButtons} from "./record_explorer.mjs"
 
 const node = (children = []) => ({
   hidden: false,
@@ -120,4 +120,20 @@ test("browser record targets stay unique after arrivals or withdrawals shift row
  assert.notEqual(firstId, laterId)
  assert.equal(recordTargetId(first, dom), firstId)
  assert.equal(recordTargetId({id: "card-bierce"}, dom), "card-bierce")
+})
+
+test("category updates keep the same button nodes for keyboard focus", () => {
+ const children = []
+ const container = {append: button => children.push(button)}
+ const create = () => ({dataset: {}, attributes: {}, setAttribute(name, value) {this.attributes[name] = value}})
+ const buttons = updateCategoryButtons(container, new Map(), categoryCounts([], {}), "", create)
+ const artwork = buttons.get("artwork")
+ const all = buttons.get("")
+ const count = children.length
+ updateCategoryButtons(container, buttons, categoryCounts([row("love", "artwork", "met")], {}), "artwork", create)
+ assert.equal(buttons.get("artwork"), artwork)
+ assert.equal(buttons.get(""), all)
+ assert.equal(children.length, count)
+ assert.equal(artwork.attributes["aria-pressed"], "true")
+ assert.equal(artwork.textContent, "Artworks 1")
 })

@@ -88,6 +88,8 @@ defmodule DevilsDictionaryWeb.WordReferenceLiveTest do
     render_hook(view, "discovery_more", %{"providers" => "cinegraph"})
     assert DevilsDictionary.Repo.aggregate(Oban.Job, :count) == before
     assert has_element?(view, "#card-bierce")
+    refute has_element?(view, "#culture-loading")
+    assert has_element?(view, "#record-provider-coverage", "not loaded for this entry")
   end
 
   test "switching and provenance preserve exact page identity, trail and filters", ctx do

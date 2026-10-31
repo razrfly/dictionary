@@ -137,6 +137,21 @@ function material(row, inventory, query) {
   article.append(body)
   return article
 }
+export function updateCategoryButtons(container, buttons, counts, selected, create = element) {
+  for (const [type, label] of categories) {
+    let button = buttons.get(type)
+    if (!button) {
+      button = create("button", null, "material-category")
+      button.type = "button"
+      button.dataset.recordCategory = type
+      buttons.set(type, button)
+      container.append(button)
+    }
+    button.textContent = label + " " + counts[type]
+    button.setAttribute("aria-pressed", String(type === selected))
+  }
+  return buttons
+}
 const RecordExplorer = {
   mounted() {
     this.q = this.el.querySelector("[name=q]")
@@ -195,13 +210,7 @@ const RecordExplorer = {
     }
     const filters = {q: this.q.value, type: this.type.value, source: this.source.value}
     const counts = categoryCounts(rows, filters)
-    const categoryButtons = categories.map(([type, label]) => {
-      const button = element("button", label + " " + counts[type], "material-category")
-      button.type = "button"; button.dataset.recordCategory = type
-      button.setAttribute("aria-pressed", String(type === filters.type))
-      return button
-    })
-    this.categories.replaceChildren(...categoryButtons)
+    this.categoryButtons = updateCategoryButtons(this.categories, this.categoryButtons || new Map(), counts, filters.type)
     const matches = interleave(applyFilters(rows, filters))
     this.results.replaceChildren(...matches.slice(0, this.limit).map((row) => material(row, this.inventory, filters.q)))
     this.more.hidden = matches.length <= this.limit
