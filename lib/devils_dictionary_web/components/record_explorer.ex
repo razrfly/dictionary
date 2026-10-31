@@ -33,111 +33,64 @@ defmodule DevilsDictionaryWeb.RecordExplorer do
       id={@id}
       phx-hook="RecordExplorer"
       phx-update="ignore"
-      class="record-filters border-y border-mist-950/10 py-6 dark:border-white/10"
+      class="record-filters"
     >
-      <.form for={@form} id="record-search" method="get" action="" class="flex flex-col gap-4">
-        <input type="hidden" name="view" value="records" />
-        <input :for={{key, value} <- @params} type="hidden" name={key} value={value} />
-        <div class="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-3">
-          <.input
-            id="record-query"
-            name="q"
-            type="search"
-            label="Search all materials"
-            value={@filters["q"] || ""}
-            placeholder="Words, titles, creators…"
-          />
-          <.input
-            id="record-type"
-            name="type"
-            type="select"
-            label="Content type"
-            value={@filters["type"] || ""}
-            options={[
-              {"All types", ""},
-              {"Definitions", "definition"},
-              {"Examples and claims", "example"},
-              {"Quotations", "quote"},
-              {"Artworks", "artwork"},
-              {"Images", "image"},
-              {"Films", "film"},
-              {"Books, poems and articles", "text"},
-              {"News", "news"},
-              {"Music", "music"},
-              {"GIFs", "gif"},
-              {"Entities and subjects", "entity"},
-              {"Word information", "word"},
-              {"Related words", "related"}
-            ]}
-          />
-          <.input
-            id="record-source"
-            name="source"
-            type="select"
-            label="Source / API"
-            value={@filters["source"] || ""}
-            options={@source_options}
-          />
-        </div>
-        <div class="flex flex-wrap items-center gap-5 text-base/7">
-          <button
-            type="submit"
-            class="rounded-md bg-mist-950 px-4 py-2 text-white dark:bg-white dark:text-mist-950"
-          >Search</button>
+      <aside class="record-category-rail" aria-label="Browse materials">
+        <h2 class="record-rail-heading">Browse materials</h2>
+        <div data-record-categories role="group" aria-label="Material categories"></div>
+        <details class="record-help">
+          <summary>About these materials</summary>
+          <p>
+            Counts cover loaded records, not entire provider catalogues. Dictionary counts include their senses. Browser-only results stay on your device. Complete texts, credits, dates and provider status remain below.
+          </p>
+        </details>
+      </aside>
+      <div class="record-search-body">
+        <.form for={@form} id="record-search" method="get" action="" class="record-toolbar">
+          <input type="hidden" name="view" value="records" />
+          <input :for={{key, value} <- @params} type="hidden" name={key} value={value} />
+          <input id="record-type" type="hidden" name="type" value={@filters["type"] || ""} />
+          <div class="record-query-control">
+            <.input
+              id="record-query"
+              name="q"
+              type="search"
+              label="Search all materials"
+              value={@filters["q"] || ""}
+              placeholder="Titles, creators, words…"
+              class="record-control"
+            />
+          </div>
+          <div class="record-source-control">
+            <.input
+              id="record-source"
+              name="source"
+              type="select"
+              label="Source / API"
+              value={@filters["source"] || ""}
+              options={@source_options}
+              class="record-control"
+            />
+          </div>
+          <button type="submit" class="sr-only">Search materials</button>
           <a
             id="record-clear"
             href={"?" <> URI.encode_query(Map.put(@params, "view", "records"))}
-            class="underline underline-offset-4"
-          >Clear filters</a>
-          <p
-            data-record-status
-            role="status"
-            aria-live="polite"
-            class="text-mist-600 dark:text-mist-400"
-          >
-            Loading the materials index…
-          </p>
+            class="record-clear"
+          >Clear</a>
+        </.form>
+        <div class="record-result-bar">
+          <p data-record-status role="status" aria-live="polite">Loading materials…</p>
+          <div role="group" aria-label="Result layout" class="record-layout-controls">
+            <button type="button" data-record-layout="list" aria-pressed="true">List</button>
+            <button type="button" data-record-layout="grid" aria-pressed="false">Grid</button>
+          </div>
         </div>
-      </.form>
-      <p class="mt-4 max-w-[80ch] text-base/7 text-pretty text-mist-600 sm:text-sm/6 dark:text-mist-400">
-        Search covers the records already available for this entry, including fetched pages.
-        “More” may acquire additional results within the existing provider limits.
-        Browser-only results are filtered on your device and are not saved.
-        Dictionary counts are entries, including their senses. Full texts, original links and provider status remain in the complete records below.
-      </p>
-      <div
-        data-record-categories
-        class="mt-6 flex flex-wrap gap-2"
-        role="group"
-        aria-label="Material categories"
-      >
+        <div data-record-results class="record-results" aria-label="Matching materials"></div>
+        <button type="button" data-record-more class="record-more" hidden>
+          Show more loaded materials
+        </button>
       </div>
-      <div class="my-5 flex flex-wrap items-center justify-between gap-3">
-        <p class="text-sm text-mist-600">
-          Loaded materials · source matches, not curated endorsements
-        </p>
-        <div role="group" aria-label="Result layout" class="flex gap-3">
-          <button
-            type="button"
-            data-record-layout="list"
-            aria-pressed="true"
-            class="underline underline-offset-4"
-          >List</button>
-          <button
-            type="button"
-            data-record-layout="grid"
-            aria-pressed="false"
-            class="underline underline-offset-4"
-          >Grid</button>
-        </div>
-      </div>
-      <div data-record-results class="record-results" aria-label="Matching materials"></div>
-      <button
-        type="button"
-        data-record-more
-        class="my-6 rounded-md border border-mist-950/20 px-4 py-2"
-        hidden
-      >Show more loaded materials</button>
       <noscript><p>Filtering requires JavaScript. All source records remain readable below.</p></noscript>
     </div>
     """

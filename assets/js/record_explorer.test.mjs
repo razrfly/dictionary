@@ -1,6 +1,6 @@
 import test from "node:test"
 import assert from "node:assert/strict"
-import {matchesRecord, applyFilters, records, openRecordTarget, recordText, categoryCounts, interleave, excerpt, recordTargetId, updateCategoryButtons} from "./record_explorer.mjs"
+import {matchesRecord, applyFilters, records, openRecordTarget, recordText, categoryCounts, interleave, excerpt, recordTargetId, updateCategoryButtons, defaultLayout, selectedLayout} from "./record_explorer.mjs"
 
 const node = (children = []) => ({
   hidden: false,
@@ -136,4 +136,17 @@ test("category updates keep the same button nodes for keyboard focus", () => {
  assert.equal(children.length, count)
  assert.equal(artwork.attributes["aria-pressed"], "true")
  assert.equal(artwork.textContent, "Artworks 1")
+})
+
+
+test("visual categories start in grid while mixed and reading categories start in list", () => {
+  for (const kind of ["artwork", "image", "film", "gif"]) assert.equal(defaultLayout(kind), "grid")
+  for (const kind of ["", "definition", "quote", "example", "text", "news", "music", "entity", "word", "related"]) assert.equal(defaultLayout(kind), "list")
+})
+test("layout choice is remembered per category without changing other defaults", () => {
+  const choices = new Map([["gif", "list"], ["definition", "grid"]])
+  assert.equal(selectedLayout("gif", choices), "list")
+  assert.equal(selectedLayout("definition", choices), "grid")
+  assert.equal(selectedLayout("image", choices), "grid")
+  assert.equal(selectedLayout("", choices), "list")
 })

@@ -56,7 +56,7 @@ defmodule DevilsDictionaryWeb.WordReferenceLiveTest do
 
     refute has_element?(records, "#reference-record details[name='sources']")
     assert has_element?(records, "#record-search")
-    assert has_element?(records, "#record-type option[value='news']")
+    assert has_element?(records, "#record-type[type='hidden'][name='type']")
     assert has_element?(records, "#record-source option[value='bierce']")
     assert has_element?(records, "#record-query")
     assert has_element?(records, "#record-clear")

@@ -103,18 +103,24 @@ function material(row, inventory, query) {
   const heading = row.node.querySelector("h2,h3,h4,[id^=culture-entry-title]")
   const title = fold(heading?.textContent) ? heading.textContent.trim() : row.text.trim().slice(0, 110)
   body.append(element("p", (categories.find(([kind]) => kind === row.type)?.[1] || row.type) + " · " + row.sources.map(source => source.label).join(" · "), "material-source"))
-  body.append(element("h3", title || "Source record", "material-title"))
-  // API cards retain their full textual credits; long native texts have the exact
-  // complete record immediately below, rather than duplicating entire dictionaries.
-  const isDiscovery = Boolean(row.node.closest("[id^=culture-shelf-]"))
+  const targetId = recordTargetId(row.node, document)
+  const titleLink = element("a", title || "Source record")
+  titleLink.href = "#" + encodeURIComponent(targetId)
+  const titleHeading = element("h3", null, "material-title")
+  titleHeading.append(titleLink)
+  body.append(titleHeading)
   const text = row.text.replace(/\s+/g, " ").trim()
-  body.append(element("p", isDiscovery ? text : excerpt(text, query), "material-description"))
-  if (row.node.dataset.recordObserved) body.append(element("p", "Shelf fetched " + row.node.dataset.recordObserved, "material-source"))
+  body.append(element("p", excerpt(text, query, 150), "material-description"))
+  // Required creator/licence credits remain visible and unclamped in both modes.
+  for (const credit of row.node.querySelectorAll("[id^=culture-attribution-]")) {
+    const copy = cleanClone(credit)
+    copy.className = "material-credit"
+    body.append(copy)
+  }
   const links = element("div", null, "material-links")
   // Preserve original, already-vetted source/evidence destinations and their labels.
   const seen = new Set()
   for (const anchor of row.node.querySelectorAll("a[href]")) {
-    if (!isDiscovery && seen.size >= 3) break
     const href = anchor.getAttribute("href")
     const identity = href + "|" + anchor.textContent.trim()
     if (!href || seen.has(identity) || !/^(https?:|\/|#)/i.test(href)) continue
@@ -124,16 +130,26 @@ function material(row, inventory, query) {
     seen.add(identity)
     links.append(copy)
   }
-  for (const source of row.sources) {
-    const mark = inventory.querySelector("#culture-mark-" + CSS.escape(source.id))
-    if (mark) links.append(cleanClone(mark))
-  }
   // Use a stable local target without changing any source identity.
-  const targetId = recordTargetId(row.node, document)
   const inspect = element("a", "Complete record ↗")
   inspect.href = "#" + encodeURIComponent(targetId)
   links.append(inspect)
-  body.append(links)
+  // Full source wording and all original destinations remain one disclosure away.
+  const details = element("details", null, "material-details")
+  details.append(element("summary", "Details & source links"))
+  details.append(element("p", text, "material-full-text"))
+  if (row.node.dataset.recordObserved) details.append(element("p", "Shelf fetched " + row.node.dataset.recordObserved, "material-source"))
+  details.append(links)
+  body.append(details)
+  if (row.type === "music") {
+    const listen = row.node.querySelector("a[title='Listen on Spotify']")
+    if (listen) body.append(cleanClone(listen))
+  }
+  // Provider marks belong alongside the result, never only inside a disclosure.
+  for (const source of row.sources) {
+    const mark = inventory.querySelector("#culture-mark-" + CSS.escape(source.id))
+    if (mark) body.append(cleanClone(mark))
+  }
   article.append(body)
   return article
 }
@@ -152,6 +168,12 @@ export function updateCategoryButtons(container, buttons, counts, selected, crea
   }
   return buttons
 }
+export function defaultLayout(type) {
+  return ["artwork", "image", "film", "gif"].includes(type) ? "grid" : "list"
+}
+export function selectedLayout(type, choices = new Map()) {
+  return choices.get(type) || defaultLayout(type)
+}
 const RecordExplorer = {
   mounted() {
     this.q = this.el.querySelector("[name=q]")
@@ -162,8 +184,10 @@ const RecordExplorer = {
     this.categories = this.el.querySelector("[data-record-categories]")
     this.more = this.el.querySelector("[data-record-more]")
     this.limit = 30
+    this.layoutChoices = new Map()
     this.updateFilters = () => { this.limit = 30; this.apply() }
     this.clear = event => {
+      event.preventDefault()
       this.q.value = ""; this.type.value = ""; this.source.value = ""
       this.updateFilters()
     }
@@ -172,11 +196,13 @@ const RecordExplorer = {
       if (category) { this.type.value = category.dataset.recordCategory; this.updateFilters() }
       const layout = event.target.closest("[data-record-layout]")
       if (layout) {
-        this.results.dataset.layout = layout.dataset.recordLayout
-        for (const button of this.el.querySelectorAll("[data-record-layout]")) button.setAttribute("aria-pressed", String(button === layout))
+        this.layoutChoices.set(this.type.value, layout.dataset.recordLayout)
+        this.applyLayout()
       }
       if (event.target.closest("[data-record-more]")) { this.limit += 30; this.apply() }
     }
+    this.submit = event => { event.preventDefault(); this.updateFilters() }
+    this.el.querySelector("#record-search").addEventListener("submit", this.submit)
     this.el.addEventListener("input", this.updateFilters)
     this.el.addEventListener("change", this.updateFilters)
     this.el.addEventListener("click", this.click)
@@ -201,6 +227,11 @@ const RecordExplorer = {
     this.apply()
     this.revealFragment()
   },
+  applyLayout() {
+    const layout = selectedLayout(this.type.value, this.layoutChoices)
+    this.results.dataset.layout = layout
+    for (const button of this.el.querySelectorAll("[data-record-layout]")) button.setAttribute("aria-pressed", String(button.dataset.recordLayout === layout))
+  },
   apply() {
     if (!this.inventory?.isConnected) return
     const rows = records(this.inventory)
@@ -209,18 +240,23 @@ const RecordExplorer = {
       if (!options.has(source.id)) { this.source.add(new Option(source.label, source.id)); options.add(source.id) }
     }
     const filters = {q: this.q.value, type: this.type.value, source: this.source.value}
+    const label = categories.find(([kind]) => kind === filters.type)?.[1] || "All materials"
+    this.el.querySelector("label[for=record-query] > span").textContent = "Search " + label.toLocaleLowerCase()
+    this.q.placeholder = filters.type ? "Search " + label.toLocaleLowerCase() + "…" : "Titles, creators, words…"
+    this.applyLayout()
     const counts = categoryCounts(rows, filters)
     this.categoryButtons = updateCategoryButtons(this.categories, this.categoryButtons || new Map(), counts, filters.type)
     const matches = interleave(applyFilters(rows, filters))
     this.results.replaceChildren(...matches.slice(0, this.limit).map((row) => material(row, this.inventory, filters.q)))
     this.more.hidden = matches.length <= this.limit
-    const message = matches.length ? `${matches.length} matching materials · showing ${Math.min(this.limit, matches.length)} of ${rows.length} loaded` : "No matching materials. Clear filters or inspect provider status below."
+    const message = matches.length ? `${matches.length} ${filters.type ? label.toLocaleLowerCase() : "materials"}${filters.q || filters.source ? " matching" : ""} · ${Math.min(this.limit, matches.length)} shown` : "No matching materials. Clear filters or inspect provider status below."
     if (this.status.textContent !== message) this.status.textContent = message
   },
   destroyed() {
     this.observer?.disconnect()
     window.removeEventListener("hashchange", this.revealFragment)
     if (this.frame) cancelAnimationFrame(this.frame)
+    this.el.querySelector("#record-search")?.removeEventListener("submit", this.submit)
     this.el.removeEventListener("input", this.updateFilters)
     this.el.removeEventListener("change", this.updateFilters)
     this.el.removeEventListener("click", this.click)
