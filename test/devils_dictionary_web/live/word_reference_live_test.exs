@@ -71,6 +71,7 @@ defmodule DevilsDictionaryWeb.WordReferenceLiveTest do
     assert has_element?(view, "[data-record-layout='list'][aria-pressed='true']")
     assert has_element?(view, "[data-record-layout='grid']")
     assert has_element?(view, "[data-record-results]")
+    assert has_element?(view, "#source-record-view > header a[href='/on/love']")
     assert has_element?(view, "#record-inventory details#card-bierce")
     assert has_element?(view, "#record-provider-coverage", "Source / API coverage")
   end

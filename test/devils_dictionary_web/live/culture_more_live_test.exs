@@ -76,6 +76,27 @@ defmodule DevilsDictionaryWeb.CultureMoreLiveTest do
     end
   end
 
+  test "read-only preview retains cached results but hides a cursor it cannot advance", ctx do
+    stub_pages()
+    word = word!(ctx, "elegy", ~w(wordnet))
+    sense!(ctx, word, "wordnet", gloss: "a lament for the dead")
+    {:ok, normal, _} = source_live(ctx.conn, ~p"/on/elegy")
+    run_all!()
+    render(normal)
+    assert has_element?(normal, "#culture-more-text")
+
+    Application.put_env(:devils_dictionary, :source_records_preview_read_only, true)
+
+    on_exit(fn ->
+      Application.delete_env(:devils_dictionary, :source_records_preview_read_only)
+    end)
+
+    {:ok, preview, _} = source_live(ctx.conn, ~p"/on/elegy")
+    for id <- 1..3, do: assert(has_element?(preview, "#culture-result-fixture_text-#{id}"))
+    refute has_element?(preview, "#culture-more-text")
+    assert Repo.aggregate(Run, :count) == 1
+  end
+
   test "the control is gone once the source has no page left", ctx do
     stub_pages()
     word = word!(ctx, "elegy", ~w(wordnet))

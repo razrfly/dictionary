@@ -483,7 +483,9 @@ defmodule DevilsDictionaryWeb.WordLive do
         records_preview_read_only?() and not defer_records? ->
           Map.new(culture_providers, fn provider ->
             state = Discovery.state(target.object_id, provider.slug())
-            {provider.slug(), Map.merge(state, %{term: target.term, relevance: target.relevance})}
+
+            {provider.slug(),
+             Map.merge(state, %{term: target.term, relevance: target.relevance, next_cursor: nil})}
           end)
           |> Map.filter(fn {_slug, state} ->
             not is_nil(state.mapping_id) or state.status != :idle
@@ -1489,14 +1491,14 @@ defmodule DevilsDictionaryWeb.WordLive do
           Search the dictionaries, texts, images and API records available for this entry. Source matches are not curated endorsements.
         </p>
         <.link
-          href={entry_view_path(assigns, false) <> "#opening"}
+          href={entry_view_path(assigns, false) <> if(@opening, do: "#opening", else: "")}
           class="underline underline-offset-4"
         >
-          Return to the curated choices, dates and selection history
+          Return to the curated article
         </.link>
       </header>
       <p :if={records_preview_read_only?()} class="mb-4 text-sm text-mist-600">
-        Read-only preview of real records. Fetching more materials is disabled here.
+        Read-only preview of real records. Saved API shelves cannot fetch more here; browser-only sources keep their normal controls.
       </p>
       <RecordExplorer.controls
         id={"record-filters-" <> Base.url_encode64(@base <> "?" <> URI.encode_query(Map.merge(@record_params, @record_filters)), padding: false)}
