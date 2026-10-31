@@ -184,25 +184,25 @@ defmodule DevilsDictionaryWeb.Subjects do
 
   # ── the section ──────────────────────────────────────────────────────────
 
-  @doc """
-  The Subjects section. `subjects` is `Routing.Subjects.cards/5`'s answer;
-  `members` the treatment overview's resolved members, when there is one,
-  so the curated cards keep its order and relationships.
-  """
-  attr :subjects, :map, required: true
-  attr :members, :list, default: []
+  @doc "Whether the authored subject section has choices, associations or withheld members."
+  def editorial_present?(nil, _members), do: false
 
-  def section(assigns) do
+  def editorial_present?(subjects, members) do
+    section = editorial(subjects, members)
+    section.curated != [] or section.associations != [] or section.withheld > 0
+  end
+
+  defp editorial(subjects, raw_members) do
     cards =
       Map.new(
-        assigns.subjects.curated |> Enum.reject(&match?({:withheld, _}, &1)),
+        subjects.curated |> Enum.reject(&match?({:withheld, _}, &1)),
         &{&1.object_id, &1}
       )
 
     # One card per identity: named twice (by itself and by its page), the
     # first membership in stored order decides where it goes.
     members =
-      assigns.members
+      raw_members
       |> Enum.filter(&(&1.kind == :subject and Map.has_key?(cards, &1.object_id)))
       |> Enum.uniq_by(& &1.object_id)
 
@@ -214,12 +214,27 @@ defmodule DevilsDictionaryWeb.Subjects do
           do: Map.put(cards[id], :rationale, member.rationale)
 
     withheld =
-      Enum.count(assigns.subjects.curated, &match?({:withheld, _}, &1)) +
+      Enum.count(subjects.curated, &match?({:withheld, _}, &1)) +
         Enum.count(
-          assigns.members,
+          raw_members,
           &(&1.kind == :withheld and
               &1.relationship in [:discusses_subject, :editorial_association])
         )
+
+    %{curated: curated, associations: associations, withheld: withheld}
+  end
+
+  @doc """
+  The Subjects section. `subjects` is `Routing.Subjects.cards/5`'s answer;
+  `members` the treatment overview's resolved members, when there is one,
+  so the curated cards keep its order and relationships.
+  """
+  attr :subjects, :map, required: true
+  attr :members, :list, default: []
+
+  def section(assigns) do
+    %{curated: curated, associations: associations, withheld: withheld} =
+      editorial(assigns.subjects, assigns.members)
 
     all = curated ++ associations ++ assigns.subjects.discovered
 

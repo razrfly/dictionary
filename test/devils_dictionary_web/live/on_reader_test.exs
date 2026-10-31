@@ -379,6 +379,39 @@ defmodule DevilsDictionaryWeb.OnReaderTest do
       end)
     end
 
+    test "withheld-only authored members retain local subject navigation", ctx do
+      world = mars!(ctx, published: true)
+
+      gone =
+        subject!("Mars probe", "works",
+          kind: :work,
+          path: "/works/withheld-probe",
+          published: true,
+          actor: ctx.human
+        )
+
+      withdrawn!(gone.page)
+
+      overview!(
+        "On Mars",
+        "/on/mars",
+        [
+          {:supplies_lexical_material, world.noun.object_id},
+          {:discusses_subject, {:page, gone.page.id}}
+        ],
+        author: ctx.human,
+        published: true
+      )
+
+      reading(false, fn ->
+        {:ok, view, _} = live(ctx.conn, "/on/mars")
+        assert has_element?(view, "#subjects-withheld")
+        assert has_element?(view, "nav[aria-label='In this entry'] a[href='#subjects']")
+        {:ok, records, _} = source_live(ctx.conn, "/on/mars")
+        refute has_element?(records, "#subjects-withheld")
+      end)
+    end
+
     test "an overview whose words are other words is a separate choice, through reload", ctx do
       world = mars!(ctx, published: true)
       candy = word!(ctx, "Mars bar", ~w(wiktionary), pos: "noun", scope: nil)

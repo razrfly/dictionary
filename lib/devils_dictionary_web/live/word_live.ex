@@ -230,8 +230,7 @@ defmodule DevilsDictionaryWeb.WordLive do
         assign(socket,
           record_claims: DevilsDictionary.Curation.LinkedClaims.for_scope(elem(claim_scope, 1)),
           record_subjects:
-            SubjectCards.cards(
-              [],
+            SubjectCards.record_cards(
               discovered(socket.assigns.page.thing),
               socket.assigns.page.headword.lexemes |> Enum.map(& &1.lemma) |> Enum.uniq(),
               socket.assigns.reading_mode
@@ -1279,7 +1278,8 @@ defmodule DevilsDictionaryWeb.WordLive do
       |> assign(:record_path, entry_view_path(assigns, true))
       |> assign(
         :editorial_subjects?,
-        assigns.overview && assigns.subjects && assigns.subjects.curated != []
+        assigns.overview &&
+          Subjects.editorial_present?(assigns.subjects, assigns.overview.members)
       )
 
     ~H"""
