@@ -1,6 +1,6 @@
 import test from "node:test"
 import assert from "node:assert/strict"
-import {matchesRecord, applyFilters, records, openRecordTarget, recordText, categoryCounts, interleave, excerpt, recordTargetId, updateCategoryButtons, defaultLayout, selectedLayout, replaceResults, revealRecordFragment, filterURL} from "./record_explorer.mjs"
+import {matchesRecord, applyFilters, records, openRecordTarget, recordText, categoryCounts, interleave, excerpt, recordTargetId, updateCategoryButtons, defaultLayout, selectedLayout, replaceResults, revealRecordFragment, filterURL, adoptExplorerState} from "./record_explorer.mjs"
 
 const node = (children = []) => ({
   hidden: false,
@@ -215,4 +215,25 @@ test("filter URLs keep the clean resource path and drop empty controls without l
   assert.equal(url.searchParams.get('q'), 'David 1774')
   assert.equal(url.searchParams.get('trail'), 'war')
   assert.equal(filterURL(url.href, {}), '/words/42/love/materials?trail=war')
+})
+
+
+test("the live hook adopts early category nodes without duplicates or losing layout choices", () => {
+  const children = []
+  const container = {append: button => children.push(button)}
+  const create = () => ({dataset: {}, setAttribute() {}})
+  const el = {}
+  const early = {el, categoryButtons: updateCategoryButtons(container, new Map(), categoryCounts([], {}), "", create),
+    layoutChoices: new Map([["definition", "grid"]]), limit: 60, revealedHash: "#card-bierce"}
+  const count = children.length
+  const live = {el}
+  adoptExplorerState(live, early)
+  updateCategoryButtons(container, live.categoryButtons, categoryCounts([], {}), "definition", create)
+  assert.equal(children.length, count)
+  assert.equal(live.categoryButtons, early.categoryButtons)
+  assert.equal(selectedLayout("definition", live.layoutChoices), "grid")
+  assert.equal(live.limit, 60)
+  const otherPage = {el: {}}
+  adoptExplorerState(otherPage, early)
+  assert.equal(otherPage.categoryButtons, undefined)
 })

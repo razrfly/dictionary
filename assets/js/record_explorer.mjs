@@ -218,11 +218,15 @@ export function defaultLayout(type) {
 export function selectedLayout(type, choices = new Map()) {
   return choices.get(type) || defaultLayout(type)
 }
+export function adoptExplorerState(current, early) {
+  if (!early || current.el !== early.el) return
+  for (const key of ["revealedHash", "categoryButtons", "layoutChoices", "limit"]) current[key] = early[key]
+}
 let earlyExplorer = null
 const RecordExplorer = {
   mounted() {
     if (earlyExplorer) {
-      this.revealedHash = earlyExplorer.revealedHash
+      adoptExplorerState(this, earlyExplorer)
       RecordExplorer.destroyed.call(earlyExplorer)
       earlyExplorer = null
     }
@@ -233,8 +237,8 @@ const RecordExplorer = {
     this.results = this.el.querySelector("[data-record-results]")
     this.categories = this.el.querySelector("[data-record-categories]")
     this.more = this.el.querySelector("[data-record-more]")
-    this.limit = 30
-    this.layoutChoices = new Map()
+    this.limit ??= 30
+    this.layoutChoices ??= new Map()
     this.updateFilters = () => {
       this.limit = 30
       this.apply()
