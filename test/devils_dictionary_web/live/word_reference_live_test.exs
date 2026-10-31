@@ -47,6 +47,7 @@ defmodule DevilsDictionaryWeb.WordReferenceLiveTest do
       assert old_text == record_text
     end
 
+    refute has_element?(records, "#reference-record details[name='sources']")
     assert has_element?(records, "#record-search")
     assert has_element?(records, "#record-type option[value='news']")
     assert has_element?(records, "#record-source option[value='bierce']")
@@ -68,6 +69,7 @@ defmodule DevilsDictionaryWeb.WordReferenceLiveTest do
     )
 
     assert has_element?(view, "#record-query[value='Milton']")
+    assert has_element?(view, "#record-search input[name='trail'][value='war']")
     assert has_element?(view, "#card-bierce-info[href*='view=records'][href*='q=Milton']")
     view |> element("#card-bierce-info") |> render_click()
     assert has_element?(view, "#provenance")

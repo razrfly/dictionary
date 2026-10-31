@@ -1429,7 +1429,7 @@ defmodule DevilsDictionaryWeb.WordLive do
         </.link>
       </header>
       <RecordExplorer.controls
-        id={"record-filters-" <> Base.url_encode64(@base <> "?" <> URI.encode_query(@record_filters), padding: false)}
+        id={"record-filters-" <> Base.url_encode64(@base <> "?" <> URI.encode_query(Map.merge(@record_params, @record_filters)), padding: false)}
         filters={@record_filters}
         params={@record_params}
         sources={@page_sources}
@@ -1535,11 +1535,14 @@ defmodule DevilsDictionaryWeb.WordLive do
       title="Definitions"
       class="mt-2"
     >
-      <:meta>{count_label(@card_sources, @page.cards)} · one open at a time</:meta>
+      <:meta>
+        {count_label(@card_sources, @page.cards)}{if !@records?, do: " · one open at a time"}
+      </:meta>
       <div class="divide-y divide-mist-950/10 dark:divide-white/10">
         <Word.source_row
           :for={{card, i} <- Enum.with_index(@page.cards)}
           card={card}
+          exclusive?={!@records?}
           open={i == default_open(@page.cards)}
           continues={continues?(@page.cards, i)}
           trail={trail_here(@page)}

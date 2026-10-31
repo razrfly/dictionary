@@ -706,6 +706,7 @@ defmodule DevilsDictionaryWeb.Word do
   """
   attr :card, :map, required: true
   attr :open, :boolean, default: false
+  attr :exclusive?, :boolean, default: true
 
   attr :continues, :boolean,
     default: false,
@@ -725,7 +726,7 @@ defmodule DevilsDictionaryWeb.Word do
       id={@card.id}
       data-record-kind="definition"
       data-record-sources={DevilsDictionaryWeb.RecordExplorer.sources([@card.source])}
-      name="sources"
+      name={if @exclusive?, do: "sources"}
       open={@open}
       class={[
         "group/row",

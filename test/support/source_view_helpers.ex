@@ -11,8 +11,11 @@ defmodule DevilsDictionary.SourceViewHelpers do
   def source_path(path) do
     uri = URI.parse(path)
 
-    if String.starts_with?(uri.path || "", ["/on/", "/words/", "/define/"]) do
-      query = URI.decode_query(uri.query || "") |> Map.put("view", "records")
+    query = URI.decode_query(uri.query || "")
+
+    if String.starts_with?(uri.path || "", ["/on/", "/words/", "/define/"]) and
+         query["layout"] != "current" do
+      query = Map.put(query, "view", "records")
       URI.to_string(%{uri | query: URI.encode_query(query)})
     else
       path
