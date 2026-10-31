@@ -100,6 +100,7 @@ defmodule DevilsDictionaryWeb.WordLive do
        reference?: true,
        records?: false,
        record_claims: [],
+       record_subjects: nil,
        record_claims_for: nil,
        record_params: %{},
        record_filters: %{},
@@ -221,12 +222,20 @@ defmodule DevilsDictionaryWeb.WordLive do
       end
 
     # Reuse the existing public native-claim reader once per loaded source view.
-    claim_scope = {base, Enum.map(socket.assigns.page.headword.lexemes, & &1.id)}
+    claim_scope =
+      {base, Enum.map(socket.assigns.page.headword.lexemes, & &1.id), socket.assigns.reading_mode}
 
     socket =
       if socket.assigns.records? and socket.assigns.record_claims_for != claim_scope do
         assign(socket,
           record_claims: DevilsDictionary.Curation.LinkedClaims.for_scope(elem(claim_scope, 1)),
+          record_subjects:
+            SubjectCards.cards(
+              [],
+              discovered(socket.assigns.page.thing),
+              socket.assigns.page.headword.lexemes |> Enum.map(& &1.lemma) |> Enum.uniq(),
+              socket.assigns.reading_mode
+            ),
           record_claims_for: claim_scope
         )
       else
@@ -1265,7 +1274,13 @@ defmodule DevilsDictionaryWeb.WordLive do
 
   # The same assigns, readers, providers and components: presentation only.
   defp reference_article(assigns) do
-    assigns = assign(assigns, :record_path, entry_view_path(assigns, true))
+    assigns =
+      assigns
+      |> assign(:record_path, entry_view_path(assigns, true))
+      |> assign(
+        :editorial_subjects?,
+        assigns.overview && assigns.subjects && assigns.subjects.curated != []
+      )
 
     ~H"""
     <article id="reference-article" class="reference-article min-w-0">
@@ -1295,7 +1310,10 @@ defmodule DevilsDictionaryWeb.WordLive do
             :if={@cultures != %{} or @browsers != [] or @culture_notes != []}
             href={@record_path <> "#in-culture"}
           >API discoveries</a>
-          <a :if={@subjects} href={@record_path <> "#subjects"}>Subjects</a>
+          <a
+            :if={@subjects}
+            href={if @editorial_subjects?, do: "#subjects", else: @record_path <> "#subjects"}
+          >Subjects</a>
           <a :if={@page.thing} href={@record_path <> "#thing"}>The concept</a>
           <a :if={@page.related} href={@record_path <> "#related"}>Related words</a>
           <a :if={@page_sources != []} href={@record_path <> "#page-sources"}>Source index</a>
@@ -1339,7 +1357,7 @@ defmodule DevilsDictionaryWeb.WordLive do
                 sources={@card_sources}
                 choices={@choices}
                 headword={false}
-                subjects={@subjects}
+                subjects={if @editorial_subjects?, do: nil, else: @subjects}
                 demo={@demo}
                 class="reference-word-facts"
               />
@@ -1353,7 +1371,7 @@ defmodule DevilsDictionaryWeb.WordLive do
             sources={@card_sources}
             choices={@choices}
             headword={false}
-            subjects={@subjects}
+            subjects={if @editorial_subjects?, do: nil, else: @subjects}
             demo={@demo}
             class="reference-bare-facts"
           />
@@ -1448,12 +1466,19 @@ defmodule DevilsDictionaryWeb.WordLive do
           sources={@card_sources}
           choices={@choices}
           headword={false}
-          subjects={@subjects}
+          subjects={@record_subjects}
           demo={@demo}
           class="mb-8"
         />
         <section id="reference-record">
-          <.column {assigns} mode={@reading_mode} reference?={true} editorial?={false} />
+          <.column
+            {assigns}
+            subjects={@record_subjects}
+            overview={nil}
+            mode={@reading_mode}
+            reference?={true}
+            editorial?={false}
+          />
         </section>
         <section
           :if={@record_claims != []}

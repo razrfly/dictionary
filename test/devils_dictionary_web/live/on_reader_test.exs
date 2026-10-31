@@ -327,6 +327,7 @@ defmodule DevilsDictionaryWeb.OnReaderTest do
         {:ok, view, _html} = live(ctx.conn, "/on/mars")
 
         assert has_element?(view, "#overview")
+        assert has_element?(view, "nav[aria-label='In this entry'] a[href='#subjects']")
         # Stored order, and a member named otherwise than the page.
         curated =
           view
@@ -365,8 +366,16 @@ defmodule DevilsDictionaryWeb.OnReaderTest do
         # Authored choices stay in the article; original source subjects stay reachable.
         {:ok, sources, _} = source_live(ctx.conn, "/on/mars")
         refute has_element?(sources, "#overview")
-        refute has_element?(sources, card(sources, "discovered", world.planet.entity))
+        # A selected identity is still a source match independently of its editorial selection.
+        assert has_element?(sources, card(sources, "discovered", world.planet.entity))
         assert has_element?(sources, card(sources, "discovered", world.deity.entity))
+        refute has_element?(sources, "#subjects", "Ares")
+        refute has_element?(sources, "#subjects", "Mars, Incorporated")
+        refute has_element?(sources, "#subjects-curated")
+        refute has_element?(sources, "#subjects-associations")
+        sources |> element("#entry-curated") |> render_click()
+        assert has_element?(sources, "#subject-curated-#{ares.entity.object_id}")
+        assert has_element?(sources, "#subjects-associations", "Mars, Incorporated")
       end)
     end
 
