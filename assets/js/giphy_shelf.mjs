@@ -98,12 +98,17 @@ export default {
     }
   },
   addItem(item) {
+    this.itemIds ||= new Set()
+    if (item.id && this.itemIds.has(item.id)) return
+    if (item.id) this.itemIds.add(item.id)
+
     // The card's width and its title clamp are the content-type row's, handed
     // over as data attributes by the shelf (#144 Phase 3); the fallbacks are
     // the `:gif` row's values, for a shelf mounted without them.
     const column = this.el?.dataset?.column || 'w-24 sm:w-28'
     const clamp = this.el?.dataset?.titleClamp || 'line-clamp-1'
     const li = document.createElement('li')
+    if (item.id) li.id = (this.el?.id || 'giphy') + '-gif-' + encodeURIComponent(item.id)
     li.className = `${column} shrink-0 snap-start space-y-2`
     const image = document.createElement('img')
     image.src = item.still
@@ -175,5 +180,6 @@ export default {
     this.more.removeEventListener('click', this.onMore)
     this.motion.removeEventListener('change', this.onMotion)
     this.list.replaceChildren()
+    this.itemIds?.clear()
   }
 }

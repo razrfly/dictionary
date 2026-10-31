@@ -157,7 +157,12 @@ defmodule DevilsDictionaryWeb.WordLive do
         if slug == lexeme.slug do
           handle_params(resolver, uri, assign(socket, object_id: lexeme.object_id, exact: :found))
         else
-          target = URI.parse(~p"/words/#{id}/#{lexeme.slug}")
+          suffix =
+            if String.ends_with?(URI.parse(uri).path, "/materials") or params["view"] == "records",
+              do: "/materials",
+              else: ""
+
+          target = URI.parse(~p"/words/#{id}/#{lexeme.slug}" <> suffix)
           target = URI.to_string(%{target | query: URI.parse(uri).query})
           {:noreply, push_navigate(socket, to: target)}
         end
@@ -165,11 +170,20 @@ defmodule DevilsDictionaryWeb.WordLive do
   end
 
   def handle_params(%{"slug" => slug} = params, uri, socket) do
+    path = URI.parse(uri).path
+
+    materials? =
+      case String.split(path, "/", trim: true) do
+        ["on", _, "materials"] -> true
+        ["words", _, _, "materials"] -> true
+        _ -> false
+      end
+
     socket = assign(socket, :reference?, params["layout"] != "current")
 
     socket =
       socket
-      |> assign(:records?, params["view"] == "records")
+      |> assign(:records?, materials? or params["view"] == "records")
       |> assign(
         :record_params,
         Map.take(params, ["trail", "opening", "demo"])
@@ -196,7 +210,7 @@ defmodule DevilsDictionaryWeb.WordLive do
         do: {slug, socket},
         else: {"", assign(socket, object_id: nil, exact: :invalid)}
 
-    base = URI.parse(uri).path
+    base = if materials?, do: String.replace_suffix(path, "/materials", ""), else: path
     trail = parse_trail(params["trail"])
     demo = Samples.on?(params)
     socket = if demo, do: socket, else: update(socket, :record_params, &Map.delete(&1, "demo"))
@@ -244,7 +258,12 @@ defmodule DevilsDictionaryWeb.WordLive do
 
     case socket.assigns[:follow] do
       nil ->
-        head = head(socket.assigns, slug, URI.parse(uri).query)
+        head =
+          head(
+            socket.assigns,
+            slug,
+            if(socket.assigns.records?, do: "materials", else: URI.parse(uri).query)
+          )
 
         {:noreply,
          socket
@@ -480,7 +499,7 @@ defmodule DevilsDictionaryWeb.WordLive do
         is_nil(target) or culture_providers == [] ->
           %{}
 
-        records_preview_read_only?() and not defer_records? ->
+        socket.assigns.records? and (defer_records? or records_preview_read_only?()) ->
           Map.new(culture_providers, fn provider ->
             state = Discovery.state(target.object_id, provider.slug())
 
@@ -1447,7 +1466,8 @@ defmodule DevilsDictionaryWeb.WordLive do
     uri = URI.parse(Word.info_path(base, trail, ref, demo))
     query = URI.decode_query(uri.query || "")
     query = if reference?, do: query, else: Map.put(query, "layout", "current")
-    query = if records?, do: Map.merge(Map.put(query, "view", "records"), filters), else: query
+    query = if records?, do: Map.merge(query, filters), else: query
+    uri = if records?, do: %{uri | path: base <> "/materials"}, else: uri
 
     URI.to_string(%{
       uri
@@ -1461,9 +1481,8 @@ defmodule DevilsDictionaryWeb.WordLive do
         do: Map.merge(assigns.record_params, assigns.record_filters),
         else: assigns.record_params
 
-    query = if records?, do: Map.put(params, "view", "records"), else: params
-
-    assigns.base <> if(map_size(query) == 0, do: "", else: "?" <> URI.encode_query(query))
+    path = assigns.base <> if(records?, do: "/materials", else: "")
+    path <> if(map_size(params) == 0, do: "", else: "?" <> URI.encode_query(params))
   end
 
   defp record_provider_status(provider, cultures) do
@@ -1502,6 +1521,7 @@ defmodule DevilsDictionaryWeb.WordLive do
       </p>
       <RecordExplorer.controls
         id={"record-filters-" <> Base.url_encode64(@base <> "?" <> URI.encode_query(Map.merge(@record_params, @record_filters)), padding: false)}
+        path={@base <> "/materials"}
         filters={@record_filters}
         params={@record_params}
         sources={@page_sources}

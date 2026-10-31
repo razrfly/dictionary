@@ -27,12 +27,12 @@ import ArtworkImage from "./artwork_image.mjs"
 import GiphyShelf from "./giphy_shelf.mjs"
 import UrbanDictionary from "./urban_dictionary.mjs"
 import PageHead from "./page_head.mjs"
-import RecordExplorer from "./record_explorer.mjs"
+import RecordExplorer, {bootRecordExplorer} from "./record_explorer.mjs"
 import topbar from "../vendor/topbar"
 
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 const liveSocket = new LiveSocket("/live", Socket, {
-  // A full source inventory can be much larger than the curated article.
+  // The saved inventory is interactive immediately; allow its larger live mount to finish.
   longPollFallbackMs: document.getElementById("source-record-view") ? 10000 : 2500,
   params: {_csrf_token: csrfToken},
   hooks: {...colocatedHooks, ArtworkImage, GiphyShelf, UrbanDictionary, PageHead, RecordExplorer},
@@ -44,6 +44,7 @@ window.addEventListener("phx:page-loading-start", _info => topbar.show(300))
 window.addEventListener("phx:page-loading-stop", _info => topbar.hide())
 
 // connect if there are any LiveViews on the page
+bootRecordExplorer()
 liveSocket.connect()
 
 // expose liveSocket on window for web console debug logs and latency simulation:

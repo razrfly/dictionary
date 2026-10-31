@@ -29,7 +29,7 @@ defmodule DevilsDictionaryWeb.WordOpeningLiveTest do
 
     assert has_element?(
              view,
-             "#opening-lead-entry[href*='view=records'][href$='#card-bierce']",
+             "#opening-lead-entry[href*='/materials'][href$='#card-bierce']",
              "Read the whole entry"
            )
 
@@ -47,8 +47,8 @@ defmodule DevilsDictionaryWeb.WordOpeningLiveTest do
   end
 
   test "the definitions are untouched: the same cards, the same ids, the same open row", ctx do
-    {:ok, plain, _} = live(ctx.conn, ~p"/on/love?view=records")
-    {:ok, curated, _} = live(ctx.conn, ~p"/on/love?view=records&opening=fixture")
+    {:ok, plain, _} = live(ctx.conn, ~p"/on/love/materials")
+    {:ok, curated, _} = live(ctx.conn, ~p"/on/love/materials?opening=fixture")
 
     cards = fn view ->
       view
@@ -197,7 +197,7 @@ defmodule DevilsDictionaryWeb.WordOpeningLiveTest do
       assert has_element?(view, "#opening-about-withheld", "Highlight 1")
       assert has_element?(view, "#opening-about-withheld", "its catalog has changed")
       # The definitions below are untouched.
-      assert has_element?(view, "#rail-card-bierce[href*='view=records']")
+      assert has_element?(view, "#rail-card-bierce[href*='/materials']")
     end
   end
 

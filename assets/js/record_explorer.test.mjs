@@ -1,6 +1,6 @@
 import test from "node:test"
 import assert from "node:assert/strict"
-import {matchesRecord, applyFilters, records, openRecordTarget, recordText, categoryCounts, interleave, excerpt, recordTargetId, updateCategoryButtons, defaultLayout, selectedLayout, replaceResults} from "./record_explorer.mjs"
+import {matchesRecord, applyFilters, records, openRecordTarget, recordText, categoryCounts, interleave, excerpt, recordTargetId, updateCategoryButtons, defaultLayout, selectedLayout, replaceResults, revealRecordFragment, filterURL} from "./record_explorer.mjs"
 
 const node = (children = []) => ({
   hidden: false,
@@ -185,4 +185,34 @@ test("withdrawn focused results move focus to search instead of retaining their 
   doc.activeElement = old.link
   replaceResults(container, [makeRow("later").result], search)
   assert.equal(doc.activeElement, search)
+})
+
+
+test("an asynchronous fragment is revealed once and later updates do not steal scroll", () => {
+  const state = {}
+  let target = null, scrolls = 0
+  const inventory = {contains: node => node === target}
+  const dom = {getElementById: () => target}
+  revealRecordFragment(state, inventory, "#late", dom)
+  assert.equal(state.pendingFragment, "late")
+  target = {tagName: "DETAILS", parentElement: inventory, open: false, scrollIntoView: () => {scrolls++}}
+  revealRecordFragment(state, inventory, "#late", dom)
+  assert.equal(target.open, true)
+  assert.equal(state.pendingFragment, null)
+  assert.equal(scrolls, 1)
+  revealRecordFragment(state, inventory, "#late", dom)
+  assert.equal(scrolls, 1)
+  revealRecordFragment(state, inventory, "#%broken", dom)
+  assert.equal(state.pendingFragment, null)
+})
+
+
+test("filter URLs keep the clean resource path and drop empty controls without losing identity", () => {
+  assert.equal(filterURL('https://example.test/on/love/materials', {}), '/on/love/materials')
+  const filtered = filterURL('https://example.test/words/42/love/materials?trail=war', {q: 'David 1774', type: 'artwork', source: 'met'})
+  const url = new URL(filtered, 'https://example.test')
+  assert.equal(url.pathname, '/words/42/love/materials')
+  assert.equal(url.searchParams.get('q'), 'David 1774')
+  assert.equal(url.searchParams.get('trail'), 'war')
+  assert.equal(filterURL(url.href, {}), '/words/42/love/materials?trail=war')
 })

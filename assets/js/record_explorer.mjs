@@ -2,6 +2,15 @@
 export const fold = value => String(value ?? "").normalize("NFKD")
   .replace(/\p{M}/gu, "").toLocaleLowerCase().replace(/\s+/g, " ").trim()
 
+export function filterURL(href, filters) {
+  const url = new URL(href)
+  url.searchParams.delete("view")
+  for (const name of ["q", "type", "source"]) {
+    if (filters[name]) url.searchParams.set(name, filters[name])
+    else url.searchParams.delete(name)
+  }
+  return url.pathname + url.search + url.hash
+}
 export function matchesRecord(record, filters) {
   return (!filters.type || record.type === filters.type) &&
     (!filters.source || record.sources.some(source => source.id === filters.source)) &&
@@ -38,6 +47,19 @@ export function openRecordTarget(inventory, target) {
     if (node.tagName === "DETAILS") node.open = true
   }
   return true
+}
+// A late target is retried until it exists, then never steals scroll again.
+export function revealRecordFragment(state, inventory, hash, dom = document) {
+  if (state.revealedHash === hash) return
+  let id
+  try { id = decodeURIComponent(hash.slice(1)) } catch {
+    state.pendingFragment = null
+    return
+  }
+  const target = id && dom.getElementById(id)
+  state.pendingFragment = id && !target ? id : null
+  if (target && openRecordTarget(inventory, target)) target.scrollIntoView({block: "start"})
+  if (!state.pendingFragment) state.revealedHash = hash
 }
 const categories = [
   ["", "All materials"], ["definition", "Definitions"], ["example", "Examples & claims"],
@@ -196,8 +218,14 @@ export function defaultLayout(type) {
 export function selectedLayout(type, choices = new Map()) {
   return choices.get(type) || defaultLayout(type)
 }
+let earlyExplorer = null
 const RecordExplorer = {
   mounted() {
+    if (earlyExplorer) {
+      this.revealedHash = earlyExplorer.revealedHash
+      RecordExplorer.destroyed.call(earlyExplorer)
+      earlyExplorer = null
+    }
     this.q = this.el.querySelector("[name=q]")
     this.type = this.el.querySelector("[name=type]")
     this.source = this.el.querySelector("[name=source]")
@@ -207,7 +235,12 @@ const RecordExplorer = {
     this.more = this.el.querySelector("[data-record-more]")
     this.limit = 30
     this.layoutChoices = new Map()
-    this.updateFilters = () => { this.limit = 30; this.apply() }
+    this.updateFilters = () => {
+      this.limit = 30
+      this.apply()
+      const path = filterURL(window.location.href, {q: this.q.value, type: this.type.value, source: this.source.value})
+      window.history.replaceState(window.history.state, "", path)
+    }
     this.clear = event => {
       event.preventDefault()
       this.q.value = ""; this.type.value = ""; this.source.value = ""
@@ -233,18 +266,17 @@ const RecordExplorer = {
     if (!this.inventory) return
     this.observer = new MutationObserver(() => {
       if (this.frame) return
-      this.frame = requestAnimationFrame(() => { this.frame = null; this.apply() })
+      this.frame = requestAnimationFrame(() => {
+        this.frame = null
+        this.apply()
+        if (this.pendingFragment) this.revealFragment()
+      })
     })
     this.observer.observe(this.inventory, {
       subtree: true, childList: true, characterData: true, attributes: true,
       attributeFilter: ["hidden", "data-record-kind", "data-record-sources"]
     })
-    this.revealFragment = () => {
-      let id
-      try { id = decodeURIComponent(window.location.hash.slice(1)) } catch { return }
-      const target = id && document.getElementById(id)
-      if (openRecordTarget(this.inventory, target)) target.scrollIntoView({block: "start"})
-    }
+    this.revealFragment = () => revealRecordFragment(this, this.inventory, window.location.hash)
     window.addEventListener("hashchange", this.revealFragment)
     this.apply()
     this.revealFragment()
@@ -284,5 +316,21 @@ const RecordExplorer = {
     this.el.removeEventListener("click", this.click)
     this.el.querySelector("#record-clear")?.removeEventListener("click", this.clear)
   }
+}
+// Make the saved inventory usable before the live transport connects. The
+// LiveView hook takes over and removes these listeners once it mounts.
+export function bootRecordExplorer(dom = document) {
+  const el = dom.querySelector('[phx-hook="RecordExplorer"]')
+  // Old preview bookmarks used a generic jump into the toolbar. Entry URLs
+  // now open at the top; exact source-record fragments still work normally.
+  if (el && window.location.hash === "#record-search") {
+    window.history.replaceState(window.history.state, "", window.location.pathname + window.location.search)
+    window.scrollTo(0, 0)
+  }
+  if (!el || earlyExplorer) return
+  const instance = Object.create(RecordExplorer)
+  instance.el = el
+  instance.mounted()
+  earlyExplorer = instance
 }
 export default RecordExplorer

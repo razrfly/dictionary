@@ -39,14 +39,48 @@ defmodule DevilsDictionaryWeb.ReadingStatus do
   def init(opts), do: opts
 
   def call(conn, _opts) do
+    legacy? =
+      conn.params["view"] == "records" and
+        (match?(["on", _], conn.path_info) or match?(["words", _, _], conn.path_info))
+
+    if legacy? do
+      query = URI.decode_query(conn.query_string) |> Map.delete("view")
+
+      target =
+        conn.request_path <>
+          "/materials" <>
+          if(map_size(query) == 0, do: "", else: "?" <> URI.encode_query(query))
+
+      conn |> put_status(301) |> Phoenix.Controller.redirect(to: target) |> halt()
+    else
+      route_status(conn)
+    end
+  end
+
+  defp route_status(conn) do
     mode = ReadingMode.mode(conn.assigns[:current_scope], ProxyGuard.proxied?(conn))
 
     case conn.path_info do
-      ["on", _slug] -> on(conn, mode)
-      ["words", _id, _slug] -> word(conn)
-      ["entities", _id, _slug] -> entity(conn)
-      [family, _slug] -> if family in Address.families(), do: subject(conn, mode), else: conn
-      _other -> conn
+      ["on", _slug, "materials"] ->
+        on(conn, mode, String.replace_suffix(conn.request_path, "/materials", ""))
+
+      ["words", _id, _slug, "materials"] ->
+        word(conn)
+
+      ["on", _slug] ->
+        on(conn, mode)
+
+      ["words", _id, _slug] ->
+        word(conn)
+
+      ["entities", _id, _slug] ->
+        entity(conn)
+
+      [family, _slug] ->
+        if family in Address.families(), do: subject(conn, mode), else: conn
+
+      _other ->
+        conn
     end
   end
 
@@ -58,8 +92,8 @@ defmodule DevilsDictionaryWeb.ReadingStatus do
     end
   end
 
-  defp on(conn, mode) do
-    resolution = Resolver.resolve(conn.request_path, mode: mode)
+  defp on(conn, mode, base \\ nil) do
+    resolution = Resolver.resolve(base || conn.request_path, mode: mode)
 
     # Words first: an overview's alias never redirects them away.
     cond do
@@ -70,7 +104,7 @@ defmodule DevilsDictionaryWeb.ReadingStatus do
         conn
 
       resolution.outcome == :redirect and resolution.page.role == :overview ->
-        redirect(conn, resolution.location)
+        redirect(conn, resolution.location, not is_nil(base))
 
       resolution.outcome == :canonical and resolution.page.role == :overview ->
         conn
@@ -117,10 +151,12 @@ defmodule DevilsDictionaryWeb.ReadingStatus do
 
   defp exact_id(_text), do: nil
 
-  defp redirect(conn, location) do
+  defp redirect(conn, location, materials? \\ false) do
+    target = Address.encode(location) <> if(materials?, do: "/materials", else: "")
+
     conn
     |> put_status(301)
-    |> Phoenix.Controller.redirect(to: Address.encode(location))
+    |> Phoenix.Controller.redirect(to: target)
     |> halt()
   end
 end

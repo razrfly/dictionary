@@ -292,7 +292,7 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
       assert html =~ ~s(id="provenance-records")
       assert html =~ "materialized"
       assert html =~ ~s(id="provenance-raw")
-      assert_patched(live, "/on/oyster?provenance=card%3Acard-wiktionary&view=records")
+      assert_patched(live, "/on/oyster/materials?provenance=card%3Acard-wiktionary")
     end
 
     test "the drawer shows the record's own id, url and the source's license", ctx do
@@ -328,7 +328,7 @@ defmodule DevilsDictionaryWeb.WordLiveTest do
       html = live |> element("#provenance-close") |> render_click()
 
       refute html =~ ~s(id="provenance-panel")
-      assert_patched(live, "/on/oyster?trail=cat&view=records")
+      assert_patched(live, "/on/oyster/materials?trail=cat")
     end
 
     test "the thing panel opens its own drawer, keyed by the concept", ctx do

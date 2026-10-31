@@ -368,7 +368,7 @@ defmodule DevilsDictionaryWeb.ConnectedFlowTest do
       assert {:error, {:live_redirect, %{to: to}}} =
                source_live(ctx.conn, ~p"/words/#{ctx.nepotism.object_id}/wrong-slug")
 
-      assert to == "/words/#{ctx.nepotism.object_id}/nepotism?view=records"
+      assert to == "/words/#{ctx.nepotism.object_id}/nepotism/materials"
     end
 
     test "an entity's slug redirects the same way", ctx do

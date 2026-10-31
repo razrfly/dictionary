@@ -16,26 +16,26 @@ defmodule DevilsDictionaryWeb.WordReferenceLiveTest do
     refute has_element?(view, "#in-culture")
     refute has_element?(view, "#card-bierce")
     assert has_element?(view, "#opening-lead-text", "temporary insanity")
-    assert has_element?(view, "#opening-lead-entry[href*='view=records'][href$='#card-bierce']")
+    assert has_element?(view, "#opening-lead-entry[href*='/materials'][href$='#card-bierce']")
     assert has_element?(view, "#opening-lead-credits")
     assert has_element?(view, "#opening-about")
 
     assert has_element?(
              view,
-             "#opening-lead-meaning a[href*='view=records'][href$='#card-bierce']"
+             "#opening-lead-meaning a[href*='/materials'][href$='#card-bierce']"
            )
 
     refute has_element?(view, "#opening-lead-meaning a[phx-click]")
     assert has_element?(view, "#opening-fixture", "not published")
     assert has_element?(view, "#entry-curated[aria-current='page']")
-    assert has_element?(view, "#rail-card-bierce[href*='view=records'][href$='#card-bierce']")
+    assert has_element?(view, "#rail-card-bierce[href*='/materials'][href$='#card-bierce']")
     refute has_element?(view, "#entry-layout-switch")
   end
 
   test "source records retain every original card, source text, subject and related record once",
        ctx do
     {:ok, old, _} = live(ctx.conn, "/on/love?layout=current")
-    {:ok, records, _} = live(ctx.conn, "/on/love?view=records")
+    {:ok, records, _} = live(ctx.conn, "/on/love/materials")
     assert has_element?(records, "#source-record-view")
     refute has_element?(records, "#opening")
 
@@ -64,7 +64,7 @@ defmodule DevilsDictionaryWeb.WordReferenceLiveTest do
   end
 
   test "All materials provides a compact search surface and complete record disclosure", ctx do
-    {:ok, view, _} = live(ctx.conn, "/on/love?view=records")
+    {:ok, view, _} = live(ctx.conn, "/on/love/materials")
     render(view)
     assert has_element?(view, "#source-record-view h1", "All materials")
     assert has_element?(view, "[data-record-categories][aria-label='Material categories']")
@@ -84,7 +84,7 @@ defmodule DevilsDictionaryWeb.WordReferenceLiveTest do
     end)
 
     before = DevilsDictionary.Repo.aggregate(Oban.Job, :count)
-    {:ok, view, _} = live(ctx.conn, "/on/love?view=records")
+    {:ok, view, _} = live(ctx.conn, "/on/love/materials")
     render(view)
     render_hook(view, "discovery_more", %{"providers" => "cinegraph"})
     assert DevilsDictionary.Repo.aggregate(Oban.Job, :count) == before
@@ -102,7 +102,7 @@ defmodule DevilsDictionaryWeb.WordReferenceLiveTest do
 
     render_patch(
       view,
-      "/words/#{ctx.love.object_id}/love?view=records&trail=war&q=Milton&type=quote&source=wiktionary"
+      "/words/#{ctx.love.object_id}/love/materials?trail=war&q=Milton&type=quote&source=wiktionary"
     )
 
     assert has_element?(view, "#record-query[value='Milton']")
@@ -115,10 +115,10 @@ defmodule DevilsDictionaryWeb.WordReferenceLiveTest do
     view |> element("#entry-records") |> render_click()
     assert has_element?(view, "#record-query[value='Milton']")
     assert has_element?(view, "#record-search input[name='trail'][value='war']")
-    assert has_element?(view, "#card-bierce-info[href*='view=records'][href*='q=Milton']")
+    assert has_element?(view, "#card-bierce-info[href*='/materials'][href*='q=Milton']")
     view |> element("#card-bierce-info") |> render_click()
     assert has_element?(view, "#provenance")
-    assert has_element?(view, "#provenance-close[href*='view=records'][href*='q=Milton']")
+    assert has_element?(view, "#provenance-close[href*='/materials'][href*='q=Milton']")
     view |> element("#provenance-close") |> render_click()
     refute has_element?(view, "#provenance")
     assert has_element?(view, "#source-record-view")
@@ -129,11 +129,11 @@ defmodule DevilsDictionaryWeb.WordReferenceLiveTest do
 
   test "bare, unavailable and malformed filter values leave source records readable", ctx do
     DevilsDictionary.WordFixtures.word!(ctx, "sparse", [], scope: nil)
-    {:ok, sparse, _} = live(ctx.conn, "/on/sparse?view=records")
+    {:ok, sparse, _} = live(ctx.conn, "/on/sparse/materials")
     assert has_element?(sparse, "#source-record-view")
     assert has_element?(sparse, "#record-search")
     refute has_element?(sparse, "#opening")
-    {:ok, malformed, _} = live(ctx.conn, "/on/love?view=records&q[a]=bad&type[a]=bad")
+    {:ok, malformed, _} = live(ctx.conn, "/on/love/materials?q[a]=bad&type[a]=bad")
     assert has_element?(malformed, "#record-query[value='']")
     assert has_element?(malformed, "#reference-record #card-bierce")
     refute has_element?(malformed, "#opening-fixture")
@@ -141,25 +141,25 @@ defmodule DevilsDictionaryWeb.WordReferenceLiveTest do
 
   test "a shared source filter is retained before that provider's asynchronous rows arrive",
        ctx do
-    {:ok, view, _} = live(ctx.conn, "/on/love?view=records&source=not-yet-loaded")
+    {:ok, view, _} = live(ctx.conn, "/on/love/materials?source=not-yet-loaded")
     assert has_element?(view, "#record-source option[value='not-yet-loaded'][selected]")
     assert has_element?(view, "#card-bierce")
-    assert has_element?(view, "#record-clear[href='?view=records']")
+    assert has_element?(view, "#record-clear[href='/on/love/materials']")
   end
 
   test "canonical slug correction retains view and filter parameters", ctx do
-    query = "view=records&source=bierce&q=insanity&trail=war"
+    query = "source=bierce&q=insanity&trail=war"
 
     assert {:error, {:live_redirect, %{to: target}}} =
-             live(ctx.conn, "/words/#{ctx.love.object_id}/old-name?" <> query)
+             live(ctx.conn, "/words/#{ctx.love.object_id}/old-name/materials?" <> query)
 
-    assert URI.parse(target).path == "/words/#{ctx.love.object_id}/love"
+    assert URI.parse(target).path == "/words/#{ctx.love.object_id}/love/materials"
     assert URI.decode_query(URI.parse(target).query) == URI.decode_query(query)
   end
 
   test "inert filters on the curated article do not change its source navigation", ctx do
     {:ok, view, _} = live(ctx.conn, "/on/love?q=Milton&type=quote&source=wiktionary")
-    assert has_element?(view, "#entry-records[href='/on/love?view=records']")
+    assert has_element?(view, "#entry-records[href='/on/love/materials']")
     refute has_element?(view, "#record-query")
   end
 
@@ -167,6 +167,23 @@ defmodule DevilsDictionaryWeb.WordReferenceLiveTest do
     {:ok, view, _} = live(ctx.conn, "/on/love?view=unrecognised")
     assert has_element?(view, "#reference-article")
     refute has_element?(view, "#record-inventory")
+  end
+
+  test "materials has a clean entry route and legacy source links redirect with their filters",
+       ctx do
+    {:ok, view, _} = live(ctx.conn, "/on/love/materials")
+    assert has_element?(view, "#source-record-view")
+    assert has_element?(view, "#entry-records[href='/on/love/materials']")
+    assert has_element?(view, "#record-search[action='/on/love/materials']")
+    refute has_element?(view, "#record-search input[name='view']")
+    assert has_element?(view, "#record-clear[href='/on/love/materials']")
+
+    response = get(ctx.conn, "/on/love?view=records&q=insanity&type=definition")
+    target = redirected_to(response, 301) |> URI.parse()
+    assert target.path == "/on/love/materials"
+    assert URI.decode_query(target.query) == %{"q" => "insanity", "type" => "definition"}
+    assert get(ctx.conn, "/on/not-a-real-word/materials").status == 404
+    assert get(ctx.conn, "/words/999999999/no-word/materials").status == 404
   end
 
   defp text(html),

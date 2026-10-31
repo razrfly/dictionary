@@ -7,6 +7,7 @@ defmodule DevilsDictionaryWeb.RecordExplorer do
   use DevilsDictionaryWeb, :html
 
   attr :id, :string, required: true
+  attr :path, :string, required: true
   attr :filters, :map, default: %{}
   attr :params, :map, default: %{}
   attr :sources, :list, default: []
@@ -46,8 +47,7 @@ defmodule DevilsDictionaryWeb.RecordExplorer do
         </details>
       </aside>
       <div class="record-search-body">
-        <.form for={@form} id="record-search" method="get" action="" class="record-toolbar">
-          <input type="hidden" name="view" value="records" />
+        <.form for={@form} id="record-search" method="get" action={@path} class="record-toolbar">
           <input :for={{key, value} <- @params} type="hidden" name={key} value={value} />
           <input id="record-type" type="hidden" name="type" value={@filters["type"] || ""} />
           <div class="record-query-control">
@@ -75,7 +75,7 @@ defmodule DevilsDictionaryWeb.RecordExplorer do
           <button type="submit" class="sr-only">Search materials</button>
           <a
             id="record-clear"
-            href={"?" <> URI.encode_query(Map.put(@params, "view", "records"))}
+            href={@path <> if(map_size(@params) == 0, do: "", else: "?" <> URI.encode_query(@params))}
             class="record-clear"
           >Clear</a>
         </.form>

@@ -227,6 +227,7 @@ export default {
       'Fetched by your browser; nothing is stored here.'
 
     body.append(byline, outLine)
+    this.el.dataset.recordKind = 'definition'
     this.el.querySelector('[data-status]')?.remove()
   },
 

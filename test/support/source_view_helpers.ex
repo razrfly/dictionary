@@ -9,7 +9,7 @@ defmodule DevilsDictionary.SourceViewHelpers do
 
     case live(conn, source_path) do
       {:ok, view, html} ->
-        if URI.decode_query(URI.parse(source_path).query || "")["view"] == "records",
+        if String.ends_with?(URI.parse(source_path).path, "/materials"),
           do: {:ok, view, Phoenix.LiveViewTest.render(view)},
           else: {:ok, view, html}
 
@@ -25,8 +25,16 @@ defmodule DevilsDictionary.SourceViewHelpers do
 
     if String.starts_with?(uri.path || "", ["/on/", "/words/", "/define/"]) and
          query["layout"] != "current" do
-      query = Map.put(query, "view", "records")
-      URI.to_string(%{uri | query: URI.encode_query(query)})
+      query = Map.delete(query, "view")
+
+      path =
+        if String.ends_with?(uri.path, "/materials"), do: uri.path, else: uri.path <> "/materials"
+
+      URI.to_string(%{
+        uri
+        | path: path,
+          query: if(map_size(query) == 0, do: nil, else: URI.encode_query(query))
+      })
     else
       path
     end

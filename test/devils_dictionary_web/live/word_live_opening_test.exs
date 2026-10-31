@@ -105,7 +105,7 @@ defmodule DevilsDictionaryWeb.WordLiveOpeningTest do
     assert has_element?(view, "#opening-lead-record-details", "1911")
     assert has_element?(view, "#opening-lead-receipt a[href*='/on/love/receipt/']")
     assert has_element?(view, "#opening-highlight-1-record-details")
-    assert has_element?(view, "#rail-card-johnson[href*='view=records']")
+    assert has_element?(view, "#rail-card-johnson[href*='/materials']")
     assert has_element?(view, "#opening-about")
   end
 
@@ -126,7 +126,7 @@ defmodule DevilsDictionaryWeb.WordLiveOpeningTest do
 
     assert has_element?(
              view,
-             "#opening-lead-entry[href*='view=records'][href$='#card-bierce']",
+             "#opening-lead-entry[href*='/materials'][href$='#card-bierce']",
              "Read the whole entry"
            )
 
@@ -135,7 +135,7 @@ defmodule DevilsDictionaryWeb.WordLiveOpeningTest do
 
     assert has_element?(
              view,
-             "#opening-highlight-1-entry[href*='view=records'][href$='#card-johnson']"
+             "#opening-highlight-1-entry[href*='/materials'][href$='#card-johnson']"
            )
 
     assert has_element?(view, "#opening-highlight-2-text", "cordial love")
@@ -185,9 +185,9 @@ defmodule DevilsDictionaryWeb.WordLiveOpeningTest do
     assert has_element?(view, "#opening-about-next", "Queued now.")
 
     # The dictionary index links to the full uncurated record.
-    assert has_element?(view, "#rail-card-bierce[href*='view=records'][href$='#card-bierce']")
+    assert has_element?(view, "#rail-card-bierce[href*='/materials'][href$='#card-bierce']")
     refute has_element?(view, "#curated-empty")
-    {:ok, records, _} = live(ctx.conn, ~p"/on/love?view=records")
+    {:ok, records, _} = live(ctx.conn, ~p"/on/love/materials")
     assert has_element?(records, "#card-bierce")
   end
 
@@ -564,7 +564,7 @@ defmodule DevilsDictionaryWeb.WordLiveOpeningTest do
     assert has_element?(on, "#opening-lead")
     refute has_element?(noun, "#opening")
     refute has_element?(verb, "#opening")
-    assert has_element?(noun, "#rail-card-bierce[href*='view=records']")
+    assert has_element?(noun, "#rail-card-bierce[href*='/materials']")
   end
 
   describe "#259: the refresh clock on the page" do

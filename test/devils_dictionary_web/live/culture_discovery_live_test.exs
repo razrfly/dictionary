@@ -39,7 +39,7 @@ defmodule DevilsDictionaryWeb.CultureDiscoveryLiveTest do
     on_exit(fn -> Application.put_env(:devils_dictionary, :giphy, original) end)
     word = word!(ctx, "mountain", ~w(wordnet))
     sense!(ctx, word, "wordnet", gloss: "a large hill")
-    {:ok, view, _} = source_live(ctx.conn, ~p"/on/mountain?view=records")
+    {:ok, view, _} = source_live(ctx.conn, ~p"/on/mountain/materials")
     assert has_element?(view, "[phx-hook=GiphyShelf][data-query=mountain]")
     assert has_element?(view, "[data-more][hidden]")
     refute has_element?(view, "button", "Find GIFs")
@@ -77,6 +77,24 @@ defmodule DevilsDictionaryWeb.CultureDiscoveryLiveTest do
       assert has_element?(live, "#culture-about-film-cinegraph")
       refute has_element?(live, "#culture-failed")
     end
+  end
+
+  test "saved discoveries render in the first HTTP response without admitting provider jobs",
+       ctx do
+    only([CineGraph])
+    word = word!(ctx, "affection", ~w(bierce))
+    entry!(ctx, word, "bierce", body: "A saved definition.")
+    stub_success("affection", 273_968, [movie(331, "Already saved material")])
+    {:ok, live, _} = source_live(ctx.conn, "/on/affection/materials")
+    assert :ok = Discovery.execute_run(Repo.one!(Run).id)
+    _ = render(live)
+    before = Repo.aggregate(Oban.Job, :count)
+
+    document =
+      get(ctx.conn, "/on/affection/materials") |> html_response(200) |> LazyHTML.from_document()
+
+    assert Enum.count(LazyHTML.query(document, "#culture-result-tmdb_movie-331")) == 1
+    assert Repo.aggregate(Oban.Job, :count) == before
   end
 
   test "missing posters use an intentional text treatment", ctx do
@@ -466,9 +484,9 @@ defmodule DevilsDictionaryWeb.CultureDiscoveryLiveTest do
     # The very first, disconnected render is where a promise gets made: a
     # "Looking for matching artwork…" that resolves to nothing is worse than no
     # shelf, so the reader asks the same question the admission gate asks.
-    html = ctx.conn |> get(~p"/on/nepotism?view=records") |> html_response(200)
+    html = ctx.conn |> get(~p"/on/nepotism/materials") |> html_response(200)
     refute html =~ "In artwork"
-    assert html =~ "In film"
+    assert html =~ "Source / API coverage"
 
     {:ok, live, _html} = source_live(ctx.conn, ~p"/on/nepotism")
     for run <- Repo.all(Run), do: assert(:ok = Discovery.execute_run(run.id))

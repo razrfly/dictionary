@@ -75,6 +75,8 @@ defmodule DevilsDictionaryWeb.Router do
     #
     # `/define/:slug` is gone: nothing has been public, so nothing redirects.
     live "/on/:slug/receipt/:version", CurationReceiptLive, :show
+    live "/on/:slug/materials", WordLive, :on
+    live "/words/:id/:slug/materials", WordLive, :canonical
     live "/on/:slug", WordLive, :on
     live "/words/:id/:slug", WordLive, :canonical
 
