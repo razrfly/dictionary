@@ -179,6 +179,7 @@ defmodule DevilsDictionaryWeb.Opening do
   attr :opening, Composition, required: true
   attr :mode, :atom, default: :public
   attr :reviewer?, :boolean, default: false
+  attr :record_path, :string, default: ""
   slot :facts
 
   def reference_section(assigns) do
@@ -213,7 +214,7 @@ defmodule DevilsDictionaryWeb.Opening do
       </header>
       <div class="reference-reading-grid">
         <div class="reference-selected-reading min-w-0">
-          <.lead :if={@opening.lead} lead={@opening.lead} compact />
+          <.lead :if={@opening.lead} lead={@opening.lead} compact record_path={@record_path} />
           <.withheld :if={@withheld_lead} id="opening-withheld-lead" item={@withheld_lead} tag="div" />
           <div id="curated-sections" class="flex min-w-0 flex-col gap-10">
             <section
@@ -231,6 +232,7 @@ defmodule DevilsDictionaryWeb.Opening do
                   shares_row={false}
                   mode={@mode}
                   compact
+                  record_path={@record_path}
                 />
               </ul>
             </section>
@@ -289,6 +291,7 @@ defmodule DevilsDictionaryWeb.Opening do
 
   # ── the lead ─────────────────────────────────────────────────────────────
 
+  attr :record_path, :string, default: ""
   attr :lead, :map, required: true
   attr :compact, :boolean, default: false
 
@@ -318,8 +321,8 @@ defmodule DevilsDictionaryWeb.Opening do
           <.link
             :if={@lead.links[:card_id]}
             id="opening-lead-entry"
-            href={"#" <> @lead.links.card_id}
-            phx-click={open_card(@lead.links.card_id)}
+            href={@record_path <> "#" <> @lead.links.card_id}
+            phx-click={if @record_path == "", do: open_card(@lead.links.card_id)}
             class="flex min-h-11 items-center gap-x-1.5 rounded-sm text-mist-600 underline underline-offset-4 hover:text-mist-950 sm:min-h-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:text-mist-400 dark:hover:text-white dark:focus-visible:outline-white"
           >
             <%= if @lead.excerpt.clipped? do %>
@@ -351,6 +354,7 @@ defmodule DevilsDictionaryWeb.Opening do
 
   # ── highlights ───────────────────────────────────────────────────────────
 
+  attr :record_path, :string, default: ""
   attr :highlight, :map, required: true
   attr :mode, :atom, default: :public
   attr :compact, :boolean, default: false
@@ -620,8 +624,8 @@ defmodule DevilsDictionaryWeb.Opening do
           <.link
             :if={@highlight.links[:card_id]}
             id={"#{@id}-entry"}
-            href={"#" <> @highlight.links.card_id}
-            phx-click={open_card(@highlight.links.card_id)}
+            href={@record_path <> "#" <> @highlight.links.card_id}
+            phx-click={if @record_path == "", do: open_card(@highlight.links.card_id)}
             class="flex min-h-11 items-center gap-x-1.5 rounded-sm underline underline-offset-4 hover:text-mist-950 sm:min-h-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:hover:text-white dark:focus-visible:outline-white"
           >
             <%= if @highlight.excerpt.clipped? do %>

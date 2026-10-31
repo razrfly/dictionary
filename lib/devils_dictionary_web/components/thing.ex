@@ -70,6 +70,10 @@ defmodule DevilsDictionaryWeb.Thing do
     ~H"""
     <div
       id="concept-card"
+      data-record-kind="entity"
+      data-record-sources={
+        DevilsDictionaryWeb.RecordExplorer.sources([%{slug: "wikidata", name: "Wikidata"}])
+      }
       class="mt-4 flex flex-col gap-4 rounded-xl bg-mist-950/2.5 p-4 sm:flex-row dark:bg-white/5"
     >
       <figure :if={@concept.image_url} class="shrink-0 sm:w-48">
@@ -159,7 +163,12 @@ defmodule DevilsDictionaryWeb.Thing do
 
   def article(assigns) do
     ~H"""
-    <div id="thing-article" class="mt-4 max-w-[47rem]">
+    <div
+      id="thing-article"
+      data-record-kind="text"
+      data-record-sources={DevilsDictionaryWeb.RecordExplorer.sources([@article.source])}
+      class="mt-4 max-w-[47rem]"
+    >
       <.document>{Phoenix.HTML.raw(@article.preview_html)}</.document>
 
       <details :if={@article.rest_html} id="thing-article-rest" class="group/article mt-2">

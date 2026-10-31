@@ -11,6 +11,7 @@ defmodule DevilsDictionaryWeb.WordWalkTest do
   use DevilsDictionaryWeb.ConnCase, async: true
 
   import DevilsDictionary.WordFixtures
+  import DevilsDictionary.SourceViewHelpers
   import Phoenix.LiveViewTest
 
   alias DevilsDictionary.Fixtures
@@ -61,7 +62,7 @@ defmodule DevilsDictionaryWeb.WordWalkTest do
     # the same word, and a walk that revisits it is a walk going nowhere.
     {seen, final_url} =
       Enum.reduce(1..@hops, {["oyster"], "/on/oyster"}, fn hop, {seen, url} ->
-        {:ok, _live, html} = live(ctx.conn, url)
+        {:ok, _live, html} = source_live(ctx.conn, url)
 
         assert html =~ ~s(id="headword"), "hop #{hop}: #{url} has no headword"
 
@@ -83,7 +84,7 @@ defmodule DevilsDictionaryWeb.WordWalkTest do
     assert final_url =~ "trail="
 
     # The trail the tenth page arrived with is the walk, in order.
-    {:ok, _live, html} = live(ctx.conn, final_url)
+    {:ok, _live, html} = source_live(ctx.conn, final_url)
     assert html =~ ~s(id="trail")
     assert html =~ ~s(id="trail-oyster")
   end
@@ -106,14 +107,14 @@ defmodule DevilsDictionaryWeb.WordWalkTest do
     tabby = word!(ctx, "tabby", ~w(wiktionary))
     relation!(ctx, kitten, :derived, tabby)
 
-    {:ok, live, _html} = live(ctx.conn, ~p"/on/cat")
+    {:ok, live, _html} = source_live(ctx.conn, ~p"/on/cat")
 
     {:error, {:live_redirect, %{to: to}}} =
       live |> element("#thing-kinds-kitten") |> render_click()
 
     assert to == "/on/kitten?trail=cat"
 
-    {:ok, _live, html} = live(ctx.conn, to)
+    {:ok, _live, html} = source_live(ctx.conn, to)
 
     assert html =~ ~s(id="trail-cat")
     assert html =~ ~s(id="related-family-tabby")
@@ -124,7 +125,7 @@ defmodule DevilsDictionaryWeb.WordWalkTest do
 
     url = "/on/mollusk?trail=oyster,bivalve"
 
-    {:ok, _live, html} = live(ctx.conn, url)
+    {:ok, _live, html} = source_live(ctx.conn, url)
 
     assert html =~ ~s(id="trail-oyster")
     assert html =~ ~s(id="trail-bivalve")

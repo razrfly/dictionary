@@ -11,6 +11,7 @@ defmodule DevilsDictionaryWeb.WordExamplesTest do
   use DevilsDictionaryWeb.ConnCase, async: true
 
   import DevilsDictionary.WordFixtures
+  import DevilsDictionary.SourceViewHelpers
   import Phoenix.LiveViewTest
 
   alias DevilsDictionary.Fixtures
@@ -47,7 +48,7 @@ defmodule DevilsDictionaryWeb.WordExamplesTest do
     named!(ctx, "Korean War", "oewn-korean-war-n")
     named!(ctx, "Boer War", "oewn-boer-war-n")
 
-    {:ok, live, _html} = live(ctx.conn, ~p"/on/war")
+    {:ok, live, _html} = source_live(ctx.conn, ~p"/on/war")
 
     assert has_element?(live, "#examples")
     assert has_element?(live, "#examples-instances li", "Korean War")
@@ -62,7 +63,7 @@ defmodule DevilsDictionaryWeb.WordExamplesTest do
   test "a chip hops to the thing's word, with the trail", ctx do
     named!(ctx, "Korean War", "oewn-korean-war-n")
 
-    {:ok, live, _html} = live(ctx.conn, ~p"/on/war")
+    {:ok, live, _html} = source_live(ctx.conn, ~p"/on/war")
 
     {:error, {:live_redirect, %{to: to}}} =
       live |> element("#examples-instances a", "Korean War") |> render_click()
@@ -75,7 +76,7 @@ defmodule DevilsDictionaryWeb.WordExamplesTest do
     concept_relation!(ctx, pig_war, :instance_of, ctx.q198)
     named!(ctx, "Korean War", "oewn-korean-war-n")
 
-    {:ok, live, _html} = live(ctx.conn, ~p"/on/war")
+    {:ok, live, _html} = source_live(ctx.conn, ~p"/on/war")
 
     assert live
            |> element(chip_id("inst:e#{pig_war.object_id}"))
@@ -93,7 +94,7 @@ defmodule DevilsDictionaryWeb.WordExamplesTest do
   test "past the cap, the rest fold behind a disclosure that counts them", ctx do
     for i <- 1..15, do: named!(ctx, "War #{i}", "oewn-war-#{i}-n")
 
-    {:ok, live, _html} = live(ctx.conn, ~p"/on/war")
+    {:ok, live, _html} = source_live(ctx.conn, ~p"/on/war")
 
     assert live |> element("#examples-instances") |> render() |> count_chips() == 12
     assert has_element?(live, "#examples-more summary", "3")
@@ -103,7 +104,7 @@ defmodule DevilsDictionaryWeb.WordExamplesTest do
   test "a word nothing names has no section", ctx do
     word!(ctx, "coward", ~w(wordnet))
 
-    {:ok, live, _html} = live(ctx.conn, ~p"/on/coward")
+    {:ok, live, _html} = source_live(ctx.conn, ~p"/on/coward")
 
     refute has_element?(live, "#examples")
   end

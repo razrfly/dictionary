@@ -12,6 +12,7 @@ defmodule DevilsDictionaryWeb.WordWithoutConceptTest do
   use DevilsDictionaryWeb.ConnCase, async: true
 
   import DevilsDictionary.WordFixtures
+  import DevilsDictionary.SourceViewHelpers
   import Phoenix.LiveViewTest
 
   alias DevilsDictionary.Fixtures
@@ -35,10 +36,10 @@ defmodule DevilsDictionaryWeb.WordWithoutConceptTest do
     assert %{concept: nil, may_refer_to: [_ | _]} = page.thing
 
     for path <- ["/words/#{word.object_id}/oyster", "/on/oyster"] do
-      html = ctx.conn |> get(path) |> html_response(200)
+      html = ctx.conn |> get(source_path(path)) |> html_response(200)
       refute html =~ ~s(id="quick-definition"), path
       assert html =~ ~s(id="may-refer-to"), path
-      assert {:ok, view, _html} = live(ctx.conn, path)
+      assert {:ok, view, _html} = source_live(ctx.conn, path)
       assert has_element?(view, "#may-refer-to")
       refute has_element?(view, "#quick-definition")
     end
@@ -61,8 +62,10 @@ defmodule DevilsDictionaryWeb.WordWithoutConceptTest do
     assert %{concept: nil, may_refer_to: [], disagreement: [_, _]} = page.thing
 
     for path <- ["/words/#{word.object_id}/seal", "/on/seal"] do
-      refute ctx.conn |> get(path) |> html_response(200) =~ ~s(id="quick-definition"), path
-      {:ok, view, _html} = live(ctx.conn, path)
+      refute ctx.conn |> get(source_path(path)) |> html_response(200) =~ ~s(id="quick-definition"),
+             path
+
+      {:ok, view, _html} = source_live(ctx.conn, path)
       refute has_element?(view, "#quick-definition")
     end
   end
@@ -74,7 +77,7 @@ defmodule DevilsDictionaryWeb.WordWithoutConceptTest do
     for path <- ["/words/#{word.object_id}/quoll", "/on/quoll"] do
       html = ctx.conn |> get(path <> "?provenance=thing") |> html_response(200)
       assert html =~ ~s(id="provenance-panel"), path
-      {:ok, view, _html} = live(ctx.conn, path)
+      {:ok, view, _html} = source_live(ctx.conn, path)
       assert render_patch(view, path <> "?provenance=thing") =~ ~s(id="provenance-panel")
     end
   end

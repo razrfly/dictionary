@@ -191,7 +191,7 @@ defmodule DevilsDictionaryWeb.PublishedHostLinksTest do
     world = world!(ctx)
 
     published_host(fn ->
-      html = ctx.conn |> tunnel() |> get("/on/voltaire") |> html_response(200)
+      html = ctx.conn |> tunnel() |> get("/on/voltaire?view=records") |> html_response(200)
       doc = doc(html)
 
       # The Subjects section: the published person at his address, the draft

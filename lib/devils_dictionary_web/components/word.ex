@@ -387,12 +387,13 @@ defmodule DevilsDictionaryWeb.Word do
     doc:
       "whether the rail opens with the headword; `WordLive` renders it on its own, before a curated opening, when there is one (#156)"
 
+  attr :record_path, :string, default: ""
   attr :sources_first, :boolean, default: false
 
   def rail(assigns) do
     ~H"""
     <aside id="word-rail" class={@class}>
-      <.rail_sources :if={@sources_first} page={@page} sources={@sources} />
+      <.rail_sources :if={@sources_first} page={@page} sources={@sources} record_path={@record_path} />
       <.headword
         :if={@headword}
         headword={@page.headword}
@@ -402,7 +403,7 @@ defmodule DevilsDictionaryWeb.Word do
         demo={@demo}
       />
       <.stats page={@page} sources={@sources} />
-      <.subjects_link :if={@subjects} subjects={@subjects} />
+      <.subjects_link :if={@subjects} subjects={@subjects} record_path={@record_path} />
 
       <%!-- On screen, not behind a summary (#133 R5). The Wikimedia A/B #131
            read says ~60% of readers never expand a collapsed section, and the
@@ -412,6 +413,8 @@ defmodule DevilsDictionaryWeb.Word do
       <div
         :if={facts?(@page.headword)}
         id="word-facts"
+        data-record-kind="definition"
+        data-record-sources={DevilsDictionaryWeb.RecordExplorer.sources([])}
         class="mt-5 border-t border-mist-950/10 pt-4 dark:border-white/10"
       >
         <.forms forms={@page.headword.forms} />
@@ -442,7 +445,7 @@ defmodule DevilsDictionaryWeb.Word do
         </details>
       </div>
 
-      <.rail_sources :if={!@sources_first} page={@page} sources={@sources} />
+      <.rail_sources :if={!@sources_first} page={@page} sources={@sources} record_path={@record_path} />
     </aside>
     """
   end
@@ -454,6 +457,8 @@ defmodule DevilsDictionaryWeb.Word do
 
   attr :page, :map, required: true
   attr :sources, :list, required: true
+
+  attr :record_path, :string, default: ""
 
   defp rail_sources(assigns) do
     ~H"""
@@ -478,7 +483,7 @@ defmodule DevilsDictionaryWeb.Word do
                  line instead of cutting the name to "Wiktionary (Engli…". Five
                  parts of speech and a 31-character source name is `set`. --%>
           <a
-            href={"#" <> group.card_id}
+            href={@record_path <> "#" <> group.card_id}
             class={[
               "truncate hover:underline",
               group.tier == :aristocracy && "text-amber-700 dark:text-amber-400",
@@ -498,7 +503,7 @@ defmodule DevilsDictionaryWeb.Word do
               <span :if={i > 0} aria-hidden="true">·</span>
               <a
                 id={"rail-#{part.card_id}"}
-                href={"#" <> part.card_id}
+                href={@record_path <> "#" <> part.card_id}
                 aria-label={"#{author(group.source)} · #{part.label}"}
                 class="hover:text-mist-950 hover:underline dark:hover:text-white"
               >
@@ -552,6 +557,7 @@ defmodule DevilsDictionaryWeb.Word do
   end
 
   attr :subjects, :map, required: true
+  attr :record_path, :string, default: ""
 
   # The Subjects section sits low on a long page, after the definitions and
   # the culture; the rail says how many there are and takes the reader there.
@@ -569,7 +575,7 @@ defmodule DevilsDictionaryWeb.Word do
     <a
       :if={@count > 0}
       id="rail-subjects"
-      href="#subjects"
+      href={@record_path <> "#subjects"}
       class="mt-2 flex min-h-11 items-center justify-between gap-4 rounded-xl bg-mist-950/2.5 p-4 hover:bg-mist-950/5 dark:bg-white/5 dark:hover:bg-white/10"
     >
       <span class="flex items-baseline gap-2">
@@ -717,6 +723,8 @@ defmodule DevilsDictionaryWeb.Word do
     ~H"""
     <details
       id={@card.id}
+      data-record-kind="definition"
+      data-record-sources={DevilsDictionaryWeb.RecordExplorer.sources([@card.source])}
       name="sources"
       open={@open}
       class={[
@@ -1042,7 +1050,12 @@ defmodule DevilsDictionaryWeb.Word do
     ~H"""
     <div id={@id} class="mt-2 mb-3 border-l-2 border-mist-950/10 pl-4 dark:border-white/10">
       <ul role="list" class="space-y-4">
-        <li :for={quotation <- @quotations.shown} id={"#{@id}-#{quotation_key(quotation)}"}>
+        <li
+          :for={quotation <- @quotations.shown}
+          id={"#{@id}-#{quotation_key(quotation)}"}
+          data-record-kind="quote"
+          data-record-sources={DevilsDictionaryWeb.RecordExplorer.sources([@source])}
+        >
           <.quotation
             quotation={quotation}
             source={@source}
@@ -1056,7 +1069,12 @@ defmodule DevilsDictionaryWeb.Word do
           more {if length(@quotations.rest) == 1, do: "quotation", else: "quotations"} for this sense
         </summary>
         <ul role="list" class="mt-3 space-y-4">
-          <li :for={quotation <- @quotations.rest} id={"#{@id}-#{quotation_key(quotation)}"}>
+          <li
+            :for={quotation <- @quotations.rest}
+            id={"#{@id}-#{quotation_key(quotation)}"}
+            data-record-kind="quote"
+            data-record-sources={DevilsDictionaryWeb.RecordExplorer.sources([@source])}
+          >
             <.quotation
               quotation={quotation}
               source={@source}

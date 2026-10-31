@@ -293,6 +293,8 @@ defmodule DevilsDictionaryWeb.Subjects do
     ~H"""
     <article
       id={"subject-#{@group}-#{@card.object_id}"}
+      data-record-kind="entity"
+      data-record-sources={DevilsDictionaryWeb.RecordExplorer.sources([])}
       data-state={@card.state}
       class="relative flex h-full flex-col gap-1.5 rounded-xl bg-white/70 p-4 ring-1 ring-mist-950/10 has-[a:focus-visible]:outline-2 has-[a:focus-visible]:outline-offset-2 has-[a:focus-visible]:outline-mist-950 dark:bg-white/2.5 dark:ring-white/10 dark:has-[a:focus-visible]:outline-white"
     >

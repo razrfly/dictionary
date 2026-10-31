@@ -1,4 +1,6 @@
 defmodule DevilsDictionaryWeb.AnimalsAbsentTest do
+  import DevilsDictionary.SourceViewHelpers
+
   @moduledoc """
   #77's headline acceptance scenario: *"No Animals population is configured —
   app boots, general search and entries work, and explicitly selected non-animal
@@ -53,7 +55,7 @@ defmodule DevilsDictionaryWeb.AnimalsAbsentTest do
 
   describe "the reader's app" do
     test "the home page, its search and its stats all work", ctx do
-      {:ok, live, _html} = live(ctx.conn, ~p"/")
+      {:ok, live, _html} = source_live(ctx.conn, ~p"/")
       html = render_async(live)
 
       assert html =~ ~s(id="stats")
@@ -62,7 +64,7 @@ defmodule DevilsDictionaryWeb.AnimalsAbsentTest do
     end
 
     test "an animal word keeps its page, its sources and its provenance", ctx do
-      {:ok, live, html} = live(ctx.conn, ~p"/on/cat")
+      {:ok, live, html} = source_live(ctx.conn, ~p"/on/cat")
 
       assert html =~ "A soft automaton."
       assert html =~ "a feline"
@@ -70,13 +72,13 @@ defmodule DevilsDictionaryWeb.AnimalsAbsentTest do
     end
 
     test "and by its canonical address too", ctx do
-      {:ok, _live, html} = live(ctx.conn, ~p"/words/#{ctx.cat.object_id}/cat")
+      {:ok, _live, html} = source_live(ctx.conn, ~p"/words/#{ctx.cat.object_id}/cat")
 
       assert html =~ "A soft automaton."
     end
 
     test "a source page answers for itself", ctx do
-      {:ok, _live, html} = live(ctx.conn, ~p"/sources/bierce")
+      {:ok, _live, html} = source_live(ctx.conn, ~p"/sources/bierce")
 
       assert html =~ "Ambrose Bierce"
       assert html =~ "Attribution:"
@@ -86,7 +88,7 @@ defmodule DevilsDictionaryWeb.AnimalsAbsentTest do
 
   describe "the operational consoles" do
     test "grade the population they are asked for, without looking Animals up", ctx do
-      {:ok, live, _html} = live(ctx.conn, ~p"/ops/health?scope=emotions")
+      {:ok, live, _html} = source_live(ctx.conn, ~p"/ops/health?scope=emotions")
       html = render_async(live, 15_000)
 
       summary = "emotions" |> then(&Score.rows(scope: &1, skip_parity: true)) |> Score.summary()
@@ -94,7 +96,7 @@ defmodule DevilsDictionaryWeb.AnimalsAbsentTest do
     end
 
     test "offer only the populations that exist", ctx do
-      {:ok, _live, html} = live(ctx.conn, ~p"/ops/imports")
+      {:ok, _live, html} = source_live(ctx.conn, ~p"/ops/imports")
 
       assert html =~ ~s(id="population-emotions")
       assert html =~ ~s(id="population-culture")
@@ -102,7 +104,7 @@ defmodule DevilsDictionaryWeb.AnimalsAbsentTest do
     end
 
     test "a source's coverage of a live population is measurable", ctx do
-      {:ok, _live, html} = live(ctx.conn, ~p"/sources/wordnet?scope=emotions")
+      {:ok, _live, html} = source_live(ctx.conn, ~p"/sources/wordnet?scope=emotions")
 
       assert html =~ ~s(id="source-coverage")
       assert html =~ "#{Health.coverage("emotions", "wordnet").total}"

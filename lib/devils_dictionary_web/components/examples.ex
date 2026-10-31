@@ -88,13 +88,24 @@ defmodule DevilsDictionaryWeb.Examples do
           id="examples-exemplars"
           class={["flex flex-col gap-3", @shown != [] && "mb-5"]}
         >
-          <li :for={item <- @exemplars} id={"examples-" <> dom_id(item.id)} class="min-w-0">
+          <li
+            :for={item <- @exemplars}
+            id={"examples-" <> dom_id(item.id)}
+            class="min-w-0"
+            data-record-kind="example"
+            data-record-sources={DevilsDictionaryWeb.RecordExplorer.sources(item.sources)}
+          >
             <.card item={item} paths={@paths} />
           </li>
         </ul>
 
         <ul :if={@shown != []} role="list" id="examples-instances" class="flex flex-wrap gap-2">
-          <li :for={item <- @shown} class="max-w-full min-w-0 text-base/6 sm:text-sm/6">
+          <li
+            :for={item <- @shown}
+            class="max-w-full min-w-0 text-base/6 sm:text-sm/6"
+            data-record-kind="example"
+            data-record-sources={DevilsDictionaryWeb.RecordExplorer.sources(item.sources)}
+          >
             <.chip
               item={item}
               badges?={@badges?}
@@ -120,7 +131,12 @@ defmodule DevilsDictionaryWeb.Examples do
               length(@rest) > scroll_cap() && "max-h-64 overflow-y-auto overscroll-contain"
             ]}
           >
-            <li :for={item <- @rest} class="max-w-full min-w-0 text-base/6 sm:text-sm/6">
+            <li
+              :for={item <- @rest}
+              class="max-w-full min-w-0 text-base/6 sm:text-sm/6"
+              data-record-kind="example"
+              data-record-sources={DevilsDictionaryWeb.RecordExplorer.sources(item.sources)}
+            >
               <.chip
                 item={item}
                 badges?={@badges?}

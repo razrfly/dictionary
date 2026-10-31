@@ -105,15 +105,15 @@ defmodule DevilsDictionaryWeb.WordLiveOpeningTest do
     assert has_element?(view, "#opening-lead-record-details", "1911")
     assert has_element?(view, "#opening-lead-receipt a[href*='/on/love/receipt/']")
     assert has_element?(view, "#opening-highlight-1-record-details")
-    assert has_element?(view, "#reference-record #card-johnson")
+    assert has_element?(view, "#rail-card-johnson[href*='view=records']")
     assert has_element?(view, "#opening-about")
   end
 
-  test "9: with nothing published the page begins at the Definitions", ctx do
+  test "9: with nothing published the article offers its source record", ctx do
     {:ok, view, _html} = live(ctx.conn, ~p"/on/love")
 
     refute has_element?(view, "#opening")
-    assert has_element?(view, "[id^='definitions-'] h2", "Definitions")
+    assert has_element?(view, "#curated-empty")
     assert has_element?(view, "#reference-article #word-rail")
   end
 
@@ -123,11 +123,21 @@ defmodule DevilsDictionaryWeb.WordLiveOpeningTest do
 
     assert has_element?(view, "#opening-lead-text", "A temporary insanity curable by marriage")
     assert has_element?(view, "#opening-lead-register", "Satire")
-    assert has_element?(view, "#opening-lead-entry[href='#card-bierce']", "Read the whole entry")
+
+    assert has_element?(
+             view,
+             "#opening-lead-entry[href*='view=records'][href$='#card-bierce']",
+             "Read the whole entry"
+           )
 
     assert has_element?(view, "#opening-highlight-1-register", "Sourced definition")
     assert has_element?(view, "#opening-highlight-1-text", "The passion between the sexes")
-    assert has_element?(view, "#opening-highlight-1-entry[href='#card-johnson']")
+
+    assert has_element?(
+             view,
+             "#opening-highlight-1-entry[href*='view=records'][href$='#card-johnson']"
+           )
+
     assert has_element?(view, "#opening-highlight-2-text", "cordial love")
 
     {first, _} = :binary.match(html, ~s(id="opening-highlight-1"))
@@ -174,9 +184,11 @@ defmodule DevilsDictionaryWeb.WordLiveOpeningTest do
     assert has_element?(view, "#opening-about-changed", "Not recorded yet.")
     assert has_element?(view, "#opening-about-next", "Queued now.")
 
-    # Below it, nothing moved.
-    assert has_element?(view, "#card-bierce")
-    assert has_element?(view, "[id^='definitions-'] h2", "Definitions")
+    # The dictionary index links to the full uncurated record.
+    assert has_element?(view, "#rail-card-bierce[href*='view=records'][href$='#card-bierce']")
+    refute has_element?(view, "#curated-empty")
+    {:ok, records, _} = live(ctx.conn, ~p"/on/love?view=records")
+    assert has_element?(records, "#card-bierce")
   end
 
   describe "§2.3: an item withheld since publication" do
@@ -254,7 +266,7 @@ defmodule DevilsDictionaryWeb.WordLiveOpeningTest do
 
     {:ok, fresh, _html} = live(ctx.conn, ~p"/on/love")
     refute has_element?(fresh, "#opening")
-    assert has_element?(fresh, "[id^='definitions-'] h2", "Definitions")
+    assert has_element?(fresh, "#curated-empty")
   end
 
   describe "12: the fixture gate" do
@@ -552,7 +564,7 @@ defmodule DevilsDictionaryWeb.WordLiveOpeningTest do
     assert has_element?(on, "#opening-lead")
     refute has_element?(noun, "#opening")
     refute has_element?(verb, "#opening")
-    assert has_element?(noun, "#card-bierce")
+    assert has_element?(noun, "#rail-card-bierce[href*='view=records']")
   end
 
   describe "#259: the refresh clock on the page" do

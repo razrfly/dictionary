@@ -31,6 +31,7 @@ defmodule DevilsDictionaryWeb.Culture do
   alias DevilsDictionaryWeb.Quotation
   alias DevilsDictionaryWeb.SourceBadge
 
+  attr :all_records, :boolean, default: false
   attr :states, :map, required: true
   attr :return_path, :string, default: nil
   attr :mode, :atom, default: :public, doc: "the reading mode, for subject links"
@@ -56,7 +57,7 @@ defmodule DevilsDictionaryWeb.Culture do
 
     assigns =
       assigns
-      |> assign(:shelves, shelves(states))
+      |> assign(:shelves, shelves(states, assigns.all_records))
       |> assign(:provider_count, length(states))
 
     assigns = assign(assigns, :paths, subject_paths(assigns.shelves, assigns.mode))
@@ -85,7 +86,7 @@ defmodule DevilsDictionaryWeb.Culture do
   # identity and one per media URL, the better-tiered source's copy kept.
   # Before this the rail was one provider's items and then the next's, which
   # is the sectioned grid a many-source shelf exists to avoid.
-  defp shelves(states) do
+  defp shelves(states, all_records) do
     for type <- ContentTypes.known(),
         group = Enum.filter(states, &(content_type(&1) == type)),
         group != [] do
@@ -126,8 +127,11 @@ defmodule DevilsDictionaryWeb.Culture do
       # What the cap leaves out is a number the page knows, so it is shown
       # (IMDb's shape: the size in the heading, the remainder in a last tile)
       # rather than left for the reader to discover by pressing *Load more*.
-      overflow = if searched?, do: max(length(entries) - page_cap(group), 0), else: 0
-      entries = if searched?, do: Enum.take(entries, page_cap(group)), else: entries
+      overflow =
+        if searched? and not all_records, do: max(length(entries) - page_cap(group), 0), else: 0
+
+      entries =
+        if searched? and not all_records, do: Enum.take(entries, page_cap(group)), else: entries
 
       %{
         type: type,
@@ -380,6 +384,16 @@ defmodule DevilsDictionaryWeb.Culture do
                 <li
                   :for={entry <- band.entries}
                   id={"culture-result-#{entry.item.external_namespace}-#{entry.item.external_id}"}
+                  data-record-kind={shelf.type}
+                  data-record-sources={
+                    DevilsDictionaryWeb.RecordExplorer.sources([
+                      %{
+                        slug: Map.get(entry.item, :source_slug) || entry.state.provider,
+                        name: entry.item.preview_metadata["provider"] || entry.state.provider_name
+                      }
+                      | entry.also
+                    ])
+                  }
                   class={["shrink-0", ContentTypes.column(shelf.type)]}
                 >
                   <.quote_card
@@ -572,6 +586,13 @@ defmodule DevilsDictionaryWeb.Culture do
     ~H"""
     <section
       id={"culture-browser-#{@browser.provider}-#{Base.url_encode64(@browser.term, padding: false)}"}
+      data-record-browser
+      data-record-kind={@browser.content_type}
+      data-record-sources={
+        DevilsDictionaryWeb.RecordExplorer.sources([
+          %{slug: @browser.provider, name: @browser.provider_name}
+        ])
+      }
       phx-hook={@browser.hook}
       phx-update="ignore"
       data-query={@browser.term}

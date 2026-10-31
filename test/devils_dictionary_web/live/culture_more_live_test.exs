@@ -14,6 +14,7 @@ defmodule DevilsDictionaryWeb.CultureMoreLiveTest do
   """
 
   use DevilsDictionaryWeb.ConnCase, async: false
+  import DevilsDictionary.SourceViewHelpers
 
   import DevilsDictionary.WordFixtures
   import Phoenix.LiveViewTest
@@ -34,7 +35,7 @@ defmodule DevilsDictionaryWeb.CultureMoreLiveTest do
     Map.merge(catalog, %{conn: conn})
   end
 
-  for layout <- [:current, :reference] do
+  for layout <- [:legacy, :records] do
     test "#{layout}: one click on the shelf's Load more fetches the next page and puts it on the rail",
          ctx do
       stub_pages()
@@ -42,9 +43,10 @@ defmodule DevilsDictionaryWeb.CultureMoreLiveTest do
       sense!(ctx, word, "wordnet", gloss: "a lament for the dead")
 
       {:ok, live, _html} =
-        live(
+        source_live(
           ctx.conn,
-          "/on/elegy" <> unquote(if layout == :reference, do: "?layout=reference", else: "")
+          "/on/elegy" <>
+            unquote(if layout == :records, do: "?view=records", else: "?layout=current")
         )
 
       run_all!()
@@ -79,7 +81,7 @@ defmodule DevilsDictionaryWeb.CultureMoreLiveTest do
     word = word!(ctx, "elegy", ~w(wordnet))
     sense!(ctx, word, "wordnet", gloss: "a lament for the dead")
 
-    {:ok, live, _html} = live(ctx.conn, ~p"/on/elegy")
+    {:ok, live, _html} = source_live(ctx.conn, ~p"/on/elegy")
     run_all!()
     _ = render(live)
 
