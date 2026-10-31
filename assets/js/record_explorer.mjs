@@ -92,7 +92,7 @@ export function recordTargetId(node, dom) {
 function material(row, inventory, query) {
   const article = element("article", null, "material-result")
   article.dataset.materialKind = row.type
-  const image = row.node.querySelector("img")
+  const image = ["artwork", "image", "film", "text", "news", "music", "gif"].includes(row.type) ? row.node.querySelector("img") : null
   if (image) {
     const copy = image.cloneNode(false)
     copy.removeAttribute("id"); copy.removeAttribute("phx-hook")
@@ -100,7 +100,7 @@ function material(row, inventory, query) {
     article.append(copy)
   }
   const body = element("div", null, "material-body")
-  const heading = row.node.querySelector("h2,h3,h4,[id^=culture-entry-title],summary")
+  const heading = row.node.querySelector("h2,h3,h4,[id^=culture-entry-title]")
   const title = fold(heading?.textContent) ? heading.textContent.trim() : row.text.trim().slice(0, 110)
   body.append(element("p", (categories.find(([kind]) => kind === row.type)?.[1] || row.type) + " · " + row.sources.map(source => source.label).join(" · "), "material-source"))
   body.append(element("h3", title || "Source record", "material-title"))
