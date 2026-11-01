@@ -21,7 +21,8 @@ defmodule DevilsDictionary.Curation.WholeEntry do
       "voltaire-whole-entry-v3",
       "voltaire-whole-entry-v4",
       "voltaire-whole-entry-v5",
-      "voltaire-whole-entry-v6"
+      "voltaire-whole-entry-v6",
+      "voltaire-whole-entry-v7"
     ]
 
   def instruction, do: "voltaire-whole-entry-v6"

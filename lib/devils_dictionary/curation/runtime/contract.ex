@@ -33,6 +33,7 @@ defmodule DevilsDictionary.Curation.Runtime.Contract do
   @max_quote_chars 400
 
   def version, do: @version
+  def version("voltaire-whole-entry-v7"), do: "selection-output-v4"
   def version("voltaire-whole-entry-v6"), do: "selection-output-v4"
   def version("voltaire-whole-entry-v5"), do: "selection-output-v4"
   def version("voltaire-whole-entry-v4"), do: "selection-output-v4"
@@ -43,7 +44,12 @@ defmodule DevilsDictionary.Curation.Runtime.Contract do
 
   @doc "The JSON schema for Ollama's `format`."
   def schema(packet \\ %{}) do
-    if SectionOutput.enabled?(packet), do: SectionOutput.schema(packet), else: flat_schema(packet)
+    schema =
+      if SectionOutput.enabled?(packet),
+        do: SectionOutput.schema(packet),
+        else: flat_schema(packet)
+
+    DevilsDictionary.Curation.Runtime.EvidenceGuidance.annotate(schema, packet)
   end
 
   defp flat_schema(packet) do
@@ -325,7 +331,8 @@ defmodule DevilsDictionary.Curation.Runtime.Contract do
          "voltaire-whole-entry-v3",
          "voltaire-whole-entry-v4",
          "voltaire-whole-entry-v5",
-         "voltaire-whole-entry-v6"
+         "voltaire-whole-entry-v6",
+         "voltaire-whole-entry-v7"
        ] and
          not is_nil(choice["quote"]),
        do: [[where, "quote_not_allowed"]],

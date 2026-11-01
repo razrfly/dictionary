@@ -1101,4 +1101,267 @@ defmodule DevilsDictionary.Curation.WholeEntryTest do
     assert html =~ "opening-withheld-lead"
     assert html =~ "curated-unavailable"
   end
+
+  for provider <- DevilsDictionary.Curation.Shelf.providers() do
+    @tag instruction: "voltaire-whole-entry-v7"
+    test "v7 #{provider}: synthetic exact selection reaches public receipt and expires without losing identity",
+         w do
+      provider = unquote(provider)
+
+      o =
+        DevilsDictionary.CitationFixtures.observation!(w, provider,
+          namespace: @namespaces[provider]
+        )
+
+      frozen = packet("voltaire-whole-entry-v7")
+
+      shelf =
+        Enum.find(
+          frozen.packet["candidates"],
+          &(&1["kind"] == "shelf" and &1["shelf"]["result"] == o.result.id)
+        )
+
+      assert shelf
+      assert :ok = Packet.verify(frozen)
+      assert length(frozen.packet["candidates"]) <= 24
+
+      lead =
+        Enum.find(
+          frozen.packet["candidates"],
+          &(&1["candidate_id"] in frozen.packet["priority_candidates"])
+        )
+
+      choice = %{
+        "candidate_id" => shelf["candidate_id"],
+        "meaning_id" => shelf["required_meaning"],
+        "reason" => "A synthetic fixture selection from supplied metadata.",
+        "quote" => nil
+      }
+
+      section = WholeEntry.section(shelf)
+
+      empty =
+        Map.new(WholeEntry.sections(), &{&1, if(&1 in ["examples", "quotes"], do: [], else: nil)})
+
+      value = if section in ["examples", "quotes"], do: [choice], else: choice
+
+      wire = %{
+        "decision" => "select",
+        "lead" => %{
+          "candidate_id" => lead["candidate_id"],
+          "meaning_id" => lead["required_meaning"],
+          "reason" => "A supplied sourced definition."
+        },
+        "selections" => Map.put(empty, section, value),
+        "abstain_reason" => nil
+      }
+
+      assert {:ok, %{outcome: :accepted}} = Contract.validate(answer(wire), frozen)
+      bad = put_in(choice["meaning_id"], "not-an-offered-meaning")
+      bad_value = if section in ["examples", "quotes"], do: [bad], else: bad
+
+      assert {:refused, _, _} =
+               Contract.validate(answer(put_in(wire, ["selections", section], bad_value)), frozen)
+
+      stub_answer!(w, wire)
+      assert {:ok, %{last_outcome_reason: "published_automatically"}} = run!(w)
+      settle!()
+      publication = Repo.one!(CompositionPublication)
+      version = Repo.get!(CompositionVersion, publication.published_version_id)
+      assert {:ok, receipt} = Receipt.read("love", version.version)
+      item = Enum.find(receipt.items, & &1.citation)
+      assert item.status == :shown
+      assert item.citation.discovery_result_id == o.result.id
+      assert item.citation.cited_revision_id == o.revision.id
+      assert item.citation.cited_checksum == o.revision.checksum
+      assert item.basis.supplied_sha256 == shelf["label_sha256"]
+      assert item.chooser.attempt_id == version.attempt_id
+      assert item.chooser.model_config_id == w.model_config.id
+      assert receipt.review_actor == nil
+      html = build_conn() |> get("/on/love") |> html_response(200)
+      assert html =~ "curation-summary"
+      assert html =~ "curated-#{section}"
+      history = build_conn() |> get("/on/love/receipt/#{version.version}") |> html_response(200)
+      assert history =~ "voltaire-whole-entry-v7"
+
+      config = Application.fetch_env!(:devils_dictionary, :discovery)
+      policies = Keyword.get(config, :source_policies, %{})
+      policy = Keyword.put(Map.get(policies, provider, []), :retention_seconds, 0)
+
+      Application.put_env(
+        :devils_dictionary,
+        :discovery,
+        Keyword.put(config, :source_policies, Map.put(policies, provider, policy))
+      )
+
+      on_exit(fn -> Application.put_env(:devils_dictionary, :discovery, config) end)
+      assert {:ok, expired} = Receipt.read("love", version.version)
+      hidden = Enum.find(expired.items, & &1.citation)
+      assert hidden.status == :withheld
+      assert hidden.status_reason == :retention_expired
+      assert hidden.citation.cited_revision_id == o.revision.id
+      assert hidden.chooser.attempt_id == version.attempt_id
+      DevilsDictionary.Discovery.purge_expired_payloads(100)
+      assert {:ok, after_cleanup} = Receipt.read("love", version.version)
+      retained = Enum.find(after_cleanup.items, & &1.citation)
+      assert retained.citation.cited_revision_id == o.revision.id
+      assert retained.citation.cited_checksum == o.revision.checksum
+      assert retained.chooser.attempt_id == version.attempt_id
+    end
+  end
+
+  @tag instruction: "voltaire-whole-entry-v7"
+  test "v7 sparse sense-only lead publishes while optional metadata stays empty; abstention remains honest",
+       w do
+    for slug <- ["bierce", "johnson"] do
+      source = DevilsDictionary.Sources.get_source_by_slug(slug)
+      source |> Ecto.Changeset.change(active: false) |> Repo.update!()
+    end
+
+    frozen = packet("voltaire-whole-entry-v7")
+    definition = Enum.find(frozen.packet["candidates"], &(&1["kind"] == "sense_definition"))
+    assert definition
+    refute Enum.any?(frozen.packet["candidates"], &(&1["kind"] == "content"))
+
+    empty =
+      Map.new(WholeEntry.sections(), &{&1, if(&1 in ["examples", "quotes"], do: [], else: nil)})
+
+    wire = %{
+      "decision" => "select",
+      "lead" => %{
+        "candidate_id" => definition["candidate_id"],
+        "meaning_id" => definition["required_meaning"],
+        "reason" => "The supplied source defines this meaning."
+      },
+      "selections" => empty,
+      "abstain_reason" => nil
+    }
+
+    abstain = %{
+      "decision" => "abstain",
+      "lead" => nil,
+      "selections" => empty,
+      "abstain_reason" => "Supplied evidence is unsafe or insufficient."
+    }
+
+    assert {:ok, %{outcome: :abstained}} = Contract.validate(answer(abstain), frozen)
+    stub_answer!(w, wire)
+    assert {:ok, %{last_outcome_reason: "published_automatically"}} = run!(w)
+    settle!()
+    publication = Repo.one!(CompositionPublication)
+
+    assert [%{role: :lead, item_kind: :sense_definition}] =
+             Compositions.items(publication.published_version_id)
+  end
+
+  @tag instruction: "voltaire-whole-entry-v7"
+  test "v7 native adapters retain exact references, original model basis and public receipt", w do
+    person = DevilsDictionary.ExemplarFixtures.person!("Fixture accepted person")
+    nomination = DevilsDictionary.ExemplarFixtures.nominate!(w.author, person, w.benevolent)
+    DevilsDictionary.ExemplarFixtures.decide!(w.reviewer, nomination)
+    linked_claims(w, false)
+    frozen = packet("voltaire-whole-entry-v7")
+    assert :ok = Packet.fits?(frozen, w.model_config.generation)
+    by_kind = Enum.group_by(frozen.packet["candidates"], & &1["kind"])
+
+    for kind <- ~w(content sense_definition sense_quotation work exemplar claim),
+        do: assert(by_kind[kind] != nil)
+
+    lead =
+      Enum.find(by_kind["content"], &(&1["candidate_id"] in frozen.packet["priority_candidates"]))
+
+    choice = fn c ->
+      %{
+        "candidate_id" => c["candidate_id"],
+        "meaning_id" => c["required_meaning"],
+        "reason" => "A synthetic choice based on the supplied source.",
+        "quote" => nil
+      }
+    end
+
+    empty =
+      Map.new(WholeEntry.sections(), &{&1, if(&1 in ["examples", "quotes"], do: [], else: nil)})
+
+    selected = [
+      hd(by_kind["sense_definition"]),
+      hd(by_kind["sense_quotation"]),
+      hd(by_kind["work"]),
+      hd(by_kind["exemplar"]),
+      hd(by_kind["claim"])
+    ]
+
+    sections =
+      empty
+      |> Map.put("definitions", choice.(Enum.at(selected, 0)))
+      |> Map.put("quotes", [choice.(Enum.at(selected, 1))])
+      |> Map.put("images", choice.(Enum.at(selected, 2)))
+      |> Map.put("examples", Enum.map(Enum.drop(selected, 3), choice))
+
+    wire = %{
+      "decision" => "select",
+      "lead" => Map.delete(choice.(lead), "quote"),
+      "selections" => sections,
+      "abstain_reason" => nil
+    }
+
+    stub_answer!(w, wire)
+    assert {:ok, %{last_outcome_reason: "published_automatically"}} = run!(w)
+    settle!()
+    publication = Repo.one!(CompositionPublication)
+    version = Repo.get!(CompositionVersion, publication.published_version_id)
+    assert {:ok, receipt} = Receipt.read("love", version.version)
+
+    assert Enum.sort(Enum.map(receipt.items, & &1.kind)) ==
+             Enum.sort([:content, :sense_definition, :sense_quotation, :work, :exemplar, :claim])
+
+    assert Enum.all?(
+             receipt.items,
+             &(&1.basis.origin == "model" and &1.chooser.attempt_id == version.attempt_id and
+                 &1.status == :shown)
+           )
+
+    items = Compositions.items(version.id)
+
+    for c <- [lead | selected] do
+      item = Enum.find(items, &(to_string(&1.item_kind) == c["kind"]))
+      assert item
+
+      for key <- ~w(content_revision_id sense_revision_id assertion_revision_id) do
+        if c[key], do: assert(Map.get(item, String.to_existing_atom(key)) == c[key])
+      end
+    end
+
+    assert receipt.review_actor == nil
+    html = build_conn() |> get("/on/love/receipt/#{version.version}") |> html_response(200)
+    assert html =~ "voltaire-whole-entry-v7"
+  end
+
+  @tag instruction: "voltaire-whole-entry-v7"
+  test "v7 all-provider packet fits the unchanged context and retains seven-kind rotation", w do
+    for provider <- DevilsDictionary.Curation.Shelf.providers(), _ <- 1..2 do
+      DevilsDictionary.CitationFixtures.observation!(w, provider,
+        namespace: @namespaces[provider]
+      )
+    end
+
+    for name <- ["Fixture first exemplar", "Fixture second exemplar"] do
+      person = DevilsDictionary.ExemplarFixtures.person!(name)
+      nomination = DevilsDictionary.ExemplarFixtures.nominate!(w.author, person, w.benevolent)
+      DevilsDictionary.ExemplarFixtures.decide!(w.reviewer, nomination)
+    end
+
+    frozen = packet("voltaire-whole-entry-v7")
+    assert length(frozen.packet["candidates"]) == 24
+    assert :ok = Packet.fits?(frozen, w.model_config.generation)
+    assert :ok = Packet.verify(frozen)
+    shelves = Enum.filter(frozen.packet["candidates"], &(&1["kind"] == "shelf"))
+
+    assert Enum.sort(Enum.uniq(Enum.map(shelves, &WholeEntry.section/1))) ==
+             Enum.sort(DevilsDictionary.Curation.Shelf.kinds())
+
+    [_, message] = Packet.messages(frozen)
+    visible = message.content |> String.replace_prefix("Packet:\n", "") |> Jason.decode!()
+    assert length(visible["candidates"]) == 24
+    assert Enum.all?(visible["candidates"], &Map.has_key?(&1, "evidence_scope"))
+  end
 end

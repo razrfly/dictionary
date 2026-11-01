@@ -87,13 +87,25 @@ defmodule DevilsDictionary.Curation.Agents.Persona do
                      @sense_lead_manifest,
                      ~w(dossier source_refs deceased_evidence_refs template_version)
                    )
+  @grounded_path Path.expand(
+                   "../../../../priv/curation/agents/personas/voltaire/v8/profile.json",
+                   __DIR__
+                 )
+  @external_resource @grounded_path
+  @grounded_manifest @grounded_path |> File.read!() |> Jason.decode!()
+  @grounded_body Map.take(
+                   @grounded_manifest,
+                   ~w(dossier source_refs deceased_evidence_refs template_version)
+                 )
+
   @whole_bodies %{
     "voltaire-whole-entry-v1" => @whole_body,
     "voltaire-whole-entry-v2" => @revised_body,
     "voltaire-whole-entry-v3" => @sections_body,
     "voltaire-whole-entry-v4" => @relevance_body,
     "voltaire-whole-entry-v5" => @selection_body,
-    "voltaire-whole-entry-v6" => @sense_lead_body
+    "voltaire-whole-entry-v6" => @sense_lead_body,
+    "voltaire-whole-entry-v7" => @grounded_body
   }
 
   def manifest, do: @manifest
@@ -116,6 +128,9 @@ defmodule DevilsDictionary.Curation.Agents.Persona do
     do:
       @sections_manifest["dossier"]["disclosure"] <>
         "\n" <> @sections_manifest["dossier"]["selection"]
+
+  def selection_instruction("voltaire-whole-entry-v7"),
+    do: selection_instruction("voltaire-whole-entry-v6")
 
   def selection_instruction("voltaire-whole-entry-v6"),
     do: selection_instruction("voltaire-whole-entry-v5")
@@ -165,7 +180,8 @@ defmodule DevilsDictionary.Curation.Agents.Persona do
                  "voltaire-whole-entry-v3",
                  "voltaire-whole-entry-v4",
                  "voltaire-whole-entry-v5",
-                 "voltaire-whole-entry-v6"
+                 "voltaire-whole-entry-v6",
+                 "voltaire-whole-entry-v7"
                ],
                :persona_instruction_mismatch
              ) do
@@ -200,7 +216,8 @@ defmodule DevilsDictionary.Curation.Agents.Persona do
                       "voltaire-whole-entry-v3",
                       "voltaire-whole-entry-v4",
                       "voltaire-whole-entry-v5",
-                      "voltaire-whole-entry-v6"
+                      "voltaire-whole-entry-v6",
+                      "voltaire-whole-entry-v7"
                     ],
                     do: "single_editor_v1",
                     else: "proposes only"

@@ -32,9 +32,18 @@ defmodule DevilsDictionary.Curation.Runtime.PacketTest do
                "voltaire-whole-entry-v3",
                "voltaire-whole-entry-v4",
                "voltaire-whole-entry-v5",
-               "voltaire-whole-entry-v6"
+               "voltaire-whole-entry-v6",
+               "voltaire-whole-entry-v7"
              ]
 
+      grounded = Packet.instruction!("voltaire-whole-entry-v7")
+
+      assert Digest.sha256(grounded) ==
+               "a3219a5c496dbbfc6d731d87138191293a7f8243f4080f8b2067f27d5d8e853c"
+
+      assert grounded =~ "Allowed meaning IDs are routing eligibility, NOT proof"
+      assert grounded =~ "No content candidate or cultural material is required"
+      refute grounded =~ "title match may justify a modest bibliographic example"
       sense_lead = Packet.instruction!("voltaire-whole-entry-v6")
 
       assert Digest.sha256(sense_lead) ==
