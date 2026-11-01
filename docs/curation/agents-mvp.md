@@ -1,3 +1,35 @@
+# Current next experiment: frozen quality preflight (31 October 2026)
+
+The 29 October trial remains a quality NO-GO. Read scorecard-v2-2026-10-31.md
+before any new calls. The current implementation follow-up adds only a read-only
+coverage report and immutable voltaire-whole-entry-v6 (same dossier, weights,
+output-v4 contract, section/candidate/context/budget bounds). It clarifies that a
+supplied sense_definition can lead without a content entry; Bierce priority and
+honest abstention remain. v1–v5 text/hashes and live configuration7 are untouched.
+No model start, enrollment beyond the ten pages or activation is part of this work.
+
+Coverage examples (PHX_SERVER unset, explicit database target, DD_NO_OBAN=1):
+    mix dd.curation.coverage --all --from 25 --to 35
+    mix dd.curation.coverage --slug love --from 25 --to 35 --limit 20
+
+These report existing records inside a read-only repeatable-read transaction.
+Eligible pool is the historical packet counts.offered; raw available inventory is
+not historically recorded and is labelled unknown. Packet omissions, selections,
+published placements and current shown/withheld state have separate denominators.
+The command prints no source payloads or editorial reasons, requests no discovery,
+and calls no model. A later snapshot can have fewer visible items after expiry.
+Do not archive provider content for evaluation.
+
+A later reviewed migration admits v6 while preserving deployed v5 compatibility.
+Do not apply it, register/admit/bind v6, enable the editor or start the runtime until
+separately authorized. Rollback refuses once v6 config/profile history exists;
+disable policy and roll forward instead of deleting history.
+
+The old ngrok-only chat heartbeat was removed; public verification remains assigned
+to #271/#252 once access is restored. Application cleanup/dispatch jobs are unchanged.
+Historical operating notes below are retained as evidence, not current go-live
+instructions or a replacement for the dated report in #275.
+
 # Headless source preparation
 
 The first cohort exposed an input gap: only love had discovery candidates. The other

@@ -135,6 +135,47 @@ defmodule DevilsDictionary.Curation.WholeEntryTest do
     assert Repo.reload!(prepared.profile).bot_actor_id == prepared.bot_actor.id
   end
 
+  @tag instruction: "voltaire-whole-entry-v6"
+  test "sense-only v6 packet publishes an exact sense lead and read-only coverage reports it",
+       w do
+    for slug <- ["bierce", "johnson"] do
+      source = DevilsDictionary.Sources.get_source_by_slug(slug)
+      source |> Ecto.Changeset.change(active: false) |> Repo.update!()
+    end
+
+    frozen = packet("voltaire-whole-entry-v6")
+    refute Enum.any?(frozen.packet["candidates"], &(&1["kind"] == "content"))
+    assert frozen.packet["priority_candidates"] == []
+    definition = Enum.find(frozen.packet["candidates"], &(&1["kind"] == "sense_definition"))
+    assert definition
+
+    wire = %{
+      "decision" => "select",
+      "lead" => %{
+        "candidate_id" => definition["candidate_id"],
+        "meaning_id" => hd(definition["allowed_meanings"]),
+        "reason" => "A supplied definition of this meaning."
+      },
+      "selections" =>
+        Map.new(WholeEntry.sections(), &{&1, if(&1 in ["examples", "quotes"], do: [], else: nil)}),
+      "abstain_reason" => nil
+    }
+
+    assert {:ok, %{outcome: :accepted}} = Contract.validate(answer(wire), frozen)
+    stub_answer!(w, wire)
+    assert {:ok, %{last_outcome_reason: "published_automatically"}} = run!(w)
+    settle!()
+    before = Repo.aggregate(CompositionPublication, :count)
+    report = DevilsDictionary.Curation.Coverage.read("love")
+    assert report.current_publication.placed == 1
+    assert report.current_publication.by_status == %{shown: 1}
+    assert [attempt] = report.attempts
+    assert attempt.selected == 1
+    assert attempt.packet_by_section["definitions"] > 0
+    assert [%{placed_items: 1}] = attempt.publication_versions
+    assert Repo.aggregate(CompositionPublication, :count) == before
+  end
+
   @tag instruction: "voltaire-whole-entry-v5"
   test "relevance instruction uses the same typed contract, publishes a suitable definition with sparse extras and keeps abstention available",
        w do

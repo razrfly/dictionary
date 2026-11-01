@@ -31,10 +31,25 @@ defmodule DevilsDictionary.Curation.Runtime.PacketTest do
                "voltaire-whole-entry-v2",
                "voltaire-whole-entry-v3",
                "voltaire-whole-entry-v4",
-               "voltaire-whole-entry-v5"
+               "voltaire-whole-entry-v5",
+               "voltaire-whole-entry-v6"
              ]
 
+      sense_lead = Packet.instruction!("voltaire-whole-entry-v6")
+
+      assert Digest.sha256(sense_lead) ==
+               "e037baf1f599d321ea35ba740bb0d5deaf3bbfb880ec47ce6c33bdfb96e67212"
+
+      assert sense_lead =~ "No kind content candidate is required"
+      assert sense_lead =~ "never force a weak lead"
+      assert sense_lead =~ "If priority_candidates is nonempty"
       selection = Packet.instruction!("voltaire-whole-entry-v5")
+
+      assert Digest.sha256(selection) ==
+               "29e9af8c58c6d8a6a871cf4603f31d90da614e9f1eeb86b7e66fbd7fe7ed90a5"
+
+      assert String.starts_with?(sense_lead, selection)
+
       assert selection =~ "every choice object is an instruction to SHOW"
       assert selection =~ ~s("news": null)
       assert selection =~ "Never invent a positive connection"

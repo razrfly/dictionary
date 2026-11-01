@@ -20,10 +20,11 @@ defmodule DevilsDictionary.Curation.WholeEntry do
       "voltaire-whole-entry-v2",
       "voltaire-whole-entry-v3",
       "voltaire-whole-entry-v4",
-      "voltaire-whole-entry-v5"
+      "voltaire-whole-entry-v5",
+      "voltaire-whole-entry-v6"
     ]
 
-  def instruction, do: "voltaire-whole-entry-v5"
+  def instruction, do: "voltaire-whole-entry-v6"
   def enabled?(%{manifest: m}), do: m["selection_scope"] == "whole_entry_v1"
   def packet?(%{"packet_version" => "runtime-packet-v4"}), do: true
   def packet?(_), do: false

@@ -208,6 +208,37 @@ defmodule DevilsDictionary.Installation.WholeEntryCompatibilityTest do
       end
 
       assert Repo.get!(DevilsDictionary.Curation.Runtime.ModelConfig, selection_config.id)
+      sense_lead_version = 20_261_101_000_313
+
+      for direction <- [:up, :down, :up] do
+        opts = if direction == :up, do: [to: sense_lead_version], else: [step: 1]
+
+        Ecto.Migrator.run(
+          Repo,
+          path,
+          direction,
+          opts ++ [dynamic_repo: Repo.get_dynamic_repo(), log: false]
+        )
+
+        assert {:ok, _} = Receipt.read("love", first.version.version)
+        assert Repo.get!(DevilsDictionary.Curation.Runtime.ModelConfig, selection_config.id)
+      end
+
+      sense_config =
+        DevilsDictionary.RuntimeFixtures.model_config!(%{
+          instruction_version: "voltaire-whole-entry-v6",
+          output_contract_version: "selection-output-v4"
+        })
+
+      assert_raise Postgrex.Error, ~r/sense-lead instruction history exists/, fn ->
+        Ecto.Migrator.run(Repo, path, :down,
+          step: 1,
+          dynamic_repo: Repo.get_dynamic_repo(),
+          log: false
+        )
+      end
+
+      assert Repo.get!(DevilsDictionary.Curation.Runtime.ModelConfig, sense_config.id)
     end)
   end
 end
