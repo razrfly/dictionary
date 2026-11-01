@@ -241,12 +241,22 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
                      Before returning, remove every choice whose own reason describes a rejection; represent it as null/[] instead. Preserve other useful choices.
                      """
 
+  @whole_sense_lead @whole_selection <>
+                      """
+                      Lead clarification for pages without dictionary entries:
+                      A supplied kind sense_definition is a complete eligible lead definition, not merely background context. No kind content candidate is required.
+                      If priority_candidates is nonempty, choose from it as before. Otherwise evaluate supplied content and sense_definition candidates by the entry's intended meaning and use an allowed meaning_id.
+                      When a supplied eligible sense_definition clearly defines this entry, select it even if no Bierce or Johnson entry or optional material is supplied. Do not abstain solely because kind content is absent.
+                      Do not invent a definition or candidate. Abstain when the supplied definition evidence is irrelevant, unsafe or insufficient; never force a weak lead.
+                      """
+
   @instructions %{
     "voltaire-whole-entry-v1" => @whole_entry,
     "voltaire-whole-entry-v2" => @whole_entry_v2,
     "voltaire-whole-entry-v3" => @whole_sections,
     "voltaire-whole-entry-v4" => @whole_relevance,
     "voltaire-whole-entry-v5" => @whole_selection,
+    "voltaire-whole-entry-v6" => @whole_sense_lead,
     "generic-editor-v1" => @generic_editor_v1,
     "generic-editor-v2" => @generic_editor_v2,
     "voltaire-selector-v1" =>
