@@ -289,6 +289,26 @@ defmodule DevilsDictionaryWeb.CultureChromeTest do
       refute html =~ "Fetched 1 hour ago"
     end
 
+    test "source age and next refresh compare timestamps chronologically across months and years" do
+      first =
+        state("aa_search", "AA stock", :image, [image_item("aa_search", 1)], %{
+          fetched_at: ~U[2025-12-30 12:00:00Z],
+          refresh_after: ~U[2027-12-30 12:00:00Z],
+          refresh_due: false
+        })
+
+      second =
+        state("bb_search", "BB stock", :image, [image_item("bb_search", 1)], %{
+          fetched_at: ~U[2026-01-02 12:00:00Z],
+          refresh_after: ~U[2028-01-02 12:00:00Z],
+          refresh_due: false
+        })
+
+      html = render([{"aa_search", first}, {"bb_search", second}])
+      assert html =~ "Fetched on 30 Dec 2025"
+      assert html =~ "refreshes on your next visit after 30 Dec 2027"
+    end
+
     test "a corpus says held since, because it never refreshes by design" do
       html =
         render([

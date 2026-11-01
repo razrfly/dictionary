@@ -1,3 +1,5 @@
+> **Preparation — 1 November 2026:** [v7 quality correction](quality-correction-v7.md) is a separately reviewed candidate, not deployed or model-tested. The running frozen v6 ten-page experiment, scorecard and stop deadline remain unchanged. No expanded enrollment or new agents.
+
 # Current next experiment: frozen quality preflight (31 October 2026)
 
 The 29 October trial remains a quality NO-GO. Read scorecard-v2-2026-10-31.md

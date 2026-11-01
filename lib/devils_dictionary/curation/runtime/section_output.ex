@@ -6,7 +6,8 @@ defmodule DevilsDictionary.Curation.Runtime.SectionOutput do
     "voltaire-whole-entry-v3",
     "voltaire-whole-entry-v4",
     "voltaire-whole-entry-v5",
-    "voltaire-whole-entry-v6"
+    "voltaire-whole-entry-v6",
+    "voltaire-whole-entry-v7"
   ]
   @top ~w(decision lead selections abstain_reason)
   @choice ~w(candidate_id meaning_id reason quote)

@@ -239,6 +239,37 @@ defmodule DevilsDictionary.Installation.WholeEntryCompatibilityTest do
       end
 
       assert Repo.get!(DevilsDictionary.Curation.Runtime.ModelConfig, sense_config.id)
+      grounded_version = 20_261_101_170_541
+
+      for direction <- [:up, :down, :up] do
+        opts = if direction == :up, do: [to: grounded_version], else: [step: 1]
+
+        Ecto.Migrator.run(
+          Repo,
+          path,
+          direction,
+          opts ++ [dynamic_repo: Repo.get_dynamic_repo(), log: false]
+        )
+
+        assert {:ok, _} = Receipt.read("love", first.version.version)
+        assert Repo.get!(DevilsDictionary.Curation.Runtime.ModelConfig, sense_config.id)
+      end
+
+      grounded_config =
+        DevilsDictionary.RuntimeFixtures.model_config!(%{
+          instruction_version: "voltaire-whole-entry-v7",
+          output_contract_version: "selection-output-v4"
+        })
+
+      assert_raise Postgrex.Error, ~r/grounded instruction history exists/, fn ->
+        Ecto.Migrator.run(Repo, path, :down,
+          step: 1,
+          dynamic_repo: Repo.get_dynamic_repo(),
+          log: false
+        )
+      end
+
+      assert Repo.get!(DevilsDictionary.Curation.Runtime.ModelConfig, grounded_config.id)
     end)
   end
 end

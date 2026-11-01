@@ -713,7 +713,7 @@ defmodule DevilsDictionaryWeb.Culture do
     fetched =
       case live do
         [] -> []
-        _ -> ["Fetched #{ago(Enum.min_by(live, & &1.fetched_at).fetched_at)}"]
+        _ -> ["Fetched #{ago(Enum.min_by(live, & &1.fetched_at, DateTime).fetched_at)}"]
       end
 
     refresh =
@@ -742,7 +742,7 @@ defmodule DevilsDictionaryWeb.Culture do
     states
     |> Enum.map(& &1[:refresh_after])
     |> Enum.reject(&is_nil/1)
-    |> Enum.min(fn -> nil end)
+    |> Enum.min(DateTime, fn -> nil end)
   end
 
   # Whole units and never a decimal: *3 days ago* is what a reader wants from a
