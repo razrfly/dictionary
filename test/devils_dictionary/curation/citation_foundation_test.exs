@@ -111,25 +111,34 @@ defmodule DevilsDictionary.Curation.CitationFoundationTest do
   end
 
   test "configuration windows are versioned, bounded and v1 defaults to 48h", world do
-    for seconds <- [86_400, 172_800, 604_800] do
-      {:ok, v} =
-        Configurations.create_version(world.reviewer, world.configuration.id, %{
-          reason: "window #{seconds}",
-          refresh_window: seconds
-        })
+    [six_hours | _] =
+      for seconds <- [21_600, 86_400, 172_800, 604_800] do
+        {:ok, v} =
+          Configurations.create_version(world.reviewer, world.configuration.id, %{
+            reason: "window #{seconds}",
+            refresh_window: seconds
+          })
 
-      assert Configurations.refresh_window(v) == seconds
-      assert Configurations.ready?(v)
-    end
+        assert Configurations.refresh_window(v) == seconds
+        assert Configurations.ready?(v)
+        v
+      end
 
     assert Configurations.refresh_window(%DevilsDictionary.Curation.ConfigurationVersion{
              manifest: %{}
            }) == 172_800
 
-    assert {:error, :invalid_refresh_window} =
-             Configurations.create_version(world.reviewer, world.configuration.id, %{
-               reason: "bad",
-               refresh_window: 1
-             })
+    for seconds <- [1, 3_600, 43_200] do
+      assert {:error, :invalid_refresh_window} =
+               Configurations.create_version(world.reviewer, world.configuration.id, %{
+                 reason: "bad",
+                 refresh_window: seconds
+               })
+    end
+
+    refute Configurations.ready?(%{
+             six_hours
+             | manifest: Map.put(six_hours.manifest, "refresh_window_seconds", 43_200)
+           })
   end
 end

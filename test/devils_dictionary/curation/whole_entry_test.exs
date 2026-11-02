@@ -135,6 +135,47 @@ defmodule DevilsDictionary.Curation.WholeEntryTest do
     assert Repo.reload!(prepared.profile).bot_actor_id == prepared.bot_actor.id
   end
 
+  test "the operator can bind a 6h window and an unlisted window is refused", w do
+    args = [
+      "bind",
+      "--profile",
+      "voltaire",
+      "--as",
+      w.reviewer.user.email,
+      "--model-config",
+      w.model_config.slug,
+      "--publication",
+      "single_editor_v1",
+      "--reason",
+      "compressed lifecycle trial"
+    ]
+
+    preview =
+      ExUnit.CaptureIO.capture_io(fn ->
+        Mix.Tasks.Dd.Curation.Editor.run(args ++ ["--refresh-window", "6h", "--dry-run"])
+      end)
+
+    assert preview =~ "refresh window: 21600 seconds"
+
+    assert_raise Mix.Error, ~r/must be 6h, 24h, 48h or 7d/, fn ->
+      Mix.Tasks.Dd.Curation.Editor.run(args ++ ["--refresh-window", "12h", "--dry-run"])
+    end
+
+    ExUnit.CaptureIO.capture_io(fn ->
+      Mix.Tasks.Dd.Curation.Editor.run(args ++ ["--refresh-window", "6h"])
+    end)
+
+    bound =
+      DevilsDictionary.Curation.ConfigurationVersion
+      |> Repo.all()
+      |> Enum.filter(&(&1.configuration_id == w.configuration.id))
+      |> Enum.max_by(& &1.id)
+
+    assert bound.id > w.editor_version.id
+    assert Configurations.refresh_window(bound) == 21_600
+    assert Configurations.ready?(bound)
+  end
+
   @tag instruction: "voltaire-whole-entry-v6"
   test "sense-only v6 packet publishes an exact sense lead and read-only coverage reports it",
        w do

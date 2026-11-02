@@ -204,10 +204,11 @@ defmodule Mix.Tasks.Dd.Curation.Editor do
 
     window =
       case Keyword.get(opts, :refresh_window, "48h") do
+        "6h" -> 21_600
         "24h" -> 86_400
         "48h" -> 172_800
         "7d" -> 604_800
-        _ -> Mix.raise("--refresh-window must be 24h, 48h or 7d")
+        _ -> Mix.raise("--refresh-window must be 6h, 24h, 48h or 7d")
       end
 
     if opts[:dry_run] do

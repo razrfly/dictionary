@@ -62,6 +62,8 @@ defmodule DevilsDictionary.Curation.Configurations do
   alias DevilsDictionary.Sources.Actor
 
   @default_slug "global-default"
+  # 6h exists for compressed lifecycle trials (#298); 24h and longer are the product windows.
+  @refresh_windows [21_600, 86_400, 172_800, 604_800]
   @seed_actor "Curation seed"
   @mode "manual"
 
@@ -165,7 +167,7 @@ defmodule DevilsDictionary.Curation.Configurations do
            {:ok, _reason} <- Transaction.required(Map.to_list(attrs), :reason),
            :ok <-
              Transaction.check(
-               attrs.refresh_window in [86_400, 172_800, 604_800],
+               attrs.refresh_window in @refresh_windows,
                :invalid_refresh_window
              ),
            :ok <-
@@ -419,7 +421,7 @@ defmodule DevilsDictionary.Curation.Configurations do
         Map.get(manifest, "editor_publication", "manual") in ["manual", "single_editor_v1"] and
         (Map.get(manifest, "editor_publication", "manual") == "manual" or
            is_map(manifest["editor"])) and
-        Map.get(manifest, "refresh_window_seconds", 172_800) in [86_400, 172_800, 604_800] and
+        Map.get(manifest, "refresh_window_seconds", 172_800) in @refresh_windows and
         editor_shape?(Map.get(manifest, "editor", :none))
 
   def ready?(_version), do: false
