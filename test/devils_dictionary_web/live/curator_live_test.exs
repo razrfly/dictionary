@@ -278,7 +278,22 @@ defmodule DevilsDictionaryWeb.CuratorLiveTest do
       assert source =~ "its rights note does not permit showing it"
       refute html =~ "A restricted passage never shown."
       assert Curators.passages_permitted?("Public domain in the USA; two short passages.")
+      assert Curators.passages_permitted?("Public domain.")
       refute Curators.passages_permitted?("All rights reserved")
+
+      # A positive, exact rule: a mention of the public domain is not enough.
+      for note <- [
+            "Not in the public domain.",
+            "Not public domain; cited by reference only.",
+            "Public domain except in the EU; check first.",
+            "Public domain in the USA but not elsewhere.",
+            "Public domain? No: in copyright until 2041.",
+            "In copyright: two short passages.",
+            "Formerly public domain",
+            "",
+            nil
+          ],
+          do: refute(Curators.passages_permitted?(note), inspect(note))
     end
   end
 
@@ -360,14 +375,115 @@ defmodule DevilsDictionaryWeb.CuratorLiveTest do
       assert view |> element("#curator-version-2") |> render() =~ "a reviewer (actor "
     end
 
-    test "an expired choice is counted as withheld, by reason", %{conn: conn} do
+    test "an expired choice is counted as withheld, by reason, in choices", %{conn: conn} do
       expire!()
       {:ok, view, _html} = live(conn, ~p"/curators/voltaire")
       totals = part(view, "#curator-totals")
       assert totals =~ "2 choices placed · 1 later withheld because the cited observation expired"
 
-      assert part(view, "#curator-withheld-now") =~
-               "1 because the selected observation's retention window has expired"
+      # Read once connected: the disconnected render only says it is checking.
+      dead = conn |> get(~p"/curators/voltaire") |> html_response(200)
+      assert dead =~ ~s(id="curator-withheld-loading")
+      refute dead =~ ~s(id="curator-withheld-now")
+      render_async(view)
+
+      withheld = part(view, "#curator-withheld-now")
+
+      assert withheld =~
+               "Withheld on the current pages now: 1 choice withheld on a page that is shown " <>
+                 "because the selected observation's retention window has expired;"
+
+      refute withheld =~ "withheld whole"
+    end
+
+    test "a page withheld whole is counted in pages, not choices", %{conn: conn} = w do
+      # A newer configuration version: the published version's no longer stands.
+      bind_persona!(w, "voltaire-whole-entry-v5", w.b.configuration_version.id)
+      {:ok, view, _html} = live(conn, ~p"/curators/voltaire")
+      render_async(view)
+      withheld = part(view, "#curator-withheld-now")
+      assert withheld =~ "1 page withheld whole because"
+      refute withheld =~ "choice"
+    end
+
+    test "a refused attempt shows its contract codes", %{conn: conn} = w do
+      bad = put_in(shelf_answer(w.observation), ["lead", "candidate_id"], "c999")
+      stub_answer!(w, bad)
+      run!(w)
+      settle!()
+
+      refused = Repo.one!(from a in Attempt, where: a.outcome == :refused)
+      assert [_ | _] = refused.refusal_reasons
+      codes = refused.refusal_reasons |> Enum.map(&List.last/1) |> Enum.uniq()
+
+      {:ok, view, _html} = live(conn, ~p"/curators/voltaire")
+      entry = part(view, "#curator-attempt-#{refused.id}")
+      assert entry =~ "refused by the output check: "
+      for code <- codes, do: assert(entry =~ String.replace(code, "_", " "))
+
+      assert part(view, "#curator-totals") =~
+               "3 model calls · 1 accepted · 1 abstained · 1 refused"
+    end
+
+    test "a readiness check and a rehearsal by another actor count through the model config",
+         %{conn: conn} = w do
+      operator = actor!(w.reviewer)
+      opts = Keyword.put(w.b.runtime, :actor_id, operator.id)
+      stub_answer!(w, abstention())
+
+      assert {:ok, smoke} =
+               DevilsDictionary.Curation.Runtime.smoke(
+                 w.b.model_config,
+                 Keyword.put(opts, :request_key, key("smoke"))
+               )
+
+      {:ok, packet} =
+        Packet.for_page(page("love"), instruction_version: "voltaire-whole-entry-v7")
+
+      {:ok, frozen} = Packet.freeze(packet)
+
+      assert {:ok, rehearsal} =
+               DevilsDictionary.Curation.Runtime.run(
+                 w.b.model_config,
+                 frozen,
+                 Keyword.put(opts, :request_key, "rehearsal:#{key()}")
+               )
+
+      settle!()
+      assert Repo.get!(Attempt, smoke.attempt_id).requested_by_actor_id == operator.id
+
+      {:ok, view, _html} = live(conn, ~p"/curators/voltaire")
+      assert part(view, "#curator-attempt-#{smoke.attempt_id}") =~ "readiness check"
+      assert part(view, "#curator-attempt-#{smoke.attempt_id}") =~ "no page"
+      assert part(view, "#curator-attempt-#{rehearsal.attempt_id}") =~ "rehearsal"
+      assert part(view, "#curator-attempt-#{rehearsal.attempt_id}") =~ "not published"
+      assert part(view, "#curator-attempt-#{smoke.attempt_id}") =~ w.b.model_config.slug
+      assert part(view, "#curator-cost-#{w.b.bot.id}") =~ "3 calls"
+      assert part(view, "#curator-totals") =~ "4 model calls"
+    end
+
+    test "the page's queries do not grow with its history", %{conn: conn} = w do
+      before = queries(fn -> conn |> get(~p"/curators/voltaire") |> html_response(200) end)
+
+      # More history: a lead-only version, then the shelf choice again.
+      lead_only = put_in(shelf_answer(w.observation), ["selections"], empty_sections())
+      stub_answer!(w, lead_only)
+      assert {:ok, %{last_outcome_reason: "published_automatically"}} = run!(w)
+      stub_answer!(w, shelf_answer(w.observation))
+      assert {:ok, %{last_outcome_reason: "published_automatically"}} = run!(w)
+      settle!()
+
+      {:ok, view, _html} = live(conn, ~p"/curators/voltaire")
+      assert part(view, "#curator-totals") =~ "3 publications"
+
+      after_growth =
+        queries(fn -> conn |> get(~p"/curators/voltaire") |> html_response(200) end)
+
+      assert after_growth == before
+
+      # A version page reads less than the profile page.
+      version = queries(fn -> conn |> get(~p"/curators/voltaire/v/2") |> html_response(200) end)
+      assert version < after_growth
     end
 
     test "an owner hold and a withdrawal appear as what they are", %{conn: conn} = w do
@@ -382,6 +498,31 @@ defmodule DevilsDictionaryWeb.CuratorLiveTest do
                "version #{w.published.version} withdrawn by a reviewer: #259 test withdrawal"
 
       assert part(view, "#curator-totals") =~ "1 withdrawal by a reviewer"
+    end
+  end
+
+  describe "the generic editor" do
+    test "has its own page, with no persona wording and no dossier", %{conn: conn} = w do
+      e = editor!(w)
+      {:ok, view, html} = live(conn, ~p"/curators/generic-editor")
+      text = text(html)
+      assert part(view, "#curator-state") =~ "ADMITTED"
+      assert part(view, "#curator-no-dossier") =~ "None, by design"
+      assert part(view, "#curator-disclosure") =~ "An AI editor with no persona"
+      assert part(view, "#curator-not") =~ "It is modelled on no one"
+      refute text =~ "It is not the person"
+      refute text =~ "the writer's work"
+      refute has_element?(view, "#curator-subject")
+      assert has_element?(view, "#binding-#{e.bot.id}")
+      assert part(view, "#curator-instruction") =~ "generic-editor-v2"
+
+      # The directory lists it as admitted, and keeps the death-evidence claim
+      # to what the records show.
+      {:ok, directory, _} = live(conn, ~p"/curators")
+      assert has_element?(directory, "#curators-admitted #curator-card-generic-editor")
+
+      assert part(directory, "#curator-card-bierce") =~
+               "deceased-status evidence not yet recorded"
     end
   end
 
@@ -467,22 +608,37 @@ defmodule DevilsDictionaryWeb.CuratorLiveTest do
 
       assert "A distinctive headline with five particular unusual words" in payload_strings
 
-      dossier_lines =
-        [Persona.manifest()["dossier"]["disclosure"], Persona.manifest()["dossier"]["selection"]]
+      # Every run of eight consecutive words of every pinned instruction,
+      # but those inside a dossier's own lens, which the page shows by design.
+      lens =
+        Enum.map_join(
+          1..8,
+          " ",
+          fn v ->
+            d =
+              "priv/curation/agents/personas/voltaire/v#{v}/profile.json"
+              |> File.read!()
+              |> Jason.decode!()
 
-      instruction_lines =
+            words(d["dossier"]["disclosure"] <> " " <> d["dossier"]["selection"])
+          end
+        )
+
+      shingles =
         Packet.instruction_versions()
-        |> Enum.flat_map(&String.split(Packet.instruction!(&1), "\n"))
-        |> Enum.map(&String.trim/1)
-        |> Enum.filter(&(String.length(&1) >= 40))
-        |> Enum.reject(fn line -> Enum.any?(dossier_lines, &String.contains?(&1, line)) end)
+        |> Enum.flat_map(&shingles(Packet.instruction!(&1)))
         |> Enum.uniq()
+        |> Enum.reject(&String.contains?(lens, &1))
 
       for html <- pages do
         text = html |> LazyHTML.from_document() |> LazyHTML.text()
 
         for s <- payload_strings, do: refute(String.contains?(text, s), "payload text: #{s}")
-        for l <- instruction_lines, do: refute(String.contains?(text, l), "prompt text: #{l}")
+        page_words = words(text)
+
+        for w <- shingles,
+            do: refute(String.contains?(page_words, w), "prompt text: #{w}")
+
         refute text =~ @abstain_reason
         refute text =~ @choice_reason
         refute text =~ w.reviewer.user.email
@@ -491,15 +647,16 @@ defmodule DevilsDictionaryWeb.CuratorLiveTest do
 
     test "every pinned instruction has a reviewed summary that does not quote it" do
       assert Curators.summarized() == Packet.instruction_versions()
+      lens = Persona.manifest()["dossier"]
 
       for version <- Packet.instruction_versions() do
         summary = Curators.summary(version)
         assert summary =~ ~r/\A# /
+        summary_words = words(summary)
 
-        for line <- Packet.instruction!(version) |> String.split("\n") |> Enum.map(&String.trim/1),
-            String.length(line) >= 40,
-            not String.starts_with?(line, Persona.manifest()["dossier"]["disclosure"]),
-            do: refute(String.contains?(summary, line), "#{version} quotes: #{line}")
+        for w <- shingles(Packet.instruction!(version)),
+            not String.contains?(words(lens["disclosure"] <> " " <> lens["selection"]), w),
+            do: refute(String.contains?(summary_words, w), "#{version} quotes: #{w}")
       end
     end
   end
@@ -520,6 +677,47 @@ defmodule DevilsDictionaryWeb.CuratorLiveTest do
   # A page's visible text, whitespace collapsed.
   defp text(html),
     do: html |> LazyHTML.from_document() |> LazyHTML.text() |> String.replace(~r/\s+/u, " ")
+
+  # Lowercased words, separated by single spaces, punctuation dropped.
+  defp words(text),
+    do:
+      text
+      |> String.downcase()
+      |> String.split(~r/[^\p{L}\p{N}_]+/u, trim: true)
+      |> Enum.join(" ")
+
+  # Every run of eight consecutive words.
+  defp shingles(text) do
+    text
+    |> words()
+    |> String.split(" ")
+    |> Enum.chunk_every(8, 1, :discard)
+    |> Enum.map(&Enum.join(&1, " "))
+  end
+
+  # The queries this test's process (and the processes it starts) send.
+  defp queries(fun) do
+    test = self()
+    counter = :counters.new(1, [])
+    id = "curator-queries-#{System.unique_integer([:positive])}"
+
+    :telemetry.attach(
+      id,
+      [:devils_dictionary, :repo, :query],
+      fn _event, _measurements, _metadata, _config ->
+        if self() == test or test in (Process.get(:"$callers") || []),
+          do: :counters.add(counter, 1, 1)
+      end,
+      nil
+    )
+
+    try do
+      fun.()
+      :counters.get(counter, 1)
+    after
+      :telemetry.detach(id)
+    end
+  end
 
   defp strings(value) when is_binary(value), do: [value]
   defp strings(value) when is_map(value), do: value |> Map.values() |> Enum.flat_map(&strings/1)

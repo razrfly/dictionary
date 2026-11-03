@@ -40,17 +40,29 @@ defmodule DevilsDictionaryWeb.CuratorLive do
         with {:ok, number} <- number(action, params),
              {:ok, page} <- Curators.page(params["slug"], version: number, mode: mode) do
           {:ok,
-           assign(socket,
+           socket
+           |> assign(
              page: page,
              page_title: title(page, action),
              visible: @visible_activity,
              head: nil
-           )}
+           )
+           |> withheld(action, page)}
         else
           _ -> raise Ecto.NoResultsError, queryable: DevilsDictionary.Curation.Profile
         end
     end
   end
+
+  # What is withheld now is the word page's own read, once per page the
+  # curator holds (#304 R1). `assign_async/3` runs it only once the socket
+  # is connected, so the first, disconnected render does not pay for it.
+  defp withheld(socket, :show, page) do
+    current = Map.take(page, [:current])
+    assign_async(socket, :withheld, fn -> {:ok, %{withheld: Curators.withheld_now(current)}} end)
+  end
+
+  defp withheld(socket, _action, _page), do: socket
 
   defp number(:show, _params), do: {:ok, nil}
 
@@ -82,8 +94,10 @@ defmodule DevilsDictionaryWeb.CuratorLive do
           </h1>
           <.text class="max-w-2xl">
             AI selection lenses that choose from the records a page already has. They never
-            write definitions or quotations. A persona is modelled on a dead writer's work and
-            labelled "inspired by"; none is that person, speaks in their voice, or checks facts.
+            write definitions or quotations. A persona is modelled on a writer's work and labelled
+            "inspired by"; none is that person, speaks in their voice, or checks facts. A persona
+            is admitted only with recorded evidence that the writer has died; the generic editor
+            has no persona.
           </.text>
         </header>
 
@@ -129,7 +143,11 @@ defmodule DevilsDictionaryWeb.CuratorLive do
               >
                 {card.profile.label}
               </.link>
-              <span class="text-mist-600 dark:text-mist-400"> · no dossier admitted</span>
+              <span class="text-mist-600 dark:text-mist-400">
+                · no dossier admitted · {if card.deceased_evidence?,
+                  do: "deceased-status evidence recorded, not yet reviewed for admission",
+                  else: "deceased-status evidence not yet recorded"}
+              </span>
             </li>
           </ul>
         </section>
@@ -171,6 +189,7 @@ defmodule DevilsDictionaryWeb.CuratorLive do
             :if={@live_action == :show}
             page={@page}
             visible={@visible}
+            withheld={@withheld}
             class="order-1 lg:order-2"
           />
           <.used_by :if={@live_action == :version} page={@page} class="order-2 lg:order-2" />
@@ -220,12 +239,18 @@ defmodule DevilsDictionaryWeb.CuratorLive do
       </p>
 
       <.text id="curator-disclosure" class="max-w-3xl">{disclosure(@page)}</.text>
-      <.text class="max-w-3xl text-sm/7">
+      <.text :if={@page.profile.kind == :persona} id="curator-not" class="max-w-3xl text-sm/7">
         An AI selection lens. It is not the person, it does not speak in their voice, and it is
         not a fact-checker: it chooses among records the page already has, and writes only a
         short reason for each choice. This page keeps four layers apart: the model's inherited
         knowledge, the dossier we authored, the instruction and context supplied, and the
         recorded result.
+      </.text>
+      <.text :if={@page.profile.kind != :persona} id="curator-not" class="max-w-3xl text-sm/7">
+        An AI editor. It is modelled on no one and is not a fact-checker: it chooses among
+        records the page already has, and writes only a short reason for each choice. This page
+        keeps four layers apart: the model's inherited knowledge, what we gave it, the
+        instruction and context supplied, and the recorded result.
       </.text>
 
       <p :if={@page.profile.kind == :persona} id="curator-subject" class="text-sm/7">
@@ -254,6 +279,7 @@ defmodule DevilsDictionaryWeb.CuratorLive do
 
   attr :page, :map, required: true
   attr :visible, :integer, required: true
+  attr :withheld, :any, default: nil
   attr :class, :string, default: nil
 
   defp did(assigns) do
@@ -283,12 +309,28 @@ defmodule DevilsDictionaryWeb.CuratorLive do
             @page.totals.withdrawals > 0
           }> · {plural(@page.totals.withdrawals, "withdrawal")} by a reviewer</span>
         </p>
-        <p :if={@page.totals.withheld_now != %{}} id="curator-withheld-now">
-          Withheld on the current pages now:
-          <span :for={{reason, count} <- Enum.sort_by(@page.totals.withheld_now, &(-elem(&1, 1)))}>
-            {count} because {Opening.withheld_reason(reason)};
-          </span>
-        </p>
+        <.async_result :let={withheld} :if={@withheld} assign={@withheld}>
+          <:loading>
+            <p id="curator-withheld-loading">Checking what the current pages withhold now…</p>
+          </:loading>
+          <:failed>
+            <p id="curator-withheld-failed">What the current pages withhold now could not be read.</p>
+          </:failed>
+          <p :if={withheld.pages == %{} and withheld.choices == %{}} id="curator-withheld-now">
+            Nothing is withheld on the current pages now.
+          </p>
+          <p :if={withheld.pages != %{} or withheld.choices != %{}} id="curator-withheld-now">
+            Withheld on the current pages now:
+            <span :for={{reasons, count} <- by_count(withheld.pages)}>
+              {plural(count, "page")} withheld whole because {Opening.withheld_reason(reasons)};
+            </span>
+            <span :for={{reason, count} <- by_count(withheld.choices)}>
+              {plural(count, "choice")} withheld on a page that is shown because {Opening.withheld_reason(
+                reason
+              )};
+            </span>
+          </p>
+        </.async_result>
         <p :if={@page.holds != []} id="curator-holds">
           Held by the owner now:
           <span :for={hold <- @page.holds}>{hold.page} since {stamp(hold.since)}; </span>
@@ -369,10 +411,22 @@ defmodule DevilsDictionaryWeb.CuratorLive do
   defp gave(assigns) do
     ~H"""
     <section id="curator-gave" class="flex min-w-0 flex-col gap-4">
-      <.layer title="What we gave it" label="The dossier we authored">
+      <.layer
+        :if={@page.profile.kind == :persona}
+        title="What we gave it"
+        label="The dossier we authored"
+      >
         Our interpretation of the writer's work, written and reviewed by us: not a
         reconstruction of their beliefs. Quoted passages are the source's words, marked with who
         speaks them; everything else on this page is ours.
+      </.layer>
+      <.layer
+        :if={@page.profile.kind != :persona}
+        title="What we gave it"
+        label="The dossier we authored"
+      >
+        Nothing beyond the shared editorial rules: no dossier, no sources and no persona. What it
+        is told is the instruction below.
       </.layer>
 
       <p :if={is_nil(@page.dossier)} id="curator-no-dossier" class="text-base/7">
@@ -682,11 +736,16 @@ defmodule DevilsDictionaryWeb.CuratorLive do
       <ul :if={@page.judgments != []} class="flex min-w-0 flex-col gap-3 text-sm/7">
         <li :for={j <- @page.judgments} class="min-w-0">
           <span class="font-medium text-mist-950 dark:text-white">{j["date"]} · {j["title"]}</span>
-          · {j["instruction_version"]}: {j["meanings"]["supported"]} supported, {j["meanings"][
-            "insufficient"
-          ]} insufficient
-          and {j["meanings"]["wrong"]} wrong of {j["choices"]} choices; {j["reasons"]["unsupported"]} unsupported
-          or misattributed reasons · <strong>{j["verdict"]}</strong>
+          · {j["instruction_version"]}:
+          <span :if={j["useful_pages"]} class="font-medium">
+            {useful(j["useful_pages"])};
+          </span>
+          {j["meanings"]["supported"]} supported, {j["meanings"]["insufficient"]} insufficient and {j[
+            "meanings"
+          ]["wrong"]} wrong of {plural(j["choices"], "choice")}; {plural(
+            j["reasons"]["unsupported"],
+            "unsupported or misattributed reason"
+          )} · <strong>{j["verdict"]}</strong>
           ·
           <a href={j["report"]} rel="noopener" target="_blank" class="underline underline-offset-4">report ↗</a>
         </li>
@@ -819,6 +878,12 @@ defmodule DevilsDictionaryWeb.CuratorLive do
     </div>
     """
   end
+
+  # A trial's main ground, first: how many of its pages got a useful entry.
+  defp useful(%{"useful" => 1, "pages" => pages}), do: "1 useful entry of #{pages} pages"
+  defp useful(%{"useful" => n, "pages" => pages}), do: "#{n} useful entries of #{pages} pages"
+
+  defp by_count(counts), do: Enum.sort_by(counts, &{-elem(&1, 1), inspect(elem(&1, 0))})
 
   defp admitted(cards), do: Enum.filter(cards, &(&1.profile.state == :admitted))
   defp proposed(cards), do: Enum.filter(cards, &(&1.profile.state == :proposed))

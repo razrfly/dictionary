@@ -18,6 +18,15 @@ defmodule DevilsDictionary.Curation.Curators do
   versions are those its bot actors created; its publications are those of
   those versions.
 
+  **A bounded number of queries** (#304 R1). Every table is read in one
+  query per page, whatever the history: the attempts, versions,
+  publications, items and ledger of every binding at once, and every placed
+  choice's citation and source in two. Each view reads only what it shows:
+  the directory skips items and the ledger, and a version page skips
+  attempts, items and the ledger too. What the reader is not shown now
+  (`withheld_now/1`) is the word page's own read, once per page the
+  profile currently holds; the LiveView asks it only once connected.
+
   **What a public page never carries** (#299 M5): an attempt's `result` or
   `packet_summary` (neither is selected), prompt text, provider payloads,
   item reasons, a human actor's label, or a dossier passage whose source's
@@ -44,6 +53,7 @@ defmodule DevilsDictionary.Curation.Curators do
     Profile,
     ProfileVersion,
     Published,
+    ShelfCitation,
     ShelfCitations
   }
 
@@ -54,11 +64,18 @@ defmodule DevilsDictionary.Curation.Curators do
   alias DevilsDictionary.Sources.{Actor, Source}
 
   # The reviewed instruction summaries (#299 M3): one short public text per
-  # pinned instruction, never the instruction itself.
+  # pinned instruction, never the instruction itself. A summary added or
+  # removed after this module compiled recompiles it (`__mix_recompile__?/0`),
+  # so a no-restart deploy picks it up; an edited one already does, through
+  # `@external_resource`.
   @instructions_dir Path.expand("../../../priv/curation/agents/instructions", __DIR__)
-  @summary_paths Path.wildcard(Path.join(@instructions_dir, "*.md"))
+  @summary_glob Path.join(@instructions_dir, "*.md")
+  @summary_paths Path.wildcard(@summary_glob)
   for path <- @summary_paths, do: @external_resource(path)
   @summaries Map.new(@summary_paths, &{Path.basename(&1, ".md"), File.read!(&1)})
+
+  @doc false
+  def __mix_recompile__?, do: Path.wildcard(@summary_glob) != @summary_paths
 
   # The dated developer judgments recorded in the repository (#299 §3.7).
   @judgments_path Path.expand("../../../priv/curation/agents/judgments.json", __DIR__)
@@ -90,12 +107,13 @@ defmodule DevilsDictionary.Curation.Curators do
     |> order_by(:id)
     |> Repo.all()
     |> Enum.map(fn profile ->
-      page = assemble(profile, nil, mode, light: true)
+      page = assemble(profile, nil, mode, :directory)
 
       %{
         profile: profile,
         current_version: page.version,
-        binding: page.current_binding || List.first(page.bindings),
+        deceased_evidence?: deceased_evidence?(page.version),
+        binding: page.current_binding || List.last(page.bindings),
         live?: not is_nil(page.current_binding),
         totals: page.totals
       }
@@ -107,19 +125,27 @@ defmodule DevilsDictionary.Curation.Curators do
   defp state_order(:proposed), do: 1
   defp state_order(:retired), do: 2
 
+  defp deceased_evidence?(%ProfileVersion{deceased_evidence_refs: [_ | _]}), do: true
+  defp deceased_evidence?(_version), do: false
+
   # ── one profile ───────────────────────────────────────────────────────────
 
   @doc """
   The page of the profile `slug`, at its current version or, with
   `version: n`, at version `n`: `{:ok, page}` or `{:error, :not_found}`.
   `mode` is the reading mode the subject link is resolved in.
+
+  A version page (`version: n`) carries no activity, cost or totals: it
+  shows the version, the bindings that ran it and what they published.
   """
   def page(slug, opts \\ []) when is_binary(slug) do
     mode = Keyword.get(opts, :mode, :public)
 
     with %Profile{} = profile <- Repo.get_by(Profile, slug: slug),
          {:ok, number} <- version_number(Keyword.get(opts, :version)) do
-      case assemble(profile, number, mode) do
+      view = if number, do: :version, else: :profile
+
+      case assemble(profile, number, mode, view) do
         %{version: nil} when is_integer(number) -> {:error, :not_found}
         page -> {:ok, page}
       end
@@ -132,11 +158,9 @@ defmodule DevilsDictionary.Curation.Curators do
   defp version_number(n) when is_integer(n) and n > 0, do: {:ok, n}
   defp version_number(_), do: :error
 
-  # `light: true` (the directory) skips what only the page shows: the
-  # current withheld state and expiry, which revalidate each placed choice.
-  defp assemble(profile, number, mode, opts \\ []) do
-    light? = Keyword.get(opts, :light, false)
-
+  # `view` is `:directory`, `:profile` or `:version`: each reads only what
+  # it shows.
+  defp assemble(profile, number, mode, view) do
     versions =
       Repo.all(from v in ProfileVersion, where: v.profile_id == ^profile.id, order_by: v.version)
 
@@ -151,16 +175,16 @@ defmodule DevilsDictionary.Curation.Curators do
     config_ids =
       bindings |> Enum.map(& &1.model_config) |> Enum.reject(&is_nil/1) |> Enum.map(& &1.id)
 
-    attempts = attempts(config_ids, actor_ids)
+    attempts = if view == :version, do: [], else: attempts(config_ids, actor_ids)
     composition_versions = composition_versions(actor_ids, Enum.map(attempts, & &1.id))
     version_ids = Enum.map(composition_versions, & &1.id)
     publications = publications(version_ids)
     published_ids = for p <- publications, p.action == :publish, do: p.published_version_id
-    items = items(published_ids)
+    items = if view == :profile, do: items(published_ids), else: []
     compositions = compositions(composition_versions, attempts)
-    slugs = page_slugs(Map.keys(compositions))
-    charges = charges(Enum.map(attempts, & &1.id))
-    withheld = if light?, do: %{}, else: withheld_now(compositions, version_ids)
+    slugs = if view == :directory, do: %{}, else: page_slugs(Map.keys(compositions))
+    charges = if view == :profile, do: charges(Enum.map(attempts, & &1.id)), else: %{}
+    roles = roles(Enum.map(versions, & &1.created_by_actor_id) ++ [profile.admitted_by_actor_id])
     by_actor = Map.new(bindings, &{&1.bot_actor.id, &1})
     by_config = for b <- bindings, b.model_config, into: %{}, do: {b.model_config.id, b}
 
@@ -170,8 +194,7 @@ defmodule DevilsDictionary.Curation.Curators do
       publications: publications,
       items: items,
       charges: charges,
-      withheld: withheld,
-      light?: light?,
+      expired: if(view == :profile, do: expired_citations(items)),
       by_actor: by_actor,
       by_config: by_config
     }
@@ -181,11 +204,14 @@ defmodule DevilsDictionary.Curation.Curators do
     %{
       profile: profile,
       versions:
-        Enum.map(versions, &version_row(&1, bindings, composition_versions, publications, slugs)),
+        Enum.map(
+          versions,
+          &version_row(&1, roles, bindings, composition_versions, publications, slugs)
+        ),
       version: shown,
       latest_version: List.last(versions),
       current_version_id: profile.current_version_id,
-      admission: admission(profile),
+      admission: admission(profile, roles),
       dossier: dossier(shown),
       instruction: instruction(shown),
       bindings: bindings,
@@ -194,8 +220,15 @@ defmodule DevilsDictionary.Curation.Curators do
       holds: holds(compositions, slugs),
       totals: overall(bindings, ctx),
       judgments: judgments(profile),
-      subject: subject(profile, shown, mode),
-      used_by: shown && used_by(shown, bindings, composition_versions, publications, slugs)
+      subject: if(view != :directory, do: subject(profile, shown, mode)),
+      used_by: shown && used_by(shown, bindings, composition_versions, publications, slugs),
+      # What `withheld_now/1` needs: the pages this profile currently holds.
+      current:
+        for(
+          {id, %{current_published_version_id: v}} <- compositions,
+          v in version_ids,
+          do: {id, v}
+        )
     }
   end
 
@@ -211,7 +244,8 @@ defmodule DevilsDictionary.Curation.Curators do
   @doc """
   The profile's bindings, oldest first: each bot actor with its model config,
   the configuration versions that bound them, the profile versions those
-  name, and when each was active (from the activation receipts).
+  name, and when each was active (from the activation receipts). One query
+  per table, however many bindings there are.
   """
   def bindings(%Profile{} = profile) do
     bound =
@@ -221,7 +255,9 @@ defmodule DevilsDictionary.Curation.Curators do
           order_by: v.id
       )
 
-    periods = periods(Enum.uniq(Enum.map(bound, & &1.configuration_id)))
+    configuration_ids = bound |> Enum.map(& &1.configuration_id) |> Enum.uniq()
+    periods = periods(configuration_ids)
+    current = current_versions(configuration_ids)
 
     groups =
       bound
@@ -230,33 +266,36 @@ defmodule DevilsDictionary.Curation.Curators do
       )
       |> Enum.sort_by(fn {_key, [first | _]} -> first.id end)
 
+    actors =
+      groups
+      |> Enum.map(fn {{actor_id, _}, _} -> actor_id end)
+      |> Kernel.++(List.wrap(profile.bot_actor_id))
+      |> by_id(Actor)
+
+    configs = groups |> Enum.map(fn {{_, config_id}, _} -> config_id end) |> by_id(ModelConfig)
+    sources = actors |> Map.values() |> Enum.map(& &1.bot_source_id) |> by_id(Source)
+
     from_manifests =
-      for {{actor_id, config_id}, cvs} <- groups, actor <- [Repo.get(Actor, actor_id)], actor do
-        binding(actor, Repo.get(ModelConfig, config_id), cvs, periods)
+      for {{actor_id, config_id}, cvs} <- groups, actor <- [Map.get(actors, actor_id)], actor do
+        binding(actor, Map.get(configs, config_id), cvs, periods, current, sources)
       end
 
     bound_actor_ids = Enum.map(from_manifests, & &1.bot_actor.id)
 
     unbound =
-      case profile.bot_actor_id do
-        nil ->
-          []
-
-        id ->
-          if id in bound_actor_ids,
-            do: [],
-            else:
-              Enum.reject([Repo.get(Actor, id)], &is_nil/1)
-              |> Enum.map(&binding(&1, nil, [], %{}))
-      end
+      for id <- List.wrap(profile.bot_actor_id),
+          id not in bound_actor_ids,
+          actor <- [Map.get(actors, id)],
+          actor,
+          do: binding(actor, nil, [], %{}, MapSet.new(), sources)
 
     from_manifests ++ unbound
   end
 
-  defp binding(actor, config, cvs, periods) do
+  defp binding(actor, config, cvs, periods, current, sources) do
     windows = Enum.flat_map(cvs, &Map.get(periods, &1.id, []))
-    source = actor.bot_source_id && Repo.get(Source, actor.bot_source_id)
-    live? = Enum.any?(windows, &is_nil(&1.until)) and live?(cvs)
+    source = Map.get(sources, actor.bot_source_id)
+    live? = Enum.any?(windows, &is_nil(&1.until)) and Enum.any?(cvs, &(&1.id in current))
 
     %{
       anchor: "binding-#{actor.id}",
@@ -267,26 +306,33 @@ defmodule DevilsDictionary.Curation.Curators do
       profile_version_ids:
         cvs |> Enum.map(& &1.manifest["editor"]["profile_version_id"]) |> Enum.uniq(),
       windows: Enum.sort_by(windows, & &1.from, DateTime),
-      live?: live?
+      live?: live?,
+      editor_on?: live? and Enum.any?(cvs, &editor_on?/1)
     }
-    |> then(fn b -> Map.put(b, :editor_on?, b.live? and Enum.any?(cvs, &editor_on?/1)) end)
   end
 
-  # Whether a binding's configuration version is the enabled configuration's
-  # current one.
-  defp live?(cvs) do
-    Enum.any?(cvs, fn cv ->
-      Repo.exists?(
-        from c in Configuration,
-          where:
-            c.id == ^cv.configuration_id and c.state == :enabled and
-              c.current_version_id == ^cv.id
-      )
-    end)
+  # The current version of each enabled configuration among `ids`.
+  defp current_versions([]), do: MapSet.new()
+
+  defp current_versions(ids) do
+    Repo.all(
+      from c in Configuration,
+        where: c.id in ^ids and c.state == :enabled,
+        select: c.current_version_id
+    )
+    |> MapSet.new()
   end
 
   defp editor_on?(cv) do
     match?({:ok, _}, DevilsDictionary.Curation.Configurations.editor_enabled(cv.id))
+  end
+
+  # Rows of `schema` by id, in one query.
+  defp by_id(ids, schema) do
+    case ids |> Enum.reject(&is_nil/1) |> Enum.uniq() do
+      [] -> %{}
+      ids -> Repo.all(from r in schema, where: r.id in ^ids) |> Map.new(&{&1.id, &1})
+    end
   end
 
   # Each configuration version's active windows: from an activation of it
@@ -305,13 +351,7 @@ defmodule DevilsDictionary.Curation.Curators do
       |> Enum.zip(tl(receipts) ++ [nil])
       |> Enum.filter(fn {a, _next} -> a.action == :activate end)
       |> Enum.map(fn {a, next} ->
-        {a.configuration_version_id,
-         %{
-           from: a.committed_at,
-           until: next && next.committed_at,
-           reason: a.reason,
-           actor_id: a.actor_id
-         }}
+        {a.configuration_version_id, %{from: a.committed_at, until: next && next.committed_at}}
       end)
     end)
     |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
@@ -393,6 +433,29 @@ defmodule DevilsDictionary.Curation.Curators do
     )
   end
 
+  # The citations among placed choices whose observation's retention has
+  # passed: the reader no longer sees them, and their payloads are due to be
+  # redacted. `ShelfCitations.check/1`'s first test, for every citation at
+  # once: two queries, however many choices were placed.
+  defp expired_citations(items) do
+    case items |> Enum.map(& &1.shelf_citation_id) |> Enum.reject(&is_nil/1) |> Enum.uniq() do
+      [] ->
+        MapSet.new()
+
+      ids ->
+        citations = Repo.all(from c in ShelfCitation, where: c.id in ^ids)
+        sources = citations |> Enum.map(& &1.source_id) |> by_id(Source)
+        now = DateTime.utc_now()
+
+        for c <- citations,
+            source <- [Map.get(sources, c.source_id)],
+            source,
+            DateTime.compare(now, ShelfCitations.deadline(c, source)) != :lt,
+            into: MapSet.new(),
+            do: c.id
+    end
+  end
+
   # The compositions a profile touched: by a version it wrote, or by the
   # composition id its attempt's request key names.
   defp compositions(versions, attempts) do
@@ -443,20 +506,33 @@ defmodule DevilsDictionary.Curation.Curators do
     |> Map.new()
   end
 
-  # Of the compositions whose current published version this profile wrote,
-  # what the reader is not shown now, counted by reason. `Published.current/1`
-  # is the word page's own read: it withholds and never substitutes.
-  defp withheld_now(compositions, version_ids) do
-    for {id, %{current_published_version_id: v}} <- compositions, v in version_ids, into: %{} do
-      reasons =
-        case Published.current(id) do
-          {:ok, %{withheld: withheld}} -> Enum.map(withheld, & &1.reason)
-          {:withheld, reasons} -> [{:publication_withheld, reasons}]
-          _ -> []
-        end
+  @doc """
+  What the reader is not shown now on the pages this profile currently
+  holds (`page.current`), counted in two units that are never added
+  together:
 
-      {v, reasons}
-    end
+    * `pages`: pages withheld whole (the configuration moved on, the scope
+      changed, the review no longer stands), by their reasons;
+    * `choices`: single choices withheld on a page that is shown, by reason.
+
+  `Published.current/1` is the word page's own read: it withholds and never
+  substitutes. One read per page; the LiveView asks only once connected.
+  """
+  def withheld_now(%{current: current}) do
+    Enum.reduce(current, %{pages: %{}, choices: %{}}, fn {composition_id, _version}, acc ->
+      case Published.current(composition_id) do
+        {:ok, %{withheld: withheld}} ->
+          Enum.reduce(withheld, acc, fn item, acc ->
+            update_in(acc, [:choices, item.reason], &((&1 || 0) + 1))
+          end)
+
+        {:withheld, reasons} ->
+          update_in(acc, [:pages, {:publication_withheld, reasons}], &((&1 || 0) + 1))
+
+        _ ->
+          acc
+      end
+    end)
   end
 
   # The binding an attempt ran under, by its bot actor's id: its model
@@ -514,12 +590,7 @@ defmodule DevilsDictionary.Curation.Curators do
           &(&1.action == :withdraw and &1.previous_version_id in version_ids)
         ),
       placed: length(placed),
-      expired: if(ctx.light?, do: nil, else: Enum.count(placed, &expired?/1)),
-      withheld_now:
-        ctx.withheld
-        |> Enum.filter(fn {v, _} -> v in version_ids end)
-        |> Enum.flat_map(&elem(&1, 1))
-        |> Enum.frequencies(),
+      expired: ctx.expired && Enum.count(placed, &(&1.shelf_citation_id in ctx.expired)),
       wall_ms: sum(metrics, "wall_ms"),
       prompt_tokens: sum(metrics, "prompt_eval_count"),
       output_tokens: sum(metrics, "eval_count"),
@@ -527,17 +598,6 @@ defmodule DevilsDictionary.Curation.Curators do
       lowest_free_percent: metrics |> Enum.flat_map(&free_percents/1) |> Enum.min(fn -> nil end),
       most_swap_bytes: metrics |> Enum.flat_map(&swap_bytes/1) |> Enum.max(fn -> nil end)
     }
-  end
-
-  # A placed choice whose cited observation's retention has passed: the
-  # reader no longer sees it, and its payload is due to be redacted.
-  defp expired?(%{shelf_citation_id: nil}), do: false
-
-  defp expired?(%{shelf_citation_id: id}) do
-    case ShelfCitations.get(id) do
-      nil -> false
-      citation -> ShelfCitations.check(citation) == :retention_expired
-    end
   end
 
   defp sum(metrics, key) do
@@ -635,12 +695,12 @@ defmodule DevilsDictionary.Curation.Curators do
 
   # ── versions ──────────────────────────────────────────────────────────────
 
-  defp version_row(version, bindings, composition_versions, publications, slugs) do
+  defp version_row(version, roles, bindings, composition_versions, publications, slugs) do
     used = used_by(version, bindings, composition_versions, publications, slugs)
 
     %{
       version: version,
-      created_by: actor_role(version.created_by_actor_id),
+      created_by: Map.get(roles, version.created_by_actor_id),
       bindings: used.bindings,
       first_active:
         used.bindings
@@ -680,23 +740,23 @@ defmodule DevilsDictionary.Curation.Curators do
     %{bindings: used, published: Enum.sort_by(rows, & &1.at, {:desc, DateTime})}
   end
 
-  defp admission(%Profile{state: :admitted} = p) do
-    %{at: p.admitted_at, by: actor_role(p.admitted_by_actor_id), reason: p.admission_reason}
+  defp admission(%Profile{state: :admitted} = p, roles) do
+    %{at: p.admitted_at, by: Map.get(roles, p.admitted_by_actor_id), reason: p.admission_reason}
   end
 
-  defp admission(_profile), do: nil
+  defp admission(_profile, _roles), do: nil
 
   # A human actor is named by role and id, never by label: a label can be
-  # an account's name. A bot is its label, the binding's public name.
-  defp actor_role(nil), do: nil
-
-  defp actor_role(id) do
-    case Repo.get(Actor, id) do
-      %Actor{actor_kind: :bot, label: label} -> %{kind: :bot, id: id, label: label}
-      %Actor{actor_kind: :user} -> %{kind: :reviewer, id: id, label: nil}
-      %Actor{actor_kind: kind} -> %{kind: kind, id: id, label: nil}
-      nil -> nil
-    end
+  # an account's name. A bot is its label, the binding's public name. All
+  # in one query.
+  defp roles(ids) do
+    ids
+    |> by_id(Actor)
+    |> Map.new(fn
+      {id, %Actor{actor_kind: :bot, label: label}} -> {id, %{kind: :bot, id: id, label: label}}
+      {id, %Actor{actor_kind: :user}} -> {id, %{kind: :reviewer, id: id, label: nil}}
+      {id, %Actor{actor_kind: kind}} -> {id, %{kind: kind, id: id, label: nil}}
+    end)
   end
 
   # ── what we gave it ───────────────────────────────────────────────────────
@@ -747,13 +807,31 @@ defmodule DevilsDictionary.Curation.Curators do
       passages_shown?: false
     }
 
+  # The first clause of a rights note (up to its first `;` or `:`) must
+  # state public domain outright: "Public domain", optionally "in"
+  # one named place. Nothing else permits a passage.
+  @public_domain ~r/\Apublic domain(?: in (?:the )?[\p{L}][\p{L} .'-]*)?\z/iu
+  @negations ~r/\b(?:not|no|non|except|excluding|unless|outside|but)\b/iu
+
   @doc """
   Whether a source reference's rights note permits showing its exact
-  passages: it must say the work is in the public domain. Anything else
-  shows the reference and the rights note only (#299 M5).
+  passages (#299 M5, #304 R2). A positive rule: the note's first clause
+  must be exactly "Public domain", or "Public domain in <place>", with no
+  negation or exception in it. "Public domain in the USA; two short
+  passages…" permits; "Not in the public domain", "Public domain except in
+  the EU" and "In copyright: …" do not. Anything else shows the reference
+  and the rights note only.
   """
-  def passages_permitted?(rights) when is_binary(rights),
-    do: String.match?(rights, ~r/\bpublic domain\b/i)
+  def passages_permitted?(rights) when is_binary(rights) do
+    clause =
+      rights
+      |> String.split(~r/[;:]/u, parts: 2)
+      |> hd()
+      |> String.trim()
+      |> String.trim_trailing(".")
+
+    String.match?(clause, @public_domain) and not String.match?(clause, @negations)
+  end
 
   def passages_permitted?(_rights), do: false
 
