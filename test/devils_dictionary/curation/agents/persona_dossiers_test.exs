@@ -11,6 +11,9 @@ defmodule DevilsDictionary.Curation.Agents.PersonaDossiersTest do
 
   @personas Path.expand("../../../../priv/curation/agents/personas", __DIR__)
   @reference Path.join(@personas, "voltaire/v8/profile.json")
+  # The project's own records of Gutenberg #972, pinned by
+  # priv/replay/MANIFEST.json; Sources.ManifestTest already needs it on disk.
+  @bierce_replay Path.expand("../../../../priv/replay/bierce.jsonl.gz", __DIR__)
   @dossiers [{"hitchens", "v1"}, {"bierce", "v1"}]
 
   @top ~w(slug template_version dossier source_refs deceased_evidence_refs)
@@ -19,8 +22,10 @@ defmodule DevilsDictionary.Curation.Agents.PersonaDossiersTest do
   @passage ~w(locator speaker text)
   @deceased ~w(url authority field value)
 
-  # Short quotation only, for a work still in copyright.
+  # Short quotation only, for a work still in copyright: per passage, and in
+  # all from one work.
   @max_quoted_words 25
+  @max_quoted_words_per_work 50
 
   defp read!(path), do: path |> File.read!() |> Jason.decode!()
 
@@ -33,6 +38,25 @@ defmodule DevilsDictionary.Curation.Agents.PersonaDossiersTest do
   defp keys(map), do: map |> Map.keys() |> Enum.sort()
 
   defp present?(value), do: is_binary(value) and String.trim(value) != ""
+
+  defp dossier!(slug), do: dossiers() |> List.keyfind!(slug, 0) |> elem(1)
+
+  defp word_count(text), do: text |> String.split() |> length()
+
+  defp squish(text), do: text |> String.split() |> Enum.join(" ")
+
+  # {headword, pos marker} => the text of each record's first fragment.
+  defp bierce_entries do
+    @bierce_replay
+    |> File.read!()
+    |> :zlib.gunzip()
+    |> String.split("\n", trim: true)
+    |> Enum.map(&Jason.decode!/1)
+    |> Enum.group_by(
+      &{&1["raw"]["headword"], &1["raw"]["pos"]},
+      &(&1["raw"]["html"] |> hd() |> Floki.parse_fragment!() |> Floki.text() |> squish())
+    )
+  end
 
   test "the reference Voltaire v8 manifest still has the shape the dossiers copy" do
     ref = read!(@reference)
@@ -83,6 +107,7 @@ defmodule DevilsDictionary.Curation.Agents.PersonaDossiersTest do
         assert Enum.all?(d[key], &present?/1), "#{slug}: #{key}"
       end
 
+      assert d["disclosure"] =~ "An AI selection lens inspired by "
       assert d["disclosure"] =~ "not his voice"
       # #300 §4: the lead rule sets the lead. The clause has to hold for a
       # single-editor comparison arm, whose v7 instruction still has the model
@@ -100,8 +125,32 @@ defmodule DevilsDictionary.Curation.Agents.PersonaDossiersTest do
       assert byte_size(d["disclosure"] <> "\n" <> d["selection"]) < 1800
     end
 
-    {_, bierce} = Enum.find(dossiers(), &(elem(&1, 0) == "bierce"))
-    assert Enum.any?(bierce["dossier"]["blind_spots"], &(&1 =~ "Bierce-first lead rule"))
+    assert Enum.any?(
+             dossier!("bierce")["dossier"]["blind_spots"],
+             &(&1 =~ "Bierce-first lead rule")
+           )
+  end
+
+  test "a passage kept as a documented prejudice is flagged and never becomes part of the lens" do
+    flagged =
+      for {slug, body} <- dossiers(),
+          source <- body["source_refs"],
+          passage <- source["passages"],
+          passage["speaker"] =~ "period prejudice" do
+        d = body["dossier"]
+        [headword | _] = String.split(passage["locator"], ",")
+        label = "#{slug}: #{headword}"
+
+        assert passage["speaker"] =~ "no part of the lens", label
+        assert source["basis"] =~ "#{headword} is quoted only as a documented period prejudice"
+        assert Enum.any?(d["blind_spots"], &(&1 =~ headword)), label
+
+        lens = [d["selection"], d["positive_example"], d["negative_example"] | d["principles"]]
+        refute Enum.any?(lens, &(&1 =~ headword)), label
+        {slug, headword}
+      end
+
+    assert flagged == [{"bierce", "INDISCRETION"}]
   end
 
   test "every source names its work, edition, locators and rights, with attributed passages" do
@@ -132,15 +181,40 @@ defmodule DevilsDictionary.Curation.Agents.PersonaDossiersTest do
         assert source["rights"] =~ "In copyright", label
         assert source["rights"] =~ "fair use", label
 
-        for passage <- source["passages"] do
-          words = passage["text"] |> String.split() |> length()
-          assert words <= @max_quoted_words, "#{label}: #{passage["locator"]}"
-        end
+        words = Enum.map(source["passages"], &word_count(&1["text"]))
+        assert Enum.all?(words, &(&1 <= @max_quoted_words)), label
+        assert Enum.sum(words) <= @max_quoted_words_per_work, label
+
+        # The rights note states the total, and the total is what is quoted.
+        assert [_, stated] = Regex.run(~r/\((\d+) words/, source["rights"]), label
+        assert String.to_integer(stated) == Enum.sum(words), label
       end
     end
 
-    {_, hitchens} = Enum.find(dossiers(), &(elem(&1, 0) == "hitchens"))
-    refute Enum.any?(hitchens["source_refs"], &String.starts_with?(&1["rights"], "Public domain"))
+    refute Enum.any?(
+             dossier!("hitchens")["source_refs"],
+             &String.starts_with?(&1["rights"], "Public domain")
+           )
+  end
+
+  # The Hitchens passages come from web pages (Slate through an Internet Archive
+  # capture, and Vanity Fair) and cannot be checked offline. They were checked
+  # against the pages their source_refs name on 3 November 2026 (#302). Bierce's
+  # can be: each must follow its own headword in the project's Gutenberg records.
+  test "every Bierce passage is the exact text of its entry in the project's Gutenberg records" do
+    entries = bierce_entries()
+
+    for source <- dossier!("bierce")["source_refs"], passage <- source["passages"] do
+      [headword, rest] = String.split(passage["locator"], ", ", parts: 2)
+      pos = rest |> String.split(",", parts: 2) |> hd() |> String.trim_trailing(".")
+      texts = Map.get(entries, {headword, pos}, [])
+
+      assert Enum.any?(
+               texts,
+               &String.starts_with?(&1, "#{headword}, #{pos}. #{passage["text"]}")
+             ),
+             passage["locator"]
+    end
   end
 
   test "deceased-status evidence comes from an authority record" do
@@ -153,6 +227,24 @@ defmodule DevilsDictionary.Curation.Agents.PersonaDossiersTest do
       end
 
       assert Enum.any?(refs, &(&1["url"] =~ "id.loc.gov/authorities/names/")), slug
+
+      # The identifier named in `authority` is the one the URL resolves.
+      for ref <- refs do
+        id = ref["url"] |> URI.parse() |> Map.fetch!(:path) |> Path.basename()
+
+        cond do
+          ref["url"] =~ "id.loc.gov/authorities/names/" ->
+            assert id =~ ~r/^n[a-z]?\d+$/, slug
+            assert ref["authority"] =~ Regex.compile!("LCCN #{id}\\b"), slug
+
+          ref["url"] =~ "www.wikidata.org/wiki/" ->
+            assert id =~ ~r/^Q\d+$/, slug
+            assert ref["authority"] =~ Regex.compile!("Wikidata item #{id}\\b"), slug
+
+          true ->
+            flunk("#{slug}: unexpected authority #{ref["url"]}")
+        end
+      end
     end
   end
 end

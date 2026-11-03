@@ -55,7 +55,10 @@ uncertain.
 ## Rights
 
 The text is public domain in the USA according to the Gutenberg record. The
-dossier quotes six short entries verbatim and paraphrases the rest. Readers
+dossier quotes five short entries and the first sentence of CYNIC verbatim,
+and paraphrases the rest. The lens draws on HYPOCRITE, POLITICS, IMPARTIAL,
+SELFISH and CYNIC; INDISCRETION is quoted only as a documented period
+prejudice. Readers
 outside the USA should check their own jurisdiction, as Gutenberg advises.
 
 ## Documented, and our interpretation

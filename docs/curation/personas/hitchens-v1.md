@@ -23,11 +23,11 @@ record below was checked against the page named on 3 November 2026.
 
 | Work | Edition | Locator | Passage | Rights |
 |---|---|---|---|---|
-| "Mommie Dearest" (Fighting Words) | Slate, posted 20 Oct 2003, 1:04 PM PT, with its correction of 21 Oct 2003. Read from the [Internet Archive capture of 23 Oct 2003](https://web.archive.org/web/20031023010642/http://slate.msn.com:80/id/2090083) | ¶2 | "to test any extraordinary claims" | In copyright; short quotation |
-| same | same | ¶7 | "a lazy media never bothered to ask any follow-up questions" | In copyright; short quotation |
-| same | same | ¶8 (final) | "what can be asserted without evidence can also be dismissed without evidence" | In copyright; short quotation |
-| "Believe Me, It's Torture" | [Vanity Fair, August 2008 issue](https://www.vanityfair.com/news/2008/08/hitchens200808); the online text is dated 2 July 2008 | Paragraph applying "the Abraham Lincoln test" | "if waterboarding does not constitute torture, then there is no such thing as torture." | In copyright; short quotation |
-| same | same | Paragraph beginning "Maybe I am being premature" | "I think that both cases have to be stated at their strongest." | In copyright; short quotation |
+| "Mommie Dearest" (Fighting Words) | Slate, posted 20 Oct 2003, 1:04 PM PT, with its correction of 21 Oct 2003. Read from the [Internet Archive capture of 23 Oct 2003](https://web.archive.org/web/20031023010642/http://slate.msn.com:80/id/2090083) | ¶2 of 8 | "to test any extraordinary claims" | In copyright; short quotation |
+| same | same | ¶7 of 8 | "a lazy media never bothered to ask any follow-up questions" | In copyright; short quotation |
+| same | same | ¶8 of 8 (final) | "what can be asserted without evidence can also be dismissed without evidence" | In copyright; short quotation |
+| "Believe Me, It's Torture" | [Vanity Fair, August 2008 issue](https://www.vanityfair.com/news/2008/08/hitchens200808); the online text is dated 2 July 2008 | Paragraph recounting the second session (Lincoln test) | "if waterboarding does not constitute torture, then there is no such thing as torture." | In copyright; short quotation |
+| same | same | Paragraph on the veterans' two views | "I think that both cases have to be stated at their strongest." | In copyright; short quotation |
 
 Deceased-status evidence:
 - Library of Congress Name Authority File [n84159549](https://id.loc.gov/authorities/names/n84159549), `deathDate` 2011-12-15. The HTML page is behind a bot check, so the record was read at the same address with `.json` appended.
@@ -38,15 +38,18 @@ Deceased-status evidence:
 Hitchens died in 2011, and both works are in copyright. The captured Slate page
 carries "©2003 Microsoft Corporation"; the Vanity Fair page carries "© 2026
 Condé Nast". The dossier keeps five short quotations, 27 and 26 words from the
-two works, for attribution and commentary as fair use. It reproduces nothing
-else, and a public profile page should show no more than these quotations.
-Each source's `rights` field repeats this.
+two works, for attribution and commentary as fair use. Beyond the two titles
+and the pages' copyright notices, it reproduces nothing else: the locators
+describe paragraphs (by number for Slate, by subject for Vanity Fair) rather
+than quote their openings. A public profile page should show no more than
+these quotations. Each source's `rights` field repeats this.
 
 ## Documented, and our interpretation
 
 Documented: the five quoted phrases with their dates and locators. The Slate
-column's appended correction, "This piece originally claimed that…",
-documents one overstated claim. The current Slate republication
+column's appended correction of 21 October 2003, about what Mother Teresa
+said in her Nobel Peace Prize lecture, documents one overstated claim. The
+current Slate republication
 ([slate.com](https://slate.com/news-and-politics/2003/10/the-fanatic-fraudulent-mother-teresa.html))
 keeps ¶2 and ¶7 but omits ¶8. That is why ¶8 is cited from the 2003 capture.
 

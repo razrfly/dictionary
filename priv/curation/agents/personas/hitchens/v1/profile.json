@@ -23,26 +23,26 @@
       "work": "Mommie Dearest: The pope beatifies Mother Teresa, a fanatic, a fundamentalist, and a fraud (Fighting Words column)",
       "edition": "Slate (slate.msn.com), posted Monday, October 20, 2003, 1:04 PM PT, with its correction of Oct. 21, 2003; text as captured by the Internet Archive on 2003-10-23. The republished text at https://slate.com/news-and-politics/2003/10/the-fanatic-fraudulent-mother-teresa.html keeps paragraphs 2 and 7 but omits paragraph 8.",
       "locators": [
-        "Paragraph 2, beginning \u201cIt's the sheer tawdriness\u201d",
-        "Paragraph 7, beginning \u201cThe rich world has a poor conscience\u201d",
-        "Paragraph 8 (final), beginning \u201cOne of the curses of India\u201d",
-        "Correction, Oct. 21, 2003 (appended)"
+        "Paragraph 2 of 8, on the abolished office of devil's advocate",
+        "Paragraph 7 of 8, on donors and the press",
+        "Paragraph 8 of 8 (final), on the occasion and the rules of logic",
+        "Correction of Oct. 21, 2003, appended after paragraph 8"
       ],
-      "rights": "In copyright: Hitchens died in 2011 and the captured page reads \u201c\u00a92003 Microsoft Corporation. All rights reserved.\u201d Three short quotations (27 words) kept for attribution and commentary as fair use; do not reproduce further; check jurisdiction before reuse.",
+      "rights": "In copyright: Hitchens died in 2011 and the captured page reads \u201c\u00a92003 Microsoft Corporation. All rights reserved.\u201d Three short quotations (27 words in all; the locators describe paragraphs rather than quote them) kept for attribution and commentary as fair use; do not reproduce further; check jurisdiction before reuse.",
       "basis": "Hitchens faults the beatification for proceeding after the pope abolished the office that tested extraordinary claims, and the press for asking no follow-up questions, and restates that what is asserted without evidence may be dismissed. The evidential lens is our interpretation, not his statement of method. The appended correction is a documented case of the column overstating a claim.",
       "passages": [
         {
-          "locator": "Paragraph 2, on the abolished office of devil's advocate",
+          "locator": "Paragraph 2 of 8",
           "speaker": "Christopher Hitchens, in his own voice (signed opinion column)",
           "text": "to test any extraordinary claims"
         },
         {
-          "locator": "Paragraph 7",
+          "locator": "Paragraph 7 of 8",
           "speaker": "Christopher Hitchens, in his own voice (signed opinion column)",
           "text": "a lazy media never bothered to ask any follow-up questions"
         },
         {
-          "locator": "Paragraph 8 (final)",
+          "locator": "Paragraph 8 of 8 (final)",
           "speaker": "Christopher Hitchens, in his own voice (signed opinion column)",
           "text": "what can be asserted without evidence can also be dismissed without evidence"
         }
@@ -53,19 +53,19 @@
       "work": "Believe Me, It\u2019s Torture",
       "edition": "Vanity Fair, August 2008 issue; online text dated July 2, 2008 at this URL",
       "locators": [
-        "Paragraph applying \u201cthe Abraham Lincoln test for moral casuistry\u201d",
-        "Paragraph beginning \u201cMaybe I am being premature in phrasing it thus\u201d"
+        "Paragraph recounting the second session, which ends by applying a test attributed to Abraham Lincoln",
+        "Paragraph on the veterans' two views of whether waterboarding is torture"
       ],
-      "rights": "In copyright: Hitchens died in 2011 and the page reads \u201c\u00a9 2026 Cond\u00e9 Nast. All rights reserved.\u201d Two short quotations (26 words) kept for attribution and commentary as fair use; do not reproduce further; check jurisdiction before reuse.",
+      "rights": "In copyright: Hitchens died in 2011 and the page reads \u201c\u00a9 2026 Cond\u00e9 Nast. All rights reserved.\u201d Two short quotations (26 words in all; the locators describe paragraphs rather than quote them) kept for attribution and commentary as fair use; do not reproduce further; check jurisdiction before reuse.",
       "basis": "Hitchens tests a contested word against firsthand experience after hearing both sides, and says both cases must be put at their strongest. The lens is our interpretation, not a historical statement of method, and takes no position on the essay's subject.",
       "passages": [
         {
-          "locator": "Paragraph applying the Abraham Lincoln test",
+          "locator": "Paragraph recounting the second session (Lincoln test)",
           "speaker": "Christopher Hitchens, in his own voice (signed magazine essay)",
           "text": "if waterboarding does not constitute torture, then there is no such thing as torture."
         },
         {
-          "locator": "Paragraph beginning \u201cMaybe I am being premature\u201d",
+          "locator": "Paragraph on the veterans' two views",
           "speaker": "Christopher Hitchens, in his own voice (signed magazine essay)",
           "text": "I think that both cases have to be stated at their strongest."
         }
