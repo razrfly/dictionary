@@ -32,9 +32,11 @@ defmodule DevilsDictionary.Curation.Runtime.Contract do
   @max_reason_chars 280
   @max_quote_chars 400
 
+  # Comparison-only instructions (#298 C3, C9) use v7's output contract.
+  @comparison DevilsDictionary.Curation.WholeEntry.comparison_instructions()
+
   def version, do: @version
-  def version("generic-whole-entry-v1"), do: "selection-output-v4"
-  def version("voltaire-whole-entry-v7-fixed-lead-v1"), do: "selection-output-v4"
+  def version(instruction) when instruction in @comparison, do: "selection-output-v4"
   def version("voltaire-whole-entry-v7"), do: "selection-output-v4"
   def version("voltaire-whole-entry-v6"), do: "selection-output-v4"
   def version("voltaire-whole-entry-v5"), do: "selection-output-v4"
@@ -375,9 +377,8 @@ defmodule DevilsDictionary.Curation.Runtime.Contract do
          "voltaire-whole-entry-v4",
          "voltaire-whole-entry-v5",
          "voltaire-whole-entry-v6",
-         "voltaire-whole-entry-v7",
-         "generic-whole-entry-v1",
-         "voltaire-whole-entry-v7-fixed-lead-v1"
+         "voltaire-whole-entry-v7"
+         | @comparison
        ] and
          not is_nil(choice["quote"]),
        do: [[where, "quote_not_allowed"]],

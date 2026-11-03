@@ -1769,10 +1769,19 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
     {usable, unusable} = usable(offered, universe, policy)
     named = Map.new(universe, &{&1.id, meaning_identity(&1.meaning)})
 
+    # A claim's basis carries registry labels: the record keeps its digest.
     pool =
       usable
       |> Enum.map(fn c ->
-        c.packet |> Map.take(@evidence_keys) |> Map.put("meaning", named[c.meaning])
+        c.packet
+        |> Map.take(@evidence_keys -- ["basis"])
+        |> then(
+          &if(c.packet["basis"],
+            do: Map.put(&1, "basis_sha256", Digest.term(c.packet["basis"])),
+            else: &1
+          )
+        )
+        |> Map.put("meaning", named[c.meaning])
       end)
       |> Enum.sort_by(& &1["key"])
 

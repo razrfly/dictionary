@@ -12,10 +12,9 @@ defmodule DevilsDictionary.Curation.Runtime.EvidenceGuidance do
   """
 
   @policy "evidence-guidance-v1"
+  # v7 and every comparison-only instruction built on its evidence policy.
   @instructions [
-    "voltaire-whole-entry-v7",
-    "generic-whole-entry-v1",
-    "voltaire-whole-entry-v7-fixed-lead-v1"
+    "voltaire-whole-entry-v7" | DevilsDictionary.Curation.WholeEntry.comparison_instructions()
   ]
 
   @doc "The instructions guided under `evidence-guidance-v1`."

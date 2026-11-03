@@ -7,10 +7,9 @@ defmodule DevilsDictionary.Curation.Runtime.SectionOutput do
     "voltaire-whole-entry-v4",
     "voltaire-whole-entry-v5",
     "voltaire-whole-entry-v6",
-    "voltaire-whole-entry-v7",
-    # Comparison-only (#298 C3, C9): the same section wire shape.
-    "generic-whole-entry-v1",
-    "voltaire-whole-entry-v7-fixed-lead-v1"
+    "voltaire-whole-entry-v7"
+    # Comparison-only instructions (#298 C3, C9) share the section wire shape.
+    | WholeEntry.comparison_instructions()
   ]
   @top ~w(decision lead selections abstain_reason)
   @choice ~w(candidate_id meaning_id reason quote)

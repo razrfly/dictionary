@@ -229,6 +229,7 @@ defmodule DevilsDictionary.Curation.Runtime.CompareTest do
       assert page.fingerprints |> Map.keys() |> Enum.sort() == ["current", "text"]
       assert arms |> Map.values() |> Enum.map(& &1.packet_hash) |> Enum.uniq() |> length() == 4
       refute Jason.encode!(page.snapshot) =~ "excerpt\""
+      refute Jason.encode!(page.snapshot) =~ "representation\""
     end
 
     test "the text cut never offers metadata-only kinds and refills under the same bounds", ctx do
