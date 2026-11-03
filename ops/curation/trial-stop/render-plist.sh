@@ -1,6 +1,7 @@
 #!/bin/zsh
 # Prints a launchd plist for trial-stop.sh from the template beside it
-# (#298 C6). It loads, writes and starts nothing.
+# (#298 C6). It loads, writes and starts nothing, and refuses a deadline
+# that is past, within a minute, more than 7 days ahead or in milliseconds.
 #
 #   render-plist.sh --label io.wordhoard.NAME --script PATH --deadline EPOCH \
 #     --run-dir DIR --log PATH [--reason TEXT] [--stop-script PATH] [--dry-run]
@@ -29,7 +30,16 @@ while (( $# > 0 )); do
 done
 
 [[ $label =~ '^io\.wordhoard\.[a-z0-9][a-z0-9.-]*$' ]] || usage
-[[ $deadline == <-> ]] || usage
+[[ $deadline == <-> && ${#deadline} -le 10 ]] || usage
+
+# A job is bootstrapped with RunAtLoad: a deadline already past would stop
+# the live system at load, and one in milliseconds would never fire. Render
+# only a deadline more than a minute ahead and at most 7 days out.
+now=$(date +%s)
+if (( deadline <= now + 60 || deadline > now + 7 * 86400 )); then
+  print -u2 "deadline $deadline must be more than 60 s and at most 7 days ahead (now $now)"
+  exit 65
+fi
 for p in $script $run_dir $log; do [[ $p == /* ]] || usage; done
 [[ -z $stop_script || $stop_script == /* ]] || usage
 

@@ -3,7 +3,8 @@ defmodule DevilsDictionary.Curation.TrialStopTest do
   #298 C6: the parameterised stop guard under `ops/curation/trial-stop/`.
   `trial-stop.sh` is run against a stub `mix` (DD_TRIAL_MIX), so nothing is
   stopped and no database is touched; `render-plist.sh` renders a valid
-  plist and loads nothing.
+  plist and loads nothing. A dry run never runs the stop script, and both
+  scripts bound the deadline (#303 review R6, R7).
   """
   use ExUnit.Case, async: true
 
@@ -17,6 +18,11 @@ defmodule DevilsDictionary.Curation.TrialStopTest do
     File.mkdir_p!(checkout)
     calls = Path.join(tmp, "calls.log")
     stub = Path.join(tmp, "mix-stub")
+
+    # The checkout's own stop script, as the serving checkout has it.
+    default_stop = Path.join(checkout, "ops/curation/trial-stop/stop.exs")
+    File.mkdir_p!(Path.dirname(default_stop))
+    File.write!(default_stop, "# stop\n")
 
     File.write!(stub, """
     #!/bin/zsh
@@ -89,15 +95,93 @@ defmodule DevilsDictionary.Curation.TrialStopTest do
     assert fallback =~ "run --no-start #{ctx.checkout}/ops/curation/trial-stop/physical-stop.exs"
   end
 
-  test "the dry run ignores the deadline and asks the stop script for a dry run only", ctx do
+  test "the dry run ignores the time to the deadline and runs only dry-run.exs", ctx do
     File.write!(Path.join(ctx.run_dir, "STOPPED"), "done\n")
 
     assert {_, 0} =
              guard(ctx, ["--deadline", "#{epoch(86_400)}", "--run-dir", ctx.run_dir, "--dry-run"])
 
     [call] = calls(ctx)
-    assert call =~ "stop.exs --dry-run --run-dir #{ctx.run_dir}"
-    refute call =~ "--reason"
+    [_pwd, _oban, _server, args] = String.split(call, "|")
+
+    assert args ==
+             "run --no-start #{ctx.checkout}/ops/curation/trial-stop/dry-run.exs --run-dir #{ctx.run_dir} " <>
+               "--stop-script #{ctx.checkout}/ops/curation/trial-stop/stop.exs"
+  end
+
+  test "a dry run never runs the named stop script, even one that ignores its arguments", ctx do
+    # Like the v6 and v7 run-folder copies: it would stop whatever it is told.
+    frozen = Path.join(ctx.run_dir, "stop.exs")
+    File.write!(frozen, "# ignores System.argv() and stops\n")
+
+    assert {_, 0} =
+             guard(ctx, [
+               "--deadline",
+               "#{epoch(3600)}",
+               "--run-dir",
+               ctx.run_dir,
+               "--stop-script",
+               frozen,
+               "--dry-run"
+             ])
+
+    [call] = calls(ctx)
+    [_pwd, _oban, _server, args] = String.split(call, "|")
+
+    assert String.starts_with?(
+             args,
+             "run --no-start #{ctx.checkout}/ops/curation/trial-stop/dry-run.exs "
+           )
+
+    assert String.ends_with?(args, "--stop-script #{frozen}")
+    refute args =~ "--reason"
+
+    # A stop script that cannot be read refuses the dry run outright.
+    assert {_, 66} =
+             guard(ctx, [
+               "--deadline",
+               "#{epoch(3600)}",
+               "--run-dir",
+               ctx.run_dir,
+               "--stop-script",
+               frozen <> ".missing",
+               "--dry-run"
+             ])
+
+    assert length(calls(ctx)) == 1
+  end
+
+  test "stop.exs has no dry run: it refuses --dry-run before connecting", ctx do
+    {out, status} =
+      System.cmd(
+        "elixir",
+        [Path.join(@dir, "stop.exs"), "--dry-run", "--run-dir", ctx.run_dir],
+        stderr_to_stdout: true
+      )
+
+    refute status == 0
+    assert out =~ "unknown options"
+    refute File.exists?(Path.join(ctx.run_dir, "STOPPED"))
+  end
+
+  test "the deadline is bounded: seconds only, at most 7 days ahead, never stale", ctx do
+    run = ["--run-dir", ctx.run_dir]
+
+    # Milliseconds, a non-number and a grace beyond a day are usage errors.
+    assert {_, 64} = guard(ctx, ["--deadline", "#{epoch(3600) * 1000}" | run])
+    assert {_, 64} = guard(ctx, ["--deadline", "soon" | run])
+    assert {_, 64} = guard(ctx, ["--deadline", "#{epoch(-5)}", "--grace-seconds", "90000" | run])
+
+    # Implausibly far out, stale beyond the grace, or a dry run already due.
+    assert {_, 65} = guard(ctx, ["--deadline", "#{epoch(8 * 86_400)}" | run])
+    assert {_, 65} = guard(ctx, ["--deadline", "#{epoch(-7200)}" | run])
+    assert {_, 65} = guard(ctx, ["--deadline", "#{epoch(-600)}", "--grace-seconds", "300" | run])
+    assert {_, 65} = guard(ctx, ["--deadline", "#{epoch(-5)}", "--dry-run" | run])
+    assert calls(ctx) == []
+
+    # Within the grace a late tick still stops.
+    assert {_, 0} = guard(ctx, ["--deadline", "#{epoch(-600)}" | run])
+    assert [_stop] = calls(ctx)
   end
 
   test "a frozen copy of the stop script can be named", ctx do
@@ -120,7 +204,10 @@ defmodule DevilsDictionary.Curation.TrialStopTest do
   test "bad arguments are refused before anything runs", ctx do
     assert {_, 64} = guard(ctx, ["--deadline", "soon", "--run-dir", ctx.run_dir])
     assert {_, 64} = guard(ctx, ["--run-dir", ctx.run_dir])
-    assert {_, 66} = guard(ctx, ["--deadline", "1", "--run-dir", ctx.run_dir <> "-missing"])
+
+    assert {_, 66} =
+             guard(ctx, ["--deadline", "#{epoch(3600)}", "--run-dir", ctx.run_dir <> "-missing"])
+
     assert calls(ctx) == []
   end
 
@@ -131,7 +218,7 @@ defmodule DevilsDictionary.Curation.TrialStopTest do
       "--script",
       "/Users/me/Library/Application Support/DictionaryTrial/trial-stop.sh",
       "--deadline",
-      "1793800000",
+      "#{epoch(3600)}",
       "--run-dir",
       ctx.run_dir,
       "--log",
@@ -142,7 +229,7 @@ defmodule DevilsDictionary.Curation.TrialStopTest do
 
     {plist, 0} = System.cmd("/bin/zsh", [Path.join(@dir, "render-plist.sh") | args])
     assert plist =~ "<string>io.wordhoard.d6-batch-stop</string>"
-    assert plist =~ "<string>1793800000</string>"
+    assert plist =~ "<string>#{epoch(3600) |> div(100)}"
     assert plist =~ "<string>#{ctx.run_dir}</string>"
     assert plist =~ "D6 batch &lt;stop&gt; &amp; verify"
     refute plist =~ "--dry-run"
@@ -159,9 +246,27 @@ defmodule DevilsDictionary.Curation.TrialStopTest do
       assert {_, 0} = System.cmd(plutil, ["-lint", path])
     end
 
-    assert {_, 64} =
-             System.cmd("/bin/zsh", [Path.join(@dir, "render-plist.sh"), "--label", "bad label"],
-               stderr_to_stdout: true
-             )
+    render = fn args ->
+      System.cmd("/bin/zsh", [Path.join(@dir, "render-plist.sh") | args], stderr_to_stdout: true)
+    end
+
+    assert {_, 64} = render.(["--label", "bad label"])
+
+    with_deadline = fn deadline ->
+      args
+      |> Enum.chunk_every(2)
+      |> Enum.flat_map(fn
+        ["--deadline", _] -> ["--deadline", deadline]
+        pair -> pair
+      end)
+    end
+
+    # Past, due within a minute, more than 7 days out: refused, nothing printed.
+    for deadline <- [epoch(-60), epoch(30), epoch(8 * 86_400)] do
+      assert {out, 65} = render.(with_deadline.("#{deadline}"))
+      refute out =~ "<plist"
+    end
+
+    assert {_, 64} = render.(with_deadline.("#{epoch(3600) * 1000}"))
   end
 end

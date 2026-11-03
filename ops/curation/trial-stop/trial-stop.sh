@@ -8,15 +8,23 @@
 # Before EPOCH-60 it exits at once. In the last minute it sleeps to EPOCH,
 # then, unless DIR/STOPPED exists, runs the stop script from the checkout
 # with DD_NO_OBAN=1 and PHX_SERVER unset, appending to DIR/stop.log. If the
-# stop fails it runs physical-stop.exs (beside the stop script) and exits 1.
+# stop fails it runs physical-stop.exs (beside the stop script) and exits 1;
+# the next minute tries again.
 #
-# --dry-run ignores the deadline and STOPPED, and runs the stop script with
-# --dry-run: it proves this environment can start mix and reach the
-# database, writes DIR/DRY_RUN_OK, and stops nothing.
+# The deadline is bounded: whole seconds (at most 10 digits, so never
+# milliseconds), at most 7 days ahead, and not stale. A deadline more than
+# --grace-seconds (3600) in the past refuses with exit 65 and stops nothing,
+# so a job loaded with an old epoch never stops a live system at load.
+#
+# --dry-run never runs the stop script, whatever --stop-script names. It
+# runs the checkout's dry-run.exs, which proves this environment can start
+# mix and reach the database read-only, hashes the stop script the real
+# guard would run (reading it, not running it), writes DIR/DRY_RUN_OK and
+# stops nothing. The deadline must then still be ahead.
 set -eu
 
 usage() {
-  print -u2 "usage: trial-stop.sh --deadline EPOCH --run-dir DIR [--reason TEXT] [--checkout DIR] [--stop-script PATH] [--dry-run]"
+  print -u2 "usage: trial-stop.sh --deadline EPOCH --run-dir DIR [--reason TEXT] [--checkout DIR] [--stop-script PATH] [--grace-seconds N] [--dry-run]"
   exit 64
 }
 
@@ -25,7 +33,9 @@ run_dir=''
 reason='fixed stop guard deadline reached'
 checkout='/Volumes/LLM Models/dictionary/src/dictionary'
 stop_script=''
+grace=3600
 dry_run=0
+max_ahead=$(( 7 * 86400 ))
 
 while (( $# > 0 )); do
   case $1 in
@@ -34,13 +44,31 @@ while (( $# > 0 )); do
     --reason) (( $# >= 2 )) || usage; reason=$2; shift 2 ;;
     --checkout) (( $# >= 2 )) || usage; checkout=$2; shift 2 ;;
     --stop-script) (( $# >= 2 )) || usage; stop_script=$2; shift 2 ;;
+    --grace-seconds) (( $# >= 2 )) || usage; grace=$2; shift 2 ;;
     --dry-run) dry_run=1; shift ;;
     *) usage ;;
   esac
 done
 
-[[ $deadline == <-> ]] || usage
+[[ $deadline == <-> && ${#deadline} -le 10 ]] || usage
+[[ $grace == <-> ]] && (( grace <= 86400 )) || usage
 [[ -n $run_dir ]] || usage
+now=$(date +%s)
+
+if (( deadline > now + max_ahead )); then
+  print -u2 "deadline $deadline is more than 7 days ahead; refused, nothing stopped"
+  exit 65
+fi
+
+if (( deadline + grace < now )); then
+  print -u2 "deadline $deadline is stale (more than $grace s past); refused, nothing stopped"
+  exit 65
+fi
+
+if (( dry_run && deadline <= now )); then
+  print -u2 "a dry run needs a deadline still ahead; refused"
+  exit 65
+fi
 
 if [[ ! -d $run_dir ]]; then
   print -u2 "run directory missing: $run_dir"
@@ -54,10 +82,9 @@ fi
 
 [[ -n $stop_script ]] || stop_script="$checkout/ops/curation/trial-stop/stop.exs"
 physical="${stop_script:h}/physical-stop.exs"
+dry_script="$checkout/ops/curation/trial-stop/dry-run.exs"
 
 if (( ! dry_run )); then
-  now=$(date +%s)
-
   if (( now < deadline - 60 )); then
     exit 0
   fi
@@ -78,7 +105,12 @@ mix_cmd=${DD_TRIAL_MIX:-mix}
 cd "$checkout"
 
 if (( dry_run )); then
-  "$mix_cmd" run --no-start "$stop_script" --dry-run --run-dir "$run_dir" >> "$run_dir/stop.log" 2>&1
+  if [[ ! -r $stop_script ]]; then
+    print -u2 "stop script not readable: $stop_script"
+    exit 66
+  fi
+
+  "$mix_cmd" run --no-start "$dry_script" --run-dir "$run_dir" --stop-script "$stop_script" >> "$run_dir/stop.log" 2>&1
   exit $?
 fi
 
