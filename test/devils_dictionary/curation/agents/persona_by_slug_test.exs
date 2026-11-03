@@ -43,6 +43,18 @@ defmodule DevilsDictionary.Curation.Agents.PersonaBySlugTest do
     assert Persona.versions("voltaire") == Enum.to_list(1..8)
   end
 
+  test "lens/1 composes a manifest's lens exactly as every pinned Voltaire instruction does" do
+    lens = &(Persona.manifest!("voltaire", &1) |> Persona.lens())
+
+    assert Persona.selection_instruction() == lens.(1)
+    assert Persona.selection_instruction("voltaire-whole-entry-v1") == lens.(2)
+    assert Persona.selection_instruction("voltaire-whole-entry-v2") == lens.(3)
+    assert Persona.selection_instruction("voltaire-whole-entry-v3") == lens.(4)
+
+    for v <- 4..7,
+        do: assert(Persona.selection_instruction("voltaire-whole-entry-v#{v}") == lens.(5))
+  end
+
   test "the instructions built from Voltaire's lens keep their hashes" do
     assert Persona.selection_instruction("voltaire-whole-entry-v7") ==
              "voltaire" |> Persona.manifest!(5) |> Persona.lens()
