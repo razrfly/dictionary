@@ -808,19 +808,47 @@ defmodule DevilsDictionary.Curation.Curators do
     }
 
   # The first clause of a rights note (up to its first `;` or `:`) must
-  # state public domain outright: "Public domain", optionally "in"
-  # one named place. Nothing else permits a passage.
-  @public_domain ~r/\Apublic domain(?: in (?:the )?[\p{L}][\p{L} .'-]*)?\z/iu
-  @negations ~r/\b(?:not|no|non|except|excluding|unless|outside|but)\b/iu
+  # state public domain outright: "Public domain", or "Public domain in"
+  # one of these jurisdictions, optionally followed by a parenthetical
+  # source such as "(Project Gutenberg record)". Nothing else permits a
+  # passage.
+  @jurisdictions [
+    "the USA",
+    "the US",
+    "the U.S.",
+    "the United States",
+    "the United States of America",
+    "the UK",
+    "the United Kingdom"
+  ]
+  @public_domain Regex.compile!(
+                   "\\Apublic domain(?: in (?:" <>
+                     Enum.map_join(@jurisdictions, "|", &Regex.escape/1) <>
+                     "))?(?: \\([^()]{1,80}\\))?\\z",
+                   "iu"
+                 )
+  # Words that, anywhere in the note, mean the passages may not all be
+  # public domain: a part, a translation, a copyright ("out of copyright"
+  # aside), a negation or an exception.
+  @refusals ~r/\b(?:in part|translat\w*|copyright\w*|not|\w+n't|except\w*|excluding|unless)\b/iu
 
   @doc """
   Whether a source reference's rights note permits showing its exact
-  passages (#299 M5, #304 R2). A positive rule: the note's first clause
-  must be exactly "Public domain", or "Public domain in <place>", with no
-  negation or exception in it. "Public domain in the USA; two short
-  passages…" permits; "Not in the public domain", "Public domain except in
-  the EU" and "In copyright: …" do not. Anything else shows the reference
-  and the rights note only.
+  passages (#299 M5, #304 R2 and N1). A positive rule, in two parts:
+
+    * the note's first clause (up to its first `;` or `:`) is exactly
+      "Public domain", or "Public domain in" an allowed jurisdiction (the
+      USA, the United States, the UK…), optionally with a parenthetical
+      source: "Public domain in the USA (Project Gutenberg record)";
+    * nowhere does the note say "in part", "translation", "copyright"
+      (other than "out of copyright"), "not", "except", "excluding" or
+      "unless".
+
+  "Public domain in the USA; two short passages…" (Candide) permits.
+  "Public domain in part: the English translation is in copyright", "Public
+  domain in the original French; …", "Not in the public domain" and "In
+  copyright: …" do not. Anything refused shows the reference and the rights
+  note only.
   """
   def passages_permitted?(rights) when is_binary(rights) do
     clause =
@@ -830,7 +858,9 @@ defmodule DevilsDictionary.Curation.Curators do
       |> String.trim()
       |> String.trim_trailing(".")
 
-    String.match?(clause, @public_domain) and not String.match?(clause, @negations)
+    rest = String.replace(rights, ~r/\bout of copyright\b/iu, "")
+
+    String.match?(clause, @public_domain) and not String.match?(rest, @refusals)
   end
 
   def passages_permitted?(_rights), do: false

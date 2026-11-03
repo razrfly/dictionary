@@ -312,6 +312,12 @@ defmodule DevilsDictionaryWeb.CuratorLive do
         <.async_result :let={withheld} :if={@withheld} assign={@withheld}>
           <:loading>
             <p id="curator-withheld-loading">Checking what the current pages withhold now…</p>
+            <noscript>
+              <p id="curator-withheld-noscript">
+                Counting what the current pages withhold now needs JavaScript. Every other
+                figure on this page is complete without it.
+              </p>
+            </noscript>
           </:loading>
           <:failed>
             <p id="curator-withheld-failed">What the current pages withhold now could not be read.</p>
@@ -322,10 +328,10 @@ defmodule DevilsDictionaryWeb.CuratorLive do
           <p :if={withheld.pages != %{} or withheld.choices != %{}} id="curator-withheld-now">
             Withheld on the current pages now:
             <span :for={{reasons, count} <- by_count(withheld.pages)}>
-              {plural(count, "page")} withheld whole because {Opening.withheld_reason(reasons)};
+              {plural(count, "page")} withheld whole, {each(count)} {Opening.withheld_reason(reasons)};
             </span>
             <span :for={{reason, count} <- by_count(withheld.choices)}>
-              {plural(count, "choice")} withheld on a page that is shown because {Opening.withheld_reason(
+              {plural(count, "choice")} withheld on a page that is shown, {each(count)} {Opening.withheld_reason(
                 reason
               )};
             </span>
@@ -423,7 +429,7 @@ defmodule DevilsDictionaryWeb.CuratorLive do
       <.layer
         :if={@page.profile.kind != :persona}
         title="What we gave it"
-        label="The dossier we authored"
+        label="No dossier, by design"
       >
         Nothing beyond the shared editorial rules: no dossier, no sources and no persona. What it
         is told is the instruction below.
@@ -882,6 +888,11 @@ defmodule DevilsDictionaryWeb.CuratorLive do
   # A trial's main ground, first: how many of its pages got a useful entry.
   defp useful(%{"useful" => 1, "pages" => pages}), do: "1 useful entry of #{pages} pages"
   defp useful(%{"useful" => n, "pages" => pages}), do: "#{n} useful entries of #{pages} pages"
+
+  # The reasons are singular ("its configuration has changed"), so a count
+  # of more than one reads "each because".
+  defp each(1), do: "because"
+  defp each(_count), do: "each because"
 
   defp by_count(counts), do: Enum.sort_by(counts, &{-elem(&1, 1), inspect(elem(&1, 0))})
 

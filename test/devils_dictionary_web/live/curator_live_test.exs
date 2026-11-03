@@ -281,8 +281,28 @@ defmodule DevilsDictionaryWeb.CuratorLiveTest do
       assert Curators.passages_permitted?("Public domain.")
       refute Curators.passages_permitted?("All rights reserved")
 
+      # #302's real Bierce note, a parenthetical source included, permits.
+      assert Curators.passages_permitted?("Public domain in the USA (Project Gutenberg record)")
+
+      assert Curators.passages_permitted?(
+               "Public domain in the USA (Project Gutenberg record); five short entries and the " <>
+                 "first sentence of CYNIC quoted verbatim, with original editorial paraphrase; " <>
+                 "check jurisdiction before reuse."
+             )
+
+      assert Curators.passages_permitted?("Public domain in the United States; out of copyright.")
+
       # A positive, exact rule: a mention of the public domain is not enough.
       for note <- [
+            "Public domain in part: the English translation (2005) is in copyright.",
+            "Public domain in the original French; this English translation is in copyright.",
+            "Public domain in name only",
+            "Public domain in the future",
+            "Public domain in the USA and in copyright elsewhere",
+            "Public domain in the USA (translation not checked)",
+            "Public domain in the USA; the illustrations are in copyright.",
+            "Public domain in the USA; quoted unless the owner objects.",
+            "Public domain in France",
             "Not in the public domain.",
             "Not public domain; cited by reference only.",
             "Public domain except in the EU; check first.",
@@ -384,13 +404,15 @@ defmodule DevilsDictionaryWeb.CuratorLiveTest do
       # Read once connected: the disconnected render only says it is checking.
       dead = conn |> get(~p"/curators/voltaire") |> html_response(200)
       assert dead =~ ~s(id="curator-withheld-loading")
+      # Without JavaScript the count never arrives, and the page says why.
+      assert dead =~ ~s(id="curator-withheld-noscript")
       refute dead =~ ~s(id="curator-withheld-now")
       render_async(view)
 
       withheld = part(view, "#curator-withheld-now")
 
       assert withheld =~
-               "Withheld on the current pages now: 1 choice withheld on a page that is shown " <>
+               "Withheld on the current pages now: 1 choice withheld on a page that is shown, " <>
                  "because the selected observation's retention window has expired;"
 
       refute withheld =~ "withheld whole"
@@ -402,7 +424,7 @@ defmodule DevilsDictionaryWeb.CuratorLiveTest do
       {:ok, view, _html} = live(conn, ~p"/curators/voltaire")
       render_async(view)
       withheld = part(view, "#curator-withheld-now")
-      assert withheld =~ "1 page withheld whole because"
+      assert withheld =~ "1 page withheld whole, because"
       refute withheld =~ "choice"
     end
 
@@ -475,6 +497,9 @@ defmodule DevilsDictionaryWeb.CuratorLiveTest do
 
       {:ok, view, _html} = live(conn, ~p"/curators/voltaire")
       assert part(view, "#curator-totals") =~ "3 publications"
+      # Let the connected page's withheld-now read finish, so none of its
+      # queries is counted below.
+      render_async(view)
 
       after_growth =
         queries(fn -> conn |> get(~p"/curators/voltaire") |> html_response(200) end)
