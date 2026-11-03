@@ -4,10 +4,10 @@ defmodule DevilsDictionary.Curation.CitationWindowTest do
   alias DevilsDictionary.Curation.{Configurations, Refresh, ShelfFocus}
   alias DevilsDictionary.Repo
 
-  test "every completion outcome uses the claim's configured 24h,48h or7d window" do
+  test "every completion outcome uses the claim's configured 6h, 24h, 48h or 7d window" do
     world = editor_world!()
 
-    for seconds <- [86_400, 172_800, 604_800] do
+    for seconds <- [21_600, 86_400, 172_800, 604_800] do
       current = Repo.reload!(world.configuration)
 
       assert {:ok, version} =
