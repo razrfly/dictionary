@@ -76,8 +76,10 @@ defmodule Mix.Tasks.Dd.Runtime do
   It freezes every page's snapshot and every arm's packet in one
   repeatable-read, read-only transaction, before any call. `--dry-run`
   prints each case's packets, fingerprints and whether its arms match, and
-  calls and writes nothing. Without it, `compare` refuses unless the
-  service is bound to the connected database, then sends each case's arms
+  calls and writes nothing, and says whether a run would be refused.
+  Without it, `compare` refuses unless no editor is enabled, the batch id
+  has never been used and the service is bound to the connected database,
+  then sends each case's arms
   back to back as `comparison` attempts (`comparison:BATCH:SLUG:N:LABEL`),
   writes one batch record (`--out`, by default
   `priv/curation/runtime_bench/comparisons/<UTC date>/<batch>.json`, never
@@ -313,8 +315,18 @@ defmodule Mix.Tasks.Dd.Runtime do
 
     shell = Mix.shell()
     Enum.each(compare_lines(batch), &shell.info/1)
+    preflight = Compare.preflight(batch.batch)
 
-    unless opts[:dry_run], do: compare_run(batch, opts)
+    cond do
+      opts[:dry_run] ->
+        shell.info(row("would run", preflight_text(preflight)))
+
+      preflight != :ok ->
+        Mix.raise("compare refused: #{preflight_text(preflight)}; nothing sent")
+
+      true ->
+        compare_run(batch, opts)
+    end
   end
 
   defp command(["budget"], opts) do
@@ -410,6 +422,14 @@ defmodule Mix.Tasks.Dd.Runtime do
 
   # ── comparisons ───────────────────────────────────────────────────────────
 
+  defp preflight_text(:ok), do: "yes: editor disabled, batch id unused"
+
+  defp preflight_text({:error, :editor_enabled}),
+    do: "REFUSED: an editor is enabled; disable it first (comparisons share the slot and budget)"
+
+  defp preflight_text({:error, {:batch_exists, id}}),
+    do: "REFUSED: batch #{id} already has comparison attempts; use a new --batch"
+
   defp compare_arms!(opts) do
     with {:ok, parsed} <- Compare.parse_arms(required(opts, :arms)),
          {:ok, arms} <- Compare.resolve_arms(parsed) do
@@ -459,12 +479,19 @@ defmodule Mix.Tasks.Dd.Runtime do
 
     claim_record!(path, batch)
 
-    {:ok, result} =
-      Compare.run(batch,
-        actor_id: operator!().id,
-        in_snapshot: &read_only_snapshot/1,
-        window_minutes: Keyword.get(opts, :window_minutes, 60)
-      )
+    result =
+      case Compare.run(batch,
+             actor_id: operator!().id,
+             in_snapshot: &read_only_snapshot/1,
+             window_minutes: Keyword.get(opts, :window_minutes, 60)
+           ) do
+        {:ok, result} ->
+          result
+
+        {:error, reason} ->
+          File.rm(path)
+          Mix.raise("compare refused: #{preflight_text({:error, reason})}; nothing sent")
+      end
 
     record =
       Compare.record(batch, result, %{

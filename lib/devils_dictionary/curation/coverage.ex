@@ -140,9 +140,29 @@ defmodule DevilsDictionary.Curation.Coverage do
   the batch ran anywhere, and `matched` when it is complete and arms that
   share a cut share one evidence fingerprint.
 
+  `opts[:record]` is the batch record `mix dd.runtime compare` wrote,
+  decoded. With it, every case the run tried is listed, in the run's order,
+  with the run's status and reason (`matched`, `unmatched`, `not_runnable`,
+  `not_run`) and its attempts, including cases with none: unmatched at the
+  freeze, expired before the first arm, not runnable, or not run after a
+  halt. Unmatched pages are reported, never dropped. The record's arms are
+  the batch's arms, and a case is `matched` only when the run said so too.
+  Without a record only cases with attempts can be listed, and the report
+  says so (`case_list`). `{:error, :record_for_another_batch}` when the
+  record names another batch.
+
   Counts, ids and hashes only: no provider text and no reason text.
   """
-  def comparison(batch_id) when is_binary(batch_id) do
+  def comparison(batch_id, opts \\ [])
+
+  def comparison(batch_id, opts) when is_binary(batch_id) do
+    case Keyword.get(opts, :record) do
+      %{"batch" => other} when other != batch_id -> {:error, :record_for_another_batch}
+      record -> comparison_report(batch_id, record)
+    end
+  end
+
+  defp comparison_report(batch_id, record) do
     attempts =
       Repo.all(
         from a in Attempt,
@@ -168,24 +188,88 @@ defmodule DevilsDictionary.Curation.Coverage do
       |> Map.new()
 
     rows = Enum.map(attempts, &comparison_row(&1, configs, charged))
-    expected = rows |> Enum.map(& &1.arm) |> Enum.uniq() |> Enum.sort()
+    recorded = record && record["cases"]
 
-    cases =
+    expected =
+      case record do
+        %{"arms" => [_ | _] = arms} -> arms |> Enum.map(& &1["label"]) |> Enum.sort()
+        _ -> rows |> Enum.map(& &1.arm) |> Enum.uniq() |> Enum.sort()
+      end
+
+    attempted =
       rows
       |> Enum.group_by(& &1.comparison_case)
       |> Enum.map(fn {case_id, arms} -> comparison_case(case_id, arms, expected) end)
       |> Enum.sort_by(&{page_rank(&1.page), &1.case_number})
 
+    cases = if is_list(recorded), do: with_record(attempted, recorded), else: attempted
+
     %{
-      report_version: "curation-comparison-v1",
+      report_version: "curation-comparison-v2",
       batch: batch_id,
       observed_at: DateTime.utc_now(),
       fingerprint_rule:
-        "matched = complete and, within each cut, one evidence fingerprint (#{DevilsDictionary.Curation.Runtime.Packet.fingerprint_scheme()})",
+        "matched = complete and, within each cut, one evidence fingerprint (#{DevilsDictionary.Curation.Runtime.Packet.fingerprint_scheme()}); with a record, also the run's own status",
+      case_list:
+        cond do
+          is_list(recorded) ->
+            "every case in the batch record"
+
+          is_map(record) ->
+            "record has no cases (status #{inspect(record["status"])}); cases with attempts only"
+
+          true ->
+            "no record read: cases with attempts only"
+        end,
       arms: expected,
+      cases_by_status: Enum.frequencies_by(cases, &(&1[:record_status] || "attempts_only")),
       cases: cases,
       totals: Map.new(expected, &{&1, arm_totals(&1, cases)})
     }
+  end
+
+  # Every case of the record, in the run's order, with its attempts; then any
+  # case with attempts that the record does not name.
+  defp with_record(attempted, recorded) do
+    by_id = Map.new(attempted, &{&1.case_id, &1})
+
+    listed =
+      Enum.map(recorded, fn rc ->
+        base =
+          Map.get_lazy(by_id, rc["case_id"], fn ->
+            %{
+              case_id: rc["case_id"],
+              page: rc["slug"],
+              case_number: rc["n"],
+              snapshot: List.wrap(rc["snapshot_sha256"]),
+              complete: false,
+              matched: false,
+              fingerprints_by_cut: %{},
+              arms: []
+            }
+          end)
+
+        Map.merge(base, %{
+          record_status: rc["status"],
+          record_reason: rc["reason"],
+          attempts: length(base.arms),
+          matched: base.matched and rc["status"] == "matched"
+        })
+      end)
+
+    names = MapSet.new(recorded, & &1["case_id"])
+
+    extra =
+      for c <- attempted, not MapSet.member?(names, c.case_id) do
+        Map.merge(c, %{
+          record_status: "not_in_record",
+          record_reason: nil,
+          attempts: length(c.arms),
+          matched: false
+        })
+      end
+
+    listed ++ extra
   end
 
   defp page_rank(slug), do: Enum.find_index(Pilot.autonomous_pages(), &(&1 == slug)) || 99

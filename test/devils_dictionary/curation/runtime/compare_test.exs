@@ -133,6 +133,58 @@ defmodule DevilsDictionary.Curation.Runtime.CompareTest do
     }
   end
 
+  # Another fake model: `:lead_only` gives a fixed-lead arm a null lead and
+  # every section empty (other arms keep their lead, without highlights);
+  # `:abstain_fixed` makes a fixed-lead arm abstain, against its schema.
+  defp stub_mode!(ctx, mode) do
+    stub_ollama!(ctx.v7,
+      chat: fn request ->
+        %{"content" => "Packet:\n" <> json} = List.last(request["messages"])
+        fixed? = is_binary(Jason.decode!(json)["fixed_lead"])
+        wire = wire(request)
+
+        empty =
+          Map.new(wire["selections"], fn {k, v} -> {k, if(is_list(v), do: [], else: nil)} end)
+
+        wire =
+          case {mode, fixed?} do
+            {:lead_only, _} ->
+              %{wire | "selections" => empty}
+
+            {:abstain_fixed, true} ->
+              %{wire | "decision" => "abstain", "selections" => empty, "abstain_reason" => "No."}
+
+            {:abstain_fixed, false} ->
+              wire
+          end
+
+        {:json, answer(wire)}
+      end
+    )
+  end
+
+  # A clock: the real time for the first `n` reads, then `later`.
+  defp clock(n, later) do
+    {:ok, agent} = Agent.start_link(fn -> 0 end)
+    real = DateTime.utc_now()
+
+    fn ->
+      if Agent.get_and_update(agent, &{&1, &1 + 1}) < n, do: real, else: later
+    end
+  end
+
+  defp enable_editor!(ctx) do
+    Repo.query!(
+      """
+      UPDATE curation_configurations
+         SET editor_enabled_version_id = current_version_id, editor_switched_by_actor_id = $1,
+             editor_switched_at = now(), editor_switch_reason = 'compare refusal test'
+       WHERE id = $2
+      """,
+      [ctx.actor.id, ctx.w.configuration.id]
+    )
+  end
+
   defp public_rows do
     for schema <- [CompositionVersion, CompositionPublication, Proposal, RefreshState],
         do: Repo.aggregate(schema, :count)
@@ -465,6 +517,145 @@ defmodule DevilsDictionary.Curation.Runtime.CompareTest do
                )
     end
 
+    test "a batch is refused while any editor is enabled, before anything is sent", ctx do
+      {:ok, batch} = Compare.freeze("c2-editor-on", ["love"], ctx.arms)
+      enable_editor!(ctx)
+
+      assert Compare.preflight("c2-editor-on") == {:error, :editor_enabled}
+
+      assert {:error, :editor_enabled} =
+               Compare.run(batch, actor_id: ctx.actor.id, service_key: ctx.key)
+
+      assert Repo.aggregate(Attempt, :count) == 0
+      refute_received {:chat, _}
+    end
+
+    test "a batch id is used once: a re-run never replays under a new snapshot", ctx do
+      {:ok, batch} = Compare.freeze("c2-once", ["love"], ctx.arms)
+      assert Compare.preflight("c2-once") == :ok
+      {:ok, _} = Compare.run(batch, actor_id: ctx.actor.id, service_key: ctx.key)
+      assert Repo.aggregate(Attempt, :count) == 4
+
+      {:ok, again} = Compare.freeze("c2-once", ["love"], ctx.arms)
+      assert {:error, {:batch_exists, "c2-once"}} = Compare.preflight("c2-once")
+
+      assert {:error, {:batch_exists, "c2-once"}} =
+               Compare.run(again, actor_id: ctx.actor.id, service_key: ctx.key)
+
+      assert Repo.aggregate(Attempt, :count) == 4
+      # A new id is a new batch: new attempts, never replays of the old ones.
+      {:ok, fresh} = Compare.freeze("c2-once-b", ["love"], ctx.arms)
+
+      {:ok, %{cases: [%{results: results}]}} =
+        Compare.run(fresh, actor_id: ctx.actor.id, service_key: ctx.key)
+
+      assert Enum.all?(results, &(&1.status == :ok))
+      assert Repo.aggregate(Attempt, :count) == 8
+    end
+
+    test "the snapshot's earliest expiry stops a text-cut arm whose own packet has no news",
+         ctx do
+      p = Enum.find(ctx.arms, &(&1.label == "P"))
+      {:ok, batch} = Compare.freeze("c2-snapshot-expiry", ["love"], [p])
+      [page] = batch.pages
+      {:ok, snapshot_expiry, _} = DateTime.from_iso8601(page.snapshot["earliest_expiry"])
+      [arm] = page.arms
+
+      {:ok, own_expiry, _} =
+        DateTime.from_iso8601(Packet.earliest_expiry(arm.frozen.packet["candidates"]))
+
+      # The text cut dropped the news that expires first.
+      assert DateTime.compare(own_expiry, snapshot_expiry) == :gt
+      between = DateTime.add(snapshot_expiry, 1, :second)
+
+      assert {:ok, %{cases: [first, second]}} =
+               Compare.run(batch,
+                 actor_id: ctx.actor.id,
+                 service_key: ctx.key,
+                 now: fn -> between end,
+                 window_minutes: 60 * 24 * 1000
+               )
+
+      assert {first.status, first.reason} == {:unmatched, :snapshot_expired}
+      assert {second.status, second.reason} == {:unmatched, :snapshot_expired}
+      assert Repo.aggregate(Attempt, :count) == 0
+    end
+
+    test "an arm expiring mid-case keeps the earlier arms' results as unmatched", ctx do
+      {:ok, batch} = Compare.freeze("c2-midcase", ["love"], ctx.arms)
+      later = DateTime.add(DateTime.utc_now(), 400, :day)
+
+      # Read 1 is the case's window check, read 2 A0's expiry check.
+      assert {:ok, %{cases: [first, second], halted: nil}} =
+               Compare.run(batch,
+                 actor_id: ctx.actor.id,
+                 service_key: ctx.key,
+                 now: clock(2, later),
+                 window_minutes: 60 * 24 * 1000
+               )
+
+      assert {first.case_id, first.status, first.reason} ==
+               {"c2-midcase:love:1", :unmatched, :snapshot_expired}
+
+      assert [%{label: "A0", outcome: :accepted, attempt_id: id}] = first.results
+      assert Repo.get!(Attempt, id).comparison_case == "c2-midcase:love:1"
+
+      assert {second.case_id, second.status, second.results} ==
+               {"c2-midcase:love:2", :unmatched, []}
+
+      assert Repo.aggregate(Attempt, :count) == 1
+
+      record = Compare.record(batch, %{cases: [first, second], halted: nil})
+      report = Coverage.comparison("c2-midcase", record: record)
+      assert [one, two] = report.cases
+
+      assert {one.record_status, one.attempts, one.complete, one.matched} ==
+               {"unmatched", 1, false, false}
+
+      assert {two.record_status, two.attempts, two.matched} == {"unmatched", 0, false}
+    end
+
+    test "a lead-only answer under a fixed lead is accepted with registry checks on", ctx do
+      stub_mode!(ctx, :lead_only)
+      arms = Enum.filter(ctx.arms, &(&1.label in ["A0", "L"]))
+      {:ok, batch} = Compare.freeze("c2-lead-only", ["love"], arms)
+
+      {:ok, %{cases: [%{status: :matched}], halted: nil}} =
+        Compare.run(batch, actor_id: ctx.actor.id, service_key: ctx.key)
+
+      l = Repo.get_by!(Attempt, arm: "L")
+      assert l.outcome == :accepted
+      assert l.result["highlights"] == []
+      assert l.result["lead"]["reason_origin"] == "rule"
+
+      [c] = Coverage.comparison("c2-lead-only").cases
+      row = Enum.find(c.arms, &(&1.arm == "L"))
+
+      assert {row.decision, row.highlights, row.rule_statements, row.model_written_reasons,
+              row.lead_is_priority} == {"select", 0, 1, 0, true}
+    end
+
+    test "an abstention under a fixed lead is refused, recorded, and halts nothing", ctx do
+      stub_mode!(ctx, :abstain_fixed)
+      {:ok, batch} = Compare.freeze("c2-abstain-fixed", ["love"], ctx.arms)
+
+      {:ok, %{cases: [c], halted: nil}} =
+        Compare.run(batch, actor_id: ctx.actor.id, service_key: ctx.key)
+
+      assert c.status == :matched
+
+      assert Enum.map(c.results, &{&1.label, &1.outcome}) ==
+               [{"A0", :accepted}, {"P", :accepted}, {"L", :refused}, {"PL", :refused}]
+
+      l = Repo.get_by!(Attempt, arm: "L")
+      assert l.refusal_reasons == [["decision", "fixed_lead_requires_select"]]
+      [report_case] = Coverage.comparison("c2-abstain-fixed").cases
+      row = Enum.find(report_case.arms, &(&1.arm == "L"))
+
+      assert {row.decision, row.lead, row.lead_is_priority, row.choices} ==
+               {"refused", nil, false, []}
+    end
+
     test "arms and batches are validated before anything is read" do
       assert {:ok, [%{label: "A0", cut: "current"}, %{label: "P", cut: "text"}, %{label: "x"}]} =
                Compare.parse_arms("A0=cfg,P=cfg:text,x")
@@ -524,18 +715,47 @@ defmodule DevilsDictionary.Curation.Runtime.CompareTest do
       assert Coverage.comparison("other-batch").cases == []
     end
 
-    test "a case missing an arm is incomplete and so unmatched", ctx do
-      {:ok, batch} = Compare.freeze("c5-partial", ["love"], ctx.arms)
-      {:ok, _} = Compare.run(batch, actor_id: ctx.actor.id, service_key: ctx.key)
+    test "with the batch record, every case is listed, attempts or not", ctx do
       PacketFixtures.pilot!(ctx.w, "greed")
-      {:ok, other} = Compare.freeze("c5-partial", ["greed"], Enum.take(ctx.arms, 2))
-      {:ok, _} = Compare.run(other, actor_id: ctx.actor.id, service_key: ctx.key)
+      {:ok, batch} = Compare.freeze("c5-record", ["love", "greed"], ctx.arms)
+      Gateway.pause("test pause", service_key: ctx.key)
+      {:ok, result} = Compare.run(batch, actor_id: ctx.actor.id, service_key: ctx.key)
+      record = Compare.record(batch, result)
 
-      report = Coverage.comparison("c5-partial")
-      cases = Map.new(report.cases, &{&1.page, &1})
-      assert cases["love"].matched
-      refute cases["greed"].complete
-      refute cases["greed"].matched
+      without = Coverage.comparison("c5-record")
+      assert without.cases == []
+      assert without.case_list =~ "attempts only"
+
+      report = Coverage.comparison("c5-record", record: record)
+      assert report.case_list == "every case in the batch record"
+      assert report.arms == ["A0", "L", "P", "PL"]
+
+      assert Enum.map(report.cases, &{&1.case_id, &1.record_status, &1.attempts}) == [
+               {"c5-record:love:1", "not_run", 0},
+               {"c5-record:greed:1", "not_run", 0}
+             ]
+
+      assert [_halted, %{record_reason: "batch_halted"}] = report.cases
+      assert report.cases_by_status == %{"not_run" => 2}
+
+      assert {:error, :record_for_another_batch} =
+               Coverage.comparison("other", record: record)
+    end
+
+    test "with the record, a case unmatched at the freeze is reported with no attempts", ctx do
+      {:ok, batch} = Compare.freeze("c5-freeze", ["love"], ctx.arms)
+      [page] = batch.pages
+      batch = %{batch | pages: [%{page | matched: false}]}
+      {:ok, result} = Compare.run(batch, actor_id: ctx.actor.id, service_key: ctx.key)
+
+      report = Coverage.comparison("c5-freeze", record: Compare.record(batch, result))
+
+      assert Enum.map(report.cases, &{&1.case_id, &1.record_status, &1.attempts, &1.matched}) == [
+               {"c5-freeze:love:1", "unmatched", 0, false},
+               {"c5-freeze:love:2", "matched", 4, true}
+             ]
+
+      assert hd(report.cases).record_reason == "fingerprint_mismatch"
     end
   end
 

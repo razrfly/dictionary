@@ -42,12 +42,22 @@ defmodule DevilsDictionary.Curation.Runtime.Compare do
   budget spent, readiness failing) or an uncertain call halts the batch;
   the pages after it are recorded `not_run`. So is a case that would start
   after the batch window (`:window_minutes`, 60, from the freeze).
+
+  **Preconditions** (`preflight/1`, checked by `run/2` before anything): no
+  configuration has its editor enabled, since a comparison shares the one
+  slot and the daily budget with due assessments and D0 requires the editor
+  off; and the batch id has no comparison attempts yet. A batch id is used
+  once: a halted batch is not resumed under the same id, so a re-run can
+  never replay old attempts under a new snapshot.
   """
 
-  alias DevilsDictionary.Curation.{Candidates, Digest, Pilot}
+  import Ecto.Query
+
+  alias DevilsDictionary.Curation.{Candidates, Configuration, Digest, Pilot}
   alias DevilsDictionary.Curation.Runtime
 
   alias DevilsDictionary.Curation.Runtime.{
+    Attempt,
     Contract,
     EvidenceGuidance,
     ModelConfig,
@@ -297,7 +307,32 @@ defmodule DevilsDictionary.Curation.Runtime.Compare do
   # ── the run ───────────────────────────────────────────────────────────────
 
   @doc """
-  Runs a frozen batch, case by case. Returns `{:ok, %{cases, halted}}`:
+  What must hold before a batch sends anything: `:ok`, or `{:error,
+  reason}`, `:editor_enabled` (some configuration's editor is on) or
+  `{:batch_exists, id}` (the batch id already has comparison attempts).
+  Reads only.
+  """
+  def preflight(batch_id) do
+    cond do
+      Repo.exists?(from c in Configuration, where: not is_nil(c.editor_enabled_version_id)) ->
+        {:error, :editor_enabled}
+
+      Repo.exists?(
+        from a in Attempt,
+          where:
+            a.purpose == :comparison and
+                fragment("split_part(?, ':', 1) = ?", a.comparison_case, ^batch_id)
+      ) ->
+        {:error, {:batch_exists, batch_id}}
+
+      true ->
+        :ok
+    end
+  end
+
+  @doc """
+  Runs a frozen batch, case by case, after `preflight/1`. Returns `{:ok,
+  %{cases, halted}}`, or `preflight/1`'s refusal with nothing sent:
   every case tried (a retried page has two), each with its status
   (`matched`, `unmatched`, `not_runnable` or `not_run`) and every arm's
   attempt id, outcome and hashes, and `halted`, the reason the batch
@@ -309,6 +344,10 @@ defmodule DevilsDictionary.Curation.Runtime.Compare do
   `:now` (a zero-arity function); and the runtime's own (`:service_key`, …).
   """
   def run(batch, opts) do
+    with :ok <- preflight(batch.batch), do: run_checked(batch, opts)
+  end
+
+  defp run_checked(batch, opts) do
     in_snapshot = Keyword.get(opts, :in_snapshot, fn fun -> fun.() end)
     deadline = DateTime.add(batch.frozen_at, Keyword.get(opts, :window_minutes, 60) * 60)
 
@@ -380,8 +419,11 @@ defmodule DevilsDictionary.Curation.Runtime.Compare do
     end
   end
 
+  # The snapshot's earliest shelf expiry, not this arm's packet's: a text-cut
+  # arm carries no news, and must not run after its matched arms' news has
+  # expired (#298 C9: all arms before the earliest news expiry in it).
   defp call_arm(arm, page, opts) do
-    expiry = Packet.earliest_expiry(arm.frozen.packet["candidates"])
+    expiry = page.snapshot["earliest_expiry"]
 
     if expiry && DateTime.compare(now(opts), elem(DateTime.from_iso8601(expiry), 1)) != :lt do
       {:unmatched, :snapshot_expired}

@@ -57,6 +57,29 @@ defmodule DevilsDictionary.Curation.CoverageTest do
     refute Map.has_key?(report, :assessed_at)
   end
 
+  test "a comparison report needs its batch record, and nothing else" do
+    for args <- [
+          ["--comparison", "d6"],
+          ["--comparison", "d6", "--record", "r.json", "--slug", "love"],
+          ["--slug", "love", "--record", "r.json"],
+          ["--slug", "love", "--all"],
+          []
+        ] do
+      assert_raise Mix.Error, ~r/--comparison BATCH --record PATH/, fn ->
+        Mix.Tasks.Dd.Curation.Coverage.run(args)
+      end
+    end
+
+    assert_raise Mix.Error, ~r/not a readable batch record/, fn ->
+      Mix.Tasks.Dd.Curation.Coverage.run([
+        "--comparison",
+        "d6",
+        "--record",
+        "/nonexistent/r.json"
+      ])
+    end
+  end
+
   test "report startup disables server and every Oban execution/peer path before connecting read-only" do
     {repo, oban, endpoint} =
       Mix.Tasks.Dd.Curation.Coverage.read_only_config(
