@@ -93,3 +93,14 @@ rm "$HOME/Library/LaunchAgents/io.wordhoard.d6-stop.plist"
 A loaded guard whose `STOPPED` exists only exits early; unloading it is tidy-up,
 not part of the stop. If `STOPPED` is absent two minutes after the deadline,
 the guard failed: run `stop.exs` by hand on the owner's yes and record it.
+
+**Inside the grace hour, a guard without `STOPPED` keeps stopping.** Until
+`--grace-seconds` (3600) after the deadline, every tick with no `RUN_DIR/STOPPED`
+runs the stop again: it disables an editor that was enabled again, pauses the
+gateway and stops a service that was started again. So when stopping by hand:
+
+- either run this `stop.exs` with `--run-dir` on **the same run directory**,
+  which writes `STOPPED` and makes the guard exit early from then on;
+- or boot the guard out (`launchctl bootout "gui/$(id -u)/LABEL"`) **before**
+  stopping by hand any other way, and before starting anything again within the
+  grace hour.

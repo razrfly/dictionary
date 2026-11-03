@@ -51,7 +51,9 @@ while (( $# > 0 )); do
 done
 
 [[ $deadline == <-> && ${#deadline} -le 10 ]] || usage
-[[ $grace == <-> ]] && (( grace <= 86400 )) || usage
+# Bound the digits before any arithmetic: zsh wraps a longer number to a
+# negative one, which would pass `<= 86400` and make every tick stale.
+[[ $grace == <-> && ${#grace} -le 5 ]] && (( grace <= 86400 )) || usage
 [[ -n $run_dir ]] || usage
 now=$(date +%s)
 

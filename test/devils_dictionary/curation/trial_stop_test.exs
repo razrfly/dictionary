@@ -172,6 +172,14 @@ defmodule DevilsDictionary.Curation.TrialStopTest do
     assert {_, 64} = guard(ctx, ["--deadline", "soon" | run])
     assert {_, 64} = guard(ctx, ["--deadline", "#{epoch(-5)}", "--grace-seconds", "90000" | run])
 
+    # A grace too long to be a number zsh holds would wrap negative and make
+    # every tick stale: it is refused by its digit count first (#303 N3).
+    for grace <- ["99999999999999999999", "123456"],
+        do:
+          assert(
+            {_, 64} = guard(ctx, ["--deadline", "#{epoch(3600)}", "--grace-seconds", grace | run])
+          )
+
     # Implausibly far out, stale beyond the grace, or a dry run already due.
     assert {_, 65} = guard(ctx, ["--deadline", "#{epoch(8 * 86_400)}" | run])
     assert {_, 65} = guard(ctx, ["--deadline", "#{epoch(-7200)}" | run])
