@@ -18,7 +18,7 @@ defmodule DevilsDictionaryWeb.Indexing do
   let crawlers retrieve noindex responses). `surface/1` names the surface a
   router path belongs to, so a test can hold every route to this list.
 
-  #{Enum.map_join([{"/", "the way in, and search: `?q=` is a lookup variant"}, {"/on/:slug", "every On page but the launch manifest's lexical entries (D1), and any with a query string"}, {"/words/:id/:slug", "every exact word (D1)"}, {"/entities/:id/:slug", "the exact-identity route; its canonical is the subject's address where one is served"}, {"/<family>/:slug", "a draft, a withdrawn page, an alias, a choice, an unresolved address, every page while the switch is off, and any with a query string"}, {"/evidence/…", "raw evidence"}, {"/connections/…, /connect", "claims, proposals and their review"}, {"/sources/:slug", "a source's provenance page"}, {"/artworks", "the artworks shelf"}, {"/ops/…, /reconciliation, /users/…, /kit, /dev/…", "operations, review, accounts and development"}, {"/s/…, /health, /admin/…", "retired paths that redirect"}, {"/robots.txt, /sitemap.xml, /sitemaps/…", "for crawling, not pages: the sitemaps say noindex in X-Robots-Tag"}, {"?demo, ?opening, a section cursor, a trail, a drawer: any query string", "a view variant of a page whose canonical is its base"}], "\n", fn {surface, why} -> "  * `#{surface}`: #{why}" end)}
+  #{Enum.map_join([{"/", "the way in, and search: `?q=` is a lookup variant"}, {"/on/:slug", "every On page but the launch manifest's lexical entries (D1), and any with a query string"}, {"/words/:id/:slug", "every exact word (D1)"}, {"/entities/:id/:slug", "the exact-identity route; its canonical is the subject's address where one is served"}, {"/<family>/:slug", "a draft, a withdrawn page, an alias, a choice, an unresolved address, every page while the switch is off, and any with a query string"}, {"/evidence/…", "raw evidence"}, {"/connections/…, /connect", "claims, proposals and their review"}, {"/sources/:slug", "a source's provenance page"}, {"/artworks", "the artworks shelf"}, {"/curators/…", "the curator pages: each AI curator, its versions and what it did"}, {"/ops/…, /reconciliation, /users/…, /kit, /dev/…", "operations, review, accounts and development"}, {"/s/…, /health, /admin/…", "retired paths that redirect"}, {"/robots.txt, /sitemap.xml, /sitemaps/…", "for crawling, not pages: the sitemaps say noindex in X-Robots-Tag"}, {"?demo, ?opening, a section cursor, a trail, a drawer: any query string", "a view variant of a page whose canonical is its base"}], "\n", fn {surface, why} -> "  * `#{surface}`: #{why}" end)}
 
   `robots.txt` keeps crawlers out of the surfaces that are not for reading
   at all (`kept_out/0`): the registry's reserved prefixes that are neither a
@@ -44,6 +44,7 @@ defmodule DevilsDictionaryWeb.Indexing do
     {"/connections/…, /connect", "claims, proposals and their review"},
     {"/sources/:slug", "a source's provenance page"},
     {"/artworks", "the artworks shelf"},
+    {"/curators/…", "the curator pages: each AI curator, its versions and what it did"},
     {"/ops/…, /reconciliation, /users/…, /kit, /dev/…",
      "operations, review, accounts and development"},
     {"/s/…, /health, /admin/…", "retired paths that redirect"},
@@ -64,6 +65,7 @@ defmodule DevilsDictionaryWeb.Indexing do
     "connect" => "/connections/…, /connect",
     "sources" => "/sources/:slug",
     "artworks" => "/artworks",
+    "curators" => "/curators/…",
     "ops" => "/ops/…, /reconciliation, /users/…, /kit, /dev/…",
     "reconciliation" => "/ops/…, /reconciliation, /users/…, /kit, /dev/…",
     "users" => "/ops/…, /reconciliation, /users/…, /kit, /dev/…",

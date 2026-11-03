@@ -197,6 +197,10 @@ defmodule DevilsDictionaryWeb.CuratorLiveTest do
 
       refute has_element?(view, "#curators-admitted #curator-card-bierce")
 
+      # A noindex surface (`Indexing`), like every page but the two exceptions.
+      assert conn |> get(~p"/curators/voltaire") |> html_response(200) =~
+               ~s(name="robots" content="noindex")
+
       # CD-2: a curator's bot principal is no provider.
       footer = html |> LazyHTML.from_document() |> LazyHTML.query("footer") |> LazyHTML.text()
       assert footer =~ "Curators"
