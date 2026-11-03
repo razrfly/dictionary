@@ -10,8 +10,11 @@ activated, and no runtime code reads it yet: the persona-by-slug seam and the
 allowlists belong to #298 Part C (C4). The owner chose this roster on 1 November
 2026 (#300 LP-1, #298 OD-A). Before Hitchens gets a seat, the lens has to run
 as a comparison arm that publishes nothing, on matched evidence, under #298
-Part D (D3). A seat proposes highlights only. The lead comes from the lead rule
-and is never voted (#300 §4).
+Part D (D3). The lead is set by the lead rule, not by this lens: the lens
+applies to highlights only, and as a panel seat it never votes the lead (#300
+§4). The wording holds both for the single-editor comparison arm, whose v7
+instruction still has the model choose the lead by that rule, and for a panel
+seat.
 
 Authored by the #300 L2 executor session for owner review. Every passage and
 record below was checked against the page named on 3 November 2026.

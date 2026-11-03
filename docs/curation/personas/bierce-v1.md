@@ -11,10 +11,14 @@ allowlists belong to #298 Part C. The owner chose this roster on 1 November
 2026 (#300 LP-1). Before Bierce gets a seat, the lens has to run as a
 comparison arm that publishes nothing, on matched evidence, under #298 Part D.
 
-**This seat votes on highlights only.** The Bierce-first lead rule already
-puts Bierce's own definition at the head of a page. If the seat could vote the
-lead, its votes would be confounded with that rule. The dossier says this in
-both `selection` and `blind_spots` (#300 §4, LP-1).
+**The lead is set by the lead rule and its Bierce-first priority, not by this
+lens.** The lens applies to highlights only, and as a panel seat it never
+votes the lead. Where the Bierce-first rule applies, Bierce's own definition
+already heads the page. If the seat could vote the lead, its votes would be
+confounded with that rule. The wording also holds for the single-editor
+comparison arm: its v7 instruction still has the model choose the lead by
+that rule, including on pages with no Bierce candidate. The dossier says this
+in both `selection` and `blind_spots` (#300 §4, LP-1).
 
 Authored by the #300 L2 executor session for owner review. Every passage and
 record below was checked against the page named on 3 November 2026.

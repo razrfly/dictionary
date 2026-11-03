@@ -84,9 +84,17 @@ defmodule DevilsDictionary.Curation.Agents.PersonaDossiersTest do
       end
 
       assert d["disclosure"] =~ "not his voice"
-      assert d["selection"] =~ "Judge highlights only"
-      # #300 §4: the lead comes from the lead rule; personas never vote it.
-      assert d["selection"] =~ ~r/cannot choose or vote the lead|lead rule and is never voted/
+      # #300 §4: the lead rule sets the lead. The clause has to hold for a
+      # single-editor comparison arm, whose v7 instruction still has the model
+      # choose the lead by that rule (#298 C4, C9), and for a panel seat, which
+      # never votes it. So the lens may not claim it cannot choose a lead.
+      assert d["selection"] =~ ~r/The lead is set by the lead rule[^:]*, not by this lens:/
+
+      assert d["selection"] =~
+               "apply the lens to highlights only, and as a panel seat never vote the lead."
+
+      assert d["selection"] =~ "The lens cannot change lead policy"
+      refute d["selection"] =~ ~r/cannot choose|is never voted|Judge highlights only/
       assert d["selection"] =~ "Abstain when no supplied evidence fits."
       # The same budget the Voltaire persona test holds its compiled instruction to.
       assert byte_size(d["disclosure"] <> "\n" <> d["selection"]) < 1800
