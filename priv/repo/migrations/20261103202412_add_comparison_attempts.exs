@@ -22,9 +22,18 @@ defmodule DevilsDictionary.Repo.Migrations.AddComparisonAttempts do
   Old code keeps working: it never writes `comparison`, and every new column
   is nullable for its purposes.
 
-  **Rollback.** `down` refuses once any comparison attempt or any recorded
-  evidence fingerprint exists: code before this migration cannot read
-  them. Disable the editor and roll forward instead.
+  **Rollback of the code.** Code from before this PR (`d33a655`) runs on
+  this schema: it never names the new columns and reads attempts that carry
+  a fingerprint without trouble. It is safe to roll the code back only until
+  the first comparison attempt exists. That code's `Attempt` purpose enum has
+  no `:comparison`, so once one exists any old read that loads it fails (the
+  ops health card's newest attempt of any purpose, for one). After the
+  first comparison attempt, roll forward only.
+
+  **Rollback of the schema.** `down` refuses once any comparison attempt or
+  any recorded evidence fingerprint exists, because it would drop that
+  history: the comparison identities and every fingerprint recorded since.
+  Disable the editor and roll forward instead.
   """
   use Ecto.Migration
 
