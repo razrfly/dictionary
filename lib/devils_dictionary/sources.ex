@@ -33,6 +33,16 @@ defmodule DevilsDictionary.Sources do
   end
 
   @doc """
+  The sources that provide material, by slug: every source but a curator's
+  bot principal (kind `:bot`). The footer's Sources list is this one; a
+  curator has its own page under `/curators` (#299 M1, CD-2). The bot rows
+  stay, because their actors and receipts depend on them.
+  """
+  def list_providers do
+    Repo.all(from s in Source, where: s.kind != :bot, order_by: s.slug)
+  end
+
+  @doc """
   Records one observation of a source record.
 
   Upserts the record's identity, then adds a revision **only if this payload is

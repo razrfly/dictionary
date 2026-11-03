@@ -22,7 +22,21 @@ defmodule DevilsDictionaryWeb.SourceLive do
 
   @impl true
   def mount(%{"slug" => slug}, _session, socket) do
-    {:ok, assign(socket, slug: slug, scope_slug: :unset, page_title: slug)}
+    case curator_path(slug) do
+      nil -> {:ok, assign(socket, slug: slug, scope_slug: :unset, page_title: slug)}
+      path -> {:ok, redirect(socket, to: path)}
+    end
+  end
+
+  # A bot source's curator page, or `/curators` for a bot no profile names.
+  defp curator_path(slug) do
+    case DevilsDictionary.Sources.get_source_by_slug(slug) do
+      %{kind: :bot} = source ->
+        DevilsDictionary.Curation.Curators.source_path(source) || "/curators"
+
+      _ ->
+        nil
+    end
   end
 
   # How much of a scope this source attests depends on which scope is asked

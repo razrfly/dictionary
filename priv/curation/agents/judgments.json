@@ -1,0 +1,24 @@
+[
+  {
+    "profile": "voltaire",
+    "instruction_version": "voltaire-whole-entry-v6",
+    "date": "2026-11-01",
+    "title": "v6 ten-page trial, primary cohort (attempts 36 to 45)",
+    "choices": 73,
+    "meanings": {"supported": 43, "insufficient": 27, "wrong": 3},
+    "reasons": {"grounded": 52, "unsupported": 20, "withheld": 1},
+    "verdict": "NO-GO",
+    "report": "https://github.com/razrfly/dictionary/blob/main/docs/curation/quality-correction-v7.md"
+  },
+  {
+    "profile": "voltaire",
+    "instruction_version": "voltaire-whole-entry-v7",
+    "date": "2026-11-03",
+    "title": "v7 six-hour trial, cycle 1 primary cohort (attempts 67 to 76)",
+    "choices": 9,
+    "meanings": {"supported": 9, "insufficient": 0, "wrong": 0},
+    "reasons": {"grounded": 8, "unsupported": 1, "withheld": 0},
+    "verdict": "NO-GO",
+    "report": "https://github.com/razrfly/dictionary/issues/298#issuecomment-6608125450"
+  }
+]

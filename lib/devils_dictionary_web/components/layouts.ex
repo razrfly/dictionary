@@ -59,6 +59,7 @@ defmodule DevilsDictionaryWeb.Layouts do
       <:links>
         <.footer_category title="Browse">
           <.footer_link navigate={~p"/artworks"}>Artworks</.footer_link>
+          <.footer_link navigate={~p"/curators"}>Curators</.footer_link>
         </.footer_category>
         <.footer_category title="Sources">
           <.footer_link :for={source <- sources()} navigate={~p"/sources/#{source.slug}"}>
@@ -86,9 +87,10 @@ defmodule DevilsDictionaryWeb.Layouts do
   end
 
   # The footer names every source we absorb: the attribution #69 backbone rule 1
-  # asks for, and the fastest way to a source page. Five rows, read straight —
-  # there is no cache process in the tree and this does not deserve the first.
-  defp sources, do: DevilsDictionary.Sources.list_sources()
+  # asks for, and the fastest way to a source page. Read straight — there is no
+  # cache process in the tree and this does not deserve the first. A curator's
+  # bot principal is no provider and is listed under Curators instead (#299).
+  defp sources, do: DevilsDictionary.Sources.list_providers()
 
   # The consoles are reachable from the chrome in development and in test,
   # and by URL everywhere. Not `/ops/scopes/:slug` — that route needs a slug,

@@ -221,6 +221,9 @@ defmodule DevilsDictionary.Curation.Receipt do
         attempt_id: attempt && attempt.id,
         request_key: attempt && attempt.request_key,
         profile: cv && cv.manifest["editor"],
+        # The exact curator version this choice was made under (#299 M1).
+        curator_path:
+          attempt && cv && DevilsDictionary.Curation.Curators.version_path(cv.manifest["editor"]),
         at:
           if(attempt,
             do: attempt.finished_at || attempt.admitted_at,
