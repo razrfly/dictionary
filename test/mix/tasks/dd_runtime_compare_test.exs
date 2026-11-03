@@ -206,6 +206,30 @@ defmodule Mix.Tasks.Dd.RuntimeCompareTest do
     assert [%{record_status: "matched", attempts: 4, matched: true}] = report.cases
   end
 
+  test "a batch halted before its first attempt keeps its id: a record names it", ctx do
+    out = Path.join(ctx.tmp_dir, "cli-halt0.json")
+    DevilsDictionary.Curation.Runtime.Gateway.pause("compare CLI test")
+
+    compare!(~w(--batch cli-halt0 --page love --out) ++ [out, "--arms", ctx.arms])
+    assert Repo.aggregate(Attempt, :count) == 0
+    record = out |> File.read!() |> Jason.decode!()
+    assert record["halted"]
+    assert [%{"status" => "not_run"}] = record["cases"]
+    lines()
+
+    # Records are looked for beside --out (and in the default directory).
+    again = Path.join(ctx.tmp_dir, "cli-halt0-again.json")
+    compare!(~w(--batch cli-halt0 --page love --dry-run --out) ++ [again, "--arms", ctx.arms])
+    assert Enum.any?(lines(), &(&1 =~ "would run" and &1 =~ "already has a record"))
+
+    assert_raise Mix.Error, ~r/already has a record/, fn ->
+      compare!(~w(--batch cli-halt0 --page love --out) ++ [again, "--arms", ctx.arms])
+    end
+
+    refute File.exists?(again)
+    assert Repo.aggregate(Attempt, :count) == 0
+  end
+
   test "an existing batch record is never overwritten", ctx do
     out = Path.join(ctx.tmp_dir, "cli-taken.json")
     File.write!(out, "{}")

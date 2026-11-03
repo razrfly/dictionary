@@ -260,7 +260,8 @@ D6's four policy arms, dry run first (it calls and writes nothing):
 
 ```
 mix dd.runtime compare --batch d6-2026-11-04 --pilot --dry-run \
-  --arms A0=qwen3.5-9b-whole-voltaire-v7,P=qwen3.5-9b-whole-voltaire-v7:text,L=qwen3.5-9b-whole-voltaire-v7-fixed-lead,PL=qwen3.5-9b-whole-voltaire-v7-fixed-lead:text
+  --arms A0=qwen3.5-9b-whole-voltaire-v7,P=qwen3.5-9b-whole-voltaire-v7:text,L=qwen3.5-9b-whole-voltaire-v7-fixed-lead,PL=qwen3.5-9b-whole-voltaire-v7-fixed-lead:text \
+  --out "/Volumes/LLM Models/dictionary/run/d6-2026-11-04/batch.json"
 mix dd.runtime compare --batch d6-2026-11-04 --pilot --window-minutes 60 \
   --arms A0=qwen3.5-9b-whole-voltaire-v7,P=qwen3.5-9b-whole-voltaire-v7:text,L=qwen3.5-9b-whole-voltaire-v7-fixed-lead,PL=qwen3.5-9b-whole-voltaire-v7-fixed-lead:text \
   --out "/Volumes/LLM Models/dictionary/run/d6-2026-11-04/batch.json"
@@ -277,10 +278,14 @@ What it does:
    cut or omissions). Arms that share a cut must share it: A0 = L, P = PL.
 2. **Dry run** prints, per case (`BATCH:SLUG:1`), each arm's fingerprint, packet hash,
    candidate count, priority candidates and fixed lead, and whether the case is matched.
+   Give it the run's `--out`: it looks for an existing record of the batch beside it.
 3. **Refuses** (and the dry run says it would) while any configuration's editor is enabled,
    since the arms share the slot and the daily budget with due assessments, and when the
-   batch id already has comparison attempts: a batch id is used once, so a re-run never
-   replays old attempts under a new snapshot. A halted batch is not resumed; start a new id.
+   batch id is already used: it has comparison attempts, or a batch record names it
+   (under `priv/curation/runtime_bench/comparisons/` or beside `--out`), even one that
+   halted before its first attempt. A batch id is used once, so a re-run never replays old
+   attempts under a new snapshot or leaves two records. A halted batch is not resumed;
+   start a new id.
 4. **Runs** (without `--dry-run`) only if the service is bound to the connected database.
    It sends each case's arms back to back as `purpose: comparison` attempts under
    `comparison:BATCH:SLUG:N:LABEL`, on the one slot and the shared daily budget. Each

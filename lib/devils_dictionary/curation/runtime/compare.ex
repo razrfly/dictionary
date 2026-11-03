@@ -46,9 +46,12 @@ defmodule DevilsDictionary.Curation.Runtime.Compare do
   **Preconditions** (`preflight/1`, checked by `run/2` before anything): no
   configuration has its editor enabled, since a comparison shares the one
   slot and the daily budget with due assessments and D0 requires the editor
-  off; and the batch id has no comparison attempts yet. A batch id is used
-  once: a halted batch is not resumed under the same id, so a re-run can
-  never replay old attempts under a new snapshot.
+  off; and the batch id has no comparison attempts yet. The CLI also
+  refuses an id that a batch record already names (`recorded/2`), so a batch
+  halted before its first attempt cannot run again under its id either. A
+  batch id is used once: a halted batch is not resumed under the same id, so
+  a re-run can never replay old attempts under a new snapshot or leave two
+  records for one id.
   """
 
   import Ecto.Query
@@ -328,6 +331,26 @@ defmodule DevilsDictionary.Curation.Runtime.Compare do
       true ->
         :ok
     end
+  end
+
+  @doc """
+  The batch records that already name `batch_id`, among the JSON files the
+  glob `patterns` match, sorted. A record's own `"batch"` decides, whatever
+  its file name; a file that does not decode is skipped. Reads only.
+  """
+  def recorded(batch_id, patterns) do
+    patterns
+    |> Enum.flat_map(&Path.wildcard/1)
+    |> Enum.uniq()
+    |> Enum.filter(fn path ->
+      with {:ok, body} <- File.read(path),
+           {:ok, %{"batch" => ^batch_id}} <- Jason.decode(body) do
+        true
+      else
+        _ -> false
+      end
+    end)
+    |> Enum.sort()
   end
 
   @doc """

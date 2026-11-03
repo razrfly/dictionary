@@ -656,6 +656,22 @@ defmodule DevilsDictionary.Curation.Runtime.CompareTest do
                {"refused", nil, false, []}
     end
 
+    @tag :tmp_dir
+    test "recorded/2 finds the records that name a batch, whatever their file names",
+         %{tmp_dir: dir} do
+      File.mkdir_p!(Path.join(dir, "2026-11-04"))
+      named = Path.join([dir, "2026-11-04", "d6.json"])
+      renamed = Path.join(dir, "batch.json")
+      File.write!(named, Jason.encode!(%{"batch" => "d6", "status" => "running"}))
+      File.write!(renamed, Jason.encode!(%{"batch" => "d6", "cases" => []}))
+      File.write!(Path.join(dir, "other.json"), Jason.encode!(%{"batch" => "d7"}))
+      File.write!(Path.join(dir, "broken.json"), "{not json")
+
+      patterns = [Path.join([dir, "*", "*.json"]), Path.join(dir, "*.json")]
+      assert Compare.recorded("d6", patterns) == Enum.sort([named, renamed])
+      assert Compare.recorded("d8", patterns) == []
+    end
+
     test "arms and batches are validated before anything is read" do
       assert {:ok, [%{label: "A0", cut: "current"}, %{label: "P", cut: "text"}, %{label: "x"}]} =
                Compare.parse_arms("A0=cfg,P=cfg:text,x")

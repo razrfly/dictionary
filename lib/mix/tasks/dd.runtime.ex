@@ -78,7 +78,8 @@ defmodule Mix.Tasks.Dd.Runtime do
   prints each case's packets, fingerprints and whether its arms match, and
   calls and writes nothing, and says whether a run would be refused.
   Without it, `compare` refuses unless no editor is enabled, the batch id
-  has never been used and the service is bound to the connected database,
+  has no comparison attempts and no batch record (in the default directory
+  or beside `--out`) and the service is bound to the connected database,
   then sends each case's arms
   back to back as `comparison` attempts (`comparison:BATCH:SLUG:N:LABEL`),
   writes one batch record (`--out`, by default
@@ -315,7 +316,7 @@ defmodule Mix.Tasks.Dd.Runtime do
 
     shell = Mix.shell()
     Enum.each(compare_lines(batch), &shell.info/1)
-    preflight = Compare.preflight(batch.batch)
+    preflight = with :ok <- Compare.preflight(batch.batch), do: unrecorded(batch.batch, opts)
 
     cond do
       opts[:dry_run] ->
@@ -427,6 +428,9 @@ defmodule Mix.Tasks.Dd.Runtime do
   defp preflight_text({:error, :editor_enabled}),
     do: "REFUSED: an editor is enabled; disable it first (comparisons share the slot and budget)"
 
+  defp preflight_text({:error, {:batch_recorded, id, paths}}),
+    do: "REFUSED: batch #{id} already has a record (#{Enum.join(paths, ", ")}); use a new --batch"
+
   defp preflight_text({:error, {:batch_exists, id}}),
     do: "REFUSED: batch #{id} already has comparison attempts; use a new --batch"
 
@@ -462,20 +466,36 @@ defmodule Mix.Tasks.Dd.Runtime do
     result
   end
 
+  @records_root "priv/curation/runtime_bench/comparisons"
+
+  defp compare_out(batch_id, opts) do
+    Keyword.get_lazy(opts, :out, fn ->
+      Path.join([@records_root, Date.to_iso8601(Date.utc_today()), batch_id <> ".json"])
+    end)
+  end
+
+  # A batch id is used once (#303 N1): refused once any record names it,
+  # in the default records directory or beside this run's --out, even if
+  # that batch halted before its first attempt.
+  defp unrecorded(batch_id, opts) do
+    patterns = [
+      Path.join([@records_root, "*", "*.json"]),
+      Path.join(Path.dirname(compare_out(batch_id, opts)), "*.json")
+    ]
+
+    case Compare.recorded(batch_id, patterns) do
+      [] -> :ok
+      paths -> {:error, {:batch_recorded, batch_id, paths}}
+    end
+  end
+
   defp compare_run(batch, opts) do
     case Authority.check([]) do
       {:ok, _identity} -> :ok
       {:error, reason, _detail} -> Mix.raise("compare refused: #{inspect(reason)}; nothing sent")
     end
 
-    path =
-      Keyword.get_lazy(opts, :out, fn ->
-        Path.join([
-          "priv/curation/runtime_bench/comparisons",
-          Date.to_iso8601(Date.utc_today()),
-          batch.batch <> ".json"
-        ])
-      end)
+    path = compare_out(batch.batch, opts)
 
     claim_record!(path, batch)
 
