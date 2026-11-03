@@ -11,9 +11,9 @@ defmodule DevilsDictionary.Curation.Agents.PersonaDossiersTest do
 
   @personas Path.expand("../../../../priv/curation/agents/personas", __DIR__)
   @reference Path.join(@personas, "voltaire/v8/profile.json")
-  # The project's own records of Gutenberg #972, pinned by
-  # priv/replay/MANIFEST.json; Sources.ManifestTest already needs it on disk.
-  @bierce_replay Path.expand("../../../../priv/replay/bierce.jsonl.gz", __DIR__)
+  # The tracked Gutenberg #972 HTML the project's Bierce source is built from.
+  # priv/sources/MANIFEST.json pins its sha256, which Sources.ManifestTest checks.
+  @bierce_gutenberg Path.expand("../../../../priv/sources/bierce/972-h.htm", __DIR__)
   @dossiers [{"hitchens", "v1"}, {"bierce", "v1"}]
 
   @top ~w(slug template_version dossier source_refs deceased_evidence_refs)
@@ -45,17 +45,9 @@ defmodule DevilsDictionary.Curation.Agents.PersonaDossiersTest do
 
   defp squish(text), do: text |> String.split() |> Enum.join(" ")
 
-  # {headword, pos marker} => the text of each record's first fragment.
-  defp bierce_entries do
-    @bierce_replay
-    |> File.read!()
-    |> :zlib.gunzip()
-    |> String.split("\n", trim: true)
-    |> Enum.map(&Jason.decode!/1)
-    |> Enum.group_by(
-      &{&1["raw"]["headword"], &1["raw"]["pos"]},
-      &(&1["raw"]["html"] |> hd() |> Floki.parse_fragment!() |> Floki.text() |> squish())
-    )
+  # The whole Gutenberg text, entities decoded and whitespace collapsed.
+  defp bierce_text do
+    @bierce_gutenberg |> File.read!() |> Floki.parse_document!() |> Floki.text() |> squish()
   end
 
   test "the reference Voltaire v8 manifest still has the shape the dossiers copy" do
@@ -145,8 +137,16 @@ defmodule DevilsDictionary.Curation.Agents.PersonaDossiersTest do
         assert source["basis"] =~ "#{headword} is quoted only as a documented period prejudice"
         assert Enum.any?(d["blind_spots"], &(&1 =~ headword)), label
 
-        lens = [d["selection"], d["positive_example"], d["negative_example"] | d["principles"]]
-        refute Enum.any?(lens, &(&1 =~ headword)), label
+        # Neither the headword nor the passage itself, in any case.
+        lens =
+          Enum.map(
+            [d["selection"], d["positive_example"], d["negative_example"] | d["principles"]],
+            &String.downcase/1
+          )
+
+        quoted = passage["text"] |> String.trim_trailing(".") |> String.downcase()
+        refute Enum.any?(lens, &String.contains?(&1, String.downcase(headword))), label
+        refute Enum.any?(lens, &String.contains?(&1, quoted)), label
         {slug, headword}
       end
 
@@ -188,6 +188,10 @@ defmodule DevilsDictionary.Curation.Agents.PersonaDossiersTest do
         # The rights note states the total, and the total is what is quoted.
         assert [_, stated] = Regex.run(~r/\((\d+) words/, source["rights"]), label
         assert String.to_integer(stated) == Enum.sum(words), label
+
+        # Locators describe paragraphs rather than quote them, as `rights` says.
+        locators = source["locators"] ++ Enum.map(source["passages"], & &1["locator"])
+        refute Enum.any?(locators, &String.contains?(&1, ["\u201C", "\u201D", "\""])), label
       end
     end
 
@@ -200,19 +204,15 @@ defmodule DevilsDictionary.Curation.Agents.PersonaDossiersTest do
   # The Hitchens passages come from web pages (Slate through an Internet Archive
   # capture, and Vanity Fair) and cannot be checked offline. They were checked
   # against the pages their source_refs name on 3 November 2026 (#302). Bierce's
-  # can be: each must follow its own headword in the project's Gutenberg records.
-  test "every Bierce passage is the exact text of its entry in the project's Gutenberg records" do
-    entries = bierce_entries()
+  # can be: each must follow its own headword in the tracked Gutenberg #972 text.
+  test "every Bierce passage follows its own headword in the tracked Gutenberg #972 text" do
+    text = bierce_text()
 
     for source <- dossier!("bierce")["source_refs"], passage <- source["passages"] do
       [headword, rest] = String.split(passage["locator"], ", ", parts: 2)
-      pos = rest |> String.split(",", parts: 2) |> hd() |> String.trim_trailing(".")
-      texts = Map.get(entries, {headword, pos}, [])
+      marker = rest |> String.split(",", parts: 2) |> hd()
 
-      assert Enum.any?(
-               texts,
-               &String.starts_with?(&1, "#{headword}, #{pos}. #{passage["text"]}")
-             ),
+      assert String.contains?(text, "#{headword}, #{marker} #{passage["text"]}"),
              passage["locator"]
     end
   end
