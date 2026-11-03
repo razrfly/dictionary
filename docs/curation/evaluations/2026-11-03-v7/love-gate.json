@@ -1,0 +1,60 @@
+{
+ "checked_at": "2026-11-03T15:22:29.764337+00:00",
+ "pass": true,
+ "gate": "operational love-first check, not quality approval (same gate as v6)",
+ "attempt_id": 67,
+ "request_key": "proposal:1:9:1",
+ "model_config_id": 8,
+ "instruction_version": "voltaire-whole-entry-v7",
+ "packet_hash": "367dcbcb357fe01ae5cbc15f1c1c5c9fee2db48ce361e79e68707772ce3a7d6b",
+ "packet_hash_note": "recorded on the attempt; not shown on the receipt; not independently recomputed",
+ "prompt_sha256": "1038268ddfa76d99b0532ee7a99197795782030936918b4d05ebbac1282893de",
+ "packet_bytes": 33809,
+ "candidates_offered": {
+  "offered": 206,
+  "meanings_total": 48,
+  "meanings_required": 9
+ },
+ "outcome": "accepted",
+ "decision": "select",
+ "composition_version_id": 47,
+ "version": 8,
+ "parent_version_id": 38,
+ "publication_id": 50,
+ "publication": "automatic single_editor_v1, previous 38 -> 47",
+ "public_receipt": "/on/love/receipt/8",
+ "receipt_shows": [
+  "chooser and instruction voltaire-whole-entry-v7",
+  "model config #8",
+  "attempt #67",
+  "profile #2 version #8",
+  "chosen date",
+  "reason",
+  "candidate id c1"
+ ],
+ "previous_receipt": "/on/love/receipt/7 reads 'Replaced by version 8'",
+ "primary_choices": 1,
+ "choices": [
+  {
+   "role": "lead",
+   "kind": "content",
+   "candidate_id": "c1",
+   "meaning_id": "m0"
+  }
+ ],
+ "highlights": 0,
+ "observation": "lead only; highlights []. v6's love versions carried 9 highlights. The v7 instruction permits this ('select it and leave unsupported optional sections empty'). Quality is judged under scorecard v2 in B3/B5, not here.",
+ "source_content_write": "none observed: bot actor 26 appears only on composition version 47",
+ "metrics": {
+  "wall_ms": 10299,
+  "prompt_tokens": 3339,
+  "output_tokens": 151,
+  "swap_bytes": 0,
+  "ledger_charge_ms": 10357
+ },
+ "review_clock": {
+  "started_at": "2026-11-03T15:20:21Z",
+  "stopped_at": "2026-11-03T15:22:29Z"
+ },
+ "further_action": "release trial-created holds on the remaining nine (L13); do not tune or retry to replace the primary result"
+}

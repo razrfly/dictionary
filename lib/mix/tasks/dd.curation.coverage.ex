@@ -3,6 +3,13 @@ defmodule Mix.Tasks.Dd.Curation.Coverage do
   @moduledoc """
   DD_NO_OBAN=1 mix dd.curation.coverage --slug love --from 25 --to 35
   DD_NO_OBAN=1 mix dd.curation.coverage --all --from 25 --to 35
+  DD_NO_OBAN=1 mix dd.curation.coverage --comparison BATCH
+
+  `--comparison` reports one comparison batch (#298 C5, C9) from its
+  `comparison` attempts: per case and arm, the ids, fingerprints, hashes,
+  decision, lead and its correctness against the priority candidate, choices
+  by candidate id with reason hashes and origins, highlights by section and
+  kind, model-written reason counts, omissions and cost; matched or not.
 
   PHX_SERVER must be unset. Starts no server, discovery or model work; uses one
   repeatable-read, read-only transaction. Default latest 20 attempts per page,
@@ -18,13 +25,27 @@ defmodule Mix.Tasks.Dd.Curation.Coverage do
 
     {opts, rest, invalid} =
       OptionParser.parse(args,
-        strict: [slug: :string, all: :boolean, from: :integer, to: :integer, limit: :integer]
+        strict: [
+          slug: :string,
+          all: :boolean,
+          from: :integer,
+          to: :integer,
+          limit: :integer,
+          comparison: :string
+        ]
       )
 
+    comparison? = is_binary(opts[:comparison])
+
     unless rest == [] and invalid == [] and
-             ((is_binary(opts[:slug]) and not opts[:all]) or
-                (opts[:all] == true and is_nil(opts[:slug]))),
-           do: Mix.raise("Use exactly --slug PILOT or --all, with optional --from/--to/--limit.")
+             ((is_binary(opts[:slug]) and not opts[:all] and not comparison?) or
+                (opts[:all] == true and is_nil(opts[:slug]) and not comparison?) or
+                (comparison? and is_nil(opts[:slug]) and is_nil(opts[:all]) and
+                   is_nil(opts[:from]) and is_nil(opts[:to]) and is_nil(opts[:limit]))),
+           do:
+             Mix.raise(
+               "Use exactly --slug PILOT or --all, with optional --from/--to/--limit, or --comparison BATCH alone."
+             )
 
     slugs = if opts[:all], do: Pilot.autonomous_pages(), else: [opts[:slug]]
 
@@ -45,12 +66,16 @@ defmodule Mix.Tasks.Dd.Curation.Coverage do
         fn ->
           Repo.query!("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
 
-          Enum.map(slugs, fn slug ->
-            case Coverage.read(slug, Keyword.take(opts, [:from, :to, :limit])) do
-              {:error, reason} -> Mix.raise("Coverage refused: #{reason}")
-              report -> report
-            end
-          end)
+          if comparison? do
+            Coverage.comparison(opts[:comparison])
+          else
+            Enum.map(slugs, fn slug ->
+              case Coverage.read(slug, Keyword.take(opts, [:from, :to, :limit])) do
+                {:error, reason} -> Mix.raise("Coverage refused: #{reason}")
+                report -> report
+              end
+            end)
+          end
         end,
         timeout: 120_000
       )

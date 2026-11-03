@@ -7,7 +7,10 @@ defmodule DevilsDictionary.Curation.Runtime.SectionOutput do
     "voltaire-whole-entry-v4",
     "voltaire-whole-entry-v5",
     "voltaire-whole-entry-v6",
-    "voltaire-whole-entry-v7"
+    "voltaire-whole-entry-v7",
+    # Comparison-only (#298 C3, C9): the same section wire shape.
+    "generic-whole-entry-v1",
+    "voltaire-whole-entry-v7-fixed-lead-v1"
   ]
   @top ~w(decision lead selections abstain_reason)
   @choice ~w(candidate_id meaning_id reason quote)
@@ -45,22 +48,31 @@ defmodule DevilsDictionary.Curation.Runtime.SectionOutput do
         {section, value}
       end)
 
+    # A rule-fixed lead (#298 C9) is the rule's, not the model's: the model
+    # returns a null lead and selects; the contract puts the rule's lead in.
+    fixed? = is_binary(packet["fixed_lead"])
+
     %{
       "type" => "object",
       "additionalProperties" => false,
       "required" => @top,
       "properties" => %{
-        "decision" => %{"type" => "string", "enum" => ["select", "abstain"]},
-        "lead" => nullable(leads, false),
+        "decision" => %{
+          "type" => "string",
+          "enum" => if(fixed?, do: ["select"], else: ["select", "abstain"])
+        },
+        "lead" => if(fixed?, do: %{"type" => "null"}, else: nullable(leads, false)),
         "selections" => %{
           "type" => "object",
           "additionalProperties" => false,
           "required" => WholeEntry.sections(),
           "properties" => sections
         },
-        "abstain_reason" => %{
-          "anyOf" => [%{"type" => "null"}, %{"type" => "string", "maxLength" => 100}]
-        }
+        "abstain_reason" =>
+          if(fixed?,
+            do: %{"type" => "null"},
+            else: %{"anyOf" => [%{"type" => "null"}, %{"type" => "string", "maxLength" => 100}]}
+          )
       }
     }
   end

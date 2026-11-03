@@ -33,6 +33,8 @@ defmodule DevilsDictionary.Curation.Runtime.Contract do
   @max_quote_chars 400
 
   def version, do: @version
+  def version("generic-whole-entry-v1"), do: "selection-output-v4"
+  def version("voltaire-whole-entry-v7-fixed-lead-v1"), do: "selection-output-v4"
   def version("voltaire-whole-entry-v7"), do: "selection-output-v4"
   def version("voltaire-whole-entry-v6"), do: "selection-output-v4"
   def version("voltaire-whole-entry-v5"), do: "selection-output-v4"
@@ -119,6 +121,7 @@ defmodule DevilsDictionary.Curation.Runtime.Contract do
          :ok <- bounded(content, opts),
          {:ok, decoded} <- decode(content),
          {:ok, decoded} <- SectionOutput.normalize(decoded, packet),
+         {:ok, decoded} <- fixed_lead(decoded, packet),
          :ok <- shape(decoded, packet) do
       # `registry: false` is the smoke call's fixed packet, which names no
       # registry rows: shape and references only.
@@ -189,6 +192,46 @@ defmodule DevilsDictionary.Curation.Runtime.Contract do
       {:error, _} -> {:refused, [["response", "malformed_json"]]}
     end
   end
+
+  # ── the rule-fixed lead (#298 C9) ─────────────────────────────────────────
+
+  @fixed_lead_reason "Lead fixed by rule: the applicable Bierce entry leads (bierce_fixed_lead_v1)."
+
+  @doc """
+  The reason a rule-fixed lead carries: a rule statement, never model text
+  (#298 C9). A result marks it `"reason_origin" => "rule"`, so it is counted
+  apart from the model's own reasons.
+  """
+  def fixed_lead_reason, do: @fixed_lead_reason
+
+  # Where the packet fixes the lead, the model must return a null lead and
+  # select; the rule's lead is then put in, under its candidate's own
+  # meaning, and checked like any lead (references, eligibility, Bierce
+  # first). Nothing the model wrote is repaired or dropped.
+  defp fixed_lead(decoded, %{"fixed_lead" => id} = packet) when is_binary(id) do
+    candidate = Enum.find(packet["candidates"], &(&1["candidate_id"] == id))
+
+    cond do
+      not is_nil(decoded["lead"]) ->
+        {:refused, [["lead", "fixed_lead_not_null"]]}
+
+      decoded["decision"] != "select" ->
+        {:refused, [["decision", "fixed_lead_requires_select"]]}
+
+      is_nil(candidate) ->
+        {:refused, [["lead", "fixed_lead_unknown"]]}
+
+      true ->
+        {:ok,
+         Map.put(decoded, "lead", %{
+           "candidate_id" => id,
+           "meaning_id" => candidate["required_meaning"],
+           "reason" => @fixed_lead_reason
+         })}
+    end
+  end
+
+  defp fixed_lead(decoded, _packet), do: {:ok, decoded}
 
   # ── C1: exactly the schema's shape ──────────────────────────────────────────
 
@@ -332,7 +375,9 @@ defmodule DevilsDictionary.Curation.Runtime.Contract do
          "voltaire-whole-entry-v4",
          "voltaire-whole-entry-v5",
          "voltaire-whole-entry-v6",
-         "voltaire-whole-entry-v7"
+         "voltaire-whole-entry-v7",
+         "generic-whole-entry-v1",
+         "voltaire-whole-entry-v7-fixed-lead-v1"
        ] and
          not is_nil(choice["quote"]),
        do: [[where, "quote_not_allowed"]],
@@ -457,10 +502,22 @@ defmodule DevilsDictionary.Curation.Runtime.Contract do
       end
     end
 
+    lead =
+      case {decoded["lead"], packet["fixed_lead"]} do
+        {nil, _fixed} ->
+          nil
+
+        {%{"candidate_id" => id} = lead, id} ->
+          lead |> keep.() |> Map.put("reason_origin", "rule")
+
+        {lead, _fixed} ->
+          keep.(lead)
+      end
+
     result = %{
       "contract" => version(packet["instruction_version"]),
       "decision" => decoded["decision"],
-      "lead" => decoded["lead"] && keep.(decoded["lead"]),
+      "lead" => lead,
       "highlights" => Enum.map(decoded["highlights"], keep),
       "abstain_reason" => decoded["abstain_reason"]
     }

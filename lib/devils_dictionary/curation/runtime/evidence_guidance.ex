@@ -1,11 +1,33 @@
 defmodule DevilsDictionary.Curation.Runtime.EvidenceGuidance do
   @moduledoc """
-  Candidate-specific inference guidance for v7 only. These schema descriptions
-  are prompts, not semantic validation or permission to fetch additional fields.
-  Earlier instruction schemas and stored choice/basis/receipt shapes stay intact.
+  Candidate-specific inference guidance for the grounded whole-entry
+  instructions: v7 and the comparison arms built on its evidence policy
+  (#298 C3, C9). These schema descriptions are prompts, not semantic
+  validation or permission to fetch additional fields. Earlier instruction
+  schemas and stored choice/basis/receipt shapes stay intact.
+
+  Guidance is activated by a whole-entry policy list, not by one literal
+  instruction, so a control arm sees exactly the guidance v7 sees. A new
+  grounded instruction joins the list under the same policy version.
   """
-  @doc "Render compact evidence scopes into v7's actual model-visible prompt."
-  def visible(visible, %{"instruction_version" => "voltaire-whole-entry-v7"} = packet) do
+
+  @policy "evidence-guidance-v1"
+  @instructions [
+    "voltaire-whole-entry-v7",
+    "generic-whole-entry-v1",
+    "voltaire-whole-entry-v7-fixed-lead-v1"
+  ]
+
+  @doc "The instructions guided under `evidence-guidance-v1`."
+  def instructions, do: @instructions
+
+  @doc "The guidance policy version an instruction is rendered under, or nil."
+  def policy(instruction) when instruction in @instructions, do: @policy
+  def policy(_instruction), do: nil
+
+  @doc "Render compact evidence scopes into the guided instructions' model-visible prompt."
+  def visible(visible, %{"instruction_version" => instruction} = packet)
+      when instruction in @instructions do
     rows = Map.new(packet["candidates"], &{&1["candidate_id"], &1})
     rules = Map.new(packet["candidates"], &{scope(&1), description(&1)})
 
@@ -24,16 +46,22 @@ defmodule DevilsDictionary.Curation.Runtime.EvidenceGuidance do
   defp scope(%{"kind" => "shelf", "shelf" => %{"shelf_kind" => kind}}), do: "shelf_" <> kind
   defp scope(%{"kind" => kind}), do: kind
 
-  def annotate(schema, %{"instruction_version" => "voltaire-whole-entry-v7"} = packet) do
+  def annotate(schema, %{"instruction_version" => instruction} = packet)
+      when instruction in @instructions do
     rows = Map.new(packet["candidates"], &{&1["candidate_id"], &1})
     schema = walk(schema, rows)
     leads = Enum.count(packet["candidates"], &(&1["kind"] in ["content", "sense_definition"]))
 
-    put_in(
-      schema,
-      ["properties", "decision", "description"],
-      "#{leads} definition candidates are supplied. Evaluate them first: sense_definition needs no content entry. Select a suitable lead and omit weak extras; abstain only when definition evidence is irrelevant, unsafe or insufficient."
-    )
+    # The decision's description is lead guidance: under a rule-fixed lead
+    # (#298 C9) it says so, and otherwise it is v7's, word for word.
+    description =
+      if is_binary(packet["fixed_lead"]),
+        do:
+          "The lead is fixed by rule (fixed_lead): return lead null and decision select. Choose only optional records whose supplied fields support them; leave weak sections empty.",
+        else:
+          "#{leads} definition candidates are supplied. Evaluate them first: sense_definition needs no content entry. Select a suitable lead and omit weak extras; abstain only when definition evidence is irrelevant, unsafe or insufficient."
+
+    put_in(schema, ["properties", "decision", "description"], description)
   end
 
   def annotate(schema, _packet), do: schema

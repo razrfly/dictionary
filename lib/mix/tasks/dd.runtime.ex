@@ -66,6 +66,25 @@ defmodule Mix.Tasks.Dd.Runtime do
   overwritten), whether it ran, replayed or refused. The same scope and
   packet replay the same receipt.
 
+  **A comparison batch** (#298 C2, C9) runs matched, non-publishing arms
+  on pilot pages from one frozen snapshot (`Runtime.Compare`):
+
+      mix dd.runtime compare --batch ID (--pilot | --page SLUG[,SLUG]) \
+        --arms LABEL=CONFIG[:current|:text],... [--generation N] [--dry-run]
+      mix dd.runtime compare ... [--window-minutes 60] [--out PATH]
+
+  It freezes every page's snapshot and every arm's packet in one
+  repeatable-read, read-only transaction, before any call. `--dry-run`
+  prints each case's packets, fingerprints and whether its arms match, and
+  calls and writes nothing. Without it, `compare` refuses unless the
+  service is bound to the connected database, then sends each case's arms
+  back to back as `comparison` attempts (`comparison:BATCH:SLUG:N:LABEL`),
+  writes one batch record (`--out`, by default
+  `priv/curation/runtime_bench/comparisons/<UTC date>/<batch>.json`, never
+  overwritten; ids and hashes only), and never a composition version,
+  proposal or publication. Read the results with
+  `mix dd.curation.coverage --comparison BATCH`.
+
   **The slot:**
 
       mix dd.runtime budget [--day YYYY-MM-DD]
@@ -91,7 +110,9 @@ defmodule Mix.Tasks.Dd.Runtime do
   alias DevilsDictionary.Curation.Runtime
 
   alias DevilsDictionary.Curation.Runtime.{
+    Authority,
     Bench,
+    Compare,
     Endpoint,
     Gateway,
     ModelConfig,
@@ -129,7 +150,13 @@ defmodule Mix.Tasks.Dd.Runtime do
     packets: :string,
     min_free_gib: :integer,
     deadline_ms: :integer,
-    rebind: :boolean
+    rebind: :boolean,
+    batch: :string,
+    arms: :string,
+    pilot: :boolean,
+    page: :string,
+    generation: :integer,
+    window_minutes: :integer
   ]
 
   # Every command this task answers, as its positional words.
@@ -143,6 +170,7 @@ defmodule Mix.Tasks.Dd.Runtime do
     ["packet"],
     ["request"],
     ["rehearse"],
+    ["compare"],
     ["budget"],
     ["sweep"],
     ["recover"],
@@ -267,6 +295,28 @@ defmodule Mix.Tasks.Dd.Runtime do
       else: rehearse(scope, config, opts)
   end
 
+  defp command(["compare"], opts) do
+    batch_id = required(opts, :batch)
+    arms = compare_arms!(opts)
+    slugs = compare_pages!(opts)
+
+    freeze_opts = [
+      generation: Keyword.get(opts, :generation, 0),
+      language: Keyword.get(opts, :language, "en")
+    ]
+
+    batch =
+      case read_only_snapshot(fn -> Compare.freeze(batch_id, slugs, arms, freeze_opts) end) do
+        {:ok, batch} -> batch
+        {:error, reason} -> Mix.raise("compare refused: #{inspect(reason)}")
+      end
+
+    shell = Mix.shell()
+    Enum.each(compare_lines(batch), &shell.info/1)
+
+    unless opts[:dry_run], do: compare_run(batch, opts)
+  end
+
   defp command(["budget"], opts) do
     day = if opts[:day], do: Date.from_iso8601!(opts[:day]), else: Date.utc_today()
     print({:ok, Gateway.budget(day)})
@@ -356,6 +406,164 @@ defmodule Mix.Tasks.Dd.Runtime do
 
     shell = Mix.shell()
     Enum.each(dry_run_lines(slug, result, candidates), &shell.info/1)
+  end
+
+  # ── comparisons ───────────────────────────────────────────────────────────
+
+  defp compare_arms!(opts) do
+    with {:ok, parsed} <- Compare.parse_arms(required(opts, :arms)),
+         {:ok, arms} <- Compare.resolve_arms(parsed) do
+      arms
+    else
+      {:error, reason} -> Mix.raise("--arms refused: #{inspect(reason)}")
+    end
+  end
+
+  defp compare_pages!(opts) do
+    case {opts[:pilot], opts[:page]} do
+      {true, nil} -> DevilsDictionary.Curation.Pilot.autonomous_pages()
+      {nil, pages} when is_binary(pages) -> String.split(pages, ",", trim: true)
+      _ -> Mix.raise("name exactly one of --pilot or --page SLUG[,SLUG]")
+    end
+  end
+
+  # One repeatable-read, read-only transaction: every page and every arm is
+  # cut from the same database snapshot, and nothing can be written.
+  defp read_only_snapshot(fun) do
+    {:ok, result} =
+      Repo.transaction(
+        fn ->
+          Repo.query!("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
+          fun.()
+        end,
+        timeout: 600_000
+      )
+
+    result
+  end
+
+  defp compare_run(batch, opts) do
+    case Authority.check([]) do
+      {:ok, _identity} -> :ok
+      {:error, reason, _detail} -> Mix.raise("compare refused: #{inspect(reason)}; nothing sent")
+    end
+
+    path =
+      Keyword.get_lazy(opts, :out, fn ->
+        Path.join([
+          "priv/curation/runtime_bench/comparisons",
+          Date.to_iso8601(Date.utc_today()),
+          batch.batch <> ".json"
+        ])
+      end)
+
+    claim_record!(path, batch)
+
+    {:ok, result} =
+      Compare.run(batch,
+        actor_id: operator!().id,
+        in_snapshot: &read_only_snapshot/1,
+        window_minutes: Keyword.get(opts, :window_minutes, 60)
+      )
+
+    record =
+      Compare.record(batch, result, %{
+        "database" => Repo.config()[:database],
+        "finished_at" => DateTime.utc_now(),
+        "budget" => Gateway.budget(Date.utc_today())
+      })
+
+    File.write!(path, Jason.encode!(record, pretty: true))
+    shell = Mix.shell()
+
+    Enum.each(result.cases, fn c ->
+      shell.info(
+        row(c.case_id, "#{c.status}#{if c.reason, do: " (#{inspect(c.reason)})", else: ""}") <>
+          " · " <>
+          Enum.map_join(c.results, ", ", &"#{&1.label} ##{&1.attempt_id} #{&1.outcome}")
+      )
+    end)
+
+    shell.info(row("halted", inspect(result.halted)))
+    shell.info(row("record", path))
+  end
+
+  # A batch record is never overwritten: its path is claimed exclusively.
+  defp claim_record!(path, batch) do
+    File.mkdir_p!(Path.dirname(path))
+
+    case File.open(path, [:write, :exclusive]) do
+      {:ok, io} ->
+        IO.binwrite(
+          io,
+          Jason.encode!(%{
+            "batch" => batch.batch,
+            "status" => "running",
+            "owner" => Gateway.owner()
+          })
+        )
+
+        File.close(io)
+
+      {:error, :eexist} ->
+        Mix.raise("#{path} exists: a batch record is never overwritten; name another --out")
+
+      {:error, reason} ->
+        Mix.raise("cannot claim #{path}: #{inspect(reason)}")
+    end
+  end
+
+  defp compare_lines(batch) do
+    arms =
+      Enum.map(batch.arms, fn arm ->
+        r = Compare.arm_record(arm)
+
+        row(
+          "arm " <> r["label"],
+          "#{r["model_config_slug"]} · #{r["instruction_version"]} (sha256 #{String.slice(r["instruction_sha256"], 0, 12)}) · cut #{r["cut"]} · guidance #{r["evidence_guidance"] || "none"}"
+        )
+      end)
+
+    same = fn key ->
+      batch.arms |> Enum.map(&Map.fetch!(&1.config, key)) |> Enum.uniq() |> length() == 1
+    end
+
+    [
+      row(
+        "batch",
+        "#{batch.batch} · frozen #{DateTime.to_iso8601(batch.frozen_at)} · snapshot #{batch.snapshot_sha256}"
+      ),
+      row(
+        "constant",
+        "artifact #{if same.(:manifest_digest), do: "same", else: "DIFFERS"} · generation #{if same.(:generation), do: "same", else: "DIFFERS"}"
+      )
+    ] ++
+      arms ++
+      Enum.flat_map(batch.pages, fn page ->
+        [
+          row(
+            page.case_id,
+            "snapshot #{String.slice(page.snapshot_sha256, 0, 16)} · " <>
+              if(page.matched, do: "matched within each cut", else: "UNMATCHED")
+          )
+        ] ++
+          Enum.map(page.arms, fn
+            %{status: :ready} = arm ->
+              packet = arm.frozen.packet
+
+              "  " <>
+                String.pad_trailing(arm.label, 8) <>
+                "fingerprint #{String.slice(arm.evidence_fingerprint, 0, 16)} · packet #{String.slice(arm.packet_hash, 0, 16)} · " <>
+                "#{length(packet["candidates"])} candidates · priority #{inspect(packet["priority_candidates"])}" <>
+                if(Map.has_key?(packet, "fixed_lead"),
+                  do: " · fixed lead #{inspect(packet["fixed_lead"])}",
+                  else: ""
+                )
+
+            arm ->
+              "  " <> String.pad_trailing(arm.label, 8) <> "REFUSED #{inspect(arm.reason)}"
+          end)
+      end)
   end
 
   # ── rehearsals ────────────────────────────────────────────────────────────
