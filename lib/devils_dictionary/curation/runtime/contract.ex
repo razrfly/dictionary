@@ -37,8 +37,12 @@ defmodule DevilsDictionary.Curation.Runtime.Contract do
   @comparison DevilsDictionary.Curation.WholeEntry.comparison_instructions()
   @raised_cap Enum.filter(
                 @comparison,
-                &(DevilsDictionary.Curation.WholeEntry.reason_cap(&1) == 200)
+                &(DevilsDictionary.Curation.WholeEntry.reason_cap(&1) != 100)
               )
+
+  for instruction <- @raised_cap,
+      DevilsDictionary.Curation.WholeEntry.reason_cap(instruction) != 200,
+      do: raise("#{instruction}: selection-output-v5 is v4's shape at a 200-character cap")
 
   def version, do: @version
   def version(instruction) when instruction in @raised_cap, do: "selection-output-v5"

@@ -272,6 +272,24 @@ mix dd.runtime compare --batch s1-2026-11-05 --pilot --dry-run \
   --out "/Volumes/LLM Models/dictionary/run/s1-2026-11-05/batch.json"
 ```
 
+D7's arms (#305, after D6's NOT JUSTIFIED) keep the fixed lead and the text cut and change
+one thing each. `voltaire-whole-entry-v7-fixed-lead-cap200-v1` is the fixed-lead text with
+only its reason cap raised from 100 to 200 characters; `…-cap200-nudge-v1` adds one section
+before the output rules (`Packet.after_lead_section/0`) against lead-only pages.
+`WholeEntry.reason_cap/1` is the cap the schema, the validation and the text all read, and
+the two run under `selection-output-v5` (v4's shape at 200); every other instruction keeps
+v4 at 100.
+
+```
+mix dd.runtime setup --model qwen3.5:9b --slug qwen3.5-9b-whole-voltaire-v7-fixed-lead-cap200 \
+  --instruction voltaire-whole-entry-v7-fixed-lead-cap200-v1 --accept-license
+mix dd.runtime setup --model qwen3.5:9b --slug qwen3.5-9b-whole-voltaire-v7-fixed-lead-cap200-nudge \
+  --instruction voltaire-whole-entry-v7-fixed-lead-cap200-nudge-v1 --accept-license
+mix dd.runtime compare --batch d7-2026-11-05 --pilot --dry-run \
+  --arms A0=qwen3.5-9b-whole-voltaire-v7,PL=qwen3.5-9b-whole-voltaire-v7-fixed-lead:text,PLC=qwen3.5-9b-whole-voltaire-v7-fixed-lead-cap200:text,PLCN=qwen3.5-9b-whole-voltaire-v7-fixed-lead-cap200-nudge:text \
+  --out "/Volumes/LLM Models/dictionary/run/d7-2026-11-05/record/batch.json"
+```
+
 D6's four policy arms, dry run first (it calls and writes nothing):
 
 ```

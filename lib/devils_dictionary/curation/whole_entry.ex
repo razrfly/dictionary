@@ -73,7 +73,12 @@ defmodule DevilsDictionary.Curation.WholeEntry do
   @doc "The instructions whose packets carry a rule-fixed lead."
   def fixed_lead_instructions, do: @fixed_lead
 
-  @doc "The reason cap, in characters, of an instruction's section output."
+  @doc """
+  The reason cap, in characters, of an instruction's section output. It means
+  something only where `Runtime.SectionOutput.enabled?/1` holds (v3 onwards and
+  the comparison instructions); a flat-contract instruction's reasons are
+  bounded by `Runtime.Contract` alone.
+  """
   def reason_cap(instruction), do: Map.get(@reason_caps, instruction, @reason_cap)
 
   def instruction, do: "voltaire-whole-entry-v6"

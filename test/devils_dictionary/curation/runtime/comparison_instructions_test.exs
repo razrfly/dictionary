@@ -109,7 +109,7 @@ defmodule DevilsDictionary.Curation.Runtime.ComparisonInstructionsTest do
                "3a3ef1f2511d3294dcaf77b238e971653eac61153dadfab788184128a3bca2ec"
 
       assert Digest.sha256(Packet.instruction!(@nudge)) ==
-               "75fd00d7658a2f99f992f6b2841db5d8f3e1a2d9986e72a43c22d22007ae970e"
+               "3f404e5630e2a95f470dfd3eda80256ebec93ef87b42953014fd8d0fe76aa9c7"
     end
 
     test "the generic control is v7's evidence policy without a dossier" do
@@ -185,8 +185,7 @@ defmodule DevilsDictionary.Curation.Runtime.ComparisonInstructionsTest do
       assert Enum.join(added, "\n") <> "\n" == section
 
       # The nudge never weakens the grounding rule it sits under.
-      assert section =~
-               "a candidate's own supplied fields support both its meaning and its reason"
+      assert section =~ "own supplied fields evidence a supplied meaning of this entry"
 
       assert section =~ "Leave a section empty only when no candidate in it is so supported."
       assert section =~ "never lowers the evidence bar"
@@ -385,8 +384,17 @@ defmodule DevilsDictionary.Curation.Runtime.ComparisonInstructionsTest do
   end
 
   describe "the reason cap (#305 D7)" do
-    test "every instruction keeps 100 characters except the two cap arms" do
-      for instruction <- Packet.instruction_versions() do
+    test "every section-output instruction keeps 100 characters except the two cap arms" do
+      sectioned =
+        Enum.filter(
+          Packet.instruction_versions(),
+          &SectionOutput.enabled?(%{"instruction_version" => &1})
+        )
+
+      assert @v7 in sectioned and @cap200 in sectioned and @nudge in sectioned
+      refute "generic-editor-v2" in sectioned
+
+      for instruction <- sectioned do
         cap = WholeEntry.reason_cap(instruction)
         assert cap == if(instruction in [@cap200, @nudge], do: 200, else: 100)
         # `Contract` bounds every reason at 280 characters.
@@ -470,6 +478,22 @@ defmodule DevilsDictionary.Curation.Runtime.ComparisonInstructionsTest do
       assert {:ok, _} = validate(abstain, packet(@cap200, open))
       assert {:refused, reasons, _} = validate(abstain, packet(@fixed, open))
       assert ["abstain_reason", "reason_too_long"] in reasons
+
+      # So does a model-chosen lead's reason.
+      lead = %{
+        "decision" => "select",
+        "lead" => %{
+          "candidate_id" => "n0",
+          "meaning_id" => "m0",
+          "reason" => String.duplicate("x", 150)
+        },
+        "selections" => empty_sections(),
+        "abstain_reason" => nil
+      }
+
+      assert {:ok, %{outcome: :accepted}} = validate(lead, packet(@cap200, open))
+      assert {:refused, lead_reasons, _} = validate(lead, packet(@fixed, open))
+      assert ["lead", "reason_too_long"] in lead_reasons
     end
   end
 end

@@ -388,7 +388,7 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
   @output_header "OUTPUT AND SAFETY:\n"
   @after_lead """
   AFTER THE LEAD, CHECK EVERY SECTION:
-  A page that shows only its lead is incomplete when supported records were supplied. After the lead, take each section in turn: definitions, examples, quotes, images, films, music, books, poems, news. In each one, select a highlight wherever a candidate's own supplied fields support both its meaning and its reason under the rules above. Leave a section empty only when no candidate in it is so supported. This never lowers the evidence bar: an unsupported choice is still wrong, and an empty section is still honest.
+  A page that shows only its lead is incomplete when supported records were supplied. After the lead, take each section in turn: definitions, examples, quotes, images, films, music, books, poems, news. In each one, select a highlight wherever a candidate's own supplied fields evidence a supplied meaning of this entry and support its reason under the rules above. Leave a section empty only when no candidate in it is so supported. This never lowers the evidence bar: an unsupported choice is still wrong, and an empty section is still honest.
 
   """
 
