@@ -77,9 +77,13 @@ MUTED = "text-mist-600 dark:text-mist-400"
 
 
 def mark(name, size="size-7 text-base"):
+    # The AI editor's mark, beside its byline and each of its reasons: "AI",
+    # never the persona's initial, which readers took for the persona's own
+    # voice (#309 D2b pre-check). `name` is kept for the call sites.
+    size = size.replace("text-base", "text-[0.6875rem]").replace("text-sm", "text-[0.625rem]")
     return (
         f'<span aria-hidden="true" class="inline-flex {size} shrink-0 items-center justify-center rounded-full '
-        f'bg-amber-100 font-display text-amber-900 dark:bg-amber-400/15 dark:text-amber-200">{e(name[0])}</span>'
+        f'bg-amber-100 font-semibold tracking-wide text-amber-900 dark:bg-amber-400/15 dark:text-amber-200">AI</span>'
     )
 
 
@@ -111,7 +115,7 @@ def disclosure(id_, rows):
     return f"""
       <details id="{id_}" class="group/why">
         <summary class="flex min-h-11 w-fit cursor-pointer list-none items-center gap-2 rounded-sm text-base/7 {MUTED} hover:text-mist-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 sm:min-h-9 dark:hover:text-white dark:focus-visible:outline-white [&amp;::-webkit-details-marker]:hidden">
-          <span class="underline decoration-mist-950/20 underline-offset-4 dark:decoration-white/20">Record and evidence</span>
+          <span class="underline decoration-mist-950/20 underline-offset-4 dark:decoration-white/20">About this choice</span>
           <span class="hero-chevron-down-mini size-5 text-mist-400 group-open/why:rotate-180"></span>
         </summary>
         <dl class="mt-2 flex flex-col gap-2 border-l-2 border-mist-950/10 pl-4 text-base/6 dark:border-white/10">{items}</dl>
