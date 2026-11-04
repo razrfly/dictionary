@@ -35,11 +35,27 @@ defmodule DevilsDictionary.Curation.WholeEntry do
     "generic-whole-entry-v1",
     "voltaire-whole-entry-v7-fixed-lead-v1",
     "hitchens-whole-entry-v1",
-    "bierce-whole-entry-v1"
+    "bierce-whole-entry-v1",
+    "voltaire-whole-entry-v7-fixed-lead-cap200-v1",
+    "voltaire-whole-entry-v7-fixed-lead-cap200-nudge-v1"
   ]
 
   # The instructions whose packets name a rule-fixed lead (#298 C9).
-  @fixed_lead ["voltaire-whole-entry-v7-fixed-lead-v1"]
+  @fixed_lead [
+    "voltaire-whole-entry-v7-fixed-lead-v1",
+    "voltaire-whole-entry-v7-fixed-lead-cap200-v1",
+    "voltaire-whole-entry-v7-fixed-lead-cap200-nudge-v1"
+  ]
+
+  # The longest original reason, in characters, an instruction asks for and
+  # its section output admits: 100, except the two arms that raise it (#305
+  # D7). The schema sent as `format`, the validation and the instruction text
+  # all read it here; `Contract`'s 280 bounds every one.
+  @reason_cap 100
+  @reason_caps %{
+    "voltaire-whole-entry-v7-fixed-lead-cap200-v1" => 200,
+    "voltaire-whole-entry-v7-fixed-lead-cap200-nudge-v1" => 200
+  }
 
   @doc """
   Every whole-entry instruction the runtime accepts: the publishing ones,
@@ -56,6 +72,9 @@ defmodule DevilsDictionary.Curation.WholeEntry do
 
   @doc "The instructions whose packets carry a rule-fixed lead."
   def fixed_lead_instructions, do: @fixed_lead
+
+  @doc "The reason cap, in characters, of an instruction's section output."
+  def reason_cap(instruction), do: Map.get(@reason_caps, instruction, @reason_cap)
 
   def instruction, do: "voltaire-whole-entry-v6"
   def enabled?(%{manifest: m}), do: m["selection_scope"] == "whole_entry_v1"

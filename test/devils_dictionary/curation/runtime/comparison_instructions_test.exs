@@ -5,6 +5,9 @@ defmodule DevilsDictionary.Curation.Runtime.ComparisonInstructionsTest do
   control sees v7's guidance exactly; the fixed-lead variant differs from
   v7 only in its lead section, and its contract puts the rule's lead in.
   #307: the Hitchens and Bierce arms are v7 with only the lens changed.
+  #305 D7: the cap and nudge arms are the fixed-lead variant with only the
+  reason cap raised to 200 and, for the nudge, one section added; their
+  schema and validation follow `WholeEntry.reason_cap/1`.
   """
   use ExUnit.Case, async: true
 
@@ -22,6 +25,8 @@ defmodule DevilsDictionary.Curation.Runtime.ComparisonInstructionsTest do
   @generic "generic-whole-entry-v1"
   @fixed "voltaire-whole-entry-v7-fixed-lead-v1"
   @personas %{"hitchens" => "hitchens-whole-entry-v1", "bierce" => "bierce-whole-entry-v1"}
+  @cap200 "voltaire-whole-entry-v7-fixed-lead-cap200-v1"
+  @nudge "voltaire-whole-entry-v7-fixed-lead-cap200-nudge-v1"
 
   defp packet(instruction, extra \\ %{}) do
     native =
@@ -61,6 +66,20 @@ defmodule DevilsDictionary.Curation.Runtime.ComparisonInstructionsTest do
   defp empty_sections,
     do: Map.new(WholeEntry.sections(), &{&1, if(&1 in ["examples", "quotes"], do: [], else: nil)})
 
+  # The lines `b` drops from `a` and the lines it adds, in order.
+  defp changed_lines(a, b) do
+    diff = List.myers_difference(String.split(a, "\n"), String.split(b, "\n"))
+
+    {Keyword.get_values(diff, :del) |> List.flatten(),
+     Keyword.get_values(diff, :ins) |> List.flatten()}
+  end
+
+  # A schema with every reason cap raised from 100 to 200.
+  defp raised(%{"maxLength" => 100} = map), do: raised(%{map | "maxLength" => 200})
+  defp raised(map) when is_map(map), do: Map.new(map, fn {k, v} -> {k, raised(v)} end)
+  defp raised(list) when is_list(list), do: Enum.map(list, &raised/1)
+  defp raised(value), do: value
+
   defp validate(wire, packet) do
     Contract.validate(
       %{"done_reason" => "stop", "message" => %{"content" => Jason.encode!(wire)}},
@@ -85,6 +104,12 @@ defmodule DevilsDictionary.Curation.Runtime.ComparisonInstructionsTest do
 
       assert Digest.sha256(Packet.instruction!(@personas["bierce"])) ==
                "b02355a9a294f4f4c5deca7d07325ae705fda6dec045ab2b64e7ac92efcb57f0"
+
+      assert Digest.sha256(Packet.instruction!(@cap200)) ==
+               "3a3ef1f2511d3294dcaf77b238e971653eac61153dadfab788184128a3bca2ec"
+
+      assert Digest.sha256(Packet.instruction!(@nudge)) ==
+               "75fd00d7658a2f99f992f6b2841db5d8f3e1a2d9986e72a43c22d22007ae970e"
     end
 
     test "the generic control is v7's evidence policy without a dossier" do
@@ -135,25 +160,64 @@ defmodule DevilsDictionary.Curation.Runtime.ComparisonInstructionsTest do
       [v7_before, _] = String.split(Packet.instruction!(@v7), "CHECK EVERY OPTIONAL CHOICE:")
       assert String.replace(before, Packet.fixed_lead_clause(), "") == v7_before
     end
+
+    test "the cap arm differs from the fixed-lead variant only by its cap sentence (#305 D7)" do
+      fixed = Packet.instruction!(@fixed)
+      cap200 = Packet.instruction!(@cap200)
+      old = "Keep each original reason under 100 characters."
+      new = "Keep each original reason under 200 characters."
+
+      assert [_, _] = String.split(fixed, old)
+      assert String.replace(cap200, new, old) == fixed
+      assert {[line], [cap_line]} = changed_lines(fixed, cap200)
+      assert String.starts_with?(line, old)
+      assert cap_line == String.replace(line, old, new)
+    end
+
+    test "the nudge arm is the cap arm with one section before the output rules (#305 D7)" do
+      cap200 = Packet.instruction!(@cap200)
+      nudge = Packet.instruction!(@nudge)
+      section = Packet.after_lead_section()
+
+      assert String.replace(nudge, section, "") == cap200
+      assert nudge =~ section <> "OUTPUT AND SAFETY:\n"
+      assert {[], added} = changed_lines(cap200, nudge)
+      assert Enum.join(added, "\n") <> "\n" == section
+
+      # The nudge never weakens the grounding rule it sits under.
+      assert section =~
+               "a candidate's own supplied fields support both its meaning and its reason"
+
+      assert section =~ "Leave a section empty only when no candidate in it is so supported."
+      assert section =~ "never lowers the evidence bar"
+      assert nudge =~ "Sparse sections may honestly remain empty."
+      assert nudge =~ "every optional section may honestly stay empty"
+    end
   end
 
   describe "allowlists" do
     test "every runtime allowlist admits the comparison instructions" do
       assert WholeEntry.comparison_instructions() ==
-               [@generic, @fixed, @personas["hitchens"], @personas["bierce"]]
+               [@generic, @fixed, @personas["hitchens"], @personas["bierce"], @cap200, @nudge]
 
       for instruction <- WholeEntry.comparison_instructions() do
         assert instruction in Packet.instruction_versions()
         assert instruction in WholeEntry.instructions()
         assert SectionOutput.enabled?(%{"instruction_version" => instruction})
-        assert Contract.version(instruction) == "selection-output-v4"
+
+        assert Contract.version(instruction) ==
+                 if(instruction in [@cap200, @nudge],
+                   do: "selection-output-v5",
+                   else: "selection-output-v4"
+                 )
+
         assert EvidenceGuidance.policy(instruction) == "evidence-guidance-v1"
         assert {:ok, _frozen} = Packet.freeze(packet(instruction))
       end
 
       assert EvidenceGuidance.policy(@v7) == "evidence-guidance-v1"
       assert is_nil(EvidenceGuidance.policy("voltaire-whole-entry-v6"))
-      assert WholeEntry.fixed_lead_instructions() == [@fixed]
+      assert WholeEntry.fixed_lead_instructions() == [@fixed, @cap200, @nudge]
     end
 
     test "no publication path admits a comparison instruction" do
@@ -210,6 +274,24 @@ defmodule DevilsDictionary.Curation.Runtime.ComparisonInstructionsTest do
                  Packet.evidence_fingerprint(packet(@v7))
 
         refute Packet.prompt_sha256(packet(instruction)) == Packet.prompt_sha256(packet(@v7))
+      end
+    end
+
+    test "the cap and nudge arms see exactly the fixed-lead variant's packet (#305 D7)" do
+      [fixed_system, fixed_user] = Packet.messages(packet(@fixed, %{"fixed_lead" => "n0"}))
+
+      for instruction <- [@cap200, @nudge] do
+        p = packet(instruction, %{"fixed_lead" => "n0"})
+        [system, user] = Packet.messages(p)
+        assert system.content == Packet.instruction!(instruction)
+        refute system.content == fixed_system.content
+        assert user.content == fixed_user.content
+
+        assert Packet.evidence_fingerprint(p) ==
+                 Packet.evidence_fingerprint(packet(@fixed, %{"fixed_lead" => "n0"}))
+
+        refute Packet.prompt_sha256(p) ==
+                 Packet.prompt_sha256(packet(@fixed, %{"fixed_lead" => "n0"}))
       end
     end
 
@@ -299,6 +381,95 @@ defmodule DevilsDictionary.Curation.Runtime.ComparisonInstructionsTest do
 
       assert {:refused, reasons, _} = validate(repeated, p)
       assert ["definitions", "lead_candidate_repeated"] in reasons
+    end
+  end
+
+  describe "the reason cap (#305 D7)" do
+    test "every instruction keeps 100 characters except the two cap arms" do
+      for instruction <- Packet.instruction_versions() do
+        cap = WholeEntry.reason_cap(instruction)
+        assert cap == if(instruction in [@cap200, @nudge], do: 200, else: 100)
+        # `Contract` bounds every reason at 280 characters.
+        assert cap <= 280
+      end
+    end
+
+    test "each grounded instruction's text states its own cap" do
+      for instruction <- [@v7 | WholeEntry.comparison_instructions()] do
+        text = Packet.instruction!(instruction)
+        cap = WholeEntry.reason_cap(instruction)
+        assert text =~ "Keep each original reason under #{cap} characters."
+        assert length(String.split(text, "Keep each original reason under")) == 2
+      end
+    end
+
+    test "the cap arms' schema is the fixed-lead schema with every reason cap at 200" do
+      for extra <- [%{"fixed_lead" => "n0"}, %{"fixed_lead" => nil, "priority_candidates" => []}],
+          instruction <- [@cap200, @nudge] do
+        schema = Contract.schema(packet(instruction, extra))
+        assert schema == raised(Contract.schema(packet(@fixed, extra)))
+        refute schema == Contract.schema(packet(@fixed, extra))
+      end
+
+      open = Contract.schema(packet(@cap200, %{"fixed_lead" => nil, "priority_candidates" => []}))
+
+      assert open["properties"]["abstain_reason"] ==
+               %{"anyOf" => [%{"type" => "null"}, %{"type" => "string", "maxLength" => 200}]}
+
+      # v7 and the fixed-lead variant keep 100.
+      for instruction <- [@v7, @fixed] do
+        v4 = Contract.schema(packet(instruction, %{"fixed_lead" => nil}))
+        assert raised(v4) != v4
+
+        assert get_in(v4, ["properties", "abstain_reason", "anyOf"]) |> List.last() ==
+                 %{"type" => "string", "maxLength" => 100}
+      end
+    end
+
+    test "validation admits a reason up to the arm's cap and refuses one over it" do
+      wire = fn length ->
+        %{
+          "decision" => "select",
+          "lead" => nil,
+          "selections" =>
+            Map.put(empty_sections(), "quotes", [
+              %{
+                "candidate_id" => "n2",
+                "meaning_id" => "m0",
+                "reason" => String.duplicate("x", length),
+                "quote" => nil
+              }
+            ]),
+          "abstain_reason" => nil
+        }
+      end
+
+      fixed = packet(@fixed, %{"fixed_lead" => "n0"})
+
+      for instruction <- [@cap200, @nudge] do
+        p = packet(instruction, %{"fixed_lead" => "n0"})
+        assert {:ok, %{outcome: :accepted}} = validate(wire.(150), p)
+        assert {:ok, %{outcome: :accepted}} = validate(wire.(200), p)
+        assert {:refused, reasons, _} = validate(wire.(201), p)
+        assert ["highlight_1", "reason_too_long"] in reasons
+      end
+
+      assert {:ok, %{outcome: :accepted}} = validate(wire.(100), fixed)
+      assert {:refused, reasons, _} = validate(wire.(150), fixed)
+      assert ["highlight_1", "reason_too_long"] in reasons
+
+      # Without a fixed lead the abstention reason follows the same cap.
+      abstain = %{
+        "decision" => "abstain",
+        "lead" => nil,
+        "selections" => empty_sections(),
+        "abstain_reason" => String.duplicate("x", 150)
+      }
+
+      open = %{"fixed_lead" => nil, "priority_candidates" => []}
+      assert {:ok, _} = validate(abstain, packet(@cap200, open))
+      assert {:refused, reasons, _} = validate(abstain, packet(@fixed, open))
+      assert ["abstain_reason", "reason_too_long"] in reasons
     end
   end
 end
