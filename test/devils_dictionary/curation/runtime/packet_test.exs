@@ -24,9 +24,11 @@ defmodule DevilsDictionary.Curation.Runtime.PacketTest do
     # A pinned text never changes: an attempt's `prompt_sha256` depends on it.
     test "each instruction version is held to its text" do
       assert Packet.instruction_versions() == [
+               "bierce-whole-entry-v1",
                "generic-editor-v1",
                "generic-editor-v2",
                "generic-whole-entry-v1",
+               "hitchens-whole-entry-v1",
                "voltaire-selector-v1",
                "voltaire-whole-entry-v1",
                "voltaire-whole-entry-v2",
