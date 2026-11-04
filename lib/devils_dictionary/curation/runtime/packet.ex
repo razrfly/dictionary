@@ -337,6 +337,29 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
   # without a dossier.
   @generic_whole_entry @grounded_policy
 
+  # The persona arms (#307, #305 Stage 1): v7's grounded body with a reviewed
+  # dossier's lens (#302), composed as `grounded_with_lens/1` composes it, so
+  # every policy section is v7's byte for byte. The dossiers are read by slug
+  # through `Agents.Persona` and compiled in; a changed lens is a new dossier
+  # version under a new instruction name, never these.
+  @personas Path.expand("../../../../priv/curation/agents/personas", __DIR__)
+
+  @persona_arms (for {instruction, slug} <- [
+                       {"hitchens-whole-entry-v1", "hitchens"},
+                       {"bierce-whole-entry-v1", "bierce"}
+                     ],
+                     into: %{} do
+                   alias DevilsDictionary.Curation.Agents.Persona
+                   path = Persona.path(slug, 1, root: @personas)
+                   Module.put_attribute(__MODULE__, :external_resource, path)
+                   manifest = Persona.manifest!(slug, 1, root: @personas)
+
+                   if manifest["template_version"] != instruction,
+                     do: raise("#{slug} v1 must name #{instruction} as its template")
+
+                   {instruction, @grounded_policy <> @lens_preface <> Persona.lens(manifest)}
+                 end)
+
   # The fixed-lead variant (#298 C9, arms L and PL): v7 with only its lead
   # section changed. Where the packet names a `fixed_lead` (the applicable
   # Bierce entry), the rule leads and the model chooses highlights only;
@@ -367,6 +390,8 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
     "voltaire-whole-entry-v7" => @whole_grounded,
     "voltaire-whole-entry-v7-fixed-lead-v1" => @whole_grounded_fixed_lead,
     "generic-whole-entry-v1" => @generic_whole_entry,
+    "hitchens-whole-entry-v1" => Map.fetch!(@persona_arms, "hitchens-whole-entry-v1"),
+    "bierce-whole-entry-v1" => Map.fetch!(@persona_arms, "bierce-whole-entry-v1"),
     "generic-editor-v1" => @generic_editor_v1,
     "generic-editor-v2" => @generic_editor_v2,
     "voltaire-selector-v1" =>

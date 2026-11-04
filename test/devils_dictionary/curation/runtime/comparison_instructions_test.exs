@@ -4,6 +4,7 @@ defmodule DevilsDictionary.Curation.Runtime.ComparisonInstructionsTest do
   by every runtime allowlist and by no publication path; the generic
   control sees v7's guidance exactly; the fixed-lead variant differs from
   v7 only in its lead section, and its contract puts the rule's lead in.
+  #307: the Hitchens and Bierce arms are v7 with only the lens changed.
   """
   use ExUnit.Case, async: true
 
@@ -20,6 +21,7 @@ defmodule DevilsDictionary.Curation.Runtime.ComparisonInstructionsTest do
   @v7 "voltaire-whole-entry-v7"
   @generic "generic-whole-entry-v1"
   @fixed "voltaire-whole-entry-v7-fixed-lead-v1"
+  @personas %{"hitchens" => "hitchens-whole-entry-v1", "bierce" => "bierce-whole-entry-v1"}
 
   defp packet(instruction, extra \\ %{}) do
     native =
@@ -77,6 +79,12 @@ defmodule DevilsDictionary.Curation.Runtime.ComparisonInstructionsTest do
 
       assert Digest.sha256(Packet.instruction!(@fixed)) ==
                "2af1ca1aee77687ef4e302253c36ded81ea64cdfcd35ab12d0447515a4754183"
+
+      assert Digest.sha256(Packet.instruction!(@personas["hitchens"])) ==
+               "3463bce9960a3919fbe8d9ef79aea83a06e8cfc3d15800338ee1cfdf73abe9ab"
+
+      assert Digest.sha256(Packet.instruction!(@personas["bierce"])) ==
+               "b02355a9a294f4f4c5deca7d07325ae705fda6dec045ab2b64e7ac92efcb57f0"
     end
 
     test "the generic control is v7's evidence policy without a dossier" do
@@ -94,6 +102,31 @@ defmodule DevilsDictionary.Curation.Runtime.ComparisonInstructionsTest do
       assert Packet.grounded_with_lens(lens) == Packet.instruction!(@v7)
     end
 
+    test "a persona arm is v7's policy byte for byte with its dossier's lens (#307)" do
+      v7 = Packet.instruction!(@v7)
+      v7_lens = "voltaire" |> Persona.manifest!(5) |> Persona.lens()
+      policy = String.replace_suffix(v7, v7_lens, "")
+      assert byte_size(policy) == byte_size(v7) - byte_size(v7_lens)
+
+      for {slug, instruction} <- @personas do
+        text = Packet.instruction!(instruction)
+
+        # The dossier on disk, read without `Persona`: disclosure, a newline
+        # and selection, as Voltaire's lens is compiled.
+        %{"template_version" => ^instruction, "dossier" => d} =
+          "priv/curation/agents/personas/#{slug}/v1/profile.json"
+          |> File.read!()
+          |> Jason.decode!()
+
+        lens = d["disclosure"] <> "\n" <> d["selection"]
+        assert lens == slug |> Persona.manifest!(1) |> Persona.lens()
+        assert text == policy <> lens
+        assert text == Packet.grounded_with_lens(lens)
+        assert String.starts_with?(text, Packet.grounded_policy())
+        refute text =~ "Voltaire"
+      end
+    end
+
     test "the fixed-lead variant differs from v7 only by its lead clause" do
       fixed = Packet.instruction!(@fixed)
       assert String.replace(fixed, Packet.fixed_lead_clause(), "") == Packet.instruction!(@v7)
@@ -106,7 +139,10 @@ defmodule DevilsDictionary.Curation.Runtime.ComparisonInstructionsTest do
 
   describe "allowlists" do
     test "every runtime allowlist admits the comparison instructions" do
-      for instruction <- [@generic, @fixed] do
+      assert WholeEntry.comparison_instructions() ==
+               [@generic, @fixed, @personas["hitchens"], @personas["bierce"]]
+
+      for instruction <- WholeEntry.comparison_instructions() do
         assert instruction in Packet.instruction_versions()
         assert instruction in WholeEntry.instructions()
         assert SectionOutput.enabled?(%{"instruction_version" => instruction})
@@ -158,6 +194,23 @@ defmodule DevilsDictionary.Curation.Runtime.ComparisonInstructionsTest do
                Packet.evidence_fingerprint(packet(@v7))
 
       refute Packet.prompt_sha256(packet(@generic)) == Packet.prompt_sha256(packet(@v7))
+    end
+
+    test "a persona arm sees exactly v7's packet, guidance and schema (#307)" do
+      [v7_system, v7_user] = Packet.messages(packet(@v7))
+
+      for instruction <- Map.values(@personas) do
+        [system, user] = Packet.messages(packet(instruction))
+        assert system.content == Packet.instruction!(instruction)
+        refute system.content == v7_system.content
+        assert user.content == v7_user.content
+        assert Contract.schema(packet(instruction)) == Contract.schema(packet(@v7))
+
+        assert Packet.evidence_fingerprint(packet(instruction)) ==
+                 Packet.evidence_fingerprint(packet(@v7))
+
+        refute Packet.prompt_sha256(packet(instruction)) == Packet.prompt_sha256(packet(@v7))
+      end
     end
 
     test "v7's synthetic prompt is unchanged by the policy list" do
