@@ -37,6 +37,8 @@ defmodule DevilsDictionary.Curation.Runtime.PacketTest do
                "voltaire-whole-entry-v5",
                "voltaire-whole-entry-v6",
                "voltaire-whole-entry-v7",
+               "voltaire-whole-entry-v7-fixed-lead-cap200-nudge-v1",
+               "voltaire-whole-entry-v7-fixed-lead-cap200-v1",
                "voltaire-whole-entry-v7-fixed-lead-v1"
              ]
 

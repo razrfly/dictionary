@@ -380,6 +380,38 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
                                @fixed_lead_clause <> @lead_header
                              )
 
+  # The cap and nudge arms (#305 D7, PLC and PLCN): the fixed-lead variant
+  # with only its reason cap raised to `WholeEntry.reason_cap/1`'s, and for
+  # the nudge one section added before the output rules, against lead-only
+  # pages. It asks for every supported section, never for a weaker one.
+  @cap_sentence "Keep each original reason under 100 characters."
+  @output_header "OUTPUT AND SAFETY:\n"
+  @after_lead """
+  AFTER THE LEAD, CHECK EVERY SECTION:
+  A page that shows only its lead is incomplete when supported records were supplied. After the lead, take each section in turn: definitions, examples, quotes, images, films, music, books, poems, news. In each one, select a highlight wherever a candidate's own supplied fields evidence a supplied meaning of this entry and support its reason under every rule in this instruction. Leave a section empty only when no candidate in it is so supported. This never lowers the evidence bar: an unsupported choice is still wrong, and an empty section is still honest.
+
+  """
+
+  for marker <- [@cap_sentence, @output_header],
+      length(String.split(@whole_grounded_fixed_lead, marker)) != 2,
+      do: raise("the fixed-lead variant must hold #{inspect(marker)} exactly once")
+
+  @whole_grounded_fixed_lead_cap200 String.replace(
+                                      @whole_grounded_fixed_lead,
+                                      @cap_sentence,
+                                      "Keep each original reason under #{DevilsDictionary.Curation.WholeEntry.reason_cap("voltaire-whole-entry-v7-fixed-lead-cap200-v1")} characters."
+                                    )
+
+  @whole_grounded_fixed_lead_cap200_nudge @whole_grounded_fixed_lead
+                                          |> String.replace(
+                                            @cap_sentence,
+                                            "Keep each original reason under #{DevilsDictionary.Curation.WholeEntry.reason_cap("voltaire-whole-entry-v7-fixed-lead-cap200-nudge-v1")} characters."
+                                          )
+                                          |> String.replace(
+                                            @output_header,
+                                            @after_lead <> @output_header
+                                          )
+
   @instructions %{
     "voltaire-whole-entry-v1" => @whole_entry,
     "voltaire-whole-entry-v2" => @whole_entry_v2,
@@ -389,6 +421,9 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
     "voltaire-whole-entry-v6" => @whole_sense_lead,
     "voltaire-whole-entry-v7" => @whole_grounded,
     "voltaire-whole-entry-v7-fixed-lead-v1" => @whole_grounded_fixed_lead,
+    "voltaire-whole-entry-v7-fixed-lead-cap200-v1" => @whole_grounded_fixed_lead_cap200,
+    "voltaire-whole-entry-v7-fixed-lead-cap200-nudge-v1" =>
+      @whole_grounded_fixed_lead_cap200_nudge,
     "generic-whole-entry-v1" => @generic_whole_entry,
     "hitchens-whole-entry-v1" => Map.fetch!(@persona_arms, "hitchens-whole-entry-v1"),
     "bierce-whole-entry-v1" => Map.fetch!(@persona_arms, "bierce-whole-entry-v1"),
@@ -422,6 +457,9 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
 
   @doc "The clause the fixed-lead variant adds before v7's lead section (#298 C9)."
   def fixed_lead_clause, do: @fixed_lead_clause
+
+  @doc "The section the nudge arm adds before the output rules (#305 D7)."
+  def after_lead_section, do: @after_lead
 
   # ── building ─────────────────────────────────────────────────────────────
 

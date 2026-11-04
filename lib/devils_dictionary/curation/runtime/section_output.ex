@@ -17,6 +17,7 @@ defmodule DevilsDictionary.Curation.Runtime.SectionOutput do
 
   def schema(packet) do
     candidates = packet["candidates"]
+    cap = WholeEntry.reason_cap(packet["instruction_version"])
     priority = packet["priority_candidates"]
     leads = Enum.filter(candidates, &(&1["kind"] in ["content", "sense_definition"]))
 
@@ -37,11 +38,11 @@ defmodule DevilsDictionary.Curation.Runtime.SectionOutput do
             %{
               "type" => "array",
               "maxItems" => min(2, length(rows)),
-              "items" => if(rows == [], do: %{"type" => "null"}, else: choices(rows, true)),
+              "items" => if(rows == [], do: %{"type" => "null"}, else: choices(rows, true, cap)),
               "uniqueItems" => true
             }
           else
-            nullable(rows, true)
+            nullable(rows, true, cap)
           end
 
         {section, value}
@@ -60,7 +61,7 @@ defmodule DevilsDictionary.Curation.Runtime.SectionOutput do
           "type" => "string",
           "enum" => if(fixed?, do: ["select"], else: ["select", "abstain"])
         },
-        "lead" => if(fixed?, do: %{"type" => "null"}, else: nullable(leads, false)),
+        "lead" => if(fixed?, do: %{"type" => "null"}, else: nullable(leads, false, cap)),
         "selections" => %{
           "type" => "object",
           "additionalProperties" => false,
@@ -70,25 +71,25 @@ defmodule DevilsDictionary.Curation.Runtime.SectionOutput do
         "abstain_reason" =>
           if(fixed?,
             do: %{"type" => "null"},
-            else: %{"anyOf" => [%{"type" => "null"}, %{"type" => "string", "maxLength" => 100}]}
+            else: %{"anyOf" => [%{"type" => "null"}, %{"type" => "string", "maxLength" => cap}]}
           )
       }
     }
   end
 
-  defp nullable([], _), do: %{"type" => "null"}
+  defp nullable([], _, _), do: %{"type" => "null"}
 
-  defp nullable(rows, highlight?),
-    do: %{"anyOf" => [%{"type" => "null"}, choices(rows, highlight?)]}
+  defp nullable(rows, highlight?, cap),
+    do: %{"anyOf" => [%{"type" => "null"}, choices(rows, highlight?, cap)]}
 
-  defp choices(rows, highlight?) do
+  defp choices(rows, highlight?, cap) do
     %{
       "anyOf" =>
         Enum.map(rows, fn row ->
           properties = %{
             "candidate_id" => %{"type" => "string", "enum" => [row["candidate_id"]]},
             "meaning_id" => %{"type" => "string", "enum" => row["allowed_meanings"]},
-            "reason" => %{"type" => "string", "maxLength" => 100}
+            "reason" => %{"type" => "string", "maxLength" => cap}
           }
 
           properties =
@@ -114,6 +115,7 @@ defmodule DevilsDictionary.Curation.Runtime.SectionOutput do
          sections when is_map(sections) <- decoded["selections"],
          true <- Enum.sort(Map.keys(sections)) == Enum.sort(WholeEntry.sections()) do
       candidates = Map.new(packet["candidates"], &{&1["candidate_id"], &1})
+      cap = WholeEntry.reason_cap(packet["instruction_version"])
 
       {highlights, errors} =
         Enum.reduce(WholeEntry.sections(), {[], []}, fn section, {items, errors} ->
@@ -153,11 +155,11 @@ defmodule DevilsDictionary.Curation.Runtime.SectionOutput do
         end)
         |> Enum.flat_map(fn {label, choice} ->
           if is_map(choice) and is_binary(choice["reason"]) and
-               String.length(choice["reason"]) > 100, do: [[label, "reason_too_long"]], else: []
+               String.length(choice["reason"]) > cap, do: [[label, "reason_too_long"]], else: []
         end)
 
       abstain_errors =
-        if is_binary(decoded["abstain_reason"]) and String.length(decoded["abstain_reason"]) > 100,
+        if is_binary(decoded["abstain_reason"]) and String.length(decoded["abstain_reason"]) > cap,
           do: [["abstain_reason", "reason_too_long"]],
           else: []
 

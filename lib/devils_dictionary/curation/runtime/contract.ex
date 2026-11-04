@@ -32,10 +32,17 @@ defmodule DevilsDictionary.Curation.Runtime.Contract do
   @max_reason_chars 280
   @max_quote_chars 400
 
-  # Comparison-only instructions (#298 C3, C9) use v7's output contract.
+  # Comparison-only instructions (#298 C3, C9) use v7's output contract; the
+  # ones that raise the reason cap (#305 D7) use v5, v4's shape at 200, the
+  # only raised cap `WholeEntry` admits.
   @comparison DevilsDictionary.Curation.WholeEntry.comparison_instructions()
+  @raised_cap Enum.filter(
+                @comparison,
+                &(DevilsDictionary.Curation.WholeEntry.reason_cap(&1) != 100)
+              )
 
   def version, do: @version
+  def version(instruction) when instruction in @raised_cap, do: "selection-output-v5"
   def version(instruction) when instruction in @comparison, do: "selection-output-v4"
   def version("voltaire-whole-entry-v7"), do: "selection-output-v4"
   def version("voltaire-whole-entry-v6"), do: "selection-output-v4"
