@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light" data-theme-source="user">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>contact sheet · curated-page sketch (#309)</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&amp;display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="./sketch.css" />
+    <script>
+      // The app's theme bootstrap (root.html.heex) minus the toggle; ?theme=dark shows the dark page from disk.
+      (() => {
+        const q = new URLSearchParams(location.search).get("theme");
+        const system = () => matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        document.documentElement.setAttribute("data-theme", q || system());
+      })();
+    </script>
+  </head>
+  <body class="bg-mist-100 font-sans text-mist-950 antialiased dark:bg-mist-950 dark:text-white">
+    <nav aria-label="Account" class="border-b border-mist-950/5 dark:border-white/10">
+      <div class="mx-auto flex h-10 max-w-7xl items-center justify-end gap-5 px-6 text-sm/6 lg:px-10">
+        <a href="#" class="font-medium hover:underline">Register</a><a href="#" class="font-medium hover:underline">Log in</a>
+      </div>
+    </nav>
+    <header class="bg-mist-100 dark:bg-mist-950">
+      <div class="mx-auto flex h-16 max-w-7xl items-center justify-between px-6 lg:px-10">
+        <a href="#" class="font-display text-2xl/8">wordhoard</a>
+        <div class="flex items-center rounded-full bg-mist-950/10 dark:bg-white/10">
+          <span class="flex p-2"><span class="hero-computer-desktop-micro size-4 opacity-75"></span></span>
+          <span class="flex rounded-full bg-white p-2 dark:bg-transparent"><span class="hero-sun-micro size-4 opacity-75"></span></span>
+          <span class="flex rounded-full p-2 dark:bg-mist-700"><span class="hero-moon-micro size-4 opacity-75"></span></span>
+        </div>
+      </div>
+    </header>
+    <div id="sketch-note" class="border-y border-amber-600/30 bg-amber-50/60 dark:bg-amber-950/20">
+      <p class="mx-auto max-w-7xl px-6 py-2 text-sm/6 text-pretty text-amber-800 lg:px-10 dark:text-amber-300">Sketch, not the app · #309 D2 · the curated page as its own article, phone first.</p>
+    </div>
+    <main class="mx-auto w-full max-w-2xl px-6 pt-8 pb-16 lg:max-w-6xl lg:px-10">
+      <article id="curated-page">
+  <h1 class="font-display text-5xl/none">Curated page sketches</h1>
+  <p class="mt-4 max-w-2xl text-base/7 text-pretty text-mist-600 dark:text-mist-400">Open each at 375 px first, then at 1280 px; add <code>?theme=dark</code> for the dark page. Content captured private copy of devils_dictionary_v2, taken read-only 2026-11-04T17:27:48Z.</p>
+  <ul role="list" class="mt-6 divide-y divide-mist-950/10 dark:divide-white/10"><li class="flex flex-wrap items-baseline gap-x-4 py-3"><a href="./nepotism.html" class="font-medium rounded-sm underline decoration-mist-950/30 underline-offset-4 hover:decoration-current focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:decoration-white/30 dark:focus-visible:outline-white">nepotism.html</a><a href="./nepotism.html?theme=dark" class="rounded-sm underline decoration-mist-950/30 underline-offset-4 hover:decoration-current focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:decoration-white/30 dark:focus-visible:outline-white text-mist-600 dark:text-mist-400">dark</a></li><li class="flex flex-wrap items-baseline gap-x-4 py-3"><a href="./truth.html" class="font-medium rounded-sm underline decoration-mist-950/30 underline-offset-4 hover:decoration-current focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:decoration-white/30 dark:focus-visible:outline-white">truth.html</a><a href="./truth.html?theme=dark" class="rounded-sm underline decoration-mist-950/30 underline-offset-4 hover:decoration-current focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:decoration-white/30 dark:focus-visible:outline-white text-mist-600 dark:text-mist-400">dark</a></li><li class="flex flex-wrap items-baseline gap-x-4 py-3"><a href="./love.html" class="font-medium rounded-sm underline decoration-mist-950/30 underline-offset-4 hover:decoration-current focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:decoration-white/30 dark:focus-visible:outline-white">love.html</a><a href="./love.html?theme=dark" class="rounded-sm underline decoration-mist-950/30 underline-offset-4 hover:decoration-current focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:decoration-white/30 dark:focus-visible:outline-white text-mist-600 dark:text-mist-400">dark</a></li><li class="flex flex-wrap items-baseline gap-x-4 py-3"><a href="./bestiality-abstained.html" class="font-medium rounded-sm underline decoration-mist-950/30 underline-offset-4 hover:decoration-current focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:decoration-white/30 dark:focus-visible:outline-white">bestiality-abstained.html</a><a href="./bestiality-abstained.html?theme=dark" class="rounded-sm underline decoration-mist-950/30 underline-offset-4 hover:decoration-current focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:decoration-white/30 dark:focus-visible:outline-white text-mist-600 dark:text-mist-400">dark</a></li><li class="flex flex-wrap items-baseline gap-x-4 py-3"><a href="./greed-withheld.html" class="font-medium rounded-sm underline decoration-mist-950/30 underline-offset-4 hover:decoration-current focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:decoration-white/30 dark:focus-visible:outline-white">greed-withheld.html</a><a href="./greed-withheld.html?theme=dark" class="rounded-sm underline decoration-mist-950/30 underline-offset-4 hover:decoration-current focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:decoration-white/30 dark:focus-visible:outline-white text-mist-600 dark:text-mist-400">dark</a></li></ul>
+      </article>
+    </main>
+  </body>
+</html>

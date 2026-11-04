@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light" data-theme-source="user">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>truth · curated-page sketch (#309)</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&amp;display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="./sketch.css" />
+    <script>
+      // The app's theme bootstrap (root.html.heex) minus the toggle; ?theme=dark shows the dark page from disk.
+      (() => {
+        const q = new URLSearchParams(location.search).get("theme");
+        const system = () => matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        document.documentElement.setAttribute("data-theme", q || system());
+      })();
+    </script>
+  </head>
+  <body class="bg-mist-100 font-sans text-mist-950 antialiased dark:bg-mist-950 dark:text-white">
+    <nav aria-label="Account" class="border-b border-mist-950/5 dark:border-white/10">
+      <div class="mx-auto flex h-10 max-w-7xl items-center justify-end gap-5 px-6 text-sm/6 lg:px-10">
+        <a href="#" class="font-medium hover:underline">Register</a><a href="#" class="font-medium hover:underline">Log in</a>
+      </div>
+    </nav>
+    <header class="bg-mist-100 dark:bg-mist-950">
+      <div class="mx-auto flex h-16 max-w-7xl items-center justify-between px-6 lg:px-10">
+        <a href="#" class="font-display text-2xl/8">wordhoard</a>
+        <div class="flex items-center rounded-full bg-mist-950/10 dark:bg-white/10">
+          <span class="flex p-2"><span class="hero-computer-desktop-micro size-4 opacity-75"></span></span>
+          <span class="flex rounded-full bg-white p-2 dark:bg-transparent"><span class="hero-sun-micro size-4 opacity-75"></span></span>
+          <span class="flex rounded-full p-2 dark:bg-mist-700"><span class="hero-moon-micro size-4 opacity-75"></span></span>
+        </div>
+      </div>
+    </header>
+    <div id="sketch-note" class="border-y border-amber-600/30 bg-amber-50/60 dark:bg-amber-950/20">
+      <p class="mx-auto max-w-7xl px-6 py-2 text-sm/6 text-pretty text-amber-800 lg:px-10 dark:text-amber-300">Sketch, not the app · #309 D2 · truth version 5. [Bracketed] items are placeholders for provider data.</p>
+    </div>
+    <main class="mx-auto w-full max-w-2xl px-6 pt-8 pb-16 lg:max-w-6xl lg:px-10">
+      <article id="curated-page">
+  <header id="curated-masthead" class="flex flex-col gap-5 pb-6">
+    
+    <nav id="entry-views" aria-label="Entry views" class="grid grid-cols-2 rounded-xl bg-mist-950/5 p-1 text-base/5 sm:w-fit sm:text-sm/5 dark:bg-white/10">
+      <a href="#" aria-current="page" class="flex min-h-11 items-center justify-center rounded-lg bg-white px-3 py-2 text-center font-medium text-mist-950 shadow-xs dark:bg-mist-700 dark:text-white">This editor’s selection</a>
+      <a href="#" class="flex min-h-11 items-center justify-center rounded-lg px-3 py-2 text-center text-mist-700 hover:text-mist-950 dark:text-mist-300 dark:hover:text-white">Everything this page holds</a>
+    </nav>
+    <div>
+      <p id="on-title" class="mb-1 text-base/7 font-semibold text-mist-700 dark:text-mist-400">On truth</p>
+      <h1 class="font-display text-5xl/none tracking-tight text-mist-950 sm:text-6xl/none dark:text-white">truth</h1>
+      <p class="mt-2 text-lg/7 text-mist-500"><span class="font-mono">/tɹuːθ/</span> · noun · verb</p>
+    </div>
+    
+    <div id="curated-byline" class="flex gap-3 text-base/7">
+      <span aria-hidden="true" class="inline-flex mt-0.5 size-7 text-base shrink-0 items-center justify-center rounded-full bg-amber-100 font-display text-amber-900 dark:bg-amber-400/15 dark:text-amber-200">V</span>
+      <div class="flex min-w-0 flex-col items-start gap-2">
+        <p class="text-pretty">Selected by an AI editor inspired by <a href="#" class="font-medium rounded-sm underline decoration-mist-950/30 underline-offset-4 hover:decoration-current focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:decoration-white/30 dark:focus-visible:outline-white">Voltaire</a></p>
+        <span id="curated-status" class="rounded-full bg-amber-100 px-3 py-0.5 text-sm/6 font-medium text-amber-900 dark:bg-amber-400/15 dark:text-amber-200">AI-selected · not reviewed by a person</span>
+        <p class="text-mist-600 dark:text-mist-400">3 November 2026 · version 5</p>
+        <a href="#" class="-mt-2 flex min-h-11 items-center rounded-sm underline decoration-mist-950/30 underline-offset-4 hover:decoration-current focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:decoration-white/30 dark:focus-visible:outline-white">How this page was curated →</a>
+      </div>
+    </div>
+  </header>
+  <div class="lg:grid lg:grid-cols-[minmax(0,1fr)_20rem] lg:gap-x-16">
+    <div id="curated-column" class="min-w-0">
+  <section id="curated-lead" aria-labelledby="curated-lead-heading" class="flex flex-col gap-4 border-t border-mist-950/10 pt-6 pb-8 dark:border-white/10">
+    <div class="flex flex-wrap items-center gap-3">
+      <h2 id="curated-lead-heading" class="text-base/7 font-semibold text-mist-700 dark:text-mist-300">Leading definition</h2>
+      <span class="rounded-full px-2.5 py-0.5 text-sm/6 bg-amber-100 text-amber-900 dark:bg-amber-400/15 dark:text-amber-200">Satire</span>
+    </div>
+    <figure class="flex max-w-[44rem] flex-col gap-3">
+      <blockquote class="font-display text-4xl/11 text-pretty text-mist-950 dark:text-white"><p class="relative before:absolute before:-translate-x-full before:content-['\201C'] after:content-['\201D']">An ingenious compound of desirability and appearance.</p></blockquote>
+      <figcaption class="text-base/7"><span class="font-medium text-amber-700 dark:text-amber-400">Ambrose Bierce</span> · <cite class="text-mist-600 dark:text-mist-400">The Devil&#x27;s Dictionary · 1911</cite></figcaption>
+    </figure>
+    <dl class="text-base/6 text-mist-600 dark:text-mist-400"><div class="inline after:mx-1.5 after:content-['·'] last:after:content-none"><dt class="inline font-medium text-mist-700 dark:text-mist-300">Source</dt> <dd class="inline break-words">Ambrose Bierce, The Devil&#x27;s Dictionary (1911), public domain</dd></div><div class="inline after:mx-1.5 after:content-['·'] last:after:content-none"><dt class="inline font-medium text-mist-700 dark:text-mist-300">Rights</dt> <dd class="inline break-words">Public domain</dd></div></dl>
+    
+      <p id="curated-lead-reason" class="flex gap-3 text-base/7">
+        <span aria-hidden="true" class="inline-flex mt-0.5 size-6 text-sm shrink-0 items-center justify-center rounded-full bg-amber-100 font-display text-amber-900 dark:bg-amber-400/15 dark:text-amber-200">V</span>
+        <span class="min-w-0 text-pretty text-mist-800 dark:text-mist-200"><span class="font-semibold text-mist-950 dark:text-white">Why it leads</span> “Bierce&#x27;s satire contrasts appearance with philosophical truth.”</span>
+      </p>
+    
+      <details id="curated-lead-record" class="group/why">
+        <summary class="flex min-h-11 w-fit cursor-pointer list-none items-center gap-2 rounded-sm text-base/7 text-mist-600 dark:text-mist-400 hover:text-mist-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 sm:min-h-9 dark:hover:text-white dark:focus-visible:outline-white [&amp;::-webkit-details-marker]:hidden">
+          <span class="underline decoration-mist-950/20 underline-offset-4 dark:decoration-white/20">Record and evidence</span>
+          <span class="hero-chevron-down-mini size-5 text-mist-400 group-open/why:rotate-180"></span>
+        </summary>
+        <dl class="mt-2 flex flex-col gap-2 border-l-2 border-mist-950/10 pl-4 text-base/6 dark:border-white/10"><div><dt class="inline font-medium text-mist-950 dark:text-white">Meaning</dt> <dd class="inline text-mist-700 dark:text-mist-300">truth, noun</dd></div><div><dt class="inline font-medium text-mist-950 dark:text-white">Kind of text</dt> <dd class="inline text-mist-700 dark:text-mist-300">Satire, quoted exactly.</dd></div><div><dt class="inline font-medium text-mist-950 dark:text-white">Content date</dt> <dd class="inline text-mist-700 dark:text-mist-300">1911</dd></div><div><dt class="inline font-medium text-mist-950 dark:text-white">Exact record</dt> <dd class="inline text-mist-700 dark:text-mist-300"><a href="#" class="rounded-sm underline decoration-mist-950/30 underline-offset-4 hover:decoration-current focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:decoration-white/30 dark:focus-visible:outline-white">the choice on the receipt</a></dd></div></dl>
+      </details>
+  </section>
+  <section id="curated-news" aria-labelledby="curated-news-heading" class="flex flex-col gap-5 border-t border-mist-950/10 py-8 dark:border-white/10">
+    <h2 id="curated-news-heading" class="font-display text-3xl/9 tracking-tight">In the news</h2>
+    <p id="curated-news-label" class="-mt-2 text-base/6 text-pretty text-mist-600 dark:text-mist-400">Headlines change. Found 3 November 2026, 03:07 UTC; shown until 10 November 2026.</p>
+    <ul role="list" class="flex flex-col divide-y divide-mist-950/10 dark:divide-white/10">
+    <li id="curated-item-9" class="flex min-w-0 flex-col gap-3 py-6 first:pt-0 last:pb-0">
+      <p class="text-base/6 font-medium text-mist-700 dark:text-mist-300">Headline <span class="font-normal text-mist-600 dark:text-mist-400">· Bing News · 3 November 2026</span></p><p class="font-display text-2xl/8 text-mist-400 italic dark:text-mist-500">[the headline as Bing News gives it]</p>
+      
+      <p id="curated-item-9-reason" class="flex gap-3 text-base/7">
+        <span aria-hidden="true" class="inline-flex mt-0.5 size-6 text-sm shrink-0 items-center justify-center rounded-full bg-amber-100 font-display text-amber-900 dark:bg-amber-400/15 dark:text-amber-200">V</span>
+        <span class="min-w-0 text-pretty text-mist-800 dark:text-mist-200"><span class="font-semibold text-mist-950 dark:text-white">Why it’s here</span> “Article addresses fake posts contrasting with verified facts.”</span>
+      </p>
+      
+      <details id="curated-item-9-record" class="group/why">
+        <summary class="flex min-h-11 w-fit cursor-pointer list-none items-center gap-2 rounded-sm text-base/7 text-mist-600 dark:text-mist-400 hover:text-mist-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 sm:min-h-9 dark:hover:text-white dark:focus-visible:outline-white [&amp;::-webkit-details-marker]:hidden">
+          <span class="underline decoration-mist-950/20 underline-offset-4 dark:decoration-white/20">Record and evidence</span>
+          <span class="hero-chevron-down-mini size-5 text-mist-400 group-open/why:rotate-180"></span>
+        </summary>
+        <dl class="mt-2 flex flex-col gap-2 border-l-2 border-mist-950/10 pl-4 text-base/6 dark:border-white/10"><div><dt class="inline font-medium text-mist-950 dark:text-white">Meaning</dt> <dd class="inline text-mist-700 dark:text-mist-300">truth, noun</dd></div><div><dt class="inline font-medium text-mist-950 dark:text-white">Found</dt> <dd class="inline text-mist-700 dark:text-mist-300">3 November 2026, 03:07 UTC</dd></div><div><dt class="inline font-medium text-mist-950 dark:text-white">Shown until</dt> <dd class="inline text-mist-700 dark:text-mist-300">10 November 2026</dd></div><div><dt class="inline font-medium text-mist-950 dark:text-white">Exact record</dt> <dd class="inline text-mist-700 dark:text-mist-300"><a href="#" class="rounded-sm underline decoration-mist-950/30 underline-offset-4 hover:decoration-current focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:decoration-white/30 dark:focus-visible:outline-white">the choice on the receipt</a></dd></div></dl>
+      </details>
+    </li></ul>
+  </section>
+  <section id="curated-definitions" aria-labelledby="curated-definitions-heading" class="flex flex-col gap-5 border-t border-mist-950/10 py-8 dark:border-white/10">
+    <h2 id="curated-definitions-heading" class="font-display text-3xl/9 tracking-tight">Definitions</h2>
+    <ul role="list" class="flex flex-col divide-y divide-mist-950/10 dark:divide-white/10">
+    <li id="curated-item-1" class="flex min-w-0 flex-col gap-3 py-6 first:pt-0 last:pb-0">
+      
+        <figure class="flex flex-col gap-2">
+          <blockquote class="font-display text-2xl/8 text-pretty text-mist-950 dark:text-white"><p class="relative before:absolute before:-translate-x-full before:content-['\201C'] after:content-['\201D']">1. The contrary to falsehood; conformity of notions to things.</p></blockquote>
+          <figcaption class="flex flex-wrap items-center gap-x-3 gap-y-1 text-base/6 text-mist-600 dark:text-mist-400"><span class="rounded-full px-2.5 py-0.5 text-sm/6 bg-mist-950/5 text-mist-700 dark:bg-white/10 dark:text-mist-300">Sourced definition</span><span>Samuel Johnson · 1755</span></figcaption>
+        </figure><dl class="text-base/6 text-mist-600 dark:text-mist-400"><div class="inline after:mx-1.5 after:content-['·'] last:after:content-none"><dt class="inline font-medium text-mist-700 dark:text-mist-300">Source</dt> <dd class="inline break-words">Samuel Johnson, A Dictionary of the English Language (1755); TEI-XML transcription by Ian Lancashire, Lexicons of Early Modern English (LEME), University of Toronto, CC BY 4.0</dd></div><div class="inline after:mx-1.5 after:content-['·'] last:after:content-none"><dt class="inline font-medium text-mist-700 dark:text-mist-300">Rights</dt> <dd class="inline break-words">CC BY 4.0 (LEME transcription); the 1755 text is public domain</dd></div></dl>
+      
+      <p id="curated-item-1-reason" class="flex gap-3 text-base/7">
+        <span aria-hidden="true" class="inline-flex mt-0.5 size-6 text-sm shrink-0 items-center justify-center rounded-full bg-amber-100 font-display text-amber-900 dark:bg-amber-400/15 dark:text-amber-200">V</span>
+        <span class="min-w-0 text-pretty text-mist-800 dark:text-mist-200"><span class="font-semibold text-mist-950 dark:text-white">Why it’s here</span> “Johnson defines truth as conformity of notions to things.”</span>
+      </p>
+      
+      <details id="curated-item-1-record" class="group/why">
+        <summary class="flex min-h-11 w-fit cursor-pointer list-none items-center gap-2 rounded-sm text-base/7 text-mist-600 dark:text-mist-400 hover:text-mist-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 sm:min-h-9 dark:hover:text-white dark:focus-visible:outline-white [&amp;::-webkit-details-marker]:hidden">
+          <span class="underline decoration-mist-950/20 underline-offset-4 dark:decoration-white/20">Record and evidence</span>
+          <span class="hero-chevron-down-mini size-5 text-mist-400 group-open/why:rotate-180"></span>
+        </summary>
+        <dl class="mt-2 flex flex-col gap-2 border-l-2 border-mist-950/10 pl-4 text-base/6 dark:border-white/10"><div><dt class="inline font-medium text-mist-950 dark:text-white">Meaning</dt> <dd class="inline text-mist-700 dark:text-mist-300">truth, noun</dd></div><div><dt class="inline font-medium text-mist-950 dark:text-white">Exact record</dt> <dd class="inline text-mist-700 dark:text-mist-300"><a href="#" class="rounded-sm underline decoration-mist-950/30 underline-offset-4 hover:decoration-current focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:decoration-white/30 dark:focus-visible:outline-white">the choice on the receipt</a></dd></div></dl>
+      </details>
+    </li></ul>
+  </section>
+  <section id="curated-quotations" aria-labelledby="curated-quotations-heading" class="flex flex-col gap-5 border-t border-mist-950/10 py-8 dark:border-white/10">
+    <h2 id="curated-quotations-heading" class="font-display text-3xl/9 tracking-tight">Quotations</h2>
+    <ul role="list" class="flex flex-col divide-y divide-mist-950/10 dark:divide-white/10">
+    <li id="curated-item-2" class="flex min-w-0 flex-col gap-3 py-6 first:pt-0 last:pb-0">
+      
+        <figure class="flex flex-col gap-2">
+          <blockquote class="font-display text-2xl/8 text-pretty text-mist-950 dark:text-white"><p class="relative before:absolute before:-translate-x-full before:content-['\201C'] after:content-['\201D']">&quot;Beauty is truth, truth beauty,&quot;—that is all / Ye know on earth, and all ye need to know.</p></blockquote>
+          <figcaption class="text-base/6 text-pretty text-mist-600 dark:text-mist-400">1819 May, John Keats, “Ode on a Grecian Urn”, in Lamia, Isabella, the Eve of St. Agnes, and Other Poems, London: […] [Thomas Davison] for Taylor and Hessey, […], published 1820, →OCLC, stanza 5, page 116</figcaption>
+        </figure><dl class="text-base/6 text-mist-600 dark:text-mist-400"><div class="inline after:mx-1.5 after:content-['·'] last:after:content-none"><dt class="inline font-medium text-mist-700 dark:text-mist-300">Quoted in</dt> <dd class="inline break-words">Wiktionary contributors (CC BY-SA 4.0), extracted by kaikki.org</dd></div><div class="inline after:mx-1.5 after:content-['·'] last:after:content-none"><dt class="inline font-medium text-mist-700 dark:text-mist-300">Rights</dt> <dd class="inline break-words">CC BY-SA 4.0</dd></div></dl>
+      
+      <p id="curated-item-2-reason" class="flex gap-3 text-base/7">
+        <span aria-hidden="true" class="inline-flex mt-0.5 size-6 text-sm shrink-0 items-center justify-center rounded-full bg-amber-100 font-display text-amber-900 dark:bg-amber-400/15 dark:text-amber-200">V</span>
+        <span class="min-w-0 text-pretty text-mist-800 dark:text-mist-200"><span class="font-semibold text-mist-950 dark:text-white">Why it’s here</span> “Keats equates beauty with truth in a concise statement.”</span>
+      </p>
+      
+      <details id="curated-item-2-record" class="group/why">
+        <summary class="flex min-h-11 w-fit cursor-pointer list-none items-center gap-2 rounded-sm text-base/7 text-mist-600 dark:text-mist-400 hover:text-mist-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 sm:min-h-9 dark:hover:text-white dark:focus-visible:outline-white [&amp;::-webkit-details-marker]:hidden">
+          <span class="underline decoration-mist-950/20 underline-offset-4 dark:decoration-white/20">Record and evidence</span>
+          <span class="hero-chevron-down-mini size-5 text-mist-400 group-open/why:rotate-180"></span>
+        </summary>
+        <dl class="mt-2 flex flex-col gap-2 border-l-2 border-mist-950/10 pl-4 text-base/6 dark:border-white/10"><div><dt class="inline font-medium text-mist-950 dark:text-white">Meaning</dt> <dd class="inline text-mist-700 dark:text-mist-300">truth, noun</dd></div><div><dt class="inline font-medium text-mist-950 dark:text-white">Exact record</dt> <dd class="inline text-mist-700 dark:text-mist-300"><a href="#" class="rounded-sm underline decoration-mist-950/30 underline-offset-4 hover:decoration-current focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:decoration-white/30 dark:focus-visible:outline-white">the choice on the receipt</a></dd></div></dl>
+      </details>
+    </li>
+    <li id="curated-item-3" class="flex min-w-0 flex-col gap-3 py-6 first:pt-0 last:pb-0">
+      
+        <figure class="flex flex-col gap-2">
+          <blockquote class="font-display text-2xl/8 text-pretty text-mist-950 dark:text-white"><p class="relative before:absolute before:-translate-x-full before:content-['\201C'] after:content-['\201D']">Alas! they had been friends in youth; / But whispering tongues can poison truth; […]</p></blockquote>
+          <figcaption class="text-base/6 text-pretty text-mist-600 dark:text-mist-400">1800, S[amuel] T[aylor] Coleridge, “Christabel. Part II.”, in Christabel: Kubla Khan, a Vision: The Pains of Sleep, London: […] John Murray, […], by William Bulmer and Co. […], published 1816, →OCLC, page 32</figcaption>
+        </figure><dl class="text-base/6 text-mist-600 dark:text-mist-400"><div class="inline after:mx-1.5 after:content-['·'] last:after:content-none"><dt class="inline font-medium text-mist-700 dark:text-mist-300">Quoted in</dt> <dd class="inline break-words">Wiktionary contributors (CC BY-SA 4.0), extracted by kaikki.org</dd></div><div class="inline after:mx-1.5 after:content-['·'] last:after:content-none"><dt class="inline font-medium text-mist-700 dark:text-mist-300">Rights</dt> <dd class="inline break-words">CC BY-SA 4.0</dd></div></dl>
+      
+      <p id="curated-item-3-reason" class="flex gap-3 text-base/7">
+        <span aria-hidden="true" class="inline-flex mt-0.5 size-6 text-sm shrink-0 items-center justify-center rounded-full bg-amber-100 font-display text-amber-900 dark:bg-amber-400/15 dark:text-amber-200">V</span>
+        <span class="min-w-0 text-pretty text-mist-800 dark:text-mist-200"><span class="font-semibold text-mist-950 dark:text-white">Why it’s here</span> “Verse illustrates how whispers can poison genuine truth.”</span>
+      </p>
+      
+      <details id="curated-item-3-record" class="group/why">
+        <summary class="flex min-h-11 w-fit cursor-pointer list-none items-center gap-2 rounded-sm text-base/7 text-mist-600 dark:text-mist-400 hover:text-mist-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 sm:min-h-9 dark:hover:text-white dark:focus-visible:outline-white [&amp;::-webkit-details-marker]:hidden">
+          <span class="underline decoration-mist-950/20 underline-offset-4 dark:decoration-white/20">Record and evidence</span>
+          <span class="hero-chevron-down-mini size-5 text-mist-400 group-open/why:rotate-180"></span>
+        </summary>
+        <dl class="mt-2 flex flex-col gap-2 border-l-2 border-mist-950/10 pl-4 text-base/6 dark:border-white/10"><div><dt class="inline font-medium text-mist-950 dark:text-white">Meaning</dt> <dd class="inline text-mist-700 dark:text-mist-300">truth, noun</dd></div><div><dt class="inline font-medium text-mist-950 dark:text-white">Exact record</dt> <dd class="inline text-mist-700 dark:text-mist-300"><a href="#" class="rounded-sm underline decoration-mist-950/30 underline-offset-4 hover:decoration-current focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:decoration-white/30 dark:focus-visible:outline-white">the choice on the receipt</a></dd></div></dl>
+      </details>
+    </li></ul>
+  </section>
+  <section id="curated-culture" aria-labelledby="curated-culture-heading" class="flex flex-col gap-5 border-t border-mist-950/10 py-8 dark:border-white/10">
+    <h2 id="curated-culture-heading" class="font-display text-3xl/9 tracking-tight">In culture</h2>
+    <ul role="list" class="flex flex-col divide-y divide-mist-950/10 dark:divide-white/10">
+    <li id="curated-item-4" class="flex min-w-0 flex-col gap-3 py-6 first:pt-0 last:pb-0">
+      <p class="text-base/6 font-medium text-mist-700 dark:text-mist-300">Image <span class="font-normal text-mist-600 dark:text-mist-400">· Unsplash · found 29 October 2026</span></p><div aria-hidden="true" class="aspect-[4/3] w-full max-w-60 rounded-lg bg-mist-950/5 outline-1 -outline-offset-1 outline-black/5 dark:bg-white/5 dark:outline-white/10"></div><p class="font-display text-xl/7 text-mist-400 italic dark:text-mist-500">[the image title as Unsplash gives it]</p>
+      
+      <p id="curated-item-4-reason" class="flex gap-3 text-base/7">
+        <span aria-hidden="true" class="inline-flex mt-0.5 size-6 text-sm shrink-0 items-center justify-center rounded-full bg-amber-100 font-display text-amber-900 dark:bg-amber-400/15 dark:text-amber-200">V</span>
+        <span class="min-w-0 text-pretty text-mist-800 dark:text-mist-200"><span class="font-semibold text-mist-950 dark:text-white">Why it’s here</span> “Visual representation of honesty and integrity concepts.”</span>
+      </p>
+      
+      <details id="curated-item-4-record" class="group/why">
+        <summary class="flex min-h-11 w-fit cursor-pointer list-none items-center gap-2 rounded-sm text-base/7 text-mist-600 dark:text-mist-400 hover:text-mist-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 sm:min-h-9 dark:hover:text-white dark:focus-visible:outline-white [&amp;::-webkit-details-marker]:hidden">
+          <span class="underline decoration-mist-950/20 underline-offset-4 dark:decoration-white/20">Record and evidence</span>
+          <span class="hero-chevron-down-mini size-5 text-mist-400 group-open/why:rotate-180"></span>
+        </summary>
+        <dl class="mt-2 flex flex-col gap-2 border-l-2 border-mist-950/10 pl-4 text-base/6 dark:border-white/10"><div><dt class="inline font-medium text-mist-950 dark:text-white">Meaning</dt> <dd class="inline text-mist-700 dark:text-mist-300">truth, noun</dd></div><div><dt class="inline font-medium text-mist-950 dark:text-white">Found</dt> <dd class="inline text-mist-700 dark:text-mist-300">29 October 2026, 20:46 UTC</dd></div><div><dt class="inline font-medium text-mist-950 dark:text-white">Shown until</dt> <dd class="inline text-mist-700 dark:text-mist-300">5 November 2026</dd></div><div><dt class="inline font-medium text-mist-950 dark:text-white">Exact record</dt> <dd class="inline text-mist-700 dark:text-mist-300"><a href="#" class="rounded-sm underline decoration-mist-950/30 underline-offset-4 hover:decoration-current focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:decoration-white/30 dark:focus-visible:outline-white">the choice on the receipt</a></dd></div></dl>
+      </details>
+    </li>
+    <li id="curated-item-5" class="flex min-w-0 flex-col gap-3 py-6 first:pt-0 last:pb-0">
+      <p class="text-base/6 font-medium text-mist-700 dark:text-mist-300">Film <span class="font-normal text-mist-600 dark:text-mist-400">· CineGraph · found 29 October 2026</span></p><p class="font-display text-xl/7 text-mist-400 italic dark:text-mist-500">[the title as CineGraph gives it]</p>
+      
+      <p id="curated-item-5-reason" class="flex gap-3 text-base/7">
+        <span aria-hidden="true" class="inline-flex mt-0.5 size-6 text-sm shrink-0 items-center justify-center rounded-full bg-amber-100 font-display text-amber-900 dark:bg-amber-400/15 dark:text-amber-200">V</span>
+        <span class="min-w-0 text-pretty text-mist-800 dark:text-mist-200"><span class="font-semibold text-mist-950 dark:text-white">Why it’s here</span> “Documentary examines the reality behind silenced truths.”</span>
+      </p>
+      
+      <details id="curated-item-5-record" class="group/why">
+        <summary class="flex min-h-11 w-fit cursor-pointer list-none items-center gap-2 rounded-sm text-base/7 text-mist-600 dark:text-mist-400 hover:text-mist-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 sm:min-h-9 dark:hover:text-white dark:focus-visible:outline-white [&amp;::-webkit-details-marker]:hidden">
+          <span class="underline decoration-mist-950/20 underline-offset-4 dark:decoration-white/20">Record and evidence</span>
+          <span class="hero-chevron-down-mini size-5 text-mist-400 group-open/why:rotate-180"></span>
+        </summary>
+        <dl class="mt-2 flex flex-col gap-2 border-l-2 border-mist-950/10 pl-4 text-base/6 dark:border-white/10"><div><dt class="inline font-medium text-mist-950 dark:text-white">Meaning</dt> <dd class="inline text-mist-700 dark:text-mist-300">truth, noun</dd></div><div><dt class="inline font-medium text-mist-950 dark:text-white">Found</dt> <dd class="inline text-mist-700 dark:text-mist-300">29 October 2026, 20:45 UTC</dd></div><div><dt class="inline font-medium text-mist-950 dark:text-white">Shown until</dt> <dd class="inline text-mist-700 dark:text-mist-300">5 November 2026</dd></div><div><dt class="inline font-medium text-mist-950 dark:text-white">Exact record</dt> <dd class="inline text-mist-700 dark:text-mist-300"><a href="#" class="rounded-sm underline decoration-mist-950/30 underline-offset-4 hover:decoration-current focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:decoration-white/30 dark:focus-visible:outline-white">the choice on the receipt</a></dd></div></dl>
+      </details>
+    </li>
+    <li id="curated-item-6" class="flex min-w-0 flex-col gap-3 py-6 first:pt-0 last:pb-0">
+      <p class="text-base/6 font-medium text-mist-700 dark:text-mist-300">Music <span class="font-normal text-mist-600 dark:text-mist-400">· Spotify · found 3 November 2026</span></p><p class="font-display text-xl/7 text-mist-400 italic dark:text-mist-500">[the title as Spotify gives it]</p>
+      
+      <p id="curated-item-6-reason" class="flex gap-3 text-base/7">
+        <span aria-hidden="true" class="inline-flex mt-0.5 size-6 text-sm shrink-0 items-center justify-center rounded-full bg-amber-100 font-display text-amber-900 dark:bg-amber-400/15 dark:text-amber-200">V</span>
+        <span class="min-w-0 text-pretty text-mist-800 dark:text-mist-200"><span class="font-semibold text-mist-950 dark:text-white">Why it’s here</span> “Album title directly references the concept of truth.”</span>
+      </p>
+      
+      <details id="curated-item-6-record" class="group/why">
+        <summary class="flex min-h-11 w-fit cursor-pointer list-none items-center gap-2 rounded-sm text-base/7 text-mist-600 dark:text-mist-400 hover:text-mist-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 sm:min-h-9 dark:hover:text-white dark:focus-visible:outline-white [&amp;::-webkit-details-marker]:hidden">
+          <span class="underline decoration-mist-950/20 underline-offset-4 dark:decoration-white/20">Record and evidence</span>
+          <span class="hero-chevron-down-mini size-5 text-mist-400 group-open/why:rotate-180"></span>
+        </summary>
+        <dl class="mt-2 flex flex-col gap-2 border-l-2 border-mist-950/10 pl-4 text-base/6 dark:border-white/10"><div><dt class="inline font-medium text-mist-950 dark:text-white">Meaning</dt> <dd class="inline text-mist-700 dark:text-mist-300">truth, noun</dd></div><div><dt class="inline font-medium text-mist-950 dark:text-white">Found</dt> <dd class="inline text-mist-700 dark:text-mist-300">3 November 2026, 03:07 UTC</dd></div><div><dt class="inline font-medium text-mist-950 dark:text-white">Shown until</dt> <dd class="inline text-mist-700 dark:text-mist-300">10 November 2026</dd></div><div><dt class="inline font-medium text-mist-950 dark:text-white">Exact record</dt> <dd class="inline text-mist-700 dark:text-mist-300"><a href="#" class="rounded-sm underline decoration-mist-950/30 underline-offset-4 hover:decoration-current focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:decoration-white/30 dark:focus-visible:outline-white">the choice on the receipt</a></dd></div></dl>
+      </details>
+    </li>
+    <li id="curated-item-7" class="flex min-w-0 flex-col gap-3 py-6 first:pt-0 last:pb-0">
+      <p class="text-base/6 font-medium text-mist-700 dark:text-mist-300">Book <span class="font-normal text-mist-600 dark:text-mist-400">· Open Library · found 29 October 2026</span></p><p class="font-display text-xl/7 text-mist-400 italic dark:text-mist-500">[the title as Open Library gives it]</p>
+      
+      <p id="curated-item-7-reason" class="flex gap-3 text-base/7">
+        <span aria-hidden="true" class="inline-flex mt-0.5 size-6 text-sm shrink-0 items-center justify-center rounded-full bg-amber-100 font-display text-amber-900 dark:bg-amber-400/15 dark:text-amber-200">V</span>
+        <span class="min-w-0 text-pretty text-mist-800 dark:text-mist-200"><span class="font-semibold text-mist-950 dark:text-white">Why it’s here</span> “Philosophical text exploring politics and moral truth.”</span>
+      </p>
+      
+      <details id="curated-item-7-record" class="group/why">
+        <summary class="flex min-h-11 w-fit cursor-pointer list-none items-center gap-2 rounded-sm text-base/7 text-mist-600 dark:text-mist-400 hover:text-mist-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 sm:min-h-9 dark:hover:text-white dark:focus-visible:outline-white [&amp;::-webkit-details-marker]:hidden">
+          <span class="underline decoration-mist-950/20 underline-offset-4 dark:decoration-white/20">Record and evidence</span>
+          <span class="hero-chevron-down-mini size-5 text-mist-400 group-open/why:rotate-180"></span>
+        </summary>
+        <dl class="mt-2 flex flex-col gap-2 border-l-2 border-mist-950/10 pl-4 text-base/6 dark:border-white/10"><div><dt class="inline font-medium text-mist-950 dark:text-white">Meaning</dt> <dd class="inline text-mist-700 dark:text-mist-300">truth, noun</dd></div><div><dt class="inline font-medium text-mist-950 dark:text-white">Found</dt> <dd class="inline text-mist-700 dark:text-mist-300">29 October 2026, 20:45 UTC</dd></div><div><dt class="inline font-medium text-mist-950 dark:text-white">Shown until</dt> <dd class="inline text-mist-700 dark:text-mist-300">5 November 2026</dd></div><div><dt class="inline font-medium text-mist-950 dark:text-white">Exact record</dt> <dd class="inline text-mist-700 dark:text-mist-300"><a href="#" class="rounded-sm underline decoration-mist-950/30 underline-offset-4 hover:decoration-current focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:decoration-white/30 dark:focus-visible:outline-white">the choice on the receipt</a></dd></div></dl>
+      </details>
+    </li>
+    <li id="curated-item-8" class="flex min-w-0 flex-col gap-3 py-6 first:pt-0 last:pb-0">
+      <p class="text-base/6 font-medium text-mist-700 dark:text-mist-300">Poem <span class="font-normal text-mist-600 dark:text-mist-400">· PoetryDB · found 29 October 2026</span></p><p class="font-display text-xl/7 text-mist-400 italic dark:text-mist-500">[the title as PoetryDB gives it]</p>
+      
+      <p id="curated-item-8-reason" class="flex gap-3 text-base/7">
+        <span aria-hidden="true" class="inline-flex mt-0.5 size-6 text-sm shrink-0 items-center justify-center rounded-full bg-amber-100 font-display text-amber-900 dark:bg-amber-400/15 dark:text-amber-200">V</span>
+        <span class="min-w-0 text-pretty text-mist-800 dark:text-mist-200"><span class="font-semibold text-mist-950 dark:text-white">Why it’s here</span> “Poem explores themes of revolution and genuine reality.”</span>
+      </p>
+      
+      <details id="curated-item-8-record" class="group/why">
+        <summary class="flex min-h-11 w-fit cursor-pointer list-none items-center gap-2 rounded-sm text-base/7 text-mist-600 dark:text-mist-400 hover:text-mist-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 sm:min-h-9 dark:hover:text-white dark:focus-visible:outline-white [&amp;::-webkit-details-marker]:hidden">
+          <span class="underline decoration-mist-950/20 underline-offset-4 dark:decoration-white/20">Record and evidence</span>
+          <span class="hero-chevron-down-mini size-5 text-mist-400 group-open/why:rotate-180"></span>
+        </summary>
+        <dl class="mt-2 flex flex-col gap-2 border-l-2 border-mist-950/10 pl-4 text-base/6 dark:border-white/10"><div><dt class="inline font-medium text-mist-950 dark:text-white">Meaning</dt> <dd class="inline text-mist-700 dark:text-mist-300">truth, noun</dd></div><div><dt class="inline font-medium text-mist-950 dark:text-white">Found</dt> <dd class="inline text-mist-700 dark:text-mist-300">29 October 2026, 20:46 UTC</dd></div><div><dt class="inline font-medium text-mist-950 dark:text-white">Shown until</dt> <dd class="inline text-mist-700 dark:text-mist-300">5 November 2026</dd></div><div><dt class="inline font-medium text-mist-950 dark:text-white">Exact record</dt> <dd class="inline text-mist-700 dark:text-mist-300"><a href="#" class="rounded-sm underline decoration-mist-950/30 underline-offset-4 hover:decoration-current focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:decoration-white/30 dark:focus-visible:outline-white">the choice on the receipt</a></dd></div></dl>
+      </details>
+    </li></ul>
+  </section>
+    </div>
+    <aside id="curated-rail" aria-label="The editor and related words" class="min-w-0 lg:border-t lg:border-mist-950/10 lg:pt-8 dark:lg:border-white/10">
+    <section id="curated-editor" aria-labelledby="curated-editor-heading" class="flex flex-col gap-4 border-t border-mist-950/10 py-8 lg:border-t-0 lg:pt-0 dark:border-white/10">
+      <h2 id="curated-editor-heading" class="font-display text-3xl/9 tracking-tight">The editor</h2>
+      <p class="flex items-center gap-3 text-base/7 font-medium"><span aria-hidden="true" class="inline-flex size-7 text-base shrink-0 items-center justify-center rounded-full bg-amber-100 font-display text-amber-900 dark:bg-amber-400/15 dark:text-amber-200">V</span>An AI editor inspired by Voltaire</p>
+      <p class="text-lg/7 text-pretty">Looks for sourced material that tests a confident claim against its consequences.</p>
+      <p class="text-base/6 text-pretty text-mist-600 dark:text-mist-400">“An AI selection lens inspired by Voltaire; not his voice or an assertion of his opinions about modern events.”</p>
+      <p class="text-base/7 text-pretty">This page holds entries from 4 dictionaries, 19 senses, their quotations, and what discovery found for truth. The editor chose 10.</p>
+      <a href="#" class="flex min-h-11 w-fit items-center font-medium rounded-sm underline decoration-mist-950/30 underline-offset-4 hover:decoration-current focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:decoration-white/30 dark:focus-visible:outline-white">Everything this page holds →</a>
+    </section>
+    <section id="curated-related" aria-labelledby="curated-related-heading" class="flex flex-col gap-4 border-t border-mist-950/10 py-8 dark:border-white/10">
+      <h2 id="curated-related-heading" class="font-display text-3xl/9 tracking-tight">Related words</h2>
+      <ul role="list" class="flex flex-wrap gap-2"><li><a href="#" class="flex min-h-11 items-center rounded-full bg-mist-950/5 px-3 text-base/6 hover:bg-mist-950/10 sm:min-h-8 dark:bg-white/10 dark:hover:bg-white/15">God honest truth</a></li><li><a href="#" class="flex min-h-11 items-center rounded-full bg-mist-950/5 px-3 text-base/6 hover:bg-mist-950/10 sm:min-h-8 dark:bg-white/10 dark:hover:bg-white/15">God&#x27;s honest truth</a></li><li><a href="#" class="flex min-h-11 items-center rounded-full bg-mist-950/5 px-3 text-base/6 hover:bg-mist-950/10 sm:min-h-8 dark:bg-white/10 dark:hover:bg-white/15">God&#x27;s truth</a></li><li><a href="#" class="flex min-h-11 items-center rounded-full bg-mist-950/5 px-3 text-base/6 hover:bg-mist-950/10 sm:min-h-8 dark:bg-white/10 dark:hover:bg-white/15">Gospel truth</a></li><li><a href="#" class="flex min-h-11 items-center rounded-full bg-mist-950/5 px-3 text-base/6 hover:bg-mist-950/10 sm:min-h-8 dark:bg-white/10 dark:hover:bg-white/15">National Day for Truth and Reconciliation</a></li><li><a href="#" class="flex min-h-11 items-center rounded-full bg-mist-950/5 px-3 text-base/6 hover:bg-mist-950/10 sm:min-h-8 dark:bg-white/10 dark:hover:bg-white/15">ReTruth</a></li><li><a href="#" class="flex min-h-11 items-center rounded-full bg-mist-950/5 px-3 text-base/6 hover:bg-mist-950/10 sm:min-h-8 dark:bg-white/10 dark:hover:bg-white/15">Spirit of Truth</a></li><li><a href="#" class="flex min-h-11 items-center rounded-full bg-mist-950/5 px-3 text-base/6 hover:bg-mist-950/10 sm:min-h-8 dark:bg-white/10 dark:hover:bg-white/15">Truth or Consequences</a></li></ul>
+    </section>
+    </aside>
+  </div>
+  <footer id="curated-provenance" class="flex flex-col gap-3 border-t border-mist-950/10 pt-8 text-base/7 text-mist-600 dark:text-mist-400 dark:border-white/10">
+    <h2 class="font-semibold text-mist-950 dark:text-white">About this version</h2>
+    <p class="text-pretty">Version 5 · published 3 November 2026, 03:14 UTC · instruction <span class="font-mono text-sm">voltaire-whole-entry-v6</span> · model <span class="font-mono text-sm">qwen3.5-9b-whole-voltaire-v6</span> · configuration version 8</p>
+    <p class="flex flex-wrap items-center gap-x-5"><a href="#" class="flex min-h-11 items-center rounded-sm underline decoration-mist-950/30 underline-offset-4 hover:decoration-current focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:decoration-white/30 dark:focus-visible:outline-white">How this page was curated →</a><span>Earlier versions: <a href="#" class="rounded-sm underline decoration-mist-950/30 underline-offset-4 hover:decoration-current focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:decoration-white/30 dark:focus-visible:outline-white">4</a>, <a href="#" class="rounded-sm underline decoration-mist-950/30 underline-offset-4 hover:decoration-current focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:decoration-white/30 dark:focus-visible:outline-white">3</a>, <a href="#" class="rounded-sm underline decoration-mist-950/30 underline-offset-4 hover:decoration-current focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:decoration-white/30 dark:focus-visible:outline-white">2</a>, <a href="#" class="rounded-sm underline decoration-mist-950/30 underline-offset-4 hover:decoration-current focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:decoration-white/30 dark:focus-visible:outline-white">1</a></span></p>
+  </footer>
+      </article>
+    </main>
+  </body>
+</html>
