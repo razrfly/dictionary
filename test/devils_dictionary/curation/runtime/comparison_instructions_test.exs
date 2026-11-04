@@ -109,7 +109,7 @@ defmodule DevilsDictionary.Curation.Runtime.ComparisonInstructionsTest do
                "3a3ef1f2511d3294dcaf77b238e971653eac61153dadfab788184128a3bca2ec"
 
       assert Digest.sha256(Packet.instruction!(@nudge)) ==
-               "3f404e5630e2a95f470dfd3eda80256ebec93ef87b42953014fd8d0fe76aa9c7"
+               "ac08a3d80c154b82da26a4fbdc68be1315a9854839876cfb613fae5f3144c6f6"
     end
 
     test "the generic control is v7's evidence policy without a dossier" do
@@ -186,6 +186,8 @@ defmodule DevilsDictionary.Curation.Runtime.ComparisonInstructionsTest do
 
       # The nudge never weakens the grounding rule it sits under.
       assert section =~ "own supplied fields evidence a supplied meaning of this entry"
+      # Its "every rule" includes the output and safety rules that follow it.
+      assert section =~ "under every rule in this instruction"
 
       assert section =~ "Leave a section empty only when no candidate in it is so supported."
       assert section =~ "never lowers the evidence bar"

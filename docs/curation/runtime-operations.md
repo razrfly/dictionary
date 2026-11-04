@@ -277,8 +277,8 @@ one thing each. `voltaire-whole-entry-v7-fixed-lead-cap200-v1` is the fixed-lead
 only its reason cap raised from 100 to 200 characters; `…-cap200-nudge-v1` adds one section
 before the output rules (`Packet.after_lead_section/0`) against lead-only pages.
 `WholeEntry.reason_cap/1` is the cap the schema, the validation and the text all read, and
-the two run under `selection-output-v5` (v4's shape at 200); every other instruction keeps
-v4 at 100.
+the two run under `selection-output-v5` (v4's shape at 200); every other section-output
+instruction keeps v4 at 100.
 
 ```
 mix dd.runtime setup --model qwen3.5:9b --slug qwen3.5-9b-whole-voltaire-v7-fixed-lead-cap200 \

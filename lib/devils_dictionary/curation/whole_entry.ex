@@ -57,6 +57,12 @@ defmodule DevilsDictionary.Curation.WholeEntry do
     "voltaire-whole-entry-v7-fixed-lead-cap200-nudge-v1" => 200
   }
 
+  # Only a comparison instruction raises its cap, and only to 200: the cap
+  # `selection-output-v5` names (`Runtime.Contract.version/1`).
+  for {instruction, cap} <- @reason_caps,
+      instruction not in @comparison or cap != 200,
+      do: raise("#{instruction}: only a comparison instruction may raise its cap, to 200")
+
   @doc """
   Every whole-entry instruction the runtime accepts: the publishing ones,
   then the comparison-only ones. The packet, section output and contract
