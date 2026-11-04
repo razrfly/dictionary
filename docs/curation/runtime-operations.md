@@ -256,6 +256,22 @@ mix dd.runtime setup --model qwen3.5:9b --slug qwen3.5-9b-whole-generic-v1 \
   --instruction generic-whole-entry-v1 --accept-license
 ```
 
+The persona arms (#307) are v7 with only the lens changed: `hitchens-whole-entry-v1` and
+`bierce-whole-entry-v1` are `Packet.grounded_with_lens/1` of each reviewed dossier's
+lens (`priv/curation/agents/personas/<slug>/v1/profile.json`), compiled in, so their
+policy sections are v7's byte for byte. They are comparison-only, like the generic
+control, and need their own model configs:
+
+```
+mix dd.runtime setup --model qwen3.5:9b --slug qwen3.5-9b-whole-hitchens-v1 \
+  --instruction hitchens-whole-entry-v1 --accept-license
+mix dd.runtime setup --model qwen3.5:9b --slug qwen3.5-9b-whole-bierce-v1 \
+  --instruction bierce-whole-entry-v1 --accept-license
+mix dd.runtime compare --batch s1-2026-11-05 --pilot --dry-run \
+  --arms V=qwen3.5-9b-whole-voltaire-v7,G=qwen3.5-9b-whole-generic-v1,H=qwen3.5-9b-whole-hitchens-v1,B=qwen3.5-9b-whole-bierce-v1 \
+  --out "/Volumes/LLM Models/dictionary/run/s1-2026-11-05/batch.json"
+```
+
 D6's four policy arms, dry run first (it calls and writes nothing):
 
 ```

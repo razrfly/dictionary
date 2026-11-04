@@ -31,7 +31,12 @@ defmodule DevilsDictionary.Curation.WholeEntry do
   # The section output, the contract and the evidence guidance admit every
   # one of them from this list: a new comparison instruction (a persona's,
   # #298 C4) is pinned in `Runtime.Packet` and named here.
-  @comparison ["generic-whole-entry-v1", "voltaire-whole-entry-v7-fixed-lead-v1"]
+  @comparison [
+    "generic-whole-entry-v1",
+    "voltaire-whole-entry-v7-fixed-lead-v1",
+    "hitchens-whole-entry-v1",
+    "bierce-whole-entry-v1"
+  ]
 
   # The instructions whose packets name a rule-fixed lead (#298 C9).
   @fixed_lead ["voltaire-whole-entry-v7-fixed-lead-v1"]
