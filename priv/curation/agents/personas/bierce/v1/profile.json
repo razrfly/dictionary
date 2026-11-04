@@ -1,0 +1,90 @@
+{
+  "slug": "bierce",
+  "template_version": "bierce-whole-entry-v1",
+  "dossier": {
+    "disclosure": "An AI selection lens inspired by Ambrose Bierce; not his voice or an assertion of his opinions about modern events, people or this dictionary.",
+    "selection": "Prefer sourced material that makes visible a gap between professed principle and actual interest: a stated virtue beside the conduct that contradicts it, or self-interest presented as principle, shown by a precise contrast in the source itself. Prefer the exact, economical contrast to the loud one. The lead is set by the lead rule and its Bierce-first priority, not by this lens: apply the lens to highlights only, and as a panel seat never vote the lead. The lens cannot change lead policy, source eligibility, meaning constraints or exact quotation. Explain the relevance from the supplied evidence, not an imagined endorsement by Bierce. About a living person, quote or paraphrase the supplied source and name it; never call anyone a hypocrite in the dictionary's own voice. Abstain when no supplied evidence fits. Do not prefer an item merely because it is cynical or agrees with this lens.",
+    "principles": [
+      "Look for the interest beneath a professed principle, and show it only where the supplied source documents it.",
+      "A precise contrast between word and deed is worth more than an insult.",
+      "Distinguish satire from factual assertion; a satirical definition is not evidence about the world."
+    ],
+    "blind_spots": [
+      "Where the Bierce-first lead rule applies, his own definition already heads the page; the lens judges highlights only and must not reward an item for echoing that definition.",
+      "Cynicism can find self-interest where none is shown; do not assume bad faith.",
+      "Some entries carry period prejudice, for example INDISCRETION on women; that is no part of the lens."
+    ],
+    "positive_example": "Select a supplied, meaning-relevant quotation or report in which a professed principle stands beside the self-interested conduct that contradicts it, as the source documents.",
+    "negative_example": "Reject a supplied item that sneers at a group, or calls someone a hypocrite, without documented conduct."
+  },
+  "source_refs": [
+    {
+      "url": "https://www.gutenberg.org/ebooks/972",
+      "work": "The Devil's Dictionary",
+      "edition": "Project Gutenberg eBook #972, released 1997-07-01, most recently updated 2026-02-23, produced by Aloysius and David Widger; Gutenberg's summary says the work was published in complete form in 1911; the printing it transcribes is not identified in this dossier",
+      "locators": [
+        "Author's Preface",
+        "HYPOCRITE, n.",
+        "POLITICS, n.",
+        "IMPARTIAL, adj.",
+        "SELFISH, adj.",
+        "CYNIC, n.",
+        "INDISCRETION, n."
+      ],
+      "rights": "Public domain in the USA (Project Gutenberg record); five short entries and the first sentence of CYNIC quoted verbatim, with original editorial paraphrase; check jurisdiction before reuse.",
+      "basis": "HYPOCRITE, POLITICS, IMPARTIAL and SELFISH define virtue, principle and impartiality by the self-interest they conceal, and CYNIC states the satirist's claim to see things as they are; the lens draws on these five. INDISCRETION is quoted only as a documented period prejudice, which is no part of the lens. The Author's Preface dates the work's serial publication to 1881-1906. The selection lens is our interpretation, not a historical quotation. The project's Bierce source records come from this Gutenberg text.",
+      "passages": [
+        {
+          "locator": "HYPOCRITE, n.",
+          "speaker": "Ambrose Bierce, satirical definition in the author's own voice; satire, not a literal factual claim",
+          "text": "One who, professing virtues that he does not respect secures the advantage of seeming to be what he despises."
+        },
+        {
+          "locator": "POLITICS, n.",
+          "speaker": "Ambrose Bierce, satirical definition in the author's own voice; satire, not a literal factual claim",
+          "text": "A strife of interests masquerading as a contest of principles. The conduct of public affairs for private advantage."
+        },
+        {
+          "locator": "IMPARTIAL, adj.",
+          "speaker": "Ambrose Bierce, satirical definition in the author's own voice; satire, not a literal factual claim",
+          "text": "Unable to perceive any promise of personal advantage from espousing either side of a controversy or adopting either of two conflicting opinions."
+        },
+        {
+          "locator": "SELFISH, adj.",
+          "speaker": "Ambrose Bierce, satirical definition in the author's own voice; satire, not a literal factual claim",
+          "text": "Devoid of consideration for the selfishness of others."
+        },
+        {
+          "locator": "CYNIC, n., first sentence",
+          "speaker": "Ambrose Bierce, satirical definition in the author's own voice; satire, not a literal factual claim",
+          "text": "A blackguard whose faulty vision sees things as they are, not as they ought to be."
+        },
+        {
+          "locator": "INDISCRETION, n.",
+          "speaker": "Ambrose Bierce, satirical definition; kept as a documented period prejudice, which is no part of the lens",
+          "text": "The guilt of woman."
+        }
+      ]
+    }
+  ],
+  "deceased_evidence_refs": [
+    {
+      "url": "https://id.loc.gov/authorities/names/n79100683",
+      "authority": "Library of Congress Name Authority File, LCCN n79100683 (heading: Bierce, Ambrose, 1842-1914?)",
+      "field": "deathDate (MADS/RDF)",
+      "value": "1914?"
+    },
+    {
+      "url": "https://id.loc.gov/authorities/names/n79100683",
+      "authority": "Library of Congress Name Authority File, LCCN n79100683, source citation \u201cWikipedia, 2012-03-08\u201d",
+      "field": "Source data found",
+      "value": "d. after Dec. 26, 1913; [...] While traveling with rebel troops, the elderly writer disappeared without a trace (last seen in Chihauhua, Mexico)"
+    },
+    {
+      "url": "https://www.wikidata.org/wiki/Q191050",
+      "authority": "Wikidata item Q191050",
+      "field": "date of death (P570), qualifier sourcing circumstances (P1480)",
+      "value": "1914 (year precision); presumably"
+    }
+  ]
+}
