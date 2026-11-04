@@ -19,7 +19,9 @@ defmodule DevilsDictionary.Curation.Runtime.Attempt do
 
     * the request key;
     * the packet's hash and a summary of ids, revision ids and excerpt
-      hashes;
+      hashes, and its evidence fingerprint (`Packet.evidence_fingerprint/1`);
+    * for a comparison attempt (#298 C2), its arm, its case and the sha256
+      of the page snapshot its packet was cut from;
     * the prompt's hash;
     * the validated result, with quotes as hashes and ranges;
     * refusal reasons and runtime metrics.
@@ -56,8 +58,14 @@ defmodule DevilsDictionary.Curation.Runtime.Attempt do
     field :service_id, :id
     field :model_config_id, :id
     field :request_key, :string
-    field :purpose, Ecto.Enum, values: [:request, :readiness_smoke, :benchmark]
+    field :purpose, Ecto.Enum, values: [:request, :readiness_smoke, :benchmark, :comparison]
     field :packet_hash, :string
+    # The digest of the evidence the packet shows (#298 C1), and, for a
+    # comparison attempt only, its arm, case and page snapshot (#298 C2, C9).
+    field :evidence_fingerprint, :string
+    field :arm, :string
+    field :comparison_case, :string
+    field :comparison_snapshot, :string
     field :packet_bytes, :integer
     field :packet_summary, :map
     field :prompt_sha256, :string

@@ -57,7 +57,8 @@ defmodule DevilsDictionary.Curation.Runtime do
       quarantined it, or a recovery ended it). Nothing more is sent;
     * `{:refused, reason}`: otherwise, nothing was admitted.
 
-  `opts`: `:request_key` and `:actor_id` (required), and `:purpose`.
+  `opts`: `:request_key` and `:actor_id` (required), `:purpose`, and for a
+  `:comparison` attempt (#298 C2) `:comparison`, `%{arm, case, snapshot}`.
   """
   def run(config_or_slug, packet, opts) do
     with {:ok, config} <- model_config(config_or_slug),
@@ -377,7 +378,8 @@ defmodule DevilsDictionary.Curation.Runtime do
     do:
       Map.merge(frozen, %{
         summary: Packet.summary(frozen),
-        prompt_sha256: Packet.prompt_sha256(frozen)
+        prompt_sha256: Packet.prompt_sha256(frozen),
+        evidence_fingerprint: Packet.evidence_fingerprint(frozen)
       })
 
   @doc "The receipt of an attempt: what an operator is told, and what the ledger holds."
@@ -393,6 +395,10 @@ defmodule DevilsDictionary.Curation.Runtime do
       metrics: a.metrics,
       fence: a.fence,
       packet_hash: a.packet_hash,
+      prompt_sha256: a.prompt_sha256,
+      evidence_fingerprint: a.evidence_fingerprint,
+      arm: a.arm,
+      comparison_case: a.comparison_case,
       model_config_id: a.model_config_id,
       transport_retries: a.transport_retries,
       reserved_ms: a.reserved_ms,

@@ -233,6 +233,98 @@ same scope with unchanged inputs gives the same packet hash, so a second rehears
 replays the first receipt: it sends nothing, and its record says `replay`. A changed
 packet is a new request key and a new attempt.
 
+## A comparison batch (#298 C2, C9)
+
+A comparison batch runs matched, **non-publishing** arms on pilot pages, all cut from one
+frozen snapshot (`Runtime.Compare`). An arm is `LABEL=MODEL-CONFIG[:CUT]`: the model config
+pins the instruction, and the cut is `current` (the live `whole-entry-cut-v1`, the default)
+or `text` (`whole-entry-text-cut-v1`: no books, films, images, music, poems, works or
+news; the freed slots refilled from text-bearing kinds under the same 24/12 bounds). The
+fixed-lead instruction `voltaire-whole-entry-v7-fixed-lead-v1` differs from v7 only in its
+lead section: where the page has an applicable Bierce entry, the packet names it as
+`fixed_lead`, the model returns a null lead and chooses highlights only, and the result's
+lead carries a rule statement (`reason_origin: rule`), never model text. A page without one
+keeps v7's model-selected lead.
+
+The comparison instructions need their own immutable model configs on the same artifact
+(a live step, on the owner's yes; no pull):
+
+```
+mix dd.runtime setup --model qwen3.5:9b --slug qwen3.5-9b-whole-voltaire-v7-fixed-lead \
+  --instruction voltaire-whole-entry-v7-fixed-lead-v1 --accept-license
+mix dd.runtime setup --model qwen3.5:9b --slug qwen3.5-9b-whole-generic-v1 \
+  --instruction generic-whole-entry-v1 --accept-license
+```
+
+D6's four policy arms, dry run first (it calls and writes nothing):
+
+```
+mix dd.runtime compare --batch d6-2026-11-04 --pilot --dry-run \
+  --arms A0=qwen3.5-9b-whole-voltaire-v7,P=qwen3.5-9b-whole-voltaire-v7:text,L=qwen3.5-9b-whole-voltaire-v7-fixed-lead,PL=qwen3.5-9b-whole-voltaire-v7-fixed-lead:text \
+  --out "/Volumes/LLM Models/dictionary/run/d6-2026-11-04/batch.json"
+mix dd.runtime compare --batch d6-2026-11-04 --pilot --window-minutes 60 \
+  --arms A0=qwen3.5-9b-whole-voltaire-v7,P=qwen3.5-9b-whole-voltaire-v7:text,L=qwen3.5-9b-whole-voltaire-v7-fixed-lead,PL=qwen3.5-9b-whole-voltaire-v7-fixed-lead:text \
+  --out "/Volumes/LLM Models/dictionary/run/d6-2026-11-04/batch.json"
+```
+
+What it does:
+1. **Freezes** every page's snapshot and every arm's packet in one repeatable-read,
+   read-only transaction, before any call. A page's snapshot records its scope, shelf
+   generation, meanings, the screen's offered pool by key, ids and evidence hashes, the
+   applicable Bierce entries and the earliest shelf expiry, with its own sha256; the batch
+   snapshot hashes them all. Each arm's packet has an **evidence fingerprint**
+   (`Packet.evidence_fingerprint/1`: scope, meanings, candidates by ids and hashes,
+   priority candidates and shelf generation; not the instruction, prompt, guidance, schema,
+   cut or omissions). Arms that share a cut must share it: A0 = L, P = PL.
+2. **Dry run** prints, per case (`BATCH:SLUG:1`), each arm's fingerprint, packet hash,
+   candidate count, priority candidates and fixed lead, and whether the case is matched.
+   Give it the run's `--out`: it looks for an existing record of the batch beside it.
+3. **Refuses** (and the dry run says it would) while any configuration's editor is enabled,
+   since the arms share the slot and the daily budget with due assessments, and when the
+   batch id is already used: it has comparison attempts, or a batch record names it
+   (under `priv/curation/runtime_bench/comparisons/` or beside `--out`), even one that
+   halted before its first attempt. A batch id is used once, so a re-run never replays old
+   attempts under a new snapshot or leaves two records. A halted batch is not resumed;
+   start a new id.
+4. **Runs** (without `--dry-run`) only if the service is bound to the connected database.
+   It sends each case's arms back to back as `purpose: comparison` attempts under
+   `comparison:BATCH:SLUG:N:LABEL`, on the one slot and the shared daily budget. Each
+   attempt stores its arm, case, page snapshot sha256 and evidence fingerprint. Nothing
+   writes a composition version, proposal or publication, and the database refuses one
+   that names a comparison attempt.
+5. **Unmatched cases** (fingerprints differ, the snapshot's earliest shelf expiry passed
+   before an arm ran, whatever that arm's own packet holds, or an arm's packet went stale) keep every result as unmatched, and the complete page and
+   arm set is retried once on a new snapshot as `BATCH:SLUG:2`. Arms from two snapshots
+   are never combined. Any other refusal (slot, budget, readiness) or an uncertain call
+   halts the batch; later pages are recorded `not_run`. So is any case after the batch
+   window (`--window-minutes`, 60 from the freeze).
+6. Writes one batch record (`--out`; never overwritten): arms with model config ids and
+   hashes, instruction sha256, output contract and guidance policy; every snapshot; every
+   case's status and attempt ids. Ids and hashes only.
+
+Read the results, read-only, with no server:
+
+```
+DD_NO_OBAN=1 mix dd.curation.coverage --comparison d6-2026-11-04 \
+  --record "/Volumes/LLM Models/dictionary/run/d6-2026-11-04/batch.json"
+```
+
+The record is required: from it the report lists every case the run tried, in its
+order, with the run's status and reason and its attempts, including cases with none
+(unmatched at the freeze, expired before the first arm, not runnable, not run after a
+halt). Unmatched pages are reported, never dropped.
+
+Per case and arm it gives the attempt id, evidence fingerprint, packet hash, prompt sha256,
+model config hash, instruction and cut, the decision, the lead and whether it is the
+priority candidate (`null` on a page without one), every proposed choice by candidate id
+with meaning id, kind, section, reason sha256 and reason origin (`model`, `rule`,
+`withheld`), highlights by section and kind, model-written reason and rule-statement
+counts, the eligible pool, omissions by reason and cost; per case, the record's status
+and reason, the attempt count, `complete` and `matched`; per arm, totals. No provider text and no reason text: judges read reasons
+from the attempts themselves when scoring under scorecard v2.
+
+Run batches with the editor disabled, under a stop guard (`ops/curation/trial-stop/`).
+
 ## The operating window
 
 The service runs only in a window the owner opens by hand. There is no LaunchAgent and no

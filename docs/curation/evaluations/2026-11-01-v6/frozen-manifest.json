@@ -1,0 +1,100 @@
+{
+  "artifact_manifest": "6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7",
+  "baseline_publications": [
+    [
+      1,
+      10,
+      "open"
+    ],
+    [
+      2,
+      19,
+      "open"
+    ],
+    [
+      3,
+      13,
+      "open"
+    ],
+    [
+      4,
+      14,
+      "open"
+    ],
+    [
+      5,
+      11,
+      "open"
+    ],
+    [
+      6,
+      15,
+      "open"
+    ],
+    [
+      7,
+      16,
+      "open"
+    ],
+    [
+      8,
+      17,
+      "open"
+    ],
+    [
+      9,
+      18,
+      "open"
+    ],
+    [
+      10,
+      null,
+      "open"
+    ]
+  ],
+  "bot_actor_id": 25,
+  "code_sha": "9a17333d9aa364e1116ecc12ea2b0c1ce0c08738",
+  "configuration_id": 1,
+  "configuration_manifest_hash": "47e863aef943d3f3e3442c765fae4fdfe1a7aac94bddc379b2bbd820396e68ea",
+  "configuration_version_id": 8,
+  "developer_review": "prospective clock begins at first love result inspection",
+  "ends_at": "2026-11-04T02:50:07+00:00",
+  "frozen_at": "2026-11-01T02:51:55.470251Z",
+  "generation": {
+    "keep_alive": "10m",
+    "num_ctx": 8192,
+    "num_predict": 1024,
+    "seed": 195,
+    "temperature": 0,
+    "think": false
+  },
+  "instruction": "voltaire-whole-entry-v6",
+  "instruction_sha256": "e037baf1f599d321ea35ba740bb0d5deaf3bbfb880ec47ce6c33bdfb96e67212",
+  "limits": "8K context/1024 output/120s call/30min shared daily; one physical slot",
+  "model_config_hash": "cbc60195dbb15b548f243229f808c9acd49c9bb6aca789a8e23ba41e31e6d135",
+  "model_config_id": 7,
+  "packet_policy": "whole_entry_v1;24 candidates;12 meanings;12 highlights",
+  "pages": [
+    "love",
+    "nepotism",
+    "greed",
+    "war",
+    "coward",
+    "patience",
+    "justice",
+    "truth",
+    "hope",
+    "bestiality"
+  ],
+  "persona_manifest_hash": "6641802e5012771c5694053d7c6030feee0b5fa1ef3ee9d40f85d862df880542",
+  "primary_cohort": "First assessment per named page after cutoff and within this fixed window; all failed/refused/abstained retained; repairs separate",
+  "profile_id": 2,
+  "profile_version": 6,
+  "profile_version_id": 7,
+  "scorecard_sha256": "156ee53110b7c8ecad98291a8087c91b831e2a07c1c47f19aca4e269ee7cd1a9",
+  "started_at": "2026-11-01T02:50:07+00:00",
+  "starting_attempt_cutoff": 35,
+  "status": "frozen-before-calls",
+  "trial": "v6-ten-page-three-day",
+  "weights_digest": "dec52a44569a2a25341c4e4d3fee25846eed4f6f0b936278e3a3c900bb99d37c"
+}

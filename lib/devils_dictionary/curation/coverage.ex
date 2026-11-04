@@ -18,9 +18,10 @@ defmodule DevilsDictionary.Curation.Coverage do
     WholeEntry
   }
 
-  alias DevilsDictionary.Curation.Runtime.{Attempt, ModelConfig}
+  alias DevilsDictionary.Curation.Digest
+  alias DevilsDictionary.Curation.Runtime.{Attempt, LedgerEntry, ModelConfig}
 
-  @omissions ~w(over_quota meaning_out_of_bound meaning_unavailable no_excerpt outside_shelf_focus)
+  @omissions ~w(over_quota meaning_out_of_bound meaning_unavailable no_excerpt outside_shelf_focus text_cut_excluded)
   @kinds ~w(content sense_definition sense_quotation work exemplar claim shelf)
   @sections ~w(definitions examples quotes images films music books poems news)
 
@@ -120,6 +121,293 @@ defmodule DevilsDictionary.Curation.Coverage do
             )
         ),
       selected_candidate_ids: if(is_list(choices), do: Enum.map(choices, & &1["candidate_id"]))
+    }
+  end
+
+  # ── comparison batches (#298 C5, C9) ─────────────────────────────────────
+
+  @doc """
+  The comparison report of batch `batch_id`, read from its `comparison`
+  attempts only: per case (page, case number, snapshot) and arm, the
+  attempt id, evidence fingerprint, packet hash, prompt sha256, model config
+  id and hash, instruction and cut, the decision, the lead (and whether it
+  is the priority candidate, or that the page has none), every proposed
+  choice by candidate id with its meaning id, kind, section, reason sha256
+  and reason origin (`model`, `rule` for a fixed lead's rule statement, or
+  `withheld`), highlights by section and by kind, model-written reason and
+  rule-statement counts, the eligible pool, omissions by reason and cost
+  (wall ms, tokens, charged ms). A case is `complete` when it has every arm
+  the batch ran anywhere, and `matched` when it is complete and arms that
+  share a cut share one evidence fingerprint.
+
+  `opts[:record]` is the batch record `mix dd.runtime compare` wrote,
+  decoded. With it, every case the run tried is listed, in the run's order,
+  with the run's status and reason (`matched`, `unmatched`, `not_runnable`,
+  `not_run`) and its attempts, including cases with none: unmatched at the
+  freeze, expired before the first arm, not runnable, or not run after a
+  halt. Unmatched pages are reported, never dropped. The record's arms are
+  the batch's arms, and a case is `matched` only when the run said so too.
+  Without a record only cases with attempts can be listed, and the report
+  says so (`case_list`). `{:error, :record_for_another_batch}` when the
+  record names another batch.
+
+  Counts, ids and hashes only: no provider text and no reason text.
+  """
+  def comparison(batch_id, opts \\ [])
+
+  def comparison(batch_id, opts) when is_binary(batch_id) do
+    case Keyword.get(opts, :record) do
+      %{"batch" => other} when other != batch_id -> {:error, :record_for_another_batch}
+      record -> comparison_report(batch_id, record)
+    end
+  end
+
+  defp comparison_report(batch_id, record) do
+    attempts =
+      Repo.all(
+        from a in Attempt,
+          where:
+            a.purpose == :comparison and
+              fragment("split_part(?, ':', 1) = ?", a.comparison_case, ^batch_id),
+          order_by: a.id
+      )
+
+    ids = Enum.map(attempts, & &1.id)
+    config_ids = attempts |> Enum.map(& &1.model_config_id) |> Enum.uniq()
+
+    configs =
+      Repo.all(from c in ModelConfig, where: c.id in ^config_ids) |> Map.new(&{&1.id, &1})
+
+    charged =
+      Repo.all(
+        from e in LedgerEntry,
+          where: e.attempt_id in ^ids and e.kind == :charge,
+          group_by: e.attempt_id,
+          select: {e.attempt_id, sum(e.amount_ms)}
+      )
+      |> Map.new()
+
+    rows = Enum.map(attempts, &comparison_row(&1, configs, charged))
+    recorded = record && record["cases"]
+
+    expected =
+      case record do
+        %{"arms" => [_ | _] = arms} -> arms |> Enum.map(& &1["label"]) |> Enum.sort()
+        _ -> rows |> Enum.map(& &1.arm) |> Enum.uniq() |> Enum.sort()
+      end
+
+    attempted =
+      rows
+      |> Enum.group_by(& &1.comparison_case)
+      |> Enum.map(fn {case_id, arms} -> comparison_case(case_id, arms, expected) end)
+      |> Enum.sort_by(&{page_rank(&1.page), &1.case_number})
+
+    cases = if is_list(recorded), do: with_record(attempted, recorded), else: attempted
+
+    %{
+      report_version: "curation-comparison-v2",
+      batch: batch_id,
+      observed_at: DateTime.utc_now(),
+      fingerprint_rule:
+        "matched = complete and, within each cut, one evidence fingerprint (#{DevilsDictionary.Curation.Runtime.Packet.fingerprint_scheme()}); with a record, also the run's own status",
+      case_list:
+        cond do
+          is_list(recorded) ->
+            "every case in the batch record"
+
+          is_map(record) ->
+            "record has no cases (status #{inspect(record["status"])}); cases with attempts only"
+
+          true ->
+            "no record read: cases with attempts only"
+        end,
+      arms: expected,
+      cases_by_status: Enum.frequencies_by(cases, &(&1[:record_status] || "attempts_only")),
+      cases: cases,
+      totals: Map.new(expected, &{&1, arm_totals(&1, cases)})
+    }
+  end
+
+  # Every case of the record, in the run's order, with its attempts; then any
+  # case with attempts that the record does not name.
+  defp with_record(attempted, recorded) do
+    by_id = Map.new(attempted, &{&1.case_id, &1})
+
+    listed =
+      Enum.map(recorded, fn rc ->
+        base =
+          Map.get_lazy(by_id, rc["case_id"], fn ->
+            %{
+              case_id: rc["case_id"],
+              page: rc["slug"],
+              case_number: rc["n"],
+              snapshot: List.wrap(rc["snapshot_sha256"]),
+              complete: false,
+              matched: false,
+              fingerprints_by_cut: %{},
+              arms: []
+            }
+          end)
+
+        Map.merge(base, %{
+          record_status: rc["status"],
+          record_reason: rc["reason"],
+          attempts: length(base.arms),
+          matched: base.matched and rc["status"] == "matched"
+        })
+      end)
+
+    names = MapSet.new(recorded, & &1["case_id"])
+
+    extra =
+      for c <- attempted, not MapSet.member?(names, c.case_id) do
+        Map.merge(c, %{
+          record_status: "not_in_record",
+          record_reason: nil,
+          attempts: length(c.arms),
+          matched: false
+        })
+      end
+
+    listed ++ extra
+  end
+
+  defp page_rank(slug), do: Enum.find_index(Pilot.autonomous_pages(), &(&1 == slug)) || 99
+
+  defp comparison_case(case_id, arms, expected) do
+    [_batch, page, n] = String.split(case_id, ":")
+    arms = Enum.sort_by(arms, &Enum.find_index(expected, fn label -> label == &1.arm end))
+
+    fingerprints =
+      arms
+      |> Enum.group_by(& &1.cut, & &1.evidence_fingerprint)
+      |> Map.new(fn {cut, prints} -> {cut, Enum.uniq(prints)} end)
+
+    complete = Enum.sort(Enum.map(arms, & &1.arm)) == expected
+
+    %{
+      case_id: case_id,
+      page: page,
+      case_number: String.to_integer(n),
+      snapshot: arms |> Enum.map(& &1.snapshot) |> Enum.uniq(),
+      complete: complete,
+      matched: complete and Enum.all?(Map.values(fingerprints), &(length(&1) == 1)),
+      fingerprints_by_cut: fingerprints,
+      arms: arms
+    }
+  end
+
+  defp comparison_row(%Attempt{} = a, configs, charged) do
+    summary = a.packet_summary || %{}
+    candidates = summary["candidates"] || []
+    by_id = Map.new(candidates, &{&1["candidate_id"], &1})
+    priority = summary["priority_candidates"] || []
+    result = if is_map(a.result), do: a.result, else: %{}
+    lead = result["lead"]
+    highlights = result["highlights"] || []
+
+    choices =
+      Enum.map(
+        List.wrap(lead && {lead, "lead"}) ++ Enum.map(highlights, &{&1, "highlight"}),
+        &choice_row(&1, by_id)
+      )
+
+    highlight_rows = Enum.filter(choices, &(&1.role == "highlight"))
+    config = configs[a.model_config_id]
+    metrics = a.metrics || %{}
+    omitted = summary["omitted"]
+
+    %{
+      arm: a.arm,
+      comparison_case: a.comparison_case,
+      snapshot: a.comparison_snapshot,
+      attempt_id: a.id,
+      state: a.state,
+      outcome: a.outcome,
+      decision: result["decision"] || (a.outcome && to_string(a.outcome)),
+      refusal_reasons: a.refusal_reasons,
+      evidence_fingerprint: a.evidence_fingerprint,
+      packet_hash: a.packet_hash,
+      prompt_sha256: a.prompt_sha256,
+      model_config_id: a.model_config_id,
+      model_config_hash: config && config.config_hash,
+      instruction_version: summary["instruction_version"],
+      cut: get_in(summary, ["policy", "cut"]),
+      eligible_pool: get_in(summary, ["counts", "offered"]),
+      packet_candidates: length(candidates),
+      packet_by_section: Enum.frequencies_by(candidates, &section/1),
+      omitted: if(is_list(omitted), do: length(omitted)),
+      omitted_by_reason:
+        if(is_list(omitted),
+          do:
+            Enum.frequencies_by(omitted, fn row ->
+              if row["reason"] in @omissions, do: row["reason"], else: "unknown"
+            end)
+        ),
+      priority_candidates: priority,
+      fixed_lead: summary["fixed_lead"],
+      lead: lead && Enum.find(choices, &(&1.role == "lead")),
+      lead_is_priority:
+        cond do
+          priority == [] -> nil
+          is_map(lead) -> lead["candidate_id"] in priority
+          true -> false
+        end,
+      choices: choices,
+      highlights: length(highlight_rows),
+      highlights_by_section: Enum.frequencies_by(highlight_rows, & &1.section),
+      highlights_by_kind: Enum.frequencies_by(highlight_rows, & &1.kind),
+      model_written_reasons: Enum.count(choices, &(&1.reason_origin == "model")),
+      rule_statements: Enum.count(choices, &(&1.reason_origin == "rule")),
+      withheld_reasons: Enum.count(choices, &(&1.reason_origin == "withheld")),
+      cost: %{
+        wall_ms: metrics["wall_ms"],
+        prompt_tokens: metrics["prompt_eval_count"],
+        output_tokens: metrics["eval_count"],
+        charged_ms: charged[a.id]
+      }
+    }
+  end
+
+  defp choice_row({choice, role}, by_id) do
+    candidate = by_id[choice["candidate_id"]] || %{}
+
+    %{
+      role: role,
+      candidate_id: choice["candidate_id"],
+      meaning_id: choice["meaning_id"],
+      kind: candidate["kind"],
+      section: section(candidate),
+      reason_sha256: is_binary(choice["reason"]) && Digest.sha256(choice["reason"]),
+      reason_origin:
+        cond do
+          choice["reason_origin"] == "rule" -> "rule"
+          is_nil(choice["reason"]) -> "withheld"
+          true -> "model"
+        end
+    }
+  end
+
+  defp arm_totals(label, cases) do
+    rows = for c <- cases, row <- c.arms, row.arm == label, do: {c, row}
+    sum = fn f -> rows |> Enum.map(fn {_c, r} -> f.(r) || 0 end) |> Enum.sum() end
+
+    %{
+      cases: length(rows),
+      matched_cases: Enum.count(rows, fn {c, _r} -> c.matched end),
+      decisions: Enum.frequencies_by(rows, fn {_c, r} -> r.decision end),
+      lead_is_priority: Enum.frequencies_by(rows, fn {_c, r} -> inspect(r.lead_is_priority) end),
+      highlights: sum.(& &1.highlights),
+      highlights_by_section:
+        Enum.reduce(rows, %{}, fn {_c, r}, acc ->
+          Map.merge(acc, r.highlights_by_section, fn _k, a, b -> a + b end)
+        end),
+      model_written_reasons: sum.(& &1.model_written_reasons),
+      rule_statements: sum.(& &1.rule_statements),
+      wall_ms: sum.(& &1.cost.wall_ms),
+      prompt_tokens: sum.(& &1.cost.prompt_tokens),
+      output_tokens: sum.(& &1.cost.output_tokens),
+      charged_ms: sum.(& &1.cost.charged_ms)
     }
   end
 

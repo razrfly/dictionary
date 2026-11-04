@@ -1,0 +1,258 @@
+{
+  "observed_at": "2026-11-01T06:01:04.080665+00:00",
+  "rubric": "scorecard-v2-2026-10-31",
+  "judgments": {
+    "patience": {
+      "attempt": 41,
+      "choices": [
+        [
+          "c1",
+          "supported",
+          "grounded"
+        ],
+        [
+          "c5",
+          "supported",
+          "grounded"
+        ],
+        [
+          "c3",
+          "supported",
+          "grounded"
+        ],
+        [
+          "c4",
+          "supported",
+          "grounded",
+          "Explicit given-name sense and quoted naming context supplied."
+        ],
+        [
+          "c20",
+          "insufficient",
+          "unsupported",
+          "Queen of the yard does not contain patience; no novel text supplied."
+        ],
+        [
+          "c21",
+          "insufficient",
+          "unsupported",
+          "Peace title alone does not establish patience virtue."
+        ]
+      ]
+    },
+    "justice": {
+      "attempt": 42,
+      "choices": [
+        [
+          "c1",
+          "supported",
+          "grounded"
+        ],
+        [
+          "c7",
+          "supported",
+          "grounded"
+        ],
+        [
+          "c4",
+          "supported",
+          "unsupported",
+          "Quotation describes even-handed consequences returning to the wrongdoer; failure of justice is not established."
+        ],
+        [
+          "c6",
+          "supported",
+          "grounded"
+        ],
+        [
+          "c22",
+          "insufficient",
+          "unsupported",
+          "Constitutional-law title does not supply content clarifying legal enforcement."
+        ],
+        [
+          "c24",
+          "supported",
+          "policy-withheld/unassessable",
+          "Headline supports a modest rule-of-law/justice connection; withheld reason cannot be treated as grounded."
+        ]
+      ]
+    },
+    "hope": {
+      "attempt": 44,
+      "choices": [
+        [
+          "c1",
+          "supported",
+          "grounded"
+        ],
+        [
+          "c9",
+          "supported",
+          "grounded"
+        ],
+        [
+          "c12",
+          "supported",
+          "grounded"
+        ],
+        [
+          "c4",
+          "supported",
+          "grounded"
+        ],
+        [
+          "c21",
+          "supported",
+          "grounded"
+        ],
+        [
+          "c18",
+          "insufficient",
+          "grounded",
+          "Title word observation is modest but does not demonstrate intended meaning."
+        ],
+        [
+          "c19",
+          "insufficient",
+          "unsupported",
+          "The Eve of Revolution title does not establish hope concept; no poem text supplied."
+        ]
+      ]
+    },
+    "war": {
+      "attempt": 39,
+      "choices": [
+        [
+          "c1",
+          "supported",
+          "grounded"
+        ],
+        [
+          "c8",
+          "supported",
+          "grounded"
+        ],
+        [
+          "c12",
+          "supported",
+          "grounded"
+        ],
+        [
+          "c13",
+          "supported",
+          "grounded"
+        ],
+        [
+          "c21",
+          "supported",
+          "grounded"
+        ],
+        [
+          "c6",
+          "supported",
+          "grounded"
+        ],
+        [
+          "c7",
+          "wrong",
+          "unsupported",
+          "Threatened swan title cannot establish the bound organized large-scale armed-conflict sense; no image supplied."
+        ],
+        [
+          "c16",
+          "insufficient",
+          "grounded",
+          "Love & War title observation is modest; it does not establish intended meaning in unseen film."
+        ],
+        [
+          "c17",
+          "insufficient",
+          "grounded",
+          "War music title observation is modest; it does not establish intended meaning in unseen music."
+        ],
+        [
+          "c18",
+          "insufficient",
+          "unsupported",
+          "Magog title does not establish a conflict illustration."
+        ],
+        [
+          "c19",
+          "insufficient",
+          "grounded",
+          "Title can evoke anticipation of revolution, but does not establish intended war meaning."
+        ],
+        [
+          "c20",
+          "insufficient",
+          "unsupported",
+          "Government spending headline does not supply metaphorical conflict connection."
+        ]
+      ]
+    },
+    "truth": {
+      "attempt": 43,
+      "choices": [
+        [
+          "c1",
+          "supported",
+          "grounded"
+        ],
+        [
+          "c7",
+          "supported",
+          "grounded"
+        ],
+        [
+          "c3",
+          "supported",
+          "grounded"
+        ],
+        [
+          "c6",
+          "supported",
+          "grounded"
+        ],
+        [
+          "c12",
+          "insufficient",
+          "grounded",
+          "Caption establishes written word truth, but not intended semantic meaning."
+        ],
+        [
+          "c19",
+          "insufficient",
+          "unsupported",
+          "Cards & Cognac title does not establish genuine reality."
+        ],
+        [
+          "c14",
+          "insufficient",
+          "grounded",
+          "Title directly references truth but no actual thematic evidence supplied."
+        ],
+        [
+          "c21",
+          "insufficient",
+          "unsupported",
+          "Bibliographic title supports reconciliation topic, not asserted genuine-reality contents."
+        ],
+        [
+          "c16",
+          "insufficient",
+          "unsupported",
+          "Essay on Criticism title supplies no evidence for claimed truth commentary."
+        ],
+        [
+          "c23",
+          "insufficient",
+          "unsupported",
+          "Headline supports generational influences, not claimed reality/truth connection."
+        ]
+      ]
+    }
+  },
+  "method": "Read-only supplied evidence verified against original keys and revision/label/excerpt/representation hashes; no provider payloads archived.",
+  "review_minutes": "unmeasured"
+}

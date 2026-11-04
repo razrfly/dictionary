@@ -1,0 +1,74 @@
+{
+  "checked_at": "2026-11-01T02:54:27.571387+00:00",
+  "pass": true,
+  "gate": "operational love-first check, not quality approval",
+  "attempt_id": 36,
+  "composition_version_id": 20,
+  "public_receipt": "/on/love/receipt/5",
+  "packet_hash_verified": "68cf71df4e1b070ba516ee1e9730db8b1f433e51dacb04faa26159b5e7309205",
+  "publication": "automatic single_editor_v1; exact references and provenance visible",
+  "quality_verdict": "NO-GO: unsupported published explanations; experiment continues for diagnosis under unchanged scorecard",
+  "primary_choices": 7,
+  "meaning": {
+    "supported": 4,
+    "wrong": 0,
+    "insufficient_supplied_evidence": 3
+  },
+  "reasons": {
+    "grounded": 5,
+    "unsupported_or_misattributed": 2,
+    "policy_withheld_unassessable": 0
+  },
+  "judgments": [
+    {
+      "candidate": "c1",
+      "meaning": "supported",
+      "reason": "grounded"
+    },
+    {
+      "candidate": "c2",
+      "meaning": "supported",
+      "reason": "grounded"
+    },
+    {
+      "candidate": "c12",
+      "meaning": "supported",
+      "reason": "grounded"
+    },
+    {
+      "candidate": "c21",
+      "meaning": "supported",
+      "reason": "grounded"
+    },
+    {
+      "candidate": "c7",
+      "meaning": "insufficient supplied evidence",
+      "reason": "unsupported",
+      "basis": "catalog title/creator/date do not support affectionate depiction or specific benevolent-care sense"
+    },
+    {
+      "candidate": "c18",
+      "meaning": "insufficient supplied evidence",
+      "reason": "grounded",
+      "basis": "modest bibliographic reason is supported; title alone does not establish intended meaning"
+    },
+    {
+      "candidate": "c19",
+      "meaning": "insufficient supplied evidence",
+      "reason": "unsupported",
+      "basis": "poem title and creator only; no supplied text supports affection/devotion claim"
+    }
+  ],
+  "all_proposed_placements_published": true,
+  "review_minutes": 5,
+  "metrics": {
+    "prompt_tokens": 2699,
+    "output_tokens": 441,
+    "wall_ms": 13471,
+    "swap_bytes": 0,
+    "free_memory_percent_before": 88,
+    "free_memory_percent_after": 76
+  },
+  "source_content_write": "none observed; selector publication path only",
+  "further_action": "release trial-created holds on remaining nine; do not tune or retry to replace primary result"
+}

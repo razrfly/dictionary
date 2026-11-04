@@ -1,0 +1,130 @@
+{
+ "observed_at": "2026-11-03T15:38:55Z",
+ "rubric": "scorecard-v2-2026-10-31 (sha256 156ee531\u2026, unchanged)",
+ "cohort": "v7 primary: first assessment per page after cutoff 66, attempts 67-76",
+ "method": "Read-only: each published item's exact record (content revision, assertion revision, sense revision, shelf citation and source record revision) and each attempt's packet summary (meanings, candidate kinds and ids); bases are the judge's own words; no provider payloads retained.",
+ "choices": [
+  {
+   "page": "love",
+   "attempt": 67,
+   "candidate": "c1",
+   "role": "lead",
+   "record": "content_revision 411 (Bierce LOVE, 1911)",
+   "meaning": "supported",
+   "reason": "grounded"
+  },
+  {
+   "page": "war",
+   "attempt": 70,
+   "candidate": "c1",
+   "role": "lead",
+   "record": "content_revision 983 (Bierce WAR, 1911)",
+   "meaning": "supported",
+   "reason": "unsupported",
+   "basis": "Reason calls peace the by-product; the entry makes war the by-product of the arts of peace. The soil-and-seeds clause is accurate.",
+   "borderline": true
+  },
+  {
+   "page": "war",
+   "attempt": 70,
+   "candidate": "c12",
+   "role": "highlight",
+   "record": "assertion_revision 4123481 (instance_hypernym: Peloponnesian War -> sense 237184)",
+   "meaning": "supported",
+   "reason": "grounded"
+  },
+  {
+   "page": "war",
+   "attempt": 70,
+   "candidate": "c13",
+   "role": "highlight",
+   "record": "assertion_revision 4213740 (instance_hypernym: Balkan Wars -> sense 237184)",
+   "meaning": "supported",
+   "reason": "grounded"
+  },
+  {
+   "page": "war",
+   "attempt": 70,
+   "candidate": "c14",
+   "role": "highlight",
+   "record": "shelf_citation 144, source_record_revision 6989263 (Wikiquote, attributed quotation)",
+   "meaning": "supported",
+   "reason": "grounded"
+  },
+  {
+   "page": "war",
+   "attempt": 70,
+   "candidate": "c21",
+   "role": "highlight",
+   "record": "shelf_citation 62, source_record_revision 6989262 (Wikiquote, attributed quotation)",
+   "meaning": "supported",
+   "reason": "grounded",
+   "basis": "Compresses the quotation's point (no war is good; war always kills innocents) but does not reverse it.",
+   "borderline": true
+  },
+  {
+   "page": "coward",
+   "attempt": 71,
+   "candidate": "c1",
+   "role": "lead",
+   "record": "content_revision 41 (Bierce COWARD, 1911)",
+   "meaning": "supported",
+   "reason": "grounded"
+  },
+  {
+   "page": "justice",
+   "attempt": 73,
+   "candidate": "c1",
+   "role": "lead",
+   "record": "content_revision 466 (Bierce JUSTICE, 1911)",
+   "meaning": "supported",
+   "reason": "grounded"
+  },
+  {
+   "page": "hope",
+   "attempt": 75,
+   "candidate": "c1",
+   "role": "lead",
+   "record": "content_revision 207 (Bierce HOPE, 1911)",
+   "meaning": "supported",
+   "reason": "grounded"
+  }
+ ],
+ "assembly_omissions": 0,
+ "published_placements": 9,
+ "meaning_counts": {
+  "supported": 9,
+  "wrong": 0,
+  "insufficient": 0
+ },
+ "reason_counts": {
+  "grounded": 8,
+  "unsupported_or_misattributed": 1,
+  "policy_withheld_unassessable": 0
+ },
+ "primary_supported_rate": "9/9 = 100 percent (small denominator; v6 was 43/73 = 58.9 percent)",
+ "scoring_coverage": "9/9",
+ "page_outcomes": {
+  "love": "lead only: exact sourced lead, every optional section empty",
+  "war": "useful: exact sourced lead and four supported highlights; one misattributed lead reason",
+  "coward": "lead only",
+  "justice": "lead only",
+  "hope": "lead only",
+  "greed": "incorrect abstention: three exact noun sense definitions (c7-c9) offered and called irrelevant",
+  "patience": "incorrect abstention: Bierce priority lead offered and rejected",
+  "truth": "incorrect abstention: Bierce priority lead offered and rejected",
+  "bestiality": "incorrect abstention: eight eligible sense definitions (c4-c11) offered (the v6 regression persists)",
+  "nepotism": "failed/refused: decision_inconsistent (attempt 68); automatic retries are repairs and separate (77 refused too)"
+ },
+ "quality_verdict": "NO-GO",
+ "quality_reasons": [
+  "ten useful entries: not met (four incorrect abstentions including bestiality, one refusal, four lead-only pages)",
+  "zero unsupported or misattributed published explanations: not met (war lead reason)",
+  "90 percent supported across all proposed choices: met on 9 choices, but the denominator is small"
+ ],
+ "lead_only_note": "Lead-only pages are not counted as useful entries here. Whether each empty optional section was justified is not assessed; it does not change the verdict.",
+ "review_clock": {
+  "started_at": "2026-11-03T15:37:00Z",
+  "stopped_at": "2026-11-03T15:38:55Z"
+ }
+}

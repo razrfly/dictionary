@@ -1,0 +1,65 @@
+{
+  "observed_at": "2026-11-01T06:01:04.080665+00:00",
+  "status": "primary-cohort scored; 72-hour operational trial still running",
+  "primary_attempts": [
+    36,
+    37,
+    38,
+    39,
+    40,
+    41,
+    42,
+    43,
+    44,
+    45
+  ],
+  "all_proposed_choices": 73,
+  "actual_published_placements": 72,
+  "assembly_omissions": 1,
+  "meaning_counts": {
+    "supported": 43,
+    "insufficient": 27,
+    "wrong": 3
+  },
+  "reason_counts": {
+    "grounded": 52,
+    "unsupported": 20,
+    "policy-withheld/unassessable": 1
+  },
+  "primary_supported_rate": 0.589041095890411,
+  "scoring_coverage": 0.6301369863013698,
+  "secondary_assessable_only_rate": 0.9347826086956522,
+  "denominator": "All 73 proposed choices including unpublished assembly omission; wrong and insufficient remain in primary denominator; no choices for abstained bestiality.",
+  "quality_verdict": "NO-GO",
+  "quality_reasons": [
+    "Supported meaning below 90 percent across all proposed choices",
+    "Unsupported published explanations observed",
+    "Bestiality incorrectly abstained despite eight eligible supplied native sense definitions"
+  ],
+  "page_outcomes": {
+    "nepotism": "useful sourced core with separately scored supplementary quality defects",
+    "greed": "useful sourced core with separately scored supplementary quality defects",
+    "war": "useful sourced core with separately scored supplementary quality defects",
+    "love": "useful sourced core with separately scored supplementary quality defects",
+    "coward": "useful sourced core with separately scored supplementary quality defects",
+    "patience": "useful sourced core with separately scored supplementary quality defects",
+    "justice": "useful sourced core with separately scored supplementary quality defects",
+    "truth": "useful sourced core with separately scored supplementary quality defects",
+    "hope": "useful sourced core with separately scored supplementary quality defects",
+    "bestiality": "incorrect abstention"
+  },
+  "limits": [
+    "Page usefulness is developer judgment of supplied native core, not independent reader evaluation.",
+    "Only love receipt and article were directly checked in browser; other publication placements and current statuses are evidenced by read-only coverage.",
+    "No new full payload archives; all evidence comparisons were transient reads.",
+    "One assembly omission still requires reference mapping for published-only explanation denominator.",
+    "Developer review time after love is unmeasured; do not infer it from elapsed inference.",
+    "Day-2/day-3, hold/offline/unchanged checks remain pending or unproved; no operational GO yet."
+  ],
+  "judgment_files": [
+    "love-gate.json",
+    "judgments-hour2.json",
+    "judgments-hour3.json"
+  ],
+  "next": "Observe unchanged frozen v6 trial; no tuning, extra calls, new pages or agents. Preserve deadline."
+}

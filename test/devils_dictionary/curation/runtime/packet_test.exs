@@ -26,6 +26,7 @@ defmodule DevilsDictionary.Curation.Runtime.PacketTest do
       assert Packet.instruction_versions() == [
                "generic-editor-v1",
                "generic-editor-v2",
+               "generic-whole-entry-v1",
                "voltaire-selector-v1",
                "voltaire-whole-entry-v1",
                "voltaire-whole-entry-v2",
@@ -33,7 +34,8 @@ defmodule DevilsDictionary.Curation.Runtime.PacketTest do
                "voltaire-whole-entry-v4",
                "voltaire-whole-entry-v5",
                "voltaire-whole-entry-v6",
-               "voltaire-whole-entry-v7"
+               "voltaire-whole-entry-v7",
+               "voltaire-whole-entry-v7-fixed-lead-v1"
              ]
 
       grounded = Packet.instruction!("voltaire-whole-entry-v7")

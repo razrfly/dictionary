@@ -1,0 +1,118 @@
+{
+  "window": "three 6-hour cycles: stop 18 hours after the freeze, before the cycle-4 dues",
+  "configuration_version_id": 9,
+  "primary_cohort": "First assessment per named page after the freeze cutoff and within this fixed window; all failed/refused/abstained retained; repairs separate; v6 record untouched",
+  "packet_policy": "whole_entry_v1;24 candidates;12 meanings;12 highlights",
+  "code_sha": "d33a6559533d23bc38aad00b4fcd5ea4d1ed35c5",
+  "template_digest": "b507b9c2f6ca642bffcd06665ea7c91f235fd32daeefdf875a0f938db05fb315",
+  "limits": "8K context/1024 output/120s call/30min shared daily; one physical slot",
+  "weights_digest": "dec52a44569a2a25341c4e4d3fee25846eed4f6f0b936278e3a3c900bb99d37c",
+  "ends_at": "2026-11-04T09:18:26Z",
+  "issue": "razrfly/dictionary#298 Part B",
+  "configuration_id": 1,
+  "model_config_id": 8,
+  "predecessor": "/Volumes/LLM Models/dictionary/run/v6-three-day-2026-11-01",
+  "bot_actor_id": 26,
+  "profile_version": 7,
+  "reviewed_head": "f15daf3bbb2bbda1491c30da63baf5148d8ac005",
+  "dossier": "priv/curation/agents/personas/voltaire/v8/profile.json",
+  "lifecycle_schedule": {
+    "offline_deferral": "justice (composition 9), cycle 3: private service stopped 10 minutes before its due time and started within 15 minutes; inconclusive if no attempt was admitted during the outage; one further try allowed on another page's due time inside the window; the stop deadline never moves",
+    "owner_hold": "patience (composition 8): mode mine at least 60 minutes before its cycle-2 due time; mode open after the cycle-2 due window has passed; expected: an assessment runs after release (cycle 2 late or cycle 3)",
+    "unchanged_assessment": "observed only (A3)"
+  },
+  "model_config_hash": "81a12ded27922d23d0bded61d9755c1f8499fb3098ea618f20360b4625203735",
+  "status": "frozen-before-calls",
+  "trial": "v7-ten-page-three-cycle-6h",
+  "stop_deadline_epoch": 1793783906,
+  "owner_decision": "2 Nov 2026: \"Build 6h windows\" (6-hour cycles instead of 24-hour days for the v7 retest)",
+  "developer_review": "prospective clock begins at first love result inspection",
+  "scorecard_sha256": "156ee53110b7c8ecad98291a8087c91b831e2a07c1c47f19aca4e269ee7cd1a9",
+  "pages": [
+    "love",
+    "nepotism",
+    "greed",
+    "war",
+    "coward",
+    "patience",
+    "justice",
+    "truth",
+    "hope",
+    "bestiality"
+  ],
+  "configuration_manifest_hash": "9783e4f9c9154427dd5150e4f3888d53e475f8ebd32cfe70c7535d15ceccccc2",
+  "starting_attempt_cutoff": 66,
+  "refresh_window_seconds": 21600,
+  "profile_version_id": 8,
+  "instruction_sha256": "a3219a5c496dbbfc6d731d87138191293a7f8243f4080f8b2067f27d5d8e853c",
+  "judgments": "each attempt judged within 20 hours (news retention 23 hours) and before the next cycle where possible; ids, digests and short bases only",
+  "persona_manifest_hash": "7db26817adb954b0da5162954327e372a2d853171bf848510e5c5998d0995efb",
+  "frozen_at": "2026-11-03T15:18:26.521437Z",
+  "model_config_slug": "qwen3.5-9b-whole-voltaire-v7",
+  "generation": {
+    "keep_alive": "10m",
+    "num_ctx": 8192,
+    "num_predict": 1024,
+    "seed": 195,
+    "temperature": 0,
+    "think": false
+  },
+  "profile_id": 2,
+  "started_at": "2026-11-03T15:18:26Z",
+  "artifact_manifest": "6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7",
+  "migration": "20261101170541_admit_grounded_selection_instruction",
+  "baseline_publications": [
+    [
+      1,
+      38,
+      "open"
+    ],
+    [
+      2,
+      41,
+      "open"
+    ],
+    [
+      3,
+      46,
+      "open"
+    ],
+    [
+      4,
+      45,
+      "open"
+    ],
+    [
+      5,
+      42,
+      "open"
+    ],
+    [
+      6,
+      39,
+      "open"
+    ],
+    [
+      7,
+      40,
+      "open"
+    ],
+    [
+      8,
+      43,
+      "open"
+    ],
+    [
+      9,
+      44,
+      "open"
+    ],
+    [
+      10,
+      null,
+      "open"
+    ]
+  ],
+  "code_note": "PR #301 merged 3 Nov 2026 01:14:36 UTC as d33a655 (parents 8d738f1, f15daf3); fast-forward from 9a17333; one migration 20261101170541; no config/*.exs or mix.lock change; CodeRabbit: no actionable comments",
+  "instruction": "voltaire-whole-entry-v7"
+}

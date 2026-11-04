@@ -69,11 +69,21 @@ defmodule DevilsDictionary.Curation.Runtime.Gateway do
       `:paused`, `:budget_exhausted` or `:pending_cap_reached`.
 
   `opts`: `:request_key` and `:actor_id` (required), `:purpose` (`:request`),
+  `:comparison` (for a `:comparison` attempt, `%{arm, case, snapshot}`),
   `:owner`, `:service_key` and `:now`.
   """
   def admit(%ModelConfig{} = config, %{hash: hash, bytes: bytes} = frozen, opts) do
-    request_key = Keyword.fetch!(opts, :request_key)
     purpose = Keyword.get(opts, :purpose, :request)
+
+    # A comparison attempt carries its arm, case and snapshot, and no other
+    # attempt does (`inference_attempts_comparison_shape`).
+    if purpose == :comparison == is_map(Keyword.get(opts, :comparison)),
+      do: admit_checked(config, hash, bytes, frozen, purpose, opts),
+      else: {:refused, :comparison_identity_mismatch}
+  end
+
+  defp admit_checked(config, hash, bytes, frozen, purpose, opts) do
+    request_key = Keyword.fetch!(opts, :request_key)
     now = now(opts)
 
     {:ok, result} =
@@ -127,6 +137,13 @@ defmodule DevilsDictionary.Curation.Runtime.Gateway do
     if remaining >= Endpoint.reservation_ms(opts), do: :ok, else: {:refused, :budget_exhausted}
   end
 
+  defp comparison(opts, key) do
+    case Keyword.get(opts, :comparison) do
+      %{} = comparison -> Map.fetch!(comparison, key)
+      nil -> nil
+    end
+  end
+
   defp insert_admitted!(service, config, frozen, bytes, purpose, request_key, now, opts) do
     fence = service.fence + 1
     reserved = Endpoint.reservation_ms(opts)
@@ -142,6 +159,10 @@ defmodule DevilsDictionary.Curation.Runtime.Gateway do
         packet_bytes: bytes,
         packet_summary: Map.get(frozen, :summary, %{}),
         prompt_sha256: Map.get(frozen, :prompt_sha256),
+        evidence_fingerprint: Map.get(frozen, :evidence_fingerprint),
+        arm: comparison(opts, :arm),
+        comparison_case: comparison(opts, :case),
+        comparison_snapshot: comparison(opts, :snapshot),
         requested_by_actor_id: Keyword.fetch!(opts, :actor_id),
         owner: Keyword.get_lazy(opts, :owner, &owner/0),
         fence: fence,

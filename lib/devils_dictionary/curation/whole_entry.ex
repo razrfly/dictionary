@@ -14,16 +14,43 @@ defmodule DevilsDictionary.Curation.WholeEntry do
   def sections, do: Enum.map(@limits, &elem(&1, 0))
   def limit(section), do: Map.get(Map.new(@limits), section, 1)
 
-  def instructions,
-    do: [
-      "voltaire-whole-entry-v1",
-      "voltaire-whole-entry-v2",
-      "voltaire-whole-entry-v3",
-      "voltaire-whole-entry-v4",
-      "voltaire-whole-entry-v5",
-      "voltaire-whole-entry-v6",
-      "voltaire-whole-entry-v7"
-    ]
+  # The instructions a configuration may bind for publication: the database's
+  # configuration CHECK and author guard admit exactly these.
+  @publishing [
+    "voltaire-whole-entry-v1",
+    "voltaire-whole-entry-v2",
+    "voltaire-whole-entry-v3",
+    "voltaire-whole-entry-v4",
+    "voltaire-whole-entry-v5",
+    "voltaire-whole-entry-v6",
+    "voltaire-whole-entry-v7"
+  ]
+
+  # Comparison-only instructions (#298 C3, C9): the runtime builds, sends and
+  # validates their whole-entry packets, and no configuration binds them.
+  # The section output, the contract and the evidence guidance admit every
+  # one of them from this list: a new comparison instruction (a persona's,
+  # #298 C4) is pinned in `Runtime.Packet` and named here.
+  @comparison ["generic-whole-entry-v1", "voltaire-whole-entry-v7-fixed-lead-v1"]
+
+  # The instructions whose packets name a rule-fixed lead (#298 C9).
+  @fixed_lead ["voltaire-whole-entry-v7-fixed-lead-v1"]
+
+  @doc """
+  Every whole-entry instruction the runtime accepts: the publishing ones,
+  then the comparison-only ones. The packet, section output and contract
+  allowlists follow it.
+  """
+  def instructions, do: @publishing ++ @comparison
+
+  @doc "The whole-entry instructions a configuration may bind for publication."
+  def publishing_instructions, do: @publishing
+
+  @doc "The whole-entry instructions only a comparison arm runs."
+  def comparison_instructions, do: @comparison
+
+  @doc "The instructions whose packets carry a rule-fixed lead."
+  def fixed_lead_instructions, do: @fixed_lead
 
   def instruction, do: "voltaire-whole-entry-v6"
   def enabled?(%{manifest: m}), do: m["selection_scope"] == "whole_entry_v1"
@@ -139,8 +166,10 @@ defmodule DevilsDictionary.Curation.WholeEntry do
         _ -> nil
       end
 
+    # A comparison-only instruction is coherent in neither shape: it never
+    # reaches a configuration (#298 §5).
     if whole,
-      do: instruction in instructions() and manifest["max_highlights"] == 12,
+      do: instruction in @publishing and manifest["max_highlights"] == 12,
       else: instruction not in instructions() and manifest["max_highlights"] in 0..3
   end
 end

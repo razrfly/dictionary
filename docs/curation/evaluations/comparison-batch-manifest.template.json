@@ -1,0 +1,40 @@
+{
+  "template": "curation-comparison-batch-manifest-v1 (#298 C7, D0): copy, fill, freeze before any call; the batch record from `mix dd.runtime compare --out` is the result, this is the plan",
+  "batch": "<batch id, e.g. d6-2026-11-04: ^[a-z0-9][a-z0-9._-]{2,63}$>",
+  "issue": "razrfly/dictionary#298 <D6|D1|D2|D3>",
+  "status": "frozen-before-calls",
+  "frozen_at": "<UTC ISO 8601>",
+  "deadline": "<UTC ISO 8601: the stop guard's deadline>",
+  "stop_deadline_epoch": "<integer>",
+  "window_minutes": 60,
+  "code_sha": "<deployed serving checkout HEAD>",
+  "migration": "<newest applied migration>",
+  "editor": "disabled throughout; no arm publishes",
+  "pages": ["nepotism", "greed", "war", "love", "coward", "patience", "justice", "truth", "hope", "bestiality"],
+  "generation_offset": 0,
+  "arms": [
+    {
+      "label": "<A0|P|L|PL|...>",
+      "model_config_id": "<id>",
+      "model_config_slug": "<slug>",
+      "model_config_hash": "<sha256>",
+      "artifact_manifest": "<manifest digest>",
+      "weights_digest": "<weights digest>",
+      "generation": {"num_ctx": 8192, "num_predict": 1024, "seed": 195, "temperature": 0, "think": false},
+      "instruction": "<instruction version>",
+      "instruction_sha256": "<sha256>",
+      "dossier": "<persona manifest path and hash, or none>",
+      "evidence_guidance": "<evidence-guidance-v1 or null>",
+      "cut": "<current|text>",
+      "lead": "<model-selected | rule-fixed where a priority candidate exists>"
+    }
+  ],
+  "differs_in": "<exactly what varies across arms, e.g. packet cut x lead rule (D6); instruction only (D2); model config only (D1)>",
+  "case_identity": "BATCH:SLUG:N, N = 1, or 2 for the one retry of an unmatched case on a new snapshot",
+  "evidence_fingerprint_rule": "evidence-fingerprint-v1; arms sharing a cut must share one fingerprint; a case is matched when complete and so",
+  "scoring": "scorecard v2 (sha256 156ee53110b7c8ecad98291a8087c91b831e2a07c1c47f19aca4e269ee7cd1a9), every proposed choice of every arm, within 20 hours; fixed-lead rule statements counted apart from model-written reasons",
+  "measures": ["useful pages (of 10, bestiality included)", "supported meaning across all proposed choices", "unsupported or misattributed reasons (model-written; rule statements apart)", "lead correctness against the priority candidate"],
+  "starting_attempt_cutoff": "<max inference_attempts.id at freeze>",
+  "dry_run": "<the dry run's output file and time>",
+  "owner_decision": "<the owner's yes, quoted, with its date>"
+}

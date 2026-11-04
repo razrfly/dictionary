@@ -1,0 +1,161 @@
+{
+  "observed_at": "2026-11-01T04:56:55.484062+00:00",
+  "rubric": "scorecard-v2-2026-10-31",
+  "method": "Read-only native/current provider evidence matched to original candidate key, exact revision and stored label/excerpt/representation hashes; no payloads retained. All proposed choices scored, including assembly omissions.",
+  "judgments": {
+    "nepotism": {
+      "attempt": 37,
+      "choices": [
+        [
+          "c1",
+          "supported",
+          "grounded"
+        ],
+        [
+          "c5",
+          "supported",
+          "grounded"
+        ],
+        [
+          "c3",
+          "supported",
+          "grounded"
+        ],
+        [
+          "c4",
+          "supported",
+          "grounded"
+        ],
+        [
+          "c13",
+          "insufficient",
+          "unsupported",
+          "Film title supplies no celebrity-favoritism theme."
+        ],
+        [
+          "c20",
+          "insufficient",
+          "grounded",
+          "Bibliographic title supports a modest title observation, not demonstrated meaning relevance."
+        ],
+        [
+          "c11",
+          "supported",
+          "grounded",
+          "Headline explicitly identifies nepotism and entertainment interview context."
+        ]
+      ]
+    },
+    "greed": {
+      "attempt": 38,
+      "choices": [
+        [
+          "c9",
+          "supported",
+          "grounded"
+        ],
+        [
+          "c7",
+          "supported",
+          "grounded"
+        ],
+        [
+          "c4",
+          "supported",
+          "grounded"
+        ],
+        [
+          "c19",
+          "supported",
+          "grounded"
+        ],
+        [
+          "c23",
+          "insufficient",
+          "grounded",
+          "Title names the subjects, but no supplied text establishes the intended meaning."
+        ],
+        [
+          "c24",
+          "wrong",
+          "grounded",
+          "Market Fear/Greed index is a different use from the supplied excessive-possession desire senses; reason stays close to headline."
+        ]
+      ]
+    },
+    "coward": {
+      "attempt": 40,
+      "choices": [
+        [
+          "c1",
+          "supported",
+          "grounded"
+        ],
+        [
+          "c2",
+          "supported",
+          "grounded"
+        ],
+        [
+          "c12",
+          "supported",
+          "grounded"
+        ],
+        [
+          "c13",
+          "supported",
+          "grounded"
+        ],
+        [
+          "c21",
+          "supported",
+          "grounded"
+        ],
+        [
+          "c3",
+          "supported",
+          "grounded"
+        ],
+        [
+          "c15",
+          "insufficient",
+          "grounded",
+          "Caption describes fear/despair but does not establish lack of courage or a coward."
+        ],
+        [
+          "c23",
+          "insufficient",
+          "unsupported",
+          "Force Majeure title does not directly reference cowardice; no synopsis supplied."
+        ],
+        [
+          "c17",
+          "insufficient",
+          "unsupported",
+          "Coward music title alone does not establish explored themes."
+        ],
+        [
+          "c18",
+          "wrong",
+          "unsupported",
+          "Noel Coward proper name is not the supplied coward meaning; supplied metadata does not establish a playwright biography."
+        ],
+        [
+          "c19",
+          "insufficient",
+          "unsupported",
+          "M'Fingal Canto II title does not contain coward; no poem text supplied."
+        ],
+        [
+          "c20",
+          "insufficient",
+          "unsupported",
+          "Tortoise/life-long headline does not support fear/timidity metaphor."
+        ]
+      ]
+    }
+  },
+  "scope": "25 newly evaluated choices; love's 7 already evaluated separately; remaining 41 pending; no aggregate percentage claimed",
+  "new_failure_category": "Proper-name Noel Coward selection does not match coward noun meaning; recorded for final report. Existing quality NO-GO unchanged.",
+  "review_minutes": "unmeasured"
+}
