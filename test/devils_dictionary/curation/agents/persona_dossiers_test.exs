@@ -137,10 +137,16 @@ defmodule DevilsDictionary.Curation.Agents.PersonaDossiersTest do
         assert source["basis"] =~ "#{headword} is quoted only as a documented period prejudice"
         assert Enum.any?(d["blind_spots"], &(&1 =~ headword)), label
 
-        # Neither the headword nor the passage itself, in any case.
+        # Neither the headword nor the passage itself, in any case, and not in
+        # the disclosure either: the instruction is compiled from it (#307).
         lens =
           Enum.map(
-            [d["selection"], d["positive_example"], d["negative_example"] | d["principles"]],
+            [
+              d["disclosure"],
+              d["selection"],
+              d["positive_example"],
+              d["negative_example"] | d["principles"]
+            ],
             &String.downcase/1
           )
 
@@ -190,8 +196,11 @@ defmodule DevilsDictionary.Curation.Agents.PersonaDossiersTest do
         assert String.to_integer(stated) == Enum.sum(words), label
 
         # Locators describe paragraphs rather than quote them, as `rights` says.
+        # An opening single quote counts; `\u2019` and `'` stay allowed as apostrophes.
         locators = source["locators"] ++ Enum.map(source["passages"], & &1["locator"])
-        refute Enum.any?(locators, &String.contains?(&1, ["\u201C", "\u201D", "\""])), label
+
+        refute Enum.any?(locators, &String.contains?(&1, ["\u201C", "\u201D", "\"", "\u2018"])),
+               label
       end
     end
 
