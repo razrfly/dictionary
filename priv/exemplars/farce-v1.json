@@ -1,0 +1,98 @@
+{
+  "schema_version": 1,
+  "kind": "exemplars",
+  "manifest": "farce-v1",
+  "description": "Recorded farce (#310 §6, rows 1–3): events whose own record carries the absurdity, nominated on the owner's words \"Yes, rows 1–3\" (5 November 2026). Every date and URL was checked on 2026-11-05; nothing here is public until a reviewer accepts it on /connections/:id.",
+  "row_count": 3,
+  "rows": [
+    {
+      "word": "war",
+      "sense": {
+        "source": "wordnet",
+        "match": "waging of armed conflict"
+      },
+      "subject": {
+        "kind": "event",
+        "label": "Emu War",
+        "wikidata": "Q14665"
+      },
+      "rationale": "In November 1932 the Australian government sent soldiers of the Royal Australian Artillery with two Lewis machine guns to Western Australia to cull the emus, some 20,000 of them, that were flattening wheat farms. After about a month and nearly 10,000 rounds the soldiers were withdrawn with most of the emus still at large. The press called it the Emu War, and the emus are generally said to have won.",
+      "evidence": [
+        {
+          "url": "http://nla.gov.au/nla.news-article2315329",
+          "attribution": "The Argus (Melbourne), 3 November 1932, \"Machine Guns Sent Against Emu Pests\", via Trove",
+          "role": "supports"
+        },
+        {
+          "url": "http://nla.gov.au/nla.news-article4509731",
+          "attribution": "The Argus (Melbourne), 19 November 1932, \"'Emu War' defended\", via Trove",
+          "role": "supports"
+        },
+        {
+          "url": "https://en.wikipedia.org/wiki/Emu_War",
+          "attribution": "Wikipedia, \"Emu War\", retrieved 5 November 2026",
+          "role": "supports"
+        }
+      ],
+      "curator": "holden"
+    },
+    {
+      "word": "war",
+      "sense": {
+        "source": "wordnet",
+        "match": "waging of armed conflict"
+      },
+      "subject": {
+        "kind": "event",
+        "label": "Football War",
+        "wikidata": "Q223085"
+      },
+      "rationale": "El Salvador and Honduras fought a four-day war in July 1969, about a hundred hours, that took its name from the rioting around the two countries' World Cup qualifying matches that June. Its causes were land, migration and the expulsion of Salvadoran settlers from Honduras; the name is what survived.",
+      "evidence": [
+        {
+          "url": "https://www.bbc.com/news/world-latin-america-48673853",
+          "attribution": "BBC News, 27 June 2019, \"Honduras v El Salvador: The football match that kicked off a war\"",
+          "role": "supports"
+        },
+        {
+          "url": "https://en.wikipedia.org/wiki/Football_War",
+          "attribution": "Wikipedia, \"Football War\", retrieved 5 November 2026",
+          "role": "supports"
+        }
+      ],
+      "curator": "holden"
+    },
+    {
+      "word": "justice",
+      "sense": {
+        "source": "wordnet",
+        "match": "quality of being just or fair"
+      },
+      "subject": {
+        "kind": "event",
+        "label": "Dreyfus affair",
+        "wikidata": "Q173457"
+      },
+      "rationale": "In 1894 Captain Alfred Dreyfus, a Jewish officer in the French army, was convicted of treason on forged evidence and sent to Devil's Island. The army suppressed proof that another officer, Esterhazy, was the spy, and acquitted him in January 1898; Émile Zola's open letter J'accuse…! forced the case open. Dreyfus was pardoned in 1899 and exonerated in 1906. The affair divided France for a decade and gave the language the word Dreyfusard.",
+      "evidence": [
+        {
+          "url": "https://fr.wikisource.org/wiki/J%E2%80%99accuse%E2%80%A6!",
+          "attribution": "Émile Zola, \"J'accuse…!\", L'Aurore, 13 January 1898, via Wikisource",
+          "role": "supports"
+        },
+        {
+          "url": "https://www.nytimes.com/2013/03/07/world/europe/files-on-dreyfus-affair-released-online.html",
+          "attribution": "The New York Times, 7 March 2013, \"French Ministry Posts Online Full File on 'Dreyfus Affair'\"",
+          "role": "supports"
+        },
+        {
+          "url": "https://en.wikipedia.org/wiki/Dreyfus_affair",
+          "attribution": "Wikipedia, \"Dreyfus affair\", retrieved 5 November 2026",
+          "role": "supports"
+        }
+      ],
+      "curator": "holden"
+    }
+  ],
+  "checksum": "3b8ff07eb742c671d233a97f3757f5ee2fe14f6768ca668aaa585bb332cfdfb9"
+}
