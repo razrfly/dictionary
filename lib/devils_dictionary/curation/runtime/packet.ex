@@ -47,8 +47,11 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
   (catalog works and metadata-only shelves), records each as omitted
   (`text_cut_excluded`) and refills the freed slots from the text-bearing
   candidates the quotas left out, one kind at a time, under the same 24
-  candidates and 12 meanings. A fixed-lead instruction's packet names its
-  lead (`fixed_lead`: the first applicable Bierce entry, or null).
+  candidates and 12 meanings. `whole-entry-text-cut-v2` (#305 D8) is the
+  text cut that also offers no `claim` bound to a word (`m*`) rather than a
+  sense, recording each as omitted (`lexeme_claim_excluded`) before the
+  quotas. A fixed-lead instruction's packet names its lead (`fixed_lead`:
+  the first applicable Bierce entry, or null).
 
   **Evidence fingerprint** (#298 C1). `evidence_fingerprint/1` digests what
   a packet shows as evidence and not how the model is asked, so packets cut
@@ -89,12 +92,14 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
   @max_gloss_chars 300
   # The kinds, in the order unused quota flows down.
   @kinds ~w(content sense_quotation work exemplar sense_definition claim shelf)
-  @omission_reasons ~w(over_quota meaning_out_of_bound meaning_unavailable no_excerpt outside_shelf_focus text_cut_excluded)
-  # The whole-entry cuts (#298 C9). The live cut is the first; the
-  # text-focused cut is a comparison arm's, never the publishing default.
+  @omission_reasons ~w(over_quota meaning_out_of_bound meaning_unavailable no_excerpt outside_shelf_focus text_cut_excluded lexeme_claim_excluded)
+  # The whole-entry cuts (#298 C9, #305 D8). The live cut is the first; the
+  # text-focused cuts are comparison arms', never the publishing default.
   @whole_entry_cut "whole-entry-cut-v1"
   @text_cut "whole-entry-text-cut-v1"
-  @whole_entry_cuts [@whole_entry_cut, @text_cut]
+  @text_cut_v2 "whole-entry-text-cut-v2"
+  @text_cuts [@text_cut, @text_cut_v2]
+  @whole_entry_cuts [@whole_entry_cut | @text_cuts]
   # The sections the text-focused cut stops offering: their supplied fields
   # are metadata (titles, captions, headlines), not text that can carry a
   # claim (#298 B5 diagnosis, finding 2).
@@ -117,9 +122,10 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
   def omission_reasons, do: @omission_reasons
 
   @doc """
-  The whole-entry cuts, the live one first: `whole-entry-cut-v1` and the
-  text-focused `whole-entry-text-cut-v1` (#298 C9), which a comparison arm
-  names with `cut:`.
+  The whole-entry cuts, the live one first: `whole-entry-cut-v1`, the
+  text-focused `whole-entry-text-cut-v1` (#298 C9) and
+  `whole-entry-text-cut-v2`, which also offers no word-bound claim (#305
+  D8). A comparison arm names one with `cut:`.
   """
   def whole_entry_cuts, do: @whole_entry_cuts
 
@@ -412,6 +418,25 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
                                             @after_lead <> @output_header
                                           )
 
+  # The attribution arm (#305 D8, NA and NXA): the nudge arm with one
+  # paragraph added after its section, against reasons that name a person,
+  # work, source or date the candidate does not supply.
+  @attribution """
+  ATTRIBUTION IN REASONS:
+  A reason names a person, work, source or date only when the candidate's own supplied fields name it. A quotation supplied without an author is described by its words and its sense, never by a guessed poet, speaker or work. Naming anyone or anything the record does not supply makes the reason wrong, whatever else it gets right.
+
+  """
+
+  @whole_grounded_fixed_lead_cap200_nudge_attrib @whole_grounded_fixed_lead
+                                                 |> String.replace(
+                                                   @cap_sentence,
+                                                   "Keep each original reason under #{DevilsDictionary.Curation.WholeEntry.reason_cap("voltaire-whole-entry-v7-fixed-lead-cap200-nudge-attrib-v1")} characters."
+                                                 )
+                                                 |> String.replace(
+                                                   @output_header,
+                                                   @after_lead <> @attribution <> @output_header
+                                                 )
+
   @instructions %{
     "voltaire-whole-entry-v1" => @whole_entry,
     "voltaire-whole-entry-v2" => @whole_entry_v2,
@@ -424,6 +449,8 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
     "voltaire-whole-entry-v7-fixed-lead-cap200-v1" => @whole_grounded_fixed_lead_cap200,
     "voltaire-whole-entry-v7-fixed-lead-cap200-nudge-v1" =>
       @whole_grounded_fixed_lead_cap200_nudge,
+    "voltaire-whole-entry-v7-fixed-lead-cap200-nudge-attrib-v1" =>
+      @whole_grounded_fixed_lead_cap200_nudge_attrib,
     "generic-whole-entry-v1" => @generic_whole_entry,
     "hitchens-whole-entry-v1" => Map.fetch!(@persona_arms, "hitchens-whole-entry-v1"),
     "bierce-whole-entry-v1" => Map.fetch!(@persona_arms, "bierce-whole-entry-v1"),
@@ -460,6 +487,9 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
 
   @doc "The section the nudge arm adds before the output rules (#305 D7)."
   def after_lead_section, do: @after_lead
+
+  @doc "The paragraph the attribution arm adds after the nudge's section (#305 D8)."
+  def attribution_section, do: @attribution
 
   # ── building ─────────────────────────────────────────────────────────────
 
@@ -599,18 +629,28 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
     {priority, rest} =
       Enum.split_with(usable, &(&1.kind == "content" and &1.packet["object_id"] in applicable))
 
-    # The text-focused cut (#298 C9) offers no candidate whose section is
+    # The text-focused cuts (#298 C9) offer no candidate whose section is
     # metadata only; each is recorded as omitted, by id, with its own reason.
     {rest, excluded} =
-      if policy.cut == @text_cut,
+      if policy.cut in @text_cuts,
         do: Enum.split_with(rest, &text_bearing?(&1.packet)),
+        else: {rest, []}
+
+    # The second (#305 D8) offers no claim bound to a word rather than a
+    # sense: a title match says the spelling might name the thing, not that
+    # this meaning does. Its kind's unused quota flows down as before.
+    words = for %{target: {:lexeme, _}, id: id} <- universe, into: MapSet.new(), do: id
+
+    {rest, word_claims} =
+      if policy.cut == @text_cut_v2,
+        do: Enum.split_with(rest, &(&1.kind != "claim" or not MapSet.member?(words, &1.meaning))),
         else: {rest, []}
 
     offerable = priority ++ rest
 
     excluded =
-      excluded
-      |> Enum.map(&omission(&1.packet, "text_cut_excluded"))
+      (Enum.map(excluded, &omission(&1.packet, "text_cut_excluded")) ++
+         Enum.map(word_claims, &omission(&1.packet, "lexeme_claim_excluded")))
       |> Enum.sort_by(& &1["key"])
 
     priority = Enum.sort_by(priority, & &1.sort)
@@ -736,7 +776,7 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
         %{acc | carry: max(room - taken, 0)}
       end)
 
-    final = if policy.cut == @text_cut, do: refill(final, policy), else: final
+    final = if policy.cut in @text_cuts, do: refill(final, policy), else: final
 
     %{
       chosen: Enum.reverse(final.chosen),

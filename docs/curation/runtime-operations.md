@@ -290,6 +290,24 @@ mix dd.runtime compare --batch d7-2026-11-05 --pilot --dry-run \
   --out "/Volumes/LLM Models/dictionary/run/d7-2026-11-05/record/batch.json"
 ```
 
+D8's arms (#316, after D7's NOT JUSTIFIED) measure two changes to D7's nudge arm apart, a
+2 × 2. The cut `whole-entry-text-cut-v2` (`text2`) is the text cut that also offers no
+`claim` bound to a word (`m*`) rather than a sense, the `lexeme_entity_candidate` path of
+`LinkedClaims`: each is omitted as `lexeme_claim_excluded` before the quotas, so its slot
+flows down and is refilled as the text cut refills. The prompt does not carry the cut's
+name, so on a page without such a claim `text2` sends what `text` sends.
+`voltaire-whole-entry-v7-fixed-lead-cap200-nudge-attrib-v1` is the nudge text with one
+paragraph after its section (`Packet.attribution_section/0`), at cap 200 under
+`selection-output-v5`.
+
+```
+mix dd.runtime setup --model qwen3.5:9b --slug qwen3.5-9b-whole-voltaire-v7-fixed-lead-cap200-nudge-attrib \
+  --instruction voltaire-whole-entry-v7-fixed-lead-cap200-nudge-attrib-v1 --accept-license
+mix dd.runtime compare --batch d8-2026-11-05 --pilot --dry-run \
+  --arms N=qwen3.5-9b-whole-voltaire-v7-fixed-lead-cap200-nudge:text,NX=qwen3.5-9b-whole-voltaire-v7-fixed-lead-cap200-nudge:text2,NA=qwen3.5-9b-whole-voltaire-v7-fixed-lead-cap200-nudge-attrib:text,NXA=qwen3.5-9b-whole-voltaire-v7-fixed-lead-cap200-nudge-attrib:text2 \
+  --out "/Volumes/LLM Models/dictionary/run/d8-2026-11-05/record/batch.json"
+```
+
 D6's four policy arms, dry run first (it calls and writes nothing):
 
 ```

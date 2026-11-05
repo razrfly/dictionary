@@ -6,8 +6,10 @@ defmodule DevilsDictionary.Curation.Runtime.Compare do
 
   **Arms.** An arm is a label, a pinned model config (which pins its
   instruction) and a packet cut: `current` (`whole-entry-cut-v1`, the live
-  one) or `text` (`whole-entry-text-cut-v1`, which offers no metadata-only
-  kind and refills from text-bearing ones). Arms that differ in instruction
+  one), `text` (`whole-entry-text-cut-v1`, which offers no metadata-only
+  kind and refills from text-bearing ones) or `text2`
+  (`whole-entry-text-cut-v2`, the text cut without word-bound claims, #305
+  D8). Arms that differ in instruction
   or model config (C2) share a cut; the policy arms (C9) differ in cut and,
   through the fixed-lead instruction, in lead.
 
@@ -74,7 +76,11 @@ defmodule DevilsDictionary.Curation.Runtime.Compare do
   @record_version "comparison-batch-v1"
   @batch_format ~r/^[a-z0-9][a-z0-9._-]{2,63}$/
   @label_format ~r/^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$/
-  @cuts %{"current" => nil, "text" => "whole-entry-text-cut-v1"}
+  @cuts %{
+    "current" => nil,
+    "text" => "whole-entry-text-cut-v1",
+    "text2" => "whole-entry-text-cut-v2"
+  }
   @max_arms 8
 
   @doc "The batch record's version."
@@ -84,7 +90,8 @@ defmodule DevilsDictionary.Curation.Runtime.Compare do
 
   @doc """
   Parses an arm list: `LABEL=CONFIG[:CUT]` items, comma-separated, where
-  CONFIG is a model config slug and CUT `current` (the default) or `text`.
+  CONFIG is a model config slug and CUT `current` (the default), `text` or
+  `text2`.
   A bare `CONFIG[:CUT]` is labelled by its slug. Returns `{:ok, arms}` or
   `{:error, reason}`: `:no_arms`, `{:too_many_arms, n}`,
   `{:invalid_arm, item}`, `{:invalid_label, label}`, `{:unknown_cut, cut}`

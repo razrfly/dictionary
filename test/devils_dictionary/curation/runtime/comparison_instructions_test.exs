@@ -8,6 +8,7 @@ defmodule DevilsDictionary.Curation.Runtime.ComparisonInstructionsTest do
   #305 D7: the cap and nudge arms are the fixed-lead variant with only the
   reason cap raised to 200 and, for the nudge, one section added; their
   schema and validation follow `WholeEntry.reason_cap/1`.
+  #305 D8: the attribution arm is the nudge arm with one paragraph added.
   """
   use ExUnit.Case, async: true
 
@@ -27,6 +28,7 @@ defmodule DevilsDictionary.Curation.Runtime.ComparisonInstructionsTest do
   @personas %{"hitchens" => "hitchens-whole-entry-v1", "bierce" => "bierce-whole-entry-v1"}
   @cap200 "voltaire-whole-entry-v7-fixed-lead-cap200-v1"
   @nudge "voltaire-whole-entry-v7-fixed-lead-cap200-nudge-v1"
+  @attrib "voltaire-whole-entry-v7-fixed-lead-cap200-nudge-attrib-v1"
 
   defp packet(instruction, extra \\ %{}) do
     native =
@@ -110,6 +112,9 @@ defmodule DevilsDictionary.Curation.Runtime.ComparisonInstructionsTest do
 
       assert Digest.sha256(Packet.instruction!(@nudge)) ==
                "ac08a3d80c154b82da26a4fbdc68be1315a9854839876cfb613fae5f3144c6f6"
+
+      assert Digest.sha256(Packet.instruction!(@attrib)) ==
+               "6938459b2118d8b9670ffa9ede62e4da8e776f408623f280bd89b28408344e1e"
     end
 
     test "the generic control is v7's evidence policy without a dossier" do
@@ -194,12 +199,39 @@ defmodule DevilsDictionary.Curation.Runtime.ComparisonInstructionsTest do
       assert nudge =~ "Sparse sections may honestly remain empty."
       assert nudge =~ "every optional section may honestly stay empty"
     end
+
+    test "the attribution arm is the nudge arm with one paragraph after its section (#305 D8)" do
+      nudge = Packet.instruction!(@nudge)
+      attrib = Packet.instruction!(@attrib)
+      paragraph = Packet.attribution_section()
+
+      assert String.replace(attrib, paragraph, "") == nudge
+      assert attrib =~ Packet.after_lead_section() <> paragraph <> "OUTPUT AND SAFETY:\n"
+      assert {[], added} = changed_lines(nudge, attrib)
+      assert Enum.join(added, "\n") <> "\n" == paragraph
+      assert length(String.split(attrib, "ATTRIBUTION IN REASONS:")) == 2
+
+      assert paragraph ==
+               """
+               ATTRIBUTION IN REASONS:
+               A reason names a person, work, source or date only when the candidate's own supplied fields name it. A quotation supplied without an author is described by its words and its sense, never by a guessed poet, speaker or work. Naming anyone or anything the record does not supply makes the reason wrong, whatever else it gets right.
+
+               """
+    end
   end
 
   describe "allowlists" do
     test "every runtime allowlist admits the comparison instructions" do
       assert WholeEntry.comparison_instructions() ==
-               [@generic, @fixed, @personas["hitchens"], @personas["bierce"], @cap200, @nudge]
+               [
+                 @generic,
+                 @fixed,
+                 @personas["hitchens"],
+                 @personas["bierce"],
+                 @cap200,
+                 @nudge,
+                 @attrib
+               ]
 
       for instruction <- WholeEntry.comparison_instructions() do
         assert instruction in Packet.instruction_versions()
@@ -207,7 +239,7 @@ defmodule DevilsDictionary.Curation.Runtime.ComparisonInstructionsTest do
         assert SectionOutput.enabled?(%{"instruction_version" => instruction})
 
         assert Contract.version(instruction) ==
-                 if(instruction in [@cap200, @nudge],
+                 if(instruction in [@cap200, @nudge, @attrib],
                    do: "selection-output-v5",
                    else: "selection-output-v4"
                  )
@@ -218,7 +250,7 @@ defmodule DevilsDictionary.Curation.Runtime.ComparisonInstructionsTest do
 
       assert EvidenceGuidance.policy(@v7) == "evidence-guidance-v1"
       assert is_nil(EvidenceGuidance.policy("voltaire-whole-entry-v6"))
-      assert WholeEntry.fixed_lead_instructions() == [@fixed, @cap200, @nudge]
+      assert WholeEntry.fixed_lead_instructions() == [@fixed, @cap200, @nudge, @attrib]
     end
 
     test "no publication path admits a comparison instruction" do
@@ -278,10 +310,10 @@ defmodule DevilsDictionary.Curation.Runtime.ComparisonInstructionsTest do
       end
     end
 
-    test "the cap and nudge arms see exactly the fixed-lead variant's packet (#305 D7)" do
+    test "the cap, nudge and attribution arms see exactly the fixed-lead variant's packet" do
       [fixed_system, fixed_user] = Packet.messages(packet(@fixed, %{"fixed_lead" => "n0"}))
 
-      for instruction <- [@cap200, @nudge] do
+      for instruction <- [@cap200, @nudge, @attrib] do
         p = packet(instruction, %{"fixed_lead" => "n0"})
         [system, user] = Packet.messages(p)
         assert system.content == Packet.instruction!(instruction)
@@ -386,7 +418,7 @@ defmodule DevilsDictionary.Curation.Runtime.ComparisonInstructionsTest do
   end
 
   describe "the reason cap (#305 D7)" do
-    test "every section-output instruction keeps 100 characters except the two cap arms" do
+    test "every section-output instruction keeps 100 characters except the cap arms" do
       sectioned =
         Enum.filter(
           Packet.instruction_versions(),
@@ -394,13 +426,22 @@ defmodule DevilsDictionary.Curation.Runtime.ComparisonInstructionsTest do
         )
 
       assert @v7 in sectioned and @cap200 in sectioned and @nudge in sectioned
+      assert @attrib in sectioned
       refute "generic-editor-v2" in sectioned
 
       for instruction <- sectioned do
         cap = WholeEntry.reason_cap(instruction)
-        assert cap == if(instruction in [@cap200, @nudge], do: 200, else: 100)
+        assert cap == if(instruction in [@cap200, @nudge, @attrib], do: 200, else: 100)
         # `Contract` bounds every reason at 280 characters.
         assert cap <= 280
+      end
+
+      # The compile-time guard's rule: only a comparison instruction raises
+      # its cap, and only to 200.
+      for instruction <- Packet.instruction_versions(),
+          WholeEntry.reason_cap(instruction) != 100 do
+        assert instruction in WholeEntry.comparison_instructions()
+        assert WholeEntry.reason_cap(instruction) == 200
       end
     end
 
@@ -415,7 +456,7 @@ defmodule DevilsDictionary.Curation.Runtime.ComparisonInstructionsTest do
 
     test "the cap arms' schema is the fixed-lead schema with every reason cap at 200" do
       for extra <- [%{"fixed_lead" => "n0"}, %{"fixed_lead" => nil, "priority_candidates" => []}],
-          instruction <- [@cap200, @nudge] do
+          instruction <- [@cap200, @nudge, @attrib] do
         schema = Contract.schema(packet(instruction, extra))
         assert schema == raised(Contract.schema(packet(@fixed, extra)))
         refute schema == Contract.schema(packet(@fixed, extra))
@@ -456,7 +497,7 @@ defmodule DevilsDictionary.Curation.Runtime.ComparisonInstructionsTest do
 
       fixed = packet(@fixed, %{"fixed_lead" => "n0"})
 
-      for instruction <- [@cap200, @nudge] do
+      for instruction <- [@cap200, @nudge, @attrib] do
         p = packet(instruction, %{"fixed_lead" => "n0"})
         assert {:ok, %{outcome: :accepted}} = validate(wire.(150), p)
         assert {:ok, %{outcome: :accepted}} = validate(wire.(200), p)
