@@ -19,7 +19,9 @@ defmodule DevilsDictionary.Curation.PageState do
 
   It reads the same rows the page's reader and refresh clock read: the global
   default configuration, the page's composition, its publication, its
-  refresh row and the attempt that row names. Database reads only; no model,
+  refresh row and, for an abstention, the latest abstained attempt under the
+  composition and configuration version that finished by the row's last
+  completion. Database reads only; no model,
   no write, and never an attempt's packet summary (#299 M5).
   """
 

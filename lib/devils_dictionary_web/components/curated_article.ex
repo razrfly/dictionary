@@ -161,6 +161,8 @@ defmodule DevilsDictionaryWeb.CuratedArticle do
           reviewer?={@reviewer?}
         />
       <% else %>
+        <%!-- An authored overview leads; the state follows it (#309 review 3). --%>
+        {render_slot(@extra)}
         <.state
           state={@state || %{kind: :none}}
           base={@base}
@@ -169,7 +171,6 @@ defmodule DevilsDictionaryWeb.CuratedArticle do
           card_sources={@card_sources}
           record_path={@record_path}
         />
-        {render_slot(@extra)}
         <.related page={@page} trail={@trail} demo={@demo} record_path={@record_path} />
       <% end %>
     </article>

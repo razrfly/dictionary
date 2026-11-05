@@ -692,7 +692,7 @@ defmodule DevilsDictionaryWeb.CurationLiveTest do
     |> LazyHTML.query("[id^='opening-']")
     |> Enum.filter(fn node ->
       [id] = LazyHTML.attribute(node, "id")
-      String.ends_with?(id, ["-text", "-title", "-why", "-credits", "-citation"])
+      String.ends_with?(id, ["-text", "-title", "-why", "-reason", "-credits", "-citation"])
     end)
     |> Map.new(fn node ->
       # The receipt is the published version's own record (#309: inside the

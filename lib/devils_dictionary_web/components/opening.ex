@@ -1097,7 +1097,7 @@ defmodule DevilsDictionaryWeb.Opening do
           id={"#{@id}-receipt"}
           class="flex flex-col gap-1 text-base/6 text-mist-600 dark:text-mist-400"
         >
-          <.choice_facts choice={@choice} />
+          <.choice_facts choice={@choice} article />
         </div>
       </div>
     </details>
@@ -1204,6 +1204,7 @@ defmodule DevilsDictionaryWeb.Opening do
   def editor_parts(_label), do: %{persona: nil, instruction: nil, model: nil}
 
   attr :choice, :map, required: true
+  attr :article, :boolean, default: false
 
   defp choice_facts(assigns) do
     ~H"""
@@ -1221,7 +1222,7 @@ defmodule DevilsDictionaryWeb.Opening do
     <.link
       :if={@choice.receipt_path}
       navigate={@choice.receipt_path}
-      class="w-fit underline underline-offset-4"
+      class={["w-fit underline underline-offset-4", @article && "flex min-h-11 items-center"]}
     >Exact choice, chooser and evidence</.link>
     """
   end

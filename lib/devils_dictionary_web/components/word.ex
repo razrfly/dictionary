@@ -88,7 +88,7 @@ defmodule DevilsDictionaryWeb.Word do
             <.link
               id={"disambiguation-#{other.object_id}"}
               navigate={~p"/words/#{other.object_id}/#{other.slug}"}
-              class="font-medium text-mist-950 hover:underline dark:text-white"
+              class="font-medium text-mist-950 underline decoration-mist-950/30 underline-offset-4 hover:decoration-current dark:text-white dark:decoration-white/30"
             >
               {other.lemma}
             </.link>
@@ -118,7 +118,7 @@ defmodule DevilsDictionaryWeb.Word do
             href={@thing.wikidata_url}
             target="_blank"
             rel="noopener"
-            class="hover:underline"
+            class="underline decoration-mist-500/40 underline-offset-4 hover:decoration-current"
           >
             Wikidata <span aria-hidden="true">↗</span>
           </.link>
