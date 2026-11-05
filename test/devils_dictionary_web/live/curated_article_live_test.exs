@@ -257,6 +257,7 @@ defmodule DevilsDictionaryWeb.CuratedArticleLiveTest do
           {"#opening", "[&_dd_a]:min-h-11"},
           {"#curated-masthead", "[&_#parts-of-speech_a]:min-h-11"},
           {"#curated-masthead", "[&_#quick-definition_a]:min-h-11"},
+          {"#curated-masthead", "[&_#quick-definition>span]:block"},
           {"#curated-provenance", "[&_#opening-about-revisions_a]:min-h-11"}
         ] do
       classes =
@@ -269,5 +270,8 @@ defmodule DevilsDictionaryWeb.CuratedArticleLiveTest do
 
       assert classes =~ rule, "#{holder} sizes its links"
     end
+
+    # The byline's link to the editor is a box of its own.
+    assert has_element?(view, "#curation-summary a.min-h-11")
   end
 end

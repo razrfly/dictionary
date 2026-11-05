@@ -471,6 +471,7 @@ defmodule DevilsDictionaryWeb.Opening do
         />
         <.choice_footer id="opening-lead" choice={@lead} article label="Why it leads">
           <.particulars
+            article
             record_path={@record_path}
             id="opening-lead"
             meaning={@lead.meaning}
@@ -682,6 +683,7 @@ defmodule DevilsDictionaryWeb.Opening do
       >Source</.link>
       <.choice_footer id={@id} choice={@highlight} compact={@compact} article={@article}>
         <.particulars
+          article={@article}
           record_path={@record_path}
           id={@id}
           meaning={@highlight.meaning}
@@ -750,6 +752,7 @@ defmodule DevilsDictionaryWeb.Opening do
 
       <.choice_footer id={@id} choice={@highlight} compact={@compact} article={@article}>
         <.particulars
+          article={@article}
           record_path={@record_path}
           id={@id}
           meaning={@highlight.meaning}
@@ -806,6 +809,7 @@ defmodule DevilsDictionaryWeb.Opening do
 
       <.choice_footer id={@id} choice={@highlight} compact={@compact} article={@article}>
         <.particulars
+          article={@article}
           record_path={@record_path}
           id={@id}
           meaning={@highlight.meaning}
@@ -875,6 +879,7 @@ defmodule DevilsDictionaryWeb.Opening do
 
       <.choice_footer id={@id} choice={@highlight} compact={@compact} article={@article}>
         <.particulars
+          article={@article}
           record_path={@record_path}
           id={@id}
           meaning={@highlight.meaning}
@@ -950,6 +955,7 @@ defmodule DevilsDictionaryWeb.Opening do
 
       <.choice_footer id={@id} choice={@highlight} compact={@compact} article={@article}>
         <.particulars
+          article={@article}
           record_path={@record_path}
           id={@id}
           meaning={@highlight.meaning}
@@ -1033,6 +1039,7 @@ defmodule DevilsDictionaryWeb.Opening do
       <.choice_footer id={@id} choice={@highlight} compact={@compact} article={@article}>
         <div class="flex flex-col gap-3">
           <.particulars
+            article={@article}
             record_path={@record_path}
             id={@id}
             meaning={@highlight.meaning}
@@ -1389,6 +1396,8 @@ defmodule DevilsDictionaryWeb.Opening do
     default: false,
     doc: "the editor's note is already on the page, so only who wrote it is repeated"
 
+  attr :article, :boolean, default: false
+
   defp particulars(assigns) do
     assigns =
       assigns
@@ -1402,7 +1411,7 @@ defmodule DevilsDictionaryWeb.Opening do
         <div id={"#{@id}-meaning"}>
           <dt class="inline font-medium text-mist-950 dark:text-white">Meaning</dt>
           <dd class="inline text-mist-700 dark:text-mist-300">
-            <.meaning record_path={@record_path} meaning={@meaning} />
+            <.meaning record_path={@record_path} meaning={@meaning} article={@article} />
           </dd>
         </div>
         <div :if={@register} id={"#{@id}-register-note"}>
@@ -1442,14 +1451,16 @@ defmodule DevilsDictionaryWeb.Opening do
 
   # A sense's gloss is its source's words, so it is quoted; a word and part
   # of speech is ours, so it is not. Either links to where the page shows it,
-  # and opens the card it is in.
+  # and opens the card it is in. On the article the link is a 44 px box, so a
+  # sense's source takes the next line, without a separator to start it.
   attr :record_path, :string, default: ""
+  attr :article, :boolean, default: false
 
   defp meaning(%{meaning: %{kind: :sense}} = assigns) do
     ~H"""
     <.meaning_link record_path={@record_path} anchor={@meaning.anchor}>“{@meaning.label}”</.meaning_link><span :if={
-      @meaning.source
-    }> · {@meaning.source.name}</span>
+      @meaning.source && !@article
+    }> · {@meaning.source.name}</span><span :if={@meaning.source && @article} class="block">{@meaning.source.name}</span>
     """
   end
 

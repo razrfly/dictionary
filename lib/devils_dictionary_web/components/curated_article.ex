@@ -95,10 +95,12 @@ defmodule DevilsDictionaryWeb.CuratedArticle do
     ~H"""
     <article id="curated-page" class="min-w-0">
       <%!-- The headword's links in a line, 44 px targets on the article
-           (#309 review 5); the shared headword is unchanged elsewhere. --%>
+           (#309 review 5), Wikidata's on a line of its own so the
+           description keeps its spacing (review 6); the shared headword is
+           unchanged elsewhere. --%>
       <header
         id="curated-masthead"
-        class="flex flex-col gap-5 pb-6 [&_#parts-of-speech_a]:inline-flex [&_#parts-of-speech_a]:min-h-11 [&_#parts-of-speech_a]:items-center [&_#quick-definition_a]:inline-flex [&_#quick-definition_a]:min-h-11 [&_#quick-definition_a]:items-center"
+        class="flex flex-col gap-5 pb-6 [&_#parts-of-speech_a]:inline-flex [&_#parts-of-speech_a]:min-h-11 [&_#parts-of-speech_a]:items-center [&_#quick-definition_a]:inline-flex [&_#quick-definition_a]:min-h-11 [&_#quick-definition_a]:items-center [&_#quick-definition>span]:block"
       >
         <nav
           id="entry-views"
@@ -201,9 +203,14 @@ defmodule DevilsDictionaryWeb.CuratedArticle do
     <div id="curated-byline" class="flex gap-3 text-base/7">
       <Opening.ai_mark :if={@model?} class="mt-0.5 size-7 text-[0.6875rem]" />
       <div class="flex min-w-0 flex-col items-start gap-2">
+        <%!-- The editor's link is a 44 px box at every width (#309 review 6). --%>
         <p id="curation-summary" class="text-pretty">
           Selected by
-          <.link :if={@receipt} navigate={@receipt} class={["font-medium", link_class()]}>{@editor}</.link>
+          <.link
+            :if={@receipt}
+            navigate={@receipt}
+            class={["inline-flex min-h-11 max-w-full items-center font-medium", link_class()]}
+          >{@editor}</.link>
           <span :if={!@receipt} class="font-medium">{@editor}</span>
         </p>
         <span

@@ -323,6 +323,23 @@ defmodule DevilsDictionaryWeb.OpeningArticleTest do
     assert Regex.scan(~r/\b(?:sm|md|lg|xl|2xl):(?:min-h|h)-(?:0|px|[0-9]|10)\b/, source) == []
   end
 
+  test "on the article a sense's source takes its own line, after its 44 px gloss link" do
+    sense = %Meaning{
+      kind: :sense,
+      object_id: 2,
+      label: "Fondness for nephews.",
+      anchor: "#card-wiktionary",
+      source: %{name: "Wiktionary (English) via Kaikki"}
+    }
+
+    doc = render_article(%{nine() | highlights: [%{quotation(2, "A line.") | meaning: sense}]})
+    meaning = LazyHTML.query(doc, "#opening-highlight-2-meaning dd")
+
+    assert LazyHTML.text(meaning) =~ "Wiktionary (English) via Kaikki"
+    refute LazyHTML.text(meaning) =~ "·"
+    assert [_] = LazyHTML.query(meaning, "span.block") |> Enum.to_list()
+  end
+
   test "a reason a person wrote has no AI mark and no cut mark" do
     person = %Reason{
       kind: :editorial,
