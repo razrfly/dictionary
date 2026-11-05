@@ -277,8 +277,9 @@ defmodule DevilsDictionaryWeb.Word do
       id={@id}
       patch={@path}
       title={"where this came from — #{@label}"}
-      class="text-sm/7 text-mist-500 hover:text-mist-950 dark:hover:text-white"
+      class="relative text-sm/7 text-mist-500 before:absolute before:-inset-3.5 before:content-[''] hover:text-mist-950 dark:hover:text-white"
     >
+      <%!-- The glyph is 14 px; the link's hit area is 44 (#309 D5). --%>
       <span aria-hidden="true">ⓘ</span>
       <span class="sr-only">where this came from — {@label}</span>
     </.link>
@@ -683,7 +684,8 @@ defmodule DevilsDictionaryWeb.Word do
       id="pronunciation-variants"
       class="min-w-0 max-w-full text-base/7 sm:text-sm/7 open:basis-full"
     >
-      <summary class="w-fit cursor-pointer list-none underline underline-offset-4 hover:text-mist-950 dark:hover:text-white [&::-webkit-details-marker]:hidden">
+      <%!-- A 44 px tap target on a phone (#309 D5); its line height elsewhere. --%>
+      <summary class="flex min-h-11 w-fit cursor-pointer list-none items-center underline underline-offset-4 hover:text-mist-950 sm:min-h-0 dark:hover:text-white [&::-webkit-details-marker]:hidden">
         +{length(@headword.pronunciations_all) - length(@headword.pronunciations)} variants
       </summary>
       <ul role="list" class="mt-2 space-y-1 text-base/7 text-mist-500 sm:text-sm/7">

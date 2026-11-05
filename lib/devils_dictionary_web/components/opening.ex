@@ -638,7 +638,7 @@ defmodule DevilsDictionaryWeb.Opening do
         href={@highlight.links.source}
         target="_blank"
         rel="noreferrer"
-        class="w-fit underline underline-offset-4"
+        class={["w-fit underline underline-offset-4", @article && "flex min-h-11 items-center"]}
       >Source</.link>
       <.choice_footer id={@id} choice={@highlight} compact={@compact} article={@article}>
         <.particulars
@@ -674,7 +674,18 @@ defmodule DevilsDictionaryWeb.Opening do
           />
         </div>
         <div class="min-w-0">
-          <p aria-hidden="true" class="text-base/6 text-mist-500 sm:text-sm/6">Artwork</p>
+          <p
+            aria-hidden="true"
+            class={[
+              "text-base/6 sm:text-sm/6",
+              if(@article,
+                do: "font-medium text-mist-700 dark:text-mist-300",
+                else: "text-mist-500"
+              )
+            ]}
+          >
+            Artwork
+          </p>
           <p class="text-base/6 font-medium text-mist-950 sm:text-sm/6 dark:text-white">
             <.work_title id={"#{@id}-title"} highlight={@highlight} mode={@mode} />
           </p>

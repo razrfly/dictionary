@@ -322,16 +322,17 @@ defmodule DevilsDictionaryWeb.CuratedArticle do
       <h2 id="curated-related-heading" class="font-display text-3xl/9 tracking-tight">
         Related words
       </h2>
-      <div class="flex flex-wrap gap-2">
-        <Word.chip
-          :for={{group, chip} <- @chips}
-          id={"curated-related-#{chip.slug}"}
-          group={group}
-          chip={chip}
-          trail={@trail}
-          demo={@demo}
-        />
-      </div>
+      <ul role="list" class="flex flex-wrap gap-2">
+        <li :for={{_group, chip} <- @chips}>
+          <.link
+            id={"curated-related-#{chip.slug}"}
+            navigate={Word.hop(chip.slug, @trail, @demo)}
+            class="flex min-h-11 items-center rounded-full bg-mist-950/5 px-3 text-base/6 hover:bg-mist-950/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 sm:min-h-8 dark:bg-white/10 dark:hover:bg-white/15 dark:focus-visible:outline-white"
+          >
+            {chip.lemma}
+          </.link>
+        </li>
+      </ul>
       <.link
         :if={@more?}
         id="curated-related-all"
