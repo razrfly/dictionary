@@ -408,11 +408,14 @@ defmodule DevilsDictionary.Curation.Runtime.CompareTest do
   describe "#305 D8: the text cut without word-bound claims" do
     test "v2 omits the word-bound claim and keeps the sense-bound ones; v1 keeps both", ctx do
       word_claim!(ctx)
-      {:ok, batch} = Compare.freeze("d8-claims", ["love"], d8_arms())
+      [n | _] = d8 = d8_arms()
+      live = %{n | label: "C", cut: "current"}
+      {:ok, batch} = Compare.freeze("d8-claims", ["love"], d8 ++ [live])
       [page] = batch.pages
       arms = by_label(page)
       text = arms["N"].frozen.packet
       text2 = arms["NX"].frozen.packet
+      current = arms["C"].frozen.packet
 
       assert text["policy"]["cut"] == "whole-entry-text-cut-v1"
       assert text2["policy"]["cut"] == "whole-entry-text-cut-v2"
@@ -427,6 +430,11 @@ defmodule DevilsDictionary.Curation.Runtime.CompareTest do
       assert key == word["key"]
       refute Enum.any?(text["omitted"], &(&1["reason"] == "lexeme_claim_excluded"))
 
+      # The live cut is untouched: it still offers the word-bound claim.
+      assert current["policy"]["cut"] == "whole-entry-cut-v1"
+      assert word["key"] in Enum.map(claims(current, :word), & &1["key"])
+      refute Enum.any?(current["omitted"], &(&1["reason"] == "lexeme_claim_excluded"))
+
       # v2 is the text cut still: nothing metadata-only is offered.
       excluded = Packet.text_cut_excluded_sections()
       refute Enum.any?(text2["candidates"], &(WholeEntry.section(&1) in excluded))
@@ -437,7 +445,7 @@ defmodule DevilsDictionary.Curation.Runtime.CompareTest do
       assert arms["N"].evidence_fingerprint == arms["NA"].evidence_fingerprint
       assert arms["NX"].evidence_fingerprint == arms["NXA"].evidence_fingerprint
       refute arms["N"].evidence_fingerprint == arms["NX"].evidence_fingerprint
-      assert page.fingerprints |> Map.keys() |> Enum.sort() == ["text", "text2"]
+      assert page.fingerprints |> Map.keys() |> Enum.sort() == ["current", "text", "text2"]
 
       # A packet of the new cut freezes and verifies under runtime-packet-v4.
       assert text2["packet_version"] == "runtime-packet-v4"
@@ -482,9 +490,14 @@ defmodule DevilsDictionary.Curation.Runtime.CompareTest do
       assert %{"reason" => "over_quota"} = Enum.find(text["omitted"], &(&1["key"] == added))
       assert Packet.text_bearing?(Enum.find(text2["candidates"], &(&1["key"] == added)))
 
-      # Every offered candidate is in the packet or omitted, by id and reason.
-      all = fn p -> MapSet.union(keys.(p, "candidates"), keys.(p, "omitted")) end
+      # Every offered candidate is in the packet or omitted, once, by id and reason.
+      all = fn p -> Enum.map(p["candidates"] ++ p["omitted"], & &1["key"]) |> Enum.sort() end
       assert all.(text2) == all.(text)
+
+      for p <- [text, text2] do
+        assert all.(p) == Enum.uniq(all.(p))
+        assert length(all.(p)) == p["counts"]["offered"]
+      end
     end
 
     test "on a page without a word-bound claim, v2 sends what v1 sends", _ctx do

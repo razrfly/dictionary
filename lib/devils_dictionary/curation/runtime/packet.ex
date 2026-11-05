@@ -35,7 +35,8 @@ defmodule DevilsDictionary.Curation.Runtime.Packet do
 
   Every candidate the screen offers is in the packet or in its `omitted`
   list, by id and reason (`over_quota`, `meaning_out_of_bound`,
-  `meaning_unavailable`, `no_excerpt`), never by its text. The refresh
+  `meaning_unavailable`, `no_excerpt`, `outside_shelf_focus`, and the text
+  cuts' `text_cut_excluded` and `lexeme_claim_excluded`), never by its text. The refresh
   fingerprint (`digest/1`) covers what the packet sends, not what it left
   out, so a candidate that becomes eligible outside the cut changes it only
   where it changes what is sent (a quotation can raise its sense into a free

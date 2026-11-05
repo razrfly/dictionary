@@ -19,9 +19,9 @@ defmodule DevilsDictionary.Curation.Coverage do
   }
 
   alias DevilsDictionary.Curation.Digest
-  alias DevilsDictionary.Curation.Runtime.{Attempt, LedgerEntry, ModelConfig}
+  alias DevilsDictionary.Curation.Runtime.{Attempt, LedgerEntry, ModelConfig, Packet}
 
-  @omissions ~w(over_quota meaning_out_of_bound meaning_unavailable no_excerpt outside_shelf_focus text_cut_excluded lexeme_claim_excluded)
+  @omissions Packet.omission_reasons()
   @kinds ~w(content sense_definition sense_quotation work exemplar claim shelf)
   @sections ~w(definitions examples quotes images films music books poems news)
 

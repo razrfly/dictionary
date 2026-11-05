@@ -237,9 +237,10 @@ packet is a new request key and a new attempt.
 
 A comparison batch runs matched, **non-publishing** arms on pilot pages, all cut from one
 frozen snapshot (`Runtime.Compare`). An arm is `LABEL=MODEL-CONFIG[:CUT]`: the model config
-pins the instruction, and the cut is `current` (the live `whole-entry-cut-v1`, the default)
-or `text` (`whole-entry-text-cut-v1`: no books, films, images, music, poems, works or
-news; the freed slots refilled from text-bearing kinds under the same 24/12 bounds). The
+pins the instruction, and the cut is `current` (the live `whole-entry-cut-v1`, the default),
+`text` (`whole-entry-text-cut-v1`: no books, films, images, music, poems, works or
+news; the freed slots refilled from text-bearing kinds under the same 24/12 bounds) or
+`text2` (`whole-entry-text-cut-v2`: the text cut without word-bound claims, #316). The
 fixed-lead instruction `voltaire-whole-entry-v7-fixed-lead-v1` differs from v7 only in its
 lead section: where the page has an applicable Bierce entry, the packet names it as
 `fixed_lead`, the model returns a null lead and chooses highlights only, and the result's
@@ -295,7 +296,10 @@ D8's arms (#316, after D7's NOT JUSTIFIED) measure two changes to D7's nudge arm
 `claim` bound to a word (`m*`) rather than a sense, the `lexeme_entity_candidate` path of
 `LinkedClaims`: each is omitted as `lexeme_claim_excluded` before the quotas, so its slot
 flows down and is refilled as the text cut refills. The prompt does not carry the cut's
-name, so on a page without such a claim `text2` sends what `text` sends.
+name, so where the page's pool offers no word-bound claim `text2` sends what `text` sends.
+Where the pool offers one that `text` leaves out, `text2` may still differ through the
+meaning places, which are ranked by how many offered candidates cite each meaning: the
+dry run's fingerprints say which pages differ.
 `voltaire-whole-entry-v7-fixed-lead-cap200-nudge-attrib-v1` is the nudge text with one
 paragraph after its section (`Packet.attribution_section/0`), at cap 200 under
 `selection-output-v5`.
@@ -327,7 +331,8 @@ What it does:
    snapshot hashes them all. Each arm's packet has an **evidence fingerprint**
    (`Packet.evidence_fingerprint/1`: scope, meanings, candidates by ids and hashes,
    priority candidates and shelf generation; not the instruction, prompt, guidance, schema,
-   cut or omissions). Arms that share a cut must share it: A0 = L, P = PL.
+   cut or omissions). Arms that share a cut must share it: A0 = L, P = PL (D6), and
+   N = NA, NX = NXA (D8).
 2. **Dry run** prints, per case (`BATCH:SLUG:1`), each arm's fingerprint, packet hash,
    candidate count, priority candidates and fixed lead, and whether the case is matched.
    Give it the run's `--out`: it looks for an existing record of the batch beside it.
