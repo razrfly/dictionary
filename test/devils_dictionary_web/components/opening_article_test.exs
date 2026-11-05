@@ -261,6 +261,46 @@ defmodule DevilsDictionaryWeb.OpeningArticleTest do
     # A link in a credit or detail line is the article's to size.
     assert LazyHTML.query(doc, "#opening") |> LazyHTML.attribute("class") |> hd() =~
              "[&_dd_a]:min-h-11"
+
+    # The entry is among the records, another page: the arrow says it leaves.
+    assert LazyHTML.query(doc, "#opening-highlight-1-entry") |> LazyHTML.text() =~ "→"
+  end
+
+  test "a shelf's attribution links are 44 px targets that wrap inside the column" do
+    image = shelf(4, "images", "An image", "Visual representation.")
+
+    image = %{
+      image
+      | work: %{
+          image.work
+          | credit_parts: [
+              %{text: "A photographer", url: "https://example.test/by"},
+              %{text: ", ", url: nil},
+              %{text: "CC BY-SA 4.0", url: "https://example.test/licence"}
+            ]
+        }
+    }
+
+    doc = render_article(%{nine() | highlights: [image]})
+    attribution = LazyHTML.query(doc, "#opening-highlight-4-attribution")
+
+    assert Enum.count(LazyHTML.query(attribution, "a")) == 2
+    classes = attribution |> LazyHTML.attribute("class") |> hd()
+    assert classes =~ "[&_a]:min-h-11"
+    assert classes =~ "[&_a]:[overflow-wrap:anywhere]"
+  end
+
+  test "on the article each required credit takes a line of its own, with no separator to start one" do
+    credits = [
+      %Credit{label: "Source", text: "A source", href: "https://example.test/source"},
+      %Credit{label: "Rights", text: "Public domain"}
+    ]
+
+    doc = render_article(%{nine() | lead: %{lead() | credits: credits}, highlights: []})
+    rows = LazyHTML.query(doc, "#opening-lead-credits > div")
+
+    assert Enum.count(rows) == 2
+    refute Enum.any?(LazyHTML.attribute(rows, "class"), &(&1 =~ "after:content"))
   end
 
   test "the pronunciation variants and the curated article's own targets do not shrink" do

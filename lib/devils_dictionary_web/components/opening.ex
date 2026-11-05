@@ -325,8 +325,12 @@ defmodule DevilsDictionaryWeb.Opening do
 
     ~H"""
     <%!-- A link in a credit or detail line is a 44 px target at every width
-         (#309 review 4, item 3). --%>
-    <div id="opening" class="min-w-0 [&_dd_a]:inline-flex [&_dd_a]:min-h-11 [&_dd_a]:items-center">
+         (#309 review 4, item 3), and a long unbroken credit still wraps
+         inside the column (review 5). --%>
+    <div
+      id="opening"
+      class="min-w-0 [&_dd_a]:inline-flex [&_dd_a]:min-h-11 [&_dd_a]:max-w-full [&_dd_a]:items-center [&_dd_a]:[overflow-wrap:anywhere]"
+    >
       <.article_lead :if={@opening.lead} lead={@opening.lead} record_path={@record_path} />
       <section
         :if={@withheld_lead}
@@ -459,7 +463,12 @@ defmodule DevilsDictionaryWeb.Opening do
             </.link>
           </figcaption>
         </figure>
-        <.credit_line id="opening-lead-credits" credits={@lead.credits} class="max-w-[44rem]" />
+        <.credit_line
+          id="opening-lead-credits"
+          credits={@lead.credits}
+          class="max-w-[44rem]"
+          article
+        />
         <.choice_footer id="opening-lead" choice={@lead} article label="Why it leads">
           <.particulars
             record_path={@record_path}
@@ -636,7 +645,11 @@ defmodule DevilsDictionaryWeb.Opening do
       <p
         :if={@highlight.kind == :shelf && @highlight.work.credit_parts != []}
         id={"#{@id}-attribution"}
-        class="text-sm/6 text-pretty"
+        class={[
+          "text-sm/6 text-pretty",
+          @article &&
+            "[&_a]:inline-flex [&_a]:min-h-11 [&_a]:max-w-full [&_a]:items-center [&_a]:[overflow-wrap:anywhere]"
+        ]}
       >
         <%= for part <- @highlight.work.credit_parts do %>
           <a
@@ -659,7 +672,7 @@ defmodule DevilsDictionaryWeb.Opening do
           provider={@highlight.source.slug}
         />
       </div>
-      <.credit_line id={"#{@id}-credits"} credits={@highlight.credits} />
+      <.credit_line id={"#{@id}-credits"} credits={@highlight.credits} article={@article} />
       <.link
         :if={@highlight.links[:source]}
         href={@highlight.links.source}
@@ -733,7 +746,7 @@ defmodule DevilsDictionaryWeb.Opening do
         </div>
       </div>
 
-      <.credit_line id={"#{@id}-credits"} credits={@highlight.credits} />
+      <.credit_line id={"#{@id}-credits"} credits={@highlight.credits} article={@article} />
 
       <.choice_footer id={@id} choice={@highlight} compact={@compact} article={@article}>
         <.particulars
@@ -789,7 +802,7 @@ defmodule DevilsDictionaryWeb.Opening do
         </figcaption>
       </figure>
 
-      <.credit_line id={"#{@id}-credits"} credits={@highlight.credits} />
+      <.credit_line id={"#{@id}-credits"} credits={@highlight.credits} article={@article} />
 
       <.choice_footer id={@id} choice={@highlight} compact={@compact} article={@article}>
         <.particulars
@@ -858,7 +871,7 @@ defmodule DevilsDictionaryWeb.Opening do
         </a>
       </div>
 
-      <.credit_line id={"#{@id}-credits"} credits={@highlight.credits} />
+      <.credit_line id={"#{@id}-credits"} credits={@highlight.credits} article={@article} />
 
       <.choice_footer id={@id} choice={@highlight} compact={@compact} article={@article}>
         <.particulars
@@ -928,12 +941,12 @@ defmodule DevilsDictionaryWeb.Opening do
             <% else %>
               The entry among the definitions
             <% end %>
-            <span aria-hidden="true">↓</span>
+            <span aria-hidden="true">{if @article, do: "→", else: "↓"}</span>
           </.link>
         </figcaption>
       </figure>
 
-      <.credit_line id={"#{@id}-credits"} credits={@highlight.credits} />
+      <.credit_line id={"#{@id}-credits"} credits={@highlight.credits} article={@article} />
 
       <.choice_footer id={@id} choice={@highlight} compact={@compact} article={@article}>
         <.particulars
@@ -1015,7 +1028,7 @@ defmodule DevilsDictionaryWeb.Opening do
         </blockquote>
       </figure>
 
-      <.credit_line id={"#{@id}-credits"} credits={@highlight.credits} />
+      <.credit_line id={"#{@id}-credits"} credits={@highlight.credits} article={@article} />
 
       <.choice_footer id={@id} choice={@highlight} compact={@compact} article={@article}>
         <div class="flex flex-col gap-3">
@@ -1289,8 +1302,14 @@ defmodule DevilsDictionaryWeb.Opening do
   attr :credits, :list, default: []
   attr :class, :any, default: nil
 
+  attr :article, :boolean,
+    default: false,
+    doc: "on the curated article, one credit to a line: its links are 44 px boxes (#309 review 5)"
+
   # The credits a source's terms require, on the page: one run of text, every
-  # credit whole and unclamped, linked where its source names a page.
+  # credit whole and unclamped, linked where its source names a page. On the
+  # article a run of 44 px links would start lines with its separator, so
+  # each credit takes a line of its own.
   defp credit_line(assigns) do
     assigns = assign(assigns, :required, Enum.filter(assigns.credits, & &1.required?))
 
@@ -1302,7 +1321,7 @@ defmodule DevilsDictionaryWeb.Opening do
     >
       <div
         :for={credit <- @required}
-        class="inline after:mx-1.5 after:content-['·'] last:after:content-none"
+        class={!@article && "inline after:mx-1.5 after:content-['·'] last:after:content-none"}
       >
         <dt class="inline font-medium text-mist-700 dark:text-mist-300">{credit.label}</dt>
         <dd class="inline break-words">

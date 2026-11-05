@@ -251,13 +251,23 @@ defmodule DevilsDictionaryWeb.CuratedArticleLiveTest do
 
     assert offending == []
 
-    # A link in a credit or detail line is the article's to size.
-    assert view
-           |> element("#opening")
-           |> render()
-           |> LazyHTML.from_fragment()
-           |> LazyHTML.query("#opening")
-           |> LazyHTML.attribute("class")
-           |> hd() =~ "[&_dd_a]:min-h-11"
+    # Links that run in a line are sized by what holds them: credits and
+    # details, the headword's other words and Wikidata, the exact revisions.
+    for {holder, rule} <- [
+          {"#opening", "[&_dd_a]:min-h-11"},
+          {"#curated-masthead", "[&_#parts-of-speech_a]:min-h-11"},
+          {"#curated-masthead", "[&_#quick-definition_a]:min-h-11"},
+          {"#curated-provenance", "[&_#opening-about-revisions_a]:min-h-11"}
+        ] do
+      classes =
+        view
+        |> render()
+        |> LazyHTML.from_fragment()
+        |> LazyHTML.query(holder)
+        |> LazyHTML.attribute("class")
+        |> hd()
+
+      assert classes =~ rule, "#{holder} sizes its links"
+    end
   end
 end

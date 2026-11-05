@@ -94,7 +94,12 @@ defmodule DevilsDictionaryWeb.CuratedArticle do
 
     ~H"""
     <article id="curated-page" class="min-w-0">
-      <header id="curated-masthead" class="flex flex-col gap-5 pb-6">
+      <%!-- The headword's links in a line, 44 px targets on the article
+           (#309 review 5); the shared headword is unchanged elsewhere. --%>
+      <header
+        id="curated-masthead"
+        class="flex flex-col gap-5 pb-6 [&_#parts-of-speech_a]:inline-flex [&_#parts-of-speech_a]:min-h-11 [&_#parts-of-speech_a]:items-center [&_#quick-definition_a]:inline-flex [&_#quick-definition_a]:min-h-11 [&_#quick-definition_a]:items-center"
+      >
         <nav
           id="entry-views"
           aria-label="Entry views"
@@ -391,6 +396,7 @@ defmodule DevilsDictionaryWeb.CuratedArticle do
       id="curated-provenance"
       class={[
         "flex flex-col gap-3 border-t border-mist-950/10 pt-8 text-base/7 dark:border-white/10",
+        "[&_#opening-about-revisions_a]:inline-flex [&_#opening-about-revisions_a]:min-h-11 [&_#opening-about-revisions_a]:items-center",
         muted()
       ]}
     >
