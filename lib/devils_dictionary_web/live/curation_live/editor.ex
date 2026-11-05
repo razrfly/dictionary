@@ -1473,7 +1473,7 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
               >
                 <%!-- The public page's own renderer (#309), so the preview is
                      what publishing shows. --%>
-                <Opening.article :if={@preview.opening} opening={@preview.opening} />
+                <Opening.article :if={@preview.opening} opening={@preview.opening} unavailable />
                 <p
                   :if={is_nil(@preview.opening)}
                   id="curation-preview-empty"

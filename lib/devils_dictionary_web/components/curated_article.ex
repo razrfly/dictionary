@@ -78,6 +78,7 @@ defmodule DevilsDictionaryWeb.CuratedArticle do
   attr :mode, :atom, default: :public
   attr :reviewer?, :boolean, default: false
   attr :earlier, :list, default: []
+  attr :chosen, :map, default: nil, doc: "`Curation.PageState.chosen/2`: the version's items"
 
   attr :trail, :list,
     default: [],
@@ -143,6 +144,7 @@ defmodule DevilsDictionaryWeb.CuratedArticle do
           >
             <.editor
               opening={@opening}
+              chosen={@chosen}
               page={@page}
               card_sources={@card_sources}
               record_path={@record_path}
@@ -226,6 +228,7 @@ defmodule DevilsDictionaryWeb.CuratedArticle do
   # ── the editor's take (D1 row 17) ────────────────────────────────────────
 
   attr :opening, :map, required: true
+  attr :chosen, :map, default: nil
   attr :page, :map, required: true
   attr :card_sources, :list, default: []
   attr :record_path, :string, required: true
@@ -233,7 +236,15 @@ defmodule DevilsDictionaryWeb.CuratedArticle do
   defp editor(assigns) do
     selector = assigns.opening.review.selected_by || %{}
     persona = persona(selector)
-    withheld = assigns.opening.withheld
+    # What the version holds, shown or withheld; a lead the lead rule finds
+    # missing is withheld too, but the editor never chose it (#309 review R2).
+    withheld =
+      case assigns.chosen do
+        %{lead?: false} -> Enum.reject(assigns.opening.withheld, &(&1.role == :lead))
+        _ -> assigns.opening.withheld
+      end
+
+    shown = length(List.wrap(assigns.opening.lead)) + length(assigns.opening.highlights)
 
     assigns =
       assigns
@@ -241,10 +252,7 @@ defmodule DevilsDictionaryWeb.CuratedArticle do
       |> assign(:editor, editor_phrase(selector))
       |> assign(:about, Map.get(@personas, persona, %{}))
       |> assign(:lens, lens(selector, persona))
-      |> assign(
-        :chose,
-        length(List.wrap(assigns.opening.lead)) + length(assigns.opening.highlights)
-      )
+      |> assign(:chose, (assigns.chosen && assigns.chosen.items) || shown + length(withheld))
       |> assign(:withheld, withheld)
       # A withheld lead says so in its own place; the rest are listed here.
       |> assign(:withheld_items, Enum.reject(withheld, &(&1.role == :lead)))
@@ -325,7 +333,7 @@ defmodule DevilsDictionaryWeb.CuratedArticle do
       <ul role="list" class="flex flex-wrap gap-2">
         <li :for={{_group, chip} <- @chips}>
           <.link
-            id={"curated-related-#{chip.slug}"}
+            id={"curated-related-word-#{chip.slug}"}
             navigate={Word.hop(chip.slug, @trail, @demo)}
             class="flex min-h-11 items-center rounded-full bg-mist-950/5 px-3 text-base/6 hover:bg-mist-950/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 sm:min-h-8 dark:bg-white/10 dark:hover:bg-white/15 dark:focus-visible:outline-white"
           >
@@ -454,7 +462,8 @@ defmodule DevilsDictionaryWeb.CuratedArticle do
           No editor has assessed it yet.
         </p>
       <% end %>
-      <p id="curated-holdings" class="text-base/7 text-pretty">
+      <%!-- A bare index word holds no dictionary entry yet: no count to give. --%>
+      <p :if={@card_sources != []} id="curated-holdings" class="text-base/7 text-pretty">
         This page holds {holdings(@page, @card_sources)}.
       </p>
       <.link
@@ -488,9 +497,11 @@ defmodule DevilsDictionaryWeb.CuratedArticle do
     <p id="curated-state-assessed" class="flex gap-3 text-base/7 text-pretty">
       <Opening.ai_mark class="mt-0.5 size-6 text-[0.625rem]" />
       <span>
-        {@editor} {@lead_in} {clock(@assessment.assessed_at)} and chose not to select{if @assessment.reason,
-          do: ":",
-          else: ", and gave no reason."}
+        {@editor} {@lead_in} {clock(@assessment.assessed_at)} and chose not to select{cond do
+          @assessment.reason -> ":"
+          @assessment[:reason_withheld?] -> "."
+          true -> ", and gave no reason."
+        end}
       </span>
     </p>
     <blockquote
@@ -513,12 +524,8 @@ defmodule DevilsDictionaryWeb.CuratedArticle do
 
   # "Inspired by Voltaire · voltaire-whole-entry-v6 · qwen3.5-…": the
   # editor's actor label, as the receipt and the curation screen name it.
-  defp persona(%{kind: :model, label: label}) when is_binary(label) do
-    case label |> String.split(" · ") |> hd() do
-      "Inspired by " <> name -> name
-      _ -> nil
-    end
-  end
+  defp persona(%{kind: :model, label: label}) when is_binary(label),
+    do: Opening.editor_parts(label).persona
 
   defp persona(_selector), do: nil
 
@@ -535,16 +542,15 @@ defmodule DevilsDictionaryWeb.CuratedArticle do
   defp lens(%{kind: :model}, nil), do: @generic
   defp lens(_selector, persona), do: get_in(@personas, [persona, :sentence])
 
+  # No person's name on a public page (#299 M5): a review is "a person".
   defp status(%{reviewed_by: reviewer, reviewed_on: on}) when is_binary(reviewer),
-    do: "Reviewed by #{reviewer}" <> if(on, do: " · #{date(on)}", else: "")
+    do: "Reviewed by a person" <> if(on, do: " · #{date(on)}", else: "")
 
   defp status(_review), do: "AI-selected · not reviewed by a person"
 
   defp technical(%{kind: :model, label: label}) when is_binary(label) do
-    case String.split(label, " · ") do
-      [_persona, instruction, model | _] -> {instruction, model}
-      _ -> {nil, nil}
-    end
+    %{instruction: instruction, model: model} = Opening.editor_parts(label)
+    {instruction, model}
   end
 
   defp technical(_selector), do: {nil, nil}

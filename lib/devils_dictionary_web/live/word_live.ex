@@ -129,6 +129,7 @@ defmodule DevilsDictionaryWeb.WordLive do
        curated?: false,
        page_state: nil,
        earlier_versions: [],
+       chosen: nil,
        # The page's own path, as in the address bar: what its drawers patch
        # to, so an exact word keeps its identity through a reload.
        base: nil,
@@ -349,13 +350,13 @@ defmodule DevilsDictionaryWeb.WordLive do
     page_state =
       if on? and is_nil(opening) and reader == PublishedReader, do: PageState.for_page(page)
 
-    earlier =
+    {earlier, chosen} =
       case opening do
         %{origin: :published, composition: %{id: id, version: version}} when on? ->
-          PageState.earlier_versions(id, version)
+          {PageState.earlier_versions(id, version), PageState.chosen(id, version)}
 
         _ ->
-          []
+          {[], nil}
       end
 
     # Counted before the samples go in: the source line is a claim about what has
@@ -375,6 +376,7 @@ defmodule DevilsDictionaryWeb.WordLive do
       |> assign(:opening_reader, reader)
       |> assign(:page_state, page_state)
       |> assign(:earlier_versions, earlier)
+      |> assign(:chosen, chosen)
       |> assign(:card_sources, card_sources)
       |> assign(:suggestions, suggestions(page, slug))
       |> assign(:choices, choices(slug, socket.assigns.object_id))
@@ -1127,13 +1129,17 @@ defmodule DevilsDictionaryWeb.WordLive do
             patch={entry_view_path(assigns, false)}
             aria-current={if !@records?, do: "page"}
             class={["underline-offset-4 hover:underline", !@records? && "underline"]}
-          >{if @live_action == :on, do: "This editor’s selection", else: "Curated article"}</.link>
+          >{if @live_action == :on and @records?,
+            do: "This editor’s selection",
+            else: "Curated article"}</.link>
           <.link
             id="entry-records"
             patch={entry_view_path(assigns, true)}
             aria-current={if @records?, do: "page"}
             class={["underline-offset-4 hover:underline", @records? && "underline"]}
-          >{if @live_action == :on, do: "Everything this page holds", else: "Source records"}</.link>
+          >{if @live_action == :on and @records?,
+            do: "Everything this page holds",
+            else: "Source records"}</.link>
         </nav>
 
         <%!-- The aggregate names itself (#219 B5): "On mars" over the words it
@@ -1385,6 +1391,7 @@ defmodule DevilsDictionaryWeb.WordLive do
       mode={@reading_mode}
       reviewer?={@reviewer?}
       earlier={@earlier_versions}
+      chosen={@chosen}
       trail={trail_here(@page)}
     >
       <:extra :if={@overview || @choice_overview || @linked_overviews != []}>

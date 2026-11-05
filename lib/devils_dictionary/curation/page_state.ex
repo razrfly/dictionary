@@ -26,6 +26,7 @@ defmodule DevilsDictionary.Curation.PageState do
   import Ecto.Query
 
   alias DevilsDictionary.Curation.{
+    CompositionItem,
     CompositionPublication,
     CompositionVersion,
     Compositions,
@@ -68,6 +69,21 @@ defmodule DevilsDictionary.Curation.PageState do
     end
   end
 
+  @doc """
+  What the editor chose in a version: how many items it holds and whether
+  one of them is the lead, for "The editor chose {k}" (D1 row 17c), which
+  counts the version's items, shown or withheld at read time.
+  """
+  def chosen(composition_id, version) do
+    Repo.one(
+      from i in CompositionItem,
+        join: v in CompositionVersion,
+        on: v.id == i.composition_version_id,
+        where: v.composition_id == ^composition_id and v.version == ^version,
+        select: %{items: count(i.id), lead?: fragment("bool_or(? = 'lead')", i.role)}
+    )
+  end
+
   @doc "The composition's earlier published versions, newest first."
   def earlier_versions(composition_id, version) do
     Repo.all(
@@ -90,21 +106,24 @@ defmodule DevilsDictionary.Curation.PageState do
     end
   end
 
-  # The refresh row's outcome is the assessment; the attempt its generation
-  # names holds who made it and, for an abstention, the reason it stored.
+  # The refresh row's outcome is the assessment. Its generation moves on as
+  # soon as the next check is admitted, while the outcome and its time stay
+  # the last completed run's, so the attempt is the latest abstention under
+  # this composition and configuration version that finished by then — not
+  # the one the current generation names (#309 review R1).
   defp assessment(composition_id, configuration_version_id) do
     case Refresh.state_for(composition_id, configuration_version_id) do
-      %{last_outcome: :abstained, last_completed_at: %{} = at} = row ->
-        attempt =
-          attempt(
-            "proposal:#{composition_id}:#{configuration_version_id}:#{row.refresh_generation}"
-          )
+      %{last_outcome: :abstained, last_completed_at: %{} = at} ->
+        attempt = abstention("proposal:#{composition_id}:#{configuration_version_id}:", at)
 
         %{
           kind: :abstained,
           assessed_at: at,
           editor: attempt && attempt.editor,
-          reason: attempt && present(attempt.reason)
+          reason: attempt && present(attempt.reason),
+          # The runtime blanks a reason that quoted provider text; the page
+          # then says nothing about a reason rather than "gave no reason".
+          reason_withheld?: (attempt && attempt.reason_withheld?) || false
         }
 
       _ ->
@@ -119,15 +138,23 @@ defmodule DevilsDictionary.Curation.PageState do
     end
   end
 
-  defp attempt(request_key) do
+  defp abstention(prefix, at) do
+    finished_by = at |> DateTime.to_naive() |> NaiveDateTime.add(1, :second)
+
     Repo.one(
       from a in "inference_attempts",
         left_join: actor in "actors",
         on: actor.id == a.requested_by_actor_id,
-        where: a.request_key == ^request_key,
-        order_by: [desc: a.id],
+        where:
+          like(a.request_key, ^(prefix <> "%")) and a.outcome == "abstained" and
+            a.finished_at <= type(^finished_by, :naive_datetime),
+        order_by: [desc: a.finished_at, desc: a.id],
         limit: 1,
-        select: %{editor: actor.label, reason: fragment("?->>'abstain_reason'", a.result)}
+        select: %{
+          editor: actor.label,
+          reason: fragment("?->>'abstain_reason'", a.result),
+          reason_withheld?: fragment("(?->>'abstain_reason_withheld') is not null", a.result)
+        }
     )
   end
 

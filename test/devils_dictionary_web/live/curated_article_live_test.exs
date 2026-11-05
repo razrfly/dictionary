@@ -77,6 +77,61 @@ defmodule DevilsDictionaryWeb.CuratedArticleLiveTest do
     assert has_element?(view, "#curated-holdings", "The editor chose 3.")
   end
 
+  test "the editor chose what the version holds: a withheld item still counts, and is named",
+       ctx do
+    composition = provision!(ctx)
+    publish!(ctx, composition)
+
+    # The Milton quotation's sense gets a newer revision: the published item
+    # is withheld at read time (#255 §2.3).
+    current = DevilsDictionary.Registry.current_sense_revision(ctx.profound.object_id)
+
+    {:ok, _newer} =
+      DevilsDictionary.Registry.add_sense_revision(ctx.profound.object_id, %{
+        gloss: current.gloss,
+        position: current.position,
+        examples: current.examples,
+        url: current.url,
+        source_record_revision_id: current.source_record_revision_id
+      })
+
+    {:ok, view, _} = live(ctx.conn, ~p"/on/love")
+
+    assert has_element?(view, "#curated-holdings", "The editor chose 3, and 1 is withheld.")
+    assert has_element?(view, "#curated-withheld-2", "Nothing was put in its place.")
+    refute has_element?(view, "#opening-highlight-2")
+  end
+
+  test "a person's review is said without the person's name", ctx do
+    publish!(ctx, provision!(ctx))
+    {:ok, view, _} = live(ctx.conn, ~p"/on/love")
+
+    assert has_element?(view, "#curated-status", "Reviewed by a person")
+
+    reviewer =
+      DevilsDictionary.Sources.Actor
+      |> DevilsDictionary.Repo.get_by!(user_id: ctx.reviewer.user.id)
+      |> DevilsDictionary.Curation.Compositions.author_label()
+
+    # The masthead names no one; the record's own disclosure in the footer
+    # (`#opening-about`, unchanged by #309) keeps its actors.
+    refute view |> element("#curated-masthead") |> render() =~ reviewer
+  end
+
+  test "every id on the page is unique", ctx do
+    publish!(ctx, provision!(ctx))
+    {:ok, view, _} = live(ctx.conn, ~p"/on/love")
+
+    ids =
+      view
+      |> render()
+      |> LazyHTML.from_fragment()
+      |> LazyHTML.query("[id]")
+      |> Enum.map(&(&1 |> LazyHTML.attribute("id") |> hd()))
+
+    assert ids -- Enum.uniq(ids) == []
+  end
+
   test "withheld as a whole: when it was published, why it is not shown, nothing in its place",
        ctx do
     %{version: version} = publish!(ctx, provision!(ctx))

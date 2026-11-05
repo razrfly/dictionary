@@ -289,6 +289,11 @@ defmodule DevilsDictionaryWeb.Opening do
   attr :mode, :atom, default: :public
   attr :record_path, :string, default: ""
 
+  attr :unavailable, :boolean,
+    default: false,
+    doc:
+      "list withheld highlights here (the curation preview); the page lists them in the editor's take"
+
   @doc """
   The selection as the curated article reads it (#309 §4, D1): the lead with
   its reason, *In the news* directly after it, then the four sections a
@@ -316,6 +321,7 @@ defmodule DevilsDictionaryWeb.Opening do
       |> assign(:news, Map.get(groups, "news", []))
       |> assign(:sections, sections)
       |> assign(:withheld_lead, withheld_lead(assigns.opening))
+      |> assign(:unavailable_slots, Enum.filter(slots(assigns.opening), & &1.withheld))
 
     ~H"""
     <div id="opening" class="min-w-0">
@@ -344,6 +350,20 @@ defmodule DevilsDictionaryWeb.Opening do
         mode={@mode}
         record_path={@record_path}
       />
+      <section
+        :if={@unavailable and @unavailable_slots != []}
+        id="curated-unavailable"
+        class="flex flex-col gap-4 border-t border-mist-950/10 py-8 dark:border-white/10"
+      >
+        <h2 class="font-display text-3xl/9 tracking-tight text-pretty">Unavailable selections</h2>
+        <ul role="list" class="flex flex-col gap-4">
+          <.withheld
+            :for={slot <- @unavailable_slots}
+            id={"curated-withheld-#{slot.position}"}
+            item={slot.withheld}
+          />
+        </ul>
+      </section>
     </div>
     """
   end
@@ -1122,7 +1142,11 @@ defmodule DevilsDictionaryWeb.Opening do
   """
   def cut_at(%{kind: :editorial, text: text, author: %{kind: :model, label: label}})
       when is_binary(text) and is_binary(label) do
-    with [_persona, instruction | _] <- String.split(label, " · "),
+    with %{instruction: instruction} when is_binary(instruction) <- editor_parts(label),
+         true <-
+           DevilsDictionary.Curation.Runtime.SectionOutput.enabled?(%{
+             "instruction_version" => instruction
+           }),
          cap = DevilsDictionary.Curation.WholeEntry.reason_cap(instruction),
          true <- String.length(text) == cap,
          false <- String.ends_with?(String.trim_trailing(text), [".", "!", "?", "…"]) do
@@ -1133,6 +1157,26 @@ defmodule DevilsDictionaryWeb.Opening do
   end
 
   def cut_at(_reason), do: nil
+
+  @doc """
+  An AI editor's actor label in its parts: "Inspired by Voltaire ·
+  voltaire-whole-entry-v6 · qwen3.5-…" for a persona, "generic-editor-v2 ·
+  qwen3.5-…" for the generic editor (`Configurations.editor_label/1`).
+  """
+  def editor_parts(label) when is_binary(label) do
+    case String.split(label, " · ") do
+      ["Inspired by " <> persona, instruction, model | _] ->
+        %{persona: persona, instruction: instruction, model: model}
+
+      [instruction, model] ->
+        %{persona: nil, instruction: instruction, model: model}
+
+      _ ->
+        %{persona: nil, instruction: nil, model: nil}
+    end
+  end
+
+  def editor_parts(_label), do: %{persona: nil, instruction: nil, model: nil}
 
   attr :choice, :map, required: true
 
