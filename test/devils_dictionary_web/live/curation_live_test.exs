@@ -432,8 +432,8 @@ defmodule DevilsDictionaryWeb.CurationLiveTest do
 
       {:ok, page, _html} = live(ctx.conn, ~p"/on/love")
       assert has_element?(page, "#opening-lead-text", "A temporary insanity")
-      assert has_element?(page, "#opening-highlight-1-note-0", @johnson_note)
-      assert has_element?(page, "#opening-highlight-2-note-0", @milton_note)
+      assert has_element?(page, "#opening-highlight-1-reason", @johnson_note)
+      assert has_element?(page, "#opening-highlight-2-reason", @milton_note)
 
       assert has_element?(
                page,
@@ -491,7 +491,7 @@ defmodule DevilsDictionaryWeb.CurationLiveTest do
       assert has_element?(view, "[id^='curation-history-receipt-']", "“wording”")
 
       {:ok, page, _html} = live(ctx.conn, ~p"/on/love")
-      assert has_element?(page, "#opening-highlight-1-note-0", @johnson_note)
+      assert has_element?(page, "#opening-highlight-1-reason", @johnson_note)
 
       # Another reviewer opening it is told whose note it carries; once they
       # save a version of their own, the note is theirs.
@@ -695,8 +695,11 @@ defmodule DevilsDictionaryWeb.CurationLiveTest do
       String.ends_with?(id, ["-text", "-title", "-why", "-credits", "-citation"])
     end)
     |> Map.new(fn node ->
+      # The receipt is the published version's own record (#309: inside the
+      # item's one disclosure); a preview has none yet.
+      receipt = node |> LazyHTML.query("[id$='-receipt']") |> LazyHTML.text()
       {[id], text} = {LazyHTML.attribute(node, "id"), LazyHTML.text(node)}
-      {id, text |> String.replace(~r/\s+/, " ") |> String.trim()}
+      {id, text |> String.replace(receipt, "") |> String.replace(~r/\s+/, " ") |> String.trim()}
     end)
   end
 

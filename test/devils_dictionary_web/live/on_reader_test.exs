@@ -327,7 +327,8 @@ defmodule DevilsDictionaryWeb.OnReaderTest do
         {:ok, view, _html} = live(ctx.conn, "/on/mars")
 
         assert has_element?(view, "#overview")
-        assert has_element?(view, "nav[aria-label='In this entry'] a[href='#subjects']")
+        # The curated page (#309) carries the overview's subjects itself.
+        assert has_element?(view, "#curated-overview #subjects")
         # Stored order, and a member named otherwise than the page.
         curated =
           view
@@ -406,7 +407,8 @@ defmodule DevilsDictionaryWeb.OnReaderTest do
       reading(false, fn ->
         {:ok, view, _} = live(ctx.conn, "/on/mars")
         assert has_element?(view, "#subjects-withheld")
-        assert has_element?(view, "nav[aria-label='In this entry'] a[href='#subjects']")
+        # The curated page (#309) carries the overview's subjects itself.
+        assert has_element?(view, "#curated-overview #subjects")
         {:ok, records, _} = source_live(ctx.conn, "/on/mars")
         refute has_element?(records, "#subjects-withheld")
       end)

@@ -94,18 +94,21 @@ defmodule DevilsDictionaryWeb.WordLiveOpeningTest do
 
   defp opening_html(view), do: view |> element("#opening") |> render()
 
-  test "reference layout preserves the published version, required credits and compact exact-record receipt",
+  test "the curated article preserves the published version, required credits and the exact-record receipt",
        ctx do
     publish_love!(ctx)
     {:ok, view, _} = live(ctx.conn, "/on/love?layout=reference")
-    assert has_element?(view, "#reference-article")
+    assert has_element?(view, "#curated-page")
     assert has_element?(view, "#opening-lead-text", "temporary insanity")
     assert has_element?(view, "#opening-lead-credits")
-    assert has_element?(view, "#opening-lead-record-details summary")
-    assert has_element?(view, "#opening-lead-record-details", "1911")
+    # One disclosure per item (#309 D1 row 9) holds the dates, the basis and
+    # the exact record.
+    assert has_element?(view, "#opening-lead-why summary", "About this choice")
+    assert has_element?(view, "#opening-lead-why #opening-lead-receipt", "1911")
     assert has_element?(view, "#opening-lead-receipt a[href*='/on/love/receipt/']")
-    assert has_element?(view, "#opening-highlight-1-record-details")
-    assert has_element?(view, "#rail-card-johnson[href*='/materials']")
+    assert has_element?(view, "#opening-highlight-1-why #opening-highlight-1-receipt")
+    refute has_element?(view, "#opening-lead-record-details")
+    assert has_element?(view, "#record-inventory-link[href*='/materials']")
     assert has_element?(view, "#opening-about")
   end
 
@@ -113,8 +116,9 @@ defmodule DevilsDictionaryWeb.WordLiveOpeningTest do
     {:ok, view, _html} = live(ctx.conn, ~p"/on/love")
 
     refute has_element?(view, "#opening")
-    assert has_element?(view, "#curated-empty")
-    assert has_element?(view, "#reference-article #word-rail")
+    assert has_element?(view, "#curated-state-heading", "No selection is published for love.")
+    assert has_element?(view, "#curated-state-why", "No editor has assessed it yet.")
+    assert has_element?(view, "#curated-state #record-inventory-link[href*='/materials']")
   end
 
   test "10: a published composition is the opening, in order, signed, with its record", ctx do
@@ -148,8 +152,10 @@ defmodule DevilsDictionaryWeb.WordLiveOpeningTest do
     reviewer = label(ctx.reviewer)
 
     for {n, note} <- [{1, @johnson_note}, {2, @milton_note}] do
-      assert has_element?(view, "#opening-highlight-#{n}-why summary", "Why this is here")
-      assert has_element?(view, "#opening-highlight-#{n}-note-0", note)
+      # The note is on the page (#309 D1 row 15); its disclosure says who
+      # wrote it.
+      assert has_element?(view, "#opening-highlight-#{n}-reason", note)
+      assert has_element?(view, "#opening-highlight-#{n}-why summary", "About this choice")
 
       assert has_element?(
                view,
@@ -184,9 +190,9 @@ defmodule DevilsDictionaryWeb.WordLiveOpeningTest do
     assert has_element?(view, "#opening-about-changed", "Not recorded yet.")
     assert has_element?(view, "#opening-about-next", "Queued now.")
 
-    # The dictionary index links to the full uncurated record.
-    assert has_element?(view, "#rail-card-bierce[href*='/materials'][href$='#card-bierce']")
-    refute has_element?(view, "#curated-empty")
+    # Every source record is one tap away.
+    assert has_element?(view, "#record-inventory-link[href*='/materials']")
+    refute has_element?(view, "#curated-state")
     {:ok, records, _} = live(ctx.conn, ~p"/on/love/materials")
     assert has_element?(records, "#card-bierce")
   end
@@ -266,7 +272,7 @@ defmodule DevilsDictionaryWeb.WordLiveOpeningTest do
 
     {:ok, fresh, _html} = live(ctx.conn, ~p"/on/love")
     refute has_element?(fresh, "#opening")
-    assert has_element?(fresh, "#curated-empty")
+    assert has_element?(fresh, "#curated-state-heading", "No selection is published for love.")
   end
 
   describe "12: the fixture gate" do
@@ -406,7 +412,7 @@ defmodule DevilsDictionaryWeb.WordLiveOpeningTest do
     assert has_element?(view, "#opening-highlight-1-named", "Nominated by #{label(ctx.author)}")
     assert has_element?(view, "#opening-highlight-1-named", "accepted")
     assert has_element?(view, "#opening-highlight-1-cited", glosses().benevolent)
-    assert has_element?(view, "#opening-highlight-1-note-0", @exemplar_note)
+    assert has_element?(view, "#opening-highlight-1-reason", @exemplar_note)
     assert has_element?(view, "#opening-highlight-1-rationale", "fixture rationale")
     assert has_element?(view, "#opening-highlight-1-stage-reviewed", "Accepted")
     assert has_element?(view, "#opening-highlight-1-stage-opening", "Published on")
@@ -490,7 +496,7 @@ defmodule DevilsDictionaryWeb.WordLiveOpeningTest do
                "Public domain poetry; API under MIT"
              )
 
-      assert has_element?(view, "#opening-highlight-1-note-0", @poem_note)
+      assert has_element?(view, "#opening-highlight-1-reason", @poem_note)
 
       # The book: title, author and year, its public-domain basis, Open Library.
       assert has_element?(view, "#opening-highlight-2-title", "Sister Carrie")
@@ -510,7 +516,7 @@ defmodule DevilsDictionaryWeb.WordLiveOpeningTest do
                Phoenix.HTML.html_escape(artwork["image_url"]) |> Phoenix.HTML.safe_to_string()
 
       assert has_element?(view, "#opening-highlight-3-credits", artwork["credit_line"])
-      assert has_element?(view, "#opening-highlight-3-note-0", @artwork_note)
+      assert has_element?(view, "#opening-highlight-3-reason", @artwork_note)
 
       assert has_element?(
                view,

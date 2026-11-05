@@ -11,7 +11,8 @@ defmodule DevilsDictionaryWeb.WordReferenceLiveTest do
 
   test "curated article is clean and preserves exact choice and dictionary navigation", ctx do
     {:ok, view, _} = live(ctx.conn, "/on/love?opening=fixture")
-    assert has_element?(view, "#reference-article")
+    assert has_element?(view, "#curated-page")
+    refute has_element?(view, "#reference-article")
     refute has_element?(view, "#reference-record")
     refute has_element?(view, "#in-culture")
     refute has_element?(view, "#card-bierce")
@@ -28,7 +29,14 @@ defmodule DevilsDictionaryWeb.WordReferenceLiveTest do
     refute has_element?(view, "#opening-lead-meaning a[phx-click]")
     assert has_element?(view, "#opening-fixture", "not published")
     assert has_element?(view, "#entry-curated[aria-current='page']")
-    assert has_element?(view, "#rail-card-bierce[href*='/materials'][href$='#card-bierce']")
+    # Every source record is one tap away, and named for what it holds.
+    assert has_element?(
+             view,
+             "#record-inventory-link[href*='/materials']",
+             "Everything this page holds"
+           )
+
+    assert has_element?(view, "#entry-records[href*='/materials']", "Everything this page holds")
     refute has_element?(view, "#entry-layout-switch")
   end
 
@@ -165,7 +173,7 @@ defmodule DevilsDictionaryWeb.WordReferenceLiveTest do
 
   test "unknown view stays on the curated article", ctx do
     {:ok, view, _} = live(ctx.conn, "/on/love?view=unrecognised")
-    assert has_element?(view, "#reference-article")
+    assert has_element?(view, "#curated-page")
     refute has_element?(view, "#record-inventory")
   end
 

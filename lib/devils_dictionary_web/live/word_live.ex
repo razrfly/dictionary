@@ -65,7 +65,7 @@ defmodule DevilsDictionaryWeb.WordLive do
   alias DevilsDictionary.Artworks.Corpus
   alias DevilsDictionary.Claims.Contributions
   alias DevilsDictionary.Curation.Opening, as: CuratedOpening
-  alias DevilsDictionary.Curation.{PublishedReader, Refresh, RefreshState}
+  alias DevilsDictionary.Curation.{PageState, PublishedReader, Refresh, RefreshState}
   alias DevilsDictionary.Lexicon
   alias DevilsDictionary.Lexicon.WordPage
   alias DevilsDictionary.Routing.{Links, OnPage}
@@ -73,6 +73,7 @@ defmodule DevilsDictionaryWeb.WordLive do
 
   alias DevilsDictionaryWeb.{
     CrowdCard,
+    CuratedArticle,
     Culture,
     Demo,
     Examples,
@@ -123,6 +124,11 @@ defmodule DevilsDictionaryWeb.WordLive do
        culture_notes: [],
        opening: nil,
        opening_reader: nil,
+       # The curated article (#309): what it says with nothing to show, and
+       # the composition's earlier versions for its footer.
+       curated?: false,
+       page_state: nil,
+       earlier_versions: [],
        # The page's own path, as in the address bar: what its drawers patch
        # to, so an exact word keeps its identity through a reload.
        base: nil,
@@ -236,6 +242,16 @@ defmodule DevilsDictionaryWeb.WordLive do
         load(assign(socket, :base, base), slug, trail, demo, reader)
       end
 
+    # `/on/:slug` reads as its own article (#309); its source records, a
+    # `/words` page and `?layout=current` keep their layouts.
+    socket =
+      assign(
+        socket,
+        :curated?,
+        socket.assigns.live_action == :on and not socket.assigns.records? and
+          socket.assigns.reference? and socket.assigns.page.headword.lexemes != []
+      )
+
     # Reuse the existing public native-claim reader once per loaded source view.
     claim_scope =
       {base, Enum.map(socket.assigns.page.headword.lexemes, & &1.id), socket.assigns.reading_mode}
@@ -326,6 +342,21 @@ defmodule DevilsDictionaryWeb.WordLive do
     # only — no provider, no model, no write.
     opening = CuratedOpening.for_page(page, reader)
     opening = refresh_visit(socket, page, opening, slug, reader, demo)
+    on? = socket.assigns.live_action == :on and page.headword.lexemes != []
+
+    # The curated article's own reads (#309), database only: the state it is
+    # in when nothing is shown, and the versions its footer lists.
+    page_state =
+      if on? and is_nil(opening) and reader == PublishedReader, do: PageState.for_page(page)
+
+    earlier =
+      case opening do
+        %{origin: :published, composition: %{id: id, version: version}} when on? ->
+          PageState.earlier_versions(id, version)
+
+        _ ->
+          []
+      end
 
     # Counted before the samples go in: the source line is a claim about what has
     # been absorbed, and "8 sources" on a page where three of them are invented
@@ -342,6 +373,8 @@ defmodule DevilsDictionaryWeb.WordLive do
       |> assign(:page, page)
       |> assign(:opening, opening)
       |> assign(:opening_reader, reader)
+      |> assign(:page_state, page_state)
+      |> assign(:earlier_versions, earlier)
       |> assign(:card_sources, card_sources)
       |> assign(:suggestions, suggestions(page, slug))
       |> assign(:choices, choices(slug, socket.assigns.object_id))
@@ -1084,7 +1117,7 @@ defmodule DevilsDictionaryWeb.WordLive do
         />
 
         <nav
-          :if={@page.headword.lexemes != []}
+          :if={@page.headword.lexemes != [] and not @curated?}
           id="entry-views"
           aria-label="Entry views"
           class="mb-8 flex flex-wrap gap-6 border-b border-mist-950/10 pb-4 text-base/7 dark:border-white/10"
@@ -1106,7 +1139,7 @@ defmodule DevilsDictionaryWeb.WordLive do
         <%!-- The aggregate names itself (#219 B5): "On mars" over the words it
              reads; the headword stays the page's h1. --%>
         <p
-          :if={@live_action == :on and @page.headword.lexemes != []}
+          :if={@live_action == :on and @page.headword.lexemes != [] and not @curated?}
           id="on-title"
           class="mb-2 text-base/7 font-semibold text-mist-700 sm:text-sm/6 dark:text-mist-400"
         >
@@ -1123,6 +1156,8 @@ defmodule DevilsDictionaryWeb.WordLive do
             </div>
           <% @page.headword.lexemes == [] -> %>
             <.miss slug={@slug} suggestions={@suggestions} demo={@demo} exact={@exact} />
+          <% @curated? -> %>
+            <.curated {assigns} />
           <% @records? -> %>
             <.record_view {assigns} />
           <% @reference? -> %>
@@ -1321,6 +1356,60 @@ defmodule DevilsDictionaryWeb.WordLive do
         )
       }
     />
+    """
+  end
+
+  # The curated page (#309): the same assigns, reader and components, laid
+  # out as an article an editor made. Presentation only.
+  defp curated(assigns) do
+    assigns =
+      assigns
+      |> assign(:record_path, entry_view_path(assigns, true))
+      |> assign(:curated_path, entry_view_path(assigns, false))
+
+    ~H"""
+    <CuratedArticle.article
+      page={@page}
+      opening={@opening}
+      state={@page_state}
+      base={@base}
+      curated_path={@curated_path}
+      record_path={@record_path}
+      card_sources={@card_sources}
+      choices={@choices}
+      thing_info={
+        @page.thing &&
+          drawer_path(@base, @page.trail, "thing", @demo, true, false, @record_filters)
+      }
+      demo={@demo}
+      mode={@reading_mode}
+      reviewer?={@reviewer?}
+      earlier={@earlier_versions}
+    >
+      <:extra :if={@overview || @choice_overview || @linked_overviews != []}>
+        <section
+          id="curated-overview"
+          class="flex flex-col gap-8 border-t border-mist-950/10 py-8 dark:border-white/10"
+        >
+          <Subjects.overview :if={@overview} overview={@overview} />
+          <Subjects.overview
+            :if={@choice_overview}
+            overview={@choice_overview}
+            as={:choice}
+            subject_paths={@choice_paths}
+          />
+          <Subjects.linked_overviews overviews={@linked_overviews} />
+          <Subjects.section
+            :if={@overview && @subjects}
+            subjects={%{@subjects | discovered: [], discovered_total: 0}}
+            members={@overview.members}
+          />
+        </section>
+      </:extra>
+      <:related :if={@page.related || @page_sources != []}>
+        <.way_out page={@page} page_sources={@page_sources} demo={@demo} class="" />
+      </:related>
+    </CuratedArticle.article>
     """
   end
 
