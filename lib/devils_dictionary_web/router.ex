@@ -55,6 +55,13 @@ defmodule DevilsDictionaryWeb.Router do
     # this one stays public and stays put. Its *coverage* section is the part
     # that needs a population, and it now renders only when one is asked for.
     live "/sources/:slug", SourceLive, :show
+
+    # The curators (#299, #203's profile pages): the directory, each
+    # profile at its current version, and each immutable version. Route
+    # names are #194's; `/curators` is #299 CD-1's recommended answer.
+    live "/curators", CuratorLive, :index
+    live "/curators/:slug", CuratorLive, :show
+    live "/curators/:slug/v/:version", CuratorLive, :version
   end
 
   scope "/", DevilsDictionaryWeb do

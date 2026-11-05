@@ -81,6 +81,8 @@ defmodule DevilsDictionaryWeb.IndexingTest do
           "/users/log-in",
           "/reconciliation",
           "/artworks",
+          "/curators",
+          "/curators/:slug/v/:version",
           "/people/:slug",
           "/on/:slug"
         ] do

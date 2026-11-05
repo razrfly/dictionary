@@ -92,7 +92,14 @@ defmodule DevilsDictionaryWeb.CurationReceiptLive do
           <p id={"receipt-status-#{item.id}"}>{status(item)}</p>
           <dl class="grid gap-x-6 gap-y-2 sm:grid-cols-[8rem_1fr]">
             <dt class="font-medium">Chosen by</dt><dd id={"receipt-chooser-#{item.id}"}>
-              {chooser(item.chooser)}
+              <.link
+                :if={item.chooser[:curator_path]}
+                navigate={item.chooser.curator_path}
+                id={"receipt-curator-#{item.id}"}
+                class="underline underline-offset-4"
+              >{item.chooser.label}</.link>{if item.chooser[:curator_path],
+                do: chooser_detail(item.chooser),
+                else: chooser(item.chooser)}
             </dd>
             <dt class="font-medium">Chosen</dt><dd>{stamp(item.chooser.at)}</dd>
             <dt class="font-medium">Reason</dt><dd id={"receipt-reason-#{item.id}"}>
@@ -195,16 +202,19 @@ defmodule DevilsDictionaryWeb.CurationReceiptLive do
   defp status(%{status: :replaced, replacement: r}),
     do: "Replaced by version #{r.version}, #{stamp(r.at)}."
 
-  defp chooser(%{kind: :model} = c),
+  defp chooser(%{kind: :model} = c), do: "#{c.label}" <> chooser_detail(c)
+
+  defp chooser(c), do: c.label || "chooser not recorded"
+
+  defp chooser_detail(c),
     do:
-      "#{c.label}, an AI model · #{c.model} · model config ##{c.model_config_id} · attempt ##{c.attempt_id}" <>
+      ", an AI model · #{c.model} · model config ##{c.model_config_id} · attempt ##{c.attempt_id}" <>
         if(c.profile,
           do:
             " · profile ##{c.profile["profile_id"]}, version ##{c.profile["profile_version_id"]}",
           else: ""
         )
 
-  defp chooser(c), do: c.label || "chooser not recorded"
   defp basis(nil), do: "basis not recorded"
   defp basis(%{origin: "legacy_unknown"}), do: "basis not recorded (legacy choice)"
 
