@@ -1,0 +1,6 @@
+/* Input for the #309 curated-page sketch stylesheet: the app's own
+   stylesheet (tokens, heroicons, the data-theme dark variant) plus this
+   directory as one more source, as docs/sketches/word-page does.
+   Rebuild with docs/sketches/curated-page/build.sh. */
+@import "../../../assets/css/app.css";
+@source "./";

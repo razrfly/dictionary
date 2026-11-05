@@ -8,6 +8,7 @@ that do not exist yet.
 
 | Directory | What it holds |
 |---|---|
+| [`curated-page/`](curated-page/) | #309 D2 — the curated page `/on/:slug` as its own article, phone first: the full entry, the longest case, the abstained and withheld states, as static HTML against the app's own tokens. Screenshots are `../discovery/issue-309-d2-*` |
 | [`word-page/`](word-page/) | #131 Phase 1 — three whole-page layouts for `/define/:slug` as static HTML against the app's own tokens, with the hard cases and the GIF-shelf versions beside them. Screenshots and the write-up are under [`../discovery/`](../discovery/) |
 
 ## Retired migrations

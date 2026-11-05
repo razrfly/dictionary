@@ -1,0 +1,681 @@
+{
+  "captured_from": "private copy of devils_dictionary_v2, taken read-only 2026-11-04T17:27:48Z",
+  "pages": [
+    {
+      "version": {
+        "record": 39,
+        "number": 5,
+        "published_at": "2026-11-03T03:08:01Z",
+        "configuration_version": 8,
+        "persona": "Inspired by Voltaire",
+        "instruction": "voltaire-whole-entry-v6",
+        "model": "qwen3.5-9b-whole-voltaire-v6",
+        "earlier": [
+          4,
+          3,
+          2,
+          1
+        ],
+        "authority": "single_editor"
+      },
+      "state": {
+        "kind": "withheld_whole",
+        "reasons": [
+          "configuration_changed"
+        ]
+      },
+      "items": [
+        {
+          "position": 1,
+          "reason": "WordNet defines job favoritism clearly.",
+          "date": null,
+          "title": "Sense definition",
+          "text": "favoritism shown to relatives or close friends by those in power (as by giving them jobs)",
+          "source": "Open English WordNet 2025",
+          "kind": "definition",
+          "creator": "Open English WordNet 2025",
+          "section": "definitions",
+          "credits": [],
+          "reason_chars": 39
+        },
+        {
+          "position": 2,
+          "reason": "Retail quote illustrates brand favoritism.",
+          "text": "Now retailers even demand deslotting or failure fees, a penalty for trial products that fail to meet their sales objectives. The struggle over display space heavily favors the incumbents and encourages what might be called brand nepotism.",
+          "source": "Wiktionary (English) via Kaikki",
+          "kind": "quotation",
+          "citation": "1989, Report on Business Magazine, volume 6, numbers 1-6, page 100",
+          "section": "quotes",
+          "credits": [
+            {
+              "label": "Quoted in",
+              "text": "Wiktionary contributors (CC BY-SA 4.0), extracted by kaikki.org",
+              "href": "https://en.wiktionary.org/wiki/nepotism#English"
+            },
+            {
+              "label": "Rights",
+              "text": "CC BY-SA 4.0",
+              "href": "https://creativecommons.org/licenses/by-sa/4.0/"
+            }
+          ],
+          "reason_chars": 42
+        },
+        {
+          "position": 3,
+          "reason": "Political quote shows corruption via allies.",
+          "text": "Mr Chen - a member of the national politburo as well as the Shanghai boss - is accused of nepotism and corruption on a grand scale: protecting political allies, granting preferment to his family and looting Shanghai's pension fund.",
+          "source": "Wiktionary (English) via Kaikki",
+          "kind": "quotation",
+          "citation": "2006 September 27, “China airbrushes Chen”, in Financial Times",
+          "section": "quotes",
+          "credits": [
+            {
+              "label": "Quoted in",
+              "text": "Wiktionary contributors (CC BY-SA 4.0), extracted by kaikki.org",
+              "href": "https://en.wiktionary.org/wiki/nepotism#English"
+            },
+            {
+              "label": "Rights",
+              "text": "CC BY-SA 4.0",
+              "href": "https://creativecommons.org/licenses/by-sa/4.0/"
+            }
+          ],
+          "reason_chars": 44
+        },
+        {
+          "position": 4,
+          "reason": "Visual representation of letter n concept.",
+          "source": "Unsplash",
+          "kind": "shelf",
+          "expires_at": "2026-11-05T20:49:25Z",
+          "section": "images",
+          "observed_at": "2026-10-29T20:49:25Z",
+          "reason_chars": 42,
+          "placeholder": true,
+          "shelf_kind": "images"
+        },
+        {
+          "position": 5,
+          "reason": "Film title directly references nepo babies.",
+          "source": "CineGraph",
+          "kind": "shelf",
+          "expires_at": "2026-11-05T20:46:05Z",
+          "section": "films",
+          "observed_at": "2026-10-29T20:46:05Z",
+          "reason_chars": 43,
+          "placeholder": true,
+          "shelf_kind": "films"
+        },
+        {
+          "position": 6,
+          "reason": "Album title explicitly names the topic.",
+          "source": "Spotify",
+          "kind": "shelf",
+          "expires_at": "2026-11-10T03:03:36Z",
+          "section": "music",
+          "observed_at": "2026-11-03T03:03:36Z",
+          "reason_chars": 39,
+          "placeholder": true,
+          "shelf_kind": "music"
+        },
+        {
+          "position": 7,
+          "reason": "Academic text on ethnic nepotism politics.",
+          "source": "Open Library",
+          "kind": "shelf",
+          "expires_at": "2026-11-05T20:46:09Z",
+          "section": "books",
+          "observed_at": "2026-10-29T20:46:09Z",
+          "reason_chars": 42,
+          "placeholder": true,
+          "shelf_kind": "books"
+        },
+        {
+          "position": 8,
+          "reason": "Article discusses workplace nepotism prevention.",
+          "source": "Bing News",
+          "kind": "shelf",
+          "expires_at": "2026-11-10T03:02:49Z",
+          "section": "news",
+          "observed_at": "2026-11-03T03:02:49Z",
+          "reason_chars": 48,
+          "placeholder": true,
+          "shelf_kind": "news"
+        }
+      ],
+      "slug": "nepotism",
+      "holdings": {
+        "dictionaries": 4,
+        "senses": 2
+      },
+      "headword": {
+        "parts": [
+          "noun"
+        ],
+        "lemma": "nepotism",
+        "pronunciation": "/ˈnep.ə.tə.zəm/"
+      },
+      "related": [
+        "antinepotism",
+        "nepotism baby",
+        "nepotism friend",
+        "nepotistic",
+        "nepotistical",
+        "cronyism"
+      ],
+      "lead": {
+        "reason": "Bierce satire highlights absurdity of power abuse.",
+        "register": "satire",
+        "text": "Appointing your grandmother to office for the good of the party.",
+        "author": "Ambrose Bierce",
+        "year": 1911,
+        "work": "The Devil's Dictionary",
+        "credits": [
+          {
+            "label": "Source",
+            "text": "Ambrose Bierce, The Devil's Dictionary (1911), public domain",
+            "href": "https://www.gutenberg.org/ebooks/972"
+          },
+          {
+            "label": "Rights",
+            "text": "Public domain",
+            "href": "https://www.gutenberg.org/policy/permission.html"
+          }
+        ]
+      },
+      "withheld": []
+    },
+    {
+      "version": {
+        "record": 45,
+        "number": 5,
+        "published_at": "2026-11-03T03:14:02Z",
+        "configuration_version": 8,
+        "persona": "Inspired by Voltaire",
+        "instruction": "voltaire-whole-entry-v6",
+        "model": "qwen3.5-9b-whole-voltaire-v6",
+        "earlier": [
+          4,
+          3,
+          2,
+          1
+        ],
+        "authority": "single_editor"
+      },
+      "state": {
+        "kind": "withheld_whole",
+        "reasons": [
+          "configuration_changed"
+        ]
+      },
+      "items": [
+        {
+          "position": 1,
+          "reason": "Johnson defines truth as conformity of notions to things.",
+          "date": "1755",
+          "title": "TRUTH. (n. s.)",
+          "text": "1. The contrary to falsehood; conformity of notions to things.",
+          "source": "Samuel Johnson, A Dictionary of the English Language",
+          "kind": "definition",
+          "creator": "Samuel Johnson",
+          "section": "definitions",
+          "credits": [
+            {
+              "label": "Source",
+              "text": "Samuel Johnson, A Dictionary of the English Language (1755); TEI-XML transcription by Ian Lancashire, Lexicons of Early Modern English (LEME), University of Toronto, CC BY 4.0",
+              "href": "https://leme.library.utoronto.ca/lexicons/1345/"
+            },
+            {
+              "label": "Rights",
+              "text": "CC BY 4.0 (LEME transcription); the 1755 text is public domain",
+              "href": "https://creativecommons.org/licenses/by/4.0/"
+            }
+          ],
+          "reason_chars": 57
+        },
+        {
+          "position": 2,
+          "reason": "Keats equates beauty with truth in a concise statement.",
+          "text": "\"Beauty is truth, truth beauty,\"—that is all / Ye know on earth, and all ye need to know.",
+          "source": "Wiktionary (English) via Kaikki",
+          "kind": "quotation",
+          "citation": "1819 May, John Keats, “Ode on a Grecian Urn”, in Lamia, Isabella, the Eve of St. Agnes, and Other Poems, London: […] [Thomas Davison] for Taylor and Hessey, […], published 1820, →OCLC, stanza 5, page 116",
+          "section": "quotes",
+          "credits": [
+            {
+              "label": "Quoted in",
+              "text": "Wiktionary contributors (CC BY-SA 4.0), extracted by kaikki.org",
+              "href": "https://en.wiktionary.org/wiki/truth#English"
+            },
+            {
+              "label": "Rights",
+              "text": "CC BY-SA 4.0",
+              "href": "https://creativecommons.org/licenses/by-sa/4.0/"
+            }
+          ],
+          "reason_chars": 55
+        },
+        {
+          "position": 3,
+          "reason": "Verse illustrates how whispers can poison genuine truth.",
+          "text": "Alas! they had been friends in youth; / But whispering tongues can poison truth; […]",
+          "source": "Wiktionary (English) via Kaikki",
+          "kind": "quotation",
+          "citation": "1800, S[amuel] T[aylor] Coleridge, “Christabel. Part II.”, in Christabel: Kubla Khan, a Vision: The Pains of Sleep, London: […] John Murray, […], by William Bulmer and Co. […], published 1816, →OCLC, page 32",
+          "section": "quotes",
+          "credits": [
+            {
+              "label": "Quoted in",
+              "text": "Wiktionary contributors (CC BY-SA 4.0), extracted by kaikki.org",
+              "href": "https://en.wiktionary.org/wiki/truth#English"
+            },
+            {
+              "label": "Rights",
+              "text": "CC BY-SA 4.0",
+              "href": "https://creativecommons.org/licenses/by-sa/4.0/"
+            }
+          ],
+          "reason_chars": 56
+        },
+        {
+          "position": 4,
+          "reason": "Visual representation of honesty and integrity concepts.",
+          "source": "Unsplash",
+          "kind": "shelf",
+          "expires_at": "2026-11-05T20:46:03Z",
+          "section": "images",
+          "observed_at": "2026-10-29T20:46:03Z",
+          "reason_chars": 56,
+          "placeholder": true,
+          "shelf_kind": "images"
+        },
+        {
+          "position": 5,
+          "reason": "Documentary examines the reality behind silenced truths.",
+          "source": "CineGraph",
+          "kind": "shelf",
+          "expires_at": "2026-11-05T20:45:28Z",
+          "section": "films",
+          "observed_at": "2026-10-29T20:45:28Z",
+          "reason_chars": 56,
+          "placeholder": true,
+          "shelf_kind": "films"
+        },
+        {
+          "position": 6,
+          "reason": "Album title directly references the concept of truth.",
+          "source": "Spotify",
+          "kind": "shelf",
+          "expires_at": "2026-11-10T03:07:53Z",
+          "section": "music",
+          "observed_at": "2026-11-03T03:07:53Z",
+          "reason_chars": 53,
+          "placeholder": true,
+          "shelf_kind": "music"
+        },
+        {
+          "position": 7,
+          "reason": "Philosophical text exploring politics and moral truth.",
+          "source": "Open Library",
+          "kind": "shelf",
+          "expires_at": "2026-11-05T20:45:36Z",
+          "section": "books",
+          "observed_at": "2026-10-29T20:45:36Z",
+          "reason_chars": 54,
+          "placeholder": true,
+          "shelf_kind": "books"
+        },
+        {
+          "position": 8,
+          "reason": "Poem explores themes of revolution and genuine reality.",
+          "source": "PoetryDB",
+          "kind": "shelf",
+          "expires_at": "2026-11-05T20:46:02Z",
+          "section": "poems",
+          "observed_at": "2026-10-29T20:46:02Z",
+          "reason_chars": 55,
+          "placeholder": true,
+          "shelf_kind": "poems"
+        },
+        {
+          "position": 9,
+          "reason": "Article addresses fake posts contrasting with verified facts.",
+          "source": "Bing News",
+          "kind": "shelf",
+          "expires_at": "2026-11-10T03:07:53Z",
+          "section": "news",
+          "observed_at": "2026-11-03T03:07:53Z",
+          "reason_chars": 61,
+          "placeholder": true,
+          "shelf_kind": "news"
+        }
+      ],
+      "slug": "truth",
+      "holdings": {
+        "dictionaries": 4,
+        "senses": 19
+      },
+      "headword": {
+        "parts": [
+          "noun",
+          "verb"
+        ],
+        "lemma": "truth",
+        "pronunciation": "/tɹuːθ/"
+      },
+      "related": [
+        "God honest truth",
+        "God's honest truth",
+        "God's truth",
+        "Gospel truth",
+        "National Day for Truth and Reconciliation",
+        "ReTruth",
+        "Spirit of Truth",
+        "Truth or Consequences"
+      ],
+      "lead": {
+        "reason": "Bierce's satire contrasts appearance with philosophical truth.",
+        "register": "satire",
+        "text": "An ingenious compound of desirability and appearance.",
+        "author": "Ambrose Bierce",
+        "year": 1911,
+        "work": "The Devil's Dictionary",
+        "credits": [
+          {
+            "label": "Source",
+            "text": "Ambrose Bierce, The Devil's Dictionary (1911), public domain",
+            "href": "https://www.gutenberg.org/ebooks/972"
+          },
+          {
+            "label": "Rights",
+            "text": "Public domain",
+            "href": "https://www.gutenberg.org/policy/permission.html"
+          }
+        ]
+      },
+      "withheld": []
+    },
+    {
+      "version": {
+        "record": 55,
+        "number": 9,
+        "published_at": "2026-11-04T03:37:19Z",
+        "configuration_version": 9,
+        "persona": "Inspired by Voltaire",
+        "instruction": "voltaire-whole-entry-v7",
+        "model": "qwen3.5-9b-whole-voltaire-v7",
+        "earlier": [
+          8,
+          7,
+          6,
+          5,
+          4,
+          3,
+          2,
+          1
+        ],
+        "authority": "single_editor"
+      },
+      "state": {
+        "kind": "published"
+      },
+      "items": [
+        {
+          "position": 1,
+          "reason": "WordNet definition explicitly defines s1 as 'any object of warm affection or devotion'.",
+          "date": null,
+          "title": "Sense definition",
+          "text": "any object of warm affection or devotion",
+          "source": "Open English WordNet 2025",
+          "kind": "definition",
+          "creator": "Open English WordNet 2025",
+          "section": "definitions",
+          "credits": [],
+          "reason_chars": 87
+        },
+        {
+          "position": 2,
+          "reason": "Adams' quote illustrates m0 'love' as social affection extending to the species.",
+          "source": "Wikiquote",
+          "kind": "shelf",
+          "expires_at": "2026-11-06T18:31:56Z",
+          "section": "quotes",
+          "observed_at": "2026-10-30T18:31:56Z",
+          "reason_chars": 80,
+          "placeholder": true,
+          "shelf_kind": "quotes"
+        },
+        {
+          "position": 3,
+          "reason": "Abbey's quote uses 'Love' metaphorically for openness and freedom, illustrating m0.",
+          "source": "Wikiquote",
+          "kind": "shelf",
+          "expires_at": "2026-11-06T18:31:56Z",
+          "section": "quotes",
+          "observed_at": "2026-10-30T18:31:56Z",
+          "reason_chars": 83,
+          "placeholder": true,
+          "shelf_kind": "quotes"
+        },
+        {
+          "position": 4,
+          "reason": "David's painting depicts a medical discovery of disease cause, supporting s16 'cause'.",
+          "date": "1774",
+          "title": "Erasistratus Discovering the Cause of Antiochus' Disease",
+          "source": "Wikidata",
+          "kind": "artwork",
+          "creator": "Jacques-Louis David",
+          "section": "images",
+          "credits": [
+            {
+              "label": "Image",
+              "text": "David-Antiochus et Stratonice.jpg · Wikimedia Commons",
+              "href": "https://commons.wikimedia.org/wiki/File:David-Antiochus_et_Stratonice.jpg"
+            }
+          ],
+          "reason_chars": 86
+        }
+      ],
+      "slug": "love",
+      "holdings": {
+        "dictionaries": 4,
+        "senses": 43
+      },
+      "headword": {
+        "parts": [
+          "noun",
+          "verb",
+          "name"
+        ],
+        "lemma": "love",
+        "pronunciation": "[ˈlɐʊ̯]"
+      },
+      "related": [
+        "God love someone",
+        "I have to love you and leave you",
+        "I love you",
+        "I'm in love with you",
+        "Lord love a duck",
+        "Lord love you",
+        "Persian love",
+        "Queen of Love"
+      ],
+      "lead": {
+        "reason": "Bierce's definition of 'temporary insanity' is the only supplied lead for meaning m0.",
+        "register": "satire",
+        "text": "A temporary insanity curable by marriage or by removal of the patient from the influences under which he incurred the disorder.",
+        "author": "Ambrose Bierce",
+        "year": 1911,
+        "work": "The Devil's Dictionary",
+        "credits": [
+          {
+            "label": "Source",
+            "text": "Ambrose Bierce, The Devil's Dictionary (1911), public domain",
+            "href": "https://www.gutenberg.org/ebooks/972"
+          },
+          {
+            "label": "Rights",
+            "text": "Public domain",
+            "href": "https://www.gutenberg.org/policy/permission.html"
+          }
+        ]
+      },
+      "withheld": []
+    },
+    {
+      "version": {
+        "record": 40,
+        "number": 4,
+        "published_at": "2026-11-03T03:08:11Z",
+        "configuration_version": 8,
+        "persona": "Inspired by Voltaire",
+        "instruction": "voltaire-whole-entry-v6",
+        "model": "qwen3.5-9b-whole-voltaire-v6",
+        "earlier": [
+          3,
+          2,
+          1
+        ],
+        "authority": "single_editor"
+      },
+      "state": {
+        "kind": "withheld_whole",
+        "reasons": [
+          "configuration_changed"
+        ]
+      },
+      "items": [
+        {
+          "position": 1,
+          "reason": "Standard definition of excessive desire for wealth.",
+          "date": null,
+          "title": "Sense definition",
+          "text": "excessive desire to acquire or possess more (especially more material wealth) than one needs or deserves",
+          "source": "Open English WordNet 2025",
+          "kind": "definition",
+          "creator": "Open English WordNet 2025",
+          "section": "definitions",
+          "credits": [],
+          "reason_chars": 51
+        },
+        {
+          "position": 2,
+          "reason": "Illustrates the concept through a clear claim.",
+          "source": null,
+          "kind": "linked_claim",
+          "section": "examples",
+          "reason_chars": 46
+        },
+        {
+          "position": 3,
+          "reason": "Famous quote reframing greed as a driving force.",
+          "text": "The point is, ladies and gentleman, that greed, for lack of a better word, is good. Greed is right, greed works. Greed clarifies, cuts through, and captures the essence of the evolutionary spirit. Greed, in all of its forms; greed for life, for money, for love, knowledge has marked the upward surge of mankind.",
+          "source": "Wiktionary (English) via Kaikki",
+          "kind": "quotation",
+          "citation": "1987, Stanley Weiser, Oliver Stone, Wall Street (motion picture), spoken by Gordon Gekko (Michael Douglas)",
+          "section": "quotes",
+          "credits": [
+            {
+              "label": "Quoted in",
+              "text": "Wiktionary contributors (CC BY-SA 4.0), extracted by kaikki.org",
+              "href": "https://en.wiktionary.org/wiki/greed#English"
+            },
+            {
+              "label": "Rights",
+              "text": "CC BY-SA 4.0",
+              "href": "https://creativecommons.org/licenses/by-sa/4.0/"
+            }
+          ],
+          "reason_chars": 48
+        },
+        {
+          "position": 4,
+          "reason": "Ancient verse contrasting life with wealth pursuit.",
+          "source": "Wikiquote",
+          "kind": "shelf",
+          "expires_at": "2026-11-05T20:50:11Z",
+          "section": "quotes",
+          "observed_at": "2026-10-29T20:50:11Z",
+          "reason_chars": 51,
+          "placeholder": true,
+          "shelf_kind": "quotes"
+        },
+        {
+          "position": 5,
+          "reason": "Directly addresses the concept in a published work.",
+          "source": "Open Library",
+          "kind": "shelf",
+          "expires_at": "2026-11-05T20:49:36Z",
+          "section": "books",
+          "observed_at": "2026-10-29T20:49:36Z",
+          "reason_chars": 51,
+          "placeholder": true,
+          "shelf_kind": "books"
+        }
+      ],
+      "slug": "greed",
+      "holdings": {
+        "dictionaries": 2,
+        "senses": 4
+      },
+      "headword": {
+        "parts": [
+          "noun",
+          "verb"
+        ],
+        "lemma": "greed",
+        "pronunciation": "/ɡɹiːd/"
+      },
+      "related": [
+        "Ngreedia",
+        "antigreed",
+        "envy",
+        "glutton",
+        "goldgreed",
+        "greedfest",
+        "greedflation",
+        "greedful"
+      ],
+      "lead": {
+        "reason": "Clear definition of excessive desire for possessions.",
+        "register": "definition",
+        "text": "A selfish or excessive desire for more than is needed or deserved, especially of money, wealth, food, or other possessions.",
+        "author": "Wiktionary (English) via Kaikki",
+        "year": null,
+        "work": null,
+        "credits": []
+      },
+      "withheld": [],
+      "assessment": {
+        "kind": "abstained",
+        "reason_chars": 100,
+        "assessed_at": "2026-11-04T09:37:36Z",
+        "attempt": 111
+      }
+    },
+    {
+      "state": {
+        "kind": "abstained",
+        "reason_chars": 100,
+        "assessed_at": "2026-11-04T09:43:02Z",
+        "attempt": 118
+      },
+      "slug": "bestiality",
+      "holdings": {
+        "dictionaries": 2,
+        "senses": 8
+      },
+      "headword": {
+        "parts": [
+          "noun"
+        ],
+        "lemma": "bestiality",
+        "pronunciation": "/ˈbɛstʃəlˌlɪtɪ/"
+      },
+      "related": [
+        "beastliness",
+        "necrobestiality"
+      ]
+    }
+  ]
+}
