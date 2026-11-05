@@ -78,7 +78,11 @@ defmodule DevilsDictionaryWeb.CuratedArticle do
   attr :mode, :atom, default: :public
   attr :reviewer?, :boolean, default: false
   attr :earlier, :list, default: []
-  slot :related, doc: "the way out of the word: related words and the source index"
+
+  attr :trail, :list,
+    default: [],
+    doc: "the walk so far, this word included, for the related words' hops"
+
   slot :extra, doc: "an authored overview and its subjects, where these words have one"
 
   def article(assigns) do
@@ -143,14 +147,7 @@ defmodule DevilsDictionaryWeb.CuratedArticle do
               card_sources={@card_sources}
               record_path={@record_path}
             />
-            <section
-              :if={@related != []}
-              id="curated-related"
-              aria-label="Related words"
-              class="border-t border-mist-950/10 py-8 dark:border-white/10"
-            >
-              {render_slot(@related)}
-            </section>
+            <.related page={@page} trail={@trail} demo={@demo} record_path={@record_path} />
           </aside>
         </div>
         <.provenance
@@ -170,14 +167,7 @@ defmodule DevilsDictionaryWeb.CuratedArticle do
           record_path={@record_path}
         />
         {render_slot(@extra)}
-        <section
-          :if={@related != []}
-          id="curated-related"
-          aria-label="Related words"
-          class="border-t border-mist-950/10 py-8 dark:border-white/10"
-        >
-          {render_slot(@related)}
-        </section>
+        <.related page={@page} trail={@trail} demo={@demo} record_path={@record_path} />
       <% end %>
     </article>
     """
@@ -302,6 +292,71 @@ defmodule DevilsDictionaryWeb.CuratedArticle do
     </section>
     """
   end
+
+  # ── related words (D1 row 18) ────────────────────────────────────────────
+
+  @related_shown 8
+
+  attr :page, :map, required: true
+  attr :trail, :list, default: []
+  attr :demo, :boolean, default: false
+  attr :record_path, :string, required: true
+
+  # The way out of the word, short: the first chips of the groups in their
+  # order, and every relation on the source records (#309 audit default 2).
+  defp related(assigns) do
+    chips = related_chips(assigns.page.related)
+
+    assigns =
+      assigns
+      |> assign(:chips, Enum.take(chips, @related_shown))
+      |> assign(:more?, length(chips) > @related_shown)
+
+    ~H"""
+    <section
+      :if={@chips != []}
+      id="curated-related"
+      aria-labelledby="curated-related-heading"
+      class="flex flex-col gap-4 border-t border-mist-950/10 py-8 dark:border-white/10"
+    >
+      <h2 id="curated-related-heading" class="font-display text-3xl/9 tracking-tight">
+        Related words
+      </h2>
+      <div class="flex flex-wrap gap-2">
+        <Word.chip
+          :for={{group, chip} <- @chips}
+          id={"curated-related-#{chip.slug}"}
+          group={group}
+          chip={chip}
+          trail={@trail}
+          demo={@demo}
+        />
+      </div>
+      <.link
+        :if={@more?}
+        id="curated-related-all"
+        href={@record_path <> "#related"}
+        class={["flex min-h-11 w-fit items-center", link_class()]}
+      >
+        All related words →
+      </.link>
+    </section>
+    """
+  end
+
+  defp related_chips(%{groups: groups}) when is_map(groups) do
+    order = DevilsDictionary.Lexicon.WordPage.group_order()
+    key = fn {group, _chips} -> if is_tuple(group), do: elem(group, 0), else: group end
+
+    groups
+    |> Enum.sort_by(&(Enum.find_index(order, fn k -> k == key.(&1) end) || length(order)))
+    |> Enum.flat_map(fn {group, chips} ->
+      Enum.map((chips[:shown] || []) ++ (chips[:rest] || []), &{group, &1})
+    end)
+    |> Enum.uniq_by(fn {_group, chip} -> chip.slug end)
+  end
+
+  defp related_chips(_related), do: []
 
   # ── about this version (D1 row 19) ───────────────────────────────────────
 

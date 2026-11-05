@@ -1127,13 +1127,13 @@ defmodule DevilsDictionaryWeb.WordLive do
             patch={entry_view_path(assigns, false)}
             aria-current={if !@records?, do: "page"}
             class={["underline-offset-4 hover:underline", !@records? && "underline"]}
-          >Curated article</.link>
+          >{if @live_action == :on, do: "This editor’s selection", else: "Curated article"}</.link>
           <.link
             id="entry-records"
             patch={entry_view_path(assigns, true)}
             aria-current={if @records?, do: "page"}
             class={["underline-offset-4 hover:underline", @records? && "underline"]}
-          >Source records</.link>
+          >{if @live_action == :on, do: "Everything this page holds", else: "Source records"}</.link>
         </nav>
 
         <%!-- The aggregate names itself (#219 B5): "On mars" over the words it
@@ -1385,6 +1385,7 @@ defmodule DevilsDictionaryWeb.WordLive do
       mode={@reading_mode}
       reviewer?={@reviewer?}
       earlier={@earlier_versions}
+      trail={trail_here(@page)}
     >
       <:extra :if={@overview || @choice_overview || @linked_overviews != []}>
         <section
@@ -1406,9 +1407,6 @@ defmodule DevilsDictionaryWeb.WordLive do
           />
         </section>
       </:extra>
-      <:related :if={@page.related || @page_sources != []}>
-        <.way_out page={@page} page_sources={@page_sources} demo={@demo} class="" />
-      </:related>
     </CuratedArticle.article>
     """
   end
