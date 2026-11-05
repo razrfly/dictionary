@@ -156,6 +156,8 @@ defmodule DevilsDictionaryWeb.CuratedArticleLiveTest do
            )
 
     assert has_element?(view, "#curated-state #record-inventory-link[href='/on/love/materials']")
+    # The withheld version's own record is a tap away.
+    assert has_element?(view, "#curated-state-receipt[href='/on/love/receipt/1']")
   end
 
   test "abstained: who assessed it, when, and that it chose not to select", ctx do
@@ -182,9 +184,10 @@ defmodule DevilsDictionaryWeb.CuratedArticleLiveTest do
     assert has_element?(
              view,
              "#curated-state-assessed",
-             "last assessed it on 4 November 2026, 09:43 UTC and chose not to select, and gave no reason."
+             "last assessed it on 4 November 2026, 09:43 UTC and chose not to select."
            )
 
+    refute has_element?(view, "#curated-state-assessed", "gave no reason")
     refute has_element?(view, "#curated-state-reason")
   end
 

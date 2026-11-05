@@ -43,11 +43,11 @@ defmodule DevilsDictionaryWeb.CuratedArticle do
       disclosure:
         "An AI selection lens inspired by Voltaire; not his voice or an assertion of his opinions about modern events."
     },
-    "Hitchens" => %{
+    "Christopher Hitchens" => %{
       sentence:
         "Looks for sourced material whose own evidence tests whether the word fits a real case."
     },
-    "Bierce" => %{
+    "Ambrose Bierce" => %{
       sentence:
         "Looks for sourced material that sets a professed principle beside the interest behind it."
     }
@@ -163,6 +163,7 @@ defmodule DevilsDictionaryWeb.CuratedArticle do
       <% else %>
         <.state
           state={@state || %{kind: :none}}
+          base={@base}
           lemma={@lemma}
           page={@page}
           card_sources={@card_sources}
@@ -407,13 +408,15 @@ defmodule DevilsDictionaryWeb.CuratedArticle do
           How this page was curated →
         </.link>
         <span :if={@earlier != []} id="curated-earlier">
-          Earlier versions:
-          <%= for {version, i} <- Enum.with_index(@earlier) do %>
-            <span :if={i > 0}>, </span><.link
-              navigate={"#{@base}/receipt/#{version}"}
-              class={["inline-flex min-h-11 items-center", link_class()]}
-            >{version}</.link>
-          <% end %>
+          Earlier versions: <%!-- Each a 44 px target, not a one-digit link (#309 review 2). --%>
+          <.link
+            :for={version <- @earlier}
+            navigate={"#{@base}/receipt/#{version}"}
+            aria-label={"Version #{version}"}
+            class={["inline-flex min-h-11 min-w-11 items-center justify-center", link_class()]}
+          >
+            {version}
+          </.link>
         </span>
       </p>
       <Opening.about opening={@opening} mode={@mode} reviewer?={@reviewer?} />
@@ -424,6 +427,7 @@ defmodule DevilsDictionaryWeb.CuratedArticle do
   # ── no selection to show (D1 rows 20–24) ─────────────────────────────────
 
   attr :state, :map, required: true
+  attr :base, :string, required: true
   attr :lemma, :string, required: true
   attr :page, :map, required: true
   attr :card_sources, :list, default: []
@@ -448,6 +452,15 @@ defmodule DevilsDictionaryWeb.CuratedArticle do
         <p id="curated-state-why" class="text-lg/7 text-pretty">
           {clauses(@state.reasons)}. Nothing was put in its place.
         </p>
+        <%!-- The withheld version's own record (§4 H). --%>
+        <.link
+          :if={@state[:version]}
+          id="curated-state-receipt"
+          navigate={"#{@base}/receipt/#{@state.version}"}
+          class={["flex min-h-11 w-fit items-center", link_class()]}
+        >
+          How this page was curated →
+        </.link>
         <.assessed
           :if={@state.assessment}
           assessment={@state.assessment}
@@ -499,7 +512,9 @@ defmodule DevilsDictionaryWeb.CuratedArticle do
       <span>
         {@editor} {@lead_in} {clock(@assessment.assessed_at)} and chose not to select{cond do
           @assessment.reason -> ":"
-          @assessment[:reason_withheld?] -> "."
+          # Withheld for quoting provider text, or the attempt is not found:
+          # nothing is said about a reason (#309 review 2).
+          @assessment[:reason_withheld?] or not @assessment[:attempt?] -> "."
           true -> ", and gave no reason."
         end}
       </span>

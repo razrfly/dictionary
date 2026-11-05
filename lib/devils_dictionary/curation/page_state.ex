@@ -58,6 +58,7 @@ defmodule DevilsDictionary.Curation.PageState do
             kind: :withheld,
             reasons: reasons,
             published_on: published_on(composition.id),
+            version: version_number(composition.current_published_version_id),
             assessment: assessment
           }
 
@@ -98,6 +99,12 @@ defmodule DevilsDictionary.Curation.PageState do
     |> Enum.sort(:desc)
   end
 
+  defp version_number(nil), do: nil
+
+  defp version_number(version_id) do
+    Repo.one(from v in CompositionVersion, where: v.id == ^version_id, select: v.version)
+  end
+
   defp published_on(composition_id) do
     case Publications.latest(composition_id) do
       %{committed_at: %NaiveDateTime{} = at} -> NaiveDateTime.to_date(at)
@@ -119,6 +126,7 @@ defmodule DevilsDictionary.Curation.PageState do
         %{
           kind: :abstained,
           assessed_at: at,
+          attempt?: not is_nil(attempt),
           editor: attempt && attempt.editor,
           reason: attempt && present(attempt.reason),
           # The runtime blanks a reason that quoted provider text; the page

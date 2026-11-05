@@ -8,9 +8,7 @@ defmodule DevilsDictionaryWeb.CuratedArticleStateLiveTest do
   use DevilsDictionaryWeb.ConnCase, async: false
 
   import Phoenix.LiveViewTest
-  import DevilsDictionary.CurationFixtures
   import DevilsDictionary.ProposalFixtures
-  import DevilsDictionary.RefreshFixtures
   import DevilsDictionary.RuntimeFixtures
 
   alias DevilsDictionary.Curation.Refresh

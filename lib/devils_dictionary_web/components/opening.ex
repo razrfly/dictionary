@@ -646,12 +646,17 @@ defmodule DevilsDictionaryWeb.Opening do
           >{part.text}</a><span :if={is_nil(part.url)}>{part.text}</span>
         <% end %>
       </p>
-      <DevilsDictionaryWeb.Culture.attribution_mark
+      <%!-- On the article the mark's link is a 44 px target (#309 review 2). --%>
+      <div
         :if={@highlight.kind == :shelf && @highlight.work.mark}
-        id={"#{@id}-provider-mark"}
-        mark={@highlight.work.mark}
-        provider={@highlight.source.slug}
-      />
+        class={@article && "[&_a]:inline-flex [&_a]:min-h-11 [&_a]:items-center"}
+      >
+        <DevilsDictionaryWeb.Culture.attribution_mark
+          id={"#{@id}-provider-mark"}
+          mark={@highlight.work.mark}
+          provider={@highlight.source.slug}
+        />
+      </div>
       <.credit_line id={"#{@id}-credits"} credits={@highlight.credits} />
       <.link
         :if={@highlight.links[:source]}
@@ -704,16 +709,24 @@ defmodule DevilsDictionaryWeb.Opening do
               )
             ]}
           >
-            Artwork
+            {if @article, do: "Image", else: "Artwork"}
           </p>
           <p class="text-base/6 font-medium text-mist-950 sm:text-sm/6 dark:text-white">
-            <.work_title id={"#{@id}-title"} highlight={@highlight} mode={@mode} />
+            <.work_title
+              id={"#{@id}-title"}
+              highlight={@highlight}
+              mode={@mode}
+              article={@article}
+            />
           </p>
           <p
-            :if={@highlight.creator || @highlight.date}
+            :if={@highlight.creator || @highlight.date || @article}
             class="text-base/6 text-mist-600 sm:text-sm/6 dark:text-mist-400"
           >
-            {Enum.join(Enum.reject([@highlight.creator, @highlight.date], &is_nil/1), " · ")}
+            {Enum.join(
+              Enum.reject([@highlight.creator, dated(@highlight.date, @article)], &is_nil/1),
+              " · "
+            )}
           </p>
         </div>
       </div>
@@ -804,18 +817,21 @@ defmodule DevilsDictionaryWeb.Opening do
         "flex flex-col gap-1",
         !@article && "rounded-xl bg-mist-950/2.5 p-5 dark:bg-white/5"
       ]}>
-        <p aria-hidden="true" class="text-base/6 text-mist-500 sm:text-sm/6">
+        <p aria-hidden="true" class={["text-base/6 sm:text-sm/6", kind_class(@article)]}>
           {work_noun(@highlight.kind)}
         </p>
         <p class="font-display text-xl/7 text-pretty text-mist-950 dark:text-white">
-          <.work_title id={"#{@id}-title"} highlight={@highlight} mode={@mode} />
+          <.work_title id={"#{@id}-title"} highlight={@highlight} mode={@mode} article={@article} />
         </p>
         <p
-          :if={@highlight.creator || @highlight.date || work_facts(@highlight) != []}
+          :if={@highlight.creator || @highlight.date || work_facts(@highlight) != [] || @article}
           id={"#{@id}-byline"}
           class="text-base/6 text-mist-600 sm:text-sm/6 dark:text-mist-400"
         >
-          {Enum.join(Enum.reject([@highlight.creator, @highlight.date], &is_nil/1), " · ")}<span
+          {Enum.join(
+            Enum.reject([@highlight.creator, dated(@highlight.date, @article)], &is_nil/1),
+            " · "
+          )}<span
             :if={work_facts(@highlight) != []}
             id={"#{@id}-facts"}
             class="tabular-nums"
@@ -887,7 +903,9 @@ defmodule DevilsDictionaryWeb.Opening do
           ]}>
             <SourceBadge.badge source={@highlight.source} decorative />{@highlight.creator}
           </span>
-          <span :if={@highlight.date} class="tabular-nums">{@highlight.date}</span>
+          <span :if={@highlight.date || @article} class="tabular-nums">
+            {@highlight.date || "undated"}
+          </span>
           <span :if={@highlight.title}>{@highlight.title}</span>
           <.link
             :if={@highlight.links[:card_id]}
@@ -935,14 +953,21 @@ defmodule DevilsDictionaryWeb.Opening do
     <li id={@id} class="flex min-w-0 flex-col gap-3">
       <h3 class="sr-only">Example: {@highlight.title}, {example_noun(@highlight.subject)}</h3>
       <div class="min-w-0">
-        <p aria-hidden="true" class="text-base/6 text-mist-500 sm:text-sm/6">
+        <p aria-hidden="true" class={["text-base/6 sm:text-sm/6", kind_class(@article)]}>
           {example_kind(@highlight.subject)}
         </p>
         <p class="text-base/6 font-medium text-mist-950 sm:text-sm/6 dark:text-white">
           <.link
             id={"#{@id}-title"}
             navigate={subject_path(@highlight, @mode)}
-            class="rounded-sm hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:focus-visible:outline-white"
+            class={
+              if(@article,
+                do:
+                  "inline-flex min-h-11 items-center rounded-sm underline decoration-mist-950/30 underline-offset-4 hover:decoration-current focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:decoration-white/30 dark:focus-visible:outline-white",
+                else:
+                  "rounded-sm hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:focus-visible:outline-white"
+              )
+            }
           >
             {@highlight.title}
           </.link>
@@ -1204,15 +1229,24 @@ defmodule DevilsDictionaryWeb.Opening do
   attr :id, :string, required: true
   attr :highlight, :map, required: true
   attr :mode, :atom, default: :public
+  attr :article, :boolean, default: false
 
   # A work's title, linked to its registry page when the registry holds it.
-  # A catalog-only work has no page of its own (#253 D5).
+  # A catalog-only work has no page of its own (#253 D5). On the article a
+  # link looks like one at rest and is a 44 px target (#309 review 2).
   defp work_title(%{highlight: %{reference: %{object_id: id}}} = assigns) when is_integer(id) do
     ~H"""
     <.link
       id={@id}
       navigate={entity_path(@highlight, @mode)}
-      class="rounded-sm hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:focus-visible:outline-white"
+      class={
+        if(@article,
+          do:
+            "inline-flex min-h-11 items-center rounded-sm underline decoration-mist-950/30 underline-offset-4 hover:decoration-current focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:decoration-white/30 dark:focus-visible:outline-white",
+          else:
+            "rounded-sm hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:focus-visible:outline-white"
+        )
+      }
     >
       {@highlight.title}
     </.link>
@@ -2156,6 +2190,13 @@ defmodule DevilsDictionaryWeb.Opening do
   defp date(%DateTime{} = datetime), do: datetime |> DateTime.to_date() |> date()
 
   defp clock(%DateTime{} = at), do: date(at) <> ", " <> Calendar.strftime(at, "%H:%M UTC")
+
+  # D1 row 16: an item with no date says so on the article.
+  defp dated(nil, true), do: "undated"
+  defp dated(date, _article), do: date
+
+  defp kind_class(true), do: "font-medium text-mist-700 dark:text-mist-300"
+  defp kind_class(_article), do: "text-mist-500"
 
   defp news?(%{kind: :shelf, work: %{kind: "news"}}), do: true
   defp news?(_highlight), do: false

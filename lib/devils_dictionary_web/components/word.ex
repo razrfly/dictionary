@@ -277,9 +277,10 @@ defmodule DevilsDictionaryWeb.Word do
       id={@id}
       patch={@path}
       title={"where this came from — #{@label}"}
-      class="relative text-sm/7 text-mist-500 before:absolute before:-inset-3.5 before:content-[''] hover:text-mist-950 dark:hover:text-white"
+      class="relative text-sm/7 text-mist-500 before:absolute before:-inset-y-3.5 before:left-0 before:-right-[30px] before:content-[''] hover:text-mist-950 dark:hover:text-white"
     >
-      <%!-- The glyph is 14 px; the link's hit area is 44 (#309 D5). --%>
+      <%!-- The glyph is 14 px; the link's hit area is 44, grown to the right
+           only, so it never covers the link before it (#309 D5, review 2). --%>
       <span aria-hidden="true">ⓘ</span>
       <span class="sr-only">where this came from — {@label}</span>
     </.link>
