@@ -324,7 +324,9 @@ defmodule DevilsDictionaryWeb.Opening do
       |> assign(:unavailable_slots, Enum.filter(slots(assigns.opening), & &1.withheld))
 
     ~H"""
-    <div id="opening" class="min-w-0">
+    <%!-- A link in a credit or detail line is a 44 px target at every width
+         (#309 review 4, item 3). --%>
+    <div id="opening" class="min-w-0 [&_dd_a]:inline-flex [&_dd_a]:min-h-11 [&_dd_a]:items-center">
       <.article_lead :if={@opening.lead} lead={@opening.lead} record_path={@record_path} />
       <section
         :if={@withheld_lead}
@@ -846,7 +848,10 @@ defmodule DevilsDictionaryWeb.Opening do
           href={@highlight.links.source}
           target="_blank"
           rel="noreferrer"
-          class="mt-1 flex min-h-11 w-fit items-center gap-x-1.5 rounded-sm text-base/6 text-mist-600 underline underline-offset-4 hover:text-mist-950 sm:min-h-0 sm:text-sm/6 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:text-mist-400 dark:hover:text-white dark:focus-visible:outline-white"
+          class={[
+            "mt-1 flex min-h-11 w-fit items-center gap-x-1.5 rounded-sm text-base/6 text-mist-600 underline underline-offset-4 hover:text-mist-950 sm:text-sm/6 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:text-mist-400 dark:hover:text-white dark:focus-visible:outline-white",
+            !@article && "sm:min-h-0"
+          ]}
         >
           {work_link(@highlight)} <span aria-hidden="true">↗</span>
           <span class="sr-only"> (opens in a new tab)</span>
@@ -912,7 +917,10 @@ defmodule DevilsDictionaryWeb.Opening do
             id={"#{@id}-entry"}
             href={@record_path <> "#" <> @highlight.links.card_id}
             phx-click={if @record_path == "", do: open_card(@highlight.links.card_id)}
-            class="flex min-h-11 items-center gap-x-1.5 rounded-sm underline underline-offset-4 hover:text-mist-950 sm:min-h-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:hover:text-white dark:focus-visible:outline-white"
+            class={[
+              "flex min-h-11 items-center gap-x-1.5 rounded-sm underline underline-offset-4 hover:text-mist-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:hover:text-white dark:focus-visible:outline-white",
+              !@article && "sm:min-h-0"
+            ]}
           >
             <%= if @highlight.excerpt.clipped? do %>
               Read the whole entry
@@ -1489,7 +1497,7 @@ defmodule DevilsDictionaryWeb.Opening do
       phx-mounted={JS.ignore_attributes(["open"])}
       class="group/about border-t border-mist-950/10 pt-4 dark:border-white/10"
     >
-      <summary class="flex cursor-pointer list-none items-start justify-between gap-4 rounded-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-mist-950 dark:focus-visible:outline-white [&::-webkit-details-marker]:hidden">
+      <summary class="flex min-h-11 cursor-pointer list-none items-start justify-between gap-4 rounded-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-mist-950 dark:focus-visible:outline-white [&::-webkit-details-marker]:hidden">
         <%!-- A published summary shares the title's line (#255 §2.1), which
              keeps the Definitions a line nearer. --%>
         <span class={[

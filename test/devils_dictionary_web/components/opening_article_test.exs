@@ -223,6 +223,66 @@ defmodule DevilsDictionaryWeb.OpeningArticleTest do
     assert ids(doc, "section[id^='curated-']") == ~w(curated-lead curated-definitions)
   end
 
+  # A phone held sideways is 640 px and wider: a tap target there is as
+  # large as it is upright (#309 review 4, item 3).
+  @shrinks ~r/^(?:sm|md|lg|xl|2xl):(?:min-h|h)-(?:0|px|[0-9]|10|\[.*\])$/
+
+  defp shrinking(doc, selector) do
+    doc
+    |> LazyHTML.query(selector)
+    |> LazyHTML.attribute("class")
+    |> Enum.flat_map(&String.split/1)
+    |> Enum.filter(&Regex.match?(@shrinks, &1))
+  end
+
+  test "a definition's entry link and a poem's source link stay 44 px on a wider screen" do
+    poem = %Highlight{
+      position: 2,
+      kind: :poem,
+      reference: %Reference{object_id: 300, object_kind: :entity},
+      title: "A poem",
+      creator: "A poet",
+      date: "1850",
+      meaning: meaning(),
+      source: %{slug: "poetrydb", name: "PoetryDB", tier: :middle, logo: nil},
+      links: %{source: "https://example.test/poem"},
+      work: %{line_count: 14},
+      credits: [],
+      reasons: [note("A poem on it.")]
+    }
+
+    definition = %{definition(1) | links: %{card_id: "card-johnson"}}
+    doc = render_article(%{nine() | highlights: [definition, poem]})
+
+    assert [_] = LazyHTML.query(doc, "#opening-highlight-1-entry") |> Enum.to_list()
+    assert [_] = LazyHTML.query(doc, "#opening-highlight-2-source") |> Enum.to_list()
+    assert shrinking(doc, "a, summary, button") == []
+
+    # A link in a credit or detail line is the article's to size.
+    assert LazyHTML.query(doc, "#opening") |> LazyHTML.attribute("class") |> hd() =~
+             "[&_dd_a]:min-h-11"
+  end
+
+  test "the pronunciation variants and the curated article's own targets do not shrink" do
+    headword = %{
+      pronunciations: [%{ipa: "/lʌv/", tags: []}],
+      pronunciations_all: [%{ipa: "/lʌv/", tags: []}, %{ipa: "/lɐv/", tags: ["Australia"]}]
+    }
+
+    doc =
+      render_component(&DevilsDictionaryWeb.Word.pronunciation_list/1, headword: headword)
+      |> LazyHTML.from_fragment()
+
+    assert [_] = LazyHTML.query(doc, "#pronunciation-variants summary") |> Enum.to_list()
+    assert shrinking(doc, "summary") == []
+
+    # Everything in the module is the article, the related chips among it,
+    # so no class in it may shrink a target.
+    source = File.read!("lib/devils_dictionary_web/components/curated_article.ex")
+
+    assert Regex.scan(~r/\b(?:sm|md|lg|xl|2xl):(?:min-h|h)-(?:0|px|[0-9]|10)\b/, source) == []
+  end
+
   test "a reason a person wrote has no AI mark and no cut mark" do
     person = %Reason{
       kind: :editorial,

@@ -228,4 +228,36 @@ defmodule DevilsDictionaryWeb.CuratedArticleLiveTest do
 
     assert offending == []
   end
+
+  # A phone held sideways is 640 px and wider: a tap target there is as
+  # large as it is upright (#309 review 4, item 3).
+  test "no tap target shrinks on a wider screen", ctx do
+    publish!(ctx, provision!(ctx))
+    {:ok, view, _} = live(ctx.conn, ~p"/on/love")
+
+    shrinks = ~r/^(?:sm|md|lg|xl|2xl):(?:min-h|h)-(?:0|px|[0-9]|10|\[.*\])$/
+
+    offending =
+      view
+      |> render()
+      |> LazyHTML.from_fragment()
+      |> LazyHTML.query("#curated-page a, #curated-page summary, #curated-page button")
+      |> Enum.flat_map(fn node ->
+        node
+        |> LazyHTML.attribute("class")
+        |> Enum.flat_map(&String.split/1)
+        |> Enum.filter(&Regex.match?(shrinks, &1))
+      end)
+
+    assert offending == []
+
+    # A link in a credit or detail line is the article's to size.
+    assert view
+           |> element("#opening")
+           |> render()
+           |> LazyHTML.from_fragment()
+           |> LazyHTML.query("#opening")
+           |> LazyHTML.attribute("class")
+           |> hd() =~ "[&_dd_a]:min-h-11"
+  end
 end

@@ -685,8 +685,8 @@ defmodule DevilsDictionaryWeb.Word do
       id="pronunciation-variants"
       class="min-w-0 max-w-full text-base/7 sm:text-sm/7 open:basis-full"
     >
-      <%!-- A 44 px tap target on a phone (#309 D5); its line height elsewhere. --%>
-      <summary class="flex min-h-11 w-fit cursor-pointer list-none items-center underline underline-offset-4 hover:text-mist-950 sm:min-h-0 dark:hover:text-white [&::-webkit-details-marker]:hidden">
+      <%!-- A 44 px tap target at every width (#309 D5, review 4). --%>
+      <summary class="flex min-h-11 w-fit cursor-pointer list-none items-center underline underline-offset-4 hover:text-mist-950 dark:hover:text-white [&::-webkit-details-marker]:hidden">
         +{length(@headword.pronunciations_all) - length(@headword.pronunciations)} variants
       </summary>
       <ul role="list" class="mt-2 space-y-1 text-base/7 text-mist-500 sm:text-sm/7">
