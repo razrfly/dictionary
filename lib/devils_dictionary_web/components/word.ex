@@ -88,7 +88,7 @@ defmodule DevilsDictionaryWeb.Word do
             <.link
               id={"disambiguation-#{other.object_id}"}
               navigate={~p"/words/#{other.object_id}/#{other.slug}"}
-              class="font-medium text-mist-950 hover:underline dark:text-white"
+              class="font-medium text-mist-950 underline decoration-mist-950/30 underline-offset-4 hover:decoration-current dark:text-white dark:decoration-white/30"
             >
               {other.lemma}
             </.link>
@@ -118,7 +118,7 @@ defmodule DevilsDictionaryWeb.Word do
             href={@thing.wikidata_url}
             target="_blank"
             rel="noopener"
-            class="hover:underline"
+            class="underline decoration-mist-500/40 underline-offset-4 hover:decoration-current"
           >
             Wikidata <span aria-hidden="true">↗</span>
           </.link>
@@ -277,8 +277,10 @@ defmodule DevilsDictionaryWeb.Word do
       id={@id}
       patch={@path}
       title={"where this came from — #{@label}"}
-      class="text-sm/7 text-mist-500 hover:text-mist-950 dark:hover:text-white"
+      class="relative text-sm/7 text-mist-500 before:absolute before:-inset-y-3.5 before:left-0 before:-right-[30px] before:content-[''] hover:text-mist-950 dark:hover:text-white"
     >
+      <%!-- The glyph is 14 px; the link's hit area is 44, grown to the right
+           only, so it never covers the link before it (#309 D5, review 2). --%>
       <span aria-hidden="true">ⓘ</span>
       <span class="sr-only">where this came from — {@label}</span>
     </.link>
@@ -683,7 +685,8 @@ defmodule DevilsDictionaryWeb.Word do
       id="pronunciation-variants"
       class="min-w-0 max-w-full text-base/7 sm:text-sm/7 open:basis-full"
     >
-      <summary class="w-fit cursor-pointer list-none underline underline-offset-4 hover:text-mist-950 dark:hover:text-white [&::-webkit-details-marker]:hidden">
+      <%!-- A 44 px tap target at every width (#309 D5, review 4). --%>
+      <summary class="flex min-h-11 w-fit cursor-pointer list-none items-center underline underline-offset-4 hover:text-mist-950 dark:hover:text-white [&::-webkit-details-marker]:hidden">
         +{length(@headword.pronunciations_all) - length(@headword.pronunciations)} variants
       </summary>
       <ul role="list" class="mt-2 space-y-1 text-base/7 text-mist-500 sm:text-sm/7">

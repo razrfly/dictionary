@@ -276,6 +276,216 @@ defmodule DevilsDictionaryWeb.Opening do
     """
   end
 
+  # ── the curated article (#309) ───────────────────────────────────────────
+
+  @article_sections [
+    {"definitions", "Definitions", ~w(definitions)},
+    {"quotations", "Quotations", ~w(quotes)},
+    {"examples", "Examples", ~w(examples)},
+    {"culture", "In culture", ~w(images films music books poems)}
+  ]
+
+  attr :opening, Composition, required: true
+  attr :mode, :atom, default: :public
+  attr :record_path, :string, default: ""
+
+  attr :unavailable, :boolean,
+    default: false,
+    doc:
+      "list withheld highlights here (the curation preview); the page lists them in the editor's take"
+
+  @doc """
+  The selection as the curated article reads it (#309 §4, D1): the lead with
+  its reason, *In the news* directly after it, then the four sections a
+  reader recognises — Definitions, Quotations, Examples, In culture — each
+  item with its reason on the page and one disclosure, *About this choice*.
+  Every published item is drawn; a section with nothing in it is not. One
+  document order at every width: `WordLive` places it, and nothing here is
+  for one screen size only.
+  """
+  def article(assigns) do
+    groups =
+      Map.new(
+        DevilsDictionary.Curation.WholeEntry.groups(assigns.opening.highlights),
+        &{&1.key, &1.items}
+      )
+
+    sections =
+      for {key, title, kinds} <- @article_sections,
+          items = Enum.flat_map(kinds, &Map.get(groups, &1, [])),
+          items != [],
+          do: %{key: key, title: title, items: items}
+
+    assigns =
+      assigns
+      |> assign(:news, Map.get(groups, "news", []))
+      |> assign(:sections, sections)
+      |> assign(:withheld_lead, withheld_lead(assigns.opening))
+      |> assign(:unavailable_slots, Enum.filter(slots(assigns.opening), & &1.withheld))
+
+    ~H"""
+    <%!-- A link in a credit or detail line is a 44 px target at every width
+         (#309 review 4, item 3), and a long unbroken credit still wraps
+         inside the column (review 5). --%>
+    <div
+      id="opening"
+      class="min-w-0 [&_dd_a]:inline-flex [&_dd_a]:min-h-11 [&_dd_a]:max-w-full [&_dd_a]:items-center [&_dd_a]:[overflow-wrap:anywhere]"
+    >
+      <.article_lead :if={@opening.lead} lead={@opening.lead} record_path={@record_path} />
+      <section
+        :if={@withheld_lead}
+        id="curated-lead"
+        aria-label="Leading definition"
+        class="border-t border-mist-950/10 pt-6 pb-8 dark:border-white/10"
+      >
+        <.withheld id="opening-withheld-lead" item={@withheld_lead} tag="p" />
+      </section>
+      <.article_section
+        :if={@news != []}
+        key="news"
+        title="In the news"
+        items={@news}
+        mode={@mode}
+        record_path={@record_path}
+      />
+      <.article_section
+        :for={section <- @sections}
+        key={section.key}
+        title={section.title}
+        items={section.items}
+        mode={@mode}
+        record_path={@record_path}
+      />
+      <section
+        :if={@unavailable and @unavailable_slots != []}
+        id="curated-unavailable"
+        class="flex flex-col gap-4 border-t border-mist-950/10 py-8 dark:border-white/10"
+      >
+        <h2 class="font-display text-3xl/9 tracking-tight text-pretty">Unavailable selections</h2>
+        <ul role="list" class="flex flex-col gap-4">
+          <.withheld
+            :for={slot <- @unavailable_slots}
+            id={"curated-withheld-#{slot.position}"}
+            item={slot.withheld}
+          />
+        </ul>
+      </section>
+    </div>
+    """
+  end
+
+  attr :key, :string, required: true
+  attr :title, :string, required: true
+  attr :items, :list, required: true
+  attr :mode, :atom, default: :public
+  attr :record_path, :string, default: ""
+
+  defp article_section(assigns) do
+    ~H"""
+    <section
+      id={"curated-" <> @key}
+      aria-labelledby={"curated-#{@key}-heading"}
+      class="flex min-w-0 flex-col gap-5 border-t border-mist-950/10 py-8 dark:border-white/10"
+    >
+      <h2 id={"curated-#{@key}-heading"} class="font-display text-3xl/9 tracking-tight text-pretty">
+        {@title}
+      </h2>
+      <ul
+        role="list"
+        class="flex min-w-0 flex-col divide-y divide-mist-950/10 *:py-6 *:first:pt-0 *:last:pb-0 dark:divide-white/10"
+      >
+        <.highlight
+          :for={item <- @items}
+          highlight={item}
+          shares_row={false}
+          mode={@mode}
+          compact
+          article
+          record_path={@record_path}
+        />
+      </ul>
+    </section>
+    """
+  end
+
+  attr :lead, :map, required: true
+  attr :record_path, :string, default: ""
+
+  defp article_lead(assigns) do
+    ~H"""
+    <section
+      id="curated-lead"
+      aria-labelledby="curated-lead-heading"
+      class="flex flex-col gap-4 border-t border-mist-950/10 pt-6 pb-8 dark:border-white/10"
+    >
+      <div class="flex flex-wrap items-center gap-3">
+        <h2
+          id="curated-lead-heading"
+          class="text-base/7 font-semibold text-mist-700 dark:text-mist-300"
+        >
+          Leading definition
+        </h2>
+        <.register id="opening-lead-register" register={@lead.register} />
+      </div>
+      <div id="opening-lead" class="flex flex-col gap-4">
+        <figure class="flex max-w-[44rem] flex-col gap-3">
+          <blockquote
+            cite={@lead.links[:source]}
+            class="font-display text-4xl/11 text-pretty text-mist-950 dark:text-white"
+          >
+            <p
+              id="opening-lead-text"
+              class="relative before:absolute before:-translate-x-full before:content-['\201C'] after:content-['\201D']"
+              phx-no-format
+            >{raw(@lead.excerpt.html)}</p>
+          </blockquote>
+          <figcaption class="flex flex-wrap items-center gap-x-3 gap-y-1 text-base/7">
+            <span class={["inline-flex items-center gap-2 font-medium", tier_text(@lead.source.tier)]}>
+              <SourceBadge.badge source={@lead.source} decorative />{@lead.author}
+            </span>
+            <cite :if={@lead.work} class="text-mist-600 dark:text-mist-400">{@lead.work}</cite>
+            <span class="text-mist-600 tabular-nums dark:text-mist-400">
+              {@lead.entry[:year] || "undated"}
+            </span>
+            <.link
+              :if={@lead.links[:card_id]}
+              id="opening-lead-entry"
+              href={@record_path <> "#" <> @lead.links.card_id}
+              class="flex min-h-11 items-center gap-x-1.5 rounded-sm text-mist-600 underline underline-offset-4 hover:text-mist-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:text-mist-400 dark:hover:text-white dark:focus-visible:outline-white"
+            >
+              <%= if @lead.excerpt.clipped? do %>
+                Read the whole entry
+                <span class="tabular-nums">· {number(@lead.excerpt.chars)} characters</span>
+              <% else %>
+                The entry among the definitions
+              <% end %>
+              <span aria-hidden="true">→</span>
+            </.link>
+          </figcaption>
+        </figure>
+        <.credit_line
+          id="opening-lead-credits"
+          credits={@lead.credits}
+          class="max-w-[44rem]"
+          article
+        />
+        <.choice_footer id="opening-lead" choice={@lead} article label="Why it leads">
+          <.particulars
+            article
+            record_path={@record_path}
+            id="opening-lead"
+            meaning={@lead.meaning}
+            register={@lead.register}
+            reasons={@lead.reasons}
+            credits={@lead.credits}
+            quoted
+          />
+        </.choice_footer>
+      </div>
+    </section>
+    """
+  end
+
   defp reference_selector(%{kind: :model, label: label}) do
     (label |> String.split(" · ", parts: 2) |> hd()) <> ", an AI curator"
   end
@@ -364,6 +574,10 @@ defmodule DevilsDictionaryWeb.Opening do
     default: true,
     doc: "whether the tile shares its row with other highlights, and keeps its picture small"
 
+  attr :article, :boolean,
+    default: false,
+    doc: "drawn on the curated article (#309): the reason on the page, one disclosure"
+
   # The picture stays beside the text when the tile shares its row: stacked
   # full width above it, a square artwork alone pushed the Definitions a
   # quarter of a screen down (#257, measured on /on/war at 1280 × 900).
@@ -371,11 +585,41 @@ defmodule DevilsDictionaryWeb.Opening do
     assigns = assign(assigns, :id, "opening-highlight-#{assigns.highlight.position}")
 
     ~H"""
-    <li id={@id} class="flex min-w-0 flex-col gap-3 rounded-xl bg-mist-950/2.5 p-5 dark:bg-white/5">
-      <p class="text-sm font-medium text-mist-600 dark:text-mist-400">
+    <li
+      id={@id}
+      class={[
+        "flex min-w-0 flex-col gap-3",
+        !@article && "rounded-xl bg-mist-950/2.5 p-5 dark:bg-white/5"
+      ]}
+    >
+      <p :if={!@article} class="text-sm font-medium text-mist-600 dark:text-mist-400">
         {if @highlight.kind == :shelf,
           do: "Selected from provider metadata",
           else: "Selected public linked claim"}
+      </p>
+      <%!-- On the article the tile names what it is and where it was found;
+           a headline also says when, and until when it is shown (#309 D1
+           rows 10a, 14a). --%>
+      <p
+        :if={@article}
+        id={"#{@id}-kind"}
+        class="text-base/6 font-medium text-mist-700 dark:text-mist-300"
+      >
+        {shelf_noun(@highlight)}<span class="font-normal text-mist-600 dark:text-mist-400">{shelf_found(
+          @highlight
+        )}</span>
+      </p>
+      <p
+        :if={
+          @article && news?(@highlight) && @highlight.work[:observed_at] &&
+            @highlight.work[:shown_until]
+        }
+        id={"#{@id}-as-of"}
+        class="text-base/6 text-pretty text-mist-600 dark:text-mist-400"
+      >
+        Headlines change. Found {clock(@highlight.work.observed_at)}; shown until {date(
+          @highlight.work.shown_until
+        )}.
       </p>
       <img
         :if={@highlight.image}
@@ -385,13 +629,28 @@ defmodule DevilsDictionaryWeb.Opening do
         class="max-h-80 w-full rounded-lg object-contain"
         loading="lazy"
       />
-      <h3 id={"#{@id}-title"} class="font-display text-2xl/8">{@highlight.title}</h3>
+      <h3
+        id={"#{@id}-title"}
+        class={[
+          "font-display text-pretty",
+          if(@article && !news?(@highlight), do: "text-xl/7", else: "text-2xl/8")
+        ]}
+      >
+        {@highlight.title}
+      </h3>
       <p :if={@highlight.current_label} id={"#{@id}-now"}>Now: {@highlight.current_label}</p>
-      <p :if={@highlight.creator}>{@highlight.creator}</p>
+      <p :if={!@article && @highlight.creator}>{@highlight.creator}</p>
+      <p :if={@article} id={"#{@id}-byline"} class="text-base/6 text-mist-600 dark:text-mist-400">
+        {Enum.join(Enum.reject([@highlight.creator, @highlight.date || "undated"], &is_nil/1), " · ")}
+      </p>
       <p
         :if={@highlight.kind == :shelf && @highlight.work.credit_parts != []}
         id={"#{@id}-attribution"}
-        class="text-sm/6 text-pretty"
+        class={[
+          "text-sm/6 text-pretty",
+          @article &&
+            "[&_a]:inline-flex [&_a]:min-h-11 [&_a]:max-w-full [&_a]:items-center [&_a]:[overflow-wrap:anywhere]"
+        ]}
       >
         <%= for part <- @highlight.work.credit_parts do %>
           <a
@@ -403,31 +662,37 @@ defmodule DevilsDictionaryWeb.Opening do
           >{part.text}</a><span :if={is_nil(part.url)}>{part.text}</span>
         <% end %>
       </p>
-      <DevilsDictionaryWeb.Culture.attribution_mark
+      <%!-- On the article the mark's link is a 44 px target (#309 review 2). --%>
+      <div
         :if={@highlight.kind == :shelf && @highlight.work.mark}
-        id={"#{@id}-provider-mark"}
-        mark={@highlight.work.mark}
-        provider={@highlight.source.slug}
-      />
-      <.credit_line id={"#{@id}-credits"} credits={@highlight.credits} />
+        class={@article && "[&_a]:inline-flex [&_a]:min-h-11 [&_a]:items-center"}
+      >
+        <DevilsDictionaryWeb.Culture.attribution_mark
+          id={"#{@id}-provider-mark"}
+          mark={@highlight.work.mark}
+          provider={@highlight.source.slug}
+        />
+      </div>
+      <.credit_line id={"#{@id}-credits"} credits={@highlight.credits} article={@article} />
       <.link
         :if={@highlight.links[:source]}
         href={@highlight.links.source}
         target="_blank"
         rel="noreferrer"
-        class="w-fit underline underline-offset-4"
+        class={["w-fit underline underline-offset-4", @article && "flex min-h-11 items-center"]}
       >Source</.link>
-      <.choice_receipt id={@id} choice={@highlight} compact={@compact} />
-      <.why id={"#{@id}-why"} summary="Why this is here" reasons={@highlight.reasons}>
+      <.choice_footer id={@id} choice={@highlight} compact={@compact} article={@article}>
         <.particulars
+          article={@article}
           record_path={@record_path}
           id={@id}
           meaning={@highlight.meaning}
           register={@highlight.register}
           reasons={@highlight.reasons}
           credits={@highlight.credits}
+          quoted={@article}
         />
-      </.why>
+      </.choice_footer>
     </li>
     """
   end
@@ -451,32 +716,52 @@ defmodule DevilsDictionaryWeb.Opening do
           />
         </div>
         <div class="min-w-0">
-          <p aria-hidden="true" class="text-base/6 text-mist-500 sm:text-sm/6">Artwork</p>
+          <p
+            aria-hidden="true"
+            class={[
+              "text-base/6 sm:text-sm/6",
+              if(@article,
+                do: "font-medium text-mist-700 dark:text-mist-300",
+                else: "text-mist-500"
+              )
+            ]}
+          >
+            {if @article, do: "Image", else: "Artwork"}
+          </p>
           <p class="text-base/6 font-medium text-mist-950 sm:text-sm/6 dark:text-white">
-            <.work_title id={"#{@id}-title"} highlight={@highlight} mode={@mode} />
+            <.work_title
+              id={"#{@id}-title"}
+              highlight={@highlight}
+              mode={@mode}
+              article={@article}
+            />
           </p>
           <p
-            :if={@highlight.creator || @highlight.date}
+            :if={@highlight.creator || @highlight.date || @article}
             class="text-base/6 text-mist-600 sm:text-sm/6 dark:text-mist-400"
           >
-            {Enum.join(Enum.reject([@highlight.creator, @highlight.date], &is_nil/1), " · ")}
+            {Enum.join(
+              Enum.reject([@highlight.creator, dated(@highlight.date, @article)], &is_nil/1),
+              " · "
+            )}
           </p>
         </div>
       </div>
 
-      <.credit_line id={"#{@id}-credits"} credits={@highlight.credits} />
+      <.credit_line id={"#{@id}-credits"} credits={@highlight.credits} article={@article} />
 
-      <.choice_receipt id={@id} choice={@highlight} compact={@compact} />
-      <.why id={"#{@id}-why"} summary="Why this is here" reasons={@highlight.reasons}>
+      <.choice_footer id={@id} choice={@highlight} compact={@compact} article={@article}>
         <.particulars
+          article={@article}
           record_path={@record_path}
           id={@id}
           meaning={@highlight.meaning}
           register={@highlight.register}
           reasons={@highlight.reasons}
           credits={@highlight.credits}
+          quoted={@article}
         />
-      </.why>
+      </.choice_footer>
     </li>
     """
   end
@@ -487,7 +772,10 @@ defmodule DevilsDictionaryWeb.Opening do
     ~H"""
     <li id={@id} class="flex min-w-0 flex-col gap-3">
       <h3 class="sr-only">Quotation: {@highlight.quotation.citation}</h3>
-      <figure class="flex flex-col gap-3 rounded-xl bg-mist-950/2.5 p-5 dark:bg-white/5">
+      <figure class={[
+        "flex flex-col gap-3",
+        !@article && "rounded-xl bg-mist-950/2.5 p-5 dark:bg-white/5"
+      ]}>
         <p class="flex flex-wrap items-center gap-2">
           <.register id={"#{@id}-register"} register={@highlight.register} />
           <span
@@ -517,19 +805,20 @@ defmodule DevilsDictionaryWeb.Opening do
         </figcaption>
       </figure>
 
-      <.credit_line id={"#{@id}-credits"} credits={@highlight.credits} />
+      <.credit_line id={"#{@id}-credits"} credits={@highlight.credits} article={@article} />
 
-      <.choice_receipt id={@id} choice={@highlight} compact={@compact} />
-      <.why id={"#{@id}-why"} summary="Why this is here" reasons={@highlight.reasons}>
+      <.choice_footer id={@id} choice={@highlight} compact={@compact} article={@article}>
         <.particulars
+          article={@article}
           record_path={@record_path}
           id={@id}
           meaning={@highlight.meaning}
           register={@highlight.register}
           reasons={@highlight.reasons}
           credits={@highlight.credits}
+          quoted={@article}
         />
-      </.why>
+      </.choice_footer>
     </li>
     """
   end
@@ -543,19 +832,25 @@ defmodule DevilsDictionaryWeb.Opening do
     ~H"""
     <li id={@id} class="flex min-w-0 flex-col gap-3">
       <h3 class="sr-only">{work_noun(@highlight.kind)}: {@highlight.title}</h3>
-      <div class="flex flex-col gap-1 rounded-xl bg-mist-950/2.5 p-5 dark:bg-white/5">
-        <p aria-hidden="true" class="text-base/6 text-mist-500 sm:text-sm/6">
+      <div class={[
+        "flex flex-col gap-1",
+        !@article && "rounded-xl bg-mist-950/2.5 p-5 dark:bg-white/5"
+      ]}>
+        <p aria-hidden="true" class={["text-base/6 sm:text-sm/6", kind_class(@article)]}>
           {work_noun(@highlight.kind)}
         </p>
         <p class="font-display text-xl/7 text-pretty text-mist-950 dark:text-white">
-          <.work_title id={"#{@id}-title"} highlight={@highlight} mode={@mode} />
+          <.work_title id={"#{@id}-title"} highlight={@highlight} mode={@mode} article={@article} />
         </p>
         <p
-          :if={@highlight.creator || @highlight.date || work_facts(@highlight) != []}
+          :if={@highlight.creator || @highlight.date || work_facts(@highlight) != [] || @article}
           id={"#{@id}-byline"}
           class="text-base/6 text-mist-600 sm:text-sm/6 dark:text-mist-400"
         >
-          {Enum.join(Enum.reject([@highlight.creator, @highlight.date], &is_nil/1), " · ")}<span
+          {Enum.join(
+            Enum.reject([@highlight.creator, dated(@highlight.date, @article)], &is_nil/1),
+            " · "
+          )}<span
             :if={work_facts(@highlight) != []}
             id={"#{@id}-facts"}
             class="tabular-nums"
@@ -570,26 +865,30 @@ defmodule DevilsDictionaryWeb.Opening do
           href={@highlight.links.source}
           target="_blank"
           rel="noreferrer"
-          class="mt-1 flex min-h-11 w-fit items-center gap-x-1.5 rounded-sm text-base/6 text-mist-600 underline underline-offset-4 hover:text-mist-950 sm:min-h-0 sm:text-sm/6 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:text-mist-400 dark:hover:text-white dark:focus-visible:outline-white"
+          class={[
+            "mt-1 flex min-h-11 w-fit items-center gap-x-1.5 rounded-sm text-base/6 text-mist-600 underline underline-offset-4 hover:text-mist-950 sm:text-sm/6 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:text-mist-400 dark:hover:text-white dark:focus-visible:outline-white",
+            !@article && "sm:min-h-0"
+          ]}
         >
           {work_link(@highlight)} <span aria-hidden="true">↗</span>
           <span class="sr-only"> (opens in a new tab)</span>
         </a>
       </div>
 
-      <.credit_line id={"#{@id}-credits"} credits={@highlight.credits} />
+      <.credit_line id={"#{@id}-credits"} credits={@highlight.credits} article={@article} />
 
-      <.choice_receipt id={@id} choice={@highlight} compact={@compact} />
-      <.why id={"#{@id}-why"} summary="Why this is here" reasons={@highlight.reasons}>
+      <.choice_footer id={@id} choice={@highlight} compact={@compact} article={@article}>
         <.particulars
+          article={@article}
           record_path={@record_path}
           id={@id}
           meaning={@highlight.meaning}
           register={@highlight.register}
           reasons={@highlight.reasons}
           credits={@highlight.credits}
+          quoted={@article}
         />
-      </.why>
+      </.choice_footer>
     </li>
     """
   end
@@ -602,7 +901,10 @@ defmodule DevilsDictionaryWeb.Opening do
     ~H"""
     <li id={@id} class="flex min-w-0 flex-col gap-3">
       <h3 class="sr-only">Definition: {@highlight.creator}, {@highlight.title}</h3>
-      <figure class="flex flex-col gap-3 rounded-xl bg-mist-950/2.5 p-5 dark:bg-white/5">
+      <figure class={[
+        "flex flex-col gap-3",
+        !@article && "rounded-xl bg-mist-950/2.5 p-5 dark:bg-white/5"
+      ]}>
         <blockquote
           cite={@highlight.links[:source]}
           class="font-display text-2xl/8 text-pretty text-mist-950 dark:text-white"
@@ -624,14 +926,19 @@ defmodule DevilsDictionaryWeb.Opening do
           ]}>
             <SourceBadge.badge source={@highlight.source} decorative />{@highlight.creator}
           </span>
-          <span :if={@highlight.date} class="tabular-nums">{@highlight.date}</span>
+          <span :if={@highlight.date || @article} class="tabular-nums">
+            {@highlight.date || "undated"}
+          </span>
           <span :if={@highlight.title}>{@highlight.title}</span>
           <.link
             :if={@highlight.links[:card_id]}
             id={"#{@id}-entry"}
             href={@record_path <> "#" <> @highlight.links.card_id}
             phx-click={if @record_path == "", do: open_card(@highlight.links.card_id)}
-            class="flex min-h-11 items-center gap-x-1.5 rounded-sm underline underline-offset-4 hover:text-mist-950 sm:min-h-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:hover:text-white dark:focus-visible:outline-white"
+            class={[
+              "flex min-h-11 items-center gap-x-1.5 rounded-sm underline underline-offset-4 hover:text-mist-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:hover:text-white dark:focus-visible:outline-white",
+              !@article && "sm:min-h-0"
+            ]}
           >
             <%= if @highlight.excerpt.clipped? do %>
               Read the whole entry
@@ -639,24 +946,25 @@ defmodule DevilsDictionaryWeb.Opening do
             <% else %>
               The entry among the definitions
             <% end %>
-            <span aria-hidden="true">↓</span>
+            <span aria-hidden="true">{if @article, do: "→", else: "↓"}</span>
           </.link>
         </figcaption>
       </figure>
 
-      <.credit_line id={"#{@id}-credits"} credits={@highlight.credits} />
+      <.credit_line id={"#{@id}-credits"} credits={@highlight.credits} article={@article} />
 
-      <.choice_receipt id={@id} choice={@highlight} compact={@compact} />
-      <.why id={"#{@id}-why"} summary="Why this is here" reasons={@highlight.reasons}>
+      <.choice_footer id={@id} choice={@highlight} compact={@compact} article={@article}>
         <.particulars
+          article={@article}
           record_path={@record_path}
           id={@id}
           meaning={@highlight.meaning}
           register={@highlight.register}
           reasons={@highlight.reasons}
           credits={@highlight.credits}
+          quoted={@article}
         />
-      </.why>
+      </.choice_footer>
     </li>
     """
   end
@@ -672,14 +980,21 @@ defmodule DevilsDictionaryWeb.Opening do
     <li id={@id} class="flex min-w-0 flex-col gap-3">
       <h3 class="sr-only">Example: {@highlight.title}, {example_noun(@highlight.subject)}</h3>
       <div class="min-w-0">
-        <p aria-hidden="true" class="text-base/6 text-mist-500 sm:text-sm/6">
+        <p aria-hidden="true" class={["text-base/6 sm:text-sm/6", kind_class(@article)]}>
           {example_kind(@highlight.subject)}
         </p>
         <p class="text-base/6 font-medium text-mist-950 sm:text-sm/6 dark:text-white">
           <.link
             id={"#{@id}-title"}
             navigate={subject_path(@highlight, @mode)}
-            class="rounded-sm hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:focus-visible:outline-white"
+            class={
+              if(@article,
+                do:
+                  "inline-flex min-h-11 items-center rounded-sm underline decoration-mist-950/30 underline-offset-4 hover:decoration-current focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:decoration-white/30 dark:focus-visible:outline-white",
+                else:
+                  "rounded-sm hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:focus-visible:outline-white"
+              )
+            }
           >
             {@highlight.title}
           </.link>
@@ -705,7 +1020,7 @@ defmodule DevilsDictionaryWeb.Opening do
            require, as the quotation tile quotes. --%>
       <figure
         :if={@highlight.subject.html}
-        class="flex flex-col gap-3 rounded-xl bg-mist-950/2.5 p-5 dark:bg-white/5"
+        class={["flex flex-col gap-3", !@article && "rounded-xl bg-mist-950/2.5 p-5 dark:bg-white/5"]}
       >
         <p class="flex flex-wrap items-center gap-2">
           <.register id={"#{@id}-register"} register={@highlight.register} />
@@ -719,18 +1034,19 @@ defmodule DevilsDictionaryWeb.Opening do
         </blockquote>
       </figure>
 
-      <.credit_line id={"#{@id}-credits"} credits={@highlight.credits} />
+      <.credit_line id={"#{@id}-credits"} credits={@highlight.credits} article={@article} />
 
-      <.choice_receipt id={@id} choice={@highlight} compact={@compact} />
-      <.why id={"#{@id}-why"} summary="Why this is here" reasons={@highlight.reasons}>
+      <.choice_footer id={@id} choice={@highlight} compact={@compact} article={@article}>
         <div class="flex flex-col gap-3">
           <.particulars
+            article={@article}
             record_path={@record_path}
             id={@id}
             meaning={@highlight.meaning}
             register={@highlight.register}
             reasons={@highlight.reasons}
             credits={@highlight.credits}
+            quoted={@article}
           />
           <dl id={"#{@id}-stages"} class="flex flex-col gap-2 text-base/6 sm:text-sm/6">
             <div id={"#{@id}-rationale"}>
@@ -748,7 +1064,7 @@ defmodule DevilsDictionaryWeb.Opening do
             </div>
           </dl>
         </div>
-      </.why>
+      </.choice_footer>
     </li>
     """
   end
@@ -779,7 +1095,144 @@ defmodule DevilsDictionaryWeb.Opening do
     """
   end
 
+  attr :id, :string, required: true
   attr :choice, :map, required: true
+  attr :compact, :boolean, default: false
+  attr :article, :boolean, default: false
+  attr :summary, :string, default: "Why this is here"
+  attr :label, :string, default: "Why it’s here"
+  slot :inner_block, required: true
+
+  # What an item says under itself. On the curated article (#309 D1 rows 7,
+  # 9, 15) the editor's stored reason is on the page and everything else
+  # about the choice is one disclosure, *About this choice*: meaning, kind of
+  # text, the stated reasons, content date, basis and the exact record.
+  # Elsewhere, the receipt and *Why this is here*, as before.
+  defp choice_footer(%{article: true} = assigns) do
+    ~H"""
+    <.stated_reason id={"#{@id}-reason"} label={@label} reasons={@choice.reasons} />
+    <details id={"#{@id}-why"} phx-mounted={JS.ignore_attributes(["open"])} class="group/why">
+      <summary class="flex min-h-11 w-fit cursor-pointer list-none items-center gap-2 rounded-sm text-base/7 text-mist-600 hover:text-mist-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:text-mist-400 dark:hover:text-white dark:focus-visible:outline-white [&::-webkit-details-marker]:hidden">
+        <span class="underline decoration-mist-950/20 underline-offset-4 dark:decoration-white/20">
+          About this choice
+        </span>
+        <.icon name="hero-chevron-down-mini" class="size-5 text-mist-400 group-open/why:rotate-180" />
+      </summary>
+      <div class="mt-2 flex flex-col gap-3 border-l-2 border-mist-950/10 pl-4 dark:border-white/10">
+        {render_slot(@inner_block)}
+        <div
+          :if={@choice.date_info}
+          id={"#{@id}-receipt"}
+          class="flex flex-col gap-1 text-base/6 text-mist-600 dark:text-mist-400"
+        >
+          <.choice_facts choice={@choice} article />
+        </div>
+      </div>
+    </details>
+    """
+  end
+
+  defp choice_footer(assigns) do
+    ~H"""
+    <.choice_receipt id={@id} choice={@choice} compact={@compact} />
+    <.why id={"#{@id}-why"} summary={@summary} reasons={@choice.reasons}>
+      {render_slot(@inner_block)}
+    </.why>
+    """
+  end
+
+  attr :id, :string, required: true
+  attr :label, :string, required: true
+  attr :reasons, :list, default: []
+
+  # The editor's stored reason, under the record it explains, word for word.
+  # A model's carries the AI mark; one that stops at its instruction's cap
+  # mid-sentence says so outside the quotation marks (D1 row 8).
+  defp stated_reason(assigns) do
+    assigns = assign(assigns, :note, Enum.find(assigns.reasons, &(&1.kind == :editorial)))
+
+    ~H"""
+    <p :if={@note} id={@id} class="flex gap-3 text-base/7">
+      <.ai_mark :if={generated?(@note)} class="mt-0.5 size-6 text-[0.625rem]" />
+      <span class="min-w-0 text-pretty text-mist-800 dark:text-mist-200">
+        <span class="font-semibold text-mist-950 dark:text-white">{@label}</span>
+        <span :if={generated?(@note)} class="sr-only">(the AI editor's note)</span>
+        “{@note.text}”<span
+          :if={cap = cut_at(@note)}
+          id={"#{@id}-cut"}
+          class="text-mist-600 dark:text-mist-400"
+        > · cut at {cap} characters</span>
+      </span>
+    </p>
+    """
+  end
+
+  attr :class, :any, default: "size-7 text-[0.6875rem]"
+
+  @doc """
+  The AI editor's mark, beside its byline and each of its reasons: *AI*,
+  never the persona's initial, which readers took for the persona's own
+  voice (#309 D2b pre-check). Decorative: the words beside it say who.
+  """
+  def ai_mark(assigns) do
+    ~H"""
+    <span
+      aria-hidden="true"
+      class={[
+        "inline-flex shrink-0 items-center justify-center rounded-full bg-amber-100 font-semibold tracking-wide text-amber-900 dark:bg-amber-400/15 dark:text-amber-200",
+        @class
+      ]}
+    >
+      AI
+    </span>
+    """
+  end
+
+  @doc """
+  The cap a model's note stopped at, or `nil`: a note exactly as long as its
+  instruction's reason cap (`WholeEntry.reason_cap/1`) that does not end a
+  sentence. The instruction is the one the note's author label names.
+  """
+  def cut_at(%{kind: :editorial, text: text, author: %{kind: :model, label: label}})
+      when is_binary(text) and is_binary(label) do
+    with %{instruction: instruction} when is_binary(instruction) <- editor_parts(label),
+         true <-
+           DevilsDictionary.Curation.Runtime.SectionOutput.enabled?(%{
+             "instruction_version" => instruction
+           }),
+         cap = DevilsDictionary.Curation.WholeEntry.reason_cap(instruction),
+         true <- String.length(text) == cap,
+         false <- String.ends_with?(String.trim_trailing(text), [".", "!", "?", "…"]) do
+      cap
+    else
+      _ -> nil
+    end
+  end
+
+  def cut_at(_reason), do: nil
+
+  @doc """
+  An AI editor's actor label in its parts: "Inspired by Voltaire ·
+  voltaire-whole-entry-v6 · qwen3.5-…" for a persona, "generic-editor-v2 ·
+  qwen3.5-…" for the generic editor (`Configurations.editor_label/1`).
+  """
+  def editor_parts(label) when is_binary(label) do
+    case String.split(label, " · ") do
+      ["Inspired by " <> persona, instruction, model | _] ->
+        %{persona: persona, instruction: instruction, model: model}
+
+      [instruction, model] ->
+        %{persona: nil, instruction: instruction, model: model}
+
+      _ ->
+        %{persona: nil, instruction: nil, model: nil}
+    end
+  end
+
+  def editor_parts(_label), do: %{persona: nil, instruction: nil, model: nil}
+
+  attr :choice, :map, required: true
+  attr :article, :boolean, default: false
 
   defp choice_facts(assigns) do
     ~H"""
@@ -797,7 +1250,7 @@ defmodule DevilsDictionaryWeb.Opening do
     <.link
       :if={@choice.receipt_path}
       navigate={@choice.receipt_path}
-      class="w-fit underline underline-offset-4"
+      class={["w-fit underline underline-offset-4", @article && "flex min-h-11 items-center"]}
     >Exact choice, chooser and evidence</.link>
     """
   end
@@ -805,15 +1258,24 @@ defmodule DevilsDictionaryWeb.Opening do
   attr :id, :string, required: true
   attr :highlight, :map, required: true
   attr :mode, :atom, default: :public
+  attr :article, :boolean, default: false
 
   # A work's title, linked to its registry page when the registry holds it.
-  # A catalog-only work has no page of its own (#253 D5).
+  # A catalog-only work has no page of its own (#253 D5). On the article a
+  # link looks like one at rest and is a 44 px target (#309 review 2).
   defp work_title(%{highlight: %{reference: %{object_id: id}}} = assigns) when is_integer(id) do
     ~H"""
     <.link
       id={@id}
       navigate={entity_path(@highlight, @mode)}
-      class="rounded-sm hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:focus-visible:outline-white"
+      class={
+        if(@article,
+          do:
+            "inline-flex min-h-11 items-center rounded-sm underline decoration-mist-950/30 underline-offset-4 hover:decoration-current focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:decoration-white/30 dark:focus-visible:outline-white",
+          else:
+            "rounded-sm hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:focus-visible:outline-white"
+        )
+      }
     >
       {@highlight.title}
     </.link>
@@ -847,8 +1309,14 @@ defmodule DevilsDictionaryWeb.Opening do
   attr :credits, :list, default: []
   attr :class, :any, default: nil
 
+  attr :article, :boolean,
+    default: false,
+    doc: "on the curated article, one credit to a line: its links are 44 px boxes (#309 review 5)"
+
   # The credits a source's terms require, on the page: one run of text, every
-  # credit whole and unclamped, linked where its source names a page.
+  # credit whole and unclamped, linked where its source names a page. On the
+  # article a run of 44 px links would start lines with its separator, so
+  # each credit takes a line of its own.
   defp credit_line(assigns) do
     assigns = assign(assigns, :required, Enum.filter(assigns.credits, & &1.required?))
 
@@ -860,7 +1328,7 @@ defmodule DevilsDictionaryWeb.Opening do
     >
       <div
         :for={credit <- @required}
-        class="inline after:mx-1.5 after:content-['·'] last:after:content-none"
+        class={!@article && "inline after:mx-1.5 after:content-['·'] last:after:content-none"}
       >
         <dt class="inline font-medium text-mist-700 dark:text-mist-300">{credit.label}</dt>
         <dd class="inline break-words">
@@ -924,6 +1392,12 @@ defmodule DevilsDictionaryWeb.Opening do
 
   attr :record_path, :string, default: ""
 
+  attr :quoted, :boolean,
+    default: false,
+    doc: "the editor's note is already on the page, so only who wrote it is repeated"
+
+  attr :article, :boolean, default: false
+
   defp particulars(assigns) do
     assigns =
       assigns
@@ -937,7 +1411,7 @@ defmodule DevilsDictionaryWeb.Opening do
         <div id={"#{@id}-meaning"}>
           <dt class="inline font-medium text-mist-950 dark:text-white">Meaning</dt>
           <dd class="inline text-mist-700 dark:text-mist-300">
-            <.meaning record_path={@record_path} meaning={@meaning} />
+            <.meaning record_path={@record_path} meaning={@meaning} article={@article} />
           </dd>
         </div>
         <div :if={@register} id={"#{@id}-register-note"}>
@@ -964,7 +1438,7 @@ defmodule DevilsDictionaryWeb.Opening do
         class="flex flex-col gap-1 rounded-lg bg-amber-50 px-3 py-2 dark:bg-amber-400/10"
       >
         <p class="font-medium text-mist-950 dark:text-white">{reason_label(note)}</p>
-        <p class="text-mist-700 text-pretty dark:text-mist-300">{note.text}</p>
+        <p :if={!@quoted} class="text-mist-700 text-pretty dark:text-mist-300">{note.text}</p>
         <p id={"#{@id}-note-#{i}-author"} class="text-mist-600 dark:text-mist-400">
           {attribution(note)}
         </p>
@@ -977,14 +1451,16 @@ defmodule DevilsDictionaryWeb.Opening do
 
   # A sense's gloss is its source's words, so it is quoted; a word and part
   # of speech is ours, so it is not. Either links to where the page shows it,
-  # and opens the card it is in.
+  # and opens the card it is in. On the article the link is a 44 px box, so a
+  # sense's source takes the next line, without a separator to start it.
   attr :record_path, :string, default: ""
+  attr :article, :boolean, default: false
 
   defp meaning(%{meaning: %{kind: :sense}} = assigns) do
     ~H"""
     <.meaning_link record_path={@record_path} anchor={@meaning.anchor}>“{@meaning.label}”</.meaning_link><span :if={
-      @meaning.source
-    }> · {@meaning.source.name}</span>
+      @meaning.source && !@article
+    }> · {@meaning.source.name}</span><span :if={@meaning.source && @article} class="block">{@meaning.source.name}</span>
     """
   end
 
@@ -1043,14 +1519,15 @@ defmodule DevilsDictionaryWeb.Opening do
 
   attr :reviewer?, :boolean, default: false
 
-  defp about(assigns) do
+  @doc false
+  def about(assigns) do
     ~H"""
     <details
       id="opening-about"
       phx-mounted={JS.ignore_attributes(["open"])}
       class="group/about border-t border-mist-950/10 pt-4 dark:border-white/10"
     >
-      <summary class="flex cursor-pointer list-none items-start justify-between gap-4 rounded-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-mist-950 dark:focus-visible:outline-white [&::-webkit-details-marker]:hidden">
+      <summary class="flex min-h-11 cursor-pointer list-none items-start justify-between gap-4 rounded-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-mist-950 dark:focus-visible:outline-white [&::-webkit-details-marker]:hidden">
         <%!-- A published summary shares the title's line (#255 §2.1), which
              keeps the Definitions a line nearer. --%>
         <span class={[
@@ -1750,6 +2227,47 @@ defmodule DevilsDictionaryWeb.Opening do
 
   defp date(%Date{} = date), do: Calendar.strftime(date, "%-d %B %Y")
   defp date(%DateTime{} = datetime), do: datetime |> DateTime.to_date() |> date()
+
+  defp clock(%DateTime{} = at), do: date(at) <> ", " <> Calendar.strftime(at, "%H:%M UTC")
+
+  # D1 row 16: an item with no date says so on the article.
+  defp dated(nil, true), do: "undated"
+  defp dated(date, _article), do: date
+
+  defp kind_class(true), do: "font-medium text-mist-700 dark:text-mist-300"
+  defp kind_class(_article), do: "text-mist-500"
+
+  defp news?(%{kind: :shelf, work: %{kind: "news"}}), do: true
+  defp news?(_highlight), do: false
+
+  @shelf_nouns %{
+    "images" => "Image",
+    "films" => "Film",
+    "music" => "Music",
+    "books" => "Book",
+    "poems" => "Poem",
+    "news" => "Headline",
+    "quotes" => "Quotation"
+  }
+
+  defp shelf_noun(%{kind: :shelf, work: %{kind: kind}}), do: Map.get(@shelf_nouns, kind, "Work")
+  defp shelf_noun(_linked_claim), do: "Example"
+
+  # " · Bing News · 3 November 2026", " · Unsplash · found 3 November 2026".
+  defp shelf_found(highlight) do
+    found =
+      case highlight do
+        %{kind: :shelf, work: %{observed_at: %DateTime{} = at}} ->
+          if news?(highlight), do: date(at), else: "found " <> date(at)
+
+        _ ->
+          nil
+      end
+
+    [highlight.source && highlight.source[:name], found]
+    |> Enum.reject(&(&1 in [nil, ""]))
+    |> Enum.map_join(&(" · " <> &1))
+  end
 
   # ── the refresh clock (#259 §2.1) ─────────────────────────────────────────
 

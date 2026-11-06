@@ -204,18 +204,19 @@ defmodule DevilsDictionary.Curation.ShelfCitations do
   @doc false
   def expired?(%ShelfCitation{} = c, now \\ DateTime.utc_now()) do
     source = Repo.get!(Source, c.source_id)
-
-    DateTime.compare(
-      now,
-      min_time(c.expires_at, DateTime.add(c.observed_at, Policy.retention_seconds(source.slug)))
-    ) != :lt
+    DateTime.compare(now, deadline(c, source.slug)) != :lt
   end
+
+  @doc """
+  When a citation stops being shown: its observation's own expiry or the
+  source's retention window from when it was observed, whichever is first.
+  """
+  def deadline(%ShelfCitation{} = c, source_slug),
+    do: min_time(c.expires_at, DateTime.add(c.observed_at, Policy.retention_seconds(source_slug)))
 
   def check(%ShelfCitation{} = c, now \\ DateTime.utc_now()) do
     source = Repo.get(Source, c.source_id)
-
-    deadline =
-      min_time(c.expires_at, DateTime.add(c.observed_at, Policy.retention_seconds(source.slug)))
+    deadline = deadline(c, source.slug)
 
     cond do
       DateTime.compare(now, deadline) != :lt ->

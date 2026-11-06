@@ -1471,7 +1471,9 @@ defmodule DevilsDictionaryWeb.CurationLive.Editor do
                 phx-mounted={JS.set_attribute({"open", ""}, to: {:inner, "details[id$='-why']"})}
                 class="rounded-2xl p-5 ring-1 ring-mist-950/10 ring-inset sm:p-6 dark:ring-white/10"
               >
-                <Opening.section :if={@preview.opening} opening={@preview.opening} />
+                <%!-- The public page's own renderer (#309), so the preview is
+                     what publishing shows. --%>
+                <Opening.article :if={@preview.opening} opening={@preview.opening} unavailable />
                 <p
                   :if={is_nil(@preview.opening)}
                   id="curation-preview-empty"

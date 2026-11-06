@@ -137,14 +137,15 @@ defmodule DevilsDictionary.Curation.PublishedReader do
 
   # The page's words, in one language. A lexical page composition has one
   # language (`Compositions.provision/3` refuses a mixed scope).
-  defp scope(%{headword: %{lexemes: [_ | _] = lexemes}}) do
+  @doc false
+  def scope(%{headword: %{lexemes: [_ | _] = lexemes}}) do
     case lexemes |> Enum.map(& &1.language) |> Enum.uniq() do
       [language] when is_binary(language) -> {:ok, Enum.map(lexemes, & &1.id), language}
       _languages -> :none
     end
   end
 
-  defp scope(_page), do: :none
+  def scope(_page), do: :none
 
   defp build(page, published, configuration, configuration_version) do
     %{composition: composition, version: version, receipt: receipt} = published
@@ -724,6 +725,10 @@ defmodule DevilsDictionary.Curation.PublishedReader do
           kind: citation.shelf_kind,
           attribution: attribution,
           mark: mark,
+          # When it was found and when it stops being shown, for "as of" on
+          # a headline (#309 D1 row 10a).
+          observed_at: citation.observed_at,
+          shown_until: DevilsDictionary.Curation.ShelfCitations.deadline(citation, source.slug),
           credit_parts:
             DevilsDictionaryWeb.Culture.credit_parts(
               metadata["attribution"] || metadata["credit_line"],

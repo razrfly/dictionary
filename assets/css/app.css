@@ -68,6 +68,11 @@
    developer surface. The kit's `@variant dark` above resolves through this. */
 @custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
 
+/* A page whose container says `data-page-width="wide"` (the curated article
+   and its materials, #309) is wider on a wide screen, and the bars and the
+   footer widen with it so every left edge stays one edge. */
+@custom-variant wide-page (body:has([data-page-width=wide]) &);
+
 /* Make LiveView wrapper divs transparent for layout */
 [data-phx-session], [data-phx-teleported-src] { display: contents }
 

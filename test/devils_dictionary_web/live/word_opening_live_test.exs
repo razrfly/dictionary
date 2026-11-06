@@ -43,7 +43,10 @@ defmodule DevilsDictionaryWeb.WordOpeningLiveTest do
     {:ok, view, _html} = live(ctx.conn, ~p"/on/love")
 
     refute has_element?(view, "#opening")
-    assert has_element?(view, "#reference-article #word-rail")
+    # The curated page (#309) says it has nothing to show, and where the
+    # source records are.
+    assert has_element?(view, "#curated-page #curated-state")
+    assert has_element?(view, "#curated-state #record-inventory-link[href$='/materials']")
   end
 
   test "the definitions are untouched: the same cards, the same ids, the same open row", ctx do
@@ -68,28 +71,30 @@ defmodule DevilsDictionaryWeb.WordOpeningLiveTest do
 
   # The #202 audit: CSS `order` put the opening after the headword on screen
   # while keyboard and screen-reader order still went through the whole rail
-  # first. The document order is now the reading order.
-  test "the document order is the reading order: headword, opening, source rail", ctx do
+  # first. The document order is the reading order; on the curated page
+  # (#309) it is the masthead, the selection, the editor, the way to every
+  # record, and the version.
+  test "the document order is the reading order: headword, byline, selection, editor", ctx do
     {:ok, view, _html} = live(ctx.conn, ~p"/on/love?opening=fixture")
     html = render(view)
 
     order =
       for marker <- [
+            ~s(id="entry-views"),
             ~s(id="headword"),
+            ~s(id="curation-summary"),
             ~s(id="opening"),
-            ~s(id="word-rail"),
-            ~s(id="word-stats"),
-            ~s(id="record-inventory-link")
+            ~s(id="curated-editor"),
+            ~s(id="record-inventory-link"),
+            ~s(id="curated-provenance")
           ],
           do: html |> :binary.match(marker) |> elem(0)
 
     assert order == Enum.sort(order)
 
-    # The headword now stands on its own, before the opening, not inside the
-    # rail; the rest of the rail keeps its id. One copy of each.
-    refute has_element?(view, "#word-rail #headword")
+    # One copy of the headword, in the masthead.
+    assert has_element?(view, "#curated-masthead #headword")
     assert html |> String.split(~s(id="headword")) |> length() == 2
-    assert html |> String.split(~s(id="word-rail")) |> length() == 2
 
     # No CSS reordering is left to disagree with it.
     refute html =~ "order-first"
@@ -97,11 +102,11 @@ defmodule DevilsDictionaryWeb.WordOpeningLiveTest do
     refute html =~ "max-lg:contents"
   end
 
-  test "without an opening the reference article keeps its headword and source rail", ctx do
+  test "without an opening the curated page keeps its headword and its way to the records", ctx do
     {:ok, view, _html} = live(ctx.conn, ~p"/on/love")
 
-    assert has_element?(view, "#reference-article > header #headword")
-    assert has_element?(view, "#reference-article #word-rail")
+    assert has_element?(view, "#curated-masthead #headword")
+    assert has_element?(view, "#curated-state #record-inventory-link")
   end
 
   test "moving between words never carries one word's selection onto another", ctx do
@@ -112,7 +117,7 @@ defmodule DevilsDictionaryWeb.WordOpeningLiveTest do
 
     render_patch(view, ~p"/on/rizz?opening=fixture")
     refute has_element?(view, "#opening")
-    assert has_element?(view, "#reference-article > header #headword")
+    assert has_element?(view, "#curated-masthead #headword", "rizz")
 
     render_patch(view, ~p"/on/love?opening=fixture")
     assert has_element?(view, "#opening-lead-text", "temporary insanity")
@@ -138,7 +143,7 @@ defmodule DevilsDictionaryWeb.WordOpeningLiveTest do
     {:ok, view, _html} = live(ctx.conn, ~p"/on/rizz?opening=fixture")
 
     refute has_element?(view, "#opening")
-    assert has_element?(view, "#reference-article #word-rail")
+    assert has_element?(view, "#curated-page #curated-state")
   end
 
   test "an explicitly empty composition draws no section, heading or skeleton", ctx do
@@ -196,8 +201,10 @@ defmodule DevilsDictionaryWeb.WordOpeningLiveTest do
       assert has_element?(view, "#opening-highlight-2-text", "cordial love")
       assert has_element?(view, "#opening-about-withheld", "Highlight 1")
       assert has_element?(view, "#opening-about-withheld", "its catalog has changed")
-      # The definitions below are untouched.
-      assert has_element?(view, "#rail-card-bierce[href*='/materials']")
+      # The withheld work is named in the editor's take, and nothing took
+      # its place; the source records are a tap away.
+      assert has_element?(view, "#curated-withheld-1", "its catalog has changed")
+      assert has_element?(view, "#record-inventory-link[href*='/materials']")
     end
   end
 

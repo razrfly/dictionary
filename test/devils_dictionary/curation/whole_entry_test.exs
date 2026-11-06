@@ -492,7 +492,7 @@ defmodule DevilsDictionary.Curation.WholeEntryTest do
     assert {:ok, history} = Receipt.read("love", version.version)
     assert length(history.items) > 4
     html = build_conn() |> get("/on/love") |> html_response(200)
-    assert html =~ "Selected reading"
+    assert html =~ "Leading definition"
     assert html =~ "curated-news"
     assert html =~ "Voltaire"
   end
@@ -730,10 +730,12 @@ defmodule DevilsDictionary.Curation.WholeEntryTest do
     conn = build_conn() |> get("/on/love")
     html = html_response(conn, 200)
     assert html =~ "curation-summary"
-    assert html =~ "Selected reading"
+    assert html =~ "Leading definition"
     assert html =~ "curated-news"
-    assert html =~ "curated-images"
-    assert html =~ "curated-quotes"
+    # The curated article's sections (#309): images in In culture,
+    # quotations in Quotations.
+    assert html =~ ~s(id="curated-culture")
+    assert html =~ ~s(id="curated-quotations")
     assert html =~ "Voltaire"
   end
 
@@ -873,7 +875,7 @@ defmodule DevilsDictionary.Curation.WholeEntryTest do
     assert html =~ ~s(href="/on/love/materials##{opening.lead.links.card_id}")
     sources = build_conn() |> get("/on/love/materials") |> html_response(200)
     assert sources =~ ~s(id="#{opening.lead.links.card_id}")
-    assert html =~ "Selected reading"
+    assert html =~ "Leading definition"
   end
 
   defp legacy!(w) do
@@ -998,7 +1000,7 @@ defmodule DevilsDictionary.Curation.WholeEntryTest do
 
     on_exit(fn -> Application.put_env(:devils_dictionary, :discovery, config) end)
     html = build_conn() |> get("/on/love") |> html_response(200)
-    assert html =~ "curated-unavailable"
+    assert html =~ ~s(id="curated-withheld")
     assert html =~ "retention"
     refute html =~ "No item selected in this version"
   end
@@ -1140,7 +1142,7 @@ defmodule DevilsDictionary.Curation.WholeEntryTest do
     html = build_conn() |> get("/on/love") |> html_response(200)
     assert html =~ "curation-summary"
     assert html =~ "opening-withheld-lead"
-    assert html =~ "curated-unavailable"
+    assert html =~ ~s(id="curated-withheld")
   end
 
   for provider <- DevilsDictionary.Curation.Shelf.providers() do
@@ -1221,7 +1223,7 @@ defmodule DevilsDictionary.Curation.WholeEntryTest do
       assert receipt.review_actor == nil
       html = build_conn() |> get("/on/love") |> html_response(200)
       assert html =~ "curation-summary"
-      assert html =~ "curated-#{section}"
+      assert html =~ ~s(id="#{article_section(section)}")
       history = build_conn() |> get("/on/love/receipt/#{version.version}") |> html_response(200)
       assert history =~ "voltaire-whole-entry-v7"
 
@@ -1405,4 +1407,12 @@ defmodule DevilsDictionary.Curation.WholeEntryTest do
     assert length(visible["candidates"]) == 24
     assert Enum.all?(visible["candidates"], &Map.has_key?(&1, "evidence_scope"))
   end
+
+  # The curated article's section for a whole-entry section (#309 D1 rows
+  # 10–14).
+  defp article_section(section) when section in ~w(images films music books poems),
+    do: "curated-culture"
+
+  defp article_section("quotes"), do: "curated-quotations"
+  defp article_section(section), do: "curated-" <> section
 end
