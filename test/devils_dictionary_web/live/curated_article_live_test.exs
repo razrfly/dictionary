@@ -26,10 +26,10 @@ defmodule DevilsDictionaryWeb.CuratedArticleLiveTest do
        ctx do
     publish!(ctx, provision!(ctx))
     {:ok, view, _} = live(ctx.conn, ~p"/on/love")
-    html = view |> element("#curated-page") |> render()
+    html = render(view)
 
     order =
-      ~w(entry-views on-title headword curated-byline curated-lead opening-lead-why
+      ~w(entry-views curated-page on-title headword curated-byline curated-lead opening-lead-why
          curated-definitions opening-highlight-1-reason curated-quotations curated-editor
          record-inventory-link curated-provenance)
 
@@ -45,6 +45,86 @@ defmodule DevilsDictionaryWeb.CuratedArticleLiveTest do
              "#entry-records[href='/on/love/materials']",
              "Everything this page holds"
            )
+  end
+
+  # The owner's audit: a tap on the switch changed the switch itself. Both
+  # views draw one control, and only which half is current changes.
+  test "one switch on both views: the same control, only the current half changes", ctx do
+    publish!(ctx, provision!(ctx))
+    {:ok, curated, _} = live(ctx.conn, ~p"/on/love")
+    {:ok, records, _} = live(ctx.conn, ~p"/on/love/materials")
+
+    switch = fn view ->
+      doc = view |> element("#entry-views") |> render() |> LazyHTML.from_fragment()
+      [nav] = doc |> LazyHTML.query("#entry-views") |> LazyHTML.attribute("class")
+
+      halves =
+        for id <- ~w(entry-curated entry-records) do
+          node = LazyHTML.query(doc, "##{id}")
+          [class] = LazyHTML.attribute(node, "class")
+
+          {id, class, LazyHTML.attribute(node, "aria-current"),
+           node |> LazyHTML.text() |> String.trim()}
+        end
+
+      {nav, halves}
+    end
+
+    {nav, [{_, curated_on, ["page"], selection}, {_, records_off, [], holds}]} =
+      switch.(curated)
+
+    {^nav, [{_, curated_off, [], ^selection}, {_, records_on, ["page"], ^holds}]} =
+      switch.(records)
+
+    assert selection == "This editor’s selection"
+    assert holds == "Everything this page holds"
+    # The current half looks the same on either view, and so does the other.
+    assert curated_on == records_on
+    assert curated_off == records_off
+    # One weight in both states: only the fill says which is current.
+    for class <- [curated_on, curated_off], do: assert(class =~ "font-medium")
+    assert has_element?(curated, "#entry-records[href='/on/love/materials']")
+    assert has_element?(records, "#entry-curated[href='/on/love']")
+  end
+
+  # The owner's audit: the page used too little of a wide screen. The two
+  # `/on` views are wider there; a `/words` page and `?layout=current` are not.
+  test "the curated article and its materials are the wide views", ctx do
+    publish!(ctx, provision!(ctx))
+
+    for path <- ["/on/love", "/on/love/materials"] do
+      {:ok, view, _} = live(ctx.conn, path)
+      assert has_element?(view, "[data-page-width='wide']"), path
+    end
+
+    for path <- ["/on/love?layout=current", "/words/#{ctx.love.object_id}/love"] do
+      {:ok, view, _} = live(ctx.conn, path)
+      refute has_element?(view, "[data-page-width]"), path
+    end
+  end
+
+  # On a desktop the byline heads the right column, level with the headword,
+  # and the editor follows it: one grid, the masthead and the body each a
+  # subgrid of it, so the document order is still the reading order.
+  test "on a desktop the byline heads the column the editor is in", ctx do
+    publish!(ctx, provision!(ctx))
+    {:ok, view, _} = live(ctx.conn, ~p"/on/love")
+    doc = view |> render() |> LazyHTML.from_fragment()
+    classes = fn selector -> doc |> LazyHTML.query(selector) |> LazyHTML.attribute("class") end
+
+    [page] = classes.("#curated-page")
+    assert page =~ "lg:grid "
+    assert page =~ "lg:grid-cols-[minmax(0,1fr)_22rem]"
+
+    [masthead] = classes.("#curated-masthead")
+    assert masthead =~ "lg:col-span-2 lg:grid lg:grid-cols-subgrid"
+    # A column gap of its own would override the grid's.
+    refute masthead =~ ~r/(?:^|\s)gap-(?:\d|x-)/
+
+    # The masthead holds the headword's block, then the byline: two cells.
+    assert doc |> LazyHTML.query("#curated-masthead > *") |> Enum.count() == 2
+    assert has_element?(view, "#curated-masthead > #curated-byline")
+    assert has_element?(view, "#curated-page > div > #curated-column + #curated-rail")
   end
 
   test "every published item renders, with its reason on the page and one disclosure", ctx do
@@ -241,7 +321,9 @@ defmodule DevilsDictionaryWeb.CuratedArticleLiveTest do
       view
       |> render()
       |> LazyHTML.from_fragment()
-      |> LazyHTML.query("#curated-page a, #curated-page summary, #curated-page button")
+      |> LazyHTML.query(
+        "#entry-views a, #curated-page a, #curated-page summary, #curated-page button"
+      )
       |> Enum.flat_map(fn node ->
         node
         |> LazyHTML.attribute("class")

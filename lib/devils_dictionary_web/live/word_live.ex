@@ -1109,7 +1109,13 @@ defmodule DevilsDictionaryWeb.WordLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} head={@head}>
-      <.container class="py-10">
+      <%!-- The curated article and its materials use a wide screen's width
+           (#309, the owner's audit); the bars and the footer follow
+           (`wide-page` in app.css). A `/words` page keeps its own. --%>
+      <.container
+        class="py-10"
+        data-page-width={(@curated? or (@records? and @live_action == :on)) && "wide"}
+      >
         <Demo.demo_banner :if={@demo} />
 
         <Word.trail
@@ -1118,36 +1124,22 @@ defmodule DevilsDictionaryWeb.WordLive do
           demo={@demo}
         />
 
-        <nav
-          :if={@page.headword.lexemes != [] and not @curated?}
-          id="entry-views"
-          aria-label="Entry views"
-          class="mb-8 flex flex-wrap gap-6 border-b border-mist-950/10 pb-4 text-base/7 dark:border-white/10"
-        >
-          <.link
-            id="entry-curated"
-            patch={entry_view_path(assigns, false)}
-            aria-current={if !@records?, do: "page"}
-            class={["underline-offset-4 hover:underline", !@records? && "underline"]}
-          >{if @live_action == :on and @records?,
-            do: "This editor’s selection",
-            else: "Curated article"}</.link>
-          <.link
-            id="entry-records"
-            patch={entry_view_path(assigns, true)}
-            aria-current={if @records?, do: "page"}
-            class={["underline-offset-4 hover:underline", @records? && "underline"]}
-          >{if @live_action == :on and @records?,
-            do: "Everything this page holds",
-            else: "Source records"}</.link>
-        </nav>
+        <%!-- The same switch, in the same place, on both of an entry's views
+             (#309): a tap changes only which half is current. --%>
+        <CuratedArticle.view_switch
+          :if={@page.headword.lexemes != []}
+          curated_path={entry_view_path(assigns, false)}
+          record_path={entry_view_path(assigns, true)}
+          records?={@records?}
+          editor?={@live_action == :on and (@curated? or @records?)}
+        />
 
         <%!-- The aggregate names itself (#219 B5): "On mars" over the words it
              reads; the headword stays the page's h1. --%>
         <p
           :if={@live_action == :on and @page.headword.lexemes != [] and not @curated?}
           id="on-title"
-          class="mb-2 text-base/7 font-semibold text-mist-700 sm:text-sm/6 dark:text-mist-400"
+          class="mb-2 text-base/7 font-semibold text-mist-700 dark:text-mist-400"
         >
           On {@page.headword.lemma}
         </p>
@@ -1371,7 +1363,6 @@ defmodule DevilsDictionaryWeb.WordLive do
     assigns =
       assigns
       |> assign(:record_path, entry_view_path(assigns, true))
-      |> assign(:curated_path, entry_view_path(assigns, false))
 
     ~H"""
     <CuratedArticle.article
@@ -1379,7 +1370,6 @@ defmodule DevilsDictionaryWeb.WordLive do
       opening={@opening}
       state={@page_state}
       base={@base}
-      curated_path={@curated_path}
       record_path={@record_path}
       card_sources={@card_sources}
       choices={@choices}

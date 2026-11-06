@@ -4,10 +4,12 @@ defmodule DevilsDictionaryWeb.CuratedArticle do
   made, phone first. One document order at every width, and nothing on it
   for one screen size only:
 
-    1. **The masthead.** The view switch (*This editor's selection* ·
-       *Everything this page holds*), the headword, and the byline: who
-       selected it, whether a person reviewed it, when, which version, and
-       the receipt.
+    1. **The masthead.** The headword and the byline: who selected it,
+       whether a person reviewed it, when, which version, and the receipt.
+       Above it, outside the article, the page draws `view_switch/1`
+       (*This editor's selection* · *Everything this page holds*), the same
+       control on both views. On a desktop the byline is the right column's
+       head, level with the headword.
     2. **The selection** (`DevilsDictionaryWeb.Opening.article/1`): the lead
        with its reason on the page, *In the news* directly after it, then
        Definitions, Quotations, Examples and In culture, every published item
@@ -61,6 +63,56 @@ defmodule DevilsDictionaryWeb.CuratedArticle do
 
   defp muted, do: "text-mist-600 dark:text-mist-400"
 
+  @doc """
+  The switch between an entry's two views: one control, in one place, on
+  both, so a tap changes only which half is current (#309). Both halves
+  keep one weight; the current one is the filled one.
+  """
+  attr :curated_path, :string, required: true
+  attr :record_path, :string, required: true
+  attr :records?, :boolean, default: false, doc: "the source records are the current view"
+
+  attr :editor?, :boolean,
+    default: true,
+    doc: "`/on`'s names for the two views; a `/words` page keeps its own"
+
+  def view_switch(assigns) do
+    ~H"""
+    <nav
+      id="entry-views"
+      aria-label="Entry views"
+      class="mb-5 grid grid-cols-2 rounded-xl bg-mist-950/5 p-1 text-base/5 sm:w-fit sm:text-sm/5 dark:bg-white/10"
+    >
+      <.link
+        id="entry-curated"
+        patch={@curated_path}
+        aria-current={!@records? && "page"}
+        class={[segment(), if(@records?, do: segment_other(), else: segment_current())]}
+      >
+        {if @editor?, do: "This editor’s selection", else: "Curated article"}
+      </.link>
+      <.link
+        id="entry-records"
+        patch={@record_path}
+        aria-current={@records? && "page"}
+        class={[segment(), if(@records?, do: segment_current(), else: segment_other())]}
+      >
+        {if @editor?, do: "Everything this page holds", else: "Source records"}
+      </.link>
+    </nav>
+    """
+  end
+
+  defp segment,
+    do:
+      "flex min-h-11 items-center justify-center rounded-lg px-3 py-2 text-center font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:focus-visible:outline-white"
+
+  defp segment_current,
+    do: "bg-white text-mist-950 shadow-xs dark:bg-mist-700 dark:text-white"
+
+  defp segment_other,
+    do: "text-mist-700 hover:text-mist-950 dark:text-mist-300 dark:hover:text-white"
+
   attr :page, :map, required: true
   attr :opening, :map, default: nil
 
@@ -69,7 +121,6 @@ defmodule DevilsDictionaryWeb.CuratedArticle do
     doc: "`Curation.PageState.for_page/1`, when there is no opening"
 
   attr :base, :string, required: true, doc: "the page's own path"
-  attr :curated_path, :string, required: true
   attr :record_path, :string, required: true
   attr :card_sources, :list, default: []
   attr :choices, :list, default: []
@@ -93,37 +144,31 @@ defmodule DevilsDictionaryWeb.CuratedArticle do
       |> assign(:receipt, receipt(assigns.base, assigns.opening))
 
     ~H"""
-    <article id="curated-page" class="min-w-0">
+    <%!-- On a desktop, one grid from the masthead down: the headword and
+         the selection on the left, the byline and the editor on the right,
+         each pair in a subgrid so the columns line up (#309, the owner's
+         audit). The right column is wide enough for the status chip on one
+         line. Below `lg` it is the document order, unchanged. --%>
+    <article
+      id="curated-page"
+      class={[
+        "min-w-0",
+        @opening &&
+          "lg:grid lg:grid-cols-[minmax(0,1fr)_22rem] lg:gap-x-12 xl:grid-cols-[minmax(0,1fr)_24rem] xl:gap-x-20"
+      ]}
+    >
       <%!-- The headword's links in a line, 44 px targets on the article
            (#309 review 5), Wikidata's on a line of its own so the
            description keeps its spacing (review 6); the shared headword is
            unchanged elsewhere. --%>
       <header
         id="curated-masthead"
-        class="flex flex-col gap-5 pb-6 [&_#parts-of-speech_a]:inline-flex [&_#parts-of-speech_a]:min-h-11 [&_#parts-of-speech_a]:items-center [&_#quick-definition_a]:inline-flex [&_#quick-definition_a]:min-h-11 [&_#quick-definition_a]:items-center [&_#quick-definition>span]:block"
+        class={[
+          "flex flex-col gap-y-5 pb-6 [&_#parts-of-speech_a]:inline-flex [&_#parts-of-speech_a]:min-h-11 [&_#parts-of-speech_a]:items-center [&_#quick-definition_a]:inline-flex [&_#quick-definition_a]:min-h-11 [&_#quick-definition_a]:items-center [&_#quick-definition>span]:block",
+          @opening && "lg:col-span-2 lg:grid lg:grid-cols-subgrid"
+        ]}
       >
-        <nav
-          id="entry-views"
-          aria-label="Entry views"
-          class="grid grid-cols-2 rounded-xl bg-mist-950/5 p-1 text-base/5 sm:w-fit sm:text-sm/5 dark:bg-white/10"
-        >
-          <.link
-            id="entry-curated"
-            patch={@curated_path}
-            aria-current="page"
-            class="flex min-h-11 items-center justify-center rounded-lg bg-white px-3 py-2 text-center font-medium text-mist-950 shadow-xs focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:bg-mist-700 dark:text-white dark:focus-visible:outline-white"
-          >
-            This editor’s selection
-          </.link>
-          <.link
-            id="entry-records"
-            patch={@record_path}
-            class="flex min-h-11 items-center justify-center rounded-lg px-3 py-2 text-center text-mist-700 hover:text-mist-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mist-950 dark:text-mist-300 dark:hover:text-white dark:focus-visible:outline-white"
-          >
-            Everything this page holds
-          </.link>
-        </nav>
-        <div>
+        <div class="min-w-0">
           <p id="on-title" class="mb-1 text-base/7 font-semibold text-mist-700 dark:text-mist-400">
             On {@lemma}
           </p>
@@ -139,7 +184,7 @@ defmodule DevilsDictionaryWeb.CuratedArticle do
       </header>
 
       <%= if @opening do %>
-        <div class="lg:grid lg:grid-cols-[minmax(0,1fr)_20rem] lg:gap-x-16">
+        <div class="lg:col-span-2 lg:grid lg:grid-cols-subgrid">
           <div id="curated-column" class="min-w-0">
             <Opening.article opening={@opening} mode={@mode} record_path={@record_path} />
             {render_slot(@extra)}
@@ -200,7 +245,7 @@ defmodule DevilsDictionaryWeb.CuratedArticle do
       |> assign(:editor, editor_phrase(selector))
 
     ~H"""
-    <div id="curated-byline" class="flex gap-3 text-base/7">
+    <div id="curated-byline" class="flex min-w-0 gap-3 text-base/7">
       <Opening.ai_mark :if={@model?} class="mt-0.5 size-7 text-[0.6875rem]" />
       <div class="flex min-w-0 flex-col items-start gap-2">
         <%!-- The editor's link is a 44 px box at every width (#309 review 6). --%>
@@ -402,7 +447,7 @@ defmodule DevilsDictionaryWeb.CuratedArticle do
     <footer
       id="curated-provenance"
       class={[
-        "flex flex-col gap-3 border-t border-mist-950/10 pt-8 text-base/7 dark:border-white/10",
+        "flex flex-col gap-3 border-t border-mist-950/10 pt-8 text-base/7 lg:col-span-2 dark:border-white/10",
         "[&_#opening-about-revisions_a]:inline-flex [&_#opening-about-revisions_a]:min-h-11 [&_#opening-about-revisions_a]:items-center",
         muted()
       ]}
@@ -453,7 +498,7 @@ defmodule DevilsDictionaryWeb.CuratedArticle do
       id="curated-state"
       data-state={@state.kind}
       aria-labelledby="curated-state-heading"
-      class="flex flex-col gap-4 border-t border-mist-950/10 py-8 dark:border-white/10"
+      class="flex flex-col gap-4 border-t border-mist-950/10 py-8 *:max-w-[44rem] dark:border-white/10"
     >
       <%= if @state.kind == :withheld do %>
         <h2 id="curated-state-heading" class="font-display text-3xl/9 tracking-tight text-pretty">

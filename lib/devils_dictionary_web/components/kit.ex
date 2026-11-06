@@ -35,7 +35,10 @@ defmodule DevilsDictionaryWeb.Kit do
   def container(assigns) do
     ~H"""
     <div
-      class={["mx-auto w-full max-w-2xl px-6 md:max-w-3xl lg:max-w-7xl lg:px-10", @class]}
+      class={[
+        "mx-auto w-full max-w-2xl px-6 md:max-w-3xl lg:max-w-7xl lg:px-10 xl:wide-page:max-w-[88rem]",
+        @class
+      ]}
       {@rest}
     >
       {render_slot(@inner_block)}
@@ -319,7 +322,7 @@ defmodule DevilsDictionaryWeb.Kit do
     ~H"""
     <header class={["sticky top-0 z-10 bg-mist-100 dark:bg-mist-950", @class]} {@rest}>
       <nav>
-        <div class="mx-auto flex h-(--scroll-padding-top) max-w-7xl items-center gap-4 px-6 lg:px-10">
+        <div class="mx-auto flex h-(--scroll-padding-top) max-w-7xl items-center gap-4 px-6 lg:px-10 xl:wide-page:max-w-[88rem]">
           <div class="flex flex-1 items-center gap-12">
             <div class="flex items-center">{render_slot(@logo)}</div>
             <div :if={@links != []} class="flex gap-8 max-lg:hidden">{render_slot(@links)}</div>
