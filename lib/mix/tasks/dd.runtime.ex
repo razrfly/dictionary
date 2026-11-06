@@ -70,7 +70,7 @@ defmodule Mix.Tasks.Dd.Runtime do
   on pilot pages from one frozen snapshot (`Runtime.Compare`):
 
       mix dd.runtime compare --batch ID (--pilot | --page SLUG[,SLUG]) \
-        --arms LABEL=CONFIG[:current|:text],... [--generation N] [--dry-run]
+        --arms LABEL=CONFIG[:current|:text|:text2],... [--generation N] [--dry-run]
       mix dd.runtime compare ... [--window-minutes 60] [--out PATH]
 
   It freezes every page's snapshot and every arm's packet in one

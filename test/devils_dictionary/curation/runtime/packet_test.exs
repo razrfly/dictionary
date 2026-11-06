@@ -37,6 +37,7 @@ defmodule DevilsDictionary.Curation.Runtime.PacketTest do
                "voltaire-whole-entry-v5",
                "voltaire-whole-entry-v6",
                "voltaire-whole-entry-v7",
+               "voltaire-whole-entry-v7-fixed-lead-cap200-nudge-attrib-v1",
                "voltaire-whole-entry-v7-fixed-lead-cap200-nudge-v1",
                "voltaire-whole-entry-v7-fixed-lead-cap200-v1",
                "voltaire-whole-entry-v7-fixed-lead-v1"
@@ -362,6 +363,34 @@ defmodule DevilsDictionary.Curation.Runtime.PacketTest do
 
       {:ok, _} = Registry.add_content_revision(ctx.bierce.object_id, %{body: "Fixture revised."})
       assert {:error, {:packet_stale, [["c1", "revision_superseded"]]}} = Packet.verify(frozen)
+    end
+  end
+
+  describe "the whole-entry cuts (#298 C9, #305 D8)" do
+    test "the live cut first, then the two text cuts, each with its own omission reason" do
+      assert Packet.whole_entry_cuts() ==
+               ~w(whole-entry-cut-v1 whole-entry-text-cut-v1 whole-entry-text-cut-v2)
+
+      assert "text_cut_excluded" in Packet.omission_reasons()
+      assert "lexeme_claim_excluded" in Packet.omission_reasons()
+    end
+
+    test "a text cut needs a whole-entry instruction, and an unknown cut is refused" do
+      page = DevilsDictionary.PacketFixtures.page("love")
+
+      for cut <- ~w(whole-entry-text-cut-v1 whole-entry-text-cut-v2) do
+        assert {:error, :cut_needs_whole_entry_instruction} =
+                 Packet.for_page(page, Keyword.put(@v1, :cut, cut))
+
+        assert {:ok, %{"policy" => %{"cut" => ^cut}}} =
+                 Packet.for_page(page, instruction_version: "voltaire-whole-entry-v7", cut: cut)
+      end
+
+      assert {:error, :unsupported_cut} =
+               Packet.for_page(page,
+                 instruction_version: "voltaire-whole-entry-v7",
+                 cut: "whole-entry-text-cut-v3"
+               )
     end
   end
 end

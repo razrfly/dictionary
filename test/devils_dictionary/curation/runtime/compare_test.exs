@@ -3,7 +3,8 @@ defmodule DevilsDictionary.Curation.Runtime.CompareTest do
   #298 C1, C2, C5 and C9: evidence fingerprints, one frozen snapshot feeding
   every arm, the text-focused cut, the rule-fixed lead, comparison attempts
   that never publish, the unmatched-case retry rule and the comparison
-  report. Against the controlled fake of the private service; no real model.
+  report. #305 D8: the text cut without word-bound claims. Against the
+  controlled fake of the private service; no real model.
   """
   use DevilsDictionary.DataCase, async: false
 
@@ -364,6 +365,178 @@ defmodule DevilsDictionary.Curation.Runtime.CompareTest do
     end
   end
 
+  # The 2 × 2 of #305 D8: the nudge and attribution instructions, each on
+  # the text cut and on the text cut without word-bound claims.
+  defp d8_arms do
+    nudge =
+      model_config!(%{
+        instruction_version: "voltaire-whole-entry-v7-fixed-lead-cap200-nudge-v1",
+        tag: "9b"
+      })
+      |> ready!()
+
+    attrib =
+      model_config!(%{
+        instruction_version: "voltaire-whole-entry-v7-fixed-lead-cap200-nudge-attrib-v1",
+        tag: "9b"
+      })
+      |> ready!()
+
+    [
+      %{label: "N", config_slug: nudge.slug, cut: "text", config: nudge},
+      %{label: "NX", config_slug: nudge.slug, cut: "text2", config: nudge},
+      %{label: "NA", config_slug: attrib.slug, cut: "text", config: attrib},
+      %{label: "NXA", config_slug: attrib.slug, cut: "text2", config: attrib}
+    ]
+  end
+
+  # A claim from the word itself, as a title match writes it.
+  defp word_claim!(ctx) do
+    entity = DevilsDictionary.WordFixtures.concept!("Q305801", "Fixture spelling concept")
+    DevilsDictionary.WordFixtures.link!(ctx.w.love, entity, method: :title_match)
+  end
+
+  defp claims(packet, bound) do
+    words = for %{"kind" => "lexeme", "meaning_id" => id} <- packet["meanings"], do: id
+
+    Enum.filter(
+      packet["candidates"],
+      &(&1["kind"] == "claim" and &1["required_meaning"] in words == (bound == :word))
+    )
+  end
+
+  describe "#305 D8: the text cut without word-bound claims" do
+    test "v2 omits the word-bound claim and keeps the sense-bound ones; v1 keeps both", ctx do
+      word_claim!(ctx)
+      [n | _] = d8 = d8_arms()
+      live = %{n | label: "C", cut: "current"}
+      {:ok, batch} = Compare.freeze("d8-claims", ["love"], d8 ++ [live])
+      [page] = batch.pages
+      arms = by_label(page)
+      text = arms["N"].frozen.packet
+      text2 = arms["NX"].frozen.packet
+      current = arms["C"].frozen.packet
+
+      assert text["policy"]["cut"] == "whole-entry-text-cut-v1"
+      assert text2["policy"]["cut"] == "whole-entry-text-cut-v2"
+      assert [word] = claims(text, :word)
+      assert [_ | _] = sense = claims(text, :sense)
+      assert claims(text2, :word) == []
+      assert Enum.map(claims(text2, :sense), & &1["key"]) == Enum.map(sense, & &1["key"])
+
+      assert [%{"key" => key, "kind" => "claim", "reason" => "lexeme_claim_excluded"}] =
+               Enum.filter(text2["omitted"], &(&1["reason"] == "lexeme_claim_excluded"))
+
+      assert key == word["key"]
+      refute Enum.any?(text["omitted"], &(&1["reason"] == "lexeme_claim_excluded"))
+
+      # The live cut is untouched: it still offers the word-bound claim.
+      assert current["policy"]["cut"] == "whole-entry-cut-v1"
+      assert word["key"] in Enum.map(claims(current, :word), & &1["key"])
+      refute Enum.any?(current["omitted"], &(&1["reason"] == "lexeme_claim_excluded"))
+
+      # v2 is the text cut still: nothing metadata-only is offered.
+      excluded = Packet.text_cut_excluded_sections()
+      refute Enum.any?(text2["candidates"], &(WholeEntry.section(&1) in excluded))
+      assert Enum.any?(text2["omitted"], &(&1["reason"] == "text_cut_excluded"))
+
+      # Arms that share a cut share a fingerprint; the cuts differ here.
+      assert page.matched
+      assert arms["N"].evidence_fingerprint == arms["NA"].evidence_fingerprint
+      assert arms["NX"].evidence_fingerprint == arms["NXA"].evidence_fingerprint
+      refute arms["N"].evidence_fingerprint == arms["NX"].evidence_fingerprint
+      assert page.fingerprints |> Map.keys() |> Enum.sort() == ["current", "text", "text2"]
+
+      # A packet of the new cut freezes and verifies under runtime-packet-v4.
+      assert text2["packet_version"] == "runtime-packet-v4"
+      assert {:ok, _} = Packet.freeze(text2)
+      assert :ok = Packet.verify(arms["NX"].frozen)
+      assert :ok = Packet.verify(arms["NXA"].frozen)
+    end
+
+    test "the freed slot is refilled under the same bounds; every candidate is accounted for",
+         ctx do
+      word_claim!(ctx)
+
+      # Enough text-bearing quotations that the cut's 24 candidates bind.
+      DevilsDictionary.WordFixtures.sense!(ctx.w, ctx.w.love, "wiktionary",
+        examples:
+          for(
+            n <- 1..16,
+            do: %{"type" => "quotation", "text" => "fixture quotation #{n}", "ref" => "fixture"}
+          )
+      )
+
+      {:ok, batch} = Compare.freeze("d8-refill", ["love"], d8_arms())
+      arms = batch.pages |> hd() |> by_label()
+      text = arms["N"].frozen.packet
+      text2 = arms["NX"].frozen.packet
+      keys = fn p, from -> p[from] |> Enum.map(& &1["key"]) |> MapSet.new() end
+
+      assert length(text["candidates"]) == 24
+      assert length(text2["candidates"]) == 24
+      assert length(text2["meanings"]) <= 12
+      assert [word] = claims(text, :word)
+
+      # The one candidate v2 drops is the word-bound claim; the one it adds
+      # is a text-bearing candidate v1 left out over quota.
+      assert MapSet.difference(keys.(text, "candidates"), keys.(text2, "candidates")) ==
+               MapSet.new([word["key"]])
+
+      assert [added] =
+               MapSet.difference(keys.(text2, "candidates"), keys.(text, "candidates"))
+               |> MapSet.to_list()
+
+      assert %{"reason" => "over_quota"} = Enum.find(text["omitted"], &(&1["key"] == added))
+      assert Packet.text_bearing?(Enum.find(text2["candidates"], &(&1["key"] == added)))
+
+      # Every offered candidate is in the packet or omitted, once, by id and reason.
+      all = fn p -> Enum.map(p["candidates"] ++ p["omitted"], & &1["key"]) |> Enum.sort() end
+      assert all.(text2) == all.(text)
+
+      for p <- [text, text2] do
+        assert all.(p) == Enum.uniq(all.(p))
+        assert length(all.(p)) == p["counts"]["offered"]
+      end
+    end
+
+    test "on a page without a word-bound claim, v2 sends what v1 sends", _ctx do
+      {:ok, batch} = Compare.freeze("d8-same", ["love"], d8_arms())
+      [page] = batch.pages
+      arms = by_label(page)
+
+      assert claims(arms["N"].frozen.packet, :word) == []
+      assert arms["N"].evidence_fingerprint == arms["NX"].evidence_fingerprint
+      assert arms["NA"].evidence_fingerprint == arms["NXA"].evidence_fingerprint
+
+      # The prompt never carries the cut's name, so it is the same prompt.
+      assert arms["N"].prompt_sha256 == arms["NX"].prompt_sha256
+      assert arms["NA"].prompt_sha256 == arms["NXA"].prompt_sha256
+      refute arms["N"].prompt_sha256 == arms["NA"].prompt_sha256
+      refute arms["N"].packet_hash == arms["NX"].packet_hash
+    end
+
+    test "the report counts the new omission by name", ctx do
+      word_claim!(ctx)
+      {:ok, batch} = Compare.freeze("d8-report", ["love"], d8_arms())
+
+      {:ok, %{cases: [%{status: :matched}]}} =
+        Compare.run(batch, actor_id: ctx.actor.id, service_key: ctx.key)
+
+      [%{arms: rows}] = Coverage.comparison("d8-report").cases
+      rows = Map.new(rows, &{&1.arm, &1})
+
+      for label <- ["NX", "NXA"] do
+        assert rows[label].cut == "whole-entry-text-cut-v2"
+        assert rows[label].omitted_by_reason["lexeme_claim_excluded"] == 1
+        refute Map.has_key?(rows[label].omitted_by_reason, "unknown")
+      end
+
+      for label <- ["N", "NA"],
+          do: refute(Map.has_key?(rows[label].omitted_by_reason, "lexeme_claim_excluded"))
+    end
+  end
+
   describe "C2: comparison attempts" do
     test "run back to back as comparison attempts and never publish", ctx do
       before = public_rows()
@@ -675,6 +848,9 @@ defmodule DevilsDictionary.Curation.Runtime.CompareTest do
     test "arms and batches are validated before anything is read" do
       assert {:ok, [%{label: "A0", cut: "current"}, %{label: "P", cut: "text"}, %{label: "x"}]} =
                Compare.parse_arms("A0=cfg,P=cfg:text,x")
+
+      assert {:ok, [%{label: "NX", config_slug: "cfg", cut: "text2"}]} =
+               Compare.parse_arms("NX=cfg:text2")
 
       assert {:error, :no_arms} = Compare.parse_arms("")
       assert {:error, {:unknown_cut, "wide"}} = Compare.parse_arms("A=cfg:wide")
